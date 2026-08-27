@@ -7,6 +7,7 @@ netrunner_godot_root="$netrunner_root/.tools/godot"
 export DOTNET_CLI_TELEMETRY_OPTOUT=1
 export DOTNET_NOLOGO=1
 export NUGET_XMLDOC_MODE=skip
+export NETRUNNER_GODOT_DATA="$netrunner_root/.tools/godot-data"
 
 if [[ -d "$netrunner_dotnet" ]]; then
   export DOTNET_ROOT="$netrunner_dotnet"

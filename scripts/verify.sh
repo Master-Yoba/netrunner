@@ -18,6 +18,11 @@ MSBUILDDISABLENODEREUSE=1 dotnet restore "$verify_root/Netrunner.sln" -m:1
 MSBUILDDISABLENODEREUSE=1 dotnet build "$verify_root/Netrunner.sln" --no-restore -m:1
 MSBUILDDISABLENODEREUSE=1 dotnet test "$verify_root/Netrunner.sln" --no-build -m:1
 dotnet run --project "$verify_root/src/Netrunner.Cli" --no-build -- self-test --seed 42
-"$GODOT4" --headless --editor --path "$verify_root/src/Netrunner.Godot" --quit
+dotnet run --project "$verify_root/src/Netrunner.Cli" --no-build -- doctor --json
+XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
+  "$GODOT4" --headless --editor --path "$verify_root/src/Netrunner.Godot" --quit-after 60
+XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
+  "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" -- --smoke-test
+"$verify_root/scripts/check-secrets.sh"
 
 echo "Development environment verified."

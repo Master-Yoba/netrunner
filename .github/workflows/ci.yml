@@ -35,4 +35,5 @@ jobs:
         run: dotnet test Netrunner.sln --no-build --configuration Release
       - name: Check formatting
         run: dotnet format Netrunner.sln --no-restore --verify-no-changes
-
+      - name: Check committed secrets
+        run: ./scripts/check-secrets.sh

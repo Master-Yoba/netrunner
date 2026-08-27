@@ -24,7 +24,7 @@ window/stretch/mode="canvas_items"
 
 [dotnet]
 
-project/assembly_name="Netrunner Solo"
+project/assembly_name="Netrunner.Godot"
 
 [rendering]
 

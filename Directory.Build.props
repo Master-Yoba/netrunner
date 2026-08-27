@@ -6,6 +6,9 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AnalysisLevel>latest-recommended</AnalysisLevel>
     <Deterministic>true</Deterministic>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionSuffix>dev</VersionSuffix>
+    <RepositoryUrl>https://github.com/Master-Yoba/netrunner</RepositoryUrl>
+    <DebugType>portable</DebugType>
   </PropertyGroup>
 </Project>
-

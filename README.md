@@ -40,9 +40,13 @@ After bootstrap, the common commands are:
 ```bash
 make build
 make test
+make watch-core
+make watch-cards
 make cli
 make godot-import
 make verify
+make doctor
+make event-smoke
 ```
 
 To open the editor:
@@ -51,6 +55,18 @@ To open the editor:
 source scripts/env.sh
 "$GODOT4" --editor --path src/Netrunner.Godot
 ```
+
+To install the pinned Godot .NET export templates and create the M0 Linux
+package:
+
+```bash
+make templates
+make package-linux
+```
+
+The one-shot test host has noticeable startup cost on the M0 reference laptop.
+Use `make watch-core` or `make watch-cards` while iterating so the compiler/test
+process stays warm. See [the measured M0 spike](docs/spikes/godot-dotnet-loop.md).
 
 The bootstrap currently supports Linux x86_64. The projects themselves are
 cross-platform; Windows and macOS bootstrap/packaging scripts are planned when
