@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      DOTNET_NOLOGO: 1
+      NUGET_XMLDOC_MODE: skip
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+          cache: true
+          cache-dependency-path: |
+            Directory.Packages.props
+            **/*.csproj
+      - name: Restore
+        run: dotnet restore Netrunner.sln --locked-mode=false
+      - name: Build
+        run: dotnet build Netrunner.sln --no-restore --configuration Release
+      - name: Test
+        run: dotnet test Netrunner.sln --no-build --configuration Release
+      - name: Check formatting
+        run: dotnet format Netrunner.sln --no-restore --verify-no-changes
+

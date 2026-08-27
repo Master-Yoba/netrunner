@@ -1,0 +1,32 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "verify",
+      "type": "shell",
+      "command": "./scripts/verify.sh",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "build",
+      "type": "shell",
+      "command": "source scripts/env.sh && dotnet build Netrunner.sln --no-restore",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "open-godot",
+      "type": "shell",
+      "command": "source scripts/env.sh && \"$GODOT4\" --editor --path src/Netrunner.Godot",
+      "problemMatcher": []
+    }
+  ]
+}
+

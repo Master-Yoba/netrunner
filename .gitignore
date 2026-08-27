@@ -1,0 +1,23 @@
+# .NET
+**/bin/
+**/obj/
+TestResults/
+artifacts/
+
+# Godot generated state
+.godot/
+src/Netrunner.Godot/.godot/
+*.uid
+
+# Local tools and machine-specific settings
+.tools/
+.env
+*.user
+*.suo
+.idea/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*~
+

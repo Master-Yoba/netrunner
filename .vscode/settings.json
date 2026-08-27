@@ -1,0 +1,16 @@
+{
+  "dotnet.defaultSolution": "Netrunner.sln",
+  "files.exclude": {
+    "**/.godot": true,
+    "**/bin": true,
+    "**/obj": true,
+    ".tools": true
+  },
+  "files.watcherExclude": {
+    "**/.godot/**": true,
+    "**/bin/**": true,
+    "**/obj/**": true,
+    ".tools/**": true
+  }
+}
+
