@@ -6,6 +6,16 @@ namespace Netrunner.Core;
 public static class EngineEventKinds
 {
     public const string CreditsAdjusted = "credits-adjusted";
+    public const string ClicksAdjusted = "clicks-adjusted";
+    public const string DamageDealt = "damage-dealt";
+    public const string TagsAdjusted = "tags-adjusted";
+    public const string MemoryAdjusted = "memory-adjusted";
+    public const string ProgramTrashedForMemory = "program-trashed-for-memory";
+    public const string CounterAdjusted = "counter-adjusted";
+    public const string VirusPurged = "virus-purged";
+    public const string LingeringEffectAdded = "lingering-effect-added";
+    public const string LingeringEffectRemoved = "lingering-effect-removed";
+    public const string LingeringEffectExpired = "lingering-effect-expired";
     public const string TurnStarted = "turn-started";
     public const string TurnEnded = "turn-ended";
     public const string ClickSpent = "click-spent";
@@ -16,6 +26,17 @@ public static class EngineEventKinds
     public const string AgendaScored = "agenda-scored";
     public const string AgendaStolen = "agenda-stolen";
     public const string GameWon = "game-won";
+    public const string RunInitiated = "run-initiated";
+    public const string RunPriorityPassed = "run-priority-passed";
+    public const string RunTimingWindowOpened = "run-timing-window-opened";
+    public const string IceApproached = "ice-approached";
+    public const string IceRezzed = "ice-rezzed";
+    public const string EncounterInitialized = "encounter-initialized";
+    public const string EncounterCompleted = "encounter-completed";
+    public const string RunMoved = "run-moved";
+    public const string RunSuccessful = "run-successful";
+    public const string BreachPlaceholderReached = "breach-placeholder-reached";
+    public const string RunEnded = "run-ended";
 }
 
 /// <summary>
@@ -24,6 +45,16 @@ public static class EngineEventKinds
 /// </summary>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 [JsonDerivedType(typeof(CreditsAdjustedEventPayload), "credits-adjusted")]
+[JsonDerivedType(typeof(ClicksAdjustedEventPayload), "clicks-adjusted")]
+[JsonDerivedType(typeof(DamageDealtEventPayload), "damage-dealt")]
+[JsonDerivedType(typeof(TagsAdjustedEventPayload), "tags-adjusted")]
+[JsonDerivedType(typeof(MemoryAdjustedEventPayload), "memory-adjusted")]
+[JsonDerivedType(typeof(ProgramTrashedForMemoryEventPayload), "program-trashed-for-memory")]
+[JsonDerivedType(typeof(CounterAdjustedEventPayload), "counter-adjusted")]
+[JsonDerivedType(typeof(VirusPurgedEventPayload), "virus-purged")]
+[JsonDerivedType(typeof(LingeringEffectAddedEventPayload), "lingering-effect-added")]
+[JsonDerivedType(typeof(LingeringEffectRemovedEventPayload), "lingering-effect-removed")]
+[JsonDerivedType(typeof(LingeringEffectExpiredEventPayload), "lingering-effect-expired")]
 [JsonDerivedType(typeof(TurnStartedEventPayload), "turn-started")]
 [JsonDerivedType(typeof(TurnEndedEventPayload), "turn-ended")]
 [JsonDerivedType(typeof(ClickSpentEventPayload), "click-spent")]
@@ -34,6 +65,17 @@ public static class EngineEventKinds
 [JsonDerivedType(typeof(AgendaScoredEventPayload), "agenda-scored")]
 [JsonDerivedType(typeof(AgendaStolenEventPayload), "agenda-stolen")]
 [JsonDerivedType(typeof(GameWonEventPayload), "game-won")]
+[JsonDerivedType(typeof(RunInitiatedEventPayload), "run-initiated")]
+[JsonDerivedType(typeof(RunPriorityPassedEventPayload), "run-priority-passed")]
+[JsonDerivedType(typeof(RunTimingWindowOpenedEventPayload), "run-timing-window-opened")]
+[JsonDerivedType(typeof(IceApproachedEventPayload), "ice-approached")]
+[JsonDerivedType(typeof(IceRezzedEventPayload), "ice-rezzed")]
+[JsonDerivedType(typeof(EncounterInitializedEventPayload), "encounter-initialized")]
+[JsonDerivedType(typeof(EncounterCompletedEventPayload), "encounter-completed")]
+[JsonDerivedType(typeof(RunMovedEventPayload), "run-moved")]
+[JsonDerivedType(typeof(RunSuccessfulEventPayload), "run-successful")]
+[JsonDerivedType(typeof(BreachPlaceholderReachedEventPayload), "breach-placeholder-reached")]
+[JsonDerivedType(typeof(RunEndedEventPayload), "run-ended")]
 public abstract record EngineEventPayload
 {
     protected EngineEventPayload(int version) => Version = version;
@@ -70,6 +112,306 @@ public sealed record CreditsAdjustedEventPayload : EngineEventPayload
     [JsonInclude]
     [JsonRequired]
     public int CreditsAfter { get; private set; }
+}
+
+public sealed record ClicksAdjustedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public ClicksAdjustedEventPayload(int version, PlayerId target, int delta, int clicksAfter)
+        : base(version)
+    {
+        Target = target;
+        Delta = delta;
+        ClicksAfter = clicksAfter;
+    }
+
+    public ClicksAdjustedEventPayload(PlayerId target, int delta, int clicksAfter)
+        : this(1, target, delta, clicksAfter)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerId Target { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Delta { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int ClicksAfter { get; private set; }
+}
+
+public sealed record DamageDealtEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public DamageDealtEventPayload(
+        int version,
+        PlayerId target,
+        DamageKind kind,
+        int amount,
+        int cardsTrashed,
+        int coreDamageAfter,
+        bool flatlined)
+        : base(version)
+    {
+        Target = target;
+        Kind = kind;
+        Amount = amount;
+        CardsTrashed = cardsTrashed;
+        CoreDamageAfter = coreDamageAfter;
+        Flatlined = flatlined;
+    }
+
+    public DamageDealtEventPayload(
+        PlayerId target,
+        DamageKind kind,
+        int amount,
+        int cardsTrashed,
+        int coreDamageAfter,
+        bool flatlined)
+        : this(1, target, kind, amount, cardsTrashed, coreDamageAfter, flatlined)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerId Target { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public DamageKind Kind { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Amount { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int CardsTrashed { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int CoreDamageAfter { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public bool Flatlined { get; private set; }
+}
+
+public sealed record TagsAdjustedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public TagsAdjustedEventPayload(int version, PlayerId target, int delta, int tagsAfter)
+        : base(version)
+    {
+        Target = target;
+        Delta = delta;
+        TagsAfter = tagsAfter;
+    }
+
+    public TagsAdjustedEventPayload(PlayerId target, int delta, int tagsAfter)
+        : this(1, target, delta, tagsAfter)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerId Target { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Delta { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int TagsAfter { get; private set; }
+}
+
+public sealed record MemoryAdjustedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public MemoryAdjustedEventPayload(int version, PlayerId target, int baseMemory, int usedMemory)
+        : base(version)
+    {
+        Target = target;
+        BaseMemory = baseMemory;
+        UsedMemory = usedMemory;
+    }
+
+    public MemoryAdjustedEventPayload(PlayerId target, int baseMemory, int usedMemory)
+        : this(1, target, baseMemory, usedMemory)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerId Target { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int BaseMemory { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int UsedMemory { get; private set; }
+}
+
+public sealed record ProgramTrashedForMemoryEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public ProgramTrashedForMemoryEventPayload(int version, CardInstanceId cardId, PlayerId owner, int memoryCost)
+        : base(version)
+    {
+        CardId = cardId;
+        Owner = owner;
+        MemoryCost = memoryCost;
+    }
+
+    public ProgramTrashedForMemoryEventPayload(CardInstanceId cardId, PlayerId owner, int memoryCost)
+        : this(1, cardId, owner, memoryCost)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId CardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerId Owner { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int MemoryCost { get; private set; }
+}
+
+public sealed record CounterAdjustedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public CounterAdjustedEventPayload(int version, CardInstanceId cardId, string counterName, int delta, int countAfter)
+        : base(version)
+    {
+        ArgumentNullException.ThrowIfNull(counterName);
+        CardId = cardId;
+        CounterName = counterName;
+        Delta = delta;
+        CountAfter = countAfter;
+    }
+
+    public CounterAdjustedEventPayload(CardInstanceId cardId, string counterName, int delta, int countAfter)
+        : this(1, cardId, counterName, delta, countAfter)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId CardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string CounterName { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Delta { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int CountAfter { get; private set; }
+}
+
+public sealed record VirusPurgedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public VirusPurgedEventPayload(int version, int countersRemoved)
+        : base(version)
+    {
+        CountersRemoved = countersRemoved;
+    }
+
+    public VirusPurgedEventPayload(int countersRemoved)
+        : this(1, countersRemoved)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int CountersRemoved { get; private set; }
+}
+
+public sealed record LingeringEffectAddedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public LingeringEffectAddedEventPayload(int version, RunEffectId effectId, string behaviorId, LingeringEffectExpiry expiry)
+        : base(version)
+    {
+        ArgumentNullException.ThrowIfNull(behaviorId);
+        EffectId = effectId;
+        BehaviorId = behaviorId;
+        Expiry = expiry;
+    }
+
+    public LingeringEffectAddedEventPayload(RunEffectId effectId, string behaviorId, LingeringEffectExpiry expiry)
+        : this(1, effectId, behaviorId, expiry)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunEffectId EffectId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string BehaviorId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public LingeringEffectExpiry Expiry { get; private set; }
+}
+
+public sealed record LingeringEffectRemovedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public LingeringEffectRemovedEventPayload(int version, RunEffectId effectId)
+        : base(version)
+    {
+        EffectId = effectId;
+    }
+
+    public LingeringEffectRemovedEventPayload(RunEffectId effectId)
+        : this(1, effectId)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunEffectId EffectId { get; private set; }
+}
+
+public sealed record LingeringEffectExpiredEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public LingeringEffectExpiredEventPayload(int version, RunEffectId effectId, LingeringEffectExpiry expiry)
+        : base(version)
+    {
+        EffectId = effectId;
+        Expiry = expiry;
+    }
+
+    public LingeringEffectExpiredEventPayload(RunEffectId effectId, LingeringEffectExpiry expiry)
+        : this(1, effectId, expiry)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunEffectId EffectId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public LingeringEffectExpiry Expiry { get; private set; }
 }
 
 public sealed record TurnStartedEventPayload : EngineEventPayload
@@ -373,6 +715,368 @@ public sealed record GameWonEventPayload : EngineEventPayload
     public GameWinReason Reason { get; private set; }
 }
 
+public sealed record RunInitiatedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public RunInitiatedEventPayload(int version, RunId runId, ServerId serverId, PlayerId runner, PlayerSide initiatingSide)
+        : base(version)
+    {
+        RunId = runId;
+        ServerId = serverId;
+        Runner = runner;
+        InitiatingSide = initiatingSide;
+    }
+
+    public RunInitiatedEventPayload(RunId runId, ServerId serverId, PlayerId runner)
+        : this(1, runId, serverId, runner, PlayerSide.Runner)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunId RunId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ServerId ServerId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerId Runner { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerSide InitiatingSide { get; private set; }
+}
+
+public sealed record RunPriorityPassedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public RunPriorityPassedEventPayload(
+        int version,
+        RunId runId,
+        RunPriorityWindowKind window,
+        PlayerSide passedBy,
+        PlayerSide nextPriorityHolder,
+        int consecutivePasses)
+        : base(version)
+    {
+        RunId = runId;
+        Window = window;
+        PassedBy = passedBy;
+        NextPriorityHolder = nextPriorityHolder;
+        ConsecutivePasses = consecutivePasses;
+    }
+
+    public RunPriorityPassedEventPayload(
+        RunId runId,
+        RunPriorityWindowKind window,
+        PlayerSide passedBy,
+        PlayerSide nextPriorityHolder,
+        int consecutivePasses)
+        : this(1, runId, window, passedBy, nextPriorityHolder, consecutivePasses)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunId RunId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunPriorityWindowKind Window { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerSide PassedBy { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerSide NextPriorityHolder { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int ConsecutivePasses { get; private set; }
+}
+
+/// <summary>Diagnostic evidence that a serialized 6.9 decision opportunity opened.</summary>
+public sealed record RunTimingWindowOpenedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public RunTimingWindowOpenedEventPayload(
+        int version,
+        RunId runId,
+        RunCrPhase phase,
+        RunTimingStep step,
+        RunPriorityWindowKind? priorityWindow,
+        PlayerSide? priorityHolder)
+        : base(version)
+    {
+        RunId = runId;
+        Phase = phase;
+        Step = step;
+        PriorityWindow = priorityWindow;
+        PriorityHolder = priorityHolder;
+    }
+
+    public RunTimingWindowOpenedEventPayload(
+        RunId runId,
+        RunCrPhase phase,
+        RunTimingStep step,
+        RunPriorityWindowKind? priorityWindow,
+        PlayerSide? priorityHolder)
+        : this(1, runId, phase, step, priorityWindow, priorityHolder)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunId RunId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunCrPhase Phase { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunTimingStep Step { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunPriorityWindowKind? PriorityWindow { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerSide? PriorityHolder { get; private set; }
+}
+
+public sealed record IceApproachedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public IceApproachedEventPayload(int version, RunId runId, CardInstanceId iceId)
+        : base(version)
+    {
+        RunId = runId;
+        IceId = iceId;
+    }
+
+    public IceApproachedEventPayload(RunId runId, CardInstanceId iceId)
+        : this(1, runId, iceId)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunId RunId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId IceId { get; private set; }
+}
+
+public sealed record IceRezzedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public IceRezzedEventPayload(int version, RunId runId, CardInstanceId iceId)
+        : base(version)
+    {
+        RunId = runId;
+        IceId = iceId;
+    }
+
+    public IceRezzedEventPayload(RunId runId, CardInstanceId iceId)
+        : this(1, runId, iceId)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunId RunId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId IceId { get; private set; }
+}
+
+public sealed record EncounterInitializedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public EncounterInitializedEventPayload(
+        int version,
+        RunId runId,
+        EncounterId encounterId,
+        CardInstanceId iceId,
+        int subroutineCount)
+        : base(version)
+    {
+        RunId = runId;
+        EncounterId = encounterId;
+        IceId = iceId;
+        SubroutineCount = subroutineCount;
+    }
+
+    public EncounterInitializedEventPayload(RunId runId, EncounterId encounterId, CardInstanceId iceId, int subroutineCount)
+        : this(1, runId, encounterId, iceId, subroutineCount)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunId RunId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public EncounterId EncounterId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId IceId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int SubroutineCount { get; private set; }
+}
+
+public sealed record EncounterCompletedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public EncounterCompletedEventPayload(int version, RunId runId, EncounterId encounterId)
+        : base(version)
+    {
+        RunId = runId;
+        EncounterId = encounterId;
+    }
+
+    public EncounterCompletedEventPayload(RunId runId, EncounterId encounterId)
+        : this(1, runId, encounterId)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunId RunId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public EncounterId EncounterId { get; private set; }
+}
+
+public sealed record RunMovedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public RunMovedEventPayload(int version, RunId runId, int fromIceIndex, int toIceIndex, CardInstanceId? nextIceId)
+        : base(version)
+    {
+        RunId = runId;
+        FromIceIndex = fromIceIndex;
+        ToIceIndex = toIceIndex;
+        NextIceId = nextIceId;
+    }
+
+    public RunMovedEventPayload(RunId runId, int fromIceIndex, int toIceIndex, CardInstanceId? nextIceId)
+        : this(1, runId, fromIceIndex, toIceIndex, nextIceId)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunId RunId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int FromIceIndex { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int ToIceIndex { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId? NextIceId { get; private set; }
+}
+
+public sealed record RunSuccessfulEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public RunSuccessfulEventPayload(int version, RunId runId, ServerId serverId)
+        : base(version)
+    {
+        RunId = runId;
+        ServerId = serverId;
+    }
+
+    public RunSuccessfulEventPayload(RunId runId, ServerId serverId)
+        : this(1, runId, serverId)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunId RunId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ServerId ServerId { get; private set; }
+}
+
+public sealed record BreachPlaceholderReachedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public BreachPlaceholderReachedEventPayload(int version, RunId runId, ServerId serverId)
+        : base(version)
+    {
+        RunId = runId;
+        ServerId = serverId;
+    }
+
+    public BreachPlaceholderReachedEventPayload(RunId runId, ServerId serverId)
+        : this(1, runId, serverId)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunId RunId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ServerId ServerId { get; private set; }
+}
+
+public sealed record RunEndedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public RunEndedEventPayload(int version, RunId runId, PlayerSide initiatingSide, RunEndReason reason, bool successful)
+        : base(version)
+    {
+        RunId = runId;
+        InitiatingSide = initiatingSide;
+        Reason = reason;
+        Successful = successful;
+    }
+
+    public RunEndedEventPayload(RunId runId, PlayerSide initiatingSide, RunEndReason reason, bool successful)
+        : this(1, runId, initiatingSide, reason, successful)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunId RunId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerSide InitiatingSide { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunEndReason Reason { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public bool Successful { get; private set; }
+}
+
 /// <summary>Versioned typed event envelope emitted by deterministic Core.</summary>
 public sealed record EngineEvent
 {
@@ -424,6 +1128,16 @@ public sealed record EngineEvent
     internal EngineEvent Copy() => Payload switch
     {
         CreditsAdjustedEventPayload value => new EngineEvent(Version, Sequence, Kind, new CreditsAdjustedEventPayload(value.Version, value.Target, value.Delta, value.CreditsAfter)),
+        ClicksAdjustedEventPayload value => new EngineEvent(Version, Sequence, Kind, new ClicksAdjustedEventPayload(value.Version, value.Target, value.Delta, value.ClicksAfter)),
+        DamageDealtEventPayload value => new EngineEvent(Version, Sequence, Kind, new DamageDealtEventPayload(value.Version, value.Target, value.Kind, value.Amount, value.CardsTrashed, value.CoreDamageAfter, value.Flatlined)),
+        TagsAdjustedEventPayload value => new EngineEvent(Version, Sequence, Kind, new TagsAdjustedEventPayload(value.Version, value.Target, value.Delta, value.TagsAfter)),
+        MemoryAdjustedEventPayload value => new EngineEvent(Version, Sequence, Kind, new MemoryAdjustedEventPayload(value.Version, value.Target, value.BaseMemory, value.UsedMemory)),
+        ProgramTrashedForMemoryEventPayload value => new EngineEvent(Version, Sequence, Kind, new ProgramTrashedForMemoryEventPayload(value.Version, value.CardId, value.Owner, value.MemoryCost)),
+        CounterAdjustedEventPayload value => new EngineEvent(Version, Sequence, Kind, new CounterAdjustedEventPayload(value.Version, value.CardId, value.CounterName, value.Delta, value.CountAfter)),
+        VirusPurgedEventPayload value => new EngineEvent(Version, Sequence, Kind, new VirusPurgedEventPayload(value.Version, value.CountersRemoved)),
+        LingeringEffectAddedEventPayload value => new EngineEvent(Version, Sequence, Kind, new LingeringEffectAddedEventPayload(value.Version, value.EffectId, value.BehaviorId, value.Expiry)),
+        LingeringEffectRemovedEventPayload value => new EngineEvent(Version, Sequence, Kind, new LingeringEffectRemovedEventPayload(value.Version, value.EffectId)),
+        LingeringEffectExpiredEventPayload value => new EngineEvent(Version, Sequence, Kind, new LingeringEffectExpiredEventPayload(value.Version, value.EffectId, value.Expiry)),
         TurnStartedEventPayload value => new EngineEvent(Version, Sequence, Kind, new TurnStartedEventPayload(value.Version, value.ActiveSide, value.TurnNumber, value.Clicks)),
         TurnEndedEventPayload value => new EngineEvent(Version, Sequence, Kind, new TurnEndedEventPayload(value.Version, value.Side, value.TurnNumber)),
         ClickSpentEventPayload value => new EngineEvent(Version, Sequence, Kind, new ClickSpentEventPayload(value.Version, value.Side, value.ClicksRemaining)),
@@ -434,6 +1148,17 @@ public sealed record EngineEvent
         AgendaScoredEventPayload value => new EngineEvent(Version, Sequence, Kind, new AgendaScoredEventPayload(value.Version, value.Winner, value.AgendaId, value.AgendaPoints)),
         AgendaStolenEventPayload value => new EngineEvent(Version, Sequence, Kind, new AgendaStolenEventPayload(value.Version, value.Winner, value.AgendaId, value.AgendaPoints)),
         GameWonEventPayload value => new EngineEvent(Version, Sequence, Kind, new GameWonEventPayload(value.Version, value.Winner, value.Reason)),
+        RunInitiatedEventPayload value => new EngineEvent(Version, Sequence, Kind, new RunInitiatedEventPayload(value.Version, value.RunId, value.ServerId, value.Runner, value.InitiatingSide)),
+        RunPriorityPassedEventPayload value => new EngineEvent(Version, Sequence, Kind, new RunPriorityPassedEventPayload(value.Version, value.RunId, value.Window, value.PassedBy, value.NextPriorityHolder, value.ConsecutivePasses)),
+        RunTimingWindowOpenedEventPayload value => new EngineEvent(Version, Sequence, Kind, new RunTimingWindowOpenedEventPayload(value.Version, value.RunId, value.Phase, value.Step, value.PriorityWindow, value.PriorityHolder)),
+        IceApproachedEventPayload value => new EngineEvent(Version, Sequence, Kind, new IceApproachedEventPayload(value.Version, value.RunId, value.IceId)),
+        IceRezzedEventPayload value => new EngineEvent(Version, Sequence, Kind, new IceRezzedEventPayload(value.Version, value.RunId, value.IceId)),
+        EncounterInitializedEventPayload value => new EngineEvent(Version, Sequence, Kind, new EncounterInitializedEventPayload(value.Version, value.RunId, value.EncounterId, value.IceId, value.SubroutineCount)),
+        EncounterCompletedEventPayload value => new EngineEvent(Version, Sequence, Kind, new EncounterCompletedEventPayload(value.Version, value.RunId, value.EncounterId)),
+        RunMovedEventPayload value => new EngineEvent(Version, Sequence, Kind, new RunMovedEventPayload(value.Version, value.RunId, value.FromIceIndex, value.ToIceIndex, value.NextIceId)),
+        RunSuccessfulEventPayload value => new EngineEvent(Version, Sequence, Kind, new RunSuccessfulEventPayload(value.Version, value.RunId, value.ServerId)),
+        BreachPlaceholderReachedEventPayload value => new EngineEvent(Version, Sequence, Kind, new BreachPlaceholderReachedEventPayload(value.Version, value.RunId, value.ServerId)),
+        RunEndedEventPayload value => new EngineEvent(Version, Sequence, Kind, new RunEndedEventPayload(value.Version, value.RunId, value.InitiatingSide, value.Reason, value.Successful)),
         _ => throw new InvalidOperationException($"No immutable clone is registered for event payload '{Payload.GetType().Name}'."),
     };
 }
@@ -483,6 +1208,77 @@ public static class EngineEventValidator
                 if (value.CreditsAfter < 0)
                 {
                     Add(violations, "event.negative-credits", $"{path}.payload.creditsAfter", "Credits after an adjustment must not be negative.");
+                }
+
+                break;
+            case ClicksAdjustedEventPayload value:
+                RequireKind(@event, EngineEventKinds.ClicksAdjusted, path, violations);
+                RequireId(value.Target.Value, $"{path}.payload.target", "player", violations);
+                if (value.ClicksAfter < 0)
+                {
+                    Add(violations, "event.negative-clicks", $"{path}.payload.clicksAfter", "Clicks after an adjustment must not be negative.");
+                }
+
+                break;
+            case DamageDealtEventPayload value:
+                RequireKind(@event, EngineEventKinds.DamageDealt, path, violations);
+                RequireId(value.Target.Value, $"{path}.payload.target", "player", violations);
+                if (!Enum.IsDefined(value.Kind))
+                {
+                    Add(violations, "event.invalid-damage-kind", $"{path}.payload.kind", $"'{value.Kind}' is not a supported damage kind.");
+                }
+
+                RequireNumber(value.Amount, $"{path}.payload.amount", "Damage amount", violations, strictlyPositive: true);
+                RequireNumber(value.CardsTrashed, $"{path}.payload.cardsTrashed", "Trashed cards", violations);
+                RequireNumber(value.CoreDamageAfter, $"{path}.payload.coreDamageAfter", "Core damage", violations);
+                break;
+            case TagsAdjustedEventPayload value:
+                RequireKind(@event, EngineEventKinds.TagsAdjusted, path, violations);
+                RequireId(value.Target.Value, $"{path}.payload.target", "player", violations);
+                RequireNumber(value.TagsAfter, $"{path}.payload.tagsAfter", "Tags", violations);
+                break;
+            case MemoryAdjustedEventPayload value:
+                RequireKind(@event, EngineEventKinds.MemoryAdjusted, path, violations);
+                RequireId(value.Target.Value, $"{path}.payload.target", "player", violations);
+                RequireNumber(value.BaseMemory, $"{path}.payload.baseMemory", "Base memory", violations);
+                RequireNumber(value.UsedMemory, $"{path}.payload.usedMemory", "Used memory", violations);
+                break;
+            case ProgramTrashedForMemoryEventPayload value:
+                RequireKind(@event, EngineEventKinds.ProgramTrashedForMemory, path, violations);
+                RequireId(value.CardId.Value, $"{path}.payload.cardId", "card", violations);
+                RequireId(value.Owner.Value, $"{path}.payload.owner", "player", violations);
+                RequireNumber(value.MemoryCost, $"{path}.payload.memoryCost", "Memory cost", violations);
+                break;
+            case CounterAdjustedEventPayload value:
+                RequireKind(@event, EngineEventKinds.CounterAdjusted, path, violations);
+                RequireId(value.CardId.Value, $"{path}.payload.cardId", "card", violations);
+                RequireId(value.CounterName, $"{path}.payload.counterName", "counter", violations);
+                RequireNumber(value.CountAfter, $"{path}.payload.countAfter", "Counter value", violations);
+                break;
+            case VirusPurgedEventPayload value:
+                RequireKind(@event, EngineEventKinds.VirusPurged, path, violations);
+                RequireNumber(value.CountersRemoved, $"{path}.payload.countersRemoved", "Purged counters", violations);
+                break;
+            case LingeringEffectAddedEventPayload value:
+                RequireKind(@event, EngineEventKinds.LingeringEffectAdded, path, violations);
+                RequireId(value.EffectId.Value, $"{path}.payload.effectId", "effect", violations);
+                RequireId(value.BehaviorId, $"{path}.payload.behaviorId", "behavior", violations);
+                if (!Enum.IsDefined(value.Expiry))
+                {
+                    Add(violations, "event.invalid-lingering-expiry", $"{path}.payload.expiry", $"'{value.Expiry}' is not supported.");
+                }
+
+                break;
+            case LingeringEffectRemovedEventPayload value:
+                RequireKind(@event, EngineEventKinds.LingeringEffectRemoved, path, violations);
+                RequireId(value.EffectId.Value, $"{path}.payload.effectId", "effect", violations);
+                break;
+            case LingeringEffectExpiredEventPayload value:
+                RequireKind(@event, EngineEventKinds.LingeringEffectExpired, path, violations);
+                RequireId(value.EffectId.Value, $"{path}.payload.effectId", "effect", violations);
+                if (!Enum.IsDefined(value.Expiry))
+                {
+                    Add(violations, "event.invalid-lingering-expiry", $"{path}.payload.expiry", $"'{value.Expiry}' is not supported.");
                 }
 
                 break;
@@ -552,6 +1348,106 @@ public static class EngineEventValidator
                 if (!Enum.IsDefined(value.Reason))
                 {
                     Add(violations, "event.invalid-reason", $"{path}.payload.reason", $"'{value.Reason}' is not a supported win reason.");
+                }
+
+                break;
+            case RunInitiatedEventPayload value:
+                RequireKind(@event, EngineEventKinds.RunInitiated, path, violations);
+                RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
+                RequireId(value.ServerId.Value, $"{path}.payload.serverId", "server", violations);
+                RequireId(value.Runner.Value, $"{path}.payload.runner", "player", violations);
+                RequireSide(value.InitiatingSide, $"{path}.payload.initiatingSide", violations);
+                break;
+            case RunPriorityPassedEventPayload value:
+                RequireKind(@event, EngineEventKinds.RunPriorityPassed, path, violations);
+                RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
+                if (!Enum.IsDefined(value.Window))
+                {
+                    Add(violations, "event.invalid-window", $"{path}.payload.window", $"'{value.Window}' is not a supported run priority window.");
+                }
+
+                RequireSide(value.PassedBy, $"{path}.payload.passedBy", violations);
+                RequireSide(value.NextPriorityHolder, $"{path}.payload.nextPriorityHolder", violations);
+                RequireNumber(value.ConsecutivePasses, $"{path}.payload.consecutivePasses", "Consecutive passes", violations, strictlyPositive: true);
+                break;
+            case RunTimingWindowOpenedEventPayload value:
+                RequireKind(@event, EngineEventKinds.RunTimingWindowOpened, path, violations);
+                RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
+                if (!Enum.IsDefined(value.Phase))
+                {
+                    Add(violations, "event.invalid-run-phase", $"{path}.payload.phase", $"'{value.Phase}' is not a supported run phase.");
+                }
+
+                if (!Enum.IsDefined(value.Step))
+                {
+                    Add(violations, "event.invalid-run-step", $"{path}.payload.step", $"'{value.Step}' is not a supported run timing step.");
+                }
+
+                if (value.PriorityWindow.HasValue && !Enum.IsDefined(value.PriorityWindow.Value))
+                {
+                    Add(violations, "event.invalid-window", $"{path}.payload.priorityWindow", $"'{value.PriorityWindow}' is not a supported run priority window.");
+                }
+
+                if (value.PriorityHolder.HasValue)
+                {
+                    RequireSide(value.PriorityHolder.Value, $"{path}.payload.priorityHolder", violations);
+                }
+
+                break;
+            case IceApproachedEventPayload value:
+                RequireKind(@event, EngineEventKinds.IceApproached, path, violations);
+                RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
+                RequireId(value.IceId.Value, $"{path}.payload.iceId", "card", violations);
+                break;
+            case IceRezzedEventPayload value:
+                RequireKind(@event, EngineEventKinds.IceRezzed, path, violations);
+                RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
+                RequireId(value.IceId.Value, $"{path}.payload.iceId", "card", violations);
+                break;
+            case EncounterInitializedEventPayload value:
+                RequireKind(@event, EngineEventKinds.EncounterInitialized, path, violations);
+                RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
+                RequireId(value.EncounterId.Value, $"{path}.payload.encounterId", "encounter", violations);
+                RequireId(value.IceId.Value, $"{path}.payload.iceId", "card", violations);
+                RequireNumber(value.SubroutineCount, $"{path}.payload.subroutineCount", "Subroutine count", violations);
+                break;
+            case EncounterCompletedEventPayload value:
+                RequireKind(@event, EngineEventKinds.EncounterCompleted, path, violations);
+                RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
+                RequireId(value.EncounterId.Value, $"{path}.payload.encounterId", "encounter", violations);
+                break;
+            case RunMovedEventPayload value:
+                RequireKind(@event, EngineEventKinds.RunMoved, path, violations);
+                RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
+                RequireNumber(value.FromIceIndex, $"{path}.payload.fromIceIndex", "Previous ICE index", violations);
+                if (value.ToIceIndex < -1)
+                {
+                    Add(violations, "event.invalid-index", $"{path}.payload.toIceIndex", "Next ICE index must be -1 or nonnegative.");
+                }
+
+                if (value.NextIceId.HasValue)
+                {
+                    RequireId(value.NextIceId.Value.Value, $"{path}.payload.nextIceId", "card", violations);
+                }
+
+                break;
+            case RunSuccessfulEventPayload value:
+                RequireKind(@event, EngineEventKinds.RunSuccessful, path, violations);
+                RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
+                RequireId(value.ServerId.Value, $"{path}.payload.serverId", "server", violations);
+                break;
+            case BreachPlaceholderReachedEventPayload value:
+                RequireKind(@event, EngineEventKinds.BreachPlaceholderReached, path, violations);
+                RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
+                RequireId(value.ServerId.Value, $"{path}.payload.serverId", "server", violations);
+                break;
+            case RunEndedEventPayload value:
+                RequireKind(@event, EngineEventKinds.RunEnded, path, violations);
+                RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
+                RequireSide(value.InitiatingSide, $"{path}.payload.initiatingSide", violations);
+                if (!Enum.IsDefined(value.Reason))
+                {
+                    Add(violations, "event.invalid-run-end-reason", $"{path}.payload.reason", $"'{value.Reason}' is not a supported run-end reason.");
                 }
 
                 break;

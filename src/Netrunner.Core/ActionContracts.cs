@@ -8,6 +8,11 @@ public enum DecisionKind
     ChooseNumber,
     ChooseCard,
     ToyTurn,
+    RunTiming,
+    MemoryCleanup,
+    TriggerChoice,
+    TriggerOrdering,
+    InterruptChoice,
 }
 
 public enum ActionKind
@@ -21,6 +26,18 @@ public enum ActionKind
     ScoreAgenda,
     StealAgenda,
     EndTurn,
+    PassPriority,
+    RezIce,
+    JackOut,
+    ContinueRun,
+    TrashProgram,
+    UseTrigger,
+    DeclineTrigger,
+    OrderTriggers,
+    UsePrevention,
+    DeclinePrevention,
+    UseReplacement,
+    DeclineReplacement,
     Legacy,
 }
 
@@ -31,7 +48,12 @@ public enum ActionKind
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 [JsonDerivedType(typeof(NumberChoiceParameters), "number")]
 [JsonDerivedType(typeof(CardChoiceParameters), "card")]
+[JsonDerivedType(typeof(RunIceParameters), "run-ice")]
 [JsonDerivedType(typeof(NoActionParameters), "none")]
+[JsonDerivedType(typeof(TriggerChoiceParameters), "trigger")]
+[JsonDerivedType(typeof(TriggerOrderParameters), "trigger-order")]
+[JsonDerivedType(typeof(PreventionChoiceParameters), "prevention")]
+[JsonDerivedType(typeof(ReplacementChoiceParameters), "replacement")]
 [JsonDerivedType(typeof(LegacyActionParameters), "legacy")]
 public abstract record ActionParameters;
 
@@ -39,12 +61,40 @@ public sealed record NumberChoiceParameters([property: JsonRequired] int Value) 
 
 public sealed record CardChoiceParameters([property: JsonRequired] CardInstanceId CardId) : ActionParameters;
 
+/// <summary>Typed target for the CR 6.9 approached-ICE rez action.</summary>
+public sealed record RunIceParameters([property: JsonRequired] CardInstanceId IceId) : ActionParameters;
+
 /// <summary>
 /// Typed marker payload for an action whose complete meaning is defined by its
 /// materialized action kind. It is deliberately distinct from the legacy
 /// string payload, which is not accepted by authoritative decisions.
 /// </summary>
 public sealed record NoActionParameters : ActionParameters;
+
+/// <summary>Typed target for using or declining one materialized trigger.</summary>
+public sealed record TriggerChoiceParameters([property: JsonRequired] TriggerId TriggerId) : ActionParameters;
+
+/// <summary>Explicit selection of the next trigger in a simultaneous group.</summary>
+public sealed record TriggerOrderParameters : ActionParameters
+{
+    [JsonConstructor]
+    public TriggerOrderParameters(TriggerId triggerId)
+    {
+        TriggerId = triggerId;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public TriggerId TriggerId { get; private set; }
+}
+
+/// <summary>Typed prevention choice; amount is materialized by Core.</summary>
+public sealed record PreventionChoiceParameters(
+    [property: JsonRequired] InterruptId InterruptId,
+    [property: JsonRequired] int Amount) : ActionParameters;
+
+/// <summary>Typed replacement choice for one materialized interrupt.</summary>
+public sealed record ReplacementChoiceParameters([property: JsonRequired] InterruptId InterruptId) : ActionParameters;
 
 /// <summary>
 /// Kept only for the pre-M1 observation compatibility constructor. It is not
@@ -263,7 +313,12 @@ public sealed class PendingDecision
     {
         NumberChoiceParameters numberChoice => new NumberChoiceParameters(numberChoice.Value),
         CardChoiceParameters cardChoice => new CardChoiceParameters(cardChoice.CardId),
+        RunIceParameters runIce => new RunIceParameters(runIce.IceId),
         NoActionParameters => new NoActionParameters(),
+        TriggerChoiceParameters trigger => new TriggerChoiceParameters(trigger.TriggerId),
+        TriggerOrderParameters order => new TriggerOrderParameters(order.TriggerId),
+        PreventionChoiceParameters prevention => new PreventionChoiceParameters(prevention.InterruptId, prevention.Amount),
+        ReplacementChoiceParameters replacement => new ReplacementChoiceParameters(replacement.InterruptId),
         LegacyActionParameters legacy => new LegacyActionParameters(legacy.Kind),
         _ => throw new InvalidOperationException(
             $"No immutable clone is registered for action parameter type '{parameters.GetType().Name}'."),

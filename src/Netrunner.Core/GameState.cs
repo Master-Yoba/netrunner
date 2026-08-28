@@ -45,6 +45,7 @@ public enum GameWinReason
 {
     AgendaPoints,
     DeckOut,
+    Flatline,
 }
 
 public sealed record PlayerState
@@ -297,7 +298,9 @@ public sealed class GameState
         IReadOnlyList<ResolutionFrame>? resolutionStack = null,
         PendingDecision? pendingDecision = null,
         long actionSequence = 0,
-        ulong initialSeed = 0)
+        ulong initialSeed = 0,
+        RunState? runState = null,
+        RulesState? rulesState = null)
     {
         ArgumentNullException.ThrowIfNull(rulesVersion);
         ArgumentNullException.ThrowIfNull(cardDataVersion);
@@ -329,6 +332,8 @@ public sealed class GameState
         ActionSequence = actionSequence;
         ResolutionStack = Freeze(resolutionStack);
         PendingDecision = pendingDecision?.Copy();
+        RunState = runState?.Copy();
+        RulesState = rulesState?.Copy();
     }
 
     /// <summary>
@@ -353,7 +358,9 @@ public sealed class GameState
         IEnumerable<ResolutionFrame>? resolutionStack = null,
         PendingDecision? pendingDecision = null,
         long actionSequence = 0,
-        ulong? initialSeed = null)
+        ulong? initialSeed = null,
+        RunState? runState = null,
+        RulesState? rulesState = null)
         : this(
             schemaVersion,
             gameId,
@@ -372,7 +379,9 @@ public sealed class GameState
             resolutionStack?.ToArray() ?? [],
             pendingDecision,
             actionSequence,
-            initialSeed ?? randomState)
+            initialSeed ?? randomState,
+            runState,
+            rulesState)
     {
     }
 
@@ -449,6 +458,16 @@ public sealed class GameState
     [JsonInclude]
     [JsonRequired]
     public PendingDecision? PendingDecision { get; private set; }
+
+    /// <summary>Live CR 6.9 run state; omitted from JSON when no run is active.</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public RunState? RunState { get; private set; }
+
+    /// <summary>Optional M2 rules-backed resources; omitted for M1-compatible states.</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public RulesState? RulesState { get; private set; }
 
     public GameSnapshot CreateSnapshot() => GameSnapshot.From(this);
 
@@ -592,7 +611,9 @@ public sealed class GameSnapshot
         IReadOnlyList<ResolutionFrame>? resolutionStack = null,
         PendingDecision? pendingDecision = null,
         long actionSequence = 0,
-        ulong initialSeed = 0)
+        ulong initialSeed = 0,
+        RunState? runState = null,
+        RulesState? rulesState = null)
     {
         ArgumentNullException.ThrowIfNull(rulesVersion);
         ArgumentNullException.ThrowIfNull(cardDataVersion);
@@ -622,6 +643,8 @@ public sealed class GameSnapshot
         ActionSequence = actionSequence;
         ResolutionStack = CopyFrames(resolutionStack);
         PendingDecision = pendingDecision?.Copy();
+        RunState = runState?.Copy();
+        RulesState = rulesState?.Copy();
     }
 
     [JsonInclude]
@@ -696,6 +719,14 @@ public sealed class GameSnapshot
     [JsonRequired]
     public PendingDecision? PendingDecision { get; private set; }
 
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public RunState? RunState { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public RulesState? RulesState { get; private set; }
+
     public static GameSnapshot From(GameState state)
     {
         ArgumentNullException.ThrowIfNull(state);
@@ -718,7 +749,9 @@ public sealed class GameSnapshot
             state.ResolutionStack,
             state.PendingDecision,
             state.ActionSequence,
-            state.InitialSeed);
+            state.InitialSeed,
+            state.RunState,
+            state.RulesState);
     }
 
     public GameState ToState() => new(
@@ -739,7 +772,9 @@ public sealed class GameSnapshot
         ResolutionStack,
         PendingDecision,
         ActionSequence,
-        InitialSeed);
+        InitialSeed,
+        RunState,
+        RulesState);
 
     private static ReadOnlyCollection<PlayerState> CopyPlayers(IEnumerable<PlayerState>? values) =>
         new ReadOnlyCollection<PlayerState>((values ?? [])

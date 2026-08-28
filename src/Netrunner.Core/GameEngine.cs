@@ -6,7 +6,7 @@ namespace Netrunner.Core;
 /// allocator, the RNG cursor, and the event buffer until a prospective state
 /// has passed invariant validation.
 /// </summary>
-public static class GameEngine
+public static partial class GameEngine
 {
     public const int DefaultResolutionStepBudget = 128;
 
@@ -227,6 +227,18 @@ public static class GameEngine
                 case ToyTurnFrame toyTurn:
                     StepToyTurn(working, toyTurn);
                     break;
+                case RunTimingFrame runTiming:
+                    StepRunTiming(working, runTiming);
+                    break;
+                case EffectResolutionFrame effectResolution:
+                    StepEffectResolution(working, effectResolution);
+                    break;
+                case EffectCheckpointFrame effectCheckpoint:
+                    StepEffectCheckpoint(working, effectCheckpoint);
+                    break;
+                case MemoryCleanupFrame memoryCleanup:
+                    StepMemoryCleanup(working, memoryCleanup);
+                    break;
                 default:
                     throw new ResolutionFailureException(
                         $"No resolution behavior is registered for frame type '{frame.GetType().Name}'.");
@@ -260,6 +272,36 @@ public static class GameEngine
                 return;
             case (ActionKind.StealAgenda, CardChoiceParameters stealChoice):
                 ConsumeToyAction(working, action.Kind, stealChoice.CardId);
+                return;
+            case (ActionKind.PassPriority, NoActionParameters):
+            case (ActionKind.RezIce, RunIceParameters runIce):
+            case (ActionKind.JackOut, NoActionParameters):
+            case (ActionKind.ContinueRun, NoActionParameters):
+                ConsumeRunAction(working, action.Kind, action.Parameters);
+                return;
+            case (ActionKind.TrashProgram, CardChoiceParameters trashProgram):
+                ConsumeMemoryCleanupAction(working, trashProgram.CardId);
+                return;
+            case (ActionKind.UseTrigger, TriggerChoiceParameters useTrigger):
+                ConsumeTriggerChoice(working, ActionKind.UseTrigger, useTrigger.TriggerId);
+                return;
+            case (ActionKind.DeclineTrigger, TriggerChoiceParameters declineTrigger):
+                ConsumeTriggerChoice(working, ActionKind.DeclineTrigger, declineTrigger.TriggerId);
+                return;
+            case (ActionKind.OrderTriggers, TriggerOrderParameters orderTriggers):
+                ConsumeTriggerOrdering(working, orderTriggers.TriggerId);
+                return;
+            case (ActionKind.UsePrevention, PreventionChoiceParameters usePrevention):
+                ConsumePreventionChoice(working, usePrevention.InterruptId, usePrevention.Amount);
+                return;
+            case (ActionKind.DeclinePrevention, PreventionChoiceParameters declinePrevention):
+                ConsumeInterruptDecline(working, ActionKind.DeclinePrevention, declinePrevention.InterruptId);
+                return;
+            case (ActionKind.UseReplacement, ReplacementChoiceParameters useReplacement):
+                ConsumeReplacementChoice(working, useReplacement.InterruptId);
+                return;
+            case (ActionKind.DeclineReplacement, ReplacementChoiceParameters declineReplacement):
+                ConsumeInterruptDecline(working, ActionKind.DeclineReplacement, declineReplacement.InterruptId);
                 return;
             default:
                 throw new ResolutionFailureException($"Action kind '{action.Kind}' has no registered resolver.");
@@ -1075,6 +1117,8 @@ public static class GameEngine
             ActionSequence = source.ActionSequence;
             ResolutionStack = source.ResolutionStack.Select(ResolutionFrameCloner.Copy).ToList();
             PendingDecision = source.PendingDecision?.Copy();
+            RunState = source.RunState?.Copy();
+            RulesState = source.RulesState?.Copy();
             Events = new List<EngineEvent>();
         }
 
@@ -1106,6 +1150,10 @@ public static class GameEngine
 
         public PendingDecision? PendingDecision { get; set; }
 
+        public RunState? RunState { get; set; }
+
+        public RulesState? RulesState { get; set; }
+
         public List<EngineEvent> Events { get; }
 
         public static WorkingState From(GameState source) => new(source);
@@ -1128,7 +1176,9 @@ public static class GameEngine
             ResolutionStack,
             PendingDecision,
             ActionSequence,
-            InitialSeed);
+            InitialSeed,
+            RunState,
+            RulesState);
     }
 }
 

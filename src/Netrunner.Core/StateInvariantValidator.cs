@@ -69,6 +69,8 @@ public static class StateInvariantValidator
         ValidateZonesAndCards(state, violations);
         ValidateServers(state, violations);
         ValidateTurnAndOutcome(state, violations);
+        ValidateRunState(state, violations);
+        ValidateRulesState(state, violations);
         ValidateResolutionAndDecision(state, violations);
         return violations.AsReadOnly();
     }
@@ -646,6 +648,11 @@ public static class StateInvariantValidator
             Add(violations, "outcome.deck-out-winner", "outcome.winner", "DeckOut must identify Runner as the winner in the M1 rules model.");
         }
 
+        if (outcome.Reason == GameWinReason.Flatline && outcome.Winner != PlayerSide.Corp)
+        {
+            Add(violations, "outcome.flatline-winner", "outcome.winner", "Flatline must identify Corp as the winner.");
+        }
+
         if (turn is not null && turn.Phase == TurnPhase.GameOver && ongoing)
         {
             Add(violations, "turn.outcome-mismatch", "turn.phase", "GameOver phase requires a terminal outcome.");
@@ -654,6 +661,651 @@ public static class StateInvariantValidator
         if (turn is not null && turn.Phase != TurnPhase.GameOver && !ongoing)
         {
             Add(violations, "turn.outcome-mismatch", "turn.phase", "A terminal outcome requires GameOver phase.");
+        }
+    }
+
+    private static void ValidateRunState(GameState state, List<StateInvariantViolation> violations)
+    {
+        RunState? run = state.RunState;
+        bool hasRunFrame = state.ResolutionStack.Any(static frame => frame is RunTimingFrame);
+        if (run is null)
+        {
+            if (hasRunFrame)
+            {
+                Add(violations, "run.frame-without-state", "resolutionStack", "A run timing frame cannot exist without live run state.");
+            }
+
+            return;
+        }
+
+        const string path = "runState";
+        if (run.Version != 1)
+        {
+            Add(violations, "run.unsupported-version", $"{path}.version", $"Run state version {run.Version} is not supported; expected 1.");
+        }
+
+        if (!StableIdentifier.TryValidate(run.Id.Value))
+        {
+            Add(violations, "id.invalid", $"{path}.id", "Run ID is empty or invalid.");
+        }
+
+        if (!StableIdentifier.TryValidate(run.AttackedServer.Value))
+        {
+            Add(violations, "id.invalid", $"{path}.attackedServer", "Attacked server ID is empty or invalid.");
+        }
+        else if (!state.Servers.Any(server => server?.Id == run.AttackedServer))
+        {
+            Add(violations, "run.unknown-server", $"{path}.attackedServer", $"Run references unknown server '{run.AttackedServer}'.");
+        }
+
+        if (!IsPlayerSide(run.InitiatingSide))
+        {
+            Add(violations, "run.invalid-initiating-side", $"{path}.initiatingSide", "Run initiating side must be Corp or Runner.");
+        }
+        else if (run.InitiatingSide != PlayerSide.Runner)
+        {
+            Add(violations, "run.invalid-initiating-side", $"{path}.initiatingSide", "This slice supports only Runner-initiated runs.");
+        }
+
+        PlayerState? initiatingPlayer = state.Players.FirstOrDefault(player => player?.Id == run.InitiatingPlayer);
+        if (initiatingPlayer is null)
+        {
+            Add(violations, "run.unknown-initiating-player", $"{path}.initiatingPlayer", $"Run references unknown player '{run.InitiatingPlayer}'.");
+        }
+        else if (initiatingPlayer.Side != run.InitiatingSide)
+        {
+            Add(violations, "run.initiating-player-side", $"{path}.initiatingPlayer", "Run initiating player side must match initiatingSide.");
+        }
+
+        if (!Enum.IsDefined(run.Phase))
+        {
+            Add(violations, "run.invalid-phase", $"{path}.phase", $"'{run.Phase}' is not a supported CR run phase.");
+        }
+
+        if (!Enum.IsDefined(run.Step))
+        {
+            Add(violations, "run.invalid-step", $"{path}.step", $"'{run.Step}' is not a supported CR 6.9 timing step.");
+        }
+        else if (run.Phase != ExpectedRunPhase(run.Step))
+        {
+            Add(violations, "run.phase-step-mismatch", $"{path}.phase", $"Phase '{run.Phase}' does not match timing step '{run.Step}'.");
+        }
+
+        if (run.Successful && run.Unsuccessful)
+        {
+            Add(violations, "run.conflicting-result", $"{path}", "A run cannot be successful and unsuccessful at the same time.");
+        }
+
+        if (run.Step == RunTimingStep.RunEnd && !run.EndReason.HasValue)
+        {
+            Add(violations, "run.missing-end-reason", $"{path}.endReason", "Run-end cleanup requires an explicit end reason.");
+        }
+
+        if (run.Step != RunTimingStep.RunEnd && run.EndReason.HasValue)
+        {
+            Add(violations, "run.unexpected-end-reason", $"{path}.endReason", "A live run before cleanup must not have an end reason.");
+        }
+
+        if (run.EndReason.HasValue && !Enum.IsDefined(run.EndReason.Value))
+        {
+            Add(violations, "run.invalid-end-reason", $"{path}.endReason", $"'{run.EndReason}' is not a supported run-end reason.");
+        }
+
+        if (run.RandomAccessLimit < 0)
+        {
+            Add(violations, "run.negative-access-limit", $"{path}.randomAccessLimit", "Random access limit must be nonnegative.");
+        }
+
+        if (run.RunCredits < 0)
+        {
+            Add(violations, "run.negative-credits", $"{path}.runCredits", "Run credits must be nonnegative.");
+        }
+
+        if (!Enum.IsDefined(run.AccessState))
+        {
+            Add(violations, "run.invalid-access-state", $"{path}.accessState", $"'{run.AccessState}' is not a supported access state.");
+        }
+
+        ServerState? server = state.Servers.FirstOrDefault(candidate => candidate?.Id == run.AttackedServer);
+        ZoneState? iceZone = server is null
+            ? null
+            : state.Zones.FirstOrDefault(zone => zone?.Id == server.IceZoneId);
+        if (iceZone is null)
+        {
+            Add(violations, "run.missing-ice-zone", $"{path}.attackedServer", "A run requires the attacked server's ICE zone.");
+        }
+        else
+        {
+            if (run.CurrentIceIndex < -1 || run.CurrentIceIndex >= iceZone.CardIds.Count)
+            {
+                Add(violations, "run.invalid-ice-index", $"{path}.currentIceIndex", "Current ICE index must be -1 or an index in the attacked server's ordered ICE zone.");
+            }
+
+            if (run.CurrentIceIndex < 0)
+            {
+                if (run.CurrentIceId.HasValue)
+                {
+                    Add(violations, "run.unexpected-current-ice", $"{path}.currentIceId", "A run at the server must not have a current ICE ID.");
+                }
+            }
+            else if (!run.CurrentIceId.HasValue || iceZone.CardIds[run.CurrentIceIndex] != run.CurrentIceId.Value)
+            {
+                Add(violations, "run.ice-position-mismatch", $"{path}.currentIceId", "Current ICE ID must match the ordered ICE zone position.");
+            }
+
+            if (run.Step is RunTimingStep.Success or RunTimingStep.BreachBoundary
+                && run.CurrentIceIndex >= 0)
+            {
+                Add(violations, "run.success-before-server", $"{path}.currentIceIndex", "Success and breach may occur only after the run reaches the server.");
+            }
+        }
+
+        ValidateRunIdList(run.BreachCandidates, "breachCandidates");
+        ValidateRunIdList(run.ChosenAccessCards, "chosenAccessCards");
+        ValidateRunIdList(run.AccessedCards, "accessedCards");
+
+        var effectIds = new HashSet<RunEffectId>();
+        for (int index = 0; index < run.LingeringEffects.Count; index++)
+        {
+            RunLingeringEffect? effect = run.LingeringEffects[index];
+            string effectPath = $"{path}.lingeringEffects[{index}]";
+            if (effect is null)
+            {
+                Add(violations, "run.null-effect", effectPath, "Lingering effects must not contain null entries.");
+                continue;
+            }
+
+            if (effect.Version != 1)
+            {
+                Add(violations, "run.effect-unsupported-version", $"{effectPath}.version", "Only lingering-effect version 1 is supported.");
+            }
+
+            if (!StableIdentifier.TryValidate(effect.Id.Value))
+            {
+                Add(violations, "id.invalid", $"{effectPath}.id", "Lingering effect ID is empty or invalid.");
+            }
+            else if (!effectIds.Add(effect.Id))
+            {
+                Add(violations, "run.duplicate-effect", $"{effectPath}.id", $"Lingering effect ID '{effect.Id}' is duplicated.");
+            }
+
+            if (!StableIdentifier.TryValidate(effect.BehaviorId))
+            {
+                Add(violations, "run.invalid-effect-behavior", $"{effectPath}.behaviorId", "Lingering effect behavior ID must be non-empty and stable.");
+            }
+
+            if (!Enum.IsDefined(effect.Expiry))
+            {
+                Add(violations, "run.invalid-effect-expiry", $"{effectPath}.expiry", $"'{effect.Expiry}' is not supported inside RunState.");
+            }
+        }
+
+        if (run.Priority is null)
+        {
+            if (IsRunPriorityStep(run.Step))
+            {
+                Add(violations, "run.missing-priority", $"{path}.priority", "Each run paid window requires priority state.");
+            }
+        }
+        else
+        {
+            ValidateRunPriority(run, path, violations);
+        }
+
+        if (run.Encounter is not null)
+        {
+            ValidateRunEncounter(state, run, path, violations);
+        }
+
+        int runFrameCount = state.ResolutionStack.Count(frame => frame is RunTimingFrame timing && timing.RunId == run.Id);
+        if (runFrameCount != 1)
+        {
+            Add(violations, "run.frame-count", "resolutionStack", $"Live run '{run.Id}' requires exactly one matching RunTimingFrame; found {runFrameCount}.");
+        }
+
+        void ValidateRunIdList(IReadOnlyList<CardInstanceId> ids, string property)
+        {
+            var seen = new HashSet<CardInstanceId>();
+            for (int index = 0; index < ids.Count; index++)
+            {
+                CardInstanceId id = ids[index];
+                string idPath = $"{path}.{property}[{index}]";
+                if (!StableIdentifier.TryValidate(id.Value))
+                {
+                    Add(violations, "id.invalid", idPath, "Run card ID is empty or invalid.");
+                }
+                else if (!seen.Add(id))
+                {
+                    Add(violations, "run.duplicate-card", idPath, $"Run card ID '{id}' occurs more than once.");
+                }
+
+                if (!state.Cards.Any(card => card?.Id == id))
+                {
+                    Add(violations, "run.unknown-card", idPath, $"Run references unknown card '{id}'.");
+                }
+            }
+        }
+    }
+
+    private static void ValidateRunPriority(RunState run, string path, List<StateInvariantViolation> violations)
+    {
+        RunPriorityState priority = run.Priority!;
+        if (priority.Version != 1)
+        {
+            Add(violations, "run.priority-unsupported-version", $"{path}.priority.version", "Only priority state version 1 is supported.");
+        }
+
+        if (!Enum.IsDefined(priority.Window))
+        {
+            Add(violations, "run.priority-invalid-window", $"{path}.priority.window", $"'{priority.Window}' is not supported.");
+        }
+
+        if (!IsPlayerSide(priority.PriorityHolder))
+        {
+            Add(violations, "run.priority-invalid-holder", $"{path}.priority.priorityHolder", "Priority holder must be Corp or Runner.");
+        }
+
+        if (priority.ConsecutivePasses is < 0 or > 1)
+        {
+            Add(violations, "run.priority-invalid-passes", $"{path}.priority.consecutivePasses", "A live paid window may have zero or one consecutive pass.");
+        }
+
+        if (!IsRunPriorityStep(run.Step))
+        {
+            Add(violations, "run.unexpected-priority", $"{path}.priority", "Priority state is only valid during a paid run window.");
+            return;
+        }
+
+        RunPriorityWindowKind expectedWindow = run.Step switch
+        {
+            RunTimingStep.InitiationPaidWindow => RunPriorityWindowKind.InitiationPaid,
+            RunTimingStep.ApproachPaidWindow => RunPriorityWindowKind.ApproachPaid,
+            RunTimingStep.EncounterPaidWindow => RunPriorityWindowKind.EncounterPaid,
+            RunTimingStep.MovementPaidWindow => RunPriorityWindowKind.MovementPaid,
+            RunTimingStep.AfterMovePaidWindow => RunPriorityWindowKind.AfterMovePaid,
+            _ => priority.Window,
+        };
+        if (priority.Window != expectedWindow)
+        {
+            Add(violations, "run.priority-window-mismatch", $"{path}.priority.window", "Priority window does not match the run timing step.");
+        }
+
+        bool expectedApproachedRez = run.Step == RunTimingStep.ApproachPaidWindow
+            && run.CurrentIceId.HasValue;
+        if (priority.CorpMayRezApproachedIce && !expectedApproachedRez)
+        {
+            Add(violations, "run.invalid-approach-rez-capability", $"{path}.priority.corpMayRezApproachedIce", "Approached-ICE rez permission is only legal in the approach paid window.");
+        }
+
+        bool expectedNonIceRez = run.Step is RunTimingStep.InitiationPaidWindow
+            or RunTimingStep.ApproachPaidWindow
+            or RunTimingStep.AfterMovePaidWindow;
+        if (priority.CorpMayRezNonIce && !expectedNonIceRez)
+        {
+            Add(violations, "run.invalid-non-ice-rez-capability", $"{path}.priority.corpMayRezNonIce", "Non-ICE rez permission is not legal in this run window.");
+        }
+    }
+
+    private static void ValidateRunEncounter(GameState state, RunState run, string path, List<StateInvariantViolation> violations)
+    {
+        RunEncounterState encounter = run.Encounter!;
+        if (encounter.Version != 1)
+        {
+            Add(violations, "run.encounter-unsupported-version", $"{path}.encounter.version", "Only encounter state version 1 is supported.");
+        }
+
+        if (!StableIdentifier.TryValidate(encounter.Id.Value))
+        {
+            Add(violations, "id.invalid", $"{path}.encounter.id", "Encounter ID is empty or invalid.");
+        }
+
+        if (!StableIdentifier.TryValidate(encounter.IceId.Value))
+        {
+            Add(violations, "id.invalid", $"{path}.encounter.iceId", "Encounter ICE ID is empty or invalid.");
+        }
+
+        if (!Enum.IsDefined(encounter.Status))
+        {
+            Add(violations, "run.encounter-invalid-status", $"{path}.encounter.status", $"'{encounter.Status}' is not supported.");
+        }
+
+        if (run.CurrentIceId != encounter.IceId)
+        {
+            Add(violations, "run.encounter-ice-mismatch", $"{path}.encounter.iceId", "Encounter ICE must be the current approached ICE.");
+        }
+
+        var subroutineIds = new HashSet<SubroutineId>();
+        var ordinals = new HashSet<int>();
+        for (int index = 0; index < encounter.Subroutines.Count; index++)
+        {
+            RunSubroutineState? subroutine = encounter.Subroutines[index];
+            string subroutinePath = $"{path}.encounter.subroutines[{index}]";
+            if (subroutine is null)
+            {
+                Add(violations, "run.null-subroutine", subroutinePath, "Encounter subroutines must not contain null entries.");
+                continue;
+            }
+
+            if (subroutine.Version != 1)
+            {
+                Add(violations, "run.subroutine-unsupported-version", $"{subroutinePath}.version", "Only subroutine state version 1 is supported.");
+            }
+
+            if (!StableIdentifier.TryValidate(subroutine.Id.Value))
+            {
+                Add(violations, "id.invalid", $"{subroutinePath}.id", "Subroutine ID is empty or invalid.");
+            }
+            else if (!subroutineIds.Add(subroutine.Id))
+            {
+                Add(violations, "run.duplicate-subroutine", $"{subroutinePath}.id", $"Subroutine ID '{subroutine.Id}' is duplicated.");
+            }
+
+            if (subroutine.Ordinal < 0 || !ordinals.Add(subroutine.Ordinal))
+            {
+                Add(violations, "run.invalid-subroutine-ordinal", $"{subroutinePath}.ordinal", "Subroutine ordinals must be unique and nonnegative.");
+            }
+
+            if (subroutine.Broken && subroutine.Resolved)
+            {
+                Add(violations, "run.subroutine-state", subroutinePath, "A broken subroutine cannot also be unresolved.");
+            }
+        }
+
+        if ((run.Step is RunTimingStep.EncounterPaidWindow or RunTimingStep.Encounter)
+            && encounter.Status != RunEncounterStatus.Initialized)
+        {
+            Add(violations, "run.encounter-status-mismatch", $"{path}.encounter.status", "Encounter paid/initialization timing requires an initialized encounter.");
+        }
+    }
+
+    private static PlayerId RunDecisionOwner(GameState state, RunState run)
+    {
+        if (run.Step == RunTimingStep.JackOutDecision)
+        {
+            return run.InitiatingPlayer;
+        }
+
+        RunPriorityState priority = run.Priority
+            ?? throw new InvalidOperationException("A run priority decision requires priority state.");
+        return state.Players.Single(player => player.Side == priority.PriorityHolder).Id;
+    }
+
+    private static bool IsRunPriorityStep(RunTimingStep step) => step is
+        RunTimingStep.InitiationPaidWindow
+        or RunTimingStep.ApproachPaidWindow
+        or RunTimingStep.EncounterPaidWindow
+        or RunTimingStep.MovementPaidWindow
+        or RunTimingStep.AfterMovePaidWindow;
+
+    private static bool IsRunPromptStep(RunTimingStep step) => IsRunPriorityStep(step)
+        || step == RunTimingStep.JackOutDecision;
+
+    private static RunCrPhase ExpectedRunPhase(RunTimingStep step) => step switch
+    {
+        RunTimingStep.InitiationPaidWindow => RunCrPhase.Initiation,
+        RunTimingStep.Approach or RunTimingStep.ApproachPaidWindow => RunCrPhase.Approach,
+        RunTimingStep.EncounterInitialization or RunTimingStep.EncounterPaidWindow or RunTimingStep.Encounter => RunCrPhase.Encounter,
+        RunTimingStep.MovementPaidWindow or RunTimingStep.JackOutDecision or RunTimingStep.MoveInward or RunTimingStep.AfterMovePaidWindow => RunCrPhase.Movement,
+        RunTimingStep.Success or RunTimingStep.BreachBoundary => RunCrPhase.Success,
+        RunTimingStep.RunEnd => RunCrPhase.RunEnd,
+        _ => throw new ArgumentOutOfRangeException(nameof(step), step, "Unknown run timing step."),
+    };
+
+    private static void ValidateRulesState(GameState state, List<StateInvariantViolation> violations)
+    {
+        RulesState? rules = state.RulesState;
+        if (rules is null)
+        {
+            return;
+        }
+
+        const string path = "rulesState";
+        if (rules.Version != 1)
+        {
+            Add(violations, "rules.unsupported-version", $"{path}.version", "Only M2 rules state version 1 is supported.");
+        }
+
+        var statePlayers = new Dictionary<PlayerId, PlayerState>();
+        foreach (PlayerState? player in state.Players)
+        {
+            if (player is not null)
+            {
+                _ = statePlayers.TryAdd(player.Id, player);
+            }
+        }
+        var rulePlayerIds = new HashSet<PlayerId>();
+        var calculatedMemory = new Dictionary<PlayerId, long>();
+        for (int index = 0; index < rules.Players.Count; index++)
+        {
+            PlayerRulesState? player = rules.Players[index];
+            string playerPath = $"{path}.players[{index}]";
+            if (player is null)
+            {
+                Add(violations, "rules.null-player", playerPath, "Rules player entries must not be null.");
+                continue;
+            }
+
+            RequireStableId(player.PlayerId.Value, $"{playerPath}.playerId", "player", violations);
+            if (!rulePlayerIds.Add(player.PlayerId))
+            {
+                Add(violations, "rules.duplicate-player", $"{playerPath}.playerId", $"Rules state contains duplicate player '{player.PlayerId}'.");
+            }
+
+            if (!statePlayers.ContainsKey(player.PlayerId))
+            {
+                Add(violations, "rules.unknown-player", $"{playerPath}.playerId", $"Rules state references unknown player '{player.PlayerId}'.");
+            }
+
+            if (player.BaseHandSize < 0)
+            {
+                Add(violations, "rules.negative-hand-size", $"{playerPath}.baseHandSize", "Base hand size must not be negative.");
+            }
+
+            if (player.CoreDamage < 0)
+            {
+                Add(violations, "rules.negative-core-damage", $"{playerPath}.coreDamage", "Core damage must not be negative.");
+            }
+
+            if (player.Tags < 0)
+            {
+                Add(violations, "rules.negative-tags", $"{playerPath}.tags", "Tags must not be negative.");
+            }
+
+            if (player.BaseMemory < 0)
+            {
+                Add(violations, "rules.negative-base-memory", $"{playerPath}.baseMemory", "Base memory must not be negative.");
+            }
+
+            if (player.UsedMemory < 0)
+            {
+                Add(violations, "rules.negative-used-memory", $"{playerPath}.usedMemory", "Used memory must not be negative.");
+            }
+
+            calculatedMemory[player.PlayerId] = 0;
+        }
+
+        foreach (PlayerState? player in state.Players)
+        {
+            if (player is not null && !rulePlayerIds.Contains(player.Id))
+            {
+                Add(violations, "rules.missing-player", $"{path}.players", $"Rules state has no entry for player '{player.Id}'.");
+            }
+        }
+
+        var cardsById = new Dictionary<CardInstanceId, CardInstanceState>();
+        foreach (CardInstanceState? card in state.Cards)
+        {
+            if (card is not null)
+            {
+                _ = cardsById.TryAdd(card.Id, card);
+            }
+        }
+        var programIds = new HashSet<CardInstanceId>();
+        for (int index = 0; index < rules.Programs.Count; index++)
+        {
+            ProgramMemoryState? program = rules.Programs[index];
+            string programPath = $"{path}.programs[{index}]";
+            if (program is null)
+            {
+                Add(violations, "rules.null-program", programPath, "Program memory entries must not be null.");
+                continue;
+            }
+
+            RequireStableId(program.CardId.Value, $"{programPath}.cardId", "card", violations);
+            RequireStableId(program.Owner.Value, $"{programPath}.owner", "player", violations);
+            if (!programIds.Add(program.CardId))
+            {
+                Add(violations, "rules.duplicate-program", $"{programPath}.cardId", $"Program '{program.CardId}' is registered more than once.");
+            }
+
+            if (program.MemoryCost < 0)
+            {
+                Add(violations, "rules.negative-program-memory", $"{programPath}.memoryCost", "Program memory cost must not be negative.");
+            }
+
+            if (!statePlayers.TryGetValue(program.Owner, out PlayerState? owner))
+            {
+                Add(violations, "rules.unknown-program-owner", $"{programPath}.owner", $"Program '{program.CardId}' references unknown player '{program.Owner}'.");
+            }
+            else if (owner.Side != PlayerSide.Runner)
+            {
+                Add(violations, "rules.program-owner-side", $"{programPath}.owner", "Only the Runner may own installed program memory.");
+            }
+
+            if (!cardsById.TryGetValue(program.CardId, out CardInstanceState? card))
+            {
+                Add(violations, "rules.unknown-program-card", $"{programPath}.cardId", $"Program memory references unknown card '{program.CardId}'.");
+            }
+            else
+            {
+                if (card.OwnerSide != PlayerSide.Runner)
+                {
+                    Add(violations, "rules.program-card-owner", $"{programPath}.cardId", "A registered program must be Runner-owned.");
+                }
+
+                ZoneState? zone = state.Zones.FirstOrDefault(candidate => candidate?.Id == card.ZoneId);
+                if (zone?.Kind != ZoneKind.RunnerRig)
+                {
+                    Add(violations, "rules.program-not-installed", $"{programPath}.cardId", "A registered program must be in the Runner rig.");
+                }
+            }
+
+            calculatedMemory.TryGetValue(program.Owner, out long used);
+            calculatedMemory[program.Owner] = checked(used + program.MemoryCost);
+        }
+
+        foreach (PlayerRulesState? player in rules.Players)
+        {
+            if (player is null)
+            {
+                continue;
+            }
+
+            calculatedMemory.TryGetValue(player.PlayerId, out long calculated);
+            if (calculated != player.UsedMemory)
+            {
+                Add(
+                    violations,
+                    "rules.used-memory-mismatch",
+                    $"{path}.players[{player.PlayerId}].usedMemory",
+                    $"Used memory {player.UsedMemory} must equal the sum of registered programs ({calculated}).");
+            }
+
+
+            if (player.UsedMemory > player.BaseMemory)
+            {
+                bool hasCleanup = state.ResolutionStack.Count >= 2
+                    && state.ResolutionStack[^1] is MemoryCleanupFrame cleanup
+                    && cleanup.Owner == player.PlayerId
+                    && state.ResolutionStack[^2] is EffectResolutionFrame
+                    {
+                        Stage: EffectResolutionStage.AwaitingMemoryCleanup,
+                    };
+                if (!hasCleanup)
+                {
+                    Add(
+                        violations,
+                        "rules.memory-over-limit-without-cleanup",
+                        $"{path}.players[{player.PlayerId}].usedMemory",
+                        "Memory may exceed its limit only while the matching mandatory cleanup decision is active.");
+                }
+            }
+        }
+
+        var counterKeys = new HashSet<string>(StringComparer.Ordinal);
+        for (int index = 0; index < rules.Counters.Count; index++)
+        {
+            CardCounterState? counter = rules.Counters[index];
+            string counterPath = $"{path}.counters[{index}]";
+            if (counter is null)
+            {
+                Add(violations, "rules.null-counter", counterPath, "Counter entries must not be null.");
+                continue;
+            }
+
+            RequireStableId(counter.CardId.Value, $"{counterPath}.cardId", "card", violations);
+            RequireStableId(counter.CounterName, $"{counterPath}.counterName", "counter", violations);
+            string key = $"{counter.CardId.Value}\u001f{counter.CounterName}";
+            if (!counterKeys.Add(key))
+            {
+                Add(violations, "rules.duplicate-counter", counterPath, $"Counter '{counter.CounterName}' on card '{counter.CardId}' is duplicated.");
+            }
+
+            if (!cardsById.ContainsKey(counter.CardId))
+            {
+                Add(violations, "rules.unknown-counter-card", $"{counterPath}.cardId", $"Counter references unknown card '{counter.CardId}'.");
+            }
+
+            if (counter.Count <= 0)
+            {
+                Add(violations, "rules.nonpositive-counter", $"{counterPath}.count", "Stored counter entries must be positive; zero-count entries are omitted.");
+            }
+        }
+
+        var effectIds = new HashSet<RunEffectId>();
+        for (int index = 0; index < rules.LingeringEffects.Count; index++)
+        {
+            GameLingeringEffect? effect = rules.LingeringEffects[index];
+            string effectPath = $"{path}.lingeringEffects[{index}]";
+            if (effect is null)
+            {
+                Add(violations, "rules.null-lingering-effect", effectPath, "Lingering effects must not be null.");
+                continue;
+            }
+
+            if (effect.Version != 1)
+            {
+                Add(violations, "rules.unsupported-lingering-version", $"{effectPath}.version", "Only lingering effect version 1 is supported.");
+            }
+
+            RequireStableId(effect.EffectId.Value, $"{effectPath}.effectId", "effect", violations);
+            if (!effectIds.Add(effect.EffectId))
+            {
+                Add(violations, "rules.duplicate-lingering-effect", $"{effectPath}.effectId", $"Lingering effect '{effect.EffectId}' is duplicated.");
+            }
+
+            RequireStableId(effect.BehaviorId, $"{effectPath}.behaviorId", "behavior", violations);
+            if (effect.SourceCardId.HasValue && !cardsById.ContainsKey(effect.SourceCardId.Value))
+            {
+                Add(violations, "rules.unknown-lingering-source", $"{effectPath}.sourceCardId", $"Lingering effect references unknown card '{effect.SourceCardId}'.");
+            }
+
+            if (!Enum.IsDefined(effect.Expiry))
+            {
+                Add(violations, "rules.invalid-lingering-expiry", $"{effectPath}.expiry", $"'{effect.Expiry}' is not a supported lingering-effect expiry.");
+            }
+        }
+    }
+
+    private static void RequireStableId(
+        string? value,
+        string path,
+        string kind,
+        List<StateInvariantViolation> violations)
+    {
+        if (!StableIdentifier.TryValidate(value))
+        {
+            Add(violations, "id.invalid", path, $"{kind} ID must be non-empty and stable.");
         }
     }
 
@@ -771,6 +1423,136 @@ public static class StateInvariantValidator
                         Add(violations, "resolution.invalid-stage", $"{path}.stage", "A Runner turn-start stage must belong to Runner.");
                     }
 
+                    break;
+                case RunTimingFrame runTiming:
+                    if (state.RunState is null)
+                    {
+                        Add(violations, "run.frame-without-state", $"{path}.runId", "A run timing frame requires live run state.");
+                    }
+                    else
+                    {
+                        if (runTiming.RunId != state.RunState.Id)
+                        {
+                            Add(violations, "run.frame-id-mismatch", $"{path}.runId", "Run timing frame ID must match live run state.");
+                        }
+
+                        if (runTiming.Step != state.RunState.Step)
+                        {
+                            Add(violations, "run.frame-step-mismatch", $"{path}.step", "Run timing frame step must match live run state.");
+                        }
+                    }
+
+                    break;
+                case EffectResolutionFrame effectFrame:
+                    RequirePlayer(playerIds, effectFrame.Controller, $"{path}.controller", violations);
+                    if (effectFrame.Stage == EffectResolutionStage.AwaitingMemoryCleanup)
+                    {
+                        if (index + 1 >= state.ResolutionStack.Count
+                            || state.ResolutionStack[index + 1] is not MemoryCleanupFrame)
+                        {
+                            Add(
+                                violations,
+                                "resolution.memory-cleanup-child-missing",
+                                path,
+                                "An effect frame awaiting memory cleanup must be immediately followed by a cleanup child frame.");
+                        }
+                    }
+                    else if (index + 1 < state.ResolutionStack.Count
+                        && state.ResolutionStack[index + 1] is MemoryCleanupFrame)
+                    {
+                        Add(
+                            violations,
+                            "resolution.unexpected-memory-cleanup-child",
+                            path,
+                            "A memory cleanup child is only valid while its parent effect frame is awaiting cleanup.");
+                    }
+
+                    break;
+                case EffectCheckpointFrame checkpoint:
+                    RequirePlayer(playerIds, checkpoint.Controller, $"{path}.controller", violations);
+                    if (checkpoint.Stage == EffectCheckpointStage.AwaitingChild)
+                    {
+                        if (index + 1 >= state.ResolutionStack.Count
+                            || state.ResolutionStack[index + 1] is not EffectResolutionFrame)
+                        {
+                            Add(
+                                violations,
+                                "resolution.checkpoint-child-missing",
+                                path,
+                                "An effect checkpoint awaiting a trigger or replacement child must be immediately followed by an effect-resolution frame.");
+                        }
+                    }
+                    else if (index + 1 < state.ResolutionStack.Count
+                        && state.ResolutionStack[index + 1] is EffectResolutionFrame)
+                    {
+                        Add(
+                            violations,
+                            "resolution.unexpected-checkpoint-child",
+                            path,
+                            "An effect-resolution child is only valid while its checkpoint is awaiting a child.");
+                    }
+
+                    if (checkpoint.Stage == EffectCheckpointStage.TriggerChoice
+                        && checkpoint.TriggerCursor < checkpoint.TriggerQueue.Count)
+                    {
+                        RequirePlayer(
+                            playerIds,
+                            checkpoint.TriggerQueue[checkpoint.TriggerCursor].Controller,
+                            $"{path}.triggerQueue[{checkpoint.TriggerCursor}].controller",
+                            violations);
+                    }
+
+                    if (checkpoint.Stage == EffectCheckpointStage.TriggerOrdering
+                        && checkpoint.TriggerCursor < checkpoint.TriggerQueue.Count)
+                    {
+                        RequirePlayer(
+                            playerIds,
+                            checkpoint.TriggerQueue[checkpoint.TriggerCursor].Controller,
+                            $"{path}.triggerQueue[{checkpoint.TriggerCursor}].controller",
+                            violations);
+                    }
+
+                    if (checkpoint.Stage == EffectCheckpointStage.InterruptChoice
+                        && checkpoint.InterruptCursor < checkpoint.InterruptQueue.Count)
+                    {
+                        RequirePlayer(
+                            playerIds,
+                            checkpoint.InterruptQueue[checkpoint.InterruptCursor].Controller,
+                            $"{path}.interruptQueue[{checkpoint.InterruptCursor}].controller",
+                            violations);
+                    }
+
+                    break;
+                case MemoryCleanupFrame memoryFrame:
+                    if (index != state.ResolutionStack.Count - 1)
+                    {
+                        Add(
+                            violations,
+                            "resolution.memory-cleanup-not-top",
+                            path,
+                            "A memory cleanup frame must be the top frame while its decision is pending.");
+                    }
+
+                    if (index == 0
+                        || state.ResolutionStack[index - 1] is not EffectResolutionFrame)
+                    {
+                            Add(
+                                violations,
+                                "resolution.memory-cleanup-parent-missing",
+                                path,
+                                "A memory cleanup frame must have an effect-resolution parent.");
+                        }
+                    else if (state.ResolutionStack[index - 1] is EffectResolutionFrame parent
+                        && parent.Stage != EffectResolutionStage.AwaitingMemoryCleanup)
+                    {
+                        Add(
+                            violations,
+                            "resolution.memory-cleanup-parent-stage",
+                            path,
+                            "A memory cleanup frame requires its parent to be in the awaiting-cleanup stage.");
+                    }
+
+                    RequirePlayer(playerIds, memoryFrame.Owner, $"{path}.owner", violations);
                     break;
             }
         }
@@ -905,6 +1687,70 @@ public static class StateInvariantValidator
                     && pending.Owner != state.Players.FirstOrDefault(player => player?.Side == toyOwnerFrame.ActiveSide)?.Id:
                     Add(violations, "resolution.pending-owner-mismatch", $"{path}.owner", "Toy-turn decision owner must be the active side's player.");
                     break;
+                case MemoryCleanupFrame memoryCleanupFrame when pending.Kind != DecisionKind.MemoryCleanup:
+                    Add(violations, "resolution.pending-kind-mismatch", $"{path}.kind", "A memory cleanup frame requires a MemoryCleanup decision.");
+                    break;
+                case MemoryCleanupFrame memoryCleanupOwnerFrame when pending.Owner != memoryCleanupOwnerFrame.Owner:
+                    Add(violations, "resolution.pending-owner-mismatch", $"{path}.owner", "Memory cleanup decision owner must match its frame.");
+                    break;
+                case EffectCheckpointFrame triggerCheckpoint when triggerCheckpoint.Stage == EffectCheckpointStage.TriggerChoice:
+                    if (pending.Kind != DecisionKind.TriggerChoice)
+                    {
+                        Add(violations, "resolution.pending-kind-mismatch", $"{path}.kind", "A trigger choice checkpoint requires a TriggerChoice decision.");
+                    }
+                    else if (triggerCheckpoint.TriggerCursor < triggerCheckpoint.TriggerQueue.Count
+                        && pending.Owner != triggerCheckpoint.TriggerQueue[triggerCheckpoint.TriggerCursor].Controller)
+                    {
+                        Add(violations, "resolution.pending-owner-mismatch", $"{path}.owner", "Trigger choice owner must match the current trigger invocation.");
+                    }
+
+                    break;
+                case EffectCheckpointFrame orderingCheckpoint when orderingCheckpoint.Stage == EffectCheckpointStage.TriggerOrdering:
+                    if (pending.Kind != DecisionKind.TriggerOrdering)
+                    {
+                        Add(violations, "resolution.pending-kind-mismatch", $"{path}.kind", "A trigger ordering checkpoint requires a TriggerOrdering decision.");
+                    }
+                    else if (orderingCheckpoint.TriggerCursor < orderingCheckpoint.TriggerQueue.Count
+                        && pending.Owner != orderingCheckpoint.TriggerQueue[orderingCheckpoint.TriggerCursor].Controller)
+                    {
+                        Add(violations, "resolution.pending-owner-mismatch", $"{path}.owner", "Trigger ordering owner must match the current controller group.");
+                    }
+
+                    break;
+                case EffectCheckpointFrame interruptCheckpoint when interruptCheckpoint.Stage == EffectCheckpointStage.InterruptChoice:
+                    if (pending.Kind != DecisionKind.InterruptChoice)
+                    {
+                        Add(violations, "resolution.pending-kind-mismatch", $"{path}.kind", "An interrupt checkpoint requires an InterruptChoice decision.");
+                    }
+                    else if (interruptCheckpoint.InterruptCursor < interruptCheckpoint.InterruptQueue.Count
+                        && pending.Owner != interruptCheckpoint.InterruptQueue[interruptCheckpoint.InterruptCursor].Controller)
+                    {
+                        Add(violations, "resolution.pending-owner-mismatch", $"{path}.owner", "Interrupt choice owner must match the current interrupt invocation.");
+                    }
+
+                    break;
+                case RunTimingFrame runFrame:
+                    if (state.RunState is null
+                        || runFrame.RunId != state.RunState.Id
+                        || runFrame.Step != state.RunState.Step)
+                    {
+                        Add(violations, "run.pending-frame-mismatch", path, "Run timing decision requires a matching live run cursor.");
+                    }
+                    else
+                    {
+                        if (pending.Kind != DecisionKind.RunTiming)
+                        {
+                            Add(violations, "resolution.pending-kind-mismatch", $"{path}.kind", "A run timing frame requires a RunTiming decision.");
+                        }
+
+                        PlayerId expectedOwner = RunDecisionOwner(state, state.RunState);
+                        if (pending.Owner != expectedOwner)
+                        {
+                            Add(violations, "resolution.pending-owner-mismatch", $"{path}.owner", $"Run timing decision owner must be '{expectedOwner}'.");
+                        }
+                    }
+
+                    break;
             }
         }
 
@@ -996,6 +1842,127 @@ public static class StateInvariantValidator
                     }
 
                     break;
+                case (ActionKind.PassPriority or ActionKind.JackOut or ActionKind.ContinueRun, NoActionParameters):
+                    if (pending.Kind != DecisionKind.RunTiming)
+                    {
+                        Add(violations, "decision.action-kind-mismatch", $"{actionPath}.kind", "Run timing actions require a RunTiming decision.");
+                    }
+
+                    break;
+                case (ActionKind.TrashProgram, CardChoiceParameters trashProgram):
+                    if (pending.Kind != DecisionKind.MemoryCleanup)
+                    {
+                        Add(violations, "decision.action-kind-mismatch", $"{actionPath}.kind", "TrashProgram actions require a MemoryCleanup decision.");
+                    }
+
+                    if (!cardIds.Contains(trashProgram.CardId))
+                    {
+                        Add(violations, "decision.unknown-card-action", $"{actionPath}.parameters.cardId", $"Trash action references unknown card '{trashProgram.CardId}'.");
+                    }
+
+                    break;
+                case (ActionKind.RezIce, RunIceParameters runIce):
+                    if (pending.Kind != DecisionKind.RunTiming)
+                    {
+                        Add(violations, "decision.action-kind-mismatch", $"{actionPath}.kind", "Run timing actions require a RunTiming decision.");
+                    }
+
+                    if (!cardIds.Contains(runIce.IceId))
+                    {
+                        Add(violations, "decision.unknown-card-action", $"{actionPath}.parameters.iceId", $"Run action references unknown ICE '{runIce.IceId}'.");
+                    }
+
+                    break;
+                case (ActionKind.UseTrigger or ActionKind.DeclineTrigger, TriggerChoiceParameters triggerChoice):
+                    if (pending.Kind != DecisionKind.TriggerChoice)
+                    {
+                        Add(violations, "decision.action-kind-mismatch", $"{actionPath}.kind", "Trigger actions require a TriggerChoice decision.");
+                    }
+                    else if (topFrame is EffectCheckpointFrame triggerFrame
+                        && (triggerFrame.Stage != EffectCheckpointStage.TriggerChoice
+                            || triggerFrame.TriggerCursor >= triggerFrame.TriggerQueue.Count
+                            || triggerFrame.TriggerQueue[triggerFrame.TriggerCursor].Id != triggerChoice.TriggerId))
+                    {
+                        Add(violations, "decision.trigger-action-not-offered", $"{actionPath}.parameters.triggerId", "Trigger action does not identify the current materialized trigger.");
+                    }
+
+                    break;
+                case (ActionKind.OrderTriggers, TriggerOrderParameters orderTriggers):
+                    if (pending.Kind != DecisionKind.TriggerOrdering)
+                    {
+                        Add(violations, "decision.action-kind-mismatch", $"{actionPath}.kind", "Trigger ordering actions require a TriggerOrdering decision.");
+                    }
+                    else if (topFrame is EffectCheckpointFrame orderingFrame
+                        && (orderingFrame.Stage != EffectCheckpointStage.TriggerOrdering
+                            || orderingFrame.TriggerCursor >= orderingFrame.TriggerQueue.Count
+                            || !orderingFrame.TriggerQueue.Skip(orderingFrame.TriggerCursor)
+                                .Where(invocation => invocation.Controller == pending.Owner)
+                                .Any(invocation => invocation.Id == orderTriggers.TriggerId)))
+                    {
+                        Add(violations, "decision.trigger-order-not-offered", $"{actionPath}.parameters.triggerId", "Trigger ordering action does not identify a remaining trigger controlled by this decision owner.");
+                    }
+
+                    break;
+                case (ActionKind.UsePrevention, PreventionChoiceParameters usePrevention):
+                    if (pending.Kind != DecisionKind.InterruptChoice)
+                    {
+                        Add(violations, "decision.action-kind-mismatch", $"{actionPath}.kind", "Prevention actions require an InterruptChoice decision.");
+                    }
+                    else if (topFrame is EffectCheckpointFrame preventionFrame
+                        && (preventionFrame.Stage != EffectCheckpointStage.InterruptChoice
+                            || preventionFrame.InterruptCursor >= preventionFrame.InterruptQueue.Count
+                            || preventionFrame.InterruptQueue[preventionFrame.InterruptCursor].Id != usePrevention.InterruptId
+                            || preventionFrame.InterruptQueue[preventionFrame.InterruptCursor].Kind != InterruptKind.Prevention))
+                    {
+                        Add(violations, "decision.interrupt-action-not-offered", $"{actionPath}.parameters.interruptId", "Prevention action does not identify the current materialized prevention interrupt.");
+                    }
+
+                    break;
+                case (ActionKind.DeclinePrevention, PreventionChoiceParameters declinePrevention):
+                    if (pending.Kind != DecisionKind.InterruptChoice)
+                    {
+                        Add(violations, "decision.action-kind-mismatch", $"{actionPath}.kind", "Prevention actions require an InterruptChoice decision.");
+                    }
+                    else if (topFrame is EffectCheckpointFrame declinePreventionFrame
+                        && (declinePreventionFrame.Stage != EffectCheckpointStage.InterruptChoice
+                            || declinePreventionFrame.InterruptCursor >= declinePreventionFrame.InterruptQueue.Count
+                            || declinePreventionFrame.InterruptQueue[declinePreventionFrame.InterruptCursor].Id != declinePrevention.InterruptId
+                            || declinePreventionFrame.InterruptQueue[declinePreventionFrame.InterruptCursor].Kind != InterruptKind.Prevention))
+                    {
+                        Add(violations, "decision.interrupt-action-not-offered", $"{actionPath}.parameters.interruptId", "Prevention action does not identify the current materialized prevention interrupt.");
+                    }
+
+                    break;
+                case (ActionKind.UseReplacement, ReplacementChoiceParameters useReplacement):
+                    if (pending.Kind != DecisionKind.InterruptChoice)
+                    {
+                        Add(violations, "decision.action-kind-mismatch", $"{actionPath}.kind", "Replacement actions require an InterruptChoice decision.");
+                    }
+                    else if (topFrame is EffectCheckpointFrame replacementFrame
+                        && (replacementFrame.Stage != EffectCheckpointStage.InterruptChoice
+                            || replacementFrame.InterruptCursor >= replacementFrame.InterruptQueue.Count
+                            || replacementFrame.InterruptQueue[replacementFrame.InterruptCursor].Id != useReplacement.InterruptId
+                            || replacementFrame.InterruptQueue[replacementFrame.InterruptCursor].Kind != InterruptKind.Replacement))
+                    {
+                        Add(violations, "decision.interrupt-action-not-offered", $"{actionPath}.parameters.interruptId", "Replacement action does not identify the current materialized replacement interrupt.");
+                    }
+
+                    break;
+                case (ActionKind.DeclineReplacement, ReplacementChoiceParameters declineReplacement):
+                    if (pending.Kind != DecisionKind.InterruptChoice)
+                    {
+                        Add(violations, "decision.action-kind-mismatch", $"{actionPath}.kind", "Replacement actions require an InterruptChoice decision.");
+                    }
+                    else if (topFrame is EffectCheckpointFrame declineReplacementFrame
+                        && (declineReplacementFrame.Stage != EffectCheckpointStage.InterruptChoice
+                            || declineReplacementFrame.InterruptCursor >= declineReplacementFrame.InterruptQueue.Count
+                            || declineReplacementFrame.InterruptQueue[declineReplacementFrame.InterruptCursor].Id != declineReplacement.InterruptId
+                            || declineReplacementFrame.InterruptQueue[declineReplacementFrame.InterruptCursor].Kind != InterruptKind.Replacement))
+                    {
+                        Add(violations, "decision.interrupt-action-not-offered", $"{actionPath}.parameters.interruptId", "Replacement action does not identify the current materialized replacement interrupt.");
+                    }
+
+                    break;
                 case (ActionKind.ChooseNumber, _):
                 case (ActionKind.ChooseCard, _):
                     Add(violations, "decision.action-parameters-mismatch", $"{actionPath}.parameters", $"Action kind '{action.Kind}' has the wrong typed parameter payload.");
@@ -1014,7 +1981,23 @@ public static class StateInvariantValidator
                         or ActionKind.AdvanceAgenda
                         or ActionKind.ScoreAgenda
                         or ActionKind.StealAgenda
-                        or ActionKind.EndTurn)))
+                        or ActionKind.EndTurn))
+                || (pending.Kind == DecisionKind.RunTiming
+                    && action.Kind is not (ActionKind.PassPriority
+                        or ActionKind.RezIce
+                        or ActionKind.JackOut
+                        or ActionKind.ContinueRun))
+                || (pending.Kind == DecisionKind.MemoryCleanup
+                    && action.Kind != ActionKind.TrashProgram)
+                || (pending.Kind == DecisionKind.TriggerChoice
+                    && action.Kind is not (ActionKind.UseTrigger or ActionKind.DeclineTrigger))
+                || (pending.Kind == DecisionKind.TriggerOrdering
+                    && action.Kind != ActionKind.OrderTriggers)
+                || (pending.Kind == DecisionKind.InterruptChoice
+                    && action.Kind is not (ActionKind.UsePrevention
+                        or ActionKind.DeclinePrevention
+                        or ActionKind.UseReplacement
+                        or ActionKind.DeclineReplacement)))
             {
                 Add(violations, "decision.action-kind-mismatch", $"{actionPath}.kind", $"Action kind '{action.Kind}' does not match decision kind '{pending.Kind}'.");
             }
@@ -1040,6 +2023,239 @@ public static class StateInvariantValidator
             && topFrame is ToyTurnFrame { Stage: ToyTurnStage.AwaitingAction } toyTurn)
         {
             ValidateToyActions(state, pending, toyTurn, path, violations);
+        }
+
+        if (pending.Kind == DecisionKind.RunTiming
+            && topFrame is RunTimingFrame runTiming
+            && state.RunState is not null)
+        {
+            ValidateRunActions(state, pending, state.RunState, runTiming, path, violations);
+        }
+
+        if (pending.Kind == DecisionKind.MemoryCleanup
+            && topFrame is MemoryCleanupFrame memoryCleanup)
+        {
+            ValidateMemoryCleanupActions(state, pending, memoryCleanup, path, violations);
+        }
+
+        if (topFrame is EffectCheckpointFrame checkpoint)
+        {
+            ValidateCheckpointActions(pending, checkpoint, path, violations);
+        }
+    }
+
+    private static void ValidateCheckpointActions(
+        PendingDecision pending,
+        EffectCheckpointFrame frame,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        var expected = new List<(ActionKind Kind, string? Target, int Amount)>();
+        switch (frame.Stage)
+        {
+            case EffectCheckpointStage.TriggerChoice when frame.TriggerCursor < frame.TriggerQueue.Count:
+                TriggerInvocation trigger = frame.TriggerQueue[frame.TriggerCursor];
+                expected.Add((ActionKind.UseTrigger, trigger.Id.Value, 0));
+                if (trigger.Mode == TriggerMode.Optional)
+                {
+                    expected.Add((ActionKind.DeclineTrigger, trigger.Id.Value, 0));
+                }
+
+                break;
+            case EffectCheckpointStage.TriggerOrdering when frame.TriggerCursor < frame.TriggerQueue.Count:
+                PlayerId controller = frame.TriggerQueue[frame.TriggerCursor].Controller;
+                foreach (TriggerInvocation remaining in frame.TriggerQueue
+                    .Skip(frame.TriggerCursor)
+                    .Where(invocation => invocation.Controller == controller))
+                {
+                    expected.Add((ActionKind.OrderTriggers, remaining.Id.Value, 0));
+                }
+
+                break;
+            case EffectCheckpointStage.InterruptChoice when frame.InterruptCursor < frame.InterruptQueue.Count:
+                InterruptInvocation interrupt = frame.InterruptQueue[frame.InterruptCursor];
+                if (interrupt.Kind == InterruptKind.Prevention)
+                {
+                    int maximum = Math.Min(
+                        interrupt.MaximumPreventionAmount,
+                        frame.CurrentEffect is DamageEffect damage ? damage.Amount : 0);
+                    for (int amount = 1; amount <= maximum; amount++)
+                    {
+                        expected.Add((ActionKind.UsePrevention, interrupt.Id.Value, amount));
+                    }
+
+                    if (!interrupt.Mandatory)
+                    {
+                        expected.Add((ActionKind.DeclinePrevention, interrupt.Id.Value, 0));
+                    }
+                }
+                else if (interrupt.Kind == InterruptKind.Replacement)
+                {
+                    expected.Add((ActionKind.UseReplacement, interrupt.Id.Value, 0));
+                    if (!interrupt.Mandatory)
+                    {
+                        expected.Add((ActionKind.DeclineReplacement, interrupt.Id.Value, 0));
+                    }
+                }
+
+                break;
+        }
+
+        var actual = new List<(ActionKind Kind, string? Target, int Amount)>();
+        foreach (LegalAction? action in pending.LegalActions)
+        {
+            if (action is null)
+            {
+                continue;
+            }
+
+            switch (action.Kind, action.Parameters)
+            {
+                case (ActionKind.UseTrigger or ActionKind.DeclineTrigger, TriggerChoiceParameters triggerChoice):
+                    actual.Add((action.Kind, triggerChoice.TriggerId.Value, 0));
+                    break;
+                case (ActionKind.OrderTriggers, TriggerOrderParameters order):
+                    actual.Add((action.Kind, order.TriggerId.Value, 0));
+                    break;
+                case (ActionKind.UsePrevention or ActionKind.DeclinePrevention, PreventionChoiceParameters prevention):
+                    actual.Add((action.Kind, prevention.InterruptId.Value, prevention.Amount));
+                    break;
+                case (ActionKind.UseReplacement or ActionKind.DeclineReplacement, ReplacementChoiceParameters replacement):
+                    actual.Add((action.Kind, replacement.InterruptId.Value, 0));
+                    break;
+            }
+        }
+
+        var expectedCounts = expected
+            .GroupBy(value => value)
+            .ToDictionary(group => group.Key, group => group.Count());
+        var actualCounts = actual
+            .GroupBy(value => value)
+            .ToDictionary(group => group.Key, group => group.Count());
+        foreach (((ActionKind Kind, string? Target, int Amount) spec, int count) in expectedCounts)
+        {
+            actualCounts.TryGetValue(spec, out int actualCount);
+            if (actualCount != count)
+            {
+                Add(
+                    violations,
+                    actualCount == 0 ? "decision.missing-checkpoint-action" : "decision.checkpoint-action-count-mismatch",
+                    $"{path}.legalActions",
+                    $"Checkpoint decision requires exactly {count} '{spec.Kind}' action(s) for '{spec.Target ?? "none"}' amount {spec.Amount}, but contains {actualCount}.");
+            }
+        }
+
+        foreach (((ActionKind Kind, string? Target, int Amount) spec, int count) in actualCounts)
+        {
+            if (!expectedCounts.TryGetValue(spec, out int expectedCount))
+            {
+                Add(
+                    violations,
+                    "decision.extra-checkpoint-action",
+                    $"{path}.legalActions",
+                    $"Checkpoint decision contains unoffered '{spec.Kind}' action for '{spec.Target ?? "none"}' amount {spec.Amount}.");
+            }
+            else if (count > expectedCount)
+            {
+                Add(
+                    violations,
+                    "decision.duplicate-checkpoint-action",
+                    $"{path}.legalActions",
+                    $"Checkpoint decision contains {count} copies of '{spec.Kind}' for '{spec.Target ?? "none"}' amount {spec.Amount}, expected {expectedCount}.");
+            }
+        }
+    }
+
+    private static void ValidateRunActions(
+        GameState state,
+        PendingDecision pending,
+        RunState run,
+        RunTimingFrame frame,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        if (frame.RunId != run.Id || frame.Step != run.Step)
+        {
+            return;
+        }
+
+        var expected = new List<(ActionKind Kind, CardInstanceId? Target)>();
+        switch (run.Step)
+        {
+            case RunTimingStep.InitiationPaidWindow:
+            case RunTimingStep.ApproachPaidWindow:
+            case RunTimingStep.EncounterPaidWindow:
+            case RunTimingStep.MovementPaidWindow:
+            case RunTimingStep.AfterMovePaidWindow:
+                expected.Add((ActionKind.PassPriority, null));
+                if (run.Step == RunTimingStep.ApproachPaidWindow
+                    && run.Priority is { PriorityHolder: PlayerSide.Corp, CorpMayRezApproachedIce: true }
+                    && run.CurrentIceId.HasValue)
+                {
+                    expected.Add((ActionKind.RezIce, run.CurrentIceId.Value));
+                }
+
+                break;
+            case RunTimingStep.JackOutDecision:
+                expected.Add((ActionKind.JackOut, null));
+                expected.Add((ActionKind.ContinueRun, null));
+                break;
+            default:
+                Add(violations, "run.unexpected-prompt", $"{path}.legalActions", $"Run step '{run.Step}' must not have a pending decision.");
+                return;
+        }
+
+        var actual = new List<(ActionKind Kind, CardInstanceId? Target)>();
+        foreach (LegalAction? action in pending.LegalActions)
+        {
+            if (action is null)
+            {
+                continue;
+            }
+
+            switch (action.Kind, action.Parameters)
+            {
+                case (ActionKind.PassPriority, NoActionParameters):
+                case (ActionKind.JackOut, NoActionParameters):
+                case (ActionKind.ContinueRun, NoActionParameters):
+                    actual.Add((action.Kind, null));
+                    break;
+                case (ActionKind.RezIce, RunIceParameters rez):
+                    actual.Add((action.Kind, rez.IceId));
+                    break;
+            }
+        }
+
+        var expectedCounts = expected.GroupBy(value => value).ToDictionary(group => group.Key, group => group.Count());
+        var actualCounts = actual.GroupBy(value => value).ToDictionary(group => group.Key, group => group.Count());
+        foreach (((ActionKind Kind, CardInstanceId? Target) spec, int count) in expectedCounts)
+        {
+            actualCounts.TryGetValue(spec, out int actualCount);
+            if (actualCount != count)
+            {
+                Add(
+                    violations,
+                    actualCount == 0 ? "run.missing-action" : "run.action-count-mismatch",
+                    $"{path}.legalActions",
+                    $"Run timing decision requires exactly {count} '{spec.Kind}' action(s) for target '{spec.Target?.ToString() ?? "none"}', but contains {actualCount}.");
+            }
+        }
+
+        foreach (((ActionKind Kind, CardInstanceId? Target) spec, int count) in actualCounts)
+        {
+            if (!expectedCounts.TryGetValue(spec, out int expectedCount))
+            {
+                Add(violations, "run.extra-action", $"{path}.legalActions", $"Run timing decision contains unoffered '{spec.Kind}' action for target '{spec.Target?.ToString() ?? "none"}'.");
+            }
+            else if (count > expectedCount)
+            {
+                Add(violations, "run.duplicate-action", $"{path}.legalActions", $"Run timing decision contains {count} copies of '{spec.Kind}' for target '{spec.Target?.ToString() ?? "none"}', expected {expectedCount}.");
+            }
+        }
+
+        if (pending.Owner != RunDecisionOwner(state, run))
+        {
+            Add(violations, "run.decision-owner-mismatch", $"{path}.owner", "Run timing decision owner does not match the current priority/Runner decision owner.");
         }
     }
 
@@ -1152,11 +2368,115 @@ public static class StateInvariantValidator
         }
     }
 
+    private static void ValidateMemoryCleanupActions(
+        GameState state,
+        PendingDecision pending,
+        MemoryCleanupFrame frame,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        RulesState? rules = state.RulesState;
+        if (rules is null)
+        {
+            Add(violations, "rules.missing", $"{path}.legalActions", "Memory cleanup requires initialized M2 rules state.");
+            return;
+        }
+
+        var expected = frame.Candidates
+            .GroupBy(candidate => candidate.CardId)
+            .ToDictionary(group => group.Key, group => group.Count());
+        var actual = new Dictionary<CardInstanceId, int>();
+        foreach (LegalAction? action in pending.LegalActions)
+        {
+            if (action?.Parameters is not CardChoiceParameters choice)
+            {
+                continue;
+            }
+
+            actual.TryGetValue(choice.CardId, out int count);
+            actual[choice.CardId] = count + 1;
+            if (!expected.ContainsKey(choice.CardId))
+            {
+                Add(violations, "decision.extra-memory-action", $"{path}.legalActions", $"Program '{choice.CardId}' is not a materialized cleanup candidate.");
+            }
+        }
+
+        if (pending.LegalActions.Count != expected.Values.Sum())
+        {
+            Add(
+                violations,
+                "decision.memory-action-count-mismatch",
+                $"{path}.legalActions",
+                $"Memory cleanup must contain exactly {expected.Values.Sum()} typed program actions, but contains {pending.LegalActions.Count}.");
+        }
+
+        foreach ((CardInstanceId cardId, int count) in expected)
+        {
+            actual.TryGetValue(cardId, out int actualCount);
+            if (actualCount == 0)
+            {
+                Add(violations, "decision.missing-memory-action", $"{path}.legalActions", $"Memory cleanup is missing program '{cardId}'.");
+            }
+            else if (actualCount != count)
+            {
+                Add(violations, "decision.duplicate-memory-action", $"{path}.legalActions", $"Memory cleanup contains {actualCount} actions for program '{cardId}', expected {count}.");
+            }
+        }
+
+        foreach ((CardInstanceId cardId, int count) in actual)
+        {
+            if (count > 1 && expected.ContainsKey(cardId))
+            {
+                Add(violations, "decision.duplicate-memory-action", $"{path}.legalActions", $"Memory cleanup contains duplicate program '{cardId}'.");
+            }
+        }
+
+        PlayerRulesState? owner = rules.Players.SingleOrDefault(player => player.PlayerId == frame.Owner);
+        if (owner is null)
+        {
+            Add(violations, "rules.unknown-player", $"{path}.owner", $"Memory cleanup owner '{frame.Owner}' has no rules state.");
+            return;
+        }
+
+        if (owner.UsedMemory <= owner.BaseMemory)
+        {
+            Add(violations, "resolution.unneeded-memory-cleanup", path, "Memory cleanup is only valid while used memory exceeds base memory.");
+        }
+
+        var installed = new Dictionary<CardInstanceId, ProgramMemoryState>();
+        foreach (ProgramMemoryState? program in rules.Programs)
+        {
+            if (program is not null && program.Owner == frame.Owner)
+            {
+                _ = installed.TryAdd(program.CardId, program);
+            }
+        }
+        foreach (ProgramMemoryState candidate in frame.Candidates)
+        {
+            if (!installed.TryGetValue(candidate.CardId, out ProgramMemoryState? current))
+            {
+                Add(violations, "resolution.stale-memory-candidate", $"{path}.candidates", $"Program '{candidate.CardId}' is no longer registered.");
+            }
+            else if (current != candidate)
+            {
+                Add(violations, "resolution.memory-candidate-mismatch", $"{path}.candidates", $"Program '{candidate.CardId}' does not match its registered memory entry.");
+            }
+        }
+    }
+
     private static bool IsPromptFrame(ResolutionFrame? frame) =>
         frame is ChooseNumberFrame
         || frame is ChooseNumberThenAdjustCreditsFrame { Stage: NestedNumberStage.OuterPrompt }
         || frame is ChooseCardFrame
-        || frame is ToyTurnFrame { Stage: ToyTurnStage.AwaitingAction };
+        || frame is ToyTurnFrame { Stage: ToyTurnStage.AwaitingAction }
+        || frame is MemoryCleanupFrame
+        || frame is EffectCheckpointFrame
+            {
+                Stage: EffectCheckpointStage.InterruptChoice
+                    or EffectCheckpointStage.TriggerChoice
+                    or EffectCheckpointStage.TriggerOrdering,
+            }
+        || frame is RunTimingFrame runTiming && IsRunPromptStep(runTiming.Step);
 
     private static bool TryGetNumberRange(ResolutionFrame? frame, out int minimum, out int maximum)
     {
@@ -1302,6 +2622,19 @@ public static class StateInvariantValidator
             if (zone is not null)
             {
                 Observe(zone.Id.Value, "zone");
+            }
+        }
+
+        if (state.RunState is not null)
+        {
+            Observe(state.RunState.Id.Value, "run");
+        }
+
+        foreach (ResolutionFrame? frame in state.ResolutionStack)
+        {
+            if (frame is RunTimingFrame runTiming)
+            {
+                Observe(runTiming.RunId.Value, "run");
             }
         }
 
