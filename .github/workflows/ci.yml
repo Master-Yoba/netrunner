@@ -28,7 +28,7 @@ jobs:
             Directory.Packages.props
             **/*.csproj
       - name: Restore
-        run: dotnet restore Netrunner.sln --locked-mode=false
+        run: dotnet restore Netrunner.sln
       - name: Build
         run: dotnet build Netrunner.sln --no-restore --configuration Release
       - name: Test

@@ -8,6 +8,10 @@ bootstrap_godot="$bootstrap_tools/godot"
 bootstrap_godot_version="4.7.2-stable"
 bootstrap_godot_zip="Godot_v4.7.2-stable_mono_linux_x86_64.zip"
 bootstrap_godot_url="https://github.com/godotengine/godot-builds/releases/download/${bootstrap_godot_version}/${bootstrap_godot_zip}"
+bootstrap_rg="$bootstrap_tools/ripgrep"
+bootstrap_rg_version="14.1.1"
+bootstrap_rg_archive="ripgrep-14.1.1-x86_64-unknown-linux-musl.tar.gz"
+bootstrap_rg_url="https://github.com/BurntSushi/ripgrep/releases/download/${bootstrap_rg_version}/${bootstrap_rg_archive}"
 
 if [[ "$(uname -s)" != "Linux" || "$(uname -m)" != "x86_64" ]]; then
   echo "This bootstrap currently supports Linux x86_64. See README.md for manual setup."
@@ -52,10 +56,22 @@ if [[ ! -d "$bootstrap_godot" ]]; then
   find "$bootstrap_godot" -maxdepth 2 -type f -name 'Godot*' -exec chmod +x {} \;
 fi
 
+if [[ ! -x "$bootstrap_rg/rg" ]]; then
+  echo "Installing ripgrep ${bootstrap_rg_version} into $bootstrap_rg"
+  curl --fail --location --silent --show-error \
+    "$bootstrap_rg_url" \
+    --output "$bootstrap_tmp/$bootstrap_rg_archive"
+  mkdir -p "$bootstrap_rg"
+  tar -xzf "$bootstrap_tmp/$bootstrap_rg_archive" -C "$bootstrap_rg" \
+    --strip-components 1 --wildcards "*/rg"
+  chmod +x "$bootstrap_rg/rg"
+fi
+
 source "$bootstrap_root/scripts/env.sh"
 
 echo ".NET SDK: $(dotnet --version)"
 echo "Godot: $($GODOT4 --version)"
+echo "ripgrep: $("$bootstrap_rg/rg" --version | head -n 1)"
 
 if [[ ! -f "$bootstrap_root/Netrunner.sln" ]]; then
   dotnet new sln --name Netrunner --format sln --output "$bootstrap_root"
