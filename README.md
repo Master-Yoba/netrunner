@@ -97,8 +97,10 @@ Use `make watch-core` or `make watch-cards` while iterating so the compiler/test
 process stays warm. See [the measured M0 spike](docs/spikes/godot-dotnet-loop.md).
 
 The bootstrap currently supports Linux x86_64. The projects themselves are
-cross-platform; Windows and macOS bootstrap/packaging scripts are planned when
-those release lanes become active.
+cross-platform; the macOS development setup is documented in
+[docs/DEVELOPMENT_MACOS.md](docs/DEVELOPMENT_MACOS.md), and Windows/macOS
+bootstrap and packaging scripts are planned when those release lanes become
+active.
 
 ## Optional LLM configuration
 
