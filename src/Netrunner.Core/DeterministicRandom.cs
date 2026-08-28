@@ -42,5 +42,25 @@ public sealed class DeterministicRandom
 
         return (int)(value % bound);
     }
-}
 
+    /// <summary>
+    /// Applies the unbiased Fisher-Yates permutation using this stream. The
+    /// list order is semantic (for example, the order of a deck), so it is
+    /// intentionally not sorted before shuffling.
+    /// </summary>
+    public void Shuffle<T>(IList<T> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+
+        for (int index = values.Count - 1; index > 0; index--)
+        {
+            int swapIndex = NextInt(index + 1);
+            if (swapIndex == index)
+            {
+                continue;
+            }
+
+            (values[index], values[swapIndex]) = (values[swapIndex], values[index]);
+        }
+    }
+}

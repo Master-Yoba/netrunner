@@ -6,22 +6,6 @@ public enum PlayerSide
     Runner,
 }
 
-public readonly record struct ActionId(string Value)
-{
-    public override string ToString() => Value;
-}
-
-public readonly record struct CardInstanceId(string Value)
-{
-    public override string ToString() => Value;
-}
-
-public sealed record LegalAction(
-    ActionId Id,
-    string Kind,
-    string Description,
-    IReadOnlyDictionary<string, string>? Parameters = null);
-
 public sealed record GameEvent(
     long Sequence,
     string Kind,
@@ -40,4 +24,3 @@ public interface IGameAgent
         Observation observation,
         CancellationToken cancellationToken = default);
 }
-

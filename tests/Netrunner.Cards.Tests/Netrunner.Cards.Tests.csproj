@@ -12,5 +12,7 @@
     </PackageReference>
     <ProjectReference Include="../../src/Netrunner.Cards/Netrunner.Cards.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Update="Fixtures/**/*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
-

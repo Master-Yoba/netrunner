@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "artifactKind": "scenario",
+  "rulesVersion": "26.03",
+  "cardDataVersion": "fixture-1",
+  "seed": 42,
+  "resolution": {
+    "kind": "nestedNumber",
+    "ownerSide": "corp",
+    "targetSide": "corp",
+    "minimum": 1,
+    "maximum": 3,
+    "creditsPerChoice": 2,
+    "stage": "outerPrompt"
+  },
+  "expectedStateHash": "5647a38b04a862146f948314abd7e48e65a57db4260439004ef206b507cec0e3"
+}
