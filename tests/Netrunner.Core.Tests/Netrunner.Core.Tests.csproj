@@ -12,5 +12,9 @@
     </PackageReference>
     <ProjectReference Include="../../src/Netrunner.Core/Netrunner.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="../../data/scenarios/*.json"
+          Link="Scenarios/%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
-

@@ -19,4 +19,3 @@ public interface ICardBehavior
 {
     string CardCode { get; }
 }
-

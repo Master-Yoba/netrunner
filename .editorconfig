@@ -19,10 +19,14 @@ csharp_style_var_when_type_is_apparent = true:suggestion
 csharp_style_var_elsewhere = false:suggestion
 dotnet_diagnostic.IDE0005.severity = error
 
+[src/Netrunner.Godot/**/*.cs]
+indent_style = tab
+indent_size = 4
+tab_width = 4
+
 [*.{json,jsonc,godot,tscn,yml,yaml,md}]
 indent_style = space
 indent_size = 2
 
 [Makefile]
 indent_style = tab
-

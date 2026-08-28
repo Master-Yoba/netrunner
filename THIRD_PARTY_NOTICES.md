@@ -21,8 +21,24 @@ dotnet list tests/Netrunner.Core.Tests/Netrunner.Core.Tests.csproj package --inc
 dotnet list src/Netrunner.Godot/Netrunner.Godot.csproj package --include-transitive --no-restore
 ```
 
-System Gateway card metadata is not vendored yet. When added in M1, its source
-commit, license/copyright notice, schema, and generated checksum must be recorded
-in the data manifest. Official card artwork, frames, and backs are deliberately
-absent.
+System Gateway card metadata is a local-only developer artifact and is not
+redistributed by this repository. It is generated from the official primary
+source `https://github.com/Null-Signal-Games/netrunner-cards-json` at the pinned
+commit
+`236140cf84491c23995b028bc791281837520b97`, using `pack/sg.json` (77 records,
+upstream schema v1) and `COPYRIGHT.md`, for retrieval date `2026-08-28`:
 
+```bash
+./scripts/update-card-data.sh \
+  --commit 236140cf84491c23995b028bc791281837520b97 \
+  --retrieval-date 2026-08-28
+```
+
+The manifest records the source license path and the identity
+`NOASSERTION`. The copied notice is retained only for local review; the
+upstream notice does not establish a redistribution grant, so the generated
+`data/vendor/system-gateway/cards.json`, `manifest.json`, and
+`SOURCE_COPYRIGHT.md` are ignored by Git and must not be shipped. No card art,
+frames, or backs are fetched or included. The checked-in normalized schema and
+synthetic fixtures are project implementation artifacts, not official card
+data.

@@ -16,8 +16,13 @@ src/Netrunner.Godot/.godot/
 *.suo
 .idea/
 
+# Local-only official System Gateway metadata.  The updater may create these
+# files for validation, but this repository does not redistribute them.
+/data/vendor/system-gateway/cards.json
+/data/vendor/system-gateway/manifest.json
+/data/vendor/system-gateway/SOURCE_COPYRIGHT.md
+
 # OS/editor noise
 .DS_Store
 Thumbs.db
 *~
-

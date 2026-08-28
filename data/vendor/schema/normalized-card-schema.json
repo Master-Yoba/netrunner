@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Master-Yoba/netrunner/blob/main/data/vendor/schema/normalized-card-schema.json",
+  "title": "Netrunner local normalized card metadata",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "code",
+      "title",
+      "side",
+      "faction",
+      "type",
+      "subtypes",
+      "text",
+      "setCode",
+      "quantity",
+      "deckLimit",
+      "uniqueness",
+      "cost",
+      "strength",
+      "memoryCost",
+      "trashCost",
+      "agendaPoints",
+      "advancementRequirement",
+      "influenceCost",
+      "minimumDeckSize",
+      "influenceLimit",
+      "baseLink"
+    ],
+    "properties": {
+      "code": { "type": "string", "minLength": 1 },
+      "title": { "type": "string", "minLength": 1 },
+      "side": { "enum": ["corp", "runner"] },
+      "faction": { "type": "string", "minLength": 1 },
+      "type": { "type": "string", "minLength": 1 },
+      "subtypes": {
+        "type": "array",
+        "items": { "type": "string", "minLength": 1 }
+      },
+      "text": { "type": "string" },
+      "setCode": { "type": "string", "minLength": 1 },
+      "quantity": { "type": "integer", "minimum": 1 },
+      "deckLimit": { "type": "integer", "minimum": 1 },
+      "uniqueness": { "type": "boolean" },
+      "cost": { "type": ["integer", "null"], "minimum": 0 },
+      "strength": { "type": ["integer", "null"], "minimum": 0 },
+      "memoryCost": { "type": ["integer", "null"], "minimum": 0 },
+      "trashCost": { "type": ["integer", "null"], "minimum": 0 },
+      "agendaPoints": { "type": ["integer", "null"], "minimum": 0 },
+      "advancementRequirement": { "type": ["integer", "null"], "minimum": 0 },
+      "influenceCost": { "type": ["integer", "null"], "minimum": 0 },
+      "minimumDeckSize": { "type": ["integer", "null"], "minimum": 0 },
+      "influenceLimit": { "type": ["integer", "null"], "minimum": 0 },
+      "baseLink": { "type": ["integer", "null"], "minimum": 0 }
+    }
+  }
+}

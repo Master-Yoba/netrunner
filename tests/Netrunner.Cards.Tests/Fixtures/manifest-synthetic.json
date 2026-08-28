@@ -1,0 +1,15 @@
+{
+  "manifestSchemaVersion": 1,
+  "sourceUrl": "https://example.invalid/netrunner-cards-json",
+  "commitSha": "0000000000000000000000000000000000000000",
+  "retrievalDate": "2026-08-28",
+  "upstreamSchemaVersion": "v1",
+  "normalizedSchemaVersion": 1,
+  "outputSha256": "fe562cb6fac1298afdcfc71701780568bd153e82718ad5182d13061cceb36828",
+  "sourceLicensePath": "fixtures/NOTICE.txt",
+  "sourceLicenseIdentity": "NOASSERTION",
+  "sourcePackPath": "fixtures/upstream-v1-synthetic.json",
+  "packCode": "synthetic",
+  "packName": "Synthetic M1 Fixture",
+  "cardCount": 6
+}
