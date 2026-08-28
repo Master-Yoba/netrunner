@@ -17,6 +17,7 @@ fi
 MSBUILDDISABLENODEREUSE=1 dotnet restore "$verify_root/Netrunner.sln" -m:1
 MSBUILDDISABLENODEREUSE=1 dotnet build "$verify_root/Netrunner.sln" --no-restore -m:1
 MSBUILDDISABLENODEREUSE=1 dotnet test "$verify_root/Netrunner.sln" --no-build -m:1
+dotnet format "$verify_root/Netrunner.sln" --no-restore --verify-no-changes
 dotnet run --project "$verify_root/src/Netrunner.Cli" --no-build --no-restore -- self-test --seed 42
 dotnet run --project "$verify_root/src/Netrunner.Cli" --no-build --no-restore -- doctor --json
 card_data_dir="$verify_root/data/vendor/system-gateway"
