@@ -35,5 +35,9 @@ jobs:
         run: dotnet test Netrunner.sln --no-build --configuration Release
       - name: Check formatting
         run: dotnet format Netrunner.sln --no-restore --verify-no-changes
+      - name: Install secret scan dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ripgrep
       - name: Check committed secrets
         run: ./scripts/check-secrets.sh
