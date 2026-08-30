@@ -154,6 +154,10 @@ public sealed class MatchCoordinatorTests
         Assert.Equal(2, snapshot.View.Runner.AgendaPoints);
         Assert.Equal(12, snapshot.View.Runner.Credits);
         Assert.Contains(publishedEvents, @event => @event.Kind == EngineEventKinds.RunEnded);
+        Assert.NotNull(snapshot.RunOutcome);
+        Assert.Equal(RunEndReason.BreachCompleted, snapshot.RunOutcome!.Reason);
+        Assert.True(snapshot.RunOutcome.Successful);
+        Assert.DoesNotContain("GameState", EngineJson.Serialize(snapshot.RunOutcome));
     }
 
     private static async Task WaitForAsync(Func<bool> condition, TimeSpan timeout)

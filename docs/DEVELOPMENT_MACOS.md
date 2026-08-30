@@ -187,14 +187,18 @@ already configured.
 - Official card data: same as Linux;
   `./scripts/update-card-data.sh --commit <sha> --retrieval-date <date>`
   needs network access and python3 (the Command Line Tools provide it).
-- Export templates and packaging: the only packaging lane today is Linux
+- Export templates and packaging: the Linux lane remains available
   (`make templates`, `make package-linux`, export preset "Linux x86_64").
   `scripts/install-export-templates.sh` targets the Linux template and a
   location macOS Godot does not read, so if you ever need templates on macOS,
   install them from the editor (Project > Export > Manage Export Templates) or
   copy the 4.7.2 .NET template contents into
   `~/Library/Application Support/Godot/export_templates/4.7.2.stable.mono/`.
-  A macOS export lane will follow when that release lane becomes active.
+  The current macOS development lane is `make package-macos`; it uses the
+  checked-in universal macOS preset and runs both the packaged full-slice smoke
+  and the 10-second responsiveness smoke with portable 30-second timeouts. It
+  requires the macOS export template (`macos.zip`) to be installed alongside
+  the Linux template.
 - `make benchmark-m0` is Linux-only (it relies on GNU `date +%s%N`); skip it
   on macOS.
 

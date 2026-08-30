@@ -21,6 +21,7 @@ public partial class TextCardControl : PanelContainer
 	private Label _counters = null!;
 	private CardViewModel? _card;
 	private bool _selected;
+	private bool _targetCandidate;
 	private bool _hovered;
 
 	[Signal]
@@ -30,6 +31,17 @@ public partial class TextCardControl : PanelContainer
 	public delegate void CardInspectedEventHandler(string cardId);
 
 	public string CardId => _card?.Id ?? string.Empty;
+
+	/// <summary>
+	/// Exposes the retained interaction state for presentation smoke checks and
+	/// accessibility-focused UI diagnostics. The engine never consumes this
+	/// state; it is local to the card control.
+	/// </summary>
+	public bool IsSelected => _selected;
+
+	public bool IsHovered => _hovered;
+
+	public bool IsTargetCandidate => _targetCandidate;
 
 	public override void _Ready()
 	{
@@ -66,6 +78,7 @@ public partial class TextCardControl : PanelContainer
 	{
 		_card = card;
 		_selected = false;
+		_targetCandidate = false;
 		if (_title is null)
 		{
 			return;
@@ -88,12 +101,31 @@ public partial class TextCardControl : PanelContainer
 			_counters.Text = string.Join("  ", card.Counters);
 		}
 
+		UpdateStatusCue();
 		UpdateBorder();
 	}
 
 	public void SetSelected(bool selected)
 	{
 		_selected = selected;
+		UpdateStatusCue();
+		UpdateBorder();
+	}
+
+	/// <summary>
+	/// Marks a visible card as a legal target. The explicit text cue and thicker
+	/// border are intentional: target affordance remains understandable without
+	/// relying on colour alone.
+	/// </summary>
+	public void SetTargetCandidate(bool candidate)
+	{
+		_targetCandidate = candidate;
+		if (!candidate)
+		{
+			_selected = false;
+		}
+
+		UpdateStatusCue();
 		UpdateBorder();
 	}
 
@@ -134,21 +166,40 @@ public partial class TextCardControl : PanelContainer
 		var style = new StyleBoxFlat
 		{
 			BgColor = new Color(0.07f, 0.1f, 0.14f),
-			BorderWidthLeft = 1,
-			BorderWidthTop = 1,
-			BorderWidthRight = 1,
-			BorderWidthBottom = 1,
+			BorderWidthLeft = _selected || _targetCandidate ? 2 : 1,
+			BorderWidthTop = _selected || _targetCandidate ? 2 : 1,
+			BorderWidthRight = _selected || _targetCandidate ? 2 : 1,
+			BorderWidthBottom = _selected || _targetCandidate ? 2 : 1,
 			CornerRadiusTopLeft = 6,
 			CornerRadiusTopRight = 6,
 			CornerRadiusBottomLeft = 6,
 			CornerRadiusBottomRight = 6,
-			BorderColor = _selected ? SelectedBorder : _hovered ? HoverBorder : NormalBorder,
+			BorderColor = _selected
+				? SelectedBorder
+				: _targetCandidate
+					? new Color(0.35f, 0.72f, 0.98f)
+					: _hovered ? HoverBorder : NormalBorder,
 			ContentMarginLeft = 8,
 			ContentMarginTop = 7,
 			ContentMarginRight = 8,
 			ContentMarginBottom = 6,
 		};
 		AddThemeStyleboxOverride("panel", style);
+	}
+
+	private void UpdateStatusCue()
+	{
+		if (_status is null || _card is null)
+		{
+			return;
+		}
+
+		string visibility = _card.Rezzed ? "REZZED" : _card.IsKnown ? "KNOWN" : "FACE-DOWN";
+		_status.Text = _selected
+			? $"TARGET SELECTED · {visibility}"
+			: _targetCandidate
+				? $"TARGET CANDIDATE · {visibility}"
+				: visibility;
 	}
 
 	private static Label MakeLabel(int size, Color colour)

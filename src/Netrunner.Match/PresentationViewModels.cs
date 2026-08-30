@@ -160,6 +160,24 @@ public sealed record OutcomeViewModel(
     public bool IsTerminal => Kind == GameOutcomeKind.Won;
 }
 
+/// <summary>
+/// Presentation-only summary of the representative run's terminal event.
+/// This is intentionally derived from the event payload, not from
+/// <see cref="GameState"/>; it contains no authoritative state, hash, RNG, or
+/// hidden-card data and lets a client keep a clear slice-complete screen after
+/// Core has cleaned up the live run.
+/// </summary>
+public sealed record RunOutcomeViewModel(
+    string RunId,
+    PlayerSide InitiatingSide,
+    RunEndReason Reason,
+    bool Successful)
+{
+    public string Summary => Successful
+        ? $"Run complete · breach succeeded · {Reason}"
+        : $"Run complete · {Reason}";
+}
+
 /// <summary>Maps filtered Core observations to immutable typed UI data.</summary>
 public static class ObservationViewMapper
 {

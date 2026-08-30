@@ -1,6 +1,6 @@
 # M3 progress — playable Godot micro-deck slice
 
-Status: starting vertical slice (not an M3 gate claim)
+Status: complete for the explicitly substituted native-macOS package gate
 
 Date: 30 August 2026
 
@@ -35,13 +35,14 @@ opponent prompt or revision.
 
 The Godot shell is container-based and uses a reusable text-card Control with
 hover/selection/details feedback, status/counter labels, click-first legal
-actions, event animation queue controls, reduced motion, and focused
-encounter/access/paid-window text. Worker publications cross a thread-safe
-queue so a fast opponent cannot overwrite event batches between rendered
-frames. Dynamic board, action, and details content use bounded scroll
-viewports, so event history or a larger legal-action set cannot push the
-action panel below the window. It is deliberately text-only and uses labels
-and borders in addition to colour.
+actions, staged target selection with explicit Confirm/Cancel, an on-demand
+card-zoom overlay, event animation queue controls, reduced motion, and focused
+encounter/access/paid-window presentations. Worker publications cross a
+thread-safe queue so a fast opponent cannot overwrite event batches between
+rendered frames. Dynamic board, action, and details content use bounded scroll
+viewports, so event history or a larger legal-action set cannot push the action
+panel below the window. It is deliberately text-only and uses labels and
+borders in addition to colour.
 
 ## Evidence
 
@@ -51,15 +52,24 @@ and borders in addition to colour.
   representative run while retaining every published event batch.
 - Existing Core observation goldens and CLI M2 proof tests remain green after
   rehoming the scenario/setup code.
-- Godot project C# build succeeds. A headless M3 smoke command is implemented
-  in the scene (`M3_SMOKE`) and checks setup, an interactable human Runner
-  decision, delayed Corp thinking, rendered-frame progress, and action-panel
-  containment after the first submitted action.
+- Godot project C# build succeeds. The headless M3 smoke command in the scene
+  (`M3_SMOKE`) drives the deterministic Runner policy through the complete M2
+  run after the initial human-style action. It verifies rendered encounter and
+  access focus, the first target's local stage/cancel path without a coordinator
+  publication or observation mutation, RunEnded/RunOutcome retention, the
+  visible slice-complete presentation, no pending action, and action-panel
+  containment.
 - `scripts/verify.sh` passes end to end: 356 tests, deterministic CLI/replay/M2
   proofs, headless Godot editor import, `M3_SMOKE`, format, card-data, and
   secret checks.
+- Native macOS packaging is configured by `scripts/package-macos.sh` and runs
+  both bounded smokes: the full-slice `M3_SMOKE` and the real ten-second
+  `M3_LATENCY_SMOKE` (one-frame inspection/control, near-60-FPS assertion,
+  hover/selection, card zoom, and 1280×720 and 2560×1440 layout checks). The
+  fresh universal bundle passed both packaged smokes: the latency hold lasted
+  10,253 ms while 1,486 frames rendered (144.9 FPS on the verification host).
 
-The packaged Linux M3 exit gate, automated Godot click-through of the full run,
-save/resume UI, and broad Gateway card coverage remain future work. This
-document records the starting vertical slice rather than claiming those gates
-are complete.
+The intended completion gate uses the explicitly substituted native macOS
+artifact for the current development lane. Linux packaging remains deferred.
+Save and resume are M5 deliverables; broad Gateway card coverage is an M4
+deliverable, not a remaining M3 gap.

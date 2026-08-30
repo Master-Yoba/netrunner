@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Globalization;
 using Godot;
 using Netrunner.Core;
 using Netrunner.Match;
@@ -22,7 +24,14 @@ public partial class Main : Control
 	private readonly Queue<IReadOnlyList<EngineEvent>> _animationBatches = new();
 	private readonly Queue<string> _eventFeedLines = new();
 	private readonly ConcurrentQueue<MatchSnapshot> _pendingSnapshots = new();
+	private readonly Dictionary<string, List<TextCardControl>> _cardControls = new(StringComparer.Ordinal);
+	private readonly Dictionary<string, CardViewModel> _cardModels = new(StringComparer.Ordinal);
 	private MatchCoordinator? _coordinator;
+	private Func<Observation, CancellationToken, ValueTask<ActionId>>? _runnerPlaybackPolicy;
+	private MatchSnapshot? _currentSnapshot;
+	private LegalActionViewModel? _stagedAction;
+	private DecisionViewModel? _stagedDecision;
+	private CardViewModel? _inspectedCard;
 	private VBoxContainer _layout = null!;
 	private VBoxContainer _startPanel = null!;
 	private VBoxContainer _board = null!;
@@ -31,6 +40,7 @@ public partial class Main : Control
 	private Label _phase = null!;
 	private Label _focus = null!;
 	private Label _decision = null!;
+	private VBoxContainer _focusPresentation = null!;
 	private Label _eventTitle = null!;
 	private RichTextLabel _eventFeed = null!;
 	private Label _details = null!;
@@ -42,20 +52,34 @@ public partial class Main : Control
 	private VBoxContainer _scores = null!;
 	private VBoxContainer _actions = null!;
 	private PanelContainer _actionPanel = null!;
+	private Button _zoomButton = null!;
+	private PanelContainer _zoomOverlay = null!;
+	private Label _zoomTitle = null!;
+	private Label _zoomText = null!;
 	private HSlider _speed = null!;
 	private CheckButton _reducedMotion = null!;
 	private Button _skipAnimations = null!;
 	private bool _smokeTest;
+	private bool _responsivenessSmoke;
 	private bool _animationRunning;
 	private bool _skipAnimation;
 	private int _framesWhileAnimating;
 	private long _renderedSequence;
+	private long _processFrameCount;
 	private int _submissionInFlight;
 	private int _smokeStarted;
+	private bool _smokeEncounterFocusObserved;
+	private bool _smokeAccessFocusObserved;
+	private bool _smokeRunEndedObserved;
+	private bool _smokeOutcomePresentationObserved;
+	private bool _smokeTargetCueObserved;
+	private bool _smokeTargetControlsObserved;
 
 	public override void _Ready()
 	{
-		_smokeTest = OS.GetCmdlineUserArgs().Contains("--smoke-test", StringComparer.Ordinal);
+		_smokeTest = OS.GetCmdlineUserArgs().Contains("--smoke-test", StringComparer.Ordinal)
+			|| OS.GetCmdlineUserArgs().Contains("--m3-responsiveness-smoke", StringComparer.Ordinal);
+		_responsivenessSmoke = OS.GetCmdlineUserArgs().Contains("--m3-responsiveness-smoke", StringComparer.Ordinal);
 		BuildShell();
 		if (_smokeTest)
 		{
@@ -63,8 +87,208 @@ public partial class Main : Control
 		}
 	}
 
+	private void RenderFocusPresentation(MatchSnapshot snapshot)
+	{
+		ClearChildren(_focusPresentation);
+		MatchViewModel view = snapshot.View;
+		if (snapshot.RunOutcome is { } completed && view.Run is null)
+		{
+			_focusPresentation.AddChild(MakeLabel("REPRESENTATIVE SLICE COMPLETE", 17, Accent));
+			_focusPresentation.AddChild(MakeLabel(
+				$"{completed.Summary}\nThe live run has been cleaned up by Core. This screen is a presentation-safe outcome summary.",
+				13,
+				Colors.White));
+			_smokeOutcomePresentationObserved |= _smokeTest && _focusPresentation.GetChildCount() > 0;
+			return;
+		}
+
+		if (view.Run is not { } run)
+		{
+			_focusPresentation.AddChild(MakeLabel(
+				"RUN FOCUS · select a legal action to continue",
+				13,
+				Muted));
+			return;
+		}
+
+		if (run.Encounter is { } encounter)
+		{
+			_smokeEncounterFocusObserved |= _smokeTest;
+			RenderEncounterFocus(snapshot, run, encounter);
+			return;
+		}
+
+		if (run.Access.State != RunAccessState.NotStarted)
+		{
+			_smokeAccessFocusObserved |= _smokeTest;
+			RenderAccessFocus(snapshot, run);
+			return;
+		}
+
+		if (run.Priority is { } priority)
+		{
+			RenderPaidWindowFocus(priority);
+			return;
+		}
+
+		_focusPresentation.AddChild(MakeLabel(
+			$"RUN STATUS · {run.Phase} · {run.Step} · credits {run.RunCredits}",
+			15,
+			Warning));
+		_focusPresentation.AddChild(MakeLabel(
+			"The current timing step is owned by Core. Legal actions below are the only actions that can mutate the run.",
+			12,
+			Muted));
+	}
+
+	private void RenderPaidWindowFocus(RunPriorityViewModel priority)
+	{
+		_focusPresentation.AddChild(MakeLabel(
+			$"PAID WINDOW · {priority.Window} · PRIORITY {priority.Holder.ToString().ToUpperInvariant()}",
+			17,
+			Accent));
+		_focusPresentation.AddChild(MakeLabel(
+			$"Consecutive passes: {priority.ConsecutivePasses} · "
+			+ $"Corp may rez approached ICE: {(priority.CorpMayRezApproachedIce ? "YES" : "NO")} · "
+			+ $"non-ICE rez: {(priority.CorpMayRezNonIce ? "YES" : "NO")}",
+			12,
+			Colors.White));
+		_focusPresentation.AddChild(MakeLabel(
+			"PASS / CONTINUE remain explicit below. The priority holder is shown as text, not colour alone.",
+			12,
+			Muted));
+	}
+
+	private void RenderEncounterFocus(
+		MatchSnapshot snapshot,
+		RunFocusViewModel run,
+		EncounterViewModel encounter)
+	{
+		string iceTitle = encounter.Ice?.Title ?? run.CurrentIce?.Title ?? "Unknown ICE";
+		_focusPresentation.AddChild(MakeLabel(
+			$"ENCOUNTER FOCUS · {iceTitle} · {encounter.Status.ToString().ToUpperInvariant()}",
+			17,
+			Warning));
+
+		HBoxContainer encounterRow = new();
+		encounterRow.AddThemeConstantOverride("separation", 10);
+		if (encounter.Ice is { } ice)
+		{
+			TextCardControl iceCard = MakeCard(ice);
+			iceCard.CustomMinimumSize = new Vector2(172, 122);
+			encounterRow.AddChild(iceCard);
+		}
+
+		VBoxContainer state = new();
+		state.AddThemeConstantOverride("separation", 3);
+		state.AddChild(MakeLabel(
+			$"ICE STRENGTH · {(encounter.Ice?.Strength is { } strength ? strength.ToString(CultureInfo.InvariantCulture) : "UNKNOWN")}",
+			14,
+			Colors.White));
+		state.AddChild(MakeLabel(
+			$"SUBROUTINES · {encounter.Subroutines.Count} total · {encounter.RemainingSubroutines} active",
+			12,
+			Accent));
+		foreach (SubroutineViewModel subroutine in encounter.Subroutines)
+		{
+			string status = subroutine.Broken
+				? "[BROKEN]"
+				: subroutine.Resolved ? "[RESOLVED]" : "[ACTIVE]";
+			state.AddChild(MakeLabel(
+				$"{status} Subroutine {subroutine.Ordinal}",
+				11,
+				subroutine.Broken || subroutine.Resolved ? Muted : Colors.White));
+		}
+
+		encounterRow.AddChild(state);
+		_focusPresentation.AddChild(encounterRow);
+		string breakerCue = string.Join(
+			" · ",
+			snapshot.View.LegalActions
+				.Where(action => action.Kind is ActionKind.PumpBreaker or ActionKind.BreakSubroutines)
+				.Select(action => $"{action.Kind}: {action.Description}"));
+		_focusPresentation.AddChild(MakeLabel(
+			string.IsNullOrWhiteSpace(breakerCue)
+				? "BREAKER OPTIONS · no breaker action is currently issued"
+				: $"BREAKER OPTIONS · {breakerCue}",
+			12,
+			Colors.White));
+		if (run.Priority is { } priority)
+		{
+			AddPriorityCue(priority);
+		}
+	}
+
+	private void RenderAccessFocus(MatchSnapshot snapshot, RunFocusViewModel run)
+	{
+		AccessViewModel access = run.Access;
+		_focusPresentation.AddChild(MakeLabel(
+			$"ACCESS FOCUS · {run.AttackedServerId} · {access.State.ToString().ToUpperInvariant()}",
+			17,
+			Accent));
+		_focusPresentation.AddChild(MakeLabel(
+			$"Candidates: {access.Candidates.Count} · chosen: {access.Chosen.Count} · accessed: {access.Accessed.Count}"
+				+ (access.RandomAccessLimit > 0 ? $" · random access limit {access.RandomAccessLimit}" : string.Empty),
+			12,
+			Colors.White));
+
+		if (access.Candidates.Count > 0)
+		{
+			_focusPresentation.AddChild(MakeLabel("CANDIDATE TARGETS · click a card or choose a legal action below", 11, Warning));
+			HBoxContainer candidates = new();
+			candidates.AddThemeConstantOverride("separation", 7);
+			foreach (CardViewModel? candidate in access.Candidates)
+			{
+				TextCardControl card = MakeCard(candidate);
+				card.CustomMinimumSize = new Vector2(140, 100);
+				candidates.AddChild(card);
+			}
+			_focusPresentation.AddChild(candidates);
+		}
+		else if (access.HiddenCandidateSource is { } source)
+		{
+			_focusPresentation.AddChild(MakeLabel(
+				$"HIDDEN CANDIDATE · Core will draw from {source} after the Runner confirms the legal choice.",
+				12,
+				Warning));
+		}
+
+		if (access.Accessed.Count > 0)
+		{
+			_focusPresentation.AddChild(MakeLabel("ACCESSED CARD · costs and choices are shown below", 11, Warning));
+			HBoxContainer accessed = new();
+			foreach (CardViewModel? cardModel in access.Accessed)
+			{
+				TextCardControl card = MakeCard(cardModel);
+				card.CustomMinimumSize = new Vector2(140, 100);
+				accessed.AddChild(card);
+			}
+			_focusPresentation.AddChild(accessed);
+		}
+
+		IEnumerable<LegalActionViewModel> accessActions = snapshot.View.LegalActions.Where(IsAccessAction);
+		string actionCue = string.Join(
+			" · ",
+			accessActions.Select(action => $"{action.Kind.ToString().ToUpperInvariant()}: {action.Description}"));
+		_focusPresentation.AddChild(MakeLabel(
+			string.IsNullOrWhiteSpace(actionCue)
+				? "ACCESS ACTIONS · select a candidate to continue"
+				: $"ACCESS ACTIONS · {actionCue}",
+			12,
+			Colors.White));
+	}
+
+	private void AddPriorityCue(RunPriorityViewModel priority)
+	{
+		_focusPresentation.AddChild(MakeLabel(
+			$"PAID WINDOW · {priority.Window} · priority {priority.Holder} · passes {priority.ConsecutivePasses} · PASS / CONTINUE below",
+			11,
+			Muted));
+	}
+
 	public override void _Process(double delta)
 	{
+		_processFrameCount++;
 		PollCoordinator();
 		if (_animationRunning)
 		{
@@ -112,6 +336,21 @@ public partial class Main : Control
 		BuildStartPanel();
 		BuildBoard();
 		BuildFooter();
+		BuildCardZoomOverlay();
+	}
+
+	public override void _UnhandledInput(InputEvent @event)
+	{
+		if (!_zoomOverlay.Visible
+			|| @event is not InputEventKey key
+			|| !key.Pressed
+			|| key.Keycode != Key.Escape)
+		{
+			return;
+		}
+
+		HideCardZoom();
+		GetViewport().SetInputAsHandled();
 	}
 
 	private void BuildHeader()
@@ -249,6 +488,16 @@ public partial class Main : Control
 		_decision = MakeLabel("No decision", 15, Colors.White);
 		_decision.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		center.AddChild(_decision);
+		PanelContainer focusPanel = MakePanel();
+		focusPanel.CustomMinimumSize = new Vector2(0, 112);
+		_focusPresentation = new VBoxContainer();
+		_focusPresentation.AddThemeConstantOverride("separation", 5);
+		focusPanel.AddChild(_focusPresentation);
+		_focusPresentation.AddChild(MakeLabel(
+			"RUN FOCUS · select a legal action to continue",
+			13,
+			Muted));
+		center.AddChild(focusPanel);
 		_servers = new VBoxContainer
 		{
 			SizeFlagsVertical = SizeFlags.ExpandFill,
@@ -354,7 +603,72 @@ public partial class Main : Control
 		detailsScroll.AddChild(_details);
 		detailsViewport.AddChild(detailsScroll);
 		detailsContent.AddChild(detailsViewport);
+		_zoomButton = new Button
+		{
+			Text = "Zoom inspected card",
+			Visible = false,
+			CustomMinimumSize = new Vector2(0, 32),
+		};
+		_zoomButton.Pressed += ShowInspectedCardZoom;
+		detailsContent.AddChild(_zoomButton);
 		lower.AddChild(detailsPanel);
+	}
+
+	private void BuildCardZoomOverlay()
+	{
+		_zoomOverlay = new PanelContainer
+		{
+			Visible = false,
+			MouseFilter = MouseFilterEnum.Stop,
+		};
+		_zoomOverlay.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+		{
+			BgColor = new Color(0.015f, 0.025f, 0.04f, 0.97f),
+			BorderColor = Accent,
+			BorderWidthLeft = 2,
+			BorderWidthTop = 2,
+			BorderWidthRight = 2,
+			BorderWidthBottom = 2,
+			CornerRadiusTopLeft = 10,
+			CornerRadiusTopRight = 10,
+			CornerRadiusBottomLeft = 10,
+			CornerRadiusBottomRight = 10,
+			ContentMarginLeft = 36,
+			ContentMarginTop = 30,
+			ContentMarginRight = 36,
+			ContentMarginBottom = 30,
+		});
+		SetFullRect(_zoomOverlay);
+		AddChild(_zoomOverlay);
+
+		MarginContainer margin = new();
+		margin.AddThemeConstantOverride("margin_left", 72);
+		margin.AddThemeConstantOverride("margin_top", 56);
+		margin.AddThemeConstantOverride("margin_right", 72);
+		margin.AddThemeConstantOverride("margin_bottom", 56);
+		_zoomOverlay.AddChild(margin);
+		VBoxContainer content = new();
+		content.AddThemeConstantOverride("separation", 14);
+		margin.AddChild(content);
+		_zoomTitle = MakeLabel("CARD ZOOM", 24, Accent);
+		_zoomTitle.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		content.AddChild(_zoomTitle);
+		_zoomText = MakeLabel(string.Empty, 18, Colors.White);
+		_zoomText.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		_zoomText.SizeFlagsVertical = SizeFlags.ExpandFill;
+		content.AddChild(_zoomText);
+		Label cue = MakeLabel(
+			"Full text view · hidden information remains concealed · press Escape or Close",
+			12,
+			Muted);
+		content.AddChild(cue);
+		Button close = new()
+		{
+			Text = "Close card zoom",
+			CustomMinimumSize = new Vector2(180, 42),
+		};
+		close.Pressed += HideCardZoom;
+		content.AddChild(close);
 	}
 
 	private void BuildFooter()
@@ -373,7 +687,14 @@ public partial class Main : Control
 			return;
 		}
 
-		MatchCoordinatorOptions options = _smokeTest
+		MatchCoordinatorOptions options = _responsivenessSmoke
+			? new MatchCoordinatorOptions
+			{
+				// This mode intentionally uses the real ten-second production delay;
+				// its frame/input assertions run while the worker is actually waiting.
+				AgentDelay = TimeSpan.FromSeconds(10),
+			}
+			: _smokeTest
 			? new MatchCoordinatorOptions
 			{
 				// Keep the production-facing ten-second setting visible in
@@ -384,6 +705,9 @@ public partial class Main : Control
 			}
 			: new MatchCoordinatorOptions();
 		_coordinator = M2MatchFactory.CreateRepresentative(options);
+		_runnerPlaybackPolicy = _smokeTest
+			? M2MatchFactory.CreateRepresentativeRunnerPolicy()
+			: null;
 		_coordinator.SnapshotPublished += QueueSnapshot;
 		_startButton.Disabled = true;
 		_startButton.Text = "Starting Core match…";
@@ -391,7 +715,7 @@ public partial class Main : Control
 		_ = AwaitStartAsync();
 		if (_smokeTest && Interlocked.Exchange(ref _smokeStarted, 1) == 0)
 		{
-			_ = RunSmokeAsync();
+			_ = _responsivenessSmoke ? RunResponsivenessSmokeAsync() : RunSmokeAsync();
 		}
 	}
 
@@ -415,6 +739,12 @@ public partial class Main : Control
 		bool delayedThinking = false;
 		bool submitted = false;
 		bool actionPanelInViewport = false;
+		bool fullRun = false;
+		bool targetStageCancelPreserved = false;
+		bool targetSelectionExercised = false;
+		bool targetCues = false;
+		bool targetControls = false;
+		bool completionNoPendingAction = false;
 		try
 		{
 			MatchSnapshot started = await _coordinator!.StartAsync();
@@ -422,59 +752,146 @@ public partial class Main : Control
 				&& started.View.Run is not null;
 			humanDecision = started.AwaitingHumanDecision
 				&& started.View.LegalActions.Count > 0;
+			if (!await AwaitRenderedSequenceAsync(started.Sequence, 60))
+			{
+				throw new TimeoutException("The fast M3 smoke did not render the setup publication.");
+			}
+
 			LegalAction? pass = started.Observation.LegalActions
 				.FirstOrDefault(value => value.Kind == ActionKind.PassPriority);
-			if (pass is not null && started.Observation.Decision is { } decision)
+			if (pass is null || started.Observation.Decision is not { } decision)
 			{
-				MatchSubmissionResult result = await _coordinator.SubmitActionAsync(
-					new ActionSubmission(decision.Owner, decision.Id, decision.Revision, pass.Id));
-				submitted = result.Accepted;
-				if (submitted)
-				{
-					// SnapshotPublished is queued from the coordinator worker. Wait
-					// for the corresponding render before checking geometry, then
-					// allow a few frames for a concurrent thinking publication to be
-					// drained. This is a deterministic containment check rather than
-					// a pixel-perfect screenshot assertion.
-					long submittedSequence = result.Snapshot.Sequence;
-					for (int frame = 0; frame < 30; frame++)
-					{
-						await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-						if (_renderedSequence >= submittedSequence
-							&& IsFullyInsideViewport(_actionPanel))
-						{
-							actionPanelInViewport = true;
-							break;
-						}
-					}
-				}
+				throw new InvalidOperationException("The fast M3 smoke did not receive the initial Runner pass decision.");
 			}
 
-			// All Godot-side observations happen after a process-frame await,
-			// so this check proves that delayed agent work did not stop frame
-			// processing or inspection.
-			for (int frame = 0; frame < 120; frame++)
+			MatchSubmissionResult result = await _coordinator.SubmitActionAsync(
+				new ActionSubmission(decision.Owner, decision.Id, decision.Revision, pass.Id));
+			submitted = result.Accepted;
+			if (!submitted)
 			{
-				await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-				if (_coordinator.CurrentSnapshot?.IsOpponentThinking == true)
+				throw new InvalidOperationException(result.Feedback ?? "The initial Runner pass was rejected.");
+			}
+
+			if (!await AwaitRenderedSequenceAsync(result.Snapshot.Sequence, 60))
+			{
+				throw new TimeoutException("The fast M3 smoke did not render the first submitted action.");
+			}
+			actionPanelInViewport = IsFullyInsideViewport(_actionPanel);
+
+			MatchSnapshot snapshot = result.Snapshot;
+			for (int step = 0; step < 256; step++)
+			{
+				if (snapshot.View.Run is null)
 				{
-					delayedThinking = true;
+					fullRun = snapshot.RunOutcome is not null;
 					break;
 				}
+
+				if (snapshot.IsOpponentThinking)
+				{
+					delayedThinking = true;
+					snapshot = await WaitForPublishedSnapshotAsync(snapshot.Sequence, 180);
+					if (!await AwaitRenderedSequenceAsync(snapshot.Sequence, 180))
+					{
+						throw new TimeoutException("The fast M3 smoke did not render a Corp publication.");
+					}
+					continue;
+				}
+
+				if (!snapshot.AwaitingHumanDecision)
+				{
+					snapshot = await WaitForPublishedSnapshotAsync(snapshot.Sequence, 180);
+					if (!await AwaitRenderedSequenceAsync(snapshot.Sequence, 180))
+					{
+						throw new TimeoutException("The fast M3 smoke did not render a timing publication.");
+					}
+					continue;
+				}
+
+				LegalActionViewModel? target = snapshot.View.LegalActions.FirstOrDefault(IsTargetedAction);
+				if (!targetSelectionExercised && target is not null)
+				{
+					targetSelectionExercised = true;
+					string observationBeforeCancel = EngineJson.Serialize(snapshot.Observation);
+					long sequenceBeforeCancel = snapshot.Sequence;
+					StageTargetAction(snapshot.View.Decision!, target);
+					bool staged = _stagedAction?.Id == target.Id
+						&& _stagedDecision is not null;
+					CancelStagedAction();
+					MatchSnapshot afterCancel = _coordinator.CurrentSnapshot
+						?? throw new InvalidOperationException("The coordinator lost its snapshot during target cancel smoke.");
+					targetStageCancelPreserved = staged
+						&& sequenceBeforeCancel == afterCancel.Sequence
+						&& observationBeforeCancel == EngineJson.Serialize(afterCancel.Observation)
+						&& _stagedAction is null;
+					targetCues = _smokeTargetCueObserved;
+					targetControls = _smokeTargetControlsObserved;
+				}
+
+				if (_runnerPlaybackPolicy is null)
+				{
+					throw new InvalidOperationException("The fast M3 smoke has no representative Runner policy.");
+				}
+
+				ActionId playbackAction = await _runnerPlaybackPolicy(
+					snapshot.Observation,
+					CancellationToken.None);
+				MatchSubmissionResult playback = await _coordinator.SubmitRunnerActionAsync(playbackAction);
+				if (!playback.Accepted)
+				{
+					throw new InvalidOperationException(playback.Feedback ?? "Deterministic Runner playback was rejected.");
+				}
+
+				snapshot = playback.Snapshot;
+				if (!await AwaitRenderedSequenceAsync(snapshot.Sequence, 180))
+				{
+					throw new TimeoutException("The fast M3 smoke did not render a Runner playback publication.");
+				}
 			}
 
+			MatchSnapshot finalSnapshot = _coordinator.CurrentSnapshot
+				?? throw new InvalidOperationException("The fast M3 smoke ended without a final coordinator snapshot.");
+			if (!fullRun && finalSnapshot.View.Run is null && finalSnapshot.RunOutcome is not null)
+			{
+				fullRun = true;
+			}
+			if (finalSnapshot.IsOpponentThinking)
+			{
+				delayedThinking = true;
+			}
+			completionNoPendingAction = fullRun
+				&& finalSnapshot.View.Run is null
+				&& finalSnapshot.View.Decision is null
+				&& !finalSnapshot.IsOpponentThinking;
+			bool renderedCompletion = await AwaitRenderedSequenceAsync(finalSnapshot.Sequence, 120);
 			bool responsive = _framesWhileAnimating > 0;
 			bool passed = setup
 				&& humanDecision
 				&& submitted
 				&& actionPanelInViewport
 				&& delayedThinking
-				&& responsive;
+				&& responsive
+				&& fullRun
+				&& _smokeEncounterFocusObserved
+				&& _smokeAccessFocusObserved
+				&& _smokeRunEndedObserved
+				&& _smokeOutcomePresentationObserved
+				&& renderedCompletion
+				&& completionNoPendingAction
+				&& targetSelectionExercised
+				&& targetStageCancelPreserved
+				&& targetCues
+				&& targetControls;
 			GD.Print(
 				$"M3_SMOKE {(passed ? "PASS" : "FAIL")} "
 				+ $"setup={setup} human_decision={humanDecision} submitted={submitted} "
 				+ $"action_panel_in_viewport={actionPanelInViewport} "
-				+ $"delayed_agent={delayedThinking} responsive_frames={_framesWhileAnimating}");
+				+ $"delayed_agent={delayedThinking} responsive_frames={_framesWhileAnimating} "
+				+ $"full_run={fullRun} encounter_focus={_smokeEncounterFocusObserved} "
+				+ $"access_focus={_smokeAccessFocusObserved} run_ended={_smokeRunEndedObserved} "
+				+ $"outcome_presentation={_smokeOutcomePresentationObserved} no_pending={completionNoPendingAction} "
+				+ $"target_stage_cancel={targetStageCancelPreserved} target_cues={targetCues} "
+				+ $"target_controls={targetControls}");
 			await _coordinator.DisposeAsync();
 			GetTree().Quit(passed ? 0 : 1);
 		}
@@ -484,6 +901,9 @@ public partial class Main : Control
 			GD.Print(
 				$"M3_SMOKE FAIL setup={setup} human_decision={humanDecision} "
 				+ $"submitted={submitted} action_panel_in_viewport={actionPanelInViewport} "
+				+ $"full_run={fullRun} encounter_focus={_smokeEncounterFocusObserved} "
+				+ $"access_focus={_smokeAccessFocusObserved} run_ended={_smokeRunEndedObserved} "
+				+ $"target_stage_cancel={targetStageCancelPreserved} "
 				+ $"error={exception.Message}");
 			if (_coordinator is not null)
 			{
@@ -492,6 +912,201 @@ public partial class Main : Control
 
 			GetTree().Quit(1);
 		}
+	}
+
+	private async Task<bool> AwaitRenderedSequenceAsync(long sequence, int maxFrames)
+	{
+		for (int frame = 0; frame < maxFrames; frame++)
+		{
+			if (_renderedSequence >= sequence)
+			{
+				return true;
+			}
+
+			await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+		}
+
+		return _renderedSequence >= sequence;
+	}
+
+	private async Task<MatchSnapshot> WaitForPublishedSnapshotAsync(long previousSequence, int maxFrames)
+	{
+		for (int frame = 0; frame < maxFrames; frame++)
+		{
+			await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+			if (_coordinator?.CurrentSnapshot is { } current && current.Sequence > previousSequence)
+			{
+				return current;
+			}
+		}
+
+		throw new TimeoutException($"The coordinator did not publish after sequence {previousSequence}.");
+	}
+
+	/// <summary>
+	/// Dedicated M3 gate for the real ten-second agent-latency requirement. It
+	/// intentionally runs separately from the fast smoke so ordinary verify
+	/// remains quick, then holds the worker delay for at least ten seconds while
+	/// exercising local inspection, a control change, zoom, and layout checks.
+	/// </summary>
+	private async Task RunResponsivenessSmokeAsync()
+	{
+		bool setup = false;
+		bool submitted = false;
+		bool thinking = false;
+		bool inspectionWithinOneFrame = false;
+		bool controlWithinOneFrame = false;
+		bool hoverSelectionWithinOneFrame = false;
+		bool zoomVisible = false;
+		bool layoutAt1280x720 = false;
+		bool layoutAt2560x1440 = false;
+		bool heldTenSeconds = false;
+		int thinkingFrames = 0;
+		TimeSpan holdDuration = TimeSpan.Zero;
+		double averageFps = 0;
+		try
+		{
+			MatchSnapshot started = await _coordinator!.StartAsync();
+			setup = started.Events.Any(value => value.Kind == EngineEventKinds.RunInitiated)
+				&& started.View.Run is not null;
+			for (int frame = 0; frame < 120 && _renderedSequence < started.Sequence; frame++)
+			{
+				await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+			}
+
+			LegalAction? pass = started.Observation.LegalActions
+				.FirstOrDefault(value => value.Kind == ActionKind.PassPriority);
+			if (pass is null || started.Observation.Decision is not { } decision)
+			{
+				throw new InvalidOperationException("The responsiveness smoke did not receive the initial Runner pass decision.");
+			}
+
+			MatchSubmissionResult result = await _coordinator.SubmitActionAsync(
+				new ActionSubmission(decision.Owner, decision.Id, decision.Revision, pass.Id));
+			submitted = result.Accepted;
+			if (!submitted)
+			{
+				throw new InvalidOperationException(result.Feedback ?? "The responsiveness smoke pass action was rejected.");
+			}
+
+			for (int frame = 0; frame < 180; frame++)
+			{
+				await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+				if (_coordinator.CurrentSnapshot?.IsOpponentThinking == true)
+				{
+					thinking = true;
+					break;
+				}
+			}
+
+			if (!thinking)
+			{
+				throw new TimeoutException("The responsiveness smoke did not observe the Corp thinking publication.");
+			}
+
+			CardViewModel card = _cardModels.Values.FirstOrDefault()
+				?? throw new InvalidOperationException("The responsiveness smoke rendered no inspectable card.");
+			TextCardControl cardControl = (_cardControls.TryGetValue(card.Id, out List<TextCardControl>? controls)
+				? controls!.FirstOrDefault(value => value.IsInsideTree())
+				: null)
+				?? throw new InvalidOperationException("The responsiveness smoke rendered no live card control.");
+			long localBaseline = _processFrameCount;
+			InspectCard(card.Id, card);
+			_speed.Value = 1.5;
+			_reducedMotion.ButtonPressed = true;
+			// Exercise the same retained states driven by real pointer signals. The
+			// explicit properties make the one-frame assertion observable without
+			// depending on a screenshot or colour-only styling.
+			cardControl.EmitSignal(Control.SignalName.MouseEntered);
+			cardControl.SetSelected(true);
+			ShowInspectedCardZoom();
+			await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+			long localFrames = _processFrameCount - localBaseline;
+			inspectionWithinOneFrame = localFrames <= 1 && _details.Text.Contains(card.Title, StringComparison.Ordinal);
+			controlWithinOneFrame = localFrames <= 1
+				&& Math.Abs(_speed.Value - 1.5) < 0.01
+				&& _reducedMotion.ButtonPressed;
+			hoverSelectionWithinOneFrame = localFrames <= 1
+				&& cardControl.IsHovered
+				&& cardControl.IsSelected;
+			cardControl.EmitSignal(Control.SignalName.MouseExited);
+			cardControl.SetSelected(false);
+			zoomVisible = _zoomOverlay.Visible && IsFullyInsideViewport(_zoomOverlay);
+
+			Stopwatch hold = Stopwatch.StartNew();
+			long holdStartFrames = _processFrameCount;
+			while (hold.Elapsed < TimeSpan.FromSeconds(10.25))
+			{
+				await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+			}
+
+			hold.Stop();
+			holdDuration = hold.Elapsed;
+			thinkingFrames = (int)Math.Max(0, _processFrameCount - holdStartFrames);
+			heldTenSeconds = holdDuration >= TimeSpan.FromSeconds(10);
+			averageFps = thinkingFrames / Math.Max(holdDuration.TotalSeconds, 0.001);
+			layoutAt1280x720 = await CheckViewportLayoutAsync(new Vector2I(1280, 720));
+			layoutAt2560x1440 = await CheckViewportLayoutAsync(new Vector2I(2560, 1440));
+
+			// The M3 gate is a 60-FPS interaction target. Allow a small timing
+			// tolerance for scheduler jitter, but never report a materially slower
+			// 30-FPS loop as satisfying that gate.
+			bool responsiveFps = averageFps >= 55;
+			bool passed = setup
+				&& submitted
+				&& thinking
+				&& heldTenSeconds
+				&& inspectionWithinOneFrame
+				&& controlWithinOneFrame
+				&& hoverSelectionWithinOneFrame
+				&& zoomVisible
+				&& responsiveFps
+				&& layoutAt1280x720
+				&& layoutAt2560x1440;
+			GD.Print(
+				$"M3_LATENCY_SMOKE {(passed ? "PASS" : "FAIL")} "
+				+ $"setup={setup} submitted={submitted} thinking={thinking} "
+				+ $"held_ms={holdDuration.TotalMilliseconds.ToString("F0", CultureInfo.InvariantCulture)} "
+				+ $"thinking_frames={thinkingFrames} avg_fps={averageFps.ToString("F1", CultureInfo.InvariantCulture)} "
+				+ $"inspection_one_frame={inspectionWithinOneFrame} control_one_frame={controlWithinOneFrame} "
+				+ $"hover_selection_one_frame={hoverSelectionWithinOneFrame} "
+				+ $"zoom_in_viewport={zoomVisible} layout_1280x720={layoutAt1280x720} "
+				+ $"layout_2560x1440={layoutAt2560x1440}");
+			await _coordinator.DisposeAsync();
+			GetTree().Quit(passed ? 0 : 1);
+		}
+		catch (Exception exception)
+		{
+			GD.PushError(exception.ToString());
+			GD.Print(
+				$"M3_LATENCY_SMOKE FAIL setup={setup} submitted={submitted} thinking={thinking} "
+				+ $"held_ms={holdDuration.TotalMilliseconds.ToString("F0", CultureInfo.InvariantCulture)} "
+				+ $"inspection_one_frame={inspectionWithinOneFrame} control_one_frame={controlWithinOneFrame} "
+				+ $"hover_selection_one_frame={hoverSelectionWithinOneFrame} "
+				+ $"zoom_in_viewport={zoomVisible} layout_1280x720={layoutAt1280x720} "
+				+ $"layout_2560x1440={layoutAt2560x1440} error={exception.Message}");
+			if (_coordinator is not null)
+			{
+				await _coordinator.DisposeAsync();
+			}
+
+			GetTree().Quit(1);
+		}
+	}
+
+	private async Task<bool> CheckViewportLayoutAsync(Vector2I size)
+	{
+		Vector2I previousSize = DisplayServer.WindowGetSize();
+		DisplayServer.WindowSetSize(size);
+		await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+		bool inside = IsFullyInsideViewport(_board)
+			&& IsFullyInsideViewport(_actionPanel)
+			&& IsFullyInsideViewport(_focusPresentation)
+			&& IsFullyInsideViewport(_zoomButton)
+			&& IsFullyInsideViewport(_zoomOverlay);
+		DisplayServer.WindowSetSize(previousSize);
+		await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+		return inside;
 	}
 
 	private void PollCoordinator()
@@ -521,31 +1136,53 @@ public partial class Main : Control
 
 	private void RenderSnapshot(MatchSnapshot snapshot)
 	{
+		MatchSnapshot? previous = _currentSnapshot;
+		bool decisionChanged = previous is null
+			|| !SameDecision(previous.View.Decision, snapshot.View.Decision);
+		_currentSnapshot = snapshot;
+		_smokeRunEndedObserved |= _smokeTest
+			&& snapshot.Events.Any(value => value.Kind == EngineEventKinds.RunEnded);
+		if (decisionChanged)
+		{
+			_stagedAction = null;
+			_stagedDecision = null;
+		}
+
 		if (_startPanel.GetParent() is CanvasItem startPanel)
 		{
 			startPanel.Visible = false;
 		}
 		_board.Visible = true;
 		MatchViewModel view = snapshot.View;
-		_status.Text = snapshot.IsOpponentThinking
+		_status.Text = snapshot.RunOutcome is { } completedRun && snapshot.View.Run is null
+			? $"Representative slice complete · {completedRun.Summary}"
+			: snapshot.IsOpponentThinking
 			? "Corp policy is thinking asynchronously · inspect cards and menus remain responsive"
 			: view.Outcome.IsTerminal
 				? $"Match complete · {view.Outcome.Winner} · {view.Outcome.Reason}"
-				: "Core state published · human Runner input is available";
+			: "Core state published · human Runner input is available";
 		_phase.Text = view.Decision is { } decision
 			? $"{decision.OwnerSide.ToString().ToUpperInvariant()} · {decision.Kind.ToString().ToUpperInvariant()}"
+			: snapshot.RunOutcome is not null && view.Run is null ? "SLICE COMPLETE"
 			: view.Outcome.IsTerminal ? "GAME OVER" : "RESOLVING";
 		_focus.Text = view.Run is { } run
 			? $"{run.FocusLabel} · attacked {run.AttackedServerId} · {run.Step}"
+			: snapshot.RunOutcome is { } ended
+				? $"REPRESENTATIVE SLICE · COMPLETE · {ended.Reason}"
 			: "RUN FOCUS · no active run";
 		_decision.Text = snapshot.IsOpponentThinking
 			? "CORP THINKING · asynchronous agent delay\nThe render loop is free to process input and card inspection."
 			: view.Decision is { } prompt
 				? $"{prompt.OwnerSide} decision · {prompt.Prompt}\nRevision {prompt.Revision} · {view.LegalActions.Count} legal action(s)"
-				: view.Outcome.IsTerminal ? "Outcome reached." : "No pending decision.";
+			: snapshot.RunOutcome is { } finished && view.Run is null
+				? $"REPRESENTATIVE RUN COMPLETE\n{finished.Summary}\nNo further Core action is pending."
+			: view.Outcome.IsTerminal ? "Outcome reached." : "No pending decision.";
 
 		_corpSummary.Text = FormatPlayer(view.Corp, view.CorpHand.Count, view.CorpDeck.Count);
 		_runnerSummary.Text = FormatPlayer(view.Runner, view.RunnerHand.Count, view.RunnerDeck.Count);
+		_cardControls.Clear();
+		_cardModels.Clear();
+		RenderFocusPresentation(snapshot);
 		RenderServers(view.Servers);
 		RenderRunnerCards(view);
 		RenderActions(snapshot);
@@ -627,6 +1264,7 @@ public partial class Main : Control
 	private void RenderActions(MatchSnapshot snapshot)
 	{
 		ClearChildren(_actions);
+		UpdateTargetHighlights(snapshot.View.LegalActions);
 		if (snapshot.IsOpponentThinking)
 		{
 			_actions.AddChild(MakeLabel("Opponent thinking…", 13, Warning));
@@ -636,20 +1274,144 @@ public partial class Main : Control
 		DecisionViewModel? decision = snapshot.View.Decision;
 		if (decision is null || decision.OwnerSide != PlayerSide.Runner)
 		{
-			_actions.AddChild(MakeLabel("Waiting for the next issued Runner decision.", 12, Muted));
+			_actions.AddChild(MakeLabel(
+				snapshot.RunOutcome is not null && snapshot.View.Run is null
+					? "REPRESENTATIVE RUN COMPLETE · no further actions"
+					: "Waiting for the next issued Runner decision.",
+				12,
+				Muted));
 			return;
+		}
+
+		if (_stagedAction is { } staged && _stagedDecision is { } stagedDecision)
+		{
+			_smokeTargetControlsObserved |= _smokeTest;
+			PanelContainer selected = MakePanel();
+			VBoxContainer selectedContent = new();
+			selectedContent.AddThemeConstantOverride("separation", 3);
+			selected.AddChild(selectedContent);
+			selectedContent.AddChild(MakeLabel("TARGET SELECTED · confirm or cancel", 12, Warning));
+			selectedContent.AddChild(MakeLabel(
+				$"{staged.Kind.ToString().ToUpperInvariant()} · {staged.Description}\n"
+				+ "No engine action has been submitted yet.",
+				11,
+				Colors.White));
+			HBoxContainer selectedButtons = new();
+			Button confirm = new()
+			{
+				Text = "Confirm target",
+				CustomMinimumSize = new Vector2(150, 34),
+			};
+			confirm.Pressed += () => ConfirmStagedAction(stagedDecision, staged);
+			selectedButtons.AddChild(confirm);
+			Button cancel = new()
+			{
+				Text = "Cancel / Back",
+				CustomMinimumSize = new Vector2(150, 34),
+			};
+			cancel.Pressed += CancelStagedAction;
+			selectedButtons.AddChild(cancel);
+			selectedContent.AddChild(selectedButtons);
+			_actions.AddChild(selected);
 		}
 
 		foreach (LegalActionViewModel action in snapshot.View.LegalActions)
 		{
+			bool targeted = GetTargetCardId(action.Parameters) is not null
+				|| action.Parameters is BreachCandidateParameters;
 			Button button = new()
 			{
-				Text = $"{action.Kind}: {action.Description}",
+				Text = targeted
+					? $"SELECT TARGET · {action.Kind}: {action.Description}"
+					: $"{action.Kind}: {action.Description}",
 				Alignment = HorizontalAlignment.Left,
 				Disabled = Volatile.Read(ref _submissionInFlight) != 0,
 			};
-			button.Pressed += () => SubmitAction(decision, action);
+			if (targeted)
+			{
+				button.Pressed += () => StageTargetAction(decision, action);
+			}
+			else
+			{
+				button.Pressed += () => SubmitAction(decision, action);
+			}
 			_actions.AddChild(button);
+		}
+	}
+
+	private void StageTargetAction(DecisionViewModel decision, LegalActionViewModel action)
+	{
+		if (!SameDecision(decision, _currentSnapshot?.View.Decision)
+			|| _currentSnapshot is null
+			|| _currentSnapshot.IsOpponentThinking)
+		{
+			return;
+		}
+
+		_stagedDecision = decision;
+		_stagedAction = action;
+		UpdateTargetHighlights(_currentSnapshot.View.LegalActions);
+		RenderActions(_currentSnapshot);
+	}
+
+	private void ConfirmStagedAction(DecisionViewModel decision, LegalActionViewModel action)
+	{
+		if (!SameDecision(decision, _currentSnapshot?.View.Decision))
+		{
+			CancelStagedAction();
+			return;
+		}
+
+		SubmitAction(decision, action);
+	}
+
+	private void CancelStagedAction()
+	{
+		_stagedAction = null;
+		_stagedDecision = null;
+		if (_currentSnapshot is not null)
+		{
+			RenderActions(_currentSnapshot);
+		}
+	}
+
+	private void UpdateTargetHighlights(IReadOnlyList<LegalActionViewModel> actions)
+	{
+		foreach (List<TextCardControl> controls in _cardControls.Values)
+		{
+			foreach (TextCardControl control in controls)
+			{
+				control.SetTargetCandidate(false);
+			}
+		}
+
+		HashSet<string> candidateIds = actions
+			.Select(action => GetTargetCardId(action.Parameters))
+			.Where(value => value is not null)
+			.Select(value => value!)
+			.ToHashSet(StringComparer.Ordinal);
+		foreach (string candidateId in candidateIds)
+		{
+			if (!_cardControls.TryGetValue(candidateId, out List<TextCardControl>? controls))
+			{
+				continue;
+			}
+
+			foreach (TextCardControl control in controls)
+			{
+				control.SetTargetCandidate(true);
+				_smokeTargetCueObserved |= _smokeTest;
+			}
+		}
+
+		if (_stagedAction is { } staged
+			&& GetTargetCardId(staged.Parameters) is { } selectedId
+			&& _cardControls.TryGetValue(selectedId, out List<TextCardControl>? selectedControls))
+		{
+			foreach (TextCardControl control in selectedControls)
+			{
+				control.SetSelected(true);
+			}
 		}
 	}
 
@@ -727,8 +1489,39 @@ public partial class Main : Control
 	{
 		var control = new TextCardControl();
 		control.SetCard(card);
+		if (card is not null)
+		{
+			_cardModels[card.Id] = card;
+			if (!_cardControls.TryGetValue(card.Id, out List<TextCardControl>? controls))
+			{
+				controls = new List<TextCardControl>();
+				_cardControls.Add(card.Id, controls);
+			}
+
+			controls.Add(control);
+		}
+
+		control.CardClicked += HandleCardClicked;
 		control.CardInspected += cardId => InspectCard(cardId, card);
 		return control;
+	}
+
+	private void HandleCardClicked(string cardId)
+	{
+		if (_currentSnapshot is null
+			|| _currentSnapshot.IsOpponentThinking
+			|| _currentSnapshot.View.Decision is not { } decision
+			|| decision.OwnerSide != PlayerSide.Runner)
+		{
+			return;
+		}
+
+		LegalActionViewModel? action = _currentSnapshot.View.LegalActions
+			.FirstOrDefault(candidate => GetTargetCardId(candidate.Parameters) == cardId);
+		if (action is not null)
+		{
+			StageTargetAction(decision, action);
+		}
 	}
 
 	private void InspectCard(string cardId, CardViewModel? card)
@@ -738,10 +1531,97 @@ public partial class Main : Control
 			return;
 		}
 
+		_inspectedCard = card;
 		_details.Text = $"{card.Title}\n{card.Type} · {card.DefinitionId}\n"
-			+ $"{card.RulesText}\n\nClick feedback is local and immediate; engine actions remain ID-only.";
+			+ $"{card.RulesText}\n\nClick feedback is local and immediate; engine actions remain ID-only.\n"
+			+ "Use Zoom inspected card for an enlarged, complete text view.";
 		_details.AddThemeColorOverride("font_color", Colors.White);
+		_zoomButton.Visible = true;
 	}
+
+	private void ShowInspectedCardZoom()
+	{
+		if (_inspectedCard is not { } card)
+		{
+			return;
+		}
+
+		_zoomTitle.Text = $"CARD ZOOM · {card.Title}";
+		_zoomText.Text = FormatCardZoom(card);
+		_zoomOverlay.Visible = true;
+		_zoomOverlay.MoveToFront();
+	}
+
+	private void HideCardZoom()
+	{
+		_zoomOverlay.Visible = false;
+	}
+
+	private static string FormatCardZoom(CardViewModel card)
+	{
+		List<string> lines =
+		[
+			$"{card.Type}{(card.Subtypes.Count == 0 ? string.Empty : " · " + string.Join(" · ", card.Subtypes))}",
+		];
+		if (card.Cost is { } cost)
+		{
+			lines.Add($"Cost · {cost}");
+		}
+
+		if (card.Strength is { } strength)
+		{
+			lines.Add($"Strength · {strength}");
+		}
+
+		if (card.AgendaPoints is { } agendaPoints)
+		{
+			lines.Add($"Agenda points · {agendaPoints}");
+		}
+
+		if (card.TrashCost is { } trashCost)
+		{
+			lines.Add($"Trash cost · {trashCost}");
+		}
+
+		lines.Add($"Status · {(card.Rezzed ? "REZZED" : card.IsKnown ? "KNOWN" : "FACE-DOWN")}");
+		if (card.Counters.Count > 0)
+		{
+			lines.Add(string.Join(" · ", card.Counters));
+		}
+
+		lines.Add(string.Empty);
+		lines.Add(card.RulesText);
+		return string.Join('\n', lines);
+	}
+
+	private static bool SameDecision(DecisionViewModel? left, DecisionViewModel? right) =>
+		left is null && right is null
+		|| left is not null
+			&& right is not null
+			&& left.Id == right.Id
+			&& left.Revision == right.Revision
+			&& left.Owner == right.Owner;
+
+	private static string? GetTargetCardId(ActionParameters parameters) => parameters switch
+	{
+		CardChoiceParameters value => value.CardId.Value,
+		RunIceParameters value => value.IceId.Value,
+		RunBreakerParameters value => value.BreakerId.Value,
+		RunBreakParameters value => value.BreakerId.Value,
+		RunCardPaymentParameters value => value.CardId.Value,
+		BreachCandidateParameters { CardId: { } cardId } => cardId.Value,
+		_ => null,
+	};
+
+	private static bool IsAccessAction(LegalActionViewModel action) => action.Kind is
+		ActionKind.StealAgenda
+		or ActionKind.TrashAccessedCard
+		or ActionKind.NoAccessAction
+		or ActionKind.ChooseBreachCandidate;
+
+	private static bool IsTargetedAction(LegalActionViewModel action) =>
+		GetTargetCardId(action.Parameters) is not null
+		|| action.Parameters is BreachCandidateParameters;
 
 	private static string FormatPlayer(PlayerViewModel player, int hand, int deck) =>
 		$"Credits {player.Credits} · Clicks {player.Clicks} · Score {player.AgendaPoints}\n"

@@ -33,7 +33,8 @@ public sealed record MatchSnapshot(
     MatchViewModel View,
     IReadOnlyList<EngineEvent> Events,
     MatchFeedback? Feedback,
-    bool IsOpponentThinking)
+    bool IsOpponentThinking,
+    RunOutcomeViewModel? RunOutcome = null)
 {
     public bool IsTerminal => View.Outcome.IsTerminal;
 
@@ -91,6 +92,7 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
     private readonly object _snapshotGate = new();
     private GameState? _state;
     private MatchSnapshot? _currentSnapshot;
+    private RunOutcomeViewModel? _runOutcome;
     private long _publicationSequence;
     private bool _disposed;
 
@@ -433,6 +435,20 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
     {
         GameState state = _state
             ?? throw new InvalidOperationException("Cannot publish before the match starts.");
+        foreach (EngineEvent @event in events)
+        {
+            if (@event.Payload is RunEndedEventPayload ended)
+            {
+                // Keep only a public, presentation-safe terminal summary. The
+                // authoritative run is still owned and cleaned up by Core.
+                _runOutcome = new RunOutcomeViewModel(
+                    ended.RunId.Value,
+                    ended.InitiatingSide,
+                    ended.Reason,
+                    ended.Successful);
+            }
+        }
+
         Observation observation = ObservationBuilder.Build(state, PlayerSide.Runner);
         MatchViewModel view = ObservationViewMapper.Build(observation);
         IReadOnlyList<EngineEvent> frozenEvents = new ReadOnlyCollection<EngineEvent>(events.ToArray());
@@ -442,7 +458,8 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
             view,
             frozenEvents,
             feedback,
-            thinking);
+            thinking,
+            _runOutcome);
         lock (_snapshotGate)
         {
             _currentSnapshot = snapshot;
@@ -556,12 +573,33 @@ public static class M2MatchFactory
         M2ScenarioDocument document = M2ScenarioProvider.LoadRepresentative(scenarioPath);
         M2ScenarioRunSpec run = document.Run
             ?? throw new M2ScenarioException(["run: the scenario has no run contract."]);
+        RunPlayContract contract = new(
+            run.Server,
+            run.Source,
+            run.Breaker ?? throw new M2ScenarioException(["run.breaker: a breaker is required."]),
+            run.MaxPumps);
         IGameAgent agent = corpAgent
-            ?? new RunContractAgent(new RunPlayContract(
-                run.Server,
-                run.Source,
-                run.Breaker ?? throw new M2ScenarioException(["run.breaker: a breaker is required."]),
-                run.MaxPumps));
+            ?? new RunContractAgent(contract);
         return new MatchCoordinator(document, agent, options);
+    }
+
+    /// <summary>
+    /// Returns a Match-layer action policy for the checked-in representative
+    /// Runner contract. The delegate consumes only a filtered observation and
+    /// returns an already-issued ActionId; callers still submit through
+    /// <see cref="MatchCoordinator.SubmitRunnerActionAsync"/>.
+    /// </summary>
+    public static Func<Observation, CancellationToken, ValueTask<ActionId>>
+        CreateRepresentativeRunnerPolicy(string? scenarioPath = null)
+    {
+        M2ScenarioDocument document = M2ScenarioProvider.LoadRepresentative(scenarioPath);
+        M2ScenarioRunSpec run = document.Run
+            ?? throw new M2ScenarioException(["run: the scenario has no run contract."]);
+        var agent = new RunContractAgent(new RunPlayContract(
+            run.Server,
+            run.Source,
+            run.Breaker ?? throw new M2ScenarioException(["run.breaker: a breaker is required."]),
+            run.MaxPumps));
+        return (observation, cancellationToken) => agent.ChooseActionAsync(observation, cancellationToken);
     }
 }
