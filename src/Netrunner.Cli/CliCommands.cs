@@ -76,6 +76,23 @@ public static class CliCommands
             return RunPlay(options!, output, error);
         }
 
+        if (args.Length > 0 && string.Equals(args[0], "m2-proof", StringComparison.Ordinal))
+        {
+            bool requestedJson = args.Skip(1).Any(static argument => argument == "--json");
+            if (!TryParseM2ProofCommand(args, out string? m2ScenarioPath, out bool m2Json, out string? m2ParseError))
+            {
+                WriteM2ProofFailure(
+                    requestedJson,
+                    2,
+                    m2ParseError ?? "The m2-proof command arguments are invalid.",
+                    output,
+                    error);
+                return 2;
+            }
+
+            return RunM2Proof(m2ScenarioPath!, m2Json, output, error);
+        }
+
         error.WriteLine(
             "Usage: Netrunner.Cli doctor [--json] | self-test --seed <unsigned-integer> | "
             + "scenario <file> [--json] | replay <file> [--json] | "
@@ -83,7 +100,8 @@ public static class CliCommands
             + "--retrieval-date YYYY-MM-DD --output-dir <directory> [--json] | "
             + "card-data validate [--root <directory>] [--json] | "
             + "play --seed <unsigned-integer> --goal corp-score|runner-steal|deck-out "
-            + "[--json] [--replay-out <file>]");
+            + "[--json] [--replay-out <file>] | "
+            + "m2-proof [scenarioPath] [--json]");
         return 2;
     }
 
@@ -842,6 +860,175 @@ public static class CliCommands
         return true;
     }
 
+    private static int RunM2Proof(string scenarioPath, bool json, TextWriter output, TextWriter error)
+    {
+        M2ScenarioDocument document;
+        try
+        {
+            document = EngineJson.Deserialize<M2ScenarioDocument>(File.ReadAllText(scenarioPath));
+        }
+        catch (Exception exception) when (IsCommandFailure(exception))
+        {
+            WriteM2ProofFailure(json, 2, exception.Message, output, error);
+            return 2;
+        }
+
+        M2ScenarioRunSpec? runSpec = document.Run;
+        if (runSpec is null)
+        {
+            WriteM2ProofFailure(json, 2, $"scenario '{document.ScenarioId}' has no run contract.", output, error);
+            return 2;
+        }
+
+        if (string.IsNullOrWhiteSpace(runSpec.Breaker))
+        {
+            WriteM2ProofFailure(
+                json,
+                2,
+                $"scenario '{document.ScenarioId}' run contract does not name an icebreaker.",
+                output,
+                error);
+            return 2;
+        }
+
+        var contract = new RunPlayContract(runSpec.Server, runSpec.Source, runSpec.Breaker, runSpec.MaxPumps);
+        M2ProofResult scripted;
+        M2ProofResult agent;
+        try
+        {
+            scripted = M2ProofRunner.Run(document, new ScriptedHumanRunPolicy(contract), "scripted-human");
+            agent = M2ProofRunner.Run(document, new RunContractAgent(contract), "contract-agent");
+        }
+        // InvalidOperationException covers M2ProofException, resolution and
+        // state-invariant failures from the proof run, and scenario setup
+        // validation errors.
+        catch (Exception exception) when (exception is M2ProofException or M2ScenarioException or InvalidOperationException)
+        {
+            WriteM2ProofFailure(json, 1, exception.Message, output, error);
+            return 1;
+        }
+
+        if (!string.Equals(scripted.FinalStateHash, agent.FinalStateHash, StringComparison.Ordinal)
+            || !string.Equals(scripted.EventStreamHash, agent.EventStreamHash, StringComparison.Ordinal))
+        {
+            WriteM2ProofFailure(
+                json,
+                1,
+                "the policies diverged: scripted-human reached final state " + scripted.FinalStateHash
+                + " / event stream " + scripted.EventStreamHash
+                + " but contract-agent reached " + agent.FinalStateHash
+                + " / " + agent.EventStreamHash + ".",
+                output,
+                error);
+            return 1;
+        }
+
+        bool replayVerified = ReplayVerifier.Verify(scripted.ReplayArtifact).Success;
+        if (json)
+        {
+            var policies = new Dictionary<string, M2ProofPolicyOutput>(StringComparer.Ordinal)
+            {
+                [scripted.PolicyName] = new M2ProofPolicyOutput(scripted.FinalStateHash, scripted.EventStreamHash),
+                [agent.PolicyName] = new M2ProofPolicyOutput(agent.FinalStateHash, agent.EventStreamHash),
+            };
+            output.WriteLine(EngineJson.Serialize(new M2ProofCommandOutput(
+                document.ScenarioId,
+                scripted.InitialStateHash,
+                scripted.FinalStateHash,
+                scripted.EventStreamHash,
+                scripted.Checkpoints.Count,
+                scripted.ReplayActions.Count,
+                replayVerified,
+                scripted.Trace.Problems,
+                policies)));
+        }
+        else
+        {
+            output.WriteLine("m2-proof=ok");
+            foreach (M2ProofResult result in (M2ProofResult[])[scripted, agent])
+            {
+                output.WriteLine(
+                    $"policy={result.PolicyName} final-state-hash={result.FinalStateHash} event-stream-hash={result.EventStreamHash}");
+            }
+
+            output.WriteLine($"checkpoints={scripted.Checkpoints.Count}");
+            output.WriteLine($"replay-actions={scripted.ReplayActions.Count}");
+            output.WriteLine($"replay-verified={replayVerified.ToString().ToLowerInvariant()}");
+            output.Write(scripted.Trace.RenderText());
+        }
+
+        return 0;
+    }
+
+    private static bool TryParseM2ProofCommand(
+        string[] args,
+        out string? path,
+        out bool json,
+        out string? error)
+    {
+        path = null;
+        json = false;
+        error = null;
+        if (args.Length == 0 || !string.Equals(args[0], "m2-proof", StringComparison.Ordinal))
+        {
+            error = "The m2-proof command must start with 'm2-proof'.";
+            return false;
+        }
+
+        string? scenarioPath = null;
+        bool jsonSeen = false;
+        for (int index = 1; index < args.Length; index++)
+        {
+            string argument = args[index];
+            if (argument == "--json")
+            {
+                if (jsonSeen)
+                {
+                    error = "The --json option may be specified only once.";
+                    return false;
+                }
+
+                jsonSeen = true;
+                continue;
+            }
+
+            if (argument.StartsWith("--", StringComparison.Ordinal))
+            {
+                error = $"Unknown m2-proof option '{argument}'.";
+                return false;
+            }
+
+            if (scenarioPath is not null)
+            {
+                error = "The m2-proof command accepts at most one scenario path.";
+                return false;
+            }
+
+            scenarioPath = argument;
+        }
+
+        path = scenarioPath ?? "data/m2/representative-run.json";
+        json = jsonSeen;
+        return true;
+    }
+
+    private static void WriteM2ProofFailure(
+        bool json,
+        int exitCode,
+        string message,
+        TextWriter output,
+        TextWriter error)
+    {
+        if (json)
+        {
+            output.WriteLine(EngineJson.Serialize(new M2ProofFailureCommandOutput("failed", message)));
+        }
+        else
+        {
+            error.WriteLine($"m2-proof failed (exit {exitCode}): {message}");
+        }
+    }
+
     private static bool TryParseGoal(string value, out ToyGoal goal)
     {
         goal = value switch
@@ -1040,6 +1227,25 @@ public static class CliCommands
         string? EventStreamHash,
         string? ReplayPath,
         string? Message);
+
+    private sealed record M2ProofCommandOutput(
+        string ScenarioId,
+        string InitialStateHash,
+        string FinalStateHash,
+        string EventStreamHash,
+        int Checkpoints,
+        int ReplayActions,
+        bool ReplayVerified,
+        IReadOnlyList<string> TraceProblems,
+        Dictionary<string, M2ProofPolicyOutput> Policies);
+
+    private sealed record M2ProofPolicyOutput(
+        string FinalStateHash,
+        string EventStreamHash);
+
+    private sealed record M2ProofFailureCommandOutput(
+        string Status,
+        string Message);
 
     private enum CardDataOperation
     {

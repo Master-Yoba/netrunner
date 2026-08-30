@@ -28,6 +28,8 @@ public enum ActionKind
     EndTurn,
     PassPriority,
     RezIce,
+    BreakSubroutines,
+    PumpBreaker,
     JackOut,
     ContinueRun,
     TrashProgram,
@@ -39,6 +41,9 @@ public enum ActionKind
     UseReplacement,
     DeclineReplacement,
     Legacy,
+    ChooseBreachCandidate,
+    TrashAccessedCard,
+    NoAccessAction,
 }
 
 /// <summary>
@@ -48,13 +53,17 @@ public enum ActionKind
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 [JsonDerivedType(typeof(NumberChoiceParameters), "number")]
 [JsonDerivedType(typeof(CardChoiceParameters), "card")]
+[JsonDerivedType(typeof(RunCardPaymentParameters), "run-card-payment")]
 [JsonDerivedType(typeof(RunIceParameters), "run-ice")]
+[JsonDerivedType(typeof(RunBreakerParameters), "run-breaker")]
+[JsonDerivedType(typeof(RunBreakParameters), "run-break")]
 [JsonDerivedType(typeof(NoActionParameters), "none")]
 [JsonDerivedType(typeof(TriggerChoiceParameters), "trigger")]
 [JsonDerivedType(typeof(TriggerOrderParameters), "trigger-order")]
 [JsonDerivedType(typeof(PreventionChoiceParameters), "prevention")]
 [JsonDerivedType(typeof(ReplacementChoiceParameters), "replacement")]
 [JsonDerivedType(typeof(LegacyActionParameters), "legacy")]
+[JsonDerivedType(typeof(BreachCandidateParameters), "breach-candidate")]
 public abstract record ActionParameters;
 
 public sealed record NumberChoiceParameters([property: JsonRequired] int Value) : ActionParameters;
@@ -63,6 +72,112 @@ public sealed record CardChoiceParameters([property: JsonRequired] CardInstanceI
 
 /// <summary>Typed target for the CR 6.9 approached-ICE rez action.</summary>
 public sealed record RunIceParameters([property: JsonRequired] CardInstanceId IceId) : ActionParameters;
+
+/// <summary>
+/// Typed target for the CR 3.9.5 encounter icebreaker pump action: the rig
+/// breaker whose strength is raised for the current encounter. The exact
+/// hosted-credit portion of the payment is materialized by Core per CR
+/// 1.10.3c.
+/// </summary>
+public sealed record RunBreakerParameters : ActionParameters
+{
+    [JsonConstructor]
+    public RunBreakerParameters(CardInstanceId breakerId, int hostedCredits = 0)
+    {
+        if (hostedCredits < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(hostedCredits), "Hosted credits spent must not be negative.");
+        }
+
+        BreakerId = breakerId;
+        HostedCredits = hostedCredits;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId BreakerId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int HostedCredits { get; private set; }
+
+    [JsonIgnore]
+    public int RunCredits => HostedCredits;
+}
+
+/// <summary>
+/// Typed target and quantity for the CR 9.8 encounter subroutine break
+/// action: the named rig icebreaker and how many subroutines it breaks.
+/// The quantity is bounded by the number of unbroken subroutines at the moment
+/// the action is materialized. The breaker's printed break limit applies to
+/// this interface ability activation only, not cumulatively across the
+/// encounter. The exact hosted-credit portion is materialized by Core.
+/// </summary>
+public sealed record RunBreakParameters : ActionParameters
+{
+    [JsonConstructor]
+    public RunBreakParameters(CardInstanceId breakerId, int quantity, int hostedCredits = 0)
+    {
+        if (quantity < 1)
+        {
+            throw new ArgumentException("The break quantity must be at least 1.", nameof(quantity));
+        }
+
+        if (hostedCredits < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(hostedCredits), "Hosted credits spent must not be negative.");
+        }
+
+        BreakerId = breakerId;
+        Quantity = quantity;
+        HostedCredits = hostedCredits;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId BreakerId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Quantity { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int HostedCredits { get; private set; }
+
+    [JsonIgnore]
+    public int RunCredits => HostedCredits;
+}
+
+/// <summary>
+/// Typed accessed-card basic-trash action. Core materializes one action for
+/// each legal division between the Runner wallet and hosted run credits.
+/// </summary>
+public sealed record RunCardPaymentParameters : ActionParameters
+{
+    [JsonConstructor]
+    public RunCardPaymentParameters(CardInstanceId cardId, int hostedCredits = 0)
+    {
+        if (hostedCredits < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(hostedCredits), "Hosted credits spent must not be negative.");
+        }
+
+        CardId = cardId;
+        HostedCredits = hostedCredits;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId CardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int HostedCredits { get; private set; }
+
+    [JsonIgnore]
+    public int RunCredits => HostedCredits;
+}
 
 /// <summary>
 /// Typed marker payload for an action whose complete meaning is defined by its
@@ -101,6 +216,50 @@ public sealed record ReplacementChoiceParameters([property: JsonRequired] Interr
 /// accepted in an authoritative PendingDecision.
 /// </summary>
 public sealed record LegacyActionParameters([property: JsonRequired] string Kind) : ActionParameters;
+
+/// <summary>
+/// Selection of one candidate during a breach: either the explicit card the
+/// Runner chooses from the visible pool, or the hidden source Core must draw
+/// from. Exactly one of the two must be present.
+/// </summary>
+public sealed record BreachCandidateParameters : ActionParameters
+{
+    [JsonConstructor]
+    public BreachCandidateParameters(CardInstanceId? cardId, BreachHiddenCandidateSource? source)
+    {
+        bool hasCard = cardId.HasValue;
+        bool hasSource = source.HasValue;
+        if (hasCard == hasSource)
+        {
+            throw new ArgumentException(
+                "Exactly one of the candidate card ID or the hidden candidate source must be provided.",
+                nameof(cardId));
+        }
+
+        CardId = cardId;
+        Source = source;
+    }
+
+    /// <summary>Convenience selection of one visible candidate card.</summary>
+    public BreachCandidateParameters(CardInstanceId cardId)
+        : this(cardId, null)
+    {
+    }
+
+    /// <summary>Convenience selection of a hidden candidate to draw from a source.</summary>
+    public BreachCandidateParameters(BreachHiddenCandidateSource source)
+        : this(null, source)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId? CardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public BreachHiddenCandidateSource? Source { get; private set; }
+}
 
 public sealed record LegalAction
 {
@@ -313,13 +472,17 @@ public sealed class PendingDecision
     {
         NumberChoiceParameters numberChoice => new NumberChoiceParameters(numberChoice.Value),
         CardChoiceParameters cardChoice => new CardChoiceParameters(cardChoice.CardId),
+        RunCardPaymentParameters payment => new RunCardPaymentParameters(payment.CardId, payment.HostedCredits),
         RunIceParameters runIce => new RunIceParameters(runIce.IceId),
+        RunBreakerParameters breaker => new RunBreakerParameters(breaker.BreakerId, breaker.HostedCredits),
+        RunBreakParameters runBreak => new RunBreakParameters(runBreak.BreakerId, runBreak.Quantity, runBreak.HostedCredits),
         NoActionParameters => new NoActionParameters(),
         TriggerChoiceParameters trigger => new TriggerChoiceParameters(trigger.TriggerId),
         TriggerOrderParameters order => new TriggerOrderParameters(order.TriggerId),
         PreventionChoiceParameters prevention => new PreventionChoiceParameters(prevention.InterruptId, prevention.Amount),
         ReplacementChoiceParameters replacement => new ReplacementChoiceParameters(replacement.InterruptId),
         LegacyActionParameters legacy => new LegacyActionParameters(legacy.Kind),
+        BreachCandidateParameters breachCandidate => new BreachCandidateParameters(breachCandidate.CardId, breachCandidate.Source),
         _ => throw new InvalidOperationException(
             $"No immutable clone is registered for action parameter type '{parameters.GetType().Name}'."),
     };

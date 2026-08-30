@@ -27,15 +27,22 @@ public static class EngineEventKinds
     public const string AgendaStolen = "agenda-stolen";
     public const string GameWon = "game-won";
     public const string RunInitiated = "run-initiated";
+    public const string RunEventPlayed = "run-event-played";
+    public const string RunCreditsAdjusted = "run-credits-adjusted";
     public const string RunPriorityPassed = "run-priority-passed";
     public const string RunTimingWindowOpened = "run-timing-window-opened";
     public const string IceApproached = "ice-approached";
     public const string IceRezzed = "ice-rezzed";
+    public const string SubroutinesBroken = "subroutines-broken";
+    public const string BreakerPumped = "breaker-pumped";
     public const string EncounterInitialized = "encounter-initialized";
     public const string EncounterCompleted = "encounter-completed";
     public const string RunMoved = "run-moved";
     public const string RunSuccessful = "run-successful";
-    public const string BreachPlaceholderReached = "breach-placeholder-reached";
+    public const string BreachStarted = "breach-started";
+    public const string BreachCandidateChosen = "breach-candidate-chosen";
+    public const string CardAccessed = "card-accessed";
+    public const string AccessedCardTrashed = "accessed-card-trashed";
     public const string RunEnded = "run-ended";
 }
 
@@ -66,15 +73,22 @@ public static class EngineEventKinds
 [JsonDerivedType(typeof(AgendaStolenEventPayload), "agenda-stolen")]
 [JsonDerivedType(typeof(GameWonEventPayload), "game-won")]
 [JsonDerivedType(typeof(RunInitiatedEventPayload), "run-initiated")]
+[JsonDerivedType(typeof(RunEventPlayedEventPayload), "run-event-played")]
+[JsonDerivedType(typeof(RunCreditsAdjustedEventPayload), "run-credits-adjusted")]
 [JsonDerivedType(typeof(RunPriorityPassedEventPayload), "run-priority-passed")]
 [JsonDerivedType(typeof(RunTimingWindowOpenedEventPayload), "run-timing-window-opened")]
 [JsonDerivedType(typeof(IceApproachedEventPayload), "ice-approached")]
 [JsonDerivedType(typeof(IceRezzedEventPayload), "ice-rezzed")]
+[JsonDerivedType(typeof(SubroutinesBrokenEventPayload), "subroutines-broken")]
+[JsonDerivedType(typeof(BreakerPumpedEventPayload), "breaker-pumped")]
 [JsonDerivedType(typeof(EncounterInitializedEventPayload), "encounter-initialized")]
 [JsonDerivedType(typeof(EncounterCompletedEventPayload), "encounter-completed")]
 [JsonDerivedType(typeof(RunMovedEventPayload), "run-moved")]
 [JsonDerivedType(typeof(RunSuccessfulEventPayload), "run-successful")]
-[JsonDerivedType(typeof(BreachPlaceholderReachedEventPayload), "breach-placeholder-reached")]
+[JsonDerivedType(typeof(BreachStartedEventPayload), "breach-started")]
+[JsonDerivedType(typeof(BreachCandidateChosenEventPayload), "breach-candidate-chosen")]
+[JsonDerivedType(typeof(CardAccessedEventPayload), "card-accessed")]
+[JsonDerivedType(typeof(AccessedCardTrashedEventPayload), "accessed-card-trashed")]
 [JsonDerivedType(typeof(RunEndedEventPayload), "run-ended")]
 public abstract record EngineEventPayload
 {
@@ -749,6 +763,108 @@ public sealed record RunInitiatedEventPayload : EngineEventPayload
     public PlayerSide InitiatingSide { get; private set; }
 }
 
+/// <summary>
+/// A registered run event was played at run initiation: its printed cost was
+/// paid and its hosted credits were placed on the event as run-scoped credits.
+/// </summary>
+public sealed record RunEventPlayedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public RunEventPlayedEventPayload(
+        int version,
+        RunId runId,
+        CardInstanceId eventCardId,
+        CardDefinitionId definitionId,
+        int cost,
+        int hostedCredits,
+        PlayerId runner,
+        int runnerCreditsAfter)
+        : base(version)
+    {
+        RunId = runId;
+        EventCardId = eventCardId;
+        DefinitionId = definitionId;
+        Cost = cost;
+        HostedCredits = hostedCredits;
+        Runner = runner;
+        RunnerCreditsAfter = runnerCreditsAfter;
+    }
+
+    public RunEventPlayedEventPayload(
+        RunId runId,
+        CardInstanceId eventCardId,
+        CardDefinitionId definitionId,
+        int cost,
+        int hostedCredits,
+        PlayerId runner,
+        int runnerCreditsAfter)
+        : this(1, runId, eventCardId, definitionId, cost, hostedCredits, runner, runnerCreditsAfter)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunId RunId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId EventCardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardDefinitionId DefinitionId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Cost { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int HostedCredits { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerId Runner { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int RunnerCreditsAfter { get; private set; }
+}
+
+/// <summary>
+/// Run-scoped hosted credits changed: spent toward a run cost (negative
+/// delta while a run is live) or expired at run end (delta equal to the
+/// negative remaining pool, credits after zero).
+/// </summary>
+public sealed record RunCreditsAdjustedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public RunCreditsAdjustedEventPayload(int version, RunId runId, int delta, int runCreditsAfter)
+        : base(version)
+    {
+        RunId = runId;
+        Delta = delta;
+        RunCreditsAfter = runCreditsAfter;
+    }
+
+    public RunCreditsAdjustedEventPayload(RunId runId, int delta, int runCreditsAfter)
+        : this(1, runId, delta, runCreditsAfter)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunId RunId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Delta { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int RunCreditsAfter { get; private set; }
+}
+
 public sealed record RunPriorityPassedEventPayload : EngineEventPayload
 {
     [JsonConstructor]
@@ -898,6 +1014,72 @@ public sealed record IceRezzedEventPayload : EngineEventPayload
     public CardInstanceId IceId { get; private set; }
 }
 
+public sealed record SubroutinesBrokenEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public SubroutinesBrokenEventPayload(
+        int version,
+        RunId runId,
+        EncounterId encounterId,
+        CardInstanceId breakerId,
+        int brokenCount)
+        : base(version)
+    {
+        RunId = runId;
+        EncounterId = encounterId;
+        BreakerId = breakerId;
+        BrokenCount = brokenCount;
+    }
+
+    public SubroutinesBrokenEventPayload(RunId runId, EncounterId encounterId, CardInstanceId breakerId, int brokenCount)
+        : this(1, runId, encounterId, breakerId, brokenCount)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunId RunId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public EncounterId EncounterId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId BreakerId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int BrokenCount { get; private set; }
+}
+
+public sealed record BreakerPumpedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public BreakerPumpedEventPayload(
+        int version,
+        RunId runId,
+        CardInstanceId breakerId)
+        : base(version)
+    {
+        RunId = runId;
+        BreakerId = breakerId;
+    }
+
+    public BreakerPumpedEventPayload(RunId runId, CardInstanceId breakerId)
+        : this(1, runId, breakerId)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunId RunId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId BreakerId { get; private set; }
+}
+
 public sealed record EncounterInitializedEventPayload : EngineEventPayload
 {
     [JsonConstructor]
@@ -1019,18 +1201,26 @@ public sealed record RunSuccessfulEventPayload : EngineEventPayload
     public ServerId ServerId { get; private set; }
 }
 
-public sealed record BreachPlaceholderReachedEventPayload : EngineEventPayload
+/// <summary>The run reached its server and breach access started.</summary>
+public sealed record BreachStartedEventPayload : EngineEventPayload
 {
     [JsonConstructor]
-    public BreachPlaceholderReachedEventPayload(int version, RunId runId, ServerId serverId)
+    public BreachStartedEventPayload(
+        int version,
+        RunId runId,
+        ServerId serverId,
+        int randomAccessLimit,
+        int candidateCount)
         : base(version)
     {
         RunId = runId;
         ServerId = serverId;
+        RandomAccessLimit = randomAccessLimit;
+        CandidateCount = candidateCount;
     }
 
-    public BreachPlaceholderReachedEventPayload(RunId runId, ServerId serverId)
-        : this(1, runId, serverId)
+    public BreachStartedEventPayload(RunId runId, ServerId serverId, int randomAccessLimit, int candidateCount)
+        : this(1, runId, serverId, randomAccessLimit, candidateCount)
     {
     }
 
@@ -1041,6 +1231,115 @@ public sealed record BreachPlaceholderReachedEventPayload : EngineEventPayload
     [JsonInclude]
     [JsonRequired]
     public ServerId ServerId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int RandomAccessLimit { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int CandidateCount { get; private set; }
+}
+
+/// <summary>One breach candidate was chosen for the run.</summary>
+public sealed record BreachCandidateChosenEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public BreachCandidateChosenEventPayload(
+        int version,
+        RunId runId,
+        ServerId serverId,
+        CardInstanceId cardId,
+        BreachHiddenCandidateSource? source)
+        : base(version)
+    {
+        RunId = runId;
+        ServerId = serverId;
+        CardId = cardId;
+        Source = source;
+    }
+
+    public BreachCandidateChosenEventPayload(RunId runId, ServerId serverId, CardInstanceId cardId, BreachHiddenCandidateSource? source)
+        : this(1, runId, serverId, cardId, source)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunId RunId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ServerId ServerId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId CardId { get; private set; }
+
+    /// <summary>Null when the chosen candidate was already visible.</summary>
+    [JsonInclude]
+    [JsonRequired]
+    public BreachHiddenCandidateSource? Source { get; private set; }
+}
+
+/// <summary>One chosen candidate card was accessed.</summary>
+public sealed record CardAccessedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public CardAccessedEventPayload(int version, RunId runId, ServerId serverId, CardInstanceId cardId)
+        : base(version)
+    {
+        RunId = runId;
+        ServerId = serverId;
+        CardId = cardId;
+    }
+
+    public CardAccessedEventPayload(RunId runId, ServerId serverId, CardInstanceId cardId)
+        : this(1, runId, serverId, cardId)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunId RunId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ServerId ServerId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId CardId { get; private set; }
+}
+
+/// <summary>An accessed card was trashed, paying its printed trash cost.</summary>
+public sealed record AccessedCardTrashedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public AccessedCardTrashedEventPayload(int version, RunId runId, CardInstanceId cardId, int trashCost)
+        : base(version)
+    {
+        RunId = runId;
+        CardId = cardId;
+        TrashCost = trashCost;
+    }
+
+    public AccessedCardTrashedEventPayload(RunId runId, CardInstanceId cardId, int trashCost)
+        : this(1, runId, cardId, trashCost)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunId RunId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId CardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int TrashCost { get; private set; }
 }
 
 public sealed record RunEndedEventPayload : EngineEventPayload
@@ -1149,15 +1448,22 @@ public sealed record EngineEvent
         AgendaStolenEventPayload value => new EngineEvent(Version, Sequence, Kind, new AgendaStolenEventPayload(value.Version, value.Winner, value.AgendaId, value.AgendaPoints)),
         GameWonEventPayload value => new EngineEvent(Version, Sequence, Kind, new GameWonEventPayload(value.Version, value.Winner, value.Reason)),
         RunInitiatedEventPayload value => new EngineEvent(Version, Sequence, Kind, new RunInitiatedEventPayload(value.Version, value.RunId, value.ServerId, value.Runner, value.InitiatingSide)),
+        RunEventPlayedEventPayload value => new EngineEvent(Version, Sequence, Kind, new RunEventPlayedEventPayload(value.Version, value.RunId, value.EventCardId, value.DefinitionId, value.Cost, value.HostedCredits, value.Runner, value.RunnerCreditsAfter)),
+        RunCreditsAdjustedEventPayload value => new EngineEvent(Version, Sequence, Kind, new RunCreditsAdjustedEventPayload(value.Version, value.RunId, value.Delta, value.RunCreditsAfter)),
         RunPriorityPassedEventPayload value => new EngineEvent(Version, Sequence, Kind, new RunPriorityPassedEventPayload(value.Version, value.RunId, value.Window, value.PassedBy, value.NextPriorityHolder, value.ConsecutivePasses)),
         RunTimingWindowOpenedEventPayload value => new EngineEvent(Version, Sequence, Kind, new RunTimingWindowOpenedEventPayload(value.Version, value.RunId, value.Phase, value.Step, value.PriorityWindow, value.PriorityHolder)),
         IceApproachedEventPayload value => new EngineEvent(Version, Sequence, Kind, new IceApproachedEventPayload(value.Version, value.RunId, value.IceId)),
         IceRezzedEventPayload value => new EngineEvent(Version, Sequence, Kind, new IceRezzedEventPayload(value.Version, value.RunId, value.IceId)),
+        SubroutinesBrokenEventPayload value => new EngineEvent(Version, Sequence, Kind, new SubroutinesBrokenEventPayload(value.Version, value.RunId, value.EncounterId, value.BreakerId, value.BrokenCount)),
+        BreakerPumpedEventPayload value => new EngineEvent(Version, Sequence, Kind, new BreakerPumpedEventPayload(value.Version, value.RunId, value.BreakerId)),
         EncounterInitializedEventPayload value => new EngineEvent(Version, Sequence, Kind, new EncounterInitializedEventPayload(value.Version, value.RunId, value.EncounterId, value.IceId, value.SubroutineCount)),
         EncounterCompletedEventPayload value => new EngineEvent(Version, Sequence, Kind, new EncounterCompletedEventPayload(value.Version, value.RunId, value.EncounterId)),
         RunMovedEventPayload value => new EngineEvent(Version, Sequence, Kind, new RunMovedEventPayload(value.Version, value.RunId, value.FromIceIndex, value.ToIceIndex, value.NextIceId)),
         RunSuccessfulEventPayload value => new EngineEvent(Version, Sequence, Kind, new RunSuccessfulEventPayload(value.Version, value.RunId, value.ServerId)),
-        BreachPlaceholderReachedEventPayload value => new EngineEvent(Version, Sequence, Kind, new BreachPlaceholderReachedEventPayload(value.Version, value.RunId, value.ServerId)),
+        BreachStartedEventPayload value => new EngineEvent(Version, Sequence, Kind, new BreachStartedEventPayload(value.Version, value.RunId, value.ServerId, value.RandomAccessLimit, value.CandidateCount)),
+        BreachCandidateChosenEventPayload value => new EngineEvent(Version, Sequence, Kind, new BreachCandidateChosenEventPayload(value.Version, value.RunId, value.ServerId, value.CardId, value.Source)),
+        CardAccessedEventPayload value => new EngineEvent(Version, Sequence, Kind, new CardAccessedEventPayload(value.Version, value.RunId, value.ServerId, value.CardId)),
+        AccessedCardTrashedEventPayload value => new EngineEvent(Version, Sequence, Kind, new AccessedCardTrashedEventPayload(value.Version, value.RunId, value.CardId, value.TrashCost)),
         RunEndedEventPayload value => new EngineEvent(Version, Sequence, Kind, new RunEndedEventPayload(value.Version, value.RunId, value.InitiatingSide, value.Reason, value.Successful)),
         _ => throw new InvalidOperationException($"No immutable clone is registered for event payload '{Payload.GetType().Name}'."),
     };
@@ -1358,6 +1664,21 @@ public static class EngineEventValidator
                 RequireId(value.Runner.Value, $"{path}.payload.runner", "player", violations);
                 RequireSide(value.InitiatingSide, $"{path}.payload.initiatingSide", violations);
                 break;
+            case RunEventPlayedEventPayload value:
+                RequireKind(@event, EngineEventKinds.RunEventPlayed, path, violations);
+                RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
+                RequireId(value.EventCardId.Value, $"{path}.payload.eventCardId", "card", violations);
+                RequireId(value.DefinitionId.Value, $"{path}.payload.definitionId", "card", violations);
+                RequireNumber(value.Cost, $"{path}.payload.cost", "Event cost", violations);
+                RequireNumber(value.HostedCredits, $"{path}.payload.hostedCredits", "Hosted credits", violations);
+                RequireId(value.Runner.Value, $"{path}.payload.runner", "player", violations);
+                RequireNumber(value.RunnerCreditsAfter, $"{path}.payload.runnerCreditsAfter", "Runner credits after", violations);
+                break;
+            case RunCreditsAdjustedEventPayload value:
+                RequireKind(@event, EngineEventKinds.RunCreditsAdjusted, path, violations);
+                RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
+                RequireNumber(value.RunCreditsAfter, $"{path}.payload.runCreditsAfter", "Run credits after", violations);
+                break;
             case RunPriorityPassedEventPayload value:
                 RequireKind(@event, EngineEventKinds.RunPriorityPassed, path, violations);
                 RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
@@ -1404,6 +1725,18 @@ public static class EngineEventValidator
                 RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
                 RequireId(value.IceId.Value, $"{path}.payload.iceId", "card", violations);
                 break;
+            case SubroutinesBrokenEventPayload value:
+                RequireKind(@event, EngineEventKinds.SubroutinesBroken, path, violations);
+                RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
+                RequireId(value.EncounterId.Value, $"{path}.payload.encounterId", "encounter", violations);
+                RequireId(value.BreakerId.Value, $"{path}.payload.breakerId", "card", violations);
+                RequireNumber(value.BrokenCount, $"{path}.payload.brokenCount", "Broken subroutine count", violations, strictlyPositive: true);
+                break;
+            case BreakerPumpedEventPayload value:
+                RequireKind(@event, EngineEventKinds.BreakerPumped, path, violations);
+                RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
+                RequireId(value.BreakerId.Value, $"{path}.payload.breakerId", "card", violations);
+                break;
             case EncounterInitializedEventPayload value:
                 RequireKind(@event, EngineEventKinds.EncounterInitialized, path, violations);
                 RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
@@ -1436,10 +1769,30 @@ public static class EngineEventValidator
                 RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
                 RequireId(value.ServerId.Value, $"{path}.payload.serverId", "server", violations);
                 break;
-            case BreachPlaceholderReachedEventPayload value:
-                RequireKind(@event, EngineEventKinds.BreachPlaceholderReached, path, violations);
+            case BreachStartedEventPayload value:
+                RequireKind(@event, EngineEventKinds.BreachStarted, path, violations);
                 RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
                 RequireId(value.ServerId.Value, $"{path}.payload.serverId", "server", violations);
+                RequireNumber(value.RandomAccessLimit, $"{path}.payload.randomAccessLimit", "Random access limit", violations);
+                RequireNumber(value.CandidateCount, $"{path}.payload.candidateCount", "Candidate count", violations);
+                break;
+            case BreachCandidateChosenEventPayload value:
+                RequireKind(@event, EngineEventKinds.BreachCandidateChosen, path, violations);
+                RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
+                RequireId(value.ServerId.Value, $"{path}.payload.serverId", "server", violations);
+                RequireId(value.CardId.Value, $"{path}.payload.cardId", "card", violations);
+                break;
+            case CardAccessedEventPayload value:
+                RequireKind(@event, EngineEventKinds.CardAccessed, path, violations);
+                RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
+                RequireId(value.ServerId.Value, $"{path}.payload.serverId", "server", violations);
+                RequireId(value.CardId.Value, $"{path}.payload.cardId", "card", violations);
+                break;
+            case AccessedCardTrashedEventPayload value:
+                RequireKind(@event, EngineEventKinds.AccessedCardTrashed, path, violations);
+                RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
+                RequireId(value.CardId.Value, $"{path}.payload.cardId", "card", violations);
+                RequireNumber(value.TrashCost, $"{path}.payload.trashCost", "Trash cost", violations);
                 break;
             case RunEndedEventPayload value:
                 RequireKind(@event, EngineEventKinds.RunEnded, path, violations);

@@ -42,8 +42,14 @@ public enum RunTimingStep
     AfterMovePaidWindow,
     // 6.9.5a: success is declared without a paid window.
     Success,
-    // 6.9.5b: a nested breach boundary; access is implemented later.
+    // 6.9.5b: the nested breach boundary that starts candidate selection.
     BreachBoundary,
+    // 7.5.4 and 7.3.4: the Runner picks one candidate to access.
+    BreachCandidateSelection,
+    // 7.2.2: the Runner's mid-access window; an accessed agenda offers the
+    // pass only (no mid-access ability is modeled in the M2 card set) and
+    // 7.2.3 steals it automatically on progression.
+    BreachAccessAbility,
     // 6.9.6: cleanup at run end.
     RunEnd,
 }
@@ -68,7 +74,7 @@ public enum RunEndReason
 public enum RunAccessState
 {
     NotStarted,
-    PlaceholderBoundary,
+    InProgress,
     Completed,
 }
 
@@ -82,6 +88,13 @@ public enum RunLingeringEffectExpiry
 {
     Encounter,
     Run,
+}
+
+/// <summary>The hidden Corp pool a random breach candidate is drawn from.</summary>
+public enum BreachHiddenCandidateSource
+{
+    CorpHand,
+    CorpDeck,
 }
 
 /// <summary>
@@ -224,7 +237,7 @@ public sealed record RunEncounterState
     }
 
     public RunEncounterState(EncounterId id, CardInstanceId iceId, IReadOnlyList<RunSubroutineState> subroutines)
-        : this(1, id, iceId, RunEncounterStatus.Initialized, subroutines)
+        : this(3, id, iceId, RunEncounterStatus.Initialized, subroutines)
     {
     }
 
@@ -334,6 +347,7 @@ public sealed record RunState
         IReadOnlyList<CardInstanceId> accessedCards,
         RunAccessState accessState,
         int runCredits,
+        CardInstanceId? activeRunEventId,
         IReadOnlyList<RunLingeringEffect> lingeringEffects)
     {
         ArgumentNullException.ThrowIfNull(breachCandidates);
@@ -361,6 +375,7 @@ public sealed record RunState
         AccessedCards = FreezeIds(accessedCards);
         AccessState = accessState;
         RunCredits = runCredits;
+        ActiveRunEventId = activeRunEventId;
         LingeringEffects = new ReadOnlyCollection<RunLingeringEffect>(lingeringEffects.Select(static value =>
         {
             ArgumentNullException.ThrowIfNull(value);
@@ -377,7 +392,9 @@ public sealed record RunState
         CardInstanceId? currentIceId,
         RunTimingStep step,
         RunPriorityState? priority = null,
-        CardInstanceId? initiatingSource = null)
+        CardInstanceId? initiatingSource = null,
+        int runCredits = 0,
+        CardInstanceId? activeRunEventId = null)
         : this(
             1,
             id,
@@ -399,7 +416,8 @@ public sealed record RunState
             [],
             [],
             RunAccessState.NotStarted,
-            0,
+            runCredits,
+            activeRunEventId,
             [])
     {
     }
@@ -488,9 +506,42 @@ public sealed record RunState
     [JsonRequired]
     public int RunCredits { get; private set; }
 
+    /// <summary>
+    /// The run event played to start this run, kept faceup in the public
+    /// RunnerPlayArea for the run's duration and trashed to the public heap
+    /// faceup at run end.
+    /// CR 26.03 1.10.3c/1.10.4/8.6.7. Null when the run started without an
+    /// event; a run plays at most one event.
+    /// </summary>
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId? ActiveRunEventId { get; private set; }
+
     [JsonInclude]
     [JsonRequired]
     public IReadOnlyList<RunLingeringEffect> LingeringEffects { get; private set; }
+
+    /// <summary>
+    /// The card currently being accessed: the last chosen access card that is
+    /// not yet in the accessed list, or null when access is complete.
+    /// Sequential access guarantees at most one such card; the last is used
+    /// for safety.
+    /// </summary>
+    internal CardInstanceId? CurrentAccessCard
+    {
+        get
+        {
+            for (int index = ChosenAccessCards.Count - 1; index >= 0; index--)
+            {
+                if (!AccessedCards.Contains(ChosenAccessCards[index]))
+                {
+                    return ChosenAccessCards[index];
+                }
+            }
+
+            return null;
+        }
+    }
 
     internal RunState Copy() => new(
         Version,
@@ -514,6 +565,7 @@ public sealed record RunState
         AccessedCards,
         AccessState,
         RunCredits,
+        ActiveRunEventId,
         LingeringEffects);
 
     /// <summary>
@@ -552,10 +604,149 @@ public sealed record RunState
             AccessedCards,
             accessState,
             RunCredits,
+            ActiveRunEventId,
             LingeringEffects);
+
+    /// <summary>
+    /// Replaces the run's encounter while retaining every other field; the
+    /// timing step and its phase are preserved unchanged.
+    /// </summary>
+    /// <summary>
+    /// Replaces the run's lingering effects while retaining every other field;
+    /// the timing step and its phase are preserved unchanged.
+    /// </summary>
+    internal RunState WithLingeringEffects(IReadOnlyList<RunLingeringEffect> lingeringEffects) => new(
+        Version,
+        Id,
+        AttackedServer,
+        InitiatingSide,
+        InitiatingPlayer,
+        InitiatingSource,
+        PhaseFor(Step),
+        Step,
+        CurrentIceIndex,
+        CurrentIceId,
+        Successful,
+        Unsuccessful,
+        EndReason,
+        Priority,
+        Encounter,
+        BreachCandidates,
+        RandomAccessLimit,
+        ChosenAccessCards,
+        AccessedCards,
+        AccessState,
+        RunCredits,
+        ActiveRunEventId,
+        lingeringEffects);
+
+    /// <summary>
+    /// Replaces the run's run-scoped hosted credits while retaining every
+    /// other field; the timing step and its phase are preserved unchanged.
+    /// </summary>
+    internal RunState WithRunCredits(int runCredits) => new(
+        Version,
+        Id,
+        AttackedServer,
+        InitiatingSide,
+        InitiatingPlayer,
+        InitiatingSource,
+        PhaseFor(Step),
+        Step,
+        CurrentIceIndex,
+        CurrentIceId,
+        Successful,
+        Unsuccessful,
+        EndReason,
+        Priority,
+        Encounter,
+        BreachCandidates,
+        RandomAccessLimit,
+        ChosenAccessCards,
+        AccessedCards,
+        AccessState,
+        runCredits,
+        ActiveRunEventId,
+        LingeringEffects);
+
+    internal RunState WithEncounter(RunEncounterState encounter) => new(
+        Version,
+        Id,
+        AttackedServer,
+        InitiatingSide,
+        InitiatingPlayer,
+        InitiatingSource,
+        PhaseFor(Step),
+        Step,
+        CurrentIceIndex,
+        CurrentIceId,
+        Successful,
+        Unsuccessful,
+        EndReason,
+        Priority,
+        encounter,
+        BreachCandidates,
+        RandomAccessLimit,
+        ChosenAccessCards,
+        AccessedCards,
+        AccessState,
+        RunCredits,
+        ActiveRunEventId,
+        LingeringEffects);
+
+    /// <summary>
+    /// Replaces the run's breach candidate/access fields while retaining every
+    /// other field; the timing step and its phase are preserved unchanged.
+    /// </summary>
+    internal RunState WithBreach(
+        RunAccessState accessState,
+        IReadOnlyList<CardInstanceId> candidates,
+        int randomAccessLimit,
+        IReadOnlyList<CardInstanceId> chosen,
+        IReadOnlyList<CardInstanceId> accessed) => new(
+        Version,
+        Id,
+        AttackedServer,
+        InitiatingSide,
+        InitiatingPlayer,
+        InitiatingSource,
+        PhaseFor(Step),
+        Step,
+        CurrentIceIndex,
+        CurrentIceId,
+        Successful,
+        Unsuccessful,
+        EndReason,
+        Priority,
+        Encounter,
+        FreezeIds(candidates),
+        randomAccessLimit,
+        FreezeIds(chosen),
+        FreezeIds(accessed),
+        accessState,
+        RunCredits,
+        ActiveRunEventId,
+        LingeringEffects);
 
     private static ReadOnlyCollection<CardInstanceId> FreezeIds(IEnumerable<CardInstanceId> values) =>
         new(values.ToArray());
+
+    /// <summary>
+    /// The hidden pool a random breach candidate is drawn from: the Corp hand
+    /// for Headquarters or the R&amp;D deck for R&amp;D, only while the random
+    /// access limit remains and the pool still holds cards; null otherwise.
+    /// </summary>
+    internal static BreachHiddenCandidateSource? HiddenBreachCandidate(
+        ServerKind kind,
+        ZoneState? hiddenZone,
+        int randomAccessLimit) =>
+        randomAccessLimit > 0
+            && hiddenZone is { CardIds.Count: > 0 }
+            && kind is ServerKind.Headquarters or ServerKind.RAndD
+            ? kind == ServerKind.Headquarters
+                ? BreachHiddenCandidateSource.CorpHand
+                : BreachHiddenCandidateSource.CorpDeck
+            : null;
 
     private static RunCrPhase PhaseFor(RunTimingStep step) => step switch
     {
@@ -563,7 +754,10 @@ public sealed record RunState
         RunTimingStep.Approach or RunTimingStep.ApproachPaidWindow => RunCrPhase.Approach,
         RunTimingStep.EncounterInitialization or RunTimingStep.EncounterPaidWindow or RunTimingStep.Encounter => RunCrPhase.Encounter,
         RunTimingStep.MovementPaidWindow or RunTimingStep.JackOutDecision or RunTimingStep.MoveInward or RunTimingStep.AfterMovePaidWindow => RunCrPhase.Movement,
-        RunTimingStep.Success or RunTimingStep.BreachBoundary => RunCrPhase.Success,
+        RunTimingStep.Success
+            or RunTimingStep.BreachBoundary
+            or RunTimingStep.BreachCandidateSelection
+            or RunTimingStep.BreachAccessAbility => RunCrPhase.Success,
         RunTimingStep.RunEnd => RunCrPhase.RunEnd,
         _ => throw new ArgumentOutOfRangeException(nameof(step), step, "Unknown run timing step."),
     };

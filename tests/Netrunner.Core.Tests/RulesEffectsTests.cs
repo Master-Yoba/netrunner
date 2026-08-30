@@ -67,6 +67,12 @@ public sealed class RulesEffectsTests
 
         Assert.Equal(2, first.GetZone(ZoneKind.RunnerHeap).CardIds.Count);
         Assert.Equal(2, first.GetZone(ZoneKind.RunnerGrip).CardIds.Count);
+        Assert.All(first.GetZone(ZoneKind.RunnerHeap).CardIds, id => Assert.True(first.GetCard(id).FaceUp));
+        foreach (PlayerSide viewer in new[] { PlayerSide.Runner, PlayerSide.Corp })
+        {
+            string observation = EngineJson.Serialize(ObservationBuilder.Build(first, viewer));
+            Assert.Contains("test:grip-", observation, StringComparison.Ordinal);
+        }
         Assert.Equal(EngineJson.Serialize(first), EngineJson.Serialize(second));
         Assert.Equal(DeterministicHash.ForState(first), DeterministicHash.ForState(second));
     }
@@ -416,7 +422,8 @@ public sealed class RulesEffectsTests
                 cardId,
                 new CardDefinitionId($"test:{placement.Name}"),
                 zone.Id,
-                placement.Side));
+                placement.Side,
+                faceUp: placement.Zone == ZoneKind.RunnerHeap));
         }
 
         ZoneState[] zones = baseline.Zones.Select(zone => new ZoneState(

@@ -9,8 +9,13 @@ artifacts/
 src/Netrunner.Godot/.godot/
 *.uid
 
+# Local developer tooling; install and update outside repository history.
+/src/Netrunner.Godot/addons/godot_ai/
+
 # Local tools and machine-specific settings
 .tools/
+.opencode/
+.pi/
 .env
 *.user
 *.suo

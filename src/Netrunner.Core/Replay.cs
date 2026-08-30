@@ -194,22 +194,24 @@ public sealed class ReplayArtifact
                 $"Rules version '{RulesVersion}' is not supported; expected '{EngineCompatibility.RulesVersion}'.");
         }
 
-        if (!string.Equals(CardDataVersion, EngineCompatibility.CardDataVersion, StringComparison.Ordinal))
+        if (!string.Equals(CardDataVersion, EngineCompatibility.CardDataVersion, StringComparison.Ordinal)
+            && !string.Equals(CardDataVersion, CardBehaviorSpecCatalog.Version, StringComparison.Ordinal))
         {
             Add(
                 violations,
                 "artifact.unsupported-card-data",
                 "cardDataVersion",
-                $"Card-data version '{CardDataVersion}' is not supported; expected '{EngineCompatibility.CardDataVersion}'.");
+                $"Card-data version '{CardDataVersion}' is not supported; expected '{EngineCompatibility.CardDataVersion}' or '{CardBehaviorSpecCatalog.Version}'.");
         }
 
-        if (!string.Equals(BehaviorRegistryVersion, EngineCompatibility.BehaviorRegistryVersion, StringComparison.Ordinal))
+        if (!string.Equals(BehaviorRegistryVersion, EngineCompatibility.BehaviorRegistryVersion, StringComparison.Ordinal)
+            && !string.Equals(BehaviorRegistryVersion, CardBehaviorSpecCatalog.Version, StringComparison.Ordinal))
         {
             Add(
                 violations,
                 "artifact.unsupported-behaviors",
                 "behaviorRegistryVersion",
-                $"Behavior registry version '{BehaviorRegistryVersion}' is not supported; expected '{EngineCompatibility.BehaviorRegistryVersion}'.");
+                $"Behavior registry version '{BehaviorRegistryVersion}' is not supported; expected '{EngineCompatibility.BehaviorRegistryVersion}' or '{CardBehaviorSpecCatalog.Version}'.");
         }
 
         try

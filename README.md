@@ -11,9 +11,10 @@ dependency-ordered engineering roadmap is in
 
 ## Current state
 
-M1 is complete. The repository contains a deterministic, headless toy match
-that proves the engine, agent, replay, scenario, and local card-data boundaries;
-it is not yet the complete Netrunner ruleset:
+M1 is complete, and the M2 run/encounter/breach/access contract—including its
+second-pass M3-readiness hardening—has passed the repository verification gate.
+The project is ready for the scoped M3 work; it is not yet the complete
+Netrunner ruleset:
 
 - `Netrunner.Core`: typed state, deterministic RNG, atomic legal actions,
   serializable resolution, canonical hashes, scenarios, and replay.
@@ -21,13 +22,18 @@ it is not yet the complete Netrunner ruleset:
   System Gateway normalization/validation.
 - `Netrunner.AI`: offline-agent boundary and deterministic toy-goal agent.
 - `Netrunner.LLM`: provider-neutral LLM transport contracts.
-- `Netrunner.Cli`: working `scenario`, `play`, `replay`, and `card-data`
-  commands.
+- `Netrunner.Cli`: working `scenario`, `play`, `replay`, `m2-proof`, and
+  `card-data` commands.
 - `Netrunner.Godot`: a minimal Godot 4.7.2 .NET desktop shell.
 - headless Core, Cards, AI, and CLI test projects.
 
+The verified M2 proof covers deterministic save/load and replay, public run
+event lifecycle, Archives disclosure, per-activation breaker limits,
+wallet/hosted-credit payment choices, and exact breach-access timing traces.
+
 See [the M1 completion record](docs/M1_COMPLETION.md) for the reviewed contracts
-and gate evidence.
+and gate evidence, and [the M2 progress record](docs/M2_PROGRESS.md) for the
+M2 contract, the curated proof, and the independent-review rework log.
 
 ## Linux development setup
 

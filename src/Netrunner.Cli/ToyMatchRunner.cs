@@ -145,13 +145,11 @@ public static class ToyMatchRunner
             PendingDecision pending = current.PendingDecision
                 ?? throw new ToyMatchException(
                     $"The toy match stalled after {acceptedActions.Count} accepted actions: no pending decision was present.");
+            // The observation builder is the sole production path from
+            // authoritative state to the agent DTO; the toy agents consume the
+            // same boundary as the M2 coordinators.
             PlayerSide viewer = current.GetPlayer(pending.Owner).Side;
-            Observation observation = new(
-                viewer,
-                pending.Id.Value,
-                pending.LegalActions,
-                CreateEmptyView(),
-                CreateEmptyView());
+            Observation observation = ObservationBuilder.Build(current, viewer);
 
             ActionId selectedAction;
             try
@@ -238,7 +236,4 @@ public static class ToyMatchRunner
     }
 
     public static ToyMatchResult RunMatch(ulong seed, ToyGoal goal) => Run(seed, goal);
-
-    private static ReadOnlyDictionary<string, object?> CreateEmptyView() =>
-        new ReadOnlyDictionary<string, object?>(new Dictionary<string, object?>());
 }

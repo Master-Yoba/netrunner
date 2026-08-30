@@ -143,7 +143,10 @@ public sealed class RunTimingTests
         Assert.Empty(result.State.ResolutionStack);
         Assert.Null(result.State.PendingDecision);
         Assert.Contains(result.Events, value => value.Kind == EngineEventKinds.RunSuccessful);
-        Assert.Contains(result.Events, value => value.Kind == EngineEventKinds.BreachPlaceholderReached);
+        BreachStartedEventPayload breachStarted = Assert.IsType<BreachStartedEventPayload>(
+            result.Events.Single(value => value.Kind == EngineEventKinds.BreachStarted).Payload);
+        Assert.Equal(0, breachStarted.CandidateCount);
+        Assert.Equal(0, breachStarted.RandomAccessLimit);
         Assert.Contains(result.Events, value => value.Kind == EngineEventKinds.RunEnded);
         Assert.DoesNotContain(result.Events, value => value.Kind == EngineEventKinds.RunPriorityPassed && value.Payload is RunPriorityPassedEventPayload payload && payload.Window.ToString().Contains("Success", StringComparison.Ordinal));
     }
@@ -230,13 +233,13 @@ public sealed class RunTimingTests
         Assert.True(accepted.State.GetCard(corpPrompt.RunState!.CurrentIceId!.Value).Rezzed);
     }
 
-    private static GameState BeginRunPrompt(int iceCount, bool rezzed)
+    internal static GameState BeginRunPrompt(int iceCount, bool rezzed)
     {
         GameState state = CreateRunState(iceCount, rezzed);
         return GameEngine.BeginRun(state, RemoteId(state));
     }
 
-    private static ApplyResult PassTwice(GameState state)
+    internal static ApplyResult PassTwice(GameState state)
     {
         ApplyResult first = ApplyKind(state, ActionKind.PassPriority);
         Assert.True(first.Accepted, first.Rejection?.Message);
@@ -268,14 +271,14 @@ public sealed class RunTimingTests
         return state;
     }
 
-    private static ApplyResult ApplyKind(GameState state, ActionKind kind, PlayerId? actor = null)
+    internal static ApplyResult ApplyKind(GameState state, ActionKind kind, PlayerId? actor = null)
     {
         PendingDecision decision = Assert.IsType<PendingDecision>(state.PendingDecision);
         LegalAction action = Assert.Single(decision.LegalActions, candidate => candidate.Kind == kind);
         return ApplyAction(state, action, actor);
     }
 
-    private static ApplyResult ApplyAction(GameState state, LegalAction action, PlayerId? actor = null)
+    internal static ApplyResult ApplyAction(GameState state, LegalAction action, PlayerId? actor = null)
     {
         PendingDecision decision = Assert.IsType<PendingDecision>(state.PendingDecision);
         return GameEngine.Apply(
@@ -283,7 +286,7 @@ public sealed class RunTimingTests
             new ActionSubmission(actor ?? decision.Owner, decision.Id, decision.Revision, action.Id));
     }
 
-    private static void AssertRunPrompt(GameState state, RunTimingStep step, PlayerSide ownerSide, ActionKind actionKind)
+    internal static void AssertRunPrompt(GameState state, RunTimingStep step, PlayerSide ownerSide, ActionKind actionKind)
     {
         Assert.NotNull(state.RunState);
         Assert.Equal(step, state.RunState.Step);
@@ -293,11 +296,11 @@ public sealed class RunTimingTests
         Assert.Contains(decision.LegalActions, action => action.Kind == actionKind);
     }
 
-    private static PlayerSide SideOf(GameState state, PlayerId id) => state.GetPlayer(id).Side;
+    internal static PlayerSide SideOf(GameState state, PlayerId id) => state.GetPlayer(id).Side;
 
-    private static ServerId RemoteId(GameState state) => state.Servers.Single(server => server.Kind == ServerKind.Remote).Id;
+    internal static ServerId RemoteId(GameState state) => state.Servers.Single(server => server.Kind == ServerKind.Remote).Id;
 
-    private static GameState CreateRunState(int iceCount, bool rezzed)
+    internal static GameState CreateRunState(int iceCount, bool rezzed, CardDefinitionId? iceDefinition = null, int? corpCredits = null)
     {
         GameState baseState = GameState.CreateNew(99);
         var allocator = new StableIdAllocator(baseState.Allocator);
@@ -310,12 +313,14 @@ public sealed class RunTimingTests
         {
             CardInstanceId cardId = allocator.NextCardInstanceId();
             iceIds.Add(cardId);
+            // CR 26.03 8.1.1: a rezzed installed ICE is faceup, while an
+            // unrezzed one stays facedown.
             cards.Add(new CardInstanceState(
                 cardId,
-                new CardDefinitionId($"fixture:ice-{index}"),
+                iceDefinition ?? FixtureIceBehaviorSpecs.Plain,
                 iceZoneId,
                 PlayerSide.Corp,
-                faceUp: false,
+                faceUp: rezzed,
                 rezzed: rezzed));
         }
 
@@ -327,7 +332,7 @@ public sealed class RunTimingTests
         var players = baseState.Players.Select(player => new PlayerState(
             player.Id,
             player.Side,
-            player.Credits,
+            player.Side == PlayerSide.Corp && corpCredits.HasValue ? corpCredits.Value : player.Credits,
             player.Side == PlayerSide.Runner ? 4 : 3,
             player.AgendaPoints)).ToArray();
         return new GameState(

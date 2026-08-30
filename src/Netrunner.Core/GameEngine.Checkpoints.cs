@@ -372,6 +372,7 @@ public static partial class GameEngine
             childKind: EffectCheckpointChildKind.Trigger,
             childTriggerId: triggerId,
             childInterruptId: null);
+        EffectResolutionFrame parent = ParentEffectFrame(working);
         working.ResolutionStack.Add(new EffectResolutionFrame(
             1,
             ResolutionBehaviorIds.EffectResolution,
@@ -381,8 +382,19 @@ public static partial class GameEngine
             EffectResolutionStage.PayCosts,
             0,
             invocation.Occurrence,
-            frame.AppliedTriggers.Append(triggerId).ToArray(),
-            frame.AppliedInterrupts));
+            parent.SuppressedTriggers.Append(triggerId).ToArray(),
+            parent.SuppressedInterrupts));
+    }
+
+    private static EffectResolutionFrame ParentEffectFrame(WorkingState working)
+    {
+        if (working.ResolutionStack.Count < 2
+            || working.ResolutionStack[^2] is not EffectResolutionFrame parent)
+        {
+            throw new ResolutionFailureException("A checkpoint child requires an effect resolution frame below the checkpoint.");
+        }
+
+        return parent;
     }
 
     private static EffectCheckpointStage RemainingTriggerStageAfterAdvance(EffectCheckpointFrame frame) =>
@@ -466,6 +478,7 @@ public static partial class GameEngine
             childKind: EffectCheckpointChildKind.Replacement,
             childTriggerId: null,
             childInterruptId: interruptId);
+        EffectResolutionFrame parent = ParentEffectFrame(working);
         working.ResolutionStack.Add(new EffectResolutionFrame(
             1,
             ResolutionBehaviorIds.EffectResolution,
@@ -475,8 +488,8 @@ public static partial class GameEngine
             EffectResolutionStage.PayCosts,
             0,
             invocation.Occurrence,
-            frame.AppliedTriggers,
-            frame.AppliedInterrupts.Append(interruptId).ToArray()));
+            parent.SuppressedTriggers,
+            parent.SuppressedInterrupts.Append(interruptId).ToArray()));
     }
 
     private static EffectCheckpointFrame CurrentCheckpoint(

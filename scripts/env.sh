@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 
-netrunner_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+netrunner_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
+if [[ ! -f "$netrunner_root/scripts/env.sh" && -f "$PWD/scripts/env.sh" ]]; then
+  netrunner_root="$PWD"
+fi
 netrunner_dotnet="$netrunner_root/.tools/dotnet"
 netrunner_godot_root="$netrunner_root/.tools/godot"
 netrunner_rg="$netrunner_root/.tools/ripgrep"

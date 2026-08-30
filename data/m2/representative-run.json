@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "scenarioId": "m2:representative-run",
+  "seed": 42,
+  "rulesVersion": "26.03",
+  "cardDataVersion": "gateway-m2-3",
+  "turn": {
+    "activeSide": "runner",
+    "phase": "runner",
+    "turnNumber": 2
+  },
+  "remotes": 1,
+  "run": {
+    "server": "remote:0",
+    "source": "card:7",
+    "breaker": "card:5",
+    "maxPumps": 1
+  },
+  "players": [
+    {
+      "side": "corp",
+      "credits": 10,
+      "clicks": 3
+    },
+    {
+      "side": "runner",
+      "credits": 15,
+      "clicks": 4
+    }
+  ],
+  "cards": [
+    {
+      "id": "card:1",
+      "definitionId": "30074",
+      "zone": "serverIce",
+      "server": "remote:0",
+      "ownerSide": "corp"
+    },
+    {
+      "id": "card:2",
+      "definitionId": "30072",
+      "zone": "serverIce",
+      "server": "remote:0",
+      "ownerSide": "corp"
+    },
+    {
+      "id": "card:3",
+      "definitionId": "30067",
+      "zone": "serverRoot",
+      "server": "remote:0",
+      "ownerSide": "corp"
+    },
+    {
+      "id": "card:4",
+      "definitionId": "30037",
+      "zone": "serverRoot",
+      "server": "remote:0",
+      "ownerSide": "corp"
+    },
+    {
+      "id": "card:5",
+      "definitionId": "30006",
+      "zone": "runnerRig",
+      "ownerSide": "runner",
+      "faceUp": true
+    },
+    {
+      "id": "card:6",
+      "definitionId": "30005",
+      "zone": "runnerRig",
+      "ownerSide": "runner",
+      "faceUp": true
+    },
+    {
+      "id": "card:7",
+      "definitionId": "30029",
+      "zone": "runnerGrip",
+      "ownerSide": "runner"
+    }
+  ],
+  "citations": [
+    "CR 26.03 6.9.1a-6.9.1e: run initiation and the 6.9.1e (P)(R) paid window, initiated by the Overclock (30029) run event with its hosted credits becoming the run-scoped credit pool",
+    "CR 26.03 6.4.3/6.9.2b: approach window with the Corp rez opportunity; Palisade (30072) and Whitespace (30074) are rezzed when approached",
+    "CR 26.03 6.5/6.9.3b/9.8/3.9.5: encounter paid window and ordered subroutine resolution; every installed rig breaker acts per encounter (no persistent server attachment), with BreakLimit applying per interface activation — Palisade is broken by the pumped Cleaver (30006) and both Whitespace subroutines are broken by Buzzsaw (30005), so Whitespace's printed subroutines never fire",
+    "CR 26.03 6.6/6.9.4b/6.9.4c/6.9.4e: movement paid window, the Runner-only jack-out decision (continue), inward movement, and the after-movement paid window",
+    "CR 26.03 6.9.5/7.5.4: successful run and remote breach; candidates are the installed cards in the server root (Offworld Office 30067, Nico Campaign 30037)",
+    "CR 26.03 7.1.5/7.1.6/7.2.2/7.2.3: access decisions; the accessed agenda is mandatorily stolen, and the accessed asset is trashed for its printed cost using the Runner's chosen wallet/hosted-credit division"
+  ],
+  "crossCheckNote": "Jinteki.net (mtgred/netrunner) compresses the same approach/encounter/movement stops into fewer UI prompts; this scenario keeps every CR 6.9 window explicit, so window counts here exceed jnet's compressed stops by design. The run-scoped Overclock pool is the hosted run-credit source, and its costs may be divided with wallet credits by the Runner; the pool expires at run end in both implementations.",
+  "expectedInitialStateHash": "4733c8f84f1f054c6c1277e07d6450173cfb0d4741d11466cf8997cfd5ea4ac6"
+}

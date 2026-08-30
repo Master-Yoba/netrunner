@@ -11,6 +11,12 @@ public enum ZoneKind
     CorpScore,
     RunnerStack,
     RunnerGrip,
+    /// <summary>
+    /// The public play area for a Runner event while its nested run ability is
+    /// resolving. This zone is created lazily at event play so M1/default
+    /// states retain their canonical topology and hashes.
+    /// </summary>
+    RunnerPlayArea,
     RunnerHeap,
     RunnerRig,
     RunnerScore,

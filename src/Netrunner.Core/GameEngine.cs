@@ -275,8 +275,13 @@ public static partial class GameEngine
                 return;
             case (ActionKind.PassPriority, NoActionParameters):
             case (ActionKind.RezIce, RunIceParameters runIce):
+            case (ActionKind.BreakSubroutines, RunBreakParameters):
+            case (ActionKind.PumpBreaker, RunBreakerParameters):
             case (ActionKind.JackOut, NoActionParameters):
             case (ActionKind.ContinueRun, NoActionParameters):
+            case (ActionKind.ChooseBreachCandidate, BreachCandidateParameters):
+            case (ActionKind.TrashAccessedCard, RunCardPaymentParameters):
+            case (ActionKind.NoAccessAction, NoActionParameters):
                 ConsumeRunAction(working, action.Kind, action.Parameters);
                 return;
             case (ActionKind.TrashProgram, CardChoiceParameters trashProgram):
@@ -862,12 +867,18 @@ public static partial class GameEngine
             destination.OwnerSide,
             destination.ServerId,
             destination.CardIds.Append(card.Id).ToArray()));
+        // CR 26.03 4.4.6/8.6.7: cards in the Runner heap are public. Keep
+        // this normalization at the single card-movement boundary so damage,
+        // memory cleanup, explicit move effects, and run-event cleanup all
+        // agree—even when a facedown Runner card enters the heap.
+        bool entersRunnerHeap = destination.Kind == ZoneKind.RunnerHeap
+            && destination.OwnerSide == PlayerSide.Runner;
         ReplaceCard(working, new CardInstanceState(
             card.Id,
             card.DefinitionId,
             destination.Id,
             card.OwnerSide,
-            card.FaceUp,
+            entersRunnerHeap || card.FaceUp,
             card.Rezzed,
             card.AdvancementCounters));
         Emit(working, EngineEventKinds.CardMoved, new CardMovedEventPayload(card.Id, source.Id, destination.Id));

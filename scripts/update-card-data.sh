@@ -257,7 +257,7 @@ fi
 for generated in cards.json manifest.json SOURCE_COPYRIGHT.md; do
   [[ -f "$stage_dir/$generated" ]] || die "normalizer did not produce '$generated'."
 done
-entry_count="$(find "$stage_dir" -mindepth 1 -maxdepth 1 -print | wc -l)"
+entry_count=$(( $(find "$stage_dir" -mindepth 1 -maxdepth 1 -print | wc -l) ))
 [[ "$entry_count" == "3" ]] || die "normalizer produced unexpected staging entries."
 
 if [[ -d "$target_dir" && ! -L "$target_dir" ]]; then

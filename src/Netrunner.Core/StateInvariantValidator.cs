@@ -258,6 +258,18 @@ public static class StateInvariantValidator
             {
                 Add(violations, "cards.invalid-owner", $"{path}.ownerSide", "Card owner must be Corp or Runner.");
             }
+
+            // CR 26.03 8.1.1: an agenda, asset, upgrade, or piece of ice is
+            // unrezzed if it is installed and facedown — a rezzed card is
+            // therefore always faceup.
+            if (card.Rezzed && !card.FaceUp)
+            {
+                Add(
+                    violations,
+                    "cards.rezzed-facedown",
+                    path,
+                    $"Card '{card.Id}' is rezzed but facedown; a rezzed installed card is faceup (CR 26.03 8.1.1).");
+            }
         }
 
         var memberships = new Dictionary<string, (int Count, string ZoneId)>(StringComparer.Ordinal);
@@ -312,8 +324,10 @@ public static class StateInvariantValidator
 
                 bool isStolenCorpAgenda = zone.Kind == ZoneKind.RunnerScore
                     && card.OwnerSide == PlayerSide.Corp
-                    && ToyCardBehaviorCatalog.TryGet(card.DefinitionId, out ToyCardBehavior? behavior)
-                    && behavior.Kind == ToyCardKind.CorpAgenda;
+                    && (
+                        (ToyCardBehaviorCatalog.TryGet(card.DefinitionId, out ToyCardBehavior? behavior)
+                            && behavior.Kind == ToyCardKind.CorpAgenda)
+                        || CardBehaviorSpecCatalog.TryGetAgenda(card.DefinitionId, out _));
                 if (zone.OwnerSide.HasValue && card.OwnerSide != zone.OwnerSide.Value && !isStolenCorpAgenda)
                 {
                     Add(
@@ -321,6 +335,15 @@ public static class StateInvariantValidator
                         "cards.owner-zone-mismatch",
                         path,
                         $"Card '{card.Id}' owner '{card.OwnerSide}' does not match zone owner '{zone.OwnerSide}'.");
+                }
+
+                if (zone.Kind == ZoneKind.RunnerHeap && !card.FaceUp)
+                {
+                    Add(
+                        violations,
+                        "cards.runner-heap-facedown",
+                        path,
+                        $"Runner heap card '{card.Id}' must be faceup after entering the public heap.");
                 }
             }
         }
@@ -352,7 +375,7 @@ public static class StateInvariantValidator
         PlayerSide? expectedOwner = zone.Kind switch
         {
             ZoneKind.CorpDeck or ZoneKind.CorpHand or ZoneKind.CorpDiscard or ZoneKind.CorpScore => PlayerSide.Corp,
-            ZoneKind.RunnerStack or ZoneKind.RunnerGrip or ZoneKind.RunnerHeap or ZoneKind.RunnerRig or ZoneKind.RunnerScore => PlayerSide.Runner,
+            ZoneKind.RunnerStack or ZoneKind.RunnerGrip or ZoneKind.RunnerPlayArea or ZoneKind.RunnerHeap or ZoneKind.RunnerRig or ZoneKind.RunnerScore => PlayerSide.Runner,
             ZoneKind.ServerIce or ZoneKind.ServerRoot => PlayerSide.Corp,
             _ => null,
         };
@@ -408,6 +431,16 @@ public static class StateInvariantValidator
                     "zones",
                     $"Found {count} '{kind}' zones; exactly one is required.");
             }
+        }
+
+        int playAreaCount = state.Zones.Count(zone => zone is not null && zone.Kind == ZoneKind.RunnerPlayArea);
+        if (playAreaCount > 1)
+        {
+            Add(
+                violations,
+                "zones.required-kind-count",
+                "zones",
+                $"Found {playAreaCount} '{ZoneKind.RunnerPlayArea}' zones; at most one is allowed.");
         }
     }
 
@@ -675,6 +708,18 @@ public static class StateInvariantValidator
                 Add(violations, "run.frame-without-state", "resolutionStack", "A run timing frame cannot exist without live run state.");
             }
 
+            foreach (ZoneState? stalePlayArea in state.Zones.Where(zone =>
+                zone is not null
+                && zone.Kind == ZoneKind.RunnerPlayArea
+                && zone.CardIds.Count > 0))
+            {
+                Add(
+                    violations,
+                    "run.active-event-without-state",
+                    $"zones[{stalePlayArea!.Id}].cardIds",
+                    "A Runner play area may contain cards only while the corresponding run is active.");
+            }
+
             return;
         }
 
@@ -761,6 +806,110 @@ public static class StateInvariantValidator
             Add(violations, "run.negative-credits", $"{path}.runCredits", "Run credits must be nonnegative.");
         }
 
+        // The initiating source and active event are the same card identity.
+        // Once the event is played it must leave RunnerGrip, remain faceup in
+        // the single public RunnerPlayArea for the nested run, and be owned by
+        // the Runner. These checks deliberately validate both IDs and the
+        // physical card/zone topology so a restored or scenario-authored
+        // state cannot smuggle an unregistered event into an active run.
+        if (run.InitiatingSource != run.ActiveRunEventId)
+        {
+            Add(
+                violations,
+                "run.active-event-source-mismatch",
+                $"{path}.activeRunEventId",
+                "InitiatingSource and ActiveRunEventId must identify the same card.");
+        }
+
+        if (run.ActiveRunEventId is { } activeEventId)
+        {
+            CardInstanceState? activeEvent = state.Cards.FirstOrDefault(card => card?.Id == activeEventId);
+            if (activeEvent is null)
+            {
+                Add(
+                    violations,
+                    "run.active-event-unknown-card",
+                    $"{path}.activeRunEventId",
+                    $"Active run event '{activeEventId}' does not exist.");
+            }
+            else
+            {
+                if (activeEvent.OwnerSide != PlayerSide.Runner)
+                {
+                    Add(
+                        violations,
+                        "run.active-event-owner",
+                        $"{path}.activeRunEventId",
+                        "The active run event must be Runner-owned.");
+                }
+
+                if (!CardBehaviorSpecCatalog.TryGetRunEvent(activeEvent.DefinitionId, out _))
+                {
+                    Add(
+                        violations,
+                        "run.active-event-unregistered",
+                        $"{path}.activeRunEventId",
+                        $"Active run event definition '{activeEvent.DefinitionId}' is not registered as a run event.");
+                }
+
+                ZoneState? activeZone = state.Zones.FirstOrDefault(zone => zone?.Id == activeEvent.ZoneId);
+                if (activeZone is null
+                    || activeZone.Kind != ZoneKind.RunnerPlayArea
+                    || activeZone.OwnerSide != PlayerSide.Runner
+                    || activeZone.ServerId is not null)
+                {
+                    Add(
+                        violations,
+                        "run.active-event-zone",
+                        $"{path}.activeRunEventId",
+                        "The active run event must be in the Runner's public play area.");
+                }
+                else
+                {
+                    if (!activeZone.CardIds.Contains(activeEventId))
+                    {
+                        Add(
+                            violations,
+                            "run.active-event-membership",
+                            $"{path}.activeRunEventId",
+                            "The active run event must be registered in its Runner play-area zone.");
+                    }
+
+                    if (activeZone.CardIds.Count != 1)
+                    {
+                        Add(
+                            violations,
+                            "run.active-event-zone-count",
+                            $"zones[{activeZone.Id}].cardIds",
+                            "The active Runner play area must contain exactly one event card.");
+                    }
+                }
+
+                if (!activeEvent.FaceUp)
+                {
+                    Add(
+                        violations,
+                        "run.active-event-facedown",
+                        $"{path}.activeRunEventId",
+                        "The active run event must be faceup while its nested run resolves.");
+                }
+            }
+        }
+        else
+        {
+            foreach (ZoneState? populatedPlayArea in state.Zones.Where(zone =>
+                zone is not null
+                && zone.Kind == ZoneKind.RunnerPlayArea
+                && zone.CardIds.Count > 0))
+            {
+                Add(
+                    violations,
+                    "run.play-area-without-event",
+                    $"zones[{populatedPlayArea!.Id}].cardIds",
+                    "A populated Runner play area requires ActiveRunEventId.");
+            }
+        }
+
         if (!Enum.IsDefined(run.AccessState))
         {
             Add(violations, "run.invalid-access-state", $"{path}.accessState", $"'{run.AccessState}' is not a supported access state.");
@@ -793,7 +942,10 @@ public static class StateInvariantValidator
                 Add(violations, "run.ice-position-mismatch", $"{path}.currentIceId", "Current ICE ID must match the ordered ICE zone position.");
             }
 
-            if (run.Step is RunTimingStep.Success or RunTimingStep.BreachBoundary
+            if (run.Step is RunTimingStep.Success
+                or RunTimingStep.BreachBoundary
+                or RunTimingStep.BreachCandidateSelection
+                or RunTimingStep.BreachAccessAbility
                 && run.CurrentIceIndex >= 0)
             {
                 Add(violations, "run.success-before-server", $"{path}.currentIceIndex", "Success and breach may occur only after the run reaches the server.");
@@ -803,6 +955,34 @@ public static class StateInvariantValidator
         ValidateRunIdList(run.BreachCandidates, "breachCandidates");
         ValidateRunIdList(run.ChosenAccessCards, "chosenAccessCards");
         ValidateRunIdList(run.AccessedCards, "accessedCards");
+
+        foreach (CardInstanceId accessed in run.AccessedCards)
+        {
+            if (!run.ChosenAccessCards.Contains(accessed))
+            {
+                Add(violations, "run.accessed-without-choice", $"{path}.accessedCards", $"Accessed card '{accessed}' was never chosen as a breach candidate.");
+                break;
+            }
+        }
+
+        foreach (CardInstanceId candidate in run.BreachCandidates)
+        {
+            if (run.ChosenAccessCards.Contains(candidate))
+            {
+                Add(violations, "run.candidate-already-chosen", $"{path}.breachCandidates", $"Chosen candidate '{candidate}' still remains in the candidate list.");
+                break;
+            }
+        }
+
+        if (run.Step == RunTimingStep.BreachAccessAbility
+            && (run.ChosenAccessCards.Count == 0 || run.CurrentAccessCard is not null))
+        {
+            Add(violations, "run.missing-access-card", $"{path}.step", "The access ability step requires a completed access of a chosen card.");
+        }
+        else if (run.Step == RunTimingStep.BreachCandidateSelection && run.CurrentAccessCard is not null)
+        {
+            Add(violations, "run.unexpected-access-card", $"{path}.step", "The candidate selection step must not have a card mid-access.");
+        }
 
         var effectIds = new HashSet<RunEffectId>();
         for (int index = 0; index < run.LingeringEffects.Count; index++)
@@ -949,9 +1129,9 @@ public static class StateInvariantValidator
     private static void ValidateRunEncounter(GameState state, RunState run, string path, List<StateInvariantViolation> violations)
     {
         RunEncounterState encounter = run.Encounter!;
-        if (encounter.Version != 1)
+        if (encounter.Version != 3)
         {
-            Add(violations, "run.encounter-unsupported-version", $"{path}.encounter.version", "Only encounter state version 1 is supported.");
+            Add(violations, "run.encounter-unsupported-version", $"{path}.encounter.version", "Only encounter state version 3 is supported.");
         }
 
         if (!StableIdentifier.TryValidate(encounter.Id.Value))
@@ -1020,7 +1200,9 @@ public static class StateInvariantValidator
 
     private static PlayerId RunDecisionOwner(GameState state, RunState run)
     {
-        if (run.Step == RunTimingStep.JackOutDecision)
+        if (run.Step is RunTimingStep.JackOutDecision
+            or RunTimingStep.BreachCandidateSelection
+            or RunTimingStep.BreachAccessAbility)
         {
             return run.InitiatingPlayer;
         }
@@ -1038,7 +1220,9 @@ public static class StateInvariantValidator
         or RunTimingStep.AfterMovePaidWindow;
 
     private static bool IsRunPromptStep(RunTimingStep step) => IsRunPriorityStep(step)
-        || step == RunTimingStep.JackOutDecision;
+        || step == RunTimingStep.JackOutDecision
+        || step == RunTimingStep.BreachCandidateSelection
+        || step == RunTimingStep.BreachAccessAbility;
 
     private static RunCrPhase ExpectedRunPhase(RunTimingStep step) => step switch
     {
@@ -1046,7 +1230,10 @@ public static class StateInvariantValidator
         RunTimingStep.Approach or RunTimingStep.ApproachPaidWindow => RunCrPhase.Approach,
         RunTimingStep.EncounterInitialization or RunTimingStep.EncounterPaidWindow or RunTimingStep.Encounter => RunCrPhase.Encounter,
         RunTimingStep.MovementPaidWindow or RunTimingStep.JackOutDecision or RunTimingStep.MoveInward or RunTimingStep.AfterMovePaidWindow => RunCrPhase.Movement,
-        RunTimingStep.Success or RunTimingStep.BreachBoundary => RunCrPhase.Success,
+        RunTimingStep.Success
+            or RunTimingStep.BreachBoundary
+            or RunTimingStep.BreachCandidateSelection
+            or RunTimingStep.BreachAccessAbility => RunCrPhase.Success,
         RunTimingStep.RunEnd => RunCrPhase.RunEnd,
         _ => throw new ArgumentOutOfRangeException(nameof(step), step, "Unknown run timing step."),
     };
@@ -1536,12 +1723,12 @@ public static class StateInvariantValidator
                     if (index == 0
                         || state.ResolutionStack[index - 1] is not EffectResolutionFrame)
                     {
-                            Add(
-                                violations,
-                                "resolution.memory-cleanup-parent-missing",
-                                path,
-                                "A memory cleanup frame must have an effect-resolution parent.");
-                        }
+                        Add(
+                            violations,
+                            "resolution.memory-cleanup-parent-missing",
+                            path,
+                            "A memory cleanup frame must have an effect-resolution parent.");
+                    }
                     else if (state.ResolutionStack[index - 1] is EffectResolutionFrame parent
                         && parent.Stage != EffectResolutionStage.AwaitingMemoryCleanup)
                     {
@@ -1842,10 +2029,50 @@ public static class StateInvariantValidator
                     }
 
                     break;
-                case (ActionKind.PassPriority or ActionKind.JackOut or ActionKind.ContinueRun, NoActionParameters):
+                case (ActionKind.PassPriority or ActionKind.JackOut or ActionKind.ContinueRun or ActionKind.NoAccessAction, NoActionParameters):
                     if (pending.Kind != DecisionKind.RunTiming)
                     {
                         Add(violations, "decision.action-kind-mismatch", $"{actionPath}.kind", "Run timing actions require a RunTiming decision.");
+                    }
+
+                    break;
+                case (ActionKind.ChooseBreachCandidate, BreachCandidateParameters breachCandidate):
+                    if (pending.Kind != DecisionKind.RunTiming)
+                    {
+                        Add(violations, "decision.action-kind-mismatch", $"{actionPath}.kind", "Run timing actions require a RunTiming decision.");
+                    }
+
+                    if (breachCandidate.CardId is not null && !cardIds.Contains(breachCandidate.CardId.Value))
+                    {
+                        Add(violations, "decision.unknown-card-action", $"{actionPath}.parameters.cardId", $"Run action references unknown card '{breachCandidate.CardId}'.");
+                    }
+
+                    break;
+                case (ActionKind.TrashAccessedCard, CardChoiceParameters trashAccessed):
+                    // Basic access trash is a payment choice. A plain
+                    // CardChoiceParameters payload cannot preserve the
+                    // Runner's selected wallet/hosted-credit division and is
+                    // therefore not an authoritative run action.
+                    Add(
+                        violations,
+                        "decision.action-parameters-mismatch",
+                        $"{actionPath}.parameters",
+                        "TrashAccessedCard requires RunCardPaymentParameters with the selected hosted-credit portion.");
+                    break;
+                case (ActionKind.TrashAccessedCard, RunCardPaymentParameters trashAccessed):
+                    if (pending.Kind != DecisionKind.RunTiming)
+                    {
+                        Add(violations, "decision.action-kind-mismatch", $"{actionPath}.kind", "Run timing actions require a RunTiming decision.");
+                    }
+
+                    if (!cardIds.Contains(trashAccessed.CardId))
+                    {
+                        Add(violations, "decision.unknown-card-action", $"{actionPath}.parameters.cardId", $"Run action references unknown card '{trashAccessed.CardId}'.");
+                    }
+
+                    if (trashAccessed.HostedCredits < 0)
+                    {
+                        Add(violations, "decision.invalid-payment", $"{actionPath}.parameters.hostedCredits", "Hosted payment credits must not be negative.");
                     }
 
                     break;
@@ -1870,6 +2097,45 @@ public static class StateInvariantValidator
                     if (!cardIds.Contains(runIce.IceId))
                     {
                         Add(violations, "decision.unknown-card-action", $"{actionPath}.parameters.iceId", $"Run action references unknown ICE '{runIce.IceId}'.");
+                    }
+
+                    break;
+                case (ActionKind.BreakSubroutines, RunBreakParameters breakSubroutines):
+                    if (pending.Kind != DecisionKind.RunTiming)
+                    {
+                        Add(violations, "decision.action-kind-mismatch", $"{actionPath}.kind", "Run timing actions require a RunTiming decision.");
+                    }
+
+                    if (!cardIds.Contains(breakSubroutines.BreakerId))
+                    {
+                        Add(violations, "decision.unknown-card-action", $"{actionPath}.parameters.breakerId", $"Run action references unknown breaker '{breakSubroutines.BreakerId}'.");
+                    }
+
+                    if (breakSubroutines.Quantity < 1)
+                    {
+                        Add(violations, "decision.invalid-break-quantity", $"{actionPath}.parameters.quantity", $"The break quantity '{breakSubroutines.Quantity}' must be at least 1.");
+                    }
+
+                    if (breakSubroutines.HostedCredits < 0)
+                    {
+                        Add(violations, "decision.invalid-payment", $"{actionPath}.parameters.hostedCredits", "Hosted payment credits must not be negative.");
+                    }
+
+                    break;
+                case (ActionKind.PumpBreaker, RunBreakerParameters pumpBreaker):
+                    if (pending.Kind != DecisionKind.RunTiming)
+                    {
+                        Add(violations, "decision.action-kind-mismatch", $"{actionPath}.kind", "Run timing actions require a RunTiming decision.");
+                    }
+
+                    if (!cardIds.Contains(pumpBreaker.BreakerId))
+                    {
+                        Add(violations, "decision.unknown-card-action", $"{actionPath}.parameters.breakerId", $"Run action references unknown breaker '{pumpBreaker.BreakerId}'.");
+                    }
+
+                    if (pumpBreaker.HostedCredits < 0)
+                    {
+                        Add(violations, "decision.invalid-payment", $"{actionPath}.parameters.hostedCredits", "Hosted payment credits must not be negative.");
                     }
 
                     break;
@@ -1985,8 +2251,13 @@ public static class StateInvariantValidator
                 || (pending.Kind == DecisionKind.RunTiming
                     && action.Kind is not (ActionKind.PassPriority
                         or ActionKind.RezIce
+                        or ActionKind.BreakSubroutines
+                        or ActionKind.PumpBreaker
                         or ActionKind.JackOut
-                        or ActionKind.ContinueRun))
+                        or ActionKind.ContinueRun
+                        or ActionKind.ChooseBreachCandidate
+                        or ActionKind.TrashAccessedCard
+                        or ActionKind.NoAccessAction))
                 || (pending.Kind == DecisionKind.MemoryCleanup
                     && action.Kind != ActionKind.TrashProgram)
                 || (pending.Kind == DecisionKind.TriggerChoice
@@ -2179,7 +2450,7 @@ public static class StateInvariantValidator
             return;
         }
 
-        var expected = new List<(ActionKind Kind, CardInstanceId? Target)>();
+        var expected = new List<(ActionKind Kind, CardInstanceId? Target, int Quantity, int HostedCredits)>();
         switch (run.Step)
         {
             case RunTimingStep.InitiationPaidWindow:
@@ -2187,25 +2458,182 @@ public static class StateInvariantValidator
             case RunTimingStep.EncounterPaidWindow:
             case RunTimingStep.MovementPaidWindow:
             case RunTimingStep.AfterMovePaidWindow:
-                expected.Add((ActionKind.PassPriority, null));
+                expected.Add((ActionKind.PassPriority, null, 0, 0));
                 if (run.Step == RunTimingStep.ApproachPaidWindow
                     && run.Priority is { PriorityHolder: PlayerSide.Corp, CorpMayRezApproachedIce: true }
                     && run.CurrentIceId.HasValue)
                 {
-                    expected.Add((ActionKind.RezIce, run.CurrentIceId.Value));
+                    CardInstanceState approachedIce = state.GetCard(run.CurrentIceId.Value);
+                    if (CardBehaviorSpecCatalog.TryGetIce(approachedIce.DefinitionId, out IceBehaviorSpec? approachedSpec))
+                    {
+                        PlayerState? corp = state.Players.FirstOrDefault(player => player?.Side == PlayerSide.Corp);
+                        if (corp is not null && corp.Credits >= approachedSpec.RezCost)
+                        {
+                            expected.Add((ActionKind.RezIce, run.CurrentIceId.Value, 0, 0));
+                        }
+                    }
+                }
+
+                if (run.Step == RunTimingStep.EncounterPaidWindow
+                    && run.Priority is { PriorityHolder: PlayerSide.Runner }
+                    && run.Encounter is { Status: RunEncounterStatus.Initialized })
+                {
+                    ServerState? attackedServer = state.Servers.FirstOrDefault(server => server?.Id == run.AttackedServer);
+
+                    // Mirrors the engine's encounter offer: every registered rig
+                    // breaker materializes break quantities (named-subtype match,
+                    // sufficient current strength, per-activation BreakLimit,
+                    // affordability) and a pump (affordability only), in
+                    // stored zone/card order; there is no persistent server
+                    // attachment.
+                    if (attackedServer is not null
+                        && CardBehaviorSpecCatalog.TryGetIce(
+                            state.GetCard(run.Encounter.IceId).DefinitionId,
+                            out IceBehaviorSpec? expectedIceSpec))
+                    {
+                        int iceStrength = EncounterStrength.Ice(expectedIceSpec, attackedServer.Kind);
+                        int unbrokenCount = run.Encounter.Subroutines.Count(subroutine => !subroutine.Broken);
+                        // Run-scoped hosted credits (Overclock) are spendable
+                        // during the run, so they count toward the offer. Each
+                        // legal wallet/hosted division is a distinct action.
+                        PlayerState? runnerPlayer = state.Players.FirstOrDefault(player => player?.Side == PlayerSide.Runner);
+
+                        foreach (ZoneState? rigZone in state.Zones)
+                        {
+                            if (rigZone is null || rigZone.Kind != ZoneKind.RunnerRig || rigZone.OwnerSide != PlayerSide.Runner)
+                            {
+                                continue;
+                            }
+
+                            foreach (CardInstanceId cardId in rigZone.CardIds)
+                            {
+                                CardInstanceState? card = state.Cards.FirstOrDefault(candidate => candidate?.Id == cardId);
+                                if (card is null
+                                    || !CardBehaviorSpecCatalog.TryGetIcebreaker(
+                                        card.DefinitionId,
+                                        out IcebreakerBehaviorSpec? expectedBreakerSpec))
+                                {
+                                    continue;
+                                }
+
+                                if (runnerPlayer is not null
+                                    && expectedIceSpec.IceType == expectedBreakerSpec.InterfaceType
+                                    && EncounterStrength.Breaker(expectedBreakerSpec, run.LingeringEffects, cardId) >= iceStrength
+                                    && (long)runnerPlayer.Credits + run.RunCredits >= expectedBreakerSpec.BreakCost)
+                                {
+                                    for (int quantity = 1;
+                                        quantity <= Math.Min(expectedBreakerSpec.BreakLimit, unbrokenCount);
+                                        quantity++)
+                                    {
+                                        foreach (int hostedCredits in LegalHostedCreditSplits(
+                                            runnerPlayer,
+                                            run,
+                                            expectedBreakerSpec.BreakCost))
+                                        {
+                                            expected.Add((
+                                                ActionKind.BreakSubroutines,
+                                                cardId,
+                                                quantity,
+                                                hostedCredits));
+                                        }
+                                    }
+                                }
+
+                                if (runnerPlayer is not null
+                                    && (long)runnerPlayer.Credits + run.RunCredits >= expectedBreakerSpec.PumpCost)
+                                {
+                                    foreach (int hostedCredits in LegalHostedCreditSplits(
+                                        runnerPlayer,
+                                        run,
+                                        expectedBreakerSpec.PumpCost))
+                                    {
+                                        expected.Add((
+                                            ActionKind.PumpBreaker,
+                                            cardId,
+                                            0,
+                                            hostedCredits));
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 break;
             case RunTimingStep.JackOutDecision:
-                expected.Add((ActionKind.JackOut, null));
-                expected.Add((ActionKind.ContinueRun, null));
+                expected.Add((ActionKind.JackOut, null, 0, 0));
+                expected.Add((ActionKind.ContinueRun, null, 0, 0));
+                break;
+            case RunTimingStep.BreachCandidateSelection:
+                foreach (CardInstanceId candidate in run.BreachCandidates)
+                {
+                    expected.Add((ActionKind.ChooseBreachCandidate, candidate, 0, 0));
+                }
+
+                ServerState? breachServer = state.Servers.FirstOrDefault(server => server?.Id == run.AttackedServer);
+                ZoneState? hiddenZone = breachServer?.Kind switch
+                {
+                    ServerKind.Headquarters => state.Zones.FirstOrDefault(zone => zone?.Kind == ZoneKind.CorpHand && zone.ServerId is null),
+                    ServerKind.RAndD => state.Zones.FirstOrDefault(zone => zone?.Kind == ZoneKind.CorpDeck && zone.ServerId is null),
+                    _ => null,
+                };
+                if (breachServer is not null
+                    && RunState.HiddenBreachCandidate(breachServer.Kind, hiddenZone, run.RandomAccessLimit) is not null)
+                {
+                    expected.Add((ActionKind.ChooseBreachCandidate, null, 0, 0));
+                }
+
+                break;
+            case RunTimingStep.BreachAccessAbility:
+                if (run.ChosenAccessCards.Count > 0)
+                {
+                    CardInstanceId accessedCardId = run.ChosenAccessCards[^1];
+                    CardInstanceState accessedCard = state.GetCard(accessedCardId);
+
+                    // CR 7.2.2/7.1.5: an accessed agenda has no mid-access
+                    // ability in the M2 card set (agendas have no trash cost),
+                    // so the window offers the pass only; CR 7.2.3 then steals
+                    // the agenda automatically on progression. Mirror the
+                    // engine's basic-trash offer for every other accessed card.
+                    bool accessedAgenda = CardBehaviorSpecCatalog.TryGetAgenda(accessedCard.DefinitionId, out _);
+                    if (!accessedAgenda)
+                    {
+                        // CR 7.1.5/7.1.5b: mirrors the engine's basic-trash offer —
+                        // the accessed card has a registered asset spec with a
+                        // trash cost the Runner can pay, and is not already in
+                        // the Corp discard.
+                        ZoneState? discardZone = state.Zones.FirstOrDefault(zone => zone?.Kind == ZoneKind.CorpDiscard && zone.ServerId is null);
+                        if (discardZone is not null
+                            && accessedCard.ZoneId != discardZone.Id
+                            && CardBehaviorSpecCatalog.TryGetAsset(accessedCard.DefinitionId, out AssetBehaviorSpec? assetSpec))
+                        {
+                            PlayerState? trashRunner = state.Players.FirstOrDefault(player => player?.Side == PlayerSide.Runner);
+                            if (trashRunner is not null && (long)trashRunner.Credits + run.RunCredits >= assetSpec.TrashCost)
+                            {
+                                foreach (int hostedCredits in LegalHostedCreditSplits(
+                                    trashRunner,
+                                    run,
+                                    assetSpec.TrashCost))
+                                {
+                                    expected.Add((
+                                        ActionKind.TrashAccessedCard,
+                                        accessedCardId,
+                                        0,
+                                        hostedCredits));
+                                }
+                            }
+                        }
+                    }
+                }
+
+                expected.Add((ActionKind.NoAccessAction, null, 0, 0));
                 break;
             default:
                 Add(violations, "run.unexpected-prompt", $"{path}.legalActions", $"Run step '{run.Step}' must not have a pending decision.");
                 return;
         }
 
-        var actual = new List<(ActionKind Kind, CardInstanceId? Target)>();
+        var actual = new List<(ActionKind Kind, CardInstanceId? Target, int Quantity, int HostedCredits)>();
         foreach (LegalAction? action in pending.LegalActions)
         {
             if (action is null)
@@ -2218,17 +2646,36 @@ public static class StateInvariantValidator
                 case (ActionKind.PassPriority, NoActionParameters):
                 case (ActionKind.JackOut, NoActionParameters):
                 case (ActionKind.ContinueRun, NoActionParameters):
-                    actual.Add((action.Kind, null));
+                    actual.Add((action.Kind, null, 0, 0));
                     break;
                 case (ActionKind.RezIce, RunIceParameters rez):
-                    actual.Add((action.Kind, rez.IceId));
+                    actual.Add((action.Kind, rez.IceId, 0, 0));
+                    break;
+                case (ActionKind.BreakSubroutines, RunBreakParameters breakSubroutinesAction):
+                    actual.Add((
+                        action.Kind,
+                        breakSubroutinesAction.BreakerId,
+                        breakSubroutinesAction.Quantity,
+                        breakSubroutinesAction.HostedCredits));
+                    break;
+                case (ActionKind.PumpBreaker, RunBreakerParameters pumpBreaker):
+                    actual.Add((action.Kind, pumpBreaker.BreakerId, 0, pumpBreaker.HostedCredits));
+                    break;
+                case (ActionKind.ChooseBreachCandidate, BreachCandidateParameters breachCandidate):
+                    actual.Add((action.Kind, breachCandidate.CardId, 0, 0));
+                    break;
+                case (ActionKind.NoAccessAction, NoActionParameters):
+                    actual.Add((action.Kind, null, 0, 0));
+                    break;
+                case (ActionKind.TrashAccessedCard, RunCardPaymentParameters trash):
+                    actual.Add((action.Kind, trash.CardId, 0, trash.HostedCredits));
                     break;
             }
         }
 
         var expectedCounts = expected.GroupBy(value => value).ToDictionary(group => group.Key, group => group.Count());
         var actualCounts = actual.GroupBy(value => value).ToDictionary(group => group.Key, group => group.Count());
-        foreach (((ActionKind Kind, CardInstanceId? Target) spec, int count) in expectedCounts)
+        foreach (((ActionKind Kind, CardInstanceId? Target, int Quantity, int HostedCredits) spec, int count) in expectedCounts)
         {
             actualCounts.TryGetValue(spec, out int actualCount);
             if (actualCount != count)
@@ -2237,25 +2684,49 @@ public static class StateInvariantValidator
                     violations,
                     actualCount == 0 ? "run.missing-action" : "run.action-count-mismatch",
                     $"{path}.legalActions",
-                    $"Run timing decision requires exactly {count} '{spec.Kind}' action(s) for target '{spec.Target?.ToString() ?? "none"}', but contains {actualCount}.");
+                    $"Run timing decision requires exactly {count} '{spec.Kind}' action(s) for target '{spec.Target?.ToString() ?? "none"}', "
+                    + $"quantity {spec.Quantity}, hosted credits {spec.HostedCredits}, but contains {actualCount}.");
             }
         }
 
-        foreach (((ActionKind Kind, CardInstanceId? Target) spec, int count) in actualCounts)
+        foreach (((ActionKind Kind, CardInstanceId? Target, int Quantity, int HostedCredits) spec, int count) in actualCounts)
         {
             if (!expectedCounts.TryGetValue(spec, out int expectedCount))
             {
-                Add(violations, "run.extra-action", $"{path}.legalActions", $"Run timing decision contains unoffered '{spec.Kind}' action for target '{spec.Target?.ToString() ?? "none"}'.");
+                Add(
+                    violations,
+                    "run.extra-action",
+                    $"{path}.legalActions",
+                    $"Run timing decision contains unoffered '{spec.Kind}' action for target '{spec.Target?.ToString() ?? "none"}', "
+                    + $"quantity {spec.Quantity}, hosted credits {spec.HostedCredits}.");
             }
             else if (count > expectedCount)
             {
-                Add(violations, "run.duplicate-action", $"{path}.legalActions", $"Run timing decision contains {count} copies of '{spec.Kind}' for target '{spec.Target?.ToString() ?? "none"}', expected {expectedCount}.");
+                Add(
+                    violations,
+                    "run.duplicate-action",
+                    $"{path}.legalActions",
+                    $"Run timing decision contains {count} copies of '{spec.Kind}' for target '{spec.Target?.ToString() ?? "none"}', "
+                    + $"quantity {spec.Quantity}, hosted credits {spec.HostedCredits}, expected {expectedCount}.");
             }
         }
 
         if (pending.Owner != RunDecisionOwner(state, run))
         {
             Add(violations, "run.decision-owner-mismatch", $"{path}.owner", "Run timing decision owner does not match the current priority/Runner decision owner.");
+        }
+
+        static IEnumerable<int> LegalHostedCreditSplits(
+            PlayerState runner,
+            RunState run,
+            int amount)
+        {
+            int minimumHosted = Math.Max(0, amount - runner.Credits);
+            int maximumHosted = Math.Min(amount, run.RunCredits);
+            for (int hosted = minimumHosted; hosted <= maximumHosted; hosted++)
+            {
+                yield return hosted;
+            }
         }
     }
 
@@ -2471,11 +2942,11 @@ public static class StateInvariantValidator
         || frame is ToyTurnFrame { Stage: ToyTurnStage.AwaitingAction }
         || frame is MemoryCleanupFrame
         || frame is EffectCheckpointFrame
-            {
-                Stage: EffectCheckpointStage.InterruptChoice
+        {
+            Stage: EffectCheckpointStage.InterruptChoice
                     or EffectCheckpointStage.TriggerChoice
                     or EffectCheckpointStage.TriggerOrdering,
-            }
+        }
         || frame is RunTimingFrame runTiming && IsRunPromptStep(runTiming.Step);
 
     private static bool TryGetNumberRange(ResolutionFrame? frame, out int minimum, out int maximum)

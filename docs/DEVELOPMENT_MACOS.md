@@ -65,12 +65,14 @@ editor section below).
 
 ```bash
 curl -fL -o /tmp/godot.zip \
-  https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_mono_macos.zip
+  https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_mono_macos.universal.zip
 mkdir -p .tools/godot
 unzip -q /tmp/godot.zip -d .tools/godot
+mv .tools/godot/Godot_mono.app .tools/godot/Godot.app
 ```
 
-This produces `.tools/godot/Godot.app`.
+This produces `.tools/godot/Godot.app` (the archive ships it as
+`Godot_mono.app`; the rename keeps the paths in this document true).
 
 **Set `GODOT4` yourself.** `scripts/env.sh` locates the single-file Linux
 binary (at most two path components below `.tools/godot/`); the macOS

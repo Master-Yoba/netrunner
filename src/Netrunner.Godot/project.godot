@@ -14,10 +14,6 @@ config/name="Netrunner Solo"
 run/main_scene="res://scenes/Main.tscn"
 config/features=PackedStringArray("4.7", "C#")
 
-[autoload]
-
-_mcp_game_helper="*res://addons/godot_ai/runtime/game_helper.gd"
-
 [display]
 
 window/size/viewport_width=1440
@@ -29,10 +25,6 @@ window/stretch/mode="canvas_items"
 [dotnet]
 
 project/assembly_name="Netrunner.Godot"
-
-[editor_plugins]
-
-enabled=PackedStringArray("res://addons/godot_ai/plugin.cfg")
 
 [rendering]
 

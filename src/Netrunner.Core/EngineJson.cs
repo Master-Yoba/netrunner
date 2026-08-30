@@ -41,11 +41,11 @@ public static class EngineJson
         }
         catch (ArgumentException exception)
         {
-            throw new JsonException($"The JSON payload for '{typeof(T).Name}' is malformed.", exception);
+            throw new JsonException($"The JSON payload for '{typeof(T).Name}' is malformed: {exception.Message}", exception);
         }
         catch (InvalidOperationException exception)
         {
-            throw new JsonException($"The JSON payload for '{typeof(T).Name}' is incompatible.", exception);
+            throw new JsonException($"The JSON payload for '{typeof(T).Name}' is incompatible: {exception.Message}", exception);
         }
 
         return ValidateRestorable(value);
@@ -65,11 +65,11 @@ public static class EngineJson
         }
         catch (ArgumentException exception)
         {
-            throw new JsonException($"The JSON payload for '{typeof(T).Name}' is malformed.", exception);
+            throw new JsonException($"The JSON payload for '{typeof(T).Name}' is malformed: {exception.Message}", exception);
         }
         catch (InvalidOperationException exception)
         {
-            throw new JsonException($"The JSON payload for '{typeof(T).Name}' is incompatible.", exception);
+            throw new JsonException($"The JSON payload for '{typeof(T).Name}' is incompatible: {exception.Message}", exception);
         }
 
         return ValidateRestorable(value);

@@ -53,6 +53,8 @@ dotnet run --project "$verify_root/src/Netrunner.Cli" --no-build --no-restore --
   play --seed 42 --goal corp-score --json --replay-out "$m1_replay_dir/corp-score.json"
 dotnet run --project "$verify_root/src/Netrunner.Cli" --no-build --no-restore -- \
   replay "$m1_replay_dir/corp-score.json" --json
+dotnet run --project "$verify_root/src/Netrunner.Cli" --no-build --no-restore -- \
+  m2-proof "$verify_root/data/m2/representative-run.json" --json
 XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
   "$GODOT4" --headless --editor --path "$verify_root/src/Netrunner.Godot" --quit-after 60
 XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
