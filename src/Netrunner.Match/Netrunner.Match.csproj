@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Netrunner.Match</AssemblyName>
+    <RootNamespace>Netrunner.Match</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Netrunner.Core/Netrunner.Core.csproj" />
+    <ProjectReference Include="../Netrunner.Cards/Netrunner.Cards.csproj" />
+    <ProjectReference Include="../Netrunner.AI/Netrunner.AI.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../data/m2/representative-run.json"
+                      LogicalName="Netrunner.Match.Data.m2.representative-run.json" />
+  </ItemGroup>
+</Project>

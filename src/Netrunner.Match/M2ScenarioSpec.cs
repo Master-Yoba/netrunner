@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 using Netrunner.Cards;
 using Netrunner.Core;
 
-namespace Netrunner.Cli;
+namespace Netrunner.Match;
 
 /// <summary>
 /// Raised when an M2 scenario document is missing, malformed, or contradictory.
@@ -485,7 +485,7 @@ public sealed class M2ScenarioDocument
         }
     }
 
-    internal static bool TryParseServerRef(string reference, int remotes, out (ServerKind Kind, int RemoteIndex) server)
+    public static bool TryParseServerRef(string reference, int remotes, out (ServerKind Kind, int RemoteIndex) server)
     {
         server = default;
         switch (reference)

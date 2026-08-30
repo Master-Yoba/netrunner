@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Netrunner.Core", "..\Netrun
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Netrunner.Cards", "..\Netrunner.Cards\Netrunner.Cards.csproj", "{767F5B18-F25B-4A70-AECA-4DD32AD67377}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Netrunner.Match", "..\Netrunner.Match\Netrunner.Match.csproj", "{BB991834-2F57-48CB-82B9-91A6FC5BBFC0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -55,6 +57,18 @@ Global
 		{767F5B18-F25B-4A70-AECA-4DD32AD67377}.Release|x64.Build.0 = Release|Any CPU
 		{767F5B18-F25B-4A70-AECA-4DD32AD67377}.Release|x86.ActiveCfg = Release|Any CPU
 		{767F5B18-F25B-4A70-AECA-4DD32AD67377}.Release|x86.Build.0 = Release|Any CPU
+		{BB991834-2F57-48CB-82B9-91A6FC5BBFC0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BB991834-2F57-48CB-82B9-91A6FC5BBFC0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BB991834-2F57-48CB-82B9-91A6FC5BBFC0}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{BB991834-2F57-48CB-82B9-91A6FC5BBFC0}.Debug|x64.Build.0 = Debug|Any CPU
+		{BB991834-2F57-48CB-82B9-91A6FC5BBFC0}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{BB991834-2F57-48CB-82B9-91A6FC5BBFC0}.Debug|x86.Build.0 = Debug|Any CPU
+		{BB991834-2F57-48CB-82B9-91A6FC5BBFC0}.Release|Any CPU.ActiveCfg = Debug|Any CPU
+		{BB991834-2F57-48CB-82B9-91A6FC5BBFC0}.Release|Any CPU.Build.0 = Debug|Any CPU
+		{BB991834-2F57-48CB-82B9-91A6FC5BBFC0}.Release|x64.ActiveCfg = Debug|Any CPU
+		{BB991834-2F57-48CB-82B9-91A6FC5BBFC0}.Release|x64.Build.0 = Debug|Any CPU
+		{BB991834-2F57-48CB-82B9-91A6FC5BBFC0}.Release|x86.ActiveCfg = Debug|Any CPU
+		{BB991834-2F57-48CB-82B9-91A6FC5BBFC0}.Release|x86.Build.0 = Debug|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

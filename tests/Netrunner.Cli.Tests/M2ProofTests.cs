@@ -1,5 +1,6 @@
 using Netrunner.AI;
 using Netrunner.Core;
+using Netrunner.Match;
 using Xunit;
 
 namespace Netrunner.Cli.Tests;

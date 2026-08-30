@@ -1,0 +1,191 @@
+using Godot;
+using Netrunner.Match;
+
+namespace Netrunner.GodotClient;
+
+/// <summary>
+/// Reusable text-only card control.  It deliberately uses labels, borders,
+/// and counter badges in addition to colour so card state remains legible in
+/// reduced-colour modes and in a headless/UI inspection run.
+/// </summary>
+public partial class TextCardControl : PanelContainer
+{
+	private static readonly Color NormalBorder = new(0.24f, 0.34f, 0.42f);
+	private static readonly Color HoverBorder = new(0.35f, 0.92f, 0.72f);
+	private static readonly Color SelectedBorder = new(0.98f, 0.74f, 0.28f);
+
+	private Label _title = null!;
+	private Label _type = null!;
+	private Label _stats = null!;
+	private Label _status = null!;
+	private Label _counters = null!;
+	private CardViewModel? _card;
+	private bool _selected;
+	private bool _hovered;
+
+	[Signal]
+	public delegate void CardClickedEventHandler(string cardId);
+
+	[Signal]
+	public delegate void CardInspectedEventHandler(string cardId);
+
+	public string CardId => _card?.Id ?? string.Empty;
+
+	public override void _Ready()
+	{
+		MouseFilter = MouseFilterEnum.Stop;
+		CustomMinimumSize = new Vector2(116, 92);
+
+		var content = new VBoxContainer
+		{
+			MouseFilter = MouseFilterEnum.Ignore,
+		};
+		AddChild(content);
+
+		_title = MakeLabel(14, Colors.White);
+		_title.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		content.AddChild(_title);
+		_type = MakeLabel(10, new Color(0.45f, 0.78f, 0.9f));
+		content.AddChild(_type);
+		_stats = MakeLabel(10, new Color(0.75f, 0.8f, 0.84f));
+		content.AddChild(_stats);
+		_status = MakeLabel(10, new Color(0.72f, 0.76f, 0.78f));
+		_status.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		content.AddChild(_status);
+		_counters = MakeLabel(10, new Color(0.98f, 0.74f, 0.28f));
+		content.AddChild(_counters);
+
+		MouseEntered += HandleMouseEntered;
+		MouseExited += HandleMouseExited;
+		// Card data may be assigned before the control enters the scene tree;
+		// redraw the retained value now that the labels exist.
+		SetCard(_card);
+	}
+
+	public void SetCard(CardViewModel? card)
+	{
+		_card = card;
+		_selected = false;
+		if (_title is null)
+		{
+			return;
+		}
+
+		if (card is null)
+		{
+			_title.Text = "UNKNOWN SLOT";
+			_type.Text = "Hidden information";
+			_stats.Text = "Identity concealed";
+			_status.Text = "The card remains face-down.";
+			_counters.Text = string.Empty;
+		}
+		else
+		{
+			_title.Text = card.Title;
+			_type.Text = card.Type + (card.Subtypes.Count == 0 ? string.Empty : " · " + string.Join(" · ", card.Subtypes));
+			_stats.Text = FormatStats(card);
+			_status.Text = card.Rezzed ? "REZZED" : card.IsKnown ? "KNOWN" : "FACE-DOWN";
+			_counters.Text = string.Join("  ", card.Counters);
+		}
+
+		UpdateBorder();
+	}
+
+	public void SetSelected(bool selected)
+	{
+		_selected = selected;
+		UpdateBorder();
+	}
+
+	public override void _GuiInput(InputEvent @event)
+	{
+		if (@event is InputEventMouseButton mouse
+			&& mouse.Pressed
+			&& mouse.ButtonIndex == MouseButton.Left
+			&& _card is not null)
+		{
+			_selected = !_selected;
+			UpdateBorder();
+			EmitSignal(SignalName.CardClicked, _card.Id);
+			EmitSignal(SignalName.CardInspected, _card.Id);
+			AcceptEvent();
+		}
+	}
+
+	private void HandleMouseEntered()
+	{
+		_hovered = true;
+		UpdateBorder();
+	}
+
+	private void HandleMouseExited()
+	{
+		_hovered = false;
+		UpdateBorder();
+	}
+
+	private void UpdateBorder()
+	{
+		if (_card is null || !IsInsideTree())
+		{
+			return;
+		}
+
+		var style = new StyleBoxFlat
+		{
+			BgColor = new Color(0.07f, 0.1f, 0.14f),
+			BorderWidthLeft = 1,
+			BorderWidthTop = 1,
+			BorderWidthRight = 1,
+			BorderWidthBottom = 1,
+			CornerRadiusTopLeft = 6,
+			CornerRadiusTopRight = 6,
+			CornerRadiusBottomLeft = 6,
+			CornerRadiusBottomRight = 6,
+			BorderColor = _selected ? SelectedBorder : _hovered ? HoverBorder : NormalBorder,
+			ContentMarginLeft = 8,
+			ContentMarginTop = 7,
+			ContentMarginRight = 8,
+			ContentMarginBottom = 6,
+		};
+		AddThemeStyleboxOverride("panel", style);
+	}
+
+	private static Label MakeLabel(int size, Color colour)
+	{
+		var label = new Label
+		{
+			MouseFilter = MouseFilterEnum.Ignore,
+			AutowrapMode = TextServer.AutowrapMode.WordSmart,
+		};
+		label.AddThemeFontSizeOverride("font_size", size);
+		label.AddThemeColorOverride("font_color", colour);
+		return label;
+	}
+
+	private static string FormatStats(CardViewModel card)
+	{
+		var values = new List<string>();
+		if (card.Cost is { } cost)
+		{
+			values.Add($"Cost {cost}");
+		}
+
+		if (card.Strength is { } strength)
+		{
+			values.Add($"STR {strength}");
+		}
+
+		if (card.AgendaPoints is { } points)
+		{
+			values.Add($"{points} AP");
+		}
+
+		if (card.TrashCost is { } trash)
+		{
+			values.Add($"Trash {trash}");
+		}
+
+		return values.Count == 0 ? card.RulesText : string.Join(" · ", values);
+	}
+}
