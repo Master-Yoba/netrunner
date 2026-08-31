@@ -79,6 +79,7 @@ public partial class Main : Control
 	private bool _smokeTargetCueObserved;
 	private bool _smokeTargetControlsObserved;
 	private bool _smokeBodyColumnsInViewport = true;
+	private bool _smokeLabelsLegible = true;
 
 	public override void _Ready()
 	{
@@ -99,7 +100,7 @@ public partial class Main : Control
 		if (snapshot.RunOutcome is { } completed && view.Run is null)
 		{
 			_focusPresentation.AddChild(MakeLabel("REPRESENTATIVE SLICE COMPLETE", 17, Accent));
-			_focusPresentation.AddChild(MakeLabel(
+			_focusPresentation.AddChild(MakeWrappedLabel(
 				$"{completed.Summary}\nThe live run has been cleaned up by Core. This screen is a presentation-safe outcome summary.",
 				13,
 				Colors.White));
@@ -140,7 +141,7 @@ public partial class Main : Control
 			$"RUN STATUS · {run.Phase} · {run.Step} · credits {run.RunCredits}",
 			15,
 			Warning));
-		_focusPresentation.AddChild(MakeLabel(
+		_focusPresentation.AddChild(MakeWrappedLabel(
 			"The current timing step is owned by Core. Legal actions below are the only actions that can mutate the run.",
 			12,
 			Muted));
@@ -152,13 +153,13 @@ public partial class Main : Control
 			$"PAID WINDOW · {priority.Window} · PRIORITY {priority.Holder.ToString().ToUpperInvariant()}",
 			17,
 			Accent));
-		_focusPresentation.AddChild(MakeLabel(
+		_focusPresentation.AddChild(MakeWrappedLabel(
 			$"Consecutive passes: {priority.ConsecutivePasses} · "
 			+ $"Corp may rez approached ICE: {(priority.CorpMayRezApproachedIce ? "YES" : "NO")} · "
 			+ $"non-ICE rez: {(priority.CorpMayRezNonIce ? "YES" : "NO")}",
 			12,
 			Colors.White));
-		_focusPresentation.AddChild(MakeLabel(
+		_focusPresentation.AddChild(MakeWrappedLabel(
 			"PASS / CONTINUE remain explicit below. The priority holder is shown as text, not colour alone.",
 			12,
 			Muted));
@@ -212,7 +213,7 @@ public partial class Main : Control
 			snapshot.View.LegalActions
 				.Where(action => action.Kind is ActionKind.PumpBreaker or ActionKind.BreakSubroutines)
 				.Select(action => $"{action.Kind}: {action.Description}"));
-		_focusPresentation.AddChild(MakeLabel(
+		_focusPresentation.AddChild(MakeWrappedLabel(
 			string.IsNullOrWhiteSpace(breakerCue)
 				? "BREAKER OPTIONS · no breaker action is currently issued"
 				: $"BREAKER OPTIONS · {breakerCue}",
@@ -252,7 +253,7 @@ public partial class Main : Control
 		}
 		else if (access.HiddenCandidateSource is { } source)
 		{
-			_focusPresentation.AddChild(MakeLabel(
+			_focusPresentation.AddChild(MakeWrappedLabel(
 				$"HIDDEN CANDIDATE · Core will draw from {source} after the Runner confirms the legal choice.",
 				12,
 				Warning));
@@ -275,7 +276,7 @@ public partial class Main : Control
 		string actionCue = string.Join(
 			" · ",
 			accessActions.Select(action => $"{action.Kind.ToString().ToUpperInvariant()}: {action.Description}"));
-		_focusPresentation.AddChild(MakeLabel(
+		_focusPresentation.AddChild(MakeWrappedLabel(
 			string.IsNullOrWhiteSpace(actionCue)
 				? "ACCESS ACTIONS · select a candidate to continue"
 				: $"ACCESS ACTIONS · {actionCue}",
@@ -285,7 +286,7 @@ public partial class Main : Control
 
 	private void AddPriorityCue(RunPriorityViewModel priority)
 	{
-		_focusPresentation.AddChild(MakeLabel(
+		_focusPresentation.AddChild(MakeWrappedLabel(
 			$"PAID WINDOW · {priority.Window} · priority {priority.Holder} · passes {priority.ConsecutivePasses} · PASS / CONTINUE below",
 			11,
 			Muted));
@@ -875,6 +876,7 @@ public partial class Main : Control
 				&& submitted
 				&& actionPanelInViewport
 				&& _smokeBodyColumnsInViewport
+				&& _smokeLabelsLegible
 				&& delayedThinking
 				&& responsive
 				&& fullRun
@@ -893,6 +895,7 @@ public partial class Main : Control
 				+ $"setup={setup} human_decision={humanDecision} submitted={submitted} "
 				+ $"action_panel_in_viewport={actionPanelInViewport} "
 				+ $"body_columns_in_viewport={_smokeBodyColumnsInViewport} "
+				+ $"labels_legible={_smokeLabelsLegible} "
 				+ $"delayed_agent={delayedThinking} responsive_frames={_framesWhileAnimating} "
 				+ $"full_run={fullRun} encounter_focus={_smokeEncounterFocusObserved} "
 				+ $"access_focus={_smokeAccessFocusObserved} run_ended={_smokeRunEndedObserved} "
@@ -909,6 +912,7 @@ public partial class Main : Control
 				$"M3_SMOKE FAIL setup={setup} human_decision={humanDecision} "
 				+ $"submitted={submitted} action_panel_in_viewport={actionPanelInViewport} "
 				+ $"body_columns_in_viewport={_smokeBodyColumnsInViewport} "
+				+ $"labels_legible={_smokeLabelsLegible} "
 				+ $"full_run={fullRun} encounter_focus={_smokeEncounterFocusObserved} "
 				+ $"access_focus={_smokeAccessFocusObserved} run_ended={_smokeRunEndedObserved} "
 				+ $"target_stage_cancel={targetStageCancelPreserved} "
@@ -1119,6 +1123,7 @@ public partial class Main : Control
 		bool inside = IsFullyInsideViewport(_board)
 			&& IsFullyInsideViewport(_actionPanel)
 			&& AreBodyColumnsInsideViewport()
+			&& AreVisibleLabelsLegible(_layout)
 			&& IsFullyInsideViewport(_focusPresentation)
 			&& IsFullyInsideViewport(_zoomButton)
 			&& IsFullyInsideViewport(_zoomOverlay);
@@ -1132,6 +1137,7 @@ public partial class Main : Control
 		if (_smokeTest && _board.IsVisibleInTree())
 		{
 			_smokeBodyColumnsInViewport &= AreBodyColumnsInsideViewport();
+			_smokeLabelsLegible &= AreVisibleLabelsLegible(_layout);
 		}
 	}
 
@@ -1693,10 +1699,17 @@ public partial class Main : Control
 		{
 			Text = text,
 			MouseFilter = MouseFilterEnum.Ignore,
-			AutowrapMode = TextServer.AutowrapMode.WordSmart,
 		};
 		label.AddThemeFontSizeOverride("font_size", size);
 		label.AddThemeColorOverride("font_color", colour);
+		return label;
+	}
+
+	private static Label MakeWrappedLabel(string text, int size, Color colour)
+	{
+		Label label = MakeLabel(text, size, colour);
+		label.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		label.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		return label;
 	}
 
@@ -1763,6 +1776,27 @@ public partial class Main : Control
 		const float epsilon = 0.5f;
 		return innerRect.Position.X >= outerRect.Position.X - epsilon
 			&& innerRect.End.X <= outerRect.End.X + epsilon;
+	}
+
+	private static bool AreVisibleLabelsLegible(Node root)
+	{
+		foreach (Node child in root.GetChildren())
+		{
+			if (child is Label label
+				&& label.IsVisibleInTree()
+				&& label.Text.Replace("\n", string.Empty, StringComparison.Ordinal).Length > 1
+				&& label.GetGlobalRect().Size.X < 16)
+			{
+				return false;
+			}
+
+			if (!AreVisibleLabelsLegible(child))
+			{
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	private static void ClearChildren(Node parent)
