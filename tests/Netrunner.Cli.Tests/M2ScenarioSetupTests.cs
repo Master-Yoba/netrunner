@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Netrunner.Cards;
 using Netrunner.Core;
 using Netrunner.Match;
 using Xunit;
@@ -33,6 +34,26 @@ public sealed class M2ScenarioSetupTests
         mutate(item);
         items[index] = JsonSerializer.SerializeToElement(item);
         return JsonSerializer.SerializeToElement(items);
+    }
+
+    private static BehaviorCatalog RebuildGatewayCatalog(
+        string? excludedDefinitionId = null,
+        IceBehaviorSpec? replacementIce = null)
+    {
+        BehaviorCatalog gateway = GatewayBehaviorCatalog.Create();
+        var builder = new BehaviorCatalogBuilder(gateway.Version)
+            .AddIce(gateway.IceSpecs.Where(spec => spec.DefinitionId.Value != excludedDefinitionId))
+            .AddIcebreaker(gateway.IcebreakerSpecs.Where(spec => spec.DefinitionId.Value != excludedDefinitionId))
+            .AddAsset(gateway.AssetSpecs.Where(spec => spec.DefinitionId.Value != excludedDefinitionId))
+            .AddAgenda(gateway.AgendaSpecs.Where(spec => spec.DefinitionId.Value != excludedDefinitionId))
+            .AddRunEvent(gateway.RunEventSpecs.Where(spec => spec.DefinitionId.Value != excludedDefinitionId))
+            .Add(gateway.GenericSpecs.Where(spec => spec.DefinitionId.Value != excludedDefinitionId));
+        if (replacementIce is not null)
+        {
+            builder.AddIce(replacementIce);
+        }
+
+        return builder.Build();
     }
 
     [Fact]
@@ -87,6 +108,61 @@ public sealed class M2ScenarioSetupTests
         Assert.Equal(
             "a61f20c71efa735d6b893b2de5bd75da96f6b20481e5ab8c0a1c0a7ac40a2c8b",
             DeterministicHash.ForState(state));
+    }
+
+    [Fact]
+    public void UnrelatedInjectedBehaviorDoesNotChangeScenarioSliceOrStateHash()
+    {
+        M2ScenarioDocument document = LoadDocument(RepresentativeRunJson);
+        BehaviorCatalog gateway = GatewayBehaviorCatalog.Create();
+        BehaviorCatalog expanded = new BehaviorCatalogBuilder(gateway.Version, gateway)
+            .AddAsset(new AssetBehaviorSpec(new CardDefinitionId("test:m2-unrelated"), trashCost: 1))
+            .Build();
+
+        BehaviorCatalog gatewaySlice = document.CreateBehaviorCatalog(gateway);
+        BehaviorCatalog expandedSlice = document.CreateBehaviorCatalog(expanded);
+        Assert.Equal(gatewaySlice.Version, expandedSlice.Version);
+        Assert.Equal(gatewaySlice.Fingerprint, expandedSlice.Fingerprint);
+        Assert.Equal(
+            DeterministicHash.ForState(M2ScenarioSetup.Build(document, gateway)),
+            DeterministicHash.ForState(M2ScenarioSetup.Build(document, expanded)));
+    }
+
+    [Fact]
+    public void MissingInjectedBehaviorReportsTheReferencingCardPath()
+    {
+        M2ScenarioDocument document = LoadDocument(RepresentativeRunJson);
+        BehaviorCatalog missing = RebuildGatewayCatalog(excludedDefinitionId: GatewayCardCodes.Whitespace.Value);
+
+        M2ScenarioException exception = Assert.Throws<M2ScenarioException>(
+            () => document.Validate(missing));
+
+        Assert.Contains("cards[0].definitionId", exception.Message);
+        Assert.Contains("not registered in the behavior spec catalog", exception.Message);
+    }
+
+    [Fact]
+    public void ChangedInjectedBehaviorStillFailsTheScenarioFingerprintPin()
+    {
+        M2ScenarioDocument document = LoadDocument(RepresentativeRunJson);
+        IceBehaviorSpec original = Assert.Single(
+            GatewayBehaviorCatalog.Create().IceSpecs,
+            spec => spec.DefinitionId == GatewayCardCodes.Whitespace);
+        BehaviorCatalog changed = RebuildGatewayCatalog(
+            excludedDefinitionId: GatewayCardCodes.Whitespace.Value,
+            replacementIce: new IceBehaviorSpec(
+                original.DefinitionId,
+                original.Strength + 1,
+                original.IceType,
+                original.RezCost,
+                original.Subroutines,
+                original.StrengthModifiers));
+
+        M2ScenarioException exception = Assert.Throws<M2ScenarioException>(
+            () => document.Validate(changed));
+
+        Assert.Contains("behaviorCatalogFingerprint:", exception.Message);
+        Assert.Contains("scenario behavior catalog fingerprint", exception.Message);
     }
 
     [Fact]

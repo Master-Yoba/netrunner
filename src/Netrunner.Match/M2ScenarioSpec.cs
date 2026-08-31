@@ -252,12 +252,30 @@ public sealed class M2ScenarioDocument
     /// <summary>Every problem with its exact document path; empty when valid.</summary>
     public IReadOnlyList<string> CollectProblems()
     {
+        return CollectProblems(GatewayBehaviorCatalog.Create());
+    }
+
+    /// <summary>
+    /// Checks this document against an injected behavior catalog. Only the
+    /// contracts referenced by the document participate in its fingerprint;
+    /// unrelated registrations in the supplied catalog are ignored.
+    /// </summary>
+    public IReadOnlyList<string> CollectProblems(IBehaviorCatalog behaviorCatalog)
+    {
+        ArgumentNullException.ThrowIfNull(behaviorCatalog);
+        BehaviorCatalog scenarioCatalog = CreateBehaviorCatalog(behaviorCatalog);
+        return CollectProblems(behaviorCatalog, scenarioCatalog);
+    }
+
+    private ReadOnlyCollection<string> CollectProblems(
+        IBehaviorCatalog suppliedCatalog,
+        BehaviorCatalog behaviorCatalog)
+    {
         // M2 callers still use the legacy static lookup/ReplayVerifier APIs;
         // keep this idempotent adapter registration until those callers are
-        // fully migrated. The immutable catalog below remains the source for
-        // this document's capability checks.
+        // fully migrated. All document capability checks below use the
+        // immutable scenario slice.
         GatewayBehaviorCatalog.RegisterAll();
-        BehaviorCatalog behaviorCatalog = GatewayBehaviorCatalog.Create();
         var problems = new List<string>();
 
         if (SchemaVersion != EngineCompatibility.ArtifactSchemaVersion)
@@ -296,11 +314,18 @@ public sealed class M2ScenarioDocument
                 $"behaviorRegistryVersion: '{BehaviorRegistryVersion}' is not the Gateway compiled behavior version '{CardBehaviorSpecCatalog.Version}'.");
         }
 
-        string gatewayFingerprint = GatewayBehaviorCatalog.Create().Fingerprint;
-        if (!string.Equals(BehaviorCatalogFingerprint, gatewayFingerprint, StringComparison.Ordinal))
+        if (!string.IsNullOrWhiteSpace(BehaviorRegistryVersion)
+            && !string.Equals(BehaviorRegistryVersion, suppliedCatalog.Version, StringComparison.Ordinal))
         {
             problems.Add(
-                $"behaviorCatalogFingerprint: '{BehaviorCatalogFingerprint}' does not match the Gateway behavior catalog fingerprint '{gatewayFingerprint}'.");
+                $"behaviorRegistryVersion: '{BehaviorRegistryVersion}' does not match the supplied behavior catalog version '{suppliedCatalog.Version}'.");
+        }
+
+        string scenarioFingerprint = behaviorCatalog.Fingerprint;
+        if (!string.Equals(BehaviorCatalogFingerprint, scenarioFingerprint, StringComparison.Ordinal))
+        {
+            problems.Add(
+                $"behaviorCatalogFingerprint: '{BehaviorCatalogFingerprint}' does not match the scenario behavior catalog fingerprint '{scenarioFingerprint}'.");
         }
 
         if (Remotes < 0 || Remotes > 8)
@@ -537,6 +562,44 @@ public sealed class M2ScenarioDocument
         }
     }
 
+    /// <summary>
+    /// Validates this document against an injected catalog and returns the
+    /// immutable slice that contains the document's referenced definitions.
+    /// </summary>
+    public BehaviorCatalog Validate(IBehaviorCatalog behaviorCatalog)
+    {
+        ArgumentNullException.ThrowIfNull(behaviorCatalog);
+        BehaviorCatalog scenarioCatalog = CreateBehaviorCatalog(behaviorCatalog);
+        ReadOnlyCollection<string> problems = CollectProblems(behaviorCatalog, scenarioCatalog);
+        if (problems.Count > 0)
+        {
+            throw new M2ScenarioException(problems);
+        }
+
+        return scenarioCatalog;
+    }
+
+    /// <summary>
+    /// Derives the immutable catalog required by this document from an
+    /// injected composition catalog. Invalid definition IDs are omitted here
+    /// so validation can report their original card paths.
+    /// </summary>
+    public BehaviorCatalog CreateBehaviorCatalog(IBehaviorCatalog behaviorCatalog)
+    {
+        ArgumentNullException.ThrowIfNull(behaviorCatalog);
+        var definitionIds = new HashSet<CardDefinitionId>();
+        foreach (M2ScenarioCardSpec card in Cards)
+        {
+            if (card is not null
+                && CardDefinitionId.TryParse(card.DefinitionId, out CardDefinitionId definitionId))
+            {
+                definitionIds.Add(definitionId);
+            }
+        }
+
+        return BehaviorCatalog.CreateSlice(behaviorCatalog, definitionIds);
+    }
+
     public static bool TryParseServerRef(string reference, int remotes, out (ServerKind Kind, int RemoteIndex) server)
     {
         server = default;
@@ -646,24 +709,17 @@ public static class M2ScenarioSetup
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(behaviorCatalog);
-        // Compatibility bridge for M2 tests/legacy consumers; all engine
-        // operations below use the explicitly supplied immutable catalog.
-        GatewayBehaviorCatalog.RegisterAll();
-        document.Validate();
-        if (!string.Equals(document.BehaviorRegistryVersion, behaviorCatalog.Version, StringComparison.Ordinal)
-            || !string.Equals(document.BehaviorCatalogFingerprint, behaviorCatalog.Fingerprint, StringComparison.Ordinal))
-        {
-            throw new M2ScenarioException([
-                $"behaviorCatalogFingerprint: the supplied behavior catalog '{behaviorCatalog.Version}/{behaviorCatalog.Fingerprint}' "
-                + $"does not match the scenario pin '{document.BehaviorRegistryVersion}/{document.BehaviorCatalogFingerprint}'."]);
-        }
+        // The injected composition catalog may contain behavior unrelated to
+        // this document. Validate once and carry the resulting immutable slice
+        // through every state/invariant operation below.
+        BehaviorCatalog scenarioCatalog = document.Validate(behaviorCatalog);
 
         GameState baseState = GameState.CreateNew(
             document.Seed,
             document.RulesVersion,
             document.CardDataVersion,
-            behaviorRegistryVersion: behaviorCatalog.Version,
-            behaviorCatalogFingerprint: behaviorCatalog.Fingerprint);
+            behaviorRegistryVersion: scenarioCatalog.Version,
+            behaviorCatalogFingerprint: scenarioCatalog.Fingerprint);
         var allocator = new StableIdAllocator(baseState.Allocator);
 
         var servers = baseState.Servers.ToList();
@@ -728,10 +784,10 @@ public static class M2ScenarioSetup
             allocator.State,
             schemaVersion: baseState.SchemaVersion,
             initialSeed: baseState.InitialSeed,
-            behaviorRegistryVersion: behaviorCatalog.Version,
-            behaviorCatalogFingerprint: behaviorCatalog.Fingerprint);
+            behaviorRegistryVersion: scenarioCatalog.Version,
+            behaviorCatalogFingerprint: scenarioCatalog.Fingerprint);
 
-        StateInvariantValidator.Validate(state, behaviorCatalog);
+        StateInvariantValidator.Validate(state, scenarioCatalog);
         if (document.ExpectedInitialStateHash is not null)
         {
             string actualHash = DeterministicHash.ForState(state);

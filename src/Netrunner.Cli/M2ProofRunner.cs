@@ -105,32 +105,46 @@ public static class M2ProofRunner
 {
     public const int MaxAcceptedActions = 256;
 
-    public static M2ProofResult Run(M2ScenarioDocument document, IGameAgent agent, string policyName)
+    public static M2ProofResult Run(
+        M2ScenarioDocument document,
+        IGameAgent agent,
+        string policyName) =>
+        Run(document, agent, policyName, behaviorCatalog: null);
+
+    /// <summary>
+    /// Runs the proof against an injected composition catalog. The proof uses
+    /// the immutable scenario slice derived from that catalog.
+    /// </summary>
+    public static M2ProofResult Run(
+        M2ScenarioDocument document,
+        IGameAgent agent,
+        string policyName,
+        IBehaviorCatalog? behaviorCatalog)
     {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(agent);
         ArgumentNullException.ThrowIfNull(policyName);
 
-        document.Validate();
+        IBehaviorCatalog suppliedCatalog = behaviorCatalog ?? GatewayBehaviorCatalog.Create();
+        BehaviorCatalog scenarioCatalog = document.Validate(suppliedCatalog);
         M2ScenarioRunSpec runSpec = document.Run
             ?? throw new M2ProofException($"scenario '{document.ScenarioId}': the scenario has no run contract.");
 
-        BehaviorCatalog behaviorCatalog = GatewayBehaviorCatalog.Create();
-        GameState initial = M2ScenarioSetup.Build(document, behaviorCatalog);
+        GameState initial = M2ScenarioSetup.Build(document, scenarioCatalog);
         string initialStateHash = DeterministicHash.ForState(initial);
 
         ServerId serverId = ResolveServerId(initial, runSpec.Server);
         GameEngine.RunStartResult start = GameEngine.BeginRunWithEvents(
             initial,
             serverId,
-            behaviorCatalog,
+            scenarioCatalog,
             initiatingSource: new CardInstanceId(runSpec.Source));
         GameState current = start.State;
 
         // The replay artifact starts at the run-start state: the recorded
         // actions are the run-window decisions, and the run start itself is
         // pinned by the scenario document's run contract.
-        GameSnapshot replaySnapshot = current.CreateSnapshot(behaviorCatalog);
+        GameSnapshot replaySnapshot = current.CreateSnapshot(scenarioCatalog);
 
         var events = new List<EngineEvent>(start.Events);
         var replayActions = new List<ReplayAction>();
@@ -152,7 +166,7 @@ public static class M2ProofRunner
             // proof exercises resumption, not only round-trip equality
             // (docs/M2_ARCHITECTURE.md:170).
             string saved = EngineJson.Serialize(current);
-            GameState restored = EngineJson.DeserializeState(saved, behaviorCatalog);
+            GameState restored = EngineJson.DeserializeState(saved, scenarioCatalog);
             string liveHash = DeterministicHash.ForState(current);
             if (!string.Equals(DeterministicHash.ForState(restored), liveHash, StringComparison.Ordinal))
             {
@@ -202,7 +216,7 @@ public static class M2ProofRunner
             }
 
             var submission = new ActionSubmission(resumed.Owner, resumed.Id, resumed.Revision, selected);
-            ApplyResult applied = GameEngine.Apply(restored, submission, behaviorCatalog);
+            ApplyResult applied = GameEngine.Apply(restored, submission, scenarioCatalog);
             if (!applied.Accepted)
             {
                 throw new M2ProofException(
@@ -236,7 +250,7 @@ public static class M2ProofRunner
             behaviorRegistryVersion: replaySnapshot.BehaviorRegistryVersion,
             behaviorCatalogFingerprint: replaySnapshot.BehaviorCatalogFingerprint,
             expectedFinalStateHash: finalStateHash);
-        ReplayVerificationResult verification = ReplayVerifier.Verify(replay, behaviorCatalog);
+        ReplayVerificationResult verification = ReplayVerifier.Verify(replay, scenarioCatalog);
         if (!verification.Success
             || !string.Equals(verification.FinalStateHash, finalStateHash, StringComparison.Ordinal))
         {

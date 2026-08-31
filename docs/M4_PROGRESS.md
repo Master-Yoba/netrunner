@@ -365,6 +365,48 @@ and Godot consumes Match presentation boundaries rather than Cards records.
 None. The authenticated official source remains gitignored by design; builds
 embed a validated generated resource and perform no runtime network fetch.
 
+### 2026-08-31 — PR #5 feedback follow-up started
+
+- GitHub review at `f6f77e9` raised one P1 concern: the checked M2
+  representative-run document pins the fingerprint of the complete Gateway
+  catalog rather than only the seven behavior definitions the scenario uses.
+- Primary architectural assessment: valid. `CollectProblems()`, scenario
+  setup, and proof execution all currently compare or persist the full catalog
+  fingerprint, so an unrelated additive Gateway registration would reject the
+  document and churn its pinned state hashes.
+- Accepted fix boundary: derive an immutable behavior-catalog slice from the
+  scenario's referenced definition IDs, use it consistently for validation,
+  setup, proof execution, and match coordination, and prove with a regression
+  test that an unrelated additive registration does not change the scenario
+  slice fingerprint or built state. Luna Max implemented the bounded change;
+  the primary architect reviewed and accepted its final API, runtime wiring,
+  compatibility overload, diagnostics, and regression coverage.
+- Implemented `BehaviorCatalog.CreateSlice` plus
+  `M2ScenarioDocument.CreateBehaviorCatalog`/injected validation. The slice
+  retains the supplied version and copies every typed and generic contract for
+  the document's distinct, valid card definition IDs; missing or changed
+  required contracts still fail with the document's exact card/fingerprint
+  paths.
+- `M2ScenarioSetup`, `M2ProofRunner`, and `MatchCoordinator` now carry the
+  validated scenario slice into state construction, save/load/replay, engine
+  actions, and presentation. The no-argument Gateway adapters remain for M2
+  compatibility callers.
+- Added regression coverage for an unrelated injected behavior (stable slice
+  fingerprint and state hash), plus missing and structurally changed required
+  behavior. The current representative document already references all seven
+  Gateway registrations, so its slice fingerprint and existing initial/final
+  state pins remain unchanged; no JSON pin edit was necessary.
+- Focused evidence: CLI M2 scenario setup tests `19/19`, CLI M2 proof tests
+  `4/4`, Match tests `24/24`, Core behavior-catalog tests `22/22`, and the CLI
+  project build all pass with zero warnings/errors.
+- Primary authoritative `./scripts/verify.sh` evidence: zero warnings/errors,
+  format and `git diff --check` clean, and `416/416` tests passed (Core 277,
+  Cards 55, AI 9, CLI 51, Match 24). Coverage remained 77 total / 7
+  registered and tested / 5 complete / 2 partial / 70 unregistered; the M1
+  proofs, 32-action M2 proof and replay passed with unchanged hashes; official
+  resolver gallery reported 77/official; Godot editor import, M3 smoke, and
+  secret scan passed. Push and refreshed PR CI status remain pending.
+
 ## Slice 4.1 exit checklist
 
 - [x] ARCH-401 / ENG-400 / VER-401 implemented and reviewed.

@@ -442,6 +442,60 @@ public sealed class BehaviorCatalog : IBehaviorCatalog
     public bool TryGet(CardDefinitionId definitionId, out CardBehaviorDefinition spec) =>
         _generic.TryGetValue(definitionId, out spec!);
 
+    /// <summary>
+    /// Builds an immutable catalog containing every typed and generic contract
+    /// for the requested definition IDs. The source version is retained, so
+    /// a scenario can pin only the behavior capabilities it references while
+    /// still consuming a larger composition catalog.
+    /// </summary>
+    public static BehaviorCatalog CreateSlice(
+        IBehaviorCatalog source,
+        IEnumerable<CardDefinitionId> definitionIds)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(definitionIds);
+
+        var builder = new BehaviorCatalogBuilder(source.Version);
+        foreach (CardDefinitionId definitionId in definitionIds.Distinct())
+        {
+            if (source.TryGetIce(definitionId, out IceBehaviorSpec? ice))
+            {
+                builder.AddIce(ice);
+            }
+
+            if (source.TryGetIcebreaker(definitionId, out IcebreakerBehaviorSpec? icebreaker))
+            {
+                builder.AddIcebreaker(icebreaker);
+            }
+
+            if (source.TryGetAsset(definitionId, out AssetBehaviorSpec? asset))
+            {
+                builder.AddAsset(asset);
+            }
+
+            if (source.TryGetAgenda(definitionId, out AgendaBehaviorSpec? agenda))
+            {
+                builder.AddAgenda(agenda);
+            }
+
+            if (source.TryGetRunEvent(definitionId, out RunEventBehaviorSpec? runEvent))
+            {
+                builder.AddRunEvent(runEvent);
+            }
+
+            if (source.TryGet(definitionId, out CardBehaviorDefinition? generic))
+            {
+                builder.Add(generic);
+            }
+        }
+
+        return builder.Build();
+    }
+
+    /// <summary>Returns a definition-ID slice of this immutable catalog.</summary>
+    public BehaviorCatalog CreateSlice(IEnumerable<CardDefinitionId> definitionIds) =>
+        CreateSlice(this, definitionIds);
+
     private static string ValidateVersion(string version)
     {
         if (string.IsNullOrWhiteSpace(version))

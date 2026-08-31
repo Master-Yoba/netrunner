@@ -173,6 +173,39 @@ public sealed class BehaviorCatalogTests
     }
 
     [Fact]
+    public void DefinitionSliceRetainsTypedAndGenericContractsAndDropsUnrelatedDefinitions()
+    {
+        var requested = new CardDefinitionId("test:slice-requested");
+        var unrelated = new CardDefinitionId("test:slice-unrelated");
+        IceBehaviorSpec ice = new(
+            requested,
+            strength: 2,
+            iceType: IceType.Barrier,
+            rezCost: 3,
+            subroutines: [new EndRunSubroutineSpec()],
+            strengthModifiers: []);
+        CardBehaviorDefinition generic = new(
+            requested,
+            PlayerSide.Corp,
+            instructions: [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]);
+        AssetBehaviorSpec extra = new(unrelated, trashCost: 1);
+        BehaviorCatalog source = new BehaviorCatalogBuilder("test:slice")
+            .AddIce(ice)
+            .Add(generic)
+            .AddAsset(extra)
+            .Build();
+
+        BehaviorCatalog slice = BehaviorCatalog.CreateSlice(source, [requested, requested]);
+
+        Assert.Equal(source.Version, slice.Version);
+        Assert.Same(ice, Assert.IsType<IceBehaviorSpec>(slice.IceSpecs.Single()));
+        Assert.Same(generic, Assert.IsType<CardBehaviorDefinition>(slice.GenericSpecs.Single()));
+        Assert.False(slice.TryGetAsset(unrelated, out _));
+        Assert.Contains(requested, slice.AllDefinitionIds);
+        Assert.DoesNotContain(unrelated, slice.AllDefinitionIds);
+    }
+
+    [Fact]
     public void CompatibilityCatalogSnapshotDoesNotChangeWhenLegacyRegistrationIsAdded()
     {
         BehaviorCatalog before = CardBehaviorSpecCatalog.Default;

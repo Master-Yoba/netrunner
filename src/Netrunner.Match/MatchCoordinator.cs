@@ -99,7 +99,8 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
     private readonly IGameAgent _corpAgent;
     private readonly MatchCoordinatorOptions _options;
     private readonly ICardMetadataResolver _metadataResolver;
-    private readonly IBehaviorCatalog _behaviorCatalog;
+    private readonly IBehaviorCatalog _suppliedBehaviorCatalog;
+    private IBehaviorCatalog _behaviorCatalog;
     private readonly CancellationTokenSource _cancellation = new();
     private readonly Channel<CoordinatorCommand> _commands =
         Channel.CreateUnbounded<CoordinatorCommand>(new UnboundedChannelOptions
@@ -127,8 +128,12 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
         _metadataResolver = _options.CardMetadataResolver
             ?? _options.MetadataResolver
             ?? CardMetadataResolvers.Default;
-        _behaviorCatalog = _options.BehaviorCatalog
+        _suppliedBehaviorCatalog = _options.BehaviorCatalog
             ?? GatewayBehaviorCatalog.Create();
+        // Keep the field initialized until StartAsync validates the document;
+        // the worker replaces it with the immutable scenario slice before any
+        // engine or presentation operation runs.
+        _behaviorCatalog = _suppliedBehaviorCatalog;
         if (_options.HumanSide != PlayerSide.Runner)
         {
             throw new ArgumentException(
@@ -322,10 +327,11 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
 
         try
         {
-            _document.Validate();
+            BehaviorCatalog scenarioCatalog = _document.Validate(_suppliedBehaviorCatalog);
+            _behaviorCatalog = scenarioCatalog;
             M2ScenarioRunSpec run = _document.Run
                 ?? throw new M2ScenarioException(["run: the scenario has no run contract."]);
-            GameState initial = M2ScenarioSetup.Build(_document, _behaviorCatalog);
+            GameState initial = M2ScenarioSetup.Build(_document, scenarioCatalog);
             ServerId server = ResolveServer(initial, run.Server);
             GameEngine.RunStartResult started = GameEngine.BeginRunWithEvents(
                 initial,
