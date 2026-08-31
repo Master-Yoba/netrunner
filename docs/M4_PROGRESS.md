@@ -1,6 +1,6 @@
 # M4 progress — System Gateway complete
 
-Status: slice 4.1 complete; pull-request handoff in progress
+Status: slice 4.1 complete; PR #5 open against `dev`
 
 Date started: 31 August 2026
 
@@ -328,6 +328,14 @@ No Slice 4.2 rules or card behavior is in scope yet.
 - The architect reviewed every Luna stream and the independent audit. All five
   audit findings and the final UI-401/D-412 dependency issue are closed; no
   Slice 4.2 behavior entered this change set.
+
+### 2026-08-31 — pull-request handoff
+
+- Committed the reviewed implementation as `f6f77e9` (`Complete M4 Slice 4.1
+  architecture and content foundation`) and pushed `M4-horizon` to `origin`.
+- Opened [PR #5](https://github.com/Master-Yoba/netrunner/pull/5) from
+  `M4-horizon` into `dev`, with the completed Slice 4.1 scope and authoritative
+  verification evidence in the PR description.
 
 ## Architecture record
 
