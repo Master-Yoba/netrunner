@@ -405,7 +405,11 @@ embed a validated generated resource and perform no runtime network fetch.
   registered and tested / 5 complete / 2 partial / 70 unregistered; the M1
   proofs, 32-action M2 proof and replay passed with unchanged hashes; official
   resolver gallery reported 77/official; Godot editor import, M3 smoke, and
-  secret scan passed. Push and refreshed PR CI status remain pending.
+  secret scan passed.
+- Committed the reviewed fix as `d4d5a70` (`Pin M2 proof to scenario catalog
+  slice`) and pushed it to PR #5. GitHub Actions `build-and-test` passed on that
+  implementation head in 2m15s; this final progress update is documentation
+  only.
 
 ## Slice 4.1 exit checklist
 
