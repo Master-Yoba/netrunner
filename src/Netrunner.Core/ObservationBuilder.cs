@@ -15,8 +15,10 @@ namespace Netrunner.Core;
 /// serializes the state and never exposes the opponent's grip/stack/hand/deck,
 /// face-down ICE to the non-owner, the Corp's facedown Archives cards to the
 /// Runner (CR 26.03 4.4.6c: the Corp alone may look through them), hidden
-/// breach candidates, RNG or allocator state, or engine bookkeeping
-/// (sequences, revisions, schemas).
+/// breach candidates, RNG or allocator state, event/allocator sequences,
+/// schemas, or an opponent's decision revision. The viewer-owned decision
+/// revision is exposed only through the typed <see cref="Observation.Decision"/>
+/// metadata required to submit an issued action.
 ///
 /// The view is built with a fixed key order, so the same state and viewer
 /// always serialize to byte-identical JSON; the negative tests pin that
@@ -49,7 +51,19 @@ public static class ObservationBuilder
             ? []
             : pending.LegalActions;
 
-        return new Observation(viewer, decisionId, legalActions, publicState, privateState);
+        return new Observation(viewer, decisionId, legalActions, publicState, privateState)
+        {
+            Decision = pending is null
+                || state.GetPlayer(pending.Owner).Side != viewer
+                ? null
+                : new ObservationDecision(
+                    pending.Id,
+                    pending.Revision,
+                    pending.Owner,
+                    state.GetPlayer(pending.Owner).Side,
+                    pending.Kind,
+                    pending.Prompt),
+        };
     }
 
     /// <summary>

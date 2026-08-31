@@ -6,6 +6,6 @@
   <ItemGroup>
     <ProjectReference Include="../Netrunner.Core/Netrunner.Core.csproj" />
     <ProjectReference Include="../Netrunner.Cards/Netrunner.Cards.csproj" />
+    <ProjectReference Include="../Netrunner.Match/Netrunner.Match.csproj" />
   </ItemGroup>
 </Project>
-

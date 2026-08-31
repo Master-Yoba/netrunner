@@ -1,4 +1,4 @@
-.PHONY: bootstrap restore build test watch-core watch-cards format cli doctor godot-import event-smoke templates package-linux secrets benchmark-m0 verify
+.PHONY: bootstrap restore build test watch-core watch-cards format cli doctor godot-import event-smoke templates package-linux package-macos secrets benchmark-m0 verify
 
 bootstrap:
 	./scripts/bootstrap.sh
@@ -38,6 +38,9 @@ templates:
 
 package-linux:
 	./scripts/package-linux.sh
+
+package-macos:
+	./scripts/package-macos.sh
 
 secrets:
 	./scripts/check-secrets.sh
