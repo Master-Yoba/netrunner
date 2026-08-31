@@ -195,6 +195,18 @@ public partial class Main : Control
 			$"SUBROUTINES · {encounter.Subroutines.Count} total · {encounter.RemainingSubroutines} active",
 			12,
 			Accent));
+		foreach (EncounterBreakerViewModel breaker in encounter.Breakers)
+		{
+			string pumpCue = breaker.EffectiveStrength == breaker.PrintedStrength
+				? string.Empty
+				: $" · PRINTED {breaker.PrintedStrength} + ENCOUNTER PUMP";
+			state.AddChild(MakeLabel(
+				$"BREAKER · {breaker.Title} · CURRENT STR {breaker.EffectiveStrength}{pumpCue}",
+				11,
+				encounter.EffectiveStrength is { } iceStrength
+					&& breaker.EffectiveStrength < iceStrength ? Warning : Accent));
+		}
+
 		foreach (SubroutineViewModel subroutine in encounter.Subroutines)
 		{
 			string status = subroutine.Broken
@@ -1279,7 +1291,11 @@ public partial class Main : Control
 		ClearChildren(_runnerRig);
 		foreach (CardViewModel card in view.RunnerRig)
 		{
-			_runnerRig.AddChild(MakeCard(card));
+			TextCardControl control = MakeCard(card);
+			EncounterBreakerViewModel? breaker = view.Run?.Encounter?.Breakers
+				.FirstOrDefault(candidate => candidate.CardId == card.Id);
+			control.SetEncounterStrength(breaker?.EffectiveStrength);
+			_runnerRig.AddChild(control);
 		}
 
 		ClearChildren(_runnerHand);

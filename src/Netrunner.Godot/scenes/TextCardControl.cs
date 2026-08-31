@@ -20,6 +20,7 @@ public partial class TextCardControl : PanelContainer
 	private Label _status = null!;
 	private Label _counters = null!;
 	private CardViewModel? _card;
+	private int? _encounterStrength;
 	private bool _selected;
 	private bool _targetCandidate;
 	private bool _hovered;
@@ -96,13 +97,26 @@ public partial class TextCardControl : PanelContainer
 		{
 			_title.Text = card.Title;
 			_type.Text = card.Type + (card.Subtypes.Count == 0 ? string.Empty : " · " + string.Join(" · ", card.Subtypes));
-			_stats.Text = FormatStats(card);
+			_stats.Text = FormatStats(card, _encounterStrength);
 			_status.Text = card.Rezzed ? "REZZED" : card.IsKnown ? "KNOWN" : "FACE-DOWN";
 			_counters.Text = string.Join("  ", card.Counters);
 		}
 
 		UpdateStatusCue();
 		UpdateBorder();
+	}
+
+	/// <summary>
+	/// Shows the current encounter strength without mutating the card's printed
+	/// strength. Passing null restores the ordinary printed-stat presentation.
+	/// </summary>
+	public void SetEncounterStrength(int? strength)
+	{
+		_encounterStrength = strength;
+		if (_stats is not null && _card is not null)
+		{
+			_stats.Text = FormatStats(_card, _encounterStrength);
+		}
 	}
 
 	public void SetSelected(bool selected)
@@ -214,7 +228,7 @@ public partial class TextCardControl : PanelContainer
 		return label;
 	}
 
-	private static string FormatStats(CardViewModel card)
+	private static string FormatStats(CardViewModel card, int? encounterStrength)
 	{
 		var values = new List<string>();
 		if (card.Cost is { } cost)
@@ -225,6 +239,10 @@ public partial class TextCardControl : PanelContainer
 		if (card.Strength is { } strength)
 		{
 			values.Add($"STR {strength}");
+			if (encounterStrength is { } current && current != strength)
+			{
+				values.Add($"CURRENT STR {current}");
+			}
 		}
 
 		if (card.AgendaPoints is { } points)

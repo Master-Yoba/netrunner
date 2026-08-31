@@ -144,8 +144,22 @@ public sealed record EncounterViewModel(
     /// </summary>
     public int? EffectiveStrength { get; init; }
 
+    /// <summary>
+    /// Current encounter strength of each visible installed icebreaker. Printed
+    /// card strength remains immutable; encounter-scoped pumps are reflected
+    /// here so clients can explain why an interface ability is or is not legal.
+    /// </summary>
+    public IReadOnlyList<EncounterBreakerViewModel> Breakers { get; init; } =
+        Array.Empty<EncounterBreakerViewModel>();
+
     public int RemainingSubroutines => Subroutines.Count(value => !value.Broken && !value.Resolved);
 }
+
+public sealed record EncounterBreakerViewModel(
+    string CardId,
+    string Title,
+    int PrintedStrength,
+    int EffectiveStrength);
 
 public sealed record SubroutineViewModel(
     int Ordinal,
@@ -327,6 +341,7 @@ public static class ObservationViewMapper
                 new ReadOnlyCollection<SubroutineViewModel>(subroutines.ToArray()))
             {
                 EffectiveStrength = CalculateEffectiveStrength(encounterIce, attackedServerKind),
+                Breakers = CalculateBreakerStrengths(publicState, map),
             };
         }
 
@@ -409,6 +424,53 @@ public static class ObservationViewMapper
             ? registered
             : GatewayIceBehaviorSpecs.IceSpecs.FirstOrDefault(candidate => candidate.DefinitionId == parsedDefinition);
         return spec is null ? null : EncounterStrength.Ice(spec, serverKind);
+    }
+
+    private static ReadOnlyCollection<EncounterBreakerViewModel> CalculateBreakerStrengths(
+        IReadOnlyDictionary<string, object?> publicState,
+        IReadOnlyDictionary<string, object?> run)
+    {
+        RunLingeringEffect[] effects = ReadList(run, "lingeringEffects")
+            .Select(value =>
+            {
+                IReadOnlyDictionary<string, object?> effect = RequiredMap(value, "lingeringEffect");
+                IReadOnlyDictionary<string, object?>? source = OptionalMap(effect, "sourceCard");
+                return new RunLingeringEffect(
+                    new RunEffectId(ReadString(effect, "id")),
+                    ReadString(effect, "behaviorId"),
+                    source is null ? null : new CardInstanceId(ReadString(source, "id")),
+                    ReadEnum<RunLingeringEffectExpiry>(effect, "expiry"));
+            })
+            .ToArray();
+
+        var breakers = new List<EncounterBreakerViewModel>();
+        foreach (CardViewModel card in ReadCards(publicState, "runnerRig"))
+        {
+            if (card.DefinitionId is not { } definitionId
+                || !CardDefinitionId.TryParse(definitionId, out CardDefinitionId parsedDefinition))
+            {
+                continue;
+            }
+
+            IcebreakerBehaviorSpec? spec = CardBehaviorSpecCatalog.TryGetIcebreaker(
+                parsedDefinition,
+                out IcebreakerBehaviorSpec? registered)
+                ? registered
+                : GatewayIcebreakerBehaviorSpecs.IcebreakerSpecs.FirstOrDefault(
+                    candidate => candidate.DefinitionId == parsedDefinition);
+            if (spec is null)
+            {
+                continue;
+            }
+
+            breakers.Add(new EncounterBreakerViewModel(
+                card.Id,
+                card.Title,
+                spec.BaseStrength,
+                EncounterStrength.Breaker(spec, effects, new CardInstanceId(card.Id))));
+        }
+
+        return new ReadOnlyCollection<EncounterBreakerViewModel>(breakers);
     }
 
     private static OutcomeViewModel MapOutcome(IReadOnlyDictionary<string, object?> map) =>

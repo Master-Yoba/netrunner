@@ -160,6 +160,48 @@ public sealed class MatchCoordinatorTests
     }
 
     [Fact]
+    public void RepresentativePalisadeRequiresCleaverPumpBeforeBreak()
+    {
+        GameState encounter = ReachPalisadeEncounter();
+        PendingDecision beforePump = Assert.IsType<PendingDecision>(encounter.PendingDecision);
+        Assert.DoesNotContain(
+            beforePump.LegalActions,
+            action => action.Kind == ActionKind.BreakSubroutines);
+
+        MatchViewModel beforeView = ObservationViewMapper.Build(
+            ObservationBuilder.Build(encounter, PlayerSide.Runner));
+        EncounterBreakerViewModel beforeCleaver = Assert.Single(
+            Assert.IsType<RunFocusViewModel>(beforeView.Run).Encounter!.Breakers,
+            breaker => breaker.CardId == "card:5");
+        Assert.Equal(3, beforeCleaver.PrintedStrength);
+        Assert.Equal(3, beforeCleaver.EffectiveStrength);
+
+        LegalAction pump = Assert.Single(beforePump.LegalActions, action =>
+            action.Kind == ActionKind.PumpBreaker
+            && action.Parameters is RunBreakerParameters
+            {
+                BreakerId.Value: "card:5",
+                HostedCredits: 2,
+            });
+        ApplyResult pumped = GameEngine.Apply(
+            encounter,
+            new ActionSubmission(beforePump.Owner, beforePump.Id, beforePump.Revision, pump.Id));
+        Assert.True(pumped.Accepted, pumped.Rejection?.Message);
+
+        PendingDecision afterPump = Assert.IsType<PendingDecision>(pumped.State.PendingDecision);
+        Assert.Contains(afterPump.LegalActions, action =>
+            action.Kind == ActionKind.BreakSubroutines
+            && action.Parameters is RunBreakParameters { BreakerId.Value: "card:5" });
+        MatchViewModel afterView = ObservationViewMapper.Build(
+            ObservationBuilder.Build(pumped.State, PlayerSide.Runner));
+        EncounterBreakerViewModel afterCleaver = Assert.Single(
+            Assert.IsType<RunFocusViewModel>(afterView.Run).Encounter!.Breakers,
+            breaker => breaker.CardId == "card:5");
+        Assert.Equal(3, afterCleaver.PrintedStrength);
+        Assert.Equal(4, afterCleaver.EffectiveStrength);
+    }
+
+    [Fact]
     public async Task HumanRunnerCanCompleteTheRepresentativeRunWithoutDroppedEventBatches()
     {
         M2ScenarioDocument document = M2ScenarioProvider.LoadRepresentative();
