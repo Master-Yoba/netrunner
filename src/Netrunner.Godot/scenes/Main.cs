@@ -138,7 +138,7 @@ public partial class Main : Control
 		}
 
 		_focusPresentation.AddChild(MakeLabel(
-			$"RUN STATUS · {run.Phase} · {run.Step} · credits {run.RunCredits}",
+			$"RUN STATUS · {run.Phase} · {run.Step} · run pool {run.RunCredits}",
 			15,
 			Warning));
 		_focusPresentation.AddChild(MakeWrappedLabel(
@@ -220,6 +220,7 @@ public partial class Main : Control
 
 		encounterRow.AddChild(state);
 		_focusPresentation.AddChild(encounterRow);
+		AddRunPoolCue(run, "hosted run credit(s) available for pump and break costs");
 		string breakerCue = string.Join(
 			" · ",
 			snapshot.View.LegalActions
@@ -284,6 +285,7 @@ public partial class Main : Control
 			_focusPresentation.AddChild(accessed);
 		}
 
+		AddRunPoolCue(run, "hosted run credit(s) available for trash costs");
 		IEnumerable<LegalActionViewModel> accessActions = snapshot.View.LegalActions.Where(IsAccessAction);
 		string actionCue = string.Join(
 			" · ",
@@ -294,6 +296,17 @@ public partial class Main : Control
 				: $"ACCESS ACTIONS · {actionCue}",
 			12,
 			Colors.White));
+	}
+
+	private void AddRunPoolCue(RunFocusViewModel run, string usage)
+	{
+		if (run.RunCredits > 0)
+		{
+			_focusPresentation.AddChild(MakeLabel(
+				$"RUN POOL · {run.RunCredits} {usage} · expires at run end",
+				11,
+				Warning));
+		}
 	}
 
 	private void AddPriorityCue(RunPriorityViewModel priority)
@@ -1237,8 +1250,12 @@ public partial class Main : Control
 				? $"REPRESENTATIVE RUN COMPLETE\n{finished.Summary}\nNo further Core action is pending."
 			: view.Outcome.IsTerminal ? "Outcome reached." : "No pending decision.";
 
-		_corpSummary.Text = FormatPlayer(view.Corp, view.CorpHand.Count, view.CorpDeck.Count);
-		_runnerSummary.Text = FormatPlayer(view.Runner, view.RunnerHand.Count, view.RunnerDeck.Count);
+		_corpSummary.Text = FormatPlayer(view.Corp, view.CorpHand.Count, view.CorpDeck.Count, null);
+		_runnerSummary.Text = FormatPlayer(
+			view.Runner,
+			view.RunnerHand.Count,
+			view.RunnerDeck.Count,
+			view.Run is { RunCredits: > 0 } runWithPool ? runWithPool.RunCredits : null);
 		_cardControls.Clear();
 		_cardModels.Clear();
 		RenderFocusPresentation(snapshot);
@@ -1504,8 +1521,32 @@ public partial class Main : Control
 		}
 		finally
 		{
-			Interlocked.Exchange(ref _submissionInFlight, 0);
+			if (Interlocked.Exchange(ref _submissionInFlight, 0) != 0)
+			{
+				// The coordinator publishes the accepted snapshot before this
+				// await resumes, so a frame can render the next decision while
+				// the flag is still set and leave its buttons disabled. When
+				// the next decision is the Runner's no later publication
+				// arrives, so rebuild the action row once the flag clears.
+				RefreshActionsAfterSubmission();
+			}
 		}
+	}
+
+	private void RefreshActionsAfterSubmission()
+	{
+		if (_currentSnapshot is not { } snapshot)
+		{
+			return;
+		}
+
+		if (_stagedAction is not null && !SameDecision(snapshot.View.Decision, _stagedDecision))
+		{
+			_stagedAction = null;
+			_stagedDecision = null;
+		}
+
+		RenderActions(snapshot);
 	}
 
 	private async Task AnimateEventsAsync()
@@ -1686,8 +1727,9 @@ public partial class Main : Control
 		GetTargetCardId(action.Parameters) is not null
 		|| action.Parameters is BreachCandidateParameters;
 
-	private static string FormatPlayer(PlayerViewModel player, int hand, int deck) =>
+	private static string FormatPlayer(PlayerViewModel player, int hand, int deck, int? runPool) =>
 		$"Credits {player.Credits} · Clicks {player.Clicks} · Score {player.AgendaPoints}\n"
+		+ (runPool is { } pool ? $"Run pool {pool} · hosted, expires at run end\n" : string.Empty)
 		+ $"Hand {hand} · Deck {deck}";
 
 	private static string DescribeEvent(EngineEvent @event) => @event.Payload switch
@@ -1705,6 +1747,7 @@ public partial class Main : Control
 		CardAccessedEventPayload payload => $"Accessed {payload.CardId.Value}.",
 		AgendaStolenEventPayload payload => $"Agenda stolen · +{payload.AgendaPoints} points.",
 		AccessedCardTrashedEventPayload payload => $"Trashed accessed card for {payload.TrashCost} credits.",
+		RunCreditsAdjustedEventPayload payload => $"Run pool {payload.Delta:+#;-#;0} · now {payload.RunCreditsAfter}.",
 		RunEndedEventPayload payload => $"Run ended · {payload.Reason}.",
 		_ => @event.Kind,
 	};
