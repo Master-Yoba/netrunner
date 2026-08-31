@@ -182,7 +182,7 @@ public partial class Main : Control
 		VBoxContainer state = new();
 		state.AddThemeConstantOverride("separation", 3);
 		state.AddChild(MakeLabel(
-			$"ICE STRENGTH · {(encounter.Ice?.Strength is { } strength ? strength.ToString(CultureInfo.InvariantCulture) : "UNKNOWN")}",
+			$"ICE STRENGTH · {(encounter.EffectiveStrength is { } strength ? strength.ToString(CultureInfo.InvariantCulture) : "UNKNOWN")}",
 			14,
 			Colors.White));
 		state.AddChild(MakeLabel(

@@ -465,7 +465,27 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
             _currentSnapshot = snapshot;
         }
 
-        SnapshotPublished?.Invoke(snapshot);
+        // Snapshot consumers are UI/diagnostic observers outside the worker's
+        // command pipeline. Invoke each delegate independently so one faulty
+        // subscriber cannot prevent healthy subscribers from seeing the
+        // publication or terminate the worker loop.
+        Action<MatchSnapshot>? subscribers = SnapshotPublished;
+        if (subscribers is not null)
+        {
+            foreach (Delegate subscriber in subscribers.GetInvocationList())
+            {
+                try
+                {
+                    ((Action<MatchSnapshot>)subscriber)(snapshot);
+                }
+                catch (Exception)
+                {
+                    // Subscriber failures must not affect match state or
+                    // command completion. The publication is best-effort.
+                }
+            }
+        }
+
         return snapshot;
     }
 

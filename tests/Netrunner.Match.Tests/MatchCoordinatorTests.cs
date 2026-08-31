@@ -102,6 +102,64 @@ public sealed class MatchCoordinatorTests
     }
 
     [Fact]
+    public async Task ThrowingSnapshotSubscriberDoesNotBlockStartOrLaterCommands()
+    {
+        await using MatchCoordinator coordinator = M2MatchFactory.CreateRepresentative(
+            new MatchCoordinatorOptions
+            {
+                Delay = static (_, _) => ValueTask.CompletedTask,
+            },
+            new FirstLegalAgent());
+        int healthyPublicationCount = 0;
+        coordinator.SnapshotPublished += static _ =>
+            throw new InvalidOperationException("The test subscriber failed.");
+        coordinator.SnapshotPublished += _ => Interlocked.Increment(ref healthyPublicationCount);
+
+        MatchSnapshot started = await coordinator.StartAsync().WaitAsync(TimeSpan.FromSeconds(2));
+
+        Assert.True(healthyPublicationCount > 0);
+        Assert.Same(started, coordinator.CurrentSnapshot);
+        LegalAction pass = Assert.Single(
+            started.Observation.LegalActions,
+            value => value.Kind == ActionKind.PassPriority);
+
+        MatchSubmissionResult submitted = await coordinator
+            .SubmitRunnerActionAsync(pass.Id)
+            .WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.True(submitted.Accepted, submitted.Feedback);
+
+        Observation observation = await coordinator
+            .GetObservationAsync(PlayerSide.Runner)
+            .WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.NotNull(observation);
+        Assert.True(healthyPublicationCount > 1);
+    }
+
+    [Fact]
+    public void EncounterProjectionUsesEffectivePalisadeStrengthWithoutChangingCardMetadata()
+    {
+        GameState state = ReachPalisadeEncounter();
+        Observation liveObservation = ObservationBuilder.Build(state, PlayerSide.Runner);
+        MatchViewModel liveView = ObservationViewMapper.Build(liveObservation);
+
+        RunFocusViewModel liveRun = Assert.IsType<RunFocusViewModel>(liveView.Run);
+        EncounterViewModel liveEncounter = Assert.IsType<EncounterViewModel>(liveRun.Encounter);
+        CardViewModel liveIce = Assert.IsType<CardViewModel>(liveEncounter.Ice);
+        Assert.Equal("30072", liveIce.DefinitionId);
+        Assert.Equal(2, liveIce.Strength);
+        Assert.Equal(4, liveEncounter.EffectiveStrength);
+
+        Observation restoredObservation = EngineJson.Deserialize<Observation>(
+            EngineJson.Serialize(liveObservation));
+        MatchViewModel restoredView = ObservationViewMapper.Build(restoredObservation);
+        RunFocusViewModel restoredRun = Assert.IsType<RunFocusViewModel>(restoredView.Run);
+        EncounterViewModel restoredEncounter = Assert.IsType<EncounterViewModel>(restoredRun.Encounter);
+        CardViewModel restoredIce = Assert.IsType<CardViewModel>(restoredEncounter.Ice);
+        Assert.Equal(2, restoredIce.Strength);
+        Assert.Equal(4, restoredEncounter.EffectiveStrength);
+    }
+
+    [Fact]
     public async Task HumanRunnerCanCompleteTheRepresentativeRunWithoutDroppedEventBatches()
     {
         M2ScenarioDocument document = M2ScenarioProvider.LoadRepresentative();
@@ -172,5 +230,38 @@ public sealed class MatchCoordinatorTests
 
             await Task.Delay(10);
         }
+    }
+
+    private static GameState ReachPalisadeEncounter()
+    {
+        M2ScenarioDocument document = M2ScenarioProvider.LoadRepresentative();
+        M2ScenarioRunSpec run = document.Run
+            ?? throw new InvalidOperationException("The representative scenario has no run contract.");
+        GameState state = M2ScenarioSetup.Build(document);
+        ServerId server = state.Servers.Single(candidate => candidate.Kind == ServerKind.Remote).Id;
+        state = GameEngine.BeginRunWithEvents(
+            state,
+            server,
+            initiatingSource: new CardInstanceId(run.Source)).State;
+
+        state = ApplyKind(state, ActionKind.PassPriority); // initiation, Runner
+        state = ApplyKind(state, ActionKind.PassPriority); // initiation, Corp
+        state = ApplyKind(state, ActionKind.PassPriority); // approach, Runner
+        state = ApplyKind(state, ActionKind.RezIce);       // approach, Corp
+        state = ApplyKind(state, ActionKind.PassPriority); // approach, Corp
+        state = ApplyKind(state, ActionKind.PassPriority); // approach, Runner
+        return state;
+    }
+
+    private static GameState ApplyKind(GameState state, ActionKind kind)
+    {
+        PendingDecision decision = state.PendingDecision
+            ?? throw new InvalidOperationException("The test state has no pending decision.");
+        LegalAction action = decision.LegalActions.Single(candidate => candidate.Kind == kind);
+        ApplyResult result = GameEngine.Apply(
+            state,
+            new ActionSubmission(decision.Owner, decision.Id, decision.Revision, action.Id));
+        Assert.True(result.Accepted, result.Rejection?.Message);
+        return result.State;
     }
 }

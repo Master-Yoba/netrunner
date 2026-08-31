@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.ObjectModel;
 using System.Text.Json;
+using Netrunner.Cards;
 using Netrunner.Core;
 
 namespace Netrunner.Match;
@@ -136,6 +137,13 @@ public sealed record EncounterViewModel(
     RunEncounterStatus Status,
     IReadOnlyList<SubroutineViewModel> Subroutines)
 {
+    /// <summary>
+    /// Effective strength of the visible encountered ICE for the attacked
+    /// server. This is encounter-specific presentation data; the ICE card's
+    /// printed <see cref="CardViewModel.Strength"/> remains unchanged.
+    /// </summary>
+    public int? EffectiveStrength { get; init; }
+
     public int RemainingSubroutines => Subroutines.Count(value => !value.Broken && !value.Resolved);
 }
 
@@ -292,6 +300,8 @@ public static class ObservationViewMapper
         }
 
         IReadOnlyDictionary<string, object?> map = RequiredMap(rawRun, "run");
+        string attackedServerId = ReadString(map, "attackedServer");
+        ServerKind? attackedServerKind = FindServerKind(publicState, attackedServerId);
         IReadOnlyDictionary<string, object?>? priority = OptionalMap(map, "priority");
         IReadOnlyDictionary<string, object?>? encounter = OptionalMap(map, "encounter");
         IReadOnlyDictionary<string, object?> breach = RequiredMap(map, "breach");
@@ -309,11 +319,15 @@ public static class ObservationViewMapper
                         ReadBool(item, "resolved"));
                 })
                 .ToArray();
+            CardViewModel? encounterIce = ReadNullableCard(encounter, "ice");
             encounterView = new EncounterViewModel(
                 ReadString(encounter, "id"),
-                ReadNullableCard(encounter, "ice"),
+                encounterIce,
                 ReadEnum<RunEncounterStatus>(encounter, "status"),
-                new ReadOnlyCollection<SubroutineViewModel>(subroutines.ToArray()));
+                new ReadOnlyCollection<SubroutineViewModel>(subroutines.ToArray()))
+            {
+                EffectiveStrength = CalculateEffectiveStrength(encounterIce, attackedServerKind),
+            };
         }
 
         RunPriorityViewModel? priorityView = priority is null
@@ -338,7 +352,7 @@ public static class ObservationViewMapper
 
         return new RunFocusViewModel(
             ReadString(map, "id"),
-            ReadString(map, "attackedServer"),
+            attackedServerId,
             ReadEnum<PlayerSide>(map, "initiatingSide"),
             ReadEnum<RunCrPhase>(map, "phase"),
             ReadEnum<RunTimingStep>(map, "step"),
@@ -360,6 +374,43 @@ public static class ObservationViewMapper
             ReadNullableCard(map, "initiatingSource"));
     }
 
+    private static ServerKind? FindServerKind(
+        IReadOnlyDictionary<string, object?> publicState,
+        string attackedServerId)
+    {
+        foreach (object? rawServer in ReadList(publicState, "servers"))
+        {
+            IReadOnlyDictionary<string, object?> server = RequiredMap(rawServer, "server");
+            if (string.Equals(ReadString(server, "id"), attackedServerId, StringComparison.Ordinal))
+            {
+                return ReadEnum<ServerKind>(server, "kind");
+            }
+        }
+
+        return null;
+    }
+
+    private static int? CalculateEffectiveStrength(
+        CardViewModel? encounterIce,
+        ServerKind? attackedServerKind)
+    {
+        if (encounterIce?.DefinitionId is not { } definitionId
+            || attackedServerKind is not { } serverKind
+            || !CardDefinitionId.TryParse(definitionId, out CardDefinitionId parsedDefinition))
+        {
+            return null;
+        }
+
+        // Live observations normally find the immutable spec in the shared
+        // catalog after scenario setup. The canonical Gateway list is a
+        // side-effect-free fallback for standalone/deserialized observations
+        // where setup has not run in this process.
+        IceBehaviorSpec? spec = CardBehaviorSpecCatalog.TryGetIce(parsedDefinition, out IceBehaviorSpec? registered)
+            ? registered
+            : GatewayIceBehaviorSpecs.IceSpecs.FirstOrDefault(candidate => candidate.DefinitionId == parsedDefinition);
+        return spec is null ? null : EncounterStrength.Ice(spec, serverKind);
+    }
+
     private static OutcomeViewModel MapOutcome(IReadOnlyDictionary<string, object?> map) =>
         new(
             ReadEnum<GameOutcomeKind>(map, "kind"),
@@ -370,7 +421,10 @@ public static class ObservationViewMapper
         IReadOnlyDictionary<string, object?> map,
         string key) => ReadList(map, key).Select(ReadNullableCard).ToArray();
 
-    private static CardViewModel? ReadNullableCard(object? value) => value is null ? null : MapCard(value);
+    private static CardViewModel? ReadNullableCard(object? value) => value is null
+        || value is JsonElement { ValueKind: JsonValueKind.Null }
+        ? null
+        : MapCard(value);
 
     private static CardViewModel? ReadNullableCard(
         IReadOnlyDictionary<string, object?> map,
@@ -480,7 +534,9 @@ public static class ObservationViewMapper
 
     private static string? ReadNullableString(IReadOnlyDictionary<string, object?> map, string key)
     {
-        if (!map.TryGetValue(key, out object? value) || value is null)
+        if (!map.TryGetValue(key, out object? value)
+            || value is null
+            || value is JsonElement { ValueKind: JsonValueKind.Null })
         {
             return null;
         }
@@ -562,7 +618,9 @@ public static class ObservationViewMapper
         string key)
         where TEnum : struct, Enum
     {
-        if (!map.TryGetValue(key, out object? value) || value is null)
+        if (!map.TryGetValue(key, out object? value)
+            || value is null
+            || value is JsonElement { ValueKind: JsonValueKind.Null })
         {
             return null;
         }
