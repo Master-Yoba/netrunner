@@ -206,20 +206,40 @@ public sealed record RunOutcomeViewModel(
 /// <summary>Maps filtered Core observations to immutable typed UI data.</summary>
 public static class ObservationViewMapper
 {
+    /// <summary>
+    /// Legacy M2 compatibility adapter. New composition code must provide the
+    /// immutable behavior catalog explicitly through the three-argument
+    /// overload below.
+    /// </summary>
     public static MatchViewModel Build(Observation observation) =>
-        Build(observation, CardMetadataResolvers.Default);
+        Build(observation, CardMetadataResolvers.Default, GatewayBehaviorCatalog.Create());
 
     /// <summary>
     /// Builds a view using the caller's immutable metadata snapshot. Metadata
     /// is consulted only for definition IDs that the observation already
-    /// reveals; hidden cards therefore remain resolver-invisible.
+    /// reveals; hidden cards therefore remain resolver-invisible. This
+    /// two-argument overload is retained as a legacy M2 compatibility adapter;
+    /// composition code should use the overload that also supplies the
+    /// immutable behavior catalog.
     /// </summary>
     public static MatchViewModel Build(
         Observation observation,
         ICardMetadataResolver metadataResolver)
+        => Build(observation, metadataResolver, GatewayBehaviorCatalog.Create());
+
+    /// <summary>
+    /// Builds a view from the caller's immutable metadata and behavior
+    /// snapshots. Both catalogs are composition inputs; no process-wide
+    /// behavior registry is consulted by this production path.
+    /// </summary>
+    public static MatchViewModel Build(
+        Observation observation,
+        ICardMetadataResolver metadataResolver,
+        IBehaviorCatalog behaviorCatalog)
     {
         ArgumentNullException.ThrowIfNull(observation);
         ArgumentNullException.ThrowIfNull(metadataResolver);
+        ArgumentNullException.ThrowIfNull(behaviorCatalog);
 
         IReadOnlyDictionary<string, object?> publicState = observation.PublicState;
         IReadOnlyDictionary<string, object?> privateState = observation.PrivateState;
@@ -252,7 +272,7 @@ public static class ObservationViewMapper
         IReadOnlyList<CardViewModel> corpScore = ReadCards(publicState, "corpScore", metadataResolver);
         IReadOnlyList<CardViewModel> runnerScore = ReadCards(publicState, "runnerScore", metadataResolver);
         DecisionViewModel? decision = MapDecision(observation);
-        RunFocusViewModel? run = MapRun(publicState, metadataResolver);
+        RunFocusViewModel? run = MapRun(publicState, metadataResolver, behaviorCatalog);
         OutcomeViewModel outcome = MapOutcome(RequiredMap(publicState, "outcome"));
         IReadOnlyList<LegalActionViewModel> actions = observation.LegalActions
             .Select(action => new LegalActionViewModel(action.Id, action.Kind, action.Description, action.Parameters))
@@ -276,13 +296,24 @@ public static class ObservationViewMapper
             new ReadOnlyCollection<LegalActionViewModel>(actions.ToArray()));
     }
 
-    /// <summary>Convenience alias used by presentation integrations.</summary>
+    /// <summary>Legacy M2 compatibility alias; prefer explicit catalogs.</summary>
     public static MatchViewModel FromObservation(Observation observation) => Build(observation);
 
+    /// <summary>
+    /// Legacy M2 compatibility adapter; use the overload with an explicit
+    /// immutable behavior catalog for composed matches.
+    /// </summary>
     public static MatchViewModel FromObservation(
         Observation observation,
         ICardMetadataResolver metadataResolver) =>
         Build(observation, metadataResolver);
+
+    /// <summary>Canonical composition alias with explicit immutable catalogs.</summary>
+    public static MatchViewModel FromObservation(
+        Observation observation,
+        ICardMetadataResolver metadataResolver,
+        IBehaviorCatalog behaviorCatalog) =>
+        Build(observation, metadataResolver, behaviorCatalog);
 
     private static DecisionViewModel? MapDecision(Observation observation)
     {
@@ -329,7 +360,8 @@ public static class ObservationViewMapper
 
     private static RunFocusViewModel? MapRun(
         IReadOnlyDictionary<string, object?> publicState,
-        ICardMetadataResolver metadataResolver)
+        ICardMetadataResolver metadataResolver,
+        IBehaviorCatalog behaviorCatalog)
     {
         if (!publicState.TryGetValue("run", out object? rawRun) || rawRun is null)
         {
@@ -363,8 +395,8 @@ public static class ObservationViewMapper
                 ReadEnum<RunEncounterStatus>(encounter, "status"),
                 new ReadOnlyCollection<SubroutineViewModel>(subroutines.ToArray()))
             {
-                EffectiveStrength = CalculateEffectiveStrength(encounterIce, attackedServerKind),
-                Breakers = CalculateBreakerStrengths(publicState, map, metadataResolver),
+                EffectiveStrength = CalculateEffectiveStrength(encounterIce, attackedServerKind, behaviorCatalog),
+                Breakers = CalculateBreakerStrengths(publicState, map, metadataResolver, behaviorCatalog),
             };
         }
 
@@ -430,7 +462,8 @@ public static class ObservationViewMapper
 
     private static int? CalculateEffectiveStrength(
         CardViewModel? encounterIce,
-        ServerKind? attackedServerKind)
+        ServerKind? attackedServerKind,
+        IBehaviorCatalog behaviorCatalog)
     {
         if (encounterIce?.DefinitionId is not { } definitionId
             || attackedServerKind is not { } serverKind
@@ -439,20 +472,17 @@ public static class ObservationViewMapper
             return null;
         }
 
-        // Live observations normally find the immutable spec in the shared
-        // catalog after scenario setup. The canonical Gateway list is a
-        // side-effect-free fallback for standalone/deserialized observations
-        // where setup has not run in this process.
-        IceBehaviorSpec? spec = CardBehaviorSpecCatalog.TryGetIce(parsedDefinition, out IceBehaviorSpec? registered)
+        IceBehaviorSpec? spec = behaviorCatalog.TryGetIce(parsedDefinition, out IceBehaviorSpec? registered)
             ? registered
-            : GatewayIceBehaviorSpecs.IceSpecs.FirstOrDefault(candidate => candidate.DefinitionId == parsedDefinition);
+            : null;
         return spec is null ? null : EncounterStrength.Ice(spec, serverKind);
     }
 
     private static ReadOnlyCollection<EncounterBreakerViewModel> CalculateBreakerStrengths(
         IReadOnlyDictionary<string, object?> publicState,
         IReadOnlyDictionary<string, object?> run,
-        ICardMetadataResolver metadataResolver)
+        ICardMetadataResolver metadataResolver,
+        IBehaviorCatalog behaviorCatalog)
     {
         RunLingeringEffect[] effects = ReadList(run, "lingeringEffects")
             .Select(value =>
@@ -476,12 +506,11 @@ public static class ObservationViewMapper
                 continue;
             }
 
-            IcebreakerBehaviorSpec? spec = CardBehaviorSpecCatalog.TryGetIcebreaker(
+            IcebreakerBehaviorSpec? spec = behaviorCatalog.TryGetIcebreaker(
                 parsedDefinition,
                 out IcebreakerBehaviorSpec? registered)
                 ? registered
-                : GatewayIcebreakerBehaviorSpecs.IcebreakerSpecs.FirstOrDefault(
-                    candidate => candidate.DefinitionId == parsedDefinition);
+                : null;
             if (spec is null)
             {
                 continue;
@@ -760,10 +789,19 @@ public static class ObservationViewMapper
 /// <summary>Short alias retained for callers that prefer a builder name.</summary>
 public static class MatchViewModelBuilder
 {
+    /// <summary>Legacy M2 compatibility adapter; prefer the catalog overload.</summary>
     public static MatchViewModel Build(Observation observation) => ObservationViewMapper.Build(observation);
 
+    /// <summary>Legacy M2 compatibility adapter; prefer the catalog overload.</summary>
     public static MatchViewModel Build(
         Observation observation,
         ICardMetadataResolver metadataResolver) =>
         ObservationViewMapper.Build(observation, metadataResolver);
+
+    /// <summary>Canonical composition entry point with explicit catalogs.</summary>
+    public static MatchViewModel Build(
+        Observation observation,
+        ICardMetadataResolver metadataResolver,
+        IBehaviorCatalog behaviorCatalog) =>
+        ObservationViewMapper.Build(observation, metadataResolver, behaviorCatalog);
 }

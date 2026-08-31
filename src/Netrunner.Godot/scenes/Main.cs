@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using Godot;
-using Netrunner.Cards;
 using Netrunner.Core;
 using Netrunner.Match;
 
@@ -23,7 +22,9 @@ public partial class Main : Control
 	private static readonly Color Warning = new(0.98f, 0.74f, 0.28f);
 
 	private readonly Queue<IReadOnlyList<EngineEvent>> _animationBatches = new();
-	private readonly Queue<string> _eventFeedLines = new();
+	private readonly CardMetadataSnapshot _metadataSnapshot = CardMetadataResolvers.Embedded;
+	private readonly ICardMetadataResolver _metadataResolver = CardMetadataResolvers.Default;
+	private readonly EventFeedRegionPresenter _eventFeedRegion = new();
 	private readonly ConcurrentQueue<MatchSnapshot> _pendingSnapshots = new();
 	private readonly Dictionary<string, List<TextCardControl>> _cardControls = new(StringComparer.Ordinal);
 	private readonly Dictionary<string, CardViewModel> _cardModels = new(StringComparer.Ordinal);
@@ -69,6 +70,7 @@ public partial class Main : Control
 	private bool _smokeTest;
 	private bool _responsivenessSmoke;
 	private bool _gallerySmoke;
+	private bool _gallerySmokePassed;
 	private bool _animationRunning;
 	private bool _skipAnimation;
 	private int _framesWhileAnimating;
@@ -95,7 +97,7 @@ public partial class Main : Control
 		BuildShell();
 		if (_gallerySmoke)
 		{
-			ShowCardGallery();
+			RunGallerySmoke();
 		}
 		else if (_smokeTest)
 		{
@@ -230,16 +232,13 @@ public partial class Main : Control
 			CustomMinimumSize = new Vector2(300, 36),
 		};
 		_galleryButton.Pressed += ShowCardGallery;
-		if (!CardDataResource.TryLoadEmbedded(out CardDataSet? embedded, out string galleryDiagnostic)
-			|| embedded is null
-			|| embedded.Cards.Count != CardDataValidator.OfficialCardCount
-			|| !string.Equals(CardDataResource.EmbeddedMode, CardDataResource.OfficialMode, StringComparison.Ordinal))
+		if (!_metadataSnapshot.IsOfficial)
 		{
 			_galleryButton.Disabled = true;
 			_galleryButton.TooltipText = "Provision the authenticated 77-card snapshot for the dev gallery.";
 			if (_gallerySmoke)
 			{
-				GD.PrintErr(galleryDiagnostic);
+				GD.PrintErr(_metadataSnapshot.Diagnostic);
 			}
 		}
 		_startPanel.AddChild(_galleryButton);
@@ -267,6 +266,7 @@ public partial class Main : Control
 				// This mode intentionally uses the real ten-second production delay;
 				// its frame/input assertions run while the worker is actually waiting.
 				AgentDelay = TimeSpan.FromSeconds(10),
+				CardMetadataResolver = _metadataResolver,
 			}
 			: _smokeTest
 			? new MatchCoordinatorOptions
@@ -274,10 +274,14 @@ public partial class Main : Control
 				// Keep the production-facing ten-second setting visible in
 				// the smoke path while injecting a short deterministic delay.
 				AgentDelay = TimeSpan.FromSeconds(10),
+				CardMetadataResolver = _metadataResolver,
 				Delay = static (_, cancellationToken) =>
 					new ValueTask(Task.Delay(TimeSpan.FromMilliseconds(45), cancellationToken)),
 			}
-			: new MatchCoordinatorOptions();
+			: new MatchCoordinatorOptions
+			{
+				CardMetadataResolver = _metadataResolver,
+			};
 		_coordinator = M2MatchFactory.CreateRepresentative(options);
 		_runnerPlaybackPolicy = _smokeTest
 			? M2MatchFactory.CreateRepresentativeRunnerPolicy()
@@ -382,7 +386,8 @@ public partial class Main : Control
 					continue;
 				}
 
-				LegalActionViewModel? target = snapshot.View.LegalActions.FirstOrDefault(IsTargetedAction);
+				LegalActionViewModel? target = snapshot.View.LegalActions
+					.FirstOrDefault(ActionsRegionPresenter.IsTargetedAction);
 				if (!targetSelectionExercised && target is not null)
 				{
 					targetSelectionExercised = true;
@@ -793,94 +798,19 @@ public partial class Main : Control
 				? $"REPRESENTATIVE RUN COMPLETE\n{finished.Summary}\nNo further Core action is pending."
 			: view.Outcome.IsTerminal ? "Outcome reached." : "No pending decision.";
 
-		_corpSummary.Text = FormatPlayer(view.Corp, view.CorpHand.Count, view.CorpDeck.Count, null);
-		_runnerSummary.Text = FormatPlayer(
-			view.Runner,
-			view.RunnerHand.Count,
-			view.RunnerDeck.Count,
-			view.Run is { RunCredits: > 0 } runWithPool ? runWithPool.RunCredits : null);
+		BoardRegionState board = BoardRegionPresenter.Present(view);
+		_corpSummary.Text = board.CorpSummary;
+		_runnerSummary.Text = board.RunnerSummary;
 		_cardControls.Clear();
 		_cardModels.Clear();
 		RenderFocusPresentationRegion(snapshot);
-		RenderServers(view.Servers);
-		RenderRunnerCards(view);
+		RenderServers(board.Servers);
+		RenderRunnerCards(board);
 		RenderActions(snapshot);
 		if (snapshot.Feedback is { } feedback)
 		{
 			_details.Text = $"{feedback.Kind.ToString().ToUpperInvariant()}\n{feedback.Message}";
 			_details.AddThemeColorOverride("font_color", feedback.IsError ? Warning : Muted);
-		}
-	}
-
-	private void RenderServers(IReadOnlyList<ServerViewModel> servers)
-	{
-		ClearChildren(_servers);
-		foreach (ServerViewModel server in servers)
-		{
-			PanelContainer panel = MakePanel();
-			VBoxContainer content = new();
-			content.AddThemeConstantOverride("separation", 4);
-			panel.AddChild(content);
-			content.AddChild(MakeLabel(
-				$"{server.Kind.ToString().ToUpperInvariant()}  ·  {server.Id}",
-				12,
-				server.Kind == ServerKind.Remote ? Warning : Muted));
-			HBoxContainer ice = new();
-			ice.AddChild(MakeLabel("ICE (outer → inner)", 10, Muted));
-			foreach (CardViewModel? card in server.OrderedIce)
-			{
-				TextCardControl control = MakeCard(card);
-				ice.AddChild(control);
-			}
-
-			content.AddChild(ice);
-			HBoxContainer root = new();
-			root.AddChild(MakeLabel("ROOT", 10, Muted));
-			foreach (CardViewModel? card in server.OrderedRoot)
-			{
-				root.AddChild(MakeCard(card));
-			}
-
-			content.AddChild(root);
-			_servers.AddChild(panel);
-		}
-	}
-
-	private void RenderRunnerCards(MatchViewModel view)
-	{
-		ClearChildren(_runnerRig);
-		foreach (CardViewModel card in view.RunnerRig)
-		{
-			TextCardControl control = MakeCard(card);
-			EncounterBreakerViewModel? breaker = view.Run?.Encounter?.Breakers
-				.FirstOrDefault(candidate => candidate.CardId == card.Id);
-			control.SetEncounterStrength(breaker?.EffectiveStrength);
-			_runnerRig.AddChild(control);
-		}
-
-		ClearChildren(_runnerHand);
-		_runnerHand.AddChild(MakeLabel(
-			$"{view.RunnerHand.Count} card(s) · deck {view.RunnerDeck.Count}",
-			11,
-			Muted));
-		foreach (CardViewModel card in view.RunnerHand.VisibleCards)
-		{
-			_runnerHand.AddChild(MakeCard(card));
-		}
-
-		ClearChildren(_scores);
-		_scores.AddChild(MakeLabel(
-			$"Runner score: {view.Runner.AgendaPoints} · Corp score: {view.Corp.AgendaPoints}",
-			11,
-			Warning));
-		foreach (CardViewModel card in view.RunnerScore)
-		{
-			_scores.AddChild(MakeLabel($"Runner · {card.Title} ({card.AgendaPoints} AP)", 10, Muted));
-		}
-
-		foreach (CardViewModel card in view.CorpScore)
-		{
-			_scores.AddChild(MakeLabel($"Corp · {card.Title} ({card.AgendaPoints} AP)", 10, Muted));
 		}
 	}
 
@@ -916,7 +846,7 @@ public partial class Main : Control
 		}
 
 		LegalActionViewModel? action = _currentSnapshot.View.LegalActions
-			.FirstOrDefault(candidate => GetTargetCardId(candidate.Parameters) == cardId);
+			.FirstOrDefault(candidate => ActionsRegionPresenter.GetTargetCardId(candidate.Parameters) == cardId);
 		if (action is not null)
 		{
 			StageTargetAction(decision, action);
@@ -945,52 +875,6 @@ public partial class Main : Control
 			&& left.Id == right.Id
 			&& left.Revision == right.Revision
 			&& left.Owner == right.Owner;
-
-	private static string? GetTargetCardId(ActionParameters parameters) => parameters switch
-	{
-		CardChoiceParameters value => value.CardId.Value,
-		RunIceParameters value => value.IceId.Value,
-		RunBreakerParameters value => value.BreakerId.Value,
-		RunBreakParameters value => value.BreakerId.Value,
-		RunCardPaymentParameters value => value.CardId.Value,
-		BreachCandidateParameters { CardId: { } cardId } => cardId.Value,
-		_ => null,
-	};
-
-	private static bool IsAccessAction(LegalActionViewModel action) => action.Kind is
-		ActionKind.StealAgenda
-		or ActionKind.TrashAccessedCard
-		or ActionKind.NoAccessAction
-		or ActionKind.ChooseBreachCandidate;
-
-	private static bool IsTargetedAction(LegalActionViewModel action) =>
-		GetTargetCardId(action.Parameters) is not null
-		|| action.Parameters is BreachCandidateParameters;
-
-	private static string FormatPlayer(PlayerViewModel player, int hand, int deck, int? runPool) =>
-		$"Credits {player.Credits} · Clicks {player.Clicks} · Score {player.AgendaPoints}\n"
-		+ (runPool is { } pool ? $"Run pool {pool} · hosted, expires at run end\n" : string.Empty)
-		+ $"Hand {hand} · Deck {deck}";
-
-	private static string DescribeEvent(EngineEvent @event) => @event.Payload switch
-	{
-		RunInitiatedEventPayload payload => $"Run initiated against {payload.ServerId.Value}.",
-		RunEventPlayedEventPayload payload => $"Played {payload.DefinitionId.Value}; hosted {payload.HostedCredits} run credits.",
-		IceApproachedEventPayload payload => $"Approached ICE {payload.IceId.Value}.",
-		IceRezzedEventPayload payload => $"Corp rezzed ICE {payload.IceId.Value}.",
-		EncounterInitializedEventPayload payload => $"Encountered {payload.IceId.Value} ({payload.SubroutineCount} subroutine(s)).",
-		BreakerPumpedEventPayload payload => $"Pumped breaker {payload.BreakerId.Value}.",
-		SubroutinesBrokenEventPayload payload => $"Broke {payload.BrokenCount} subroutine(s) with {payload.BreakerId.Value}.",
-		RunSuccessfulEventPayload => "Run successful · breach boundary.",
-		BreachStartedEventPayload payload => $"Breach started · {payload.CandidateCount} access candidate(s).",
-		BreachCandidateChosenEventPayload payload => $"Access candidate chosen: {payload.CardId.Value}.",
-		CardAccessedEventPayload payload => $"Accessed {payload.CardId.Value}.",
-		AgendaStolenEventPayload payload => $"Agenda stolen · +{payload.AgendaPoints} points.",
-		AccessedCardTrashedEventPayload payload => $"Trashed accessed card for {payload.TrashCost} credits.",
-		RunCreditsAdjustedEventPayload payload => $"Run pool {payload.Delta:+#;-#;0} · now {payload.RunCreditsAfter}.",
-		RunEndedEventPayload payload => $"Run ended · {payload.Reason}.",
-		_ => @event.Kind,
-	};
 
 	private static Label MakeLabel(string text, int size, Color colour)
 	{

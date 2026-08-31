@@ -372,6 +372,7 @@ public sealed class BehaviorCatalog : IBehaviorCatalog
         _agendas = Freeze(agendas);
         _runEvents = Freeze(runEvents);
         _generic = Freeze(generic);
+        ValidateTypedFamilyConflicts(_ice, _icebreakers, _assets, _agendas, _runEvents);
         Fingerprint = BehaviorCatalogFingerprint.Compute(
             Version,
             _ice,
@@ -471,6 +472,40 @@ public sealed class BehaviorCatalog : IBehaviorCatalog
         }
 
         return new ReadOnlyDictionary<CardDefinitionId, T>(copy);
+    }
+
+    private static void ValidateTypedFamilyConflicts<TIce, TBreaker, TAsset, TAgenda, TRunEvent>(
+        IReadOnlyDictionary<CardDefinitionId, TIce> ice,
+        IReadOnlyDictionary<CardDefinitionId, TBreaker> icebreakers,
+        IReadOnlyDictionary<CardDefinitionId, TAsset> assets,
+        IReadOnlyDictionary<CardDefinitionId, TAgenda> agendas,
+        IReadOnlyDictionary<CardDefinitionId, TRunEvent> runEvents)
+        where TIce : class
+        where TBreaker : class
+        where TAsset : class
+        where TAgenda : class
+        where TRunEvent : class
+    {
+        var familiesByDefinition = new Dictionary<CardDefinitionId, string>();
+        Check("ICE", ice.Keys);
+        Check("icebreaker", icebreakers.Keys);
+        Check("asset", assets.Keys);
+        Check("agenda", agendas.Keys);
+        Check("run event", runEvents.Keys);
+
+        void Check(string family, IEnumerable<CardDefinitionId> definitionIds)
+        {
+            foreach (CardDefinitionId definitionId in definitionIds)
+            {
+                if (familiesByDefinition.TryGetValue(definitionId, out string? existingFamily))
+                {
+                    throw new InvalidOperationException(
+                        $"Card definition '{definitionId}' cannot be registered as both {existingFamily} and {family} behavior.");
+                }
+
+                familiesByDefinition.Add(definitionId, family);
+            }
+        }
     }
 }
 

@@ -1,4 +1,3 @@
-using System.Threading;
 using Godot;
 using Netrunner.Core;
 using Netrunner.Match;
@@ -13,23 +12,32 @@ public partial class Main
 {
 	private void RenderActions(MatchSnapshot snapshot)
 	{
+		ActionsRegionState region = ActionsRegionPresenter.Present(snapshot);
 		ClearChildren(_actions);
-		UpdateTargetHighlights(snapshot.View.LegalActions);
-		if (snapshot.IsOpponentThinking)
+		UpdateTargetHighlights(region.Actions);
+		if (region.Status == ActionsRegionStatus.OpponentThinking)
 		{
 			_actions.AddChild(MakeLabel("Opponent thinking…", 13, Warning));
 			return;
 		}
 
-		DecisionViewModel? decision = snapshot.View.Decision;
-		if (decision is null || decision.OwnerSide != PlayerSide.Runner)
+		DecisionViewModel? decision = region.Decision;
+		if (region.Status is ActionsRegionStatus.WaitingForDecision or ActionsRegionStatus.Complete)
 		{
 			_actions.AddChild(MakeLabel(
-				snapshot.RunOutcome is not null && snapshot.View.Run is null
+				region.Status == ActionsRegionStatus.Complete
 					? "REPRESENTATIVE RUN COMPLETE · no further actions"
 					: "Waiting for the next issued Runner decision.",
 				12,
 				Muted));
+			return;
+		}
+
+		if (decision is null)
+		{
+			// The presenter only emits AwaitingRunnerDecision with a decision;
+			// keep the renderer fail-closed if a future projection changes.
+			_actions.AddChild(MakeLabel("Waiting for the next issued Runner decision.", 12, Muted));
 			return;
 		}
 
@@ -65,9 +73,9 @@ public partial class Main
 			_actions.AddChild(selected);
 		}
 
-		foreach (LegalActionViewModel action in snapshot.View.LegalActions)
+		foreach (LegalActionViewModel action in region.Actions)
 		{
-			bool targeted = GetTargetCardId(action.Parameters) is not null
+			bool targeted = ActionsRegionPresenter.GetTargetCardId(action.Parameters) is not null
 				|| action.Parameters is BreachCandidateParameters;
 			Button button = new()
 			{
@@ -136,7 +144,7 @@ public partial class Main
 		}
 
 		HashSet<string> candidateIds = actions
-			.Select(action => GetTargetCardId(action.Parameters))
+			.Select(action => ActionsRegionPresenter.GetTargetCardId(action.Parameters))
 			.Where(value => value is not null)
 			.Select(value => value!)
 			.ToHashSet(StringComparer.Ordinal);
@@ -155,7 +163,7 @@ public partial class Main
 		}
 
 		if (_stagedAction is { } staged
-			&& GetTargetCardId(staged.Parameters) is { } selectedId
+			&& ActionsRegionPresenter.GetTargetCardId(staged.Parameters) is { } selectedId
 			&& _cardControls.TryGetValue(selectedId, out List<TextCardControl>? selectedControls))
 		{
 			foreach (TextCardControl control in selectedControls)

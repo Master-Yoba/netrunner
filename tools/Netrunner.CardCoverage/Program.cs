@@ -565,84 +565,52 @@ internal static class CatalogReader
         string fullPath = Path.GetFullPath(path);
         var context = new CatalogLoadContext(fullPath);
         Assembly assembly = context.LoadFromAssemblyPath(fullPath);
-        InvokeRegistration(assembly);
+        Type catalogType = assembly.GetType("Netrunner.Cards.GatewayBehaviorCatalog", throwOnError: false)
+            ?? throw new CoverageUsageException(
+                "Compiled catalog assembly does not expose Netrunner.Cards.GatewayBehaviorCatalog.");
+        MethodInfo create = catalogType.GetMethod(
+                "Create",
+                BindingFlags.Public | BindingFlags.Static,
+                binder: null,
+                types: Type.EmptyTypes,
+                modifiers: null)
+            ?? throw new CoverageUsageException(
+                "Compiled catalog does not expose the immutable GatewayBehaviorCatalog.Create() surface.");
 
-        var codes = new HashSet<string>(StringComparer.Ordinal);
-        foreach (Type type in assembly.GetExportedTypes())
-        {
-            if (!type.IsAbstract || !type.IsSealed || !type.Name.EndsWith("BehaviorSpecs", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            foreach (PropertyInfo property in type.GetProperties(BindingFlags.Public | BindingFlags.Static))
-            {
-                if (property.GetIndexParameters().Length != 0
-                    || !typeof(IEnumerable).IsAssignableFrom(property.PropertyType))
-                {
-                    continue;
-                }
-
-                if (property.GetValue(null) is not IEnumerable values)
-                {
-                    continue;
-                }
-
-                foreach (object? value in values)
-                {
-                    if (value is null)
-                    {
-                        continue;
-                    }
-
-                    PropertyInfo? definitionId = value.GetType().GetProperty("DefinitionId");
-                    object? id = definitionId?.GetValue(value);
-                    string? text = id?.ToString();
-                    if (!string.IsNullOrWhiteSpace(text))
-                    {
-                        codes.Add(text);
-                    }
-                }
-            }
-        }
-
-        Type? catalog = assembly.GetType("Netrunner.Cards.CardBehaviorSpecCatalog", throwOnError: false);
-        PropertyInfo? definitionIds = catalog?.GetProperty(
-            "DefinitionIds",
-            BindingFlags.Public | BindingFlags.Static);
-        if (definitionIds?.GetValue(null) is IEnumerable valuesFromCatalog)
-        {
-            foreach (object? id in valuesFromCatalog)
-            {
-                string? text = id?.ToString();
-                if (!string.IsNullOrWhiteSpace(text))
-                {
-                    codes.Add(text);
-                }
-            }
-        }
-
-        return codes;
-    }
-
-    private static void InvokeRegistration(Assembly assembly)
-    {
-        Type? catalog = assembly.GetType("Netrunner.Cards.GatewayBehaviorCatalog", throwOnError: false);
-        MethodInfo? register = catalog?.GetMethod(
-            "RegisterAll",
-            BindingFlags.Public | BindingFlags.Static,
-            binder: null,
-            types: Type.EmptyTypes,
-            modifiers: null);
+        object immutableCatalog;
         try
         {
-            register?.Invoke(null, null);
+            immutableCatalog = create.Invoke(null, null)
+                ?? throw new CoverageUsageException("Immutable Gateway behavior catalog creation returned null.");
         }
         catch (TargetInvocationException exception)
         {
             throw new CoverageUsageException(
-                $"Compiled catalog registration failed: {exception.InnerException?.Message ?? exception.Message}");
+                $"Immutable Gateway behavior catalog creation failed: {exception.InnerException?.Message ?? exception.Message}");
         }
+
+        PropertyInfo allDefinitionIds = immutableCatalog.GetType().GetProperty(
+                "AllDefinitionIds",
+                BindingFlags.Public | BindingFlags.Instance)
+            ?? throw new CoverageUsageException(
+                "Immutable Gateway behavior catalog does not expose AllDefinitionIds.");
+        if (allDefinitionIds.GetValue(immutableCatalog) is not IEnumerable values)
+        {
+            throw new CoverageUsageException(
+                "Immutable Gateway behavior catalog AllDefinitionIds is not enumerable.");
+        }
+
+        var codes = new HashSet<string>(StringComparer.Ordinal);
+        foreach (object? id in values)
+        {
+            string? text = id?.ToString();
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                codes.Add(text);
+            }
+        }
+
+        return codes;
     }
 
     private sealed class CatalogLoadContext : AssemblyLoadContext

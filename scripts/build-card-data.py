@@ -19,6 +19,10 @@ import sys
 
 OFFICIAL_COMMIT = "236140cf84491c23995b028bc791281837520b97"
 OFFICIAL_SOURCE = "https://github.com/Null-Signal-Games/netrunner-cards-json"
+BOOTSTRAP_COMMAND = (
+    "./scripts/update-card-data.sh --commit "
+    f"{OFFICIAL_COMMIT} --retrieval-date 2026-08-28"
+)
 
 
 def fail(message: str) -> "NoReturn":
@@ -31,8 +35,9 @@ def read_bytes(path: pathlib.Path, description: str) -> bytes:
     except FileNotFoundError:
         fail(
             f"{description} is missing at '{path}'. "
-            "Run ./scripts/update-card-data.sh --commit "
-            f"{OFFICIAL_COMMIT} --retrieval-date 2026-08-28."
+            f"Run {BOOTSTRAP_COMMAND}. "
+            "Then rebuild with -p:NetrunnerContentEnabled=true "
+            "-p:NetrunnerCardDataMode=official."
         )
     except OSError as error:
         fail(f"unable to read {description} at '{path}': {error}")
@@ -132,7 +137,12 @@ internal static class GeneratedCardData
     try:
         if output.exists() and output.read_text(encoding="utf-8") == content:
             return
-        output.write_text(content, encoding="utf-8", newline="\n")
+        # pathlib.Path.write_text gained a ``newline`` parameter only in
+        # newer Python releases.  CI deliberately supports the system
+        # Python, so open the file explicitly while still forcing the
+        # generated resource to use LF bytes on every platform.
+        with output.open("w", encoding="utf-8", newline="\n") as stream:
+            stream.write(content)
     except OSError as error:
         fail(f"unable to write generated resource '{output}': {error}")
 

@@ -108,6 +108,24 @@ public sealed class M2ScenarioSetupTests
     }
 
     [Fact]
+    public void VersionMigrationRejectsLegacyMetadataPinAndDoesNotInferBehaviorPin()
+    {
+        string mutated = MutatedRoot(root =>
+        {
+            root["cardDataVersion"] = JsonDocument.Parse("\"gateway-m2-3\"").RootElement;
+            root.Remove("behaviorRegistryVersion");
+            root.Remove("behaviorCatalogFingerprint");
+        });
+
+        M2ScenarioDocument document = LoadDocument(mutated);
+        M2ScenarioException exception = Assert.Throws<M2ScenarioException>(() => document.Validate());
+
+        Assert.Contains("cardDataVersion: 'gateway-m2-3' is not the authenticated Gateway metadata snapshot", exception.Message);
+        Assert.Contains("behaviorRegistryVersion: must be an explicit compiled behavior catalog version", exception.Message);
+        Assert.Contains("behaviorCatalogFingerprint:", exception.Message);
+    }
+
+    [Fact]
     public void ServerZoneCardWithoutServerReferenceReportsExactPath()
     {
         string mutated = MutatedRoot(root => root["cards"] = MutateCard(root["cards"], 0, item => item.Remove("server")));

@@ -1,5 +1,6 @@
 using Godot;
 using Netrunner.Core;
+using Netrunner.Match;
 
 namespace Netrunner.GodotClient;
 
@@ -15,7 +16,7 @@ public partial class Main
 			foreach (EngineEvent @event in batch)
 			{
 				_eventTitle.Text = $"{@event.Kind} · sequence {@event.Sequence}";
-				AppendEventFeed(DescribeEvent(@event));
+				AppendEventFeed(EventFeedRegionPresenter.Describe(@event));
 				double seconds = _reducedMotion.ButtonPressed || _skipAnimation
 					? 0.01
 					: 0.18 / Math.Max(0.25, _speed.Value);
@@ -36,13 +37,7 @@ public partial class Main
 
 	private void AppendEventFeed(string line)
 	{
-		const int MaxVisibleEventLines = 8;
-		_eventFeedLines.Enqueue(line);
-		while (_eventFeedLines.Count > MaxVisibleEventLines)
-		{
-			_eventFeedLines.Dequeue();
-		}
-
-		_eventFeed.Text = string.Join('\n', _eventFeedLines.Reverse());
+		_eventFeedRegion.Append(line);
+		_eventFeed.Text = _eventFeedRegion.RenderedText;
 	}
 }

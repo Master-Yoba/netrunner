@@ -84,6 +84,51 @@ public sealed class BehaviorCatalogTests
         Assert.Contains("both ICE and agenda", exception.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("ICE", "icebreaker")]
+    [InlineData("ICE", "asset")]
+    [InlineData("ICE", "run event")]
+    [InlineData("icebreaker", "asset")]
+    [InlineData("icebreaker", "agenda")]
+    [InlineData("icebreaker", "run event")]
+    [InlineData("asset", "agenda")]
+    [InlineData("asset", "run event")]
+    [InlineData("agenda", "run event")]
+    public void BuilderRejectsReuseAcrossEveryTypedBehaviorFamilyPair(
+        string firstFamily,
+        string secondFamily)
+    {
+        string idSuffix = $"{firstFamily}-{secondFamily}".Replace(' ', '-');
+        var id = new CardDefinitionId($"test:cross-family-{idSuffix}");
+        BehaviorCatalogBuilder builder = new("test:all-cross-family-pairs");
+        AddTyped(builder, firstFamily, id);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
+            () => AddTyped(builder, secondFamily, id));
+
+        Assert.Contains("cannot be registered as both", exception.Message, StringComparison.Ordinal);
+        Assert.Contains(firstFamily, exception.Message, StringComparison.Ordinal);
+        Assert.Contains(secondFamily, exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LegacyCompatibilityRegistrationRejectsCrossFamilyConflictsBeforeSnapshot()
+    {
+        var id = new CardDefinitionId("test:legacy-cross-family-conflict");
+        CardBehaviorSpecCatalog.RegisterIce(new IceBehaviorSpec(
+            id,
+            strength: 1,
+            iceType: IceType.Barrier,
+            rezCost: 1,
+            subroutines: [new EndRunSubroutineSpec()],
+            strengthModifiers: []));
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            CardBehaviorSpecCatalog.RegisterAgenda(new AgendaBehaviorSpec(id, agendaPoints: 1)));
+
+        Assert.Contains("both ICE and agenda", exception.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void GenericBehaviorMayIntentionallyOverlayOneLegacyTypedFamily()
     {
@@ -106,6 +151,25 @@ public sealed class BehaviorCatalogTests
 
         Assert.True(catalog.TryGetIce(id, out _));
         Assert.True(catalog.TryGet(id, out _));
+    }
+
+    [Fact]
+    public void ImmutableCatalogDefinitionIdsIncludeGenericOnlyContracts()
+    {
+        var id = new CardDefinitionId("test:generic-only");
+        CardBehaviorDefinition generic = new(
+            id,
+            PlayerSide.Runner,
+            instructions: [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]);
+
+        BehaviorCatalog catalog = new BehaviorCatalogBuilder("test:generic-only-catalog")
+            .Add(generic)
+            .Build();
+
+        Assert.Contains(id, catalog.AllDefinitionIds);
+        Assert.DoesNotContain(id, catalog.DefinitionIds);
+        Assert.True(catalog.TryGet(id, out CardBehaviorDefinition? resolved));
+        Assert.Same(generic, resolved);
     }
 
     [Fact]
@@ -230,5 +294,42 @@ public sealed class BehaviorCatalogTests
         }
 
         return JsonSerializer.Serialize(output);
+    }
+
+    private static void AddTyped(BehaviorCatalogBuilder builder, string family, CardDefinitionId id)
+    {
+        switch (family)
+        {
+            case "ICE":
+                builder.AddIce(new IceBehaviorSpec(
+                    id,
+                    strength: 1,
+                    iceType: IceType.Barrier,
+                    rezCost: 1,
+                    subroutines: [new EndRunSubroutineSpec()],
+                    strengthModifiers: []));
+                return;
+            case "icebreaker":
+                builder.AddIcebreaker(new IcebreakerBehaviorSpec(
+                    id,
+                    baseStrength: 1,
+                    interfaceType: IceType.Barrier,
+                    breakCost: 1,
+                    breakLimit: 1,
+                    pumpCost: 1,
+                    pumpStrength: 1));
+                return;
+            case "asset":
+                builder.AddAsset(new AssetBehaviorSpec(id, trashCost: 1));
+                return;
+            case "agenda":
+                builder.AddAgenda(new AgendaBehaviorSpec(id, agendaPoints: 1));
+                return;
+            case "run event":
+                builder.AddRunEvent(new RunEventBehaviorSpec(id, cost: 1, hostedCredits: 0));
+                return;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(family), family, "Unknown behavior family.");
+        }
     }
 }

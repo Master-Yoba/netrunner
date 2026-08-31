@@ -353,6 +353,7 @@ public static class CardBehaviorSpecCatalog
         ArgumentNullException.ThrowIfNull(spec);
         lock (Gate)
         {
+            EnsureTypedFamilyAvailable(spec.DefinitionId, "ICE");
             if (Registered.TryGetValue(spec.DefinitionId, out IceBehaviorSpec? existing))
             {
                 if (!StructurallyEqual(existing, spec))
@@ -398,6 +399,7 @@ public static class CardBehaviorSpecCatalog
         ArgumentNullException.ThrowIfNull(spec);
         lock (Gate)
         {
+            EnsureTypedFamilyAvailable(spec.DefinitionId, "icebreaker");
             if (RegisteredBreakers.TryGetValue(spec.DefinitionId, out IcebreakerBehaviorSpec? existing))
             {
                 if (!StructurallyEqual(existing, spec))
@@ -443,6 +445,7 @@ public static class CardBehaviorSpecCatalog
         ArgumentNullException.ThrowIfNull(spec);
         lock (Gate)
         {
+            EnsureTypedFamilyAvailable(spec.DefinitionId, "asset");
             if (RegisteredAssets.TryGetValue(spec.DefinitionId, out AssetBehaviorSpec? existing))
             {
                 if (!StructurallyEqual(existing, spec))
@@ -488,6 +491,7 @@ public static class CardBehaviorSpecCatalog
         ArgumentNullException.ThrowIfNull(spec);
         lock (Gate)
         {
+            EnsureTypedFamilyAvailable(spec.DefinitionId, "agenda");
             if (RegisteredAgendas.TryGetValue(spec.DefinitionId, out AgendaBehaviorSpec? existing))
             {
                 if (!StructurallyEqual(existing, spec))
@@ -533,6 +537,7 @@ public static class CardBehaviorSpecCatalog
         ArgumentNullException.ThrowIfNull(spec);
         lock (Gate)
         {
+            EnsureTypedFamilyAvailable(spec.DefinitionId, "run event");
             if (RegisteredRunEvents.TryGetValue(spec.DefinitionId, out RunEventBehaviorSpec? existing))
             {
                 if (!StructurallyEqual(existing, spec))
@@ -582,6 +587,27 @@ public static class CardBehaviorSpecCatalog
             .AddAgenda(RegisteredAgendas.Values)
             .AddRunEvent(RegisteredRunEvents.Values);
         return builder.Build();
+    }
+
+    private static void EnsureTypedFamilyAvailable(CardDefinitionId definitionId, string family)
+    {
+        (bool Exists, string Name)[] registeredFamilies =
+        [
+            (Registered.ContainsKey(definitionId), "ICE"),
+            (RegisteredBreakers.ContainsKey(definitionId), "icebreaker"),
+            (RegisteredAssets.ContainsKey(definitionId), "asset"),
+            (RegisteredAgendas.ContainsKey(definitionId), "agenda"),
+            (RegisteredRunEvents.ContainsKey(definitionId), "run event"),
+        ];
+
+        foreach ((bool exists, string name) in registeredFamilies)
+        {
+            if (exists && !string.Equals(name, family, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Card definition '{definitionId}' cannot be registered as both {name} and {family} behavior.");
+            }
+        }
     }
 
     /// <summary>

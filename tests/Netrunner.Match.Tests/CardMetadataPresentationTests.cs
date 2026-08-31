@@ -71,9 +71,31 @@ public sealed class CardMetadataPresentationTests
 
         Assert.True(resolver.TryResolve("91001", out CardPresentationMetadata metadata));
         Assert.Equal("Synthetic Resolver Card", metadata.Title);
+        Assert.Equal("runner", metadata.Side);
         Assert.Equal("[click]", CardMarkupFormatter.Format(metadata.RulesText).Split(' ').Last().TrimEnd('.'));
         Assert.False(resolver.TryResolve("hidden", out _));
         Assert.Single(resolver.Cards);
+    }
+
+    [Fact]
+    public void EmbeddedSnapshotCarriesResolverAndProvenanceDescriptor()
+    {
+        CardMetadataSnapshot snapshot = CardMetadataResolvers.CreateEmbeddedSnapshot();
+
+        Assert.Equal(snapshot.CardCount, snapshot.Resolver.Cards.Count);
+        Assert.Equal(CardDataResource.EmbeddedMode, snapshot.Mode);
+        Assert.Contains("embedded", snapshot.Diagnostic, StringComparison.Ordinal);
+        Assert.Equal(
+            snapshot.CommitSha,
+            CardDataResource.LoadEmbedded().Manifest.CommitSha);
+        if (snapshot.IsOfficial)
+        {
+            Assert.Equal(CardDataValidator.OfficialCardCount, snapshot.CardCount);
+        }
+        else
+        {
+            Assert.NotEqual(CardDataValidator.OfficialCardCount, snapshot.CardCount);
+        }
     }
 
     [Fact]

@@ -20,7 +20,8 @@ public sealed record CardPresentationMetadata(
     int? TrashCost,
     int? AgendaPoints,
     int? AdvancementRequirement,
-    string RulesText)
+    string RulesText,
+    string Side = "")
 {
     public static CardPresentationMetadata From(NormalizedCardDefinition card) => new(
         card.Code,
@@ -34,7 +35,8 @@ public sealed record CardPresentationMetadata(
         card.TrashCost,
         card.AgendaPoints,
         card.AdvancementRequirement,
-        card.Text);
+        card.Text,
+        card.Side);
 
     public static CardPresentationMetadata Unknown(string? definitionId = null) => new(
         definitionId ?? "",
@@ -155,22 +157,61 @@ public sealed class EmptyCardMetadataResolver : ICardMetadataResolver
     }
 }
 
+/// <summary>
+/// Immutable descriptor for the generated metadata snapshot composed by the
+/// Match layer. Clients use the resolver for card fields and this descriptor
+/// only for build/provenance diagnostics.
+/// </summary>
+public sealed record CardMetadataSnapshot(
+    ICardMetadataResolver Resolver,
+    string Mode,
+    string CommitSha,
+    int CardCount,
+    string Diagnostic)
+{
+    public bool IsOfficial =>
+        string.Equals(Mode, CardDataResource.OfficialMode, StringComparison.Ordinal)
+        && CardCount == CardDataValidator.OfficialCardCount;
+}
+
 /// <summary>Composition helper for the current generated Cards resource.</summary>
 public static class CardMetadataResolvers
 {
-    private static readonly Lazy<ICardMetadataResolver> DefaultResolver = new(
-        CreateDefault,
+    private static readonly Lazy<CardMetadataSnapshot> EmbeddedSnapshot = new(
+        CreateEmbeddedSnapshot,
         LazyThreadSafetyMode.ExecutionAndPublication);
 
-    public static ICardMetadataResolver Default => DefaultResolver.Value;
+    /// <summary>One immutable resolver/descriptor pair for the generated resource.</summary>
+    public static CardMetadataSnapshot Embedded => EmbeddedSnapshot.Value;
+
+    public static ICardMetadataResolver Default => Embedded.Resolver;
 
     public static ICardMetadataResolver CreateDefault()
+        => CreateEmbeddedSnapshot().Resolver;
+
+    /// <summary>
+    /// Composes the generated resource without exposing Cards-layer types to a
+    /// client. Failed validation returns an empty resolver and an actionable
+    /// diagnostic so clean synthetic CI remains usable.
+    /// </summary>
+    public static CardMetadataSnapshot CreateEmbeddedSnapshot()
     {
-        return CardDataResource.TryLoadEmbedded(
-            out CardDataSet? data,
-            out _)
-            && data is not null
-            ? new CardCatalogMetadataResolver(data)
-            : EmptyCardMetadataResolver.Instance;
+        if (!CardDataResource.TryLoadEmbedded(out CardDataSet? data, out string diagnostic)
+            || data is null)
+        {
+            return new CardMetadataSnapshot(
+                EmptyCardMetadataResolver.Instance,
+                CardDataResource.EmbeddedMode,
+                "",
+                0,
+                diagnostic);
+        }
+
+        return new CardMetadataSnapshot(
+            new CardCatalogMetadataResolver(data),
+            CardDataResource.EmbeddedMode,
+            data.Manifest.CommitSha,
+            data.Cards.Count,
+            diagnostic);
     }
 }

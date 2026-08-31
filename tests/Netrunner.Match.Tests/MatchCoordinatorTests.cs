@@ -160,6 +160,41 @@ public sealed class MatchCoordinatorTests
     }
 
     [Fact]
+    public void EncounterProjectionUsesInjectedBehaviorCatalogSnapshot()
+    {
+        GameState state = ReachPalisadeEncounter();
+        BehaviorCatalog behaviorCatalog = new BehaviorCatalogBuilder("test-view-catalog")
+            .AddIce(new IceBehaviorSpec(
+                new CardDefinitionId("30072"),
+                strength: 9,
+                IceType.Barrier,
+                rezCost: 3,
+                subroutines: Array.Empty<IceSubroutineSpec>(),
+                strengthModifiers: Array.Empty<IceStrengthModifierSpec>()))
+            .AddIcebreaker(new IcebreakerBehaviorSpec(
+                new CardDefinitionId("30006"),
+                baseStrength: 11,
+                IceType.Barrier,
+                breakCost: 1,
+                breakLimit: 2,
+                pumpCost: 2,
+                pumpStrength: 1))
+            .Build();
+
+        MatchViewModel view = ObservationViewMapper.Build(
+            ObservationBuilder.Build(state, PlayerSide.Runner),
+            CardMetadataResolvers.Default,
+            behaviorCatalog);
+        EncounterViewModel encounter = Assert.IsType<EncounterViewModel>(
+            Assert.IsType<RunFocusViewModel>(view.Run).Encounter);
+
+        Assert.Equal(9, encounter.EffectiveStrength);
+        Assert.Equal(
+            11,
+            Assert.Single(encounter.Breakers, breaker => breaker.CardId == "card:5").EffectiveStrength);
+    }
+
+    [Fact]
     public void RepresentativePalisadeRequiresCleaverPumpBeforeBreak()
     {
         GameState encounter = ReachPalisadeEncounter();

@@ -1,5 +1,4 @@
 using Godot;
-using Netrunner.Cards;
 using Netrunner.Match;
 
 namespace Netrunner.GodotClient;
@@ -11,20 +10,35 @@ namespace Netrunner.GodotClient;
 /// </summary>
 public partial class Main
 {
+	private void RunGallerySmoke()
+	{
+		_gallerySmokePassed = TryShowCardGallery();
+		Callable.From(FinishGallerySmoke).CallDeferred();
+	}
+
+	private void FinishGallerySmoke()
+	{
+		GetTree().Quit(_gallerySmokePassed ? 0 : 1);
+	}
+
 	private void ShowCardGallery()
+	{
+		_ = TryShowCardGallery();
+	}
+
+	private bool TryShowCardGallery()
 	{
 		if (_galleryOverlay is not null)
 		{
 			_galleryOverlay.Visible = true;
 			_galleryOverlay.MoveToFront();
-			return;
+			return true;
 		}
 
-		if (!CardDataResource.TryLoadEmbedded(out CardDataSet? data, out string diagnostic)
-			|| data is null)
+		if (_metadataResolver.Cards.Count == 0)
 		{
-			GD.PrintErr($"M4_CARD_GALLERY FAIL {diagnostic}");
-			return;
+			GD.PrintErr($"M4_CARD_GALLERY FAIL {_metadataSnapshot.Diagnostic}");
+			return false;
 		}
 
 		_galleryOverlay = new PanelContainer
@@ -45,11 +59,11 @@ public partial class Main
 		content.AddThemeConstantOverride("separation", 8);
 		margin.AddChild(content);
 		content.AddChild(MakeLabel(
-			$"SYSTEM GATEWAY METADATA GALLERY · {data.Cards.Count} cards",
+			$"SYSTEM GATEWAY METADATA GALLERY · {_metadataResolver.Cards.Count} cards",
 			20,
 			Accent));
 		content.AddChild(MakeWrappedLabel(
-			$"Authenticated mode: {CardDataResource.EmbeddedMode} · snapshot {data.Manifest.CommitSha}\n"
+			$"Authenticated mode: {_metadataSnapshot.Mode} · snapshot {_metadataSnapshot.CommitSha}\n"
 			+ "Development-only text audit. Symbols are rendered as labelled cues; no card text is executed.",
 			12,
 			Muted));
@@ -66,7 +80,7 @@ public partial class Main
 		scroll.AddChild(rows);
 		content.AddChild(scroll);
 
-		foreach (NormalizedCardDefinition card in data.Cards)
+		foreach (CardPresentationMetadata card in _metadataResolver.Cards)
 		{
 			string stats = string.Join(
 				" · ",
@@ -81,11 +95,11 @@ public partial class Main
 					card.AdvancementRequirement is { } advancement ? $"advance {advancement}" : null,
 				}.Where(value => value is not null)!);
 			rows.AddChild(MakeLabel(
-				$"{card.Code} · {card.Title} · {card.Type.ToUpperInvariant()}",
+				$"{card.DefinitionId} · {card.Title} · {card.Type.ToUpperInvariant()}",
 				14,
 				Colors.White));
 			rows.AddChild(MakeWrappedLabel(
-				$"{stats}\n{string.Join(" · ", card.Subtypes)}\n{CardMarkupFormatter.Format(card.Text)}",
+				$"{stats}\n{string.Join(" · ", card.Subtypes)}\n{FormatCardRules(card.RulesText)}",
 				11,
 				Muted));
 		}
@@ -98,17 +112,22 @@ public partial class Main
 		close.Pressed += HideCardGallery;
 		content.AddChild(close);
 
-		if (data.Cards.Count == CardDataValidator.OfficialCardCount
-			&& string.Equals(CardDataResource.EmbeddedMode, CardDataResource.OfficialMode, StringComparison.Ordinal))
+		bool passed = _metadataSnapshot.IsOfficial
+			&& _metadataResolver.Cards.Count == _metadataSnapshot.CardCount;
+		if (passed)
 		{
-			GD.Print($"M4_CARD_GALLERY PASS cards={data.Cards.Count} mode={CardDataResource.EmbeddedMode}");
+			GD.Print(
+				$"M4_CARD_GALLERY PASS cards={_metadataSnapshot.CardCount} "
+				+ $"mode={_metadataSnapshot.Mode} commit={_metadataSnapshot.CommitSha}");
 		}
 		else
 		{
 			GD.PrintErr(
-				$"M4_CARD_GALLERY FAIL expected {CardDataValidator.OfficialCardCount} official cards, "
-				+ $"found {data.Cards.Count} in {CardDataResource.EmbeddedMode} mode");
+				$"M4_CARD_GALLERY FAIL expected official snapshot, "
+				+ $"found {_metadataResolver.Cards.Count} resolver cards in {_metadataSnapshot.Mode} mode");
 		}
+
+		return passed;
 	}
 
 	private void HideCardGallery()

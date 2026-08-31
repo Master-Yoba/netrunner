@@ -15,8 +15,8 @@ public partial class Main
 	private void RenderFocusPresentationRegion(MatchSnapshot snapshot)
 	{
 		ClearChildren(_focusPresentation);
-		MatchViewModel view = snapshot.View;
-		if (snapshot.RunOutcome is { } completed && view.Run is null)
+		FocusRegionState focus = FocusRegionPresenter.Present(snapshot);
+		if (focus.Mode == FocusRegionMode.Outcome && focus.Outcome is { } completed)
 		{
 			_focusPresentation.AddChild(MakeLabel("REPRESENTATIVE SLICE COMPLETE", 17, Accent));
 			_focusPresentation.AddChild(MakeWrappedLabel(
@@ -27,7 +27,7 @@ public partial class Main
 			return;
 		}
 
-		if (view.Run is not { } run)
+		if (focus.Mode == FocusRegionMode.Empty || focus.Run is not { } run)
 		{
 			_focusPresentation.AddChild(MakeLabel(
 				"RUN FOCUS · select a legal action to continue",
@@ -36,21 +36,21 @@ public partial class Main
 			return;
 		}
 
-		if (run.Encounter is { } encounter)
+		if (focus.Mode == FocusRegionMode.Encounter && focus.Encounter is { } encounter)
 		{
 			_smokeEncounterFocusObserved |= _smokeTest;
 			RenderEncounterFocusRegion(snapshot, run, encounter);
 			return;
 		}
 
-		if (run.Access.State != RunAccessState.NotStarted)
+		if (focus.Mode == FocusRegionMode.Access)
 		{
 			_smokeAccessFocusObserved |= _smokeTest;
 			RenderAccessFocusRegion(snapshot, run);
 			return;
 		}
 
-		if (run.Priority is { } priority)
+		if (focus.Mode == FocusRegionMode.PaidWindow && focus.Priority is { } priority)
 		{
 			RenderPaidWindowFocusRegion(priority);
 			return;
@@ -205,7 +205,8 @@ public partial class Main
 		}
 
 		AddRunPoolCueRegion(run, "hosted run credit(s) available for trash costs");
-		IEnumerable<LegalActionViewModel> accessActions = snapshot.View.LegalActions.Where(IsAccessAction);
+		IEnumerable<LegalActionViewModel> accessActions = snapshot.View.LegalActions
+			.Where(ActionsRegionPresenter.IsAccessAction);
 		string actionCue = string.Join(
 			" · ",
 			accessActions.Select(action => $"{action.Kind.ToString().ToUpperInvariant()}: {action.Description}"));

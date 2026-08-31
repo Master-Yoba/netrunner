@@ -477,7 +477,10 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
         }
 
         Observation observation = ObservationBuilder.Build(state, PlayerSide.Runner);
-        MatchViewModel view = ObservationViewMapper.Build(observation, _metadataResolver);
+        MatchViewModel view = ObservationViewMapper.Build(
+            observation,
+            _metadataResolver,
+            _behaviorCatalog);
         IReadOnlyList<EngineEvent> frozenEvents = new ReadOnlyCollection<EngineEvent>(events.ToArray());
         MatchSnapshot snapshot = new(
             Interlocked.Increment(ref _publicationSequence),

@@ -14,6 +14,32 @@ if [[ -z "${GODOT4:-}" || ! -x "$GODOT4" ]]; then
   exit 1
 fi
 
+# macOS does not ship GNU timeout. Keep the content-lane gallery bounded on
+# both macOS and Linux without making a package-manager utility a prerequisite.
+run_with_timeout() {
+  local limit_seconds="$1"
+  shift
+  "$@" &
+  local command_pid=$!
+  local timer_pid
+  (
+    sleep "$limit_seconds"
+    if kill -0 "$command_pid" >/dev/null 2>&1; then
+      echo "Command exceeded ${limit_seconds}s; terminating $*" >&2
+      kill -TERM "$command_pid" >/dev/null 2>&1 || true
+      sleep 2
+      kill -KILL "$command_pid" >/dev/null 2>&1 || true
+    fi
+  ) &
+  timer_pid=$!
+
+  local command_status=0
+  wait "$command_pid" || command_status=$?
+  kill "$timer_pid" >/dev/null 2>&1 || true
+  wait "$timer_pid" >/dev/null 2>&1 || true
+  return "$command_status"
+}
+
 MSBUILDDISABLENODEREUSE=1 dotnet restore "$verify_root/Netrunner.sln" -m:1
 MSBUILDDISABLENODEREUSE=1 dotnet build "$verify_root/Netrunner.sln" --no-restore -m:1
 MSBUILDDISABLENODEREUSE=1 dotnet test "$verify_root/Netrunner.sln" --no-build -m:1
@@ -26,6 +52,11 @@ card_data_manifest="$card_data_dir/manifest.json"
 card_data_copyright="$card_data_dir/SOURCE_COPYRIGHT.md"
 card_data_present=0
 card_data_content_enabled=0
+official_content_properties=(
+  "-p:NetrunnerContentEnabled=true"
+  "-p:NetrunnerCardDataMode=official"
+  "-p:NetrunnerCardDataInputRoot=$card_data_dir"
+)
 for card_data_file in "$card_data_cards" "$card_data_manifest" "$card_data_copyright"; do
   if [[ -e "$card_data_file" ]]; then
     card_data_present=$((card_data_present + 1))
@@ -40,13 +71,24 @@ elif ((card_data_present == 3)) && [[ -f "$card_data_cards" && -f "$card_data_ma
     card-data validate --root "$verify_root" --json
   dotnet build "$verify_root/src/Netrunner.Cards/Netrunner.Cards.csproj" \
     --no-restore --nologo -m:1 \
-    -p:NetrunnerContentEnabled=true -p:NetrunnerCardDataMode=official
+    "${official_content_properties[@]}"
+  dotnet build "$verify_root/src/Netrunner.Match/Netrunner.Match.csproj" \
+    --no-restore --nologo -m:1 \
+    "${official_content_properties[@]}"
+  dotnet build "$verify_root/src/Netrunner.Cli/Netrunner.Cli.csproj" \
+    --no-restore --nologo -m:1 \
+    "${official_content_properties[@]}"
+  dotnet build "$verify_root/src/Netrunner.Godot/Netrunner.Godot.csproj" \
+    --no-restore --nologo -m:1 \
+    "${official_content_properties[@]}"
   card_data_content_enabled=1
 else
   echo "card-data validation failed: local System Gateway snapshot is partial." >&2
   exit 1
 fi
-coverage_report_dir="$(mktemp -d "${TMPDIR:-/tmp}/netrunner-gateway-coverage.XXXXXX")"
+verify_temp_root="${TMPDIR:-/tmp}"
+verify_temp_root="${verify_temp_root%/}"
+coverage_report_dir="$(mktemp -d "$verify_temp_root/netrunner-gateway-coverage.XXXXXX")"
 if [[ -z "$coverage_report_dir" || ! -d "$coverage_report_dir" ]]; then
   echo "Unable to create the Gateway coverage report directory." >&2
   exit 1
@@ -69,6 +111,21 @@ if ! grep -Fq "$missing_card_data_expected" "$missing_card_data_log"; then
   exit 1
 fi
 echo "card-data=missing-input diagnostic=PASS"
+official_without_opt_in_log="$coverage_report_dir/official-without-opt-in.log"
+official_without_opt_in_expected="DATA-400: official card content is opt-in; set NetrunnerContentEnabled=true"
+if dotnet build "$verify_root/src/Netrunner.Cards/Netrunner.Cards.csproj" \
+  --no-restore --nologo -m:1 \
+  -p:NetrunnerCardDataMode=official \
+  >"$official_without_opt_in_log" 2>&1; then
+  echo "DATA-400 official-without-opt-in contract unexpectedly succeeded." >&2
+  exit 1
+fi
+if ! grep -Fq "$official_without_opt_in_expected" "$official_without_opt_in_log"; then
+  echo "DATA-400 official-without-opt-in diagnostic changed unexpectedly:" >&2
+  sed -n '1,80p' "$official_without_opt_in_log" >&2
+  exit 1
+fi
+echo "card-data=official-without-opt-in diagnostic=PASS"
 coverage_catalog="$verify_root/src/Netrunner.Cards/bin/Debug/net8.0/Netrunner.Cards.dll"
 coverage_tests="$verify_root/tests/Netrunner.Cards.Tests/bin/Debug/net8.0/Netrunner.Cards.Tests.dll"
 coverage_cards_arg=()
@@ -92,7 +149,7 @@ if ! diff -u "$verify_root/docs/generated/gateway-coverage.json" \
   echo "Gateway JSON coverage report is stale. Regenerate it with Netrunner.CardCoverage." >&2
   exit 1
 fi
-m1_replay_dir="$(mktemp -d "${TMPDIR:-/tmp}/netrunner-m1.XXXXXX")"
+m1_replay_dir="$(mktemp -d "$verify_temp_root/netrunner-m1.XXXXXX")"
 if [[ -z "$m1_replay_dir" || ! -d "$m1_replay_dir" ]]; then
   echo "Unable to create the M1 replay verification directory." >&2
   exit 1
@@ -109,6 +166,7 @@ dotnet run --project "$verify_root/src/Netrunner.Cli" --no-build --no-restore --
   m2-proof "$verify_root/data/m2/representative-run.json" --json
 if ((card_data_content_enabled == 1)); then
   NetrunnerContentEnabled=true NetrunnerCardDataMode=official \
+    NetrunnerCardDataInputRoot="$card_data_dir" \
     XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
     "$GODOT4" --headless --editor --path "$verify_root/src/Netrunner.Godot" --quit-after 60
 else
@@ -116,9 +174,26 @@ else
     "$GODOT4" --headless --editor --path "$verify_root/src/Netrunner.Godot" --quit-after 60
 fi
 if ((card_data_content_enabled == 1)); then
-  NetrunnerContentEnabled=true NetrunnerCardDataMode=official \
+  gallery_smoke_log="$coverage_report_dir/gallery-smoke.log"
+  gallery_expected="M4_CARD_GALLERY PASS cards=77 mode=official"
+  if ! run_with_timeout 30 env \
+    NetrunnerContentEnabled=true \
+    NetrunnerCardDataMode=official \
+    NetrunnerCardDataInputRoot="$card_data_dir" \
     XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
-    "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" -- --m4-card-gallery-smoke
+    "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \
+    -- --m4-card-gallery-smoke >"$gallery_smoke_log" 2>&1; then
+    echo "M4 card gallery smoke failed or timed out; see $gallery_smoke_log." >&2
+    sed -n '1,120p' "$gallery_smoke_log" >&2
+    exit 1
+  fi
+  if ! grep -Fq "$gallery_expected" "$gallery_smoke_log" \
+    || grep -Fq "M4_CARD_GALLERY FAIL" "$gallery_smoke_log"; then
+    echo "M4 card gallery smoke did not prove the official 77-card payload; see $gallery_smoke_log." >&2
+    sed -n '1,120p' "$gallery_smoke_log" >&2
+    exit 1
+  fi
+  echo "m4-card-gallery-smoke=PASS cards=77 mode=official"
 fi
 XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
   "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" -- --smoke-test

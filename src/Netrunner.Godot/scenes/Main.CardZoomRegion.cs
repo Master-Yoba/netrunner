@@ -82,49 +82,5 @@ public partial class Main
 	}
 
 	private static string FormatCardZoom(CardViewModel card)
-	{
-		List<string> lines =
-		[
-			$"{card.Type}{(card.Subtypes.Count == 0 ? string.Empty : " · " + string.Join(" · ", card.Subtypes))}",
-		];
-		if (card.Cost is { } cost)
-		{
-			lines.Add($"Cost · {cost}");
-		}
-
-		if (card.Strength is { } strength)
-		{
-			lines.Add($"Strength · {strength}");
-		}
-
-		if (card.AgendaPoints is { } agendaPoints)
-		{
-			lines.Add($"Agenda points · {agendaPoints}");
-		}
-
-		if (card.TrashCost is { } trashCost)
-		{
-			lines.Add($"Trash cost · {trashCost}");
-		}
-
-		if (card.MemoryCost is { } memoryCost)
-		{
-			lines.Add($"Memory · {memoryCost}");
-		}
-
-		if (card.AdvancementRequirement is { } advancementRequirement)
-		{
-			lines.Add($"Advancement · {advancementRequirement}");
-		}
-
-		lines.Add($"Status · {(card.Rezzed ? "REZZED" : card.IsKnown ? "KNOWN" : "FACE-DOWN")}");
-		if (card.Counters.Count > 0)
-		{
-			lines.Add(string.Join(" · ", card.Counters));
-		}
-
-		lines.Add(string.Empty);
-		lines.Add(FormatCardRules(card.RulesText));
-		return string.Join('\n', lines);
-	}
+		=> CardZoomRegionPresenter.Format(card);
 }

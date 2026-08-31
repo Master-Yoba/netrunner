@@ -187,20 +187,12 @@ public sealed class M2ScenarioDocument
         Seed = seed;
         RulesVersion = rulesVersion;
         CardDataVersion = cardDataVersion;
-        // M2 documents predate D-401 and used cardDataVersion for the
-        // behavior catalog pin. Keep that input readable, while exposing a
-        // distinct behavior field for new documents. New documents use the
-        // authenticated Gateway source commit, which is intentionally not
-        // equal to the compiled behavior version.
-        BehaviorRegistryVersion = behaviorRegistryVersion
-            ?? (cardDataVersion == CardBehaviorSpecCatalog.Version
-                || cardDataVersion == EngineCompatibility.GatewayCardDataVersion
-                ? CardBehaviorSpecCatalog.Version
-                : EngineCompatibility.BehaviorRegistryVersion);
-        BehaviorCatalogFingerprint = behaviorCatalogFingerprint
-            ?? (BehaviorRegistryVersion == CardBehaviorSpecCatalog.Version
-                ? GatewayBehaviorCatalog.Create().Fingerprint
-                : null);
+        // D-401 is a deliberate one-time migration: metadata and compiled
+        // behavior pins are independent and must be supplied in their own
+        // fields. Missing values are retained as invalid input for
+        // CollectProblems; they are never inferred from the other pin.
+        BehaviorRegistryVersion = behaviorRegistryVersion ?? string.Empty;
+        BehaviorCatalogFingerprint = behaviorCatalogFingerprint;
         Turn = turn;
         Remotes = remotes;
         Run = run;
@@ -268,9 +260,10 @@ public sealed class M2ScenarioDocument
         BehaviorCatalog behaviorCatalog = GatewayBehaviorCatalog.Create();
         var problems = new List<string>();
 
-        if (SchemaVersion != 1)
+        if (SchemaVersion != EngineCompatibility.ArtifactSchemaVersion)
         {
-            problems.Add($"schemaVersion: expected 1, found {SchemaVersion}.");
+            problems.Add(
+                $"schemaVersion: expected {EngineCompatibility.ArtifactSchemaVersion}, found {SchemaVersion}.");
         }
 
         if (string.IsNullOrWhiteSpace(ScenarioId))
@@ -287,17 +280,17 @@ public sealed class M2ScenarioDocument
         {
             problems.Add("cardDataVersion: must be a non-empty authenticated metadata version.");
         }
-        else if (CardDataVersion != EngineCompatibility.GatewayCardDataVersion
-            // Keep old checked-in/consumer documents readable during the
-            // deliberate migration; newly authored M2 documents are pinned to
-            // the authenticated source commit above.
-            && CardDataVersion != CardBehaviorSpecCatalog.Version)
+        else if (CardDataVersion != EngineCompatibility.GatewayCardDataVersion)
         {
             problems.Add(
                 $"cardDataVersion: '{CardDataVersion}' is not the authenticated Gateway metadata snapshot '{EngineCompatibility.GatewayCardDataVersion}'.");
         }
 
-        if (BehaviorRegistryVersion != CardBehaviorSpecCatalog.Version)
+        if (string.IsNullOrWhiteSpace(BehaviorRegistryVersion))
+        {
+            problems.Add("behaviorRegistryVersion: must be an explicit compiled behavior catalog version.");
+        }
+        else if (BehaviorRegistryVersion != CardBehaviorSpecCatalog.Version)
         {
             problems.Add(
                 $"behaviorRegistryVersion: '{BehaviorRegistryVersion}' is not the Gateway compiled behavior version '{CardBehaviorSpecCatalog.Version}'.");

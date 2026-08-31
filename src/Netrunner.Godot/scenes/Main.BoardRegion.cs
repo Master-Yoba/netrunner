@@ -1,4 +1,6 @@
 using Godot;
+using Netrunner.Core;
+using Netrunner.Match;
 
 namespace Netrunner.GodotClient;
 
@@ -213,5 +215,77 @@ public partial class Main
 		_zoomButton.Pressed += ShowInspectedCardZoom;
 		detailsContent.AddChild(_zoomButton);
 		lower.AddChild(detailsPanel);
+	}
+
+	private void RenderServers(IReadOnlyList<ServerViewModel> servers)
+	{
+		ClearChildren(_servers);
+		foreach (ServerViewModel server in servers)
+		{
+			PanelContainer panel = MakePanel();
+			VBoxContainer content = new();
+			content.AddThemeConstantOverride("separation", 4);
+			panel.AddChild(content);
+			content.AddChild(MakeLabel(
+				$"{server.Kind.ToString().ToUpperInvariant()}  ·  {server.Id}",
+				12,
+				server.Kind == ServerKind.Remote ? Warning : Muted));
+			HBoxContainer ice = new();
+			ice.AddChild(MakeLabel("ICE (outer → inner)", 10, Muted));
+			foreach (CardViewModel? card in server.OrderedIce)
+			{
+				TextCardControl control = MakeCard(card);
+				ice.AddChild(control);
+			}
+
+			content.AddChild(ice);
+			HBoxContainer root = new();
+			root.AddChild(MakeLabel("ROOT", 10, Muted));
+			foreach (CardViewModel? card in server.OrderedRoot)
+			{
+				root.AddChild(MakeCard(card));
+			}
+
+			content.AddChild(root);
+			_servers.AddChild(panel);
+		}
+	}
+
+	private void RenderRunnerCards(BoardRegionState board)
+	{
+		ClearChildren(_runnerRig);
+		foreach (CardViewModel card in board.RunnerRig)
+		{
+			TextCardControl control = MakeCard(card);
+			EncounterBreakerViewModel? breaker = board.Run?.Encounter?.Breakers
+				.FirstOrDefault(candidate => candidate.CardId == card.Id);
+			control.SetEncounterStrength(breaker?.EffectiveStrength);
+			_runnerRig.AddChild(control);
+		}
+
+		ClearChildren(_runnerHand);
+		_runnerHand.AddChild(MakeLabel(
+			$"{board.RunnerHand.Count} card(s) · deck {board.RunnerDeck.Count}",
+			11,
+			Muted));
+		foreach (CardViewModel card in board.RunnerHand.VisibleCards)
+		{
+			_runnerHand.AddChild(MakeCard(card));
+		}
+
+		ClearChildren(_scores);
+		_scores.AddChild(MakeLabel(
+			$"Runner score: {board.Runner.AgendaPoints} · Corp score: {board.Corp.AgendaPoints}",
+			11,
+			Warning));
+		foreach (CardViewModel card in board.RunnerScore)
+		{
+			_scores.AddChild(MakeLabel($"Runner · {card.Title} ({card.AgendaPoints} AP)", 10, Muted));
+		}
+
+		foreach (CardViewModel card in board.CorpScore)
+		{
+			_scores.AddChild(MakeLabel($"Corp · {card.Title} ({card.AgendaPoints} AP)", 10, Muted));
+		}
 	}
 }
