@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Netrunner.Cards;
+using Netrunner.Core;
 using Xunit;
 
 namespace Netrunner.Cli.Tests;
@@ -40,6 +42,26 @@ public sealed class M2ProofCommandTests
         Assert.Equal(ExpectedEventStreamHash, policies.GetProperty("scripted-human").GetProperty("eventStreamHash").GetString());
         Assert.Equal(ExpectedFinalStateHash, policies.GetProperty("contract-agent").GetProperty("finalStateHash").GetString());
         Assert.Equal(ExpectedEventStreamHash, policies.GetProperty("contract-agent").GetProperty("eventStreamHash").GetString());
+    }
+
+    [Fact]
+    public void M2ProofCommandReplaysAgainstTheScenarioSliceOfAnExpandedCatalog()
+    {
+        string path = Path.Combine(AppContext.BaseDirectory, "M2Scenarios", "representative-run.json");
+        BehaviorCatalog gateway = GatewayBehaviorCatalog.Create();
+        BehaviorCatalog expanded = new BehaviorCatalogBuilder(gateway.Version, gateway)
+            .AddAsset(new AssetBehaviorSpec(new CardDefinitionId("test:m2-command-unrelated"), trashCost: 1))
+            .Build();
+        var output = new StringWriter();
+        var error = new StringWriter();
+
+        int code = CliCommands.RunWithBehaviorCatalog(["m2-proof", path, "--json"], output, error, expanded);
+
+        Assert.Equal(0, code);
+        using JsonDocument document = JsonDocument.Parse(output.ToString());
+        Assert.True(document.RootElement.GetProperty("replayVerified").GetBoolean());
+        Assert.Equal(ExpectedFinalStateHash, document.RootElement.GetProperty("finalStateHash").GetString());
+        Assert.Equal(ExpectedEventStreamHash, document.RootElement.GetProperty("eventStreamHash").GetString());
     }
 
     [Fact]

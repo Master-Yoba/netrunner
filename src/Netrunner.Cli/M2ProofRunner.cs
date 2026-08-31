@@ -127,6 +127,25 @@ public static class M2ProofRunner
 
         IBehaviorCatalog suppliedCatalog = behaviorCatalog ?? GatewayBehaviorCatalog.Create();
         BehaviorCatalog scenarioCatalog = document.Validate(suppliedCatalog);
+        return RunWithScenarioCatalog(document, agent, policyName, scenarioCatalog);
+    }
+
+    /// <summary>
+    /// Runs the proof against an already validated immutable scenario slice.
+    /// The command path uses this seam to share one slice across both policy
+    /// runs and its final replay verification.
+    /// </summary>
+    internal static M2ProofResult RunWithScenarioCatalog(
+        M2ScenarioDocument document,
+        IGameAgent agent,
+        string policyName,
+        BehaviorCatalog scenarioCatalog)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(agent);
+        ArgumentNullException.ThrowIfNull(policyName);
+        ArgumentNullException.ThrowIfNull(scenarioCatalog);
+
         M2ScenarioRunSpec runSpec = document.Run
             ?? throw new M2ProofException($"scenario '{document.ScenarioId}': the scenario has no run contract.");
 

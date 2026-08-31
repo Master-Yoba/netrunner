@@ -411,6 +411,41 @@ embed a validated generated resource and perform no runtime network fetch.
   implementation head in 2m15s; this final progress update is documentation
   only.
 
+### 2026-08-31 — second PR #5 feedback follow-up started
+
+- A fresh review of `f91811d` found one additional P1 path in
+  `CliCommands.RunM2Proof`: after both policy runs verify their replay against
+  the scenario slice, the command re-verifies the returned artifact against a
+  newly created full Gateway catalog.
+- Primary architectural assessment: valid. A future unrelated additive
+  Gateway registration would leave the document-derived replay pin stable but
+  make this separate command-level verification report `replayVerified:
+  false` because the full-catalog fingerprint differs.
+- Implemented the bounded fix in `CliCommands.RunM2Proof`: the command now
+  composes one catalog, derives one document scenario slice, and passes that
+  same immutable slice to both policy runs and the final `ReplayVerifier`
+  call. The production overloads retain their existing default behavior; an
+  internal `RunWithBehaviorCatalog` seam keeps composition injection scoped to
+  command-level coverage.
+- Added `M2ProofCommandTests.M2ProofCommandReplaysAgainstTheScenarioSliceOfAnExpandedCatalog`,
+  which adds an unrelated asset registration to an otherwise identical
+  Gateway composition and asserts `m2-proof --json` remains successful with
+  `replayVerified: true` and the pinned final-state/event-stream hashes.
+- Focused evidence: `dotnet test tests/Netrunner.Cli.Tests/Netrunner.Cli.Tests.csproj
+  --no-restore --filter FullyQualifiedName~M2ProofCommandTests --verbosity
+  minimal -m:1` passed (3/3). Primary full verification/CI is intentionally
+  not claimed in this follow-up.
+- The primary architect reviewed and accepted the internal-only composition
+  seam, the single validated-slice ownership in the command, and the expanded
+  catalog regression; public CLI behavior and output remain unchanged.
+- Primary authoritative `./scripts/verify.sh` evidence: zero warnings/errors,
+  format and diff checks clean, and `417/417` tests passed (Core 277, Cards 55,
+  AI 9, CLI 52, Match 24). Coverage remained 77 total / 7 registered and
+  tested / 5 complete / 2 partial / 70 unregistered. M1 and the 32-action M2
+  proof/replay passed with unchanged hashes and `replayVerified: true`; the
+  official 77-card gallery, Godot editor/M3 smoke, and secret scan passed.
+  Commit, push, and refreshed PR CI remain pending.
+
 ## Slice 4.1 exit checklist
 
 - [x] ARCH-401 / ENG-400 / VER-401 implemented and reviewed.
