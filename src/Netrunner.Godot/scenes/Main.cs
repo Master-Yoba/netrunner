@@ -51,6 +51,10 @@ public partial class Main : Control
 	private VBoxContainer _runnerHand = null!;
 	private VBoxContainer _scores = null!;
 	private VBoxContainer _actions = null!;
+	private ScrollContainer _bodyScroll = null!;
+	private PanelContainer _corpPanel = null!;
+	private PanelContainer _centerPanel = null!;
+	private PanelContainer _runnerPanel = null!;
 	private PanelContainer _actionPanel = null!;
 	private Button _zoomButton = null!;
 	private PanelContainer _zoomOverlay = null!;
@@ -74,6 +78,7 @@ public partial class Main : Control
 	private bool _smokeOutcomePresentationObserved;
 	private bool _smokeTargetCueObserved;
 	private bool _smokeTargetControlsObserved;
+	private bool _smokeBodyColumnsInViewport = true;
 
 	public override void _Ready()
 	{
@@ -452,13 +457,13 @@ public partial class Main : Control
 		};
 		_board.AddChild(bodyViewport);
 
-		ScrollContainer bodyScroll = new()
+		_bodyScroll = new ScrollContainer
 		{
 			HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
 			VerticalScrollMode = ScrollContainer.ScrollMode.Auto,
 		};
-		SetFullRect(bodyScroll);
-		bodyViewport.AddChild(bodyScroll);
+		SetFullRect(_bodyScroll);
+		bodyViewport.AddChild(_bodyScroll);
 
 		HBoxContainer body = new()
 		{
@@ -466,25 +471,25 @@ public partial class Main : Control
 			SizeFlagsVertical = SizeFlags.ExpandFill,
 		};
 		body.AddThemeConstantOverride("separation", 10);
-		bodyScroll.AddChild(body);
+		_bodyScroll.AddChild(body);
 
-		PanelContainer corpPanel = MakePanel();
-		corpPanel.CustomMinimumSize = new Vector2(205, 0);
+		_corpPanel = MakePanel();
+		_corpPanel.CustomMinimumSize = new Vector2(205, 0);
 		VBoxContainer corpContent = new();
 		corpContent.AddThemeConstantOverride("separation", 7);
-		corpPanel.AddChild(corpContent);
+		_corpPanel.AddChild(corpContent);
 		corpContent.AddChild(MakeLabel("CORP · REMOTE NETWORK", 14, new Color(0.93f, 0.48f, 0.48f)));
 		_corpSummary = MakeLabel("Credits · Clicks · Score", 13, Muted);
 		corpContent.AddChild(_corpSummary);
 		corpContent.AddChild(MakeLabel("HQ / R&D / Archives", 12, Muted));
-		body.AddChild(corpPanel);
+		body.AddChild(_corpPanel);
 
-		PanelContainer centerPanel = MakePanel();
-		centerPanel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		centerPanel.SizeFlagsVertical = SizeFlags.ExpandFill;
+		_centerPanel = MakePanel();
+		_centerPanel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+		_centerPanel.SizeFlagsVertical = SizeFlags.ExpandFill;
 		VBoxContainer center = new();
 		center.AddThemeConstantOverride("separation", 7);
-		centerPanel.AddChild(center);
+		_centerPanel.AddChild(center);
 		_decision = MakeLabel("No decision", 15, Colors.White);
 		_decision.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		center.AddChild(_decision);
@@ -517,13 +522,13 @@ public partial class Main : Control
 		_eventFeed.AddThemeFontSizeOverride("normal_font_size", 11);
 		_eventFeed.AddThemeColorOverride("default_color", Muted);
 		center.AddChild(_eventFeed);
-		body.AddChild(centerPanel);
+		body.AddChild(_centerPanel);
 
-		PanelContainer runnerPanel = MakePanel();
-		runnerPanel.CustomMinimumSize = new Vector2(260, 0);
+		_runnerPanel = MakePanel();
+		_runnerPanel.CustomMinimumSize = new Vector2(260, 0);
 		VBoxContainer runnerContent = new();
 		runnerContent.AddThemeConstantOverride("separation", 6);
-		runnerPanel.AddChild(runnerContent);
+		_runnerPanel.AddChild(runnerContent);
 		runnerContent.AddChild(MakeLabel("RUNNER · YOUR RIG", 14, Accent));
 		_runnerSummary = MakeLabel("Credits · Clicks · Score", 13, Muted);
 		runnerContent.AddChild(_runnerSummary);
@@ -539,7 +544,7 @@ public partial class Main : Control
 		_scores = new VBoxContainer();
 		_scores.AddThemeConstantOverride("separation", 4);
 		runnerContent.AddChild(_scores);
-		body.AddChild(runnerPanel);
+		body.AddChild(_runnerPanel);
 
 		HBoxContainer lower = new();
 		lower.AddThemeConstantOverride("separation", 10);
@@ -869,6 +874,7 @@ public partial class Main : Control
 				&& humanDecision
 				&& submitted
 				&& actionPanelInViewport
+				&& _smokeBodyColumnsInViewport
 				&& delayedThinking
 				&& responsive
 				&& fullRun
@@ -886,6 +892,7 @@ public partial class Main : Control
 				$"M3_SMOKE {(passed ? "PASS" : "FAIL")} "
 				+ $"setup={setup} human_decision={humanDecision} submitted={submitted} "
 				+ $"action_panel_in_viewport={actionPanelInViewport} "
+				+ $"body_columns_in_viewport={_smokeBodyColumnsInViewport} "
 				+ $"delayed_agent={delayedThinking} responsive_frames={_framesWhileAnimating} "
 				+ $"full_run={fullRun} encounter_focus={_smokeEncounterFocusObserved} "
 				+ $"access_focus={_smokeAccessFocusObserved} run_ended={_smokeRunEndedObserved} "
@@ -901,6 +908,7 @@ public partial class Main : Control
 			GD.Print(
 				$"M3_SMOKE FAIL setup={setup} human_decision={humanDecision} "
 				+ $"submitted={submitted} action_panel_in_viewport={actionPanelInViewport} "
+				+ $"body_columns_in_viewport={_smokeBodyColumnsInViewport} "
 				+ $"full_run={fullRun} encounter_focus={_smokeEncounterFocusObserved} "
 				+ $"access_focus={_smokeAccessFocusObserved} run_ended={_smokeRunEndedObserved} "
 				+ $"target_stage_cancel={targetStageCancelPreserved} "
@@ -920,13 +928,22 @@ public partial class Main : Control
 		{
 			if (_renderedSequence >= sequence)
 			{
+				await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+				ObserveBodyColumnLayout();
 				return true;
 			}
 
 			await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 		}
 
-		return _renderedSequence >= sequence;
+		bool rendered = _renderedSequence >= sequence;
+		if (rendered)
+		{
+			await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+			ObserveBodyColumnLayout();
+		}
+
+		return rendered;
 	}
 
 	private async Task<MatchSnapshot> WaitForPublishedSnapshotAsync(long previousSequence, int maxFrames)
@@ -1101,12 +1118,36 @@ public partial class Main : Control
 		await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 		bool inside = IsFullyInsideViewport(_board)
 			&& IsFullyInsideViewport(_actionPanel)
+			&& AreBodyColumnsInsideViewport()
 			&& IsFullyInsideViewport(_focusPresentation)
 			&& IsFullyInsideViewport(_zoomButton)
 			&& IsFullyInsideViewport(_zoomOverlay);
 		DisplayServer.WindowSetSize(previousSize);
 		await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 		return inside;
+	}
+
+	private void ObserveBodyColumnLayout()
+	{
+		if (_smokeTest && _board.IsVisibleInTree())
+		{
+			_smokeBodyColumnsInViewport &= AreBodyColumnsInsideViewport();
+		}
+	}
+
+	private bool AreBodyColumnsInsideViewport()
+	{
+		if (!IsInstanceValid(_bodyScroll) || !_bodyScroll.IsVisibleInTree())
+		{
+			return false;
+		}
+
+		Rect2 viewportRect = GetViewport().GetVisibleRect();
+		Rect2 bodyViewportRect = _bodyScroll.GetGlobalRect();
+		return IsHorizontallyInside(bodyViewportRect, viewportRect)
+			&& IsHorizontallyInside(_corpPanel, bodyViewportRect)
+			&& IsHorizontallyInside(_centerPanel, bodyViewportRect)
+			&& IsHorizontallyInside(_runnerPanel, bodyViewportRect);
 	}
 
 	private void PollCoordinator()
@@ -1652,6 +1693,7 @@ public partial class Main : Control
 		{
 			Text = text,
 			MouseFilter = MouseFilterEnum.Ignore,
+			AutowrapMode = TextServer.AutowrapMode.WordSmart,
 		};
 		label.AddThemeFontSizeOverride("font_size", size);
 		label.AddThemeColorOverride("font_color", colour);
@@ -1704,6 +1746,23 @@ public partial class Main : Control
 			&& controlRect.Position.Y >= viewportRect.Position.Y - epsilon
 			&& controlRect.End.X <= viewportRect.End.X + epsilon
 			&& controlRect.End.Y <= viewportRect.End.Y + epsilon;
+	}
+
+	private static bool IsHorizontallyInside(Control control, Rect2 outerRect)
+	{
+		if (!IsInstanceValid(control) || !control.IsVisibleInTree())
+		{
+			return false;
+		}
+
+		return IsHorizontallyInside(control.GetGlobalRect(), outerRect);
+	}
+
+	private static bool IsHorizontallyInside(Rect2 innerRect, Rect2 outerRect)
+	{
+		const float epsilon = 0.5f;
+		return innerRect.Position.X >= outerRect.Position.X - epsilon
+			&& innerRect.End.X <= outerRect.End.X + epsilon;
 	}
 
 	private static void ClearChildren(Node parent)
