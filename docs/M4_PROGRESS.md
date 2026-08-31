@@ -444,7 +444,10 @@ embed a validated generated resource and perform no runtime network fetch.
   tested / 5 complete / 2 partial / 70 unregistered. M1 and the 32-action M2
   proof/replay passed with unchanged hashes and `replayVerified: true`; the
   official 77-card gallery, Godot editor/M3 smoke, and secret scan passed.
-  Commit, push, and refreshed PR CI remain pending.
+- Committed the reviewed fix as `ddb4448` (`Verify M2 replay with scenario
+  catalog`) and pushed it to PR #5. GitHub Actions `build-and-test` passed on
+  that implementation head in 2m0s; this final progress update is
+  documentation only.
 
 ## Slice 4.1 exit checklist
 
