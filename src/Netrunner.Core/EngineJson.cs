@@ -28,6 +28,11 @@ public static class EngineJson
 
     public static T Deserialize<T>(string json)
     {
+        return Deserialize<T>(json, null);
+    }
+
+    public static T Deserialize<T>(string json, IBehaviorCatalog? behaviorCatalog)
+    {
         ArgumentNullException.ThrowIfNull(json);
         T value;
         try
@@ -48,10 +53,15 @@ public static class EngineJson
             throw new JsonException($"The JSON payload for '{typeof(T).Name}' is incompatible: {exception.Message}", exception);
         }
 
-        return ValidateRestorable(value);
+        return ValidateRestorable(value, behaviorCatalog);
     }
 
     public static T Deserialize<T>(ReadOnlySpan<byte> utf8Json)
+    {
+        return Deserialize<T>(utf8Json, null);
+    }
+
+    public static T Deserialize<T>(ReadOnlySpan<byte> utf8Json, IBehaviorCatalog? behaviorCatalog)
     {
         T value;
         try
@@ -72,15 +82,20 @@ public static class EngineJson
             throw new JsonException($"The JSON payload for '{typeof(T).Name}' is incompatible: {exception.Message}", exception);
         }
 
-        return ValidateRestorable(value);
+        return ValidateRestorable(value, behaviorCatalog);
     }
 
     public static GameState DeserializeState(string json)
     {
-        GameState state = Deserialize<GameState>(json);
+        return DeserializeState(json, null);
+    }
+
+    public static GameState DeserializeState(string json, IBehaviorCatalog? behaviorCatalog)
+    {
+        GameState state = Deserialize<GameState>(json, behaviorCatalog);
         try
         {
-            StateInvariantValidator.Validate(state);
+            StateInvariantValidator.Validate(state, behaviorCatalog);
         }
         catch (StateInvariantException exception)
         {
@@ -92,10 +107,15 @@ public static class EngineJson
 
     public static GameSnapshot DeserializeSnapshot(string json)
     {
-        GameSnapshot snapshot = Deserialize<GameSnapshot>(json);
+        return DeserializeSnapshot(json, null);
+    }
+
+    public static GameSnapshot DeserializeSnapshot(string json, IBehaviorCatalog? behaviorCatalog)
+    {
+        GameSnapshot snapshot = Deserialize<GameSnapshot>(json, behaviorCatalog);
         try
         {
-            StateInvariantValidator.Validate(snapshot.ToState());
+            StateInvariantValidator.Validate(snapshot.ToState(), behaviorCatalog);
         }
         catch (StateInvariantException exception)
         {
@@ -120,23 +140,23 @@ public static class EngineJson
         return options;
     }
 
-    private static T ValidateRestorable<T>(T value)
+    private static T ValidateRestorable<T>(T value, IBehaviorCatalog? behaviorCatalog)
     {
         try
         {
             switch (value)
             {
                 case GameState state:
-                    StateInvariantValidator.Validate(state);
+                    StateInvariantValidator.Validate(state, behaviorCatalog);
                     break;
                 case GameSnapshot snapshot:
-                    StateInvariantValidator.Validate(snapshot.ToState());
+                    StateInvariantValidator.Validate(snapshot.ToState(), behaviorCatalog);
                     break;
                 case EngineEvent @event:
                     EngineEventValidator.Validate(@event);
                     break;
                 case ReplayArtifact replay:
-                    replay.Validate();
+                    replay.Validate(behaviorCatalog);
                     break;
                 case ScenarioArtifact scenario:
                     scenario.Validate();

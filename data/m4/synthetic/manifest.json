@@ -1,0 +1,15 @@
+{
+  "manifestSchemaVersion": 1,
+  "sourceUrl": "https://example.invalid/netrunner-m4-synthetic",
+  "commitSha": "0000000000000000000000000000000000000000",
+  "retrievalDate": "2026-08-31",
+  "upstreamSchemaVersion": "synthetic-v1",
+  "normalizedSchemaVersion": 1,
+  "outputSha256": "66fe9fb6d4fc69ed63ece2520f10a24af66b1933a9d273d5c14391ced198873e",
+  "sourceLicensePath": "SYNTHETIC.md",
+  "sourceLicenseIdentity": "NOASSERTION",
+  "sourcePackPath": "m4/synthetic",
+  "packCode": "m4-synthetic",
+  "packName": "M4 synthetic clean-CI fixture",
+  "cardCount": 7
+}

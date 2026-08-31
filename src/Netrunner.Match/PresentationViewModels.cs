@@ -76,7 +76,10 @@ public sealed record CardViewModel(
     int? AgendaPoints,
     int? TrashCost,
     IReadOnlyList<string> Subtypes,
-    string RulesText)
+    string RulesText,
+    string Faction = "",
+    int? MemoryCost = null,
+    int? AdvancementRequirement = null)
 {
     public IReadOnlyList<string> Counters => AdvancementCounters > 0
         ? new[] { $"Advancement ×{AdvancementCounters}" }
@@ -203,9 +206,40 @@ public sealed record RunOutcomeViewModel(
 /// <summary>Maps filtered Core observations to immutable typed UI data.</summary>
 public static class ObservationViewMapper
 {
-    public static MatchViewModel Build(Observation observation)
+    /// <summary>
+    /// Legacy M2 compatibility adapter. New composition code must provide the
+    /// immutable behavior catalog explicitly through the three-argument
+    /// overload below.
+    /// </summary>
+    public static MatchViewModel Build(Observation observation) =>
+        Build(observation, CardMetadataResolvers.Default, GatewayBehaviorCatalog.Create());
+
+    /// <summary>
+    /// Builds a view using the caller's immutable metadata snapshot. Metadata
+    /// is consulted only for definition IDs that the observation already
+    /// reveals; hidden cards therefore remain resolver-invisible. This
+    /// two-argument overload is retained as a legacy M2 compatibility adapter;
+    /// composition code should use the overload that also supplies the
+    /// immutable behavior catalog.
+    /// </summary>
+    public static MatchViewModel Build(
+        Observation observation,
+        ICardMetadataResolver metadataResolver)
+        => Build(observation, metadataResolver, GatewayBehaviorCatalog.Create());
+
+    /// <summary>
+    /// Builds a view from the caller's immutable metadata and behavior
+    /// snapshots. Both catalogs are composition inputs; no process-wide
+    /// behavior registry is consulted by this production path.
+    /// </summary>
+    public static MatchViewModel Build(
+        Observation observation,
+        ICardMetadataResolver metadataResolver,
+        IBehaviorCatalog behaviorCatalog)
     {
         ArgumentNullException.ThrowIfNull(observation);
+        ArgumentNullException.ThrowIfNull(metadataResolver);
+        ArgumentNullException.ThrowIfNull(behaviorCatalog);
 
         IReadOnlyDictionary<string, object?> publicState = observation.PublicState;
         IReadOnlyDictionary<string, object?> privateState = observation.PrivateState;
@@ -217,28 +251,28 @@ public static class ObservationViewMapper
         ZoneViewModel corpHand = MapZone(
             ZoneKind.CorpHand,
             ReadInt(hidden, "corpHand"),
-            observation.Viewer == PlayerSide.Corp ? ReadCards(privateState, "hand") : Array.Empty<CardViewModel>());
+            observation.Viewer == PlayerSide.Corp ? ReadCards(privateState, "hand", metadataResolver) : Array.Empty<CardViewModel>());
         ZoneViewModel corpDeck = MapZone(
             ZoneKind.CorpDeck,
             ReadInt(hidden, "corpDeck"),
-            observation.Viewer == PlayerSide.Corp ? ReadCards(privateState, "deck") : Array.Empty<CardViewModel>());
+            observation.Viewer == PlayerSide.Corp ? ReadCards(privateState, "deck", metadataResolver) : Array.Empty<CardViewModel>());
         ZoneViewModel runnerHand = MapZone(
             ZoneKind.RunnerGrip,
             ReadInt(hidden, "runnerGrip"),
-            observation.Viewer == PlayerSide.Runner ? ReadCards(privateState, "grip") : Array.Empty<CardViewModel>());
+            observation.Viewer == PlayerSide.Runner ? ReadCards(privateState, "grip", metadataResolver) : Array.Empty<CardViewModel>());
         ZoneViewModel runnerDeck = MapZone(
             ZoneKind.RunnerStack,
             ReadInt(hidden, "runnerStack"),
-            observation.Viewer == PlayerSide.Runner ? ReadCards(privateState, "stack") : Array.Empty<CardViewModel>());
+            observation.Viewer == PlayerSide.Runner ? ReadCards(privateState, "stack", metadataResolver) : Array.Empty<CardViewModel>());
 
         IReadOnlyList<ServerViewModel> servers = ReadList(publicState, "servers")
-            .Select(MapServer)
+            .Select(value => MapServer(value, metadataResolver))
             .ToArray();
-        IReadOnlyList<CardViewModel> runnerRig = ReadCards(publicState, "runnerRig");
-        IReadOnlyList<CardViewModel> corpScore = ReadCards(publicState, "corpScore");
-        IReadOnlyList<CardViewModel> runnerScore = ReadCards(publicState, "runnerScore");
+        IReadOnlyList<CardViewModel> runnerRig = ReadCards(publicState, "runnerRig", metadataResolver);
+        IReadOnlyList<CardViewModel> corpScore = ReadCards(publicState, "corpScore", metadataResolver);
+        IReadOnlyList<CardViewModel> runnerScore = ReadCards(publicState, "runnerScore", metadataResolver);
         DecisionViewModel? decision = MapDecision(observation);
-        RunFocusViewModel? run = MapRun(publicState);
+        RunFocusViewModel? run = MapRun(publicState, metadataResolver, behaviorCatalog);
         OutcomeViewModel outcome = MapOutcome(RequiredMap(publicState, "outcome"));
         IReadOnlyList<LegalActionViewModel> actions = observation.LegalActions
             .Select(action => new LegalActionViewModel(action.Id, action.Kind, action.Description, action.Parameters))
@@ -262,8 +296,24 @@ public static class ObservationViewMapper
             new ReadOnlyCollection<LegalActionViewModel>(actions.ToArray()));
     }
 
-    /// <summary>Convenience alias used by presentation integrations.</summary>
+    /// <summary>Legacy M2 compatibility alias; prefer explicit catalogs.</summary>
     public static MatchViewModel FromObservation(Observation observation) => Build(observation);
+
+    /// <summary>
+    /// Legacy M2 compatibility adapter; use the overload with an explicit
+    /// immutable behavior catalog for composed matches.
+    /// </summary>
+    public static MatchViewModel FromObservation(
+        Observation observation,
+        ICardMetadataResolver metadataResolver) =>
+        Build(observation, metadataResolver);
+
+    /// <summary>Canonical composition alias with explicit immutable catalogs.</summary>
+    public static MatchViewModel FromObservation(
+        Observation observation,
+        ICardMetadataResolver metadataResolver,
+        IBehaviorCatalog behaviorCatalog) =>
+        Build(observation, metadataResolver, behaviorCatalog);
 
     private static DecisionViewModel? MapDecision(Observation observation)
     {
@@ -290,23 +340,28 @@ public static class ObservationViewMapper
     private static ZoneViewModel MapZone(ZoneKind kind, int count, IReadOnlyList<CardViewModel> visibleCards) =>
         new(kind, count, new ReadOnlyCollection<CardViewModel>(visibleCards.ToArray()));
 
-    private static ServerViewModel MapServer(object? value)
+    private static ServerViewModel MapServer(
+        object? value,
+        ICardMetadataResolver metadataResolver)
     {
         IReadOnlyDictionary<string, object?> map = RequiredMap(value, "server");
         // Core stores server ICE from innermost to outermost (the active
         // approach index starts at Count - 1). Presentation uses the spatial
         // order promised by ServerViewModel: outermost to innermost.
-        IReadOnlyList<CardViewModel?> orderedIce = ReadNullableCards(map, "ice")
+        IReadOnlyList<CardViewModel?> orderedIce = ReadNullableCards(map, "ice", metadataResolver)
             .Reverse()
             .ToArray();
         return new ServerViewModel(
             ReadString(map, "id"),
             ReadEnum<ServerKind>(map, "kind"),
             orderedIce,
-            ReadNullableCards(map, "root"));
+            ReadNullableCards(map, "root", metadataResolver));
     }
 
-    private static RunFocusViewModel? MapRun(IReadOnlyDictionary<string, object?> publicState)
+    private static RunFocusViewModel? MapRun(
+        IReadOnlyDictionary<string, object?> publicState,
+        ICardMetadataResolver metadataResolver,
+        IBehaviorCatalog behaviorCatalog)
     {
         if (!publicState.TryGetValue("run", out object? rawRun) || rawRun is null)
         {
@@ -333,15 +388,15 @@ public static class ObservationViewMapper
                         ReadBool(item, "resolved"));
                 })
                 .ToArray();
-            CardViewModel? encounterIce = ReadNullableCard(encounter, "ice");
+            CardViewModel? encounterIce = ReadNullableCard(encounter, "ice", metadataResolver);
             encounterView = new EncounterViewModel(
                 ReadString(encounter, "id"),
                 encounterIce,
                 ReadEnum<RunEncounterStatus>(encounter, "status"),
                 new ReadOnlyCollection<SubroutineViewModel>(subroutines.ToArray()))
             {
-                EffectiveStrength = CalculateEffectiveStrength(encounterIce, attackedServerKind),
-                Breakers = CalculateBreakerStrengths(publicState, map),
+                EffectiveStrength = CalculateEffectiveStrength(encounterIce, attackedServerKind, behaviorCatalog),
+                Breakers = CalculateBreakerStrengths(publicState, map, metadataResolver, behaviorCatalog),
             };
         }
 
@@ -372,21 +427,21 @@ public static class ObservationViewMapper
             ReadEnum<RunCrPhase>(map, "phase"),
             ReadEnum<RunTimingStep>(map, "step"),
             ReadInt(map, "currentIceIndex"),
-            ReadNullableCard(map, "currentIce"),
+            ReadNullableCard(map, "currentIce", metadataResolver),
             ReadBool(map, "successful"),
             ReadBool(map, "unsuccessful"),
             ReadNullableEnum<RunEndReason>(map, "endReason"),
             priorityView,
             encounterView,
             new AccessViewModel(
-                ReadNullableCards(breach, "candidates"),
+                ReadNullableCards(breach, "candidates", metadataResolver),
                 ReadInt(breach, "randomAccessLimit"),
                 hiddenSource,
-                ReadNullableCards(breach, "chosen"),
-                ReadNullableCards(breach, "accessed"),
+                ReadNullableCards(breach, "chosen", metadataResolver),
+                ReadNullableCards(breach, "accessed", metadataResolver),
                 ReadEnum<RunAccessState>(breach, "accessState")),
             ReadInt(map, "runCredits"),
-            ReadNullableCard(map, "initiatingSource"));
+            ReadNullableCard(map, "initiatingSource", metadataResolver));
     }
 
     private static ServerKind? FindServerKind(
@@ -407,7 +462,8 @@ public static class ObservationViewMapper
 
     private static int? CalculateEffectiveStrength(
         CardViewModel? encounterIce,
-        ServerKind? attackedServerKind)
+        ServerKind? attackedServerKind,
+        IBehaviorCatalog behaviorCatalog)
     {
         if (encounterIce?.DefinitionId is not { } definitionId
             || attackedServerKind is not { } serverKind
@@ -416,19 +472,17 @@ public static class ObservationViewMapper
             return null;
         }
 
-        // Live observations normally find the immutable spec in the shared
-        // catalog after scenario setup. The canonical Gateway list is a
-        // side-effect-free fallback for standalone/deserialized observations
-        // where setup has not run in this process.
-        IceBehaviorSpec? spec = CardBehaviorSpecCatalog.TryGetIce(parsedDefinition, out IceBehaviorSpec? registered)
+        IceBehaviorSpec? spec = behaviorCatalog.TryGetIce(parsedDefinition, out IceBehaviorSpec? registered)
             ? registered
-            : GatewayIceBehaviorSpecs.IceSpecs.FirstOrDefault(candidate => candidate.DefinitionId == parsedDefinition);
+            : null;
         return spec is null ? null : EncounterStrength.Ice(spec, serverKind);
     }
 
     private static ReadOnlyCollection<EncounterBreakerViewModel> CalculateBreakerStrengths(
         IReadOnlyDictionary<string, object?> publicState,
-        IReadOnlyDictionary<string, object?> run)
+        IReadOnlyDictionary<string, object?> run,
+        ICardMetadataResolver metadataResolver,
+        IBehaviorCatalog behaviorCatalog)
     {
         RunLingeringEffect[] effects = ReadList(run, "lingeringEffects")
             .Select(value =>
@@ -444,7 +498,7 @@ public static class ObservationViewMapper
             .ToArray();
 
         var breakers = new List<EncounterBreakerViewModel>();
-        foreach (CardViewModel card in ReadCards(publicState, "runnerRig"))
+        foreach (CardViewModel card in ReadCards(publicState, "runnerRig", metadataResolver))
         {
             if (card.DefinitionId is not { } definitionId
                 || !CardDefinitionId.TryParse(definitionId, out CardDefinitionId parsedDefinition))
@@ -452,12 +506,11 @@ public static class ObservationViewMapper
                 continue;
             }
 
-            IcebreakerBehaviorSpec? spec = CardBehaviorSpecCatalog.TryGetIcebreaker(
+            IcebreakerBehaviorSpec? spec = behaviorCatalog.TryGetIcebreaker(
                 parsedDefinition,
                 out IcebreakerBehaviorSpec? registered)
                 ? registered
-                : GatewayIcebreakerBehaviorSpecs.IcebreakerSpecs.FirstOrDefault(
-                    candidate => candidate.DefinitionId == parsedDefinition);
+                : null;
             if (spec is null)
             {
                 continue;
@@ -481,33 +534,49 @@ public static class ObservationViewMapper
 
     private static CardViewModel?[] ReadNullableCards(
         IReadOnlyDictionary<string, object?> map,
-        string key) => ReadList(map, key).Select(ReadNullableCard).ToArray();
+        string key,
+        ICardMetadataResolver metadataResolver) => ReadList(map, key)
+            .Select(value => ReadNullableCard(value, metadataResolver))
+            .ToArray();
 
-    private static CardViewModel? ReadNullableCard(object? value) => value is null
+    private static CardViewModel? ReadNullableCard(
+        object? value,
+        ICardMetadataResolver metadataResolver) => value is null
         || value is JsonElement { ValueKind: JsonValueKind.Null }
         ? null
-        : MapCard(value);
+        : MapCard(value, metadataResolver);
 
     private static CardViewModel? ReadNullableCard(
         IReadOnlyDictionary<string, object?> map,
-        string key) => map.TryGetValue(key, out object? value)
-            ? ReadNullableCard(value)
+        string key,
+        ICardMetadataResolver metadataResolver) => map.TryGetValue(key, out object? value)
+            ? ReadNullableCard(value, metadataResolver)
             : null;
 
     private static CardViewModel[] ReadCards(
         IReadOnlyDictionary<string, object?> map,
-        string key) => ReadList(map, key)
+        string key,
+        ICardMetadataResolver metadataResolver) => ReadList(map, key)
             .Select(value => value is null
                 ? throw new FormatException($"Observation field '{key}' contains a null card.")
-                : MapCard(value))
+                : MapCard(value, metadataResolver))
             .ToArray();
 
-    private static CardViewModel MapCard(object value)
+    private static CardViewModel MapCard(
+        object value,
+        ICardMetadataResolver metadataResolver)
     {
         IReadOnlyDictionary<string, object?> map = RequiredMap(value, "card");
         string id = ReadString(map, "id");
         string? definitionId = ReadNullableString(map, "definitionId");
-        CardPresentationMetadata metadata = CardPresentationMetadata.For(definitionId);
+        CardPresentationMetadata metadata = CardPresentationMetadata.Unknown(definitionId);
+        bool known = false;
+        if (definitionId is not null
+            && metadataResolver.TryResolve(definitionId, out CardPresentationMetadata resolved))
+        {
+            metadata = resolved;
+            known = true;
+        }
         return new CardViewModel(
             id,
             definitionId,
@@ -521,7 +590,10 @@ public static class ObservationViewMapper
             metadata.AgendaPoints,
             metadata.TrashCost,
             metadata.Subtypes,
-            metadata.Text);
+            known ? CardMarkupFormatter.Format(metadata.RulesText) : metadata.RulesText,
+            metadata.Faction,
+            metadata.MemoryCost,
+            metadata.AdvancementRequirement);
     }
 
     private static IReadOnlyDictionary<string, object?> RequiredMap(object? value, string path)
@@ -712,35 +784,24 @@ public static class ObservationViewMapper
         _ => value.ToString() ?? string.Empty,
     };
 
-    private sealed record CardPresentationMetadata(
-        string Title,
-        string Type,
-        int? Cost,
-        int? Strength,
-        int? AgendaPoints,
-        int? TrashCost,
-        IReadOnlyList<string> Subtypes,
-        string Text)
-    {
-        public static CardPresentationMetadata For(string? definitionId)
-        {
-            return definitionId switch
-            {
-                "30072" => new("Palisade", "ICE", 3, 2, null, null, ["Barrier"], "End the run."),
-                "30074" => new("Whitespace", "ICE", 2, 0, null, null, ["Code Gate"], "The Runner loses 3 credits. If the Runner has 6 credits or fewer, end the run."),
-                "30006" => new("Cleaver", "Program", 4, 3, null, null, ["Icebreaker · Fracter"], "Break barrier subroutines."),
-                "30005" => new("Buzzsaw", "Program", 5, 3, null, null, ["Icebreaker · Decoder"], "Break code gate subroutines."),
-                "30029" => new("Overclock", "Event", 1, null, null, null, Array.Empty<string>(), "Put 5 credits on this event, then run any server."),
-                "30067" => new("Offworld Office", "Agenda", null, null, 2, null, Array.Empty<string>(), "Agenda · 4 advancement"),
-                "30037" => new("Nico Campaign", "Asset", 2, null, null, 2, Array.Empty<string>(), "Place 2 credits on Nico Campaign."),
-                _ => new(definitionId ?? "Unknown card", "Card", null, null, null, null, Array.Empty<string>(), "Card details are hidden."),
-            };
-        }
-    }
 }
 
 /// <summary>Short alias retained for callers that prefer a builder name.</summary>
 public static class MatchViewModelBuilder
 {
+    /// <summary>Legacy M2 compatibility adapter; prefer the catalog overload.</summary>
     public static MatchViewModel Build(Observation observation) => ObservationViewMapper.Build(observation);
+
+    /// <summary>Legacy M2 compatibility adapter; prefer the catalog overload.</summary>
+    public static MatchViewModel Build(
+        Observation observation,
+        ICardMetadataResolver metadataResolver) =>
+        ObservationViewMapper.Build(observation, metadataResolver);
+
+    /// <summary>Canonical composition entry point with explicit catalogs.</summary>
+    public static MatchViewModel Build(
+        Observation observation,
+        ICardMetadataResolver metadataResolver,
+        IBehaviorCatalog behaviorCatalog) =>
+        ObservationViewMapper.Build(observation, metadataResolver, behaviorCatalog);
 }

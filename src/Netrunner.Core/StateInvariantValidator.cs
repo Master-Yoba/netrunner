@@ -42,8 +42,19 @@ public static class StateInvariantValidator
 {
     public static void Validate(GameState state)
     {
+        Validate(state, null);
+    }
+
+    /// <summary>
+    /// Validates against an explicitly composed behavior catalog.  The
+    /// catalog is never stored in state; this overload lets an injected
+    /// engine session validate the same opaque definition IDs against its own
+    /// immutable registration set.
+    /// </summary>
+    public static void Validate(GameState state, IBehaviorCatalog? behaviorCatalog)
+    {
         ArgumentNullException.ThrowIfNull(state);
-        IReadOnlyList<StateInvariantViolation> violations = Collect(state);
+        IReadOnlyList<StateInvariantViolation> violations = Collect(state, behaviorCatalog);
         if (violations.Count > 0)
         {
             throw new StateInvariantException(violations);
@@ -54,28 +65,49 @@ public static class StateInvariantValidator
         GameState state,
         out IReadOnlyList<StateInvariantViolation> violations)
     {
+        return TryValidate(state, null, out violations);
+    }
+
+    public static bool TryValidate(
+        GameState state,
+        IBehaviorCatalog? behaviorCatalog,
+        out IReadOnlyList<StateInvariantViolation> violations)
+    {
         ArgumentNullException.ThrowIfNull(state);
-        violations = Collect(state);
+        violations = Collect(state, behaviorCatalog);
         return violations.Count == 0;
     }
 
     public static IReadOnlyList<StateInvariantViolation> Collect(GameState state)
     {
+        return Collect(state, null);
+    }
+
+    public static IReadOnlyList<StateInvariantViolation> Collect(
+        GameState state,
+        IBehaviorCatalog? behaviorCatalog)
+    {
         ArgumentNullException.ThrowIfNull(state);
+        bool enforceCatalogCompatibility = behaviorCatalog is not null;
+        behaviorCatalog ??= CardBehaviorSpecCatalog.Default;
 
         var violations = new List<StateInvariantViolation>();
-        ValidateMetadata(state, violations);
+        ValidateMetadata(state, behaviorCatalog, enforceCatalogCompatibility, violations);
         ValidatePlayers(state, violations);
-        ValidateZonesAndCards(state, violations);
+        ValidateZonesAndCards(state, behaviorCatalog, violations);
         ValidateServers(state, violations);
         ValidateTurnAndOutcome(state, violations);
-        ValidateRunState(state, violations);
+        ValidateRunState(state, behaviorCatalog, violations);
         ValidateRulesState(state, violations);
-        ValidateResolutionAndDecision(state, violations);
+        ValidateResolutionAndDecision(state, behaviorCatalog, violations);
         return violations.AsReadOnly();
     }
 
-    private static void ValidateMetadata(GameState state, List<StateInvariantViolation> violations)
+    private static void ValidateMetadata(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        bool enforceCatalogCompatibility,
+        List<StateInvariantViolation> violations)
     {
         if (state.SchemaVersion != GameState.CurrentSchemaVersion)
         {
@@ -99,6 +131,40 @@ public static class StateInvariantValidator
         if (string.IsNullOrWhiteSpace(state.CardDataVersion))
         {
             Add(violations, "metadata.missing", "cardDataVersion", "Card-data version must be non-empty.");
+        }
+
+        if (string.IsNullOrWhiteSpace(state.BehaviorRegistryVersion))
+        {
+            Add(violations, "metadata.missing", "behaviorRegistryVersion", "Behavior-registry version must be non-empty.");
+        }
+        else if (enforceCatalogCompatibility
+            && !string.Equals(state.BehaviorRegistryVersion, behaviorCatalog.Version, StringComparison.Ordinal))
+        {
+            Add(
+                violations,
+                "metadata.behavior-version-mismatch",
+                "behaviorRegistryVersion",
+                $"Behavior-registry version '{state.BehaviorRegistryVersion}' does not match the supplied catalog version '{behaviorCatalog.Version}'.");
+        }
+
+        if (state.BehaviorCatalogFingerprint is not null
+            && !DeterministicHash.IsSha256Hex(state.BehaviorCatalogFingerprint))
+        {
+            Add(
+                violations,
+                "metadata.invalid-fingerprint",
+                "behaviorCatalogFingerprint",
+                "Behavior-catalog fingerprints must be lowercase SHA-256 hex.");
+        }
+        else if (enforceCatalogCompatibility
+            && state.BehaviorCatalogFingerprint is not null
+            && !string.Equals(state.BehaviorCatalogFingerprint, behaviorCatalog.Fingerprint, StringComparison.Ordinal))
+        {
+            Add(
+                violations,
+                "metadata.behavior-fingerprint-mismatch",
+                "behaviorCatalogFingerprint",
+                $"Behavior-catalog fingerprint '{state.BehaviorCatalogFingerprint}' does not match the supplied catalog fingerprint '{behaviorCatalog.Fingerprint}'.");
         }
 
         if (state.Allocator is null || state.Allocator.NextSequence == 0)
@@ -192,7 +258,10 @@ public static class StateInvariantValidator
         }
     }
 
-    private static void ValidateZonesAndCards(GameState state, List<StateInvariantViolation> violations)
+    private static void ValidateZonesAndCards(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        List<StateInvariantViolation> violations)
     {
         var zonesById = new Dictionary<string, ZoneState>(StringComparer.Ordinal);
         for (int index = 0; index < state.Zones.Count; index++)
@@ -327,7 +396,7 @@ public static class StateInvariantValidator
                     && (
                         (ToyCardBehaviorCatalog.TryGet(card.DefinitionId, out ToyCardBehavior? behavior)
                             && behavior.Kind == ToyCardKind.CorpAgenda)
-                        || CardBehaviorSpecCatalog.TryGetAgenda(card.DefinitionId, out _));
+                        || behaviorCatalog.TryGetAgenda(card.DefinitionId, out _));
                 if (zone.OwnerSide.HasValue && card.OwnerSide != zone.OwnerSide.Value && !isStolenCorpAgenda)
                 {
                     Add(
@@ -697,7 +766,10 @@ public static class StateInvariantValidator
         }
     }
 
-    private static void ValidateRunState(GameState state, List<StateInvariantViolation> violations)
+    private static void ValidateRunState(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        List<StateInvariantViolation> violations)
     {
         RunState? run = state.RunState;
         bool hasRunFrame = state.ResolutionStack.Any(static frame => frame is RunTimingFrame);
@@ -843,7 +915,7 @@ public static class StateInvariantValidator
                         "The active run event must be Runner-owned.");
                 }
 
-                if (!CardBehaviorSpecCatalog.TryGetRunEvent(activeEvent.DefinitionId, out _))
+                if (!behaviorCatalog.TryGetRunEvent(activeEvent.DefinitionId, out _))
                 {
                     Add(
                         violations,
@@ -1496,7 +1568,10 @@ public static class StateInvariantValidator
         }
     }
 
-    private static void ValidateResolutionAndDecision(GameState state, List<StateInvariantViolation> violations)
+    private static void ValidateResolutionAndDecision(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        List<StateInvariantViolation> violations)
     {
         var playerIds = new HashSet<PlayerId>(
             state.Players.Where(static player => player is not null).Select(static player => player!.Id));
@@ -1758,7 +1833,7 @@ public static class StateInvariantValidator
         }
         else
         {
-            ValidatePendingDecision(state, pending, playerIds, cardIds, violations);
+            ValidatePendingDecision(state, pending, playerIds, cardIds, behaviorCatalog, violations);
         }
 
         if (state.Outcome.Kind == GameOutcomeKind.Won)
@@ -1781,6 +1856,7 @@ public static class StateInvariantValidator
         PendingDecision pending,
         HashSet<PlayerId> playerIds,
         HashSet<CardInstanceId> cardIds,
+        IBehaviorCatalog behaviorCatalog,
         List<StateInvariantViolation> violations)
     {
         const string path = "pendingDecision";
@@ -2300,7 +2376,7 @@ public static class StateInvariantValidator
             && topFrame is RunTimingFrame runTiming
             && state.RunState is not null)
         {
-            ValidateRunActions(state, pending, state.RunState, runTiming, path, violations);
+            ValidateRunActions(state, pending, state.RunState, runTiming, behaviorCatalog, path, violations);
         }
 
         if (pending.Kind == DecisionKind.MemoryCleanup
@@ -2442,6 +2518,7 @@ public static class StateInvariantValidator
         PendingDecision pending,
         RunState run,
         RunTimingFrame frame,
+        IBehaviorCatalog behaviorCatalog,
         string path,
         List<StateInvariantViolation> violations)
     {
@@ -2464,7 +2541,7 @@ public static class StateInvariantValidator
                     && run.CurrentIceId.HasValue)
                 {
                     CardInstanceState approachedIce = state.GetCard(run.CurrentIceId.Value);
-                    if (CardBehaviorSpecCatalog.TryGetIce(approachedIce.DefinitionId, out IceBehaviorSpec? approachedSpec))
+                    if (behaviorCatalog.TryGetIce(approachedIce.DefinitionId, out IceBehaviorSpec? approachedSpec))
                     {
                         PlayerState? corp = state.Players.FirstOrDefault(player => player?.Side == PlayerSide.Corp);
                         if (corp is not null && corp.Credits >= approachedSpec.RezCost)
@@ -2487,7 +2564,7 @@ public static class StateInvariantValidator
                     // stored zone/card order; there is no persistent server
                     // attachment.
                     if (attackedServer is not null
-                        && CardBehaviorSpecCatalog.TryGetIce(
+                        && behaviorCatalog.TryGetIce(
                             state.GetCard(run.Encounter.IceId).DefinitionId,
                             out IceBehaviorSpec? expectedIceSpec))
                     {
@@ -2509,7 +2586,7 @@ public static class StateInvariantValidator
                             {
                                 CardInstanceState? card = state.Cards.FirstOrDefault(candidate => candidate?.Id == cardId);
                                 if (card is null
-                                    || !CardBehaviorSpecCatalog.TryGetIcebreaker(
+                                    || !behaviorCatalog.TryGetIcebreaker(
                                         card.DefinitionId,
                                         out IcebreakerBehaviorSpec? expectedBreakerSpec))
                                 {
@@ -2595,7 +2672,7 @@ public static class StateInvariantValidator
                     // so the window offers the pass only; CR 7.2.3 then steals
                     // the agenda automatically on progression. Mirror the
                     // engine's basic-trash offer for every other accessed card.
-                    bool accessedAgenda = CardBehaviorSpecCatalog.TryGetAgenda(accessedCard.DefinitionId, out _);
+                    bool accessedAgenda = behaviorCatalog.TryGetAgenda(accessedCard.DefinitionId, out _);
                     if (!accessedAgenda)
                     {
                         // CR 7.1.5/7.1.5b: mirrors the engine's basic-trash offer —
@@ -2605,7 +2682,7 @@ public static class StateInvariantValidator
                         ZoneState? discardZone = state.Zones.FirstOrDefault(zone => zone?.Kind == ZoneKind.CorpDiscard && zone.ServerId is null);
                         if (discardZone is not null
                             && accessedCard.ZoneId != discardZone.Id
-                            && CardBehaviorSpecCatalog.TryGetAsset(accessedCard.DefinitionId, out AssetBehaviorSpec? assetSpec))
+                            && behaviorCatalog.TryGetAsset(accessedCard.DefinitionId, out AssetBehaviorSpec? assetSpec))
                         {
                             PlayerState? trashRunner = state.Players.FirstOrDefault(player => player?.Side == PlayerSide.Runner);
                             if (trashRunner is not null && (long)trashRunner.Credits + run.RunCredits >= assetSpec.TrashCost)

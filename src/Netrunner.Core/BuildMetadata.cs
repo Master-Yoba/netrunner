@@ -5,8 +5,15 @@ namespace Netrunner.Core;
 public static class BuildMetadata
 {
     public const string RulesVersion = "26.03";
-    public const int SaveSchemaVersion = 1;
-    public const int ActionLogSchemaVersion = 1;
+    // M4-4.1: persisted state now carries an explicit behavior-registry
+    // version.  This is a deliberate migration; schema-1 state is rejected
+    // rather than silently defaulting the new metadata. Keep the build
+    // metadata pin coupled to the state contract so the two cannot drift.
+    public const int SaveSchemaVersion = GameState.CurrentSchemaVersion;
+    // Replay/action wire shape did not migrate with the saved state. Keep its
+    // contract aligned with EngineCompatibility.ArtifactSchemaVersion while
+    // SaveSchemaVersion tracks the separate state/snapshot migration.
+    public const int ActionLogSchemaVersion = EngineCompatibility.ArtifactSchemaVersion;
 
     public static BuildInfo Current { get; } = Create();
 
@@ -30,4 +37,3 @@ public sealed record BuildInfo(
     string RulesVersion,
     int SaveSchemaVersion,
     int ActionLogSchemaVersion);
-

@@ -19,9 +19,11 @@ public sealed class M2ProofTests
     // with the same AgendaStolen event, so the event stream, the terminal
     // state, and the 32-decision count are unchanged (only the checkpoint
     // state hash at the agenda mid-access decision differs). The initial
-    // state hash is unchanged by the rework.
+    // The M4-4.1 state schema migration adds the explicit behavior pin and
+    // catalog fingerprint, so state hashes are intentionally re-pinned;
+    // event hashes remain stable because event payloads are unchanged.
     private const string ExpectedFinalStateHash =
-        "c822e9790dcad48ccdb52f42539be678943fc109820ea2c7e20e5f8fa03805ac";
+        "950d1b0d44da26d5ba9a688b83b7ac8202850d8337a8c0609eaf47269b1387ed";
     private const string ExpectedEventStreamHash =
         "d20cdef94e97ac928ca088e14952b65d2116fecda00485fff5c3b05e1b6e9e20";
 

@@ -22,7 +22,9 @@ public partial class Main : Control
 	private static readonly Color Warning = new(0.98f, 0.74f, 0.28f);
 
 	private readonly Queue<IReadOnlyList<EngineEvent>> _animationBatches = new();
-	private readonly Queue<string> _eventFeedLines = new();
+	private readonly CardMetadataSnapshot _metadataSnapshot = CardMetadataResolvers.Embedded;
+	private readonly ICardMetadataResolver _metadataResolver = CardMetadataResolvers.Default;
+	private readonly EventFeedRegionPresenter _eventFeedRegion = new();
 	private readonly ConcurrentQueue<MatchSnapshot> _pendingSnapshots = new();
 	private readonly Dictionary<string, List<TextCardControl>> _cardControls = new(StringComparer.Ordinal);
 	private readonly Dictionary<string, CardViewModel> _cardModels = new(StringComparer.Ordinal);
@@ -58,6 +60,8 @@ public partial class Main : Control
 	private PanelContainer _actionPanel = null!;
 	private Button _zoomButton = null!;
 	private PanelContainer _zoomOverlay = null!;
+	private Button _galleryButton = null!;
+	private PanelContainer? _galleryOverlay;
 	private Label _zoomTitle = null!;
 	private Label _zoomText = null!;
 	private HSlider _speed = null!;
@@ -65,6 +69,8 @@ public partial class Main : Control
 	private Button _skipAnimations = null!;
 	private bool _smokeTest;
 	private bool _responsivenessSmoke;
+	private bool _gallerySmoke;
+	private bool _gallerySmokePassed;
 	private bool _animationRunning;
 	private bool _skipAnimation;
 	private int _framesWhileAnimating;
@@ -83,238 +89,20 @@ public partial class Main : Control
 
 	public override void _Ready()
 	{
-		_smokeTest = OS.GetCmdlineUserArgs().Contains("--smoke-test", StringComparer.Ordinal)
-			|| OS.GetCmdlineUserArgs().Contains("--m3-responsiveness-smoke", StringComparer.Ordinal);
-		_responsivenessSmoke = OS.GetCmdlineUserArgs().Contains("--m3-responsiveness-smoke", StringComparer.Ordinal);
+		IReadOnlyList<string> arguments = OS.GetCmdlineUserArgs();
+		_gallerySmoke = arguments.Contains("--m4-card-gallery-smoke", StringComparer.Ordinal);
+		_smokeTest = arguments.Contains("--smoke-test", StringComparer.Ordinal)
+			|| arguments.Contains("--m3-responsiveness-smoke", StringComparer.Ordinal);
+		_responsivenessSmoke = arguments.Contains("--m3-responsiveness-smoke", StringComparer.Ordinal);
 		BuildShell();
-		if (_smokeTest)
+		if (_gallerySmoke)
+		{
+			RunGallerySmoke();
+		}
+		else if (_smokeTest)
 		{
 			BeginMatch();
 		}
-	}
-
-	private void RenderFocusPresentation(MatchSnapshot snapshot)
-	{
-		ClearChildren(_focusPresentation);
-		MatchViewModel view = snapshot.View;
-		if (snapshot.RunOutcome is { } completed && view.Run is null)
-		{
-			_focusPresentation.AddChild(MakeLabel("REPRESENTATIVE SLICE COMPLETE", 17, Accent));
-			_focusPresentation.AddChild(MakeWrappedLabel(
-				$"{completed.Summary}\nThe live run has been cleaned up by Core. This screen is a presentation-safe outcome summary.",
-				13,
-				Colors.White));
-			_smokeOutcomePresentationObserved |= _smokeTest && _focusPresentation.GetChildCount() > 0;
-			return;
-		}
-
-		if (view.Run is not { } run)
-		{
-			_focusPresentation.AddChild(MakeLabel(
-				"RUN FOCUS · select a legal action to continue",
-				13,
-				Muted));
-			return;
-		}
-
-		if (run.Encounter is { } encounter)
-		{
-			_smokeEncounterFocusObserved |= _smokeTest;
-			RenderEncounterFocus(snapshot, run, encounter);
-			return;
-		}
-
-		if (run.Access.State != RunAccessState.NotStarted)
-		{
-			_smokeAccessFocusObserved |= _smokeTest;
-			RenderAccessFocus(snapshot, run);
-			return;
-		}
-
-		if (run.Priority is { } priority)
-		{
-			RenderPaidWindowFocus(priority);
-			return;
-		}
-
-		_focusPresentation.AddChild(MakeLabel(
-			$"RUN STATUS · {run.Phase} · {run.Step} · run pool {run.RunCredits}",
-			15,
-			Warning));
-		_focusPresentation.AddChild(MakeWrappedLabel(
-			"The current timing step is owned by Core. Legal actions below are the only actions that can mutate the run.",
-			12,
-			Muted));
-	}
-
-	private void RenderPaidWindowFocus(RunPriorityViewModel priority)
-	{
-		_focusPresentation.AddChild(MakeLabel(
-			$"PAID WINDOW · {priority.Window} · PRIORITY {priority.Holder.ToString().ToUpperInvariant()}",
-			17,
-			Accent));
-		_focusPresentation.AddChild(MakeWrappedLabel(
-			$"Consecutive passes: {priority.ConsecutivePasses} · "
-			+ $"Corp may rez approached ICE: {(priority.CorpMayRezApproachedIce ? "YES" : "NO")} · "
-			+ $"non-ICE rez: {(priority.CorpMayRezNonIce ? "YES" : "NO")}",
-			12,
-			Colors.White));
-		_focusPresentation.AddChild(MakeWrappedLabel(
-			"PASS / CONTINUE remain explicit below. The priority holder is shown as text, not colour alone.",
-			12,
-			Muted));
-	}
-
-	private void RenderEncounterFocus(
-		MatchSnapshot snapshot,
-		RunFocusViewModel run,
-		EncounterViewModel encounter)
-	{
-		string iceTitle = encounter.Ice?.Title ?? run.CurrentIce?.Title ?? "Unknown ICE";
-		_focusPresentation.AddChild(MakeLabel(
-			$"ENCOUNTER FOCUS · {iceTitle} · {encounter.Status.ToString().ToUpperInvariant()}",
-			17,
-			Warning));
-
-		HBoxContainer encounterRow = new();
-		encounterRow.AddThemeConstantOverride("separation", 10);
-		if (encounter.Ice is { } ice)
-		{
-			TextCardControl iceCard = MakeCard(ice);
-			iceCard.CustomMinimumSize = new Vector2(172, 122);
-			encounterRow.AddChild(iceCard);
-		}
-
-		VBoxContainer state = new();
-		state.AddThemeConstantOverride("separation", 3);
-		state.AddChild(MakeLabel(
-			$"ICE STRENGTH · {(encounter.EffectiveStrength is { } strength ? strength.ToString(CultureInfo.InvariantCulture) : "UNKNOWN")}",
-			14,
-			Colors.White));
-		state.AddChild(MakeLabel(
-			$"SUBROUTINES · {encounter.Subroutines.Count} total · {encounter.RemainingSubroutines} active",
-			12,
-			Accent));
-		foreach (EncounterBreakerViewModel breaker in encounter.Breakers)
-		{
-			string pumpCue = breaker.EffectiveStrength == breaker.PrintedStrength
-				? string.Empty
-				: $" · PRINTED {breaker.PrintedStrength} + ENCOUNTER PUMP";
-			state.AddChild(MakeLabel(
-				$"BREAKER · {breaker.Title} · CURRENT STR {breaker.EffectiveStrength}{pumpCue}",
-				11,
-				encounter.EffectiveStrength is { } iceStrength
-					&& breaker.EffectiveStrength < iceStrength ? Warning : Accent));
-		}
-
-		foreach (SubroutineViewModel subroutine in encounter.Subroutines)
-		{
-			string status = subroutine.Broken
-				? "[BROKEN]"
-				: subroutine.Resolved ? "[RESOLVED]" : "[ACTIVE]";
-			state.AddChild(MakeLabel(
-				$"{status} Subroutine {subroutine.Ordinal}",
-				11,
-				subroutine.Broken || subroutine.Resolved ? Muted : Colors.White));
-		}
-
-		encounterRow.AddChild(state);
-		_focusPresentation.AddChild(encounterRow);
-		AddRunPoolCue(run, "hosted run credit(s) available for pump and break costs");
-		string breakerCue = string.Join(
-			" · ",
-			snapshot.View.LegalActions
-				.Where(action => action.Kind is ActionKind.PumpBreaker or ActionKind.BreakSubroutines)
-				.Select(action => $"{action.Kind}: {action.Description}"));
-		_focusPresentation.AddChild(MakeWrappedLabel(
-			string.IsNullOrWhiteSpace(breakerCue)
-				? "BREAKER OPTIONS · no breaker action is currently issued"
-				: $"BREAKER OPTIONS · {breakerCue}",
-			12,
-			Colors.White));
-		if (run.Priority is { } priority)
-		{
-			AddPriorityCue(priority);
-		}
-	}
-
-	private void RenderAccessFocus(MatchSnapshot snapshot, RunFocusViewModel run)
-	{
-		AccessViewModel access = run.Access;
-		_focusPresentation.AddChild(MakeLabel(
-			$"ACCESS FOCUS · {run.AttackedServerId} · {access.State.ToString().ToUpperInvariant()}",
-			17,
-			Accent));
-		_focusPresentation.AddChild(MakeLabel(
-			$"Candidates: {access.Candidates.Count} · chosen: {access.Chosen.Count} · accessed: {access.Accessed.Count}"
-				+ (access.RandomAccessLimit > 0 ? $" · random access limit {access.RandomAccessLimit}" : string.Empty),
-			12,
-			Colors.White));
-
-		if (access.Candidates.Count > 0)
-		{
-			_focusPresentation.AddChild(MakeLabel("CANDIDATE TARGETS · click a card or choose a legal action below", 11, Warning));
-			HBoxContainer candidates = new();
-			candidates.AddThemeConstantOverride("separation", 7);
-			foreach (CardViewModel? candidate in access.Candidates)
-			{
-				TextCardControl card = MakeCard(candidate);
-				card.CustomMinimumSize = new Vector2(140, 100);
-				candidates.AddChild(card);
-			}
-			_focusPresentation.AddChild(candidates);
-		}
-		else if (access.HiddenCandidateSource is { } source)
-		{
-			_focusPresentation.AddChild(MakeWrappedLabel(
-				$"HIDDEN CANDIDATE · Core will draw from {source} after the Runner confirms the legal choice.",
-				12,
-				Warning));
-		}
-
-		if (access.Accessed.Count > 0)
-		{
-			_focusPresentation.AddChild(MakeLabel("ACCESSED CARD · costs and choices are shown below", 11, Warning));
-			HBoxContainer accessed = new();
-			foreach (CardViewModel? cardModel in access.Accessed)
-			{
-				TextCardControl card = MakeCard(cardModel);
-				card.CustomMinimumSize = new Vector2(140, 100);
-				accessed.AddChild(card);
-			}
-			_focusPresentation.AddChild(accessed);
-		}
-
-		AddRunPoolCue(run, "hosted run credit(s) available for trash costs");
-		IEnumerable<LegalActionViewModel> accessActions = snapshot.View.LegalActions.Where(IsAccessAction);
-		string actionCue = string.Join(
-			" · ",
-			accessActions.Select(action => $"{action.Kind.ToString().ToUpperInvariant()}: {action.Description}"));
-		_focusPresentation.AddChild(MakeWrappedLabel(
-			string.IsNullOrWhiteSpace(actionCue)
-				? "ACCESS ACTIONS · select a candidate to continue"
-				: $"ACCESS ACTIONS · {actionCue}",
-			12,
-			Colors.White));
-	}
-
-	private void AddRunPoolCue(RunFocusViewModel run, string usage)
-	{
-		if (run.RunCredits > 0)
-		{
-			_focusPresentation.AddChild(MakeLabel(
-				$"RUN POOL · {run.RunCredits} {usage} · expires at run end",
-				11,
-				Warning));
-		}
-	}
-
-	private void AddPriorityCue(RunPriorityViewModel priority)
-	{
-		_focusPresentation.AddChild(MakeWrappedLabel(
-			$"PAID WINDOW · {priority.Window} · priority {priority.Holder} · passes {priority.ConsecutivePasses} · PASS / CONTINUE below",
-			11,
-			Muted));
 	}
 
 	public override void _Process(double delta)
@@ -340,6 +128,7 @@ public partial class Main : Control
 
 	private void BuildShell()
 	{
+		ApplyThemeFoundation();
 		ColorRect backdrop = new()
 		{
 			Color = Background,
@@ -436,270 +225,23 @@ public partial class Main : Control
 		_startButton.AddThemeFontSizeOverride("font_size", 16);
 		_startButton.Pressed += BeginMatch;
 		_startPanel.AddChild(_startButton);
-	}
 
-	private void BuildBoard()
-	{
-		_board = new VBoxContainer
+		_galleryButton = new Button
 		{
-			Visible = false,
-			SizeFlagsVertical = SizeFlags.ExpandFill,
+			Text = "Open 77-card metadata gallery (dev)",
+			CustomMinimumSize = new Vector2(300, 36),
 		};
-		_board.AddThemeConstantOverride("separation", 10);
-		_layout.AddChild(_board);
-
-		HBoxContainer toolbar = new();
-		toolbar.AddThemeConstantOverride("separation", 12);
-		_board.AddChild(toolbar);
-		_focus = MakeLabel("RUN FOCUS · awaiting engine publication", 16, Warning);
-		_focus.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		toolbar.AddChild(_focus);
-		_reducedMotion = new CheckButton { Text = "Reduced motion" };
-		_reducedMotion.AddThemeColorOverride("font_color", Muted);
-		toolbar.AddChild(_reducedMotion);
-		toolbar.AddChild(MakeLabel("Speed", 12, Muted));
-		_speed = new HSlider
+		_galleryButton.Pressed += ShowCardGallery;
+		if (!_metadataSnapshot.IsOfficial)
 		{
-			MinValue = 0.25,
-			MaxValue = 2.0,
-			Step = 0.25,
-			Value = 1.0,
-			CustomMinimumSize = new Vector2(110, 24),
-		};
-		toolbar.AddChild(_speed);
-		_skipAnimations = new Button { Text = "Skip queued animation" };
-		_skipAnimations.Pressed += SkipAnimations;
-		toolbar.AddChild(_skipAnimations);
-
-		// A plain Control deliberately owns the scroll viewport. Containers
-		// propagate their children's minimum size to their parent; that would
-		// allow the dynamically rendered server/card columns to push the action
-		// row below the viewport as the match progresses.
-		Control bodyViewport = new()
-		{
-			ClipContents = true,
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-			SizeFlagsVertical = SizeFlags.ExpandFill,
-		};
-		_board.AddChild(bodyViewport);
-
-		_bodyScroll = new ScrollContainer
-		{
-			HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-			VerticalScrollMode = ScrollContainer.ScrollMode.Auto,
-		};
-		SetFullRect(_bodyScroll);
-		bodyViewport.AddChild(_bodyScroll);
-
-		HBoxContainer body = new()
-		{
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-			SizeFlagsVertical = SizeFlags.ExpandFill,
-		};
-		body.AddThemeConstantOverride("separation", 10);
-		_bodyScroll.AddChild(body);
-
-		_corpPanel = MakePanel();
-		_corpPanel.CustomMinimumSize = new Vector2(205, 0);
-		VBoxContainer corpContent = new();
-		corpContent.AddThemeConstantOverride("separation", 7);
-		_corpPanel.AddChild(corpContent);
-		corpContent.AddChild(MakeLabel("CORP · REMOTE NETWORK", 14, new Color(0.93f, 0.48f, 0.48f)));
-		_corpSummary = MakeLabel("Credits · Clicks · Score", 13, Muted);
-		corpContent.AddChild(_corpSummary);
-		corpContent.AddChild(MakeLabel("HQ / R&D / Archives", 12, Muted));
-		body.AddChild(_corpPanel);
-
-		_centerPanel = MakePanel();
-		_centerPanel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		_centerPanel.SizeFlagsVertical = SizeFlags.ExpandFill;
-		VBoxContainer center = new();
-		center.AddThemeConstantOverride("separation", 7);
-		_centerPanel.AddChild(center);
-		_decision = MakeLabel("No decision", 15, Colors.White);
-		_decision.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-		center.AddChild(_decision);
-		PanelContainer focusPanel = MakePanel();
-		focusPanel.CustomMinimumSize = new Vector2(0, 112);
-		_focusPresentation = new VBoxContainer();
-		_focusPresentation.AddThemeConstantOverride("separation", 5);
-		focusPanel.AddChild(_focusPresentation);
-		_focusPresentation.AddChild(MakeLabel(
-			"RUN FOCUS · select a legal action to continue",
-			13,
-			Muted));
-		center.AddChild(focusPanel);
-		_servers = new VBoxContainer
-		{
-			SizeFlagsVertical = SizeFlags.ExpandFill,
-		};
-		_servers.AddThemeConstantOverride("separation", 6);
-		center.AddChild(_servers);
-		_eventTitle = MakeLabel("Immutable Engine Event", 13, Accent);
-		center.AddChild(_eventTitle);
-		_eventFeed = new RichTextLabel
-		{
-			Text = "Event queue is empty.",
-			FitContent = false,
-			ScrollActive = true,
-			ScrollFollowing = true,
-			CustomMinimumSize = new Vector2(0, 76),
-		};
-		_eventFeed.AddThemeFontSizeOverride("normal_font_size", 11);
-		_eventFeed.AddThemeColorOverride("default_color", Muted);
-		center.AddChild(_eventFeed);
-		body.AddChild(_centerPanel);
-
-		_runnerPanel = MakePanel();
-		_runnerPanel.CustomMinimumSize = new Vector2(260, 0);
-		VBoxContainer runnerContent = new();
-		runnerContent.AddThemeConstantOverride("separation", 6);
-		_runnerPanel.AddChild(runnerContent);
-		runnerContent.AddChild(MakeLabel("RUNNER · YOUR RIG", 14, Accent));
-		_runnerSummary = MakeLabel("Credits · Clicks · Score", 13, Muted);
-		runnerContent.AddChild(_runnerSummary);
-		runnerContent.AddChild(MakeLabel("Rig", 12, Warning));
-		_runnerRig = new VBoxContainer();
-		_runnerRig.AddThemeConstantOverride("separation", 4);
-		runnerContent.AddChild(_runnerRig);
-		runnerContent.AddChild(MakeLabel("Grip (cards you own)", 12, Warning));
-		_runnerHand = new VBoxContainer();
-		_runnerHand.AddThemeConstantOverride("separation", 4);
-		runnerContent.AddChild(_runnerHand);
-		runnerContent.AddChild(MakeLabel("Scoring", 12, Warning));
-		_scores = new VBoxContainer();
-		_scores.AddThemeConstantOverride("separation", 4);
-		runnerContent.AddChild(_scores);
-		body.AddChild(_runnerPanel);
-
-		HBoxContainer lower = new();
-		lower.AddThemeConstantOverride("separation", 10);
-		lower.CustomMinimumSize = new Vector2(0, 150);
-		_board.AddChild(lower);
-
-		_actionPanel = MakePanel();
-		PanelContainer actionPanel = _actionPanel;
-		actionPanel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		VBoxContainer actionContent = new();
-		actionContent.AddThemeConstantOverride("separation", 5);
-		actionPanel.AddChild(actionContent);
-		actionContent.AddChild(MakeLabel("LEGAL ACTIONS · CLICK TO COMMIT", 13, Accent));
-
-		// Keep the action row's height independent of the number or length of
-		// legal actions. The inner ScrollContainer can grow its child, but this
-		// wrapper reports only its fixed viewport minimum to actionContent.
-		Control actionViewport = new()
-		{
-			ClipContents = true,
-			CustomMinimumSize = new Vector2(0, 100),
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-			SizeFlagsVertical = SizeFlags.ExpandFill,
-		};
-		ScrollContainer actionScroll = new()
-		{
-			HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-			VerticalScrollMode = ScrollContainer.ScrollMode.Auto,
-		};
-		SetFullRect(actionScroll);
-		_actions = new VBoxContainer();
-		_actions.AddThemeConstantOverride("separation", 5);
-		_actions.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		actionScroll.AddChild(_actions);
-		actionViewport.AddChild(actionScroll);
-		actionContent.AddChild(actionViewport);
-		lower.AddChild(actionPanel);
-
-		PanelContainer detailsPanel = MakePanel();
-		detailsPanel.CustomMinimumSize = new Vector2(420, 0);
-		VBoxContainer detailsContent = new();
-		detailsContent.AddThemeConstantOverride("separation", 5);
-		detailsPanel.AddChild(detailsContent);
-		detailsContent.AddChild(MakeLabel("INSPECTED CARD / TIMING", 13, Warning));
-		Control detailsViewport = new()
-		{
-			ClipContents = true,
-			CustomMinimumSize = new Vector2(0, 100),
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-			SizeFlagsVertical = SizeFlags.ExpandFill,
-		};
-		ScrollContainer detailsScroll = new()
-		{
-			HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-			VerticalScrollMode = ScrollContainer.ScrollMode.Auto,
-		};
-		SetFullRect(detailsScroll);
-		_details = MakeLabel("Hover or click a text card for details.\nImportant cues use labels and borders as well as colour.", 12, Muted);
-		_details.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-		_details.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		detailsScroll.AddChild(_details);
-		detailsViewport.AddChild(detailsScroll);
-		detailsContent.AddChild(detailsViewport);
-		_zoomButton = new Button
-		{
-			Text = "Zoom inspected card",
-			Visible = false,
-			CustomMinimumSize = new Vector2(0, 32),
-		};
-		_zoomButton.Pressed += ShowInspectedCardZoom;
-		detailsContent.AddChild(_zoomButton);
-		lower.AddChild(detailsPanel);
-	}
-
-	private void BuildCardZoomOverlay()
-	{
-		_zoomOverlay = new PanelContainer
-		{
-			Visible = false,
-			MouseFilter = MouseFilterEnum.Stop,
-		};
-		_zoomOverlay.AddThemeStyleboxOverride("panel", new StyleBoxFlat
-		{
-			BgColor = new Color(0.015f, 0.025f, 0.04f, 0.97f),
-			BorderColor = Accent,
-			BorderWidthLeft = 2,
-			BorderWidthTop = 2,
-			BorderWidthRight = 2,
-			BorderWidthBottom = 2,
-			CornerRadiusTopLeft = 10,
-			CornerRadiusTopRight = 10,
-			CornerRadiusBottomLeft = 10,
-			CornerRadiusBottomRight = 10,
-			ContentMarginLeft = 36,
-			ContentMarginTop = 30,
-			ContentMarginRight = 36,
-			ContentMarginBottom = 30,
-		});
-		SetFullRect(_zoomOverlay);
-		AddChild(_zoomOverlay);
-
-		MarginContainer margin = new();
-		margin.AddThemeConstantOverride("margin_left", 72);
-		margin.AddThemeConstantOverride("margin_top", 56);
-		margin.AddThemeConstantOverride("margin_right", 72);
-		margin.AddThemeConstantOverride("margin_bottom", 56);
-		_zoomOverlay.AddChild(margin);
-		VBoxContainer content = new();
-		content.AddThemeConstantOverride("separation", 14);
-		margin.AddChild(content);
-		_zoomTitle = MakeLabel("CARD ZOOM", 24, Accent);
-		_zoomTitle.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-		content.AddChild(_zoomTitle);
-		_zoomText = MakeLabel(string.Empty, 18, Colors.White);
-		_zoomText.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-		_zoomText.SizeFlagsVertical = SizeFlags.ExpandFill;
-		content.AddChild(_zoomText);
-		Label cue = MakeLabel(
-			"Full text view · hidden information remains concealed · press Escape or Close",
-			12,
-			Muted);
-		content.AddChild(cue);
-		Button close = new()
-		{
-			Text = "Close card zoom",
-			CustomMinimumSize = new Vector2(180, 42),
-		};
-		close.Pressed += HideCardZoom;
-		content.AddChild(close);
+			_galleryButton.Disabled = true;
+			_galleryButton.TooltipText = "Provision the authenticated 77-card snapshot for the dev gallery.";
+			if (_gallerySmoke)
+			{
+				GD.PrintErr(_metadataSnapshot.Diagnostic);
+			}
+		}
+		_startPanel.AddChild(_galleryButton);
 	}
 
 	private void BuildFooter()
@@ -724,6 +266,7 @@ public partial class Main : Control
 				// This mode intentionally uses the real ten-second production delay;
 				// its frame/input assertions run while the worker is actually waiting.
 				AgentDelay = TimeSpan.FromSeconds(10),
+				CardMetadataResolver = _metadataResolver,
 			}
 			: _smokeTest
 			? new MatchCoordinatorOptions
@@ -731,10 +274,14 @@ public partial class Main : Control
 				// Keep the production-facing ten-second setting visible in
 				// the smoke path while injecting a short deterministic delay.
 				AgentDelay = TimeSpan.FromSeconds(10),
+				CardMetadataResolver = _metadataResolver,
 				Delay = static (_, cancellationToken) =>
 					new ValueTask(Task.Delay(TimeSpan.FromMilliseconds(45), cancellationToken)),
 			}
-			: new MatchCoordinatorOptions();
+			: new MatchCoordinatorOptions
+			{
+				CardMetadataResolver = _metadataResolver,
+			};
 		_coordinator = M2MatchFactory.CreateRepresentative(options);
 		_runnerPlaybackPolicy = _smokeTest
 			? M2MatchFactory.CreateRepresentativeRunnerPolicy()
@@ -839,7 +386,8 @@ public partial class Main : Control
 					continue;
 				}
 
-				LegalActionViewModel? target = snapshot.View.LegalActions.FirstOrDefault(IsTargetedAction);
+				LegalActionViewModel? target = snapshot.View.LegalActions
+					.FirstOrDefault(ActionsRegionPresenter.IsTargetedAction);
 				if (!targetSelectionExercised && target is not null)
 				{
 					targetSelectionExercised = true;
@@ -1250,343 +798,20 @@ public partial class Main : Control
 				? $"REPRESENTATIVE RUN COMPLETE\n{finished.Summary}\nNo further Core action is pending."
 			: view.Outcome.IsTerminal ? "Outcome reached." : "No pending decision.";
 
-		_corpSummary.Text = FormatPlayer(view.Corp, view.CorpHand.Count, view.CorpDeck.Count, null);
-		_runnerSummary.Text = FormatPlayer(
-			view.Runner,
-			view.RunnerHand.Count,
-			view.RunnerDeck.Count,
-			view.Run is { RunCredits: > 0 } runWithPool ? runWithPool.RunCredits : null);
+		BoardRegionState board = BoardRegionPresenter.Present(view);
+		_corpSummary.Text = board.CorpSummary;
+		_runnerSummary.Text = board.RunnerSummary;
 		_cardControls.Clear();
 		_cardModels.Clear();
-		RenderFocusPresentation(snapshot);
-		RenderServers(view.Servers);
-		RenderRunnerCards(view);
+		RenderFocusPresentationRegion(snapshot);
+		RenderServers(board.Servers);
+		RenderRunnerCards(board);
 		RenderActions(snapshot);
 		if (snapshot.Feedback is { } feedback)
 		{
 			_details.Text = $"{feedback.Kind.ToString().ToUpperInvariant()}\n{feedback.Message}";
 			_details.AddThemeColorOverride("font_color", feedback.IsError ? Warning : Muted);
 		}
-	}
-
-	private void RenderServers(IReadOnlyList<ServerViewModel> servers)
-	{
-		ClearChildren(_servers);
-		foreach (ServerViewModel server in servers)
-		{
-			PanelContainer panel = MakePanel();
-			VBoxContainer content = new();
-			content.AddThemeConstantOverride("separation", 4);
-			panel.AddChild(content);
-			content.AddChild(MakeLabel(
-				$"{server.Kind.ToString().ToUpperInvariant()}  ·  {server.Id}",
-				12,
-				server.Kind == ServerKind.Remote ? Warning : Muted));
-			HBoxContainer ice = new();
-			ice.AddChild(MakeLabel("ICE (outer → inner)", 10, Muted));
-			foreach (CardViewModel? card in server.OrderedIce)
-			{
-				TextCardControl control = MakeCard(card);
-				ice.AddChild(control);
-			}
-
-			content.AddChild(ice);
-			HBoxContainer root = new();
-			root.AddChild(MakeLabel("ROOT", 10, Muted));
-			foreach (CardViewModel? card in server.OrderedRoot)
-			{
-				root.AddChild(MakeCard(card));
-			}
-
-			content.AddChild(root);
-			_servers.AddChild(panel);
-		}
-	}
-
-	private void RenderRunnerCards(MatchViewModel view)
-	{
-		ClearChildren(_runnerRig);
-		foreach (CardViewModel card in view.RunnerRig)
-		{
-			TextCardControl control = MakeCard(card);
-			EncounterBreakerViewModel? breaker = view.Run?.Encounter?.Breakers
-				.FirstOrDefault(candidate => candidate.CardId == card.Id);
-			control.SetEncounterStrength(breaker?.EffectiveStrength);
-			_runnerRig.AddChild(control);
-		}
-
-		ClearChildren(_runnerHand);
-		_runnerHand.AddChild(MakeLabel(
-			$"{view.RunnerHand.Count} card(s) · deck {view.RunnerDeck.Count}",
-			11,
-			Muted));
-		foreach (CardViewModel card in view.RunnerHand.VisibleCards)
-		{
-			_runnerHand.AddChild(MakeCard(card));
-		}
-
-		ClearChildren(_scores);
-		_scores.AddChild(MakeLabel(
-			$"Runner score: {view.Runner.AgendaPoints} · Corp score: {view.Corp.AgendaPoints}",
-			11,
-			Warning));
-		foreach (CardViewModel card in view.RunnerScore)
-		{
-			_scores.AddChild(MakeLabel($"Runner · {card.Title} ({card.AgendaPoints} AP)", 10, Muted));
-		}
-
-		foreach (CardViewModel card in view.CorpScore)
-		{
-			_scores.AddChild(MakeLabel($"Corp · {card.Title} ({card.AgendaPoints} AP)", 10, Muted));
-		}
-	}
-
-	private void RenderActions(MatchSnapshot snapshot)
-	{
-		ClearChildren(_actions);
-		UpdateTargetHighlights(snapshot.View.LegalActions);
-		if (snapshot.IsOpponentThinking)
-		{
-			_actions.AddChild(MakeLabel("Opponent thinking…", 13, Warning));
-			return;
-		}
-
-		DecisionViewModel? decision = snapshot.View.Decision;
-		if (decision is null || decision.OwnerSide != PlayerSide.Runner)
-		{
-			_actions.AddChild(MakeLabel(
-				snapshot.RunOutcome is not null && snapshot.View.Run is null
-					? "REPRESENTATIVE RUN COMPLETE · no further actions"
-					: "Waiting for the next issued Runner decision.",
-				12,
-				Muted));
-			return;
-		}
-
-		if (_stagedAction is { } staged && _stagedDecision is { } stagedDecision)
-		{
-			_smokeTargetControlsObserved |= _smokeTest;
-			PanelContainer selected = MakePanel();
-			VBoxContainer selectedContent = new();
-			selectedContent.AddThemeConstantOverride("separation", 3);
-			selected.AddChild(selectedContent);
-			selectedContent.AddChild(MakeLabel("TARGET SELECTED · confirm or cancel", 12, Warning));
-			selectedContent.AddChild(MakeLabel(
-				$"{staged.Kind.ToString().ToUpperInvariant()} · {staged.Description}\n"
-				+ "No engine action has been submitted yet.",
-				11,
-				Colors.White));
-			HBoxContainer selectedButtons = new();
-			Button confirm = new()
-			{
-				Text = "Confirm target",
-				CustomMinimumSize = new Vector2(150, 34),
-			};
-			confirm.Pressed += () => ConfirmStagedAction(stagedDecision, staged);
-			selectedButtons.AddChild(confirm);
-			Button cancel = new()
-			{
-				Text = "Cancel / Back",
-				CustomMinimumSize = new Vector2(150, 34),
-			};
-			cancel.Pressed += CancelStagedAction;
-			selectedButtons.AddChild(cancel);
-			selectedContent.AddChild(selectedButtons);
-			_actions.AddChild(selected);
-		}
-
-		foreach (LegalActionViewModel action in snapshot.View.LegalActions)
-		{
-			bool targeted = GetTargetCardId(action.Parameters) is not null
-				|| action.Parameters is BreachCandidateParameters;
-			Button button = new()
-			{
-				Text = targeted
-					? $"SELECT TARGET · {action.Kind}: {action.Description}"
-					: $"{action.Kind}: {action.Description}",
-				Alignment = HorizontalAlignment.Left,
-				Disabled = Volatile.Read(ref _submissionInFlight) != 0,
-			};
-			if (targeted)
-			{
-				button.Pressed += () => StageTargetAction(decision, action);
-			}
-			else
-			{
-				button.Pressed += () => SubmitAction(decision, action);
-			}
-			_actions.AddChild(button);
-		}
-	}
-
-	private void StageTargetAction(DecisionViewModel decision, LegalActionViewModel action)
-	{
-		if (!SameDecision(decision, _currentSnapshot?.View.Decision)
-			|| _currentSnapshot is null
-			|| _currentSnapshot.IsOpponentThinking)
-		{
-			return;
-		}
-
-		_stagedDecision = decision;
-		_stagedAction = action;
-		UpdateTargetHighlights(_currentSnapshot.View.LegalActions);
-		RenderActions(_currentSnapshot);
-	}
-
-	private void ConfirmStagedAction(DecisionViewModel decision, LegalActionViewModel action)
-	{
-		if (!SameDecision(decision, _currentSnapshot?.View.Decision))
-		{
-			CancelStagedAction();
-			return;
-		}
-
-		SubmitAction(decision, action);
-	}
-
-	private void CancelStagedAction()
-	{
-		_stagedAction = null;
-		_stagedDecision = null;
-		if (_currentSnapshot is not null)
-		{
-			RenderActions(_currentSnapshot);
-		}
-	}
-
-	private void UpdateTargetHighlights(IReadOnlyList<LegalActionViewModel> actions)
-	{
-		foreach (List<TextCardControl> controls in _cardControls.Values)
-		{
-			foreach (TextCardControl control in controls)
-			{
-				control.SetTargetCandidate(false);
-			}
-		}
-
-		HashSet<string> candidateIds = actions
-			.Select(action => GetTargetCardId(action.Parameters))
-			.Where(value => value is not null)
-			.Select(value => value!)
-			.ToHashSet(StringComparer.Ordinal);
-		foreach (string candidateId in candidateIds)
-		{
-			if (!_cardControls.TryGetValue(candidateId, out List<TextCardControl>? controls))
-			{
-				continue;
-			}
-
-			foreach (TextCardControl control in controls)
-			{
-				control.SetTargetCandidate(true);
-				_smokeTargetCueObserved |= _smokeTest;
-			}
-		}
-
-		if (_stagedAction is { } staged
-			&& GetTargetCardId(staged.Parameters) is { } selectedId
-			&& _cardControls.TryGetValue(selectedId, out List<TextCardControl>? selectedControls))
-		{
-			foreach (TextCardControl control in selectedControls)
-			{
-				control.SetSelected(true);
-			}
-		}
-	}
-
-	private void SubmitAction(DecisionViewModel decision, LegalActionViewModel action)
-	{
-		if (_coordinator is null || Interlocked.Exchange(ref _submissionInFlight, 1) != 0)
-		{
-			return;
-		}
-
-		_ = SubmitActionAsync(new ActionSubmission(
-			decision.Owner,
-			new DecisionId(decision.Id),
-			decision.Revision,
-			action.Id));
-	}
-
-	private async Task SubmitActionAsync(ActionSubmission submission)
-	{
-		try
-		{
-			await _coordinator!.SubmitActionAsync(submission);
-		}
-		catch (Exception exception)
-		{
-			GD.PushError(exception.ToString());
-		}
-		finally
-		{
-			if (Interlocked.Exchange(ref _submissionInFlight, 0) != 0)
-			{
-				// The coordinator publishes the accepted snapshot before this
-				// await resumes, so a frame can render the next decision while
-				// the flag is still set and leave its buttons disabled. When
-				// the next decision is the Runner's no later publication
-				// arrives, so rebuild the action row once the flag clears.
-				RefreshActionsAfterSubmission();
-			}
-		}
-	}
-
-	private void RefreshActionsAfterSubmission()
-	{
-		if (_currentSnapshot is not { } snapshot)
-		{
-			return;
-		}
-
-		if (_stagedAction is not null && !SameDecision(snapshot.View.Decision, _stagedDecision))
-		{
-			_stagedAction = null;
-			_stagedDecision = null;
-		}
-
-		RenderActions(snapshot);
-	}
-
-	private async Task AnimateEventsAsync()
-	{
-		_animationRunning = true;
-		while (_animationBatches.Count > 0)
-		{
-			IReadOnlyList<EngineEvent> batch = _animationBatches.Dequeue();
-			foreach (EngineEvent @event in batch)
-			{
-				_eventTitle.Text = $"{@event.Kind} · sequence {@event.Sequence}";
-				AppendEventFeed(DescribeEvent(@event));
-				double seconds = _reducedMotion.ButtonPressed || _skipAnimation
-					? 0.01
-					: 0.18 / Math.Max(0.25, _speed.Value);
-				await ToSignal(GetTree().CreateTimer(seconds), SceneTreeTimer.SignalName.Timeout);
-			}
-
-			_skipAnimation = false;
-		}
-
-		_animationRunning = false;
-	}
-
-	private void SkipAnimations()
-	{
-		_skipAnimation = true;
-		_animationBatches.Clear();
-	}
-
-	private void AppendEventFeed(string line)
-	{
-		const int MaxVisibleEventLines = 8;
-		_eventFeedLines.Enqueue(line);
-		while (_eventFeedLines.Count > MaxVisibleEventLines)
-		{
-			_eventFeedLines.Dequeue();
-		}
-
-		_eventFeed.Text = string.Join('\n', _eventFeedLines.Reverse());
 	}
 
 	private TextCardControl MakeCard(CardViewModel? card)
@@ -1621,7 +846,7 @@ public partial class Main : Control
 		}
 
 		LegalActionViewModel? action = _currentSnapshot.View.LegalActions
-			.FirstOrDefault(candidate => GetTargetCardId(candidate.Parameters) == cardId);
+			.FirstOrDefault(candidate => ActionsRegionPresenter.GetTargetCardId(candidate.Parameters) == cardId);
 		if (action is not null)
 		{
 			StageTargetAction(decision, action);
@@ -1637,65 +862,10 @@ public partial class Main : Control
 
 		_inspectedCard = card;
 		_details.Text = $"{card.Title}\n{card.Type} · {card.DefinitionId}\n"
-			+ $"{card.RulesText}\n\nClick feedback is local and immediate; engine actions remain ID-only.\n"
+			+ $"{FormatCardRules(card.RulesText)}\n\nClick feedback is local and immediate; engine actions remain ID-only.\n"
 			+ "Use Zoom inspected card for an enlarged, complete text view.";
 		_details.AddThemeColorOverride("font_color", Colors.White);
 		_zoomButton.Visible = true;
-	}
-
-	private void ShowInspectedCardZoom()
-	{
-		if (_inspectedCard is not { } card)
-		{
-			return;
-		}
-
-		_zoomTitle.Text = $"CARD ZOOM · {card.Title}";
-		_zoomText.Text = FormatCardZoom(card);
-		_zoomOverlay.Visible = true;
-		_zoomOverlay.MoveToFront();
-	}
-
-	private void HideCardZoom()
-	{
-		_zoomOverlay.Visible = false;
-	}
-
-	private static string FormatCardZoom(CardViewModel card)
-	{
-		List<string> lines =
-		[
-			$"{card.Type}{(card.Subtypes.Count == 0 ? string.Empty : " · " + string.Join(" · ", card.Subtypes))}",
-		];
-		if (card.Cost is { } cost)
-		{
-			lines.Add($"Cost · {cost}");
-		}
-
-		if (card.Strength is { } strength)
-		{
-			lines.Add($"Strength · {strength}");
-		}
-
-		if (card.AgendaPoints is { } agendaPoints)
-		{
-			lines.Add($"Agenda points · {agendaPoints}");
-		}
-
-		if (card.TrashCost is { } trashCost)
-		{
-			lines.Add($"Trash cost · {trashCost}");
-		}
-
-		lines.Add($"Status · {(card.Rezzed ? "REZZED" : card.IsKnown ? "KNOWN" : "FACE-DOWN")}");
-		if (card.Counters.Count > 0)
-		{
-			lines.Add(string.Join(" · ", card.Counters));
-		}
-
-		lines.Add(string.Empty);
-		lines.Add(card.RulesText);
-		return string.Join('\n', lines);
 	}
 
 	private static bool SameDecision(DecisionViewModel? left, DecisionViewModel? right) =>
@@ -1705,52 +875,6 @@ public partial class Main : Control
 			&& left.Id == right.Id
 			&& left.Revision == right.Revision
 			&& left.Owner == right.Owner;
-
-	private static string? GetTargetCardId(ActionParameters parameters) => parameters switch
-	{
-		CardChoiceParameters value => value.CardId.Value,
-		RunIceParameters value => value.IceId.Value,
-		RunBreakerParameters value => value.BreakerId.Value,
-		RunBreakParameters value => value.BreakerId.Value,
-		RunCardPaymentParameters value => value.CardId.Value,
-		BreachCandidateParameters { CardId: { } cardId } => cardId.Value,
-		_ => null,
-	};
-
-	private static bool IsAccessAction(LegalActionViewModel action) => action.Kind is
-		ActionKind.StealAgenda
-		or ActionKind.TrashAccessedCard
-		or ActionKind.NoAccessAction
-		or ActionKind.ChooseBreachCandidate;
-
-	private static bool IsTargetedAction(LegalActionViewModel action) =>
-		GetTargetCardId(action.Parameters) is not null
-		|| action.Parameters is BreachCandidateParameters;
-
-	private static string FormatPlayer(PlayerViewModel player, int hand, int deck, int? runPool) =>
-		$"Credits {player.Credits} · Clicks {player.Clicks} · Score {player.AgendaPoints}\n"
-		+ (runPool is { } pool ? $"Run pool {pool} · hosted, expires at run end\n" : string.Empty)
-		+ $"Hand {hand} · Deck {deck}";
-
-	private static string DescribeEvent(EngineEvent @event) => @event.Payload switch
-	{
-		RunInitiatedEventPayload payload => $"Run initiated against {payload.ServerId.Value}.",
-		RunEventPlayedEventPayload payload => $"Played {payload.DefinitionId.Value}; hosted {payload.HostedCredits} run credits.",
-		IceApproachedEventPayload payload => $"Approached ICE {payload.IceId.Value}.",
-		IceRezzedEventPayload payload => $"Corp rezzed ICE {payload.IceId.Value}.",
-		EncounterInitializedEventPayload payload => $"Encountered {payload.IceId.Value} ({payload.SubroutineCount} subroutine(s)).",
-		BreakerPumpedEventPayload payload => $"Pumped breaker {payload.BreakerId.Value}.",
-		SubroutinesBrokenEventPayload payload => $"Broke {payload.BrokenCount} subroutine(s) with {payload.BreakerId.Value}.",
-		RunSuccessfulEventPayload => "Run successful · breach boundary.",
-		BreachStartedEventPayload payload => $"Breach started · {payload.CandidateCount} access candidate(s).",
-		BreachCandidateChosenEventPayload payload => $"Access candidate chosen: {payload.CardId.Value}.",
-		CardAccessedEventPayload payload => $"Accessed {payload.CardId.Value}.",
-		AgendaStolenEventPayload payload => $"Agenda stolen · +{payload.AgendaPoints} points.",
-		AccessedCardTrashedEventPayload payload => $"Trashed accessed card for {payload.TrashCost} credits.",
-		RunCreditsAdjustedEventPayload payload => $"Run pool {payload.Delta:+#;-#;0} · now {payload.RunCreditsAfter}.",
-		RunEndedEventPayload payload => $"Run ended · {payload.Reason}.",
-		_ => @event.Kind,
-	};
 
 	private static Label MakeLabel(string text, int size, Color colour)
 	{

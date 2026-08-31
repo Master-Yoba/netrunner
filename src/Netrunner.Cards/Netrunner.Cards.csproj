@@ -2,5 +2,43 @@
   <ItemGroup>
     <ProjectReference Include="../Netrunner.Core/Netrunner.Core.csproj" />
   </ItemGroup>
-</Project>
 
+  <!--
+    DATA-400: official System Gateway metadata is a local-only, authenticated
+    input.  The source directory is ignored by Git; this target turns it into
+    a deterministic generated payload under obj/ so downstream assemblies
+    work offline and never read the source directory at runtime.  A tracked
+    seven-card fixture keeps clean CI and M2 tests self-contained.  A caller
+    that requests content (NetrunnerContentEnabled=true) gets an actionable
+    error instead of silently receiving synthetic data.
+  -->
+  <PropertyGroup>
+    <!--
+      Official metadata is never an ambient default.  The only supported
+      opt-in is NetrunnerContentEnabled=true; the mode property remains
+      overridable for an explicit synthetic fixture build.
+    -->
+    <NetrunnerContentEnabled Condition="'$(NetrunnerContentEnabled)' == ''">false</NetrunnerContentEnabled>
+    <NetrunnerCardDataInputRoot Condition="'$(NetrunnerCardDataInputRoot)' == ''">$(MSBuildProjectDirectory)/../../data/vendor/system-gateway</NetrunnerCardDataInputRoot>
+    <NetrunnerCardDataSyntheticRoot Condition="'$(NetrunnerCardDataSyntheticRoot)' == ''">$(MSBuildProjectDirectory)/../../data/m4/synthetic</NetrunnerCardDataSyntheticRoot>
+    <NetrunnerCardDataMode Condition="'$(NetrunnerCardDataMode)' == '' and '$(NetrunnerContentEnabled)' == 'true'">official</NetrunnerCardDataMode>
+    <!-- A clean clone must remain deterministic even if an ignored source
+         directory happens to be present. Official content is opt-in. -->
+    <NetrunnerCardDataMode Condition="'$(NetrunnerCardDataMode)' == ''">synthetic</NetrunnerCardDataMode>
+    <NetrunnerCardDataGeneratedFile>$(MSBuildProjectDirectory)/obj/$(Configuration)/$(TargetFramework)/Netrunner.CardData/GeneratedCardData.g.cs</NetrunnerCardDataGeneratedFile>
+    <NetrunnerCardDataBuildScript>$(MSBuildProjectDirectory)/../../scripts/build-card-data.py</NetrunnerCardDataBuildScript>
+    <NetrunnerPythonCommand Condition="'$(NetrunnerPythonCommand)' == ''">python3</NetrunnerPythonCommand>
+  </PropertyGroup>
+
+  <Target Name="GenerateNetrunnerCardData" BeforeTargets="CoreCompile">
+    <Error Condition="'$(NetrunnerCardDataMode)' != 'official' and '$(NetrunnerCardDataMode)' != 'synthetic'"
+           Text="DATA-400: unsupported NetrunnerCardDataMode '$(NetrunnerCardDataMode)'; expected official or synthetic." />
+    <Error Condition="'$(NetrunnerCardDataMode)' == 'official' and '$(NetrunnerContentEnabled)' != 'true'"
+           Text="DATA-400: official card content is opt-in; set NetrunnerContentEnabled=true (and, when selecting a mode explicitly, NetrunnerCardDataMode=official). The default build uses the checked-in synthetic fixture." />
+    <Exec Command="&quot;$(NetrunnerPythonCommand)&quot; &quot;$(NetrunnerCardDataBuildScript)&quot; --mode $(NetrunnerCardDataMode) --input-root &quot;$(NetrunnerCardDataInputRoot)&quot; --synthetic-root &quot;$(NetrunnerCardDataSyntheticRoot)&quot; --output &quot;$(NetrunnerCardDataGeneratedFile)&quot;"
+          WorkingDirectory="$(MSBuildProjectDirectory)/../.." />
+    <ItemGroup>
+      <Compile Include="$(NetrunnerCardDataGeneratedFile)" Visible="false" />
+    </ItemGroup>
+  </Target>
+</Project>

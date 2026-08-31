@@ -174,7 +174,9 @@ public sealed class M2ScenarioDocument
         IReadOnlyList<M2ScenarioCardSpec>? cards = null,
         IReadOnlyList<string>? citations = null,
         string? crossCheckNote = null,
-        string? expectedInitialStateHash = null)
+        string? expectedInitialStateHash = null,
+        string? behaviorRegistryVersion = null,
+        string? behaviorCatalogFingerprint = null)
     {
         ArgumentNullException.ThrowIfNull(scenarioId);
         ArgumentNullException.ThrowIfNull(rulesVersion);
@@ -185,6 +187,12 @@ public sealed class M2ScenarioDocument
         Seed = seed;
         RulesVersion = rulesVersion;
         CardDataVersion = cardDataVersion;
+        // D-401 is a deliberate one-time migration: metadata and compiled
+        // behavior pins are independent and must be supplied in their own
+        // fields. Missing values are retained as invalid input for
+        // CollectProblems; they are never inferred from the other pin.
+        BehaviorRegistryVersion = behaviorRegistryVersion ?? string.Empty;
+        BehaviorCatalogFingerprint = behaviorCatalogFingerprint;
         Turn = turn;
         Remotes = remotes;
         Run = run;
@@ -209,6 +217,21 @@ public sealed class M2ScenarioDocument
     [JsonInclude]
     public string CardDataVersion { get; }
 
+    /// <summary>
+    /// Compiled behavior pin, distinct from authenticated metadata version.
+    /// Missing legacy JSON derives the old gateway pin only when its
+    /// cardDataVersion carries that legacy value.
+    /// </summary>
+    [JsonInclude]
+    public string BehaviorRegistryVersion { get; }
+
+    /// <summary>
+    /// Optional compiled-catalog capability fingerprint. Legacy M2 JSON gets
+    /// the Gateway fingerprint when it derives the Gateway behavior pin.
+    /// </summary>
+    [JsonInclude]
+    public string? BehaviorCatalogFingerprint { get; }
+
     [JsonInclude]
     public M2ScenarioTurnSpec Turn { get; }
 
@@ -229,12 +252,36 @@ public sealed class M2ScenarioDocument
     /// <summary>Every problem with its exact document path; empty when valid.</summary>
     public IReadOnlyList<string> CollectProblems()
     {
+        return CollectProblems(GatewayBehaviorCatalog.Create());
+    }
+
+    /// <summary>
+    /// Checks this document against an injected behavior catalog. Only the
+    /// contracts referenced by the document participate in its fingerprint;
+    /// unrelated registrations in the supplied catalog are ignored.
+    /// </summary>
+    public IReadOnlyList<string> CollectProblems(IBehaviorCatalog behaviorCatalog)
+    {
+        ArgumentNullException.ThrowIfNull(behaviorCatalog);
+        BehaviorCatalog scenarioCatalog = CreateBehaviorCatalog(behaviorCatalog);
+        return CollectProblems(behaviorCatalog, scenarioCatalog);
+    }
+
+    private ReadOnlyCollection<string> CollectProblems(
+        IBehaviorCatalog suppliedCatalog,
+        BehaviorCatalog behaviorCatalog)
+    {
+        // M2 callers still use the legacy static lookup/ReplayVerifier APIs;
+        // keep this idempotent adapter registration until those callers are
+        // fully migrated. All document capability checks below use the
+        // immutable scenario slice.
         GatewayBehaviorCatalog.RegisterAll();
         var problems = new List<string>();
 
-        if (SchemaVersion != 1)
+        if (SchemaVersion != EngineCompatibility.ArtifactSchemaVersion)
         {
-            problems.Add($"schemaVersion: expected 1, found {SchemaVersion}.");
+            problems.Add(
+                $"schemaVersion: expected {EngineCompatibility.ArtifactSchemaVersion}, found {SchemaVersion}.");
         }
 
         if (string.IsNullOrWhiteSpace(ScenarioId))
@@ -247,9 +294,38 @@ public sealed class M2ScenarioDocument
             problems.Add($"rulesVersion: '{RulesVersion}' is not supported; expected '{EngineCompatibility.RulesVersion}'.");
         }
 
-        if (CardDataVersion != CardBehaviorSpecCatalog.Version)
+        if (string.IsNullOrWhiteSpace(CardDataVersion))
         {
-            problems.Add($"cardDataVersion: '{CardDataVersion}' is not the registered gateway catalog version '{CardBehaviorSpecCatalog.Version}'.");
+            problems.Add("cardDataVersion: must be a non-empty authenticated metadata version.");
+        }
+        else if (CardDataVersion != EngineCompatibility.GatewayCardDataVersion)
+        {
+            problems.Add(
+                $"cardDataVersion: '{CardDataVersion}' is not the authenticated Gateway metadata snapshot '{EngineCompatibility.GatewayCardDataVersion}'.");
+        }
+
+        if (string.IsNullOrWhiteSpace(BehaviorRegistryVersion))
+        {
+            problems.Add("behaviorRegistryVersion: must be an explicit compiled behavior catalog version.");
+        }
+        else if (BehaviorRegistryVersion != CardBehaviorSpecCatalog.Version)
+        {
+            problems.Add(
+                $"behaviorRegistryVersion: '{BehaviorRegistryVersion}' is not the Gateway compiled behavior version '{CardBehaviorSpecCatalog.Version}'.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(BehaviorRegistryVersion)
+            && !string.Equals(BehaviorRegistryVersion, suppliedCatalog.Version, StringComparison.Ordinal))
+        {
+            problems.Add(
+                $"behaviorRegistryVersion: '{BehaviorRegistryVersion}' does not match the supplied behavior catalog version '{suppliedCatalog.Version}'.");
+        }
+
+        string scenarioFingerprint = behaviorCatalog.Fingerprint;
+        if (!string.Equals(BehaviorCatalogFingerprint, scenarioFingerprint, StringComparison.Ordinal))
+        {
+            problems.Add(
+                $"behaviorCatalogFingerprint: '{BehaviorCatalogFingerprint}' does not match the scenario behavior catalog fingerprint '{scenarioFingerprint}'.");
         }
 
         if (Remotes < 0 || Remotes > 8)
@@ -329,7 +405,7 @@ public sealed class M2ScenarioDocument
             {
                 problems.Add($"run.source: source card '{Run.Source}' must be placed in RunnerGrip before the run starts.");
             }
-            else if (!CardBehaviorSpecCatalog.TryGetRunEvent(new CardDefinitionId(source.DefinitionId), out _))
+            else if (!behaviorCatalog.TryGetRunEvent(new CardDefinitionId(source.DefinitionId), out _))
             {
                 problems.Add($"run.source: definition '{source.DefinitionId}' is not a registered run event.");
             }
@@ -353,7 +429,7 @@ public sealed class M2ScenarioDocument
             {
                 problems.Add($"run.breaker: breaker card '{Run.Breaker}' is not installed in the Runner's rig.");
             }
-            else if (!CardBehaviorSpecCatalog.TryGetIcebreaker(new CardDefinitionId(breaker.DefinitionId), out _))
+            else if (!behaviorCatalog.TryGetIcebreaker(new CardDefinitionId(breaker.DefinitionId), out _))
             {
                 problems.Add($"run.breaker: definition '{breaker.DefinitionId}' is not a registered icebreaker.");
             }
@@ -388,13 +464,14 @@ public sealed class M2ScenarioDocument
             {
                 problems.Add($"{path}.definitionId: '{card.DefinitionId}' is not a valid stable identifier.");
             }
-            else if (!IsRegisteredBehavior(new CardDefinitionId(card.DefinitionId)))
+            else if (!IsRegisteredBehavior(new CardDefinitionId(card.DefinitionId), behaviorCatalog))
             {
                 problems.Add($"{path}.definitionId: '{card.DefinitionId}' is not registered in the behavior spec catalog.");
             }
             else if (!IsBehaviorCompatibleWithInstalledZone(
                 new CardDefinitionId(card.DefinitionId),
                 card.Zone,
+                behaviorCatalog,
                 out string expectedBehavior))
             {
                 problems.Add($"{path}.definitionId: '{card.DefinitionId}' is not registered as {expectedBehavior} and cannot be placed in zone '{card.Zone}'.");
@@ -485,6 +562,44 @@ public sealed class M2ScenarioDocument
         }
     }
 
+    /// <summary>
+    /// Validates this document against an injected catalog and returns the
+    /// immutable slice that contains the document's referenced definitions.
+    /// </summary>
+    public BehaviorCatalog Validate(IBehaviorCatalog behaviorCatalog)
+    {
+        ArgumentNullException.ThrowIfNull(behaviorCatalog);
+        BehaviorCatalog scenarioCatalog = CreateBehaviorCatalog(behaviorCatalog);
+        ReadOnlyCollection<string> problems = CollectProblems(behaviorCatalog, scenarioCatalog);
+        if (problems.Count > 0)
+        {
+            throw new M2ScenarioException(problems);
+        }
+
+        return scenarioCatalog;
+    }
+
+    /// <summary>
+    /// Derives the immutable catalog required by this document from an
+    /// injected composition catalog. Invalid definition IDs are omitted here
+    /// so validation can report their original card paths.
+    /// </summary>
+    public BehaviorCatalog CreateBehaviorCatalog(IBehaviorCatalog behaviorCatalog)
+    {
+        ArgumentNullException.ThrowIfNull(behaviorCatalog);
+        var definitionIds = new HashSet<CardDefinitionId>();
+        foreach (M2ScenarioCardSpec card in Cards)
+        {
+            if (card is not null
+                && CardDefinitionId.TryParse(card.DefinitionId, out CardDefinitionId definitionId))
+            {
+                definitionIds.Add(definitionId);
+            }
+        }
+
+        return BehaviorCatalog.CreateSlice(behaviorCatalog, definitionIds);
+    }
+
     public static bool TryParseServerRef(string reference, int remotes, out (ServerKind Kind, int RemoteIndex) server)
     {
         server = default;
@@ -514,29 +629,41 @@ public sealed class M2ScenarioDocument
     }
 
     internal static bool IsRegisteredBehavior(CardDefinitionId definitionId) =>
-        CardBehaviorSpecCatalog.TryGetIce(definitionId, out _)
-        || CardBehaviorSpecCatalog.TryGetIcebreaker(definitionId, out _)
-        || CardBehaviorSpecCatalog.TryGetAgenda(definitionId, out _)
-        || CardBehaviorSpecCatalog.TryGetAsset(definitionId, out _)
-        || CardBehaviorSpecCatalog.TryGetRunEvent(definitionId, out _);
+        IsRegisteredBehavior(definitionId, CardBehaviorSpecCatalog.Default);
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Performance",
+        "CA1859:Change type of parameter 'behaviorCatalog' to 'BehaviorCatalog'",
+        Justification = "The interface is the composition boundary for custom match catalogs.")]
+    private static bool IsRegisteredBehavior(CardDefinitionId definitionId, IBehaviorCatalog behaviorCatalog) =>
+        behaviorCatalog.TryGetIce(definitionId, out _)
+        || behaviorCatalog.TryGetIcebreaker(definitionId, out _)
+        || behaviorCatalog.TryGetAgenda(definitionId, out _)
+        || behaviorCatalog.TryGetAsset(definitionId, out _)
+        || behaviorCatalog.TryGetRunEvent(definitionId, out _);
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Performance",
+        "CA1859:Change type of parameter 'behaviorCatalog' to 'BehaviorCatalog'",
+        Justification = "The interface is the composition boundary for custom match catalogs.")]
     private static bool IsBehaviorCompatibleWithInstalledZone(
         CardDefinitionId definitionId,
         ZoneKind zone,
+        IBehaviorCatalog behaviorCatalog,
         out string expectedBehavior)
     {
         switch (zone)
         {
             case ZoneKind.ServerIce:
                 expectedBehavior = "ICE";
-                return CardBehaviorSpecCatalog.TryGetIce(definitionId, out _);
+                return behaviorCatalog.TryGetIce(definitionId, out _);
             case ZoneKind.ServerRoot:
                 expectedBehavior = "an asset or agenda";
-                return CardBehaviorSpecCatalog.TryGetAsset(definitionId, out _)
-                    || CardBehaviorSpecCatalog.TryGetAgenda(definitionId, out _);
+                return behaviorCatalog.TryGetAsset(definitionId, out _)
+                    || behaviorCatalog.TryGetAgenda(definitionId, out _);
             case ZoneKind.RunnerRig:
                 expectedBehavior = "an icebreaker";
-                return CardBehaviorSpecCatalog.TryGetIcebreaker(definitionId, out _);
+                return behaviorCatalog.TryGetIcebreaker(definitionId, out _);
             default:
                 expectedBehavior = "a behavior compatible with the installed zone";
                 return true;
@@ -571,11 +698,28 @@ public static class M2ScenarioSetup
 {
     public static GameState Build(M2ScenarioDocument document)
     {
-        ArgumentNullException.ThrowIfNull(document);
-        GatewayBehaviorCatalog.RegisterAll();
-        document.Validate();
+        return Build(document, GatewayBehaviorCatalog.Create());
+    }
 
-        GameState baseState = GameState.CreateNew(document.Seed, document.RulesVersion, document.CardDataVersion);
+    /// <summary>
+    /// Builds an M2 state using the immutable catalog supplied by composition.
+    /// The default overload remains the M2 Gateway adapter.
+    /// </summary>
+    public static GameState Build(M2ScenarioDocument document, IBehaviorCatalog behaviorCatalog)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(behaviorCatalog);
+        // The injected composition catalog may contain behavior unrelated to
+        // this document. Validate once and carry the resulting immutable slice
+        // through every state/invariant operation below.
+        BehaviorCatalog scenarioCatalog = document.Validate(behaviorCatalog);
+
+        GameState baseState = GameState.CreateNew(
+            document.Seed,
+            document.RulesVersion,
+            document.CardDataVersion,
+            behaviorRegistryVersion: scenarioCatalog.Version,
+            behaviorCatalogFingerprint: scenarioCatalog.Fingerprint);
         var allocator = new StableIdAllocator(baseState.Allocator);
 
         var servers = baseState.Servers.ToList();
@@ -639,9 +783,11 @@ public static class M2ScenarioSetup
             baseState.RandomState,
             allocator.State,
             schemaVersion: baseState.SchemaVersion,
-            initialSeed: baseState.InitialSeed);
+            initialSeed: baseState.InitialSeed,
+            behaviorRegistryVersion: scenarioCatalog.Version,
+            behaviorCatalogFingerprint: scenarioCatalog.Fingerprint);
 
-        StateInvariantValidator.Validate(state);
+        StateInvariantValidator.Validate(state, scenarioCatalog);
         if (document.ExpectedInitialStateHash is not null)
         {
             string actualHash = DeterministicHash.ForState(state);

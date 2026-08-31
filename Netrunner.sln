@@ -19,6 +19,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Netrunner.Godot", "src\Netr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Netrunner.Match", "src\Netrunner.Match\Netrunner.Match.csproj", "{4D7D0B28-934A-4FB6-BE87-F9C442D851D8}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Netrunner.CardCoverage", "tools\Netrunner.CardCoverage\Netrunner.CardCoverage.csproj", "{E9A3F5C1-48F1-4FE7-BB1C-8F73DD4B4A09}"
+EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Netrunner.Core.Tests", "tests\Netrunner.Core.Tests\Netrunner.Core.Tests.csproj", "{CFBA0194-3C30-4652-891C-6137B175F2ED}"
@@ -125,6 +127,18 @@ Global
 		{4D7D0B28-934A-4FB6-BE87-F9C442D851D8}.Release|x64.Build.0 = Release|Any CPU
 		{4D7D0B28-934A-4FB6-BE87-F9C442D851D8}.Release|x86.ActiveCfg = Release|Any CPU
 		{4D7D0B28-934A-4FB6-BE87-F9C442D851D8}.Release|x86.Build.0 = Release|Any CPU
+		{E9A3F5C1-48F1-4FE7-BB1C-8F73DD4B4A09}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E9A3F5C1-48F1-4FE7-BB1C-8F73DD4B4A09}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E9A3F5C1-48F1-4FE7-BB1C-8F73DD4B4A09}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{E9A3F5C1-48F1-4FE7-BB1C-8F73DD4B4A09}.Debug|x64.Build.0 = Debug|Any CPU
+		{E9A3F5C1-48F1-4FE7-BB1C-8F73DD4B4A09}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{E9A3F5C1-48F1-4FE7-BB1C-8F73DD4B4A09}.Debug|x86.Build.0 = Debug|Any CPU
+		{E9A3F5C1-48F1-4FE7-BB1C-8F73DD4B4A09}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E9A3F5C1-48F1-4FE7-BB1C-8F73DD4B4A09}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E9A3F5C1-48F1-4FE7-BB1C-8F73DD4B4A09}.Release|x64.ActiveCfg = Release|Any CPU
+		{E9A3F5C1-48F1-4FE7-BB1C-8F73DD4B4A09}.Release|x64.Build.0 = Release|Any CPU
+		{E9A3F5C1-48F1-4FE7-BB1C-8F73DD4B4A09}.Release|x86.ActiveCfg = Release|Any CPU
+		{E9A3F5C1-48F1-4FE7-BB1C-8F73DD4B4A09}.Release|x86.Build.0 = Release|Any CPU
 		{CFBA0194-3C30-4652-891C-6137B175F2ED}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{CFBA0194-3C30-4652-891C-6137B175F2ED}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CFBA0194-3C30-4652-891C-6137B175F2ED}.Debug|x64.ActiveCfg = Debug|Any CPU

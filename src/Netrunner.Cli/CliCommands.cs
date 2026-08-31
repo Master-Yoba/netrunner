@@ -15,6 +15,29 @@ public static class CliCommands
 
     public static int Run(string[] args, TextWriter output, TextWriter error)
     {
+        return RunCore(args, output, error, behaviorCatalog: null);
+    }
+
+    /// <summary>
+    /// Runs commands with an explicitly composed behavior catalog. This
+    /// internal seam keeps command-level composition tests scoped to M2 proof.
+    /// </summary>
+    internal static int RunWithBehaviorCatalog(
+        string[] args,
+        TextWriter output,
+        TextWriter error,
+        IBehaviorCatalog behaviorCatalog)
+    {
+        ArgumentNullException.ThrowIfNull(behaviorCatalog);
+        return RunCore(args, output, error, behaviorCatalog);
+    }
+
+    private static int RunCore(
+        string[] args,
+        TextWriter output,
+        TextWriter error,
+        IBehaviorCatalog? behaviorCatalog)
+    {
         ArgumentNullException.ThrowIfNull(args);
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(error);
@@ -91,7 +114,7 @@ public static class CliCommands
                 return 2;
             }
 
-            return RunM2Proof(m2ScenarioPath!, m2Json, output, error);
+            return RunM2Proof(m2ScenarioPath!, m2Json, output, error, behaviorCatalog);
         }
 
         error.WriteLine(
@@ -861,7 +884,12 @@ public static class CliCommands
         return true;
     }
 
-    private static int RunM2Proof(string scenarioPath, bool json, TextWriter output, TextWriter error)
+    private static int RunM2Proof(
+        string scenarioPath,
+        bool json,
+        TextWriter output,
+        TextWriter error,
+        IBehaviorCatalog? suppliedCatalog)
     {
         M2ScenarioDocument document;
         try
@@ -893,12 +921,23 @@ public static class CliCommands
         }
 
         var contract = new RunPlayContract(runSpec.Server, runSpec.Source, runSpec.Breaker, runSpec.MaxPumps);
+        BehaviorCatalog scenarioCatalog;
         M2ProofResult scripted;
         M2ProofResult agent;
         try
         {
-            scripted = M2ProofRunner.Run(document, new ScriptedHumanRunPolicy(contract), "scripted-human");
-            agent = M2ProofRunner.Run(document, new RunContractAgent(contract), "contract-agent");
+            IBehaviorCatalog compositionCatalog = suppliedCatalog ?? GatewayBehaviorCatalog.Create();
+            scenarioCatalog = document.Validate(compositionCatalog);
+            scripted = M2ProofRunner.RunWithScenarioCatalog(
+                document,
+                new ScriptedHumanRunPolicy(contract),
+                "scripted-human",
+                scenarioCatalog);
+            agent = M2ProofRunner.RunWithScenarioCatalog(
+                document,
+                new RunContractAgent(contract),
+                "contract-agent",
+                scenarioCatalog);
         }
         // InvalidOperationException covers M2ProofException, resolution and
         // state-invariant failures from the proof run, and scenario setup
@@ -924,7 +963,9 @@ public static class CliCommands
             return 1;
         }
 
-        bool replayVerified = ReplayVerifier.Verify(scripted.ReplayArtifact).Success;
+        bool replayVerified = ReplayVerifier.Verify(
+            scripted.ReplayArtifact,
+            scenarioCatalog).Success;
         if (json)
         {
             var policies = new Dictionary<string, M2ProofPolicyOutput>(StringComparer.Ordinal)

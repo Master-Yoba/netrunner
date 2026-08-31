@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Reflection;
 using System.Threading.Channels;
 using Netrunner.AI;
+using Netrunner.Cards;
 using Netrunner.Core;
 
 namespace Netrunner.Match;
@@ -65,6 +66,23 @@ public sealed class MatchCoordinatorOptions
     public Func<TimeSpan, CancellationToken, ValueTask>? Delay { get; init; }
 
     public PlayerSide HumanSide { get; init; } = PlayerSide.Runner;
+
+    /// <summary>
+    /// Immutable card metadata supplied by composition. When omitted, the
+    /// generated Cards resource is used; Match never reads the ignored source
+    /// directory itself.
+    /// </summary>
+    public ICardMetadataResolver? CardMetadataResolver { get; init; }
+
+    /// <summary>Short alias retained for integrations that call this a metadata resolver.</summary>
+    public ICardMetadataResolver? MetadataResolver { get; init; }
+
+    /// <summary>
+    /// Immutable compiled behavior catalog supplied at match composition.
+    /// When omitted, the Gateway catalog is built once for this coordinator;
+    /// no process-wide mutable registry is used by the worker.
+    /// </summary>
+    public IBehaviorCatalog? BehaviorCatalog { get; init; }
 }
 
 /// <summary>
@@ -80,6 +98,9 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
     private readonly M2ScenarioDocument _document;
     private readonly IGameAgent _corpAgent;
     private readonly MatchCoordinatorOptions _options;
+    private readonly ICardMetadataResolver _metadataResolver;
+    private readonly IBehaviorCatalog _suppliedBehaviorCatalog;
+    private IBehaviorCatalog _behaviorCatalog;
     private readonly CancellationTokenSource _cancellation = new();
     private readonly Channel<CoordinatorCommand> _commands =
         Channel.CreateUnbounded<CoordinatorCommand>(new UnboundedChannelOptions
@@ -104,6 +125,15 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
         _document = document ?? throw new ArgumentNullException(nameof(document));
         _corpAgent = corpAgent ?? throw new ArgumentNullException(nameof(corpAgent));
         _options = options ?? new MatchCoordinatorOptions();
+        _metadataResolver = _options.CardMetadataResolver
+            ?? _options.MetadataResolver
+            ?? CardMetadataResolvers.Default;
+        _suppliedBehaviorCatalog = _options.BehaviorCatalog
+            ?? GatewayBehaviorCatalog.Create();
+        // Keep the field initialized until StartAsync validates the document;
+        // the worker replaces it with the immutable scenario slice before any
+        // engine or presentation operation runs.
+        _behaviorCatalog = _suppliedBehaviorCatalog;
         if (_options.HumanSide != PlayerSide.Runner)
         {
             throw new ArgumentException(
@@ -297,14 +327,16 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
 
         try
         {
-            _document.Validate();
+            BehaviorCatalog scenarioCatalog = _document.Validate(_suppliedBehaviorCatalog);
+            _behaviorCatalog = scenarioCatalog;
             M2ScenarioRunSpec run = _document.Run
                 ?? throw new M2ScenarioException(["run: the scenario has no run contract."]);
-            GameState initial = M2ScenarioSetup.Build(_document);
+            GameState initial = M2ScenarioSetup.Build(_document, scenarioCatalog);
             ServerId server = ResolveServer(initial, run.Server);
             GameEngine.RunStartResult started = GameEngine.BeginRunWithEvents(
                 initial,
                 server,
+                _behaviorCatalog,
                 initiatingSource: new CardInstanceId(run.Source));
             _state = started.State;
             MatchSnapshot snapshot = Publish(started.Events, feedback: null, thinking: false);
@@ -326,7 +358,7 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
             return;
         }
 
-        ApplyResult applied = GameEngine.Apply(_state, command.Submission);
+        ApplyResult applied = GameEngine.Apply(_state, command.Submission, _behaviorCatalog);
         if (!applied.Accepted)
         {
             MatchFeedback feedback = new(
@@ -381,7 +413,8 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
                     .ConfigureAwait(false);
                 ApplyResult applied = GameEngine.Apply(
                     state,
-                    new ActionSubmission(pending.Owner, pending.Id, pending.Revision, actionId));
+                    new ActionSubmission(pending.Owner, pending.Id, pending.Revision, actionId),
+                    _behaviorCatalog);
                 if (!applied.Accepted)
                 {
                     MatchFeedback feedback = new(
@@ -450,7 +483,10 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
         }
 
         Observation observation = ObservationBuilder.Build(state, PlayerSide.Runner);
-        MatchViewModel view = ObservationViewMapper.Build(observation);
+        MatchViewModel view = ObservationViewMapper.Build(
+            observation,
+            _metadataResolver,
+            _behaviorCatalog);
         IReadOnlyList<EngineEvent> frozenEvents = new ReadOnlyCollection<EngineEvent>(events.ToArray());
         MatchSnapshot snapshot = new(
             Interlocked.Increment(ref _publicationSequence),

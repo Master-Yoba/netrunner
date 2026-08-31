@@ -1,4 +1,6 @@
 using System.Text.Json;
+using Netrunner.Cards;
+using Netrunner.Core;
 using Xunit;
 
 namespace Netrunner.Cli.Tests;
@@ -9,9 +11,10 @@ public sealed class M2ProofCommandTests
     // by M2 rework U5 and kept stable by U6 — the agenda mid-access window
     // (pass only) and the automatic 7.2.3 steal emit the same event stream
     // as the pre-U6 player-steal action, see M2ProofTests); the same
-    // constants M2ProofTests pins for both policies.
+    // constants M2ProofTests pins for both policies. The M4-4.1 state schema
+    // migration intentionally changed state hashes; the event hash is stable.
     private const string ExpectedFinalStateHash =
-        "c822e9790dcad48ccdb52f42539be678943fc109820ea2c7e20e5f8fa03805ac";
+        "950d1b0d44da26d5ba9a688b83b7ac8202850d8337a8c0609eaf47269b1387ed";
     private const string ExpectedEventStreamHash =
         "d20cdef94e97ac928ca088e14952b65d2116fecda00485fff5c3b05e1b6e9e20";
 
@@ -39,6 +42,26 @@ public sealed class M2ProofCommandTests
         Assert.Equal(ExpectedEventStreamHash, policies.GetProperty("scripted-human").GetProperty("eventStreamHash").GetString());
         Assert.Equal(ExpectedFinalStateHash, policies.GetProperty("contract-agent").GetProperty("finalStateHash").GetString());
         Assert.Equal(ExpectedEventStreamHash, policies.GetProperty("contract-agent").GetProperty("eventStreamHash").GetString());
+    }
+
+    [Fact]
+    public void M2ProofCommandReplaysAgainstTheScenarioSliceOfAnExpandedCatalog()
+    {
+        string path = Path.Combine(AppContext.BaseDirectory, "M2Scenarios", "representative-run.json");
+        BehaviorCatalog gateway = GatewayBehaviorCatalog.Create();
+        BehaviorCatalog expanded = new BehaviorCatalogBuilder(gateway.Version, gateway)
+            .AddAsset(new AssetBehaviorSpec(new CardDefinitionId("test:m2-command-unrelated"), trashCost: 1))
+            .Build();
+        var output = new StringWriter();
+        var error = new StringWriter();
+
+        int code = CliCommands.RunWithBehaviorCatalog(["m2-proof", path, "--json"], output, error, expanded);
+
+        Assert.Equal(0, code);
+        using JsonDocument document = JsonDocument.Parse(output.ToString());
+        Assert.True(document.RootElement.GetProperty("replayVerified").GetBoolean());
+        Assert.Equal(ExpectedFinalStateHash, document.RootElement.GetProperty("finalStateHash").GetString());
+        Assert.Equal(ExpectedEventStreamHash, document.RootElement.GetProperty("eventStreamHash").GetString());
     }
 
     [Fact]

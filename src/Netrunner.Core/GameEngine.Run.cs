@@ -27,7 +27,37 @@ public static partial class GameEngine
         ServerId serverId,
         PlayerId? initiatingPlayer = null,
         CardInstanceId? initiatingSource = null) =>
-        BeginRunWithEvents(state, serverId, initiatingPlayer, initiatingSource).State;
+        BeginRunWithEvents(
+            state,
+            serverId,
+            initiatingPlayer,
+            initiatingSource,
+            CardBehaviorSpecCatalog.Default,
+            enforceCatalogCompatibility: false).State;
+
+    /// <summary>Begins a run with an explicitly injected immutable catalog.</summary>
+    public static GameState BeginRun(
+        GameState state,
+        ServerId serverId,
+        IBehaviorCatalog behaviorCatalog,
+        PlayerId? initiatingPlayer = null,
+        CardInstanceId? initiatingSource = null) =>
+        BeginRunWithEvents(
+            state,
+            serverId,
+            initiatingPlayer,
+            initiatingSource,
+            behaviorCatalog,
+            enforceCatalogCompatibility: true).State;
+
+    /// <summary>Parameter-order adapter for callers that append dependencies.</summary>
+    public static GameState BeginRun(
+        GameState state,
+        ServerId serverId,
+        PlayerId? initiatingPlayer,
+        CardInstanceId? initiatingSource,
+        IBehaviorCatalog behaviorCatalog) =>
+        BeginRun(state, serverId, behaviorCatalog, initiatingPlayer, initiatingSource);
 
     public static RunStartResult BeginRunWithEvents(
         GameState state,
@@ -35,8 +65,58 @@ public static partial class GameEngine
         PlayerId? initiatingPlayer = null,
         CardInstanceId? initiatingSource = null)
     {
+        return BeginRunWithEvents(
+            state,
+            serverId,
+            initiatingPlayer,
+            initiatingSource,
+            CardBehaviorSpecCatalog.Default,
+            enforceCatalogCompatibility: false);
+    }
+
+    /// <summary>Begins a run with an explicitly injected immutable catalog.</summary>
+    public static RunStartResult BeginRunWithEvents(
+        GameState state,
+        ServerId serverId,
+        IBehaviorCatalog behaviorCatalog,
+        PlayerId? initiatingPlayer = null,
+        CardInstanceId? initiatingSource = null) =>
+        BeginRunWithEvents(
+            state,
+            serverId,
+            initiatingPlayer,
+            initiatingSource,
+            behaviorCatalog,
+            enforceCatalogCompatibility: true);
+
+    /// <summary>Parameter-order adapter for callers that append dependencies.</summary>
+    public static RunStartResult BeginRunWithEvents(
+        GameState state,
+        ServerId serverId,
+        PlayerId? initiatingPlayer,
+        CardInstanceId? initiatingSource,
+        IBehaviorCatalog behaviorCatalog) =>
+        BeginRunWithEvents(state, serverId, behaviorCatalog, initiatingPlayer, initiatingSource);
+
+    private static RunStartResult BeginRunWithEvents(
+        GameState state,
+        ServerId serverId,
+        PlayerId? initiatingPlayer,
+        CardInstanceId? initiatingSource,
+        IBehaviorCatalog behaviorCatalog,
+        bool enforceCatalogCompatibility)
+    {
         ArgumentNullException.ThrowIfNull(state);
-        StateInvariantValidator.Validate(state);
+        ArgumentNullException.ThrowIfNull(behaviorCatalog);
+        if (enforceCatalogCompatibility
+            && !CatalogMatchesState(state, behaviorCatalog, out string? catalogMismatch))
+        {
+            throw new ResolutionFailureException(catalogMismatch!);
+        }
+
+        StateInvariantValidator.Validate(
+            state,
+            enforceCatalogCompatibility ? behaviorCatalog : null);
 
         if (state.Outcome.Kind != GameOutcomeKind.Ongoing)
         {
@@ -84,7 +164,7 @@ public static partial class GameEngine
                 throw new ResolutionFailureException("A run source must be owned by the Runner.");
             }
 
-            runEventSpec = ValidateRunEventSource(state, initiatingSource.Value, source);
+            runEventSpec = ValidateRunEventSource(state, initiatingSource.Value, source, behaviorCatalog);
             if (runner.Credits < runEventSpec.Cost)
             {
                 throw new ResolutionFailureException(
@@ -93,7 +173,7 @@ public static partial class GameEngine
             }
         }
 
-        var working = WorkingState.From(state);
+        var working = WorkingState.From(state, behaviorCatalog);
         RunId runId = working.Allocator.NextRunId();
         int currentIceIndex = iceZone.CardIds.Count - 1;
         CardInstanceId? currentIceId = currentIceIndex >= 0
@@ -192,7 +272,9 @@ public static partial class GameEngine
                 emitWindowEvent: false);
             Advance(working, DefaultResolutionStepBudget);
             GameState next = working.Build(state);
-            StateInvariantValidator.Validate(next);
+            StateInvariantValidator.Validate(
+                next,
+                enforceCatalogCompatibility ? behaviorCatalog : null);
             return new RunStartResult(next, working.Events.ToList());
         }
         catch (ResolutionFailureException)
@@ -214,6 +296,14 @@ public static partial class GameEngine
         CardInstanceId? initiatingSource = null) =>
         BeginRun(state, serverId, initiatingPlayer, initiatingSource);
 
+    public static GameState InitiateRun(
+        GameState state,
+        ServerId serverId,
+        IBehaviorCatalog behaviorCatalog,
+        PlayerId? initiatingPlayer = null,
+        CardInstanceId? initiatingSource = null) =>
+        BeginRun(state, serverId, behaviorCatalog, initiatingPlayer, initiatingSource);
+
     /// <summary>
     /// The run-event play validation: the source must be a card in the
     /// Runner's grip (faceup or facedown) whose definition is registered in
@@ -227,7 +317,8 @@ public static partial class GameEngine
     private static RunEventBehaviorSpec ValidateRunEventSource(
         GameState state,
         CardInstanceId sourceId,
-        CardInstanceState source)
+        CardInstanceState source,
+        IBehaviorCatalog behaviorCatalog)
     {
         ZoneState? grip = state.Zones.FirstOrDefault(zone =>
             zone.Kind == ZoneKind.RunnerGrip && zone.OwnerSide == PlayerSide.Runner);
@@ -237,7 +328,7 @@ public static partial class GameEngine
                 $"Run source '{sourceId.Value}' must be a card in the Runner's grip.");
         }
 
-        if (!CardBehaviorSpecCatalog.TryGetRunEvent(source.DefinitionId, out RunEventBehaviorSpec? spec))
+        if (!behaviorCatalog.TryGetRunEvent(source.DefinitionId, out RunEventBehaviorSpec? spec))
         {
             throw new ResolutionFailureException(
                 $"Card definition '{source.DefinitionId.Value}' is not a registered run event "
@@ -364,7 +455,7 @@ public static partial class GameEngine
             throw new ResolutionFailureException("An encounter can only initialize against rezzed ICE.");
         }
 
-        if (!CardBehaviorSpecCatalog.TryGetIce(ice.DefinitionId, out IceBehaviorSpec spec))
+        if (!working.BehaviorCatalog.TryGetIce(ice.DefinitionId, out IceBehaviorSpec spec))
         {
             throw new ResolutionFailureException(
                 $"ICE definition '{ice.DefinitionId}' is not registered in the ICE behavior spec catalog; "
@@ -408,7 +499,7 @@ public static partial class GameEngine
         }
 
         CardInstanceState ice = GetCard(working, encounter.IceId);
-        if (!CardBehaviorSpecCatalog.TryGetIce(ice.DefinitionId, out IceBehaviorSpec iceSpec))
+        if (!working.BehaviorCatalog.TryGetIce(ice.DefinitionId, out IceBehaviorSpec iceSpec))
         {
             throw new ResolutionFailureException(
                 $"Encounter ICE '{ice.DefinitionId}' is not registered in the ICE behavior spec catalog; "
@@ -855,7 +946,7 @@ public static partial class GameEngine
             CardInstanceState card = GetCard(working, accessed);
             ZoneState? scoreZone = working.Zones.FirstOrDefault(zone =>
                 zone.Kind == ZoneKind.RunnerScore && zone.ServerId is null);
-            if (CardBehaviorSpecCatalog.TryGetAgenda(card.DefinitionId, out _)
+            if (working.BehaviorCatalog.TryGetAgenda(card.DefinitionId, out _)
                 && (scoreZone is null || card.ZoneId != scoreZone.Id))
             {
                 StealAccessedAgendaInternal(working, run, accessed);
@@ -889,7 +980,7 @@ public static partial class GameEngine
         }
 
         CardInstanceState card = GetCard(working, accessed);
-        if (!CardBehaviorSpecCatalog.TryGetAsset(card.DefinitionId, out AssetBehaviorSpec? spec))
+        if (!working.BehaviorCatalog.TryGetAsset(card.DefinitionId, out AssetBehaviorSpec? spec))
         {
             throw new ResolutionFailureException($"The accessed card '{accessed}' has no registered asset behavior spec.");
         }
@@ -953,7 +1044,7 @@ public static partial class GameEngine
         }
 
         CardInstanceState card = GetCard(working, accessed);
-        if (!CardBehaviorSpecCatalog.TryGetAgenda(card.DefinitionId, out AgendaBehaviorSpec? spec))
+        if (!working.BehaviorCatalog.TryGetAgenda(card.DefinitionId, out AgendaBehaviorSpec? spec))
         {
             throw new ResolutionFailureException($"The accessed card '{accessed}' is not a registered agenda.");
         }
@@ -1172,7 +1263,7 @@ public static partial class GameEngine
             throw new ResolutionFailureException("The approached ICE is already rezzed.");
         }
 
-        if (!CardBehaviorSpecCatalog.TryGetIce(ice.DefinitionId, out IceBehaviorSpec spec))
+        if (!working.BehaviorCatalog.TryGetIce(ice.DefinitionId, out IceBehaviorSpec spec))
         {
             throw new ResolutionFailureException(
                 $"Approached ICE '{ice.DefinitionId}' is not registered in the ICE behavior spec catalog; "
@@ -1251,7 +1342,7 @@ public static partial class GameEngine
             throw new ResolutionFailureException("The breaking breaker must be installed in the Runner rig.");
         }
 
-        if (!CardBehaviorSpecCatalog.TryGetIcebreaker(breaker.DefinitionId, out IcebreakerBehaviorSpec breakerSpec))
+        if (!working.BehaviorCatalog.TryGetIcebreaker(breaker.DefinitionId, out IcebreakerBehaviorSpec breakerSpec))
         {
             throw new ResolutionFailureException(
                 $"Breaker '{breaker.DefinitionId}' is not registered in the icebreaker behavior spec catalog; "
@@ -1263,7 +1354,7 @@ public static partial class GameEngine
 
         CardInstanceId iceId = encounter.IceId;
         CardInstanceState ice = GetCard(working, iceId);
-        if (!CardBehaviorSpecCatalog.TryGetIce(ice.DefinitionId, out IceBehaviorSpec iceSpec))
+        if (!working.BehaviorCatalog.TryGetIce(ice.DefinitionId, out IceBehaviorSpec iceSpec))
         {
             throw new ResolutionFailureException(
                 $"Encounter ICE '{ice.DefinitionId}' is not registered in the ICE behavior spec catalog; "
@@ -1394,7 +1485,7 @@ public static partial class GameEngine
             throw new ResolutionFailureException("The pumped breaker must be installed in the Runner rig.");
         }
 
-        if (!CardBehaviorSpecCatalog.TryGetIcebreaker(breaker.DefinitionId, out IcebreakerBehaviorSpec breakerSpec))
+        if (!working.BehaviorCatalog.TryGetIcebreaker(breaker.DefinitionId, out IcebreakerBehaviorSpec breakerSpec))
         {
             throw new ResolutionFailureException(
                 $"Breaker '{breaker.DefinitionId}' is not registered in the icebreaker behavior spec catalog; "
@@ -1508,7 +1599,7 @@ public static partial class GameEngine
             && run.CurrentIceId.HasValue)
         {
             CardInstanceState approachedIce = GetCard(working, run.CurrentIceId.Value);
-            if (!CardBehaviorSpecCatalog.TryGetIce(approachedIce.DefinitionId, out IceBehaviorSpec? approachedSpec))
+            if (!working.BehaviorCatalog.TryGetIce(approachedIce.DefinitionId, out IceBehaviorSpec? approachedSpec))
             {
                 throw new ResolutionFailureException(
                     $"Approached ICE '{approachedIce.DefinitionId}' is not registered in the ICE behavior spec catalog; "
@@ -1542,7 +1633,7 @@ public static partial class GameEngine
             ServerState attackedServer = working.Servers.SingleOrDefault(candidate => candidate.Id == run.AttackedServer)
                 ?? throw new ResolutionFailureException($"Run server '{run.AttackedServer}' does not exist.");
             CardInstanceState encounteredIce = GetCard(working, run.Encounter.IceId);
-            if (!CardBehaviorSpecCatalog.TryGetIce(encounteredIce.DefinitionId, out IceBehaviorSpec? iceSpec))
+            if (!working.BehaviorCatalog.TryGetIce(encounteredIce.DefinitionId, out IceBehaviorSpec? iceSpec))
             {
                 throw new ResolutionFailureException(
                     $"Encounter ICE '{encounteredIce.DefinitionId}' is not registered in the ICE behavior spec catalog; "
@@ -1563,7 +1654,7 @@ public static partial class GameEngine
 
                 foreach (CardInstanceId cardId in rigZone.CardIds)
                 {
-                    if (!CardBehaviorSpecCatalog.TryGetIcebreaker(
+                    if (!working.BehaviorCatalog.TryGetIcebreaker(
                         GetCard(working, cardId).DefinitionId,
                         out IcebreakerBehaviorSpec? breakerSpec))
                     {
@@ -1785,7 +1876,7 @@ public static partial class GameEngine
         // only. CR 7.2.3/7.1.6 then steals the still-accessed agenda
         // automatically when the window is passed — the steal is not a
         // player action.
-        if (CardBehaviorSpecCatalog.TryGetAgenda(card.DefinitionId, out _))
+        if (working.BehaviorCatalog.TryGetAgenda(card.DefinitionId, out _))
         {
             List<LegalAction> passActions = new()
             {
@@ -1809,7 +1900,7 @@ public static partial class GameEngine
         // asset with a trash cost the Runner can pay, and never for a card
         // that is already in the Corp discard.
         if (card.ZoneId != GetZone(working, ZoneKind.CorpDiscard).Id
-            && CardBehaviorSpecCatalog.TryGetAsset(card.DefinitionId, out AssetBehaviorSpec? assetSpec)
+            && working.BehaviorCatalog.TryGetAsset(card.DefinitionId, out AssetBehaviorSpec? assetSpec)
             && CanAffordRunCredits(GetPlayer(working, PlayerSide.Runner), run, assetSpec.TrashCost))
         {
             PlayerState runner = GetPlayer(working, PlayerSide.Runner);

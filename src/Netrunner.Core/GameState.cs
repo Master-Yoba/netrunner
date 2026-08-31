@@ -283,7 +283,9 @@ public sealed record GameOutcome
 /// </summary>
 public sealed class GameState
 {
-    public const int CurrentSchemaVersion = 1;
+    // M4-4.1 migration: behavior registry identity is now explicit state
+    // metadata, so schema 1 states are intentionally not forward-loadable.
+    public const int CurrentSchemaVersion = EngineCompatibility.StateSchemaVersion;
 
     [JsonConstructor]
     public GameState(
@@ -306,7 +308,9 @@ public sealed class GameState
         long actionSequence = 0,
         ulong initialSeed = 0,
         RunState? runState = null,
-        RulesState? rulesState = null)
+        RulesState? rulesState = null,
+        string? behaviorRegistryVersion = null,
+        string? behaviorCatalogFingerprint = null)
     {
         ArgumentNullException.ThrowIfNull(rulesVersion);
         ArgumentNullException.ThrowIfNull(cardDataVersion);
@@ -322,6 +326,8 @@ public sealed class GameState
         GameId = gameId;
         RulesVersion = rulesVersion;
         CardDataVersion = cardDataVersion;
+        BehaviorRegistryVersion = behaviorRegistryVersion ?? EngineCompatibility.BehaviorRegistryVersion;
+        BehaviorCatalogFingerprint = behaviorCatalogFingerprint;
         Players = FreezeSorted(players, static player => player.Id.Value);
         Cards = FreezeSorted(cards, static card => card.Id.Value);
         Zones = FreezeSorted(zones, static zone => zone.Id.Value);
@@ -366,7 +372,9 @@ public sealed class GameState
         long actionSequence = 0,
         ulong? initialSeed = null,
         RunState? runState = null,
-        RulesState? rulesState = null)
+        RulesState? rulesState = null,
+        string? behaviorRegistryVersion = null,
+        string? behaviorCatalogFingerprint = null)
         : this(
             schemaVersion,
             gameId,
@@ -387,7 +395,9 @@ public sealed class GameState
             actionSequence,
             initialSeed ?? randomState,
             runState,
-            rulesState)
+            rulesState,
+            behaviorRegistryVersion,
+            behaviorCatalogFingerprint)
     {
     }
 
@@ -406,6 +416,26 @@ public sealed class GameState
     [JsonInclude]
     [JsonRequired]
     public string CardDataVersion { get; private set; }
+
+    /// <summary>
+    /// Version of the compiled behavior registry used to create this state.
+    /// It is deliberately distinct from <see cref="CardDataVersion"/>.
+    /// </summary>
+    [JsonInclude]
+    [JsonRequired]
+    public string BehaviorRegistryVersion { get; private set; }
+
+    /// <summary>
+    /// Optional content fingerprint for catalogs that share a version label.
+    /// Null is retained for legacy fixture constructors; content-enabled
+    /// composition supplies the deterministic SHA-256 fingerprint.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? BehaviorCatalogFingerprint { get; private set; }
+
+    [JsonIgnore]
+    public string? BehaviorRegistryFingerprint => BehaviorCatalogFingerprint;
 
     [JsonInclude]
     [JsonRequired]
@@ -477,6 +507,9 @@ public sealed class GameState
 
     public GameSnapshot CreateSnapshot() => GameSnapshot.From(this);
 
+    public GameSnapshot CreateSnapshot(IBehaviorCatalog behaviorCatalog) =>
+        GameSnapshot.From(this, behaviorCatalog);
+
     [JsonIgnore]
     public GameSnapshot Snapshot => CreateSnapshot();
 
@@ -503,7 +536,9 @@ public sealed class GameState
     public static GameState CreateNew(
         ulong seed,
         string rulesVersion = "26.03",
-        string cardDataVersion = "fixture-1")
+        string cardDataVersion = "fixture-1",
+        string? behaviorRegistryVersion = null,
+        string? behaviorCatalogFingerprint = null)
     {
         var allocator = new StableIdAllocator();
         GameId gameId = allocator.NextGameId();
@@ -542,7 +577,9 @@ public sealed class GameState
             new GameOutcome(),
             seed,
             allocator.State,
-            initialSeed: seed);
+            initialSeed: seed,
+            behaviorRegistryVersion: behaviorRegistryVersion,
+            behaviorCatalogFingerprint: behaviorCatalogFingerprint);
 
         StateInvariantValidator.Validate(state);
         return state;
@@ -560,9 +597,14 @@ public sealed class GameState
 
     public static GameState FromSnapshot(GameSnapshot snapshot)
     {
+        return FromSnapshot(snapshot, null);
+    }
+
+    public static GameState FromSnapshot(GameSnapshot snapshot, IBehaviorCatalog? behaviorCatalog)
+    {
         ArgumentNullException.ThrowIfNull(snapshot);
         GameState state = snapshot.ToState();
-        StateInvariantValidator.Validate(state);
+        StateInvariantValidator.Validate(state, behaviorCatalog);
         return state;
     }
 
@@ -619,7 +661,9 @@ public sealed class GameSnapshot
         long actionSequence = 0,
         ulong initialSeed = 0,
         RunState? runState = null,
-        RulesState? rulesState = null)
+        RulesState? rulesState = null,
+        string? behaviorRegistryVersion = null,
+        string? behaviorCatalogFingerprint = null)
     {
         ArgumentNullException.ThrowIfNull(rulesVersion);
         ArgumentNullException.ThrowIfNull(cardDataVersion);
@@ -635,6 +679,8 @@ public sealed class GameSnapshot
         GameId = gameId;
         RulesVersion = rulesVersion;
         CardDataVersion = cardDataVersion;
+        BehaviorRegistryVersion = behaviorRegistryVersion ?? EngineCompatibility.BehaviorRegistryVersion;
+        BehaviorCatalogFingerprint = behaviorCatalogFingerprint;
         Players = CopyPlayers(players);
         Cards = CopyCards(cards);
         Zones = CopyZones(zones);
@@ -668,6 +714,17 @@ public sealed class GameSnapshot
     [JsonInclude]
     [JsonRequired]
     public string CardDataVersion { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string BehaviorRegistryVersion { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? BehaviorCatalogFingerprint { get; private set; }
+
+    [JsonIgnore]
+    public string? BehaviorRegistryFingerprint => BehaviorCatalogFingerprint;
 
     [JsonInclude]
     [JsonRequired]
@@ -735,8 +792,13 @@ public sealed class GameSnapshot
 
     public static GameSnapshot From(GameState state)
     {
+        return From(state, null);
+    }
+
+    public static GameSnapshot From(GameState state, IBehaviorCatalog? behaviorCatalog)
+    {
         ArgumentNullException.ThrowIfNull(state);
-        StateInvariantValidator.Validate(state);
+        StateInvariantValidator.Validate(state, behaviorCatalog);
         return new GameSnapshot(
             state.SchemaVersion,
             state.GameId,
@@ -757,7 +819,9 @@ public sealed class GameSnapshot
             state.ActionSequence,
             state.InitialSeed,
             state.RunState,
-            state.RulesState);
+            state.RulesState,
+            state.BehaviorRegistryVersion,
+            state.BehaviorCatalogFingerprint);
     }
 
     public GameState ToState() => new(
@@ -780,7 +844,9 @@ public sealed class GameSnapshot
         ActionSequence,
         InitialSeed,
         RunState,
-        RulesState);
+        RulesState,
+        BehaviorRegistryVersion,
+        BehaviorCatalogFingerprint);
 
     private static ReadOnlyCollection<PlayerState> CopyPlayers(IEnumerable<PlayerState>? values) =>
         new ReadOnlyCollection<PlayerState>((values ?? [])
