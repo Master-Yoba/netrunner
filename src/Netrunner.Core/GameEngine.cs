@@ -10,17 +10,54 @@ public static partial class GameEngine
 {
     public const int DefaultResolutionStepBudget = 128;
 
+    /// <summary>Creates an engine session bound to one immutable catalog.</summary>
+    public static GameEngineSession CreateSession(IBehaviorCatalog behaviorCatalog) =>
+        new(behaviorCatalog);
+
     public static ApplyResult Apply(GameState state, ActionSubmission? submission)
     {
-        return ApplyCore(state, submission, DefaultResolutionStepBudget);
+        return ApplyCore(
+            state,
+            submission,
+            CardBehaviorSpecCatalog.Default,
+            enforceCatalogCompatibility: false,
+            maxResolutionSteps: DefaultResolutionStepBudget);
     }
+
+    /// <summary>
+    /// Applies an action using an explicitly composed immutable behavior
+    /// catalog.  The catalog is captured for the whole atomic reduction and
+    /// is never read from process-wide mutable registration state.
+    /// </summary>
+    public static ApplyResult Apply(
+        GameState state,
+        ActionSubmission? submission,
+        IBehaviorCatalog behaviorCatalog)
+    {
+        return ApplyCore(
+            state,
+            submission,
+            behaviorCatalog,
+            enforceCatalogCompatibility: true,
+            maxResolutionSteps: DefaultResolutionStepBudget);
+    }
+
+    /// <summary>Parameter-order adapter for composition callers.</summary>
+    public static ApplyResult Apply(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        ActionSubmission? submission) =>
+        Apply(state, submission, behaviorCatalog);
 
     private static ApplyResult ApplyCore(
         GameState state,
         ActionSubmission? submission,
+        IBehaviorCatalog behaviorCatalog,
+        bool enforceCatalogCompatibility,
         int maxResolutionSteps)
     {
         ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(behaviorCatalog);
 
         if (submission is null)
         {
@@ -30,7 +67,19 @@ public static partial class GameEngine
                 "An action submission is required.");
         }
 
-        if (!StateInvariantValidator.TryValidate(state, out IReadOnlyList<StateInvariantViolation> violations))
+        if (enforceCatalogCompatibility
+            && !CatalogMatchesState(state, behaviorCatalog, out string? catalogMismatch))
+        {
+            return ApplyResult.Reject(
+                state,
+                ApplyRejectionCode.InvalidInputState,
+                catalogMismatch!);
+        }
+
+        if (!StateInvariantValidator.TryValidate(
+                state,
+                enforceCatalogCompatibility ? behaviorCatalog : null,
+                out IReadOnlyList<StateInvariantViolation> violations))
         {
             return ApplyResult.Reject(
                 state,
@@ -96,7 +145,7 @@ public static partial class GameEngine
                 "The resolution step budget must be positive.");
         }
 
-        var working = WorkingState.From(state);
+        var working = WorkingState.From(state, behaviorCatalog);
         try
         {
             working.PendingDecision = null;
@@ -105,7 +154,9 @@ public static partial class GameEngine
             working.ActionSequence = NextSequence(working.ActionSequence, "action");
 
             GameState next = working.Build(state);
-            StateInvariantValidator.Validate(next);
+            StateInvariantValidator.Validate(
+                next,
+                enforceCatalogCompatibility ? behaviorCatalog : null);
             IReadOnlyList<EngineEvent> events = FreezeEvents(working.Events);
             var acceptedAction = new AcceptedActionRecord(
                 working.ActionSequence,
@@ -143,9 +194,56 @@ public static partial class GameEngine
         ResolutionFrame frame,
         int maxResolutionSteps = DefaultResolutionStepBudget)
     {
+        return BeginResolutionCore(
+            state,
+            frame,
+            CardBehaviorSpecCatalog.Default,
+            enforceCatalogCompatibility: false,
+            maxResolutionSteps: maxResolutionSteps);
+    }
+
+    /// <summary>Begins a resolution using an injected immutable catalog.</summary>
+    public static GameState BeginResolution(
+        GameState state,
+        ResolutionFrame frame,
+        IBehaviorCatalog behaviorCatalog,
+        int maxResolutionSteps = DefaultResolutionStepBudget)
+    {
+        return BeginResolutionCore(
+            state,
+            frame,
+            behaviorCatalog,
+            enforceCatalogCompatibility: true,
+            maxResolutionSteps: maxResolutionSteps);
+    }
+
+    /// <summary>Parameter-order adapter for injected-session callers.</summary>
+    public static GameState BeginResolution(
+        GameState state,
+        ResolutionFrame frame,
+        int maxResolutionSteps,
+        IBehaviorCatalog behaviorCatalog) =>
+        BeginResolution(state, frame, behaviorCatalog, maxResolutionSteps);
+
+    private static GameState BeginResolutionCore(
+        GameState state,
+        ResolutionFrame frame,
+        IBehaviorCatalog behaviorCatalog,
+        bool enforceCatalogCompatibility,
+        int maxResolutionSteps)
+    {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(frame);
-        StateInvariantValidator.Validate(state);
+        ArgumentNullException.ThrowIfNull(behaviorCatalog);
+        if (enforceCatalogCompatibility
+            && !CatalogMatchesState(state, behaviorCatalog, out string? catalogMismatch))
+        {
+            throw new ResolutionFailureException(catalogMismatch!);
+        }
+
+        StateInvariantValidator.Validate(
+            state,
+            enforceCatalogCompatibility ? behaviorCatalog : null);
 
         if (state.Outcome.Kind == GameOutcomeKind.Won)
         {
@@ -162,13 +260,15 @@ public static partial class GameEngine
             throw new ResolutionStepBudgetExceededException(maxResolutionSteps);
         }
 
-        var working = WorkingState.From(state);
+        var working = WorkingState.From(state, behaviorCatalog);
         try
         {
             working.ResolutionStack.Add(ResolutionFrameCloner.Copy(frame));
             Advance(working, maxResolutionSteps);
             GameState next = working.Build(state);
-            StateInvariantValidator.Validate(next);
+            StateInvariantValidator.Validate(
+                next,
+                enforceCatalogCompatibility ? behaviorCatalog : null);
             return next;
         }
         catch (ResolutionFailureException)
@@ -188,63 +288,6 @@ public static partial class GameEngine
         ResolutionFrame frame,
         int maxResolutionSteps = DefaultResolutionStepBudget) =>
         BeginResolution(state, frame, maxResolutionSteps);
-
-    private static void Advance(WorkingState working, int maxResolutionSteps)
-    {
-        int steps = 0;
-        while (working.PendingDecision is null && working.ResolutionStack.Count > 0)
-        {
-            if (steps >= maxResolutionSteps)
-            {
-                throw new ResolutionStepBudgetExceededException(maxResolutionSteps);
-            }
-
-            steps++;
-            ResolutionFrame frame = working.ResolutionStack[^1]
-                ?? throw new ResolutionFailureException("The resolution stack contained a null frame.");
-
-            IReadOnlyList<StateInvariantViolation> frameViolations = ResolutionFrameValidator.Collect(frame);
-            if (frameViolations.Count > 0)
-            {
-                throw new ResolutionFailureException(FormatViolations(frameViolations));
-            }
-
-            switch (frame)
-            {
-                case ChooseNumberThenAdjustCreditsFrame chooseThenAdjust:
-                    StepChooseNumberThenAdjustCredits(working, chooseThenAdjust);
-                    break;
-                case ChooseNumberFrame chooseNumber:
-                    StepChooseNumber(working, chooseNumber);
-                    break;
-                case ChooseCardFrame chooseCard:
-                    StepChooseCard(working, chooseCard);
-                    break;
-                case AdjustCreditsFrame adjustCredits:
-                    working.ResolutionStack.RemoveAt(working.ResolutionStack.Count - 1);
-                    ApplyCreditDelta(working, adjustCredits.Target, adjustCredits.Delta);
-                    break;
-                case ToyTurnFrame toyTurn:
-                    StepToyTurn(working, toyTurn);
-                    break;
-                case RunTimingFrame runTiming:
-                    StepRunTiming(working, runTiming);
-                    break;
-                case EffectResolutionFrame effectResolution:
-                    StepEffectResolution(working, effectResolution);
-                    break;
-                case EffectCheckpointFrame effectCheckpoint:
-                    StepEffectCheckpoint(working, effectCheckpoint);
-                    break;
-                case MemoryCleanupFrame memoryCleanup:
-                    StepMemoryCleanup(working, memoryCleanup);
-                    break;
-                default:
-                    throw new ResolutionFailureException(
-                        $"No resolution behavior is registered for frame type '{frame.GetType().Name}'.");
-            }
-        }
-    }
 
     private static void ConsumeAction(WorkingState working, LegalAction action)
     {
@@ -420,423 +463,6 @@ public static partial class GameEngine
         }
 
         working.ResolutionStack.RemoveAt(working.ResolutionStack.Count - 1);
-    }
-
-    private static void ConsumeToyAction(
-        WorkingState working,
-        ActionKind kind,
-        CardInstanceId? targetCardId)
-    {
-        if (working.ResolutionStack.Count == 0
-            || working.ResolutionStack[^1] is not ToyTurnFrame frame
-            || frame.Stage != ToyTurnStage.AwaitingAction
-            || working.Turn.ActiveSide != frame.ActiveSide)
-        {
-            throw new ResolutionFailureException("The submitted toy action does not match the active toy-turn frame.");
-        }
-
-        PlayerSide side = frame.ActiveSide;
-        PlayerState player = working.Players.SingleOrDefault(candidate => candidate.Side == side)
-            ?? throw new ResolutionFailureException($"The active '{side}' player does not exist.");
-
-        switch (kind)
-        {
-            case ActionKind.GainCredit:
-                RequireNoToyTarget(targetCardId, kind);
-                RequireClicks(player, kind);
-                ApplyCreditDelta(working, player.Id, 1);
-                SpendClick(working, player.Id);
-                break;
-            case ActionKind.DrawCard:
-                RequireNoToyTarget(targetCardId, kind);
-                RequireClicks(player, kind);
-                SpendClick(working, player.Id);
-                if (!TryDrawCard(working, side))
-                {
-                    if (side == PlayerSide.Corp)
-                    {
-                        CompleteToyGame(working, PlayerSide.Runner, GameWinReason.DeckOut);
-                    }
-                    else
-                    {
-                        throw new ResolutionFailureException("The Runner cannot draw from an empty stack.");
-                    }
-
-                    return;
-                }
-                break;
-            case ActionKind.InstallCard:
-                RequireToyTarget(targetCardId, kind);
-                RequireClicks(player, kind);
-                InstallToyCard(working, side, targetCardId.GetValueOrDefault());
-                SpendClick(working, player.Id);
-                break;
-            case ActionKind.AdvanceAgenda:
-                RequireToyTarget(targetCardId, kind);
-                RequireClicks(player, kind);
-                SpendClick(working, player.Id);
-                AdvanceToyAgenda(working, targetCardId.GetValueOrDefault());
-                break;
-            case ActionKind.ScoreAgenda:
-                RequireToyTarget(targetCardId, kind);
-                ScoreToyAgenda(working, targetCardId.GetValueOrDefault());
-                break;
-            case ActionKind.StealAgenda:
-                RequireToyTarget(targetCardId, kind);
-                RequireClicks(player, kind);
-                SpendClick(working, player.Id);
-                StealToyAgenda(working, targetCardId.GetValueOrDefault());
-                break;
-            case ActionKind.EndTurn:
-                RequireNoToyTarget(targetCardId, kind);
-                EndToyTurn(working, side);
-                return;
-            default:
-                throw new ResolutionFailureException($"Action kind '{kind}' is not a toy-turn action.");
-        }
-    }
-
-    private static void StepToyTurn(WorkingState working, ToyTurnFrame frame)
-    {
-        if (working.Turn.ActiveSide != frame.ActiveSide)
-        {
-            throw new ResolutionFailureException("Toy-turn frame side does not match the active turn side.");
-        }
-
-        switch (frame.Stage)
-        {
-            case ToyTurnStage.CorpTurnStartDraw:
-                if (frame.ActiveSide != PlayerSide.Corp)
-                {
-                    throw new ResolutionFailureException("Only the Corp may have a mandatory draw stage.");
-                }
-
-                PlayerState corp = GetPlayer(working, PlayerSide.Corp);
-                Emit(working, EngineEventKinds.TurnStarted, new TurnStartedEventPayload(
-                    PlayerSide.Corp,
-                    working.Turn.TurnNumber,
-                    corp.Clicks));
-                if (!TryDrawCard(working, PlayerSide.Corp))
-                {
-                    CompleteToyGame(working, PlayerSide.Runner, GameWinReason.DeckOut);
-                    return;
-                }
-
-                working.ResolutionStack[^1] = new ToyTurnFrame(
-                    1,
-                    ResolutionBehaviorIds.ToyTurn,
-                    PlayerSide.Corp,
-                    ToyTurnStage.AwaitingAction);
-                break;
-            case ToyTurnStage.RunnerTurnStart:
-                if (frame.ActiveSide != PlayerSide.Runner)
-                {
-                    throw new ResolutionFailureException("Only the Runner may have a Runner turn-start stage.");
-                }
-
-                PlayerState runner = GetPlayer(working, PlayerSide.Runner);
-                Emit(working, EngineEventKinds.TurnStarted, new TurnStartedEventPayload(
-                    PlayerSide.Runner,
-                    working.Turn.TurnNumber,
-                    runner.Clicks));
-                working.ResolutionStack[^1] = new ToyTurnFrame(
-                    1,
-                    ResolutionBehaviorIds.ToyTurn,
-                    PlayerSide.Runner,
-                    ToyTurnStage.AwaitingAction);
-                break;
-            case ToyTurnStage.AwaitingAction:
-                YieldToyDecision(working, frame.ActiveSide);
-                break;
-            default:
-                throw new ResolutionFailureException($"Unsupported toy-turn stage '{frame.Stage}'.");
-        }
-    }
-
-    private static void YieldToyDecision(WorkingState working, PlayerSide side)
-    {
-        PlayerState player = GetPlayer(working, side);
-        ZoneState hand = GetZone(working, side == PlayerSide.Corp ? ZoneKind.CorpHand : ZoneKind.RunnerGrip);
-        ZoneState stack = GetZone(working, side == PlayerSide.Corp ? ZoneKind.CorpDeck : ZoneKind.RunnerStack);
-        ZoneState remoteRoot = GetRemoteRoot(working);
-        IReadOnlyList<ToyActionSpec> expected = ToyActionRules.Expected(
-            side,
-            player,
-            hand,
-            stack,
-            remoteRoot,
-            working.Cards);
-        var actions = new List<LegalAction>(expected.Count);
-        foreach (ToyActionSpec spec in expected)
-        {
-            string description = spec.Target.HasValue
-                ? $"{GetToyActionVerb(spec.Kind)} {spec.Target.Value}"
-                : GetToyActionVerb(spec.Kind);
-            ActionParameters parameters = spec.Target.HasValue
-                ? new CardChoiceParameters(spec.Target.Value)
-                : new NoActionParameters();
-            actions.Add(new LegalAction(
-                working.Allocator.NextActionId(),
-                spec.Kind,
-                description,
-                parameters));
-        }
-
-        DecisionId decisionId = working.Allocator.NextDecisionId();
-        working.DecisionRevision = NextRevision(working.DecisionRevision);
-        working.PendingDecision = new PendingDecision(
-            decisionId,
-            working.DecisionRevision,
-            player.Id,
-            DecisionKind.ToyTurn,
-            side == PlayerSide.Corp ? "Choose a Corp action" : "Choose a Runner action",
-            actions);
-    }
-
-    private static string GetToyActionVerb(ActionKind kind) => kind switch
-    {
-        ActionKind.GainCredit => "Gain 1 credit",
-        ActionKind.DrawCard => "Draw a card",
-        ActionKind.InstallCard => "Install card",
-        ActionKind.AdvanceAgenda => "Advance agenda",
-        ActionKind.ScoreAgenda => "Score agenda",
-        ActionKind.StealAgenda => "Steal agenda",
-        ActionKind.EndTurn => "End turn",
-        _ => throw new ResolutionFailureException($"Action kind '{kind}' is not a toy action."),
-    };
-
-    private static void InstallToyCard(WorkingState working, PlayerSide side, CardInstanceId cardId)
-    {
-        CardInstanceState card = GetCard(working, cardId);
-        ToyCardBehavior behavior = ToyCardBehaviorCatalog.Get(card.DefinitionId);
-        ZoneKind handKind = side == PlayerSide.Corp ? ZoneKind.CorpHand : ZoneKind.RunnerGrip;
-        ZoneState hand = GetZone(working, handKind);
-        if (card.OwnerSide != side || card.ZoneId != hand.Id)
-        {
-            throw new ResolutionFailureException($"Card '{cardId}' is not in the active player's hand.");
-        }
-
-        if (behavior.OwnerSide != side
-            || (side == PlayerSide.Corp && behavior.Kind != ToyCardKind.CorpAgenda)
-            || (side == PlayerSide.Runner && behavior.Kind != ToyCardKind.RunnerProgram))
-        {
-            throw new ResolutionFailureException($"Card '{cardId}' is not installable by '{side}'.");
-        }
-
-        PlayerState player = GetPlayer(working, side);
-        if (player.Credits < behavior.InstallCost)
-        {
-            throw new ResolutionFailureException($"Installing '{cardId}' requires {behavior.InstallCost} credits.");
-        }
-
-        ZoneState destination = side == PlayerSide.Corp
-            ? GetRemoteRoot(working)
-            : GetZone(working, ZoneKind.RunnerRig);
-        if (side == PlayerSide.Corp && destination.CardIds.Count > 0)
-        {
-            throw new ResolutionFailureException("The fixture remote already contains an installed card.");
-        }
-
-        MoveCard(working, card, hand, destination);
-        ApplyCreditDelta(working, player.Id, -behavior.InstallCost);
-        Emit(working, EngineEventKinds.CardInstalled, new CardInstalledEventPayload(
-            side,
-            cardId,
-            hand.Id,
-            destination.Id,
-            behavior.InstallCost));
-    }
-
-    private static void AdvanceToyAgenda(WorkingState working, CardInstanceId cardId)
-    {
-        CardInstanceState card = GetCard(working, cardId);
-        ToyCardBehavior behavior = ToyCardBehaviorCatalog.Get(card.DefinitionId);
-        ZoneState remoteRoot = GetRemoteRoot(working);
-        PlayerState corp = GetPlayer(working, PlayerSide.Corp);
-        if (corp.Side != PlayerSide.Corp
-            || card.OwnerSide != PlayerSide.Corp
-            || card.ZoneId != remoteRoot.Id
-            || behavior.Kind != ToyCardKind.CorpAgenda
-            || card.AdvancementCounters >= behavior.AdvancementRequirement)
-        {
-            throw new ResolutionFailureException($"Card '{cardId}' is not an installed Corp agenda.");
-        }
-
-        if (corp.Credits < 1)
-        {
-            throw new ResolutionFailureException("Advancing an agenda requires one credit.");
-        }
-
-        int counters = checked(card.AdvancementCounters + 1);
-        ReplaceCard(working, new CardInstanceState(
-            card.Id,
-            card.DefinitionId,
-            card.ZoneId,
-            card.OwnerSide,
-            card.FaceUp,
-            card.Rezzed,
-            counters));
-        ApplyCreditDelta(working, corp.Id, -1);
-        Emit(working, EngineEventKinds.AgendaAdvanced, new AgendaAdvancedEventPayload(
-            cardId,
-            counters,
-            behavior.AdvancementRequirement));
-    }
-
-    private static void ScoreToyAgenda(WorkingState working, CardInstanceId cardId)
-    {
-        CardInstanceState card = GetCard(working, cardId);
-        ToyCardBehavior behavior = ToyCardBehaviorCatalog.Get(card.DefinitionId);
-        ZoneState remoteRoot = GetRemoteRoot(working);
-        if (card.OwnerSide != PlayerSide.Corp
-            || card.ZoneId != remoteRoot.Id
-            || behavior.Kind != ToyCardKind.CorpAgenda
-            || card.AdvancementCounters < behavior.AdvancementRequirement)
-        {
-            throw new ResolutionFailureException($"Card '{cardId}' is not a completed installed Corp agenda.");
-        }
-
-        ZoneState score = GetZone(working, ZoneKind.CorpScore);
-        MoveCard(working, card, remoteRoot, score);
-        ReplaceCard(working, new CardInstanceState(
-            card.Id,
-            card.DefinitionId,
-            score.Id,
-            PlayerSide.Corp,
-            true,
-            card.Rezzed,
-            card.AdvancementCounters));
-        AddAgendaPoints(working, PlayerSide.Corp, behavior.AgendaPoints);
-        Emit(working, EngineEventKinds.AgendaScored, new AgendaScoredEventPayload(
-            PlayerSide.Corp,
-            cardId,
-            behavior.AgendaPoints));
-        if (GetPlayer(working, PlayerSide.Corp).AgendaPoints >= ToyRules.AgendaPointsToWin)
-        {
-            CompleteToyGame(working, PlayerSide.Corp, GameWinReason.AgendaPoints);
-        }
-    }
-
-    private static void StealToyAgenda(WorkingState working, CardInstanceId cardId)
-    {
-        CardInstanceState card = GetCard(working, cardId);
-        ToyCardBehavior behavior = ToyCardBehaviorCatalog.Get(card.DefinitionId);
-        ZoneState remoteRoot = GetRemoteRoot(working);
-        if (card.OwnerSide != PlayerSide.Corp
-            || card.ZoneId != remoteRoot.Id
-            || behavior.Kind != ToyCardKind.CorpAgenda)
-        {
-            throw new ResolutionFailureException($"Card '{cardId}' is not an installed agenda available to steal.");
-        }
-
-        ZoneState score = GetZone(working, ZoneKind.RunnerScore);
-        MoveCard(working, card, remoteRoot, score);
-        ReplaceCard(working, new CardInstanceState(
-            card.Id,
-            card.DefinitionId,
-            score.Id,
-            PlayerSide.Corp,
-            true,
-            card.Rezzed,
-            card.AdvancementCounters));
-        AddAgendaPoints(working, PlayerSide.Runner, behavior.AgendaPoints);
-        Emit(working, EngineEventKinds.AgendaStolen, new AgendaStolenEventPayload(
-            PlayerSide.Runner,
-            cardId,
-            behavior.AgendaPoints));
-        if (GetPlayer(working, PlayerSide.Runner).AgendaPoints >= ToyRules.AgendaPointsToWin)
-        {
-            CompleteToyGame(working, PlayerSide.Runner, GameWinReason.AgendaPoints);
-        }
-    }
-
-    private static bool TryDrawCard(WorkingState working, PlayerSide side)
-    {
-        ZoneState deck = GetZone(working, side == PlayerSide.Corp ? ZoneKind.CorpDeck : ZoneKind.RunnerStack);
-        if (deck.CardIds.Count == 0)
-        {
-            return false;
-        }
-
-        ZoneState hand = GetZone(working, side == PlayerSide.Corp ? ZoneKind.CorpHand : ZoneKind.RunnerGrip);
-        CardInstanceState card = GetCard(working, deck.CardIds[0]);
-        MoveCard(working, card, deck, hand);
-        Emit(working, EngineEventKinds.CardDrawn, new CardDrawnEventPayload(
-            side,
-            card.Id,
-            deck.Id,
-            hand.Id));
-        return true;
-    }
-
-    private static void EndToyTurn(WorkingState working, PlayerSide side)
-    {
-        PlayerState current = GetPlayer(working, side);
-        ReplacePlayer(working, new PlayerState(current.Id, current.Side, current.Credits, 0, current.AgendaPoints));
-        Emit(working, EngineEventKinds.TurnEnded, new TurnEndedEventPayload(side, working.Turn.TurnNumber));
-        PlayerSide nextSide = side == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp;
-        int nextTurnNumber = side == PlayerSide.Runner
-            ? checked(working.Turn.TurnNumber + 1)
-            : working.Turn.TurnNumber;
-        PlayerState next = GetPlayer(working, nextSide);
-        ReplacePlayer(working, new PlayerState(
-            next.Id,
-            next.Side,
-            next.Credits,
-            nextSide == PlayerSide.Corp ? ToyRules.CorpClicksPerTurn : ToyRules.RunnerClicksPerTurn,
-            next.AgendaPoints));
-        working.Turn = new TurnState(
-            nextSide,
-            nextSide == PlayerSide.Corp ? TurnPhase.Corp : TurnPhase.Runner,
-            nextTurnNumber);
-        working.ResolutionStack[^1] = new ToyTurnFrame(
-            1,
-            ResolutionBehaviorIds.ToyTurn,
-            nextSide,
-            nextSide == PlayerSide.Corp ? ToyTurnStage.CorpTurnStartDraw : ToyTurnStage.RunnerTurnStart);
-    }
-
-    private static void CompleteToyGame(WorkingState working, PlayerSide winner, GameWinReason reason)
-    {
-        working.PendingDecision = null;
-        working.ResolutionStack.Clear();
-        foreach (PlayerState player in working.Players.ToArray())
-        {
-            ReplacePlayer(working, new PlayerState(player.Id, player.Side, player.Credits, 0, player.AgendaPoints));
-        }
-
-        working.Outcome = new GameOutcome(GameOutcomeKind.Won, winner, reason);
-        working.Turn = new TurnState(winner, TurnPhase.GameOver, working.Turn.TurnNumber);
-        Emit(working, EngineEventKinds.GameWon, new GameWonEventPayload(winner, reason));
-    }
-
-    private static void AddAgendaPoints(WorkingState working, PlayerSide side, int points)
-    {
-        PlayerState player = GetPlayer(working, side);
-        ReplacePlayer(working, new PlayerState(
-            player.Id,
-            player.Side,
-            player.Credits,
-            player.Clicks,
-            checked(player.AgendaPoints + points)));
-    }
-
-    private static void SpendClick(WorkingState working, PlayerId playerId)
-    {
-        PlayerState player = working.Players.Single(candidate => candidate.Id == playerId);
-        if (player.Clicks <= 0)
-        {
-            throw new ResolutionFailureException($"Player '{playerId}' has no clicks remaining.");
-        }
-
-        int remaining = player.Clicks - 1;
-        ReplacePlayer(working, new PlayerState(
-            player.Id,
-            player.Side,
-            player.Credits,
-            remaining,
-            player.AgendaPoints));
-        Emit(working, EngineEventKinds.ClickSpent, new ClickSpentEventPayload(player.Side, remaining));
     }
 
     private static void MoveCard(
@@ -1110,10 +736,35 @@ public static partial class GameEngine
     private static string FormatViolations(IReadOnlyList<StateInvariantViolation> violations) =>
         string.Join("; ", violations.Select(static violation => violation.ToString()));
 
+    private static bool CatalogMatchesState(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        out string? mismatch)
+    {
+        if (!string.Equals(state.BehaviorRegistryVersion, behaviorCatalog.Version, StringComparison.Ordinal))
+        {
+            mismatch =
+                $"Behavior registry version '{state.BehaviorRegistryVersion}' does not match the injected catalog version '{behaviorCatalog.Version}'.";
+            return false;
+        }
+
+        if (state.BehaviorCatalogFingerprint is not null
+            && !string.Equals(state.BehaviorCatalogFingerprint, behaviorCatalog.Fingerprint, StringComparison.Ordinal))
+        {
+            mismatch =
+                $"Behavior catalog fingerprint '{state.BehaviorCatalogFingerprint}' does not match the injected catalog fingerprint '{behaviorCatalog.Fingerprint}'.";
+            return false;
+        }
+
+        mismatch = null;
+        return true;
+    }
+
     private sealed class WorkingState
     {
-        private WorkingState(GameState source)
+        private WorkingState(GameState source, IBehaviorCatalog behaviorCatalog)
         {
+            BehaviorCatalog = behaviorCatalog;
             Players = source.Players.ToList();
             Cards = source.Cards.ToList();
             Zones = source.Zones.ToList();
@@ -1134,6 +785,9 @@ public static partial class GameEngine
         }
 
         public List<PlayerState> Players { get; }
+
+        /// <summary>Immutable catalog captured for this atomic reduction.</summary>
+        public IBehaviorCatalog BehaviorCatalog { get; }
 
         public List<CardInstanceState> Cards { get; }
 
@@ -1167,7 +821,8 @@ public static partial class GameEngine
 
         public List<EngineEvent> Events { get; }
 
-        public static WorkingState From(GameState source) => new(source);
+        public static WorkingState From(GameState source, IBehaviorCatalog? behaviorCatalog = null) =>
+            new(source, behaviorCatalog ?? CardBehaviorSpecCatalog.Default);
 
         public GameState Build(GameState source) => new(
             source.SchemaVersion,
@@ -1189,7 +844,9 @@ public static partial class GameEngine
             ActionSequence,
             InitialSeed,
             RunState,
-            RulesState);
+            RulesState,
+            source.BehaviorRegistryVersion,
+            source.BehaviorCatalogFingerprint);
     }
 }
 

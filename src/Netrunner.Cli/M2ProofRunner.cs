@@ -1,3 +1,4 @@
+using Netrunner.Cards;
 using Netrunner.Core;
 using Netrunner.Match;
 
@@ -114,20 +115,22 @@ public static class M2ProofRunner
         M2ScenarioRunSpec runSpec = document.Run
             ?? throw new M2ProofException($"scenario '{document.ScenarioId}': the scenario has no run contract.");
 
-        GameState initial = M2ScenarioSetup.Build(document);
+        BehaviorCatalog behaviorCatalog = GatewayBehaviorCatalog.Create();
+        GameState initial = M2ScenarioSetup.Build(document, behaviorCatalog);
         string initialStateHash = DeterministicHash.ForState(initial);
 
         ServerId serverId = ResolveServerId(initial, runSpec.Server);
         GameEngine.RunStartResult start = GameEngine.BeginRunWithEvents(
             initial,
             serverId,
+            behaviorCatalog,
             initiatingSource: new CardInstanceId(runSpec.Source));
         GameState current = start.State;
 
         // The replay artifact starts at the run-start state: the recorded
         // actions are the run-window decisions, and the run start itself is
         // pinned by the scenario document's run contract.
-        GameSnapshot replaySnapshot = current.CreateSnapshot();
+        GameSnapshot replaySnapshot = current.CreateSnapshot(behaviorCatalog);
 
         var events = new List<EngineEvent>(start.Events);
         var replayActions = new List<ReplayAction>();
@@ -149,7 +152,7 @@ public static class M2ProofRunner
             // proof exercises resumption, not only round-trip equality
             // (docs/M2_ARCHITECTURE.md:170).
             string saved = EngineJson.Serialize(current);
-            GameState restored = EngineJson.DeserializeState(saved);
+            GameState restored = EngineJson.DeserializeState(saved, behaviorCatalog);
             string liveHash = DeterministicHash.ForState(current);
             if (!string.Equals(DeterministicHash.ForState(restored), liveHash, StringComparison.Ordinal))
             {
@@ -199,7 +202,7 @@ public static class M2ProofRunner
             }
 
             var submission = new ActionSubmission(resumed.Owner, resumed.Id, resumed.Revision, selected);
-            ApplyResult applied = GameEngine.Apply(restored, submission);
+            ApplyResult applied = GameEngine.Apply(restored, submission, behaviorCatalog);
             if (!applied.Accepted)
             {
                 throw new M2ProofException(
@@ -230,9 +233,10 @@ public static class M2ProofRunner
             replaySnapshot,
             document.Seed,
             replayActions,
-            behaviorRegistryVersion: CardBehaviorSpecCatalog.Version,
+            behaviorRegistryVersion: replaySnapshot.BehaviorRegistryVersion,
+            behaviorCatalogFingerprint: replaySnapshot.BehaviorCatalogFingerprint,
             expectedFinalStateHash: finalStateHash);
-        ReplayVerificationResult verification = ReplayVerifier.Verify(replay);
+        ReplayVerificationResult verification = ReplayVerifier.Verify(replay, behaviorCatalog);
         if (!verification.Success
             || !string.Equals(verification.FinalStateHash, finalStateHash, StringComparison.Ordinal))
         {

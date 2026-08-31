@@ -1,3 +1,5 @@
+using Netrunner.Core;
+
 namespace Netrunner.Cards;
 
 /// <summary>
@@ -8,6 +10,26 @@ namespace Netrunner.Cards;
 /// </summary>
 public static class GatewayBehaviorCatalog
 {
+    /// <summary>
+    /// Builds the immutable Gateway behavior catalog used by a production
+    /// engine session.  This is the composition path for M4; the legacy
+    /// <see cref="RegisterAll"/> method remains available to M2 callers.
+    /// </summary>
+    public static BehaviorCatalog Create()
+    {
+        var builder = new BehaviorCatalogBuilder(CardBehaviorSpecCatalog.Version);
+        return builder
+            .AddIce(GatewayIceBehaviorSpecs.IceSpecs)
+            .AddIcebreaker(GatewayIcebreakerBehaviorSpecs.IcebreakerSpecs)
+            .AddRunEvent(GatewayRunEventBehaviorSpecs.RunEventSpecs)
+            .AddAgenda(GatewayAgendaBehaviorSpecs.AgendaSpecs)
+            .AddAsset(GatewayAssetBehaviorSpecs.AssetSpecs)
+            .Build();
+    }
+
+    /// <summary>Alias retained for callers that use build terminology.</summary>
+    public static BehaviorCatalog Build() => Create();
+
     public static void RegisterAll()
     {
         GatewayIceBehaviorSpecs.RegisterAll();

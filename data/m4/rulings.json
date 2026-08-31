@@ -1,0 +1,211 @@
+{
+  "schemaVersion": 1,
+  "rulesVersion": "CR-26.03",
+  "sourceUrl": "https://rules.nullsignal.games/",
+  "rulings": [
+    {
+      "id": "CR-1.6-setup",
+      "cr": "1.6.5-1.6.7",
+      "summary": "Starting hands are five cards; the Corp may mulligan before the Runner, and a mulliganed player keeps the second hand.",
+      "jnetCrossCheck": "jnet setup order and mulligan prompts are Corp first, then Runner; no third hand is offered."
+    },
+    {
+      "id": "CR-1.11-clicks",
+      "cr": "1.11.1-1.11.3",
+      "summary": "Clicks are the basic unit of activity; the Corp receives three and the Runner receives four each turn.",
+      "jnetCrossCheck": "jnet turn traces allot three Corp clicks and four Runner clicks before their action phases."
+    },
+    {
+      "id": "CR-1.17-victory",
+      "cr": "1.17.1-1.17.3; 10.3.5c",
+      "summary": "A player wins at the next checkpoint when their score reaches seven agenda points.",
+      "jnetCrossCheck": "jnet checks the seven-point threshold at checkpoints, including after score and steal effects."
+    },
+    {
+      "id": "CR-1.18-advance",
+      "cr": "1.18",
+      "summary": "Advancing is the Corp basic action that spends one click and one credit; only advanceable cards may be advanced.",
+      "jnetCrossCheck": "jnet offers advance only for legal installed cards and records the counter before checkpoint effects."
+    },
+    {
+      "id": "CR-1.13-hosting",
+      "cr": "1.13.1-1.13.14",
+      "summary": "Placed or loaded objects are hosted, hosted is distinct from installed, and host changes/trash follow checkpoint rules.",
+      "jnetCrossCheck": "jnet preserves host relationships through counters, Trojan installs, and host removal."
+    },
+    {
+      "id": "CR-2.2-unique",
+      "cr": "2.2; 10.1.1; 10.3.5d",
+      "summary": "Only one active unique card of a name remains, with the newest active copy surviving at checkpoint.",
+      "jnetCrossCheck": "jnet enforces uniqueness at checkpoint rather than deck construction."
+    },
+    {
+      "id": "CR-3.8-console",
+      "cr": "3.8.5",
+      "summary": "A player may have only one active installed console; older active consoles are trashed at checkpoint.",
+      "jnetCrossCheck": "jnet allows multiple console copies in a deck and resolves the active-most-recent rule in play."
+    },
+    {
+      "id": "CR-4.3-hidden",
+      "cr": "4.3.8-4.4.7; 8.1",
+      "summary": "HQ, R&D, Archives, and the grip have different visibility; facedown Corp cards remain hidden unless a rule requires a reveal.",
+      "jnetCrossCheck": "jnet observations expose only the viewer's legal hidden-zone choices and revealed cards."
+    },
+    {
+      "id": "CR-5.1-turns",
+      "cr": "5.1.1-5.1.4",
+      "summary": "The Corp turn has draw, action, and discard phases; the Runner turn has action and discard phases.",
+      "jnetCrossCheck": "jnet emits formal turn-begin/end and phase transitions, including forced action-phase end."
+    },
+    {
+      "id": "CR-5.2-basic-actions",
+      "cr": "5.2.3-5.2.7",
+      "summary": "Basic actions are phase-bound, and the Corp/Runner action sets include gain, draw, install, play, advance, run, tag, and purge costs.",
+      "jnetCrossCheck": "jnet legality rejects actions outside an action phase and charges the printed click/credit costs."
+    },
+    {
+      "id": "CR-5.3-draw",
+      "cr": "5.3.1-5.3.3; 8.4",
+      "summary": "The Corp's mandatory draw is not an action; the Runner has no draw phase; drawing from an empty deck is handled by deck-out rules.",
+      "jnetCrossCheck": "jnet starts the Corp turn with the mandatory draw and reports deck-out before a missing card is silently ignored."
+    },
+    {
+      "id": "CR-5.4-action-phase",
+      "cr": "5.4.1-5.4.3",
+      "summary": "A player continues actions until no clicks remain unless an ability directly ends the action phase; no voluntary end-turn action is added.",
+      "jnetCrossCheck": "jnet terminal effects close action windows and continue to discard; leftover clicks are lost at phase end."
+    },
+    {
+      "id": "CR-6.2-run-position",
+      "cr": "6.2.1-6.2.6; 8.5.10",
+      "summary": "Run position is stable across approach/encounter; an ICE uninstalled mid-encounter is passed and the run continues.",
+      "jnetCrossCheck": "jnet run traces use ICE identity/position semantics rather than stale list indexes after topology changes."
+    },
+    {
+      "id": "CR-6.7-success",
+      "cr": "6.7.1-6.7.5",
+      "summary": "A run becomes successful before the breach, and effects tied to successful runs expire with the run unless a card says otherwise.",
+      "jnetCrossCheck": "jnet applies successful-run triggers before breach and carries run-scoped modifiers through the breach only."
+    },
+    {
+      "id": "CR-7.1-access",
+      "cr": "7.1.1-7.1.10; 7.2",
+      "summary": "Access reveals the accessed card to the Runner, permits one mid-access ability, and forces agenda steal after that opportunity.",
+      "jnetCrossCheck": "jnet exposes access choices only during the access window and ends access when the card moves."
+    },
+    {
+      "id": "CR-8.2-movements",
+      "cr": "8.2.1",
+      "summary": "Draw, install, play, search, score, steal, swap, trash, discard, set-aside, and remove-from-game are explicit card movements or placements.",
+      "jnetCrossCheck": "jnet replay traces distinguish movements and preserve deterministic order for choices and shuffles."
+    },
+    {
+      "id": "CR-8.4-draw",
+      "cr": "8.4.1-8.4.5",
+      "summary": "Drawing N cards is an ordered procedure with deck-out handling and no hidden-card identity leak to the opponent.",
+      "jnetCrossCheck": "jnet does not reveal drawn HQ/grip cards to the opponent and applies deck-out at the required step."
+    },
+    {
+      "id": "CR-8.3-arrange",
+      "cr": "8.3.1-8.3.4",
+      "summary": "Arranging and shuffling cards preserves the hidden or open status of a zone while applying the instructed order change.",
+      "jnetCrossCheck": "jnet records explicit arrange/shuffle choices and never exposes the resulting hidden R&D order."
+    },
+    {
+      "id": "CR-8.5-install",
+      "cr": "8.5.1-8.5.16",
+      "summary": "Installation declares a legal destination, trashes like cards, pays cost, creates servers, changes active state, and then triggers when-installed abilities.",
+      "jnetCrossCheck": "jnet models the ordered install steps and keeps Corp installed cards facedown/unrezzed until rez."
+    },
+    {
+      "id": "CR-4.6.6-servers",
+      "cr": "4.6.6-4.6.9",
+      "summary": "Servers have central and remote positions; a remote server is created by installing a root and is removed when it has no cards.",
+      "jnetCrossCheck": "jnet exposes legal central/remote destinations and removes an empty remote after its last card leaves."
+    },
+    {
+      "id": "CR-7.3-breach",
+      "cr": "7.3.1-7.5",
+      "summary": "A breach establishes the access set and resolves each access as a separate ordered instruction.",
+      "jnetCrossCheck": "jnet applies additional-access modifiers to the breach without exposing cards before their access."
+    },
+    {
+      "id": "CR-8.5.11-costs",
+      "cr": "8.5.11a-8.5.11c",
+      "summary": "ICE install cost is one credit per existing ICE protecting the destination; hardware/program/resource use printed cost; Corp root cards have no install cost.",
+      "jnetCrossCheck": "jnet charges the current ICE count and honors explicit ignore-cost instructions without changing printed costs."
+    },
+    {
+      "id": "CR-8.5.13-reveal",
+      "cr": "8.5.13a-8.5.13d",
+      "summary": "Hidden cards are not revealed merely to verify ordinary type/server legality; ability-specific requirements can require reveal.",
+      "jnetCrossCheck": "jnet examples match hidden Brân/Ansel installs: no reveal for ordinary ICE eligibility, reveal only for extra constraints."
+    },
+    {
+      "id": "CR-8.6-play",
+      "cr": "8.6.1-8.6.7",
+      "summary": "Events and operations are played, paid, made active, resolved, and trashed unless their effect creates an exception or lingering effect.",
+      "jnetCrossCheck": "jnet keeps run-starting events active through their timing structure and trashes ordinary operations/events afterward."
+    },
+    {
+      "id": "CR-8.7-search",
+      "cr": "8.7.1-8.7.4",
+      "summary": "Search temporarily permits looking at a hidden zone, then returns/shuffles cards according to the effect without leaking the search contents.",
+      "jnetCrossCheck": "jnet search effects reveal only explicitly revealed cards and shuffle the searched zone when directed."
+    },
+    {
+      "id": "CR-8.8-swap",
+      "cr": "8.8.1-8.8.3",
+      "summary": "Swapped installed cards exchange locations simultaneously, remain installed, and retain host relationships without reinstall costs.",
+      "jnetCrossCheck": "jnet swap traces preserve ICE positions and hosted Trojans while updating the active run's stable target."
+    },
+    {
+      "id": "CR-9.1-triggered",
+      "cr": "9.1.1-9.1.8",
+      "summary": "Triggered abilities meet conditions even when their source is inactive in the access cases specified by the rules; pending windows are ordered.",
+      "jnetCrossCheck": "jnet trigger traces distinguish condition occurrence from ability resolution and honor inactive-access exceptions."
+    },
+    {
+      "id": "CR-9.2.8-checkpoint",
+      "cr": "9.2.8; 10.3",
+      "summary": "Checkpoints and reaction/interrupt windows resolve state-based legality, unique/console cleanup, memory, server, and win checks.",
+      "jnetCrossCheck": "jnet and the engine both resolve checkpoint consequences before the next action/priority window."
+    },
+    {
+      "id": "CR-9.10-lingering",
+      "cr": "9.10",
+      "summary": "Lingering effects have explicit durations and are independent of a source event or operation after creation.",
+      "jnetCrossCheck": "jnet run/turn duration markers expire at the same occurrence as the corresponding rule duration."
+    },
+    {
+      "id": "CR-10.1-counters",
+      "cr": "10.1.2; 10.9-10.11",
+      "summary": "Virus, advancement, hosted, loaded, and other counters are typed; purge removes virus counters and loaded cards empty at zero.",
+      "jnetCrossCheck": "jnet keeps hosted counters distinct from player pools and resolves load/empty transitions at checkpoints."
+    },
+    {
+      "id": "CR-10.9-load-empty",
+      "cr": "10.9",
+      "summary": "Load places counters on an object and empty triggers when the specified hosted pool reaches zero.",
+      "jnetCrossCheck": "jnet resolves load/empty transitions immediately at the required checkpoint and does not mix hosted credits with player credits."
+    },
+    {
+      "id": "CR-10.3-illegal-state",
+      "cr": "10.3.5e-10.3.5i",
+      "summary": "Illegal memory, host, unique, console, and server states are repaired at checkpoint using an appropriate set chosen by the controlling rules.",
+      "jnetCrossCheck": "jnet state validation reports and repairs illegal objects at checkpoint instead of allowing an invalid board to persist."
+    },
+    {
+      "id": "CR-10.5-tags",
+      "cr": "10.5",
+      "summary": "Tags are persistent state; the Corp trash-resource and Runner remove-tag basic actions have their printed click/credit costs and conditions.",
+      "jnetCrossCheck": "jnet tag prompts and tag-or-pay choices are legal only for the tagged Runner and preserve tag state through turns."
+    },
+    {
+      "id": "CR-10.7-link",
+      "cr": "10.7",
+      "summary": "Link is an identity/card characteristic and does not alter the basic run cost in Gateway.",
+      "jnetCrossCheck": "jnet retains link metadata but charges one click for a basic run for all Gateway identities."
+    }
+  ]
+}

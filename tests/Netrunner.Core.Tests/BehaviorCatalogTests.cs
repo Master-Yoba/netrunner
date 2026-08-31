@@ -1,0 +1,234 @@
+using System.Text.Json;
+
+using Xunit;
+
+namespace Netrunner.Core.Tests;
+
+public sealed class BehaviorCatalogTests
+{
+    private static readonly CardDefinitionId IceId = new("test:catalog-ice");
+    private static readonly CardDefinitionId AgendaId = new("test:catalog-agenda");
+
+    [Fact]
+    public void BuilderProducesAnImmutableVersionedCatalogWithStableFingerprint()
+    {
+        IceBehaviorSpec ice = new(
+            IceId,
+            strength: 2,
+            iceType: IceType.Barrier,
+            rezCost: 3,
+            subroutines: [new EndRunSubroutineSpec()],
+            strengthModifiers: []);
+        AgendaBehaviorSpec agenda = new(AgendaId, agendaPoints: 2);
+
+        BehaviorCatalog first = new BehaviorCatalogBuilder("test:catalog")
+            .AddAgenda(agenda)
+            .AddIce(ice)
+            .Build();
+        BehaviorCatalog second = new BehaviorCatalogBuilder("test:catalog")
+            .AddIce(ice)
+            .AddAgenda(agenda)
+            .Build();
+
+        Assert.Equal("test:catalog", first.Version);
+        Assert.Equal(first.Version, first.BehaviorRegistryVersion);
+        Assert.Equal(first.Fingerprint, second.Fingerprint);
+        Assert.True(first.TryGetIce(IceId, out _));
+        Assert.True(first.TryGetAgenda(AgendaId, out _));
+        Assert.Contains(IceId, first.AllDefinitionIds);
+        Assert.Contains(AgendaId, first.AllDefinitionIds);
+        Assert.IsAssignableFrom<IList<IceBehaviorSpec>>(first.IceSpecs);
+        Assert.Throws<NotSupportedException>(() =>
+            ((IList<IceBehaviorSpec>)first.IceSpecs).Clear());
+    }
+
+    [Fact]
+    public void BuilderRejectsConflictingDuplicatesButAcceptsStructuralDuplicates()
+    {
+        IceBehaviorSpec canonical = new(
+            IceId,
+            strength: 2,
+            iceType: IceType.Barrier,
+            rezCost: 3,
+            subroutines: [new EndRunSubroutineSpec()],
+            strengthModifiers: []);
+        var builder = new BehaviorCatalogBuilder("test:duplicates");
+
+        builder.AddIce(canonical).AddIce(canonical);
+        Assert.Throws<InvalidOperationException>(() => builder.AddIce(new IceBehaviorSpec(
+            IceId,
+            strength: 3,
+            iceType: canonical.IceType,
+            rezCost: canonical.RezCost,
+            subroutines: canonical.Subroutines,
+            strengthModifiers: canonical.StrengthModifiers)));
+    }
+
+    [Fact]
+    public void BuilderRejectsReuseAcrossTypedBehaviorFamilies()
+    {
+        var id = new CardDefinitionId("test:cross-family");
+        IceBehaviorSpec ice = new(
+            id,
+            strength: 2,
+            iceType: IceType.Barrier,
+            rezCost: 3,
+            subroutines: [new EndRunSubroutineSpec()],
+            strengthModifiers: []);
+        AgendaBehaviorSpec agenda = new(id, agendaPoints: 2);
+
+        BehaviorCatalogBuilder builder = new("test:cross-family-catalog");
+        builder.AddIce(ice);
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() => builder.AddAgenda(agenda));
+        Assert.Contains("both ICE and agenda", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GenericBehaviorMayIntentionallyOverlayOneLegacyTypedFamily()
+    {
+        var id = new CardDefinitionId("test:generic-overlay");
+        IceBehaviorSpec ice = new(
+            id,
+            strength: 2,
+            iceType: IceType.Barrier,
+            rezCost: 3,
+            subroutines: [new EndRunSubroutineSpec()],
+            strengthModifiers: []);
+        CardBehaviorDefinition generic = new(id, PlayerSide.Corp, instructions: [
+            new BehaviorInstruction(BehaviorInstructionKind.NoOp),
+        ]);
+
+        BehaviorCatalog catalog = new BehaviorCatalogBuilder("test:generic-overlay-catalog")
+            .AddIce(ice)
+            .Add(generic)
+            .Build();
+
+        Assert.True(catalog.TryGetIce(id, out _));
+        Assert.True(catalog.TryGet(id, out _));
+    }
+
+    [Fact]
+    public void CompatibilityCatalogSnapshotDoesNotChangeWhenLegacyRegistrationIsAdded()
+    {
+        BehaviorCatalog before = CardBehaviorSpecCatalog.Default;
+        CardDefinitionId extra = new("test:catalog-snapshot");
+
+        CardBehaviorSpecCatalog.RegisterAsset(new AssetBehaviorSpec(extra, trashCost: 1));
+
+        Assert.False(before.TryGetAsset(extra, out _));
+        Assert.True(CardBehaviorSpecCatalog.Default.TryGetAsset(extra, out _));
+    }
+
+    [Fact]
+    public void ExplicitSessionUsesOnlyItsInjectedCatalogAndVersionPin()
+    {
+        BehaviorCatalog catalog = new BehaviorCatalogBuilder("test:session").Build();
+        GameState state = GameState.CreateNew(
+            seed: 7,
+            behaviorRegistryVersion: catalog.Version,
+            behaviorCatalogFingerprint: catalog.Fingerprint);
+        GameEngineSession session = GameEngine.CreateSession(catalog);
+        PlayerId corpId = state.Players.Single(player => player.Side == PlayerSide.Corp).Id;
+
+        GameState prompt = session.BeginResolution(
+            state,
+            new ChooseNumberFrame(corpId, 1, 2));
+
+        Assert.NotNull(prompt.PendingDecision);
+        Assert.Equal(catalog.Version, prompt.BehaviorRegistryVersion);
+        Assert.Equal(catalog.Fingerprint, prompt.BehaviorCatalogFingerprint);
+    }
+
+    [Fact]
+    public void MetadataSnapshotAndCompiledBehaviorPinsRemainIndependent()
+    {
+        BehaviorCatalog catalog = new BehaviorCatalogBuilder("test:gateway-behavior").Build();
+        GameState fixture = GameState.CreateNew(seed: 5);
+        GameState contentState = GameState.CreateNew(
+            seed: 5,
+            cardDataVersion: EngineCompatibility.GatewayCardDataVersion,
+            behaviorRegistryVersion: catalog.Version,
+            behaviorCatalogFingerprint: catalog.Fingerprint);
+
+        Assert.Equal(EngineCompatibility.CardDataVersion, fixture.CardDataVersion);
+        Assert.Equal(EngineCompatibility.BehaviorRegistryVersion, fixture.BehaviorRegistryVersion);
+        Assert.Null(fixture.BehaviorCatalogFingerprint);
+        Assert.NotEqual(contentState.CardDataVersion, contentState.BehaviorRegistryVersion);
+        StateInvariantValidator.Validate(contentState, catalog);
+    }
+
+    [Fact]
+    public void AdditiveCompatibilityRegistrationDoesNotChurnAnInjectedSemanticPin()
+    {
+        BehaviorCatalog catalog = new BehaviorCatalogBuilder("test:semantic-pin").Build();
+        GameState state = GameState.CreateNew(
+            seed: 19,
+            behaviorRegistryVersion: catalog.Version,
+            behaviorCatalogFingerprint: catalog.Fingerprint);
+        PlayerId corpId = state.Players.Single(player => player.Side == PlayerSide.Corp).Id;
+        GameState prompt = GameEngine.BeginResolution(
+            state,
+            new ChooseNumberFrame(corpId, 1, 1),
+            catalog);
+        PendingDecision decision = Assert.IsType<PendingDecision>(prompt.PendingDecision);
+        var submission = new ActionSubmission(
+            decision.Owner,
+            decision.Id,
+            decision.Revision,
+            Assert.Single(decision.LegalActions).Id);
+
+        ApplyResult before = GameEngine.Apply(prompt, submission, catalog);
+        CardBehaviorSpecCatalog.RegisterAsset(new AssetBehaviorSpec(
+            new CardDefinitionId("test:semantic-pin-additive"),
+            trashCost: 2));
+        ApplyResult after = GameEngine.Apply(prompt, submission, catalog);
+
+        Assert.True(before.Accepted, before.Rejection?.Message);
+        Assert.True(after.Accepted, after.Rejection?.Message);
+        Assert.Equal(DeterministicHash.ForState(before.State), DeterministicHash.ForState(after.State));
+        Assert.Equal(DeterministicHash.ForEvents(before.Events), DeterministicHash.ForEvents(after.Events));
+        Assert.Equal(before.AcceptedAction!.ResultingStateHash, after.AcceptedAction!.ResultingStateHash);
+        Assert.Equal(before.AcceptedAction.ResultingEventBatchHash, after.AcceptedAction.ResultingEventBatchHash);
+    }
+
+    [Fact]
+    public void StateSchemaMigrationRequiresBehaviorRegistryFieldAndRejectsSchemaOne()
+    {
+        GameState state = GameState.CreateNew(seed: 11);
+        string json = EngineJson.Serialize(state);
+        Assert.Contains("\"behaviorRegistryVersion\"", json, StringComparison.Ordinal);
+
+        string oldSchema = json.Replace(
+            $"\"schemaVersion\":{GameState.CurrentSchemaVersion}",
+            "\"schemaVersion\":1",
+            StringComparison.Ordinal);
+        Assert.Throws<JsonException>(() => EngineJson.DeserializeState(oldSchema));
+
+        string missingBehavior = RemoveTopLevelProperty(json, "behaviorRegistryVersion");
+        Assert.Throws<JsonException>(() => EngineJson.DeserializeState(missingBehavior));
+    }
+
+    [Fact]
+    public void StateMigrationDoesNotBumpTheReplayActionArtifactContract()
+    {
+        Assert.Equal(2, BuildMetadata.SaveSchemaVersion);
+        Assert.Equal(EngineCompatibility.ArtifactSchemaVersion, BuildMetadata.ActionLogSchemaVersion);
+        Assert.Equal(1, EngineCompatibility.ArtifactSchemaVersion);
+    }
+
+    private static string RemoveTopLevelProperty(string json, string propertyName)
+    {
+        using JsonDocument document = JsonDocument.Parse(json);
+        var output = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        foreach (JsonProperty property in document.RootElement.EnumerateObject())
+        {
+            if (!string.Equals(property.Name, propertyName, StringComparison.Ordinal))
+            {
+                output[property.Name] = property.Value.Clone();
+            }
+        }
+
+        return JsonSerializer.Serialize(output);
+    }
+}

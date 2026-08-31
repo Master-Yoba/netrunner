@@ -3,7 +3,9 @@
   "scenarioId": "m2:representative-run",
   "seed": 42,
   "rulesVersion": "26.03",
-  "cardDataVersion": "gateway-m2-3",
+  "cardDataVersion": "236140cf84491c23995b028bc791281837520b97",
+  "behaviorRegistryVersion": "gateway-m2-3",
+  "behaviorCatalogFingerprint": "6b00468c24fc876825b1fd211b57383861fdf82ab5d7efb8f399a857338bb3dc",
   "turn": {
     "activeSide": "runner",
     "phase": "runner",
@@ -87,5 +89,5 @@
     "CR 26.03 7.1.5/7.1.6/7.2.2/7.2.3: access decisions; the accessed agenda is mandatorily stolen, and the accessed asset is trashed for its printed cost using the Runner's chosen wallet/hosted-credit division"
   ],
   "crossCheckNote": "Jinteki.net (mtgred/netrunner) compresses the same approach/encounter/movement stops into fewer UI prompts; this scenario keeps every CR 6.9 window explicit, so window counts here exceed jnet's compressed stops by design. The run-scoped Overclock pool is the hosted run-credit source, and its costs may be divided with wallet credits by the Runner; the pool expires at run end in both implementations.",
-  "expectedInitialStateHash": "4733c8f84f1f054c6c1277e07d6450173cfb0d4741d11466cf8997cfd5ea4ac6"
+  "expectedInitialStateHash": "a61f20c71efa735d6b893b2de5bd75da96f6b20481e5ab8c0a1c0a7ac40a2c8b"
 }

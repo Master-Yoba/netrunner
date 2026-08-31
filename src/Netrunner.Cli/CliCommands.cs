@@ -924,7 +924,9 @@ public static class CliCommands
             return 1;
         }
 
-        bool replayVerified = ReplayVerifier.Verify(scripted.ReplayArtifact).Success;
+        bool replayVerified = ReplayVerifier.Verify(
+            scripted.ReplayArtifact,
+            GatewayBehaviorCatalog.Create()).Success;
         if (json)
         {
             var policies = new Dictionary<string, M2ProofPolicyOutput>(StringComparer.Ordinal)

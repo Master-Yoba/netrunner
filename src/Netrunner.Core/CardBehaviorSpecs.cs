@@ -313,6 +313,29 @@ public static class CardBehaviorSpecCatalog
     // may register concurrently, so every read and write takes the gate.
     private static readonly object Gate = new();
 
+    /// <summary>
+    /// Returns an immutable snapshot for composition into an engine session.
+    /// This property is the compatibility bridge for callers that still use
+    /// the M2 process-wide registration API; new production composition should
+    /// build a <see cref="BehaviorCatalog"/> directly.
+    /// </summary>
+    public static BehaviorCatalog Default
+    {
+        get
+        {
+            lock (Gate)
+            {
+                return SnapshotUnsafe();
+            }
+        }
+    }
+
+    /// <summary>Alias for <see cref="Default"/> used by composition code.</summary>
+    public static BehaviorCatalog Snapshot => Default;
+
+    /// <summary>Fingerprint of the current immutable compatibility snapshot.</summary>
+    public static string Fingerprint => Default.Fingerprint;
+
     /// <summary>The ICE definition IDs currently registered, in registration order.</summary>
     public static IReadOnlyCollection<CardDefinitionId> DefinitionIds
     {
@@ -549,6 +572,17 @@ public static class CardBehaviorSpecCatalog
             : throw new ArgumentException(
                 $"Card definition '{definitionId}' is not registered in the run event behavior spec catalog.",
                 nameof(definitionId));
+
+    private static BehaviorCatalog SnapshotUnsafe()
+    {
+        var builder = new BehaviorCatalogBuilder(Version);
+        builder.AddIce(Registered.Values)
+            .AddIcebreaker(RegisteredBreakers.Values)
+            .AddAsset(RegisteredAssets.Values)
+            .AddAgenda(RegisteredAgendas.Values)
+            .AddRunEvent(RegisteredRunEvents.Values);
+        return builder.Build();
+    }
 
     /// <summary>
     /// Structural comparison over scalar fields and the ordered list

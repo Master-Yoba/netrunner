@@ -25,18 +25,71 @@ card_data_cards="$card_data_dir/cards.json"
 card_data_manifest="$card_data_dir/manifest.json"
 card_data_copyright="$card_data_dir/SOURCE_COPYRIGHT.md"
 card_data_present=0
+card_data_content_enabled=0
 for card_data_file in "$card_data_cards" "$card_data_manifest" "$card_data_copyright"; do
   if [[ -e "$card_data_file" ]]; then
     card_data_present=$((card_data_present + 1))
   fi
 done
 if ((card_data_present == 0)); then
-  echo "card-data=skipped (local System Gateway snapshot absent; no network fetch)"
+  echo "card-data=synthetic (local System Gateway snapshot absent; no network fetch)"
+  echo "Provision official content explicitly with:"
+  echo "  ./scripts/update-card-data.sh --commit 236140cf84491c23995b028bc791281837520b97 --retrieval-date 2026-08-28"
 elif ((card_data_present == 3)) && [[ -f "$card_data_cards" && -f "$card_data_manifest" && -f "$card_data_copyright" ]]; then
   dotnet run --project "$verify_root/src/Netrunner.Cli" --no-build --no-restore -- \
     card-data validate --root "$verify_root" --json
+  dotnet build "$verify_root/src/Netrunner.Cards/Netrunner.Cards.csproj" \
+    --no-restore --nologo -m:1 \
+    -p:NetrunnerContentEnabled=true -p:NetrunnerCardDataMode=official
+  card_data_content_enabled=1
 else
   echo "card-data validation failed: local System Gateway snapshot is partial." >&2
+  exit 1
+fi
+coverage_report_dir="$(mktemp -d "${TMPDIR:-/tmp}/netrunner-gateway-coverage.XXXXXX")"
+if [[ -z "$coverage_report_dir" || ! -d "$coverage_report_dir" ]]; then
+  echo "Unable to create the Gateway coverage report directory." >&2
+  exit 1
+fi
+m1_replay_dir=""
+trap 'rm -rf -- "$coverage_report_dir"; if [[ -n "$m1_replay_dir" ]]; then rm -rf -- "$m1_replay_dir"; fi' EXIT
+missing_card_data_root="$coverage_report_dir/missing-source"
+missing_card_data_log="$coverage_report_dir/missing-input.log"
+missing_card_data_expected="DATA-400: normalized card data is missing at '$missing_card_data_root/cards.json'. Run ./scripts/update-card-data.sh --commit 236140cf84491c23995b028bc791281837520b97 --retrieval-date 2026-08-28."
+if dotnet build "$verify_root/src/Netrunner.Cards/Netrunner.Cards.csproj" \
+  --no-restore --nologo -m:1 \
+  -p:NetrunnerContentEnabled=true -p:NetrunnerCardDataInputRoot="$missing_card_data_root" \
+  >"$missing_card_data_log" 2>&1; then
+  echo "DATA-400 missing-input contract unexpectedly succeeded." >&2
+  exit 1
+fi
+if ! grep -Fq "$missing_card_data_expected" "$missing_card_data_log"; then
+  echo "DATA-400 missing-input diagnostic changed unexpectedly:" >&2
+  sed -n '1,80p' "$missing_card_data_log" >&2
+  exit 1
+fi
+echo "card-data=missing-input diagnostic=PASS"
+coverage_catalog="$verify_root/src/Netrunner.Cards/bin/Debug/net8.0/Netrunner.Cards.dll"
+coverage_tests="$verify_root/tests/Netrunner.Cards.Tests/bin/Debug/net8.0/Netrunner.Cards.Tests.dll"
+coverage_cards_arg=()
+if [[ -f "$card_data_cards" ]]; then
+  coverage_cards_arg=(--cards "$card_data_cards")
+fi
+dotnet run --project "$verify_root/tools/Netrunner.CardCoverage" --no-build --no-restore -- \
+  --root "$verify_root" \
+  --catalog "$coverage_catalog" \
+  --tests "$coverage_tests" \
+  "${coverage_cards_arg[@]}" \
+  --markdown "$coverage_report_dir/gateway-coverage.md" \
+  --json "$coverage_report_dir/gateway-coverage.json"
+if ! diff -u "$verify_root/docs/generated/gateway-coverage.md" \
+  "$coverage_report_dir/gateway-coverage.md"; then
+  echo "Gateway Markdown coverage report is stale. Regenerate it with Netrunner.CardCoverage." >&2
+  exit 1
+fi
+if ! diff -u "$verify_root/docs/generated/gateway-coverage.json" \
+  "$coverage_report_dir/gateway-coverage.json"; then
+  echo "Gateway JSON coverage report is stale. Regenerate it with Netrunner.CardCoverage." >&2
   exit 1
 fi
 m1_replay_dir="$(mktemp -d "${TMPDIR:-/tmp}/netrunner-m1.XXXXXX")"
@@ -44,7 +97,6 @@ if [[ -z "$m1_replay_dir" || ! -d "$m1_replay_dir" ]]; then
   echo "Unable to create the M1 replay verification directory." >&2
   exit 1
 fi
-trap 'rm -rf -- "$m1_replay_dir"' EXIT
 for m1_goal in corp-score runner-steal deck-out; do
   dotnet run --project "$verify_root/src/Netrunner.Cli" --no-build --no-restore -- \
     play --seed 42 --goal "$m1_goal" --json
@@ -55,8 +107,19 @@ dotnet run --project "$verify_root/src/Netrunner.Cli" --no-build --no-restore --
   replay "$m1_replay_dir/corp-score.json" --json
 dotnet run --project "$verify_root/src/Netrunner.Cli" --no-build --no-restore -- \
   m2-proof "$verify_root/data/m2/representative-run.json" --json
-XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
-  "$GODOT4" --headless --editor --path "$verify_root/src/Netrunner.Godot" --quit-after 60
+if ((card_data_content_enabled == 1)); then
+  NetrunnerContentEnabled=true NetrunnerCardDataMode=official \
+    XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
+    "$GODOT4" --headless --editor --path "$verify_root/src/Netrunner.Godot" --quit-after 60
+else
+  XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
+    "$GODOT4" --headless --editor --path "$verify_root/src/Netrunner.Godot" --quit-after 60
+fi
+if ((card_data_content_enabled == 1)); then
+  NetrunnerContentEnabled=true NetrunnerCardDataMode=official \
+    XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
+    "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" -- --m4-card-gallery-smoke
+fi
 XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
   "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" -- --smoke-test
 "$verify_root/scripts/check-secrets.sh"
