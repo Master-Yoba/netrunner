@@ -22,6 +22,12 @@ public enum ZoneKind
     RunnerScore,
     ServerIce,
     ServerRoot,
+    /// <summary>
+    /// Transient private zone owned by an active generic behavior. Cards are
+    /// physically removed from their source zone while a search/reveal
+    /// choice is pending, then returned or moved by the behavior cursor.
+    /// </summary>
+    BehaviorSetAside,
 }
 
 /// <summary>The stable topology kind of a Corp server.</summary>
@@ -229,11 +235,15 @@ public sealed record TurnState
     public TurnState(
         PlayerSide activeSide,
         TurnPhase phase = TurnPhase.Setup,
-        int turnNumber = 1)
+        int turnNumber = 1,
+        TurnStep step = TurnStep.None,
+        TurnHistoryState? history = null)
     {
         ActiveSide = activeSide;
         Phase = phase;
         TurnNumber = turnNumber;
+        Step = step;
+        History = history?.Copy();
     }
 
     [JsonInclude]
@@ -247,6 +257,31 @@ public sealed record TurnState
     [JsonInclude]
     [JsonRequired]
     public int TurnNumber { get; private set; }
+
+    /// <summary>
+    /// Fine-grained CR 5 step for real turns. The default None value is omitted
+    /// from legacy M1/M2 JSON; real-turn states always populate it.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public TurnStep Step { get; private set; }
+
+    /// <summary>
+    /// Explicit current/last-turn facts. Null is retained only by the M1/M2
+    /// compatibility projection; a real turn frame requires this aggregate.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public TurnHistoryState? History { get; private set; }
+
+    [JsonIgnore]
+    public TurnStep CurrentStep => Step;
+
+    [JsonIgnore]
+    public TurnFactsState? ThisTurnFacts => History?.ThisTurn(ActiveSide);
+
+    [JsonIgnore]
+    public TurnFactsState? LastTurnFacts => History?.LastTurn(ActiveSide);
 }
 
 public sealed record GameOutcome
@@ -310,7 +345,9 @@ public sealed class GameState
         RunState? runState = null,
         RulesState? rulesState = null,
         string? behaviorRegistryVersion = null,
-        string? behaviorCatalogFingerprint = null)
+        string? behaviorCatalogFingerprint = null,
+        string? runtimeCardCatalogVersion = null,
+        string? runtimeCardCatalogFingerprint = null)
     {
         ArgumentNullException.ThrowIfNull(rulesVersion);
         ArgumentNullException.ThrowIfNull(cardDataVersion);
@@ -328,6 +365,8 @@ public sealed class GameState
         CardDataVersion = cardDataVersion;
         BehaviorRegistryVersion = behaviorRegistryVersion ?? EngineCompatibility.BehaviorRegistryVersion;
         BehaviorCatalogFingerprint = behaviorCatalogFingerprint;
+        RuntimeCardCatalogVersion = runtimeCardCatalogVersion;
+        RuntimeCardCatalogFingerprint = runtimeCardCatalogFingerprint;
         Players = FreezeSorted(players, static player => player.Id.Value);
         Cards = FreezeSorted(cards, static card => card.Id.Value);
         Zones = FreezeSorted(zones, static zone => zone.Id.Value);
@@ -374,7 +413,9 @@ public sealed class GameState
         RunState? runState = null,
         RulesState? rulesState = null,
         string? behaviorRegistryVersion = null,
-        string? behaviorCatalogFingerprint = null)
+        string? behaviorCatalogFingerprint = null,
+        string? runtimeCardCatalogVersion = null,
+        string? runtimeCardCatalogFingerprint = null)
         : this(
             schemaVersion,
             gameId,
@@ -397,7 +438,9 @@ public sealed class GameState
             runState,
             rulesState,
             behaviorRegistryVersion,
-            behaviorCatalogFingerprint)
+            behaviorCatalogFingerprint,
+            runtimeCardCatalogVersion,
+            runtimeCardCatalogFingerprint)
     {
     }
 
@@ -433,6 +476,18 @@ public sealed class GameState
     [JsonInclude]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? BehaviorCatalogFingerprint { get; private set; }
+
+    /// <summary>
+    /// Optional identity of the immutable printed-card metadata catalog used
+    /// by real card actions. It is omitted for M1/M2-compatible states.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RuntimeCardCatalogVersion { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RuntimeCardCatalogFingerprint { get; private set; }
 
     [JsonIgnore]
     public string? BehaviorRegistryFingerprint => BehaviorCatalogFingerprint;
@@ -510,6 +565,14 @@ public sealed class GameState
     public GameSnapshot CreateSnapshot(IBehaviorCatalog behaviorCatalog) =>
         GameSnapshot.From(this, behaviorCatalog);
 
+    public GameSnapshot CreateSnapshot(IRuntimeCardCatalog runtimeCardCatalog) =>
+        GameSnapshot.From(this, null, runtimeCardCatalog);
+
+    public GameSnapshot CreateSnapshot(
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog runtimeCardCatalog) =>
+        GameSnapshot.From(this, behaviorCatalog, runtimeCardCatalog);
+
     [JsonIgnore]
     public GameSnapshot Snapshot => CreateSnapshot();
 
@@ -538,7 +601,9 @@ public sealed class GameState
         string rulesVersion = "26.03",
         string cardDataVersion = "fixture-1",
         string? behaviorRegistryVersion = null,
-        string? behaviorCatalogFingerprint = null)
+        string? behaviorCatalogFingerprint = null,
+        string? runtimeCardCatalogVersion = null,
+        string? runtimeCardCatalogFingerprint = null)
     {
         var allocator = new StableIdAllocator();
         GameId gameId = allocator.NextGameId();
@@ -579,7 +644,9 @@ public sealed class GameState
             allocator.State,
             initialSeed: seed,
             behaviorRegistryVersion: behaviorRegistryVersion,
-            behaviorCatalogFingerprint: behaviorCatalogFingerprint);
+            behaviorCatalogFingerprint: behaviorCatalogFingerprint,
+            runtimeCardCatalogVersion: runtimeCardCatalogVersion,
+            runtimeCardCatalogFingerprint: runtimeCardCatalogFingerprint);
 
         StateInvariantValidator.Validate(state);
         return state;
@@ -597,14 +664,27 @@ public sealed class GameState
 
     public static GameState FromSnapshot(GameSnapshot snapshot)
     {
-        return FromSnapshot(snapshot, null);
+        return FromSnapshot(snapshot, (IBehaviorCatalog?)null, null);
     }
 
     public static GameState FromSnapshot(GameSnapshot snapshot, IBehaviorCatalog? behaviorCatalog)
     {
+        return FromSnapshot(snapshot, behaviorCatalog, null);
+    }
+
+    public static GameState FromSnapshot(GameSnapshot snapshot, IRuntimeCardCatalog runtimeCardCatalog)
+    {
+        return FromSnapshot(snapshot, null, runtimeCardCatalog);
+    }
+
+    public static GameState FromSnapshot(
+        GameSnapshot snapshot,
+        IBehaviorCatalog? behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog)
+    {
         ArgumentNullException.ThrowIfNull(snapshot);
         GameState state = snapshot.ToState();
-        StateInvariantValidator.Validate(state, behaviorCatalog);
+        StateInvariantValidator.Validate(state, behaviorCatalog, runtimeCardCatalog);
         return state;
     }
 
@@ -663,7 +743,9 @@ public sealed class GameSnapshot
         RunState? runState = null,
         RulesState? rulesState = null,
         string? behaviorRegistryVersion = null,
-        string? behaviorCatalogFingerprint = null)
+        string? behaviorCatalogFingerprint = null,
+        string? runtimeCardCatalogVersion = null,
+        string? runtimeCardCatalogFingerprint = null)
     {
         ArgumentNullException.ThrowIfNull(rulesVersion);
         ArgumentNullException.ThrowIfNull(cardDataVersion);
@@ -681,11 +763,13 @@ public sealed class GameSnapshot
         CardDataVersion = cardDataVersion;
         BehaviorRegistryVersion = behaviorRegistryVersion ?? EngineCompatibility.BehaviorRegistryVersion;
         BehaviorCatalogFingerprint = behaviorCatalogFingerprint;
+        RuntimeCardCatalogVersion = runtimeCardCatalogVersion;
+        RuntimeCardCatalogFingerprint = runtimeCardCatalogFingerprint;
         Players = CopyPlayers(players);
         Cards = CopyCards(cards);
         Zones = CopyZones(zones);
         Servers = CopyServers(servers);
-        Turn = new TurnState(turn.ActiveSide, turn.Phase, turn.TurnNumber);
+        Turn = new TurnState(turn.ActiveSide, turn.Phase, turn.TurnNumber, turn.Step, turn.History);
         Outcome = new GameOutcome(outcome.Kind, outcome.Winner, outcome.Reason);
         InitialSeed = initialSeed;
         RandomState = randomState;
@@ -722,6 +806,14 @@ public sealed class GameSnapshot
     [JsonInclude]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? BehaviorCatalogFingerprint { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RuntimeCardCatalogVersion { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RuntimeCardCatalogFingerprint { get; private set; }
 
     [JsonIgnore]
     public string? BehaviorRegistryFingerprint => BehaviorCatalogFingerprint;
@@ -792,13 +884,26 @@ public sealed class GameSnapshot
 
     public static GameSnapshot From(GameState state)
     {
-        return From(state, null);
+        return From(state, (IBehaviorCatalog?)null, null);
     }
 
     public static GameSnapshot From(GameState state, IBehaviorCatalog? behaviorCatalog)
     {
+        return From(state, behaviorCatalog, null);
+    }
+
+    public static GameSnapshot From(GameState state, IRuntimeCardCatalog runtimeCardCatalog)
+    {
+        return From(state, null, runtimeCardCatalog);
+    }
+
+    public static GameSnapshot From(
+        GameState state,
+        IBehaviorCatalog? behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog)
+    {
         ArgumentNullException.ThrowIfNull(state);
-        StateInvariantValidator.Validate(state, behaviorCatalog);
+        StateInvariantValidator.Validate(state, behaviorCatalog, runtimeCardCatalog);
         return new GameSnapshot(
             state.SchemaVersion,
             state.GameId,
@@ -821,7 +926,9 @@ public sealed class GameSnapshot
             state.RunState,
             state.RulesState,
             state.BehaviorRegistryVersion,
-            state.BehaviorCatalogFingerprint);
+            state.BehaviorCatalogFingerprint,
+            state.RuntimeCardCatalogVersion,
+            state.RuntimeCardCatalogFingerprint);
     }
 
     public GameState ToState() => new(
@@ -846,7 +953,9 @@ public sealed class GameSnapshot
         RunState,
         RulesState,
         BehaviorRegistryVersion,
-        BehaviorCatalogFingerprint);
+        BehaviorCatalogFingerprint,
+        RuntimeCardCatalogVersion,
+        RuntimeCardCatalogFingerprint);
 
     private static ReadOnlyCollection<PlayerState> CopyPlayers(IEnumerable<PlayerState>? values) =>
         new ReadOnlyCollection<PlayerState>((values ?? [])

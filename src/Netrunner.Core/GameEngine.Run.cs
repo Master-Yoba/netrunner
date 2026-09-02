@@ -33,6 +33,7 @@ public static partial class GameEngine
             initiatingPlayer,
             initiatingSource,
             CardBehaviorSpecCatalog.Default,
+            runtimeCardCatalog: null,
             enforceCatalogCompatibility: false).State;
 
     /// <summary>Begins a run with an explicitly injected immutable catalog.</summary>
@@ -48,6 +49,24 @@ public static partial class GameEngine
             initiatingPlayer,
             initiatingSource,
             behaviorCatalog,
+            runtimeCardCatalog: null,
+            enforceCatalogCompatibility: true).State;
+
+    /// <summary>Begins a run with both injected immutable catalogs.</summary>
+    public static GameState BeginRun(
+        GameState state,
+        ServerId serverId,
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog runtimeCardCatalog,
+        PlayerId? initiatingPlayer = null,
+        CardInstanceId? initiatingSource = null) =>
+        BeginRunWithEvents(
+            state,
+            serverId,
+            initiatingPlayer,
+            initiatingSource,
+            behaviorCatalog,
+            runtimeCardCatalog,
             enforceCatalogCompatibility: true).State;
 
     /// <summary>Parameter-order adapter for callers that append dependencies.</summary>
@@ -71,6 +90,7 @@ public static partial class GameEngine
             initiatingPlayer,
             initiatingSource,
             CardBehaviorSpecCatalog.Default,
+            runtimeCardCatalog: null,
             enforceCatalogCompatibility: false);
     }
 
@@ -87,6 +107,24 @@ public static partial class GameEngine
             initiatingPlayer,
             initiatingSource,
             behaviorCatalog,
+            runtimeCardCatalog: null,
+            enforceCatalogCompatibility: true);
+
+    /// <summary>Begins a run with both injected immutable catalogs.</summary>
+    public static RunStartResult BeginRunWithEvents(
+        GameState state,
+        ServerId serverId,
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog runtimeCardCatalog,
+        PlayerId? initiatingPlayer = null,
+        CardInstanceId? initiatingSource = null) =>
+        BeginRunWithEvents(
+            state,
+            serverId,
+            initiatingPlayer,
+            initiatingSource,
+            behaviorCatalog,
+            runtimeCardCatalog,
             enforceCatalogCompatibility: true);
 
     /// <summary>Parameter-order adapter for callers that append dependencies.</summary>
@@ -104,6 +142,7 @@ public static partial class GameEngine
         PlayerId? initiatingPlayer,
         CardInstanceId? initiatingSource,
         IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog,
         bool enforceCatalogCompatibility)
     {
         ArgumentNullException.ThrowIfNull(state);
@@ -114,9 +153,16 @@ public static partial class GameEngine
             throw new ResolutionFailureException(catalogMismatch!);
         }
 
+        if (runtimeCardCatalog is not null
+            && !CatalogMatchesState(state, runtimeCardCatalog, out string? runtimeMismatch))
+        {
+            throw new ResolutionFailureException(runtimeMismatch!);
+        }
+
         StateInvariantValidator.Validate(
             state,
-            enforceCatalogCompatibility ? behaviorCatalog : null);
+            enforceCatalogCompatibility ? behaviorCatalog : null,
+            runtimeCardCatalog);
 
         if (state.Outcome.Kind != GameOutcomeKind.Ongoing)
         {
@@ -173,7 +219,7 @@ public static partial class GameEngine
             }
         }
 
-        var working = WorkingState.From(state, behaviorCatalog);
+        var working = WorkingState.From(state, behaviorCatalog, runtimeCardCatalog);
         RunId runId = working.Allocator.NextRunId();
         int currentIceIndex = iceZone.CardIds.Count - 1;
         CardInstanceId? currentIceId = currentIceIndex >= 0
@@ -274,7 +320,8 @@ public static partial class GameEngine
             GameState next = working.Build(state);
             StateInvariantValidator.Validate(
                 next,
-                enforceCatalogCompatibility ? behaviorCatalog : null);
+                enforceCatalogCompatibility ? behaviorCatalog : null,
+                runtimeCardCatalog);
             return new RunStartResult(next, working.Events.ToList());
         }
         catch (ResolutionFailureException)
@@ -648,6 +695,7 @@ public static partial class GameEngine
         }
 
         Emit(working, EngineEventKinds.RunSuccessful, new RunSuccessfulEventPayload(run.Id, run.AttackedServer));
+        MarkSuccessfulRunThisTurn(working, run.InitiatingSide);
         SetRunTiming(working, run.WithTiming(
             RunTimingStep.BreachBoundary,
             -1,

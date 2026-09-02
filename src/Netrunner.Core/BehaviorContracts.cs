@@ -1,0 +1,525 @@
+using System.Collections.ObjectModel;
+using System.Text.Json.Serialization;
+
+namespace Netrunner.Core;
+
+/// <summary>Who receives a declarative choice prompt.</summary>
+public enum BehaviorChooser
+{
+    ActingPlayer,
+    Controller,
+    Opponent,
+    Corp,
+    Runner,
+}
+
+/// <summary>
+/// How a choice is presented. Cardinality is carried separately so a mode
+/// choice and a target choice have the same bounded selection contract.
+/// </summary>
+public enum BehaviorChoiceMode
+{
+    Mandatory,
+    Optional,
+    Mode,
+    TargetSelection,
+    OrderSelection,
+}
+
+/// <summary>Cardinality kind for a bounded declarative choice.</summary>
+public enum BehaviorChoiceCardinalityKind
+{
+    Exactly,
+    UpTo,
+    AnyNumber,
+}
+
+/// <summary>Immutable exactly/up-to/any-number choice cardinality.</summary>
+public sealed class BehaviorChoiceCardinality : IEquatable<BehaviorChoiceCardinality>
+{
+    public BehaviorChoiceCardinality(BehaviorChoiceCardinalityKind kind, int? count = null)
+    {
+        if (!Enum.IsDefined(kind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(kind));
+        }
+
+        if (kind is BehaviorChoiceCardinalityKind.Exactly or BehaviorChoiceCardinalityKind.UpTo)
+        {
+            if (count is null || count < 1)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(count),
+                    "Exactly and up-to cardinalities require a positive count.");
+            }
+        }
+        else if (count is not null)
+        {
+            throw new ArgumentException(
+                "Any-number cardinality must not carry a count.",
+                nameof(count));
+        }
+
+        Kind = kind;
+        Count = count;
+    }
+
+    public BehaviorChoiceCardinalityKind Kind { get; }
+
+    public int? Count { get; }
+
+    public static BehaviorChoiceCardinality Exactly(int count) =>
+        new(BehaviorChoiceCardinalityKind.Exactly, count);
+
+    public static BehaviorChoiceCardinality UpTo(int count) =>
+        new(BehaviorChoiceCardinalityKind.UpTo, count);
+
+    public static BehaviorChoiceCardinality AnyNumber { get; } =
+        new(BehaviorChoiceCardinalityKind.AnyNumber);
+
+    public bool Equals(BehaviorChoiceCardinality? other) =>
+        other is not null
+        && Kind == other.Kind
+        && Count == other.Count;
+
+    public override bool Equals(object? obj) => Equals(obj as BehaviorChoiceCardinality);
+
+    public override int GetHashCode() => HashCode.Combine(Kind, Count);
+}
+
+/// <summary>
+/// Typed card filter for a hidden-zone selection. Subtype is a stable data key,
+/// never raw rules text or an executable predicate.
+/// </summary>
+public sealed class BehaviorCardFilter : IEquatable<BehaviorCardFilter>
+{
+    [JsonConstructor]
+    public BehaviorCardFilter(
+        BehaviorCardType cardType = BehaviorCardType.Any,
+        CardDefinitionId? definitionId = null,
+        PlayerSide? ownerSide = null,
+        string? subtype = null)
+    {
+        if (!Enum.IsDefined(cardType))
+        {
+            throw new ArgumentOutOfRangeException(nameof(cardType));
+        }
+
+        if (definitionId is { } id && !StableIdentifier.TryValidate(id.Value))
+        {
+            throw new ArgumentException(
+                "A card filter definition ID must be a stable identifier.",
+                nameof(definitionId));
+        }
+
+        if (subtype is not null && !StableIdentifier.TryValidate(subtype))
+        {
+            throw new ArgumentException(
+                "A card-filter subtype must be a stable identifier.",
+                nameof(subtype));
+        }
+
+        if (ownerSide is { } side && !Enum.IsDefined(side))
+        {
+            throw new ArgumentOutOfRangeException(nameof(ownerSide));
+        }
+
+        CardType = cardType;
+        DefinitionId = definitionId;
+        OwnerSide = ownerSide;
+        Subtype = subtype;
+    }
+
+    public BehaviorCardType CardType { get; }
+
+    public CardDefinitionId? DefinitionId { get; }
+
+    public PlayerSide? OwnerSide { get; }
+
+    public string? Subtype { get; }
+
+    public static BehaviorCardFilter Any { get; } = new();
+
+    public bool Equals(BehaviorCardFilter? other) =>
+        other is not null
+        && CardType == other.CardType
+        && DefinitionId == other.DefinitionId
+        && OwnerSide == other.OwnerSide
+        && string.Equals(Subtype, other.Subtype, StringComparison.Ordinal);
+
+    public override bool Equals(object? obj) => Equals(obj as BehaviorCardFilter);
+
+    public override int GetHashCode() => HashCode.Combine(CardType, DefinitionId, OwnerSide, Subtype);
+}
+
+/// <summary>Core card categories usable by a declarative card filter.</summary>
+public enum BehaviorCardType
+{
+    Any,
+    Agenda,
+    Asset,
+    Event,
+    Hardware,
+    Ice,
+    Icebreaker,
+    Identity,
+    Operation,
+    Resource,
+    Upgrade,
+}
+
+/// <summary>
+/// Zones that may be named by a behavior contract. In particular, Deck,
+/// Headquarters, and Archives make hidden-zone search/reveal explicit.
+/// </summary>
+public enum BehaviorZone
+{
+    Deck,
+    Headquarters,
+    Archives,
+    Grip,
+    Stack,
+    Heap,
+    Rig,
+    PlayArea,
+    ScoreArea,
+    ServerIce,
+    ServerRoot,
+    RemovedFromGame,
+}
+
+/// <summary>One option in a mode, target, or ordered choice.</summary>
+public sealed class BehaviorChoiceOption : IEquatable<BehaviorChoiceOption>
+{
+    [JsonConstructor]
+    public BehaviorChoiceOption(
+        string key,
+        IReadOnlyList<BehaviorInstruction>? instructions = null,
+        BehaviorTarget? target = null)
+    {
+        if (!StableIdentifier.TryValidate(key))
+        {
+            throw new ArgumentException(
+                "A behavior choice option key must be a stable identifier.",
+                nameof(key));
+        }
+
+        Key = key;
+        Instructions = Freeze(instructions);
+        Target = target;
+    }
+
+    public string Key { get; }
+
+    public IReadOnlyList<BehaviorInstruction> Instructions { get; }
+
+    public BehaviorTarget? Target { get; }
+
+    public bool Equals(BehaviorChoiceOption? other) =>
+        other is not null
+        && string.Equals(Key, other.Key, StringComparison.Ordinal)
+        && BehaviorContractStructure.SequenceEquals(Instructions, other.Instructions, BehaviorContractStructure.AreEqual)
+        && BehaviorContractStructure.AreEqual(Target, other.Target);
+
+    public override bool Equals(object? obj) => Equals(obj as BehaviorChoiceOption);
+
+    public override int GetHashCode() =>
+        HashCode.Combine(Key, Instructions.Count, Target);
+
+    private static ReadOnlyCollection<T> Freeze<T>(IEnumerable<T>? values)
+        where T : class
+    {
+        T[] copy = (values ?? []).ToArray();
+        if (copy.Any(static value => value is null))
+        {
+            throw new ArgumentException(
+                "Behavior choice option collections must not contain null entries.",
+                nameof(values));
+        }
+
+        return new ReadOnlyCollection<T>(copy);
+    }
+}
+
+/// <summary>
+/// A reusable explicit choice. A target descriptor may supply dynamic
+/// candidates (for example cards in hidden HQ/Archives) without exposing a
+/// runtime predicate or a mutable card list.
+/// </summary>
+public sealed class BehaviorChoiceSpec : IEquatable<BehaviorChoiceSpec>
+{
+    [JsonConstructor]
+    public BehaviorChoiceSpec(
+        string key,
+        BehaviorChooser chooser,
+        BehaviorChoiceMode mode,
+        BehaviorChoiceCardinality cardinality,
+        IReadOnlyList<BehaviorChoiceOption>? options = null,
+        BehaviorTarget? target = null)
+    {
+        if (!StableIdentifier.TryValidate(key))
+        {
+            throw new ArgumentException(
+                "A behavior choice key must be a stable identifier.",
+                nameof(key));
+        }
+
+        if (!Enum.IsDefined(chooser))
+        {
+            throw new ArgumentOutOfRangeException(nameof(chooser));
+        }
+
+        if (!Enum.IsDefined(mode))
+        {
+            throw new ArgumentOutOfRangeException(nameof(mode));
+        }
+
+        ArgumentNullException.ThrowIfNull(cardinality);
+        Key = key;
+        Chooser = chooser;
+        Mode = mode;
+        Cardinality = cardinality;
+        Options = Freeze(options);
+        Target = target;
+
+        var optionKeys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (BehaviorChoiceOption option in Options)
+        {
+            if (!optionKeys.Add(option.Key))
+            {
+                throw new ArgumentException(
+                    $"Behavior choice '{key}' contains duplicate option '{option.Key}'.",
+                    nameof(options));
+            }
+        }
+
+        if (Mode == BehaviorChoiceMode.Mode && Options.Count < 2)
+        {
+            throw new ArgumentException(
+                "A mode choice requires at least two options.",
+                nameof(options));
+        }
+
+        if (Mode == BehaviorChoiceMode.Mode
+            && (cardinality.Kind != BehaviorChoiceCardinalityKind.Exactly
+                || cardinality.Count != 1))
+        {
+            throw new ArgumentException(
+                "A mode choice must select exactly one option.",
+                nameof(cardinality));
+        }
+
+        if (Mode == BehaviorChoiceMode.Optional
+            && (cardinality.Kind != BehaviorChoiceCardinalityKind.UpTo
+                || cardinality.Count != 1))
+        {
+            throw new ArgumentException(
+                "An optional choice must select up to one option.",
+                nameof(cardinality));
+        }
+
+        if (Mode == BehaviorChoiceMode.TargetSelection && target is null && Options.Count == 0)
+        {
+            throw new ArgumentException(
+                "A target selection requires a target descriptor or options.",
+                nameof(target));
+        }
+
+        if (cardinality.Count is { } count && Options.Count > 0 && count > Options.Count)
+        {
+            throw new ArgumentException(
+                $"Choice cardinality {count} exceeds the {Options.Count} declared options.",
+                nameof(cardinality));
+        }
+    }
+
+    public string Key { get; }
+
+    public BehaviorChooser Chooser { get; }
+
+    public BehaviorChoiceMode Mode { get; }
+
+    public BehaviorChoiceCardinality Cardinality { get; }
+
+    public IReadOnlyList<BehaviorChoiceOption> Options { get; }
+
+    public BehaviorTarget? Target { get; }
+
+    public bool Equals(BehaviorChoiceSpec? other) =>
+        other is not null
+        && string.Equals(Key, other.Key, StringComparison.Ordinal)
+        && Chooser == other.Chooser
+        && Mode == other.Mode
+        && Cardinality.Equals(other.Cardinality)
+        && BehaviorContractStructure.SequenceEquals(Options, other.Options, BehaviorContractStructure.AreEqual)
+        && BehaviorContractStructure.AreEqual(Target, other.Target);
+
+    public override bool Equals(object? obj) => Equals(obj as BehaviorChoiceSpec);
+
+    public override int GetHashCode() =>
+        HashCode.Combine(Key, Chooser, Mode, Cardinality, Options.Count, Target);
+
+    private static ReadOnlyCollection<T> Freeze<T>(IEnumerable<T>? values)
+        where T : class
+    {
+        T[] copy = (values ?? []).ToArray();
+        if (copy.Any(static value => value is null))
+        {
+            throw new ArgumentException(
+                "Behavior choice collections must not contain null entries.",
+                nameof(values));
+        }
+
+        return new ReadOnlyCollection<T>(copy);
+    }
+}
+
+/// <summary>
+/// A typed conditional branch. Both arms are immutable ordered instruction
+/// lists; an omitted false arm is an explicit no-op.
+/// </summary>
+public sealed class BehaviorBranchSpec : IEquatable<BehaviorBranchSpec>
+{
+    [JsonConstructor]
+    public BehaviorBranchSpec(
+        BehaviorCondition condition,
+        IReadOnlyList<BehaviorInstruction> whenTrue,
+        IReadOnlyList<BehaviorInstruction>? whenFalse = null,
+        string? key = null)
+    {
+        ArgumentNullException.ThrowIfNull(condition);
+        if (key is not null && !StableIdentifier.TryValidate(key))
+        {
+            throw new ArgumentException(
+                "A behavior branch key must be a stable identifier.",
+                nameof(key));
+        }
+
+        ArgumentNullException.ThrowIfNull(whenTrue);
+        Condition = condition;
+        WhenTrue = Freeze(whenTrue, nameof(whenTrue));
+        WhenFalse = Freeze(whenFalse ?? [], nameof(whenFalse));
+        Key = key;
+        if (WhenTrue.Count == 0)
+        {
+            throw new ArgumentException(
+                "A behavior branch must have at least one true-arm instruction.",
+                nameof(whenTrue));
+        }
+    }
+
+    public string? Key { get; }
+
+    public BehaviorCondition Condition { get; }
+
+    public IReadOnlyList<BehaviorInstruction> WhenTrue { get; }
+
+    public IReadOnlyList<BehaviorInstruction> WhenFalse { get; }
+
+    public bool Equals(BehaviorBranchSpec? other) =>
+        other is not null
+        && string.Equals(Key, other.Key, StringComparison.Ordinal)
+        && Condition.Equals(other.Condition)
+        && BehaviorContractStructure.SequenceEquals(WhenTrue, other.WhenTrue, BehaviorContractStructure.AreEqual)
+        && BehaviorContractStructure.SequenceEquals(WhenFalse, other.WhenFalse, BehaviorContractStructure.AreEqual);
+
+    public override bool Equals(object? obj) => Equals(obj as BehaviorBranchSpec);
+
+    public override int GetHashCode() =>
+        HashCode.Combine(Key, Condition, WhenTrue.Count, WhenFalse.Count);
+
+    private static ReadOnlyCollection<T> Freeze<T>(IEnumerable<T> values, string parameterName)
+        where T : class
+    {
+        T[] copy = values.ToArray();
+        if (copy.Any(static value => value is null))
+        {
+            throw new ArgumentException(
+                "Behavior branch collections must not contain null entries.",
+                parameterName);
+        }
+
+        return new ReadOnlyCollection<T>(copy);
+    }
+}
+
+/// <summary>Typed static modifiers supported by the declarative foundation.</summary>
+public enum BehaviorStaticModifierKind
+{
+    MemoryUnits,
+    MaximumHandSize,
+}
+
+internal static class BehaviorContractStructure
+{
+    public static bool SequenceEquals<T>(
+        IReadOnlyList<T> left,
+        IReadOnlyList<T> right,
+        Func<T, T, bool> comparer)
+    {
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < left.Count; index++)
+        {
+            if (!comparer(left[index], right[index]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public static bool AreEqual(BehaviorChoiceCardinality? left, BehaviorChoiceCardinality? right) =>
+        left is null ? right is null : left.Equals(right);
+
+    public static bool AreEqual(BehaviorCardFilter? left, BehaviorCardFilter? right) =>
+        left is null ? right is null : left.Equals(right);
+
+    public static bool AreEqual(BehaviorTarget? left, BehaviorTarget? right) =>
+        left is null
+            ? right is null
+            : right is not null
+                && left.Kind == right.Kind
+                && string.Equals(left.Selector, right.Selector, StringComparison.Ordinal)
+                && left.Zone == right.Zone
+                && AreEqual(left.Filter, right.Filter)
+                && left.Reveal == right.Reveal;
+
+    public static bool AreEqual(BehaviorInstruction? left, BehaviorInstruction? right) =>
+        left is null
+            ? right is null
+            : right is not null
+                && left.Kind == right.Kind
+                && left.Amount == right.Amount
+                && string.Equals(left.Argument, right.Argument, StringComparison.Ordinal)
+                && AreEqual(left.Target, right.Target)
+                && left.SourceZone == right.SourceZone
+                && left.DestinationZone == right.DestinationZone
+                && AreEqual(left.Filter, right.Filter)
+                && Equals(left.Condition, right.Condition)
+                && AreEqual(left.Choice, right.Choice)
+                && AreEqual(left.Branch, right.Branch)
+                && left.Optional == right.Optional;
+
+    public static bool AreEqual(BehaviorChoiceOption? left, BehaviorChoiceOption? right) =>
+        left is null ? right is null : right is not null && left.Equals(right);
+
+    public static bool AreEqual(BehaviorChoiceSpec? left, BehaviorChoiceSpec? right) =>
+        left is null ? right is null : right is not null && left.Equals(right);
+
+    public static bool AreEqual(BehaviorBranchSpec? left, BehaviorBranchSpec? right) =>
+        left is null ? right is null : right is not null && left.Equals(right);
+
+    public static bool AreEqual(BehaviorStaticModifier? left, BehaviorStaticModifier? right) =>
+        left is null
+            ? right is null
+            : right is not null
+                && string.Equals(left.ValueKey, right.ValueKey, StringComparison.Ordinal)
+                && left.Delta == right.Delta
+                && string.Equals(left.ReasonKey, right.ReasonKey, StringComparison.Ordinal)
+                && left.Kind == right.Kind;
+}

@@ -40,6 +40,7 @@ public partial class Main : Control
 	private Button _startButton = null!;
 	private Label _status = null!;
 	private Label _phase = null!;
+	private Label _turnSummary = null!;
 	private Label _focus = null!;
 	private Label _decision = null!;
 	private VBoxContainer _focusPresentation = null!;
@@ -774,6 +775,7 @@ public partial class Main : Control
 		}
 		_board.Visible = true;
 		MatchViewModel view = snapshot.View;
+		TurnRegionState turnRegion = TurnRegionPresenter.Present(snapshot);
 		_status.Text = snapshot.RunOutcome is { } completedRun && snapshot.View.Run is null
 			? $"Representative slice complete · {completedRun.Summary}"
 			: snapshot.IsOpponentThinking
@@ -781,10 +783,22 @@ public partial class Main : Control
 			: view.Outcome.IsTerminal
 				? $"Match complete · {view.Outcome.Winner} · {view.Outcome.Reason}"
 			: "Core state published · human Runner input is available";
-		_phase.Text = view.Decision is { } decision
-			? $"{decision.OwnerSide.ToString().ToUpperInvariant()} · {decision.Kind.ToString().ToUpperInvariant()}"
+		_phase.Text = turnRegion.IsAvailable
+			? $"{turnRegion.Turn.PhaseLabel} · {turnRegion.Turn.TimingLabel}"
 			: snapshot.RunOutcome is not null && view.Run is null ? "SLICE COMPLETE"
-			: view.Outcome.IsTerminal ? "GAME OVER" : "RESOLVING";
+			: view.Outcome.IsTerminal ? "GAME OVER" : "TIMING UNAVAILABLE";
+		string installedCounters = view.InstalledAdvancementCounters.Count == 0
+			? "INSTALLED ADVANCEMENT · none visible"
+			: "INSTALLED ADVANCEMENT · "
+				+ string.Join(
+					" · ",
+					view.InstalledAdvancementCounters.Select(counter => counter.Summary));
+		_turnSummary.Text = turnRegion.IsAvailable
+			? $"{turnRegion.Summary}\n{installedCounters}"
+			: $"{turnRegion.Summary}\n{turnRegion.Diagnostic}\n{installedCounters}";
+		_turnSummary.AddThemeColorOverride(
+			"font_color",
+			turnRegion.IsAvailable ? Colors.White : Warning);
 		_focus.Text = view.Run is { } run
 			? $"{run.FocusLabel} · attacked {run.AttackedServerId} · {run.Step}"
 			: snapshot.RunOutcome is { } ended
@@ -793,7 +807,7 @@ public partial class Main : Control
 		_decision.Text = snapshot.IsOpponentThinking
 			? "CORP THINKING · asynchronous agent delay\nThe render loop is free to process input and card inspection."
 			: view.Decision is { } prompt
-				? $"{prompt.OwnerSide} decision · {prompt.Prompt}\nRevision {prompt.Revision} · {view.LegalActions.Count} legal action(s)"
+				? $"{prompt.OwnerSide} decision · {prompt.Prompt}\nRevision {prompt.Revision} · {ActionsRegionPresenter.Present(snapshot).DisplayActions.Count} displayed action(s)"
 			: snapshot.RunOutcome is { } finished && view.Run is null
 				? $"REPRESENTATIVE RUN COMPLETE\n{finished.Summary}\nNo further Core action is pending."
 			: view.Outcome.IsTerminal ? "Outcome reached." : "No pending decision.";
@@ -845,7 +859,7 @@ public partial class Main : Control
 			return;
 		}
 
-		LegalActionViewModel? action = _currentSnapshot.View.LegalActions
+		LegalActionViewModel? action = ActionsRegionPresenter.Present(_currentSnapshot).DisplayActions
 			.FirstOrDefault(candidate => ActionsRegionPresenter.GetTargetCardId(candidate.Parameters) == cardId);
 		if (action is not null)
 		{

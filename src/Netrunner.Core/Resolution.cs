@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace Netrunner.Core;
 
-public static class ResolutionBehaviorIds
+public static partial class ResolutionBehaviorIds
 {
     public const string ChooseNumberThenAdjustCredits = "fixture.choose-number-then-adjust-credits";
     public const string ChooseNumber = "fixture.choose-number";
@@ -14,6 +14,9 @@ public static class ResolutionBehaviorIds
     public const string EffectResolution = "rules.effects-2a";
     public const string MemoryCleanup = "rules.memory-cleanup-2a";
     public const string EffectCheckpoint = "rules.effect-checkpoint-2b";
+    public const string Turn = "rules.turn-26.03";
+    public const string TurnDiscard = "rules.turn-discard-26.03";
+    public const string Install = "rules.install-26.03";
 }
 
 public enum ResolutionContinuation
@@ -51,10 +54,14 @@ public enum EffectResolutionStage
 [JsonDerivedType(typeof(ChooseCardFrame), "choose-card")]
 [JsonDerivedType(typeof(AdjustCreditsFrame), "adjust-credits")]
 [JsonDerivedType(typeof(ToyTurnFrame), "toy-turn")]
+[JsonDerivedType(typeof(TurnFrame), "turn")]
+[JsonDerivedType(typeof(TurnDiscardFrame), "turn-discard")]
+[JsonDerivedType(typeof(InstallFrame), "install")]
 [JsonDerivedType(typeof(RunTimingFrame), "run-timing")]
 [JsonDerivedType(typeof(EffectResolutionFrame), "effect-resolution")]
 [JsonDerivedType(typeof(MemoryCleanupFrame), "memory-cleanup")]
 [JsonDerivedType(typeof(EffectCheckpointFrame), "effect-checkpoint")]
+[JsonDerivedType(typeof(BehaviorResolutionFrame), "card-behavior")]
 public abstract record ResolutionFrame
 {
     protected ResolutionFrame(int version, string behaviorId)
@@ -305,6 +312,223 @@ public sealed record ToyTurnFrame : ResolutionFrame
     [JsonInclude]
     [JsonRequired]
     public ToyTurnStage Stage { get; private set; }
+}
+
+/// <summary>
+/// Serializable CR 8.5 install cursor. A first install action opens this
+/// frame when the rules allow an optional or required pre-install trash
+/// selection for either side. Subsequent actions incrementally select frozen
+/// candidates or finalize the exact selected set; payment and movement happen
+/// only at finalization.
+/// </summary>
+public sealed record InstallFrame : ResolutionFrame
+{
+    [JsonConstructor]
+    public InstallFrame(
+        int version,
+        string behaviorId,
+        PlayerId owner,
+        CardInstanceId cardId,
+        CardDefinitionId definitionId,
+        RuntimeCardClass cardClass,
+        ZoneId sourceZoneId,
+        ZoneKind sourceZoneKind,
+        InstallDestinationKind destinationKind,
+        ServerId? serverId,
+        bool createNewRemote,
+        int installCost,
+        IReadOnlyList<CardInstanceId>? candidateReplacementCardIds = null,
+        IReadOnlyList<CardInstanceId>? requiredReplacementCardIds = null,
+        IReadOnlyList<CardInstanceId>? selectedReplacementCardIds = null,
+        ZoneId? destinationZoneId = null,
+        IReadOnlyList<CardDefinitionId>? candidateReplacementDefinitionIds = null)
+        : base(version, behaviorId)
+    {
+        if (!Enum.IsDefined(cardClass))
+        {
+            throw new ArgumentOutOfRangeException(nameof(cardClass));
+        }
+
+        if (!Enum.IsDefined(destinationKind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(destinationKind));
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegative(installCost);
+
+        Owner = owner;
+        CardId = cardId;
+        DefinitionId = definitionId;
+        CardClass = cardClass;
+        SourceZoneId = sourceZoneId;
+        SourceZoneKind = sourceZoneKind;
+        DestinationKind = destinationKind;
+        ServerId = serverId;
+        CreateNewRemote = createNewRemote;
+        InstallCost = installCost;
+        CandidateReplacementCardIds = Freeze(candidateReplacementCardIds);
+        RequiredReplacementCardIds = Freeze(requiredReplacementCardIds);
+        SelectedReplacementCardIds = Freeze(selectedReplacementCardIds);
+        DestinationZoneId = destinationZoneId;
+        CandidateReplacementDefinitionIds = FreezeDefinitions(candidateReplacementDefinitionIds);
+    }
+
+    public InstallFrame(
+        PlayerId owner,
+        CardInstanceId cardId,
+        CardDefinitionId definitionId,
+        RuntimeCardClass cardClass,
+        ZoneId sourceZoneId,
+        ZoneKind sourceZoneKind,
+        InstallDestinationKind destinationKind,
+        ServerId? serverId,
+        bool createNewRemote,
+        int installCost,
+        IReadOnlyList<CardInstanceId>? candidateReplacementCardIds = null,
+        IReadOnlyList<CardInstanceId>? requiredReplacementCardIds = null,
+        IReadOnlyList<CardInstanceId>? selectedReplacementCardIds = null,
+        ZoneId? destinationZoneId = null,
+        IReadOnlyList<CardDefinitionId>? candidateReplacementDefinitionIds = null)
+        : this(
+            1,
+            ResolutionBehaviorIds.Install,
+            owner,
+            cardId,
+            definitionId,
+            cardClass,
+            sourceZoneId,
+            sourceZoneKind,
+            destinationKind,
+            serverId,
+            createNewRemote,
+            installCost,
+            candidateReplacementCardIds,
+            requiredReplacementCardIds,
+            selectedReplacementCardIds,
+            destinationZoneId,
+            candidateReplacementDefinitionIds)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerId Owner { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId CardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardDefinitionId DefinitionId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RuntimeCardClass CardClass { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ZoneId SourceZoneId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ZoneKind SourceZoneKind { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public InstallDestinationKind DestinationKind { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ServerId? ServerId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public bool CreateNewRemote { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int InstallCost { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public IReadOnlyList<CardInstanceId> CandidateReplacementCardIds { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public IReadOnlyList<CardInstanceId> RequiredReplacementCardIds { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public IReadOnlyList<CardInstanceId> SelectedReplacementCardIds { get; private set; }
+
+    /// <summary>
+    /// Frozen runtime definition identities for the physical replacement
+    /// candidates.  This is an internal semantic snapshot: it lets a loaded
+    /// Corp selection reject a root whose metadata changed even when the
+    /// candidate IDs and required subset happen to remain the same.
+    /// Runner frames created before this field was introduced may omit it;
+    /// current engine-issued frames always retain the list.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<CardDefinitionId>? CandidateReplacementDefinitionIds { get; private set; }
+
+    /// <summary>
+    /// Identity of the physical destination zone captured when the install
+    /// was materialized.  The destination kind/server pair is not sufficient
+    /// to detect a reconstructed state whose Runner rig or Corp server-root
+    /// topology was replaced while a selection decision was pending.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ZoneId? DestinationZoneId { get; private set; }
+
+    internal InstallFrame Select(CardInstanceId cardId, int installCost) => new(
+        Version,
+        BehaviorId,
+        Owner,
+        CardId,
+        DefinitionId,
+        CardClass,
+        SourceZoneId,
+        SourceZoneKind,
+        DestinationKind,
+        ServerId,
+        CreateNewRemote,
+        installCost,
+        CandidateReplacementCardIds,
+        RequiredReplacementCardIds,
+        SelectedReplacementCardIds.Append(cardId).ToArray(),
+        DestinationZoneId,
+        CandidateReplacementDefinitionIds);
+
+    internal InstallFrame WithInstallCost(int installCost) => new(
+        Version,
+        BehaviorId,
+        Owner,
+        CardId,
+        DefinitionId,
+        CardClass,
+        SourceZoneId,
+        SourceZoneKind,
+        DestinationKind,
+        ServerId,
+        CreateNewRemote,
+        installCost,
+        CandidateReplacementCardIds,
+        RequiredReplacementCardIds,
+        SelectedReplacementCardIds,
+        DestinationZoneId,
+        CandidateReplacementDefinitionIds);
+
+    private static ReadOnlyCollection<CardInstanceId> Freeze(IEnumerable<CardInstanceId>? values) =>
+        new((values ?? []).ToArray());
+
+    private static ReadOnlyCollection<CardDefinitionId>? FreezeDefinitions(IEnumerable<CardDefinitionId>? values) =>
+        values is null
+            ? null
+            : new ReadOnlyCollection<CardDefinitionId>(values.ToArray());
 }
 
 /// <summary>
@@ -612,6 +836,223 @@ public static class ResolutionFrameValidator
                 }
 
                 break;
+            case TurnFrame turn:
+                ValidateBehavior(frame, ResolutionBehaviorIds.Turn, path, violations);
+                if (turn.ActiveSide is not (PlayerSide.Corp or PlayerSide.Runner))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-side",
+                        $"{path}.activeSide",
+                        $"'{turn.ActiveSide}' is not a supported turn side."));
+                }
+
+                if (turn.TurnNumber < 1)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-turn-number",
+                        $"{path}.turnNumber",
+                        "A turn frame number must be positive."));
+                }
+
+                if (!Enum.IsDefined(turn.Stage))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-stage",
+                        $"{path}.stage",
+                        $"'{turn.Stage}' is not a supported CR turn stage."));
+                }
+
+                if (turn.PriorityWindow.HasValue && !Enum.IsDefined(turn.PriorityWindow.Value))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-priority-window",
+                        $"{path}.priorityWindow",
+                        $"'{turn.PriorityWindow}' is not a supported CR turn priority window."));
+                }
+
+                if (turn.ActiveSide == PlayerSide.Corp
+                    && turn.PriorityWindow.HasValue
+                    && turn.PriorityWindow.Value != TurnPriorityWindowKind.PaidRezAndScore)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-priority-window",
+                        $"{path}.priorityWindow",
+                        "Corp turn windows must expose paid, rez, and score capabilities together."));
+                }
+
+                if (turn.ActiveSide == PlayerSide.Runner
+                    && turn.PriorityWindow.HasValue
+                    && turn.PriorityWindow.Value != TurnPriorityWindowKind.PaidAndRez)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-priority-window",
+                        $"{path}.priorityWindow",
+                        "Runner turn windows must expose paid and rez capabilities."));
+                }
+
+                if (turn.ActiveSide == PlayerSide.Runner && turn.Stage == TurnFrameStage.MandatoryDraw)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-stage",
+                        $"{path}.stage",
+                        "Runner turns do not have a mandatory draw stage."));
+                }
+
+                bool priorityStage = turn.Stage is TurnFrameStage.BeforeTurnPriority
+                    or TurnFrameStage.ActionPriority
+                    or TurnFrameStage.DiscardPriority;
+                if (priorityStage && !turn.PriorityWindow.HasValue)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.missing-priority-window",
+                        path,
+                        "A turn priority stage must retain its capability window."));
+                }
+
+                if (!priorityStage && (turn.PriorityWindow.HasValue || turn.PriorityHolder.HasValue || turn.ConsecutivePasses != 0))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.unexpected-priority-state",
+                        path,
+                        "Priority state is only valid while a turn paid-ability window is open."));
+                }
+
+                if (priorityStage && turn.PriorityHolder is null)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.missing-priority-holder",
+                        $"{path}.priorityHolder",
+                        "An open turn priority window must identify its holder."));
+                }
+
+                if (turn.ConsecutivePasses is < 0 or > 1)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-consecutive-passes",
+                        $"{path}.consecutivePasses",
+                        "A turn paid-ability window has zero or one consecutive pass before it closes."));
+                }
+
+                break;
+            case TurnDiscardFrame turnDiscard:
+                ValidateBehavior(frame, ResolutionBehaviorIds.TurnDiscard, path, violations);
+                ValidatePlayer(turnDiscard.Owner, $"{path}.owner", violations);
+                if (turnDiscard.RequiredCount <= 0)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-discard-count",
+                        $"{path}.requiredCount",
+                        "A discard decision must require at least one card."));
+                }
+
+                ValidateCardOptions(turnDiscard.Candidates, $"{path}.candidates", violations);
+                ValidateCardOptions(turnDiscard.Selected, $"{path}.selected", violations);
+                if (turnDiscard.Selected.Count > turnDiscard.RequiredCount)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.too-many-selected-discards",
+                        $"{path}.selected",
+                        "Selected discards must not exceed the required count."));
+                }
+
+                if (turnDiscard.Candidates.Count < turnDiscard.RequiredCount)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.insufficient-discard-candidates",
+                        $"{path}.candidates",
+                        "A discard decision must offer at least the required number of cards."));
+                }
+
+                if (turnDiscard.Selected.Any(cardId => !turnDiscard.Candidates.Contains(cardId)))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.selected-discard-not-offered",
+                        $"{path}.selected",
+                        "Every selected discard must be one of the materialized candidates."));
+                }
+
+                break;
+            case InstallFrame install:
+                ValidateBehavior(frame, ResolutionBehaviorIds.Install, path, violations);
+                ValidatePlayer(install.Owner, $"{path}.owner", violations);
+                ValidateCardId(install.CardId, $"{path}.cardId", violations);
+                if (!StableIdentifier.TryValidate(install.DefinitionId.Value))
+                {
+                    violations.Add(new StateInvariantViolation("id.invalid", $"{path}.definitionId", "Definition ID is empty or invalid."));
+                }
+                ValidateZoneId(install.SourceZoneId, $"{path}.sourceZoneId", violations);
+                if (install.DestinationZoneId is { } destinationZoneId)
+                {
+                    ValidateZoneId(destinationZoneId, $"{path}.destinationZoneId", violations);
+                }
+                if (!Enum.IsDefined(install.SourceZoneKind))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-source-zone-kind",
+                        $"{path}.sourceZoneKind",
+                        $"'{install.SourceZoneKind}' is not a supported install source zone."));
+                }
+
+                if (install.DestinationKind == InstallDestinationKind.RunnerRig
+                    && (install.ServerId is not null || install.CreateNewRemote))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-install-destination",
+                        $"{path}.destinationKind",
+                        "Runner-rig install frames must not identify a server or new remote."));
+                }
+
+                bool serverDestination = install.DestinationKind is InstallDestinationKind.ServerRoot or InstallDestinationKind.ServerIce;
+                if (serverDestination && (install.ServerId is null) == !install.CreateNewRemote)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-install-destination",
+                        $"{path}.serverId",
+                        "Server install frames must identify exactly one existing server or a new remote."));
+                }
+
+                if (install.InstallCost < 0)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-install-cost",
+                        $"{path}.installCost",
+                        "Install credit cost must not be negative."));
+                }
+
+                ValidateCardOptions(install.CandidateReplacementCardIds, $"{path}.candidateReplacementCardIds", violations);
+                ValidateCardOptions(install.RequiredReplacementCardIds, $"{path}.requiredReplacementCardIds", violations);
+                ValidateCardOptions(install.SelectedReplacementCardIds, $"{path}.selectedReplacementCardIds", violations);
+                if (install.CandidateReplacementDefinitionIds is not null)
+                {
+                    for (int definitionIndex = 0; definitionIndex < install.CandidateReplacementDefinitionIds.Count; definitionIndex++)
+                    {
+                        CardDefinitionId definitionId = install.CandidateReplacementDefinitionIds[definitionIndex];
+                        if (!StableIdentifier.TryValidate(definitionId.Value))
+                        {
+                            violations.Add(new StateInvariantViolation(
+                                "id.invalid",
+                                $"{path}.candidateReplacementDefinitionIds[{definitionIndex}]",
+                                "Candidate replacement definition ID is empty or invalid."));
+                        }
+                    }
+                }
+                if (install.RequiredReplacementCardIds.Any(cardId => !install.CandidateReplacementCardIds.Contains(cardId)))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.install-required-not-offered",
+                        path,
+                        "Every required install replacement must be one of the frozen candidates."));
+                }
+
+                if (install.SelectedReplacementCardIds.Any(cardId => !install.CandidateReplacementCardIds.Contains(cardId)))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.install-selected-not-offered",
+                        path,
+                        "Every selected install replacement must be one of the frozen candidates."));
+                }
+
+                break;
             case RunTimingFrame runTiming:
                 ValidateBehavior(frame, ResolutionBehaviorIds.RunTiming, path, violations);
                 if (!StableIdentifier.TryValidate(runTiming.RunId.Value))
@@ -834,6 +1275,157 @@ public static class ResolutionFrameValidator
                 }
 
                 break;
+            case BehaviorResolutionFrame behavior:
+                ValidateBehavior(frame, ResolutionBehaviorIds.CardBehavior, path, violations);
+                ValidatePlayer(behavior.Controller, $"{path}.controller", violations);
+                ValidateCardId(behavior.SourceCardId, $"{path}.sourceCardId", violations);
+                if (!StableIdentifier.TryValidate(behavior.DefinitionId.Value))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "id.invalid",
+                        $"{path}.definitionId",
+                        "Behavior definition ID is empty or invalid."));
+                }
+
+                if (!StableIdentifier.TryValidate(behavior.CatalogFingerprint)
+                    || !DeterministicHash.IsSha256Hex(behavior.CatalogFingerprint))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-catalog-fingerprint",
+                        $"{path}.catalogFingerprint",
+                        "Behavior frames must retain a lowercase SHA-256 catalog fingerprint."));
+                }
+
+                if (!StableIdentifier.TryValidate(behavior.DefinitionFingerprint)
+                    || !DeterministicHash.IsSha256Hex(behavior.DefinitionFingerprint))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-definition-fingerprint",
+                        $"{path}.definitionFingerprint",
+                        "Behavior frames must retain a lowercase SHA-256 definition fingerprint."));
+                }
+
+                if (!Enum.IsDefined(behavior.Stage))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-behavior-stage",
+                        $"{path}.stage",
+                        $"'{behavior.Stage}' is not a supported behavior resolution stage."));
+                }
+
+                if (!BehaviorFrameIdentity.TryValidateIssued(behavior.FrameIdentity, out _))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-behavior-frame-identity",
+                        $"{path}.frameIdentity",
+                        "Behavior frames must retain an engine-issued behavior-frame ID."));
+                }
+
+                if (behavior.SourceZoneId is not { } sourceZoneId
+                    || !StableIdentifier.TryValidate(sourceZoneId.Value)
+                    || behavior.SourceZoneKind is not { } sourceZoneKind
+                    || !Enum.IsDefined(sourceZoneKind))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-behavior-source-location",
+                        $"{path}.sourceZoneId",
+                        "Behavior frames must retain a valid source zone ID and zone kind."));
+                }
+
+                if (behavior.ParentFrameIdentity is not null
+                    && !StableIdentifier.TryValidate(behavior.ParentFrameIdentity))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-behavior-parent-identity",
+                        $"{path}.parentFrameIdentity",
+                        "Behavior parent frame identities must be stable identifiers."));
+                }
+
+                ValidateBehaviorInstructions(behavior.RootInstructions, $"{path}.rootInstructions", violations);
+                ValidateBehaviorInstructions(behavior.Instructions, $"{path}.instructions", violations);
+                if (behavior.InstructionCursor < 0
+                    || (behavior.Instructions.Count > 0
+                        && behavior.InstructionCursor > behavior.Instructions.Count))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-behavior-cursor",
+                        $"{path}.instructionCursor",
+                        "Behavior instruction cursor must identify the next instruction or the end of the program."));
+                }
+
+                ValidateBehaviorBindings(behavior.Bindings, $"{path}.bindings", violations);
+                ValidateBehaviorSetAside(behavior.SetAside, $"{path}.setAside", violations);
+                ValidateBehaviorContinuation(behavior.Continuation, $"{path}.continuation", violations);
+                if (behavior.SetAsideZoneId is { } setAsideZoneId
+                    && !StableIdentifier.TryValidate(setAsideZoneId.Value))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "id.invalid",
+                        $"{path}.setAsideZoneId",
+                        "Behavior set-aside zone IDs must be stable identifiers."));
+                }
+
+                if (behavior.SetAside.Count == 0 && behavior.SetAsideZoneId is not null)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.behavior-empty-set-aside-zone",
+                        $"{path}.setAsideZoneId",
+                        "An empty behavior selection must not retain a set-aside zone."));
+                }
+                if (behavior.Choice is not null)
+                {
+                    BehaviorChoiceMaterialization choice = behavior.Choice;
+                    ValidatePlayer(choice.Owner, $"{path}.choice.owner", violations);
+                    if (!Enum.IsDefined(choice.Mode)
+                        || !Enum.IsDefined(choice.CardinalityKind))
+                    {
+                        violations.Add(new StateInvariantViolation(
+                            "resolution.invalid-behavior-choice",
+                            $"{path}.choice",
+                            "Behavior choice mode and cardinality must be defined values."));
+                    }
+
+                    if (choice.CardinalityKind is BehaviorChoiceCardinalityKind.Exactly
+                        or BehaviorChoiceCardinalityKind.UpTo
+                        && (choice.CardinalityCount is null || choice.CardinalityCount < 1))
+                    {
+                        violations.Add(new StateInvariantViolation(
+                            "resolution.invalid-behavior-cardinality",
+                            $"{path}.choice.cardinalityCount",
+                            "Exactly and up-to behavior choices require a positive count."));
+                    }
+
+                    if (choice.CardinalityKind == BehaviorChoiceCardinalityKind.AnyNumber
+                        && choice.CardinalityCount is not null)
+                    {
+                        violations.Add(new StateInvariantViolation(
+                            "resolution.invalid-behavior-cardinality",
+                            $"{path}.choice.cardinalityCount",
+                            "Any-number behavior choices must not carry a count."));
+                    }
+
+                    ValidateStringKeys(choice.OptionKeys, $"{path}.choice.optionKeys", violations);
+                    ValidateCardIds(choice.CandidateCardIds, $"{path}.choice.candidateCardIds", violations);
+                    ValidateCardIds(choice.SelectedCardIds, $"{path}.choice.selectedCardIds", violations);
+                    if (choice.SelectedCardIds.Any(cardId => !choice.CandidateCardIds.Contains(cardId)))
+                    {
+                        violations.Add(new StateInvariantViolation(
+                            "resolution.behavior-selected-not-candidate",
+                            $"{path}.choice.selectedCardIds",
+                            "Behavior partial selections must be frozen candidates."));
+                    }
+
+                    if (choice.Mode is BehaviorChoiceMode.Mode or BehaviorChoiceMode.OrderSelection
+                        && choice.SelectedCardIds.Count > 0)
+                    {
+                        violations.Add(new StateInvariantViolation(
+                            "resolution.behavior-option-selection-mismatch",
+                            $"{path}.choice.selectedCardIds",
+                            "Mode and ordered choices select option keys, not card candidates."));
+                    }
+                }
+
+                break;
             default:
                 violations.Add(new StateInvariantViolation(
                     "resolution.unknown-frame",
@@ -857,6 +1449,212 @@ public static class ResolutionFrameValidator
                 "resolution.unknown-behavior",
                 $"{path}.behaviorId",
                 $"Behavior '{frame.BehaviorId}' is not valid for frame type '{frame.GetType().Name}'; expected '{expected}'."));
+        }
+    }
+
+    private static void ValidateCardId(CardInstanceId cardId, string path, List<StateInvariantViolation> violations) =>
+        ValidateCardIds([cardId], path, violations);
+
+    private static void ValidateZoneId(ZoneId zoneId, string path, List<StateInvariantViolation> violations)
+    {
+        if (!StableIdentifier.TryValidate(zoneId.Value))
+        {
+            violations.Add(new StateInvariantViolation("id.invalid", path, "Zone ID is empty or invalid."));
+        }
+    }
+
+    private static void ValidateCardIds(
+        IReadOnlyList<CardInstanceId> cardIds,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        var seen = new HashSet<CardInstanceId>();
+        for (int index = 0; index < cardIds.Count; index++)
+        {
+            CardInstanceId cardId = cardIds[index];
+            if (!StableIdentifier.TryValidate(cardId.Value))
+            {
+                violations.Add(new StateInvariantViolation("id.invalid", $"{path}[{index}]", "Card ID is empty or invalid."));
+            }
+            else if (!seen.Add(cardId))
+            {
+                violations.Add(new StateInvariantViolation("resolution.duplicate-behavior-card", $"{path}[{index}]", $"Card '{cardId}' occurs more than once."));
+            }
+        }
+    }
+
+    private static void ValidateStringKeys(
+        IReadOnlyList<string> keys,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        for (int index = 0; index < keys.Count; index++)
+        {
+            string? key = keys[index];
+            if (!StableIdentifier.TryValidate(key))
+            {
+                violations.Add(new StateInvariantViolation("id.invalid", $"{path}[{index}]", "Choice key is empty or invalid."));
+            }
+            else if (!seen.Add(key))
+            {
+                violations.Add(new StateInvariantViolation("resolution.duplicate-behavior-key", $"{path}[{index}]", $"Choice key '{key}' occurs more than once."));
+            }
+        }
+    }
+
+    private static void ValidateBehaviorInstructions(
+        IReadOnlyList<BehaviorInstruction> instructions,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        for (int index = 0; index < instructions.Count; index++)
+        {
+            if (instructions[index] is null)
+            {
+                violations.Add(new StateInvariantViolation("resolution.null-behavior-instruction", $"{path}[{index}]", "Behavior instructions must not be null."));
+            }
+        }
+    }
+
+    private static void ValidateBehaviorBindings(
+        IReadOnlyList<BehaviorBinding> bindings,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        for (int index = 0; index < bindings.Count; index++)
+        {
+            BehaviorBinding? binding = bindings[index];
+            if (binding is null)
+            {
+                violations.Add(new StateInvariantViolation("resolution.null-behavior-binding", $"{path}[{index}]", "Behavior bindings must not be null."));
+                continue;
+            }
+
+            ValidateStringKeys([binding.Key], $"{path}[{index}].key", violations);
+            if (!keys.Add(binding.Key))
+            {
+                violations.Add(new StateInvariantViolation("resolution.duplicate-behavior-binding", $"{path}[{index}].key", $"Behavior binding '{binding.Key}' occurs more than once."));
+            }
+
+            ValidateCardIds(binding.CardIds, $"{path}[{index}].cardIds", violations);
+        }
+    }
+
+    private static void ValidateBehaviorSetAside(
+        IReadOnlyList<BehaviorSetAsideCard> cards,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        var ids = new HashSet<CardInstanceId>();
+        for (int index = 0; index < cards.Count; index++)
+        {
+            BehaviorSetAsideCard? card = cards[index];
+            if (card is null)
+            {
+                violations.Add(new StateInvariantViolation("resolution.null-behavior-set-aside", $"{path}[{index}]", "Behavior set-aside entries must not be null."));
+                continue;
+            }
+
+            ValidateCardIds([card.CardId], $"{path}[{index}].cardId", violations);
+            if (!ids.Add(card.CardId))
+            {
+                violations.Add(new StateInvariantViolation("resolution.duplicate-behavior-set-aside", $"{path}[{index}].cardId", $"Card '{card.CardId}' occurs more than once in behavior set-aside."));
+            }
+
+            if (!StableIdentifier.TryValidate(card.OriginalZoneId.Value))
+            {
+                violations.Add(new StateInvariantViolation("id.invalid", $"{path}[{index}].originalZoneId", "Original zone ID is empty or invalid."));
+            }
+        }
+    }
+
+    private static void ValidateBehaviorContinuation(
+        IReadOnlyList<BehaviorContinuationStep> continuation,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        for (int index = 0; index < continuation.Count; index++)
+        {
+            BehaviorContinuationStep? step = continuation[index];
+            string stepPath = $"{path}[{index}]";
+            if (step is null)
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.null-behavior-continuation",
+                    stepPath,
+                    "Behavior continuation entries must not be null."));
+                continue;
+            }
+
+            if (step.InstructionCursor < 0)
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.invalid-behavior-continuation-cursor",
+                    $"{stepPath}.instructionCursor",
+                    "A behavior continuation cursor must not be negative."));
+            }
+
+            if (!StableIdentifier.TryValidate(step.Key))
+            {
+                violations.Add(new StateInvariantViolation(
+                    "id.invalid",
+                    $"{stepPath}.key",
+                    "Behavior continuation keys must be stable identifiers."));
+            }
+
+            if (!Enum.IsDefined(step.Kind))
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.invalid-behavior-continuation-kind",
+                    $"{stepPath}.kind",
+                    $"'{step.Kind}' is not a supported behavior continuation kind."));
+            }
+
+            if (step.OptionKey is not null && !StableIdentifier.TryValidate(step.OptionKey))
+            {
+                violations.Add(new StateInvariantViolation(
+                    "id.invalid",
+                    $"{stepPath}.optionKey",
+                    "Behavior continuation option keys must be stable identifiers."));
+            }
+
+            if (step.Kind == BehaviorContinuationKind.ChoiceOption && step.OptionKey is null)
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.behavior-continuation-option-missing",
+                    stepPath,
+                    "A choice-option continuation requires its selected option key."));
+            }
+
+            if (step.Kind != BehaviorContinuationKind.ChoiceOption && step.OptionKey is not null)
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.behavior-continuation-option-unexpected",
+                    $"{stepPath}.optionKey",
+                    "Only a choice-option continuation may carry an option key."));
+            }
+
+            ValidateCardIds(
+                step.CardIds,
+                $"{stepPath}.cardIds",
+                violations);
+            if (step.Kind != BehaviorContinuationKind.ChoiceSelection && step.CardIds.Count > 0)
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.behavior-continuation-cards-unexpected",
+                    $"{stepPath}.cardIds",
+                    "Only a choice-selection continuation may carry selected card IDs."));
+            }
+
+            if (step.CardIds.Distinct().Count() != step.CardIds.Count)
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.duplicate-behavior-continuation-card",
+                    $"{stepPath}.cardIds",
+                    "A behavior continuation selection must contain distinct card IDs."));
+            }
         }
     }
 
@@ -894,6 +1692,32 @@ public static class ResolutionFrameValidator
         }
     }
 
+    private static void ValidateCardOptions(
+        IReadOnlyList<CardInstanceId> options,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        var ids = new HashSet<CardInstanceId>();
+        for (int index = 0; index < options.Count; index++)
+        {
+            CardInstanceId cardId = options[index];
+            if (!StableIdentifier.TryValidate(cardId.Value))
+            {
+                violations.Add(new StateInvariantViolation(
+                    "id.invalid",
+                    $"{path}[{index}]",
+                    "Card option ID is empty or invalid."));
+            }
+            else if (!ids.Add(cardId))
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.duplicate-card-option",
+                    $"{path}[{index}]",
+                    $"Card option '{cardId}' occurs more than once."));
+            }
+        }
+    }
+
     private static void ValidateOccurrence(
         OccurrenceSnapshot occurrence,
         string path,
@@ -920,6 +1744,47 @@ public static class ResolutionFrameValidator
         if (!Enum.IsDefined(occurrence.Phase))
         {
             violations.Add(new StateInvariantViolation("resolution.invalid-occurrence-phase", $"{path}.phase", "Occurrence phase is not supported."));
+        }
+
+        if (occurrence.Kind is OccurrenceKind.TurnBegin or OccurrenceKind.TurnEnd)
+        {
+            if (occurrence.Effect is not TurnBoundaryEffect boundary)
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.turn-boundary-effect-missing",
+                    $"{path}.effect",
+                    "A turn-boundary occurrence must carry a typed turn-boundary effect instruction."));
+            }
+            else
+            {
+                if (boundary.Kind != occurrence.Kind)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.turn-boundary-kind-mismatch",
+                        $"{path}.effect.kind",
+                        "Turn-boundary effect kind must match its occurrence kind."));
+                }
+
+                if (occurrence.TargetPlayer != boundary.Target)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.turn-boundary-target-mismatch",
+                        $"{path}.effect.target",
+                        "Turn-boundary effect target must match its occurrence target player."));
+                }
+
+                if (boundary.TurnNumber <= 0)
+                {
+                    // The first clause reports malformed boundary data while
+                    // keeping this validator independent of the enclosing turn
+                    // frame; exact cursor/side binding is checked by the state
+                    // invariant validator.
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-turn-boundary-number",
+                        $"{path}.effect.turnNumber",
+                        "Turn-boundary effect turn number must be positive."));
+                }
+            }
         }
 
         ValidatePlayer(occurrence.Controller, $"{path}.controller", violations);
@@ -1048,6 +1913,41 @@ internal static class ResolutionFrameCloner
             toyTurn.BehaviorId,
             toyTurn.ActiveSide,
             toyTurn.Stage),
+        TurnFrame turn => new TurnFrame(
+            turn.Version,
+            turn.BehaviorId,
+            turn.ActiveSide,
+            turn.TurnNumber,
+            turn.Stage,
+            turn.PriorityWindow,
+            turn.PriorityHolder,
+            turn.ConsecutivePasses,
+            turn.ForcedActionEnd),
+        TurnDiscardFrame turnDiscard => new TurnDiscardFrame(
+            turnDiscard.Version,
+            turnDiscard.BehaviorId,
+            turnDiscard.Owner,
+            turnDiscard.RequiredCount,
+            turnDiscard.Candidates,
+            turnDiscard.Selected),
+        InstallFrame install => new InstallFrame(
+            install.Version,
+            install.BehaviorId,
+            install.Owner,
+            install.CardId,
+            install.DefinitionId,
+            install.CardClass,
+            install.SourceZoneId,
+            install.SourceZoneKind,
+            install.DestinationKind,
+            install.ServerId,
+            install.CreateNewRemote,
+            install.InstallCost,
+            install.CandidateReplacementCardIds,
+            install.RequiredReplacementCardIds,
+            install.SelectedReplacementCardIds,
+            install.DestinationZoneId,
+            install.CandidateReplacementDefinitionIds),
         RunTimingFrame runTiming => new RunTimingFrame(
             runTiming.Version,
             runTiming.BehaviorId,
@@ -1071,6 +1971,27 @@ internal static class ResolutionFrameCloner
             memoryCleanup.RequiredReduction,
             memoryCleanup.Candidates),
         EffectCheckpointFrame checkpoint => checkpoint.Copy(),
+        BehaviorResolutionFrame behavior => new BehaviorResolutionFrame(
+            behavior.Version,
+            behavior.BehaviorId,
+            behavior.DefinitionId,
+            behavior.SourceCardId,
+            behavior.Controller,
+            behavior.ActingPlayer,
+            behavior.CatalogFingerprint,
+            behavior.DefinitionFingerprint,
+            behavior.Stage,
+            behavior.InstructionCursor,
+            behavior.Bindings,
+            behavior.SetAside,
+            behavior.Choice,
+            behavior.Continuation,
+            behavior.SetAsideZoneId,
+            behavior.ParentBehaviorId,
+            behavior.FrameIdentity,
+            behavior.SourceZoneId,
+            behavior.SourceZoneKind,
+            behavior.ParentFrameIdentity),
         _ => throw new InvalidOperationException($"No cloner is registered for frame type '{frame.GetType().Name}'."),
     };
 }

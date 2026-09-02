@@ -28,7 +28,21 @@ public static class ObservationBuilder
 {
     public static Observation Build(GameState state, PlayerSide viewer)
     {
+        return Build(state, viewer, CardBehaviorSpecCatalog.Default);
+    }
+
+    /// <summary>
+    /// Builds the same viewer-scoped observation using the immutable behavior
+    /// catalog composed by the match. This keeps effective static projections
+    /// (including maximum hand size) derived without mutating base rules.
+    /// </summary>
+    public static Observation Build(
+        GameState state,
+        PlayerSide viewer,
+        IBehaviorCatalog behaviorCatalog)
+    {
         ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(behaviorCatalog);
         if (!Enum.IsDefined(viewer))
         {
             throw new ArgumentOutOfRangeException(nameof(viewer), viewer, "Unknown observer side.");
@@ -41,7 +55,7 @@ public static class ObservationBuilder
         // reducer, so they do not need temporary visibility here.
         HashSet<CardInstanceId> accessVisible = BuildAccessVisibleSet(state);
 
-        Dictionary<string, object?> publicState = BuildPublicState(state, viewer, accessVisible);
+        Dictionary<string, object?> publicState = BuildPublicState(state, viewer, accessVisible, behaviorCatalog);
         Dictionary<string, object?> privateState = BuildPrivateState(state, viewer);
 
         PendingDecision? pending = state.PendingDecision;
@@ -83,7 +97,11 @@ public static class ObservationBuilder
         return new HashSet<CardInstanceId>(run.ChosenAccessCards);
     }
 
-    private static Dictionary<string, object?> BuildPublicState(GameState state, PlayerSide viewer, IReadOnlySet<CardInstanceId> accessVisible)
+    private static Dictionary<string, object?> BuildPublicState(
+        GameState state,
+        PlayerSide viewer,
+        IReadOnlySet<CardInstanceId> accessVisible,
+        IBehaviorCatalog behaviorCatalog)
     {
         PlayerState corp = state.Players.Single(player => player.Side == PlayerSide.Corp);
         PlayerState runner = state.Players.Single(player => player.Side == PlayerSide.Runner);
@@ -98,8 +116,8 @@ public static class ObservationBuilder
             },
             ["players"] = new Dictionary<string, object?>
             {
-                ["corp"] = PlayerView(corp),
-                ["runner"] = PlayerView(runner),
+                ["corp"] = PlayerView(state, corp, behaviorCatalog),
+                ["runner"] = PlayerView(state, runner, behaviorCatalog),
             },
             ["outcome"] = new Dictionary<string, object?>
             {
@@ -122,6 +140,24 @@ public static class ObservationBuilder
             ["runnerScore"] = ZoneCards(state, ZoneKind.RunnerScore).Select(card => CardView(card)).ToArray(),
         };
 
+        // Real CR turns carry an explicit step/facts projection. Keep these
+        // additive and conditional so M1/M2 observation goldens retain their
+        // original byte shape while viewers still receive this/last-turn
+        // facts without any private card or allocator data.
+        if (state.Turn.Step != TurnStep.None)
+        {
+            ((Dictionary<string, object?>)publicState["turn"]!)["step"] = state.Turn.Step;
+        }
+
+        if (state.Turn.History is TurnHistoryState history)
+        {
+            publicState["turnFacts"] = new Dictionary<string, object?>
+            {
+                ["corp"] = TurnFactsView(state, viewer, history.CorpThisTurn, history.CorpLastTurn),
+                ["runner"] = TurnFactsView(state, viewer, history.RunnerThisTurn, history.RunnerLastTurn),
+            };
+        }
+
         // Keep the lazy play-area topology absent from ordinary M1
         // observations. Once an event-run has created the zone, expose its
         // public contents explicitly to both viewers.
@@ -140,6 +176,39 @@ public static class ObservationBuilder
 
         return publicState;
     }
+
+    private static Dictionary<string, object?> TurnFactsView(
+        GameState state,
+        PlayerSide viewer,
+        TurnFactsState? thisTurn,
+        TurnFactsState? lastTurn) =>
+        new()
+        {
+            ["thisTurn"] = thisTurn is null ? null : FactsView(state, viewer, thisTurn),
+            ["lastTurn"] = lastTurn is null ? null : FactsView(state, viewer, lastTurn),
+        };
+
+    private static Dictionary<string, object?> FactsView(
+        GameState state,
+        PlayerSide viewer,
+        TurnFactsState facts) =>
+        new()
+        {
+            ["side"] = facts.Side,
+            ["turnNumber"] = facts.TurnNumber,
+            ["clicksAllotted"] = facts.ClicksAllotted,
+            ["clicksLost"] = facts.ClicksLost,
+            ["turnBegan"] = facts.TurnBegan,
+            ["mandatoryDrawPerformed"] = facts.MandatoryDrawPerformed,
+            ["actionPhaseEnded"] = facts.ActionPhaseEnded,
+            ["discardPhaseEnded"] = facts.DiscardPhaseEnded,
+            ["installedCardIds"] = facts.InstalledCardIds
+                .Where(cardId => state.Cards.FirstOrDefault(card => card.Id == cardId) is { } card
+                    && IsVisibleTo(card, state.GetZone(card.ZoneId), viewer, new HashSet<CardInstanceId>()))
+                .Select(static cardId => cardId.Value)
+                .ToArray(),
+            ["successfulRun"] = facts.SuccessfulRun,
+        };
 
     private static Dictionary<string, object?> ServerView(GameState state, ServerState server, PlayerSide viewer, IReadOnlySet<CardInstanceId> accessVisible)
     {
@@ -317,13 +386,36 @@ public static class ObservationBuilder
         return card.OwnerSide == viewer || card.FaceUp || accessVisible.Contains(card.Id);
     }
 
-    private static Dictionary<string, object?> PlayerView(PlayerState player) => new()
+    private static Dictionary<string, object?> PlayerView(
+        GameState state,
+        PlayerState player,
+        IBehaviorCatalog behaviorCatalog)
     {
-        ["id"] = player.Id.Value,
-        ["credits"] = player.Credits,
-        ["clicks"] = player.Clicks,
-        ["agendaPoints"] = player.AgendaPoints,
-    };
+        var view = new Dictionary<string, object?>
+        {
+            ["id"] = player.Id.Value,
+            ["credits"] = player.Credits,
+            ["clicks"] = player.Clicks,
+            ["agendaPoints"] = player.AgendaPoints,
+        };
+
+        // Keep the M1 observation golden unchanged when the optional M2
+        // rules aggregate is absent. Once it is present, expose only the
+        // viewer-safe derived limit; base damage and hidden card contents are
+        // not leaked through this public projection.
+        if (state.RulesState?.Players.SingleOrDefault(value => value.PlayerId == player.Id) is { } rules)
+        {
+            int modifier = BehaviorStaticModifierProjection.Sum(
+                behaviorCatalog,
+                state.Cards,
+                state.Zones,
+                player.Side,
+                BehaviorStaticModifierKind.MaximumHandSize);
+            view["maximumHandSize"] = Math.Max(0, checked(rules.MaximumHandSize + modifier));
+        }
+
+        return view;
+    }
 
     private static Dictionary<string, object?> CardView(CardInstanceState card) => new()
     {

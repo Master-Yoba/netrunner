@@ -10,9 +10,22 @@ public static partial class GameEngine
 {
     public const int DefaultResolutionStepBudget = 128;
 
+    /// <summary>
+    /// The turn-start boundary result.  Turn setup emits its opening click
+    /// allotment and paid-window events before yielding the first decision;
+    /// callers that need a complete event stream must prepend this batch to
+    /// subsequent <see cref="ApplyResult.Events"/> batches.
+    /// </summary>
+    public sealed record TurnStartResult(GameState State, IReadOnlyList<EngineEvent> Events);
+
     /// <summary>Creates an engine session bound to one immutable catalog.</summary>
     public static GameEngineSession CreateSession(IBehaviorCatalog behaviorCatalog) =>
         new(behaviorCatalog);
+
+    public static GameEngineSession CreateSession(
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog runtimeCardCatalog) =>
+        new(behaviorCatalog, runtimeCardCatalog);
 
     public static ApplyResult Apply(GameState state, ActionSubmission? submission)
     {
@@ -20,6 +33,7 @@ public static partial class GameEngine
             state,
             submission,
             CardBehaviorSpecCatalog.Default,
+            runtimeCardCatalog: null,
             enforceCatalogCompatibility: false,
             maxResolutionSteps: DefaultResolutionStepBudget);
     }
@@ -38,6 +52,7 @@ public static partial class GameEngine
             state,
             submission,
             behaviorCatalog,
+            runtimeCardCatalog: null,
             enforceCatalogCompatibility: true,
             maxResolutionSteps: DefaultResolutionStepBudget);
     }
@@ -49,10 +64,30 @@ public static partial class GameEngine
         ActionSubmission? submission) =>
         Apply(state, submission, behaviorCatalog);
 
+    /// <summary>
+    /// Applies an action with separately injected executable behavior and
+    /// printed-card metadata catalogs. The two fingerprints remain distinct.
+    /// </summary>
+    public static ApplyResult Apply(
+        GameState state,
+        ActionSubmission? submission,
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog runtimeCardCatalog)
+    {
+        return ApplyCore(
+            state,
+            submission,
+            behaviorCatalog,
+            runtimeCardCatalog,
+            enforceCatalogCompatibility: true,
+            maxResolutionSteps: DefaultResolutionStepBudget);
+    }
+
     private static ApplyResult ApplyCore(
         GameState state,
         ActionSubmission? submission,
         IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog,
         bool enforceCatalogCompatibility,
         int maxResolutionSteps)
     {
@@ -76,9 +111,19 @@ public static partial class GameEngine
                 catalogMismatch!);
         }
 
+        if (runtimeCardCatalog is not null
+            && !CatalogMatchesState(state, runtimeCardCatalog, out string? runtimeMismatch))
+        {
+            return ApplyResult.Reject(
+                state,
+                ApplyRejectionCode.InvalidInputState,
+                runtimeMismatch!);
+        }
+
         if (!StateInvariantValidator.TryValidate(
                 state,
                 enforceCatalogCompatibility ? behaviorCatalog : null,
+                runtimeCardCatalog,
                 out IReadOnlyList<StateInvariantViolation> violations))
         {
             return ApplyResult.Reject(
@@ -145,7 +190,7 @@ public static partial class GameEngine
                 "The resolution step budget must be positive.");
         }
 
-        var working = WorkingState.From(state, behaviorCatalog);
+        var working = WorkingState.From(state, behaviorCatalog, runtimeCardCatalog);
         try
         {
             working.PendingDecision = null;
@@ -156,7 +201,8 @@ public static partial class GameEngine
             GameState next = working.Build(state);
             StateInvariantValidator.Validate(
                 next,
-                enforceCatalogCompatibility ? behaviorCatalog : null);
+                enforceCatalogCompatibility ? behaviorCatalog : null,
+                runtimeCardCatalog);
             IReadOnlyList<EngineEvent> events = FreezeEvents(working.Events);
             var acceptedAction = new AcceptedActionRecord(
                 working.ActionSequence,
@@ -198,6 +244,7 @@ public static partial class GameEngine
             state,
             frame,
             CardBehaviorSpecCatalog.Default,
+            runtimeCardCatalog: null,
             enforceCatalogCompatibility: false,
             maxResolutionSteps: maxResolutionSteps);
     }
@@ -213,6 +260,28 @@ public static partial class GameEngine
             state,
             frame,
             behaviorCatalog,
+            runtimeCardCatalog: null,
+            enforceCatalogCompatibility: true,
+            maxResolutionSteps: maxResolutionSteps);
+    }
+
+    /// <summary>
+    /// Begins a resolution with explicitly injected executable behavior and
+    /// printed-card metadata catalogs. Both catalogs are checked against the
+    /// state before any frame is opened or state is copied.
+    /// </summary>
+    public static GameState BeginResolution(
+        GameState state,
+        ResolutionFrame frame,
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog runtimeCardCatalog,
+        int maxResolutionSteps = DefaultResolutionStepBudget)
+    {
+        return BeginResolutionCore(
+            state,
+            frame,
+            behaviorCatalog,
+            runtimeCardCatalog,
             enforceCatalogCompatibility: true,
             maxResolutionSteps: maxResolutionSteps);
     }
@@ -229,6 +298,7 @@ public static partial class GameEngine
         GameState state,
         ResolutionFrame frame,
         IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog,
         bool enforceCatalogCompatibility,
         int maxResolutionSteps)
     {
@@ -241,9 +311,16 @@ public static partial class GameEngine
             throw new ResolutionFailureException(catalogMismatch!);
         }
 
+        if (runtimeCardCatalog is not null
+            && !CatalogMatchesState(state, runtimeCardCatalog, out string? runtimeMismatch))
+        {
+            throw new ResolutionFailureException(runtimeMismatch!);
+        }
+
         StateInvariantValidator.Validate(
             state,
-            enforceCatalogCompatibility ? behaviorCatalog : null);
+            enforceCatalogCompatibility ? behaviorCatalog : null,
+            runtimeCardCatalog);
 
         if (state.Outcome.Kind == GameOutcomeKind.Won)
         {
@@ -255,12 +332,31 @@ public static partial class GameEngine
             throw new ResolutionFailureException("A new resolution cannot begin while a decision is pending.");
         }
 
+        if (frame is BehaviorResolutionFrame)
+        {
+            throw new ResolutionFailureException(
+                "Generic card behaviors may only be opened by an engine-owned card play/install invocation so source-zone and invocation provenance are validated.");
+        }
+
+        if (frame is InstallFrame)
+        {
+            throw new ResolutionFailureException(
+                "Install frames may only be opened by an engine-issued install action in the active Runner turn.");
+        }
+
         if (maxResolutionSteps <= 0)
         {
             throw new ResolutionStepBudgetExceededException(maxResolutionSteps);
         }
 
-        var working = WorkingState.From(state, behaviorCatalog);
+        if (frame is EffectResolutionFrame { Effects: { } effects }
+            && effects.Instructions.Any(static instruction => instruction is TurnBoundaryEffect))
+        {
+            throw new ResolutionFailureException(
+                "Turn-boundary occurrences may only be opened by the active turn frame.");
+        }
+
+        var working = WorkingState.From(state, behaviorCatalog, runtimeCardCatalog);
         try
         {
             working.ResolutionStack.Add(ResolutionFrameCloner.Copy(frame));
@@ -268,7 +364,8 @@ public static partial class GameEngine
             GameState next = working.Build(state);
             StateInvariantValidator.Validate(
                 next,
-                enforceCatalogCompatibility ? behaviorCatalog : null);
+                enforceCatalogCompatibility ? behaviorCatalog : null,
+                runtimeCardCatalog);
             return next;
         }
         catch (ResolutionFailureException)
@@ -289,19 +386,257 @@ public static partial class GameEngine
         int maxResolutionSteps = DefaultResolutionStepBudget) =>
         BeginResolution(state, frame, maxResolutionSteps);
 
+    /// <summary>
+    /// Starts the CR 5 turn shell for the already active side. The returned
+    /// state is paused at the first required paid-ability window (or its
+    /// corresponding decision), so the mandatory draw and formal turn-begin
+    /// occurrence cannot be skipped by a caller.
+    /// </summary>
+    public static GameState BeginTurn(
+        GameState state,
+        PlayerSide side,
+        int maxResolutionSteps = DefaultResolutionStepBudget)
+        => BeginTurnWithEvents(state, side, maxResolutionSteps).State;
+
+    /// <summary>Starts a turn for the side already recorded as active.</summary>
+    public static GameState BeginTurn(
+        GameState state,
+        int maxResolutionSteps = DefaultResolutionStepBudget) =>
+        BeginTurn(state, state.Turn.ActiveSide, maxResolutionSteps);
+
+    public static GameState StartTurn(
+        GameState state,
+        PlayerSide side,
+        int maxResolutionSteps = DefaultResolutionStepBudget) =>
+        BeginTurn(state, side, maxResolutionSteps);
+
+    /// <summary>Starts a turn with an explicitly composed behavior catalog.</summary>
+    public static GameState BeginTurn(
+        GameState state,
+        PlayerSide side,
+        IBehaviorCatalog behaviorCatalog,
+        int maxResolutionSteps = DefaultResolutionStepBudget) =>
+        BeginTurnWithEvents(state, side, behaviorCatalog, maxResolutionSteps).State;
+
+    /// <summary>Starts a turn with both injected immutable catalogs.</summary>
+    public static GameState BeginTurn(
+        GameState state,
+        PlayerSide side,
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog runtimeCardCatalog,
+        int maxResolutionSteps = DefaultResolutionStepBudget) =>
+        BeginTurnWithEvents(state, side, behaviorCatalog, runtimeCardCatalog, maxResolutionSteps).State;
+
+    /// <summary>
+    /// Starts a turn and returns the events emitted while opening its first
+    /// decision.  This mirrors <see cref="BeginRunWithEvents"/> and removes
+    /// the need for callers to reconstruct setup events from state fields.
+    /// </summary>
+    public static TurnStartResult BeginTurnWithEvents(
+        GameState state,
+        PlayerSide side,
+        int maxResolutionSteps = DefaultResolutionStepBudget) =>
+        BeginTurnWithEvents(
+            state,
+            side,
+            CardBehaviorSpecCatalog.Default,
+            runtimeCardCatalog: null,
+            maxResolutionSteps: maxResolutionSteps,
+            enforceCatalogCompatibility: false);
+
+    /// <summary>Starts a turn for the side already recorded as active.</summary>
+    public static TurnStartResult BeginTurnWithEvents(
+        GameState state,
+        int maxResolutionSteps = DefaultResolutionStepBudget) =>
+        BeginTurnWithEvents(state, state.Turn.ActiveSide, maxResolutionSteps);
+
+    /// <summary>Starts a turn with an explicitly injected immutable catalog.</summary>
+    public static TurnStartResult BeginTurnWithEvents(
+        GameState state,
+        PlayerSide side,
+        IBehaviorCatalog behaviorCatalog,
+        int maxResolutionSteps = DefaultResolutionStepBudget) =>
+        BeginTurnWithEvents(
+            state,
+            side,
+            behaviorCatalog,
+            runtimeCardCatalog: null,
+            maxResolutionSteps: maxResolutionSteps,
+            enforceCatalogCompatibility: true);
+
+    /// <summary>Starts a turn with both injected immutable catalogs.</summary>
+    public static TurnStartResult BeginTurnWithEvents(
+        GameState state,
+        PlayerSide side,
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog runtimeCardCatalog,
+        int maxResolutionSteps = DefaultResolutionStepBudget) =>
+        BeginTurnWithEvents(
+            state,
+            side,
+            behaviorCatalog,
+            runtimeCardCatalog,
+            maxResolutionSteps,
+            enforceCatalogCompatibility: true);
+
+    /// <summary>Starts the active side's turn with an injected catalog.</summary>
+    public static TurnStartResult BeginTurnWithEvents(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        int maxResolutionSteps = DefaultResolutionStepBudget) =>
+        BeginTurnWithEvents(state, state.Turn.ActiveSide, behaviorCatalog, maxResolutionSteps);
+
+    /// <summary>Parameter-order adapter for an active-side injected turn.</summary>
+    public static TurnStartResult BeginTurnWithEvents(
+        GameState state,
+        int maxResolutionSteps,
+        IBehaviorCatalog behaviorCatalog) =>
+        BeginTurnWithEvents(state, behaviorCatalog, maxResolutionSteps);
+
+    /// <summary>Parameter-order adapter for callers that append dependencies.</summary>
+    public static TurnStartResult BeginTurnWithEvents(
+        GameState state,
+        PlayerSide side,
+        int maxResolutionSteps,
+        IBehaviorCatalog behaviorCatalog) =>
+        BeginTurnWithEvents(state, side, behaviorCatalog, maxResolutionSteps);
+
+    private static TurnStartResult BeginTurnWithEvents(
+        GameState state,
+        PlayerSide side,
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog,
+        int maxResolutionSteps,
+        bool enforceCatalogCompatibility)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(behaviorCatalog);
+        if (!Enum.IsDefined(side))
+        {
+            throw new ArgumentOutOfRangeException(nameof(side), side, "Unknown turn side.");
+        }
+
+        if (state.Turn.ActiveSide != side)
+        {
+            throw new ResolutionFailureException("A turn can only begin for the currently active side.");
+        }
+
+        if (state.ResolutionStack.Count > 0)
+        {
+            throw new ResolutionFailureException("A turn cannot begin while another resolution is active.");
+        }
+
+        return BeginTurnWithEventsCore(
+            state,
+            new TurnFrame(side, state.Turn.TurnNumber),
+            behaviorCatalog,
+            runtimeCardCatalog,
+            enforceCatalogCompatibility,
+            maxResolutionSteps);
+    }
+
+    private static TurnStartResult BeginTurnWithEventsCore(
+        GameState state,
+        ResolutionFrame frame,
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog,
+        bool enforceCatalogCompatibility,
+        int maxResolutionSteps)
+    {
+        if (enforceCatalogCompatibility
+            && !CatalogMatchesState(state, behaviorCatalog, out string? catalogMismatch))
+        {
+            throw new ResolutionFailureException(catalogMismatch!);
+        }
+
+        if (runtimeCardCatalog is not null
+            && !CatalogMatchesState(state, runtimeCardCatalog, out string? runtimeMismatch))
+        {
+            throw new ResolutionFailureException(runtimeMismatch!);
+        }
+
+        StateInvariantValidator.Validate(
+            state,
+            enforceCatalogCompatibility ? behaviorCatalog : null,
+            runtimeCardCatalog);
+
+        if (state.Outcome.Kind == GameOutcomeKind.Won)
+        {
+            throw new ResolutionFailureException("A terminal state cannot begin a turn.");
+        }
+
+        if (state.PendingDecision is not null)
+        {
+            throw new ResolutionFailureException("A turn cannot begin while a decision is pending.");
+        }
+
+        if (state.ResolutionStack.Count > 0)
+        {
+            throw new ResolutionFailureException("A turn cannot begin while another resolution is active.");
+        }
+
+        if (maxResolutionSteps <= 0)
+        {
+            throw new ResolutionStepBudgetExceededException(maxResolutionSteps);
+        }
+
+        var working = WorkingState.From(state, behaviorCatalog, runtimeCardCatalog);
+        try
+        {
+            working.ResolutionStack.Add(ResolutionFrameCloner.Copy(frame));
+            Advance(working, maxResolutionSteps);
+            GameState next = working.Build(state);
+            StateInvariantValidator.Validate(
+                next,
+                enforceCatalogCompatibility ? behaviorCatalog : null,
+                runtimeCardCatalog);
+            return new TurnStartResult(next, FreezeEvents(working.Events));
+        }
+        catch (ResolutionFailureException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is StateInvariantException or ArgumentException or InvalidOperationException or OverflowException)
+        {
+            throw new ResolutionFailureException(
+                $"The turn could not be started: {exception.Message}",
+                exception);
+        }
+    }
+
     private static void ConsumeAction(WorkingState working, LegalAction action)
     {
         switch (action.Kind, action.Parameters)
         {
+            case (ActionKind.ChooseCard, CardChoiceParameters discardChoice)
+                when IsTurnDiscardFrameTop(working):
+                ConsumeTurnDiscardAction(working, discardChoice.CardId);
+                return;
             case (ActionKind.ChooseNumber, NumberChoiceParameters numberChoice):
                 ConsumeNumberAction(working, numberChoice.Value);
                 return;
             case (ActionKind.ChooseCard, CardChoiceParameters cardChoice):
                 ConsumeCardAction(working, cardChoice.CardId);
                 return;
+            case (ActionKind.ChooseBehavior, BehaviorChoiceParameters behaviorChoice):
+                ConsumeBehaviorChoice(working, behaviorChoice);
+                return;
+            case (ActionKind.InstallCard, InstallCardParameters install)
+                when IsInstallFrameTop(working):
+                ConsumeInstallChoiceAction(working, install);
+                return;
+            case (ActionKind.InstallCard, InstallCardParameters install):
+                ConsumeTurnInstallAction(working, install);
+                return;
             case (ActionKind.GainCredit, NoActionParameters):
             case (ActionKind.DrawCard, NoActionParameters):
             case (ActionKind.EndTurn, NoActionParameters):
+                if (IsTurnFrameTop(working))
+                {
+                    ConsumeTurnAction(working, action.Kind);
+                    return;
+                }
+
                 ConsumeToyAction(working, action.Kind, null);
                 return;
             case (ActionKind.InstallCard, CardChoiceParameters installChoice):
@@ -317,6 +652,14 @@ public static partial class GameEngine
                 ConsumeToyAction(working, action.Kind, stealChoice.CardId);
                 return;
             case (ActionKind.PassPriority, NoActionParameters):
+                if (IsTurnFrameTop(working))
+                {
+                    ConsumeTurnPriorityAction(working);
+                    return;
+                }
+
+                ConsumeRunAction(working, action.Kind, action.Parameters);
+                return;
             case (ActionKind.RezIce, RunIceParameters runIce):
             case (ActionKind.BreakSubroutines, RunBreakParameters):
             case (ActionKind.PumpBreaker, RunBreakerParameters):

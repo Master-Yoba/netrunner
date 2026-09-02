@@ -8,11 +8,16 @@ public enum DecisionKind
     ChooseNumber,
     ChooseCard,
     ToyTurn,
+    TurnTiming,
+    TurnAction,
+    InstallChoice,
+    TurnDiscard,
     RunTiming,
     MemoryCleanup,
     TriggerChoice,
     TriggerOrdering,
     InterruptChoice,
+    BehaviorChoice,
 }
 
 public enum ActionKind
@@ -44,6 +49,7 @@ public enum ActionKind
     ChooseBreachCandidate,
     TrashAccessedCard,
     NoAccessAction,
+    ChooseBehavior,
 }
 
 /// <summary>
@@ -53,6 +59,7 @@ public enum ActionKind
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 [JsonDerivedType(typeof(NumberChoiceParameters), "number")]
 [JsonDerivedType(typeof(CardChoiceParameters), "card")]
+[JsonDerivedType(typeof(InstallCardParameters), "install")]
 [JsonDerivedType(typeof(RunCardPaymentParameters), "run-card-payment")]
 [JsonDerivedType(typeof(RunIceParameters), "run-ice")]
 [JsonDerivedType(typeof(RunBreakerParameters), "run-breaker")]
@@ -64,11 +71,127 @@ public enum ActionKind
 [JsonDerivedType(typeof(ReplacementChoiceParameters), "replacement")]
 [JsonDerivedType(typeof(LegacyActionParameters), "legacy")]
 [JsonDerivedType(typeof(BreachCandidateParameters), "breach-candidate")]
+[JsonDerivedType(typeof(BehaviorChoiceParameters), "behavior-choice")]
 public abstract record ActionParameters;
 
 public sealed record NumberChoiceParameters([property: JsonRequired] int Value) : ActionParameters;
 
 public sealed record CardChoiceParameters([property: JsonRequired] CardInstanceId CardId) : ActionParameters;
+
+/// <summary>
+/// The physical destination family for a real CR install action.  A server
+/// destination is completed by <see cref="InstallCardParameters.ServerId"/>
+/// or the explicit <see cref="InstallCardParameters.CreateNewRemote"/>
+/// marker; callers never provide a zone ID.
+/// </summary>
+public enum InstallDestinationKind
+{
+    RunnerRig,
+    ServerRoot,
+    ServerIce,
+}
+
+/// <summary>
+/// Engine-issued immutable install payload.  Unlike the legacy
+/// <see cref="CardChoiceParameters"/>, this DTO freezes the source card,
+/// typed destination, server/new-remote choice, calculated credit cost, and
+/// the bounded replacement-selection protocol.  The action submission still
+/// contains only the issued action ID.
+/// </summary>
+public sealed record InstallCardParameters : ActionParameters
+{
+    [JsonConstructor]
+    public InstallCardParameters(
+        CardInstanceId cardId,
+        InstallDestinationKind destinationKind,
+        ServerId? serverId,
+        bool createNewRemote,
+        int creditCost,
+        IReadOnlyList<CardInstanceId>? candidateReplacementCardIds = null,
+        IReadOnlyList<CardInstanceId>? requiredReplacementCardIds = null,
+        IReadOnlyList<CardInstanceId>? selectedReplacementCardIds = null,
+        bool finalizeSelection = true)
+    {
+        if (!Enum.IsDefined(destinationKind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(destinationKind));
+        }
+
+        if (creditCost < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(creditCost), "Install credit cost must not be negative.");
+        }
+
+        bool serverDestination = destinationKind is InstallDestinationKind.ServerRoot or InstallDestinationKind.ServerIce;
+        if (destinationKind == InstallDestinationKind.RunnerRig && (serverId.HasValue || createNewRemote))
+        {
+            throw new ArgumentException("Runner-rig installs must not identify a server or a new remote.", nameof(serverId));
+        }
+
+        if (serverDestination && serverId.HasValue == createNewRemote)
+        {
+            throw new ArgumentException(
+                "A server install must identify exactly one existing server or the explicit new-remote marker.",
+                nameof(serverId));
+        }
+
+        CardId = cardId;
+        DestinationKind = destinationKind;
+        ServerId = serverId;
+        CreateNewRemote = createNewRemote;
+        CreditCost = creditCost;
+        CandidateReplacementCardIds = Freeze(candidateReplacementCardIds);
+        RequiredReplacementCardIds = Freeze(requiredReplacementCardIds);
+        SelectedReplacementCardIds = Freeze(selectedReplacementCardIds);
+        FinalizeSelection = finalizeSelection;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId CardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public InstallDestinationKind DestinationKind { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ServerId? ServerId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public bool CreateNewRemote { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int CreditCost { get; private set; }
+
+    /// <summary>Frozen candidates for the bounded like-card/program selection.</summary>
+    [JsonInclude]
+    [JsonRequired]
+    public IReadOnlyList<CardInstanceId> CandidateReplacementCardIds { get; private set; }
+
+    /// <summary>Frozen candidates that must be selected to satisfy replacement rules.</summary>
+    [JsonInclude]
+    [JsonRequired]
+    public IReadOnlyList<CardInstanceId> RequiredReplacementCardIds { get; private set; }
+
+    /// <summary>Cards selected so far by the incremental install protocol.</summary>
+    [JsonInclude]
+    [JsonRequired]
+    public IReadOnlyList<CardInstanceId> SelectedReplacementCardIds { get; private set; }
+
+    /// <summary>
+    /// False means the action advances the frozen selection; true submits the
+    /// exact selected set and commits the install.
+    /// </summary>
+    [JsonInclude]
+    [JsonRequired]
+    public bool FinalizeSelection { get; private set; }
+
+    private static ReadOnlyCollection<CardInstanceId> Freeze(IEnumerable<CardInstanceId>? values) =>
+        new((values ?? []).ToArray());
+}
 
 /// <summary>Typed target for the CR 6.9 approached-ICE rez action.</summary>
 public sealed record RunIceParameters([property: JsonRequired] CardInstanceId IceId) : ActionParameters;
@@ -259,6 +382,65 @@ public sealed record BreachCandidateParameters : ActionParameters
     [JsonInclude]
     [JsonRequired]
     public BreachHiddenCandidateSource? Source { get; private set; }
+}
+
+/// <summary>
+/// A complete selection for one materialized generic card-behavior choice.
+/// Option keys represent mode/order options; card IDs represent frozen hidden
+/// or public candidates. Empty lists are the explicit skip for an optional
+/// up-to-one choice.
+/// </summary>
+public sealed record BehaviorChoiceParameters : ActionParameters
+{
+    [JsonConstructor]
+    public BehaviorChoiceParameters(
+        string choiceKey,
+        IReadOnlyList<string>? optionKeys = null,
+        IReadOnlyList<CardInstanceId>? cardIds = null,
+        bool finalizeSelection = true)
+    {
+        if (!StableIdentifier.TryValidate(choiceKey))
+        {
+            throw new ArgumentException("A behavior choice key must be stable.", nameof(choiceKey));
+        }
+
+        ChoiceKey = choiceKey;
+        OptionKeys = new ReadOnlyCollection<string>((optionKeys ?? []).ToArray());
+        CardIds = new ReadOnlyCollection<CardInstanceId>((cardIds ?? []).ToArray());
+        FinalizeSelection = finalizeSelection;
+    }
+
+    public BehaviorChoiceParameters(string choiceKey, string optionKey)
+        : this(choiceKey, [optionKey], null, true)
+    {
+    }
+
+    public BehaviorChoiceParameters(string choiceKey, IEnumerable<CardInstanceId> cardIds)
+        : this(choiceKey, null, cardIds?.ToArray(), true)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string ChoiceKey { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public IReadOnlyList<string> OptionKeys { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public IReadOnlyList<CardInstanceId> CardIds { get; private set; }
+
+    /// <summary>
+    /// Large any-number/up-to choices use a bounded toggle protocol. A
+    /// non-final action adds one card to the frozen partial selection; the
+    /// final action submits the accumulated set for normal cardinality
+    /// validation. Existing complete-choice payloads default to true.
+    /// </summary>
+    [JsonInclude]
+    [JsonRequired]
+    public bool FinalizeSelection { get; private set; }
 }
 
 public sealed record LegalAction
@@ -472,6 +654,16 @@ public sealed class PendingDecision
     {
         NumberChoiceParameters numberChoice => new NumberChoiceParameters(numberChoice.Value),
         CardChoiceParameters cardChoice => new CardChoiceParameters(cardChoice.CardId),
+        InstallCardParameters install => new InstallCardParameters(
+            install.CardId,
+            install.DestinationKind,
+            install.ServerId,
+            install.CreateNewRemote,
+            install.CreditCost,
+            install.CandidateReplacementCardIds,
+            install.RequiredReplacementCardIds,
+            install.SelectedReplacementCardIds,
+            install.FinalizeSelection),
         RunCardPaymentParameters payment => new RunCardPaymentParameters(payment.CardId, payment.HostedCredits),
         RunIceParameters runIce => new RunIceParameters(runIce.IceId),
         RunBreakerParameters breaker => new RunBreakerParameters(breaker.BreakerId, breaker.HostedCredits),
@@ -483,6 +675,11 @@ public sealed class PendingDecision
         ReplacementChoiceParameters replacement => new ReplacementChoiceParameters(replacement.InterruptId),
         LegacyActionParameters legacy => new LegacyActionParameters(legacy.Kind),
         BreachCandidateParameters breachCandidate => new BreachCandidateParameters(breachCandidate.CardId, breachCandidate.Source),
+        BehaviorChoiceParameters behaviorChoice => new BehaviorChoiceParameters(
+            behaviorChoice.ChoiceKey,
+            behaviorChoice.OptionKeys,
+            behaviorChoice.CardIds,
+            behaviorChoice.FinalizeSelection),
         _ => throw new InvalidOperationException(
             $"No immutable clone is registered for action parameter type '{parameters.GetType().Name}'."),
     };

@@ -263,4 +263,614 @@ public static partial class GameEngine
             player.AgendaPoints));
         Emit(working, EngineEventKinds.ClickSpent, new ClickSpentEventPayload(player.Side, remaining));
     }
+
+    // ---------------------------------------------------------------------
+    // CR 5.6/5.7 turn shell (ENG-401)
+    // ---------------------------------------------------------------------
+
+    private static bool IsTurnFrameTop(WorkingState working) =>
+        working.ResolutionStack.Count > 0
+        && working.ResolutionStack[^1] is TurnFrame;
+
+    private static bool IsTurnDiscardFrameTop(WorkingState working) =>
+        working.ResolutionStack.Count > 0
+        && working.ResolutionStack[^1] is TurnDiscardFrame;
+
+    private static void StepTurn(WorkingState working, TurnFrame frame)
+    {
+        if (working.Turn.ActiveSide != frame.ActiveSide
+            || working.Turn.TurnNumber != frame.TurnNumber)
+        {
+            throw new ResolutionFailureException("Turn frame does not match the active turn.");
+        }
+
+        switch (frame.Stage)
+        {
+            case TurnFrameStage.GainAllottedClicks:
+                AllotTurnClicks(working, frame);
+                return;
+            case TurnFrameStage.BeforeTurnPriority:
+            case TurnFrameStage.ActionPriority:
+            case TurnFrameStage.DiscardPriority:
+                YieldTurnPriorityDecision(working, frame);
+                return;
+            case TurnFrameStage.FormalTurnBegin:
+                BeginFormalTurn(working, frame);
+                return;
+            case TurnFrameStage.MandatoryDraw:
+                PerformMandatoryDraw(working, frame);
+                return;
+            case TurnFrameStage.AwaitingAction:
+                if (GetPlayer(working, frame.ActiveSide).Clicks <= 0)
+                {
+                    working.ResolutionStack[^1] = new TurnFrame(
+                        frame.Version,
+                        frame.BehaviorId,
+                        frame.ActiveSide,
+                        frame.TurnNumber,
+                        TurnFrameStage.ActionPhaseEnd,
+                        forcedActionEnd: true);
+                }
+                else
+                {
+                    YieldTurnActionDecision(working, frame);
+                }
+
+                return;
+            case TurnFrameStage.ActionPhaseEnd:
+                if (GetPlayer(working, frame.ActiveSide).Clicks > 0 && !frame.ForcedActionEnd)
+                {
+                    throw new ResolutionFailureException("The action phase cannot end while clicks remain without a direct effect.");
+                }
+
+                EndTurnActionPhase(working, frame);
+                return;
+            case TurnFrameStage.DiscardSelection:
+                BeginTurnDiscard(working, frame);
+                return;
+            case TurnFrameStage.LoseLeftoverClicks:
+                LoseTurnClicks(working, frame);
+                return;
+            case TurnFrameStage.FormalTurnEnd:
+                EndFormalTurn(working, frame);
+                return;
+            default:
+                throw new ResolutionFailureException($"Unsupported CR turn stage '{frame.Stage}'.");
+        }
+    }
+
+    private static void AllotTurnClicks(WorkingState working, TurnFrame frame)
+    {
+        PlayerState player = GetPlayer(working, frame.ActiveSide);
+        int allotted = frame.ActiveSide == PlayerSide.Corp ? 3 : 4;
+        ReplacePlayer(working, new PlayerState(
+            player.Id,
+            player.Side,
+            player.Credits,
+            allotted,
+            player.AgendaPoints));
+
+        TurnHistoryState history = (working.Turn.History ?? new TurnHistoryState())
+            .Start(frame.ActiveSide, frame.TurnNumber, allotted);
+        TurnStep step = frame.ActiveSide == PlayerSide.Corp ? TurnStep.CorpDraw : TurnStep.RunnerAction;
+        ReplaceTurn(working, frame.ActiveSide, TurnPhaseFor(frame.ActiveSide), frame.TurnNumber, step, history);
+        Emit(working, EngineEventKinds.TurnClicksAllotted, new TurnClicksAllottedEventPayload(
+            frame.ActiveSide,
+            frame.TurnNumber,
+            allotted));
+
+        working.ResolutionStack[^1] = new TurnFrame(
+            frame.Version,
+            frame.BehaviorId,
+            frame.ActiveSide,
+            frame.TurnNumber,
+            TurnFrameStage.BeforeTurnPriority,
+            TurnWindow(frame.ActiveSide),
+            frame.ActiveSide,
+            0,
+            frame.ForcedActionEnd);
+    }
+
+    private static void YieldTurnPriorityDecision(WorkingState working, TurnFrame frame)
+    {
+        if (frame.PriorityWindow is null || frame.PriorityHolder is null)
+        {
+            throw new ResolutionFailureException("A CR turn priority stage requires an explicit window and holder.");
+        }
+
+        if (frame.ConsecutivePasses == 0)
+        {
+            Emit(working, EngineEventKinds.TurnTimingWindowOpened, new TurnTimingWindowOpenedEventPayload(
+                frame.ActiveSide,
+                frame.TurnNumber,
+                frame.Stage,
+                frame.PriorityWindow.Value,
+                frame.PriorityHolder.Value));
+        }
+
+        PlayerState holder = GetPlayer(working, frame.PriorityHolder.Value);
+        DecisionId decisionId = working.Allocator.NextDecisionId();
+        ActionId passId = working.Allocator.NextActionId();
+        working.DecisionRevision = NextRevision(working.DecisionRevision);
+        working.PendingDecision = new PendingDecision(
+            decisionId,
+            working.DecisionRevision,
+            holder.Id,
+            DecisionKind.TurnTiming,
+            $"{frame.PriorityWindow.Value} window ({frame.Stage})",
+            [new LegalAction(
+                passId,
+                ActionKind.PassPriority,
+                "Pass",
+                new NoActionParameters())]);
+    }
+
+    private static void ConsumeTurnPriorityAction(WorkingState working)
+    {
+        if (working.ResolutionStack.Count == 0
+            || working.ResolutionStack[^1] is not TurnFrame frame
+            || frame.Stage is not (TurnFrameStage.BeforeTurnPriority
+                or TurnFrameStage.ActionPriority
+                or TurnFrameStage.DiscardPriority)
+            || frame.PriorityHolder is null
+            || frame.PriorityWindow is null)
+        {
+            throw new ResolutionFailureException("The submitted pass does not match an active CR turn priority window.");
+        }
+
+        PlayerSide passedBy = frame.PriorityHolder.Value;
+        PlayerSide other = passedBy == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp;
+        int nextPasses = frame.ConsecutivePasses + 1;
+        Emit(working, EngineEventKinds.TurnPriorityPassed, new TurnPriorityPassedEventPayload(
+            frame.ActiveSide,
+            frame.TurnNumber,
+            frame.PriorityWindow.Value,
+            passedBy,
+            other,
+            nextPasses));
+
+        if (frame.ConsecutivePasses == 0)
+        {
+            working.ResolutionStack[^1] = new TurnFrame(
+                frame.Version,
+                frame.BehaviorId,
+                frame.ActiveSide,
+                frame.TurnNumber,
+                frame.Stage,
+                frame.PriorityWindow,
+                other,
+                nextPasses,
+                frame.ForcedActionEnd);
+            return;
+        }
+
+        TurnFrameStage nextStage = frame.Stage switch
+        {
+            TurnFrameStage.BeforeTurnPriority => TurnFrameStage.FormalTurnBegin,
+            TurnFrameStage.ActionPriority => GetPlayer(working, frame.ActiveSide).Clicks > 0
+                ? TurnFrameStage.AwaitingAction
+                : TurnFrameStage.ActionPhaseEnd,
+            TurnFrameStage.DiscardPriority => TurnFrameStage.LoseLeftoverClicks,
+            _ => throw new ResolutionFailureException("Unsupported turn priority stage."),
+        };
+        working.ResolutionStack[^1] = new TurnFrame(
+            frame.Version,
+            frame.BehaviorId,
+            frame.ActiveSide,
+            frame.TurnNumber,
+            nextStage,
+            forcedActionEnd: nextStage == TurnFrameStage.ActionPhaseEnd);
+    }
+
+    private static void BeginFormalTurn(WorkingState working, TurnFrame frame)
+    {
+        TurnHistoryState history = (working.Turn.History ?? new TurnHistoryState())
+            .MarkTurnBegan(frame.ActiveSide);
+        TurnStep step = frame.ActiveSide == PlayerSide.Corp ? TurnStep.CorpDraw : TurnStep.RunnerAction;
+        ReplaceTurn(working, frame.ActiveSide, TurnPhaseFor(frame.ActiveSide), frame.TurnNumber, step, history);
+        PlayerState player = GetPlayer(working, frame.ActiveSide);
+        Emit(working, EngineEventKinds.TurnStarted, new TurnStartedEventPayload(
+            frame.ActiveSide,
+            frame.TurnNumber,
+            player.Clicks));
+        Emit(working, EngineEventKinds.TurnPhaseStarted, new TurnPhaseStartedEventPayload(
+            frame.ActiveSide,
+            frame.TurnNumber,
+            step));
+
+        if (frame.ActiveSide == PlayerSide.Corp)
+        {
+            working.ResolutionStack[^1] = new TurnFrame(
+                frame.Version,
+                frame.BehaviorId,
+                frame.ActiveSide,
+                frame.TurnNumber,
+                TurnFrameStage.MandatoryDraw);
+        }
+        else
+        {
+            working.ResolutionStack[^1] = new TurnFrame(
+                frame.Version,
+                frame.BehaviorId,
+                frame.ActiveSide,
+                frame.TurnNumber,
+                TurnFrameStage.ActionPriority,
+                TurnWindow(frame.ActiveSide),
+                frame.ActiveSide);
+        }
+
+        QueueTurnBoundaryOccurrence(working, frame, OccurrenceKind.TurnBegin);
+    }
+
+    private static void PerformMandatoryDraw(WorkingState working, TurnFrame frame)
+    {
+        if (frame.ActiveSide != PlayerSide.Corp)
+        {
+            throw new ResolutionFailureException("Only the Corp has a mandatory turn draw.");
+        }
+
+        if (!TryDrawCard(working, PlayerSide.Corp))
+        {
+            CompleteTurnGame(working, PlayerSide.Runner, GameWinReason.DeckOut);
+            return;
+        }
+
+        TurnHistoryState history = (working.Turn.History ?? new TurnHistoryState())
+            .MarkMandatoryDraw(PlayerSide.Corp);
+        ReplaceTurn(working, PlayerSide.Corp, TurnPhase.Corp, frame.TurnNumber, TurnStep.CorpAction, history);
+        Emit(working, EngineEventKinds.TurnPhaseEnded, new TurnPhaseEndedEventPayload(
+            PlayerSide.Corp,
+            frame.TurnNumber,
+            TurnStep.CorpDraw));
+        working.ResolutionStack[^1] = new TurnFrame(
+            frame.Version,
+            frame.BehaviorId,
+            frame.ActiveSide,
+            frame.TurnNumber,
+            TurnFrameStage.ActionPriority,
+            TurnWindow(frame.ActiveSide),
+            frame.ActiveSide);
+    }
+
+    private static void YieldTurnActionDecision(WorkingState working, TurnFrame frame)
+    {
+        PlayerState player = GetPlayer(working, frame.ActiveSide);
+        ZoneKind deckKind = frame.ActiveSide == PlayerSide.Corp ? ZoneKind.CorpDeck : ZoneKind.RunnerStack;
+        ZoneState? deck = working.Zones.FirstOrDefault(zone => zone.Kind == deckKind && zone.ServerId is null);
+        var actions = new List<LegalAction>
+        {
+            new(
+                working.Allocator.NextActionId(),
+                ActionKind.GainCredit,
+                "Gain 1 credit",
+                new NoActionParameters()),
+        };
+        if (deck is not null && deck.CardIds.Count > 0)
+        {
+            actions.Add(new LegalAction(
+                working.Allocator.NextActionId(),
+                ActionKind.DrawCard,
+                "Draw a card",
+                new NoActionParameters()));
+        }
+
+        // Real installs are materialized from the injected printed metadata
+        // catalog only while the active side still has a click. The helper
+        // exposes the bounded Runner and Corp-root streams; unsupported card
+        // classes/destinations fail closed in the shared planner.
+        if (player.Clicks > 0)
+        {
+            AddInstallActions(working, frame.ActiveSide, actions);
+        }
+
+        working.DecisionRevision = NextRevision(working.DecisionRevision);
+        working.PendingDecision = new PendingDecision(
+            working.Allocator.NextDecisionId(),
+            working.DecisionRevision,
+            player.Id,
+            DecisionKind.TurnAction,
+            frame.ActiveSide == PlayerSide.Corp ? "Choose a Corp action" : "Choose a Runner action",
+            actions);
+    }
+
+    private static void ConsumeTurnAction(WorkingState working, ActionKind kind)
+    {
+        if (working.ResolutionStack.Count == 0
+            || working.ResolutionStack[^1] is not TurnFrame frame
+            || frame.Stage != TurnFrameStage.AwaitingAction)
+        {
+            throw new ResolutionFailureException("The submitted action does not match the active CR turn action stage.");
+        }
+
+        PlayerState player = GetPlayer(working, frame.ActiveSide);
+        RequireClicks(player, kind);
+        switch (kind)
+        {
+            case ActionKind.GainCredit:
+                ApplyCreditDelta(working, player.Id, 1);
+                SpendClick(working, player.Id);
+                break;
+            case ActionKind.DrawCard:
+                SpendClick(working, player.Id);
+                if (!TryDrawCard(working, frame.ActiveSide))
+                {
+                    if (frame.ActiveSide == PlayerSide.Corp)
+                    {
+                        CompleteTurnGame(working, PlayerSide.Runner, GameWinReason.DeckOut);
+                        return;
+                    }
+
+                    throw new ResolutionFailureException("The Runner cannot draw from an empty stack.");
+                }
+
+                break;
+            case ActionKind.EndTurn:
+                throw new ResolutionFailureException("EndTurn is not legal while clicks remain.");
+            default:
+                throw new ResolutionFailureException($"Action kind '{kind}' is not a CR 5 turn-shell action.");
+        }
+
+        working.ResolutionStack[^1] = new TurnFrame(
+            frame.Version,
+            frame.BehaviorId,
+            frame.ActiveSide,
+            frame.TurnNumber,
+            TurnFrameStage.ActionPriority,
+            TurnWindow(frame.ActiveSide),
+            frame.ActiveSide);
+    }
+
+    private static void EndTurnActionPhase(WorkingState working, TurnFrame frame)
+    {
+        TurnHistoryState history = (working.Turn.History ?? new TurnHistoryState())
+            .MarkActionPhaseEnded(frame.ActiveSide);
+        TurnStep actionStep = frame.ActiveSide == PlayerSide.Corp ? TurnStep.CorpAction : TurnStep.RunnerAction;
+        TurnStep discardStep = frame.ActiveSide == PlayerSide.Corp ? TurnStep.CorpDiscard : TurnStep.RunnerDiscard;
+        ReplaceTurn(working, frame.ActiveSide, TurnPhaseFor(frame.ActiveSide), frame.TurnNumber, discardStep, history);
+        Emit(working, EngineEventKinds.TurnPhaseEnded, new TurnPhaseEndedEventPayload(
+            frame.ActiveSide,
+            frame.TurnNumber,
+            actionStep));
+        Emit(working, EngineEventKinds.TurnPhaseStarted, new TurnPhaseStartedEventPayload(
+            frame.ActiveSide,
+            frame.TurnNumber,
+            discardStep));
+        working.ResolutionStack[^1] = new TurnFrame(
+            frame.Version,
+            frame.BehaviorId,
+            frame.ActiveSide,
+            frame.TurnNumber,
+            TurnFrameStage.DiscardSelection);
+    }
+
+    private static void BeginTurnDiscard(WorkingState working, TurnFrame frame)
+    {
+        PlayerState player = GetPlayer(working, frame.ActiveSide);
+        ZoneKind handKind = frame.ActiveSide == PlayerSide.Corp ? ZoneKind.CorpHand : ZoneKind.RunnerGrip;
+        ZoneState hand = GetZone(working, handKind);
+        int maximum = MaximumHandSize(working, frame.ActiveSide);
+        int required = hand.CardIds.Count - maximum;
+        if (required <= 0)
+        {
+            working.ResolutionStack[^1] = new TurnFrame(
+                frame.Version,
+                frame.BehaviorId,
+                frame.ActiveSide,
+                frame.TurnNumber,
+                TurnFrameStage.DiscardPriority,
+                TurnWindow(frame.ActiveSide),
+                frame.ActiveSide);
+            return;
+        }
+
+        working.ResolutionStack.Add(new TurnDiscardFrame(player.Id, required, hand.CardIds));
+    }
+
+    private static void StepTurnDiscard(WorkingState working, TurnDiscardFrame frame)
+    {
+        if (frame.Selected.Count >= frame.RequiredCount)
+        {
+            FinishTurnDiscard(working, frame);
+            return;
+        }
+
+        PlayerState owner = working.Players.SingleOrDefault(player => player.Id == frame.Owner)
+            ?? throw new ResolutionFailureException("The turn discard owner does not exist.");
+        var actions = new List<LegalAction>();
+        foreach (CardInstanceId cardId in frame.Candidates.Where(candidate => !frame.Selected.Contains(candidate)))
+        {
+            actions.Add(new LegalAction(
+                working.Allocator.NextActionId(),
+                ActionKind.ChooseCard,
+                "Discard card",
+                new CardChoiceParameters(cardId)));
+        }
+
+        if (actions.Count == 0)
+        {
+            throw new ResolutionFailureException("The turn discard frame has no remaining card choices.");
+        }
+
+        working.DecisionRevision = NextRevision(working.DecisionRevision);
+        working.PendingDecision = new PendingDecision(
+            working.Allocator.NextDecisionId(),
+            working.DecisionRevision,
+            owner.Id,
+            DecisionKind.TurnDiscard,
+            $"Choose {frame.RequiredCount - frame.Selected.Count} card(s) to discard",
+            actions);
+    }
+
+    private static void ConsumeTurnDiscardAction(WorkingState working, CardInstanceId cardId)
+    {
+        if (working.ResolutionStack.Count == 0
+            || working.ResolutionStack[^1] is not TurnDiscardFrame frame
+            || frame.Selected.Contains(cardId)
+            || !frame.Candidates.Contains(cardId))
+        {
+            throw new ResolutionFailureException("The submitted discard is not a remaining materialized candidate.");
+        }
+
+        TurnDiscardFrame selected = frame.Select(cardId);
+        if (selected.Selected.Count < selected.RequiredCount)
+        {
+            working.ResolutionStack[^1] = selected;
+            return;
+        }
+
+        FinishTurnDiscard(working, selected);
+    }
+
+    private static void FinishTurnDiscard(WorkingState working, TurnDiscardFrame frame)
+    {
+        PlayerSide side = GetPlayer(working, frame.Owner).Side;
+        ZoneKind handKind = side == PlayerSide.Corp ? ZoneKind.CorpHand : ZoneKind.RunnerGrip;
+        ZoneState hand = GetZone(working, handKind);
+        ZoneKind discardKind = side == PlayerSide.Corp ? ZoneKind.CorpDiscard : ZoneKind.RunnerHeap;
+        ZoneState discard = GetZone(working, discardKind);
+        int maximum = MaximumHandSize(working, side);
+        foreach (CardInstanceId cardId in frame.Candidates.Where(candidate => frame.Selected.Contains(candidate)))
+        {
+            CardInstanceState card = GetCard(working, cardId);
+            MoveCard(working, card, hand, discard);
+            hand = GetZone(working, handKind);
+            discard = GetZone(working, discardKind);
+            Emit(working, EngineEventKinds.TurnCardDiscarded, new TurnCardDiscardedEventPayload(
+                side,
+                working.Turn.TurnNumber,
+                cardId,
+                hand.CardIds.Count,
+                maximum));
+        }
+
+        working.ResolutionStack.RemoveAt(working.ResolutionStack.Count - 1);
+        if (working.ResolutionStack.Count == 0
+            || working.ResolutionStack[^1] is not TurnFrame parent
+            || parent.Stage != TurnFrameStage.DiscardSelection)
+        {
+            throw new ResolutionFailureException("Turn discard frame has no matching discard-selection parent.");
+        }
+
+        working.ResolutionStack[^1] = new TurnFrame(
+            parent.Version,
+            parent.BehaviorId,
+            parent.ActiveSide,
+            parent.TurnNumber,
+            TurnFrameStage.DiscardPriority,
+            TurnWindow(parent.ActiveSide),
+            parent.ActiveSide);
+    }
+
+    private static void LoseTurnClicks(WorkingState working, TurnFrame frame)
+    {
+        PlayerState player = GetPlayer(working, frame.ActiveSide);
+        int clicksLost = player.Clicks;
+        if (clicksLost > 0)
+        {
+            ReplacePlayer(working, new PlayerState(
+                player.Id,
+                player.Side,
+                player.Credits,
+                0,
+                player.AgendaPoints));
+        }
+
+        Emit(working, EngineEventKinds.TurnClicksLost, new TurnClicksLostEventPayload(
+            frame.ActiveSide,
+            frame.TurnNumber,
+            clicksLost));
+        TurnHistoryState history = (working.Turn.History ?? new TurnHistoryState())
+            .MarkDiscardPhaseEnded(frame.ActiveSide, clicksLost);
+        TurnStep discardStep = frame.ActiveSide == PlayerSide.Corp ? TurnStep.CorpDiscard : TurnStep.RunnerDiscard;
+        ReplaceTurn(working, frame.ActiveSide, TurnPhaseFor(frame.ActiveSide), frame.TurnNumber, discardStep, history);
+        Emit(working, EngineEventKinds.TurnPhaseEnded, new TurnPhaseEndedEventPayload(
+            frame.ActiveSide,
+            frame.TurnNumber,
+            discardStep));
+        working.ResolutionStack[^1] = new TurnFrame(
+            frame.Version,
+            frame.BehaviorId,
+            frame.ActiveSide,
+            frame.TurnNumber,
+            TurnFrameStage.FormalTurnEnd);
+    }
+
+    private static void EndFormalTurn(WorkingState working, TurnFrame frame)
+    {
+        Emit(working, EngineEventKinds.TurnEnded, new TurnEndedEventPayload(frame.ActiveSide, frame.TurnNumber));
+        PlayerSide nextSide = frame.ActiveSide == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp;
+        int nextTurnNumber = frame.ActiveSide == PlayerSide.Runner
+            ? checked(frame.TurnNumber + 1)
+            : frame.TurnNumber;
+        TurnStep nextStep = nextSide == PlayerSide.Corp ? TurnStep.CorpDraw : TurnStep.RunnerAction;
+        ReplaceTurn(
+            working,
+            nextSide,
+            TurnPhaseFor(nextSide),
+            nextTurnNumber,
+            nextStep,
+            working.Turn.History ?? new TurnHistoryState());
+        working.ResolutionStack[^1] = new TurnFrame(
+            frame.Version,
+            frame.BehaviorId,
+            nextSide,
+            nextTurnNumber,
+            TurnFrameStage.GainAllottedClicks);
+        QueueTurnBoundaryOccurrence(working, frame, OccurrenceKind.TurnEnd);
+    }
+
+    /// <summary>
+    /// Routes formal turn boundaries through the same serializable occurrence
+    /// checkpoint path as card effects.  The continuation turn frame is placed
+    /// below the no-op effect frame, so a trigger decision can pause and resume
+    /// without skipping the mandatory draw or advancing into the next turn.
+    /// </summary>
+    private static void QueueTurnBoundaryOccurrence(
+        WorkingState working,
+        TurnFrame frame,
+        OccurrenceKind kind)
+    {
+        PlayerState controller = GetPlayer(working, frame.ActiveSide);
+        working.ResolutionStack.Add(new EffectResolutionFrame(
+            controller.Id,
+            new CostBundle(),
+            new EffectBundle(new TurnBoundaryEffect(kind, controller.Id, frame.TurnNumber))));
+    }
+
+    private static void CompleteTurnGame(WorkingState working, PlayerSide winner, GameWinReason reason)
+    {
+        working.PendingDecision = null;
+        working.ResolutionStack.Clear();
+        foreach (PlayerState player in working.Players.ToArray())
+        {
+            ReplacePlayer(working, new PlayerState(player.Id, player.Side, player.Credits, 0, player.AgendaPoints));
+        }
+
+        working.Outcome = new GameOutcome(GameOutcomeKind.Won, winner, reason);
+        working.Turn = new TurnState(
+            winner,
+            TurnPhase.GameOver,
+            working.Turn.TurnNumber,
+            TurnStep.None,
+            working.Turn.History);
+        Emit(working, EngineEventKinds.GameWon, new GameWonEventPayload(winner, reason));
+    }
+
+    private static int MaximumHandSize(WorkingState working, PlayerSide side)
+        => EffectiveMaximumHandSize(working, side);
+
+    private static TurnPriorityWindowKind TurnWindow(PlayerSide side) =>
+        side == PlayerSide.Corp ? TurnPriorityWindowKind.PaidRezAndScore : TurnPriorityWindowKind.PaidAndRez;
+
+    private static TurnPhase TurnPhaseFor(PlayerSide side) =>
+        side == PlayerSide.Corp ? TurnPhase.Corp : TurnPhase.Runner;
+
+    private static void ReplaceTurn(
+        WorkingState working,
+        PlayerSide side,
+        TurnPhase phase,
+        int turnNumber,
+        TurnStep step,
+        TurnHistoryState history) =>
+        working.Turn = new TurnState(side, phase, turnNumber, step, history);
 }

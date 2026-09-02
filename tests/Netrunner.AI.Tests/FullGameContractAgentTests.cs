@@ -1,0 +1,464 @@
+using System.Text.Json;
+using Netrunner.Core;
+using Xunit;
+
+namespace Netrunner.AI.Tests;
+
+public sealed class FullGameContractAgentTests
+{
+    [Fact]
+    public void PolicyIsVersionedTypedAndDefensivelyCopied()
+    {
+        ActionKind[] turnOrder = [ActionKind.DrawCard, ActionKind.GainCredit];
+        ActionKind[] runOrder = [ActionKind.JackOut, ActionKind.ContinueRun, ActionKind.PassPriority];
+        FullGameContractPolicy policy = new(PlayerSide.Runner, turnActionOrder: turnOrder, runActionOrder: runOrder);
+
+        turnOrder[0] = ActionKind.EndTurn;
+        runOrder[0] = ActionKind.EndTurn;
+
+        Assert.Equal(FullGameContractAgentVersion.SchemaVersion, policy.SchemaVersion);
+        Assert.Equal(FullGameContractAgentVersion.PolicyVersion, policy.PolicyVersion);
+        Assert.Equal(PlayerSide.Runner, policy.ControlledSide);
+        Assert.Equal(ActionKind.DrawCard, policy.TurnActionOrder[0]);
+        Assert.Equal(ActionKind.JackOut, policy.RunActionOrder[0]);
+
+        FullGameContractAgent agent = new(policy);
+        Assert.Equal(FullGameContractAgentVersion.AgentVersion, agent.AgentVersion);
+        Assert.Same(policy, agent.Policy);
+    }
+
+    [Fact]
+    public async Task TurnActionDispatchUsesTypedGainAndDrawPriorityAndNeverEndsTurn()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Corp);
+        LegalAction gain = Action("gain", ActionKind.GainCredit, new NoActionParameters());
+        LegalAction draw = Action("draw", ActionKind.DrawCard, new NoActionParameters());
+        LegalAction end = Action("end", ActionKind.EndTurn, new NoActionParameters());
+
+        ActionId selected = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Corp, DecisionKind.TurnAction, end, draw, gain));
+
+        Assert.Equal(gain.Id, selected);
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await agent.ChooseActionAsync(ObservationFor(PlayerSide.Corp, DecisionKind.TurnAction, end)));
+
+        Assert.Equal(
+            draw.Id,
+            await agent.ChooseActionAsync(ObservationFor(PlayerSide.Corp, DecisionKind.TurnAction, draw)));
+    }
+
+    [Fact]
+    public async Task SemanticTieBreakingIsIndependentOfLegalActionOrder()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Runner);
+        LegalAction high = Action(
+            "discard-high",
+            ActionKind.ChooseCard,
+            new CardChoiceParameters(new CardInstanceId("card:20")));
+        LegalAction low = Action(
+            "discard-low",
+            ActionKind.ChooseCard,
+            new CardChoiceParameters(new CardInstanceId("card:10")));
+
+        ActionId first = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.TurnDiscard, high, low));
+        ActionId replay = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.TurnDiscard, low, high));
+
+        Assert.Equal(low.Id, first);
+        Assert.Equal(first, replay);
+    }
+
+    [Fact]
+    public async Task StableActionIdBreaksIdenticalTypedSemanticKeys()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Corp);
+        LegalAction laterId = Action("z", ActionKind.GainCredit, new NoActionParameters());
+        LegalAction earlierId = Action("a", ActionKind.GainCredit, new NoActionParameters());
+
+        ActionId first = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Corp, DecisionKind.TurnAction, laterId, earlierId));
+        ActionId replay = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Corp, DecisionKind.TurnAction, earlierId, laterId));
+
+        Assert.Equal(earlierId.Id, first);
+        Assert.Equal(first, replay);
+    }
+
+    [Fact]
+    public async Task BehaviorChoiceDispatchUsesOptionKeysAndStableTieBreaking()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Corp);
+        LegalAction draw = Action(
+            "behavior-draw",
+            ActionKind.ChooseBehavior,
+            new BehaviorChoiceParameters("planogram", "draw"));
+        LegalAction gain = Action(
+            "behavior-gain",
+            ActionKind.ChooseBehavior,
+            new BehaviorChoiceParameters("planogram", "gain"));
+
+        ActionId selected = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Corp, DecisionKind.BehaviorChoice, draw, gain));
+        Assert.Equal(gain.Id, selected);
+
+        LegalAction duplicate = Action(
+            "behavior-gain-duplicate",
+            ActionKind.ChooseBehavior,
+            new BehaviorChoiceParameters("planogram", "gain"));
+        Assert.Equal(
+            gain.Id,
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Corp, DecisionKind.BehaviorChoice, duplicate, gain)));
+
+        LegalAction targetHigh = Action(
+            "behavior-target-high",
+            ActionKind.ChooseBehavior,
+            new BehaviorChoiceParameters(
+                "target",
+                [new CardInstanceId("card:20")]));
+        LegalAction targetLow = Action(
+            "behavior-target-low",
+            ActionKind.ChooseBehavior,
+            new BehaviorChoiceParameters(
+                "target",
+                [new CardInstanceId("card:10")]));
+        Assert.Equal(
+            targetLow.Id,
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Corp, DecisionKind.BehaviorChoice, targetHigh, targetLow)));
+    }
+
+    [Fact]
+    public async Task ActionDescriptionsAreNotPolicyInput()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Corp);
+        LegalAction gain = Action(
+            "gain",
+            ActionKind.GainCredit,
+            new NoActionParameters(),
+            "draw three cards now");
+        LegalAction draw = Action(
+            "draw",
+            ActionKind.DrawCard,
+            new NoActionParameters(),
+            "gain nine credits instead");
+
+        ActionId first = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Corp, DecisionKind.TurnAction, draw, gain));
+
+        LegalAction changedGain = Action(
+            "gain",
+            ActionKind.GainCredit,
+            new NoActionParameters(),
+            "this description now says draw");
+        LegalAction changedDraw = Action(
+            "draw",
+            ActionKind.DrawCard,
+            new NoActionParameters(),
+            "this description now says gain");
+        ActionId replay = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Corp, DecisionKind.TurnAction, changedGain, changedDraw));
+
+        Assert.Equal(gain.Id, first);
+        Assert.Equal(first, replay);
+    }
+
+    [Fact]
+    public async Task SelectingAnExistingActionIdIsNeutralAcrossTypedSerialization()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Runner);
+        LegalAction high = Action(
+            "high",
+            ActionKind.ChooseCard,
+            new CardChoiceParameters(new CardInstanceId("card:20")));
+        LegalAction low = Action(
+            "low",
+            ActionKind.ChooseCard,
+            new CardChoiceParameters(new CardInstanceId("card:10")));
+
+        ActionId before = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.TurnDiscard, high, low));
+        string payload = JsonSerializer.Serialize(new[] { high, low });
+        LegalAction[] restored = JsonSerializer.Deserialize<LegalAction[]>(payload)
+            ?? throw new InvalidOperationException("The serialized legal-action payload was empty.");
+        ActionId after = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.TurnDiscard, restored));
+
+        Assert.Equal(before, after);
+        Assert.Contains(restored, action => action.Id == after);
+    }
+
+    [Fact]
+    public async Task RunWindowDispatchCoversEveryCurrentlyMaterializedRunAction()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Runner);
+
+        Assert.Equal(
+            "issued:pass",
+            (await agent.ChooseActionAsync(ObservationFor(
+                PlayerSide.Runner,
+                DecisionKind.RunTiming,
+                Action("pass", ActionKind.PassPriority, new NoActionParameters())))).Value);
+        Assert.Equal(
+            "issued:rez",
+            (await agent.ChooseActionAsync(ObservationFor(
+                PlayerSide.Runner,
+                DecisionKind.RunTiming,
+                Action("rez", ActionKind.RezIce, new RunIceParameters(new CardInstanceId("ice:1")))))).Value);
+        Assert.Equal(
+            "issued:break",
+            (await agent.ChooseActionAsync(ObservationFor(
+                PlayerSide.Runner,
+                DecisionKind.RunTiming,
+                Action(
+                    "break",
+                    ActionKind.BreakSubroutines,
+                    new RunBreakParameters(new CardInstanceId("breaker:1"), 1))))).Value);
+        Assert.Equal(
+            "issued:pump",
+            (await agent.ChooseActionAsync(ObservationFor(
+                PlayerSide.Runner,
+                DecisionKind.RunTiming,
+                Action(
+                    "pump",
+                    ActionKind.PumpBreaker,
+                    new RunBreakerParameters(new CardInstanceId("breaker:1")))))).Value);
+        Assert.Equal(
+            "issued:breach",
+            (await agent.ChooseActionAsync(ObservationFor(
+                PlayerSide.Runner,
+                DecisionKind.RunTiming,
+                Action(
+                    "breach",
+                    ActionKind.ChooseBreachCandidate,
+                    new BreachCandidateParameters(new CardInstanceId("card:1")))))).Value);
+        Assert.Equal(
+            "issued:trash",
+            (await agent.ChooseActionAsync(ObservationFor(
+                PlayerSide.Runner,
+                DecisionKind.RunTiming,
+                Action(
+                    "trash",
+                    ActionKind.TrashAccessedCard,
+                    new RunCardPaymentParameters(new CardInstanceId("card:1")))))).Value);
+        Assert.Equal(
+            "issued:no-access",
+            (await agent.ChooseActionAsync(ObservationFor(
+                PlayerSide.Runner,
+                DecisionKind.RunTiming,
+                Action("no-access", ActionKind.NoAccessAction, new NoActionParameters())))).Value);
+        Assert.Equal(
+            "issued:continue",
+            (await agent.ChooseActionAsync(ObservationFor(
+                PlayerSide.Runner,
+                DecisionKind.RunTiming,
+                Action("continue", ActionKind.ContinueRun, new NoActionParameters())))).Value);
+        Assert.Equal(
+            "issued:jack-out",
+            (await agent.ChooseActionAsync(ObservationFor(
+                PlayerSide.Runner,
+                DecisionKind.RunTiming,
+                Action("jack-out", ActionKind.JackOut, new NoActionParameters())))).Value);
+
+        LegalAction lowerBreaker = Action(
+            "break-low",
+            ActionKind.BreakSubroutines,
+            new RunBreakParameters(new CardInstanceId("breaker:1"), 1));
+        LegalAction higherBreaker = Action(
+            "break-high",
+            ActionKind.BreakSubroutines,
+            new RunBreakParameters(new CardInstanceId("breaker:2"), 1));
+        Assert.Equal(
+            lowerBreaker.Id,
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Runner, DecisionKind.RunTiming, higherBreaker, lowerBreaker)));
+    }
+
+    [Fact]
+    public async Task TurnTimingUsesPassAndDoesNotSelectAnEndTurnOffer()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Corp);
+        LegalAction pass = Action("pass", ActionKind.PassPriority, new NoActionParameters());
+        LegalAction end = Action("end", ActionKind.EndTurn, new NoActionParameters());
+
+        Assert.Equal(
+            pass.Id,
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Corp, DecisionKind.TurnTiming, end, pass)));
+    }
+
+    [Fact]
+    public async Task OwnerAndDecisionMetadataAreCheckedBeforeDispatch()
+    {
+        FullGameContractAgent corpAgent = new(PlayerSide.Corp);
+        LegalAction gain = Action("gain", ActionKind.GainCredit, new NoActionParameters());
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await corpAgent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Runner, DecisionKind.TurnAction, gain)));
+
+        Observation mismatchedOwner = ObservationFor(
+            PlayerSide.Corp,
+            DecisionKind.TurnAction,
+            [gain],
+            ownerSide: PlayerSide.Runner);
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await corpAgent.ChooseActionAsync(mismatchedOwner));
+
+        Observation mismatchedDecisionId = ObservationFor(
+            PlayerSide.Corp,
+            DecisionKind.TurnAction,
+            [gain],
+            ownerSide: PlayerSide.Corp,
+            decisionId: "decision:other",
+            typedDecisionId: "decision:turn-action");
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await corpAgent.ChooseActionAsync(mismatchedDecisionId));
+    }
+
+    [Fact]
+    public async Task UnsupportedOrEmptyDecisionsFailClosed()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Corp);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await agent.ChooseActionAsync(ObservationFor(PlayerSide.Corp, DecisionKind.TurnAction)));
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await agent.ChooseActionAsync(
+                ObservationFor(
+                    PlayerSide.Corp,
+                    DecisionKind.TurnAction,
+                    Action("legacy", ActionKind.Legacy, new LegacyActionParameters("draw")))));
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await agent.ChooseActionAsync(
+                ObservationFor(
+                    PlayerSide.Corp,
+                    DecisionKind.TriggerChoice,
+                    Action("trigger", ActionKind.UseTrigger, new TriggerChoiceParameters(new TriggerId("trigger:1"))))));
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await agent.ChooseActionAsync(
+                ObservationFor(
+                    PlayerSide.Corp,
+                    DecisionKind.TurnAction,
+                    Action("future-install", ActionKind.InstallCard, new CardChoiceParameters(new CardInstanceId("card:1"))))));
+
+        Observation withoutDecision = new(
+            PlayerSide.Corp,
+            "decision:turn-action",
+            [Action("gain", ActionKind.GainCredit, new NoActionParameters())],
+            new ThrowingReadOnlyDictionary(),
+            new ThrowingReadOnlyDictionary());
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await agent.ChooseActionAsync(withoutDecision));
+    }
+
+    [Fact]
+    public async Task AgentReadsOnlyTypedObservationSurfaceAndReturnsIssuedActionId()
+    {
+        LegalAction issued = Action("engine-issued-id", ActionKind.GainCredit, new NoActionParameters());
+        Observation observation = ObservationFor(PlayerSide.Corp, DecisionKind.TurnAction, issued);
+
+        ActionId selected = await new FullGameContractAgent(PlayerSide.Corp).ChooseActionAsync(observation);
+
+        Assert.Equal(issued.Id, selected);
+        Assert.DoesNotContain(
+            typeof(FullGameContractAgent).GetMethods()
+                .SelectMany(method => method.GetParameters()),
+            parameter => parameter.ParameterType == typeof(GameState));
+    }
+
+    [Fact]
+    public async Task CancellationIsHonoredBeforeSelection()
+    {
+        using CancellationTokenSource canceled = new();
+        canceled.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+            await new FullGameContractAgent(PlayerSide.Corp).ChooseActionAsync(
+                ObservationFor(
+                    PlayerSide.Corp,
+                    DecisionKind.TurnAction,
+                    Action("gain", ActionKind.GainCredit, new NoActionParameters())),
+                canceled.Token));
+    }
+
+    [Fact]
+    public void PolicyRejectsEndTurnAndDuplicateOrUnsupportedPriorityEntries()
+    {
+        Assert.Throws<ArgumentException>(() => new FullGameContractPolicy(
+            PlayerSide.Corp,
+            runActionOrder: [ActionKind.EndTurn]));
+        Assert.Throws<ArgumentException>(() => new FullGameContractPolicy(
+            PlayerSide.Corp,
+            turnActionOrder: [ActionKind.GainCredit, ActionKind.GainCredit]));
+        Assert.Throws<ArgumentException>(() => new FullGameContractPolicy(
+            PlayerSide.Corp,
+            runActionOrder: [ActionKind.UseTrigger]));
+    }
+
+    private static Observation ObservationFor(
+        PlayerSide viewer,
+        DecisionKind kind,
+        params LegalAction[] actions) =>
+        ObservationFor(viewer, kind, actions, ownerSide: viewer, decisionId: "decision:" + kind);
+
+    private static Observation ObservationFor(
+        PlayerSide viewer,
+        DecisionKind kind,
+        LegalAction[] actions,
+        PlayerSide ownerSide,
+        string? decisionId = null,
+        string? typedDecisionId = null)
+    {
+        string actualDecisionId = decisionId ?? "decision:" + kind;
+        DecisionId typedId = new(typedDecisionId ?? actualDecisionId);
+        PlayerId owner = new(ownerSide == PlayerSide.Corp ? "player:corp" : "player:runner");
+        return new Observation(
+            viewer,
+            actualDecisionId,
+            actions,
+            new ThrowingReadOnlyDictionary(),
+            new ThrowingReadOnlyDictionary())
+        {
+            Decision = new ObservationDecision(
+                typedId,
+                1,
+                owner,
+                ownerSide,
+                kind,
+                "ignored")
+        };
+    }
+
+    private static LegalAction Action(string id, ActionKind kind, ActionParameters parameters) =>
+        Action(id, kind, parameters, "description is not policy input");
+
+    private static LegalAction Action(
+        string id,
+        ActionKind kind,
+        ActionParameters parameters,
+        string description) =>
+        new(new ActionId("issued:" + id), kind, description, parameters);
+
+    private sealed class ThrowingReadOnlyDictionary : IReadOnlyDictionary<string, object?>
+    {
+        public object? this[string key] => throw new InvalidOperationException("The agent must not inspect state.");
+
+        public IEnumerable<string> Keys => throw new InvalidOperationException("The agent must not inspect state.");
+
+        public IEnumerable<object?> Values => throw new InvalidOperationException("The agent must not inspect state.");
+
+        public int Count => throw new InvalidOperationException("The agent must not inspect state.");
+
+        public bool ContainsKey(string key) => throw new InvalidOperationException("The agent must not inspect state.");
+
+        public IEnumerator<KeyValuePair<string, object?>> GetEnumerator() =>
+            throw new InvalidOperationException("The agent must not inspect state.");
+
+        public bool TryGetValue(string key, out object? value) =>
+            throw new InvalidOperationException("The agent must not inspect state.");
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+}

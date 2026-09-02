@@ -710,6 +710,7 @@ public static partial class GameEngine
 
     private static PlayerId? TargetPlayer(EffectInstruction instruction) => instruction switch
     {
+        TurnBoundaryEffect value => value.Target,
         CreditAdjustmentEffect value => value.Target,
         ClickAdjustmentEffect value => value.Target,
         DamageEffect value => value.Target,
@@ -721,6 +722,7 @@ public static partial class GameEngine
 
     private static OccurrenceKind EffectOccurrenceKind(EffectInstruction instruction) => instruction switch
     {
+        TurnBoundaryEffect value => value.Kind,
         CreditAdjustmentEffect => OccurrenceKind.CreditAdjustment,
         ClickAdjustmentEffect => OccurrenceKind.ClickAdjustment,
         DamageEffect => OccurrenceKind.Damage,

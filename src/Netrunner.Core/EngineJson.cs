@@ -33,6 +33,19 @@ public static class EngineJson
 
     public static T Deserialize<T>(string json, IBehaviorCatalog? behaviorCatalog)
     {
+        return Deserialize<T>(json, behaviorCatalog, null);
+    }
+
+    /// <summary>
+    /// Deserializes and validates against the explicitly supplied executable
+    /// behavior and printed-card metadata catalogs. Deserialization and both
+    /// catalog checks complete as one fail-closed boundary.
+    /// </summary>
+    public static T Deserialize<T>(
+        string json,
+        IBehaviorCatalog? behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog)
+    {
         ArgumentNullException.ThrowIfNull(json);
         T value;
         try
@@ -53,7 +66,7 @@ public static class EngineJson
             throw new JsonException($"The JSON payload for '{typeof(T).Name}' is incompatible: {exception.Message}", exception);
         }
 
-        return ValidateRestorable(value, behaviorCatalog);
+        return ValidateRestorable(value, behaviorCatalog, runtimeCardCatalog);
     }
 
     public static T Deserialize<T>(ReadOnlySpan<byte> utf8Json)
@@ -62,6 +75,15 @@ public static class EngineJson
     }
 
     public static T Deserialize<T>(ReadOnlySpan<byte> utf8Json, IBehaviorCatalog? behaviorCatalog)
+    {
+        return Deserialize<T>(utf8Json, behaviorCatalog, null);
+    }
+
+    /// <summary>UTF-8 counterpart to the dual-catalog string overload.</summary>
+    public static T Deserialize<T>(
+        ReadOnlySpan<byte> utf8Json,
+        IBehaviorCatalog? behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog)
     {
         T value;
         try
@@ -82,7 +104,7 @@ public static class EngineJson
             throw new JsonException($"The JSON payload for '{typeof(T).Name}' is incompatible: {exception.Message}", exception);
         }
 
-        return ValidateRestorable(value, behaviorCatalog);
+        return ValidateRestorable(value, behaviorCatalog, runtimeCardCatalog);
     }
 
     public static GameState DeserializeState(string json)
@@ -92,10 +114,22 @@ public static class EngineJson
 
     public static GameState DeserializeState(string json, IBehaviorCatalog? behaviorCatalog)
     {
-        GameState state = Deserialize<GameState>(json, behaviorCatalog);
+        return DeserializeState(json, behaviorCatalog, null);
+    }
+
+    /// <summary>
+    /// Restores a state only when both injected catalogs agree with the pins
+    /// embedded in the payload. No partially restored state is returned.
+    /// </summary>
+    public static GameState DeserializeState(
+        string json,
+        IBehaviorCatalog? behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog)
+    {
+        GameState state = Deserialize<GameState>(json, behaviorCatalog, runtimeCardCatalog);
         try
         {
-            StateInvariantValidator.Validate(state, behaviorCatalog);
+            StateInvariantValidator.Validate(state, behaviorCatalog, runtimeCardCatalog);
         }
         catch (StateInvariantException exception)
         {
@@ -112,10 +146,19 @@ public static class EngineJson
 
     public static GameSnapshot DeserializeSnapshot(string json, IBehaviorCatalog? behaviorCatalog)
     {
-        GameSnapshot snapshot = Deserialize<GameSnapshot>(json, behaviorCatalog);
+        return DeserializeSnapshot(json, behaviorCatalog, null);
+    }
+
+    /// <summary>Dual-catalog counterpart for serialized snapshots.</summary>
+    public static GameSnapshot DeserializeSnapshot(
+        string json,
+        IBehaviorCatalog? behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog)
+    {
+        GameSnapshot snapshot = Deserialize<GameSnapshot>(json, behaviorCatalog, runtimeCardCatalog);
         try
         {
-            StateInvariantValidator.Validate(snapshot.ToState(), behaviorCatalog);
+            StateInvariantValidator.Validate(snapshot.ToState(), behaviorCatalog, runtimeCardCatalog);
         }
         catch (StateInvariantException exception)
         {
@@ -140,17 +183,20 @@ public static class EngineJson
         return options;
     }
 
-    private static T ValidateRestorable<T>(T value, IBehaviorCatalog? behaviorCatalog)
+    private static T ValidateRestorable<T>(
+        T value,
+        IBehaviorCatalog? behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog)
     {
         try
         {
             switch (value)
             {
                 case GameState state:
-                    StateInvariantValidator.Validate(state, behaviorCatalog);
+                    StateInvariantValidator.Validate(state, behaviorCatalog, runtimeCardCatalog);
                     break;
                 case GameSnapshot snapshot:
-                    StateInvariantValidator.Validate(snapshot.ToState(), behaviorCatalog);
+                    StateInvariantValidator.Validate(snapshot.ToState(), behaviorCatalog, runtimeCardCatalog);
                     break;
                 case EngineEvent @event:
                     EngineEventValidator.Validate(@event);
@@ -160,6 +206,9 @@ public static class EngineJson
                     break;
                 case ScenarioArtifact scenario:
                     scenario.Validate();
+                    break;
+                case TurnScenarioArtifact turnScenario:
+                    turnScenario.Validate();
                     break;
             }
         }

@@ -154,6 +154,53 @@ public sealed class BehaviorCatalogTests
     }
 
     [Fact]
+    public void ClassificationCannotCreateAnExecutableDefinitionByItself()
+    {
+        var classificationOnlyId = new CardDefinitionId("test:classification-only");
+
+        InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
+            new BehaviorCatalogBuilder("test:classification-only-catalog")
+                .AddCardType(classificationOnlyId, BehaviorCardType.Hardware)
+                .Build());
+
+        Assert.Contains("requires a corresponding typed or generic behavior", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ClassificationIsAnAdjunctToExecutableIdsAndSlicesDeterministically()
+    {
+        var firstId = new CardDefinitionId("test:classification-first");
+        var secondId = new CardDefinitionId("test:classification-second");
+        CardBehaviorDefinition firstDefinition = new(firstId, PlayerSide.Runner);
+        CardBehaviorDefinition secondDefinition = new(secondId, PlayerSide.Runner);
+
+        BehaviorCatalog first = new BehaviorCatalogBuilder("test:classification-order")
+            .Add(firstDefinition)
+            .Add(secondDefinition)
+            .AddCardType(firstId, BehaviorCardType.Hardware)
+            .AddCardType(secondId, BehaviorCardType.Resource)
+            .Build();
+        BehaviorCatalog second = new BehaviorCatalogBuilder("test:classification-order")
+            .Add(secondDefinition)
+            .Add(firstDefinition)
+            .AddCardType(secondId, BehaviorCardType.Resource)
+            .AddCardType(firstId, BehaviorCardType.Hardware)
+            .Build();
+
+        Assert.Equal(first.Fingerprint, second.Fingerprint);
+        Assert.Equal(first.AllDefinitionIds, second.AllDefinitionIds);
+        Assert.Equal(2, first.AllDefinitionIds.Count);
+        Assert.True(first.TryGetCardType(firstId, out BehaviorCardType firstType));
+        Assert.Equal(BehaviorCardType.Hardware, firstType);
+
+        BehaviorCatalog slice = first.CreateSlice([firstId]);
+        Assert.Equal([firstId], slice.AllDefinitionIds);
+        Assert.True(slice.TryGetCardType(firstId, out BehaviorCardType slicedType));
+        Assert.Equal(BehaviorCardType.Hardware, slicedType);
+        Assert.DoesNotContain(secondId, slice.AllDefinitionIds);
+    }
+
+    [Fact]
     public void ImmutableCatalogDefinitionIdsIncludeGenericOnlyContracts()
     {
         var id = new CardDefinitionId("test:generic-only");

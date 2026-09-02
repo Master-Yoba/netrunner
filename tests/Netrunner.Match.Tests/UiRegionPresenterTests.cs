@@ -1,3 +1,4 @@
+using Netrunner.Cards;
 using Netrunner.Core;
 using Xunit;
 
@@ -31,6 +32,318 @@ public sealed class UiRegionPresenterTests
             Run = zeroPoolView.Run! with { RunCredits = 1 },
         };
         Assert.Contains("Run pool 1", BoardRegionPresenter.Present(hostedPoolView).RunnerSummary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ObservationMapperProjectsTurnScoresAndExplicitHandLimitDependency()
+    {
+        MatchViewModel view = RepresentativeView();
+
+        Assert.True(view.Turn.IsAvailable);
+        Assert.NotNull(view.Turn.ActiveSide);
+        Assert.NotNull(view.Turn.Phase);
+        Assert.Null(view.Turn.Step);
+        Assert.Equal(view.CorpHand.Count, view.CorpHandSize.Count);
+        Assert.Equal(view.RunnerHand.Count, view.RunnerHandSize.Count);
+        Assert.False(view.RunnerHandSize.IsMaximumKnown);
+        Assert.Contains("Core ObservationBuilder", view.RunnerHandSize.MaximumHandSizeDiagnostic, StringComparison.Ordinal);
+        Assert.Equal(view.Runner.AgendaPoints, view.RunnerScoreArea.AgendaPoints);
+        Assert.Equal(view.Corp.AgendaPoints, view.CorpScoreArea.AgendaPoints);
+
+        M2ScenarioDocument document = M2ScenarioProvider.LoadRepresentative();
+        Observation observation = ObservationBuilder.Build(
+            M2ScenarioSetup.Build(document),
+            PlayerSide.Runner);
+        MatchViewModel injected = ObservationViewMapper.Build(
+            observation,
+            CardMetadataResolvers.Default,
+            GatewayBehaviorCatalog.Create(),
+            new HandSizeProjection(5, 6));
+
+        Assert.Equal(5, injected.CorpHandSize.MaximumHandSize);
+        Assert.Equal(6, injected.RunnerHandSize.MaximumHandSize);
+        Assert.True(injected.RunnerHandSize.IsMaximumKnown);
+        Assert.Contains("Hand", BoardRegionPresenter.Present(injected).RunnerSummary, StringComparison.Ordinal);
+        Assert.Contains("max 6", BoardRegionPresenter.Present(injected).RunnerSummary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ObservationMapperKeepsVisibleInstalledCountersAndRejectsUnknownTurnEnums()
+    {
+        Observation observation = new(
+            PlayerSide.Runner,
+            string.Empty,
+            Array.Empty<LegalAction>(),
+            new Dictionary<string, object?>
+            {
+                ["turn"] = new Dictionary<string, object?>
+                {
+                    ["activeSide"] = "runner",
+                    ["phase"] = "runner",
+                    ["turnNumber"] = 3,
+                    ["step"] = "runnerAction",
+                },
+                ["players"] = new Dictionary<string, object?>
+                {
+                    ["corp"] = new Dictionary<string, object?>
+                    {
+                        ["id"] = "player:corp",
+                        ["credits"] = 4,
+                        ["clicks"] = 2,
+                        ["agendaPoints"] = 0,
+                    },
+                    ["runner"] = new Dictionary<string, object?>
+                    {
+                        ["id"] = "player:runner",
+                        ["credits"] = 7,
+                        ["clicks"] = 3,
+                        ["agendaPoints"] = 1,
+                    },
+                },
+                ["hiddenZoneCounts"] = new Dictionary<string, object?>
+                {
+                    ["corpHand"] = 0,
+                    ["corpDeck"] = 0,
+                    ["runnerGrip"] = 0,
+                    ["runnerStack"] = 0,
+                },
+                ["servers"] = new object?[]
+                {
+                    new Dictionary<string, object?>
+                    {
+                        ["id"] = "server:remote",
+                        ["kind"] = "remote",
+                        ["ice"] = Array.Empty<object?>(),
+                        ["root"] = new object?[]
+                        {
+                            new Dictionary<string, object?>
+                            {
+                                ["id"] = "card:agenda",
+                                ["definitionId"] = "unknown:agenda",
+                                ["rezzed"] = false,
+                                ["advancementCounters"] = 2,
+                            },
+                        },
+                    },
+                },
+                ["runnerRig"] = new object?[]
+                {
+                    new Dictionary<string, object?>
+                    {
+                        ["id"] = "card:rig",
+                        ["definitionId"] = "unknown:rig",
+                        ["rezzed"] = false,
+                        ["advancementCounters"] = 1,
+                    },
+                },
+                ["corpScore"] = Array.Empty<object?>(),
+                ["runnerScore"] = Array.Empty<object?>(),
+                ["outcome"] = new Dictionary<string, object?>
+                {
+                    ["kind"] = "ongoing",
+                    ["winner"] = null,
+                    ["reason"] = null,
+                },
+            },
+            new Dictionary<string, object?>());
+
+        MatchViewModel view = ObservationViewMapper.Build(observation);
+
+        Assert.Equal(
+            ["card:agenda", "card:rig"],
+            view.InstalledAdvancementCounters.Select(counter => counter.CardId));
+        Assert.Equal([2, 1], view.InstalledAdvancementCounters.Select(counter => counter.Count));
+        Assert.Equal(PlayerSide.Corp, view.InstalledAdvancementCounters[0].Controller);
+        Assert.Equal(PlayerSide.Runner, view.InstalledAdvancementCounters[1].Controller);
+
+        Dictionary<string, object?> unknownTurn = new(observation.PublicState)
+        {
+            ["turn"] = new Dictionary<string, object?>
+            {
+                ["activeSide"] = "future-side",
+                ["phase"] = "runner",
+                ["turnNumber"] = 3,
+                ["step"] = "runnerAction",
+            },
+        };
+        MatchViewModel rejected = ObservationViewMapper.Build(
+            observation with { PublicState = unknownTurn });
+        Assert.False(rejected.Turn.IsAvailable);
+        Assert.Contains("unsupported", rejected.Turn.Diagnostic, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TurnRegionShowsActiveTurnPriorityAndForcedDiscardWithoutInferringCounts()
+    {
+        MatchViewModel view = RepresentativeView();
+        DecisionViewModel decision = new(
+            "decision:discard",
+            2,
+            new PlayerId("player:runner"),
+            PlayerSide.Runner,
+            DecisionKind.TurnDiscard,
+            "Discard down to your maximum hand size.");
+        MatchViewModel discardView = view with { Run = BaseRun(), Decision = decision };
+        TurnRegionState state = TurnRegionPresenter.Present(Snapshot(discardView));
+
+        Assert.True(state.IsAvailable);
+        Assert.True(state.IsForcedDiscard);
+        Assert.Contains(
+            $"ACTIVE {view.Turn.ActiveSide!.Value.ToString().ToUpperInvariant()}",
+            state.Summary,
+            StringComparison.Ordinal);
+        Assert.Contains("PRIORITY RUNNER", state.Summary, StringComparison.Ordinal);
+        Assert.Contains("TURNDISCARD", state.Summary, StringComparison.Ordinal);
+        Assert.Null(view.ForcedDiscard);
+
+        MatchViewModel mapped = ObservationViewMapper.Build(
+            new Observation(
+                PlayerSide.Runner,
+                decision.Id,
+                Array.Empty<LegalAction>(),
+                new Dictionary<string, object?>
+                {
+                    ["turn"] = new Dictionary<string, object?>
+                    {
+                        ["activeSide"] = "runner",
+                        ["phase"] = "runner",
+                        ["turnNumber"] = 2,
+                        ["step"] = "runnerDiscard",
+                    },
+                    ["players"] = new Dictionary<string, object?>
+                    {
+                        ["corp"] = new Dictionary<string, object?>
+                        {
+                            ["id"] = "player:corp",
+                            ["credits"] = 5,
+                            ["clicks"] = 0,
+                            ["agendaPoints"] = 0,
+                        },
+                        ["runner"] = new Dictionary<string, object?>
+                        {
+                            ["id"] = "player:runner",
+                            ["credits"] = 5,
+                            ["clicks"] = 0,
+                            ["agendaPoints"] = 0,
+                        },
+                    },
+                    ["hiddenZoneCounts"] = new Dictionary<string, object?>
+                    {
+                        ["corpHand"] = 0,
+                        ["corpDeck"] = 0,
+                        ["runnerGrip"] = 6,
+                        ["runnerStack"] = 0,
+                    },
+                    ["servers"] = Array.Empty<object?>(),
+                    ["runnerRig"] = Array.Empty<object?>(),
+                    ["corpScore"] = Array.Empty<object?>(),
+                    ["runnerScore"] = Array.Empty<object?>(),
+                    ["outcome"] = new Dictionary<string, object?>
+                    {
+                        ["kind"] = "ongoing",
+                        ["winner"] = null,
+                        ["reason"] = null,
+                    },
+                },
+                new Dictionary<string, object?>())
+            {
+                Decision = new ObservationDecision(
+                    new DecisionId(decision.Id),
+                    decision.Revision,
+                    decision.Owner,
+                    decision.OwnerSide,
+                    decision.Kind,
+                    decision.Prompt),
+            },
+            CardMetadataResolvers.Default,
+            GatewayBehaviorCatalog.Create(),
+            new HandSizeProjection(5, 5));
+
+        Assert.NotNull(mapped.ForcedDiscard);
+        Assert.Equal(PlayerSide.Runner, mapped.ForcedDiscard!.Side);
+        Assert.True(mapped.RunnerHandSize.IsOverLimit);
+        Assert.Contains("FORCED DISCARD", mapped.ForcedDiscard.Summary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ActionsProgressivelyDiscloseOnlyTheActiveDecisionGroup()
+    {
+        MatchViewModel view = RepresentativeView();
+        DecisionViewModel decision = new(
+            "decision:turn-action",
+            1,
+            new PlayerId("player:runner"),
+            PlayerSide.Runner,
+            DecisionKind.TurnAction,
+            "Choose a basic action.");
+        LegalActionViewModel[] issued =
+        [
+            new(new ActionId("action:gain"), ActionKind.GainCredit, "Gain 1 credit.", new NoActionParameters()),
+            new(new ActionId("action:draw"), ActionKind.DrawCard, "Draw 1 card.", new NoActionParameters()),
+            new(new ActionId("action:run"), ActionKind.ContinueRun, "Continue the run.", new NoActionParameters()),
+            new(new ActionId("action:behavior"), ActionKind.ChooseBehavior, "Choose a mode.", new BehaviorChoiceParameters("mode", "gain")),
+            new(new ActionId("action:discard"), ActionKind.ChooseCard, "Discard a card.", new CardChoiceParameters(new CardInstanceId("card:hidden"))),
+        ];
+
+        ActionsRegionState region = ActionsRegionPresenter.Present(
+            Snapshot(view with { Decision = decision, LegalActions = issued }));
+
+        Assert.Equal(
+            [ActionKind.GainCredit, ActionKind.DrawCard, ActionKind.ChooseBehavior],
+            region.DisplayActions.Select(action => action.Kind));
+        Assert.Single(region.ActionGroups);
+        Assert.Equal("BASIC ACTIONS ISSUED BY CORE", region.ActionGroups[0].Label);
+        Assert.DoesNotContain(region.DisplayActions, action => action.Kind == ActionKind.ContinueRun);
+
+        ActionsRegionState discard = ActionsRegionPresenter.Present(
+            Snapshot(view with
+            {
+                Decision = decision with { Kind = DecisionKind.TurnDiscard },
+                LegalActions = issued,
+            }));
+        Assert.True(discard.IsForcedDiscard);
+        Assert.Equal([ActionKind.ChooseCard], discard.DisplayActions.Select(action => action.Kind));
+    }
+
+    [Fact]
+    public void UnknownTurnAndDecisionEnumsFailClosedForPresentation()
+    {
+        MatchViewModel view = RepresentativeView() with
+        {
+            Turn = new TurnViewModel(
+                true,
+                (PlayerSide)999,
+                TurnPhase.Corp,
+                TurnStep.CorpAction,
+                1,
+                null),
+            Decision = new DecisionViewModel(
+                "decision:future",
+                1,
+                new PlayerId("player:runner"),
+                PlayerSide.Runner,
+                (DecisionKind)999,
+                "Future decision"),
+        };
+
+        TurnRegionState timing = TurnRegionPresenter.Present(Snapshot(view));
+        Assert.False(timing.IsAvailable);
+        Assert.Contains("unavailable", timing.Summary, StringComparison.OrdinalIgnoreCase);
+
+        ActionsRegionState actions = ActionsRegionPresenter.Present(Snapshot(view));
+        Assert.Equal(ActionsRegionStatus.Unsupported, actions.Status);
+        Assert.Empty(actions.DisplayActions);
+        Assert.Empty(actions.ActionGroups);
+        Assert.Empty(actions.TargetedActions);
+
+        RunFocusViewModel invalidRun = BaseRun() with { Phase = (RunCrPhase)999 };
+        Assert.Equal(
+            FocusRegionMode.Empty,
+            FocusRegionPresenter.Present(Snapshot(view with
+            {
+                Decision = null,
+                Run = invalidRun,
+            })).Mode);
     }
 
     [Fact]

@@ -11,7 +11,8 @@ public static partial class GameEngine
         WorkingState working,
         CardInstanceState card,
         ZoneState source,
-        ZoneState destination)
+        ZoneState destination,
+        bool emit = true)
     {
         if (card.ZoneId != source.Id || !source.CardIds.Contains(card.Id))
         {
@@ -49,7 +50,10 @@ public static partial class GameEngine
             entersRunnerHeap || card.FaceUp,
             card.Rezzed,
             card.AdvancementCounters));
-        Emit(working, EngineEventKinds.CardMoved, new CardMovedEventPayload(card.Id, source.Id, destination.Id));
+        if (emit)
+        {
+            Emit(working, EngineEventKinds.CardMoved, new CardMovedEventPayload(card.Id, source.Id, destination.Id));
+        }
     }
 
     private static void ReplacePlayer(WorkingState working, PlayerState player)
@@ -174,9 +178,13 @@ public static partial class GameEngine
 
     private sealed class WorkingState
     {
-        private WorkingState(GameState source, IBehaviorCatalog behaviorCatalog)
+        private WorkingState(
+            GameState source,
+            IBehaviorCatalog behaviorCatalog,
+            IRuntimeCardCatalog? runtimeCardCatalog)
         {
             BehaviorCatalog = behaviorCatalog;
+            RuntimeCardCatalog = runtimeCardCatalog;
             Players = source.Players.ToList();
             Cards = source.Cards.ToList();
             Zones = source.Zones.ToList();
@@ -184,7 +192,12 @@ public static partial class GameEngine
             InitialSeed = source.InitialSeed;
             RandomState = source.RandomState;
             Allocator = new StableIdAllocator(source.Allocator);
-            Turn = new TurnState(source.Turn.ActiveSide, source.Turn.Phase, source.Turn.TurnNumber);
+            Turn = new TurnState(
+                source.Turn.ActiveSide,
+                source.Turn.Phase,
+                source.Turn.TurnNumber,
+                source.Turn.Step,
+                source.Turn.History);
             Outcome = new GameOutcome(source.Outcome.Kind, source.Outcome.Winner, source.Outcome.Reason);
             DecisionRevision = source.DecisionRevision;
             EventSequence = source.EventSequence;
@@ -200,6 +213,12 @@ public static partial class GameEngine
 
         /// <summary>Immutable catalog captured for this atomic reduction.</summary>
         public IBehaviorCatalog BehaviorCatalog { get; }
+
+        /// <summary>
+        /// Immutable printed-card metadata captured for this atomic reducer.
+        /// It is deliberately separate from the executable behavior catalog.
+        /// </summary>
+        public IRuntimeCardCatalog? RuntimeCardCatalog { get; }
 
         public List<CardInstanceState> Cards { get; }
 
@@ -233,8 +252,11 @@ public static partial class GameEngine
 
         public List<EngineEvent> Events { get; }
 
-        public static WorkingState From(GameState source, IBehaviorCatalog? behaviorCatalog = null) =>
-            new(source, behaviorCatalog ?? CardBehaviorSpecCatalog.Default);
+        public static WorkingState From(
+            GameState source,
+            IBehaviorCatalog? behaviorCatalog = null,
+            IRuntimeCardCatalog? runtimeCardCatalog = null) =>
+            new(source, behaviorCatalog ?? CardBehaviorSpecCatalog.Default, runtimeCardCatalog);
 
         public GameState Build(GameState source) => new(
             source.SchemaVersion,
@@ -258,6 +280,8 @@ public static partial class GameEngine
             RunState,
             RulesState,
             source.BehaviorRegistryVersion,
-            source.BehaviorCatalogFingerprint);
+            source.BehaviorCatalogFingerprint,
+            RuntimeCardCatalog?.Version ?? source.RuntimeCardCatalogVersion,
+            RuntimeCardCatalog?.Fingerprint ?? source.RuntimeCardCatalogFingerprint);
     }
 }

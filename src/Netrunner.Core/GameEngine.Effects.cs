@@ -48,7 +48,15 @@ public static partial class GameEngine
         switch (frame.Stage)
         {
             case EffectResolutionStage.PayCosts:
-                EnsureRulesState(working);
+                // Turn-boundary occurrences are no-op checkpoints.  They may
+                // still materialize registered triggers, but opening a legacy
+                // M1 turn must not eagerly create an otherwise-unused
+                // RulesState and change its canonical hash.
+                if (!IsTurnBoundaryBundle(frame.Effects))
+                {
+                    EnsureRulesState(working);
+                }
+
                 PayCosts(working, frame.Costs);
                 ReplaceTopFrame(working, new EffectResolutionFrame(
                     frame.Version, frame.BehaviorId, frame.Controller, frame.Costs, frame.Effects,
@@ -125,7 +133,7 @@ public static partial class GameEngine
                 return;
             case EffectResolutionStage.AwaitingMemoryCleanup:
                 PlayerRulesState? illegal = working.RulesState!.Players
-                    .FirstOrDefault(player => player.UsedMemory > player.BaseMemory);
+                    .FirstOrDefault(player => player.UsedMemory > EffectiveMemoryLimit(working, player.PlayerId));
                 if (illegal is not null)
                 {
                     throw new ResolutionFailureException(
@@ -141,8 +149,14 @@ public static partial class GameEngine
 
     private static void FinishEffectBundle(WorkingState working, EffectResolutionFrame frame)
     {
+        if (IsTurnBoundaryBundle(frame.Effects))
+        {
+            working.ResolutionStack.RemoveAt(working.ResolutionStack.Count - 1);
+            return;
+        }
+
         PlayerRulesState? overMemory = working.RulesState!.Players
-            .FirstOrDefault(player => player.UsedMemory > player.BaseMemory);
+            .FirstOrDefault(player => player.UsedMemory > EffectiveMemoryLimit(working, player.PlayerId));
         if (overMemory is null)
         {
             working.ResolutionStack.RemoveAt(working.ResolutionStack.Count - 1);
@@ -169,14 +183,19 @@ public static partial class GameEngine
             frame.SuppressedInterrupts));
         working.ResolutionStack.Add(new MemoryCleanupFrame(
             overMemory.PlayerId,
-            overMemory.UsedMemory - overMemory.BaseMemory,
+            overMemory.UsedMemory - EffectiveMemoryLimit(working, overMemory.PlayerId),
             candidates));
     }
+
+    private static bool IsTurnBoundaryBundle(EffectBundle effects) =>
+        effects.Instructions.Count > 0
+        && effects.Instructions.All(static instruction => instruction is TurnBoundaryEffect);
 
     private static void StepMemoryCleanup(WorkingState working, MemoryCleanupFrame frame)
     {
         PlayerRulesState owner = GetPlayerRules(RequireRulesState(working), frame.Owner);
-        if (owner.UsedMemory <= owner.BaseMemory)
+        int memoryLimit = EffectiveMemoryLimit(working, frame.Owner);
+        if (owner.UsedMemory <= memoryLimit)
         {
             working.ResolutionStack.RemoveAt(working.ResolutionStack.Count - 1);
             return;
@@ -189,11 +208,11 @@ public static partial class GameEngine
         }
 
         if (!SameProgramCandidates(frame.Candidates, candidates)
-            || frame.RequiredReduction != owner.UsedMemory - owner.BaseMemory)
+            || frame.RequiredReduction != owner.UsedMemory - memoryLimit)
         {
             frame = new MemoryCleanupFrame(
                 frame.Owner,
-                owner.UsedMemory - owner.BaseMemory,
+                owner.UsedMemory - memoryLimit,
                 candidates);
             ReplaceTopFrame(working, frame);
         }
@@ -238,7 +257,7 @@ public static partial class GameEngine
             frame.Candidates.Single(candidate => candidate.CardId == cardId).MemoryCost));
 
         PlayerRulesState owner = GetPlayerRules(RequireRulesState(working), frame.Owner);
-        if (owner.UsedMemory <= owner.BaseMemory)
+        if (owner.UsedMemory <= EffectiveMemoryLimit(working, frame.Owner))
         {
             working.ResolutionStack.RemoveAt(working.ResolutionStack.Count - 1);
             return;
@@ -252,7 +271,7 @@ public static partial class GameEngine
 
         ReplaceTopFrame(working, new MemoryCleanupFrame(
             frame.Owner,
-            owner.UsedMemory - owner.BaseMemory,
+            owner.UsedMemory - EffectiveMemoryLimit(working, frame.Owner),
             candidates));
     }
 
@@ -327,6 +346,7 @@ public static partial class GameEngine
             case AddLingeringEffect value: AddLingering(working, value.Effect); break;
             case RemoveLingeringEffect value: RemoveLingering(working, value.EffectId); break;
             case MoveCardEffect value: ApplyMoveCard(working, value.CardId, value.DestinationZoneId); break;
+            case TurnBoundaryEffect: break;
             default: throw new ResolutionFailureException($"Unsupported effect instruction '{instruction.GetType().Name}'.");
         }
     }

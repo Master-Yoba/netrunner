@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "fixtureId": "sim-slice42-batch1-basic",
+  "rulesVersion": "26.03",
+  "cardDataVersion": "236140cf84491c23995b028bc791281837520b97",
+  "behaviorRegistryVersion": "gateway-m2-3",
+  "behaviorCatalogFingerprint": "609d83418823cd629d6b763cd3a2b9ab401cb39cadfa5a23bb237bd800d3a063",
+  "seed": 40102,
+  "actionCap": 128,
+  "corpDeck": {
+    "schemaVersion": 1,
+    "side": "corp",
+    "identityCode": "30077",
+    "cards": [
+      { "code": "30072", "quantity": 1 },
+      { "code": "30074", "quantity": 1 },
+      { "code": "30037", "quantity": 1 },
+      { "code": "30067", "quantity": 1 },
+      { "code": "30064", "quantity": 1 },
+      { "code": "30075", "quantity": 1 },
+      { "code": "30041", "quantity": 1 },
+      { "code": "30048", "quantity": 1 },
+      { "code": "30056", "quantity": 1 },
+      { "code": "30040", "quantity": 1 }
+    ],
+    "validationProfile": "developerReduced"
+  },
+  "runnerDeck": {
+    "schemaVersion": 1,
+    "side": "runner",
+    "identityCode": "30076",
+    "cards": [
+      { "code": "30005", "quantity": 1 },
+      { "code": "30006", "quantity": 1 },
+      { "code": "30029", "quantity": 1 },
+      { "code": "30002", "quantity": 1 },
+      { "code": "30020", "quantity": 1 },
+      { "code": "30021", "quantity": 1 },
+      { "code": "30030", "quantity": 1 },
+      { "code": "30011", "quantity": 1 },
+      { "code": "30031", "quantity": 1 }
+    ],
+    "validationProfile": "developerReduced"
+  },
+  "policy": {
+    "corpActionOrder": [ "basic-draw", "gain-credit" ],
+    "runnerActionOrder": [ "basic-draw", "gain-credit" ]
+  },
+  "expectedOutcome": {
+    "kind": "ongoing"
+  },
+  "citations": [
+    "M4_PLAN.md D-405",
+    "CR-26.03 sections 1.6.5-1.6.7",
+    "https://nullsignal.games/products/system-gateway/",
+    "https://rules.nullsignal.games/"
+  ],
+  "crossCheckNote": "Developer-curated code/quantity-only decks use the seven M2 baseline registrations and all twelve Slice 4.2 Batch-1 assignments. This provisional catalog pin covers the ten complete Batch-1 declarations; Mutual Favor and Seamless Launch remain blocked until their Core predicates land. No headless outcome is claimed until MATCH-401A and AGT-401 consume this fixture through normal setup."
+}
