@@ -258,13 +258,13 @@ public sealed class ScenarioArtifact
                         ? "Scenario card placement must use one of the foundational Corp or Runner zones; server/shared topology is not a compact scenario input."
                     : $"'{card.Zone}' is not a supported zone kind.");
             }
-            else if (card.Zone == ZoneKind.RunnerPlayArea)
+            else if (card.Zone is ZoneKind.CorpPlayArea or ZoneKind.RunnerPlayArea)
             {
                 Add(
                     violations,
                     "scenario.invalid-zone",
                     $"{path}.zone",
-                    "RunnerPlayArea is an active-run zone and cannot be populated by a pre-run compact scenario.");
+                    "CorpPlayArea and RunnerPlayArea are active card-play/run zones and cannot be populated by a pre-run compact scenario.");
             }
 
             if (!Enum.IsDefined(card.OwnerSide))
@@ -375,6 +375,7 @@ public sealed class ScenarioArtifact
             case ZoneKind.CorpHand:
             case ZoneKind.CorpDiscard:
             case ZoneKind.CorpScore:
+            case ZoneKind.CorpPlayArea:
                 owner = PlayerSide.Corp;
                 return true;
             case ZoneKind.RunnerStack:

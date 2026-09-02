@@ -136,21 +136,24 @@ public static partial class GameEngine
                 finalizeSelection: false));
         }
 
-        if (InstallSelectionSatisfiesRequirements(working, frame, plan, frame.SelectedReplacementCardIds))
+        PlayerState player = GetPlayer(working, frame.Owner);
+        int selectedCost = CalculateInstallCost(
+            working,
+            plan.Spec,
+            frame.DestinationKind,
+            frame.ServerId,
+            frame.CreateNewRemote,
+            frame.SelectedReplacementCardIds);
+        if (InstallSelectionSatisfiesRequirements(working, frame, plan, frame.SelectedReplacementCardIds)
+            && (frame.InitiationKind == InstallInitiationKind.BehaviorEffect || player.Clicks >= 1)
+            && player.Credits >= selectedCost)
         {
-            int cost = CalculateInstallCost(
-                working,
-                plan.Spec,
-                frame.DestinationKind,
-                frame.ServerId,
-                frame.CreateNewRemote,
-                frame.SelectedReplacementCardIds);
             materialized.Add(new InstallCardParameters(
                 frame.CardId,
                 frame.DestinationKind,
                 frame.ServerId,
                 frame.CreateNewRemote,
-                cost,
+                selectedCost,
                 frame.CandidateReplacementCardIds,
                 frame.RequiredReplacementCardIds,
                 frame.SelectedReplacementCardIds,
@@ -350,7 +353,7 @@ public static partial class GameEngine
     {
         ValidateInstallFrame(working, frame, requireFinalLegality: true);
         PlayerState player = GetPlayer(working, frame.Owner);
-        if (player.Clicks < 1)
+        if (frame.InitiationKind == InstallInitiationKind.BasicAction && player.Clicks < 1)
         {
             throw new ResolutionFailureException("Installing a card requires one click.");
         }
@@ -404,7 +407,10 @@ public static partial class GameEngine
         }
 
         ApplyCreditDeltaIfNonZero(working, player.Id, -cost);
-        SpendClick(working, player.Id);
+        if (frame.InitiationKind == InstallInitiationKind.BasicAction)
+        {
+            SpendClick(working, player.Id);
+        }
 
         CardInstanceState card = GetCard(working, frame.CardId);
         ZoneState source = ZoneForInstallCard(working, card);
@@ -441,6 +447,32 @@ public static partial class GameEngine
             working.ResolutionStack.RemoveAt(working.ResolutionStack.Count - 1);
         }
 
+        if (frame.InitiationKind == InstallInitiationKind.BehaviorEffect)
+        {
+            if (working.ResolutionStack.Count == 0
+                || working.ResolutionStack[^1] is not BehaviorResolutionFrame behaviorParent
+                || !string.Equals(
+                    frame.ParentFrameIdentity,
+                    BehaviorFrameIdentity.Compute(behaviorParent),
+                    StringComparison.Ordinal))
+            {
+                throw new ResolutionFailureException(
+                    "The completed behavior install has no matching behavior parent frame.");
+            }
+
+            IReadOnlyList<BehaviorBinding> bindings = behaviorParent.Bindings
+                .Select(binding => new BehaviorBinding(
+                    binding.Key,
+                    binding.CardIds.Where(cardId => cardId != frame.CardId).ToArray()))
+                .Where(binding => binding.CardIds.Count > 0
+                    && !string.Equals(binding.Key, "chosen", StringComparison.Ordinal))
+                .ToArray();
+            AdvanceBehaviorCursor(
+                working,
+                behaviorParent.With(bindings: bindings));
+            return;
+        }
+
         if (working.ResolutionStack.Count == 0
             || working.ResolutionStack[^1] is not TurnFrame parent
             || parent.Stage != TurnFrameStage.AwaitingAction)
@@ -464,14 +496,16 @@ public static partial class GameEngine
         TurnFrame parent,
         InstallPlan plan)
     {
-        if (plan.DestinationKind != InstallDestinationKind.ServerRoot
-            || plan.Spec.Side != PlayerSide.Corp
-            || plan.Spec.CardClass is not (RuntimeCardClass.Agenda or RuntimeCardClass.Asset or RuntimeCardClass.Upgrade)
-            || plan.InstallCost != 0
+        bool isCorpRootInstall = plan.DestinationKind == InstallDestinationKind.ServerRoot
+            && plan.Spec.CardClass is RuntimeCardClass.Agenda or RuntimeCardClass.Asset or RuntimeCardClass.Upgrade;
+        bool isCorpIceInstall = plan.DestinationKind == InstallDestinationKind.ServerIce
+            && plan.Spec.CardClass == RuntimeCardClass.Ice;
+        if (plan.Spec.Side != PlayerSide.Corp
+            || (!isCorpRootInstall && !isCorpIceInstall)
             || plan.CandidateReplacementCardIds.Count != 0
             || plan.RequiredReplacementCardIds.Count != 0)
         {
-            throw new ResolutionFailureException("The Corp install is outside the bounded B1b root-install contract.");
+            throw new ResolutionFailureException("The Corp install is outside the bounded B1b root/ICE-install contract.");
         }
 
         PlayerState corp = GetPlayer(working, PlayerSide.Corp);
@@ -491,8 +525,13 @@ public static partial class GameEngine
         // final legality check has passed.  Existing destinations are resolved
         // by their frozen server identity and never allocate topology.
         ZoneState destination = plan.CreateNewRemote
-            ? CreateNewRemoteInstallDestination(working)
+            ? CreateNewRemoteInstallDestination(working, plan.DestinationKind)
             : ResolveExistingInstallDestination(working, plan.DestinationKind, plan.ServerId);
+
+        if (!plan.CreateNewRemote && destination.CardIds.Count != 0)
+        {
+            throw new ResolutionFailureException("A direct Corp install requires an empty destination zone.");
+        }
 
         ApplyCreditDeltaIfNonZero(working, corp.Id, -plan.InstallCost);
         SpendClick(working, corp.Id);
@@ -553,11 +592,28 @@ public static partial class GameEngine
         CardInstanceId cardId,
         InstallDestinationKind destinationKind,
         ServerId? serverId,
-        bool createNewRemote)
+        bool createNewRemote,
+        InstallInitiationKind initiationKind = InstallInitiationKind.BasicAction)
     {
         if (side is not (PlayerSide.Runner or PlayerSide.Corp))
         {
             return null;
+        }
+
+        if (!Enum.IsDefined(initiationKind))
+        {
+            return null;
+        }
+
+        if (initiationKind == InstallInitiationKind.BehaviorEffect)
+        {
+            return BuildBehaviorInstallPlan(
+                working,
+                side,
+                cardId,
+                destinationKind,
+                serverId,
+                createNewRemote);
         }
 
         IRuntimeCardCatalog? catalog = working.RuntimeCardCatalog;
@@ -617,7 +673,10 @@ public static partial class GameEngine
             createNewRemote);
         if (!createNewRemote
             && (destination is null
-                || side == PlayerSide.Corp && destination.Kind != ZoneKind.ServerRoot))
+                || side == PlayerSide.Corp
+                    && destination.Kind != (spec.CardClass == RuntimeCardClass.Ice
+                        ? ZoneKind.ServerIce
+                        : ZoneKind.ServerRoot)))
         {
             return null;
         }
@@ -634,6 +693,16 @@ public static partial class GameEngine
         }
 
         CardInstanceId[] candidates = InstallCandidates(working, spec, destinationKind, serverId, createNewRemote);
+        if (side == PlayerSide.Corp
+            && destinationKind == InstallDestinationKind.ServerIce
+            && candidates.Any(candidateId => RuntimeClass(working, candidateId) != RuntimeCardClass.Ice))
+        {
+            // A physical ICE zone is authoritative for installation legality;
+            // never infer a candidate's class from title/text when runtime
+            // metadata is missing or says the card is not ICE.
+            return null;
+        }
+
         CardInstanceId[] required = InstallRequiredCandidates(working, spec, candidates, destinationKind, serverId, createNewRemote);
         if (required.Any(cardOption => !candidates.Contains(cardOption)))
         {
@@ -651,11 +720,14 @@ public static partial class GameEngine
         }
 
         int installCost = CalculateInstallCost(working, spec, destinationKind, serverId, createNewRemote, []);
-        if (side == PlayerSide.Corp && installCost != 0)
+        if (side == PlayerSide.Corp
+            && spec.CardClass is not RuntimeCardClass.Ice
+            && installCost != 0)
         {
             // This checkpoint is deliberately limited to the zero-credit
             // Corp root-install stream. Do not issue an action that the
-            // bounded commit reducer would later reject.
+            // bounded commit reducer would later reject. ICE uses its
+            // dynamic protector count as its printed install cost.
             return null;
         }
 
@@ -691,6 +763,97 @@ public static partial class GameEngine
             installCost,
             candidates,
             required,
+            candidateDefinitions);
+    }
+
+    /// <summary>
+    /// Builds the same authoritative Runner install plan used by a basic
+    /// install, with only its initiation/source semantics changed. A
+    /// behavior-owned install is paid in credits but never consumes a click;
+    /// all uniqueness, memory, replacement, and metadata checks remain shared
+    /// with the normal install pipeline.
+    /// </summary>
+    private static InstallPlan? BuildBehaviorInstallPlan(
+        WorkingState working,
+        PlayerSide side,
+        CardInstanceId cardId,
+        InstallDestinationKind destinationKind,
+        ServerId? serverId,
+        bool createNewRemote)
+    {
+        if (side != PlayerSide.Runner || working.RuntimeCardCatalog is null)
+        {
+            return null;
+        }
+
+        CardInstanceState card = GetCard(working, cardId);
+        if (!working.RuntimeCardCatalog.TryGet(card.DefinitionId, out CardRuntimeSpec? spec)
+            || spec.Side != PlayerSide.Runner
+            || spec.CardClass != RuntimeCardClass.Program
+            || card.OwnerSide != PlayerSide.Runner)
+        {
+            return null;
+        }
+
+        ZoneState? source = working.Zones.FirstOrDefault(
+            zone => zone.Kind == ZoneKind.RunnerStack
+                && zone.OwnerSide == PlayerSide.Runner
+                && zone.ServerId is null);
+        ZoneState? destination = working.Zones.FirstOrDefault(
+            zone => zone.Kind == ZoneKind.RunnerRig
+                && zone.OwnerSide == PlayerSide.Runner
+                && zone.ServerId is null);
+        if (source is null
+            || destination is null
+            || card.ZoneId != source.Id
+            || !source.CardIds.Contains(card.Id)
+            || destinationKind != InstallDestinationKind.RunnerRig
+            || serverId is not null
+            || createNewRemote
+            || !AllRuntimeCardsKnown(working, destination.CardIds)
+            || HasActiveInstallConflict(working, card, spec, PlayerSide.Runner))
+        {
+            return null;
+        }
+
+        CardInstanceId[] candidates = InstallCandidates(
+            working,
+            spec,
+            destinationKind,
+            serverId,
+            createNewRemote);
+        if (!CanInstallProgram(working, card, spec, candidates))
+        {
+            return null;
+        }
+
+        int installCost = CalculateInstallCost(
+            working,
+            spec,
+            destinationKind,
+            serverId,
+            createNewRemote,
+            []);
+        PlayerState player = GetPlayer(working, PlayerSide.Runner);
+        if (player.Credits < installCost)
+        {
+            return null;
+        }
+
+        CardDefinitionId[] candidateDefinitions = candidates
+            .Select(candidateId => GetCard(working, candidateId).DefinitionId)
+            .ToArray();
+        return new InstallPlan(
+            card,
+            spec,
+            source,
+            destinationKind,
+            serverId,
+            createNewRemote,
+            destination.Id,
+            installCost,
+            candidates,
+            [],
             candidateDefinitions);
     }
 
@@ -748,7 +911,7 @@ public static partial class GameEngine
         side switch
         {
             PlayerSide.Runner => cardClass is (RuntimeCardClass.Program or RuntimeCardClass.Hardware or RuntimeCardClass.Resource),
-            PlayerSide.Corp => cardClass is (RuntimeCardClass.Agenda or RuntimeCardClass.Asset or RuntimeCardClass.Upgrade),
+            PlayerSide.Corp => cardClass is (RuntimeCardClass.Agenda or RuntimeCardClass.Asset or RuntimeCardClass.Upgrade or RuntimeCardClass.Ice),
             _ => false,
         };
 
@@ -768,7 +931,9 @@ public static partial class GameEngine
                 && !createNewRemote;
         }
 
-        if (destinationKind != InstallDestinationKind.ServerRoot
+        bool isServerRoot = destinationKind == InstallDestinationKind.ServerRoot;
+        bool isServerIce = destinationKind == InstallDestinationKind.ServerIce;
+        if ((!isServerRoot && !isServerIce)
             || (serverId is null) == !createNewRemote)
         {
             return false;
@@ -777,7 +942,9 @@ public static partial class GameEngine
         if (createNewRemote)
         {
             return side == PlayerSide.Corp
-                && cardClass is (RuntimeCardClass.Agenda or RuntimeCardClass.Asset or RuntimeCardClass.Upgrade);
+                && ((isServerRoot
+                        && cardClass is (RuntimeCardClass.Agenda or RuntimeCardClass.Asset or RuntimeCardClass.Upgrade))
+                    || (isServerIce && cardClass == RuntimeCardClass.Ice));
         }
 
         ZoneState? destination = TryResolveInstallDestination(
@@ -785,7 +952,8 @@ public static partial class GameEngine
             destinationKind,
             serverId,
             createNewRemote);
-        if (destination is null || destination.Kind != ZoneKind.ServerRoot)
+        ZoneKind expectedKind = isServerIce ? ZoneKind.ServerIce : ZoneKind.ServerRoot;
+        if (destination is null || destination.Kind != expectedKind)
         {
             return false;
         }
@@ -793,9 +961,11 @@ public static partial class GameEngine
         ServerKind serverKind = working.Servers
             .Single(server => server.Id == serverId!.Value)
             .Kind;
-        return cardClass == RuntimeCardClass.Upgrade
-            || (serverKind == ServerKind.Remote
-                && cardClass is (RuntimeCardClass.Agenda or RuntimeCardClass.Asset));
+        return isServerIce
+            ? cardClass == RuntimeCardClass.Ice
+            : cardClass == RuntimeCardClass.Upgrade
+                || (serverKind == ServerKind.Remote
+                    && cardClass is (RuntimeCardClass.Agenda or RuntimeCardClass.Asset));
     }
 
     private static CardInstanceId[] InstallCandidates(
@@ -827,7 +997,11 @@ public static partial class GameEngine
 
         if (destinationKind == InstallDestinationKind.ServerIce)
         {
-            return destination.CardIds.OrderBy(id => id.Value, StringComparer.Ordinal).ToArray();
+            // ICE is ordered from innermost to outermost. Preserve that
+            // physical order through the frozen candidate list so selected
+            // trash leaves the remaining protectors in the same order and a
+            // normal install appends the incoming ICE outermost.
+            return destination.CardIds.ToArray();
         }
 
         // Root installs use one bounded candidate list. Required like-card
@@ -1119,7 +1293,8 @@ public static partial class GameEngine
                 frame.CardId,
                 frame.DestinationKind,
                 frame.ServerId,
-                frame.CreateNewRemote)
+                frame.CreateNewRemote,
+                frame.InitiationKind)
             ?? throw new ResolutionFailureException("The frozen install destination or card is stale.");
 
         if (frame.DefinitionId != plan.Card.DefinitionId
@@ -1130,8 +1305,24 @@ public static partial class GameEngine
             || !frame.RequiredReplacementCardIds.SequenceEqual(plan.RequiredReplacementCardIds)
             || frame.CandidateReplacementDefinitionIds is not null
                 && !frame.CandidateReplacementDefinitionIds.SequenceEqual(plan.CandidateReplacementDefinitionIds)
+            || plan.Spec.Side == PlayerSide.Corp
+                && frame.CandidateReplacementCardIds.Count > 0
+                && frame.CandidateReplacementDefinitionIds is null
             || frame.SelectedReplacementCardIds.Any(id => !frame.CandidateReplacementCardIds.Contains(id))
-            || frame.SelectedReplacementCardIds.Distinct().Count() != frame.SelectedReplacementCardIds.Count)
+            || frame.SelectedReplacementCardIds.Distinct().Count() != frame.SelectedReplacementCardIds.Count
+            || (frame.InitiationKind == InstallInitiationKind.BasicAction
+                ? frame.ParentFrameIdentity is not null
+                : !StableIdentifier.TryValidate(frame.ParentFrameIdentity))
+            || (frame.InitiationKind == InstallInitiationKind.BehaviorEffect
+                && (frame.CandidateReplacementDefinitionIds is null
+                    || !frame.CandidateReplacementDefinitionIds.SequenceEqual(plan.CandidateReplacementDefinitionIds)))
+            || (frame.InitiationKind == InstallInitiationKind.BehaviorEffect
+                && (frame.Owner != GetPlayer(working, PlayerSide.Runner).Id
+                    || frame.CardClass != RuntimeCardClass.Program
+                    || frame.SourceZoneKind != ZoneKind.RunnerStack
+                    || frame.DestinationKind != InstallDestinationKind.RunnerRig
+                    || frame.ServerId is not null
+                    || frame.CreateNewRemote)))
         {
             throw new ResolutionFailureException("The frozen install frame no longer matches the current state.");
         }
@@ -1157,6 +1348,40 @@ public static partial class GameEngine
             throw new ResolutionFailureException("The frozen install destination zone is stale.");
         }
 
+        if (frame.InitiationKind == InstallInitiationKind.BehaviorEffect)
+        {
+            if (working.ResolutionStack.Count < 2
+                || working.ResolutionStack[^2] is not BehaviorResolutionFrame behaviorParent
+                || !string.Equals(
+                    frame.ParentFrameIdentity,
+                    BehaviorFrameIdentity.Compute(behaviorParent),
+                    StringComparison.Ordinal))
+            {
+                throw new ResolutionFailureException(
+                    "The behavior install parent frame identity is stale or forged.");
+            }
+
+            List<BehaviorInstruction> behaviorInstructions = GetBehaviorInstructions(working, behaviorParent);
+            if (behaviorParent.InstructionCursor < 0
+                || behaviorParent.InstructionCursor >= behaviorInstructions.Count
+                || behaviorInstructions[behaviorParent.InstructionCursor].Kind != BehaviorInstructionKind.InstallCard)
+            {
+                throw new ResolutionFailureException(
+                    "The behavior install parent cursor no longer identifies an InstallCard instruction.");
+            }
+
+            InstallPlan behaviorPlan = ValidateBehaviorInstallInstruction(
+                working,
+                behaviorParent,
+                behaviorInstructions[behaviorParent.InstructionCursor]);
+            if (behaviorPlan.Card.Id != frame.CardId
+                || behaviorPlan.DestinationZoneId != frame.DestinationZoneId)
+            {
+                throw new ResolutionFailureException(
+                    "The behavior install frame no longer matches its parent instruction binding.");
+            }
+        }
+
         foreach (CardInstanceId selected in frame.SelectedReplacementCardIds)
         {
             CardInstanceState selectedCard = GetCard(working, selected);
@@ -1175,7 +1400,8 @@ public static partial class GameEngine
             }
 
             PlayerState player = GetPlayer(working, frame.Owner);
-            if (player.Clicks < 1 || player.Credits < expectedCost)
+            if ((frame.InitiationKind == InstallInitiationKind.BasicAction && player.Clicks < 1)
+                || player.Credits < expectedCost)
             {
                 throw new ResolutionFailureException("The install is no longer affordable.");
             }
@@ -1241,15 +1467,23 @@ public static partial class GameEngine
         TryResolveInstallDestination(working, destinationKind, serverId, createNewRemote: false)
         ?? throw new ResolutionFailureException("The existing install destination does not exist.");
 
-    private static ZoneState CreateNewRemoteInstallDestination(WorkingState working)
+    private static ZoneState CreateNewRemoteInstallDestination(
+        WorkingState working,
+        InstallDestinationKind destinationKind)
     {
+        if (destinationKind is not (InstallDestinationKind.ServerRoot or InstallDestinationKind.ServerIce))
+        {
+            throw new ResolutionFailureException("A new remote install requires a server root or ICE destination.");
+        }
+
         ServerId remoteId = working.Allocator.NextServerId();
         ZoneId iceId = working.Allocator.NextZoneId();
         ZoneId rootId = working.Allocator.NextZoneId();
         working.Servers.Add(new ServerState(remoteId, ServerKind.Remote, iceId, rootId));
         working.Zones.Add(new ZoneState(iceId, ZoneKind.ServerIce, PlayerSide.Corp, remoteId));
         working.Zones.Add(new ZoneState(rootId, ZoneKind.ServerRoot, PlayerSide.Corp, remoteId));
-        return working.Zones.Single(zone => zone.Id == rootId);
+        ZoneId destinationId = destinationKind == InstallDestinationKind.ServerIce ? iceId : rootId;
+        return working.Zones.Single(zone => zone.Id == destinationId);
     }
 
     private static void AddInstallActions(WorkingState working, PlayerSide side, List<LegalAction> actions)
@@ -1383,7 +1617,7 @@ public static partial class GameEngine
         }
 
         if (side != PlayerSide.Corp
-            || spec.CardClass is not (RuntimeCardClass.Agenda or RuntimeCardClass.Asset or RuntimeCardClass.Upgrade))
+            || spec.CardClass is not (RuntimeCardClass.Agenda or RuntimeCardClass.Asset or RuntimeCardClass.Upgrade or RuntimeCardClass.Ice))
         {
             yield break;
         }
@@ -1393,6 +1627,12 @@ public static partial class GameEngine
             .ThenBy(server => server.Id.Value, StringComparer.Ordinal);
         foreach (ServerState server in servers)
         {
+            if (spec.CardClass == RuntimeCardClass.Ice)
+            {
+                yield return (InstallDestinationKind.ServerIce, server.Id, false);
+                continue;
+            }
+
             if (spec.CardClass is (RuntimeCardClass.Agenda or RuntimeCardClass.Asset)
                 && server.Kind != ServerKind.Remote)
             {
@@ -1402,7 +1642,9 @@ public static partial class GameEngine
             yield return (InstallDestinationKind.ServerRoot, server.Id, false);
         }
 
-        yield return (InstallDestinationKind.ServerRoot, null, true);
+        yield return spec.CardClass == RuntimeCardClass.Ice
+            ? (InstallDestinationKind.ServerIce, null, true)
+            : (InstallDestinationKind.ServerRoot, null, true);
     }
 
     private static void StartNextTurnActionWindow(WorkingState working, TurnFrame frame)

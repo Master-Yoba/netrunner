@@ -226,8 +226,10 @@ public sealed class RulesEffectsTests
         Fixture fixture = CreateFixture(
             79,
             withRules: true,
-            new Placement("counter-card", PlayerSide.Runner, ZoneKind.RunnerHeap));
+            new Placement("counter-card", PlayerSide.Runner, ZoneKind.RunnerHeap),
+            new Placement("second-counter-card", PlayerSide.Runner, ZoneKind.RunnerHeap));
         CardInstanceId cardId = fixture.Cards["counter-card"];
+        CardInstanceId secondCardId = fixture.Cards["second-counter-card"];
 
         GameState withCounters = GameEngine.ResolveEffects(
             fixture.State,
@@ -235,8 +237,10 @@ public sealed class RulesEffectsTests
             new CostBundle(),
             new EffectBundle(
                 new CardCounterAdjustmentEffect(cardId, "virus", 2),
+                new CardCounterAdjustmentEffect(secondCardId, "virus", 3),
                 new CardCounterAdjustmentEffect(cardId, "power", 1)));
-        Assert.Equal(2, withCounters.RulesState!.Counters.Single(value => value.CounterName == "virus").Count);
+        Assert.Equal(2, withCounters.RulesState!.Counters.Single(value => value.CardId == cardId && value.CounterName == "virus").Count);
+        Assert.Equal(3, withCounters.RulesState.Counters.Single(value => value.CardId == secondCardId && value.CounterName == "virus").Count);
         Assert.Single(withCounters.RulesState.Counters, value => value.CounterName == "power");
 
         GameState purged = GameEngine.ResolveEffects(

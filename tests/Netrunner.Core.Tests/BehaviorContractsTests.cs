@@ -85,6 +85,8 @@ public sealed class BehaviorContractsTests
     {
         BehaviorCondition tagged = BehaviorCondition.Tagged();
         BehaviorCondition notTagged = BehaviorCondition.NotTagged();
+        BehaviorCondition runnerTagged = BehaviorCondition.Tagged(PlayerSide.Runner);
+        BehaviorCondition corpNotTagged = BehaviorCondition.NotTagged(PlayerSide.Corp);
         BehaviorCondition unqualifiedTagged = BehaviorCondition.Tagged();
         BehaviorCondition unqualifiedNotTagged = BehaviorCondition.NotTagged();
         BehaviorCondition clicks = BehaviorCondition.ClicksRemainingAtLeast(2);
@@ -93,6 +95,11 @@ public sealed class BehaviorContractsTests
 
         Assert.Equal(BehaviorConditionKind.Tagged, tagged.Kind);
         Assert.Null(tagged.Fact);
+        Assert.Null(tagged.SubjectSide);
+        Assert.Equal(PlayerSide.Runner, runnerTagged.SubjectSide);
+        Assert.Equal(PlayerSide.Corp, corpNotTagged.SubjectSide);
+        Assert.NotEqual(tagged, runnerTagged);
+        Assert.NotEqual(BehaviorCondition.Tagged(PlayerSide.Corp), runnerTagged);
         Assert.Equal(BehaviorConditionKind.NotTagged, notTagged.Kind);
         Assert.Null(unqualifiedTagged.Fact);
         Assert.Null(unqualifiedNotTagged.Fact);
@@ -101,6 +108,13 @@ public sealed class BehaviorContractsTests
         Assert.Equal(BehaviorConditionKind.SuccessfulRunThisTurn, successfulRun.Kind);
         Assert.Throws<ArgumentException>(() =>
             new BehaviorCondition(BehaviorConditionKind.Tagged, fact: "unexpected"));
+        Assert.Throws<ArgumentException>(() =>
+            new BehaviorCondition(
+                BehaviorConditionKind.ClicksRemainingAtLeast,
+                value: 1,
+                subjectSide: PlayerSide.Runner));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            BehaviorCondition.Tagged((PlayerSide)999));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             BehaviorCondition.ClicksRemainingAtLeast(-1));
         Assert.Throws<ArgumentException>(() =>
@@ -126,6 +140,20 @@ public sealed class BehaviorContractsTests
             new BehaviorTarget(BehaviorTargetKind.ZoneCard));
         Assert.Throws<ArgumentException>(() =>
             new BehaviorTarget(BehaviorTargetKind.NamedCard, selector: null));
+
+        string runnerJson = System.Text.Json.JsonSerializer.Serialize(
+            runnerTagged,
+            EngineJson.Options);
+        Assert.Contains("\"subjectSide\":\"runner\"", runnerJson, StringComparison.Ordinal);
+        BehaviorCondition restoredRunner = System.Text.Json.JsonSerializer.Deserialize<BehaviorCondition>(
+            runnerJson,
+            EngineJson.Options)!;
+        Assert.Equal(runnerTagged, restoredRunner);
+
+        BehaviorCondition restoredLegacy = System.Text.Json.JsonSerializer.Deserialize<BehaviorCondition>(
+            "{\"kind\":\"tagged\",\"fact\":null,\"value\":null}",
+            EngineJson.Options)!;
+        Assert.Null(restoredLegacy.SubjectSide);
     }
 
     [Fact]
@@ -150,6 +178,9 @@ public sealed class BehaviorContractsTests
             equivalentFilter);
         BehaviorTarget chosenCard = new(BehaviorTargetKind.ChosenCard);
         BehaviorTarget installedCard = new(BehaviorTargetKind.InstalledCard);
+        BehaviorTarget installedCorpCard = new(
+            BehaviorTargetKind.InstalledCardNotThisTurn,
+            filter: new BehaviorCardFilter(ownerSide: PlayerSide.Corp));
 
         BehaviorInstruction search = new(
             BehaviorInstructionKind.Search,
@@ -209,6 +240,8 @@ public sealed class BehaviorContractsTests
         Assert.Equal(BehaviorInstructionKind.TrashCard, trash.Kind);
         Assert.True(install.Optional);
         Assert.Equal(BehaviorTargetKind.InstalledCard, advance.Target?.Kind);
+        Assert.Equal(BehaviorTargetKind.InstalledCardNotThisTurn, installedCorpCard.Kind);
+        Assert.Equal(PlayerSide.Corp, installedCorpCard.Filter?.OwnerSide);
         Assert.Equal(BehaviorConditionKind.ClicksRemainingAtLeast, conditionalLoss.Condition?.Kind);
 
         Assert.Throws<ArgumentNullException>(() => new BehaviorInstruction(
@@ -271,10 +304,11 @@ public sealed class BehaviorContractsTests
             BehaviorInstructionKind.Reveal));
         Assert.Throws<ArgumentNullException>(() => new BehaviorInstruction(
             BehaviorInstructionKind.TrashCard));
-        Assert.Throws<ArgumentException>(() => new BehaviorInstruction(
+        BehaviorInstruction chosenAdvance = new(
             BehaviorInstructionKind.AdvanceCard,
             amount: 1,
-            target: chosenCard));
+            target: chosenCard);
+        Assert.Equal(BehaviorTargetKind.ChosenCard, chosenAdvance.Target?.Kind);
         Assert.Throws<ArgumentNullException>(() => new BehaviorInstruction(
             BehaviorInstructionKind.AdvanceCard,
             amount: 1));
@@ -393,7 +427,42 @@ public sealed class BehaviorContractsTests
             .Add(changedDefinition)
             .Build();
         Assert.NotEqual(first.Fingerprint, changed.Fingerprint);
+
+        BehaviorCatalog omittedSubject = new BehaviorCatalogBuilder("test:subject")
+            .Add(CreateTaggedDefinition(BehaviorCondition.Tagged()))
+            .Build();
+        BehaviorCatalog explicitRunnerSubject = new BehaviorCatalogBuilder("test:subject")
+            .Add(CreateTaggedDefinition(BehaviorCondition.Tagged(PlayerSide.Runner)))
+            .Build();
+        BehaviorCatalog explicitCorpSubject = new BehaviorCatalogBuilder("test:subject")
+            .Add(CreateTaggedDefinition(BehaviorCondition.Tagged(PlayerSide.Corp)))
+            .Build();
+        Assert.NotEqual(
+            omittedSubject.GetDefinitionFingerprint(SearchCardId),
+            explicitRunnerSubject.GetDefinitionFingerprint(SearchCardId));
+        Assert.NotEqual(
+            explicitRunnerSubject.GetDefinitionFingerprint(SearchCardId),
+            explicitCorpSubject.GetDefinitionFingerprint(SearchCardId));
+        Assert.Equal(
+            omittedSubject.GetDefinitionFingerprint(SearchCardId),
+            new BehaviorCatalogBuilder("test:subject")
+                .Add(CreateTaggedDefinition(new BehaviorCondition(BehaviorConditionKind.Tagged)))
+                .Build()
+                .GetDefinitionFingerprint(SearchCardId));
     }
+
+    private static CardBehaviorDefinition CreateTaggedDefinition(BehaviorCondition condition) =>
+        new(
+            SearchCardId,
+            PlayerSide.Corp,
+            instructions:
+            [
+                new BehaviorInstruction(
+                    BehaviorInstructionKind.Branch,
+                    branch: new BehaviorBranchSpec(
+                        condition,
+                        [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1)])),
+            ]);
 
     private static CardBehaviorDefinition CreateDefinition(int drawAmount)
     {

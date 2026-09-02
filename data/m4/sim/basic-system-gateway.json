@@ -4,7 +4,7 @@
   "rulesVersion": "26.03",
   "cardDataVersion": "236140cf84491c23995b028bc791281837520b97",
   "behaviorRegistryVersion": "gateway-m2-3",
-  "behaviorCatalogFingerprint": "609d83418823cd629d6b763cd3a2b9ab401cb39cadfa5a23bb237bd800d3a063",
+  "behaviorCatalogFingerprint": "19c8800481f0b65935d4420f0bef019746b5039b5b0159217cc59ae051dc0a66",
   "seed": 40102,
   "actionCap": 128,
   "corpDeck": {
@@ -55,5 +55,5 @@
     "https://nullsignal.games/products/system-gateway/",
     "https://rules.nullsignal.games/"
   ],
-  "crossCheckNote": "Developer-curated code/quantity-only decks use the seven M2 baseline registrations and all twelve Slice 4.2 Batch-1 assignments. This provisional catalog pin covers the ten complete Batch-1 declarations; Mutual Favor and Seamless Launch remain blocked until their Core predicates land. No headless outcome is claimed until MATCH-401A and AGT-401 consume this fixture through normal setup."
+  "crossCheckNote": "Developer-curated code/quantity-only decks use the seven M2 baseline registrations and all twelve executable Slice 4.2 Batch-1 declarations. The catalog fingerprint pins the completed immutable behavior surface. No headless outcome is claimed until MATCH-401A and AGT-401 consume this fixture through normal setup."
 }

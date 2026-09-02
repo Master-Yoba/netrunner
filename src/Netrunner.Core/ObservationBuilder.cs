@@ -168,6 +168,16 @@ public static class ObservationBuilder
                 .ToArray();
         }
 
+        // Keep the lazy Corp play-area topology absent from ordinary
+        // observations. Once an Operation play has created the zone, expose
+        // its public contents explicitly to both viewers.
+        if (state.Zones.Any(zone => zone.Kind == ZoneKind.CorpPlayArea && zone.ServerId is null))
+        {
+            publicState["corpPlayArea"] = ZoneCards(state, ZoneKind.CorpPlayArea)
+                .Select(card => CardView(card))
+                .ToArray();
+        }
+
         RunState? run = state.RunState;
         if (run is not null)
         {
@@ -412,6 +422,7 @@ public static class ObservationBuilder
                 player.Side,
                 BehaviorStaticModifierKind.MaximumHandSize);
             view["maximumHandSize"] = Math.Max(0, checked(rules.MaximumHandSize + modifier));
+            view["tags"] = Math.Max(0, rules.Tags);
         }
 
         return view;

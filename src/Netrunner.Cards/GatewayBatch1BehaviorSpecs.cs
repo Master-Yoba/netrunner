@@ -24,8 +24,48 @@ public static class GatewayBatch1BehaviorSpecs
     private static readonly BehaviorTarget InstalledCard =
         new(BehaviorTargetKind.InstalledCard);
 
+    private static readonly BehaviorTarget CorpInstalledCardNotThisTurn =
+        new(
+            BehaviorTargetKind.InstalledCardNotThisTurn,
+            filter: new BehaviorCardFilter(ownerSide: PlayerSide.Corp));
+
     private static readonly BehaviorTarget HeadquartersCardsTarget =
         BehaviorTarget.CardsInZone(BehaviorZone.Headquarters, BehaviorCardFilter.Any);
+
+    private static readonly BehaviorCardFilter MutualFavorIcebreakerFilter =
+        new(BehaviorCardType.Icebreaker, ownerSide: PlayerSide.Runner);
+
+    private static readonly BehaviorTarget MutualFavorSearchTarget =
+        BehaviorTarget.CardInZone(
+            BehaviorZone.Stack,
+            MutualFavorIcebreakerFilter,
+            reveal: false);
+
+    private static readonly BehaviorChoiceSpec MutualFavorDispositionChoice = new(
+        "mutual-favor-disposition",
+        BehaviorChooser.Controller,
+        BehaviorChoiceMode.Mode,
+        BehaviorChoiceCardinality.Exactly(1),
+        [
+            new BehaviorChoiceOption(
+                "install",
+                [
+                    new BehaviorInstruction(
+                        BehaviorInstructionKind.InstallCard,
+                        target: ChosenCard,
+                        sourceZone: BehaviorZone.Stack,
+                        destinationZone: BehaviorZone.Rig),
+                ]),
+            new BehaviorChoiceOption(
+                "grip",
+                [
+                    new BehaviorInstruction(
+                        BehaviorInstructionKind.AddToHand,
+                        target: ChosenCard,
+                        sourceZone: BehaviorZone.Stack,
+                        destinationZone: BehaviorZone.Grip),
+                ]),
+        ]);
 
     private static readonly BehaviorChoiceSpec WildcatStrikeChoice = new(
         "wildcat-strike-effect",
@@ -57,6 +97,13 @@ public static class GatewayBatch1BehaviorSpecs
         BehaviorChoiceMode.Mandatory,
         BehaviorChoiceCardinality.Exactly(1),
         target: HeadquartersCardsTarget);
+
+    private static readonly BehaviorChoiceSpec SeamlessLaunchChoice = new(
+        "seamless-launch-target",
+        BehaviorChooser.Corp,
+        BehaviorChoiceMode.Mandatory,
+        BehaviorChoiceCardinality.Exactly(1),
+        target: CorpInstalledCardNotThisTurn);
 
     private static readonly BehaviorChoiceSpec PredictivePlanogramSingleChoice = new(
         "predictive-planogram-single-effect",
@@ -109,6 +156,54 @@ public static class GatewayBatch1BehaviorSpecs
         PlayerSide.Runner,
         costs: [CreditCost(2)],
         instructions: [Choose(WildcatStrikeChoice)]);
+
+    // 30011 — CR-8.6-play / CR-8.7-search / CR-8.5-install. The search is
+    // private and bounded to at most one Runner-owned icebreaker in Stack;
+    // the chosen card remains bound through the shuffle/reveal branches.
+    private static readonly CardBehaviorDefinition MutualFavor = new(
+        GatewayBatch1CardCodes.MutualFavor,
+        PlayerSide.Runner,
+        costs: [CreditCost(0)],
+        instructions:
+        [
+            new BehaviorInstruction(
+                BehaviorInstructionKind.Search,
+                argument: "mutual-favor-search",
+                target: MutualFavorSearchTarget,
+                sourceZone: BehaviorZone.Stack,
+                filter: MutualFavorIcebreakerFilter),
+            new BehaviorInstruction(
+                BehaviorInstructionKind.ShuffleIntoDeck,
+                target: ChosenCard,
+                sourceZone: BehaviorZone.Stack,
+                destinationZone: BehaviorZone.Stack),
+            new BehaviorInstruction(
+                BehaviorInstructionKind.Branch,
+                branch: new BehaviorBranchSpec(
+                    BehaviorCondition.FoundCard(),
+                    whenTrue:
+                    [
+                        new BehaviorInstruction(
+                            BehaviorInstructionKind.Reveal,
+                            target: ChosenCard),
+                        new BehaviorInstruction(
+                            BehaviorInstructionKind.Branch,
+                            branch: new BehaviorBranchSpec(
+                                BehaviorCondition.SuccessfulRunThisTurn(),
+                                whenTrue: [Choose(MutualFavorDispositionChoice)],
+                                whenFalse:
+                                [
+                                    new BehaviorInstruction(
+                                        BehaviorInstructionKind.AddToHand,
+                                        target: ChosenCard,
+                                        sourceZone: BehaviorZone.Stack,
+                                        destinationZone: BehaviorZone.Grip),
+                                ],
+                                key: "mutual-favor-successful-run")),
+                    ],
+                    whenFalse: [],
+                    key: "mutual-favor-found-card")),
+        ]);
 
     // 30020 — CR-8.6-play / CR-5.4-action-phase.
     private static readonly CardBehaviorDefinition CreativeCommission = new(
@@ -186,6 +281,25 @@ public static class GatewayBatch1BehaviorSpecs
             new BehaviorInstruction(BehaviorInstructionKind.TrashCard, target: ChosenCard),
         ]);
 
+    // 30040 — CR-8.6-play / CR-1.18-advance. The real play reducer owns the
+    // printed one-credit play cost; the behavior only selects an eligible
+    // Corp-installed card and applies the exact two-counter effect.
+    private static readonly CardBehaviorDefinition SeamlessLaunch = new(
+        GatewayBatch1CardCodes.SeamlessLaunch,
+        PlayerSide.Corp,
+        costs: [CreditCost(1)],
+        targets: [CorpInstalledCardNotThisTurn],
+        instructions:
+        [
+            new BehaviorInstruction(
+                BehaviorInstructionKind.Choose,
+                choice: SeamlessLaunchChoice),
+            new BehaviorInstruction(
+                BehaviorInstructionKind.AdvanceCard,
+                amount: 2,
+                target: ChosenCard),
+        ]);
+
     // 30056 — CR-8.6-play / CR-8.4-draw; tagged branch and ordered both mode.
     private static readonly CardBehaviorDefinition PredictivePlanogram = new(
         GatewayBatch1CardCodes.PredictivePlanogram,
@@ -196,7 +310,7 @@ public static class GatewayBatch1BehaviorSpecs
             new BehaviorInstruction(
                 BehaviorInstructionKind.Branch,
                 branch: new BehaviorBranchSpec(
-                    BehaviorCondition.Tagged(),
+                    BehaviorCondition.Tagged(PlayerSide.Runner),
                     whenTrue: [Choose(PredictivePlanogramTaggedChoice)],
                     whenFalse: [Choose(PredictivePlanogramSingleChoice)],
                     key: "predictive-planogram-tagged")),
@@ -216,7 +330,7 @@ public static class GatewayBatch1BehaviorSpecs
         costs: [CreditCost(5)],
         instructions: [Gain(9)]);
 
-    /// <summary>All twelve assigned Batch 1 IDs, including blocked drafts.</summary>
+    /// <summary>All twelve assigned Batch 1 IDs.</summary>
     public static IReadOnlyList<CardDefinitionId> AssignedDefinitionIds { get; } =
         new ReadOnlyCollection<CardDefinitionId>
         ([
@@ -235,18 +349,12 @@ public static class GatewayBatch1BehaviorSpecs
         ]);
 
     /// <summary>
-    /// IDs intentionally withheld from the executable catalog until Core has
-    /// a serializable set-aside search boundary and an installed-card target
-    /// predicate excluding cards installed during the current turn.
-    ///
-    /// The first gap belongs to Mutual Favor (CR-8.7-search); the second is
-    /// Seamless Launch (CR-1.18-advance and CR-8.5-install). Keeping these IDs
-    /// in this explicit list preserves the assignment/provenance inventory
-    /// without making the behavior gate claim either card is executable.
+    /// IDs intentionally withheld from the executable catalog. This batch has
+    /// no blocked definitions now that all twelve declarations have their
+    /// serializable Core runtime handoffs.
     /// </summary>
     public static IReadOnlyList<CardDefinitionId> BlockedDefinitionIds { get; } =
-        new ReadOnlyCollection<CardDefinitionId>
-        ([GatewayBatch1CardCodes.MutualFavor, GatewayBatch1CardCodes.SeamlessLaunch]);
+        new ReadOnlyCollection<CardDefinitionId>([]);
 
     /// <summary>
     /// Immutable complete generic declarations. The catalog builder accepts
@@ -257,12 +365,14 @@ public static class GatewayBatch1BehaviorSpecs
         new ReadOnlyCollection<CardBehaviorDefinition>(
         [
             WildcatStrike,
+            MutualFavor,
             CreativeCommission,
             VRcation,
             SureGamble,
             T400MemoryDiamond,
             Sprint,
             HanseiReview,
+            SeamlessLaunch,
             PredictivePlanogram,
             GovernmentSubsidy,
             HedgeFund,

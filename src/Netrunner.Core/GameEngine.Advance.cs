@@ -50,6 +50,9 @@ public static partial class GameEngine
                 case InstallFrame install:
                     StepInstall(working, install);
                     break;
+                case CardPlayFrame cardPlay:
+                    StepCardPlay(working, cardPlay);
+                    break;
                 case RunTimingFrame runTiming:
                     StepRunTiming(working, runTiming);
                     break;

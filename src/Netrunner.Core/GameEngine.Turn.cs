@@ -391,6 +391,16 @@ public static partial class GameEngine
         PlayerState holder = GetPlayer(working, frame.PriorityHolder.Value);
         DecisionId decisionId = working.Allocator.NextDecisionId();
         ActionId passId = working.Allocator.NextActionId();
+        var actions = new List<LegalAction>
+        {
+            new(
+                passId,
+                ActionKind.PassPriority,
+                "Pass",
+                new NoActionParameters()),
+        };
+        AddRezCardActions(working, actions);
+        AddScoreActions(working, frame, actions);
         working.DecisionRevision = NextRevision(working.DecisionRevision);
         working.PendingDecision = new PendingDecision(
             decisionId,
@@ -398,11 +408,7 @@ public static partial class GameEngine
             holder.Id,
             DecisionKind.TurnTiming,
             $"{frame.PriorityWindow.Value} window ({frame.Stage})",
-            [new LegalAction(
-                passId,
-                ActionKind.PassPriority,
-                "Pass",
-                new NoActionParameters())]);
+            actions);
     }
 
     private static void ConsumeTurnPriorityAction(WorkingState working)
@@ -561,6 +567,10 @@ public static partial class GameEngine
         if (player.Clicks > 0)
         {
             AddInstallActions(working, frame.ActiveSide, actions);
+            AddPlayActions(working, actions);
+            AddRunActions(working, actions);
+            AddAdvanceCardActions(working, actions);
+            AddTagResourcePurgeActions(working, actions);
         }
 
         working.DecisionRevision = NextRevision(working.DecisionRevision);

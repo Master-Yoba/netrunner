@@ -523,10 +523,24 @@ public static partial class GameEngine
     private static void PurgeVirusCounters(WorkingState working)
     {
         RulesState rules = RequireRulesState(working);
-        int removed = rules.Counters.Count(counter => string.Equals(counter.CounterName, "virus", StringComparison.Ordinal));
+        long removed = 0;
+        foreach (CardCounterState counter in rules.Counters)
+        {
+            if (string.Equals(counter.CounterName, "virus", StringComparison.Ordinal))
+            {
+                removed = checked(removed + counter.Count);
+            }
+        }
+
+        if (removed is < 0 or > int.MaxValue)
+        {
+            throw new ResolutionFailureException(
+                "The virus-counter total does not fit the event payload.");
+        }
+
         SetRulesState(working, counters: rules.Counters
             .Where(counter => !string.Equals(counter.CounterName, "virus", StringComparison.Ordinal)).ToArray());
-        Emit(working, EngineEventKinds.VirusPurged, new VirusPurgedEventPayload(removed));
+        Emit(working, EngineEventKinds.VirusPurged, new VirusPurgedEventPayload((int)removed));
     }
 
     private static void AddLingering(WorkingState working, GameLingeringEffect effect)

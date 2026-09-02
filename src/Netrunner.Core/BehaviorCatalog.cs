@@ -119,11 +119,28 @@ public enum BehaviorCostKind
 public sealed record BehaviorCondition
 {
     [JsonConstructor]
-    public BehaviorCondition(BehaviorConditionKind kind, string? fact = null, int? value = null)
+    public BehaviorCondition(
+        BehaviorConditionKind kind,
+        string? fact = null,
+        int? value = null,
+        PlayerSide? subjectSide = null)
     {
         if (!Enum.IsDefined(kind))
         {
             throw new ArgumentOutOfRangeException(nameof(kind));
+        }
+
+        if (subjectSide is { } side && !Enum.IsDefined(side))
+        {
+            throw new ArgumentOutOfRangeException(nameof(subjectSide));
+        }
+
+        if (subjectSide is not null
+            && kind is not (BehaviorConditionKind.Tagged or BehaviorConditionKind.NotTagged))
+        {
+            throw new ArgumentException(
+                "An explicit subject side is valid only for Tagged and NotTagged conditions.",
+                nameof(subjectSide));
         }
 
         if (kind is BehaviorConditionKind.FactEquals or BehaviorConditionKind.CounterAtLeast)
@@ -170,7 +187,8 @@ public sealed record BehaviorCondition
         }
 
         if ((kind is BehaviorConditionKind.InstalledThisTurn
-                or BehaviorConditionKind.SuccessfulRunThisTurn)
+                or BehaviorConditionKind.SuccessfulRunThisTurn
+                or BehaviorConditionKind.FoundCard)
             && (fact is not null || value is not null))
         {
             throw new ArgumentException(
@@ -180,6 +198,7 @@ public sealed record BehaviorCondition
 
         Fact = fact;
         Kind = kind;
+        SubjectSide = subjectSide;
         Value = value;
     }
 
@@ -187,15 +206,22 @@ public sealed record BehaviorCondition
 
     public string? Fact { get; }
 
+    /// <summary>
+    /// Optional player whose standard tag state is tested by a Tagged or
+    /// NotTagged condition. When omitted, evaluation remains relative to the
+    /// behavior controller for compatibility with the original contract.
+    /// </summary>
+    public PlayerSide? SubjectSide { get; }
+
     public int? Value { get; }
 
     /// <summary>Creates a condition requiring the standard tag state to be present.</summary>
-    public static BehaviorCondition Tagged() =>
-        new(BehaviorConditionKind.Tagged);
+    public static BehaviorCondition Tagged(PlayerSide? subjectSide = null) =>
+        new(BehaviorConditionKind.Tagged, subjectSide: subjectSide);
 
     /// <summary>Creates a condition requiring the standard tag state to be absent.</summary>
-    public static BehaviorCondition NotTagged() =>
-        new(BehaviorConditionKind.NotTagged);
+    public static BehaviorCondition NotTagged(PlayerSide? subjectSide = null) =>
+        new(BehaviorConditionKind.NotTagged, subjectSide: subjectSide);
 
     /// <summary>Creates a condition over the acting player's remaining clicks.</summary>
     public static BehaviorCondition ClicksRemainingAtLeast(int threshold) =>
@@ -208,6 +234,10 @@ public sealed record BehaviorCondition
     /// <summary>Creates a successful-run-this-turn fact condition.</summary>
     public static BehaviorCondition SuccessfulRunThisTurn() =>
         new(BehaviorConditionKind.SuccessfulRunThisTurn);
+
+    /// <summary>Creates a condition requiring the latest search to find a card.</summary>
+    public static BehaviorCondition FoundCard() =>
+        new(BehaviorConditionKind.FoundCard);
 }
 
 public enum BehaviorConditionKind
@@ -223,6 +253,7 @@ public enum BehaviorConditionKind
     ClicksRemainingAtLeast,
     InstalledThisTurn,
     SuccessfulRunThisTurn,
+    FoundCard,
 }
 
 /// <summary>A typed target selector; IDs are resolved by Core at runtime.</summary>
@@ -259,6 +290,31 @@ public sealed record BehaviorTarget
             if (!Enum.IsDefined(zone.Value))
             {
                 throw new ArgumentOutOfRangeException(nameof(zone));
+            }
+        }
+        else if (kind is BehaviorTargetKind.InstalledCard or BehaviorTargetKind.InstalledCardNotThisTurn)
+        {
+            if (zone is not null || reveal)
+            {
+                throw new ArgumentException(
+                    "Installed-card targets may not carry a zone or reveal flag.",
+                    nameof(zone));
+            }
+
+            // Installed selectors are intentionally narrow. The target
+            // itself supplies the installed/location predicate; the only
+            // additional selector permitted in this slice is the owning
+            // side. Definition, subtype, and card-class filters remain
+            // hidden-zone vocabulary and must not silently widen this
+            // selector's trust boundary.
+            if (filter is not null
+                && (filter.CardType != BehaviorCardType.Any
+                    || filter.DefinitionId is not null
+                    || filter.Subtype is not null))
+            {
+                throw new ArgumentException(
+                    "Installed-card targets may carry only an owner-side filter.",
+                    nameof(filter));
             }
         }
         else if (zone is not null || filter is not null || reveal)
@@ -327,6 +383,17 @@ public sealed record BehaviorTarget
     /// </summary>
     public static BehaviorTarget InstalledCardNotThisTurn(string? selector = null) =>
         new(BehaviorTargetKind.InstalledCardNotThisTurn, selector);
+
+    /// <summary>
+    /// Creates an installed-card target constrained to one owning side. The
+    /// side filter is intentionally explicit so a Corp behavior cannot
+    /// accidentally target a Runner card (or vice versa).
+    /// </summary>
+    public static BehaviorTarget InstalledCardNotThisTurn(PlayerSide ownerSide, string? selector = null) =>
+        new(
+            BehaviorTargetKind.InstalledCardNotThisTurn,
+            selector,
+            filter: new BehaviorCardFilter(ownerSide: ownerSide));
 }
 
 public enum BehaviorTargetKind
@@ -468,6 +535,13 @@ public sealed record BehaviorInstruction
                     nameof(Target));
             }
 
+            if (SourceZone is BehaviorZone.Deck or BehaviorZone.Stack && Target.Reveal)
+            {
+                throw new ArgumentException(
+                    "Deck and Stack searches must keep the selection hidden; reveal with an explicit Reveal instruction after any shuffle.",
+                    nameof(Target));
+            }
+
             if (!BehaviorContractStructure.AreEqual(Target.Filter, Filter))
             {
                 throw new ArgumentException(
@@ -539,7 +613,8 @@ public sealed record BehaviorInstruction
                         nameof(SourceZone),
                         BehaviorZone.Headquarters,
                         BehaviorZone.Grip,
-                        BehaviorZone.Archives);
+                        BehaviorZone.Archives,
+                        BehaviorZone.Stack);
                 }
 
                 RequireDestination(
@@ -550,10 +625,10 @@ public sealed record BehaviorInstruction
                     BehaviorZone.PlayArea);
                 break;
             case BehaviorInstructionKind.AdvanceCard:
-                if (Target?.Kind != BehaviorTargetKind.InstalledCard)
+                if (Target?.Kind is not (BehaviorTargetKind.InstalledCard or BehaviorTargetKind.ChosenCard))
                 {
                     throw new ArgumentException(
-                        "Advance instructions must target an installed card.",
+                        "Advance instructions must target an installed card or a chosen card binding.",
                         nameof(Target));
                 }
 
@@ -1525,6 +1600,14 @@ internal static class BehaviorCatalogFingerprint
         AppendString(builder, value.Fact);
         builder.Append(",value=");
         AppendNullableInt(builder, value.Value);
+        // Preserve the historical fingerprint bytes for controller-relative
+        // conditions. The subject field is encoded only for an explicit
+        // Tagged/NotTagged subject so adding this optional contract field does
+        // not invalidate existing behavior definition pins.
+        if (value.SubjectSide is { } subjectSide)
+        {
+            builder.Append(",subject=").Append((int)subjectSide);
+        }
     }
 
     private static void AppendTarget(StringBuilder builder, BehaviorTarget? value)

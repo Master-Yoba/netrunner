@@ -628,6 +628,30 @@ public static partial class GameEngine
             case (ActionKind.InstallCard, InstallCardParameters install):
                 ConsumeTurnInstallAction(working, install);
                 return;
+            case (ActionKind.PlayCard, PlayCardParameters playCard):
+                ConsumeTurnPlayAction(working, playCard);
+                return;
+            case (ActionKind.StartRun, RunServerParameters runServer):
+                ConsumeTurnStartRunAction(working, runServer);
+                return;
+            case (ActionKind.AdvanceCard, AdvanceCardParameters advanceCard):
+                ConsumeTurnAdvanceCardAction(working, advanceCard);
+                return;
+            case (ActionKind.RemoveTag, RemoveTagParameters removeTag):
+                ConsumeRemoveTagAction(working, removeTag);
+                return;
+            case (ActionKind.TrashTaggedResource, TrashTaggedResourceParameters trashTaggedResource):
+                ConsumeTrashTaggedResourceAction(working, trashTaggedResource);
+                return;
+            case (ActionKind.PurgeVirusCounters, PurgeVirusCountersParameters purgeVirusCounters):
+                ConsumePurgeVirusCountersAction(working, purgeVirusCounters);
+                return;
+            case (ActionKind.ScoreAgenda, ScoreAgendaParameters scoreAgenda):
+                ConsumeTurnScoreAgendaAction(working, scoreAgenda);
+                return;
+            case (ActionKind.RezCard, RezCardParameters rezCard):
+                ConsumeRezCardAction(working, rezCard);
+                return;
             case (ActionKind.GainCredit, NoActionParameters):
             case (ActionKind.DrawCard, NoActionParameters):
             case (ActionKind.EndTurn, NoActionParameters):

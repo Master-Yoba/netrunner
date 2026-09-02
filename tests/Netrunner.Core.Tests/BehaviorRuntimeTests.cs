@@ -140,6 +140,75 @@ public sealed class BehaviorRuntimeTests
     }
 
     [Fact]
+    public void ExactMultiCardSelectionPreservesEveryCardThroughSetAsideAndTransfer()
+    {
+        CardDefinitionId definitionId = new("test:runtime-multi-target");
+        CardInstanceId sourceId = new("card:runtime-multi-target-source");
+        CardInstanceId first = new("card:runtime-multi-target-a");
+        CardInstanceId second = new("card:runtime-multi-target-b");
+        BehaviorTarget headquarters = BehaviorTarget.CardsInZone(
+            BehaviorZone.Headquarters,
+            BehaviorCardFilter.Any);
+        BehaviorCatalog catalog = Catalog(new CardBehaviorDefinition(
+            definitionId,
+            PlayerSide.Corp,
+            instructions:
+            [
+                new BehaviorInstruction(
+                    BehaviorInstructionKind.Choose,
+                    choice: new BehaviorChoiceSpec(
+                        "runtime-multi-target-choice",
+                        BehaviorChooser.Controller,
+                        BehaviorChoiceMode.Mandatory,
+                        BehaviorChoiceCardinality.Exactly(2),
+                        target: headquarters)),
+                new BehaviorInstruction(
+                    BehaviorInstructionKind.TrashCard,
+                    target: new BehaviorTarget(BehaviorTargetKind.ChosenCard)),
+            ]));
+        GameState state = CreateState(
+            catalog,
+            (sourceId, definitionId, ZoneKind.CorpHand, PlayerSide.Corp),
+            (first, new CardDefinitionId("test:runtime-multi-target-a-definition"), ZoneKind.CorpHand, PlayerSide.Corp),
+            (second, new CardDefinitionId("test:runtime-multi-target-b-definition"), ZoneKind.CorpHand, PlayerSide.Corp));
+        PlayerId corp = state.Players.Single(player => player.Side == PlayerSide.Corp).Id;
+
+        GameState prompt = GameEngine.BeginBehaviorForTesting(
+            state,
+            new BehaviorInvocationContext(sourceId, corp),
+            catalog);
+        LegalAction selection = prompt.PendingDecision!.LegalActions.Single(action =>
+            action.Parameters is BehaviorChoiceParameters choice
+            && choice.CardIds.SequenceEqual([first, second]));
+
+        ApplyResult result = GameEngine.Apply(
+            prompt,
+            new ActionSubmission(
+                prompt.PendingDecision.Owner,
+                prompt.PendingDecision.Id,
+                prompt.PendingDecision.Revision,
+                selection.Id),
+            catalog);
+
+        Assert.True(result.Accepted, result.Rejection?.Message);
+        Assert.Null(result.State.PendingDecision);
+        Assert.Empty(result.State.ResolutionStack);
+        Assert.Equal(
+            [first, second],
+            result.State.GetZone(ZoneKind.CorpDiscard).CardIds);
+        Assert.All(
+            new[] { first, second },
+            cardId => Assert.True(result.State.GetCard(cardId).FaceUp));
+        Assert.Contains(sourceId, result.State.GetZone(ZoneKind.CorpHand).CardIds);
+        CardInstanceId[] setAsideCards = result.State.Zones
+            .Where(zone => zone.Kind == ZoneKind.BehaviorSetAside)
+            .SelectMany(zone => zone.CardIds)
+            .ToArray();
+        Assert.DoesNotContain(first, setAsideCards);
+        Assert.DoesNotContain(second, setAsideCards);
+    }
+
+    [Fact]
     public void CardinalityActionsExposeUpToAndAnyNumberIncludingExplicitSkip()
     {
         CardDefinitionId definitionId = new("test:runtime-cardinality");
@@ -178,15 +247,15 @@ public sealed class BehaviorRuntimeTests
         CardDefinitionId definitionId = new("test:runtime-search");
         CardInstanceId sourceId = new("card:runtime-search-source");
         CardInstanceId hidden = new("card:runtime-search-hidden");
-        BehaviorTarget stack = BehaviorTarget.CardInZone(BehaviorZone.Stack, BehaviorCardFilter.Any, reveal: true);
+        BehaviorTarget stack = BehaviorTarget.CardInZone(BehaviorZone.Stack, BehaviorCardFilter.Any);
         BehaviorCatalog catalog = Catalog(new CardBehaviorDefinition(
             definitionId,
             PlayerSide.Runner,
             instructions:
             [
                 new BehaviorInstruction(BehaviorInstructionKind.Search, sourceZone: BehaviorZone.Stack, filter: BehaviorCardFilter.Any, target: stack),
-                new BehaviorInstruction(BehaviorInstructionKind.Reveal, target: new BehaviorTarget(BehaviorTargetKind.ChosenCard)),
                 new BehaviorInstruction(BehaviorInstructionKind.ShuffleIntoDeck, target: new BehaviorTarget(BehaviorTargetKind.ChosenCard), sourceZone: BehaviorZone.Stack, destinationZone: BehaviorZone.Stack),
+                new BehaviorInstruction(BehaviorInstructionKind.Reveal, target: new BehaviorTarget(BehaviorTargetKind.ChosenCard)),
             ]));
         GameState state = CreateState(
             catalog,
@@ -207,6 +276,12 @@ public sealed class BehaviorRuntimeTests
         Assert.Null(result.State.PendingDecision);
         Assert.False(result.State.GetCard(hidden).FaceUp);
         Assert.Contains(hidden, result.State.GetZone(ZoneKind.RunnerStack).CardIds);
+        int shuffleIndex = result.Events.ToList().FindIndex(
+            @event => @event.Kind == EngineEventKinds.BehaviorCardsShuffled);
+        int revealIndex = result.Events.ToList().FindIndex(
+            @event => @event.Kind == EngineEventKinds.BehaviorCardRevealed);
+        Assert.True(shuffleIndex >= 0);
+        Assert.True(revealIndex > shuffleIndex);
         Assert.Contains(result.Events, @event =>
             @event.Kind == EngineEventKinds.BehaviorCardRevealed
             && @event.Payload is BehaviorCardRevealedEventPayload payload
@@ -820,6 +895,165 @@ public sealed class BehaviorRuntimeTests
     }
 
     [Fact]
+    public void EmptyMandatoryTargetPersistsNoOpForChosenTransferAndContinues()
+    {
+        CardDefinitionId definitionId = new("test:runtime-empty-transfer");
+        CardInstanceId sourceId = new("card:runtime-empty-transfer-source");
+        BehaviorTarget emptyArchives = BehaviorTarget.CardInZone(
+            BehaviorZone.Archives,
+            BehaviorCardFilter.Any);
+        BehaviorCatalog catalog = Catalog(new CardBehaviorDefinition(
+            definitionId,
+            PlayerSide.Corp,
+            instructions:
+            [
+                new BehaviorInstruction(
+                    BehaviorInstructionKind.Choose,
+                    choice: new BehaviorChoiceSpec(
+                        "runtime-empty-transfer-choice",
+                        BehaviorChooser.Corp,
+                        BehaviorChoiceMode.Mandatory,
+                        BehaviorChoiceCardinality.Exactly(1),
+                        target: emptyArchives)),
+                new BehaviorInstruction(
+                    BehaviorInstructionKind.TrashCard,
+                    target: new BehaviorTarget(BehaviorTargetKind.ChosenCard)),
+                new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 2),
+            ]));
+        GameState state = CreateState(
+            catalog,
+            (sourceId, definitionId, ZoneKind.CorpHand, PlayerSide.Corp));
+        PlayerId corp = state.Players.Single(player => player.Side == PlayerSide.Corp).Id;
+
+        GameState result = GameEngine.BeginBehaviorForTesting(
+            state,
+            new BehaviorInvocationContext(sourceId, corp),
+            catalog);
+
+        Assert.Null(result.PendingDecision);
+        Assert.Empty(result.ResolutionStack);
+        Assert.Equal(state.GetPlayer(corp).Credits + 2, result.GetPlayer(corp).Credits);
+        Assert.Contains(sourceId, result.GetZone(ZoneKind.CorpHand).CardIds);
+        Assert.Empty(result.GetZone(ZoneKind.CorpDiscard).CardIds);
+    }
+
+    [Fact]
+    public void ChosenCardWithoutEmptySelectionContinuationRejectsAtomically()
+    {
+        CardDefinitionId definitionId = new("test:runtime-missing-chosen");
+        CardInstanceId sourceId = new("card:runtime-missing-chosen-source");
+        BehaviorChoiceSpec optionChoice = new(
+            "runtime-missing-chosen-option",
+            BehaviorChooser.Corp,
+            BehaviorChoiceMode.Mode,
+            BehaviorChoiceCardinality.Exactly(1),
+            [new BehaviorChoiceOption(
+                "trash",
+                [new BehaviorInstruction(
+                    BehaviorInstructionKind.TrashCard,
+                    target: new BehaviorTarget(BehaviorTargetKind.ChosenCard))]),
+             new BehaviorChoiceOption("leave", [new BehaviorInstruction(BehaviorInstructionKind.NoOp)])]);
+        BehaviorCatalog catalog = Catalog(new CardBehaviorDefinition(
+            definitionId,
+            PlayerSide.Corp,
+            instructions: [new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: optionChoice)]));
+        GameState state = CreateState(
+            catalog,
+            (sourceId, definitionId, ZoneKind.CorpHand, PlayerSide.Corp));
+        PlayerId corp = state.Players.Single(player => player.Side == PlayerSide.Corp).Id;
+        GameState prompt = GameEngine.BeginBehaviorForTesting(
+            state,
+            new BehaviorInvocationContext(sourceId, corp),
+            catalog);
+        LegalAction trash = Assert.Single(
+            prompt.PendingDecision!.LegalActions,
+            action => action.Parameters is BehaviorChoiceParameters parameters
+                && parameters.OptionKeys.SequenceEqual(["trash"]));
+        string hash = DeterministicHash.ForState(prompt);
+
+        ApplyResult result = GameEngine.Apply(
+            prompt,
+            new ActionSubmission(
+                corp,
+                prompt.PendingDecision.Id,
+                prompt.PendingDecision.Revision,
+                trash.Id),
+            catalog);
+
+        Assert.False(result.Accepted);
+        Assert.Equal(ApplyRejectionCode.ResolutionFailure, result.Rejection?.Code);
+        Assert.Equal(hash, DeterministicHash.ForState(result.State));
+        Assert.Contains(sourceId, result.State.GetZone(ZoneKind.CorpHand).CardIds);
+    }
+
+    [Fact]
+    public void ForgedChosenBindingWithoutEmptySelectionContinuationRejectsAtomically()
+    {
+        CardDefinitionId definitionId = new("test:runtime-forged-chosen");
+        CardInstanceId sourceId = new("card:runtime-forged-chosen-source");
+        BehaviorChoiceSpec choice = new(
+            "runtime-forged-chosen-choice",
+            BehaviorChooser.Corp,
+            BehaviorChoiceMode.Mode,
+            BehaviorChoiceCardinality.Exactly(1),
+            [new BehaviorChoiceOption("skip", [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]),
+             new BehaviorChoiceOption("leave", [new BehaviorInstruction(BehaviorInstructionKind.NoOp)])]);
+        BehaviorCatalog catalog = Catalog(new CardBehaviorDefinition(
+            definitionId,
+            PlayerSide.Corp,
+            instructions: [new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: choice)]));
+        GameState state = CreateState(
+            catalog,
+            (sourceId, definitionId, ZoneKind.CorpHand, PlayerSide.Corp));
+        PlayerId corp = state.Players.Single(player => player.Side == PlayerSide.Corp).Id;
+        GameState prompt = GameEngine.BeginBehaviorForTesting(
+            state,
+            new BehaviorInvocationContext(sourceId, corp),
+            catalog);
+        BehaviorResolutionFrame original = Assert.IsType<BehaviorResolutionFrame>(prompt.ResolutionStack.Single());
+        BehaviorResolutionFrame forged = new(
+            original.Version,
+            original.BehaviorId,
+            original.DefinitionId,
+            original.SourceCardId,
+            original.Controller,
+            original.ActingPlayer,
+            original.CatalogFingerprint,
+            original.DefinitionFingerprint,
+            original.Stage,
+            original.InstructionCursor,
+            [new BehaviorBinding("chosen", [sourceId])],
+            original.SetAside,
+            original.Choice,
+            original.Continuation,
+            original.SetAsideZoneId,
+            original.ParentBehaviorId,
+            original.FrameIdentity,
+            original.SourceZoneId,
+            original.SourceZoneKind,
+            original.ParentFrameIdentity);
+        GameState tampered = ReplaceResolutionStack(prompt, [forged]);
+        string hash = DeterministicHash.ForState(tampered);
+        LegalAction skip = Assert.Single(
+            prompt.PendingDecision!.LegalActions,
+            action => action.Parameters is BehaviorChoiceParameters parameters
+                && parameters.OptionKeys.SequenceEqual(["skip"]));
+
+        ApplyResult result = GameEngine.Apply(
+            tampered,
+            new ActionSubmission(
+                corp,
+                tampered.PendingDecision!.Id,
+                tampered.PendingDecision.Revision,
+                skip.Id),
+            catalog);
+
+        Assert.False(result.Accepted);
+        Assert.Equal(ApplyRejectionCode.InvalidInputState, result.Rejection?.Code);
+        Assert.Equal(hash, DeterministicHash.ForState(result.State));
+    }
+
+    [Fact]
     public void SetAsideRevealAndLaterGripChoicePreserveHiddenStateAndBinding()
     {
         CardDefinitionId definitionId = new("test:runtime-setaside");
@@ -848,13 +1082,13 @@ public sealed class BehaviorRuntimeTests
                     BehaviorInstructionKind.Search,
                     sourceZone: BehaviorZone.Stack,
                     filter: BehaviorCardFilter.Any,
-                    target: BehaviorTarget.CardInZone(BehaviorZone.Stack, BehaviorCardFilter.Any, reveal: true)),
-                new BehaviorInstruction(BehaviorInstructionKind.Reveal, target: new BehaviorTarget(BehaviorTargetKind.ChosenCard)),
+                    target: BehaviorTarget.CardInZone(BehaviorZone.Stack, BehaviorCardFilter.Any)),
                 new BehaviorInstruction(
                     BehaviorInstructionKind.ShuffleIntoDeck,
                     target: new BehaviorTarget(BehaviorTargetKind.ChosenCard),
                     sourceZone: BehaviorZone.Stack,
                     destinationZone: BehaviorZone.Stack),
+                new BehaviorInstruction(BehaviorInstructionKind.Reveal, target: new BehaviorTarget(BehaviorTargetKind.ChosenCard)),
                 new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: disposition),
             ]));
         GameState state = CreateState(
@@ -907,17 +1141,9 @@ public sealed class BehaviorRuntimeTests
     [Fact]
     public void InstalledNotThisTurnTracksActualInstallAndResetsAtNextTurn()
     {
-        CardDefinitionId installDefinition = new("test:runtime-fact-install");
         CardDefinitionId queryDefinition = new("test:runtime-fact-query");
-        CardInstanceId installSource = new("card:runtime-fact-install-source");
         CardInstanceId querySource = new("card:runtime-fact-query-source");
         CardInstanceId installed = new("card:runtime-fact-installed");
-        BehaviorChoiceSpec installChoice = new(
-            "runtime-fact-install-choice",
-            BehaviorChooser.Runner,
-            BehaviorChoiceMode.Mandatory,
-            BehaviorChoiceCardinality.Exactly(1),
-            target: BehaviorTarget.CardInZone(BehaviorZone.Grip));
         BehaviorChoiceSpec queryChoice = new(
             "runtime-fact-query-choice",
             BehaviorChooser.Runner,
@@ -926,27 +1152,14 @@ public sealed class BehaviorRuntimeTests
             target: BehaviorTarget.InstalledCardNotThisTurn());
         BehaviorCatalog catalog = new BehaviorCatalogBuilder("test:behavior-facts")
             .Add(new CardBehaviorDefinition(
-                installDefinition,
-                PlayerSide.Runner,
-                instructions:
-                [
-                    new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: installChoice),
-                    new BehaviorInstruction(
-                        BehaviorInstructionKind.InstallCard,
-                        target: new BehaviorTarget(BehaviorTargetKind.ChosenCard),
-                        sourceZone: BehaviorZone.Grip,
-                        destinationZone: BehaviorZone.Rig),
-                ]))
-            .Add(new CardBehaviorDefinition(
                 queryDefinition,
                 PlayerSide.Runner,
                 instructions: [new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: queryChoice)]))
             .Build();
         GameState state = CreateState(
             catalog,
-            (installSource, installDefinition, ZoneKind.RunnerGrip, PlayerSide.Runner),
             (querySource, queryDefinition, ZoneKind.RunnerGrip, PlayerSide.Runner),
-            (installed, new CardDefinitionId("test:runtime-fact-program"), ZoneKind.RunnerGrip, PlayerSide.Runner));
+            (installed, new CardDefinitionId("test:runtime-fact-program"), ZoneKind.RunnerRig, PlayerSide.Runner));
         PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
         state = ReplaceTurn(state, new TurnState(
             PlayerSide.Runner,
@@ -957,37 +1170,32 @@ public sealed class BehaviorRuntimeTests
                 1,
                 null,
                 null,
-                new TurnFactsState(1, PlayerSide.Runner, 1, 4, 0, true, false, false, false),
+                new TurnFactsState(
+                    1,
+                    PlayerSide.Runner,
+                    1,
+                    4,
+                    0,
+                    true,
+                    false,
+                    false,
+                    false,
+                    installedCardIds: [installed]),
                 null)));
 
-        GameState installPrompt = GameEngine.BeginBehaviorForTesting(
-            state,
-            new BehaviorInvocationContext(installSource, runner),
-            catalog);
-        LegalAction install = Assert.Single(
-            installPrompt.PendingDecision!.LegalActions,
-            action => action.Parameters is BehaviorChoiceParameters parameters
-                && parameters.CardIds.SequenceEqual([installed]));
-        ApplyResult installedResult = GameEngine.Apply(
-            installPrompt,
-            new ActionSubmission(runner, installPrompt.PendingDecision.Id, installPrompt.PendingDecision.Revision, install.Id),
-            catalog);
-        Assert.True(installedResult.Accepted, installedResult.Rejection?.Message);
-        Assert.Contains(installed, installedResult.State.Turn.History!.RunnerThisTurn!.InstalledCardIds);
-        string runnerObservation = EngineJson.Serialize(
-            ObservationBuilder.Build(installedResult.State, PlayerSide.Runner));
-        string corpObservation = EngineJson.Serialize(
-            ObservationBuilder.Build(installedResult.State, PlayerSide.Corp));
-        Assert.Contains(installed.Value, runnerObservation, StringComparison.Ordinal);
-        Assert.Contains(installed.Value, corpObservation, StringComparison.Ordinal);
-
         GameState sameTurnQuery = GameEngine.BeginBehaviorForTesting(
-            installedResult.State,
+            state,
             new BehaviorInvocationContext(querySource, runner),
             catalog);
         Assert.Null(sameTurnQuery.PendingDecision);
+        string runnerObservation = EngineJson.Serialize(
+            ObservationBuilder.Build(sameTurnQuery, PlayerSide.Runner));
+        string corpObservation = EngineJson.Serialize(
+            ObservationBuilder.Build(sameTurnQuery, PlayerSide.Corp));
+        Assert.Contains(installed.Value, runnerObservation, StringComparison.Ordinal);
+        Assert.Contains(installed.Value, corpObservation, StringComparison.Ordinal);
 
-        GameState nextTurn = ReplaceTurn(installedResult.State, new TurnState(
+        GameState nextTurn = ReplaceTurn(sameTurnQuery, new TurnState(
             PlayerSide.Runner,
             TurnPhase.Runner,
             2,
@@ -997,7 +1205,7 @@ public sealed class BehaviorRuntimeTests
                 null,
                 null,
                 new TurnFactsState(1, PlayerSide.Runner, 2, 4, 0, true, false, false, false),
-                installedResult.State.Turn.History!.RunnerThisTurn)));
+                sameTurnQuery.Turn.History!.RunnerThisTurn)));
         GameState nextTurnQuery = GameEngine.BeginBehaviorForTesting(
             nextTurn,
             new BehaviorInvocationContext(querySource, runner),
@@ -1128,6 +1336,184 @@ public sealed class BehaviorRuntimeTests
             && payload.Amount == 2
             && payload.AdvancementCounters == 2);
         Assert.DoesNotContain(applied.Events, @event => @event.Kind == EngineEventKinds.AgendaAdvanced);
+    }
+
+    [Fact]
+    public void InstalledChoiceBindsWithoutMovingAndChosenAdvanceUsesOriginSelector()
+    {
+        CardDefinitionId definitionId = new("test:runtime-installed-choice");
+        CardInstanceId sourceId = new("card:runtime-installed-choice-source");
+        CardInstanceId targetId = new("card:runtime-installed-choice-target");
+        BehaviorTarget target = new(
+            BehaviorTargetKind.InstalledCardNotThisTurn,
+            filter: new BehaviorCardFilter(ownerSide: PlayerSide.Runner));
+        BehaviorChoiceSpec choice = new(
+            "runtime-installed-choice",
+            BehaviorChooser.Runner,
+            BehaviorChoiceMode.Mandatory,
+            BehaviorChoiceCardinality.Exactly(1),
+            target: target);
+        BehaviorCatalog catalog = Catalog(new CardBehaviorDefinition(
+            definitionId,
+            PlayerSide.Runner,
+            instructions:
+            [
+                new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: choice),
+                new BehaviorInstruction(
+                    BehaviorInstructionKind.AdvanceCard,
+                    amount: 2,
+                    target: new BehaviorTarget(BehaviorTargetKind.ChosenCard)),
+            ]));
+        GameState state = CreateState(
+            catalog,
+            (sourceId, definitionId, ZoneKind.RunnerGrip, PlayerSide.Runner),
+            (targetId, new CardDefinitionId("test:runtime-installed-target"), ZoneKind.RunnerRig, PlayerSide.Runner));
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+
+        GameState prompt = GameEngine.BeginBehaviorForTesting(
+            state,
+            new BehaviorInvocationContext(sourceId, runner),
+            catalog);
+        LegalAction selection = Assert.Single(prompt.PendingDecision!.LegalActions);
+        BehaviorResolutionFrame promptedFrame = Assert.IsType<BehaviorResolutionFrame>(prompt.ResolutionStack.Single());
+        Assert.Contains(targetId, promptedFrame.Choice!.CandidateCardIds);
+        Assert.Contains(targetId, prompt.GetZone(ZoneKind.RunnerRig).CardIds);
+        Assert.DoesNotContain(targetId, prompt.Zones.Where(zone => zone.Kind == ZoneKind.BehaviorSetAside).SelectMany(zone => zone.CardIds));
+
+        ApplyResult result = GameEngine.Apply(
+            prompt,
+            new ActionSubmission(runner, prompt.PendingDecision.Id, prompt.PendingDecision.Revision, selection.Id),
+            catalog);
+
+        Assert.True(result.Accepted, result.Rejection?.Message);
+        Assert.Equal([targetId], result.State.GetZone(ZoneKind.RunnerRig).CardIds);
+        Assert.Equal(2, result.State.GetCard(targetId).AdvancementCounters);
+        Assert.Contains(result.Events, @event =>
+            @event.Kind == EngineEventKinds.BehaviorCardAdvanced
+            && @event.Payload is BehaviorCardAdvancedEventPayload payload
+            && payload.CardId == targetId
+            && payload.Amount == 2);
+    }
+
+    [Fact]
+    public void ChosenAdvanceRejectsMovedTargetAtomically()
+    {
+        CardDefinitionId definitionId = new("test:runtime-stale-installed-choice");
+        CardInstanceId sourceId = new("card:runtime-stale-installed-source");
+        CardInstanceId targetId = new("card:runtime-stale-installed-target");
+        BehaviorTarget target = new(
+            BehaviorTargetKind.InstalledCardNotThisTurn,
+            filter: new BehaviorCardFilter(ownerSide: PlayerSide.Runner));
+        BehaviorChoiceSpec choice = new(
+            "runtime-stale-installed-choice",
+            BehaviorChooser.Runner,
+            BehaviorChoiceMode.Mandatory,
+            BehaviorChoiceCardinality.Exactly(1),
+            target: target);
+        BehaviorChoiceSpec pause = new(
+            "runtime-stale-installed-pause",
+            BehaviorChooser.Runner,
+            BehaviorChoiceMode.Mode,
+            BehaviorChoiceCardinality.Exactly(1),
+            [new BehaviorChoiceOption("continue"), new BehaviorChoiceOption("decline")]);
+        BehaviorCatalog catalog = Catalog(new CardBehaviorDefinition(
+            definitionId,
+            PlayerSide.Runner,
+            instructions:
+            [
+                new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: choice),
+                new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: pause),
+                new BehaviorInstruction(
+                    BehaviorInstructionKind.AdvanceCard,
+                    amount: 2,
+                    target: new BehaviorTarget(BehaviorTargetKind.ChosenCard)),
+            ]));
+        GameState state = CreateState(
+            catalog,
+            (sourceId, definitionId, ZoneKind.RunnerGrip, PlayerSide.Runner),
+            (targetId, new CardDefinitionId("test:runtime-stale-installed-target"), ZoneKind.RunnerRig, PlayerSide.Runner));
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+        GameState prompt = GameEngine.BeginBehaviorForTesting(
+            state,
+            new BehaviorInvocationContext(sourceId, runner),
+            catalog);
+        LegalAction select = Assert.Single(prompt.PendingDecision!.LegalActions);
+        ApplyResult selected = GameEngine.Apply(
+            prompt,
+            new ActionSubmission(runner, prompt.PendingDecision.Id, prompt.PendingDecision.Revision, select.Id),
+            catalog);
+        Assert.True(selected.Accepted, selected.Rejection?.Message);
+        Assert.NotNull(selected.State.PendingDecision);
+
+        GameState stale = MoveCardFixture(selected.State, targetId, ZoneKind.RunnerHeap);
+        PendingDecision pending = stale.PendingDecision!;
+        LegalAction continueAction = Assert.Single(
+            pending.LegalActions,
+            action => action.Parameters is BehaviorChoiceParameters parameters
+                && parameters.OptionKeys.SequenceEqual(["continue"]));
+        ApplyResult rejected = GameEngine.Apply(
+            stale,
+            new ActionSubmission(runner, pending.Id, pending.Revision, continueAction.Id),
+            catalog);
+
+        Assert.False(rejected.Accepted);
+        Assert.Equal(ApplyRejectionCode.ResolutionFailure, rejected.Rejection?.Code);
+        Assert.Same(stale, rejected.State);
+        Assert.Empty(rejected.Events);
+        Assert.Equal(0, stale.GetCard(targetId).AdvancementCounters);
+    }
+
+    [Fact]
+    public void ChosenAdvanceRejectsReachableNonInstalledOriginAtomically()
+    {
+        CardDefinitionId definitionId = new("test:runtime-noninstalled-origin");
+        CardInstanceId sourceId = new("card:runtime-noninstalled-origin-source");
+        CardInstanceId targetId = new("card:runtime-noninstalled-origin-target");
+        BehaviorChoiceSpec choice = new(
+            "runtime-noninstalled-origin-choice",
+            BehaviorChooser.Corp,
+            BehaviorChoiceMode.Mandatory,
+            BehaviorChoiceCardinality.Exactly(1),
+            target: BehaviorTarget.CardInZone(BehaviorZone.Headquarters));
+        BehaviorCatalog catalog = Catalog(new CardBehaviorDefinition(
+            definitionId,
+            PlayerSide.Corp,
+            instructions:
+            [
+                new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: choice),
+                new BehaviorInstruction(
+                    BehaviorInstructionKind.AdvanceCard,
+                    amount: 2,
+                    target: new BehaviorTarget(BehaviorTargetKind.ChosenCard)),
+            ]));
+        GameState state = CreateState(
+            catalog,
+            (sourceId, definitionId, ZoneKind.CorpHand, PlayerSide.Corp),
+            (targetId, new CardDefinitionId("test:runtime-noninstalled-target"), ZoneKind.CorpHand, PlayerSide.Corp));
+        PlayerId corp = state.Players.Single(player => player.Side == PlayerSide.Corp).Id;
+        GameState prompt = GameEngine.BeginBehaviorForTesting(
+            state,
+            new BehaviorInvocationContext(sourceId, corp),
+            catalog);
+        LegalAction target = Assert.Single(prompt.PendingDecision!.LegalActions);
+        string hash = DeterministicHash.ForState(prompt);
+
+        ApplyResult rejected = GameEngine.Apply(
+            prompt,
+            new ActionSubmission(corp, prompt.PendingDecision.Id, prompt.PendingDecision.Revision, target.Id),
+            catalog);
+
+        Assert.False(rejected.Accepted);
+        Assert.Equal(ApplyRejectionCode.ResolutionFailure, rejected.Rejection?.Code);
+        Assert.Equal(hash, DeterministicHash.ForState(rejected.State));
+        Assert.Same(prompt, rejected.State);
+        Assert.Empty(rejected.Events);
+        Assert.Contains(targetId, rejected.State.GetZone(ZoneKind.CorpHand).CardIds);
+        Assert.DoesNotContain(
+            targetId,
+            rejected.State.Zones
+                .Where(zone => zone.Kind == ZoneKind.BehaviorSetAside)
+                .SelectMany(zone => zone.CardIds));
     }
 
     private static BehaviorCatalog Catalog(CardBehaviorDefinition definition) =>

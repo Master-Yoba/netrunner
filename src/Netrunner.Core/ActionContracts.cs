@@ -26,12 +26,19 @@ public enum ActionKind
     ChooseCard,
     GainCredit,
     DrawCard,
+    PlayCard,
+    StartRun,
     InstallCard,
     AdvanceAgenda,
+    AdvanceCard,
     ScoreAgenda,
+    RemoveTag,
+    TrashTaggedResource,
+    PurgeVirusCounters,
     StealAgenda,
     EndTurn,
     PassPriority,
+    RezCard,
     RezIce,
     BreakSubroutines,
     PumpBreaker,
@@ -59,6 +66,14 @@ public enum ActionKind
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 [JsonDerivedType(typeof(NumberChoiceParameters), "number")]
 [JsonDerivedType(typeof(CardChoiceParameters), "card")]
+[JsonDerivedType(typeof(PlayCardParameters), "play-card")]
+[JsonDerivedType(typeof(RunServerParameters), "run-server")]
+[JsonDerivedType(typeof(RezCardParameters), "rez-card")]
+[JsonDerivedType(typeof(AdvanceCardParameters), "advance-card")]
+[JsonDerivedType(typeof(ScoreAgendaParameters), "score-agenda")]
+[JsonDerivedType(typeof(RemoveTagParameters), "remove-tag")]
+[JsonDerivedType(typeof(TrashTaggedResourceParameters), "trash-tagged-resource")]
+[JsonDerivedType(typeof(PurgeVirusCountersParameters), "purge-virus-counters")]
 [JsonDerivedType(typeof(InstallCardParameters), "install")]
 [JsonDerivedType(typeof(RunCardPaymentParameters), "run-card-payment")]
 [JsonDerivedType(typeof(RunIceParameters), "run-ice")]
@@ -77,6 +92,198 @@ public abstract record ActionParameters;
 public sealed record NumberChoiceParameters([property: JsonRequired] int Value) : ActionParameters;
 
 public sealed record CardChoiceParameters([property: JsonRequired] CardInstanceId CardId) : ActionParameters;
+
+/// <summary>
+/// Engine-issued immutable payload for the Runner's standard tag-removal
+/// action. Both costs are frozen in the materialized action; callers submit
+/// only the issued action ID.
+/// </summary>
+public sealed record RemoveTagParameters : ActionParameters
+{
+    [JsonConstructor]
+    public RemoveTagParameters(int clickCost, int creditCost)
+    {
+        ClickCost = clickCost;
+        CreditCost = creditCost;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int ClickCost { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int CreditCost { get; private set; }
+}
+
+/// <summary>
+/// Engine-issued immutable payload for the Corp's tagged Runner-resource
+/// trash action. The physical target and both costs are frozen in the
+/// materialized action; callers submit only the issued action ID.
+/// </summary>
+public sealed record TrashTaggedResourceParameters : ActionParameters
+{
+    [JsonConstructor]
+    public TrashTaggedResourceParameters(CardInstanceId cardId, int clickCost, int creditCost)
+    {
+        CardId = cardId;
+        ClickCost = clickCost;
+        CreditCost = creditCost;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId CardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int ClickCost { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int CreditCost { get; private set; }
+}
+
+/// <summary>
+/// Engine-issued immutable payload for the Corp's global virus-counter
+/// purge. The click cost is frozen in the materialized action; callers submit
+/// only the issued action ID.
+/// </summary>
+public sealed record PurgeVirusCountersParameters : ActionParameters
+{
+    [JsonConstructor]
+    public PurgeVirusCountersParameters(int clickCost) => ClickCost = clickCost;
+
+    [JsonInclude]
+    [JsonRequired]
+    public int ClickCost { get; private set; }
+}
+
+/// <summary>
+/// Engine-issued immutable payload for ordinary card play. The action binds
+/// the physical card and its frozen printed credit cost; callers submit only
+/// the materialized action ID.
+/// </summary>
+public sealed record PlayCardParameters : ActionParameters
+{
+    [JsonConstructor]
+    public PlayCardParameters(CardInstanceId cardId, int creditCost)
+    {
+        if (creditCost < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(creditCost), "Play credit cost must not be negative.");
+        }
+
+        CardId = cardId;
+        CreditCost = creditCost;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId CardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int CreditCost { get; private set; }
+}
+
+/// <summary>
+/// Engine-issued immutable payload for a basic Runner run. The server ID is
+/// the complete action payload; basic runs cost one click and no credits or
+/// link, so no mutable payment data belongs on the action.
+/// </summary>
+public sealed record RunServerParameters : ActionParameters
+{
+    [JsonConstructor]
+    public RunServerParameters(ServerId serverId) => ServerId = serverId;
+
+    [JsonInclude]
+    [JsonRequired]
+    public ServerId ServerId { get; private set; }
+}
+
+/// <summary>
+/// Engine-issued immutable payload for a runtime-catalog-backed rez action.
+/// The printed cost is frozen with the physical card identity so a restored
+/// or forged decision cannot change payment semantics.
+/// </summary>
+public sealed record RezCardParameters : ActionParameters
+{
+    [JsonConstructor]
+    public RezCardParameters(CardInstanceId cardId, int creditCost)
+    {
+        if (creditCost < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(creditCost), "Rez credit cost must not be negative.");
+        }
+
+        CardId = cardId;
+        CreditCost = creditCost;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId CardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int CreditCost { get; private set; }
+}
+
+/// <summary>
+/// Engine-issued immutable payload for the real Corp advance action. The
+/// action always costs exactly one credit; the frozen cost remains in the
+/// payload so a restored or forged decision cannot change payment semantics.
+/// </summary>
+public sealed record AdvanceCardParameters : ActionParameters
+{
+    [JsonConstructor]
+    public AdvanceCardParameters(CardInstanceId cardId, int creditCost)
+    {
+        CardId = cardId;
+        CreditCost = creditCost;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId CardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int CreditCost { get; private set; }
+}
+
+/// <summary>
+/// Engine-issued immutable payload for the Corp score option in a paid,
+/// rez, and score timing window. Both printed values are bound to the
+/// injected runtime card catalog and are never supplied by the reducer
+/// caller independently of the issued action.
+/// </summary>
+public sealed record ScoreAgendaParameters : ActionParameters
+{
+    [JsonConstructor]
+    public ScoreAgendaParameters(
+        CardInstanceId cardId,
+        int agendaPoints,
+        int advancementRequirement)
+    {
+        CardId = cardId;
+        AgendaPoints = agendaPoints;
+        AdvancementRequirement = advancementRequirement;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId CardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int AgendaPoints { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int AdvancementRequirement { get; private set; }
+}
 
 /// <summary>
 /// The physical destination family for a real CR install action.  A server
@@ -654,6 +861,20 @@ public sealed class PendingDecision
     {
         NumberChoiceParameters numberChoice => new NumberChoiceParameters(numberChoice.Value),
         CardChoiceParameters cardChoice => new CardChoiceParameters(cardChoice.CardId),
+        RemoveTagParameters removeTag => new RemoveTagParameters(removeTag.ClickCost, removeTag.CreditCost),
+        TrashTaggedResourceParameters trashTaggedResource => new TrashTaggedResourceParameters(
+            trashTaggedResource.CardId,
+            trashTaggedResource.ClickCost,
+            trashTaggedResource.CreditCost),
+        PurgeVirusCountersParameters purgeVirusCounters => new PurgeVirusCountersParameters(purgeVirusCounters.ClickCost),
+        PlayCardParameters playCard => new PlayCardParameters(playCard.CardId, playCard.CreditCost),
+        RunServerParameters runServer => new RunServerParameters(runServer.ServerId),
+        RezCardParameters rezCard => new RezCardParameters(rezCard.CardId, rezCard.CreditCost),
+        AdvanceCardParameters advanceCard => new AdvanceCardParameters(advanceCard.CardId, advanceCard.CreditCost),
+        ScoreAgendaParameters scoreAgenda => new ScoreAgendaParameters(
+            scoreAgenda.CardId,
+            scoreAgenda.AgendaPoints,
+            scoreAgenda.AdvancementRequirement),
         InstallCardParameters install => new InstallCardParameters(
             install.CardId,
             install.DestinationKind,

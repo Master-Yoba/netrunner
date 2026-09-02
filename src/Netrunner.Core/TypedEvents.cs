@@ -29,6 +29,9 @@ public static class EngineEventKinds
     public const string CardMoved = "card-moved";
     public const string CardDrawn = "card-drawn";
     public const string CardInstalled = "card-installed";
+    public const string CardRezzed = "card-rezzed";
+    public const string CardPlayStarted = "card-play-started";
+    public const string CardPlayCompleted = "card-play-completed";
     public const string BehaviorCardRevealed = "behavior-card-revealed";
     public const string BehaviorCardsShuffled = "behavior-cards-shuffled";
     public const string BehaviorCardAdvanced = "behavior-card-advanced";
@@ -85,6 +88,9 @@ public static class EngineEventKinds
 [JsonDerivedType(typeof(CardMovedEventPayload), "card-moved")]
 [JsonDerivedType(typeof(CardDrawnEventPayload), "card-drawn")]
 [JsonDerivedType(typeof(CardInstalledEventPayload), "card-installed")]
+[JsonDerivedType(typeof(CardRezzedEventPayload), "card-rezzed")]
+[JsonDerivedType(typeof(CardPlayStartedEventPayload), "card-play-started")]
+[JsonDerivedType(typeof(CardPlayCompletedEventPayload), "card-play-completed")]
 [JsonDerivedType(typeof(BehaviorCardRevealedEventPayload), "behavior-card-revealed")]
 [JsonDerivedType(typeof(BehaviorCardsShuffledEventPayload), "behavior-cards-shuffled")]
 [JsonDerivedType(typeof(BehaviorCardAdvancedEventPayload), "behavior-card-advanced")]
@@ -916,6 +922,140 @@ public sealed record CardInstalledEventPayload : EngineEventPayload
     [JsonInclude]
     [JsonRequired]
     public int Cost { get; private set; }
+}
+
+/// <summary>Public evidence that an installed card was rezzed.</summary>
+public sealed record CardRezzedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public CardRezzedEventPayload(int version, CardInstanceId cardId, int creditCost)
+        : base(version)
+    {
+        CardId = cardId;
+        CreditCost = creditCost;
+    }
+
+    public CardRezzedEventPayload(CardInstanceId cardId, int creditCost)
+        : this(1, cardId, creditCost)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId CardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int CreditCost { get; private set; }
+}
+
+/// <summary>Public evidence that an ordinary Event or Operation entered play.</summary>
+public sealed record CardPlayStartedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public CardPlayStartedEventPayload(
+        int version,
+        PlayerSide side,
+        CardInstanceId cardId,
+        CardDefinitionId definitionId,
+        ZoneId fromZoneId,
+        ZoneId playAreaZoneId,
+        int cost)
+        : base(version)
+    {
+        Side = side;
+        CardId = cardId;
+        DefinitionId = definitionId;
+        FromZoneId = fromZoneId;
+        PlayAreaZoneId = playAreaZoneId;
+        Cost = cost;
+    }
+
+    public CardPlayStartedEventPayload(
+        PlayerSide side,
+        CardInstanceId cardId,
+        CardDefinitionId definitionId,
+        ZoneId fromZoneId,
+        ZoneId playAreaZoneId,
+        int cost)
+        : this(1, side, cardId, definitionId, fromZoneId, playAreaZoneId, cost)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerSide Side { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId CardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardDefinitionId DefinitionId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ZoneId FromZoneId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ZoneId PlayAreaZoneId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Cost { get; private set; }
+}
+
+/// <summary>Public evidence that an ordinary Event or Operation left play.</summary>
+public sealed record CardPlayCompletedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public CardPlayCompletedEventPayload(
+        int version,
+        PlayerSide side,
+        CardInstanceId cardId,
+        CardDefinitionId definitionId,
+        ZoneId playAreaZoneId,
+        ZoneId discardZoneId)
+        : base(version)
+    {
+        Side = side;
+        CardId = cardId;
+        DefinitionId = definitionId;
+        PlayAreaZoneId = playAreaZoneId;
+        DiscardZoneId = discardZoneId;
+    }
+
+    public CardPlayCompletedEventPayload(
+        PlayerSide side,
+        CardInstanceId cardId,
+        CardDefinitionId definitionId,
+        ZoneId playAreaZoneId,
+        ZoneId discardZoneId)
+        : this(1, side, cardId, definitionId, playAreaZoneId, discardZoneId)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerSide Side { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId CardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardDefinitionId DefinitionId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ZoneId PlayAreaZoneId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ZoneId DiscardZoneId { get; private set; }
 }
 
 /// <summary>
@@ -1866,6 +2006,9 @@ public sealed record EngineEvent
         CardMovedEventPayload value => new EngineEvent(Version, Sequence, Kind, new CardMovedEventPayload(value.Version, value.CardId, value.FromZoneId, value.ToZoneId)),
         CardDrawnEventPayload value => new EngineEvent(Version, Sequence, Kind, new CardDrawnEventPayload(value.Version, value.Side, value.CardId, value.FromZoneId, value.ToZoneId)),
         CardInstalledEventPayload value => new EngineEvent(Version, Sequence, Kind, new CardInstalledEventPayload(value.Version, value.Side, value.CardId, value.FromZoneId, value.ToZoneId, value.Cost)),
+        CardRezzedEventPayload value => new EngineEvent(Version, Sequence, Kind, new CardRezzedEventPayload(value.Version, value.CardId, value.CreditCost)),
+        CardPlayStartedEventPayload value => new EngineEvent(Version, Sequence, Kind, new CardPlayStartedEventPayload(value.Version, value.Side, value.CardId, value.DefinitionId, value.FromZoneId, value.PlayAreaZoneId, value.Cost)),
+        CardPlayCompletedEventPayload value => new EngineEvent(Version, Sequence, Kind, new CardPlayCompletedEventPayload(value.Version, value.Side, value.CardId, value.DefinitionId, value.PlayAreaZoneId, value.DiscardZoneId)),
         BehaviorCardRevealedEventPayload value => new EngineEvent(Version, Sequence, Kind, new BehaviorCardRevealedEventPayload(value.Version, value.CardId, value.DefinitionId, value.SourceZoneId, value.OwnerSide)),
         BehaviorCardsShuffledEventPayload value => new EngineEvent(Version, Sequence, Kind, new BehaviorCardsShuffledEventPayload(value.Version, value.DestinationZoneId, value.CardCount)),
         BehaviorCardAdvancedEventPayload value => new EngineEvent(Version, Sequence, Kind, new BehaviorCardAdvancedEventPayload(value.Version, value.CardId, value.Amount, value.AdvancementCounters)),
@@ -2117,6 +2260,38 @@ public static class EngineEventValidator
                 RequireId(value.ToZoneId.Value, $"{path}.payload.toZoneId", "zone", violations);
                 RequireNumber(value.Cost, $"{path}.payload.cost", "Install cost", violations);
                 break;
+            case CardRezzedEventPayload value:
+                RequireKind(@event, EngineEventKinds.CardRezzed, path, violations);
+                RequireId(value.CardId.Value, $"{path}.payload.cardId", "card", violations);
+                RequireNumber(value.CreditCost, $"{path}.payload.creditCost", "Rez cost", violations);
+                break;
+            case CardPlayStartedEventPayload value:
+                RequireKind(@event, EngineEventKinds.CardPlayStarted, path, violations);
+                RequireSide(value.Side, $"{path}.payload.side", violations);
+                RequireId(value.CardId.Value, $"{path}.payload.cardId", "card", violations);
+                RequireId(value.DefinitionId.Value, $"{path}.payload.definitionId", "definition", violations);
+                RequireId(value.FromZoneId.Value, $"{path}.payload.fromZoneId", "zone", violations);
+                RequireId(value.PlayAreaZoneId.Value, $"{path}.payload.playAreaZoneId", "zone", violations);
+                RequireNumber(value.Cost, $"{path}.payload.cost", "Play cost", violations);
+                if (value.FromZoneId == value.PlayAreaZoneId)
+                {
+                    Add(violations, "event.same-zone-play", $"{path}.payload", "A card play must change zones.");
+                }
+
+                break;
+            case CardPlayCompletedEventPayload value:
+                RequireKind(@event, EngineEventKinds.CardPlayCompleted, path, violations);
+                RequireSide(value.Side, $"{path}.payload.side", violations);
+                RequireId(value.CardId.Value, $"{path}.payload.cardId", "card", violations);
+                RequireId(value.DefinitionId.Value, $"{path}.payload.definitionId", "definition", violations);
+                RequireId(value.PlayAreaZoneId.Value, $"{path}.payload.playAreaZoneId", "zone", violations);
+                RequireId(value.DiscardZoneId.Value, $"{path}.payload.discardZoneId", "zone", violations);
+                if (value.PlayAreaZoneId == value.DiscardZoneId)
+                {
+                    Add(violations, "event.same-zone-play", $"{path}.payload", "A completed card play must change zones.");
+                }
+
+                break;
             case BehaviorCardRevealedEventPayload value:
                 RequireKind(@event, EngineEventKinds.BehaviorCardRevealed, path, violations);
                 RequireId(value.CardId.Value, $"{path}.payload.cardId", "card", violations);
@@ -2127,7 +2302,7 @@ public static class EngineEventValidator
             case BehaviorCardsShuffledEventPayload value:
                 RequireKind(@event, EngineEventKinds.BehaviorCardsShuffled, path, violations);
                 RequireId(value.DestinationZoneId.Value, $"{path}.payload.destinationZoneId", "zone", violations);
-                RequireNumber(value.CardCount, $"{path}.payload.cardCount", "Shuffled card count", violations, strictlyPositive: true);
+                RequireNumber(value.CardCount, $"{path}.payload.cardCount", "Shuffled card count", violations);
                 break;
             case BehaviorCardAdvancedEventPayload value:
                 RequireKind(@event, EngineEventKinds.BehaviorCardAdvanced, path, violations);

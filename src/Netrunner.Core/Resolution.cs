@@ -17,12 +17,25 @@ public static partial class ResolutionBehaviorIds
     public const string Turn = "rules.turn-26.03";
     public const string TurnDiscard = "rules.turn-discard-26.03";
     public const string Install = "rules.install-26.03";
+    public const string CardPlay = "rules.card-play-26.03";
 }
 
 public enum ResolutionContinuation
 {
     Complete,
     AdjustCredits,
+}
+
+/// <summary>
+/// Identifies which authoritative reducer opened an install cursor.  The
+/// default value intentionally remains the original basic-action shape so
+/// snapshots written before behavior-owned installs were introduced retain
+/// their byte representation.
+/// </summary>
+public enum InstallInitiationKind
+{
+    BasicAction = 0,
+    BehaviorEffect = 1,
 }
 
 /// <summary>
@@ -57,6 +70,7 @@ public enum EffectResolutionStage
 [JsonDerivedType(typeof(TurnFrame), "turn")]
 [JsonDerivedType(typeof(TurnDiscardFrame), "turn-discard")]
 [JsonDerivedType(typeof(InstallFrame), "install")]
+[JsonDerivedType(typeof(CardPlayFrame), "card-play")]
 [JsonDerivedType(typeof(RunTimingFrame), "run-timing")]
 [JsonDerivedType(typeof(EffectResolutionFrame), "effect-resolution")]
 [JsonDerivedType(typeof(MemoryCleanupFrame), "memory-cleanup")]
@@ -341,7 +355,9 @@ public sealed record InstallFrame : ResolutionFrame
         IReadOnlyList<CardInstanceId>? requiredReplacementCardIds = null,
         IReadOnlyList<CardInstanceId>? selectedReplacementCardIds = null,
         ZoneId? destinationZoneId = null,
-        IReadOnlyList<CardDefinitionId>? candidateReplacementDefinitionIds = null)
+        IReadOnlyList<CardDefinitionId>? candidateReplacementDefinitionIds = null,
+        InstallInitiationKind initiationKind = InstallInitiationKind.BasicAction,
+        string? parentFrameIdentity = null)
         : base(version, behaviorId)
     {
         if (!Enum.IsDefined(cardClass))
@@ -352,6 +368,26 @@ public sealed record InstallFrame : ResolutionFrame
         if (!Enum.IsDefined(destinationKind))
         {
             throw new ArgumentOutOfRangeException(nameof(destinationKind));
+        }
+
+        if (!Enum.IsDefined(initiationKind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(initiationKind));
+        }
+
+        if (initiationKind == InstallInitiationKind.BasicAction && parentFrameIdentity is not null)
+        {
+            throw new ArgumentException(
+                "Basic-action install frames must not retain a behavior parent identity.",
+                nameof(parentFrameIdentity));
+        }
+
+        if (initiationKind == InstallInitiationKind.BehaviorEffect
+            && !StableIdentifier.TryValidate(parentFrameIdentity))
+        {
+            throw new ArgumentException(
+                "Behavior-effect install frames require a stable parent frame identity.",
+                nameof(parentFrameIdentity));
         }
 
         ArgumentOutOfRangeException.ThrowIfNegative(installCost);
@@ -371,6 +407,8 @@ public sealed record InstallFrame : ResolutionFrame
         SelectedReplacementCardIds = Freeze(selectedReplacementCardIds);
         DestinationZoneId = destinationZoneId;
         CandidateReplacementDefinitionIds = FreezeDefinitions(candidateReplacementDefinitionIds);
+        InitiationKind = initiationKind;
+        ParentFrameIdentity = parentFrameIdentity;
     }
 
     public InstallFrame(
@@ -388,7 +426,9 @@ public sealed record InstallFrame : ResolutionFrame
         IReadOnlyList<CardInstanceId>? requiredReplacementCardIds = null,
         IReadOnlyList<CardInstanceId>? selectedReplacementCardIds = null,
         ZoneId? destinationZoneId = null,
-        IReadOnlyList<CardDefinitionId>? candidateReplacementDefinitionIds = null)
+        IReadOnlyList<CardDefinitionId>? candidateReplacementDefinitionIds = null,
+        InstallInitiationKind initiationKind = InstallInitiationKind.BasicAction,
+        string? parentFrameIdentity = null)
         : this(
             1,
             ResolutionBehaviorIds.Install,
@@ -406,7 +446,9 @@ public sealed record InstallFrame : ResolutionFrame
             requiredReplacementCardIds,
             selectedReplacementCardIds,
             destinationZoneId,
-            candidateReplacementDefinitionIds)
+            candidateReplacementDefinitionIds,
+            initiationKind,
+            parentFrameIdentity)
     {
     }
 
@@ -484,6 +526,22 @@ public sealed record InstallFrame : ResolutionFrame
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public ZoneId? DestinationZoneId { get; private set; }
 
+    /// <summary>
+    /// The reducer that opened this cursor. BasicAction is omitted from JSON
+    /// to preserve the pre-4.2 install-frame shape.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public InstallInitiationKind InitiationKind { get; private set; }
+
+    /// <summary>
+    /// Exact identity of the BehaviorResolutionFrame that owns a
+    /// BehaviorEffect install cursor. It is absent for ordinary installs.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ParentFrameIdentity { get; private set; }
+
     internal InstallFrame Select(CardInstanceId cardId, int installCost) => new(
         Version,
         BehaviorId,
@@ -501,7 +559,9 @@ public sealed record InstallFrame : ResolutionFrame
         RequiredReplacementCardIds,
         SelectedReplacementCardIds.Append(cardId).ToArray(),
         DestinationZoneId,
-        CandidateReplacementDefinitionIds);
+        CandidateReplacementDefinitionIds,
+        InitiationKind,
+        ParentFrameIdentity);
 
     internal InstallFrame WithInstallCost(int installCost) => new(
         Version,
@@ -520,7 +580,9 @@ public sealed record InstallFrame : ResolutionFrame
         RequiredReplacementCardIds,
         SelectedReplacementCardIds,
         DestinationZoneId,
-        CandidateReplacementDefinitionIds);
+        CandidateReplacementDefinitionIds,
+        InitiationKind,
+        ParentFrameIdentity);
 
     private static ReadOnlyCollection<CardInstanceId> Freeze(IEnumerable<CardInstanceId>? values) =>
         new((values ?? []).ToArray());
@@ -529,6 +591,142 @@ public sealed record InstallFrame : ResolutionFrame
         values is null
             ? null
             : new ReadOnlyCollection<CardDefinitionId>(values.ToArray());
+}
+
+/// <summary>
+/// Serializable ordinary card-play cursor. The frame freezes the physical
+/// source, public play area, discard destination, printed cost, and catalog
+/// identities needed to resume the generic card behavior safely.
+/// </summary>
+public sealed record CardPlayFrame : ResolutionFrame
+{
+    [JsonConstructor]
+    public CardPlayFrame(
+        int version,
+        string behaviorId,
+        PlayerId owner,
+        PlayerSide side,
+        CardInstanceId cardId,
+        CardDefinitionId definitionId,
+        RuntimeCardClass cardClass,
+        ZoneId sourceZoneId,
+        ZoneKind sourceZoneKind,
+        ZoneId playAreaZoneId,
+        ZoneId discardZoneId,
+        int creditCost,
+        string catalogFingerprint,
+        string definitionFingerprint)
+        : base(version, behaviorId)
+    {
+        if (!Enum.IsDefined(side))
+        {
+            throw new ArgumentOutOfRangeException(nameof(side));
+        }
+
+        if (!Enum.IsDefined(cardClass))
+        {
+            throw new ArgumentOutOfRangeException(nameof(cardClass));
+        }
+
+        if (!Enum.IsDefined(sourceZoneKind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(sourceZoneKind));
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegative(creditCost);
+
+        Owner = owner;
+        Side = side;
+        CardId = cardId;
+        DefinitionId = definitionId;
+        CardClass = cardClass;
+        SourceZoneId = sourceZoneId;
+        SourceZoneKind = sourceZoneKind;
+        PlayAreaZoneId = playAreaZoneId;
+        DiscardZoneId = discardZoneId;
+        CreditCost = creditCost;
+        CatalogFingerprint = catalogFingerprint;
+        DefinitionFingerprint = definitionFingerprint;
+    }
+
+    public CardPlayFrame(
+        PlayerId owner,
+        PlayerSide side,
+        CardInstanceId cardId,
+        CardDefinitionId definitionId,
+        RuntimeCardClass cardClass,
+        ZoneId sourceZoneId,
+        ZoneKind sourceZoneKind,
+        ZoneId playAreaZoneId,
+        ZoneId discardZoneId,
+        int creditCost,
+        string catalogFingerprint,
+        string definitionFingerprint)
+        : this(
+            1,
+            ResolutionBehaviorIds.CardPlay,
+            owner,
+            side,
+            cardId,
+            definitionId,
+            cardClass,
+            sourceZoneId,
+            sourceZoneKind,
+            playAreaZoneId,
+            discardZoneId,
+            creditCost,
+            catalogFingerprint,
+            definitionFingerprint)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerId Owner { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerSide Side { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId CardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardDefinitionId DefinitionId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RuntimeCardClass CardClass { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ZoneId SourceZoneId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ZoneKind SourceZoneKind { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ZoneId PlayAreaZoneId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ZoneId DiscardZoneId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int CreditCost { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string CatalogFingerprint { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string DefinitionFingerprint { get; private set; }
 }
 
 /// <summary>
@@ -976,6 +1174,29 @@ public static class ResolutionFrameValidator
                 ValidateBehavior(frame, ResolutionBehaviorIds.Install, path, violations);
                 ValidatePlayer(install.Owner, $"{path}.owner", violations);
                 ValidateCardId(install.CardId, $"{path}.cardId", violations);
+                if (!Enum.IsDefined(install.InitiationKind))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-install-initiation",
+                        $"{path}.initiationKind",
+                        $"'{install.InitiationKind}' is not a supported install initiation kind."));
+                }
+                else if (install.InitiationKind == InstallInitiationKind.BasicAction
+                    && install.ParentFrameIdentity is not null)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.unexpected-install-parent",
+                        $"{path}.parentFrameIdentity",
+                        "A basic-action install frame must not retain a behavior parent identity."));
+                }
+                else if (install.InitiationKind == InstallInitiationKind.BehaviorEffect
+                    && !StableIdentifier.TryValidate(install.ParentFrameIdentity))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.missing-install-parent",
+                        $"{path}.parentFrameIdentity",
+                        "A behavior-effect install frame must retain a stable behavior parent identity."));
+                }
                 if (!StableIdentifier.TryValidate(install.DefinitionId.Value))
                 {
                     violations.Add(new StateInvariantViolation("id.invalid", $"{path}.definitionId", "Definition ID is empty or invalid."));
@@ -1050,6 +1271,91 @@ public static class ResolutionFrameValidator
                         "resolution.install-selected-not-offered",
                         path,
                         "Every selected install replacement must be one of the frozen candidates."));
+                }
+
+                break;
+            case CardPlayFrame cardPlay:
+                ValidateBehavior(frame, ResolutionBehaviorIds.CardPlay, path, violations);
+                ValidatePlayer(cardPlay.Owner, $"{path}.owner", violations);
+                ValidateCardId(cardPlay.CardId, $"{path}.cardId", violations);
+                if (!StableIdentifier.TryValidate(cardPlay.DefinitionId.Value))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "id.invalid",
+                        $"{path}.definitionId",
+                        "Definition ID is empty or invalid."));
+                }
+
+                ValidateZoneId(cardPlay.SourceZoneId, $"{path}.sourceZoneId", violations);
+                ValidateZoneId(cardPlay.PlayAreaZoneId, $"{path}.playAreaZoneId", violations);
+                ValidateZoneId(cardPlay.DiscardZoneId, $"{path}.discardZoneId", violations);
+
+                if (!Enum.IsDefined(cardPlay.Side))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-side",
+                        $"{path}.side",
+                        $"'{cardPlay.Side}' is not a supported card-play side."));
+                }
+
+                if (!Enum.IsDefined(cardPlay.CardClass))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-card-class",
+                        $"{path}.cardClass",
+                        $"'{cardPlay.CardClass}' is not a supported card-play class."));
+                }
+                else if ((cardPlay.Side, cardPlay.CardClass) is not
+                    (PlayerSide.Corp, RuntimeCardClass.Operation)
+                    and not (PlayerSide.Runner, RuntimeCardClass.Event))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-card-class",
+                        $"{path}.cardClass",
+                        "Ordinary card play supports only Corp Operations and Runner Events."));
+                }
+
+                if (!Enum.IsDefined(cardPlay.SourceZoneKind))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-source-zone-kind",
+                        $"{path}.sourceZoneKind",
+                        $"'{cardPlay.SourceZoneKind}' is not a supported card-play source zone."));
+                }
+                else if ((cardPlay.Side, cardPlay.SourceZoneKind) is not
+                    (PlayerSide.Corp, ZoneKind.CorpHand)
+                    and not (PlayerSide.Runner, ZoneKind.RunnerGrip))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-source-zone-kind",
+                        $"{path}.sourceZoneKind",
+                        "Ordinary card play must source Corp Operations from CorpHand or Runner Events from RunnerGrip."));
+                }
+
+                if (cardPlay.CreditCost < 0)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-play-cost",
+                        $"{path}.creditCost",
+                        "Play credit cost must not be negative."));
+                }
+
+                if (!StableIdentifier.TryValidate(cardPlay.CatalogFingerprint)
+                    || !DeterministicHash.IsSha256Hex(cardPlay.CatalogFingerprint))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-catalog-fingerprint",
+                        $"{path}.catalogFingerprint",
+                        "Card-play frames must retain a lowercase SHA-256 catalog fingerprint."));
+                }
+
+                if (!StableIdentifier.TryValidate(cardPlay.DefinitionFingerprint)
+                    || !DeterministicHash.IsSha256Hex(cardPlay.DefinitionFingerprint))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-definition-fingerprint",
+                        $"{path}.definitionFingerprint",
+                        "Card-play frames must retain a lowercase SHA-256 definition fingerprint."));
                 }
 
                 break;
@@ -1947,7 +2253,24 @@ internal static class ResolutionFrameCloner
             install.RequiredReplacementCardIds,
             install.SelectedReplacementCardIds,
             install.DestinationZoneId,
-            install.CandidateReplacementDefinitionIds),
+            install.CandidateReplacementDefinitionIds,
+            install.InitiationKind,
+            install.ParentFrameIdentity),
+        CardPlayFrame cardPlay => new CardPlayFrame(
+            cardPlay.Version,
+            cardPlay.BehaviorId,
+            cardPlay.Owner,
+            cardPlay.Side,
+            cardPlay.CardId,
+            cardPlay.DefinitionId,
+            cardPlay.CardClass,
+            cardPlay.SourceZoneId,
+            cardPlay.SourceZoneKind,
+            cardPlay.PlayAreaZoneId,
+            cardPlay.DiscardZoneId,
+            cardPlay.CreditCost,
+            cardPlay.CatalogFingerprint,
+            cardPlay.DefinitionFingerprint),
         RunTimingFrame runTiming => new RunTimingFrame(
             runTiming.Version,
             runTiming.BehaviorId,
