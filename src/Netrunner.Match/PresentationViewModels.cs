@@ -61,10 +61,9 @@ public sealed record MatchViewModel(
 
 /// <summary>
 /// Optional Match-layer input for a viewer-safe maximum hand-size projection.
-/// Core's current Observation contract does not expose RulesState.MaximumHandSize,
-/// so the default mapper leaves both values unavailable. A future coordinator
-/// may inject these values after Core projects them; this record cannot inspect
-/// GameState or derive a value from card text.
+/// This is a compatibility fallback for observations produced before Core
+/// projected the viewer-safe maximum in each public player object. The mapper
+/// never inspects GameState or derives a value from card text.
 /// </summary>
 public sealed record HandSizeProjection(
     int? CorpMaximumHandSize,
@@ -74,7 +73,7 @@ public sealed record HandSizeProjection(
     public static HandSizeProjection Unavailable { get; } = new(
         null,
         null,
-        "Maximum hand size unavailable: Core ObservationBuilder does not project RulesState.MaximumHandSize; Match must inject a viewer-safe hand-limit projection.");
+        "Maximum hand size unavailable: observation has no viewer-safe maximum and no compatibility fallback was supplied.");
 
     public int? For(PlayerSide side) => side switch
     {
@@ -110,7 +109,7 @@ public sealed record TurnViewModel(
         : "TIMING STEP UNAVAILABLE";
 }
 
-/// <summary>Public hand count paired with an optional injected maximum.</summary>
+/// <summary>Public hand count paired with an optional observed or fallback maximum.</summary>
 public sealed record HandSizeViewModel(
     PlayerSide Side,
     int Count,
@@ -386,8 +385,10 @@ public static class ObservationViewMapper
         IReadOnlyDictionary<string, object?> publicState = observation.PublicState;
         IReadOnlyDictionary<string, object?> privateState = observation.PrivateState;
         IReadOnlyDictionary<string, object?> players = RequiredMap(publicState, "players");
-        PlayerViewModel corp = MapPlayer(RequiredMap(players, "corp"), PlayerSide.Corp);
-        PlayerViewModel runner = MapPlayer(RequiredMap(players, "runner"), PlayerSide.Runner);
+        IReadOnlyDictionary<string, object?> corpPlayer = RequiredMap(players, "corp");
+        IReadOnlyDictionary<string, object?> runnerPlayer = RequiredMap(players, "runner");
+        PlayerViewModel corp = MapPlayer(corpPlayer, PlayerSide.Corp);
+        PlayerViewModel runner = MapPlayer(runnerPlayer, PlayerSide.Runner);
         IReadOnlyDictionary<string, object?> hidden = RequiredMap(publicState, "hiddenZoneCounts");
 
         ZoneViewModel corpHand = MapZone(
@@ -440,10 +441,12 @@ public static class ObservationViewMapper
         HandSizeViewModel corpHandSize = MapHandSize(
             PlayerSide.Corp,
             corpHand,
+            corpPlayer,
             handSizeProjection);
         HandSizeViewModel runnerHandSize = MapHandSize(
             PlayerSide.Runner,
             runnerHand,
+            runnerPlayer,
             handSizeProjection);
         return view with
         {
@@ -531,9 +534,15 @@ public static class ObservationViewMapper
     private static HandSizeViewModel MapHandSize(
         PlayerSide side,
         ZoneViewModel zone,
+        IReadOnlyDictionary<string, object?> observedPlayer,
         HandSizeProjection handSizeProjection)
     {
-        int? maximum = handSizeProjection.For(side);
+        // Core's current observation carries this value in the already
+        // viewer-safe public player projection. Prefer it over compatibility
+        // injection so the UI cannot display a stale composition estimate.
+        int? maximum = TryReadOptionalInt(observedPlayer, "maximumHandSize", out int observedMaximum)
+            ? observedMaximum
+            : handSizeProjection.For(side);
         return maximum is { } value
             ? new HandSizeViewModel(side, zone.Count, value, null)
             : HandSizeViewModel.Unavailable(side, zone.Count, handSizeProjection.UnavailableReason);
@@ -614,6 +623,22 @@ public static class ObservationViewMapper
             value = default;
             return false;
         }
+    }
+
+    private static bool TryReadOptionalInt(
+        IReadOnlyDictionary<string, object?> map,
+        string key,
+        out int value)
+    {
+        if (!map.TryGetValue(key, out object? raw)
+            || raw is null
+            || raw is JsonElement { ValueKind: JsonValueKind.Null })
+        {
+            value = default;
+            return false;
+        }
+
+        return TryReadRequiredInt(map, key, out value);
     }
 
     private static bool TryReadEnum<TEnum>(

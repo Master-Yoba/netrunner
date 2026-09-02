@@ -233,7 +233,7 @@ public sealed class BehaviorInstallActionTests
     }
 
     [Fact]
-    public void BehaviorInstallOptionIsGripOnlyWhenAnActiveUniqueConflictExists()
+    public void BehaviorInstallOptionReplacesAnActiveUniqueConflictAfterSaveLoad()
     {
         CardInstanceId existingId = new("card:behavior-install-unique-existing");
         CardDefinitionId existingDefinition = new("test:behavior-install-unique-existing");
@@ -244,7 +244,90 @@ public sealed class BehaviorInstallActionTests
             existingUniquenessKey: uniquenessKey);
         GameState disposition = OpenBehaviorDispositionChoice(fixture);
 
-        AssertOnlyGripOption(disposition);
+        Assert.Equal(DecisionKind.BehaviorChoice, disposition.PendingDecision!.Kind);
+        LegalAction[] options = disposition.PendingDecision.LegalActions.ToArray();
+        Assert.Equal(2, options.Length);
+        Assert.Contains(options, action =>
+            action.Parameters is BehaviorChoiceParameters choice
+            && choice.OptionKeys.SequenceEqual(["install"]));
+        Assert.Contains(options, action =>
+            action.Parameters is BehaviorChoiceParameters choice
+            && choice.OptionKeys.SequenceEqual(["grip"]));
+
+        int creditsBeforeInstall = disposition.GetPlayer(fixture.RunnerId).Credits;
+        int clicksBeforeInstall = disposition.GetPlayer(fixture.RunnerId).Clicks;
+        LegalAction install = Assert.Single(
+            options,
+            action => action.Parameters is BehaviorChoiceParameters choice
+                && choice.OptionKeys.SequenceEqual(["install"]));
+        ApplyResult opened = Apply(disposition, fixture, install);
+        Assert.True(opened.Accepted, opened.Rejection?.Message);
+        InstallFrame frame = Assert.IsType<InstallFrame>(opened.State.ResolutionStack[^1]);
+        Assert.Equal([existingId], frame.CandidateReplacementCardIds);
+        Assert.Equal([existingId], frame.RequiredReplacementCardIds);
+        Assert.Equal([existingDefinition], frame.CandidateReplacementDefinitionIds);
+        Assert.Equal(creditsBeforeInstall, opened.State.GetPlayer(fixture.RunnerId).Credits);
+        Assert.Equal(clicksBeforeInstall, opened.State.GetPlayer(fixture.RunnerId).Clicks);
+
+        string json = EngineJson.Serialize(opened.State);
+        GameState restored = EngineJson.DeserializeState(
+            json,
+            fixture.BehaviorCatalog,
+            fixture.RuntimeCatalog);
+        Assert.Equal(json, EngineJson.Serialize(restored));
+        Assert.Equal(DeterministicHash.ForState(opened.State), DeterministicHash.ForState(restored));
+
+        PendingDecision choice = Assert.IsType<PendingDecision>(restored.PendingDecision);
+        LegalAction select = Assert.Single(
+            choice.LegalActions,
+            action => Assert.IsType<InstallCardParameters>(action.Parameters)
+                .SelectedReplacementCardIds.SequenceEqual([existingId]));
+        ApplyResult selected = Apply(restored, fixture, select);
+        Assert.True(selected.Accepted, selected.Rejection?.Message);
+        PendingDecision finalDecision = Assert.IsType<PendingDecision>(selected.State.PendingDecision);
+        LegalAction finalize = Assert.Single(
+            finalDecision.LegalActions,
+            action => Assert.IsType<InstallCardParameters>(action.Parameters).FinalizeSelection);
+        InstallCardParameters finalParameters = Assert.IsType<InstallCardParameters>(finalize.Parameters);
+        Assert.Equal([existingId], finalParameters.SelectedReplacementCardIds);
+        Assert.Equal(fixture.IncomingInstallCost, finalParameters.CreditCost);
+
+        ApplyResult result = Apply(selected.State, fixture, finalize);
+        Assert.True(result.Accepted, result.Rejection?.Message);
+        Assert.Equal(ZoneKind.RunnerHeap, result.State.ZoneOf(existingId).Kind);
+        Assert.Equal(ZoneKind.RunnerRig, result.State.ZoneOf(fixture.IncomingProgramId).Kind);
+        Assert.True(result.State.GetCard(fixture.IncomingProgramId).FaceUp);
+        Assert.Equal(
+            creditsBeforeInstall - fixture.IncomingInstallCost,
+            result.State.GetPlayer(fixture.RunnerId).Credits);
+        Assert.Equal(clicksBeforeInstall, result.State.GetPlayer(fixture.RunnerId).Clicks);
+        Assert.Equal([fixture.IncomingProgramId], result.State.Turn.ThisTurnFacts!.InstalledCardIds);
+        Assert.Single(result.State.RulesState!.Programs, value => value.CardId == fixture.IncomingProgramId);
+        Assert.DoesNotContain(result.State.RulesState.Programs, value => value.CardId == existingId);
+        Assert.Equal(
+            [
+                EngineEventKinds.CardMoved,
+                EngineEventKinds.CreditsAdjusted,
+                EngineEventKinds.CardMoved,
+                EngineEventKinds.MemoryAdjusted,
+                EngineEventKinds.CardInstalled,
+                EngineEventKinds.CardMoved,
+                EngineEventKinds.CardPlayCompleted,
+                EngineEventKinds.TurnTimingWindowOpened,
+            ],
+            result.Events.Select(value => value.Kind));
+        CreditsAdjustedEventPayload credits = Assert.IsType<CreditsAdjustedEventPayload>(
+            result.Events.Single(value => value.Kind == EngineEventKinds.CreditsAdjusted).Payload);
+        Assert.Equal(-fixture.IncomingInstallCost, credits.Delta);
+        Assert.Equal(creditsBeforeInstall - fixture.IncomingInstallCost, credits.CreditsAfter);
+        CardInstalledEventPayload installed = Assert.IsType<CardInstalledEventPayload>(
+            result.Events.Single(value => value.Kind == EngineEventKinds.CardInstalled).Payload);
+        Assert.Equal(fixture.IncomingInstallCost, installed.Cost);
+        Assert.Equal(1, result.Events.Count(value => value.Kind == EngineEventKinds.CreditsAdjusted));
+        Assert.Equal(3, result.Events.Count(value => value.Kind == EngineEventKinds.CardMoved));
+        Assert.Equal(1, result.Events.Count(value => value.Kind == EngineEventKinds.MemoryAdjusted));
+        Assert.DoesNotContain(result.Events, value => value.Kind == EngineEventKinds.ClickSpent);
+        Assert.Empty(StateInvariantValidator.Collect(result.State, fixture.BehaviorCatalog, fixture.RuntimeCatalog));
     }
 
     [Fact]

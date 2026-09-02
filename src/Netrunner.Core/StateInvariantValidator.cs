@@ -2265,6 +2265,7 @@ public static class StateInvariantValidator
                     }
 
                     CardInstanceState? installCard = state.Cards.FirstOrDefault(card => card?.Id == install.CardId);
+                    CardRuntimeSpec? installSpecForProjection = null;
                     if (installCard is null)
                     {
                         Add(violations, "resolution.unknown-install-card", $"{path}.cardId", $"Install card '{install.CardId}' does not exist.");
@@ -2302,6 +2303,7 @@ public static class StateInvariantValidator
                             }
                             else
                             {
+                                installSpecForProjection = runtimeSpec;
                                 if (runtimeSpec.Side != PlayerSide.Runner
                                     || !IsRunnerInstallableRuntimeClass(runtimeSpec.CardClass))
                                 {
@@ -2320,6 +2322,67 @@ public static class StateInvariantValidator
                                         $"{path}.cardClass",
                                         $"Install frame class '{install.CardClass}' must match runtime class '{runtimeSpec.CardClass}' for '{installCard.DefinitionId}'.");
                                 }
+                            }
+                        }
+                    }
+
+                    if (runnerRig is not null
+                        && runtimeCardCatalog is not null
+                        && installSpecForProjection is
+                        { Side: PlayerSide.Runner } runnerInstallSpec)
+                    {
+                        if (runnerInstallSpec.CardClass != RuntimeCardClass.Program
+                            && (runnerInstallSpec.Unique || runnerInstallSpec.Console)
+                            && !AllActiveRunnerRigCardsKnown(state, runtimeCardCatalog, runnerRig))
+                        {
+                            Add(
+                                violations,
+                                "resolution.install-runtime-candidate-missing",
+                                $"{path}.candidateReplacementCardIds",
+                                "A unique or Console Runner install cannot classify every active Rig card from authoritative runtime metadata.");
+                        }
+
+                        CardInstanceId[] expectedCandidates = RunnerInstallCandidateIds(
+                            state,
+                            runtimeCardCatalog,
+                            runnerRig,
+                            runnerInstallSpec);
+                        if (!install.CandidateReplacementCardIds.SequenceEqual(expectedCandidates))
+                        {
+                            Add(
+                                violations,
+                                "resolution.install-candidates-mismatch",
+                                $"{path}.candidateReplacementCardIds",
+                                "Runner install candidates must equal installed Programs plus active uniqueness/Console conflicts, or the exact conflict set for non-Programs.");
+                        }
+
+                        CardInstanceId[] expectedRequired = ActiveRunnerInstallConflictIds(
+                            state,
+                            runtimeCardCatalog,
+                            runnerInstallSpec);
+                        if (!install.RequiredReplacementCardIds.SequenceEqual(expectedRequired))
+                        {
+                            Add(
+                                violations,
+                                "resolution.install-required-mismatch",
+                                $"{path}.requiredReplacementCardIds",
+                                "Runner install required replacements must equal the exact active uniqueness/Console conflict set.");
+                        }
+
+                        if (install.CandidateReplacementDefinitionIds is not null)
+                        {
+                            CardDefinitionId[] expectedDefinitions = expectedCandidates
+                                .Select(cardId => state.Cards.FirstOrDefault(card => card?.Id == cardId)?.DefinitionId)
+                                .Where(definitionId => definitionId.HasValue)
+                                .Select(definitionId => definitionId!.Value)
+                                .ToArray();
+                            if (!install.CandidateReplacementDefinitionIds.SequenceEqual(expectedDefinitions))
+                            {
+                                Add(
+                                    violations,
+                                    "resolution.install-candidate-definitions-mismatch",
+                                    $"{path}.candidateReplacementDefinitionIds",
+                                    "Runner install replacement definitions must match the current installed Programs plus active conflicts.");
                             }
                         }
                     }
@@ -5176,6 +5239,7 @@ public static class StateInvariantValidator
                 "Behavior-effect install card must equal the current chosen binding.");
         }
 
+        CardRuntimeSpec? installSpecForProjection = null;
         if (installCard is not null && runtimeCardCatalog is not null)
         {
             if (!runtimeCardCatalog.TryGet(installCard.DefinitionId, out CardRuntimeSpec? spec))
@@ -5188,6 +5252,7 @@ public static class StateInvariantValidator
             }
             else
             {
+                installSpecForProjection = spec;
                 if (spec.Side != PlayerSide.Runner || spec.CardClass != RuntimeCardClass.Program)
                 {
                     Add(
@@ -5211,22 +5276,42 @@ public static class StateInvariantValidator
 
         if (runnerRig is not null)
         {
-            CardInstanceId[] expectedCandidates = state.Cards
-                .Where(card => card?.OwnerSide == PlayerSide.Runner
-                    && card.ZoneId == runnerRig.Id
-                    && runtimeCardCatalog is not null
-                    && runtimeCardCatalog.TryGet(card.DefinitionId, out CardRuntimeSpec? spec)
-                    && spec.CardClass == RuntimeCardClass.Program)
-                .Select(card => card!.Id)
-                .OrderBy(id => id.Value, StringComparer.Ordinal)
-                .ToArray();
+            if (runtimeCardCatalog is not null
+                && !AllRuntimeCardsKnown(state, runtimeCardCatalog, runnerRig))
+            {
+                Add(
+                    violations,
+                    "resolution.install-runtime-candidate-missing",
+                    $"{path}.candidateReplacementCardIds",
+                    "Behavior-effect installs cannot classify every physical Runner Rig card from authoritative runtime metadata.");
+            }
+
+            CardInstanceId[] conflicts = installSpecForProjection is
+            { Side: PlayerSide.Runner, CardClass: RuntimeCardClass.Program }
+                && runtimeCardCatalog is not null
+                ? ActiveRunnerInstallConflictIds(state, runtimeCardCatalog, installSpecForProjection)
+                : [];
+            CardInstanceId[] expectedCandidates = installSpecForProjection is
+            { Side: PlayerSide.Runner, CardClass: RuntimeCardClass.Program }
+                && runtimeCardCatalog is not null
+                ? RunnerInstallCandidateIds(state, runtimeCardCatalog, runnerRig, installSpecForProjection)
+                : [];
             if (!install.CandidateReplacementCardIds.SequenceEqual(expectedCandidates))
             {
                 Add(
                     violations,
                     "resolution.install-candidates-mismatch",
                     $"{path}.candidateReplacementCardIds",
-                    "Behavior-effect install candidates must equal the current installed Runner Programs.");
+                    "Behavior-effect install candidates must equal the current installed Runner Programs plus active uniqueness/Console conflicts.");
+            }
+
+            if (!install.RequiredReplacementCardIds.SequenceEqual(conflicts))
+            {
+                Add(
+                    violations,
+                    "resolution.install-required-mismatch",
+                    $"{path}.requiredReplacementCardIds",
+                    "Behavior-effect install required replacements must equal the active uniqueness/Console conflicts.");
             }
 
             CardDefinitionId[] expectedCandidateDefinitions = expectedCandidates
@@ -5246,7 +5331,7 @@ public static class StateInvariantValidator
                     violations,
                     "resolution.install-candidate-definitions-mismatch",
                     $"{path}.candidateReplacementDefinitionIds",
-                    "Behavior-effect install replacement definitions must match the current installed Runner Programs.");
+                    "Behavior-effect install replacement definitions must match the current installed Runner Programs plus active uniqueness/Console conflicts.");
             }
         }
 
@@ -7568,19 +7653,19 @@ public static class StateInvariantValidator
                 return false;
             }
 
-            if (HasBehaviorInstallConflict(state, runtimeCardCatalog, incoming))
+            CardInstanceId[] conflicts = ActiveRunnerInstallConflictIds(
+                state,
+                runtimeCardCatalog,
+                incoming);
+            CardInstanceId[] candidates = RunnerInstallCandidateIds(
+                state,
+                runtimeCardCatalog,
+                rig,
+                incoming);
+            if (conflicts.Any(conflict => !candidates.Contains(conflict)))
             {
                 return false;
             }
-
-            CardInstanceId[] candidates = state.Cards
-                .Where(candidate => candidate?.OwnerSide == PlayerSide.Runner
-                    && candidate.ZoneId == rig.Id
-                    && runtimeCardCatalog.TryGet(candidate.DefinitionId, out CardRuntimeSpec? spec)
-                    && spec.CardClass == RuntimeCardClass.Program)
-                .Select(candidate => candidate!.Id)
-                .OrderBy(id => id.Value, StringComparer.Ordinal)
-                .ToArray();
             if (!CanBehaviorInstallProgram(
                     state,
                     behaviorCatalog,
@@ -7608,6 +7693,67 @@ public static class StateInvariantValidator
         }
     }
 
+    private static CardInstanceId[] ActiveRunnerInstallConflictIds(
+        GameState state,
+        IRuntimeCardCatalog runtimeCardCatalog,
+        CardRuntimeSpec incoming)
+    {
+        ZoneState? rig = state.Zones.FirstOrDefault(zone => zone?.Kind == ZoneKind.RunnerRig
+            && zone.OwnerSide == PlayerSide.Runner
+            && zone.ServerId is null);
+        if (rig is null || (!incoming.Unique && !incoming.Console))
+        {
+            return [];
+        }
+
+        return rig.CardIds
+            .Select(cardId => state.Cards.FirstOrDefault(card => card?.Id == cardId))
+            .Where(card => card is not null
+                && card.OwnerSide == PlayerSide.Runner
+                && card.ZoneId == rig.Id
+                && card.FaceUp
+                && runtimeCardCatalog.TryGet(card.DefinitionId, out CardRuntimeSpec? current)
+                && ((incoming.Unique
+                        && incoming.UniquenessKey is not null
+                        && current.Unique
+                        && current.UniquenessKey is not null
+                        && string.Equals(current.UniquenessKey, incoming.UniquenessKey, StringComparison.Ordinal))
+                    || (incoming.Console && current.Console)))
+            .Select(card => card!.Id)
+            .Distinct()
+            .OrderBy(id => id.Value, StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static CardInstanceId[] RunnerInstallCandidateIds(
+        GameState state,
+        IRuntimeCardCatalog runtimeCardCatalog,
+        ZoneState rig,
+        CardRuntimeSpec incoming)
+    {
+        CardInstanceId[] conflicts = ActiveRunnerInstallConflictIds(
+            state,
+            runtimeCardCatalog,
+            incoming);
+        if (incoming.CardClass != RuntimeCardClass.Program)
+        {
+            return conflicts;
+        }
+
+        return rig.CardIds
+            .Select(cardId => state.Cards.FirstOrDefault(card => card?.Id == cardId))
+            .Where(card => card is not null
+                && card.OwnerSide == PlayerSide.Runner
+                && card.ZoneId == rig.Id
+                && runtimeCardCatalog.TryGet(card.DefinitionId, out CardRuntimeSpec? candidateSpec)
+                && candidateSpec.CardClass == RuntimeCardClass.Program)
+            .Select(card => card!.Id)
+            .Concat(conflicts)
+            .Distinct()
+            .OrderBy(id => id.Value, StringComparer.Ordinal)
+            .ToArray();
+    }
+
     private static bool AllRuntimeCardsKnown(
         GameState state,
         IRuntimeCardCatalog runtimeCardCatalog,
@@ -7617,6 +7763,27 @@ public static class StateInvariantValidator
         {
             CardInstanceState? card = state.Cards.FirstOrDefault(candidate => candidate?.Id == cardId);
             if (card is null || !runtimeCardCatalog.TryGet(card.DefinitionId, out _))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool AllActiveRunnerRigCardsKnown(
+        GameState state,
+        IRuntimeCardCatalog runtimeCardCatalog,
+        ZoneState rig)
+    {
+        foreach (CardInstanceId cardId in rig.CardIds)
+        {
+            CardInstanceState? card = state.Cards.FirstOrDefault(candidate => candidate?.Id == cardId);
+            if (card is not null
+                && card.OwnerSide == PlayerSide.Runner
+                && card.ZoneId == rig.Id
+                && card.FaceUp
+                && !runtimeCardCatalog.TryGet(card.DefinitionId, out _))
             {
                 return false;
             }
@@ -7684,30 +7851,6 @@ public static class StateInvariantValidator
                     originatingTarget,
                     excludedCardId: null)
                 .Contains(cardIds[0]);
-    }
-
-    private static bool HasBehaviorInstallConflict(
-        GameState state,
-        IRuntimeCardCatalog runtimeCardCatalog,
-        CardRuntimeSpec incoming)
-    {
-        CardInstanceState[] installed = state.Cards
-            .Where(card => card?.OwnerSide == PlayerSide.Runner
-                && IsInstalledCard(state, card.Id)
-                && card.FaceUp)
-            .Select(card => card!)
-            .ToArray();
-        if (incoming.Unique
-            && installed.Any(card => runtimeCardCatalog.TryGet(card.DefinitionId, out CardRuntimeSpec? current)
-                && current.Unique
-                && string.Equals(current.UniquenessKey, incoming.UniquenessKey, StringComparison.Ordinal)))
-        {
-            return true;
-        }
-
-        return incoming.Console
-            && installed.Any(card => runtimeCardCatalog.TryGet(card.DefinitionId, out CardRuntimeSpec? current)
-                && current.Console);
     }
 
     private static bool CanBehaviorInstallProgram(

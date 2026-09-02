@@ -386,7 +386,7 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
 
         try
         {
-            command.Complete(ObservationBuilder.Build(_state, command.Viewer));
+            command.Complete(ObservationBuilder.Build(_state, command.Viewer, _behaviorCatalog));
         }
         catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
         {
@@ -404,7 +404,7 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
             // The published snapshot is intentionally Runner-filtered. Corp
             // policy receives its own filtered observation, never the
             // presentation snapshot and never GameState.
-            Observation observation = ObservationBuilder.Build(state, PlayerSide.Corp);
+            Observation observation = ObservationBuilder.Build(state, PlayerSide.Corp, _behaviorCatalog);
             try
             {
                 await DelayAsync(_options.AgentDelay, _cancellation.Token).ConfigureAwait(false);
@@ -482,7 +482,7 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
             }
         }
 
-        Observation observation = ObservationBuilder.Build(state, PlayerSide.Runner);
+        Observation observation = ObservationBuilder.Build(state, PlayerSide.Runner, _behaviorCatalog);
         MatchViewModel view = ObservationViewMapper.Build(
             observation,
             _metadataResolver,

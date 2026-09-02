@@ -2399,3 +2399,66 @@ errors; runtime action expansion and full verification remain pending.
   merge state clean and found no general comments, submitted reviews, or inline
   review comments, so there is currently no remote feedback requiring a Luna
   correction. The PR remains open for maintainer review.
+
+### 2026-09-03 — PR #6 automated review architecture
+
+- A review submitted after the first handoff sweep raised three P2 findings;
+  root inspected each against the production call graph and local M4 rules and
+  accepted all three. `MatchCoordinator.Publish` owns the composed behavior
+  catalog but calls the legacy two-argument observation adapter, so T400's
+  static hand-size modifier is lost. The normal observation-to-view mapper
+  then ignores the now-present per-player `maximumHandSize` field and replaces
+  it with an unavailable projection. Production must pass the composed catalog
+  to `ObservationBuilder`, and the mapper must prefer observed maximums while
+  retaining the injected projection only as a legacy-observation fallback.
+- The Runner install planner also rejects an active unique/console conflict at
+  action materialization. This contradicts the checked-in CR 2.2/3.8/10.3
+  contract: installing the newest active copy is legal and older conflicts are
+  repaired at checkpoint. Root's bounded correction is to freeze every active
+  matching unique/console card into the install candidate set and require its
+  removal in the existing serialized install transaction. Program installs
+  retain all ordinary MU replacement candidates plus the conflict union;
+  non-program Runner installs expose only their exact conflicts. Basic and
+  behavior-owned installs, option projection, frame invariants, save/load, and
+  stale/forged validation must share the same sorted metadata-derived set.
+- Root delegated only these fixed implementations and regressions to Luna Max.
+  No Corp rez/activation cleanup or unrelated checkpoint subsystem is added by
+  this review correction; facedown Corp installs remain inactive and their
+  later activation timing stays with its owning checkpoint.
+
+### 2026-09-03 — PR #6 automated review corrections accepted
+
+- Luna implemented root's observation boundary contract at all three
+  `MatchCoordinator` call sites. Explicit requests, Corp-agent input, and the
+  published Runner snapshot now use the coordinator's composed behavior
+  catalog, so installed static modifiers survive into the public observation.
+  The Match mapper consumes the observed per-player `maximumHandSize` first,
+  including zero and negative values, and uses the injected projection only
+  for legacy observations that omit the field. A coordinator-level T400
+  regression proves the composed value reaches both observation and view.
+- Luna also implemented root's shared Runner conflict transaction. Active
+  matching unique cards and active Consoles are derived solely from canonical
+  face-up Rig state plus authoritative runtime metadata, sorted ordinally,
+  frozen as required replacements, and trashed before the incoming card is
+  activated. Program installs retain their ordinary MU candidates plus that
+  conflict union; non-Program installs expose the exact conflict set. Basic
+  and behavior-owned planning, option projection, persisted frames, and state
+  invariants now derive the same candidates, required IDs, and definition
+  snapshot. Unknown active Rig metadata fails closed where a non-Program
+  unique/Console decision would otherwise be inferred.
+- Root reviewed and accepted the implementation after requiring ordinary and
+  behavior-path invariant parity, a coordinator-level observation regression,
+  and real basic-action coverage. The final regressions prove behavior-owned
+  unique replacement through save/load without an extra click, basic unique
+  Program replacement, multi-Console Hardware replacement, and unknown active
+  metadata suppression. Root independently passed complete Core at 488/488
+  and complete Match at 43/43.
+- Root's first repository-wide run passed the zero-warning build and every
+  test suite but stopped at three formatter diagnostics in Luna's validator
+  edit. Luna made only those whitespace corrections; root identified and sent
+  back one additional visually misaligned diagnostic argument. The clean
+  rerun of `./scripts/verify.sh` then passed end to end: Core 488/488, Cards
+  97/97, AI 23/23, CLI 52/52, Match 43/43, formatter, official builds and
+  77-card validation, coverage drift, deterministic CLI/replay proofs, the
+  32-checkpoint M2 proof, both Godot smoke lanes, and secret scan. The review
+  corrections are ready for commit and PR #6 update.

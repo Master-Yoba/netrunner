@@ -46,7 +46,9 @@ public sealed class UiRegionPresenterTests
         Assert.Equal(view.CorpHand.Count, view.CorpHandSize.Count);
         Assert.Equal(view.RunnerHand.Count, view.RunnerHandSize.Count);
         Assert.False(view.RunnerHandSize.IsMaximumKnown);
-        Assert.Contains("Core ObservationBuilder", view.RunnerHandSize.MaximumHandSizeDiagnostic, StringComparison.Ordinal);
+        Assert.Equal(
+            HandSizeProjection.Unavailable.UnavailableReason,
+            view.RunnerHandSize.MaximumHandSizeDiagnostic);
         Assert.Equal(view.Runner.AgendaPoints, view.RunnerScoreArea.AgendaPoints);
         Assert.Equal(view.Corp.AgendaPoints, view.CorpScoreArea.AgendaPoints);
 
@@ -65,6 +67,55 @@ public sealed class UiRegionPresenterTests
         Assert.True(injected.RunnerHandSize.IsMaximumKnown);
         Assert.Contains("Hand", BoardRegionPresenter.Present(injected).RunnerSummary, StringComparison.Ordinal);
         Assert.Contains("max 6", BoardRegionPresenter.Present(injected).RunnerSummary, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ObservationMapperUsesObservedMaximumsAndPreservesNegativeValues()
+    {
+        Observation observation = ObservationWithMaximumHandSizes(
+            corpMaximumHandSize: -1,
+            runnerMaximumHandSize: 0);
+
+        MatchViewModel view = ObservationViewMapper.Build(
+            observation,
+            CardMetadataResolvers.Default,
+            GatewayBehaviorCatalog.Create());
+
+        Assert.Equal(-1, view.CorpHandSize.MaximumHandSize);
+        Assert.True(view.CorpHandSize.IsOverLimit);
+        Assert.Equal(0, view.RunnerHandSize.MaximumHandSize);
+        Assert.True(view.RunnerHandSize.IsOverLimit);
+    }
+
+    [Fact]
+    public void ObservationMapperUsesInjectedMaximumOnlyWhenLegacyObservationOmitsIt()
+    {
+        Observation legacy = ObservationBuilder.Build(
+            M2ScenarioSetup.Build(M2ScenarioProvider.LoadRepresentative()),
+            PlayerSide.Runner);
+        HandSizeProjection conflictingFallback = new(100, 101);
+
+        MatchViewModel legacyView = ObservationViewMapper.Build(
+            legacy,
+            CardMetadataResolvers.Default,
+            GatewayBehaviorCatalog.Create(),
+            conflictingFallback);
+        Assert.Equal(100, legacyView.CorpHandSize.MaximumHandSize);
+        Assert.Equal(101, legacyView.RunnerHandSize.MaximumHandSize);
+
+        Observation observed = ObservationWithMaximumHandSizes(
+            corpMaximumHandSize: 3,
+            runnerMaximumHandSize: 2);
+        MatchViewModel observedView = ObservationViewMapper.Build(
+            observed,
+            CardMetadataResolvers.Default,
+            GatewayBehaviorCatalog.Create(),
+            conflictingFallback);
+
+        Assert.Equal(3, observedView.CorpHandSize.MaximumHandSize);
+        Assert.Equal(2, observedView.RunnerHandSize.MaximumHandSize);
+        Assert.NotEqual(conflictingFallback.CorpMaximumHandSize, observedView.CorpHandSize.MaximumHandSize);
+        Assert.NotEqual(conflictingFallback.RunnerMaximumHandSize, observedView.RunnerHandSize.MaximumHandSize);
     }
 
     [Fact]
@@ -482,6 +533,28 @@ public sealed class UiRegionPresenterTests
         GameState state = M2ScenarioSetup.Build(document);
         Observation observation = ObservationBuilder.Build(state, PlayerSide.Runner);
         return ObservationViewMapper.Build(observation);
+    }
+
+    private static Observation ObservationWithMaximumHandSizes(
+        int corpMaximumHandSize,
+        int runnerMaximumHandSize)
+    {
+        M2ScenarioDocument document = M2ScenarioProvider.LoadRepresentative();
+        GameState state = M2ScenarioSetup.Build(document);
+        Observation baseline = ObservationBuilder.Build(state, PlayerSide.Runner);
+        var publicState = new Dictionary<string, object?>(baseline.PublicState);
+        var baselinePlayers = (IReadOnlyDictionary<string, object?>)publicState["players"]!;
+        var players = new Dictionary<string, object?>(baselinePlayers);
+        var corp = new Dictionary<string, object?>
+            ((IReadOnlyDictionary<string, object?>)baselinePlayers["corp"]!);
+        var runner = new Dictionary<string, object?>
+            ((IReadOnlyDictionary<string, object?>)baselinePlayers["runner"]!);
+        corp["maximumHandSize"] = corpMaximumHandSize;
+        runner["maximumHandSize"] = runnerMaximumHandSize;
+        players["corp"] = corp;
+        players["runner"] = runner;
+        publicState["players"] = players;
+        return baseline with { PublicState = publicState };
     }
 
     private static RunFocusViewModel BaseRun() => new(

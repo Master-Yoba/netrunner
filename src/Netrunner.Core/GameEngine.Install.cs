@@ -657,11 +657,15 @@ public static partial class GameEngine
             return null;
         }
 
-        // Corp installs enter the board facedown and unrezzed, so uniqueness
-        // and console conflicts are not active-install legality at this
-        // boundary. Those checks apply to the Runner's face-up Rig installs;
-        // Corp activation/rez cleanup belongs to a later checkpoint.
-        if (side == PlayerSide.Runner && HasActiveInstallConflict(working, card, spec, side))
+        // A unique or Console Runner non-Program must inspect every active
+        // Rig card to prove the exact conflict set. If any such card lacks
+        // authoritative runtime metadata, fail closed before issuing an
+        // action; plain non-unique/non-Console Hardware and Resources do not
+        // need that stronger gate.
+        if (side == PlayerSide.Runner
+            && spec.CardClass is not RuntimeCardClass.Program
+            && (spec.Unique || spec.Console)
+            && !AllActiveRunnerRigCardsKnown(working))
         {
             return null;
         }
@@ -810,8 +814,7 @@ public static partial class GameEngine
             || destinationKind != InstallDestinationKind.RunnerRig
             || serverId is not null
             || createNewRemote
-            || !AllRuntimeCardsKnown(working, destination.CardIds)
-            || HasActiveInstallConflict(working, card, spec, PlayerSide.Runner))
+            || !AllRuntimeCardsKnown(working, destination.CardIds))
         {
             return null;
         }
@@ -826,6 +829,8 @@ public static partial class GameEngine
         {
             return null;
         }
+
+        CardInstanceId[] required = ActiveRunnerInstallConflictIds(working, spec);
 
         int installCost = CalculateInstallCost(
             working,
@@ -853,7 +858,7 @@ public static partial class GameEngine
             destination.Id,
             installCost,
             candidates,
-            [],
+            required,
             candidateDefinitions);
     }
 
@@ -975,14 +980,36 @@ public static partial class GameEngine
         ServerId? serverId,
         bool createNewRemote)
     {
-        if (createNewRemote
-            || (destinationKind == InstallDestinationKind.RunnerRig
-                && spec.CardClass is not RuntimeCardClass.Program))
+        if (createNewRemote)
         {
             return [];
         }
 
         ZoneState destination = ResolveExistingInstallDestination(working, destinationKind, serverId);
+        if (destinationKind == InstallDestinationKind.RunnerRig
+            && spec.Side == PlayerSide.Runner)
+        {
+            CardInstanceId[] conflicts = ActiveRunnerInstallConflictIds(working, spec);
+            if (spec.CardClass != RuntimeCardClass.Program)
+            {
+                return conflicts;
+            }
+
+            CardInstanceId[] programs = destination.CardIds
+                .Select(cardId => working.Cards.FirstOrDefault(card => card.Id == cardId))
+                .Where(card => card is not null
+                    && card.OwnerSide == PlayerSide.Runner
+                    && card.ZoneId == destination.Id
+                    && working.RuntimeCardCatalog!.TryGet(card.DefinitionId, out CardRuntimeSpec? candidateSpec)
+                    && candidateSpec.CardClass == RuntimeCardClass.Program)
+                .Select(card => card!.Id)
+                .Concat(conflicts)
+                .Distinct()
+                .OrderBy(id => id.Value, StringComparer.Ordinal)
+                .ToArray();
+            return programs;
+        }
+
         if (spec.CardClass == RuntimeCardClass.Program)
         {
             return working.Cards
@@ -1018,6 +1045,12 @@ public static partial class GameEngine
         ServerId? serverId,
         bool createNewRemote)
     {
+        if (destinationKind == InstallDestinationKind.RunnerRig
+            && spec.Side == PlayerSide.Runner)
+        {
+            return ActiveRunnerInstallConflictIds(working, spec);
+        }
+
         if (createNewRemote || destinationKind == InstallDestinationKind.RunnerRig)
         {
             return [];
@@ -1043,6 +1076,65 @@ public static partial class GameEngine
     private static bool AllRuntimeCardsKnown(WorkingState working, IEnumerable<CardInstanceId> cardIds) =>
         cardIds.All(cardId => working.RuntimeCardCatalog!.TryGet(GetCard(working, cardId).DefinitionId, out _));
 
+    private static bool AllActiveRunnerRigCardsKnown(WorkingState working)
+    {
+        ZoneState? rig = working.Zones.FirstOrDefault(zone =>
+            zone.Kind == ZoneKind.RunnerRig
+            && zone.OwnerSide == PlayerSide.Runner
+            && zone.ServerId is null);
+        if (rig is null)
+        {
+            return false;
+        }
+
+        foreach (CardInstanceId cardId in rig.CardIds)
+        {
+            CardInstanceState? card = working.Cards.FirstOrDefault(candidate => candidate.Id == cardId);
+            if (card is not null
+                && card.OwnerSide == PlayerSide.Runner
+                && card.ZoneId == rig.Id
+                && card.FaceUp
+                && !working.RuntimeCardCatalog!.TryGet(card.DefinitionId, out _))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static CardInstanceId[] ActiveRunnerInstallConflictIds(
+        WorkingState working,
+        CardRuntimeSpec incoming)
+    {
+        ZoneState? rig = working.Zones.FirstOrDefault(zone =>
+            zone.Kind == ZoneKind.RunnerRig
+            && zone.OwnerSide == PlayerSide.Runner
+            && zone.ServerId is null);
+        if (rig is null || (!incoming.Unique && !incoming.Console))
+        {
+            return [];
+        }
+
+        return rig.CardIds
+            .Select(cardId => working.Cards.FirstOrDefault(card => card.Id == cardId))
+            .Where(card => card is not null
+                && card.OwnerSide == PlayerSide.Runner
+                && card.ZoneId == rig.Id
+                && card.FaceUp
+                && working.RuntimeCardCatalog!.TryGet(card.DefinitionId, out CardRuntimeSpec? current)
+                && ((incoming.Unique
+                        && incoming.UniquenessKey is not null
+                        && current.Unique
+                        && current.UniquenessKey is not null
+                        && string.Equals(current.UniquenessKey, incoming.UniquenessKey, StringComparison.Ordinal))
+                    || (incoming.Console && current.Console)))
+            .Select(card => card!.Id)
+            .Distinct()
+            .OrderBy(id => id.Value, StringComparer.Ordinal)
+            .ToArray();
+    }
+
     private static RuntimeCardClass RuntimeClass(WorkingState working, CardInstanceId cardId) =>
         working.RuntimeCardCatalog!.GetSpec(GetCard(working, cardId).DefinitionId).CardClass;
 
@@ -1051,74 +1143,6 @@ public static partial class GameEngine
 
     private static bool IsRegion(WorkingState working, CardInstanceId cardId) => IsRegion(
         working.RuntimeCardCatalog!.GetSpec(GetCard(working, cardId).DefinitionId));
-
-    private static bool HasActiveInstallConflict(
-        WorkingState working,
-        CardInstanceState card,
-        CardRuntimeSpec spec,
-        PlayerSide side)
-    {
-        if (spec.Unique)
-        {
-            foreach (CardInstanceState installed in InstalledCards(working, side))
-            {
-                if (!IsActiveInstalled(working, installed, side)
-                    || !working.RuntimeCardCatalog!.TryGet(installed.DefinitionId, out CardRuntimeSpec? installedSpec))
-                {
-                    continue;
-                }
-
-                if (installedSpec.Unique
-                    && string.Equals(installedSpec.UniquenessKey, spec.UniquenessKey, StringComparison.Ordinal))
-                {
-                    return true;
-                }
-            }
-        }
-
-        if (spec.Console)
-        {
-            return InstalledCards(working, PlayerSide.Runner)
-                .Where(installed => IsActiveInstalled(working, installed, PlayerSide.Runner))
-                .Any(installed => working.RuntimeCardCatalog!.TryGet(installed.DefinitionId, out CardRuntimeSpec? installedSpec)
-                    && installedSpec.Console);
-        }
-
-        return false;
-    }
-
-    private static IEnumerable<CardInstanceState> InstalledCards(WorkingState working, PlayerSide side)
-    {
-        foreach (CardInstanceState card in working.Cards)
-        {
-            if (card.OwnerSide != side)
-            {
-                continue;
-            }
-
-            ZoneState? zone = working.Zones.FirstOrDefault(candidate => candidate.Id == card.ZoneId);
-            if (zone is null)
-            {
-                continue;
-            }
-
-            if (side == PlayerSide.Runner
-                ? zone.Kind == ZoneKind.RunnerRig
-                : zone.Kind is ZoneKind.ServerRoot or ZoneKind.ServerIce)
-            {
-                yield return card;
-            }
-        }
-    }
-
-    private static bool IsActiveInstalled(WorkingState working, CardInstanceState card, PlayerSide side)
-    {
-        ZoneState? zone = working.Zones.FirstOrDefault(candidate => candidate.Id == card.ZoneId);
-        return zone is not null
-            && (side == PlayerSide.Runner
-                ? zone.Kind == ZoneKind.RunnerRig && card.FaceUp
-                : zone.Kind is ZoneKind.ServerRoot or ZoneKind.ServerIce && card.Rezzed);
-    }
 
     private static bool CanInstallProgram(
         WorkingState working,
