@@ -57,6 +57,7 @@ public enum ActionKind
     TrashAccessedCard,
     NoAccessAction,
     ChooseBehavior,
+    UseAbility,
 }
 
 /// <summary>
@@ -87,6 +88,7 @@ public enum ActionKind
 [JsonDerivedType(typeof(LegacyActionParameters), "legacy")]
 [JsonDerivedType(typeof(BreachCandidateParameters), "breach-candidate")]
 [JsonDerivedType(typeof(BehaviorChoiceParameters), "behavior-choice")]
+[JsonDerivedType(typeof(AbilityActionParameters), "ability")]
 public abstract record ActionParameters;
 
 public sealed record NumberChoiceParameters([property: JsonRequired] int Value) : ActionParameters;
@@ -650,6 +652,164 @@ public sealed record BehaviorChoiceParameters : ActionParameters
     public bool FinalizeSelection { get; private set; }
 }
 
+/// <summary>
+/// Engine-issued payload for one paid-ability activation.  The payload is a
+/// detached snapshot: callers submit its action ID and cannot replace source,
+/// costs, targets, usage facts, or catalog pins.
+/// </summary>
+public sealed record AbilityActionParameters : ActionParameters
+{
+    [JsonConstructor]
+    public AbilityActionParameters(
+        CardInstanceId sourceCardId,
+        CardDefinitionId definitionId,
+        string abilityKey,
+        BehaviorAbilityTiming timing,
+        BehaviorAbilityActivation activation,
+        IReadOnlyList<BehaviorCost> costs,
+        IReadOnlyList<CardInstanceId> targetCardIds,
+        AbilityUsageSnapshot usage,
+        string catalogFingerprint,
+        string definitionFingerprint,
+        ZoneId sourceZoneId,
+        ZoneKind sourceZoneKind)
+    {
+        if (!StableIdentifier.TryValidate(sourceCardId.Value))
+        {
+            throw new ArgumentException("An ability action requires a stable source card ID.", nameof(sourceCardId));
+        }
+
+        if (!StableIdentifier.TryValidate(definitionId.Value))
+        {
+            throw new ArgumentException("An ability action requires a stable definition ID.", nameof(definitionId));
+        }
+
+        if (!StableIdentifier.TryValidate(sourceZoneId.Value))
+        {
+            throw new ArgumentException("An ability action requires a stable source zone ID.", nameof(sourceZoneId));
+        }
+
+        if (!Enum.IsDefined(sourceZoneKind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(sourceZoneKind));
+        }
+
+        if (!StableIdentifier.TryValidate(abilityKey))
+        {
+            throw new ArgumentException(
+                "An ability action requires a stable ability key.",
+                nameof(abilityKey));
+        }
+
+        if (!Enum.IsDefined(timing))
+        {
+            throw new ArgumentOutOfRangeException(nameof(timing));
+        }
+
+        if (!Enum.IsDefined(activation))
+        {
+            throw new ArgumentOutOfRangeException(nameof(activation));
+        }
+
+        if (!DeterministicHash.IsSha256Hex(catalogFingerprint))
+        {
+            throw new ArgumentException(
+                "An ability action catalog fingerprint must be lowercase SHA-256 hex.",
+                nameof(catalogFingerprint));
+        }
+
+        if (!DeterministicHash.IsSha256Hex(definitionFingerprint))
+        {
+            throw new ArgumentException(
+                "An ability action definition fingerprint must be lowercase SHA-256 hex.",
+                nameof(definitionFingerprint));
+        }
+
+        ArgumentNullException.ThrowIfNull(usage);
+        SourceCardId = sourceCardId;
+        DefinitionId = definitionId;
+        AbilityKey = abilityKey;
+        Timing = timing;
+        Activation = activation;
+        Costs = Freeze(costs, nameof(costs));
+        TargetCardIds = FreezeIds(targetCardIds);
+        Usage = new AbilityUsageSnapshot(usage.Limit, usage.UsesThisTurn);
+        CatalogFingerprint = catalogFingerprint;
+        DefinitionFingerprint = definitionFingerprint;
+        SourceZoneId = sourceZoneId;
+        SourceZoneKind = sourceZoneKind;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId SourceCardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardDefinitionId DefinitionId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ZoneId SourceZoneId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ZoneKind SourceZoneKind { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string AbilityKey { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public BehaviorAbilityTiming Timing { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public BehaviorAbilityActivation Activation { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public IReadOnlyList<BehaviorCost> Costs { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public IReadOnlyList<CardInstanceId> TargetCardIds { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public AbilityUsageSnapshot Usage { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string CatalogFingerprint { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string DefinitionFingerprint { get; private set; }
+
+    private static ReadOnlyCollection<T> Freeze<T>(IReadOnlyList<T> values, string parameterName)
+        where T : class
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        T[] copy = values.ToArray();
+        if (copy.Any(static value => value is null))
+        {
+            throw new ArgumentException(
+                "Ability action collections must not contain null entries.",
+                parameterName);
+        }
+
+        return new ReadOnlyCollection<T>(copy);
+    }
+
+    private static ReadOnlyCollection<CardInstanceId> FreezeIds(IReadOnlyList<CardInstanceId> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        return new ReadOnlyCollection<CardInstanceId>(values.ToArray());
+    }
+}
+
 public sealed record LegalAction
 {
     [JsonConstructor]
@@ -901,6 +1061,19 @@ public sealed class PendingDecision
             behaviorChoice.OptionKeys,
             behaviorChoice.CardIds,
             behaviorChoice.FinalizeSelection),
+        AbilityActionParameters ability => new AbilityActionParameters(
+            ability.SourceCardId,
+            ability.DefinitionId,
+            ability.AbilityKey,
+            ability.Timing,
+            ability.Activation,
+            ability.Costs,
+            ability.TargetCardIds,
+            ability.Usage,
+            ability.CatalogFingerprint,
+            ability.DefinitionFingerprint,
+            ability.SourceZoneId,
+            ability.SourceZoneKind),
         _ => throw new InvalidOperationException(
             $"No immutable clone is registered for action parameter type '{parameters.GetType().Name}'."),
     };

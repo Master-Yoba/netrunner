@@ -146,7 +146,12 @@ public static class StateInvariantValidator
         ValidateTurnAndOutcome(state, violations);
         ValidateRunState(state, behaviorCatalog, violations);
         ValidateRulesState(state, behaviorCatalog, runtimeCardCatalog, violations);
-        ValidateResolutionAndDecision(state, behaviorCatalog, runtimeCardCatalog, violations);
+        ValidateResolutionAndDecision(
+            state,
+            behaviorCatalog,
+            runtimeCardCatalog,
+            enforceCatalogCompatibility,
+            violations);
         return violations.AsReadOnly();
     }
 
@@ -1936,6 +1941,7 @@ public static class StateInvariantValidator
         GameState state,
         IBehaviorCatalog behaviorCatalog,
         IRuntimeCardCatalog? runtimeCardCatalog,
+        bool enforceCatalogCompatibility,
         List<StateInvariantViolation> violations)
     {
         var playerIds = new HashSet<PlayerId>(
@@ -2783,7 +2789,16 @@ public static class StateInvariantValidator
         }
         else
         {
-            ValidatePendingDecision(state, pending, playerIds, cardIds, behaviorCatalog, runtimeCardCatalog, violations);
+            ValidatePendingDecision(
+                state,
+                pending,
+                playerIds,
+                cardIds,
+                cardsById,
+                behaviorCatalog,
+                runtimeCardCatalog,
+                enforceCatalogCompatibility,
+                violations);
         }
 
         if (state.Outcome.Kind == GameOutcomeKind.Won)
@@ -2888,8 +2903,10 @@ public static class StateInvariantValidator
         PendingDecision pending,
         HashSet<PlayerId> playerIds,
         HashSet<CardInstanceId> cardIds,
+        Dictionary<CardInstanceId, CardInstanceState> cardsById,
         IBehaviorCatalog behaviorCatalog,
         IRuntimeCardCatalog? runtimeCardCatalog,
+        bool enforceCatalogCompatibility,
         List<StateInvariantViolation> violations)
     {
         const string path = "pendingDecision";
@@ -3247,6 +3264,18 @@ public static class StateInvariantValidator
                         }
                     }
 
+                    break;
+                case (ActionKind.UseAbility, AbilityActionParameters ability):
+                    ValidateAbilityAction(
+                        state,
+                        pending,
+                        ability,
+                        cardIds,
+                        cardsById,
+                        behaviorCatalog,
+                        enforceCatalogCompatibility,
+                        actionPath,
+                        violations);
                     break;
                 case (ActionKind.PlayCard, PlayCardParameters playCard):
                     if (pending.Kind != DecisionKind.TurnAction)
@@ -3752,6 +3781,9 @@ public static class StateInvariantValidator
                 case (ActionKind.ChooseBehavior, _):
                     Add(violations, "decision.action-parameters-mismatch", $"{actionPath}.parameters", "ChooseBehavior requires BehaviorChoiceParameters.");
                     break;
+                case (ActionKind.UseAbility, _):
+                    Add(violations, "decision.action-parameters-mismatch", $"{actionPath}.parameters", "UseAbility requires AbilityActionParameters.");
+                    break;
                 default:
                     Add(violations, "decision.invalid-action-kind", $"{actionPath}.kind", $"Action kind '{action.Kind}' is not supported.");
                     break;
@@ -3768,7 +3800,10 @@ public static class StateInvariantValidator
                         or ActionKind.StealAgenda
                         or ActionKind.EndTurn))
                 || (pending.Kind == DecisionKind.TurnTiming
-                    && action.Kind is not (ActionKind.PassPriority or ActionKind.RezCard or ActionKind.ScoreAgenda))
+                    && action.Kind is not (ActionKind.PassPriority
+                        or ActionKind.RezCard
+                        or ActionKind.ScoreAgenda
+                        or ActionKind.UseAbility))
                 || (pending.Kind == DecisionKind.TurnAction
                     && action.Kind is not (ActionKind.GainCredit
                         or ActionKind.DrawCard
@@ -3778,7 +3813,8 @@ public static class StateInvariantValidator
                         or ActionKind.AdvanceCard
                         or ActionKind.RemoveTag
                         or ActionKind.TrashTaggedResource
-                        or ActionKind.PurgeVirusCounters))
+                        or ActionKind.PurgeVirusCounters
+                        or ActionKind.UseAbility))
                 || (pending.Kind == DecisionKind.InstallChoice
                     && action.Kind != ActionKind.InstallCard)
                 || (pending.Kind == DecisionKind.TurnDiscard
@@ -3793,7 +3829,8 @@ public static class StateInvariantValidator
                         or ActionKind.ContinueRun
                         or ActionKind.ChooseBreachCandidate
                         or ActionKind.TrashAccessedCard
-                        or ActionKind.NoAccessAction))
+                        or ActionKind.NoAccessAction
+                        or ActionKind.UseAbility))
                 || (pending.Kind == DecisionKind.MemoryCleanup
                     && action.Kind != ActionKind.TrashProgram)
                 || (pending.Kind == DecisionKind.TriggerChoice
@@ -3886,6 +3923,472 @@ public static class StateInvariantValidator
         if (topFrame is EffectCheckpointFrame checkpoint)
         {
             ValidateCheckpointActions(pending, checkpoint, path, violations);
+        }
+    }
+
+    private static void ValidateAbilityAction(
+        GameState state,
+        PendingDecision pending,
+        AbilityActionParameters ability,
+        HashSet<CardInstanceId> cardIds,
+        Dictionary<CardInstanceId, CardInstanceState> cardsById,
+        IBehaviorCatalog behaviorCatalog,
+        bool enforceCatalogCompatibility,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        if (ability.Activation == BehaviorAbilityActivation.ClickAction)
+        {
+            if (pending.Kind != DecisionKind.TurnAction)
+            {
+                Add(
+                    violations,
+                    "decision.ability-action-kind-mismatch",
+                    $"{path}.kind",
+                    "ClickAction abilities require a TurnAction decision.");
+            }
+        }
+        else if (ability.Activation == BehaviorAbilityActivation.PaidAbility)
+        {
+            if (pending.Kind is not (DecisionKind.TurnTiming or DecisionKind.RunTiming))
+            {
+                Add(
+                    violations,
+                    "decision.ability-action-kind-mismatch",
+                    $"{path}.kind",
+                    "PaidAbility activations require a TurnTiming or RunTiming decision.");
+            }
+        }
+
+        if (!StableIdentifier.TryValidate(ability.SourceCardId.Value))
+        {
+            Add(
+                violations,
+                "id.invalid",
+                $"{path}.parameters.sourceCardId",
+                "Ability source card ID is empty or invalid.");
+        }
+
+        if (!StableIdentifier.TryValidate(ability.DefinitionId.Value))
+        {
+            Add(
+                violations,
+                "id.invalid",
+                $"{path}.parameters.definitionId",
+                "Ability definition ID is empty or invalid.");
+        }
+
+        if (!StableIdentifier.TryValidate(ability.AbilityKey))
+        {
+            Add(
+                violations,
+                "id.invalid",
+                $"{path}.parameters.abilityKey",
+                "Ability key is empty or invalid.");
+        }
+
+        if (!StableIdentifier.TryValidate(ability.SourceZoneId.Value))
+        {
+            Add(
+                violations,
+                "id.invalid",
+                $"{path}.parameters.sourceZoneId",
+                "Ability source zone ID is empty or invalid.");
+        }
+
+        if (!Enum.IsDefined(ability.SourceZoneKind))
+        {
+            Add(
+                violations,
+                "decision.invalid-ability-source-zone-kind",
+                $"{path}.parameters.sourceZoneKind",
+                "Ability source zone kind is not a supported value.");
+        }
+
+        CardInstanceState? sourceCard = null;
+        if (!cardIds.Contains(ability.SourceCardId)
+            || !cardsById.TryGetValue(ability.SourceCardId, out sourceCard))
+        {
+            Add(
+                violations,
+                "decision.unknown-ability-source",
+                $"{path}.parameters.sourceCardId",
+                $"Ability action references unknown source card '{ability.SourceCardId}'.");
+        }
+        else
+        {
+            if (sourceCard.DefinitionId != ability.DefinitionId)
+            {
+                Add(
+                    violations,
+                    "decision.ability-source-definition-mismatch",
+                    $"{path}.parameters.definitionId",
+                    "Ability source card definition must match the action definition.");
+            }
+
+            PlayerState? owner = state.Players.FirstOrDefault(player => player?.Id == pending.Owner);
+            if (owner is not null && owner.Side != sourceCard.OwnerSide)
+            {
+                Add(
+                    violations,
+                    "decision.ability-source-owner-mismatch",
+                    $"{path}.parameters.sourceCardId",
+                    "Ability source card owner must match the pending decision owner.");
+            }
+
+            if (sourceCard.ZoneId != ability.SourceZoneId)
+            {
+                Add(
+                    violations,
+                    "decision.ability-source-zone-mismatch",
+                    $"{path}.parameters.sourceZoneId",
+                    "Ability source card must still occupy its captured source zone.");
+            }
+        }
+
+        ZoneState? sourceZone = state.Zones.FirstOrDefault(zone => zone?.Id == ability.SourceZoneId);
+        if (sourceZone is null)
+        {
+            Add(
+                violations,
+                "decision.unknown-ability-source-zone",
+                $"{path}.parameters.sourceZoneId",
+                $"Ability action references unknown source zone '{ability.SourceZoneId}'.");
+        }
+        else
+        {
+            if (sourceZone.Kind != ability.SourceZoneKind)
+            {
+                Add(
+                    violations,
+                    "decision.ability-source-zone-kind-mismatch",
+                    $"{path}.parameters.sourceZoneKind",
+                    "Ability source zone kind must match the captured source zone.");
+            }
+
+            if (!sourceZone.CardIds.Contains(ability.SourceCardId))
+            {
+                Add(
+                    violations,
+                    "decision.ability-source-membership-mismatch",
+                    $"{path}.parameters.sourceCardId",
+                    "Ability source card must be a member of its captured source zone.");
+            }
+        }
+
+        var targetIds = new HashSet<CardInstanceId>();
+        if (ability.TargetCardIds is null)
+        {
+            Add(
+                violations,
+                "decision.missing-ability-targets",
+                $"{path}.parameters.targetCardIds",
+                "Ability actions must retain a target snapshot.");
+        }
+        else
+        {
+            for (int index = 0; index < ability.TargetCardIds.Count; index++)
+            {
+                CardInstanceId targetId = ability.TargetCardIds[index];
+                string targetPath = $"{path}.parameters.targetCardIds[{index}]";
+                if (!StableIdentifier.TryValidate(targetId.Value))
+                {
+                    Add(violations, "id.invalid", targetPath, "Ability target card ID is empty or invalid.");
+                }
+                else if (!cardIds.Contains(targetId))
+                {
+                    Add(
+                        violations,
+                        "decision.unknown-ability-target",
+                        targetPath,
+                        $"Ability action references unknown target card '{targetId}'.");
+                }
+
+                if (!targetIds.Add(targetId))
+                {
+                    Add(
+                        violations,
+                        "decision.duplicate-ability-target",
+                        targetPath,
+                        $"Ability target card '{targetId}' occurs more than once.");
+                }
+            }
+        }
+
+        if (!DeterministicHash.IsSha256Hex(ability.CatalogFingerprint))
+        {
+            Add(
+                violations,
+                "decision.invalid-ability-catalog-fingerprint",
+                $"{path}.parameters.catalogFingerprint",
+                "Ability actions must retain a lowercase SHA-256 catalog fingerprint.");
+        }
+
+        if (!DeterministicHash.IsSha256Hex(ability.DefinitionFingerprint))
+        {
+            Add(
+                violations,
+                "decision.invalid-ability-definition-fingerprint",
+                $"{path}.parameters.definitionFingerprint",
+                "Ability actions must retain a lowercase SHA-256 definition fingerprint.");
+        }
+
+        if (state.BehaviorCatalogFingerprint is not null
+            && !string.Equals(
+                ability.CatalogFingerprint,
+                state.BehaviorCatalogFingerprint,
+                StringComparison.Ordinal))
+        {
+            Add(
+                violations,
+                "decision.ability-catalog-state-mismatch",
+                $"{path}.parameters.catalogFingerprint",
+                "Ability action catalog fingerprint must match the state catalog pin.");
+        }
+
+        if (enforceCatalogCompatibility
+            && !string.Equals(ability.CatalogFingerprint, behaviorCatalog.Fingerprint, StringComparison.Ordinal))
+        {
+            Add(
+                violations,
+                "decision.ability-catalog-mismatch",
+                $"{path}.parameters.catalogFingerprint",
+                "Ability action catalog fingerprint must match the injected catalog.");
+        }
+
+        ValidateAbilityActionCosts(ability.Costs, $"{path}.parameters.costs", violations);
+        bool hasClickCost = ability.Costs is not null
+            && ability.Costs.Any(cost => cost is not null && cost.Kind == BehaviorCostKind.Clicks);
+        bool hasLoseClickCost = ability.Costs is not null
+            && ability.Costs.Any(cost => cost is not null && cost.Kind == BehaviorCostKind.LoseClick);
+        int clickCostCount = ability.Costs?.Count(cost => cost is not null && cost.Kind == BehaviorCostKind.Clicks) ?? 0;
+        int clickAmount = ability.Costs?
+            .SingleOrDefault(cost => cost is not null && cost.Kind == BehaviorCostKind.Clicks)?.Amount ?? 0;
+        if (ability.Activation == BehaviorAbilityActivation.ClickAction
+            && (ability.Timing != BehaviorAbilityTiming.ActionPhase
+                || clickCostCount != 1
+                || clickAmount != 1
+                || hasLoseClickCost))
+        {
+            Add(
+                violations,
+                "decision.invalid-ability-combination",
+                path,
+                "A ClickAction ability requires exactly one Click cost of one and action-phase timing.");
+        }
+        else if (ability.Activation == BehaviorAbilityActivation.PaidAbility && hasClickCost)
+        {
+            Add(
+                violations,
+                "decision.invalid-ability-combination",
+                path,
+                "A PaidAbility action may not carry an action Click cost.");
+        }
+
+        if (ability.Usage is null)
+        {
+            Add(
+                violations,
+                "decision.missing-ability-usage",
+                $"{path}.parameters.usage",
+                "Ability actions must retain an exact usage snapshot.");
+        }
+        else
+        {
+            if (!Enum.IsDefined(ability.Usage.Limit))
+            {
+                Add(
+                    violations,
+                    "decision.invalid-ability-usage-limit",
+                    $"{path}.parameters.usage.limit",
+                    "Ability usage limit is not a supported value.");
+            }
+
+            if (ability.Usage.UsesThisTurn < 0
+                || (ability.Usage.Limit == BehaviorAbilityUsageLimit.OncePerTurn
+                    && ability.Usage.UsesThisTurn > 1))
+            {
+                Add(
+                    violations,
+                    "decision.invalid-ability-usage",
+                    $"{path}.parameters.usage.usesThisTurn",
+                    "Ability usage count is outside its declared limit.");
+            }
+        }
+
+        if (!enforceCatalogCompatibility)
+        {
+            return;
+        }
+
+        CardBehaviorDefinition? definition = null;
+        bool definitionFound = false;
+        try
+        {
+            definitionFound = behaviorCatalog.TryGet(ability.DefinitionId, out definition!);
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or KeyNotFoundException)
+        {
+            Add(
+                violations,
+                "decision.ability-definition-lookup-failed",
+                $"{path}.parameters.definitionId",
+                $"Ability definition lookup failed: {exception.Message}");
+        }
+
+        if (!definitionFound || definition is null)
+        {
+            Add(
+                violations,
+                "decision.unknown-ability-definition",
+                $"{path}.parameters.definitionId",
+                $"Ability definition '{ability.DefinitionId}' is not registered in the injected catalog.");
+            return;
+        }
+
+        if (definition.DefinitionId != ability.DefinitionId)
+        {
+            Add(
+                violations,
+                "decision.ability-definition-mismatch",
+                $"{path}.parameters.definitionId",
+                "Ability definition must match the injected catalog registration.");
+        }
+
+        try
+        {
+            string expectedDefinitionFingerprint = behaviorCatalog.GetDefinitionFingerprint(ability.DefinitionId);
+            if (!string.Equals(ability.DefinitionFingerprint, expectedDefinitionFingerprint, StringComparison.Ordinal))
+            {
+                Add(
+                    violations,
+                    "decision.ability-definition-mismatch",
+                    $"{path}.parameters.definitionFingerprint",
+                    "Ability definition fingerprint must match the injected catalog definition.");
+            }
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or KeyNotFoundException)
+        {
+            Add(
+                violations,
+                "decision.ability-definition-fingerprint-failed",
+                $"{path}.parameters.definitionFingerprint",
+                $"Ability definition fingerprint lookup failed: {exception.Message}");
+        }
+
+        BehaviorPaidAbility? declaration = definition.PaidAbilities
+            .SingleOrDefault(candidate => string.Equals(candidate.Key, ability.AbilityKey, StringComparison.Ordinal));
+        if (declaration is null)
+        {
+            Add(
+                violations,
+                "decision.unknown-ability-key",
+                $"{path}.parameters.abilityKey",
+                $"Ability key '{ability.AbilityKey}' is not declared by definition '{ability.DefinitionId}'.");
+            return;
+        }
+
+        if (ability.Timing != declaration.Timing)
+        {
+            Add(
+                violations,
+                "decision.ability-timing-mismatch",
+                $"{path}.parameters.timing",
+                "Ability timing must match the declared ability shape.");
+        }
+
+        if (ability.Activation != declaration.Activation)
+        {
+            Add(
+                violations,
+                "decision.ability-activation-mismatch",
+                $"{path}.parameters.activation",
+                "Ability activation must match the declared ability shape.");
+        }
+
+        if (ability.Usage is not null && ability.Usage.Limit != declaration.UsageLimit)
+        {
+            Add(
+                violations,
+                "decision.ability-usage-limit-mismatch",
+                $"{path}.parameters.usage.limit",
+                "Ability usage limit must match the declared ability shape.");
+        }
+
+        if (ability.Costs is null || !ability.Costs.SequenceEqual(declaration.Costs))
+        {
+            Add(
+                violations,
+                "decision.ability-costs-mismatch",
+                $"{path}.parameters.costs",
+                "Ability costs must match the declared ability shape.");
+        }
+    }
+
+    private static void ValidateAbilityActionCosts(
+        IReadOnlyList<BehaviorCost>? costs,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        if (costs is null)
+        {
+            Add(violations, "decision.missing-ability-costs", path, "Ability actions must retain a cost snapshot.");
+            return;
+        }
+
+        for (int index = 0; index < costs.Count; index++)
+        {
+            BehaviorCost? cost = costs[index];
+            string costPath = $"{path}[{index}]";
+            if (cost is null)
+            {
+                Add(violations, "decision.null-ability-cost", costPath, "Ability costs must not contain null entries.");
+                continue;
+            }
+
+            if (!Enum.IsDefined(cost.Kind))
+            {
+                Add(violations, "decision.invalid-ability-cost-kind", $"{costPath}.kind", "Ability cost kind is not a supported value.");
+                continue;
+            }
+
+            bool invalidAmount = cost.Kind switch
+            {
+                BehaviorCostKind.Credits => cost.Amount < 0,
+                BehaviorCostKind.Clicks
+                    or BehaviorCostKind.LoseClick
+                    or BehaviorCostKind.Counter
+                    or BehaviorCostKind.Tags
+                    or BehaviorCostKind.Additional => cost.Amount <= 0,
+                BehaviorCostKind.TrashSelf => cost.Amount != 1,
+                _ => false,
+            };
+            if (invalidAmount)
+            {
+                Add(violations, "decision.invalid-ability-cost-amount", $"{costPath}.amount", "Ability cost amount is outside its declared rules.");
+            }
+
+            if (cost.Kind == BehaviorCostKind.Counter
+                && !StableIdentifier.TryValidate(cost.CounterName))
+            {
+                Add(violations, "decision.invalid-ability-counter-cost", $"{costPath}.counterName", "Counter costs must carry a stable counter name.");
+            }
+
+            if (cost.Kind == BehaviorCostKind.Additional
+                && !StableIdentifier.TryValidate(cost.AdditionalKey))
+            {
+                Add(violations, "decision.invalid-ability-additional-cost", $"{costPath}.additionalKey", "Additional costs must carry a stable additional-cost key.");
+            }
+
+            if (cost.Kind != BehaviorCostKind.Counter && cost.CounterName is not null)
+            {
+                Add(violations, "decision.invalid-ability-counter-cost", $"{costPath}.counterName", "Only counter costs may carry a counter name.");
+            }
+
+            if (cost.Kind != BehaviorCostKind.Additional && cost.AdditionalKey is not null)
+            {
+                Add(violations, "decision.invalid-ability-additional-cost", $"{costPath}.additionalKey", "Only additional costs may carry an additional-cost key.");
+            }
         }
     }
 
@@ -4749,6 +5252,11 @@ public static class StateInvariantValidator
         foreach (LegalAction? action in pending.LegalActions)
         {
             if (action is null)
+            {
+                continue;
+            }
+
+            if (action.Kind == ActionKind.UseAbility)
             {
                 continue;
             }
@@ -6056,6 +6564,11 @@ public static class StateInvariantValidator
         foreach (LegalAction? action in pending.LegalActions)
         {
             if (action is null)
+            {
+                continue;
+            }
+
+            if (action.Kind == ActionKind.UseAbility)
             {
                 continue;
             }

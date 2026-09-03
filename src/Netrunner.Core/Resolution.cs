@@ -76,6 +76,7 @@ public enum EffectResolutionStage
 [JsonDerivedType(typeof(MemoryCleanupFrame), "memory-cleanup")]
 [JsonDerivedType(typeof(EffectCheckpointFrame), "effect-checkpoint")]
 [JsonDerivedType(typeof(BehaviorResolutionFrame), "card-behavior")]
+[JsonDerivedType(typeof(AbilityFrame), "ability")]
 public abstract record ResolutionFrame
 {
     protected ResolutionFrame(int version, string behaviorId)
@@ -1732,6 +1733,139 @@ public static class ResolutionFrameValidator
                 }
 
                 break;
+            case AbilityFrame ability:
+                ValidateBehavior(frame, ResolutionBehaviorIds.Ability, path, violations);
+                ValidateCardId(ability.SourceCardId, $"{path}.sourceCardId", violations);
+                ValidatePlayer(ability.Controller, $"{path}.controller", violations);
+                ValidateZoneId(ability.SourceZoneId, $"{path}.sourceZoneId", violations);
+                if (!Enum.IsDefined(ability.SourceZoneKind))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-ability-source-zone-kind",
+                        $"{path}.sourceZoneKind",
+                        "Ability source zone kind is not a supported value."));
+                }
+
+                if (!Enum.IsDefined(ability.Stage))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-ability-stage",
+                        $"{path}.stage",
+                        "Ability lifecycle stage is not a supported value."));
+                }
+
+                if (!StableIdentifier.TryValidate(ability.DefinitionId.Value))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "id.invalid",
+                        $"{path}.definitionId",
+                        "Ability definition ID is empty or invalid."));
+                }
+
+                if (!StableIdentifier.TryValidate(ability.AbilityKey))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "id.invalid",
+                        $"{path}.abilityKey",
+                        "Ability keys must be stable identifiers."));
+                }
+
+                if (!StableIdentifier.TryValidate(ability.CatalogFingerprint)
+                    || !DeterministicHash.IsSha256Hex(ability.CatalogFingerprint))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-catalog-fingerprint",
+                        $"{path}.catalogFingerprint",
+                        "Ability frames must retain a lowercase SHA-256 catalog fingerprint."));
+                }
+
+                if (!StableIdentifier.TryValidate(ability.DefinitionFingerprint)
+                    || !DeterministicHash.IsSha256Hex(ability.DefinitionFingerprint))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-definition-fingerprint",
+                        $"{path}.definitionFingerprint",
+                        "Ability frames must retain a lowercase SHA-256 definition fingerprint."));
+                }
+
+                if (!Enum.IsDefined(ability.Timing))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-ability-timing",
+                        $"{path}.timing",
+                        "Ability timing is not a supported value."));
+                }
+
+                if (!Enum.IsDefined(ability.Activation))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-ability-activation",
+                        $"{path}.activation",
+                        "Ability activation is not a supported value."));
+                }
+
+                if (ability.ParentFrameIdentity is not null
+                    && !StableIdentifier.TryValidate(ability.ParentFrameIdentity))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-ability-parent-identity",
+                        $"{path}.parentFrameIdentity",
+                        "Ability parent frame identities must be stable identifiers."));
+                }
+
+                ValidateAbilityCosts(ability.Costs, $"{path}.costs", violations);
+                ValidateCardIds(ability.TargetCardIds, $"{path}.targetCardIds", violations);
+                if (ability.Usage is null)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.missing-ability-usage",
+                        $"{path}.usage",
+                        "Ability frames must retain an exact usage snapshot."));
+                }
+                else
+                {
+                    if (!Enum.IsDefined(ability.Usage.Limit))
+                    {
+                        violations.Add(new StateInvariantViolation(
+                            "resolution.invalid-ability-usage-limit",
+                            $"{path}.usage.limit",
+                            "Ability usage limit is not a supported value."));
+                    }
+
+                    if (ability.Usage.UsesThisTurn < 0
+                        || (ability.Usage.Limit == BehaviorAbilityUsageLimit.OncePerTurn
+                            && ability.Usage.UsesThisTurn > 1))
+                    {
+                        violations.Add(new StateInvariantViolation(
+                            "resolution.invalid-ability-usage",
+                            $"{path}.usage.usesThisTurn",
+                            "Ability usage count is outside its declared limit."));
+                    }
+                }
+
+                bool hasClickCost = ability.Costs.Any(static cost => cost is not null && cost.Kind == BehaviorCostKind.Clicks);
+                bool hasLoseClickCost = ability.Costs.Any(static cost => cost is not null && cost.Kind == BehaviorCostKind.LoseClick);
+                if (ability.Activation == BehaviorAbilityActivation.ClickAction
+                    && (ability.Timing != BehaviorAbilityTiming.ActionPhase
+                        || !hasClickCost
+                        || hasLoseClickCost
+                        || ability.Costs.Count(cost => cost is not null && cost.Kind == BehaviorCostKind.Clicks) != 1
+                        || ability.Costs.SingleOrDefault(cost => cost is not null && cost.Kind == BehaviorCostKind.Clicks)?.Amount != 1))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-ability-combination",
+                        path,
+                        "A click-action frame requires exactly one Click cost and action-phase timing."));
+                }
+                else if (ability.Activation == BehaviorAbilityActivation.PaidAbility && hasClickCost)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-ability-combination",
+                        path,
+                        "A paid-ability frame may not carry an action Click cost."));
+                }
+
+                break;
             default:
                 violations.Add(new StateInvariantViolation(
                     "resolution.unknown-frame",
@@ -1819,6 +1953,71 @@ public static class ResolutionFrameValidator
             if (instructions[index] is null)
             {
                 violations.Add(new StateInvariantViolation("resolution.null-behavior-instruction", $"{path}[{index}]", "Behavior instructions must not be null."));
+            }
+        }
+    }
+
+    private static void ValidateAbilityCosts(
+        IReadOnlyList<BehaviorCost> costs,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        for (int index = 0; index < costs.Count; index++)
+        {
+            BehaviorCost? cost = costs[index];
+            string costPath = $"{path}[{index}]";
+            if (cost is null)
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.null-ability-cost",
+                    costPath,
+                    "Ability costs must not contain null entries."));
+                continue;
+            }
+
+            if (!Enum.IsDefined(cost.Kind))
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.invalid-ability-cost-kind",
+                    $"{costPath}.kind",
+                    "Ability cost kind is not a supported value."));
+            }
+
+            bool invalidAmount = cost.Kind switch
+            {
+                BehaviorCostKind.Credits => cost.Amount < 0,
+                BehaviorCostKind.Clicks
+                    or BehaviorCostKind.LoseClick
+                    or BehaviorCostKind.Counter
+                    or BehaviorCostKind.Tags
+                    or BehaviorCostKind.Additional => cost.Amount <= 0,
+                BehaviorCostKind.TrashSelf => cost.Amount != 1,
+                _ => false,
+            };
+            if (invalidAmount)
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.invalid-ability-cost-amount",
+                    $"{costPath}.amount",
+                    "Ability cost amount must not be negative."));
+            }
+
+            if (cost.Kind == BehaviorCostKind.Counter
+                && !StableIdentifier.TryValidate(cost.CounterName))
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.invalid-ability-counter-cost",
+                    $"{costPath}.counterName",
+                    "Counter costs must carry a stable counter name."));
+            }
+
+            if (cost.Kind == BehaviorCostKind.Additional
+                && !StableIdentifier.TryValidate(cost.AdditionalKey))
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.invalid-ability-additional-cost",
+                    $"{costPath}.additionalKey",
+                    "Additional costs must carry a stable additional-cost key."));
             }
         }
     }
@@ -2315,6 +2514,24 @@ internal static class ResolutionFrameCloner
             behavior.SourceZoneId,
             behavior.SourceZoneKind,
             behavior.ParentFrameIdentity),
+        AbilityFrame ability => new AbilityFrame(
+            ability.Version,
+            ability.BehaviorId,
+            ability.DefinitionId,
+            ability.SourceCardId,
+            ability.AbilityKey,
+            ability.Controller,
+            ability.Timing,
+            ability.Activation,
+            ability.Costs,
+            ability.TargetCardIds,
+            ability.Usage,
+            ability.CatalogFingerprint,
+            ability.DefinitionFingerprint,
+            ability.SourceZoneId,
+            ability.SourceZoneKind,
+            ability.Stage,
+            ability.ParentFrameIdentity),
         _ => throw new InvalidOperationException($"No cloner is registered for frame type '{frame.GetType().Name}'."),
     };
 }

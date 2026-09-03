@@ -2612,3 +2612,34 @@ errors; runtime action expansion and full verification remain pending.
   and formatter checks proportional to its schema impact. Root reviews the
   diff and reruns the focused gate before updating this ledger and creating a
   local commit. A checkpoint is not accepted merely because it compiles.
+
+### 2026-09-03 — Checkpoint A1 paid-ability schema accepted
+
+- Luna Max implemented the bounded declaration/schema vertical after root
+  rejected an initial alias-heavy API and a single-window model that could not
+  represent generally usable paid abilities. The accepted public surface has
+  exactly one immutable `BehaviorPaidAbility`, one typed timing vocabulary
+  with an explicit any-paid-window value, one activation enum distinguishing
+  click actions from paid abilities, one usage-limit/snapshot contract, one
+  `UseAbility` action payload, and one serializable `AbilityFrame`.
+- Ability declarations freeze costs, conditions, targets, and instructions;
+  require unique stable keys; and participate completely in generic catalog
+  equality and fingerprints. Click actions require exactly one ordinary Click
+  cost and action-phase timing, while paid abilities reject Click and retain
+  the distinct `LoseClick` verb. Credits may cost zero; counter, tag,
+  lose-click, and additional costs are positive; self-trash is exactly one.
+- Issued action/frame shapes retain the source definition/card/zone, ability
+  key, timing/activation, exact cost/target/usage snapshots, catalog and
+  definition fingerprints, and the frame lifecycle/parent identity needed by
+  the next runtime checkpoint. `StateInvariantValidator` accepts only the
+  exact action/payload pairing and checks decision kind, source ownership and
+  zone membership, target existence, state/catalog pins, and the injected
+  declaration shape. No action materialization, cost payment, state mutation,
+  card registration, or ICE change landed in A1.
+- Root independently passed the zero-warning solution build, focused paid
+  ability tests 10/10, complete Core 499/499, Core formatter verification,
+  and `git diff --check`. The focused CLI M2 proof suite passed 3/3; the direct
+  deterministic proof retained initial/final/event hashes
+  `a61f20c7...` / `950d1b0d...` / `d20cdef9...`, 32 checkpoints, and verified
+  replay. Existing definition fingerprints are unchanged when no ability or
+  additional-cost field is present.

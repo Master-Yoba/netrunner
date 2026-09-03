@@ -75,27 +75,74 @@ public interface IBehaviorCatalog
 /// </summary>
 public sealed record BehaviorCost
 {
-    public BehaviorCost(BehaviorCostKind kind, int amount = 1, string? counterName = null)
+    [JsonConstructor]
+    public BehaviorCost(
+        BehaviorCostKind kind,
+        int amount = 1,
+        string? counterName = null,
+        string? additionalKey = null)
     {
         if (!Enum.IsDefined(kind))
         {
             throw new ArgumentOutOfRangeException(nameof(kind));
         }
 
-        if (amount < 0)
+        if (kind == BehaviorCostKind.Credits && amount < 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(amount), "A behavior cost amount must not be negative.");
+            throw new ArgumentOutOfRangeException(nameof(amount), "A Credits behavior cost amount must not be negative.");
+        }
+
+        if (kind is BehaviorCostKind.Clicks
+            or BehaviorCostKind.LoseClick
+            or BehaviorCostKind.Counter
+            or BehaviorCostKind.Tags
+            or BehaviorCostKind.Additional)
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(
+                amount,
+                1,
+                "A non-credit behavior cost amount must be positive.");
+        }
+
+        if (kind == BehaviorCostKind.TrashSelf && amount != 1)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(amount),
+                "A TrashSelf behavior cost must have exactly one unit.");
         }
 
         if (kind == BehaviorCostKind.Counter
-            && string.IsNullOrWhiteSpace(counterName))
+            && !StableIdentifier.TryValidate(counterName))
         {
-            throw new ArgumentException("Counter costs require a counter name.", nameof(counterName));
+            throw new ArgumentException("Counter costs require a stable counter name.", nameof(counterName));
+        }
+
+        if (kind == BehaviorCostKind.Additional
+            && !StableIdentifier.TryValidate(additionalKey))
+        {
+            throw new ArgumentException(
+                "Additional costs require a stable additional-cost key.",
+                nameof(additionalKey));
+        }
+
+        if (kind != BehaviorCostKind.Counter && counterName is not null)
+        {
+            throw new ArgumentException(
+                "Only counter costs may carry a counter name.",
+                nameof(counterName));
+        }
+
+        if (kind != BehaviorCostKind.Additional && additionalKey is not null)
+        {
+            throw new ArgumentException(
+                "Only additional costs may carry an additional-cost key.",
+                nameof(additionalKey));
         }
 
         Kind = kind;
         Amount = amount;
         CounterName = counterName;
+        AdditionalKey = additionalKey;
     }
 
     public BehaviorCostKind Kind { get; }
@@ -103,6 +150,14 @@ public sealed record BehaviorCost
     public int Amount { get; }
 
     public string? CounterName { get; }
+
+    /// <summary>
+    /// Stable key for a card-specific additional cost.  It is intentionally
+    /// inert in Core until a later slice supplies the corresponding reducer.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? AdditionalKey { get; }
+
 }
 
 public enum BehaviorCostKind
@@ -113,6 +168,7 @@ public enum BehaviorCostKind
     Counter,
     TrashSelf,
     LoseClick,
+    Additional,
 }
 
 /// <summary>A serializable condition term in a compiled behavior contract.</summary>
@@ -883,7 +939,8 @@ public sealed class CardBehaviorDefinition
         IReadOnlyList<BehaviorInstruction>? instructions = null,
         IReadOnlyList<BehaviorStaticModifier>? staticModifiers = null,
         IReadOnlyList<BehaviorTrigger>? triggers = null,
-        string? extensionHandlerId = null)
+        string? extensionHandlerId = null,
+        IReadOnlyList<BehaviorPaidAbility>? paidAbilities = null)
     {
         DefinitionId = definitionId;
         if (!Enum.IsDefined(controller))
@@ -898,6 +955,7 @@ public sealed class CardBehaviorDefinition
         Instructions = Freeze(instructions);
         StaticModifiers = Freeze(staticModifiers);
         Triggers = Freeze(triggers);
+        PaidAbilities = FreezePaidAbilities(paidAbilities);
         if (!string.IsNullOrWhiteSpace(extensionHandlerId))
         {
             ExtensionHandlerId = extensionHandlerId;
@@ -922,6 +980,12 @@ public sealed class CardBehaviorDefinition
 
     public string? ExtensionHandlerId { get; }
 
+    /// <summary>
+    /// Immutable paid-ability declarations.  The declarations are data-only;
+    /// materialization and execution are owned by later engine checkpoints.
+    /// </summary>
+    public IReadOnlyList<BehaviorPaidAbility> PaidAbilities { get; }
+
     private static ReadOnlyCollection<T> Freeze<T>(IEnumerable<T>? values)
         where T : class
     {
@@ -932,6 +996,31 @@ public sealed class CardBehaviorDefinition
         }
 
         return new ReadOnlyCollection<T>(copy);
+    }
+
+    private static ReadOnlyCollection<BehaviorPaidAbility> FreezePaidAbilities(
+        IEnumerable<BehaviorPaidAbility>? paidAbilities)
+    {
+        BehaviorPaidAbility[] copy = (paidAbilities ?? []).ToArray();
+        if (copy.Any(static value => value is null))
+        {
+            throw new ArgumentException(
+                "Paid ability declarations must not contain null entries.",
+                nameof(paidAbilities));
+        }
+
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (BehaviorPaidAbility declaration in copy)
+        {
+            if (!keys.Add(declaration.Key))
+            {
+                throw new ArgumentException(
+                    $"Paid ability key '{declaration.Key}' is declared more than once.",
+                    nameof(paidAbilities));
+            }
+        }
+
+        return new ReadOnlyCollection<BehaviorPaidAbility>(copy);
     }
 }
 
@@ -1462,12 +1551,17 @@ internal static class BehaviorCatalogStructure
                     b.StaticModifiers,
                     BehaviorContractStructure.AreEqual)
                 && SequenceEquals(a.Triggers, b.Triggers)
+                && BehaviorContractStructure.SequenceEquals(
+                    a.PaidAbilities,
+                    b.PaidAbilities,
+                    static (left, right) => left.Equals(right))
                 && a.ExtensionHandlerId == b.ExtensionHandlerId,
             _ => false,
         };
 
     public static bool SequenceEquals<T>(IReadOnlyList<T> left, IReadOnlyList<T> right)
         where T : notnull => left.SequenceEqual(right);
+
 }
 
 internal static class BehaviorCatalogFingerprint
@@ -1562,6 +1656,26 @@ internal static class BehaviorCatalogFingerprint
         AppendSequence(builder, value.Instructions, AppendInstruction);
         AppendSequence(builder, value.StaticModifiers, AppendStaticModifier);
         AppendSequence(builder, value.Triggers, AppendTrigger);
+        // Keep the byte projection of existing M2 definitions unchanged;
+        // only definitions that actually declare the new field receive its
+        // paid-ability fingerprint segment.
+        if (value.PaidAbilities.Count > 0)
+        {
+            AppendSequence(builder, value.PaidAbilities, AppendPaidAbility);
+        }
+    }
+
+    private static void AppendPaidAbility(StringBuilder builder, BehaviorPaidAbility value)
+    {
+        builder.Append("key=");
+        AppendString(builder, value.Key);
+        builder.Append(",timing=").Append((int)value.Timing)
+            .Append(",activation=").Append((int)value.Activation)
+            .Append(",usageLimit=").Append((int)value.UsageLimit);
+        AppendSequence(builder, value.Costs, AppendCost);
+        AppendSequence(builder, value.Conditions, AppendCondition);
+        AppendSequence(builder, value.Targets, AppendTarget);
+        AppendSequence(builder, value.Instructions, AppendInstruction);
     }
 
     private static void AppendSequence<T>(
@@ -1585,6 +1699,14 @@ internal static class BehaviorCatalogFingerprint
             .Append(",amount=").Append(value.Amount)
             .Append(",counter=");
         AppendString(builder, value.CounterName);
+        // Preserve historical M2 fingerprint bytes for existing cost kinds;
+        // the additional key is encoded only when the new cost field is in
+        // use, so adding the schema does not rewrite pinned catalogs.
+        if (value.AdditionalKey is not null)
+        {
+            builder.Append(",additional=");
+            AppendString(builder, value.AdditionalKey);
+        }
     }
 
     private static void AppendCondition(StringBuilder builder, BehaviorCondition? value)
