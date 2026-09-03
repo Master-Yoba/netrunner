@@ -15,10 +15,13 @@ public sealed class GatewayBatch2BehaviorSpecTests
         Assert.Equal(
             new CardDefinitionId[]
             {
+                GatewayBatch2CardCodes.Fermenter,
+                GatewayBatch2CardCodes.Cookbook,
                 GatewayBatch2CardCodes.Pennyshaver,
                 GatewayBatch2CardCodes.Carmen,
                 GatewayBatch2CardCodes.Marjanah,
                 GatewayBatch2CardCodes.RedTeam,
+                GatewayBatch2CardCodes.Pantograph,
                 GatewayBatch2CardCodes.Conduit,
                 GatewayBatch2CardCodes.TeleworkContract,
                 GatewayBatch2CardCodes.SmartwareDistributor,
@@ -31,10 +34,13 @@ public sealed class GatewayBatch2BehaviorSpecTests
         Assert.Equal(
             new CardDefinitionId[]
             {
+                GatewayBatch2CardCodes.Fermenter,
+                GatewayBatch2CardCodes.Cookbook,
                 GatewayBatch2CardCodes.Pennyshaver,
                 GatewayBatch2CardCodes.Carmen,
                 GatewayBatch2CardCodes.Marjanah,
                 GatewayBatch2CardCodes.RedTeam,
+                GatewayBatch2CardCodes.Pantograph,
                 GatewayBatch2CardCodes.Conduit,
                 GatewayBatch2CardCodes.TeleworkContract,
                 GatewayBatch2CardCodes.SmartwareDistributor,

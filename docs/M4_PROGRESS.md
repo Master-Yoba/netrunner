@@ -3527,3 +3527,34 @@ errors; runtime action expansion and full verification remain pending.
   only the known SIM-401 checked-in fixture fingerprint pending regeneration.
   Formatter and diff checks pass, and the direct M2 proof retains all pinned
   hashes with 32 replayed checkpoints.
+
+### 2026-09-04 — Checkpoint E2 ENG-407/409 trigger-card bindings accepted
+
+- Luna Max bound Fermenter, Cookbook, and Pantograph through generic typed
+  behavior declarations. Fermenter uses a structural source-counter amount
+  operand for its click-and-trash payout; its virus counters survive only the
+  exact paid self-movement child required to calculate that effect and are
+  cleared at ability completion. Cookbook consumes the checkpoint-authenticated
+  installed-card subject and filters it as a Runner virus Program without a
+  title branch.
+- Pantograph contributes its typed +1 MU modifier and responds to either side's
+  agenda score/steal occurrence with the ordered credit gain followed by an
+  optional Grip install. Behavior-effect installs now accept Runner Program,
+  Hardware, or Resource cards from Stack or Grip through the ordinary install
+  planner. The private choice freezes only currently legal candidates after
+  the credit gain, then revalidates printed cost, conditional quote, memory,
+  uniqueness, Console replacement, exact source zone, and stable origin when
+  consumed. Reducer and invariant projections share the same fail-closed
+  legality boundary.
+- Root rejected declaration-only and opt-in/skipped test drafts. The accepted
+  production fixtures exercise real install, turn-begin, score, steal, trigger
+  accept/decline, cost payment, memory replacement, hidden choice, save/load,
+  and forged-source paths. Review also repaired typed static-modifier JSON so
+  its enum survives round-trip while legacy string modifiers remain stable,
+  and closed a pre-existing structural-equality omission for typed run
+  operands.
+- Root passed the combined focused Core gate 49/49, focused Cards gate 25/25,
+  complete Core 659/659, complete Cards 144/144, the zero-warning/error
+  solution build, solution formatter verification, and `git diff --check`.
+  The direct M2 proof remains byte-stable at `faf4e631...` / `c882eb43...` /
+  `d20cdef9...`, with all 32 checkpoints replay verified.

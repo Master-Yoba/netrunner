@@ -861,16 +861,17 @@ public static partial class GameEngine
         CardInstanceState card = GetCard(working, cardId);
         if (!working.RuntimeCardCatalog.TryGet(card.DefinitionId, out CardRuntimeSpec? spec)
             || spec.Side != PlayerSide.Runner
-            || spec.CardClass != RuntimeCardClass.Program
+            || !IsBasicInstallClass(PlayerSide.Runner, spec.CardClass)
             || card.OwnerSide != PlayerSide.Runner)
         {
             return null;
         }
 
         ZoneState? source = working.Zones.FirstOrDefault(
-            zone => zone.Kind == ZoneKind.RunnerStack
+            zone => zone.Kind is (ZoneKind.RunnerStack or ZoneKind.RunnerGrip)
                 && zone.OwnerSide == PlayerSide.Runner
-                && zone.ServerId is null);
+                && zone.ServerId is null
+                && zone.Id == card.ZoneId);
         ZoneState? destination = working.Zones.FirstOrDefault(
             zone => zone.Kind == ZoneKind.RunnerRig
                 && zone.OwnerSide == PlayerSide.Runner
@@ -1413,8 +1414,8 @@ public static partial class GameEngine
                     || !frame.CandidateReplacementDefinitionIds.SequenceEqual(plan.CandidateReplacementDefinitionIds)))
             || (frame.InitiationKind == InstallInitiationKind.BehaviorEffect
                 && (frame.Owner != GetPlayer(working, PlayerSide.Runner).Id
-                    || frame.CardClass != RuntimeCardClass.Program
-                    || frame.SourceZoneKind != ZoneKind.RunnerStack
+                    || !IsBasicInstallClass(PlayerSide.Runner, frame.CardClass)
+                    || frame.SourceZoneKind is not (ZoneKind.RunnerStack or ZoneKind.RunnerGrip)
                     || frame.DestinationKind != InstallDestinationKind.RunnerRig
                     || frame.ServerId is not null
                     || frame.CreateNewRemote)))

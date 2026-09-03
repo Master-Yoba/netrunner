@@ -579,7 +579,8 @@ public sealed record BehaviorInstruction
         BehaviorBranchSpec? branch = null,
         bool optional = false,
         HostedCreditSpendRestriction? spendRestriction = null,
-        BehaviorRunOperand? runOperand = null)
+        BehaviorRunOperand? runOperand = null,
+        BehaviorAmountOperand? amountOperand = null)
     {
         if (!Enum.IsDefined(kind))
         {
@@ -601,6 +602,7 @@ public sealed record BehaviorInstruction
         Optional = optional;
         SpendRestriction = NormalizeSpendRestriction(kind, spendRestriction);
         RunOperand = runOperand;
+        AmountOperand = amountOperand;
         ValidateOperands();
     }
 
@@ -649,6 +651,15 @@ public sealed record BehaviorInstruction
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public BehaviorRunOperand? RunOperand { get; }
 
+    /// <summary>
+    /// Optional typed dynamic amount for a credit-gain instruction. A
+    /// non-null operand is mutually exclusive with the instruction's static
+    /// <see cref="Amount"/> and is re-evaluated from authoritative counters
+    /// at execution time.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BehaviorAmountOperand? AmountOperand { get; }
+
     private void ValidateOperands()
     {
         if (SpendRestriction is { } spendRestriction && !Enum.IsDefined(spendRestriction))
@@ -677,6 +688,22 @@ public sealed record BehaviorInstruction
             throw new ArgumentException(
                 "A typed run operand is valid only for StartRun instructions.",
                 nameof(RunOperand));
+        }
+
+        if (Kind != BehaviorInstructionKind.GainCredits && AmountOperand is not null)
+        {
+            throw new ArgumentException(
+                "A dynamic amount operand is valid only for GainCredits instructions.",
+                nameof(AmountOperand));
+        }
+
+        if (Kind == BehaviorInstructionKind.GainCredits
+            && AmountOperand is not null
+            && Amount != 0)
+        {
+            throw new ArgumentException(
+                "A GainCredits instruction must use either a static amount or a dynamic amount operand, not both.",
+                nameof(Amount));
         }
 
         bool hostedCreditInstruction = Kind is BehaviorInstructionKind.LoadHostedCredits
@@ -746,11 +773,38 @@ public sealed record BehaviorInstruction
                 or BehaviorInstructionKind.Draw
                 or BehaviorInstructionKind.LoseClicks
                 or BehaviorInstructionKind.AdvanceCard)
+            && (Kind != BehaviorInstructionKind.GainCredits || AmountOperand is null)
             && Amount <= 0)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(Amount),
                 "This executable numeric instruction requires a positive amount.");
+        }
+
+        if (Kind == BehaviorInstructionKind.AddCounter)
+        {
+            if (Amount <= 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(Amount),
+                    "A counter instruction requires a positive amount.");
+            }
+
+            if (Target is not null
+                && Target.Kind is not (BehaviorTargetKind.Self or BehaviorTargetKind.ChosenCard))
+            {
+                throw new ArgumentException(
+                    "Counter instructions may target Self or an engine-proven ChosenCard binding.",
+                    nameof(Target));
+            }
+
+            if (Target is { Kind: BehaviorTargetKind.ChosenCard }
+                && !StableIdentifier.TryValidate(Target.Selector))
+            {
+                throw new ArgumentException(
+                    "A chosen counter target requires a stable binding selector.",
+                    nameof(Target));
+            }
         }
 
         if (Kind == BehaviorInstructionKind.Search)
@@ -960,6 +1014,7 @@ public sealed record BehaviorInstruction
             or BehaviorInstructionKind.Search
             or BehaviorInstructionKind.ShuffleIntoDeck
             or BehaviorInstructionKind.AddToHand
+            or BehaviorInstructionKind.AddCounter
             or BehaviorInstructionKind.TrashCard
             or BehaviorInstructionKind.InstallCard
             or BehaviorInstructionKind.AdvanceCard
@@ -1048,26 +1103,51 @@ public enum BehaviorInstructionKind
 /// <summary>A static value modifier with a typed condition and reason key.</summary>
 public sealed record BehaviorStaticModifier
 {
-    public BehaviorStaticModifier(string valueKey, int delta, string? reasonKey = null)
+    [JsonConstructor]
+    public BehaviorStaticModifier(
+        string valueKey,
+        int delta,
+        string? reasonKey = null,
+        BehaviorStaticModifierKind? kind = null)
     {
         if (string.IsNullOrWhiteSpace(valueKey))
         {
             throw new ArgumentException("A modifier value key is required.", nameof(valueKey));
         }
 
+        if (kind is { } typedKind)
+        {
+            if (!Enum.IsDefined(typedKind))
+            {
+                throw new ArgumentOutOfRangeException(nameof(kind));
+            }
+
+            string canonicalValueKey = ValueKeyFor(typedKind);
+            if (!string.Equals(valueKey, canonicalValueKey, StringComparison.Ordinal))
+            {
+                throw new ArgumentException(
+                    $"A typed static modifier kind '{typedKind}' must use value key '{canonicalValueKey}'.",
+                    nameof(valueKey));
+            }
+        }
+
         ValueKey = valueKey;
         Delta = delta;
         ReasonKey = reasonKey;
-        Kind = null;
+        Kind = kind;
+    }
+
+    public BehaviorStaticModifier(string valueKey, int delta, string? reasonKey = null)
+        : this(valueKey, delta, reasonKey, kind: null)
+    {
     }
 
     public BehaviorStaticModifier(
         BehaviorStaticModifierKind kind,
         int delta,
         string? reasonKey = null)
-        : this(ValueKeyFor(kind), delta, reasonKey)
+        : this(ValueKeyFor(kind), delta, reasonKey, kind)
     {
-        Kind = kind;
     }
 
     public string ValueKey { get; }
@@ -2238,6 +2318,16 @@ internal static class BehaviorCatalogFingerprint
             AppendNullableInt(builder, runOperand.BreachAccessDeltaPerCounter);
             builder.Append(",reason=");
             AppendString(builder, runOperand.BreachAccessReasonKey);
+        }
+
+        // Dynamic amounts are structural operands. Keep the legacy bytes for
+        // static instructions and add this segment only when the new
+        // vocabulary is actually used.
+        if (value.AmountOperand is { } amountOperand)
+        {
+            builder.Append(",amountOperand=counter=");
+            AppendString(builder, amountOperand.SourceCounterName);
+            builder.Append(",multiplier=").Append(amountOperand.Multiplier);
         }
     }
 

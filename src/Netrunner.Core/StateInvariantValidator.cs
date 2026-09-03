@@ -3162,6 +3162,30 @@ public static class StateInvariantValidator
                                             : currentSourceZone.Kind == ZoneKind.RunnerHeap))))
                                 || hostedCreditOccurrencePendingMovement
                                 || hostedCreditOccurrenceCompletedMovement;
+                            bool dynamicCounterRetentionAuthorized = behaviorFrame.AbilityKey is not null
+                                && (selfTrash || selfRemove)
+                                && behaviorCatalog.TryGet(
+                                    behaviorFrame.DefinitionId,
+                                    out CardBehaviorDefinition? retainedCounterDefinition)
+                                && retainedCounterDefinition.PaidAbilities
+                                    .SingleOrDefault(ability => string.Equals(
+                                        ability.Key,
+                                        behaviorFrame.AbilityKey,
+                                        StringComparison.Ordinal)) is { } retainedCounterAbility
+                                && ContainsBehaviorDynamicAmount(retainedCounterAbility.Instructions);
+                            bool movedSourceRetainsCounters = sourceCard is not null
+                                && sourceCard.ZoneId != sourceZone.Id
+                                && state.RulesState?.Counters.Any(counter => counter.CardId == sourceCard.Id) == true;
+                            if (movedSourceRetainsCounters
+                                && (!movedAfterPayment || !dynamicCounterRetentionAuthorized))
+                            {
+                                Add(
+                                    violations,
+                                    "resolution.behavior-source-counters-unauthorized",
+                                    $"{path}.sourceCardId",
+                                    "Counters may remain on a moved behavior source only for the exact paid self-movement ability whose catalog path contains a dynamic credit amount.");
+                            }
+
                             if (sourceCard is not null
                                 && sourceCard.ZoneId != sourceZone.Id
                                 && !catalogTriggerDetachedSource
@@ -4036,6 +4060,20 @@ public static class StateInvariantValidator
                     "resolution.ability-source-location-mismatch",
                     $"{path}.sourceZoneId",
                     "Ability source may move only to its owner discard or removed-from-game zone after its declared self-movement payment.");
+            }
+
+            bool retainsSourceCounters = state.RulesState?.Counters.Any(counter => counter.CardId == source.Id) == true;
+            bool dynamicCounterRetentionAuthorized = paymentAccepted
+                && (selfTrash || selfRemove)
+                && declaration is not null
+                && ContainsBehaviorDynamicAmount(declaration.Instructions);
+            if (retainsSourceCounters && (!validLifecycleZone || !dynamicCounterRetentionAuthorized))
+            {
+                Add(
+                    violations,
+                    "resolution.ability-source-counters-unauthorized",
+                    $"{path}.sourceCardId",
+                    "Counters may remain on a moved ability source only after its exact self-movement payment and only when the catalog ability path contains a dynamic credit amount.");
             }
         }
 
@@ -6894,6 +6932,34 @@ public static class StateInvariantValidator
             or RuntimeCardClass.Hardware
             or RuntimeCardClass.Resource;
 
+    private static bool ContainsBehaviorDynamicAmount(
+        IReadOnlyList<BehaviorInstruction> instructions)
+    {
+        foreach (BehaviorInstruction instruction in instructions)
+        {
+            if (instruction.Kind == BehaviorInstructionKind.GainCredits
+                && instruction.AmountOperand is not null)
+            {
+                return true;
+            }
+
+            if (instruction.Branch is { } branch
+                && (ContainsBehaviorDynamicAmount(branch.WhenTrue)
+                    || ContainsBehaviorDynamicAmount(branch.WhenFalse)))
+            {
+                return true;
+            }
+
+            if (instruction.Choice is { } choice
+                && choice.Options.Any(option => ContainsBehaviorDynamicAmount(option.Instructions)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static bool IsCorpInstallableRuntimeClass(RuntimeCardClass cardClass) =>
         cardClass is RuntimeCardClass.Agenda
             or RuntimeCardClass.Asset
@@ -6932,16 +6998,22 @@ public static class StateInvariantValidator
             return;
         }
 
-        if (index < 2
-            || state.ResolutionStack[index - 2] is not CardPlayFrame
-            || index < 3
-            || state.ResolutionStack[index - 3] is not TurnFrame)
+        bool hasAbilityInstallTopology = index >= 3
+            && state.ResolutionStack[index - 2] is AbilityFrame
+            && state.ResolutionStack[index - 3] is TurnFrame or RunTimingFrame;
+        bool hasCardPlayInstallTopology = index >= 3
+            && state.ResolutionStack[index - 2] is CardPlayFrame
+            && state.ResolutionStack[index - 3] is TurnFrame;
+        bool hasTriggerInstallTopology = index >= 3
+            && state.ResolutionStack[index - 2] is EffectCheckpointFrame
+            && state.ResolutionStack[index - 3] is EffectResolutionFrame;
+        if (!hasAbilityInstallTopology && !hasCardPlayInstallTopology && !hasTriggerInstallTopology)
         {
             Add(
                 violations,
                 "resolution.install-parent-topology",
                 path,
-                "A behavior-effect install frame requires the [TurnFrame, CardPlayFrame, BehaviorResolutionFrame, InstallFrame] topology.");
+                "A behavior-effect install frame requires an exact card-play, ability, or catalog-trigger parent topology.");
         }
 
         if (!ParentIdentityMatches(behaviorParent, install.ParentFrameIdentity))
@@ -6981,15 +7053,23 @@ public static class StateInvariantValidator
             return;
         }
 
-        IReadOnlyList<BehaviorInstruction> rootInstructions = behaviorParent.AbilityKey is null
-            ? definition.Instructions
-            : definition.PaidAbilities
+        IReadOnlyList<BehaviorInstruction> rootInstructions = behaviorParent.AbilityKey is not null
+            ? definition.PaidAbilities
                 .SingleOrDefault(ability => string.Equals(
                     ability.Key,
                     behaviorParent.AbilityKey,
                     StringComparison.Ordinal))
                 ?.Instructions
-                ?? [];
+                ?? []
+            : behaviorParent.TriggerKey is not null
+                ? definition.Triggers
+                    .SingleOrDefault(trigger => string.Equals(
+                        trigger.Key,
+                        behaviorParent.TriggerKey,
+                        StringComparison.Ordinal))
+                    ?.Instructions
+                    ?? []
+                : definition.Instructions;
         List<BehaviorInstruction> replay = rootInstructions.ToList();
         BehaviorTarget? originTarget = null;
         IReadOnlyList<CardInstanceId>? originSelection = null;
@@ -7032,58 +7112,66 @@ public static class StateInvariantValidator
             {
                 Kind: BehaviorInstructionKind.InstallCard,
                 Target: { Kind: BehaviorTargetKind.ChosenCard } chosenTarget,
-                SourceZone: BehaviorZone.Stack,
+                SourceZone: BehaviorZone sourceZone,
                 DestinationZone: BehaviorZone.Rig,
-            })
+            }
+            || sourceZone is not (BehaviorZone.Stack or BehaviorZone.Grip))
         {
             Add(
                 violations,
                 "resolution.install-instruction-mismatch",
                 path,
-                "Behavior-effect install cursor must identify a chosen Runner Stack card installed to the Runner Rig.");
+                "Behavior-effect install cursor must identify a chosen Runner Stack or Grip card installed to the Runner Rig.");
             return;
         }
 
+        string bindingKey = StableIdentifier.TryValidate(chosenTarget.Selector)
+            ? chosenTarget.Selector!
+            : "chosen";
         if (chosenTarget.Selector is not null
-            && !string.Equals(chosenTarget.Selector, "chosen", StringComparison.Ordinal))
+            && !StableIdentifier.TryValidate(chosenTarget.Selector))
         {
             Add(
                 violations,
                 "resolution.install-binding-mismatch",
                 $"{path}.cardId",
-                "Behavior-effect installs must consume the current chosen binding.");
+                "Behavior-effect installs must consume a stable binding selector.");
         }
 
         BehaviorBinding? chosenBinding = behaviorParent.Bindings.SingleOrDefault(
-            binding => string.Equals(binding.Key, "chosen", StringComparison.Ordinal));
+            binding => string.Equals(binding.Key, bindingKey, StringComparison.Ordinal));
         if (chosenBinding is null || chosenBinding.CardIds.Count != 1)
         {
             Add(
                 violations,
                 "resolution.install-binding-missing",
                 $"{path}.cardId",
-                "Behavior-effect installs require exactly one current chosen binding.");
+                "Behavior-effect installs require exactly one current stable binding.");
         }
 
         CardInstanceState? installCard = state.Cards.FirstOrDefault(card => card?.Id == install.CardId);
-        ZoneState? runnerStack = state.Zones.FirstOrDefault(zone => zone?.Kind == ZoneKind.RunnerStack && zone.ServerId is null);
+        ZoneKind expectedSourceKind = sourceZone == BehaviorZone.Grip
+            ? ZoneKind.RunnerGrip
+            : ZoneKind.RunnerStack;
+        ZoneState? installSource = state.Zones.FirstOrDefault(zone => zone?.Kind == expectedSourceKind
+            && zone.ServerId is null
+            && zone.Id == install.SourceZoneId);
         ZoneState? runnerRig = state.Zones.FirstOrDefault(zone => zone?.Kind == ZoneKind.RunnerRig && zone.ServerId is null);
-        if (runnerStack is null
-            || install.SourceZoneKind != ZoneKind.RunnerStack
-            || install.SourceZoneId != runnerStack.Id
+        if (installSource is null
+            || install.SourceZoneKind != expectedSourceKind
             || installCard is null
-            || installCard.ZoneId != runnerStack.Id
-            || !runnerStack.CardIds.Contains(install.CardId)
+            || installCard.ZoneId != installSource.Id
+            || !installSource.CardIds.Contains(install.CardId)
             || installCard.OwnerSide != PlayerSide.Runner)
         {
             Add(
                 violations,
                 "resolution.install-source-mismatch",
                 $"{path}.sourceZoneId",
-                "Behavior-effect install cards must remain Runner-owned in the canonical Runner Stack.");
+                "Behavior-effect install cards must remain Runner-owned in their declared Grip or Stack source.");
         }
 
-        if (install.CardClass != RuntimeCardClass.Program
+        if (!IsRunnerInstallableRuntimeClass(install.CardClass)
             || install.DestinationKind != InstallDestinationKind.RunnerRig
             || install.ServerId is not null
             || install.CreateNewRemote
@@ -7094,7 +7182,7 @@ public static class StateInvariantValidator
                 violations,
                 "resolution.install-destination-mismatch",
                 path,
-                "Behavior-effect installs must target the canonical Runner Rig as a Program.");
+                "Behavior-effect installs must target the canonical Runner Rig as a Runner-installable card.");
         }
 
         if (chosenBinding is not null
@@ -7121,13 +7209,13 @@ public static class StateInvariantValidator
             else
             {
                 installSpecForProjection = spec;
-                if (spec.Side != PlayerSide.Runner || spec.CardClass != RuntimeCardClass.Program)
+                if (spec.Side != PlayerSide.Runner || !IsRunnerInstallableRuntimeClass(spec.CardClass))
                 {
                     Add(
                         violations,
                         "resolution.install-runtime-class-invalid",
                         $"{path}.cardClass",
-                        "Behavior-effect installs require Runner Program runtime metadata.");
+                        "Behavior-effect installs require Runner Program, Hardware, or Resource runtime metadata.");
                 }
 
                 CostQuote? expectedInstallQuote = GameEngine.ProjectCostQuote(
@@ -7173,12 +7261,12 @@ public static class StateInvariantValidator
             }
 
             CardInstanceId[] conflicts = installSpecForProjection is
-            { Side: PlayerSide.Runner, CardClass: RuntimeCardClass.Program }
+            { Side: PlayerSide.Runner }
                 && runtimeCardCatalog is not null
                 ? ActiveRunnerInstallConflictIds(state, runtimeCardCatalog, installSpecForProjection)
                 : [];
             CardInstanceId[] expectedCandidates = installSpecForProjection is
-            { Side: PlayerSide.Runner, CardClass: RuntimeCardClass.Program }
+            { Side: PlayerSide.Runner }
                 && runtimeCardCatalog is not null
                 ? RunnerInstallCandidateIds(state, runtimeCardCatalog, runnerRig, installSpecForProjection)
                 : [];
@@ -7188,7 +7276,7 @@ public static class StateInvariantValidator
                     violations,
                     "resolution.install-candidates-mismatch",
                     $"{path}.candidateReplacementCardIds",
-                    "Behavior-effect install candidates must equal the current installed Runner Programs plus active uniqueness/Console conflicts.");
+                    "Behavior-effect install candidates must equal the current Runner install conflicts.");
             }
 
             if (!install.RequiredReplacementCardIds.SequenceEqual(conflicts))
@@ -7217,13 +7305,13 @@ public static class StateInvariantValidator
                     violations,
                     "resolution.install-candidate-definitions-mismatch",
                     $"{path}.candidateReplacementDefinitionIds",
-                    "Behavior-effect install replacement definitions must match the current installed Runner Programs plus active uniqueness/Console conflicts.");
+                    "Behavior-effect install replacement definitions must match the current Runner install conflicts.");
             }
         }
 
         if (originTarget is null
             || originTarget.Kind is not (BehaviorTargetKind.ZoneCard or BehaviorTargetKind.ZoneCards)
-            || originTarget.Zone != BehaviorZone.Stack
+            || originTarget.Zone != sourceZone
             || originSelection is null
             || !originSelection.SequenceEqual([install.CardId]))
         {
@@ -7231,7 +7319,7 @@ public static class StateInvariantValidator
                 violations,
                 "resolution.install-origin-missing",
                 $"{path}.cardId",
-                "Behavior-effect install binding must originate in a reachable Stack search or choice continuation.");
+                "Behavior-effect install binding must originate in a reachable declared source-zone search or choice continuation.");
         }
         else if (runtimeCardCatalog is not null
             && !BehaviorCardMatches(state, behaviorCatalog, runtimeCardCatalog, install.CardId, originTarget.Filter))
@@ -7240,7 +7328,7 @@ public static class StateInvariantValidator
                 violations,
                 "resolution.install-origin-stale",
                 $"{path}.cardId",
-                "Behavior-effect install card no longer matches its originating Stack selector.");
+                "Behavior-effect install card no longer matches its originating source selector.");
         }
 
     }
@@ -9415,6 +9503,18 @@ public static class StateInvariantValidator
                 instruction.Kind == BehaviorInstructionKind.Search || target.Kind is BehaviorTargetKind.ZoneCard or BehaviorTargetKind.ZoneCards
                     ? frame.SourceCardId
                     : null);
+            if (instruction.Kind == BehaviorInstructionKind.Choose
+                && specification is not null)
+            {
+                expectedCandidates = FilterImmediateInstallCandidates(
+                    state,
+                    behaviorCatalog,
+                    runtimeCardCatalog,
+                    frame,
+                    specification,
+                    derivedInstructions,
+                    expectedCandidates);
+            }
             if (!choice.CandidateCardIds.SequenceEqual(expectedCandidates))
             {
                 Add(violations, "resolution.behavior-choice-candidates-mismatch", $"{choicePath}.candidateCardIds", "Materialized behavior candidates no longer match the catalog target and current state.");
@@ -9472,6 +9572,87 @@ public static class StateInvariantValidator
         {
             Add(violations, "resolution.behavior-choice-cardinality-invalid", choicePath, "Up-to choices require a count.");
         }
+    }
+
+    /// <summary>
+    /// Mirrors the reducer's immediate-following InstallCard projection for
+    /// a pending target choice.  The reducer freezes only cards that can
+    /// survive the shared behavior-install planner; validating the raw target
+    /// alone would reject that authenticated, intentionally narrower list.
+    /// </summary>
+    private static CardInstanceId[] FilterImmediateInstallCandidates(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog,
+        BehaviorResolutionFrame frame,
+        BehaviorChoiceSpec specification,
+        List<BehaviorInstruction> derivedInstructions,
+        CardInstanceId[] candidates)
+    {
+        if (runtimeCardCatalog is null
+            || specification.Target is not
+            {
+                Kind: BehaviorTargetKind.ZoneCard,
+                Zone: BehaviorZone.Grip or BehaviorZone.Stack,
+            }
+            || frame.InstructionCursor < 0
+            || frame.InstructionCursor + 1 >= derivedInstructions.Count
+            || derivedInstructions[frame.InstructionCursor + 1] is not
+            {
+                Kind: BehaviorInstructionKind.InstallCard,
+                Target: { Kind: BehaviorTargetKind.ChosenCard } installTarget,
+                SourceZone: { } sourceZone,
+                DestinationZone: BehaviorZone.Rig,
+            }
+            || sourceZone != specification.Target.Zone)
+        {
+            return candidates.ToArray();
+        }
+
+        // The reducer binds the selection under both the choice key and the
+        // conventional "chosen" key.  A different stable selector denotes a
+        // separate binding and must not accidentally inherit this filter.
+        string bindingKey = StableIdentifier.TryValidate(installTarget.Selector)
+            ? installTarget.Selector!
+            : "chosen";
+        if (!string.Equals(bindingKey, "chosen", StringComparison.Ordinal)
+            && !string.Equals(bindingKey, specification.Key, StringComparison.Ordinal))
+        {
+            return candidates.ToArray();
+        }
+
+        var filtered = new List<CardInstanceId>(candidates.Length);
+        foreach (CardInstanceId candidate in candidates)
+        {
+            BehaviorContinuationStep selectionStep = new(
+                frame.InstructionCursor,
+                specification.Key,
+                BehaviorContinuationKind.ChoiceSelection,
+                cardIds: [candidate]);
+            IReadOnlyList<BehaviorBinding> bindings = frame.Bindings
+                .Where(binding => !string.Equals(binding.Key, specification.Key, StringComparison.Ordinal)
+                    && !string.Equals(binding.Key, "chosen", StringComparison.Ordinal))
+                .Append(new BehaviorBinding(specification.Key, [candidate]))
+                .Append(new BehaviorBinding("chosen", [candidate]))
+                .ToArray();
+            BehaviorResolutionFrame hypothetical = frame.With(
+                bindings: bindings,
+                continuation: frame.Continuation.Append(selectionStep).ToArray());
+            var option = new BehaviorChoiceOption(
+                "install",
+                [derivedInstructions[frame.InstructionCursor + 1]]);
+            if (IsBehaviorInstallOptionAvailable(
+                state,
+                behaviorCatalog,
+                runtimeCardCatalog,
+                hypothetical,
+                option))
+            {
+                filtered.Add(candidate);
+            }
+        }
+
+        return filtered.ToArray();
     }
 
     private static bool IsConstrainedSingleCardSearch(BehaviorInstruction instruction) =>
@@ -9631,6 +9812,7 @@ public static class StateInvariantValidator
                 BehaviorCardType.Ice => runtimeSpec.CardClass == RuntimeCardClass.Ice,
                 BehaviorCardType.Icebreaker => runtimeSpec.CardClass == RuntimeCardClass.Program
                     && runtimeSpec.Subtypes.Contains("icebreaker", StringComparer.Ordinal),
+                BehaviorCardType.Program => runtimeSpec.CardClass == RuntimeCardClass.Program,
                 BehaviorCardType.Identity => runtimeSpec.CardClass == RuntimeCardClass.Identity,
                 BehaviorCardType.Operation => runtimeSpec.CardClass == RuntimeCardClass.Operation,
                 BehaviorCardType.Resource => runtimeSpec.CardClass == RuntimeCardClass.Resource,
@@ -9679,10 +9861,9 @@ public static class StateInvariantValidator
         {
             BehaviorInstruction instruction = option.Instructions[0];
             if (instruction.Target is not { Kind: BehaviorTargetKind.ChosenCard } target
-                || instruction.SourceZone != BehaviorZone.Stack
+                || instruction.SourceZone is not (BehaviorZone.Stack or BehaviorZone.Grip)
                 || instruction.DestinationZone != BehaviorZone.Rig
-                || (target.Selector is not null
-                    && !string.Equals(target.Selector, "chosen", StringComparison.Ordinal)))
+                || (target.Selector is not null && !StableIdentifier.TryValidate(target.Selector)))
             {
                 return false;
             }
@@ -9698,23 +9879,28 @@ public static class StateInvariantValidator
             }
 
             CardInstanceState? card = state.Cards.FirstOrDefault(candidate => candidate?.Id == binding.CardIds[0]);
-            ZoneState? stack = state.Zones.FirstOrDefault(
-                zone => zone?.Kind == ZoneKind.RunnerStack
+            ZoneKind expectedSourceKind = instruction.SourceZone == BehaviorZone.Grip
+                ? ZoneKind.RunnerGrip
+                : ZoneKind.RunnerStack;
+            ZoneState? source = state.Zones.FirstOrDefault(
+                zone => zone?.Kind == expectedSourceKind
                     && zone.OwnerSide == PlayerSide.Runner
-                    && zone.ServerId is null);
+                    && zone.ServerId is null
+                    && zone.Id == card?.ZoneId);
             ZoneState? rig = state.Zones.FirstOrDefault(
                 zone => zone?.Kind == ZoneKind.RunnerRig
                     && zone.OwnerSide == PlayerSide.Runner
                     && zone.ServerId is null);
             if (card is null
-                || stack is null
+                || source is null
                 || rig is null
                 || card.OwnerSide != PlayerSide.Runner
-                || card.ZoneId != stack.Id
-                || !stack.CardIds.Contains(card.Id)
+                || !source.CardIds.Contains(card.Id)
                 || !runtimeCardCatalog.TryGet(card.DefinitionId, out CardRuntimeSpec? incoming)
                 || incoming.Side != PlayerSide.Runner
-                || incoming.CardClass != RuntimeCardClass.Program)
+                || incoming.CardClass is not (RuntimeCardClass.Program
+                    or RuntimeCardClass.Hardware
+                    or RuntimeCardClass.Resource))
             {
                 return false;
             }
@@ -9738,7 +9924,8 @@ public static class StateInvariantValidator
                     runtimeCardCatalog,
                     frame,
                     bindingKey,
-                    binding.CardIds))
+                    binding.CardIds,
+                    instruction.SourceZone.Value))
             {
                 return false;
             }
@@ -9756,7 +9943,8 @@ public static class StateInvariantValidator
             {
                 return false;
             }
-            if (!CanBehaviorInstallProgram(
+            if (incoming.CardClass == RuntimeCardClass.Program
+                && !CanBehaviorInstallProgram(
                     state,
                     behaviorCatalog,
                     runtimeCardCatalog,
@@ -9768,7 +9956,14 @@ public static class StateInvariantValidator
             }
 
             PlayerState? runner = state.Players.FirstOrDefault(player => player?.Side == PlayerSide.Runner);
-            return runner is not null && runner.Credits >= (incoming.InstallCost ?? 0);
+            CostQuote? installQuote = GameEngine.ProjectCostQuote(
+                state,
+                behaviorCatalog,
+                card.Id,
+                BehaviorCostModifierKind.RunnerInstallCreditCost,
+                incoming.InstallCost ?? 0);
+            int installCost = installQuote?.EffectiveCost ?? (incoming.InstallCost ?? 0);
+            return runner is not null && runner.Credits >= installCost;
         }
         catch (Exception exception) when (exception is ResolutionFailureException
             or OverflowException
@@ -9888,7 +10083,8 @@ public static class StateInvariantValidator
         IRuntimeCardCatalog runtimeCardCatalog,
         BehaviorResolutionFrame frame,
         string bindingKey,
-        IReadOnlyList<CardInstanceId> cardIds)
+        IReadOnlyList<CardInstanceId> cardIds,
+        BehaviorZone expectedSourceZone = BehaviorZone.Stack)
     {
         if (!behaviorCatalog.TryGet(frame.DefinitionId, out CardBehaviorDefinition? definition))
         {
@@ -9948,7 +10144,7 @@ public static class StateInvariantValidator
 
         return originatingTarget is not null
             && originatingTarget.Kind is BehaviorTargetKind.ZoneCard or BehaviorTargetKind.ZoneCards
-            && originatingTarget.Zone == BehaviorZone.Stack
+            && originatingTarget.Zone == expectedSourceZone
             && originatingSelection is not null
             && originatingSelection.SequenceEqual(cardIds)
             && MaterializeBehaviorCandidates(

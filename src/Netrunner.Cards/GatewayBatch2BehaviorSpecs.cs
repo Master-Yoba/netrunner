@@ -67,10 +67,13 @@ public static class GatewayBatch2BehaviorSpecs
     public static IReadOnlyList<CardDefinitionId> AssignedDefinitionIds { get; } =
         new ReadOnlyCollection<CardDefinitionId>
         ([
+            GatewayBatch2CardCodes.Fermenter,
+            GatewayBatch2CardCodes.Cookbook,
             GatewayBatch2CardCodes.Pennyshaver,
             GatewayBatch2CardCodes.Carmen,
             GatewayBatch2CardCodes.Marjanah,
             GatewayBatch2CardCodes.RedTeam,
+            GatewayBatch2CardCodes.Pantograph,
             GatewayBatch2CardCodes.Conduit,
             GatewayBatch2CardCodes.TeleworkContract,
             GatewayBatch2CardCodes.SmartwareDistributor,
@@ -88,6 +91,10 @@ public static class GatewayBatch2BehaviorSpecs
     public static IReadOnlyList<CardBehaviorDefinition> GenericSpecs { get; } =
         new ReadOnlyCollection<CardBehaviorDefinition>
         ([
+            GatewayBatch2TriggerBehaviorSpecs.GenericSpecs.Single(
+                static definition => definition.DefinitionId == GatewayBatch2CardCodes.Fermenter),
+            GatewayBatch2TriggerBehaviorSpecs.GenericSpecs.Single(
+                static definition => definition.DefinitionId == GatewayBatch2CardCodes.Cookbook),
             GatewayBatch2EconomyBehaviorSpecs.GenericSpecs.Single(
                 static definition => definition.DefinitionId == GatewayBatch2CardCodes.Pennyshaver),
             GatewayBatch2RunCostBehaviorSpecs.GenericSpecs.Single(
@@ -96,6 +103,8 @@ public static class GatewayBatch2BehaviorSpecs
                 static definition => definition.DefinitionId == GatewayBatch2CardCodes.Marjanah),
             GatewayBatch2RunCostBehaviorSpecs.GenericSpecs.Single(
                 static definition => definition.DefinitionId == GatewayBatch2CardCodes.RedTeam),
+            GatewayBatch2TriggerBehaviorSpecs.GenericSpecs.Single(
+                static definition => definition.DefinitionId == GatewayBatch2CardCodes.Pantograph),
             GatewayBatch2RunCostBehaviorSpecs.GenericSpecs.Single(
                 static definition => definition.DefinitionId == GatewayBatch2CardCodes.Conduit),
             GatewayBatch2EconomyBehaviorSpecs.GenericSpecs.Single(

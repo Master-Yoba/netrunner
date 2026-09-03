@@ -826,6 +826,21 @@ public static partial class GameEngine
         ZoneId sourceZoneId) => EnumerateAbilitySources(working)
             .Any(candidate => candidate.Card.Id == source.Id && candidate.Zone.Id == sourceZoneId);
 
+    private static bool AbilityRetainsSourceCountersThroughChild(
+        WorkingState working,
+        AbilityFrame frame)
+    {
+        if (!frame.Costs.Any(static cost =>
+                cost.Kind is BehaviorCostKind.TrashSelf or BehaviorCostKind.RemoveSelfFromGame)
+            || !working.BehaviorCatalog.TryGet(frame.DefinitionId, out CardBehaviorDefinition? definition))
+        {
+            return false;
+        }
+
+        BehaviorPaidAbility declaration = GetAbilityDeclaration(definition, frame.AbilityKey);
+        return ContainsDynamicAmount(declaration.Instructions);
+    }
+
     private static void PayAbilityCosts(WorkingState working, AbilityFrame frame)
     {
         CardInstanceState source = GetCard(working, frame.SourceCardId);
@@ -882,7 +897,8 @@ public static partial class GameEngine
             }
         }
 
-        if (deferredCounterCleanup)
+        if (deferredCounterCleanup
+            && !AbilityRetainsSourceCountersThroughChild(working, frame))
         {
             ClearCardCounters(working, frame.SourceCardId);
         }
@@ -936,6 +952,11 @@ public static partial class GameEngine
         if (working.ResolutionStack.Count < 2)
         {
             throw new ResolutionFailureException("An ability completion requires its parent frame.");
+        }
+
+        if (AbilityRetainsSourceCountersThroughChild(working, frame))
+        {
+            ClearCardCounters(working, frame.SourceCardId);
         }
 
         ResolutionFrame parent = working.ResolutionStack[^2];

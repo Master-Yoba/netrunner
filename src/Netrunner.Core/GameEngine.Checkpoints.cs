@@ -943,6 +943,7 @@ public static partial class GameEngine
                 BehaviorCardType.Ice => runtime.CardClass == RuntimeCardClass.Ice,
                 BehaviorCardType.Icebreaker => runtime.CardClass == RuntimeCardClass.Program
                     && runtime.Subtypes.Contains("icebreaker", StringComparer.Ordinal),
+                BehaviorCardType.Program => runtime.CardClass == RuntimeCardClass.Program,
                 BehaviorCardType.Identity => runtime.CardClass == RuntimeCardClass.Identity,
                 BehaviorCardType.Operation => runtime.CardClass == RuntimeCardClass.Operation,
                 BehaviorCardType.Resource => runtime.CardClass == RuntimeCardClass.Resource,

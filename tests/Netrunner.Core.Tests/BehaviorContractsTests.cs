@@ -490,6 +490,44 @@ public sealed class BehaviorContractsTests
     }
 
     [Fact]
+    public void StaticModifierJsonPreservesTypedKindAndAcceptsLegacyStringShape()
+    {
+        BehaviorStaticModifier typed = new(
+            BehaviorStaticModifierKind.MemoryUnits,
+            delta: 1,
+            reasonKey: "pantograph-memory");
+        string typedJson = EngineJson.Serialize(typed);
+        BehaviorStaticModifier typedRestored = EngineJson.Deserialize<BehaviorStaticModifier>(typedJson);
+
+        Assert.Equal(typed, typedRestored);
+        Assert.Equal(BehaviorStaticModifierKind.MemoryUnits, typedRestored.Kind);
+        Assert.Equal(typedJson, EngineJson.Serialize(typedRestored));
+
+        BehaviorStaticModifier legacy = new("legacy-value", delta: 2, reasonKey: "legacy-reason");
+        string legacyJson = EngineJson.Serialize(legacy);
+        BehaviorStaticModifier legacyRestored = EngineJson.Deserialize<BehaviorStaticModifier>(legacyJson);
+
+        Assert.Equal(legacy, legacyRestored);
+        Assert.Null(legacyRestored.Kind);
+        Assert.Equal(legacyJson, EngineJson.Serialize(legacyRestored));
+    }
+
+    [Fact]
+    public void StaticModifierJsonRejectsForgedTypedKindValueKeyMismatch()
+    {
+        string forged =
+            "{\"valueKey\":\"maximum-hand-size\",\"delta\":1,\"reasonKey\":null,\"kind\":\"memoryUnits\"}";
+
+        Assert.Throws<System.Text.Json.JsonException>(() =>
+            EngineJson.Deserialize<BehaviorStaticModifier>(forged));
+        Assert.Throws<ArgumentException>(() =>
+            new BehaviorStaticModifier(
+                "maximum-hand-size",
+                delta: 1,
+                kind: BehaviorStaticModifierKind.MemoryUnits));
+    }
+
+    [Fact]
     public void GenericCatalogFingerprintIsStableStructuralAndSensitive()
     {
         CardBehaviorDefinition firstDefinition = CreateDefinition(drawAmount: 3);
@@ -838,6 +876,125 @@ public sealed class BehaviorContractsTests
         Assert.Equal(firstCatalog.Fingerprint, equivalentCatalog.Fingerprint);
         Assert.NotEqual(firstCatalog.Fingerprint, changedInstructionCatalog.Fingerprint);
         Assert.NotEqual(firstCatalog.Fingerprint, changedFilterCatalog.Fingerprint);
+    }
+
+    [Fact]
+    public void DynamicGainAmountIsTypedStructuralAndMutuallyExclusiveWithStaticAmount()
+    {
+        BehaviorAmountOperand operand = new("virus", 2);
+        BehaviorInstruction gain = new(
+            BehaviorInstructionKind.GainCredits,
+            amountOperand: operand);
+        BehaviorInstruction equivalent = EngineJson.Deserialize<BehaviorInstruction>(
+            EngineJson.Serialize(gain));
+
+        Assert.Equal(0, gain.Amount);
+        Assert.Equal(operand, gain.AmountOperand);
+        Assert.Equal(gain, equivalent);
+        string json = EngineJson.Serialize(gain);
+        Assert.Contains("\"amountOperand\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"sourceCounterName\":\"virus\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"multiplier\":2", json, StringComparison.Ordinal);
+        Assert.Equal(json, EngineJson.Serialize(equivalent));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorAmountOperand("virus", 0));
+        Assert.Throws<ArgumentException>(() => new BehaviorAmountOperand("not stable", 2));
+        Assert.Throws<ArgumentException>(() => new BehaviorInstruction(
+            BehaviorInstructionKind.GainCredits,
+            amount: 1,
+            amountOperand: operand));
+        Assert.Throws<ArgumentException>(() => new BehaviorInstruction(
+            BehaviorInstructionKind.Draw,
+            amount: 1,
+            amountOperand: operand));
+
+        BehaviorCatalog first = new BehaviorCatalogBuilder("test:dynamic-amount")
+            .Add(new CardBehaviorDefinition(
+                SearchCardId,
+                PlayerSide.Runner,
+                instructions: [gain]))
+            .Build();
+        BehaviorCatalog changed = new BehaviorCatalogBuilder("test:dynamic-amount")
+            .Add(new CardBehaviorDefinition(
+                SearchCardId,
+                PlayerSide.Runner,
+                instructions:
+                [new BehaviorInstruction(
+                    BehaviorInstructionKind.GainCredits,
+                    amountOperand: new BehaviorAmountOperand("virus", 3))]))
+            .Build();
+        Assert.NotEqual(first.Fingerprint, changed.Fingerprint);
+    }
+
+    [Fact]
+    public void BehaviorContractStructureIncludesBehaviorRunOperandInInstructionAndDefinitionEquality()
+    {
+        BehaviorRunOperand rnd = new(ServerKind.RAndD);
+        BehaviorRunOperand headquarters = new(ServerKind.Headquarters);
+        BehaviorInstruction rndInstruction = new(
+            BehaviorInstructionKind.StartRun,
+            runOperand: rnd);
+        BehaviorInstruction headquartersInstruction = new(
+            BehaviorInstructionKind.StartRun,
+            runOperand: headquarters);
+
+        Assert.NotEqual(rndInstruction, headquartersInstruction);
+        Assert.False(BehaviorContractStructure.AreEqual(rndInstruction, headquartersInstruction));
+
+        BehaviorPaidAbility rndAbility = new(
+            "run",
+            BehaviorAbilityTiming.ActionPhase,
+            BehaviorAbilityActivation.ClickAction,
+            [new BehaviorCost(BehaviorCostKind.Clicks)],
+            [],
+            [],
+            [rndInstruction],
+            BehaviorAbilityUsageLimit.Unlimited);
+        BehaviorPaidAbility headquartersAbility = new(
+            "run",
+            BehaviorAbilityTiming.ActionPhase,
+            BehaviorAbilityActivation.ClickAction,
+            [new BehaviorCost(BehaviorCostKind.Clicks)],
+            [],
+            [],
+            [headquartersInstruction],
+            BehaviorAbilityUsageLimit.Unlimited);
+        CardBehaviorDefinition rndDefinition = new(
+            SearchCardId,
+            PlayerSide.Runner,
+            paidAbilities: [rndAbility]);
+        CardBehaviorDefinition headquartersDefinition = new(
+            SearchCardId,
+            PlayerSide.Runner,
+            paidAbilities: [headquartersAbility]);
+
+        Assert.False(BehaviorCatalogStructure.AreEqual(rndDefinition, headquartersDefinition));
+    }
+
+    [Fact]
+    public void StableChosenTargetSupportsCounterPlacementAndGripInstallOrigin()
+    {
+        BehaviorInstruction counter = new(
+            BehaviorInstructionKind.AddCounter,
+            amount: 1,
+            argument: "virus",
+            target: new BehaviorTarget(
+                BehaviorTargetKind.ChosenCard,
+                selector: "trigger-subject"));
+        BehaviorInstruction install = new(
+            BehaviorInstructionKind.InstallCard,
+            target: new BehaviorTarget(
+                BehaviorTargetKind.ChosenCard,
+                selector: "pantograph-install"),
+            sourceZone: BehaviorZone.Grip,
+            destinationZone: BehaviorZone.Rig,
+            optional: true);
+
+        Assert.Equal("trigger-subject", counter.Target?.Selector);
+        Assert.Equal(BehaviorZone.Grip, install.SourceZone);
+        Assert.Equal("pantograph-install", install.Target?.Selector);
+        Assert.True(install.Optional);
+        Assert.Equal(install, EngineJson.Deserialize<BehaviorInstruction>(EngineJson.Serialize(install)));
     }
 
     private static CardBehaviorDefinition CreateTaggedDefinition(BehaviorCondition condition) =>
