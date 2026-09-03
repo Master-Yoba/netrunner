@@ -799,6 +799,28 @@ public static partial class GameEngine
             null,
             null,
             RunAccessState.NotStarted));
+        if (HasActiveCatalogTrigger(working, OccurrenceKind.RunSuccessful))
+        {
+            QueueRunSuccessfulOccurrence(working, run);
+        }
+    }
+
+    /// <summary>
+    /// Opens the normal occurrence/checkpoint pipeline after success has
+    /// committed its event and advanced the run cursor to the breach
+    /// boundary. The boundary remains below this marker so a yielded trigger
+    /// cannot re-declare success or begin breach processing early.
+    /// </summary>
+    private static void QueueRunSuccessfulOccurrence(WorkingState working, RunState run)
+    {
+        working.ResolutionStack.Add(new EffectResolutionFrame(
+            run.InitiatingPlayer,
+            new CostBundle(),
+            new EffectBundle(new GameplayOccurrenceEffect(
+                OccurrenceKind.RunSuccessful,
+                run.InitiatingPlayer,
+                run.InitiatingSource,
+                run.AttackedServer))));
     }
 
     private static void StepBreachBoundary(WorkingState working, RunState run)

@@ -3107,3 +3107,28 @@ errors; runtime action expansion and full verification remain pending.
   `faf4e631...` / `c882eb43...` / `d20cdef9...` with 32 replay-verified
   checkpoints. Run-success/end, agenda, and access hooks remain separate C2b
   work.
+
+### 2026-09-03 — Checkpoint C2b-3a successful-run triggers accepted
+
+- Luna Max connected `StepRunSuccess` to the catalog occurrence pipeline. The
+  engine emits `RunSuccessful`, records the turn fact, and advances both live
+  run state and its timing frame to `BreachBoundary` before queuing the marker.
+  The occurrence carries the initiating player, optional physical run source,
+  and attacked server. Trigger effects consequently finish before breach starts,
+  and an optional trigger can yield/save/load without declaring success twice.
+- Run-stack validation permits only the exact matching RunSuccessful occurrence
+  suffix at that boundary and rejects a forged controller/source/server tuple;
+  the generic effect/checkpoint validators continue to own every deeper frame.
+  Focused evidence covers Controller and Any scopes, active/inactive/unknown
+  sources, same-controller ordering, run-event subject filtering, self-scope
+  exclusion for the inactive play-area event, canonical JSON resume, event
+  order, and a clean `RunTimingTrace`.
+- Root rejected the first green semantic patch because even a triggerless M2
+  run allocated no-op occurrence frames and changed the pinned final state hash.
+  The accepted reusable `HasActiveCatalogTrigger` gate skips only an occurrence
+  for which no active installed source declares the kind; full eligibility
+  remains centralized in the checkpoint collector. Focused run/catalog tests
+  pass 36/36, complete Core passes 601/601, the solution build has zero
+  warnings/errors, Core formatting and `git diff --check` pass, and the direct
+  M2 proof is restored to `faf4e631...` / `c882eb43...` / `d20cdef9...` with
+  32 replay-verified checkpoints. Run-end, agenda, and access hooks remain.

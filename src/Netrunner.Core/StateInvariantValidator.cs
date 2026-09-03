@@ -1400,44 +1400,53 @@ public static class StateInvariantValidator
         else
         {
             // A2b may suspend an ability directly beneath the live run timing
-            // frame. The ability/behavior validators prove the exact suffix;
-            // this check only ensures no unrelated frame can be smuggled into a
+            // frame. C2b-3a may also suspend the generic occurrence pipeline
+            // after success has advanced the run cursor to BreachBoundary.
+            // The effect/checkpoint validators prove the nested suffix; this
+            // check only ensures no unrelated frame can be smuggled into a
             // run stack prefix.
-            if (state.ResolutionStack[runFrameIndex + 1] is not AbilityFrame)
+            ResolutionFrame suffixRoot = state.ResolutionStack[runFrameIndex + 1];
+            bool runSuccessfulOccurrence = run.Step == RunTimingStep.BreachBoundary
+                && suffixRoot is EffectResolutionFrame occurrenceFrame
+                && IsRunSuccessfulOccurrenceFrame(occurrenceFrame, run);
+            if (suffixRoot is not AbilityFrame && !runSuccessfulOccurrence)
             {
                 Add(
                     violations,
                     "run.stack-topology",
                     "resolutionStack",
-                    "Only an ability lifecycle may follow the live run timing frame.");
+                    "Only an ability lifecycle or the exact RunSuccessful occurrence pipeline may follow the live run timing frame.");
                 return;
             }
 
-            for (int index = runFrameIndex + 2; index < state.ResolutionStack.Count; index++)
+            if (!runSuccessfulOccurrence)
             {
-                ResolutionFrame suffix = state.ResolutionStack[index];
-                if (suffix is BehaviorResolutionFrame behavior
-                    && behavior.AbilityKey is not null
-                    && index == runFrameIndex + 2)
+                for (int index = runFrameIndex + 2; index < state.ResolutionStack.Count; index++)
                 {
-                    continue;
-                }
+                    ResolutionFrame suffix = state.ResolutionStack[index];
+                    if (suffix is BehaviorResolutionFrame behavior
+                        && behavior.AbilityKey is not null
+                        && index == runFrameIndex + 2)
+                    {
+                        continue;
+                    }
 
-                // The existing behavior install validator owns its exact child
-                // shape. Permit only that narrow continuation after an ability
-                // child; all other nested cursors are invalid in this vertical.
-                if (suffix is InstallFrame install
-                    && index == runFrameIndex + 3
-                    && state.ResolutionStack[index - 1] is BehaviorResolutionFrame)
-                {
-                    continue;
-                }
+                    // The existing behavior install validator owns its exact child
+                    // shape. Permit only that narrow continuation after an ability
+                    // child; all other nested cursors are invalid in this vertical.
+                    if (suffix is InstallFrame install
+                        && index == runFrameIndex + 3
+                        && state.ResolutionStack[index - 1] is BehaviorResolutionFrame)
+                    {
+                        continue;
+                    }
 
-                Add(
-                    violations,
-                    "run.stack-topology",
-                    $"resolutionStack[{index}]",
-                    "A run ability stack contains an unsupported nested resolution frame.");
+                    Add(
+                        violations,
+                        "run.stack-topology",
+                        $"resolutionStack[{index}]",
+                        "A run ability stack contains an unsupported nested resolution frame.");
+                }
             }
         }
 
@@ -1483,6 +1492,23 @@ public static class StateInvariantValidator
                 "runState.initiatingSource",
                 "A basic run nested under a real turn must not carry a card source or active run event.");
         }
+    }
+
+    private static bool IsRunSuccessfulOccurrenceFrame(
+        EffectResolutionFrame frame,
+        RunState run)
+    {
+        if (frame.Controller != run.InitiatingPlayer
+            || frame.Effects.Instructions.Count != 1
+            || frame.Effects.Instructions[0] is not GameplayOccurrenceEffect occurrence)
+        {
+            return false;
+        }
+
+        return occurrence.Kind == OccurrenceKind.RunSuccessful
+            && occurrence.Controller == run.InitiatingPlayer
+            && occurrence.SubjectCardId == run.InitiatingSource
+            && occurrence.ServerId == run.AttackedServer;
     }
 
     /// <summary>

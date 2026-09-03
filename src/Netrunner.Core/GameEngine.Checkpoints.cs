@@ -812,6 +812,34 @@ public static partial class GameEngine
         return materialized.ToArray();
     }
 
+    /// <summary>
+    /// Reports whether the active installed-card projection declares a
+    /// catalog trigger for the supplied occurrence. Lifecycle reducers use
+    /// this cheap gate to avoid opening an otherwise empty occurrence
+    /// checkpoint and changing legacy no-trigger state hashes.
+    /// </summary>
+    private static bool HasActiveCatalogTrigger(
+        WorkingState working,
+        OccurrenceKind occurrenceKind)
+    {
+        foreach (CardInstanceState source in working.Cards)
+        {
+            if (!RuntimeCardActivity.IsActive(source, working.Zones)
+                || !working.BehaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? definition)
+                || definition.Controller != source.OwnerSide)
+            {
+                continue;
+            }
+
+            if (definition.Triggers.Any(trigger => trigger.Occurrence == occurrenceKind))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static bool CatalogTriggerScopeMatches(
         BehaviorTriggerScope scope,
         CardInstanceState source,
