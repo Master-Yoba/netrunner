@@ -2924,3 +2924,9 @@ errors; runtime action expansion and full verification remain pending.
   the zero-warning solution build, Core formatting, and `git diff --check`.
   The direct M2 proof retains the schema-3 hashes and 32 replay-verified
   checkpoints. ENG-407 unique/Console enforcement is complete at this boundary.
+- A delayed delegated test-only correction aligned the pre-existing Runner
+  Console install scenario with the same invariant: its normal path now starts
+  from one active Console and still proves that replacement is mandatory before
+  the incoming newest Console enters the Rig. The focused Runner install suite
+  passed 18/18 before the follow-up local commit; the forged two-Console test
+  remains the sole multi-active fixture.

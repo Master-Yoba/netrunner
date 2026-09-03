@@ -230,14 +230,12 @@ public sealed class RunnerInstallActionTests
     }
 
     [Fact]
-    public void RunnerConsoleHardwareInstallOffersAndRequiresEveryActiveConsoleReplacement()
+    public void RunnerConsoleHardwareInstallOffersAndRequiresActiveConsoleReplacement()
     {
         CardDefinitionId incomingDefinitionId = new("test:runner-console-incoming");
         CardInstanceId incomingCardId = new("card:runner-console-incoming");
         CardDefinitionId firstDefinitionId = new("test:runner-console-first");
         CardInstanceId firstCardId = new("card:runner-console-first");
-        CardDefinitionId secondDefinitionId = new("test:runner-console-second");
-        CardInstanceId secondCardId = new("card:runner-console-second");
         RuntimeCardCatalog runtimeCatalog = new RuntimeCardCatalogBuilder("runtime:runner-console-hardware")
             .Add(new CardRuntimeSpec(
                 incomingDefinitionId,
@@ -255,14 +253,6 @@ public sealed class RunnerInstallActionTests
                 console: true,
                 consoleKey: "console-first",
                 subtypes: ["console"]))
-            .Add(new CardRuntimeSpec(
-                secondDefinitionId,
-                PlayerSide.Runner,
-                RuntimeCardClass.Hardware,
-                installCost: 1,
-                console: true,
-                consoleKey: "console-second",
-                subtypes: ["console"]))
             .Build();
         BehaviorCatalog behaviorCatalog = new BehaviorCatalogBuilder(EngineCompatibility.BehaviorRegistryVersion).Build();
         GameState state = CreateStateWithPreExistingRigCards(
@@ -270,15 +260,14 @@ public sealed class RunnerInstallActionTests
             incomingDefinitionId,
             runnerCredits: 5,
             runtimeCatalog,
-            (firstCardId, firstDefinitionId),
-            (secondCardId, secondDefinitionId));
+            (firstCardId, firstDefinitionId));
 
         state = OpenRunnerAction(state, behaviorCatalog, runtimeCatalog);
         PendingDecision turnDecision = Assert.IsType<PendingDecision>(state.PendingDecision);
         LegalAction install = Assert.Single(turnDecision.LegalActions, action => action.Kind == ActionKind.InstallCard);
         InstallCardParameters issued = Assert.IsType<InstallCardParameters>(install.Parameters);
-        Assert.Equal([firstCardId, secondCardId], issued.CandidateReplacementCardIds);
-        Assert.Equal([firstCardId, secondCardId], issued.RequiredReplacementCardIds);
+        Assert.Equal([firstCardId], issued.CandidateReplacementCardIds);
+        Assert.Equal([firstCardId], issued.RequiredReplacementCardIds);
         Assert.False(issued.FinalizeSelection);
 
         ApplyResult opened = GameEngine.Apply(
@@ -289,8 +278,8 @@ public sealed class RunnerInstallActionTests
         Assert.True(opened.Accepted, opened.Rejection?.Message);
         Assert.Empty(opened.Events);
         InstallFrame frame = Assert.IsType<InstallFrame>(opened.State.ResolutionStack[^1]);
-        Assert.Equal([firstCardId, secondCardId], frame.CandidateReplacementCardIds);
-        Assert.Equal([firstCardId, secondCardId], frame.RequiredReplacementCardIds);
+        Assert.Equal([firstCardId], frame.CandidateReplacementCardIds);
+        Assert.Equal([firstCardId], frame.RequiredReplacementCardIds);
         Assert.Empty(StateInvariantValidator.Collect(opened.State, behaviorCatalog, runtimeCatalog));
 
         PendingDecision choice = Assert.IsType<PendingDecision>(opened.State.PendingDecision);
@@ -304,34 +293,21 @@ public sealed class RunnerInstallActionTests
             behaviorCatalog,
             runtimeCatalog);
         Assert.True(selectedFirst.Accepted, selectedFirst.Rejection?.Message);
-        PendingDecision secondChoice = Assert.IsType<PendingDecision>(selectedFirst.State.PendingDecision);
-        LegalAction selectSecond = Assert.Single(
-            secondChoice.LegalActions,
-            action => !Assert.IsType<InstallCardParameters>(action.Parameters).FinalizeSelection
-                && Assert.IsType<InstallCardParameters>(action.Parameters)
-                    .SelectedReplacementCardIds.SequenceEqual([firstCardId, secondCardId]));
-        ApplyResult selected = GameEngine.Apply(
-            selectedFirst.State,
-            new ActionSubmission(secondChoice.Owner, secondChoice.Id, secondChoice.Revision, selectSecond.Id),
-            behaviorCatalog,
-            runtimeCatalog);
-        Assert.True(selected.Accepted, selected.Rejection?.Message);
-        PendingDecision finalDecision = Assert.IsType<PendingDecision>(selected.State.PendingDecision);
+        PendingDecision finalDecision = Assert.IsType<PendingDecision>(selectedFirst.State.PendingDecision);
         LegalAction finalize = Assert.Single(
             finalDecision.LegalActions,
             action => Assert.IsType<InstallCardParameters>(action.Parameters).FinalizeSelection);
         InstallCardParameters finalParameters = Assert.IsType<InstallCardParameters>(finalize.Parameters);
-        Assert.Equal([firstCardId, secondCardId], finalParameters.SelectedReplacementCardIds);
+        Assert.Equal([firstCardId], finalParameters.SelectedReplacementCardIds);
         Assert.Equal(2, finalParameters.CreditCost);
 
         ApplyResult result = GameEngine.Apply(
-            selected.State,
+            selectedFirst.State,
             new ActionSubmission(finalDecision.Owner, finalDecision.Id, finalDecision.Revision, finalize.Id),
             behaviorCatalog,
             runtimeCatalog);
         Assert.True(result.Accepted, result.Rejection?.Message);
         Assert.Equal(ZoneKind.RunnerHeap, result.State.GetZone(result.State.GetCard(firstCardId).ZoneId).Kind);
-        Assert.Equal(ZoneKind.RunnerHeap, result.State.GetZone(result.State.GetCard(secondCardId).ZoneId).Kind);
         Assert.Equal(ZoneKind.RunnerRig, result.State.GetZone(result.State.GetCard(incomingCardId).ZoneId).Kind);
         Assert.True(result.State.GetCard(incomingCardId).FaceUp);
         Assert.Equal(3, result.State.GetPlayer(turnDecision.Owner).Credits);
@@ -340,7 +316,6 @@ public sealed class RunnerInstallActionTests
         Assert.Equal(
             [
                 EngineEventKinds.CardMoved,
-                EngineEventKinds.CardMoved,
                 EngineEventKinds.CreditsAdjusted,
                 EngineEventKinds.ClickSpent,
                 EngineEventKinds.CardMoved,
@@ -348,7 +323,7 @@ public sealed class RunnerInstallActionTests
                 EngineEventKinds.TurnTimingWindowOpened,
             ],
             result.Events.Select(value => value.Kind));
-        Assert.Equal(3, result.Events.Count(value => value.Kind == EngineEventKinds.CardMoved));
+        Assert.Equal(2, result.Events.Count(value => value.Kind == EngineEventKinds.CardMoved));
         CardInstalledEventPayload installed = Assert.IsType<CardInstalledEventPayload>(
             result.Events.Single(value => value.Kind == EngineEventKinds.CardInstalled).Payload);
         Assert.Equal(2, installed.Cost);
