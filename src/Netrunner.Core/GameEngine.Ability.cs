@@ -369,6 +369,7 @@ public static partial class GameEngine
             long credits = 0;
             long clicks = 0;
             long tags = 0;
+            long hostedCredits = 0;
             var counters = new Dictionary<string, long>(StringComparer.Ordinal);
             foreach (BehaviorCost cost in ability.Costs)
             {
@@ -383,6 +384,9 @@ public static partial class GameEngine
                         break;
                     case BehaviorCostKind.Tags:
                         tags = checked(tags + cost.Amount);
+                        break;
+                    case BehaviorCostKind.HostedCredits:
+                        hostedCredits = checked(hostedCredits + cost.Amount);
                         break;
                     case BehaviorCostKind.Counter:
                         string counterName = cost.CounterName!;
@@ -401,6 +405,19 @@ public static partial class GameEngine
             PlayerState controller = GetPlayer(working, controllerId);
             int availableTags = working.RulesState?.Players
                 .SingleOrDefault(value => value.PlayerId == controllerId)?.Tags ?? 0;
+            if (hostedCredits > 0)
+            {
+                CardCounterState? hostedPool = working.RulesState?.Counters.SingleOrDefault(counter =>
+                    counter.CardId == source.Id
+                    && counter.Purpose == CardCounterPurpose.HostedCredit);
+                if (hostedPool is null
+                    || !CardCounterRules.CanSpend(hostedPool, HostedCreditSpendRestriction.AbilityCost)
+                    || hostedCredits > hostedPool.Count)
+                {
+                    return false;
+                }
+            }
+
             return credits <= controller.Credits
                 && clicks <= controller.Clicks
                 && tags <= availableTags
@@ -755,6 +772,15 @@ public static partial class GameEngine
                     break;
                 case BehaviorCostKind.Tags:
                     ApplyTags(working, frame.Controller, checked(-cost.Amount));
+                    break;
+                case BehaviorCostKind.HostedCredits:
+                    ChangeHostedCreditPool(
+                        working,
+                        frame.SourceCardId,
+                        HostedCreditPoolOperation.Spend,
+                        cost.Amount,
+                        HostedCreditSpendRestriction.AbilityCost,
+                        recipient: null);
                     break;
                 case BehaviorCostKind.Counter:
                     if (!StableIdentifier.TryValidate(cost.CounterName))

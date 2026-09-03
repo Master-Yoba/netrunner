@@ -92,6 +92,223 @@ public sealed class PaidAbilityRuntimeTests
     }
 
     [Fact]
+    public void HostedCreditAbilityRequiresAnAbilityEligibleSourcePool()
+    {
+        CardDefinitionId definitionId = new("test:runtime-hosted-cost-legality");
+        CardInstanceId sourceId = new("card:runtime-hosted-cost-legality");
+        BehaviorPaidAbility ability = Ability(
+            "ability:hosted-cost-legality",
+            BehaviorAbilityTiming.AnyPaidWindow,
+            BehaviorAbilityActivation.PaidAbility,
+            [new BehaviorCost(BehaviorCostKind.HostedCredits)],
+            [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]);
+        BehaviorCatalog catalog = Catalog(definitionId, PlayerSide.Runner, [ability]);
+
+        foreach (HostedCreditSpendRestriction restriction in Enum.GetValues<HostedCreditSpendRestriction>())
+        {
+            GameState state = BuildRunnerState(
+                catalog,
+                definitionId,
+                sourceId,
+                credits: 5,
+                clicks: 4,
+                counters: [CardCounterState.CreateHostedCredit(sourceId, 1, restriction)]);
+            GameState prompt = BeginPaidPrompt(state, catalog);
+            bool legal = restriction is HostedCreditSpendRestriction.AbilityCost
+                or HostedCreditSpendRestriction.AnyCost;
+            Assert.Equal(
+                legal,
+                prompt.PendingDecision!.LegalActions.Any(candidate => candidate.Kind == ActionKind.UseAbility));
+        }
+
+        foreach (CardCounterState counter in new[]
+                 { new CardCounterState(sourceId, "charge", 1), new CardCounterState(sourceId, "virus", 1) })
+        {
+            GameState state = BuildRunnerState(
+                catalog,
+                definitionId,
+                sourceId,
+                credits: 5,
+                clicks: 4,
+                counters: [counter]);
+            GameState prompt = BeginPaidPrompt(state, catalog);
+            Assert.DoesNotContain(prompt.PendingDecision!.LegalActions, candidate => candidate.Kind == ActionKind.UseAbility);
+        }
+    }
+
+    [Fact]
+    public void RepeatedHostedCreditCostsAggregateAndPayInDeclaredOrder()
+    {
+        CardDefinitionId definitionId = new("test:runtime-hosted-cost-repeat");
+        CardInstanceId sourceId = new("card:runtime-hosted-cost-repeat");
+        BehaviorPaidAbility ability = Ability(
+            "ability:hosted-cost-repeat",
+            BehaviorAbilityTiming.AnyPaidWindow,
+            BehaviorAbilityActivation.PaidAbility,
+            [
+                new BehaviorCost(BehaviorCostKind.HostedCredits, 2),
+                new BehaviorCost(BehaviorCostKind.HostedCredits, 1),
+            ],
+            [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]);
+        BehaviorCatalog catalog = Catalog(definitionId, PlayerSide.Runner, [ability]);
+
+        GameState insufficient = BuildRunnerState(
+            catalog,
+            definitionId,
+            sourceId,
+            credits: 5,
+            clicks: 4,
+            counters: [CardCounterState.CreateHostedCredit(sourceId, 2, HostedCreditSpendRestriction.AnyCost)]);
+        GameState insufficientPrompt = BeginPaidPrompt(insufficient, catalog);
+        Assert.DoesNotContain(insufficientPrompt.PendingDecision!.LegalActions, candidate => candidate.Kind == ActionKind.UseAbility);
+
+        GameState state = BuildRunnerState(
+            catalog,
+            definitionId,
+            sourceId,
+            credits: 5,
+            clicks: 4,
+            counters: [CardCounterState.CreateHostedCredit(sourceId, 3, HostedCreditSpendRestriction.AnyCost)]);
+        GameState prompt = BeginPaidPrompt(state, catalog);
+        ApplyResult result = GameEngine.Apply(
+            prompt,
+            new ActionSubmission(
+                prompt.PendingDecision!.Owner,
+                prompt.PendingDecision.Id,
+                prompt.PendingDecision.Revision,
+                Assert.Single(prompt.PendingDecision.LegalActions, candidate => candidate.Kind == ActionKind.UseAbility).Id),
+            catalog);
+
+        Assert.True(result.Accepted, result.Rejection?.Message);
+        HostedCreditPoolChangedEventPayload[] events = result.Events
+            .Select(@event => @event.Payload)
+            .OfType<HostedCreditPoolChangedEventPayload>()
+            .ToArray();
+        Assert.Equal(2, events.Length);
+        Assert.All(events, value =>
+        {
+            Assert.Equal(HostedCreditPoolOperation.Spend, value.Operation);
+            Assert.Equal(sourceId, value.CardId);
+            Assert.Equal(HostedCreditSpendRestriction.AnyCost, value.Restriction);
+            Assert.Null(value.Recipient);
+        });
+        Assert.Equal([-2, -1], events.Select(value => value.Delta));
+        Assert.Equal([1, 0], events.Select(value => value.CountAfter));
+        Assert.False(events[0].Emptied);
+        Assert.True(events[1].Emptied);
+        Assert.Empty(result.State.RulesState!.Counters);
+    }
+
+    [Fact]
+    public void HostedCreditAbilityRejectsStaleInsufficientPoolAtomically()
+    {
+        CardDefinitionId definitionId = new("test:runtime-hosted-cost-stale");
+        CardInstanceId sourceId = new("card:runtime-hosted-cost-stale");
+        BehaviorPaidAbility ability = Ability(
+            "ability:hosted-cost-stale",
+            BehaviorAbilityTiming.AnyPaidWindow,
+            BehaviorAbilityActivation.PaidAbility,
+            [new BehaviorCost(BehaviorCostKind.HostedCredits, 2)],
+            [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]);
+        BehaviorCatalog catalog = Catalog(definitionId, PlayerSide.Runner, [ability]);
+        GameState state = BuildRunnerState(
+            catalog,
+            definitionId,
+            sourceId,
+            credits: 5,
+            clicks: 4,
+            counters: [CardCounterState.CreateHostedCredit(sourceId, 2, HostedCreditSpendRestriction.AbilityCost)]);
+        GameState prompt = BeginPaidPrompt(state, catalog);
+        LegalAction action = Assert.Single(prompt.PendingDecision!.LegalActions, candidate => candidate.Kind == ActionKind.UseAbility);
+        GameState stale = ReplaceCounters(
+            prompt,
+            [CardCounterState.CreateHostedCredit(sourceId, 1, HostedCreditSpendRestriction.AbilityCost)]);
+        string before = EngineJson.Serialize(stale);
+
+        ApplyResult result = GameEngine.Apply(
+            stale,
+            new ActionSubmission(stale.PendingDecision!.Owner, stale.PendingDecision.Id, stale.PendingDecision.Revision, action.Id),
+            catalog);
+
+        Assert.False(result.Accepted);
+        Assert.Equal(before, EngineJson.Serialize(result.State));
+        Assert.Equal(1, Assert.Single(result.State.RulesState!.Counters).Count);
+        Assert.DoesNotContain(result.State.ResolutionStack, frame => frame is AbilityFrame);
+        Assert.Empty(result.Events);
+    }
+
+    [Fact]
+    public void HostedCreditCostCheckpointResumesWithoutDoubleSpend()
+    {
+        CardDefinitionId definitionId = new("test:runtime-hosted-cost-checkpoint");
+        CardInstanceId sourceId = new("card:runtime-hosted-cost-checkpoint");
+        BehaviorPaidAbility ability = Ability(
+            "ability:hosted-cost-checkpoint",
+            BehaviorAbilityTiming.AnyPaidWindow,
+            BehaviorAbilityActivation.PaidAbility,
+            [new BehaviorCost(BehaviorCostKind.HostedCredits)],
+            [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]);
+        BehaviorCatalog catalog = Catalog(definitionId, PlayerSide.Runner, [ability]);
+        GameState state = BuildRunnerState(
+            catalog,
+            definitionId,
+            sourceId,
+            credits: 5,
+            clicks: 4,
+            counters: [CardCounterState.CreateHostedCredit(sourceId, 1, HostedCreditSpendRestriction.AbilityCost)]);
+        TurnFrame parent = new(
+            1,
+            ResolutionBehaviorIds.Turn,
+            PlayerSide.Runner,
+            state.Turn.TurnNumber,
+            TurnFrameStage.BeforeTurnPriority,
+            TurnPriorityWindowKind.PaidAndRez,
+            PlayerSide.Runner);
+        AbilityActionParameters parameters = Assert.Single(
+            GameEngine.MaterializeAbilityActionParameters(ReplaceStack(state, [parent]), catalog));
+        PlayerId runnerId = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+        AbilityFrame abilityFrame = new(
+            1,
+            ResolutionBehaviorIds.Ability,
+            parameters.DefinitionId,
+            parameters.SourceCardId,
+            parameters.AbilityKey,
+            runnerId,
+            parameters.Timing,
+            parameters.Activation,
+            parameters.Costs,
+            parameters.TargetCardIds,
+            parameters.Usage,
+            parameters.CatalogFingerprint,
+            parameters.DefinitionFingerprint,
+            parameters.SourceZoneId,
+            parameters.SourceZoneKind,
+            AbilityLifecycleStage.PayCosts,
+            BehaviorFrameIdentity.Compute(parent));
+
+        GameState checkpoint = GameEngine.BeginResolution(
+            ReplaceStack(state, [parent, abilityFrame]),
+            abilityFrame,
+            catalog,
+            maxResolutionSteps: 1);
+        Assert.Equal(AbilityLifecycleStage.CostCheckpoint, Assert.IsType<AbilityFrame>(checkpoint.ResolutionStack[^1]).Stage);
+        Assert.Empty(checkpoint.RulesState!.Counters);
+        long checkpointSequence = checkpoint.EventSequence;
+        string json = EngineJson.Serialize(checkpoint);
+        GameState restored = EngineJson.DeserializeState(json, catalog);
+        Assert.Equal(json, EngineJson.Serialize(restored));
+
+        AbilityFrame restoredFrame = Assert.IsType<AbilityFrame>(restored.ResolutionStack[^1]);
+        GameState resumed = GameEngine.BeginResolution(restored, restoredFrame, catalog);
+        Assert.Empty(resumed.RulesState!.Counters);
+        // Resuming completes the child and reopens the parent paid window,
+        // which emits exactly one fresh timing-window event; the hosted-cost
+        // payment itself must not be repeated.
+        Assert.Equal(checkpointSequence + 1, resumed.EventSequence);
+        Assert.Equal(5, resumed.GetPlayer(sourceOwner: PlayerSide.Runner).Credits);
+    }
+
+    [Fact]
     public void CostCheckpointRoundTripsAndResumesTheSameAbilityFrame()
     {
         CardDefinitionId definitionId = new("test:runtime-checkpoint");
@@ -579,6 +796,23 @@ public sealed class PaidAbilityRuntimeTests
         GameState state,
         IReadOnlyList<PlayerState> players) =>
         ReplaceState(state, players: players);
+
+    private static GameState ReplaceCounters(
+        GameState state,
+        IReadOnlyList<CardCounterState> counters)
+    {
+        RulesState defaults = state.RulesState
+            ?? throw new InvalidOperationException("The test state must have rules state.");
+        RulesState rules = new(
+            defaults.Version,
+            defaults.Players,
+            defaults.Programs,
+            counters,
+            defaults.LingeringEffects,
+            defaults.Triggers,
+            defaults.Interrupts);
+        return ReplaceState(state, rulesState: rules);
+    }
 
     private static GameState ReplaceStack(GameState state, IReadOnlyList<ResolutionFrame> stack) =>
         ReplaceState(state, resolutionStack: stack);

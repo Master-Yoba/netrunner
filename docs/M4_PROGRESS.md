@@ -2798,3 +2798,25 @@ errors; runtime action expansion and full verification remain pending.
   hashes above with 32 replay-verified checkpoints. Hosted-credit ability
   affordability and payment, public observation, leave-play cleanup,
   empty-pool follow-up, and card bindings remain separate unclaimed checkpoints.
+
+### 2026-09-03 — Checkpoint B2b-2 hosted-credit ability costs accepted
+
+- Luna Max connected `BehaviorCostKind.HostedCredits` to the paid-ability
+  legality and payment lifecycle. Materialization and the cost checkpoint use
+  the same aggregate affordability projection over the activating physical
+  card's single typed pool. AbilityCost and AnyCost pools are eligible;
+  CardEffectOnly, RunCost, Generic, Virus, missing, stale, and insufficient
+  pools fail closed before any cost mutates state.
+- Successful payment retains declaration order and routes every hosted-credit
+  cost through the B2b-1 transition boundary. Repeated costs therefore emit
+  distinct ordered Spend events with null recipients, the pool's actual
+  restriction, successive counts, and `Emptied` only on the final
+  positive-to-zero transition. The whole bundle is preflighted first, so a
+  rejected or stale action cannot partially debit either counters or wallet.
+- Save/load coverage pins the paid CostCheckpoint after the pool debit and
+  proves that resuming it does not spend twice. Root independently passed
+  focused paid ability runtime/materialization tests 21/21, complete Core
+  545/545, the zero-warning solution build, Core formatting, and
+  `git diff --check`. The direct M2 proof remains byte-stable at the schema-3
+  hashes above with 32 replay-verified checkpoints. Observation, leave-play
+  cleanup, empty-pool follow-up, and card bindings remain unclaimed.
