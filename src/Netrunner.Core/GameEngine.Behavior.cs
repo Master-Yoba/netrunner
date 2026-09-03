@@ -1509,7 +1509,7 @@ public static partial class GameEngine
     {
         if (target.Kind is BehaviorTargetKind.ZoneCard or BehaviorTargetKind.ZoneCards)
         {
-            ZoneState zone = GetBehaviorZone(working, target.Zone!.Value, null);
+            ZoneState zone = GetBehaviorZone(working, target.Zone!.Value, target.Filter?.OwnerSide);
             return zone.CardIds
                 .Where(cardId => !excludedCardId.HasValue || cardId != excludedCardId.Value)
                 .Where(cardId => BehaviorCardMatches(working, cardId, target.Filter))
@@ -2145,11 +2145,12 @@ public static partial class GameEngine
             ZoneState source = ZoneForCard(working, cardId);
             BehaviorSetAsideCard? frozenSelection = frame.SetAside.SingleOrDefault(selected => selected.CardId == cardId);
             if (instruction.SourceZone.HasValue
-                && !BehaviorZoneMatches(instruction.SourceZone.Value, source.Kind)
+                && !BehaviorZoneMatches(instruction.SourceZone.Value, source.Kind, card.OwnerSide)
                 && (frozenSelection is null
                     || !BehaviorZoneMatches(
                         instruction.SourceZone.Value,
-                        working.Zones.Single(zone => zone.Id == frozenSelection.OriginalZoneId).Kind)))
+                        working.Zones.Single(zone => zone.Id == frozenSelection.OriginalZoneId).Kind,
+                        card.OwnerSide)))
             {
                 throw new ResolutionFailureException($"Behavior card '{cardId}' is not in the declared source zone.");
             }
@@ -2551,21 +2552,30 @@ public static partial class GameEngine
         working.Zones.SingleOrDefault(zone => zone.CardIds.Contains(cardId))
         ?? throw new ResolutionFailureException($"Card '{cardId}' does not belong to a zone.");
 
-    private static bool BehaviorZoneMatches(BehaviorZone expected, ZoneKind actual) => expected switch
-    {
-        BehaviorZone.Deck => actual is ZoneKind.CorpDeck or ZoneKind.RunnerStack,
-        BehaviorZone.Headquarters => actual == ZoneKind.CorpHand,
-        BehaviorZone.Archives => actual == ZoneKind.CorpDiscard,
-        BehaviorZone.Grip => actual == ZoneKind.RunnerGrip,
-        BehaviorZone.Stack => actual == ZoneKind.RunnerStack,
-        BehaviorZone.Heap => actual == ZoneKind.RunnerHeap,
-        BehaviorZone.Rig => actual == ZoneKind.RunnerRig,
-        BehaviorZone.PlayArea => actual == ZoneKind.RunnerPlayArea,
-        BehaviorZone.ScoreArea => actual is ZoneKind.CorpScore or ZoneKind.RunnerScore,
-        BehaviorZone.ServerIce => actual == ZoneKind.ServerIce,
-        BehaviorZone.ServerRoot => actual == ZoneKind.ServerRoot,
-        _ => false,
-    };
+    private static bool BehaviorZoneMatches(
+        BehaviorZone expected,
+        ZoneKind actual,
+        PlayerSide? ownerSide = null) => expected switch
+        {
+            BehaviorZone.Deck => actual is ZoneKind.CorpDeck or ZoneKind.RunnerStack,
+            BehaviorZone.Headquarters => actual == ZoneKind.CorpHand,
+            BehaviorZone.Archives => actual == ZoneKind.CorpDiscard,
+            BehaviorZone.Grip => actual == ZoneKind.RunnerGrip,
+            BehaviorZone.Stack => actual == ZoneKind.RunnerStack,
+            BehaviorZone.Heap => actual == ZoneKind.RunnerHeap,
+            BehaviorZone.Rig => actual == ZoneKind.RunnerRig,
+            BehaviorZone.PlayArea => actual == ZoneKind.RunnerPlayArea,
+            BehaviorZone.ScoreArea => actual is ZoneKind.CorpScore or ZoneKind.RunnerScore,
+            BehaviorZone.ServerIce => actual == ZoneKind.ServerIce,
+            BehaviorZone.ServerRoot => actual == ZoneKind.ServerRoot,
+            BehaviorZone.RemovedFromGame => ownerSide switch
+            {
+                PlayerSide.Corp => actual == ZoneKind.CorpRemovedFromGame,
+                PlayerSide.Runner => actual == ZoneKind.RunnerRemovedFromGame,
+                _ => false,
+            },
+            _ => false,
+        };
 
     private static ZoneState GetBehaviorZone(WorkingState working, BehaviorZone zone, PlayerSide? ownerSide)
     {
@@ -2583,6 +2593,9 @@ public static partial class GameEngine
             BehaviorZone.ScoreArea => side == PlayerSide.Corp ? ZoneKind.CorpScore : ZoneKind.RunnerScore,
             BehaviorZone.ServerIce => ZoneKind.ServerIce,
             BehaviorZone.ServerRoot => ZoneKind.ServerRoot,
+            BehaviorZone.RemovedFromGame => side == PlayerSide.Corp
+                ? ZoneKind.CorpRemovedFromGame
+                : ZoneKind.RunnerRemovedFromGame,
             _ => throw new ResolutionFailureException($"Behavior zone '{zone}' is not executable."),
         };
 
@@ -2595,6 +2608,19 @@ public static partial class GameEngine
             }
 
             var created = new ZoneState(working.Allocator.NextZoneId(), kind, PlayerSide.Runner);
+            working.Zones.Add(created);
+            return created;
+        }
+
+        if (kind is ZoneKind.CorpRemovedFromGame or ZoneKind.RunnerRemovedFromGame)
+        {
+            ZoneState? existing = working.Zones.FirstOrDefault(candidate => candidate.Kind == kind && candidate.ServerId is null);
+            if (existing is not null)
+            {
+                return existing;
+            }
+
+            var created = new ZoneState(working.Allocator.NextZoneId(), kind, side);
             working.Zones.Add(created);
             return created;
         }

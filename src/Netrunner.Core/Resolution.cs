@@ -2001,7 +2001,8 @@ public static class ResolutionFrameValidator
                     or BehaviorCostKind.Tags
                     or BehaviorCostKind.HostedCredits
                     or BehaviorCostKind.Additional => cost.Amount <= 0,
-                BehaviorCostKind.TrashSelf => cost.Amount != 1,
+                BehaviorCostKind.TrashSelf
+                    or BehaviorCostKind.RemoveSelfFromGame => cost.Amount != 1,
                 _ => false,
             };
             if (invalidAmount)
@@ -2045,6 +2046,15 @@ public static class ResolutionFrameValidator
                     $"{costPath}.additionalKey",
                     "Only additional costs may carry an additional-cost key."));
             }
+        }
+
+        if (costs.Count(static cost => cost is not null
+                && cost.Kind is BehaviorCostKind.TrashSelf or BehaviorCostKind.RemoveSelfFromGame) > 1)
+        {
+            violations.Add(new StateInvariantViolation(
+                "resolution.duplicate-ability-self-movement",
+                path,
+                "An ability may not declare more than one self-movement cost."));
         }
     }
 

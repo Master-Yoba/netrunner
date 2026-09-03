@@ -34,6 +34,10 @@ public enum ZoneKind
     /// choice is pending, then returned or moved by the behavior cursor.
     /// </summary>
     BehaviorSetAside,
+    /// <summary>Lazy public Corp removed-from-game zone.</summary>
+    CorpRemovedFromGame,
+    /// <summary>Lazy public Runner removed-from-game zone.</summary>
+    RunnerRemovedFromGame,
 }
 
 /// <summary>The stable topology kind of a Corp server.</summary>

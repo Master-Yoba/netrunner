@@ -402,6 +402,43 @@ public sealed class BehaviorContractsTests
     }
 
     [Fact]
+    public void RemoveSelfFromGameCostHasAClosedSchemaAndFingerprint()
+    {
+        BehaviorCost remove = new(BehaviorCostKind.RemoveSelfFromGame);
+        BehaviorCost restored = EngineJson.Deserialize<BehaviorCost>(EngineJson.Serialize(remove));
+
+        Assert.Equal(BehaviorCostKind.RemoveSelfFromGame, remove.Kind);
+        Assert.Equal(1, remove.Amount);
+        Assert.Equal(remove, restored);
+        Assert.Contains("\"kind\":\"removeSelfFromGame\"", EngineJson.Serialize(remove), StringComparison.Ordinal);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorCost(BehaviorCostKind.RemoveSelfFromGame, 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorCost(BehaviorCostKind.RemoveSelfFromGame, 2));
+        Assert.Throws<ArgumentException>(() => new BehaviorCost(
+            BehaviorCostKind.RemoveSelfFromGame,
+            counterName: "counter"));
+        Assert.Throws<ArgumentException>(() => new BehaviorCost(
+            BehaviorCostKind.RemoveSelfFromGame,
+            additionalKey: "additional"));
+
+        CardBehaviorDefinition removeDefinition = new(
+            SearchCardId,
+            PlayerSide.Runner,
+            costs: [remove]);
+        CardBehaviorDefinition trashDefinition = new(
+            SearchCardId,
+            PlayerSide.Runner,
+            costs: [new BehaviorCost(BehaviorCostKind.TrashSelf)]);
+        Assert.NotEqual(removeDefinition.Costs[0], trashDefinition.Costs[0]);
+        Assert.NotEqual(
+            new BehaviorCatalogBuilder("test:remove-cost").Add(removeDefinition).Build().Fingerprint,
+            new BehaviorCatalogBuilder("test:remove-cost").Add(trashDefinition).Build().Fingerprint);
+        Assert.Throws<ArgumentException>(() => new CardBehaviorDefinition(
+            SearchCardId,
+            PlayerSide.Runner,
+            costs: [remove, new BehaviorCost(BehaviorCostKind.TrashSelf)]));
+    }
+
+    [Fact]
     public void CardDefinitionFreezesInstructionTreeAndStaticModifiers()
     {
         BehaviorChoiceSpec choice = new(

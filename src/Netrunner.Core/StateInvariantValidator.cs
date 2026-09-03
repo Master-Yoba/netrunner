@@ -520,6 +520,16 @@ public static class StateInvariantValidator
                         path,
                         $"Runner heap card '{card.Id}' must be faceup after entering the public heap.");
                 }
+
+                if (zone.Kind is ZoneKind.CorpRemovedFromGame or ZoneKind.RunnerRemovedFromGame
+                    && !card.FaceUp)
+                {
+                    Add(
+                        violations,
+                        "cards.removed-from-game-facedown",
+                        path,
+                        $"Removed-from-game card '{card.Id}' must be faceup.");
+                }
             }
         }
 
@@ -549,8 +559,8 @@ public static class StateInvariantValidator
 
         PlayerSide? expectedOwner = zone.Kind switch
         {
-            ZoneKind.CorpDeck or ZoneKind.CorpHand or ZoneKind.CorpDiscard or ZoneKind.CorpScore or ZoneKind.CorpPlayArea => PlayerSide.Corp,
-            ZoneKind.RunnerStack or ZoneKind.RunnerGrip or ZoneKind.RunnerPlayArea or ZoneKind.RunnerHeap or ZoneKind.RunnerRig or ZoneKind.RunnerScore => PlayerSide.Runner,
+            ZoneKind.CorpDeck or ZoneKind.CorpHand or ZoneKind.CorpDiscard or ZoneKind.CorpScore or ZoneKind.CorpPlayArea or ZoneKind.CorpRemovedFromGame => PlayerSide.Corp,
+            ZoneKind.RunnerStack or ZoneKind.RunnerGrip or ZoneKind.RunnerPlayArea or ZoneKind.RunnerHeap or ZoneKind.RunnerRig or ZoneKind.RunnerScore or ZoneKind.RunnerRemovedFromGame => PlayerSide.Runner,
             ZoneKind.ServerIce or ZoneKind.ServerRoot => PlayerSide.Corp,
             ZoneKind.BehaviorSetAside => null,
             _ => null,
@@ -628,6 +638,19 @@ public static class StateInvariantValidator
                     "zones.required-kind-count",
                     "zones",
                     $"Found {playAreaCount} '{playAreaKind}' zones; at most one is allowed.");
+            }
+        }
+
+        foreach (ZoneKind removedKind in new[] { ZoneKind.CorpRemovedFromGame, ZoneKind.RunnerRemovedFromGame })
+        {
+            int removedCount = state.Zones.Count(zone => zone is not null && zone.Kind == removedKind);
+            if (removedCount > 1)
+            {
+                Add(
+                    violations,
+                    "zones.required-kind-count",
+                    "zones",
+                    $"Found {removedCount} '{removedKind}' zones; at most one is allowed.");
             }
         }
     }
@@ -4894,7 +4917,8 @@ public static class StateInvariantValidator
                     or BehaviorCostKind.Tags
                     or BehaviorCostKind.HostedCredits
                     or BehaviorCostKind.Additional => cost.Amount <= 0,
-                BehaviorCostKind.TrashSelf => cost.Amount != 1,
+                BehaviorCostKind.TrashSelf
+                    or BehaviorCostKind.RemoveSelfFromGame => cost.Amount != 1,
                 _ => false,
             };
             if (invalidAmount)
@@ -4923,6 +4947,16 @@ public static class StateInvariantValidator
             {
                 Add(violations, "decision.invalid-ability-additional-cost", $"{costPath}.additionalKey", "Only additional costs may carry an additional-cost key.");
             }
+        }
+
+        if (costs.Count(static cost => cost is not null
+                && cost.Kind is BehaviorCostKind.TrashSelf or BehaviorCostKind.RemoveSelfFromGame) > 1)
+        {
+            Add(
+                violations,
+                "decision.duplicate-ability-self-movement",
+                path,
+                "An ability may not declare more than one self-movement cost.");
         }
     }
 
@@ -8667,7 +8701,7 @@ public static class StateInvariantValidator
     {
         if (target.Kind is BehaviorTargetKind.ZoneCard or BehaviorTargetKind.ZoneCards)
         {
-            ZoneState? zone = FindBehaviorZone(state, target.Zone!.Value);
+            ZoneState? zone = FindBehaviorZone(state, target.Zone!.Value, target.Filter?.OwnerSide);
             return zone is null
                 ? []
                 : zone.CardIds
@@ -8693,29 +8727,38 @@ public static class StateInvariantValidator
         return [];
     }
 
-    private static ZoneState? FindBehaviorZone(GameState state, BehaviorZone zone) => zone switch
-    {
-        BehaviorZone.Deck => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.CorpDeck && value.ServerId is null),
-        BehaviorZone.Headquarters => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.CorpHand && value.ServerId is null),
-        BehaviorZone.Archives => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.CorpDiscard && value.ServerId is null),
-        BehaviorZone.Grip => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.RunnerGrip && value.ServerId is null),
-        BehaviorZone.Stack => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.RunnerStack && value.ServerId is null),
-        BehaviorZone.Heap => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.RunnerHeap && value.ServerId is null),
-        BehaviorZone.Rig => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.RunnerRig && value.ServerId is null),
-        BehaviorZone.PlayArea => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.RunnerPlayArea && value.ServerId is null),
-        BehaviorZone.ScoreArea => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.CorpScore && value.ServerId is null),
-        BehaviorZone.ServerRoot => state.Servers
-            .Where(server => server.Kind == ServerKind.Remote)
-            .OrderBy(server => server.Id.Value, StringComparer.Ordinal)
-            .Select(server => state.Zones.FirstOrDefault(zoneState => zoneState.Id == server.RootZoneId))
-            .FirstOrDefault(value => value is not null),
-        BehaviorZone.ServerIce => state.Servers
-            .Where(server => server.Kind == ServerKind.Remote)
-            .OrderBy(server => server.Id.Value, StringComparer.Ordinal)
-            .Select(server => state.Zones.FirstOrDefault(zoneState => zoneState.Id == server.IceZoneId))
-            .FirstOrDefault(value => value is not null),
-        _ => null,
-    };
+    private static ZoneState? FindBehaviorZone(
+        GameState state,
+        BehaviorZone zone,
+        PlayerSide? ownerSide = null) => zone switch
+        {
+            BehaviorZone.Deck => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.CorpDeck && value.ServerId is null),
+            BehaviorZone.Headquarters => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.CorpHand && value.ServerId is null),
+            BehaviorZone.Archives => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.CorpDiscard && value.ServerId is null),
+            BehaviorZone.Grip => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.RunnerGrip && value.ServerId is null),
+            BehaviorZone.Stack => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.RunnerStack && value.ServerId is null),
+            BehaviorZone.Heap => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.RunnerHeap && value.ServerId is null),
+            BehaviorZone.Rig => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.RunnerRig && value.ServerId is null),
+            BehaviorZone.PlayArea => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.RunnerPlayArea && value.ServerId is null),
+            BehaviorZone.ScoreArea => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.CorpScore && value.ServerId is null),
+            BehaviorZone.RemovedFromGame => ownerSide switch
+            {
+                PlayerSide.Corp => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.CorpRemovedFromGame && value.ServerId is null),
+                PlayerSide.Runner => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.RunnerRemovedFromGame && value.ServerId is null),
+                _ => null,
+            },
+            BehaviorZone.ServerRoot => state.Servers
+                .Where(server => server.Kind == ServerKind.Remote)
+                .OrderBy(server => server.Id.Value, StringComparer.Ordinal)
+                .Select(server => state.Zones.FirstOrDefault(zoneState => zoneState.Id == server.RootZoneId))
+                .FirstOrDefault(value => value is not null),
+            BehaviorZone.ServerIce => state.Servers
+                .Where(server => server.Kind == ServerKind.Remote)
+                .OrderBy(server => server.Id.Value, StringComparer.Ordinal)
+                .Select(server => state.Zones.FirstOrDefault(zoneState => zoneState.Id == server.IceZoneId))
+                .FirstOrDefault(value => value is not null),
+            _ => null,
+        };
 
     private static bool IsInstalledCard(GameState state, CardInstanceId cardId)
     {

@@ -240,10 +240,10 @@ public sealed class BehaviorPaidAbility : IEquatable<BehaviorPaidAbility>
                 nameof(Costs));
         }
 
-        if (Costs.Count(static cost => cost.Kind == BehaviorCostKind.TrashSelf) > 1)
+        if (Costs.Count(static cost => cost.Kind is BehaviorCostKind.TrashSelf or BehaviorCostKind.RemoveSelfFromGame) > 1)
         {
             throw new ArgumentException(
-                "An ability may not declare TrashSelf more than once.",
+                "An ability may not declare more than one self-movement cost.",
                 nameof(Costs));
         }
 

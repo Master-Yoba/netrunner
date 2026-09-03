@@ -97,6 +97,7 @@ public sealed record BehaviorCost
             or BehaviorCostKind.Counter
             or BehaviorCostKind.Tags
             or BehaviorCostKind.HostedCredits
+            or BehaviorCostKind.RemoveSelfFromGame
             or BehaviorCostKind.Additional)
         {
             ArgumentOutOfRangeException.ThrowIfLessThan(
@@ -105,11 +106,12 @@ public sealed record BehaviorCost
                 "A non-credit behavior cost amount must be positive.");
         }
 
-        if (kind == BehaviorCostKind.TrashSelf && amount != 1)
+        if ((kind is BehaviorCostKind.TrashSelf or BehaviorCostKind.RemoveSelfFromGame)
+            && amount != 1)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(amount),
-                "A TrashSelf behavior cost must have exactly one unit.");
+                "A self-movement behavior cost must have exactly one unit.");
         }
 
         if (kind == BehaviorCostKind.Counter
@@ -171,6 +173,7 @@ public enum BehaviorCostKind
     LoseClick,
     Additional,
     HostedCredits,
+    RemoveSelfFromGame,
 }
 
 /// <summary>A serializable condition term in a compiled behavior contract.</summary>
@@ -1028,6 +1031,12 @@ public sealed class CardBehaviorDefinition
 
         Controller = controller;
         Costs = Freeze(costs);
+        if (Costs.Count(static cost => cost.Kind is BehaviorCostKind.TrashSelf or BehaviorCostKind.RemoveSelfFromGame) > 1)
+        {
+            throw new ArgumentException(
+                "A behavior may not declare more than one self-movement cost.",
+                nameof(costs));
+        }
         Conditions = Freeze(conditions);
         Targets = Freeze(targets);
         Instructions = Freeze(instructions);

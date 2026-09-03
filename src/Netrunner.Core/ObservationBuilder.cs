@@ -178,6 +178,23 @@ public static class ObservationBuilder
                 .ToArray();
         }
 
+        // Removed-from-game zones are lazy so the default topology and its
+        // observation golden remain unchanged. Once either side's zone exists,
+        // it is a public zone and is projected to both viewers.
+        if (state.Zones.Any(zone => zone.Kind == ZoneKind.CorpRemovedFromGame && zone.ServerId is null))
+        {
+            publicState["corpRemovedFromGame"] = ZoneCards(state, ZoneKind.CorpRemovedFromGame)
+                .Select(card => CardView(state, card))
+                .ToArray();
+        }
+
+        if (state.Zones.Any(zone => zone.Kind == ZoneKind.RunnerRemovedFromGame && zone.ServerId is null))
+        {
+            publicState["runnerRemovedFromGame"] = ZoneCards(state, ZoneKind.RunnerRemovedFromGame)
+                .Select(card => CardView(state, card))
+                .ToArray();
+        }
+
         RunState? run = state.RunState;
         if (run is not null)
         {

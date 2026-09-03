@@ -2842,3 +2842,22 @@ errors; runtime action expansion and full verification remain pending.
   formatting, and `git diff --check`. The direct M2 proof retains the schema-3
   initial/final/event hashes and all 32 replay-verified checkpoints. Triggered
   empty-pool follow-up and card bindings remain unclaimed.
+
+### 2026-09-03 — Checkpoint B3a-1 removed-from-game schema accepted
+
+- Luna Max added a distinct `RemoveSelfFromGame` cost term; it is not encoded
+  as trash. Generic and paid declarations permit exactly one total
+  self-movement cost, and the new kind participates in construction,
+  structural action/frame validation, JSON, equality, cloning, and catalog
+  fingerprints. Runtime payment deliberately remains fail-closed until B3a-2.
+- Removed cards have separate lazy Corp and Runner zones. Each zone is
+  side-owned, serverless, public, and unique when present; default games do not
+  allocate either zone, preserving the existing topology and canonical hashes.
+  `BehaviorZone.RemovedFromGame` resolves by an explicit target owner, and
+  observation conditionally publishes each present zone to both viewers.
+- Root rejected the first draft because a facedown card could occupy the
+  nominally public zone and disappear from observation. The accepted invariant
+  requires every RFG card to be faceup. Root independently passed 24/24 focused
+  contract/topology tests, complete Core 555/555, the zero-warning solution
+  build, Core formatting, and `git diff --check`; the direct M2 proof remains
+  byte-stable at the schema-3 hashes with 32 replay-verified checkpoints.

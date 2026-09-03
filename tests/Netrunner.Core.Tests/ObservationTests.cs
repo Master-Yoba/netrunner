@@ -13,6 +13,57 @@ namespace Netrunner.Core.Tests;
 public sealed class ObservationTests
 {
     [Fact]
+    public void RemovedFromGameZonesArePublicOnlyAfterTheirLazyZoneExists()
+    {
+        GameState baseline = GameState.CreateNew(42);
+        ZoneId corpZoneId = new("zone:obs-corp-rfg");
+        ZoneId runnerZoneId = new("zone:obs-runner-rfg");
+        CardInstanceId corpCardId = new("card:obs-corp-rfg");
+        CardInstanceId runnerCardId = new("card:obs-runner-rfg");
+        CardInstanceState corpCard = new(
+            corpCardId,
+            new CardDefinitionId("def:obs-corp-rfg"),
+            corpZoneId,
+            PlayerSide.Corp,
+            faceUp: true);
+        CardInstanceState runnerCard = new(
+            runnerCardId,
+            new CardDefinitionId("def:obs-runner-rfg"),
+            runnerZoneId,
+            PlayerSide.Runner,
+            faceUp: true);
+        GameState state = new(
+            baseline.GameId,
+            baseline.RulesVersion,
+            baseline.CardDataVersion,
+            players: baseline.Players,
+            cards: [corpCard, runnerCard],
+            zones: baseline.Zones
+                .Append(new ZoneState(corpZoneId, ZoneKind.CorpRemovedFromGame, PlayerSide.Corp, null, [corpCardId]))
+                .Append(new ZoneState(runnerZoneId, ZoneKind.RunnerRemovedFromGame, PlayerSide.Runner, null, [runnerCardId])),
+            servers: baseline.Servers,
+            turn: baseline.Turn,
+            outcome: baseline.Outcome,
+            randomState: baseline.RandomState,
+            allocator: baseline.Allocator,
+            schemaVersion: baseline.SchemaVersion,
+            initialSeed: baseline.InitialSeed);
+
+        foreach (PlayerSide viewer in new[] { PlayerSide.Corp, PlayerSide.Runner })
+        {
+            Observation observation = ObservationBuilder.Build(state, viewer);
+            IReadOnlyList<object?> corpRfg = Assert.IsAssignableFrom<IReadOnlyList<object?>>(
+                observation.PublicState["corpRemovedFromGame"]);
+            IReadOnlyList<object?> runnerRfg = Assert.IsAssignableFrom<IReadOnlyList<object?>>(
+                observation.PublicState["runnerRemovedFromGame"]);
+            Assert.Equal(corpCardId.Value, ((Dictionary<string, object?>)Assert.Single(corpRfg)!)!["id"]);
+            Assert.Equal(runnerCardId.Value, ((Dictionary<string, object?>)Assert.Single(runnerRfg)!)!["id"]);
+            Assert.DoesNotContain("corpRemovedFromGame", EngineJson.Serialize(observation.PrivateState));
+            Assert.DoesNotContain("runnerRemovedFromGame", EngineJson.Serialize(observation.PrivateState));
+        }
+    }
+
+    [Fact]
     public void BeforeRunBothViewersHaveTheExactPinnedShape()
     {
         (GameState state, _) = BuildState();

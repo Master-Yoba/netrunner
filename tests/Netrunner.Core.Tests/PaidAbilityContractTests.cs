@@ -50,6 +50,13 @@ public sealed class PaidAbilityContractTests
             [],
             [],
             BehaviorAbilityUsageLimit.Unlimited));
+
+        Assert.Throws<ArgumentException>(() => Ability(
+            costs:
+            [
+                new BehaviorCost(BehaviorCostKind.TrashSelf),
+                new BehaviorCost(BehaviorCostKind.RemoveSelfFromGame),
+            ]));
     }
 
     [Fact]
@@ -66,6 +73,7 @@ public sealed class PaidAbilityContractTests
             new BehaviorCost(BehaviorCostKind.HostedCredits, 1),
             new BehaviorCost(BehaviorCostKind.Additional, 1, additionalKey: "additional"),
             new BehaviorCost(BehaviorCostKind.TrashSelf, 1),
+            new BehaviorCost(BehaviorCostKind.RemoveSelfFromGame, 1),
         })
         {
             Assert.True(cost.Amount > 0 || cost.Kind == BehaviorCostKind.Credits);
@@ -80,6 +88,8 @@ public sealed class PaidAbilityContractTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorCost(BehaviorCostKind.Additional, 0, additionalKey: "additional"));
         Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorCost(BehaviorCostKind.TrashSelf, 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorCost(BehaviorCostKind.TrashSelf, 2));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorCost(BehaviorCostKind.RemoveSelfFromGame, 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorCost(BehaviorCostKind.RemoveSelfFromGame, 2));
         Assert.Throws<ArgumentException>(() => new BehaviorCost(
             BehaviorCostKind.HostedCredits,
             1,
