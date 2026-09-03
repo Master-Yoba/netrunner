@@ -669,6 +669,36 @@ public sealed record RunState
         ActiveRunEventId,
         LingeringEffects);
 
+    /// <summary>
+    /// Replaces the live run priority cursor while retaining the exact run
+    /// timing/source/access state. Ability completion uses this boundary to
+    /// clear consecutive passes without advancing the run step.
+    /// </summary>
+    internal RunState WithPriority(RunPriorityState? priority) => new(
+        Version,
+        Id,
+        AttackedServer,
+        InitiatingSide,
+        InitiatingPlayer,
+        InitiatingSource,
+        PhaseFor(Step),
+        Step,
+        CurrentIceIndex,
+        CurrentIceId,
+        Successful,
+        Unsuccessful,
+        EndReason,
+        priority,
+        Encounter,
+        BreachCandidates,
+        RandomAccessLimit,
+        ChosenAccessCards,
+        AccessedCards,
+        AccessState,
+        RunCredits,
+        ActiveRunEventId,
+        LingeringEffects);
+
     internal RunState WithEncounter(RunEncounterState encounter) => new(
         Version,
         Id,

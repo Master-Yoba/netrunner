@@ -207,7 +207,7 @@ public sealed class PaidAbilityMaterializationTests
             4,
             0,
             true,
-            true,
+            false,
             false,
             false,
             usedAbilityKeys: [key, key]);

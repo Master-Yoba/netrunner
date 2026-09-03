@@ -1648,6 +1648,15 @@ public static class ResolutionFrameValidator
                         "Behavior parent frame identities must be stable identifiers."));
                 }
 
+                if (behavior.AbilityKey is not null
+                    && !StableIdentifier.TryValidate(behavior.AbilityKey))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-behavior-ability-key",
+                        $"{path}.abilityKey",
+                        "An ability behavior child key must be a stable identifier."));
+                }
+
                 ValidateBehaviorInstructions(behavior.RootInstructions, $"{path}.rootInstructions", violations);
                 ValidateBehaviorInstructions(behavior.Instructions, $"{path}.instructions", violations);
                 if (behavior.InstructionCursor < 0
@@ -2513,7 +2522,8 @@ internal static class ResolutionFrameCloner
             behavior.FrameIdentity,
             behavior.SourceZoneId,
             behavior.SourceZoneKind,
-            behavior.ParentFrameIdentity),
+            behavior.ParentFrameIdentity,
+            behavior.AbilityKey),
         AbilityFrame ability => new AbilityFrame(
             ability.Version,
             ability.BehaviorId,

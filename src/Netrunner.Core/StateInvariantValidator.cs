@@ -1288,27 +1288,87 @@ public static class StateInvariantValidator
         RunState run,
         List<StateInvariantViolation> violations)
     {
-        bool standalone = state.ResolutionStack.Count == 1
-            && state.ResolutionStack[0] is RunTimingFrame standaloneFrame
-            && standaloneFrame.RunId == run.Id
-            && standaloneFrame.Step == run.Step;
-        if (standalone)
-        {
-            return;
-        }
-
-        bool nested = state.ResolutionStack.Count == 2
+        int[] matchingRunFrameIndexes = state.ResolutionStack
+            .Select((frame, index) => (frame, index))
+            .Where(value => value.frame is RunTimingFrame timing
+                && timing.RunId == run.Id
+                && timing.Step == run.Step)
+            .Select(value => value.index)
+            .ToArray();
+        int runFrameIndex = matchingRunFrameIndexes.Length == 1
+            ? matchingRunFrameIndexes[0]
+            : -1;
+        bool standalone = runFrameIndex == 0
+            && state.ResolutionStack[0] is RunTimingFrame;
+        bool nested = runFrameIndex == 1
             && state.ResolutionStack[0] is TurnFrame turnFrame
-            && state.ResolutionStack[1] is RunTimingFrame nestedFrame
-            && nestedFrame.RunId == run.Id
-            && nestedFrame.Step == run.Step;
-        if (!nested)
+            && state.ResolutionStack[1] is RunTimingFrame;
+        if (!standalone && !nested)
         {
             Add(
                 violations,
                 "run.stack-topology",
                 "resolutionStack",
-                "A live run must be either one standalone RunTimingFrame or an exact Runner TurnFrame/RunTimingFrame nesting.");
+                "A live run must begin with one standalone RunTimingFrame or an exact Runner TurnFrame/RunTimingFrame nesting.");
+            return;
+        }
+
+        bool hasSuffix = state.ResolutionStack.Count > runFrameIndex + 1;
+        if (!hasSuffix)
+        {
+            // A nested run with no suspended ability still needs its parent
+            // turn checks below; a standalone run is complete at this frame.
+            if (!nested)
+            {
+                return;
+            }
+        }
+        else
+        {
+            // A2b may suspend an ability directly beneath the live run timing
+            // frame. The ability/behavior validators prove the exact suffix;
+            // this check only ensures no unrelated frame can be smuggled into a
+            // run stack prefix.
+            if (state.ResolutionStack[runFrameIndex + 1] is not AbilityFrame)
+            {
+                Add(
+                    violations,
+                    "run.stack-topology",
+                    "resolutionStack",
+                    "Only an ability lifecycle may follow the live run timing frame.");
+                return;
+            }
+
+            for (int index = runFrameIndex + 2; index < state.ResolutionStack.Count; index++)
+            {
+                ResolutionFrame suffix = state.ResolutionStack[index];
+                if (suffix is BehaviorResolutionFrame behavior
+                    && behavior.AbilityKey is not null
+                    && index == runFrameIndex + 2)
+                {
+                    continue;
+                }
+
+                // The existing behavior install validator owns its exact child
+                // shape. Permit only that narrow continuation after an ability
+                // child; all other nested cursors are invalid in this vertical.
+                if (suffix is InstallFrame install
+                    && index == runFrameIndex + 3
+                    && state.ResolutionStack[index - 1] is BehaviorResolutionFrame)
+                {
+                    continue;
+                }
+
+                Add(
+                    violations,
+                    "run.stack-topology",
+                    $"resolutionStack[{index}]",
+                    "A run ability stack contains an unsupported nested resolution frame.");
+            }
+        }
+
+        if (!nested)
+        {
             return;
         }
 
@@ -2432,6 +2492,18 @@ public static class StateInvariantValidator
                     }
 
                     break;
+                case AbilityFrame abilityFrame:
+                    ValidateAbilityFrame(
+                        state,
+                        abilityFrame,
+                        index,
+                        path,
+                        playerIds,
+                        cardIds,
+                        cardsById,
+                        behaviorCatalog,
+                        violations);
+                    break;
                 case BehaviorResolutionFrame behaviorFrame:
                     RequirePlayer(playerIds, behaviorFrame.Controller, $"{path}.controller", violations);
                     if (!behaviorFrame.ActingPlayer.HasValue)
@@ -2468,6 +2540,27 @@ public static class StateInvariantValidator
                             "Behavior parent ID and parent frame identity must be present together.");
                     }
 
+                    if (behaviorFrame.AbilityKey is not null)
+                    {
+                        if (index == 0
+                            || state.ResolutionStack[index - 1] is not AbilityFrame abilityParent
+                            || abilityParent.Stage != AbilityLifecycleStage.AwaitingChild
+                            || !string.Equals(
+                                abilityParent.AbilityKey,
+                                behaviorFrame.AbilityKey,
+                                StringComparison.Ordinal)
+                            || abilityParent.SourceCardId != behaviorFrame.SourceCardId
+                            || abilityParent.DefinitionId != behaviorFrame.DefinitionId
+                            || abilityParent.Controller != behaviorFrame.Controller)
+                        {
+                            Add(
+                                violations,
+                                "resolution.ability-child-parent-mismatch",
+                                path,
+                                "An ability behavior child must remain immediately above its exact awaiting ability parent.");
+                        }
+                    }
+
                     if (!BehaviorFrameIdentity.TryValidateIssued(behaviorFrame.FrameIdentity, out _))
                     {
                         Add(violations, "resolution.behavior-frame-identity", $"{path}.frameIdentity", "A behavior frame must retain an engine-issued frame identity.");
@@ -2491,8 +2584,29 @@ public static class StateInvariantValidator
                                 Add(violations, "resolution.behavior-source-location-mismatch", path, "Behavior source location kind does not match the captured invocation context.");
                             }
 
-                            if (cardIds.Contains(behaviorFrame.SourceCardId)
-                                && state.Cards.Single(card => card.Id == behaviorFrame.SourceCardId).ZoneId != sourceZone.Id)
+                            bool abilitySelfTrash = behaviorFrame.AbilityKey is not null
+                                && behaviorCatalog.TryGet(behaviorFrame.DefinitionId, out CardBehaviorDefinition? sourceDefinition)
+                                && sourceDefinition.PaidAbilities
+                                    .SingleOrDefault(ability => string.Equals(
+                                        ability.Key,
+                                        behaviorFrame.AbilityKey,
+                                        StringComparison.Ordinal))?.Costs
+                                    .Any(cost => cost.Kind == BehaviorCostKind.TrashSelf) == true;
+                            CardInstanceState? sourceCard = cardIds.Contains(behaviorFrame.SourceCardId)
+                                ? state.Cards.Single(card => card.Id == behaviorFrame.SourceCardId)
+                                : null;
+                            ZoneState? currentSourceZone = sourceCard is null
+                                ? null
+                                : state.Zones.FirstOrDefault(zone => zone?.Id == sourceCard.ZoneId);
+                            bool movedAfterAbilityPayment = abilitySelfTrash
+                                && behaviorFrame.AbilityKey is not null
+                                && behaviorFrame.Stage == BehaviorResolutionStage.Execute
+                                && currentSourceZone is not null
+                                && (currentSourceZone.Kind == ZoneKind.RunnerHeap
+                                    || currentSourceZone.Kind == ZoneKind.CorpDiscard);
+                            if (sourceCard is not null
+                                && sourceCard.ZoneId != sourceZone.Id
+                                && !movedAfterAbilityPayment)
                             {
                                 Add(violations, "resolution.behavior-source-location-mismatch", $"{path}.sourceZoneId", "Behavior source card no longer occupies its captured invocation location.");
                             }
@@ -2548,7 +2662,24 @@ public static class StateInvariantValidator
                             Add(violations, "resolution.behavior-definition-mismatch", $"{path}.definitionFingerprint", "Behavior frame definition fingerprint must match the injected catalog.");
                         }
 
-                        var derivedInstructions = definition.Instructions.ToList();
+                        BehaviorPaidAbility? abilityDeclaration = behaviorFrame.AbilityKey is null
+                            ? null
+                            : definition.PaidAbilities.SingleOrDefault(ability => string.Equals(
+                                ability.Key,
+                                behaviorFrame.AbilityKey,
+                                StringComparison.Ordinal));
+                        if (behaviorFrame.AbilityKey is not null && abilityDeclaration is null)
+                        {
+                            Add(
+                                violations,
+                                "resolution.unknown-ability-key",
+                                $"{path}.abilityKey",
+                                $"Ability key '{behaviorFrame.AbilityKey}' is not declared by definition '{behaviorFrame.DefinitionId}'.");
+                        }
+
+                        IReadOnlyList<BehaviorInstruction> behaviorRoot =
+                            abilityDeclaration?.Instructions ?? definition.Instructions;
+                        var derivedInstructions = behaviorRoot.ToList();
                         foreach (BehaviorContinuationStep step in behaviorFrame.Continuation)
                         {
                             if (!BehaviorContinuation.TryApply(derivedInstructions, step, out string? continuationError))
@@ -2570,7 +2701,7 @@ public static class StateInvariantValidator
 
                         ValidateBehaviorContinuationBindings(
                             behaviorFrame,
-                            definition.Instructions,
+                            behaviorRoot,
                             cardsById,
                             $"{path}",
                             violations);
@@ -2778,7 +2909,14 @@ public static class StateInvariantValidator
         PendingDecision? pending = state.PendingDecision;
         if (pending is null)
         {
-            if (state.ResolutionStack.Any(IsPromptFrame))
+            // A turn/run frame may be suspended beneath an engine-owned
+            // ability lifecycle (and its behavior child). Only the actual
+            // top frame can own a pending decision; requiring every prompt
+            // frame in the stack to do so rejects valid suspended parents.
+            ResolutionFrame? topFrame = state.ResolutionStack.Count == 0
+                ? null
+                : state.ResolutionStack[^1];
+            if (IsPromptFrame(topFrame))
             {
                 Add(
                     violations,
@@ -2896,6 +3034,365 @@ public static class StateInvariantValidator
                     $"Turn boundary '{boundary.Kind}' does not match the parent turn cursor context.");
             }
         }
+    }
+
+    private static void ValidateAbilityFrame(
+        GameState state,
+        AbilityFrame frame,
+        int index,
+        string path,
+        HashSet<PlayerId> playerIds,
+        HashSet<CardInstanceId> cardIds,
+        Dictionary<CardInstanceId, CardInstanceState> cardsById,
+        IBehaviorCatalog behaviorCatalog,
+        List<StateInvariantViolation> violations)
+    {
+        RequirePlayer(playerIds, frame.Controller, $"{path}.controller", violations);
+
+        if (index == 0)
+        {
+            Add(
+                violations,
+                "resolution.ability-parent-missing",
+                path,
+                "An ability frame requires an immediately preceding turn or run timing parent.");
+            return;
+        }
+
+        ResolutionFrame parent = state.ResolutionStack[index - 1];
+        if (frame.ParentFrameIdentity is null)
+        {
+            Add(
+                violations,
+                "resolution.ability-parent-missing",
+                $"{path}.parentFrameIdentity",
+                "An ability frame must retain its exact parent frame identity.");
+        }
+        else
+        {
+            try
+            {
+                if (!string.Equals(
+                        frame.ParentFrameIdentity,
+                        BehaviorFrameIdentity.Compute(parent),
+                        StringComparison.Ordinal))
+                {
+                    Add(
+                        violations,
+                        "resolution.ability-parent-context-mismatch",
+                        $"{path}.parentFrameIdentity",
+                        "Ability parent identity does not match the exact active parent frame.");
+                }
+            }
+            catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or JsonException)
+            {
+                Add(
+                    violations,
+                    "resolution.ability-parent-context-mismatch",
+                    $"{path}.parentFrameIdentity",
+                    $"Ability parent identity could not be recomputed: {exception.Message}");
+            }
+        }
+
+        PlayerState? controller = state.Players.FirstOrDefault(player => player?.Id == frame.Controller);
+        CardInstanceState? source = cardsById.GetValueOrDefault(frame.SourceCardId);
+        if (source is null)
+        {
+            Add(
+                violations,
+                "resolution.unknown-ability-source",
+                $"{path}.sourceCardId",
+                $"Ability source card '{frame.SourceCardId}' does not exist.");
+        }
+        else
+        {
+            if (source.DefinitionId != frame.DefinitionId)
+            {
+                Add(
+                    violations,
+                    "resolution.ability-source-definition-mismatch",
+                    path,
+                    "Ability source card definition must match the frame definition.");
+            }
+
+            if (controller is not null && controller.Side != source.OwnerSide)
+            {
+                Add(
+                    violations,
+                    "resolution.ability-controller-mismatch",
+                    $"{path}.controller",
+                    "Ability controller must be the source card owner.");
+            }
+        }
+
+        ZoneState? capturedZone = state.Zones.FirstOrDefault(zone => zone?.Id == frame.SourceZoneId);
+        if (capturedZone is null)
+        {
+            Add(
+                violations,
+                "resolution.unknown-ability-source-zone",
+                $"{path}.sourceZoneId",
+                $"Ability source zone '{frame.SourceZoneId}' does not exist.");
+        }
+        else
+        {
+            if (capturedZone.Kind != frame.SourceZoneKind)
+            {
+                Add(
+                    violations,
+                    "resolution.ability-source-zone-kind-mismatch",
+                    $"{path}.sourceZoneKind",
+                    "Ability source zone kind must match the captured zone.");
+            }
+
+            if (!capturedZone.CardIds.Contains(frame.SourceCardId)
+                && source?.ZoneId == frame.SourceZoneId)
+            {
+                Add(
+                    violations,
+                    "resolution.ability-source-membership-mismatch",
+                    $"{path}.sourceCardId",
+                    "Ability source card must be a member of its captured source zone.");
+            }
+        }
+
+        BehaviorPaidAbility? declaration = null;
+        if (!string.Equals(frame.CatalogFingerprint, behaviorCatalog.Fingerprint, StringComparison.Ordinal))
+        {
+            Add(
+                violations,
+                "resolution.ability-catalog-mismatch",
+                $"{path}.catalogFingerprint",
+                "Ability frame catalog fingerprint must match the injected catalog.");
+        }
+        else if (behaviorCatalog.TryGet(frame.DefinitionId, out CardBehaviorDefinition? definition))
+        {
+            try
+            {
+                if (!string.Equals(
+                        frame.DefinitionFingerprint,
+                        behaviorCatalog.GetDefinitionFingerprint(frame.DefinitionId),
+                        StringComparison.Ordinal))
+                {
+                    Add(
+                        violations,
+                        "resolution.ability-definition-mismatch",
+                        $"{path}.definitionFingerprint",
+                        "Ability frame definition fingerprint must match the injected catalog.");
+                }
+            }
+            catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or KeyNotFoundException)
+            {
+                Add(
+                    violations,
+                    "resolution.ability-definition-fingerprint-failed",
+                    $"{path}.definitionFingerprint",
+                    $"Ability definition fingerprint lookup failed: {exception.Message}");
+            }
+
+            declaration = definition.PaidAbilities.SingleOrDefault(candidate => string.Equals(
+                candidate.Key,
+                frame.AbilityKey,
+                StringComparison.Ordinal));
+            if (declaration is null)
+            {
+                Add(
+                    violations,
+                    "resolution.unknown-ability-key",
+                    $"{path}.abilityKey",
+                    $"Ability key '{frame.AbilityKey}' is not declared by definition '{frame.DefinitionId}'.");
+            }
+        }
+        else
+        {
+            Add(
+                violations,
+                "resolution.unknown-ability-definition",
+                $"{path}.definitionId",
+                $"Ability definition '{frame.DefinitionId}' is not registered.");
+        }
+
+        if (declaration is not null)
+        {
+            if (frame.Timing != declaration.Timing)
+            {
+                Add(violations, "resolution.ability-timing-mismatch", $"{path}.timing", "Ability timing must match the declaration.");
+            }
+
+            if (frame.Activation != declaration.Activation)
+            {
+                Add(violations, "resolution.ability-activation-mismatch", $"{path}.activation", "Ability activation must match the declaration.");
+            }
+
+            if (frame.Usage is null || frame.Usage.Limit != declaration.UsageLimit)
+            {
+                Add(violations, "resolution.ability-usage-mismatch", $"{path}.usage", "Ability usage snapshot must match the declaration.");
+            }
+
+            if (frame.Costs is null || !frame.Costs.SequenceEqual(declaration.Costs))
+            {
+                Add(violations, "resolution.ability-costs-mismatch", $"{path}.costs", "Ability costs must match the declaration.");
+            }
+
+            if (declaration.Targets.Count != 0 || frame.TargetCardIds.Count != 0)
+            {
+                Add(violations, "resolution.ability-targets-unsupported", $"{path}.targetCardIds", "A2 ability frames must not retain targets.");
+            }
+
+            if (declaration.Costs.Any(static cost => cost.Kind == BehaviorCostKind.Additional))
+            {
+                Add(violations, "resolution.ability-additional-cost-unsupported", $"{path}.costs", "A2 ability frames must not retain additional costs.");
+            }
+        }
+
+        if (!Enum.IsDefined(frame.Stage))
+        {
+            return;
+        }
+
+        bool paymentAccepted = frame.Stage != AbilityLifecycleStage.PayCosts;
+        bool selfTrash = declaration?.Costs.Any(static cost => cost.Kind == BehaviorCostKind.TrashSelf) == true;
+        if (source is not null && source.ZoneId != frame.SourceZoneId)
+        {
+            ZoneState? currentZone = state.Zones.FirstOrDefault(zone => zone?.Id == source.ZoneId);
+            bool validTrash = paymentAccepted
+                && selfTrash
+                && currentZone is not null
+                && (source.OwnerSide == PlayerSide.Runner
+                    ? currentZone.Kind == ZoneKind.RunnerHeap
+                    : currentZone.Kind == ZoneKind.CorpDiscard);
+            if (!validTrash)
+            {
+                Add(
+                    violations,
+                    "resolution.ability-source-location-mismatch",
+                    $"{path}.sourceZoneId",
+                    "Ability source may move only to its owner discard after a declared TrashSelf payment.");
+            }
+        }
+
+        if (frame.Stage == AbilityLifecycleStage.PayCosts
+            && source is not null
+            && capturedZone is not null
+            && !IsActiveAbilitySource(state, source, capturedZone))
+        {
+            Add(
+                violations,
+                "resolution.ability-source-inactive",
+                $"{path}.sourceCardId",
+                "An ability may begin payment only from an active face-up source.");
+        }
+
+        if (controller is not null)
+        {
+            TurnFactsState? facts = state.Turn.History?.ThisTurn(controller.Side);
+            if (facts is null)
+            {
+                Add(violations, "resolution.ability-turn-facts-missing", path, "Ability lifecycle requires current turn facts.");
+            }
+            else if (frame.Usage is not null)
+            {
+                bool used = facts.HasUsedAbility(frame.SourceCardId, frame.AbilityKey);
+                if (frame.Usage.Limit == BehaviorAbilityUsageLimit.OncePerTurn
+                    && ((!paymentAccepted && used)
+                        || (paymentAccepted && !used)
+                        || frame.Usage.UsesThisTurn != 0))
+                {
+                    Add(violations, "resolution.ability-usage-mismatch", $"{path}.usage", "Ability usage snapshot does not match current turn facts.");
+                }
+
+                if (frame.Usage.Limit == BehaviorAbilityUsageLimit.Unlimited
+                    && frame.Usage.UsesThisTurn != 0)
+                {
+                    Add(violations, "resolution.ability-usage-mismatch", $"{path}.usage", "Unlimited abilities must retain zero uses.");
+                }
+            }
+        }
+
+        bool parentMatches = false;
+        if (parent is TurnFrame turn)
+        {
+            bool click = frame.Activation == BehaviorAbilityActivation.ClickAction;
+            parentMatches = state.RunState is null
+                && turn.ActiveSide == controller?.Side
+                && state.Turn.ActiveSide == turn.ActiveSide
+                && state.Turn.TurnNumber == turn.TurnNumber
+                && (click
+                    ? turn.Stage == TurnFrameStage.AwaitingAction
+                    : turn.Stage is (TurnFrameStage.BeforeTurnPriority
+                        or TurnFrameStage.ActionPriority
+                        or TurnFrameStage.DiscardPriority)
+                        && turn.AllowsPaidAbilities
+                        && turn.PriorityHolder == controller?.Side);
+        }
+        else if (parent is RunTimingFrame runFrame && state.RunState is { } run)
+        {
+            parentMatches = frame.Activation == BehaviorAbilityActivation.PaidAbility
+                && IsRunPriorityStep(run.Step)
+                && runFrame.RunId == run.Id
+                && runFrame.Step == run.Step
+                && run.Priority is not null
+                && state.Players.FirstOrDefault(player => player.Side == run.Priority.PriorityHolder)?.Id == frame.Controller
+                && (frame.Timing == BehaviorAbilityTiming.AnyPaidWindow
+                    || frame.Timing == (run.Step switch
+                    {
+                        RunTimingStep.InitiationPaidWindow => BehaviorAbilityTiming.InitiationPaidWindow,
+                        RunTimingStep.ApproachPaidWindow => BehaviorAbilityTiming.ApproachPaidWindow,
+                        RunTimingStep.EncounterPaidWindow => BehaviorAbilityTiming.EncounterPaidWindow,
+                        RunTimingStep.MovementPaidWindow => BehaviorAbilityTiming.MovementPaidWindow,
+                        RunTimingStep.AfterMovePaidWindow => BehaviorAbilityTiming.AfterMovePaidWindow,
+                        _ => (BehaviorAbilityTiming?)null,
+                    }));
+        }
+
+        if (!parentMatches)
+        {
+            Add(violations, "resolution.ability-parent-context-mismatch", path, "Ability frame parent is not the matching active paid/action window.");
+        }
+
+        if (frame.Stage == AbilityLifecycleStage.AwaitingChild)
+        {
+            if (index + 1 >= state.ResolutionStack.Count
+                || state.ResolutionStack[index + 1] is not BehaviorResolutionFrame child
+                || !string.Equals(child.AbilityKey, frame.AbilityKey, StringComparison.Ordinal)
+                || child.ParentFrameIdentity is null)
+            {
+                Add(violations, "resolution.ability-child-missing", path, "An ability awaiting child must have its exact behavior child immediately above it.");
+            }
+        }
+        else if (index + 1 < state.ResolutionStack.Count
+            && state.ResolutionStack[index + 1] is BehaviorResolutionFrame { AbilityKey: not null })
+        {
+            Add(violations, "resolution.unexpected-ability-child", path, "An ability behavior child is only valid while its ability parent awaits the child.");
+        }
+    }
+
+    private static bool IsActiveAbilitySource(
+        GameState state,
+        CardInstanceState source,
+        ZoneState zone)
+    {
+        if (source.OwnerSide == PlayerSide.Runner)
+        {
+            return zone.Kind == ZoneKind.RunnerRig
+                && zone.OwnerSide == PlayerSide.Runner
+                && zone.ServerId is null
+                && state.Zones.Count(candidate => candidate.Kind == ZoneKind.RunnerRig
+                    && candidate.OwnerSide == PlayerSide.Runner
+                    && candidate.ServerId is null) == 1
+                && source.FaceUp;
+        }
+
+        return source.OwnerSide == PlayerSide.Corp
+            && zone.Kind is ZoneKind.ServerRoot or ZoneKind.ServerIce
+            && zone.OwnerSide == PlayerSide.Corp
+            && zone.ServerId is { } serverId
+            && state.Servers.Any(server => server.Id == serverId
+                && (zone.Kind == ZoneKind.ServerRoot
+                    ? server.RootZoneId == zone.Id
+                    : server.IceZoneId == zone.Id))
+            && source.FaceUp
+            && source.Rezzed;
     }
 
     private static void ValidatePendingDecision(
@@ -5661,7 +6158,16 @@ public static class StateInvariantValidator
             return;
         }
 
-        List<BehaviorInstruction> replay = definition.Instructions.ToList();
+        IReadOnlyList<BehaviorInstruction> rootInstructions = behaviorParent.AbilityKey is null
+            ? definition.Instructions
+            : definition.PaidAbilities
+                .SingleOrDefault(ability => string.Equals(
+                    ability.Key,
+                    behaviorParent.AbilityKey,
+                    StringComparison.Ordinal))
+                ?.Instructions
+                ?? [];
+        List<BehaviorInstruction> replay = rootInstructions.ToList();
         BehaviorTarget? originTarget = null;
         IReadOnlyList<CardInstanceId>? originSelection = null;
         foreach (BehaviorContinuationStep step in behaviorParent.Continuation)
@@ -8498,7 +9004,16 @@ public static class StateInvariantValidator
             return false;
         }
 
-        List<BehaviorInstruction> replay = definition.Instructions.ToList();
+        IReadOnlyList<BehaviorInstruction> rootInstructions = frame.AbilityKey is null
+            ? definition.Instructions
+            : definition.PaidAbilities
+                .SingleOrDefault(ability => string.Equals(
+                    ability.Key,
+                    frame.AbilityKey,
+                    StringComparison.Ordinal))
+                ?.Instructions
+                ?? [];
+        List<BehaviorInstruction> replay = rootInstructions.ToList();
         BehaviorTarget? originatingTarget = null;
         IReadOnlyList<CardInstanceId>? originatingSelection = null;
         foreach (BehaviorContinuationStep step in frame.Continuation)

@@ -457,7 +457,8 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
         string? frameIdentity = null,
         ZoneId? sourceZoneId = null,
         ZoneKind? sourceZoneKind = null,
-        string? parentFrameIdentity = null)
+        string? parentFrameIdentity = null,
+        string? abilityKey = null)
         : base(version, behaviorId)
     {
         if (!StableIdentifier.TryValidate(catalogFingerprint))
@@ -493,6 +494,7 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
         SourceZoneId = sourceZoneId;
         SourceZoneKind = sourceZoneKind;
         ParentFrameIdentity = parentFrameIdentity;
+        AbilityKey = abilityKey;
     }
 
     public BehaviorResolutionFrame(
@@ -532,7 +534,10 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
         ZoneId sourceZoneId,
         ZoneKind sourceZoneKind,
         string? parentBehaviorId,
-        string? parentFrameIdentity)
+        string? parentFrameIdentity,
+        string? abilityKey = null,
+        IReadOnlyList<BehaviorInstruction>? rootInstructions = null,
+        IReadOnlyList<BehaviorInstruction>? instructions = null)
         : this(
             1,
             ResolutionBehaviorIds.CardBehavior,
@@ -549,10 +554,11 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
             frameIdentity: frameIdentity,
             sourceZoneId: sourceZoneId,
             sourceZoneKind: sourceZoneKind,
-            parentFrameIdentity: parentFrameIdentity)
+            parentFrameIdentity: parentFrameIdentity,
+            abilityKey: abilityKey)
     {
-        RootInstructions = Freeze(definition.Instructions);
-        Instructions = Freeze(definition.Instructions);
+        RootInstructions = Freeze(rootInstructions ?? definition.Instructions);
+        Instructions = Freeze(instructions ?? rootInstructions ?? definition.Instructions);
     }
 
     [JsonInclude]
@@ -647,6 +653,15 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
     [JsonRequired]
     public string? ParentFrameIdentity { get; private set; }
 
+    /// <summary>
+    /// When present, this behavior cursor is the execution child of an
+    /// AbilityFrame. The declaration is selected by key from the injected
+    /// catalog; a null value preserves the pre-4.3 generic behavior shape.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? AbilityKey { get; private set; }
+
     internal BehaviorResolutionFrame With(
         BehaviorResolutionStage? stage = null,
         IReadOnlyList<BehaviorInstruction>? instructions = null,
@@ -657,7 +672,8 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
         bool clearChoice = false,
         IReadOnlyList<BehaviorContinuationStep>? continuation = null,
         ZoneId? setAsideZoneId = null,
-        bool clearSetAsideZone = false) =>
+        bool clearSetAsideZone = false,
+        string? abilityKey = null) =>
         new(
             Version,
             BehaviorId,
@@ -678,7 +694,8 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
             frameIdentity: FrameIdentity,
             sourceZoneId: SourceZoneId,
             sourceZoneKind: SourceZoneKind,
-            parentFrameIdentity: ParentFrameIdentity)
+            parentFrameIdentity: ParentFrameIdentity,
+            abilityKey: AbilityKey)
         {
             RootInstructions = Freeze(RootInstructions),
             Instructions = Freeze(instructions ?? Instructions),

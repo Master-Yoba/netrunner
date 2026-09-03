@@ -412,6 +412,520 @@ public static partial class GameEngine
         }
     }
 
+    /// <summary>
+    /// Consumes an engine-issued UseAbility action. The payload is compared
+    /// against the same pure materializer used for the pending decision, then
+    /// converted into a serialized lifecycle cursor. No cost is paid here;
+    /// payment is an explicit reducer step so a checkpoint can be persisted
+    /// between authorization and execution.
+    /// </summary>
+    private static void ConsumeAbilityAction(
+        WorkingState working,
+        AbilityActionParameters submitted,
+        PlayerId? decisionOwner)
+    {
+        if (decisionOwner is null)
+        {
+            throw new ResolutionFailureException("An ability action requires a decision owner.");
+        }
+
+        IReadOnlyList<AbilityActionParameters> materialized =
+            MaterializeAbilityActionParameters(working);
+        AbilityActionParameters? expected = materialized.FirstOrDefault(candidate =>
+            AbilityParametersMatch(candidate, submitted));
+        if (expected is null)
+        {
+            throw new ResolutionFailureException(
+                "The submitted ability action is not an exact current materialization.");
+        }
+
+        CardInstanceState source = GetCard(working, submitted.SourceCardId);
+        PlayerState controller = GetPlayer(working, decisionOwner.Value);
+        if (controller.Side != source.OwnerSide)
+        {
+            throw new ResolutionFailureException(
+                "An ability controller must be the pending decision owner and source-card owner.");
+        }
+
+        if (working.ResolutionStack.Count == 0)
+        {
+            throw new ResolutionFailureException("An ability action requires an active turn or run parent frame.");
+        }
+
+        ResolutionFrame parent = working.ResolutionStack[^1];
+        ValidateAbilityParent(working, parent, submitted, controller.Id);
+        string parentIdentity = BehaviorFrameIdentity.Compute(parent);
+
+        working.ResolutionStack.Add(new AbilityFrame(
+            1,
+            ResolutionBehaviorIds.Ability,
+            expected.DefinitionId,
+            expected.SourceCardId,
+            expected.AbilityKey,
+            controller.Id,
+            expected.Timing,
+            expected.Activation,
+            expected.Costs,
+            expected.TargetCardIds,
+            expected.Usage,
+            expected.CatalogFingerprint,
+            expected.DefinitionFingerprint,
+            expected.SourceZoneId,
+            expected.SourceZoneKind,
+            AbilityLifecycleStage.PayCosts,
+            parentIdentity));
+    }
+
+    /// <summary>Advances the serialized ability lifecycle one boundary.</summary>
+    private static void StepAbility(WorkingState working, AbilityFrame frame)
+    {
+        ValidateAbilityFrameRuntime(working, frame);
+        switch (frame.Stage)
+        {
+            case AbilityLifecycleStage.PayCosts:
+                CardBehaviorDefinition definition = GetAbilityDefinition(working, frame);
+                BehaviorPaidAbility declaration = GetAbilityDeclaration(definition, frame.AbilityKey);
+                CardInstanceState source = GetCard(working, frame.SourceCardId);
+                PreflightAbilityPayment(working, frame, declaration, source);
+                PayAbilityCosts(working, frame);
+                MarkAbilityUsage(working, frame);
+                ReplaceTopFrame(working, frame.With(AbilityLifecycleStage.CostCheckpoint));
+                return;
+            case AbilityLifecycleStage.CostCheckpoint:
+                ReplaceTopFrame(working, frame.With(AbilityLifecycleStage.Execute));
+                return;
+            case AbilityLifecycleStage.Execute:
+                PushAbilityBehaviorChild(working, frame);
+                return;
+            case AbilityLifecycleStage.AwaitingChild:
+                ReplaceTopFrame(working, frame.With(AbilityLifecycleStage.Complete));
+                return;
+            case AbilityLifecycleStage.Complete:
+                CompleteAbility(working, frame);
+                return;
+            default:
+                throw new ResolutionFailureException($"Ability stage '{frame.Stage}' is not executable.");
+        }
+    }
+
+    private static CardBehaviorDefinition GetAbilityDefinition(WorkingState working, AbilityFrame frame)
+    {
+        if (!working.BehaviorCatalog.TryGet(frame.DefinitionId, out CardBehaviorDefinition? definition))
+        {
+            throw new ResolutionFailureException(
+                $"Ability definition '{frame.DefinitionId}' is unavailable.");
+        }
+
+        return definition;
+    }
+
+    private static BehaviorPaidAbility GetAbilityDeclaration(
+        CardBehaviorDefinition definition,
+        string abilityKey) => definition.PaidAbilities
+            .SingleOrDefault(candidate => string.Equals(candidate.Key, abilityKey, StringComparison.Ordinal))
+            ?? throw new ResolutionFailureException(
+                $"Ability key '{abilityKey}' is not declared by definition '{definition.DefinitionId}'.");
+
+    private static void ValidateAbilityParent(
+        WorkingState working,
+        ResolutionFrame parent,
+        AbilityActionParameters parameters,
+        PlayerId controllerId)
+    {
+        PlayerState controller = GetPlayer(working, controllerId);
+        switch (parent)
+        {
+            case TurnFrame turn:
+                if (working.RunState is not null
+                    || turn.ActiveSide != controller.Side
+                    || working.Turn.ActiveSide != turn.ActiveSide
+                    || working.Turn.TurnNumber != turn.TurnNumber)
+                {
+                    throw new ResolutionFailureException("Ability parent turn does not match the active turn.");
+                }
+
+                if (parameters.Activation == BehaviorAbilityActivation.ClickAction)
+                {
+                    if (turn.Stage != TurnFrameStage.AwaitingAction
+                        || turn.PriorityHolder.HasValue
+                        || turn.PriorityWindow.HasValue)
+                    {
+                        throw new ResolutionFailureException(
+                            "A click ability requires the active turn's AwaitingAction frame.");
+                    }
+
+                    return;
+                }
+
+                if (turn.Stage is not (TurnFrameStage.BeforeTurnPriority
+                    or TurnFrameStage.ActionPriority
+                    or TurnFrameStage.DiscardPriority)
+                    || !turn.AllowsPaidAbilities
+                    || turn.PriorityHolder != controller.Side
+                    || !turn.PriorityWindow.HasValue)
+                {
+                    throw new ResolutionFailureException(
+                        "A paid ability requires the controller's active turn priority window.");
+                }
+
+                return;
+            case RunTimingFrame runFrame:
+                RunState run = working.RunState
+                    ?? throw new ResolutionFailureException("A run ability requires live run state.");
+                BehaviorAbilityTiming? runTiming = RunTimingFor(run.Step);
+                if (parameters.Activation != BehaviorAbilityActivation.PaidAbility
+                    || runFrame.RunId != run.Id
+                    || runFrame.Step != run.Step
+                    || !IsPaidWindow(run.Step)
+                    || run.Priority is null
+                    || GetPlayer(working, run.Priority.PriorityHolder).Id != controllerId
+                    || runTiming is null
+                    || (parameters.Timing != BehaviorAbilityTiming.AnyPaidWindow
+                        && parameters.Timing != runTiming.Value))
+                {
+                    throw new ResolutionFailureException(
+                        "A run ability parent does not match the active paid window.");
+                }
+
+                return;
+            default:
+                throw new ResolutionFailureException(
+                    "Ability parent must be the exact top TurnFrame or RunTimingFrame.");
+        }
+    }
+
+    private static void ValidateAbilityFrameRuntime(WorkingState working, AbilityFrame frame)
+    {
+        if (working.ResolutionStack.Count < 2
+            || !ReferenceEquals(working.ResolutionStack[^1], frame))
+        {
+            throw new ResolutionFailureException("An ability frame must be the active top resolution frame.");
+        }
+
+        CardBehaviorDefinition definition = GetAbilityDefinition(working, frame);
+        BehaviorPaidAbility declaration = GetAbilityDeclaration(definition, frame.AbilityKey);
+        CardInstanceState source = GetCard(working, frame.SourceCardId);
+        ZoneState sourceZone = working.Zones.SingleOrDefault(zone => zone.Id == frame.SourceZoneId)
+            ?? throw new ResolutionFailureException("Ability source zone no longer exists.");
+        if (sourceZone.Kind != frame.SourceZoneKind)
+        {
+            throw new ResolutionFailureException("Ability source zone kind no longer matches the captured snapshot.");
+        }
+
+        if (source.DefinitionId != frame.DefinitionId
+            || source.OwnerSide != GetPlayer(working, frame.Controller).Side)
+        {
+            throw new ResolutionFailureException("Ability source card no longer matches its captured definition or owner.");
+        }
+
+        if (!string.Equals(frame.CatalogFingerprint, working.BehaviorCatalog.Fingerprint, StringComparison.Ordinal)
+            || !string.Equals(
+                frame.DefinitionFingerprint,
+                working.BehaviorCatalog.GetDefinitionFingerprint(frame.DefinitionId),
+                StringComparison.Ordinal))
+        {
+            throw new ResolutionFailureException("Ability frame catalog provenance does not match the injected catalog.");
+        }
+
+        if (frame.Timing != declaration.Timing
+            || frame.Activation != declaration.Activation
+            || frame.Usage.Limit != declaration.UsageLimit
+            || !frame.Costs.SequenceEqual(declaration.Costs)
+            || frame.TargetCardIds.Count != 0
+            || declaration.Targets.Count != 0
+            || declaration.Costs.Any(static cost => cost.Kind == BehaviorCostKind.Additional))
+        {
+            throw new ResolutionFailureException("Ability frame no longer matches the declared executable shape.");
+        }
+
+        ResolutionFrame parent = working.ResolutionStack[^2];
+        if (frame.ParentFrameIdentity is null
+            || !string.Equals(
+                frame.ParentFrameIdentity,
+                BehaviorFrameIdentity.Compute(parent),
+                StringComparison.Ordinal))
+        {
+            throw new ResolutionFailureException("Ability frame parent identity no longer matches the exact parent.");
+        }
+
+        var parentParameters = new AbilityActionParameters(
+            frame.SourceCardId,
+            frame.DefinitionId,
+            frame.AbilityKey,
+            frame.Timing,
+            frame.Activation,
+            frame.Costs,
+            frame.TargetCardIds,
+            frame.Usage,
+            frame.CatalogFingerprint,
+            frame.DefinitionFingerprint,
+            frame.SourceZoneId,
+            frame.SourceZoneKind);
+        ValidateAbilityParent(working, parent, parentParameters, frame.Controller);
+
+        bool paid = frame.Stage != AbilityLifecycleStage.PayCosts;
+        if (!paid && source.ZoneId != frame.SourceZoneId)
+        {
+            throw new ResolutionFailureException("Ability source card moved before its costs were paid.");
+        }
+
+        bool selfTrash = declaration.Costs.Any(static cost => cost.Kind == BehaviorCostKind.TrashSelf);
+        if (source.ZoneId != frame.SourceZoneId)
+        {
+            ZoneState currentSourceZone = working.Zones.SingleOrDefault(zone => zone.Id == source.ZoneId)
+                ?? throw new ResolutionFailureException("Ability source card current zone no longer exists.");
+            if (!paid || !selfTrash || !IsAbilityTrashZone(currentSourceZone, source))
+            {
+                throw new ResolutionFailureException("Ability source card moved outside its permitted lifecycle.");
+            }
+        }
+
+        TurnFactsState? facts = CurrentAbilityFacts(working, frame.Controller);
+        if (facts is null)
+        {
+            throw new ResolutionFailureException("Ability lifecycle requires current turn facts.");
+        }
+
+        bool used = facts.HasUsedAbility(frame.SourceCardId, frame.AbilityKey);
+        if (frame.Usage.Limit == BehaviorAbilityUsageLimit.OncePerTurn)
+        {
+            // UsesThisTurn is the exact action-issued snapshot.  It remains
+            // zero for the whole lifecycle; the turn-facts ledger records the
+            // successful payment separately and is what changes after the
+            // bundle is accepted.
+            if ((!paid && used) || (paid && !used) || frame.Usage.UsesThisTurn != 0)
+            {
+                throw new ResolutionFailureException("Ability usage snapshot does not match the current turn facts.");
+            }
+        }
+        else if (frame.Usage.UsesThisTurn != 0)
+        {
+            throw new ResolutionFailureException("Unlimited abilities must retain a zero usage count.");
+        }
+    }
+
+    private static bool IsAbilityTrashZone(ZoneState zone, CardInstanceState source) =>
+        source.OwnerSide == PlayerSide.Corp
+            ? zone.Kind == ZoneKind.CorpDiscard
+            : zone.Kind == ZoneKind.RunnerHeap;
+
+    private static void PreflightAbilityPayment(
+        WorkingState working,
+        AbilityFrame frame,
+        BehaviorPaidAbility declaration,
+        CardInstanceState source)
+    {
+        if (frame.Stage != AbilityLifecycleStage.PayCosts
+            || source.ZoneId != frame.SourceZoneId
+            || !IsCurrentlyActiveAbilitySource(working, source, frame.SourceZoneId)
+            || !CanAffordAbility(working, source, frame.Controller, declaration))
+        {
+            throw new ResolutionFailureException("Ability costs or source state are no longer affordable.");
+        }
+
+        if (declaration.Costs.Any(static cost => cost.Kind == BehaviorCostKind.Additional)
+            || declaration.Targets.Count != 0
+            || declaration.Costs.Count(static cost => cost.Kind == BehaviorCostKind.TrashSelf) > 1)
+        {
+            throw new ResolutionFailureException("This ability contains an unsupported cost or target.");
+        }
+    }
+
+    private static bool IsCurrentlyActiveAbilitySource(
+        WorkingState working,
+        CardInstanceState source,
+        ZoneId sourceZoneId) => EnumerateAbilitySources(working)
+            .Any(candidate => candidate.Card.Id == source.Id && candidate.Zone.Id == sourceZoneId);
+
+    private static void PayAbilityCosts(WorkingState working, AbilityFrame frame)
+    {
+        CardInstanceState source = GetCard(working, frame.SourceCardId);
+        foreach (BehaviorCost cost in frame.Costs)
+        {
+            switch (cost.Kind)
+            {
+                case BehaviorCostKind.Credits:
+                    ApplyCreditDeltaIfNonZero(working, frame.Controller, checked(-cost.Amount));
+                    break;
+                case BehaviorCostKind.Clicks:
+                    SpendClick(working, frame.Controller);
+                    break;
+                case BehaviorCostKind.LoseClick:
+                    ApplyClickDelta(working, frame.Controller, checked(-cost.Amount));
+                    break;
+                case BehaviorCostKind.Tags:
+                    ApplyTags(working, frame.Controller, checked(-cost.Amount));
+                    break;
+                case BehaviorCostKind.Counter:
+                    if (!StableIdentifier.TryValidate(cost.CounterName))
+                    {
+                        throw new ResolutionFailureException("Ability counter cost has no stable counter name.");
+                    }
+
+                    AdjustCounter(working, frame.SourceCardId, cost.CounterName!, checked(-cost.Amount));
+                    break;
+                case BehaviorCostKind.TrashSelf:
+                    MoveBehaviorCardToTrash(working, source);
+                    source = GetCard(working, frame.SourceCardId);
+                    break;
+                default:
+                    throw new ResolutionFailureException($"Ability cost '{cost.Kind}' is not executable.");
+            }
+        }
+    }
+
+    private static void MarkAbilityUsage(WorkingState working, AbilityFrame frame)
+    {
+        if (frame.Usage.Limit != BehaviorAbilityUsageLimit.OncePerTurn)
+        {
+            return;
+        }
+
+        PlayerSide side = GetPlayer(working, frame.Controller).Side;
+        TurnHistoryState history = working.Turn.History
+            ?? throw new ResolutionFailureException("Ability usage requires current turn facts.");
+        working.Turn = new TurnState(
+            working.Turn.ActiveSide,
+            working.Turn.Phase,
+            working.Turn.TurnNumber,
+            working.Turn.Step,
+            history.MarkAbilityUsed(side, frame.SourceCardId, frame.AbilityKey));
+    }
+
+    private static void PushAbilityBehaviorChild(WorkingState working, AbilityFrame frame)
+    {
+        CardBehaviorDefinition definition = GetAbilityDefinition(working, frame);
+        BehaviorPaidAbility declaration = GetAbilityDeclaration(definition, frame.AbilityKey);
+        AbilityFrame awaitingChild = frame.With(AbilityLifecycleStage.AwaitingChild);
+        string parentIdentity = BehaviorFrameIdentity.Compute(awaitingChild);
+        BehaviorResolutionFrame child = new BehaviorResolutionFrame(
+            definition,
+            new BehaviorInvocationContext(frame.SourceCardId, frame.Controller, frame.Controller),
+            working.BehaviorCatalog.Fingerprint,
+            working.BehaviorCatalog.GetDefinitionFingerprint(frame.DefinitionId),
+            working.Allocator.NextBehaviorFrameId(),
+            frame.SourceZoneId,
+            frame.SourceZoneKind,
+            frame.BehaviorId,
+            parentIdentity,
+            abilityKey: frame.AbilityKey,
+            rootInstructions: declaration.Instructions,
+            instructions: declaration.Instructions);
+        child = child.With(stage: BehaviorResolutionStage.Execute);
+
+        ReplaceTopFrame(working, awaitingChild);
+        working.ResolutionStack.Add(child);
+    }
+
+    private static void CompleteAbility(WorkingState working, AbilityFrame frame)
+    {
+        if (working.ResolutionStack.Count < 2)
+        {
+            throw new ResolutionFailureException("An ability completion requires its parent frame.");
+        }
+
+        ResolutionFrame parent = working.ResolutionStack[^2];
+        working.ResolutionStack.RemoveAt(working.ResolutionStack.Count - 1);
+        switch (parent)
+        {
+            case TurnFrame turn when frame.Activation == BehaviorAbilityActivation.ClickAction:
+                if (turn.Stage != TurnFrameStage.AwaitingAction)
+                {
+                    throw new ResolutionFailureException("A click ability parent changed before completion.");
+                }
+
+                working.ResolutionStack[^1] = new TurnFrame(
+                    turn.Version,
+                    turn.BehaviorId,
+                    turn.ActiveSide,
+                    turn.TurnNumber,
+                    TurnFrameStage.ActionPriority,
+                    TurnWindow(turn.ActiveSide),
+                    turn.ActiveSide,
+                    0,
+                    turn.ForcedActionEnd);
+                return;
+            case TurnFrame turn when frame.Activation == BehaviorAbilityActivation.PaidAbility:
+                if (turn.PriorityHolder is null || !turn.PriorityWindow.HasValue)
+                {
+                    throw new ResolutionFailureException("A paid turn ability parent lost its priority context.");
+                }
+
+                working.ResolutionStack[^1] = new TurnFrame(
+                    turn.Version,
+                    turn.BehaviorId,
+                    turn.ActiveSide,
+                    turn.TurnNumber,
+                    turn.Stage,
+                    turn.PriorityWindow,
+                    turn.PriorityHolder,
+                    0,
+                    turn.ForcedActionEnd);
+                return;
+            case RunTimingFrame runFrame when frame.Activation == BehaviorAbilityActivation.PaidAbility:
+                RunState run = working.RunState
+                    ?? throw new ResolutionFailureException("A run ability parent lost its live run state.");
+                if (run.Id != runFrame.RunId || run.Step != runFrame.Step || run.Priority is null)
+                {
+                    throw new ResolutionFailureException("A run ability parent changed before completion.");
+                }
+
+                RunPriorityState priority = run.Priority;
+                working.RunState = run.WithPriority(new RunPriorityState(
+                    priority.Version,
+                    priority.Window,
+                    priority.PriorityHolder,
+                    0,
+                    priority.CorpMayRezApproachedIce,
+                    priority.CorpMayRezNonIce));
+                working.ResolutionStack[^1] = new RunTimingFrame(
+                    runFrame.Version,
+                    runFrame.BehaviorId,
+                    runFrame.RunId,
+                    runFrame.Step);
+                return;
+            default:
+                throw new ResolutionFailureException("An ability parent frame is not a matching paid window.");
+        }
+    }
+
+    private static bool AbilityParametersMatch(
+        AbilityActionParameters actual,
+        AbilityActionParameters expected) =>
+        actual.SourceCardId == expected.SourceCardId
+        && actual.DefinitionId == expected.DefinitionId
+        && string.Equals(actual.AbilityKey, expected.AbilityKey, StringComparison.Ordinal)
+        && actual.Timing == expected.Timing
+        && actual.Activation == expected.Activation
+        && actual.Costs.SequenceEqual(expected.Costs)
+        && actual.TargetCardIds.SequenceEqual(expected.TargetCardIds)
+        && actual.Usage.Equals(expected.Usage)
+        && string.Equals(actual.CatalogFingerprint, expected.CatalogFingerprint, StringComparison.Ordinal)
+        && string.Equals(actual.DefinitionFingerprint, expected.DefinitionFingerprint, StringComparison.Ordinal)
+        && actual.SourceZoneId == expected.SourceZoneId
+        && actual.SourceZoneKind == expected.SourceZoneKind;
+
+    private static bool AbilityFramesMatch(
+        AbilityFrame actual,
+        AbilityFrame expected) =>
+        actual.Version == expected.Version
+        && string.Equals(actual.BehaviorId, expected.BehaviorId, StringComparison.Ordinal)
+        && actual.DefinitionId == expected.DefinitionId
+        && actual.SourceCardId == expected.SourceCardId
+        && string.Equals(actual.AbilityKey, expected.AbilityKey, StringComparison.Ordinal)
+        && actual.Controller == expected.Controller
+        && actual.Timing == expected.Timing
+        && actual.Activation == expected.Activation
+        && actual.Costs.SequenceEqual(expected.Costs)
+        && actual.TargetCardIds.SequenceEqual(expected.TargetCardIds)
+        && actual.Usage.Equals(expected.Usage)
+        && string.Equals(actual.CatalogFingerprint, expected.CatalogFingerprint, StringComparison.Ordinal)
+        && string.Equals(actual.DefinitionFingerprint, expected.DefinitionFingerprint, StringComparison.Ordinal)
+        && actual.SourceZoneId == expected.SourceZoneId
+        && actual.SourceZoneKind == expected.SourceZoneKind
+        && actual.Stage == expected.Stage
+        && string.Equals(actual.ParentFrameIdentity, expected.ParentFrameIdentity, StringComparison.Ordinal);
+
     private static void AddAbilityActions(WorkingState working, List<LegalAction> actions)
     {
         foreach (AbilityActionParameters parameters in MaterializeAbilityActionParameters(working))

@@ -391,6 +391,15 @@ public sealed record TurnHistoryState
         return ReplaceCurrent(side, current.MarkSuccessfulRun());
     }
 
+    internal TurnHistoryState MarkAbilityUsed(
+        PlayerSide side,
+        CardInstanceId sourceCardId,
+        string abilityKey)
+    {
+        TurnFactsState current = RequireCurrent(side);
+        return ReplaceCurrent(side, current.MarkAbilityUsed(sourceCardId, abilityKey));
+    }
+
     internal TurnHistoryState Copy() => new(Version, CorpThisTurn, CorpLastTurn, RunnerThisTurn, RunnerLastTurn);
 
     private TurnFactsState RequireCurrent(PlayerSide side) => ThisTurn(side)

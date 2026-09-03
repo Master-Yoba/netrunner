@@ -194,7 +194,7 @@ public static partial class GameEngine
         try
         {
             working.PendingDecision = null;
-            ConsumeAction(working, action);
+            ConsumeAction(working, action, pending.Owner);
             Advance(working, maxResolutionSteps);
             working.ActionSequence = NextSequence(working.ActionSequence, "action");
 
@@ -359,7 +359,20 @@ public static partial class GameEngine
         var working = WorkingState.From(state, behaviorCatalog, runtimeCardCatalog);
         try
         {
-            working.ResolutionStack.Add(ResolutionFrameCloner.Copy(frame));
+            // A cost checkpoint is a first-class serialized boundary. Allow
+            // the same engine-owned entry point to resume the exact top
+            // AbilityFrame after save/load instead of appending a duplicate
+            // cursor beneath it. Other frame types retain the original
+            // begin-only semantics.
+            bool resumeAbility = frame is AbilityFrame ability
+                && working.ResolutionStack.Count > 0
+                && working.ResolutionStack[^1] is AbilityFrame activeAbility
+                && AbilityFramesMatch(activeAbility, ability);
+            if (!resumeAbility)
+            {
+                working.ResolutionStack.Add(ResolutionFrameCloner.Copy(frame));
+            }
+
             Advance(working, maxResolutionSteps);
             GameState next = working.Build(state);
             StateInvariantValidator.Validate(
@@ -604,7 +617,10 @@ public static partial class GameEngine
         }
     }
 
-    private static void ConsumeAction(WorkingState working, LegalAction action)
+    private static void ConsumeAction(
+        WorkingState working,
+        LegalAction action,
+        PlayerId? decisionOwner = null)
     {
         switch (action.Kind, action.Parameters)
         {
@@ -620,6 +636,9 @@ public static partial class GameEngine
                 return;
             case (ActionKind.ChooseBehavior, BehaviorChoiceParameters behaviorChoice):
                 ConsumeBehaviorChoice(working, behaviorChoice);
+                return;
+            case (ActionKind.UseAbility, AbilityActionParameters ability):
+                ConsumeAbilityAction(working, ability, decisionOwner);
                 return;
             case (ActionKind.InstallCard, InstallCardParameters install)
                 when IsInstallFrameTop(working):

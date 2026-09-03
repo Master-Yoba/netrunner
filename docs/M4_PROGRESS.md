@@ -2675,3 +2675,34 @@ errors; runtime action expansion and full verification remain pending.
   consumption, cost mutation/checkpointing, target choices, and child behavior
   execution are explicitly not part of A2a and remain required before ENG-407
   is complete.
+
+### 2026-09-03 — Checkpoint A2b paid-ability execution accepted
+
+- Luna Max implemented the engine-owned execution vertical and root accepted
+  it after two review rounds. `UseAbility` consumption now re-materializes and
+  compares the exact issued payload, binds a serialized `AbilityFrame` to the
+  precise turn/run parent identity, preflights the complete cost bundle before
+  mutation, pays costs in declaration order, and executes only the selected
+  ability's instruction tree through an exact behavior child. Generic
+  install/play behavior continues to start from the definition's ordinary
+  instruction root and retains its prior cost lifecycle.
+- The accepted lifecycle is `PayCosts` → `CostCheckpoint` → `Execute` →
+  `AwaitingChild` → `Complete`. The cost boundary round-trips through canonical
+  JSON and resumes without duplicate payment. Credit, click, lose-click, tag,
+  named-counter, and self-trash costs are supported; target selection and
+  `Additional` costs remain fail-closed for their later checkpoint. A
+  once-per-turn frame retains the exact issued zero-use snapshot while the
+  post-payment use is recorded separately in current turn facts.
+- Completion returns click actions to turn action priority and paid abilities
+  to the same turn/run priority holder with consecutive passes reset. Runtime
+  and invariant checks prove the active source/catalog/declaration, captured
+  source zone (including the narrow paid self-trash exception), parent/child
+  topology, usage ledger, and legal turn/run window. Only the top resolution
+  frame owns a pending decision, so a prompt-shaped turn/run parent may be
+  safely suspended beneath the ability lifecycle.
+- Root independently passed the focused ability contract/materialization/
+  runtime suite 26/26, complete Core 515/515, the zero-warning solution build,
+  Core formatter verification, `git diff --check`, and focused CLI M2 proof
+  tests 7/7. The direct M2 proof remains byte-stable at initial/final/event
+  hashes `faf4e631...` / `c882eb43...` / `d20cdef9...`, with 32 checkpoints,
+  identical scripted/agent results, and verified replay.

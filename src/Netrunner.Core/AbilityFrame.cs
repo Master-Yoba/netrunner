@@ -193,6 +193,25 @@ public sealed record AbilityFrame : ResolutionFrame
     [JsonRequired]
     public string? ParentFrameIdentity { get; private set; }
 
+    internal AbilityFrame With(AbilityLifecycleStage stage) => new(
+        Version,
+        BehaviorId,
+        DefinitionId,
+        SourceCardId,
+        AbilityKey,
+        Controller,
+        Timing,
+        Activation,
+        Costs,
+        TargetCardIds,
+        Usage,
+        CatalogFingerprint,
+        DefinitionFingerprint,
+        SourceZoneId,
+        SourceZoneKind,
+        stage,
+        ParentFrameIdentity);
+
     private static ReadOnlyCollection<BehaviorCost> Freeze(
         IReadOnlyList<BehaviorCost> values,
         string parameterName)

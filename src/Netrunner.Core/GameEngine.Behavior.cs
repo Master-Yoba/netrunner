@@ -475,7 +475,10 @@ public static partial class GameEngine
         }
 
         CardBehaviorDefinition definition = GetBehaviorDefinition(working, frame);
-        List<BehaviorInstruction> replay = definition.Instructions.ToList();
+        IReadOnlyList<BehaviorInstruction> rootInstructions = frame.AbilityKey is null
+            ? definition.Instructions
+            : GetAbilityDeclaration(definition, frame.AbilityKey).Instructions;
+        List<BehaviorInstruction> replay = rootInstructions.ToList();
         BehaviorTarget? originatingTarget = null;
         IReadOnlyList<CardInstanceId>? originatingSelection = null;
         foreach (BehaviorContinuationStep step in frame.Continuation)
@@ -547,7 +550,13 @@ public static partial class GameEngine
         BehaviorResolutionFrame frame)
     {
         CardBehaviorDefinition definition = GetBehaviorDefinition(working, frame);
-        var instructions = definition.Instructions.ToList();
+        IReadOnlyList<BehaviorInstruction> root = definition.Instructions;
+        if (frame.AbilityKey is not null)
+        {
+            root = GetAbilityDeclaration(definition, frame.AbilityKey).Instructions;
+        }
+
+        var instructions = root.ToList();
         foreach (BehaviorContinuationStep step in frame.Continuation)
         {
             if (!BehaviorContinuation.TryApply(instructions, step, out string? continuationError))
@@ -563,6 +572,24 @@ public static partial class GameEngine
     private static void ValidateBehaviorRuntimeFrame(WorkingState working, BehaviorResolutionFrame frame)
     {
         CardBehaviorDefinition definition = GetBehaviorDefinition(working, frame);
+        IReadOnlyList<BehaviorInstruction> rootInstructions = definition.Instructions;
+        BehaviorPaidAbility? abilityDeclaration = null;
+        if (frame.AbilityKey is not null)
+        {
+            if (!StableIdentifier.TryValidate(frame.AbilityKey))
+            {
+                throw new ResolutionFailureException("Behavior ability child key is missing or invalid.");
+            }
+
+            abilityDeclaration = GetAbilityDeclaration(definition, frame.AbilityKey);
+            rootInstructions = abilityDeclaration.Instructions;
+            if (frame.Stage != BehaviorResolutionStage.Execute)
+            {
+                throw new ResolutionFailureException(
+                    "An ability behavior child must begin and remain in Execute stage.");
+            }
+        }
+
         if (!string.Equals(frame.CatalogFingerprint, working.BehaviorCatalog.Fingerprint, StringComparison.Ordinal))
         {
             throw new ResolutionFailureException("Behavior frame catalog provenance does not match the injected catalog.");
@@ -576,7 +603,7 @@ public static partial class GameEngine
             throw new ResolutionFailureException("Behavior frame definition provenance does not match the injected catalog.");
         }
 
-        var derivedInstructions = definition.Instructions.ToList();
+        var derivedInstructions = rootInstructions.ToList();
         foreach (BehaviorContinuationStep step in frame.Continuation)
         {
             if (!BehaviorContinuation.TryApply(derivedInstructions, step, out string? continuationError))
@@ -597,7 +624,7 @@ public static partial class GameEngine
         if (frame.RootInstructions.Count > 0
             && !BehaviorContractStructure.SequenceEquals(
                 frame.RootInstructions,
-                definition.Instructions,
+                rootInstructions,
                 BehaviorContractStructure.AreEqual))
         {
             throw new ResolutionFailureException("Behavior frame root instructions do not match the injected catalog.");
@@ -659,6 +686,22 @@ public static partial class GameEngine
             throw new ResolutionFailureException("Behavior frame source location kind no longer matches its invocation context.");
         }
 
+        if (source.ZoneId != frame.SourceZoneId.Value)
+        {
+            bool abilitySelfTrash = abilityDeclaration is not null
+                && abilityDeclaration.Costs.Any(static cost => cost.Kind == BehaviorCostKind.TrashSelf);
+            ZoneState currentSourceZone = working.Zones.SingleOrDefault(zone => zone.Id == source.ZoneId)
+                ?? throw new ResolutionFailureException("Behavior source card current zone no longer exists.");
+            if (!abilitySelfTrash
+                || frame.AbilityKey is null
+                || frame.Stage != BehaviorResolutionStage.Execute
+                || !IsAbilityTrashZone(currentSourceZone, source))
+            {
+                throw new ResolutionFailureException(
+                    "Behavior source card no longer occupies its captured invocation location.");
+            }
+        }
+
         if (frame.ParentFrameIdentity is not null)
         {
             if (working.ResolutionStack.Count < 2
@@ -669,6 +712,21 @@ public static partial class GameEngine
             {
                 throw new ResolutionFailureException(
                     "Behavior frame parent identity no longer matches the active parent frame context.");
+            }
+        }
+
+        if (frame.AbilityKey is not null)
+        {
+            if (working.ResolutionStack.Count < 2
+                || working.ResolutionStack[^2] is not AbilityFrame abilityParent
+                || abilityParent.Stage != AbilityLifecycleStage.AwaitingChild
+                || !string.Equals(abilityParent.AbilityKey, frame.AbilityKey, StringComparison.Ordinal)
+                || abilityParent.SourceCardId != frame.SourceCardId
+                || abilityParent.DefinitionId != frame.DefinitionId
+                || abilityParent.Controller != frame.Controller)
+            {
+                throw new ResolutionFailureException(
+                    "Ability behavior child no longer matches its exact awaiting ability parent.");
             }
         }
 
@@ -948,7 +1006,11 @@ public static partial class GameEngine
         // the condition itself. StepBehaviorResolution already performs this
         // check for normal execution; retaining it here keeps the condition
         // fail-closed when called from a future resolution path.
-        List<BehaviorInstruction> replay = GetBehaviorDefinition(working, frame).Instructions.ToList();
+        CardBehaviorDefinition definition = GetBehaviorDefinition(working, frame);
+        IReadOnlyList<BehaviorInstruction> rootInstructions = frame.AbilityKey is null
+            ? definition.Instructions
+            : GetAbilityDeclaration(definition, frame.AbilityKey).Instructions;
+        List<BehaviorInstruction> replay = rootInstructions.ToList();
         BehaviorContinuationStep? latestSelection = null;
         bool latestSelectionWasSearch = false;
         foreach (BehaviorContinuationStep step in frame.Continuation)
@@ -2166,7 +2228,11 @@ public static partial class GameEngine
         WorkingState working,
         BehaviorResolutionFrame frame)
     {
-        List<BehaviorInstruction> replay = GetBehaviorDefinition(working, frame).Instructions.ToList();
+        CardBehaviorDefinition definition = GetBehaviorDefinition(working, frame);
+        IReadOnlyList<BehaviorInstruction> rootInstructions = frame.AbilityKey is null
+            ? definition.Instructions
+            : GetAbilityDeclaration(definition, frame.AbilityKey).Instructions;
+        List<BehaviorInstruction> replay = rootInstructions.ToList();
         BehaviorInstruction? latestEmptySearch = null;
         foreach (BehaviorContinuationStep step in frame.Continuation)
         {
@@ -2279,7 +2345,10 @@ public static partial class GameEngine
         }
 
         CardBehaviorDefinition definition = GetBehaviorDefinition(working, frame);
-        List<BehaviorInstruction> replay = definition.Instructions.ToList();
+        IReadOnlyList<BehaviorInstruction> rootInstructions = frame.AbilityKey is null
+            ? definition.Instructions
+            : GetAbilityDeclaration(definition, frame.AbilityKey).Instructions;
+        List<BehaviorInstruction> replay = rootInstructions.ToList();
         BehaviorTarget? originatingTarget = null;
         IReadOnlyList<CardInstanceId>? originatingSelection = null;
         foreach (BehaviorContinuationStep step in frame.Continuation)
@@ -2414,6 +2483,12 @@ public static partial class GameEngine
             card.OwnerSide == PlayerSide.Corp ? BehaviorZone.Archives : BehaviorZone.Heap,
             card.OwnerSide);
         MoveCard(working, card, source, destination);
+        if (card.OwnerSide == PlayerSide.Runner
+            && source.Kind == ZoneKind.RunnerRig
+            && working.RulesState?.Programs.Any(program => program.CardId == card.Id) == true)
+        {
+            RemoveProgramRegistration(working, card.Id);
+        }
     }
 
     private static ZoneState ZoneForCard(WorkingState working, CardInstanceId cardId) =>
