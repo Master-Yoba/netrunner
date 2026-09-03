@@ -1560,8 +1560,9 @@ public static partial class GameEngine
         }
 
         // CR 26.03 3.9.5h: an interface ability that names a subtype of ice
-        // can only be used on encountered ice with that subtype.
-        if (iceSpec.IceType != breakerSpec.InterfaceType)
+        // can only be used on encountered ice with that subtype. An explicit
+        // wildcard interface may be used with any concrete encountered ICE.
+        if (!IceInterfaceMatcher.Matches(iceSpec, breakerSpec))
         {
             throw new ResolutionFailureException(
                 $"Breaker '{breakerSpec.DefinitionId}' interfaces with {breakerSpec.InterfaceType} ICE, "
@@ -1820,8 +1821,8 @@ public static partial class GameEngine
 
         // CR 26.03 6.5/9.8/3.9.5: while the encounter paid window is open, every
         // registered rig icebreaker materializes its interface abilities
-        // against the encountered ICE — break quantities (only while the named
-        // subtype matches, the current strength covers the ICE, and the
+        // against the encountered ICE — break quantities (only while the
+        // interface matches, the current strength covers the ICE, and the
         // quantity stays within this activation's BreakLimit) and a pump
         // (never strength- or subtype-gated, because it exists to raise
         // strength into range). There is no persistent server attachment:
@@ -1863,7 +1864,7 @@ public static partial class GameEngine
                         continue;
                     }
 
-                    if (iceSpec.IceType == breakerSpec.InterfaceType
+                    if (IceInterfaceMatcher.Matches(iceSpec, breakerSpec)
                         && EncounterStrength.Breaker(breakerSpec, run.LingeringEffects, cardId) >= iceStrength
                         && availableCredits >= breakerSpec.BreakCost)
                     {

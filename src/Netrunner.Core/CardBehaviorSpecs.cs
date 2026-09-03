@@ -36,6 +36,13 @@ public sealed record IceBehaviorSpec
             throw new ArgumentException(
                 $"Card '{definitionId}' must not have a negative rez cost.", nameof(rezCost));
         }
+
+        if (iceType is IceType.Any || !Enum.IsDefined(iceType))
+        {
+            throw new ArgumentException(
+                $"Card '{definitionId}' must declare a concrete ICE subtype; '{iceType}' is not a valid ICE subtype.",
+                nameof(iceType));
+        }
     }
 
     public CardDefinitionId DefinitionId { get; }
@@ -129,6 +136,8 @@ public enum IceType
 {
     Barrier,
     CodeGate,
+    Sentry,
+    Any,
 }
 
 /// <summary>
@@ -182,6 +191,13 @@ public sealed record IcebreakerBehaviorSpec
         {
             throw new ArgumentException(
                 $"Card '{definitionId}' must have a positive pump strength.", nameof(pumpStrength));
+        }
+
+        if (!Enum.IsDefined(interfaceType))
+        {
+            throw new ArgumentException(
+                $"Card '{definitionId}' must declare a concrete or wildcard icebreaker interface; '{interfaceType}' is invalid.",
+                nameof(interfaceType));
         }
     }
 

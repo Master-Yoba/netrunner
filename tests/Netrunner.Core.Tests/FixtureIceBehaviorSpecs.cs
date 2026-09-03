@@ -18,8 +18,11 @@ internal static class FixtureIceBehaviorSpecs
     public static readonly CardDefinitionId EndRunIfCredits = new("fixture:ice-end-run-if-credits");
     public static readonly CardDefinitionId ThreeSubroutines = new("fixture:ice-three-subroutines");
     public static readonly CardDefinitionId CodeGateLoseCredits = new("fixture:ice-codegate-lose-credits");
+    public static readonly CardDefinitionId SentryLoseCredits = new("fixture:ice-sentry-lose-credits");
     public static readonly CardDefinitionId BreakerBarrier = new("fixture:breaker-barrier");
     public static readonly CardDefinitionId BreakerCodeGate = new("fixture:breaker-codgate");
+    public static readonly CardDefinitionId BreakerSentry = new("fixture:breaker-sentry");
+    public static readonly CardDefinitionId BreakerAny = new("fixture:breaker-any");
 
     [ModuleInitializer]
     internal static void Initialize()
@@ -116,6 +119,16 @@ internal static class FixtureIceBehaviorSpecs
                 new EndRunIfCreditsAtMostSubroutineSpec(PlayerSide.Runner, 6),
             },
             strengthModifiers: Array.Empty<IceStrengthModifierSpec>()));
+        CardBehaviorSpecCatalog.RegisterIce(new IceBehaviorSpec(
+            SentryLoseCredits,
+            strength: 0,
+            iceType: IceType.Sentry,
+            rezCost: 0,
+            subroutines: new IceSubroutineSpec[]
+            {
+                new LoseCreditsSubroutineSpec(PlayerSide.Runner, 1),
+            },
+            strengthModifiers: Array.Empty<IceStrengthModifierSpec>()));
         CardBehaviorSpecCatalog.RegisterIcebreaker(new IcebreakerBehaviorSpec(
             BreakerBarrier,
             baseStrength: 3,
@@ -128,6 +141,22 @@ internal static class FixtureIceBehaviorSpecs
             BreakerCodeGate,
             baseStrength: 3,
             interfaceType: IceType.CodeGate,
+            breakCost: 1,
+            breakLimit: 2,
+            pumpCost: 2,
+            pumpStrength: 1));
+        CardBehaviorSpecCatalog.RegisterIcebreaker(new IcebreakerBehaviorSpec(
+            BreakerSentry,
+            baseStrength: 3,
+            interfaceType: IceType.Sentry,
+            breakCost: 1,
+            breakLimit: 2,
+            pumpCost: 2,
+            pumpStrength: 1));
+        CardBehaviorSpecCatalog.RegisterIcebreaker(new IcebreakerBehaviorSpec(
+            BreakerAny,
+            baseStrength: 3,
+            interfaceType: IceType.Any,
             breakCost: 1,
             breakLimit: 2,
             pumpCost: 2,

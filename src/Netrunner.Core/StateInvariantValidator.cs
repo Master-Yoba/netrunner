@@ -5592,7 +5592,7 @@ public static class StateInvariantValidator
                     ServerState? attackedServer = state.Servers.FirstOrDefault(server => server?.Id == run.AttackedServer);
 
                     // Mirrors the engine's encounter offer: every registered rig
-                    // breaker materializes break quantities (named-subtype match,
+                    // breaker materializes break quantities (interface match,
                     // sufficient current strength, per-activation BreakLimit,
                     // affordability) and a pump (affordability only), in
                     // stored zone/card order; there is no persistent server
@@ -5628,7 +5628,7 @@ public static class StateInvariantValidator
                                 }
 
                                 if (runnerPlayer is not null
-                                    && expectedIceSpec.IceType == expectedBreakerSpec.InterfaceType
+                                    && IceInterfaceMatcher.Matches(expectedIceSpec, expectedBreakerSpec)
                                     && EncounterStrength.Breaker(expectedBreakerSpec, run.LingeringEffects, cardId) >= iceStrength
                                     && (long)runnerPlayer.Credits + run.RunCredits >= expectedBreakerSpec.BreakCost)
                                 {

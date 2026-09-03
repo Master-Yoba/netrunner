@@ -2706,3 +2706,25 @@ errors; runtime action expansion and full verification remain pending.
   tests 7/7. The direct M2 proof remains byte-stable at initial/final/event
   hashes `faf4e631...` / `c882eb43...` / `d20cdef9...`, with 32 checkpoints,
   identical scripted/agent results, and verified replay.
+
+### 2026-09-03 — Checkpoint A3 encountered-ICE subtype legality accepted
+
+- Luna Max completed ENG-407A's shared subtype boundary. `IceType` now carries
+  concrete Barrier, Code Gate, and Sentry values plus an explicit `Any`
+  icebreaker interface. Actual `IceBehaviorSpec` declarations reject the
+  wildcard and undefined enum values; `IcebreakerBehaviorSpec` accepts all
+  defined concrete/wildcard interfaces.
+- One pure `IceInterfaceMatcher` is now the subtype authority for break-action
+  materialization, submitted break consumption, and invariant reconstruction.
+  Strength, affordability, hosted run-credit division, and per-activation
+  break limits remain separate existing legality terms; pump actions remain
+  correctly independent of subtype/strength eligibility. No card title switch,
+  Carmen declaration, or Slice 4.4 strength-modifier work landed here.
+- Focused coverage proves exact Sentry use, wildcard use against all three
+  concrete types, concrete mismatch omission and forged-action rejection,
+  wildcard rejection as an actual ICE type, invariant agreement, named JSON
+  serialization, and catalog equality/fingerprint changes. Root independently
+  passed the focused gate 15/15, complete Core 530/530, Core formatting, and
+  `git diff --check`; the delegated whole-solution gate passed 746/746 with a
+  zero-warning build. The direct M2 proof retains the schema-3 hashes and 32
+  replay-verified checkpoints recorded above.
