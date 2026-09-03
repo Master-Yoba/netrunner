@@ -182,6 +182,13 @@ public sealed class RealAdvanceScoreTests
         Assert.Equal(PlayerSide.Corp, scored.Winner);
         Assert.Equal(fixture.AgendaIds[0], scored.AgendaId);
         Assert.Equal(fixture.AgendaPoints, scored.AgendaPoints);
+        Assert.Equal(
+            [new AgendaTurnChange(
+                fixture.AgendaIds[0],
+                PlayerSide.Corp,
+                fixture.AgendaPoints,
+                AgendaTurnChangeKind.Score)],
+            result.State.Turn.ThisTurnFacts!.AgendaTurnChanges);
         Assert.Equal(TurnFrameStage.ActionPriority, Assert.IsType<TurnFrame>(result.State.ResolutionStack.Single()).Stage);
         Assert.Equal(PlayerSide.Corp, Assert.IsType<TurnFrame>(result.State.ResolutionStack.Single()).PriorityHolder);
         Assert.Equal(DecisionKind.TurnTiming, result.State.PendingDecision!.Kind);
@@ -361,6 +368,13 @@ public sealed class RealAdvanceScoreTests
         Assert.Equal(GameOutcomeKind.Won, result.State.Outcome.Kind);
         Assert.Equal(PlayerSide.Corp, result.State.Outcome.Winner);
         Assert.Equal(RealGameRules.AgendaPointsToWin, result.State.GetPlayer(fixture.CorpId).AgendaPoints);
+        Assert.Equal(
+            [new AgendaTurnChange(
+                fixture.AgendaIds[0],
+                PlayerSide.Corp,
+                fixture.AgendaPoints,
+                AgendaTurnChangeKind.Score)],
+            result.State.Turn.ThisTurnFacts!.AgendaTurnChanges);
         Assert.DoesNotContain(result.State.Servers, server => server.Id == fixture.RemoteId);
         Assert.DoesNotContain(result.State.Zones, zone => zone.Id == fixture.RootZoneId || zone.Id == fixture.IceZoneId);
     }

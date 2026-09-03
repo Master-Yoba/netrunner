@@ -63,6 +63,7 @@ public sealed class BasicRunActionTests
             pending.LegalActions,
             candidate => candidate.Kind == ActionKind.StartRun
                 && Assert.IsType<RunServerParameters>(candidate.Parameters).ServerId == RemoteId(before));
+        ServerId attackedServer = Assert.IsType<RunServerParameters>(action.Parameters).ServerId;
         PlayerState runnerBefore = before.GetPlayer(pending.Owner);
 
         ApplyResult result = Apply(before, action);
@@ -87,6 +88,9 @@ public sealed class BasicRunActionTests
         Assert.DoesNotContain(result.State.Zones, zone => zone.Kind == ZoneKind.RunnerPlayArea);
         Assert.Equal(DecisionKind.RunTiming, result.State.PendingDecision!.Kind);
         Assert.Equal(PlayerSide.Runner, SideOf(result.State, result.State.PendingDecision.Owner));
+        Assert.Equal([attackedServer], result.State.Turn.ThisTurnFacts!.AttemptedRunServerIds);
+        Assert.Empty(result.State.Turn.ThisTurnFacts.SuccessfulRunServerIds);
+        Assert.False(result.State.Turn.ThisTurnFacts.SuccessfulRun);
         StateInvariantValidator.Validate(result.State);
     }
 
@@ -132,6 +136,13 @@ public sealed class BasicRunActionTests
         Assert.Equal(TurnFrameStage.ActionPriority, Assert.IsType<TurnFrame>(completed.State.ResolutionStack[0]).Stage);
         Assert.Equal(DecisionKind.TurnTiming, completed.State.PendingDecision!.Kind);
         Assert.Contains(completed.Events, @event => @event.Kind == EngineEventKinds.RunEnded);
+        Assert.Equal(
+            [RemoteId(started)],
+            completed.State.Turn.ThisTurnFacts!.AttemptedRunServerIds);
+        Assert.Equal(
+            [RemoteId(started)],
+            completed.State.Turn.ThisTurnFacts.SuccessfulRunServerIds);
+        Assert.True(completed.State.Turn.ThisTurnFacts.SuccessfulRun);
 
         GameState actionPriorityClosed = ApplyPass(completed.State).State;
         actionPriorityClosed = ApplyPass(actionPriorityClosed).State;
@@ -352,6 +363,8 @@ public sealed class BasicRunActionTests
         LegalAction accessAgenda = Assert.Single(
             candidateSelection.PendingDecision!.LegalActions,
             action => action.Kind == ActionKind.ChooseBreachCandidate);
+        BreachCandidateParameters accessParameters =
+            Assert.IsType<BreachCandidateParameters>(accessAgenda.Parameters);
         ApplyResult accessed = Apply(candidateSelection, accessAgenda);
         Assert.True(accessed.Accepted, accessed.Rejection?.Message);
         Assert.Equal(RunTimingStep.BreachAccessAbility, accessed.State.RunState!.Step);
@@ -363,6 +376,17 @@ public sealed class BasicRunActionTests
 
         Assert.True(stolen.Accepted, stolen.Rejection?.Message);
         Assert.Contains(stolen.Events, @event => @event.Kind == EngineEventKinds.AgendaStolen);
+        TurnFactsState facts = stolen.State.Turn.ThisTurnFacts!;
+        Assert.Equal([RemoteId(started)], facts.AttemptedRunServerIds);
+        Assert.Equal([RemoteId(started)], facts.SuccessfulRunServerIds);
+        Assert.Equal([accessParameters.CardId!.Value], facts.AccessedCardOccurrenceIds);
+        Assert.Equal(
+            [new AgendaTurnChange(
+                accessParameters.CardId.Value,
+                PlayerSide.Runner,
+                1,
+                AgendaTurnChangeKind.Steal)],
+            facts.AgendaTurnChanges);
         int runEnded = stolen.Events.ToList().FindIndex(@event => @event.Kind == EngineEventKinds.RunEnded);
         Assert.True(runEnded >= 0);
         int gameWon = stolen.Events.ToList().FindIndex(@event => @event.Kind == EngineEventKinds.GameWon);
@@ -396,6 +420,8 @@ public sealed class BasicRunActionTests
         Assert.IsType<RunTimingFrame>(started.State.ResolutionStack[0]);
         Assert.DoesNotContain(started.Events, @event => @event.Kind == EngineEventKinds.ClickSpent);
         Assert.Contains(started.Events, @event => @event.Kind == EngineEventKinds.RunInitiated);
+        Assert.Null(started.State.Turn.History);
+        Assert.Null(started.State.Turn.ThisTurnFacts);
     }
 
     private static GameState StartBasicRun(GameState state)

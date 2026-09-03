@@ -126,6 +126,7 @@ public sealed class CardAccessedTriggerTests
         Assert.Equal(RunTimingStep.BreachAccessAbility, opened.State.RunState?.Step);
         Assert.Equal([fixture.AgendaId], opened.State.RunState!.ChosenAccessCards.ToArray());
         Assert.Equal([fixture.AgendaId], opened.State.RunState.AccessedCards.ToArray());
+        Assert.Equal([fixture.AgendaId], opened.State.Turn.ThisTurnFacts!.AccessedCardOccurrenceIds);
         Assert.Equal(1, opened.Events.Count(@event => @event.Kind == EngineEventKinds.BreachCandidateChosen));
         Assert.Equal(1, opened.Events.Count(@event => @event.Kind == EngineEventKinds.CardAccessed));
         Assert.DoesNotContain(opened.Events, @event => @event.Kind == EngineEventKinds.CreditsAdjusted);
@@ -151,6 +152,7 @@ public sealed class CardAccessedTriggerTests
         Assert.Equal(RunTimingStep.BreachAccessAbility, declined.State.RunState?.Step);
         Assert.Equal([fixture.AgendaId], declined.State.RunState!.ChosenAccessCards.ToArray());
         Assert.Equal([fixture.AgendaId], declined.State.RunState.AccessedCards.ToArray());
+        Assert.Equal([fixture.AgendaId], declined.State.Turn.ThisTurnFacts!.AccessedCardOccurrenceIds);
         Assert.Equal(DecisionKind.RunTiming, declined.State.PendingDecision?.Kind);
         Assert.Single(
             declined.State.PendingDecision!.LegalActions,

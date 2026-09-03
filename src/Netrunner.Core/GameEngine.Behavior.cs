@@ -2971,19 +2971,4 @@ public static partial class GameEngine
             working.Turn.History.MarkInstalled(side, cardId));
     }
 
-    private static void MarkSuccessfulRunThisTurn(WorkingState working, PlayerSide side)
-    {
-        if (working.Turn.History is null || working.Turn.History.ThisTurn(side) is null)
-        {
-            return;
-        }
-
-        ReplaceTurn(
-            working,
-            working.Turn.ActiveSide,
-            working.Turn.Phase,
-            working.Turn.TurnNumber,
-            working.Turn.Step,
-            working.Turn.History.MarkSuccessfulRun(side));
-    }
 }

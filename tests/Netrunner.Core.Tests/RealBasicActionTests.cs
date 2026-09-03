@@ -40,6 +40,9 @@ public sealed class RealBasicActionTests
         Assert.Equal(before.Clicks - 1, after.Clicks);
         Assert.Equal(before.Credits - 2, after.Credits);
         Assert.Equal(1, result.State.RulesState!.Players.Single(value => value.PlayerId == fixture.RunnerId).Tags);
+        Assert.Equal(
+            [new TagTurnChange(fixture.RunnerId, -1)],
+            result.State.Turn.ThisTurnFacts!.TagTurnChanges);
         Assert.Equal(DecisionKind.TurnTiming, result.State.PendingDecision!.Kind);
         Assert.Equal(TurnFrameStage.ActionPriority, Assert.IsType<TurnFrame>(result.State.ResolutionStack.Single()).Stage);
     }

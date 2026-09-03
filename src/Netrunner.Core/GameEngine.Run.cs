@@ -331,6 +331,8 @@ public static partial class GameEngine
                 GetPlayer(working, runner.Id).Credits));
         }
 
+        RecordTurnRunAttempt(working, server.Id);
+
         // CR 6.9.1: initiation follows event placement/payment. The first
         // decision is yielded directly, preserving the standalone M2 boundary
         // and giving a basic turn action the same run timing cursor.
@@ -788,7 +790,7 @@ public static partial class GameEngine
         }
 
         Emit(working, EngineEventKinds.RunSuccessful, new RunSuccessfulEventPayload(run.Id, run.AttackedServer));
-        MarkSuccessfulRunThisTurn(working, run.InitiatingSide);
+        RecordTurnRunSuccess(working, run.AttackedServer);
         SetRunTiming(working, run.WithTiming(
             RunTimingStep.BreachBoundary,
             -1,
@@ -1178,6 +1180,7 @@ public static partial class GameEngine
             null,
             RunAccessState.InProgress);
         SetRunTiming(working, run);
+        RecordTurnAccess(working, cardId);
         if (HasActiveCatalogTrigger(working, OccurrenceKind.CardAccessed))
         {
             QueueCardAccessedOccurrence(
@@ -1325,6 +1328,12 @@ public static partial class GameEngine
             card.AdvancementCounters));
         AddAgendaPoints(working, PlayerSide.Runner, spec.AgendaPoints);
         Emit(working, EngineEventKinds.AgendaStolen, new AgendaStolenEventPayload(PlayerSide.Runner, cardId, spec.AgendaPoints));
+        RecordTurnAgendaChange(
+            working,
+            card.Id,
+            PlayerSide.Runner,
+            spec.AgendaPoints,
+            AgendaTurnChangeKind.Steal);
 
         bool realTurnRun = IsRealTurnRun(working, run);
         int agendaPointsToWin = realTurnRun

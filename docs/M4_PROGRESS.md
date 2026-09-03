@@ -3265,3 +3265,31 @@ errors; runtime action expansion and full verification remain pending.
   `git diff --check`. The direct M2 proof remains byte-stable at
   `faf4e631...` / `c882eb43...` / `d20cdef9...`, with all 32 checkpoints
   replay verified. Production ENG-413 recording remains the next checkpoint.
+
+### 2026-09-03 — Checkpoint C3c-1 ENG-413 lifecycle recording accepted
+
+- Luna Max added one formal-turn fact mutation boundary and connected it to
+  the shared production run initiation, run success, breach access, real agenda
+  score/steal, and tag-adjustment reducers. Each helper updates only the active
+  side's current formal history while preserving the turn cursor verbatim;
+  legacy/toy states without formal history remain no-ops and allocate no new
+  frames or events.
+- Run initiation records the attacked server once, success records the same
+  server as both attempted and successful, and jack-out retains only the
+  attempt. Access is appended after its chosen/accessed evidence and before
+  trigger dispatch, so an optional trigger JSON resume cannot duplicate it.
+  Nonterminal and terminal Corp scores plus terminal Runner steals retain the
+  typed physical agenda, beneficiary, kind, and printed points after the
+  authoritative move/point event. Central nonzero tag deltas record both gains
+  and removals against the Runner in their actual occurrence order.
+- Root replaced a null-forgiving helper draft with an explicit nullable-history
+  guard and removed a redundant second jack-out fixture change: the dedicated
+  runtime test owns formal unsuccessful-run evidence while the established
+  run-trigger test keeps its original standalone contract. Semantic trash
+  recording remains deliberately separate because ordinary discard/movement
+  must not be misclassified as trash.
+- Root independently passed the reviewed lifecycle-focused gate 41/41,
+  complete Core 622/622, the zero-warning/error solution build, Core
+  formatting, and `git diff --check`. The direct M2 proof remains byte-stable
+  at `faf4e631...` / `c882eb43...` / `d20cdef9...`, with all 32 checkpoints
+  replay verified.

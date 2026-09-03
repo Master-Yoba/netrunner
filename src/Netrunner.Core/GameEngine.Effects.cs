@@ -571,6 +571,7 @@ public static partial class GameEngine
             target,
             delta,
             (int)next));
+        RecordTurnTagChange(working, target, delta);
     }
 
     private static void ApplyBaseMemory(WorkingState working, PlayerId target, int delta)

@@ -251,6 +251,12 @@ public static partial class GameEngine
             PlayerSide.Corp,
             card.Id,
             spec.AgendaPoints));
+        RecordTurnAgendaChange(
+            working,
+            card.Id,
+            PlayerSide.Corp,
+            spec.AgendaPoints,
+            AgendaTurnChangeKind.Score);
 
         CleanupEmptyRemote(working, server);
 
