@@ -3212,3 +3212,32 @@ errors; runtime action expansion and full verification remain pending.
   M2 stays at `faf4e631...` / `c882eb43...` / `d20cdef9...` with 32 verified
   checkpoints. All ENG-409 occurrence kinds now have production dispatch;
   card bindings and ENG-411 installed run-source state remain later work.
+
+### 2026-09-03 — Checkpoint C3a ENG-413 turn-fact contracts accepted
+
+- Luna Max implemented the state/API half of ENG-413. Side-specific turn facts
+  now retain first-seen run-attempt and successful-run server sets, ordered
+  access and trash occurrences (including repeated physical IDs), typed agenda
+  score/steal and tag deltas, and counted first-X consumption keyed by physical
+  source plus stable purpose. Immutable transitions preserve every ledger, use
+  checked accumulation, and expose one canonical first-X count query.
+- Root rejected an ephemeral legacy marker whose meaning changed after a JSON
+  round trip and removed redundant accessor aliases. The stable compatibility
+  rule accepts the existing `SuccessfulRun = true` shape with no server detail,
+  while new server-bearing success facts require the success flag and a matching
+  attempted server. Historical server IDs are deliberately not required to
+  remain on the current board because an accessed/trash-cleared remote can be
+  removed later in the same turn.
+- Constructors and history copies freeze nested collections and records;
+  canonical JSON retains all new facts. Invariants reject malformed IDs,
+  duplicate run/first-X keys, success-without-attempt, unknown card/player
+  references, Corp run facts, mismatched agenda kind/beneficiary/turn side,
+  non-Runner tag targets, and invalid counts. A formal `TurnHistory.Start`
+  moves the complete prior ledger to last-turn facts and creates an empty new
+  current ledger without mutating the prior history.
+- Root independently passed focused turn-fact contracts 7/7, complete Core
+  617/617, the zero-warning/error solution build, Core formatting, and
+  `git diff --check`. The direct M2 proof remains byte-stable at initial/final/
+  event hashes `faf4e631...` / `c882eb43...` / `d20cdef9...`, with all 32
+  checkpoints replay verified. Production fact recording and observation
+  projection remain the next ENG-413 checkpoints.

@@ -918,10 +918,43 @@ public static class StateInvariantValidator
 
             if (turn.History is not null)
             {
-                ValidateTurnFacts(turn.History.CorpThisTurn, PlayerSide.Corp, "turn.history.corpThisTurn", violations);
-                ValidateTurnFacts(turn.History.CorpLastTurn, PlayerSide.Corp, "turn.history.corpLastTurn", violations);
-                ValidateTurnFacts(turn.History.RunnerThisTurn, PlayerSide.Runner, "turn.history.runnerThisTurn", violations);
-                ValidateTurnFacts(turn.History.RunnerLastTurn, PlayerSide.Runner, "turn.history.runnerLastTurn", violations);
+                HashSet<CardInstanceId> knownCardIds = state.Cards
+                    .Where(static card => card is not null && StableIdentifier.TryValidate(card.Id.Value))
+                    .Select(static card => card!.Id)
+                    .ToHashSet();
+                Dictionary<PlayerId, PlayerSide> knownPlayers = state.Players
+                    .Where(static player => player is not null && StableIdentifier.TryValidate(player.Id.Value))
+                    .GroupBy(static player => player!.Id)
+                    .ToDictionary(static group => group.Key, static group => group.First()!.Side);
+
+                ValidateTurnFacts(
+                    turn.History.CorpThisTurn,
+                    PlayerSide.Corp,
+                    "turn.history.corpThisTurn",
+                    knownCardIds,
+                    knownPlayers,
+                    violations);
+                ValidateTurnFacts(
+                    turn.History.CorpLastTurn,
+                    PlayerSide.Corp,
+                    "turn.history.corpLastTurn",
+                    knownCardIds,
+                    knownPlayers,
+                    violations);
+                ValidateTurnFacts(
+                    turn.History.RunnerThisTurn,
+                    PlayerSide.Runner,
+                    "turn.history.runnerThisTurn",
+                    knownCardIds,
+                    knownPlayers,
+                    violations);
+                ValidateTurnFacts(
+                    turn.History.RunnerLastTurn,
+                    PlayerSide.Runner,
+                    "turn.history.runnerLastTurn",
+                    knownCardIds,
+                    knownPlayers,
+                    violations);
             }
             else if (turn.Step != TurnStep.None)
             {
@@ -9813,6 +9846,8 @@ public static class StateInvariantValidator
         TurnFactsState? facts,
         PlayerSide expectedSide,
         string path,
+        HashSet<CardInstanceId> knownCardIds,
+        Dictionary<PlayerId, PlayerSide> knownPlayers,
         List<StateInvariantViolation> violations)
     {
         if (facts is null)
@@ -9871,6 +9906,205 @@ public static class StateInvariantValidator
             Add(violations, "turn.corp-successful-run", $"{path}.successfulRun", "Only Runner turn facts may record a successful run.");
         }
 
+        var attemptedServers = new HashSet<ServerId>();
+        for (int index = 0; index < facts.AttemptedRunServerIds.Count; index++)
+        {
+            ServerId serverId = facts.AttemptedRunServerIds[index];
+            string itemPath = $"{path}.attemptedRunServerIds[{index}]";
+            bool validId = StableIdentifier.TryValidate(serverId.Value);
+            if (!validId)
+            {
+                Add(violations, "id.invalid", itemPath, "Attempted-run server ID must be non-empty and stable.");
+            }
+            if (validId && !attemptedServers.Add(serverId))
+            {
+                Add(violations, "turn.duplicate-attempted-run-server", itemPath, $"Attempted-run server '{serverId}' is duplicated.");
+            }
+        }
+
+        var successfulServers = new HashSet<ServerId>();
+        for (int index = 0; index < facts.SuccessfulRunServerIds.Count; index++)
+        {
+            ServerId serverId = facts.SuccessfulRunServerIds[index];
+            string itemPath = $"{path}.successfulRunServerIds[{index}]";
+            bool validId = StableIdentifier.TryValidate(serverId.Value);
+            if (!validId)
+            {
+                Add(violations, "id.invalid", itemPath, "Successful-run server ID must be non-empty and stable.");
+            }
+            if (validId && !successfulServers.Add(serverId))
+            {
+                Add(violations, "turn.duplicate-successful-run-server", itemPath, $"Successful-run server '{serverId}' is duplicated.");
+            }
+
+            if (validId && !attemptedServers.Contains(serverId))
+            {
+                Add(violations, "turn.successful-run-not-attempted", itemPath, $"Successful-run server '{serverId}' was not recorded as attempted.");
+            }
+        }
+
+        if (facts.AttemptedRunServerIds.Count > 0 && expectedSide != PlayerSide.Runner)
+        {
+            Add(violations, "turn.corp-attempted-run", $"{path}.attemptedRunServerIds", "Only Runner turn facts may record run attempts.");
+        }
+
+        if (facts.SuccessfulRunServerIds.Count > 0 && expectedSide != PlayerSide.Runner)
+        {
+            Add(violations, "turn.corp-successful-run", $"{path}.successfulRunServerIds", "Only Runner turn facts may record successful runs.");
+        }
+
+        if (!facts.SuccessfulRun && facts.SuccessfulRunServerIds.Count > 0)
+        {
+            Add(
+                violations,
+                "turn.successful-run-flag-mismatch",
+                $"{path}.successfulRun",
+                "Successful-run server IDs require SuccessfulRun to be true.");
+        }
+
+        ValidateTurnFactCardOccurrences(
+            facts.AccessedCardOccurrenceIds,
+            "accessedCardOccurrenceIds",
+            "accessed-card",
+            path,
+            knownCardIds,
+            violations);
+        ValidateTurnFactCardOccurrences(
+            facts.TrashedCardOccurrenceIds,
+            "trashedCardOccurrenceIds",
+            "trashed-card",
+            path,
+            knownCardIds,
+            violations);
+
+        for (int index = 0; index < facts.AgendaTurnChanges.Count; index++)
+        {
+            AgendaTurnChange? change = facts.AgendaTurnChanges[index];
+            string itemPath = $"{path}.agendaTurnChanges[{index}]";
+            if (change is null)
+            {
+                Add(violations, "turn.null-agenda-change", itemPath, "Agenda changes must not be null.");
+                continue;
+            }
+
+            if (!StableIdentifier.TryValidate(change.CardId.Value))
+            {
+                Add(violations, "id.invalid", $"{itemPath}.cardId", "Agenda card ID must be non-empty and stable.");
+            }
+            else if (!knownCardIds.Contains(change.CardId))
+            {
+                Add(violations, "turn.unknown-agenda-card", $"{itemPath}.cardId", $"Agenda card '{change.CardId}' does not exist in the game state.");
+            }
+
+            bool validBeneficiary = IsPlayerSide(change.BeneficiarySide);
+            if (!validBeneficiary)
+            {
+                Add(violations, "turn.invalid-agenda-beneficiary", $"{itemPath}.beneficiarySide", $"'{change.BeneficiarySide}' is not a valid agenda beneficiary side.");
+            }
+
+            bool validKind = Enum.IsDefined(change.Kind);
+            if (!validKind)
+            {
+                Add(violations, "turn.invalid-agenda-kind", $"{itemPath}.kind", $"'{change.Kind}' is not a supported agenda change kind.");
+            }
+
+            if (change.Points <= 0)
+            {
+                Add(violations, "turn.invalid-agenda-points", $"{itemPath}.points", "Agenda change points must be positive.");
+            }
+
+            if (validBeneficiary && validKind)
+            {
+                PlayerSide expectedBeneficiary = change.Kind == AgendaTurnChangeKind.Score
+                    ? PlayerSide.Corp
+                    : PlayerSide.Runner;
+                if (change.BeneficiarySide != expectedBeneficiary)
+                {
+                    Add(
+                        violations,
+                        "turn.agenda-beneficiary-kind-mismatch",
+                        $"{itemPath}.beneficiarySide",
+                        $"An agenda '{change.Kind}' change must benefit '{expectedBeneficiary}'.");
+                }
+
+                if (expectedSide != expectedBeneficiary)
+                {
+                    Add(
+                        violations,
+                        "turn.agenda-turn-side-mismatch",
+                        itemPath,
+                        $"An agenda '{change.Kind}' change must be recorded in the '{expectedBeneficiary}' turn facts.");
+                }
+            }
+        }
+
+        for (int index = 0; index < facts.TagTurnChanges.Count; index++)
+        {
+            TagTurnChange? change = facts.TagTurnChanges[index];
+            string itemPath = $"{path}.tagTurnChanges[{index}]";
+            if (change is null)
+            {
+                Add(violations, "turn.null-tag-change", itemPath, "Tag changes must not be null.");
+                continue;
+            }
+
+            if (!StableIdentifier.TryValidate(change.AffectedPlayerId.Value))
+            {
+                Add(violations, "id.invalid", $"{itemPath}.affectedPlayerId", "Tag target player ID must be non-empty and stable.");
+            }
+            else if (!knownPlayers.TryGetValue(change.AffectedPlayerId, out PlayerSide affectedSide))
+            {
+                Add(violations, "turn.unknown-tag-player", $"{itemPath}.affectedPlayerId", $"Tag target player '{change.AffectedPlayerId}' does not exist in the game state.");
+            }
+            else if (affectedSide != PlayerSide.Runner)
+            {
+                Add(violations, "turn.tag-target-not-runner", $"{itemPath}.affectedPlayerId", "Only the Runner may be tagged.");
+            }
+
+            if (change.Delta == 0)
+            {
+                Add(violations, "turn.zero-tag-change", $"{itemPath}.delta", "A tag change must be nonzero.");
+            }
+        }
+
+        var firstXKeys = new HashSet<(CardInstanceId SourceCardId, string Key)>();
+        for (int index = 0; index < facts.FirstXUseKeys.Count; index++)
+        {
+            FirstXUseKey? use = facts.FirstXUseKeys[index];
+            string itemPath = $"{path}.firstXUseKeys[{index}]";
+            if (use is null)
+            {
+                Add(violations, "turn.null-first-x-use", itemPath, "First-X use entries must not be null.");
+                continue;
+            }
+
+            if (!StableIdentifier.TryValidate(use.SourceCardId.Value))
+            {
+                Add(violations, "id.invalid", $"{itemPath}.sourceCardId", "First-X source card ID must be non-empty and stable.");
+            }
+            else if (!knownCardIds.Contains(use.SourceCardId))
+            {
+                Add(violations, "turn.unknown-first-x-source", $"{itemPath}.sourceCardId", $"First-X source card '{use.SourceCardId}' does not exist in the game state.");
+            }
+
+            bool validKey = StableIdentifier.TryValidate(use.Key);
+            if (!validKey)
+            {
+                Add(violations, "id.invalid", $"{itemPath}.key", "First-X key must be non-empty and stable.");
+            }
+
+            if (use.Count <= 0)
+            {
+                Add(violations, "turn.invalid-first-x-count", $"{itemPath}.count", "First-X use count must be positive.");
+            }
+
+            if (StableIdentifier.TryValidate(use.SourceCardId.Value) && validKey
+                && !firstXKeys.Add((use.SourceCardId, use.Key)))
+            {
+                Add(violations, "turn.duplicate-first-x-key", itemPath, $"First-X key '{use.SourceCardId}/{use.Key}' is duplicated.");
+            }
+        }
+
         var installed = new HashSet<CardInstanceId>();
         for (int index = 0; index < facts.InstalledCardIds.Count; index++)
         {
@@ -9908,6 +10142,29 @@ public static class StateInvariantValidator
             if (!usedAbilities.Add(use))
             {
                 Add(violations, "turn.duplicate-ability-use", $"{path}.usedAbilityKeys[{index}]", $"Ability usage '{use.SourceCardId}/{use.AbilityKey}' is duplicated.");
+            }
+        }
+    }
+
+    private static void ValidateTurnFactCardOccurrences(
+        IReadOnlyList<CardInstanceId> occurrenceIds,
+        string fieldName,
+        string occurrenceName,
+        string path,
+        HashSet<CardInstanceId> knownCardIds,
+        List<StateInvariantViolation> violations)
+    {
+        for (int index = 0; index < occurrenceIds.Count; index++)
+        {
+            CardInstanceId cardId = occurrenceIds[index];
+            string itemPath = $"{path}.{fieldName}[{index}]";
+            if (!StableIdentifier.TryValidate(cardId.Value))
+            {
+                Add(violations, "id.invalid", itemPath, $"{occurrenceName} card ID must be non-empty and stable.");
+            }
+            else if (!knownCardIds.Contains(cardId))
+            {
+                Add(violations, "turn.unknown-card-occurrence", itemPath, $"{occurrenceName} card '{cardId}' does not exist in the game state.");
             }
         }
     }
