@@ -969,14 +969,39 @@ public sealed record BehaviorStaticModifier
     }
 }
 
-/// <summary>A trigger binding identified by occurrence and timing window.</summary>
-public sealed record BehaviorTrigger
+/// <summary>Whether a trigger is scoped to its source, controller, or either player.</summary>
+public enum BehaviorTriggerScope
 {
-    public BehaviorTrigger(string occurrenceKey, TriggerMode mode = TriggerMode.Optional)
+    Self,
+    Controller,
+    Any,
+}
+
+/// <summary>
+/// Immutable typed trigger declaration. A trigger's instruction list is the
+/// complete behavior executed when its declared occurrence is dispatched.
+/// </summary>
+public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
+{
+    [JsonConstructor]
+    public BehaviorTrigger(
+        string key,
+        OccurrenceKind occurrence,
+        TriggerMode mode,
+        BehaviorTriggerScope scope,
+        BehaviorCardFilter? subjectCardFilter,
+        IReadOnlyList<BehaviorInstruction> instructions)
     {
-        if (string.IsNullOrWhiteSpace(occurrenceKey))
+        if (!StableIdentifier.TryValidate(key))
         {
-            throw new ArgumentException("A trigger occurrence key is required.", nameof(occurrenceKey));
+            throw new ArgumentException(
+                "A behavior trigger key must be a stable identifier.",
+                nameof(key));
+        }
+
+        if (!Enum.IsDefined(occurrence))
+        {
+            throw new ArgumentOutOfRangeException(nameof(occurrence));
         }
 
         if (!Enum.IsDefined(mode))
@@ -984,13 +1009,93 @@ public sealed record BehaviorTrigger
             throw new ArgumentOutOfRangeException(nameof(mode));
         }
 
-        OccurrenceKey = occurrenceKey;
+        if (!Enum.IsDefined(scope))
+        {
+            throw new ArgumentOutOfRangeException(nameof(scope));
+        }
+
+        if (scope == BehaviorTriggerScope.Self && !IsCardBearing(occurrence))
+        {
+            throw new ArgumentException(
+                $"Self-scoped triggers require a card-bearing occurrence, not '{occurrence}'.",
+                nameof(scope));
+        }
+
+        if (subjectCardFilter is not null && !IsCardBearing(occurrence))
+        {
+            throw new ArgumentException(
+                $"A subject card filter requires a card-bearing occurrence, not '{occurrence}'.",
+                nameof(subjectCardFilter));
+        }
+
+        ArgumentNullException.ThrowIfNull(instructions);
+        if (instructions.Count == 0)
+        {
+            throw new ArgumentException(
+                "A behavior trigger must declare at least one instruction.",
+                nameof(instructions));
+        }
+
+        Key = key;
+        Occurrence = occurrence;
         Mode = mode;
+        Scope = scope;
+        SubjectCardFilter = subjectCardFilter;
+        Instructions = Freeze(instructions);
     }
 
-    public string OccurrenceKey { get; }
+    public string Key { get; }
+
+    public OccurrenceKind Occurrence { get; }
 
     public TriggerMode Mode { get; }
+
+    public BehaviorTriggerScope Scope { get; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BehaviorCardFilter? SubjectCardFilter { get; }
+
+    public IReadOnlyList<BehaviorInstruction> Instructions { get; }
+
+    public bool Equals(BehaviorTrigger? other) =>
+        other is not null
+        && string.Equals(Key, other.Key, StringComparison.Ordinal)
+        && Occurrence == other.Occurrence
+        && Mode == other.Mode
+        && Scope == other.Scope
+        && BehaviorContractStructure.AreEqual(SubjectCardFilter, other.SubjectCardFilter)
+        && BehaviorContractStructure.SequenceEquals(
+            Instructions,
+            other.Instructions,
+            BehaviorContractStructure.AreEqual);
+
+    public override bool Equals(object? obj) => Equals(obj as BehaviorTrigger);
+
+    public override int GetHashCode() =>
+        HashCode.Combine(Key, Occurrence, Mode, Scope, SubjectCardFilter, Instructions.Count);
+
+    private static bool IsCardBearing(OccurrenceKind occurrence) => occurrence is
+        OccurrenceKind.CardInstalled
+        or OccurrenceKind.CardRezzed
+        or OccurrenceKind.RunSuccessful
+        or OccurrenceKind.RunEnded
+        or OccurrenceKind.AgendaScoredOrStolen
+        or OccurrenceKind.CardAccessed
+        or OccurrenceKind.HostedCreditPoolEmptied;
+
+    private static ReadOnlyCollection<BehaviorInstruction> Freeze(
+        IEnumerable<BehaviorInstruction> values)
+    {
+        BehaviorInstruction[] copy = values.ToArray();
+        if (copy.Any(static value => value is null))
+        {
+            throw new ArgumentException(
+                "Behavior trigger instructions must not contain null entries.",
+                nameof(values));
+        }
+
+        return new ReadOnlyCollection<BehaviorInstruction>(copy);
+    }
 }
 
 /// <summary>
@@ -1042,6 +1147,17 @@ public sealed class CardBehaviorDefinition
         Instructions = Freeze(instructions);
         StaticModifiers = Freeze(staticModifiers);
         Triggers = Freeze(triggers);
+        var triggerKeys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (BehaviorTrigger trigger in Triggers)
+        {
+            if (!triggerKeys.Add(trigger.Key))
+            {
+                throw new ArgumentException(
+                    $"Behavior trigger key '{trigger.Key}' is declared more than once.",
+                    nameof(triggers));
+            }
+        }
+
         PaidAbilities = FreezePaidAbilities(paidAbilities);
         if (!string.IsNullOrWhiteSpace(extensionHandlerId))
         {
@@ -1637,7 +1753,10 @@ internal static class BehaviorCatalogStructure
                     a.StaticModifiers,
                     b.StaticModifiers,
                     BehaviorContractStructure.AreEqual)
-                && SequenceEquals(a.Triggers, b.Triggers)
+                && BehaviorContractStructure.SequenceEquals(
+                    a.Triggers,
+                    b.Triggers,
+                    static (left, right) => left.Equals(right))
                 && BehaviorContractStructure.SequenceEquals(
                     a.PaidAbilities,
                     b.PaidAbilities,
@@ -1881,9 +2000,15 @@ internal static class BehaviorCatalogFingerprint
 
     private static void AppendTrigger(StringBuilder builder, BehaviorTrigger value)
     {
-        builder.Append("occurrence=");
-        AppendString(builder, value.OccurrenceKey);
-        builder.Append(",mode=").Append((int)value.Mode);
+        builder.Append("key=");
+        AppendString(builder, value.Key);
+        builder.Append(",occurrence=").Append((int)value.Occurrence)
+            .Append(",mode=").Append((int)value.Mode)
+            .Append(",scope=").Append((int)value.Scope)
+            .Append(",subject=");
+        AppendFilter(builder, value.SubjectCardFilter);
+        builder.Append(",instructions=");
+        AppendSequence(builder, value.Instructions, AppendInstruction);
     }
 
     private static void AppendChoice(StringBuilder builder, BehaviorChoiceSpec? value)

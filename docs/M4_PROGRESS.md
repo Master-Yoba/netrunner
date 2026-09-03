@@ -2930,3 +2930,25 @@ errors; runtime action expansion and full verification remain pending.
   the incoming newest Console enters the Rig. The focused Runner install suite
   passed 18/18 before the follow-up local commit; the forged two-Console test
   remains the sole multi-active fixture.
+
+### 2026-09-03 — Checkpoint C1 typed behavior-trigger declarations accepted
+
+- Luna Max replaced the unused string occurrence placeholder with an immutable
+  trigger declaration: stable trigger key, typed occurrence, mandatory/optional
+  mode, Self/Controller/Any scope, optional typed subject-card filter, and a
+  non-empty frozen behavior-instruction tree. Definitions reject duplicate
+  trigger keys, and structural equality plus catalog fingerprints include the
+  complete nested declaration.
+- The occurrence vocabulary now names card install, card rez, successful run,
+  run end, agenda score-or-steal, card access, and hosted-credit-pool empty.
+  Root corrected the initial card-bearing classification: run occurrences carry
+  their initiating source for Conduit and Red Team, while score-or-steal carries
+  the agenda for Pantograph-era filtering. Consequently every new gameplay
+  occurrence supports Self scope and subject filters; legacy turn/effect
+  occurrences that lack card context reject them.
+- JSON round trips preserve the typed declarations and copied collections stay
+  immutable. Root independently passed the focused behavior-contract gate
+  11/11, complete Core 567/567, the zero-warning solution build, Core
+  formatting, and `git diff --check`. The direct M2 proof retains the schema-3
+  hashes and all 32 replay-verified checkpoints. Runtime occurrence dispatch,
+  trigger scheduling, and source-snapshot execution remain the next checkpoint.

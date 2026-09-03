@@ -23,6 +23,13 @@ public enum OccurrenceKind
     CounterAdjustment,
     LingeringEffectAdded,
     LingeringEffectRemoved,
+    CardInstalled,
+    CardRezzed,
+    RunSuccessful,
+    RunEnded,
+    AgendaScoredOrStolen,
+    CardAccessed,
+    HostedCreditPoolEmptied,
 }
 
 public enum OccurrencePhase

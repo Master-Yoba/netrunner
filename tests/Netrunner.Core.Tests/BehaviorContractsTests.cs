@@ -584,6 +584,262 @@ public sealed class BehaviorContractsTests
         Assert.NotEqual(defaultLoad.Costs[0], runLoad.Costs[0]);
     }
 
+    [Fact]
+    public void TriggerContractValidatesOccurrenceScopeFilterAndInstructionMatrix()
+    {
+        BehaviorInstruction instruction = new(BehaviorInstructionKind.GainCredits, amount: 1);
+        BehaviorCardFilter filter = new(
+            BehaviorCardType.Asset,
+            definitionId: SearchCardId,
+            ownerSide: PlayerSide.Corp);
+
+        BehaviorTrigger trigger = new(
+            "contract-trigger",
+            OccurrenceKind.CardInstalled,
+            TriggerMode.Mandatory,
+            BehaviorTriggerScope.Self,
+            filter,
+            [instruction]);
+
+        Assert.Equal("contract-trigger", trigger.Key);
+        Assert.Equal(OccurrenceKind.CardInstalled, trigger.Occurrence);
+        Assert.Equal(TriggerMode.Mandatory, trigger.Mode);
+        Assert.Equal(BehaviorTriggerScope.Self, trigger.Scope);
+        Assert.Equal(filter, trigger.SubjectCardFilter);
+        Assert.Single(trigger.Instructions);
+
+        foreach (OccurrenceKind occurrence in new[]
+        {
+            OccurrenceKind.CardInstalled,
+            OccurrenceKind.CardRezzed,
+            OccurrenceKind.RunSuccessful,
+            OccurrenceKind.RunEnded,
+            OccurrenceKind.AgendaScoredOrStolen,
+            OccurrenceKind.CardAccessed,
+            OccurrenceKind.HostedCreditPoolEmptied,
+        })
+        {
+            _ = new BehaviorTrigger(
+                $"self-{occurrence}",
+                occurrence,
+                TriggerMode.Optional,
+                BehaviorTriggerScope.Self,
+                filter,
+                [instruction]);
+        }
+
+        foreach (OccurrenceKind occurrence in Enum.GetValues<OccurrenceKind>())
+        {
+            _ = new BehaviorTrigger(
+                $"controller-{occurrence}",
+                occurrence,
+                TriggerMode.Optional,
+                BehaviorTriggerScope.Controller,
+                null,
+                [instruction]);
+            _ = new BehaviorTrigger(
+                $"any-{occurrence}",
+                occurrence,
+                TriggerMode.Optional,
+                BehaviorTriggerScope.Any,
+                null,
+                [instruction]);
+        }
+
+        foreach (OccurrenceKind occurrence in Enum.GetValues<OccurrenceKind>()
+            .Except(new[]
+            {
+                OccurrenceKind.CardInstalled,
+                OccurrenceKind.CardRezzed,
+                OccurrenceKind.RunSuccessful,
+                OccurrenceKind.RunEnded,
+                OccurrenceKind.AgendaScoredOrStolen,
+                OccurrenceKind.CardAccessed,
+                OccurrenceKind.HostedCreditPoolEmptied,
+            }))
+        {
+            Assert.Throws<ArgumentException>(() => new BehaviorTrigger(
+                $"invalid-self-{occurrence}",
+                occurrence,
+                TriggerMode.Optional,
+                BehaviorTriggerScope.Self,
+                null,
+                [instruction]));
+            Assert.Throws<ArgumentException>(() => new BehaviorTrigger(
+                $"invalid-filter-{occurrence}",
+                occurrence,
+                TriggerMode.Optional,
+                BehaviorTriggerScope.Controller,
+                filter,
+                [instruction]));
+        }
+
+        Assert.Throws<ArgumentException>(() => new BehaviorTrigger(
+            "empty-trigger",
+            OccurrenceKind.TurnBegin,
+            TriggerMode.Optional,
+            BehaviorTriggerScope.Controller,
+            null,
+            []));
+        Assert.Throws<ArgumentException>(() => new BehaviorTrigger(
+            "invalid key",
+            OccurrenceKind.TurnBegin,
+            TriggerMode.Optional,
+            BehaviorTriggerScope.Controller,
+            null,
+            [instruction]));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorTrigger(
+            "invalid-occurrence",
+            (OccurrenceKind)999,
+            TriggerMode.Optional,
+            BehaviorTriggerScope.Controller,
+            null,
+            [instruction]));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorTrigger(
+            "invalid-mode",
+            OccurrenceKind.TurnBegin,
+            (TriggerMode)999,
+            BehaviorTriggerScope.Controller,
+            null,
+            [instruction]));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorTrigger(
+            "invalid-scope",
+            OccurrenceKind.TurnBegin,
+            TriggerMode.Optional,
+            (BehaviorTriggerScope)999,
+            null,
+            [instruction]));
+        Assert.Throws<ArgumentNullException>(() => new BehaviorTrigger(
+            "null-instructions",
+            OccurrenceKind.TurnBegin,
+            TriggerMode.Optional,
+            BehaviorTriggerScope.Controller,
+            null,
+            null!));
+    }
+
+    [Fact]
+    public void TriggerContractFreezesInstructionsRejectsDuplicateKeysAndRoundTrips()
+    {
+        var instructions = new List<BehaviorInstruction>
+        {
+            new(BehaviorInstructionKind.GainCredits, amount: 1),
+        };
+        BehaviorTrigger trigger = new(
+            "immutable-trigger",
+            OccurrenceKind.CardRezzed,
+            TriggerMode.Optional,
+            BehaviorTriggerScope.Self,
+            new BehaviorCardFilter(BehaviorCardType.Ice),
+            instructions);
+
+        instructions.Add(new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 2));
+        Assert.Single(trigger.Instructions);
+        Assert.IsAssignableFrom<IList<BehaviorInstruction>>(trigger.Instructions);
+        Assert.Throws<NotSupportedException>(() =>
+            ((IList<BehaviorInstruction>)trigger.Instructions).Clear());
+
+        Assert.Throws<ArgumentException>(() => new CardBehaviorDefinition(
+            SearchCardId,
+            PlayerSide.Corp,
+            triggers:
+            [
+                trigger,
+                new BehaviorTrigger(
+                    "immutable-trigger",
+                    OccurrenceKind.TurnBegin,
+                    TriggerMode.Optional,
+                    BehaviorTriggerScope.Controller,
+                    null,
+                    [new BehaviorInstruction(BehaviorInstructionKind.Draw, amount: 1)]),
+            ]));
+    }
+
+    [Fact]
+    public void TriggerContractEqualityFingerprintAndJsonIncludeNestedFields()
+    {
+        BehaviorCardFilter filter = new(
+            BehaviorCardType.Asset,
+            definitionId: SearchCardId,
+            ownerSide: PlayerSide.Corp,
+            subtype: "campaign");
+        BehaviorTrigger first = new(
+            "nested-trigger",
+            OccurrenceKind.HostedCreditPoolEmptied,
+            TriggerMode.Mandatory,
+            BehaviorTriggerScope.Self,
+            filter,
+            [
+                new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1),
+                new BehaviorInstruction(BehaviorInstructionKind.Draw, amount: 1),
+            ]);
+        BehaviorTrigger equivalent = new(
+            "nested-trigger",
+            OccurrenceKind.HostedCreditPoolEmptied,
+            TriggerMode.Mandatory,
+            BehaviorTriggerScope.Self,
+            new BehaviorCardFilter(
+                BehaviorCardType.Asset,
+                definitionId: SearchCardId,
+                ownerSide: PlayerSide.Corp,
+                subtype: "campaign"),
+            [
+                new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1),
+                new BehaviorInstruction(BehaviorInstructionKind.Draw, amount: 1),
+            ]);
+        BehaviorTrigger changedInstruction = new(
+            "nested-trigger",
+            OccurrenceKind.HostedCreditPoolEmptied,
+            TriggerMode.Mandatory,
+            BehaviorTriggerScope.Self,
+            filter,
+            [
+                new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 2),
+                new BehaviorInstruction(BehaviorInstructionKind.Draw, amount: 1),
+            ]);
+        BehaviorTrigger changedFilter = new(
+            "nested-trigger",
+            OccurrenceKind.HostedCreditPoolEmptied,
+            TriggerMode.Mandatory,
+            BehaviorTriggerScope.Self,
+            new BehaviorCardFilter(BehaviorCardType.Asset, ownerSide: PlayerSide.Runner),
+            [
+                new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1),
+                new BehaviorInstruction(BehaviorInstructionKind.Draw, amount: 1),
+            ]);
+
+        Assert.Equal(first, equivalent);
+        Assert.NotEqual(first, changedInstruction);
+        Assert.NotEqual(first, changedFilter);
+
+        string json = EngineJson.Serialize(first);
+        Assert.Contains("\"key\":\"nested-trigger\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"occurrence\":\"hostedCreditPoolEmptied\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"scope\":\"self\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"subjectCardFilter\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"instructions\"", json, StringComparison.Ordinal);
+        BehaviorTrigger restored = EngineJson.Deserialize<BehaviorTrigger>(json);
+        Assert.Equal(first, restored);
+        Assert.Equal(json, EngineJson.Serialize(restored));
+
+        BehaviorCatalog firstCatalog = new BehaviorCatalogBuilder("test:trigger-catalog")
+            .Add(new CardBehaviorDefinition(SearchCardId, PlayerSide.Corp, triggers: [first]))
+            .Build();
+        BehaviorCatalog equivalentCatalog = new BehaviorCatalogBuilder("test:trigger-catalog")
+            .Add(new CardBehaviorDefinition(SearchCardId, PlayerSide.Corp, triggers: [equivalent]))
+            .Build();
+        BehaviorCatalog changedInstructionCatalog = new BehaviorCatalogBuilder("test:trigger-catalog")
+            .Add(new CardBehaviorDefinition(SearchCardId, PlayerSide.Corp, triggers: [changedInstruction]))
+            .Build();
+        BehaviorCatalog changedFilterCatalog = new BehaviorCatalogBuilder("test:trigger-catalog")
+            .Add(new CardBehaviorDefinition(SearchCardId, PlayerSide.Corp, triggers: [changedFilter]))
+            .Build();
+
+        Assert.Equal(firstCatalog.Fingerprint, equivalentCatalog.Fingerprint);
+        Assert.NotEqual(firstCatalog.Fingerprint, changedInstructionCatalog.Fingerprint);
+        Assert.NotEqual(firstCatalog.Fingerprint, changedFilterCatalog.Fingerprint);
+    }
+
     private static CardBehaviorDefinition CreateTaggedDefinition(BehaviorCondition condition) =>
         new(
             SearchCardId,
