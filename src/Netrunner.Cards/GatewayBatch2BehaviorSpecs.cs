@@ -68,6 +68,10 @@ public static class GatewayBatch2BehaviorSpecs
         new ReadOnlyCollection<CardDefinitionId>
         ([
             GatewayBatch2CardCodes.Pennyshaver,
+            GatewayBatch2CardCodes.Carmen,
+            GatewayBatch2CardCodes.Marjanah,
+            GatewayBatch2CardCodes.RedTeam,
+            GatewayBatch2CardCodes.Conduit,
             GatewayBatch2CardCodes.TeleworkContract,
             GatewayBatch2CardCodes.SmartwareDistributor,
             GatewayCardCodes.NicoCampaign,
@@ -86,8 +90,18 @@ public static class GatewayBatch2BehaviorSpecs
         ([
             GatewayBatch2EconomyBehaviorSpecs.GenericSpecs.Single(
                 static definition => definition.DefinitionId == GatewayBatch2CardCodes.Pennyshaver),
+            GatewayBatch2RunCostBehaviorSpecs.GenericSpecs.Single(
+                static definition => definition.DefinitionId == GatewayBatch2CardCodes.Carmen),
+            GatewayBatch2RunCostBehaviorSpecs.GenericSpecs.Single(
+                static definition => definition.DefinitionId == GatewayBatch2CardCodes.Marjanah),
+            GatewayBatch2RunCostBehaviorSpecs.GenericSpecs.Single(
+                static definition => definition.DefinitionId == GatewayBatch2CardCodes.RedTeam),
+            GatewayBatch2RunCostBehaviorSpecs.GenericSpecs.Single(
+                static definition => definition.DefinitionId == GatewayBatch2CardCodes.Conduit),
             GatewayBatch2EconomyBehaviorSpecs.GenericSpecs.Single(
                 static definition => definition.DefinitionId == GatewayBatch2CardCodes.TeleworkContract),
+            GatewayBatch2EconomyBehaviorSpecs.GenericSpecs.Single(
+                static definition => definition.DefinitionId == GatewayBatch2CardCodes.SmartwareDistributor),
             GatewayBatch2EconomyBehaviorSpecs.GenericSpecs.Single(
                 static definition => definition.DefinitionId == GatewayCardCodes.NicoCampaign),
             SpinDoctor,

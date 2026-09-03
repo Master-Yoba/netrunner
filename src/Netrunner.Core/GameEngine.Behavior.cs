@@ -382,6 +382,24 @@ public static partial class GameEngine
                 }
 
                 return;
+            case BehaviorInstructionKind.TakeUpToHostedCredits:
+                bool poolEmptiedByTakeUpTo = ChangeHostedCreditPool(
+                    working,
+                    frame.SourceCardId,
+                    HostedCreditPoolOperation.TakeUpTo,
+                    instruction.Amount,
+                    declaredRestriction: null,
+                    recipient: frame.Controller);
+                if (poolEmptiedByTakeUpTo)
+                {
+                    QueueHostedCreditPoolEmptiedOccurrence(working, frame);
+                }
+                else
+                {
+                    AdvanceBehaviorCursor(working, frame);
+                }
+
+                return;
             case BehaviorInstructionKind.TakeAllHostedCredits:
                 bool poolEmptiedByTakeAll = ChangeHostedCreditPool(
                     working,

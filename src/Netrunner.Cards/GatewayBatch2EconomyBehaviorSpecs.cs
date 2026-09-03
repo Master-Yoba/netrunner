@@ -81,13 +81,6 @@ public static class GatewayBatch2EconomyBehaviorSpecs
                 BehaviorAbilityUsageLimit.OncePerTurn),
         ]);
 
-    /// <summary>
-    /// Smartware's click placement is a valid generic operation, but its
-    /// mandatory turn-begin take must be deferred until Core supports a
-    /// typed take-up-to/available operation.  Registering the declaration in
-    /// this blocked surface keeps the audited shape visible without making an
-    /// exact take from an empty pool look executable.
-    /// </summary>
     private static readonly CardBehaviorDefinition SmartwareDistributor = new(
         GatewayBatch2CardCodes.SmartwareDistributor,
         PlayerSide.Runner,
@@ -99,7 +92,7 @@ public static class GatewayBatch2EconomyBehaviorSpecs
                 TriggerMode.Mandatory,
                 BehaviorTriggerScope.Controller,
                 subjectCardFilter: null,
-                instructions: [TakeHosted(1)]),
+                instructions: [TakeUpToHosted(1)]),
         ],
         paidAbilities:
         [
@@ -190,12 +183,8 @@ public static class GatewayBatch2EconomyBehaviorSpecs
             GatewayBatch2CardCodes.RegolithMiningLicense,
         ]);
 
-    /// <summary>
-    /// Smartware remains outside the executable catalog until Core gains a
-    /// mandatory take-up-to/available hosted-credit instruction.
-    /// </summary>
     public static IReadOnlyList<CardDefinitionId> BlockedDefinitionIds { get; } =
-        new ReadOnlyCollection<CardDefinitionId>([GatewayBatch2CardCodes.SmartwareDistributor]);
+        new ReadOnlyCollection<CardDefinitionId>([]);
 
     /// <summary>Complete executable declarations from this submodule.</summary>
     public static IReadOnlyList<CardBehaviorDefinition> GenericSpecs { get; } =
@@ -203,13 +192,14 @@ public static class GatewayBatch2EconomyBehaviorSpecs
         ([
             Pennyshaver,
             TeleworkContract,
+            SmartwareDistributor,
             NicoCampaign,
             RegolithMiningLicense,
         ]);
 
-    /// <summary>Audited declarations intentionally withheld from the catalog.</summary>
+    /// <summary>No economy declarations are blocked after E1b.</summary>
     public static IReadOnlyList<CardBehaviorDefinition> BlockedSpecs { get; } =
-        new ReadOnlyCollection<CardBehaviorDefinition>([SmartwareDistributor]);
+        new ReadOnlyCollection<CardBehaviorDefinition>([]);
 
     private static BehaviorCost ClickCost() =>
         new(BehaviorCostKind.Clicks, amount: 1);
@@ -228,4 +218,7 @@ public static class GatewayBatch2EconomyBehaviorSpecs
 
     private static BehaviorInstruction TakeHosted(int amount) =>
         new(BehaviorInstructionKind.TakeHostedCredits, amount);
+
+    private static BehaviorInstruction TakeUpToHosted(int amount) =>
+        new(BehaviorInstructionKind.TakeUpToHostedCredits, amount);
 }

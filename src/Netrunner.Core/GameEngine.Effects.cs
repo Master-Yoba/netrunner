@@ -787,6 +787,42 @@ public static partial class GameEngine
                 transitionAmount = -amount;
                 break;
 
+            case HostedCreditPoolOperation.TakeUpTo:
+                if (amount <= 0)
+                {
+                    throw new ResolutionFailureException("Hosted-credit take-up-to amounts must be positive.");
+                }
+
+                if (declaredRestriction is not null)
+                {
+                    throw new ResolutionFailureException("Hosted-credit take-up-to operations do not declare a restriction.");
+                }
+
+                if (recipient is not { } takeUpToRecipient)
+                {
+                    throw new ResolutionFailureException("Hosted-credit take-up-to operations require a recipient.");
+                }
+
+                _ = GetPlayer(working, takeUpToRecipient);
+                if (current is null)
+                {
+                    // A mandatory take-up-to operation is a successful no-op
+                    // when its source has no hosted pool. There is no debit,
+                    // wallet transfer, empty occurrence, or event to record.
+                    return false;
+                }
+
+                if (current.SpendRestriction is not { } takeUpToRestriction)
+                {
+                    throw new ResolutionFailureException($"Card '{cardId}' has no hosted-credit pool restriction.");
+                }
+
+                int takeUpToAmount = Math.Min(amount, current.Count);
+                nextCount = CardCounterRules.Take(current, takeUpToAmount);
+                restriction = takeUpToRestriction;
+                transitionAmount = -takeUpToAmount;
+                break;
+
             case HostedCreditPoolOperation.TakeAll:
                 if (amount != 0)
                 {

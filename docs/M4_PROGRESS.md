@@ -3478,3 +3478,28 @@ errors; runtime action expansion and full verification remain pending.
   the focused CLI/Match gate 24/24 and the direct proof returned the unchanged
   `faf4e631...` / `c882eb43...` / `d20cdef9...` hashes with all 32 checkpoints
   replay verified.
+
+### 2026-09-04 — Checkpoint E1b/D3 hosted withdrawal and run-cost bindings accepted
+
+- Luna Max added a distinct typed `TakeUpToHostedCredits` operation for
+  Smartware Distributor. Exact `take` still rejects underflow; `take up to`
+  transfers the actual minimum, treats an absent/empty pool as a successful
+  event-free no-op, emits the actual nonzero delta, and preserves atomic wallet
+  overflow and ordered empty-pool trigger behavior across JSON resumes.
+- Conduit and Red Team now use the typed click-run substrate. Conduit snapshots
+  its virus-scaled R&D access modifier at initiation and its optional successful
+  R&D run-end trigger is filtered through stable server topology. Red Team
+  exposes one history-constrained action for each central, pays out only for a
+  run initiated by that exact physical source, and trashes itself when its
+  hosted pool empties.
+- Carmen and Marjanah are registered with their Sentry/Killer and
+  Barrier/Fracter interfaces and typed successful-run cost adjustments. Real
+  install and encounter tests prove printed versus reduced quotes, wallet/run
+  credit splits, and immutable quote reasons. Root rejected the first delegated
+  test pass because it lacked these production lifecycles, then corrected three
+  fixture defects before acceptance.
+- Root passed the combined focused Core gate 32/32, focused Cards gate 31/31,
+  complete Core 651/651, complete Cards 123/123, a zero-warning/error solution
+  build, formatter verification, and `git diff --check`. The direct M2 proof
+  retained the pinned `faf4e631...` / `c882eb43...` / `d20cdef9...` hashes and
+  replayed all 32 checkpoints.

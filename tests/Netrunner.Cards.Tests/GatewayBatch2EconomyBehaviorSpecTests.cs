@@ -7,7 +7,7 @@ namespace Netrunner.Cards.Tests;
 public sealed class GatewayBatch2EconomyBehaviorSpecTests
 {
     [Fact]
-    public void EconomyDeclarationsHaveStableCatalogSurfaceAndKeepSmartwareBlocked()
+    public void EconomyDeclarationsHaveStableCatalogSurfaceAndIncludeSmartware()
     {
         BehaviorCatalog first = GatewayBehaviorCatalog.Create();
         BehaviorCatalog second = GatewayBehaviorCatalog.Create();
@@ -15,23 +15,25 @@ public sealed class GatewayBatch2EconomyBehaviorSpecTests
         CardDefinitionId[] expectedAssigned =
         [
             GatewayBatch2CardCodes.Pennyshaver,
+            GatewayBatch2CardCodes.Carmen,
+            GatewayBatch2CardCodes.Marjanah,
+            GatewayBatch2CardCodes.RedTeam,
+            GatewayBatch2CardCodes.Conduit,
             GatewayBatch2CardCodes.TeleworkContract,
             GatewayBatch2CardCodes.SmartwareDistributor,
             GatewayCardCodes.NicoCampaign,
             GatewayBatch2CardCodes.SpinDoctor,
             GatewayBatch2CardCodes.RegolithMiningLicense,
         ];
-        Assert.Equal(expectedAssigned.ToHashSet(), GatewayBatch2BehaviorSpecs.AssignedDefinitionIds.ToHashSet());
+        Assert.Equal(expectedAssigned, GatewayBatch2BehaviorSpecs.AssignedDefinitionIds);
+        Assert.Empty(GatewayBatch2BehaviorSpecs.BlockedDefinitionIds);
         Assert.Equal(
-            [GatewayBatch2CardCodes.SmartwareDistributor],
-            GatewayBatch2BehaviorSpecs.BlockedDefinitionIds);
-        Assert.Equal(
-            expectedAssigned.Where(id => id != GatewayBatch2CardCodes.SmartwareDistributor).ToHashSet(),
-            GatewayBatch2BehaviorSpecs.GenericSpecs.Select(static spec => spec.DefinitionId).ToHashSet());
+            expectedAssigned,
+            GatewayBatch2BehaviorSpecs.GenericSpecs.Select(static spec => spec.DefinitionId));
         Assert.Equal(first.Fingerprint, second.Fingerprint);
 
-        Assert.DoesNotContain(GatewayBatch2CardCodes.SmartwareDistributor, first.AllDefinitionIds);
-        Assert.False(first.TryGet(GatewayBatch2CardCodes.SmartwareDistributor, out _));
+        Assert.Contains(GatewayBatch2CardCodes.SmartwareDistributor, first.AllDefinitionIds);
+        Assert.True(first.TryGet(GatewayBatch2CardCodes.SmartwareDistributor, out _));
         Assert.Contains(GatewayBatch2CardCodes.Pennyshaver, first.AllDefinitionIds);
         Assert.Contains(GatewayBatch2CardCodes.TeleworkContract, first.AllDefinitionIds);
         Assert.Contains(GatewayBatch2CardCodes.RegolithMiningLicense, first.AllDefinitionIds);
@@ -115,23 +117,162 @@ public sealed class GatewayBatch2EconomyBehaviorSpecTests
     }
 
     [Fact]
-    public void SmartwareBlockedDeclarationPreservesMandatoryTurnBeginAndExpressibleClickPlacement()
+    public void SmartwareDeclarationUsesMandatoryTakeUpToAndClickPlacement()
     {
-        CardBehaviorDefinition smartware = Assert.Single(
-            GatewayBatch2EconomyBehaviorSpecs.BlockedSpecs,
-            definition => definition.DefinitionId == GatewayBatch2CardCodes.SmartwareDistributor);
+        CardBehaviorDefinition smartware = Definition(GatewayBatch2CardCodes.SmartwareDistributor);
         BehaviorTrigger turnBegin = Assert.Single(smartware.Triggers);
         Assert.Equal(OccurrenceKind.TurnBegin, turnBegin.Occurrence);
         Assert.Equal(TriggerMode.Mandatory, turnBegin.Mode);
         Assert.Equal(BehaviorTriggerScope.Controller, turnBegin.Scope);
-        Assert.Equal(BehaviorInstructionKind.TakeHostedCredits, Assert.Single(turnBegin.Instructions).Kind);
+        Assert.Equal(BehaviorInstructionKind.TakeUpToHostedCredits, Assert.Single(turnBegin.Instructions).Kind);
         Assert.Equal(1, turnBegin.Instructions[0].Amount);
+        Assert.Null(turnBegin.Instructions[0].SpendRestriction);
 
         BehaviorPaidAbility place = Assert.Single(smartware.PaidAbilities);
         Assert.Equal(BehaviorAbilityUsageLimit.Unlimited, place.UsageLimit);
         Assert.Equal((BehaviorCostKind.Clicks, 1), Cost(place));
         Assert.Equal(BehaviorInstructionKind.PlaceHostedCredits, Assert.Single(place.Instructions).Kind);
         Assert.Equal(3, place.Instructions[0].Amount);
+    }
+
+    [Fact]
+    public void SmartwareClickPlacementPlacesThreeCreditsThroughRealAction()
+    {
+        BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();
+        CardInstanceId sourceId = new("card:economy-smartware-click");
+        GameState state = BuildInstalledState(
+            catalog,
+            sourceId,
+            GatewayBatch2CardCodes.SmartwareDistributor,
+            PlayerSide.Runner,
+            ZoneKind.RunnerRig,
+            rezzed: false);
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+
+        TurnFrame parent = new(
+            1,
+            ResolutionBehaviorIds.Turn,
+            PlayerSide.Runner,
+            state.Turn.TurnNumber,
+            TurnFrameStage.AwaitingAction);
+        GameState prompt = GameEngine.BeginResolution(state, parent, catalog);
+        PendingDecision decision = Assert.IsType<PendingDecision>(prompt.PendingDecision);
+        LegalAction place = Assert.Single(
+            decision.LegalActions,
+            action => action.Kind == ActionKind.UseAbility
+                && Assert.IsType<AbilityActionParameters>(action.Parameters).SourceCardId == sourceId);
+
+        string promptJson = EngineJson.Serialize(prompt);
+        GameState restoredPrompt = EngineJson.DeserializeState(promptJson, catalog);
+        PendingDecision restoredDecision = Assert.IsType<PendingDecision>(restoredPrompt.PendingDecision);
+        LegalAction restoredPlace = Assert.Single(
+            restoredDecision.LegalActions,
+            action => action.Kind == ActionKind.UseAbility
+                && Assert.IsType<AbilityActionParameters>(action.Parameters).SourceCardId == sourceId);
+
+        ApplyResult used = GameEngine.Apply(
+            restoredPrompt,
+            new ActionSubmission(
+                restoredDecision.Owner,
+                restoredDecision.Id,
+                restoredDecision.Revision,
+                restoredPlace.Id),
+            catalog);
+        Assert.True(used.Accepted, used.Rejection?.Message);
+        Assert.Equal(5, used.State.GetPlayer(runner).Credits);
+        Assert.Equal(3, used.State.GetPlayer(runner).Clicks);
+        Assert.Equal(3, HostedCount(used.State, sourceId));
+        HostedCreditPoolChangedEventPayload hosted = Assert.IsType<HostedCreditPoolChangedEventPayload>(
+            Assert.Single(used.Events, @event => @event.Kind == EngineEventKinds.HostedCreditPoolChanged).Payload);
+        Assert.Equal(HostedCreditPoolOperation.Place, hosted.Operation);
+        Assert.Equal(3, hosted.Delta);
+        Assert.Equal(3, hosted.CountAfter);
+        Assert.False(hosted.Emptied);
+    }
+
+    [Fact]
+    public void SmartwareTurnBeginTakesOneFromNonzeroPoolAndResumesThroughJson()
+    {
+        BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();
+        CardInstanceId sourceId = new("card:economy-smartware-turn");
+        GameState state = BuildInstalledState(
+            catalog,
+            sourceId,
+            GatewayBatch2CardCodes.SmartwareDistributor,
+            PlayerSide.Runner,
+            ZoneKind.RunnerRig,
+            rezzed: false,
+            hostedCredits: 2);
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+
+        GameEngine.TurnStartResult started = GameEngine.BeginTurnWithEvents(
+            state,
+            PlayerSide.Runner,
+            catalog);
+        Assert.Equal(DecisionKind.TurnTiming, started.State.PendingDecision?.Kind);
+
+        // Resume from the first opening timing window so the mandatory
+        // Controller TurnBegin trigger is reached through the production turn
+        // shell, rather than injecting a boundary occurrence.
+        GameState restored = EngineJson.DeserializeState(
+            EngineJson.Serialize(started.State),
+            catalog);
+        ApplyResult firstWindow = Pass(restored, catalog);
+        Assert.True(firstWindow.Accepted, firstWindow.Rejection?.Message);
+        Assert.Equal(DecisionKind.TurnTiming, firstWindow.State.PendingDecision?.Kind);
+
+        ApplyResult turnBegin = Pass(firstWindow.State, catalog);
+        Assert.True(turnBegin.Accepted, turnBegin.Rejection?.Message);
+        Assert.Equal(1, HostedCount(turnBegin.State, sourceId));
+        Assert.Equal(6, turnBegin.State.GetPlayer(runner).Credits);
+        HostedCreditPoolChangedEventPayload hosted = Assert.IsType<HostedCreditPoolChangedEventPayload>(
+            Assert.Single(turnBegin.Events, @event => @event.Kind == EngineEventKinds.HostedCreditPoolChanged).Payload);
+        Assert.Equal(HostedCreditPoolOperation.TakeUpTo, hosted.Operation);
+        Assert.Equal(-1, hosted.Delta);
+        Assert.Equal(1, hosted.CountAfter);
+        Assert.False(hosted.Emptied);
+        Assert.Contains(
+            turnBegin.Events,
+            @event => @event.Kind == EngineEventKinds.CreditsAdjusted
+                && Assert.IsType<CreditsAdjustedEventPayload>(@event.Payload).Delta == 1);
+        Assert.Empty(StateInvariantValidator.Collect(turnBegin.State, catalog));
+    }
+
+    [Fact]
+    public void SmartwareTurnBeginWithoutPoolSucceedsWithoutEventsOrTrash()
+    {
+        BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();
+        CardInstanceId sourceId = new("card:economy-smartware-empty");
+        GameState state = BuildInstalledState(
+            catalog,
+            sourceId,
+            GatewayBatch2CardCodes.SmartwareDistributor,
+            PlayerSide.Runner,
+            ZoneKind.RunnerRig,
+            rezzed: false);
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+
+        GameEngine.TurnStartResult started = GameEngine.BeginTurnWithEvents(
+            state,
+            PlayerSide.Runner,
+            catalog);
+        GameState restored = EngineJson.DeserializeState(
+            EngineJson.Serialize(started.State),
+            catalog);
+        ApplyResult firstWindow = Pass(restored, catalog);
+        ApplyResult turnBegin = Pass(firstWindow.State, catalog);
+
+        Assert.True(turnBegin.Accepted, turnBegin.Rejection?.Message);
+        Assert.Equal(0, HostedCount(turnBegin.State, sourceId));
+        Assert.Equal(5, turnBegin.State.GetPlayer(runner).Credits);
+        Assert.DoesNotContain(
+            turnBegin.Events,
+            @event => @event.Kind == EngineEventKinds.HostedCreditPoolChanged
+                || @event.Kind == EngineEventKinds.CreditsAdjusted);
+        Assert.Equal(
+            ZoneKind.RunnerRig,
+            turnBegin.State.GetZone(turnBegin.State.GetCard(sourceId).ZoneId).Kind);
+        Assert.Empty(StateInvariantValidator.Collect(turnBegin.State, catalog));
     }
 
     [Fact]
@@ -439,7 +580,8 @@ public sealed class GatewayBatch2EconomyBehaviorSpecTests
         PlayerSide owner,
         ZoneKind zoneKind,
         bool rezzed,
-        CardInstanceId? corpDeckCardId = null)
+        CardInstanceId? corpDeckCardId = null,
+        int? hostedCredits = null)
     {
         GameState baseline = GameState.CreateNew(
             seed: 44117,
@@ -482,6 +624,18 @@ public sealed class GatewayBatch2EconomyBehaviorSpecTests
         TurnHistoryState history = owner == PlayerSide.Corp
             ? new TurnHistoryState(1, facts, null, null, null)
             : new TurnHistoryState(1, null, null, facts, null);
+        RulesState defaults = RulesState.CreateDefault(baseline.Players);
+        CardCounterState[] counters = hostedCredits is { } count
+            ? [CardCounterState.CreateHostedCredit(cardId, count)]
+            : [];
+        RulesState rules = new(
+            defaults.Version,
+            defaults.Players,
+            defaults.Programs,
+            counters,
+            defaults.LingeringEffects,
+            defaults.Triggers,
+            defaults.Interrupts);
         return new GameState(
             baseline.SchemaVersion,
             baseline.GameId,
@@ -495,7 +649,7 @@ public sealed class GatewayBatch2EconomyBehaviorSpecTests
             baseline.Outcome,
             baseline.RandomState,
             baseline.Allocator,
-            rulesState: RulesState.CreateDefault(baseline.Players),
+            rulesState: rules,
             behaviorRegistryVersion: catalog.Version,
             behaviorCatalogFingerprint: catalog.Fingerprint);
     }

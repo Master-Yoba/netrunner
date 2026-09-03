@@ -66,6 +66,7 @@ public enum HostedCreditPoolOperation
     Load,
     Place,
     Take,
+    TakeUpTo,
     TakeAll,
     Spend,
 }
@@ -2235,7 +2236,9 @@ public static class EngineEventValidator
                 }
 
                 bool loading = value.Operation is HostedCreditPoolOperation.Load or HostedCreditPoolOperation.Place;
-                bool transfer = value.Operation is HostedCreditPoolOperation.Take or HostedCreditPoolOperation.TakeAll;
+                bool transfer = value.Operation is HostedCreditPoolOperation.Take
+                    or HostedCreditPoolOperation.TakeUpTo
+                    or HostedCreditPoolOperation.TakeAll;
                 if (loading && value.Delta <= 0)
                 {
                     Add(

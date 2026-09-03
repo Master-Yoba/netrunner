@@ -783,7 +783,8 @@ public static partial class GameEngine
                         && trigger.Scope == BehaviorTriggerScope.Self
                     || frame.AppliedTriggers.Contains(CatalogTriggerId(occurrence, source, trigger.Key))
                     || !CatalogTriggerScopeMatches(trigger.Scope, source, occurrence, occurrenceController)
-                    || !CatalogTriggerOutcomeMatches(trigger, occurrence))
+                    || !CatalogTriggerOutcomeMatches(trigger, occurrence)
+                    || !CatalogTriggerServerMatches(working, trigger, occurrence))
                 {
                     continue;
                 }
@@ -834,6 +835,27 @@ public static partial class GameEngine
             : RunOutcomeRequirement.Unsuccessful);
     }
 
+    private static bool CatalogTriggerServerMatches(
+        WorkingState working,
+        BehaviorTrigger trigger,
+        OccurrenceSnapshot occurrence)
+    {
+        if (trigger.ServerKindRequirement is not { } requiredServerKind)
+        {
+            return true;
+        }
+
+        if (occurrence.Kind is not (OccurrenceKind.RunSuccessful or OccurrenceKind.RunEnded)
+            || occurrence.Effect is not GameplayOccurrenceEffect gameplay
+            || gameplay.ServerId is not { } serverId)
+        {
+            return false;
+        }
+
+        ServerState? server = working.Servers.FirstOrDefault(candidate => candidate.Id == serverId);
+        return server?.Kind == requiredServerKind;
+    }
+
     /// <summary>
     /// Reports whether the active installed-card projection declares a
     /// catalog trigger for the supplied occurrence. Lifecycle reducers use
@@ -842,7 +864,8 @@ public static partial class GameEngine
     /// </summary>
     private static bool HasActiveCatalogTrigger(
         WorkingState working,
-        OccurrenceKind occurrenceKind)
+        OccurrenceKind occurrenceKind,
+        ServerId? serverId = null)
     {
         foreach (CardInstanceState source in working.Cards)
         {
@@ -853,7 +876,12 @@ public static partial class GameEngine
                 continue;
             }
 
-            if (definition.Triggers.Any(trigger => trigger.Occurrence == occurrenceKind))
+            if (definition.Triggers.Any(trigger =>
+                trigger.Occurrence == occurrenceKind
+                && (trigger.ServerKindRequirement is null
+                    || serverId is { } suppliedServerId
+                        && working.Servers.FirstOrDefault(candidate => candidate.Id == suppliedServerId)?.Kind
+                            == trigger.ServerKindRequirement)))
             {
                 return true;
             }

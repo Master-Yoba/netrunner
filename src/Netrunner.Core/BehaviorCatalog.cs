@@ -682,6 +682,7 @@ public sealed record BehaviorInstruction
         bool hostedCreditInstruction = Kind is BehaviorInstructionKind.LoadHostedCredits
             or BehaviorInstructionKind.PlaceHostedCredits
             or BehaviorInstructionKind.TakeHostedCredits
+            or BehaviorInstructionKind.TakeUpToHostedCredits
             or BehaviorInstructionKind.TakeAllHostedCredits;
         if (!hostedCreditInstruction && SpendRestriction is not null)
         {
@@ -695,6 +696,7 @@ public sealed record BehaviorInstruction
             case BehaviorInstructionKind.LoadHostedCredits:
             case BehaviorInstructionKind.PlaceHostedCredits:
             case BehaviorInstructionKind.TakeHostedCredits:
+            case BehaviorInstructionKind.TakeUpToHostedCredits:
                 if (Amount <= 0)
                 {
                     throw new ArgumentOutOfRangeException(
@@ -702,11 +704,12 @@ public sealed record BehaviorInstruction
                         "Hosted-credit load, place, and take instructions require a positive amount.");
                 }
 
-                if (Kind is BehaviorInstructionKind.TakeHostedCredits
+                if (Kind is (BehaviorInstructionKind.TakeHostedCredits
+                    or BehaviorInstructionKind.TakeUpToHostedCredits)
                     && SpendRestriction is not null)
                 {
                     throw new ArgumentException(
-                        "TakeHostedCredits instructions do not carry a spend restriction.",
+                        "Hosted-credit take instructions do not carry a spend restriction.",
                         nameof(SpendRestriction));
                 }
 
@@ -1031,6 +1034,7 @@ public enum BehaviorInstructionKind
     LoadHostedCredits,
     PlaceHostedCredits,
     TakeHostedCredits,
+    TakeUpToHostedCredits,
     TakeAllHostedCredits,
 
     // Short aliases keep the contract pleasant for callers while the longer
@@ -1120,7 +1124,8 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         BehaviorTriggerScope scope,
         BehaviorCardFilter? subjectCardFilter,
         IReadOnlyList<BehaviorInstruction> instructions,
-        RunOutcomeRequirement? runOutcomeRequirement = null)
+        RunOutcomeRequirement? runOutcomeRequirement = null,
+        ServerKind? serverKindRequirement = null)
     {
         if (!StableIdentifier.TryValidate(key))
         {
@@ -1171,6 +1176,15 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
                 nameof(runOutcomeRequirement));
         }
 
+        if (serverKindRequirement is { } requiredServerKind
+            && (!Enum.IsDefined(requiredServerKind)
+                || occurrence is not (OccurrenceKind.RunSuccessful or OccurrenceKind.RunEnded)))
+        {
+            throw new ArgumentException(
+                "A server-kind requirement is valid only for RunSuccessful or RunEnded triggers and must name a defined server kind.",
+                nameof(serverKindRequirement));
+        }
+
         ArgumentNullException.ThrowIfNull(instructions);
         if (instructions.Count == 0)
         {
@@ -1187,6 +1201,7 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         Instructions = Freeze(instructions);
         BehaviorRunOperandValidation.RequireNoStartRun(Instructions, nameof(instructions));
         RunOutcomeRequirement = runOutcomeRequirement;
+        ServerKindRequirement = serverKindRequirement;
     }
 
     public string Key { get; }
@@ -1203,6 +1218,14 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public RunOutcomeRequirement? RunOutcomeRequirement { get; }
 
+    /// <summary>
+    /// Optional server topology predicate for a run occurrence. The engine
+    /// resolves the occurrence's stable server ID through the current server
+    /// topology; it never infers this value from card text or a source title.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ServerKind? ServerKindRequirement { get; }
+
     public IReadOnlyList<BehaviorInstruction> Instructions { get; }
 
     public bool Equals(BehaviorTrigger? other) =>
@@ -1213,6 +1236,7 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         && Scope == other.Scope
         && BehaviorContractStructure.AreEqual(SubjectCardFilter, other.SubjectCardFilter)
         && RunOutcomeRequirement == other.RunOutcomeRequirement
+        && ServerKindRequirement == other.ServerKindRequirement
         && BehaviorContractStructure.SequenceEquals(
             Instructions,
             other.Instructions,
@@ -1221,7 +1245,15 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
     public override bool Equals(object? obj) => Equals(obj as BehaviorTrigger);
 
     public override int GetHashCode() =>
-        HashCode.Combine(Key, Occurrence, Mode, Scope, SubjectCardFilter, RunOutcomeRequirement, Instructions.Count);
+        HashCode.Combine(
+            Key,
+            Occurrence,
+            Mode,
+            Scope,
+            SubjectCardFilter,
+            RunOutcomeRequirement,
+            ServerKindRequirement,
+            Instructions.Count);
 
     private static bool IsCardBearing(OccurrenceKind occurrence) => occurrence is
         OccurrenceKind.CardInstalled
@@ -2232,6 +2264,11 @@ internal static class BehaviorCatalogFingerprint
         if (value.RunOutcomeRequirement is { } outcomeRequirement)
         {
             builder.Append(",runOutcome=").Append((int)outcomeRequirement);
+        }
+
+        if (value.ServerKindRequirement is { } serverKindRequirement)
+        {
+            builder.Append(",serverKind=").Append((int)serverKindRequirement);
         }
 
         builder.Append(",instructions=");

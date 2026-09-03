@@ -16,6 +16,10 @@ public sealed class GatewayBatch2BehaviorSpecTests
             new CardDefinitionId[]
             {
                 GatewayBatch2CardCodes.Pennyshaver,
+                GatewayBatch2CardCodes.Carmen,
+                GatewayBatch2CardCodes.Marjanah,
+                GatewayBatch2CardCodes.RedTeam,
+                GatewayBatch2CardCodes.Conduit,
                 GatewayBatch2CardCodes.TeleworkContract,
                 GatewayBatch2CardCodes.SmartwareDistributor,
                 GatewayCardCodes.NicoCampaign,
@@ -23,14 +27,17 @@ public sealed class GatewayBatch2BehaviorSpecTests
                 GatewayBatch2CardCodes.RegolithMiningLicense,
             },
             GatewayBatch2BehaviorSpecs.AssignedDefinitionIds);
-        Assert.Equal(
-            [GatewayBatch2CardCodes.SmartwareDistributor],
-            GatewayBatch2BehaviorSpecs.BlockedDefinitionIds);
+        Assert.Empty(GatewayBatch2BehaviorSpecs.BlockedDefinitionIds);
         Assert.Equal(
             new CardDefinitionId[]
             {
                 GatewayBatch2CardCodes.Pennyshaver,
+                GatewayBatch2CardCodes.Carmen,
+                GatewayBatch2CardCodes.Marjanah,
+                GatewayBatch2CardCodes.RedTeam,
+                GatewayBatch2CardCodes.Conduit,
                 GatewayBatch2CardCodes.TeleworkContract,
+                GatewayBatch2CardCodes.SmartwareDistributor,
                 GatewayCardCodes.NicoCampaign,
                 GatewayBatch2CardCodes.SpinDoctor,
                 GatewayBatch2CardCodes.RegolithMiningLicense,

@@ -877,7 +877,7 @@ public static partial class GameEngine
             null,
             null,
             RunAccessState.NotStarted));
-        if (HasActiveCatalogTrigger(working, OccurrenceKind.RunSuccessful))
+        if (HasActiveCatalogTrigger(working, OccurrenceKind.RunSuccessful, run.AttackedServer))
         {
             QueueRunSuccessfulOccurrence(working, run);
         }
@@ -1093,7 +1093,7 @@ public static partial class GameEngine
                 forcedActionEnd: parent.ForcedActionEnd);
         }
 
-        if (HasActiveCatalogTrigger(working, OccurrenceKind.RunEnded))
+        if (HasActiveCatalogTrigger(working, OccurrenceKind.RunEnded, attackedServer))
         {
             QueueRunEndedOccurrence(
                 working,

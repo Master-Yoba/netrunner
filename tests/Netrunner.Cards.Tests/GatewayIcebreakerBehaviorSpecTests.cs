@@ -35,10 +35,16 @@ public sealed class GatewayIcebreakerBehaviorSpecTests
     }
 
     [Fact]
-    public void IcebreakerSpecsBindExactlyTheTwoRepresentativeIcebreakerDefinitions()
+    public void IcebreakerSpecsBindAllRegisteredDefinitionsInCodeOrder()
     {
         Assert.Equal(
-            new[] { GatewayCardCodes.Cleaver, GatewayCardCodes.Buzzsaw },
+            new[]
+            {
+                GatewayCardCodes.Buzzsaw,
+                GatewayCardCodes.Cleaver,
+                GatewayBatch2CardCodes.Carmen,
+                GatewayBatch2CardCodes.Marjanah,
+            },
             GatewayIcebreakerBehaviorSpecs.IcebreakerSpecs
                 .Select(static spec => spec.DefinitionId)
                 .ToArray());
@@ -52,10 +58,10 @@ public sealed class GatewayIcebreakerBehaviorSpecTests
 
         Assert.Equal(
             GatewayIcebreakerBehaviorSpecs.IcebreakerSpecs[0],
-            CardBehaviorSpecCatalog.GetIcebreaker(GatewayCardCodes.Cleaver));
+            CardBehaviorSpecCatalog.GetIcebreaker(GatewayCardCodes.Buzzsaw));
         Assert.Equal(
             GatewayIcebreakerBehaviorSpecs.IcebreakerSpecs[1],
-            CardBehaviorSpecCatalog.GetIcebreaker(GatewayCardCodes.Buzzsaw));
+            CardBehaviorSpecCatalog.GetIcebreaker(GatewayCardCodes.Cleaver));
     }
 
     [Fact]
@@ -70,7 +76,8 @@ public sealed class GatewayIcebreakerBehaviorSpecTests
     [Fact]
     public void RegisteringADifferentSpecForTheSameDefinitionThrows()
     {
-        IcebreakerBehaviorSpec canonical = GatewayIcebreakerBehaviorSpecs.IcebreakerSpecs[0];
+        IcebreakerBehaviorSpec canonical = GatewayIcebreakerBehaviorSpecs.IcebreakerSpecs.Single(
+            static candidate => candidate.DefinitionId == GatewayCardCodes.Cleaver);
         Assert.Equal(GatewayCardCodes.Cleaver, canonical.DefinitionId);
         CardBehaviorSpecCatalog.RegisterIcebreaker(canonical);
 

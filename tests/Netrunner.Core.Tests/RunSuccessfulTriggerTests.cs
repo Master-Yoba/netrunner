@@ -6,6 +6,83 @@ namespace Netrunner.Core.Tests;
 public sealed class RunSuccessfulTriggerTests
 {
     [Fact]
+    public void RunTriggerServerRequirementIsTypedCanonicalAndMatchedThroughTopology()
+    {
+        BehaviorInstruction instruction = new(BehaviorInstructionKind.GainCredits, amount: 1);
+        BehaviorTrigger rndTrigger = new(
+            "server-filter",
+            OccurrenceKind.RunEnded,
+            TriggerMode.Optional,
+            BehaviorTriggerScope.Any,
+            subjectCardFilter: null,
+            [instruction],
+            runOutcomeRequirement: RunOutcomeRequirement.Successful,
+            serverKindRequirement: ServerKind.RAndD);
+        BehaviorTrigger remoteTrigger = new(
+            "server-filter",
+            OccurrenceKind.RunEnded,
+            TriggerMode.Optional,
+            BehaviorTriggerScope.Any,
+            subjectCardFilter: null,
+            [instruction],
+            runOutcomeRequirement: RunOutcomeRequirement.Successful,
+            serverKindRequirement: ServerKind.Remote);
+
+        Assert.Equal(ServerKind.RAndD, rndTrigger.ServerKindRequirement);
+        Assert.NotEqual(rndTrigger, remoteTrigger);
+        string json = EngineJson.Serialize(rndTrigger);
+        Assert.Contains("\"serverKindRequirement\":\"rAndD\"", json, StringComparison.Ordinal);
+        BehaviorTrigger restored = EngineJson.Deserialize<BehaviorTrigger>(json);
+        Assert.Equal(rndTrigger, restored);
+        Assert.Equal(json, EngineJson.Serialize(restored));
+
+        Assert.Throws<ArgumentException>(() => new BehaviorTrigger(
+            "invalid-server-filter",
+            OccurrenceKind.CardInstalled,
+            TriggerMode.Optional,
+            BehaviorTriggerScope.Any,
+            subjectCardFilter: null,
+            [instruction],
+            serverKindRequirement: ServerKind.RAndD));
+        Assert.Throws<ArgumentException>(() => new BehaviorTrigger(
+            "invalid-server-filter-value",
+            OccurrenceKind.RunEnded,
+            TriggerMode.Optional,
+            BehaviorTriggerScope.Any,
+            subjectCardFilter: null,
+            [instruction],
+            serverKindRequirement: (ServerKind)999));
+
+        CardDefinitionId definitionId = new("test:server-filter-definition");
+        BehaviorCatalog catalog = Catalog(new CardBehaviorDefinition(
+            definitionId,
+            PlayerSide.Runner,
+            triggers: [rndTrigger]));
+        GameState state = CreateState(
+            catalog,
+            new CardPlacement(new("card:server-filter-source"), definitionId, ZoneKind.RunnerRig));
+
+        ServerId remote = state.Servers.Single(server => server.Kind == ServerKind.Remote).Id;
+        GameEngine.RunStartResult remoteStart = GameEngine.BeginRunWithEvents(state, remote, catalog);
+        ApplyResult remotePass = ApplyPass(remoteStart.State, catalog);
+        ApplyResult remoteFinished = ApplyPass(remotePass.State, catalog);
+        Assert.True(remoteFinished.Accepted, remoteFinished.Rejection?.Message);
+        Assert.Null(remoteFinished.State.PendingDecision);
+        Assert.Equal(5, remoteFinished.State.GetPlayer(RunnerId(state)).Credits);
+
+        ServerId rnd = state.Servers.Single(server => server.Kind == ServerKind.RAndD).Id;
+        GameEngine.RunStartResult rndStart = GameEngine.BeginRunWithEvents(state, rnd, catalog);
+        ApplyResult rndPass = ApplyPass(rndStart.State, catalog);
+        ApplyResult rndOpened = ApplyPass(rndPass.State, catalog);
+        if (rndOpened.State.PendingDecision is null)
+        {
+            rndOpened = ApplyPass(rndOpened.State, catalog);
+        }
+        Assert.True(rndOpened.Accepted, rndOpened.Rejection?.Message);
+        Assert.Equal(DecisionKind.TriggerChoice, rndOpened.State.PendingDecision?.Kind);
+    }
+
+    [Fact]
     public void RunEndedOutcomeRequirementAndOccurrenceOutcomeAreTypedAndCanonical()
     {
         PlayerId runner = new("player:success-contract-runner");
