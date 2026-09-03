@@ -98,6 +98,7 @@ public sealed record CostBundle
 [JsonDerivedType(typeof(RemoveLingeringEffect), "remove-lingering")]
 [JsonDerivedType(typeof(MoveCardEffect), "move-card")]
 [JsonDerivedType(typeof(TurnBoundaryEffect), "turn-boundary")]
+[JsonDerivedType(typeof(GameplayOccurrenceEffect), "gameplay-occurrence")]
 public abstract record EffectInstruction;
 
 public sealed record CreditAdjustmentEffect : EffectInstruction
@@ -347,6 +348,55 @@ public sealed record TurnBoundaryEffect : EffectInstruction
     public int TurnNumber { get; private set; }
 }
 
+/// <summary>
+/// A typed gameplay occurrence marker.  The marker itself has no state
+/// mutation; the normal effect checkpoint commits it as a no-op and then
+/// evaluates the occurrence's catalog triggers.
+/// </summary>
+public sealed record GameplayOccurrenceEffect : EffectInstruction
+{
+    [JsonConstructor]
+    public GameplayOccurrenceEffect(
+        OccurrenceKind kind,
+        PlayerId controller,
+        CardInstanceId? subjectCardId = null,
+        ServerId? serverId = null)
+    {
+        if (!Enum.IsDefined(kind)
+            || kind is not (OccurrenceKind.CardInstalled
+                or OccurrenceKind.CardRezzed
+                or OccurrenceKind.RunSuccessful
+                or OccurrenceKind.RunEnded
+                or OccurrenceKind.AgendaScoredOrStolen
+                or OccurrenceKind.CardAccessed
+                or OccurrenceKind.HostedCreditPoolEmptied))
+        {
+            throw new ArgumentOutOfRangeException(nameof(kind));
+        }
+
+        Kind = kind;
+        Controller = controller;
+        SubjectCardId = subjectCardId;
+        ServerId = serverId;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public OccurrenceKind Kind { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerId Controller { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId? SubjectCardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ServerId? ServerId { get; private set; }
+}
+
 /// <summary>Frozen ordered list of typed effects.</summary>
 public sealed record EffectBundle
 {
@@ -386,6 +436,7 @@ public sealed record EffectBundle
             RemoveLingeringEffect value => new RemoveLingeringEffect(value.EffectId),
             MoveCardEffect value => new MoveCardEffect(value.CardId, value.DestinationZoneId),
             TurnBoundaryEffect value => new TurnBoundaryEffect(value.Kind, value.Target, value.TurnNumber),
+            GameplayOccurrenceEffect value => new GameplayOccurrenceEffect(value.Kind, value.Controller, value.SubjectCardId, value.ServerId),
             _ => throw new ArgumentException($"Unknown effect instruction type '{instruction.GetType().Name}'.", nameof(instruction)),
         };
     }
@@ -527,6 +578,31 @@ public static class EffectInstructionValidator
 
                         RequireId(boundary.Target.Value, $"{instructionPath}.target", "player", violations);
                         RequirePositive(boundary.TurnNumber, $"{instructionPath}.turnNumber", "Turn number", violations);
+                        break;
+                    case GameplayOccurrenceEffect occurrence:
+                        if (!Enum.IsDefined(occurrence.Kind)
+                            || occurrence.Kind is not (OccurrenceKind.CardInstalled
+                                or OccurrenceKind.CardRezzed
+                                or OccurrenceKind.RunSuccessful
+                                or OccurrenceKind.RunEnded
+                                or OccurrenceKind.AgendaScoredOrStolen
+                                or OccurrenceKind.CardAccessed
+                                or OccurrenceKind.HostedCreditPoolEmptied))
+                        {
+                            Add(violations, "effects.invalid-gameplay-occurrence-kind", $"{instructionPath}.kind", $"'{occurrence.Kind}' is not a supported gameplay occurrence.");
+                        }
+
+                        RequireId(occurrence.Controller.Value, $"{instructionPath}.controller", "player", violations);
+                        if (occurrence.SubjectCardId is { } subjectCardId)
+                        {
+                            RequireId(subjectCardId.Value, $"{instructionPath}.subjectCardId", "card", violations);
+                        }
+
+                        if (occurrence.ServerId is { } serverId)
+                        {
+                            RequireId(serverId.Value, $"{instructionPath}.serverId", "server", violations);
+                        }
+
                         break;
                     default:
                         violations.Add(new StateInvariantViolation(

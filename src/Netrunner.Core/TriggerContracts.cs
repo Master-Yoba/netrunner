@@ -180,6 +180,7 @@ public sealed record OccurrenceSnapshot
         RemoveLingeringEffect value => new RemoveLingeringEffect(value.EffectId),
         MoveCardEffect value => new MoveCardEffect(value.CardId, value.DestinationZoneId),
         TurnBoundaryEffect value => new TurnBoundaryEffect(value.Kind, value.Target, value.TurnNumber),
+        GameplayOccurrenceEffect value => new GameplayOccurrenceEffect(value.Kind, value.Controller, value.SubjectCardId, value.ServerId),
         _ => throw new ArgumentException($"Unknown effect instruction type '{effect.GetType().Name}'.", nameof(effect)),
     };
 }
@@ -555,12 +556,34 @@ public sealed record TriggerInvocation
         ZoneId? sourceZoneId,
         OccurrenceSnapshot occurrence,
         CostBundle costs,
-        EffectBundle effects)
+        EffectBundle effects,
+        string? triggerKey = null,
+        string? catalogFingerprint = null,
+        string? definitionFingerprint = null)
     {
         ArgumentNullException.ThrowIfNull(behaviorId);
         ArgumentNullException.ThrowIfNull(occurrence);
         ArgumentNullException.ThrowIfNull(costs);
         ArgumentNullException.ThrowIfNull(effects);
+        bool catalogFieldPresent = triggerKey is not null
+            || catalogFingerprint is not null
+            || definitionFingerprint is not null;
+        if (catalogFieldPresent
+            && (!StableIdentifier.TryValidate(triggerKey)
+                || !StableIdentifier.TryValidate(catalogFingerprint)
+                || !StableIdentifier.TryValidate(definitionFingerprint)))
+        {
+            throw new ArgumentException(
+                "A catalog trigger invocation requires a stable trigger key and both catalog fingerprints.");
+        }
+
+        if (catalogFieldPresent
+            && (costs.Instructions.Count != 0 || effects.Instructions.Count != 0))
+        {
+            throw new ArgumentException(
+                "Catalog trigger invocations must not persist executable cost or effect bodies.");
+        }
+
         Version = version;
         Id = id;
         Controller = controller;
@@ -572,6 +595,9 @@ public sealed record TriggerInvocation
         Occurrence = occurrence.Copy();
         Costs = costs.Copy();
         Effects = effects.Copy();
+        TriggerKey = triggerKey;
+        CatalogFingerprint = catalogFingerprint;
+        DefinitionFingerprint = definitionFingerprint;
     }
 
     public TriggerInvocation(TriggerRegistration registration, OccurrenceSnapshot occurrence)
@@ -596,6 +622,39 @@ public sealed record TriggerInvocation
             occurrence,
             registration.Costs,
             registration.Effects)
+    {
+    }
+
+    /// <summary>
+    /// Creates the detached catalog form. The trigger's instruction tree is
+    /// intentionally not copied into this invocation; it is reconstructed
+    /// from the pinned catalog when the child frame runs.
+    /// </summary>
+    public TriggerInvocation(
+        TriggerId id,
+        PlayerId controller,
+        BehaviorTrigger trigger,
+        CardInstanceId sourceCardId,
+        CardDefinitionId sourceDefinitionId,
+        ZoneId sourceZoneId,
+        OccurrenceSnapshot occurrence,
+        string catalogFingerprint,
+        string definitionFingerprint)
+        : this(
+            1,
+            id,
+            controller,
+            trigger?.Mode ?? throw new ArgumentNullException(nameof(trigger)),
+            ResolutionBehaviorIds.CardBehavior,
+            sourceCardId,
+            sourceDefinitionId,
+            sourceZoneId,
+            occurrence,
+            new CostBundle(),
+            new EffectBundle(),
+            trigger.Key,
+            catalogFingerprint,
+            definitionFingerprint)
     {
     }
 
@@ -643,6 +702,24 @@ public sealed record TriggerInvocation
     [JsonRequired]
     public EffectBundle Effects { get; private set; }
 
+    /// <summary>Null for legacy registered trigger invocations.</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? TriggerKey { get; private set; }
+
+    /// <summary>Catalog provenance for a catalog trigger invocation.</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CatalogFingerprint { get; private set; }
+
+    /// <summary>Definition provenance for a catalog trigger invocation.</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? DefinitionFingerprint { get; private set; }
+
+    [JsonIgnore]
+    public bool IsCatalogTrigger => TriggerKey is not null;
+
     internal TriggerInvocation Copy() => new(
         Version,
         Id,
@@ -654,7 +731,10 @@ public sealed record TriggerInvocation
         SourceZoneId,
         Occurrence,
         Costs,
-        Effects);
+        Effects,
+        TriggerKey,
+        CatalogFingerprint,
+        DefinitionFingerprint);
 }
 
 /// <summary>Detached interrupt invocation materialized at an occurrence.</summary>

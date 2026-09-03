@@ -3,6 +3,31 @@ namespace Netrunner.Core;
 /// <summary>Atomic reducers for the reusable M2 cost and effect instructions.</summary>
 public static partial class GameEngine
 {
+    /// <summary>
+    /// Friend-visible C2a seam for opening a typed gameplay occurrence. The
+    /// production lifecycle reducers will call the same effect/checkpoint
+    /// path in a later slice; this method intentionally performs no lifecycle
+    /// integration of its own.
+    /// </summary>
+    internal static GameState BeginGameplayOccurrenceForTesting(
+        GameState state,
+        GameplayOccurrenceEffect occurrence,
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog = null,
+        int maxResolutionSteps = DefaultResolutionStepBudget) =>
+        runtimeCardCatalog is null
+            ? BeginResolution(
+                state,
+                new EffectResolutionFrame(occurrence.Controller, new CostBundle(), new EffectBundle(occurrence)),
+                behaviorCatalog,
+                maxResolutionSteps)
+            : BeginResolution(
+                state,
+                new EffectResolutionFrame(occurrence.Controller, new CostBundle(), new EffectBundle(occurrence)),
+                behaviorCatalog,
+                runtimeCardCatalog,
+                maxResolutionSteps);
+
     public static GameState ResolveEffects(
         GameState state,
         PlayerId controller,
@@ -346,7 +371,9 @@ public static partial class GameEngine
             case AddLingeringEffect value: AddLingering(working, value.Effect); break;
             case RemoveLingeringEffect value: RemoveLingering(working, value.EffectId); break;
             case MoveCardEffect value: ApplyMoveCard(working, value.CardId, value.DestinationZoneId); break;
-            case TurnBoundaryEffect: break;
+            case TurnBoundaryEffect:
+            case GameplayOccurrenceEffect:
+                break;
             default: throw new ResolutionFailureException($"Unsupported effect instruction '{instruction.GetType().Name}'.");
         }
     }

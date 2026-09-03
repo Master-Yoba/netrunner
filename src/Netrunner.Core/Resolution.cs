@@ -1464,6 +1464,24 @@ public static class ResolutionFrameValidator
                         "A checkpoint without a child kind must not identify a child invocation."));
                 }
 
+                if (checkpoint.ChildKind == EffectCheckpointChildKind.Trigger
+                    && (!checkpoint.ChildTriggerId.HasValue || checkpoint.ChildInterruptId.HasValue))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-checkpoint-trigger-child",
+                        path,
+                        "A trigger checkpoint child must identify only a trigger invocation."));
+                }
+
+                if (checkpoint.ChildKind == EffectCheckpointChildKind.Replacement
+                    && (!checkpoint.ChildInterruptId.HasValue || checkpoint.ChildTriggerId.HasValue))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-checkpoint-replacement-child",
+                        path,
+                        "A replacement checkpoint child must identify only an interrupt invocation."));
+                }
+
                 foreach (TriggerInvocation invocation in checkpoint.TriggerQueue)
                 {
                     ValidateTriggerInvocation(invocation, $"{path}.triggerQueue", violations);
@@ -1655,6 +1673,23 @@ public static class ResolutionFrameValidator
                         "resolution.invalid-behavior-ability-key",
                         $"{path}.abilityKey",
                         "An ability behavior child key must be a stable identifier."));
+                }
+
+                if (behavior.TriggerKey is not null
+                    && !StableIdentifier.TryValidate(behavior.TriggerKey))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-behavior-trigger-key",
+                        $"{path}.triggerKey",
+                        "A trigger behavior child key must be a stable identifier."));
+                }
+
+                if (behavior.AbilityKey is not null && behavior.TriggerKey is not null)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.behavior-multiple-declarations",
+                        path,
+                        "A behavior frame cannot carry both an ability key and a trigger key."));
                 }
 
                 ValidateBehaviorInstructions(behavior.RootInstructions, $"{path}.rootInstructions", violations);
@@ -2328,6 +2363,49 @@ public static class ResolutionFrameValidator
             }
         }
 
+        if (occurrence.Kind is OccurrenceKind.CardInstalled
+            or OccurrenceKind.CardRezzed
+            or OccurrenceKind.RunSuccessful
+            or OccurrenceKind.RunEnded
+            or OccurrenceKind.AgendaScoredOrStolen
+            or OccurrenceKind.CardAccessed
+            or OccurrenceKind.HostedCreditPoolEmptied)
+        {
+            if (occurrence.Effect is not GameplayOccurrenceEffect gameplay)
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.gameplay-occurrence-effect-missing",
+                    $"{path}.effect",
+                    "A gameplay occurrence must carry a typed gameplay occurrence effect."));
+            }
+            else
+            {
+                if (gameplay.Kind != occurrence.Kind)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.gameplay-occurrence-kind-mismatch",
+                        $"{path}.effect.kind",
+                        "Gameplay occurrence effect kind must match its occurrence kind."));
+                }
+
+                if (gameplay.Controller != occurrence.Controller)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.gameplay-occurrence-controller-mismatch",
+                        $"{path}.effect.controller",
+                        "Gameplay occurrence effect controller must match its occurrence controller."));
+                }
+
+                if (gameplay.SubjectCardId != occurrence.SourceCardId)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.gameplay-occurrence-subject-mismatch",
+                        $"{path}.effect.subjectCardId",
+                        "Gameplay occurrence subject must match the occurrence source card."));
+                }
+            }
+        }
+
         ValidatePlayer(occurrence.Controller, $"{path}.controller", violations);
         if (occurrence.TargetPlayer.HasValue)
         {
@@ -2377,6 +2455,56 @@ public static class ResolutionFrameValidator
         if (!StableIdentifier.TryValidate(invocation.BehaviorId))
         {
             violations.Add(new StateInvariantViolation("resolution.invalid-behavior", $"{path}.behaviorId", "Trigger behavior ID is empty or invalid."));
+        }
+
+        bool catalogFieldPresent = invocation.TriggerKey is not null
+            || invocation.CatalogFingerprint is not null
+            || invocation.DefinitionFingerprint is not null;
+        if (catalogFieldPresent)
+        {
+            if (!StableIdentifier.TryValidate(invocation.TriggerKey))
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.invalid-trigger-key",
+                    $"{path}.triggerKey",
+                    "A catalog trigger invocation must carry a stable trigger key."));
+            }
+
+            if (!StableIdentifier.TryValidate(invocation.CatalogFingerprint)
+                || !DeterministicHash.IsSha256Hex(invocation.CatalogFingerprint))
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.invalid-trigger-catalog-fingerprint",
+                    $"{path}.catalogFingerprint",
+                    "A catalog trigger invocation must carry a lowercase SHA-256 catalog fingerprint."));
+            }
+
+            if (!StableIdentifier.TryValidate(invocation.DefinitionFingerprint)
+                || !DeterministicHash.IsSha256Hex(invocation.DefinitionFingerprint))
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.invalid-trigger-definition-fingerprint",
+                    $"{path}.definitionFingerprint",
+                    "A catalog trigger invocation must carry a lowercase SHA-256 definition fingerprint."));
+            }
+
+            if (invocation.SourceCardId is null
+                || invocation.SourceDefinitionId is null
+                || invocation.SourceZoneId is null)
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.missing-trigger-source-snapshot",
+                    path,
+                    "A catalog trigger invocation must retain its source card, definition, and zone snapshot."));
+            }
+
+            if (invocation.Costs.Instructions.Count != 0 || invocation.Effects.Instructions.Count != 0)
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.catalog-trigger-executable-payload",
+                    path,
+                    "Catalog trigger invocations must not retain executable cost or effect payloads."));
+            }
         }
 
         ValidateOccurrence(invocation.Occurrence, $"{path}.occurrence", violations);
@@ -2550,7 +2678,8 @@ internal static class ResolutionFrameCloner
             behavior.SourceZoneId,
             behavior.SourceZoneKind,
             behavior.ParentFrameIdentity,
-            behavior.AbilityKey),
+            behavior.AbilityKey,
+            behavior.TriggerKey),
         AbilityFrame ability => new AbilityFrame(
             ability.Version,
             ability.BehaviorId,

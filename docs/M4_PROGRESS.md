@@ -2952,3 +2952,34 @@ errors; runtime action expansion and full verification remain pending.
   formatting, and `git diff --check`. The direct M2 proof retains the schema-3
   hashes and all 32 replay-verified checkpoints. Runtime occurrence dispatch,
   trigger scheduling, and source-snapshot execution remain the next checkpoint.
+
+### 2026-09-03 — Checkpoint C2a-1 catalog-trigger runtime seam accepted
+
+- Luna Max added a typed, persistable gameplay-occurrence marker for the seven
+  C1 occurrence kinds. It is a no-op effect that traverses the existing M2
+  imminent/resolved checkpoint pipeline and retains the occurrence controller,
+  optional subject card, and optional server context. A friend-visible test
+  seam opens this exact path; production install/rez/run/score/access hooks are
+  deliberately deferred rather than simulated here.
+- Materialized trigger invocations now discriminate legacy registered effects
+  from catalog behavior triggers. The catalog form stores only its stable key,
+  physical source/controller/zone snapshot, occurrence, and catalog/definition
+  provenance; its instruction tree is reconstructed from the injected catalog
+  by a mutually exclusive `TriggerKey` behavior child. Deterministic IDs derive
+  from occurrence, source, definition, and trigger key, and catalog candidates
+  join the existing active-player/controller/stable-ID ordering pipeline.
+- Eligibility is limited to active installed sources and applies typed
+  Self/Controller/Any scope plus subject-card filters. The checkpoint seeds the
+  reserved `trigger-subject` binding, and runtime/state validation ties it to
+  the exact parent invocation across yielded JSON save/load. Child topology is
+  discriminated: catalog triggers require their matching behavior frame while
+  legacy triggers and replacements retain effect-resolution children. Stale
+  child IDs are cleared when leaving the awaiting-child stage.
+- Root rejected an early test assertion that read final credits before resolving
+  the correctly yielded simultaneous-order decision and required strict yielded
+  child provenance tests. The accepted gate passes focused catalog-trigger
+  tests 6/6, complete Core 573/573, the zero-warning solution build, Core
+  formatting, and `git diff --check`. The direct M2 proof remains byte-stable at
+  the schema-3 hashes with 32 replay-verified checkpoints. Source movement after
+  materialization, trigger-body self movement, fuller simultaneous ordering,
+  and real lifecycle hooks remain explicit C2a-2/C2b work.

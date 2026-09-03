@@ -515,9 +515,11 @@ public static partial class GameEngine
         }
 
         CardBehaviorDefinition definition = GetBehaviorDefinition(working, frame);
-        IReadOnlyList<BehaviorInstruction> rootInstructions = frame.AbilityKey is null
-            ? definition.Instructions
-            : GetAbilityDeclaration(definition, frame.AbilityKey).Instructions;
+        IReadOnlyList<BehaviorInstruction> rootInstructions = frame.AbilityKey is not null
+            ? GetAbilityDeclaration(definition, frame.AbilityKey).Instructions
+            : frame.TriggerKey is not null
+                ? GetTriggerDeclaration(definition, frame.TriggerKey).Instructions
+                : definition.Instructions;
         List<BehaviorInstruction> replay = rootInstructions.ToList();
         BehaviorTarget? originatingTarget = null;
         IReadOnlyList<CardInstanceId>? originatingSelection = null;
@@ -580,6 +582,33 @@ public static partial class GameEngine
         return definition;
     }
 
+    private static CardBehaviorDefinition GetBehaviorDefinition(
+        WorkingState working,
+        CardDefinitionId definitionId)
+    {
+        if (!working.BehaviorCatalog.TryGet(definitionId, out CardBehaviorDefinition? definition))
+        {
+            throw new ResolutionFailureException($"Behavior definition '{definitionId}' is unavailable.");
+        }
+
+        return definition;
+    }
+
+    private static BehaviorTrigger GetTriggerDeclaration(
+        CardBehaviorDefinition definition,
+        string triggerKey)
+    {
+        if (!StableIdentifier.TryValidate(triggerKey))
+        {
+            throw new ResolutionFailureException("Behavior trigger key is missing or invalid.");
+        }
+
+        return definition.Triggers.SingleOrDefault(trigger =>
+                   string.Equals(trigger.Key, triggerKey, StringComparison.Ordinal))
+            ?? throw new ResolutionFailureException(
+                $"Behavior trigger '{triggerKey}' is not declared by definition '{definition.DefinitionId}'.");
+    }
+
     /// <summary>
     /// Replays the immutable continuation path from the catalog root. The
     /// resulting list is a transient execution projection only; it is never
@@ -594,6 +623,10 @@ public static partial class GameEngine
         if (frame.AbilityKey is not null)
         {
             root = GetAbilityDeclaration(definition, frame.AbilityKey).Instructions;
+        }
+        else if (frame.TriggerKey is not null)
+        {
+            root = GetTriggerDeclaration(definition, frame.TriggerKey).Instructions;
         }
 
         var instructions = root.ToList();
@@ -614,6 +647,12 @@ public static partial class GameEngine
         CardBehaviorDefinition definition = GetBehaviorDefinition(working, frame);
         IReadOnlyList<BehaviorInstruction> rootInstructions = definition.Instructions;
         BehaviorPaidAbility? abilityDeclaration = null;
+        BehaviorTrigger? triggerDeclaration = null;
+        if (frame.AbilityKey is not null && frame.TriggerKey is not null)
+        {
+            throw new ResolutionFailureException("A behavior frame cannot carry both an ability key and a trigger key.");
+        }
+
         if (frame.AbilityKey is not null)
         {
             if (!StableIdentifier.TryValidate(frame.AbilityKey))
@@ -627,6 +666,87 @@ public static partial class GameEngine
             {
                 throw new ResolutionFailureException(
                     "An ability behavior child must begin and remain in Execute stage.");
+            }
+        }
+        else if (frame.TriggerKey is not null)
+        {
+            triggerDeclaration = GetTriggerDeclaration(definition, frame.TriggerKey);
+            rootInstructions = triggerDeclaration.Instructions;
+            if (frame.Stage != BehaviorResolutionStage.Execute)
+            {
+                throw new ResolutionFailureException(
+                    "A catalog trigger behavior child must begin and remain in Execute stage.");
+            }
+        }
+
+        // `trigger-subject` is an engine-seeded binding, never a general
+        // behavior binding. It is valid only on a catalog-trigger child and
+        // must remain exactly equal to the subject captured by that child's
+        // current checkpoint invocation. Keeping this check in the runtime
+        // validator protects both yielded execution and save/load resumes;
+        // the state validator mirrors it for the persisted boundary.
+        BehaviorBinding[] triggerSubjectBindings = frame.Bindings
+            .Where(binding => string.Equals(binding.Key, "trigger-subject", StringComparison.Ordinal))
+            .ToArray();
+        if (frame.TriggerKey is null)
+        {
+            if (triggerSubjectBindings.Length > 0)
+            {
+                throw new ResolutionFailureException(
+                    "The trigger-subject binding is reserved for catalog trigger children.");
+            }
+        }
+        else
+        {
+            if (working.ResolutionStack.Count < 2
+                || working.ResolutionStack[^2] is not EffectCheckpointFrame triggerParent
+                || triggerParent.Stage != EffectCheckpointStage.AwaitingChild
+                || triggerParent.ChildKind != EffectCheckpointChildKind.Trigger
+                || triggerParent.ChildTriggerId is not { } childTriggerId)
+            {
+                throw new ResolutionFailureException(
+                    "A catalog trigger behavior child requires an awaiting effect checkpoint parent.");
+            }
+
+            TriggerInvocation[] matchingInvocations = triggerParent.TriggerQueue
+                .Where(candidate => candidate.Id == childTriggerId)
+                .Take(2)
+                .ToArray();
+            if (matchingInvocations.Length != 1)
+            {
+                throw new ResolutionFailureException(
+                    "A catalog trigger behavior child no longer matches its checkpoint invocation.");
+            }
+
+            TriggerInvocation invocation = matchingInvocations[0];
+            if (!invocation.IsCatalogTrigger
+                || !string.Equals(invocation.TriggerKey, frame.TriggerKey, StringComparison.Ordinal)
+                || invocation.SourceCardId != frame.SourceCardId
+                || invocation.SourceDefinitionId != frame.DefinitionId
+                || invocation.SourceZoneId != frame.SourceZoneId
+                || invocation.Controller != frame.Controller
+                || !string.Equals(invocation.CatalogFingerprint, frame.CatalogFingerprint, StringComparison.Ordinal)
+                || !string.Equals(invocation.DefinitionFingerprint, frame.DefinitionFingerprint, StringComparison.Ordinal))
+            {
+                throw new ResolutionFailureException(
+                    "A catalog trigger behavior child does not match its exact checkpoint invocation.");
+            }
+
+            CardInstanceId? subjectCardId = invocation.Occurrence.SourceCardId;
+            if (subjectCardId is null)
+            {
+                if (triggerSubjectBindings.Length > 0)
+                {
+                    throw new ResolutionFailureException(
+                        "A catalog trigger without an occurrence subject must not retain a trigger-subject binding.");
+                }
+            }
+            else if (triggerSubjectBindings.Length != 1
+                || triggerSubjectBindings[0].CardIds.Count != 1
+                || triggerSubjectBindings[0].CardIds[0] != subjectCardId.Value)
+            {
+                throw new ResolutionFailureException(
+                    "The trigger-subject binding must equal the exact checkpoint invocation subject.");
             }
         }
 
@@ -1064,9 +1184,11 @@ public static partial class GameEngine
         // check for normal execution; retaining it here keeps the condition
         // fail-closed when called from a future resolution path.
         CardBehaviorDefinition definition = GetBehaviorDefinition(working, frame);
-        IReadOnlyList<BehaviorInstruction> rootInstructions = frame.AbilityKey is null
-            ? definition.Instructions
-            : GetAbilityDeclaration(definition, frame.AbilityKey).Instructions;
+        IReadOnlyList<BehaviorInstruction> rootInstructions = frame.AbilityKey is not null
+            ? GetAbilityDeclaration(definition, frame.AbilityKey).Instructions
+            : frame.TriggerKey is not null
+                ? GetTriggerDeclaration(definition, frame.TriggerKey).Instructions
+                : definition.Instructions;
         List<BehaviorInstruction> replay = rootInstructions.ToList();
         BehaviorContinuationStep? latestSelection = null;
         bool latestSelectionWasSearch = false;
@@ -2203,7 +2325,9 @@ public static partial class GameEngine
             if (kind != BehaviorTransferKind.Shuffle)
             {
                 remainingBindings = remainingBindings
-                    .Select(binding => new BehaviorBinding(binding.Key, binding.CardIds.Where(id => id != cardId).ToArray()))
+                    .Select(binding => string.Equals(binding.Key, "trigger-subject", StringComparison.Ordinal)
+                        ? binding
+                        : new BehaviorBinding(binding.Key, binding.CardIds.Where(id => id != cardId).ToArray()))
                     .Where(binding => binding.CardIds.Count > 0)
                     .ToList();
             }
@@ -2293,9 +2417,11 @@ public static partial class GameEngine
         BehaviorResolutionFrame frame)
     {
         CardBehaviorDefinition definition = GetBehaviorDefinition(working, frame);
-        IReadOnlyList<BehaviorInstruction> rootInstructions = frame.AbilityKey is null
-            ? definition.Instructions
-            : GetAbilityDeclaration(definition, frame.AbilityKey).Instructions;
+        IReadOnlyList<BehaviorInstruction> rootInstructions = frame.AbilityKey is not null
+            ? GetAbilityDeclaration(definition, frame.AbilityKey).Instructions
+            : frame.TriggerKey is not null
+                ? GetTriggerDeclaration(definition, frame.TriggerKey).Instructions
+                : definition.Instructions;
         List<BehaviorInstruction> replay = rootInstructions.ToList();
         BehaviorInstruction? latestEmptySearch = null;
         foreach (BehaviorContinuationStep step in frame.Continuation)
@@ -2409,9 +2535,11 @@ public static partial class GameEngine
         }
 
         CardBehaviorDefinition definition = GetBehaviorDefinition(working, frame);
-        IReadOnlyList<BehaviorInstruction> rootInstructions = frame.AbilityKey is null
-            ? definition.Instructions
-            : GetAbilityDeclaration(definition, frame.AbilityKey).Instructions;
+        IReadOnlyList<BehaviorInstruction> rootInstructions = frame.AbilityKey is not null
+            ? GetAbilityDeclaration(definition, frame.AbilityKey).Instructions
+            : frame.TriggerKey is not null
+                ? GetTriggerDeclaration(definition, frame.TriggerKey).Instructions
+                : definition.Instructions;
         List<BehaviorInstruction> replay = rootInstructions.ToList();
         BehaviorTarget? originatingTarget = null;
         IReadOnlyList<CardInstanceId>? originatingSelection = null;

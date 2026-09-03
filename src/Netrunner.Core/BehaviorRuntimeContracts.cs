@@ -458,9 +458,25 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
         ZoneId? sourceZoneId = null,
         ZoneKind? sourceZoneKind = null,
         string? parentFrameIdentity = null,
-        string? abilityKey = null)
+        string? abilityKey = null,
+        string? triggerKey = null)
         : base(version, behaviorId)
     {
+        if (abilityKey is not null && triggerKey is not null)
+        {
+            throw new ArgumentException("A behavior frame cannot carry both an ability key and a trigger key.");
+        }
+
+        if (abilityKey is not null && !StableIdentifier.TryValidate(abilityKey))
+        {
+            throw new ArgumentException("An ability key must be a stable identifier.", nameof(abilityKey));
+        }
+
+        if (triggerKey is not null && !StableIdentifier.TryValidate(triggerKey))
+        {
+            throw new ArgumentException("A trigger key must be a stable identifier.", nameof(triggerKey));
+        }
+
         if (!StableIdentifier.TryValidate(catalogFingerprint))
         {
             throw new ArgumentException("A behavior frame requires a catalog fingerprint.", nameof(catalogFingerprint));
@@ -495,6 +511,7 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
         SourceZoneKind = sourceZoneKind;
         ParentFrameIdentity = parentFrameIdentity;
         AbilityKey = abilityKey;
+        TriggerKey = triggerKey;
     }
 
     public BehaviorResolutionFrame(
@@ -536,6 +553,7 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
         string? parentBehaviorId,
         string? parentFrameIdentity,
         string? abilityKey = null,
+        string? triggerKey = null,
         IReadOnlyList<BehaviorInstruction>? rootInstructions = null,
         IReadOnlyList<BehaviorInstruction>? instructions = null)
         : this(
@@ -555,7 +573,8 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
             sourceZoneId: sourceZoneId,
             sourceZoneKind: sourceZoneKind,
             parentFrameIdentity: parentFrameIdentity,
-            abilityKey: abilityKey)
+            abilityKey: abilityKey,
+            triggerKey: triggerKey)
     {
         RootInstructions = Freeze(rootInstructions ?? definition.Instructions);
         Instructions = Freeze(instructions ?? rootInstructions ?? definition.Instructions);
@@ -662,6 +681,15 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? AbilityKey { get; private set; }
 
+    /// <summary>
+    /// When present, this behavior cursor executes the immutable trigger
+    /// declaration selected by key from the injected catalog. It is mutually
+    /// exclusive with <see cref="AbilityKey"/>.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? TriggerKey { get; private set; }
+
     internal BehaviorResolutionFrame With(
         BehaviorResolutionStage? stage = null,
         IReadOnlyList<BehaviorInstruction>? instructions = null,
@@ -673,7 +701,8 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
         IReadOnlyList<BehaviorContinuationStep>? continuation = null,
         ZoneId? setAsideZoneId = null,
         bool clearSetAsideZone = false,
-        string? abilityKey = null) =>
+        string? abilityKey = null,
+        string? triggerKey = null) =>
         new(
             Version,
             BehaviorId,
@@ -695,7 +724,8 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
             sourceZoneId: SourceZoneId,
             sourceZoneKind: SourceZoneKind,
             parentFrameIdentity: ParentFrameIdentity,
-            abilityKey: AbilityKey)
+            abilityKey: AbilityKey,
+            triggerKey: TriggerKey)
         {
             RootInstructions = Freeze(RootInstructions),
             Instructions = Freeze(instructions ?? Instructions),

@@ -2737,6 +2737,74 @@ public static class StateInvariantValidator
                         }
                     }
 
+                    BehaviorBinding[] triggerSubjectBindings = behaviorFrame.Bindings
+                        .Where(binding => string.Equals(binding.Key, "trigger-subject", StringComparison.Ordinal))
+                        .ToArray();
+                    if (behaviorFrame.TriggerKey is null)
+                    {
+                        if (triggerSubjectBindings.Length > 0)
+                        {
+                            Add(
+                                violations,
+                                "resolution.behavior-trigger-subject-unexpected",
+                                $"{path}.bindings",
+                                "The trigger-subject binding is reserved for catalog trigger children.");
+                        }
+                    }
+                    else
+                    {
+                        TriggerInvocation? triggerInvocation = null;
+                        if (index > 0
+                            && state.ResolutionStack[index - 1] is EffectCheckpointFrame triggerParent
+                            && triggerParent.Stage == EffectCheckpointStage.AwaitingChild
+                            && triggerParent.ChildKind == EffectCheckpointChildKind.Trigger
+                            && triggerParent.ChildTriggerId is { } childTriggerId)
+                        {
+                            TriggerInvocation[] matchingInvocations = triggerParent.TriggerQueue
+                                .Where(invocation => invocation.Id == childTriggerId)
+                                .Take(2)
+                                .ToArray();
+                            if (matchingInvocations.Length == 1)
+                            {
+                                triggerInvocation = matchingInvocations[0];
+                            }
+                        }
+
+                        if (triggerInvocation is null
+                            || !triggerInvocation.IsCatalogTrigger
+                            || !string.Equals(triggerInvocation.TriggerKey, behaviorFrame.TriggerKey, StringComparison.Ordinal)
+                            || triggerInvocation.SourceCardId != behaviorFrame.SourceCardId
+                            || triggerInvocation.SourceDefinitionId != behaviorFrame.DefinitionId
+                            || triggerInvocation.SourceZoneId != behaviorFrame.SourceZoneId
+                            || triggerInvocation.Controller != behaviorFrame.Controller
+                            || !string.Equals(triggerInvocation.CatalogFingerprint, behaviorFrame.CatalogFingerprint, StringComparison.Ordinal)
+                            || !string.Equals(triggerInvocation.DefinitionFingerprint, behaviorFrame.DefinitionFingerprint, StringComparison.Ordinal))
+                        {
+                            Add(
+                                violations,
+                                "resolution.trigger-child-parent-mismatch",
+                                path,
+                                "A catalog trigger behavior child must remain immediately above its exact awaiting checkpoint invocation.");
+                        }
+                        else
+                        {
+                            CardInstanceId? subjectCardId = triggerInvocation.Occurrence.SourceCardId;
+                            bool bindingMatches = subjectCardId is null
+                                ? triggerSubjectBindings.Length == 0
+                                : triggerSubjectBindings.Length == 1
+                                    && triggerSubjectBindings[0].CardIds.Count == 1
+                                    && triggerSubjectBindings[0].CardIds[0] == subjectCardId.Value;
+                            if (!bindingMatches)
+                            {
+                                Add(
+                                    violations,
+                                    "resolution.behavior-trigger-subject-mismatch",
+                                    $"{path}.bindings",
+                                    "The trigger-subject binding must equal the exact checkpoint invocation subject.");
+                            }
+                        }
+                    }
+
                     if (behaviorFrame.ParentFrameIdentity is not null)
                     {
                         if (index == 0)
@@ -2786,6 +2854,15 @@ public static class StateInvariantValidator
                             Add(violations, "resolution.behavior-definition-mismatch", $"{path}.definitionFingerprint", "Behavior frame definition fingerprint must match the injected catalog.");
                         }
 
+                        if (behaviorFrame.AbilityKey is not null && behaviorFrame.TriggerKey is not null)
+                        {
+                            Add(
+                                violations,
+                                "resolution.behavior-multiple-declarations",
+                                path,
+                                "A behavior frame cannot carry both an ability key and a trigger key.");
+                        }
+
                         BehaviorPaidAbility? abilityDeclaration = behaviorFrame.AbilityKey is null
                             ? null
                             : definition.PaidAbilities.SingleOrDefault(ability => string.Equals(
@@ -2801,8 +2878,34 @@ public static class StateInvariantValidator
                                 $"Ability key '{behaviorFrame.AbilityKey}' is not declared by definition '{behaviorFrame.DefinitionId}'.");
                         }
 
+                        BehaviorTrigger? triggerDeclaration = behaviorFrame.TriggerKey is null
+                            ? null
+                            : definition.Triggers.SingleOrDefault(trigger => string.Equals(
+                                trigger.Key,
+                                behaviorFrame.TriggerKey,
+                                StringComparison.Ordinal));
+                        if (behaviorFrame.TriggerKey is not null && triggerDeclaration is null)
+                        {
+                            Add(
+                                violations,
+                                "resolution.unknown-trigger-key",
+                                $"{path}.triggerKey",
+                                $"Trigger key '{behaviorFrame.TriggerKey}' is not declared by definition '{behaviorFrame.DefinitionId}'.");
+                        }
+
+                        if (behaviorFrame.TriggerKey is not null && behaviorFrame.Stage != BehaviorResolutionStage.Execute)
+                        {
+                            Add(
+                                violations,
+                                "resolution.trigger-stage-invalid",
+                                $"{path}.stage",
+                                "A catalog trigger behavior child must remain in Execute stage.");
+                        }
+
                         IReadOnlyList<BehaviorInstruction> behaviorRoot =
-                            abilityDeclaration?.Instructions ?? definition.Instructions;
+                            triggerDeclaration?.Instructions
+                            ?? abilityDeclaration?.Instructions
+                            ?? definition.Instructions;
                         var derivedInstructions = behaviorRoot.ToList();
                         foreach (BehaviorContinuationStep step in behaviorFrame.Continuation)
                         {
@@ -2945,18 +3048,86 @@ public static class StateInvariantValidator
                     RequirePlayer(playerIds, checkpoint.Controller, $"{path}.controller", violations);
                     if (checkpoint.Stage == EffectCheckpointStage.AwaitingChild)
                     {
-                        if (index + 1 >= state.ResolutionStack.Count
-                            || state.ResolutionStack[index + 1] is not EffectResolutionFrame)
+                        ResolutionFrame? child = index + 1 < state.ResolutionStack.Count
+                            ? state.ResolutionStack[index + 1]
+                            : null;
+                        if (child is null)
                         {
                             Add(
                                 violations,
                                 "resolution.checkpoint-child-missing",
                                 path,
-                                "An effect checkpoint awaiting a trigger or replacement child must be immediately followed by an effect-resolution frame.");
+                                "An effect checkpoint awaiting a trigger or replacement child must be immediately followed by its resolution child frame.");
+                        }
+                        else if (checkpoint.ChildKind == EffectCheckpointChildKind.Replacement)
+                        {
+                            if (child is not EffectResolutionFrame)
+                            {
+                                Add(
+                                    violations,
+                                    "resolution.checkpoint-child-kind-mismatch",
+                                    path,
+                                    "A replacement checkpoint must be followed by an EffectResolutionFrame child.");
+                            }
+                        }
+                        else if (checkpoint.ChildKind == EffectCheckpointChildKind.Trigger)
+                        {
+                            TriggerInvocation[] matchingInvocations = checkpoint.ChildTriggerId is { } childTriggerId
+                                ? checkpoint.TriggerQueue
+                                    .Where(candidate => candidate.Id == childTriggerId)
+                                    .Take(2)
+                                    .ToArray()
+                                : [];
+                            if (matchingInvocations.Length != 1)
+                            {
+                                Add(
+                                    violations,
+                                    "resolution.checkpoint-trigger-child-missing",
+                                    path,
+                                    "A trigger checkpoint child must identify an invocation in its materialized trigger queue.");
+                            }
+                            else
+                            {
+                                TriggerInvocation invocation = matchingInvocations[0];
+                                if (invocation.IsCatalogTrigger)
+                                {
+                                    if (child is not BehaviorResolutionFrame behaviorChild
+                                        || !string.Equals(behaviorChild.TriggerKey, invocation.TriggerKey, StringComparison.Ordinal)
+                                        || behaviorChild.SourceCardId != invocation.SourceCardId
+                                        || behaviorChild.DefinitionId != invocation.SourceDefinitionId
+                                        || behaviorChild.SourceZoneId != invocation.SourceZoneId
+                                        || behaviorChild.Controller != invocation.Controller
+                                        || !string.Equals(behaviorChild.CatalogFingerprint, invocation.CatalogFingerprint, StringComparison.Ordinal)
+                                        || !string.Equals(behaviorChild.DefinitionFingerprint, invocation.DefinitionFingerprint, StringComparison.Ordinal))
+                                    {
+                                        Add(
+                                            violations,
+                                            "resolution.checkpoint-catalog-trigger-child-mismatch",
+                                            path,
+                                            "A catalog trigger checkpoint must be followed by a behavior child matching the exact materialized invocation.");
+                                    }
+                                }
+                                else if (child is not EffectResolutionFrame)
+                                {
+                                    Add(
+                                        violations,
+                                        "resolution.checkpoint-legacy-trigger-child-mismatch",
+                                        path,
+                                        "A legacy trigger checkpoint must be followed by an EffectResolutionFrame child.");
+                                }
+                            }
+                        }
+                        else
+                        {
+                            Add(
+                                violations,
+                                "resolution.checkpoint-child-kind-mismatch",
+                                path,
+                                "An awaiting effect checkpoint must declare either a trigger or replacement child.");
                         }
                     }
                     else if (index + 1 < state.ResolutionStack.Count
-                        && state.ResolutionStack[index + 1] is EffectResolutionFrame)
+                        && state.ResolutionStack[index + 1] is (EffectResolutionFrame or BehaviorResolutionFrame))
                     {
                         Add(
                             violations,
@@ -8493,6 +8664,24 @@ public static class StateInvariantValidator
 
         foreach (BehaviorBinding binding in frame.Bindings)
         {
+            if (string.Equals(binding.Key, "trigger-subject", StringComparison.Ordinal))
+            {
+                // This binding is seeded by the checkpoint reducer for a
+                // catalog-trigger child. It is not produced by a card choice
+                // continuation and is validated against the exact parent
+                // trigger invocation by the surrounding frame validator.
+                if (frame.TriggerKey is null)
+                {
+                    Add(
+                        violations,
+                        "resolution.behavior-trigger-subject-unexpected",
+                        $"{path}.bindings",
+                        "The trigger-subject binding is reserved for catalog trigger children.");
+                }
+
+                continue;
+            }
+
             if (string.Equals(binding.Key, "chosen", StringComparison.Ordinal))
             {
                 if (lastNonEmptySelection is null)
@@ -9155,15 +9344,23 @@ public static class StateInvariantValidator
             return false;
         }
 
-        IReadOnlyList<BehaviorInstruction> rootInstructions = frame.AbilityKey is null
-            ? definition.Instructions
-            : definition.PaidAbilities
+        IReadOnlyList<BehaviorInstruction> rootInstructions = frame.AbilityKey is not null
+            ? definition.PaidAbilities
                 .SingleOrDefault(ability => string.Equals(
                     ability.Key,
                     frame.AbilityKey,
                     StringComparison.Ordinal))
                 ?.Instructions
-                ?? [];
+                ?? []
+            : frame.TriggerKey is not null
+                ? definition.Triggers
+                    .SingleOrDefault(trigger => string.Equals(
+                        trigger.Key,
+                        frame.TriggerKey,
+                        StringComparison.Ordinal))
+                    ?.Instructions
+                    ?? []
+                : definition.Instructions;
         List<BehaviorInstruction> replay = rootInstructions.ToList();
         BehaviorTarget? originatingTarget = null;
         IReadOnlyList<CardInstanceId>? originatingSelection = null;
