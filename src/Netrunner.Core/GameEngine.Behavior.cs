@@ -2313,7 +2313,7 @@ public static partial class GameEngine
             && instruction.Target is { Kind: BehaviorTargetKind.ChosenCard }
             && IsProvenEmptyChosenCard(frame, instruction.Target))
         {
-            ResolveProvenEmptySearchShuffle(working, frame, instruction);
+            ResolveProvenEmptySelectionShuffle(working, frame, instruction);
             return;
         }
 
@@ -2436,7 +2436,7 @@ public static partial class GameEngine
                 clearSetAsideZone: remainingSetAside.Count == 0));
     }
 
-    private static void ResolveProvenEmptySearchShuffle(
+    private static void ResolveProvenEmptySelectionShuffle(
         WorkingState working,
         BehaviorResolutionFrame frame,
         BehaviorInstruction shuffleInstruction)
@@ -2444,19 +2444,82 @@ public static partial class GameEngine
         BehaviorInstruction? searchInstruction = LatestEmptySearchContinuation(
             working,
             frame);
-        if (searchInstruction?.SourceZone is not (BehaviorZone.Deck or BehaviorZone.Stack)
-            || shuffleInstruction.SourceZone != searchInstruction.SourceZone
-            || shuffleInstruction.DestinationZone != searchInstruction.SourceZone)
+        if (searchInstruction is not null)
         {
-            throw new ResolutionFailureException(
-                "An empty chosen-card shuffle must immediately follow a reachable empty Deck or Stack search and name the same source and destination zone.");
+            if (searchInstruction.SourceZone is not (BehaviorZone.Deck or BehaviorZone.Stack)
+                || shuffleInstruction.SourceZone != searchInstruction.SourceZone
+                || shuffleInstruction.DestinationZone != searchInstruction.SourceZone)
+            {
+                throw new ResolutionFailureException(
+                    "An empty chosen-card shuffle must immediately follow a reachable empty Deck or Stack search and name the same source and destination zone.");
+            }
+
+            ShuffleProvenEmptyZone(
+                working,
+                frame,
+                searchInstruction.SourceZone.Value,
+                GetPlayer(working, frame.Controller).Side);
+            return;
         }
 
-        PlayerSide controllerSide = GetPlayer(working, frame.Controller).Side;
+        (BehaviorInstruction Instruction, BehaviorChoiceSpec Choice, BehaviorContinuationStep Selection)? choiceOrigin =
+            LatestEmptyChoiceContinuation(working, frame);
+        if (choiceOrigin is not
+            {
+                Instruction: { Kind: BehaviorInstructionKind.Choose },
+                Choice: { Target: { } target } choice,
+                Selection: { } selection
+            })
+        {
+            throw new ResolutionFailureException(
+                "An empty chosen-card shuffle must be backed by a reachable empty search or target choice.");
+        }
+
+        if (shuffleInstruction.Target?.Selector is not { } selector
+            || !StableIdentifier.TryValidate(selector)
+            || !string.Equals(selector, selection.Key, StringComparison.Ordinal)
+            || target.Kind is not (BehaviorTargetKind.ZoneCard or BehaviorTargetKind.ZoneCards)
+            || target.Zone is not { } sourceZone
+            || shuffleInstruction.SourceZone != sourceZone
+            || choice.Cardinality.Kind is not
+                (BehaviorChoiceCardinalityKind.UpTo or BehaviorChoiceCardinalityKind.AnyNumber)
+            || shuffleInstruction.DestinationZone is not { } destinationZone
+            || destinationZone != (ResolveBehaviorOwner(target, frame, working) == PlayerSide.Corp
+                ? BehaviorZone.Deck
+                : BehaviorZone.Stack))
+        {
+            throw new ResolutionFailureException(
+                "An empty chosen-card shuffle must match a reachable zero-permitted target choice, source zone, selector, and owner-correct Deck or Stack destination.");
+        }
+
+        PlayerSide ownerSide = ResolveBehaviorOwner(target, frame, working);
+        ZoneState source = GetBehaviorZone(working, sourceZone, ownerSide);
+        if (source.OwnerSide != ownerSide)
+        {
+            throw new ResolutionFailureException(
+                "An empty chosen-card shuffle target owner does not match its source zone.");
+        }
+
+        ShuffleProvenEmptyZone(working, frame, destinationZone, ownerSide);
+    }
+
+    private static PlayerSide ResolveBehaviorOwner(
+        BehaviorTarget target,
+        BehaviorResolutionFrame frame,
+        WorkingState working) =>
+        target.Filter?.OwnerSide
+        ?? GetPlayer(working, frame.Controller).Side;
+
+    private static void ShuffleProvenEmptyZone(
+        WorkingState working,
+        BehaviorResolutionFrame frame,
+        BehaviorZone destinationZone,
+        PlayerSide ownerSide)
+    {
         ZoneState destination = GetBehaviorZone(
             working,
-            searchInstruction.SourceZone.Value,
-            controllerSide);
+            destinationZone,
+            ownerSide);
         var shuffled = destination.CardIds.ToList();
         var random = DeterministicRandom.Restore(working.RandomState);
         random.Shuffle(shuffled);
@@ -2474,6 +2537,45 @@ public static partial class GameEngine
             EngineEventKinds.BehaviorCardsShuffled,
             new BehaviorCardsShuffledEventPayload(destination.Id, 0));
         AdvanceBehaviorCursor(working, frame);
+    }
+
+    private static (BehaviorInstruction Instruction, BehaviorChoiceSpec Choice, BehaviorContinuationStep Selection)?
+        LatestEmptyChoiceContinuation(
+            WorkingState working,
+            BehaviorResolutionFrame frame)
+    {
+        CardBehaviorDefinition definition = GetBehaviorDefinition(working, frame);
+        IReadOnlyList<BehaviorInstruction> rootInstructions = frame.AbilityKey is not null
+            ? GetAbilityDeclaration(definition, frame.AbilityKey).Instructions
+            : frame.TriggerKey is not null
+                ? GetTriggerDeclaration(definition, frame.TriggerKey).Instructions
+                : definition.Instructions;
+        List<BehaviorInstruction> replay = rootInstructions.ToList();
+        (BehaviorInstruction Instruction, BehaviorChoiceSpec Choice, BehaviorContinuationStep Selection)? latest = null;
+        foreach (BehaviorContinuationStep step in frame.Continuation)
+        {
+            if (step.InstructionCursor < 0 || step.InstructionCursor >= replay.Count)
+            {
+                return null;
+            }
+
+            BehaviorInstruction instruction = replay[step.InstructionCursor];
+            if (step.Kind == BehaviorContinuationKind.ChoiceSelection)
+            {
+                latest = step.CardIds.Count == 0
+                    && instruction.Kind == BehaviorInstructionKind.Choose
+                    && instruction.Choice is { } choice
+                    ? (instruction, choice, step)
+                    : null;
+            }
+
+            if (!BehaviorContinuation.TryApply(replay, step, out _))
+            {
+                return null;
+            }
+        }
+
+        return latest;
     }
 
     private static BehaviorInstruction? LatestEmptySearchContinuation(

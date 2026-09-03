@@ -25,6 +25,7 @@ public static class GatewayBehaviorCatalog
             .AddAgenda(GatewayAgendaBehaviorSpecs.AgendaSpecs)
             .AddAsset(GatewayAssetBehaviorSpecs.AssetSpecs)
             .Add(GatewayBatch1BehaviorSpecs.GenericSpecs)
+            .Add(GatewayBatch2BehaviorSpecs.GenericSpecs)
             .Build();
     }
 

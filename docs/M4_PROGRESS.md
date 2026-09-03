@@ -3319,3 +3319,29 @@ errors; runtime action expansion and full verification remain pending.
   `faf4e631...` / `c882eb43...` / `d20cdef9...`, with all 32 checkpoints
   replay verified. ENG-413's schema, observation, lifecycle, reset, and trash
   recording contracts are now complete; later cards consume the first-X API.
+
+### 2026-09-03 — Checkpoint C4 ENG-410 Spin Doctor accepted
+
+- Luna Max bound Spin Doctor into both the typed behavior catalog and the
+  established asset lifecycle: rez draws two cards, access trash costs two,
+  and an unlimited any-paid-window ability removes the rezzed source from the
+  game before its Corp-owned Archives choice is exposed. The choice selects up
+  to two Corp cards through an explicit binding, moves exactly those cards to
+  R&D, and produces exactly one deterministic shuffle, including when zero
+  cards are selected.
+- Root's end-to-end review exposed that the generic shuffle continuation only
+  recognized an empty searched zone, not a deliberate empty `UpTo` choice.
+  The continuation proof was extended narrowly: it reconstructs the immutable
+  catalog instruction and requires the exact choice key, source zone,
+  permissive cardinality, card owner, and owner-correct deck destination.
+  Exact-cardinality and forged-destination continuations remain atomic
+  rejections, while the existing empty-search contract remains intact.
+- Production coverage proves 0/1/2-card resolutions, pre-choice self-removal,
+  public removed-from-game visibility for both viewers, Corp-only choice
+  ownership, exact candidate privacy, JSON resume/hash stability, unique zone
+  membership, and the zero-selection shuffle event.
+- Root independently passed the affected Core gate 54/54, the focused Cards
+  gate 17/17, complete Core 626/626, complete Cards 102/102, the zero-warning
+  solution build, solution formatting, and `git diff --check`. The direct M2
+  proof remains byte-stable at `faf4e631...` / `c882eb43...` /
+  `d20cdef9...`, with all 32 checkpoints replay verified.

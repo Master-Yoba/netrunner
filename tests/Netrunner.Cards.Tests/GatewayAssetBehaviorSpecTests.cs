@@ -17,13 +17,17 @@ public sealed class GatewayAssetBehaviorSpecTests
     }
 
     [Fact]
-    public void AssetSpecsBindExactlyTheOneRepresentativeAssetDefinition()
+    public void AssetSpecsBindTheImplementedAssetDefinitionsInCardOrder()
     {
         Assert.Equal(
-            new[] { GatewayCardCodes.NicoCampaign },
+            new[] { GatewayCardCodes.NicoCampaign, GatewayBatch2CardCodes.SpinDoctor },
             GatewayAssetBehaviorSpecs.AssetSpecs
                 .Select(static spec => spec.DefinitionId)
                 .ToArray());
+
+        AssetBehaviorSpec spinDoctor = GatewayAssetBehaviorSpecs.AssetSpecs.Single(
+            static candidate => candidate.DefinitionId == GatewayBatch2CardCodes.SpinDoctor);
+        Assert.Equal(2, spinDoctor.TrashCost);
     }
 
     [Fact]
@@ -37,6 +41,10 @@ public sealed class GatewayAssetBehaviorSpecTests
         Assert.Equal(
             GatewayAssetBehaviorSpecs.AssetSpecs[0],
             CardBehaviorSpecCatalog.GetAsset(GatewayCardCodes.NicoCampaign));
+        Assert.True(CardBehaviorSpecCatalog.TryGetAsset(
+            GatewayBatch2CardCodes.SpinDoctor,
+            out AssetBehaviorSpec? spinDoctor));
+        Assert.Equal(2, spinDoctor.TrashCost);
     }
 
     [Fact]
