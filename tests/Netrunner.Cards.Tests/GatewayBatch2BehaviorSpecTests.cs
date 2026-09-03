@@ -13,11 +13,28 @@ public sealed class GatewayBatch2BehaviorSpecTests
         BehaviorCatalog second = GatewayBehaviorCatalog.Create();
 
         Assert.Equal(
-            [GatewayBatch2CardCodes.SpinDoctor],
+            new CardDefinitionId[]
+            {
+                GatewayBatch2CardCodes.Pennyshaver,
+                GatewayBatch2CardCodes.TeleworkContract,
+                GatewayBatch2CardCodes.SmartwareDistributor,
+                GatewayCardCodes.NicoCampaign,
+                GatewayBatch2CardCodes.SpinDoctor,
+                GatewayBatch2CardCodes.RegolithMiningLicense,
+            },
             GatewayBatch2BehaviorSpecs.AssignedDefinitionIds);
-        Assert.Empty(GatewayBatch2BehaviorSpecs.BlockedDefinitionIds);
         Assert.Equal(
-            [GatewayBatch2CardCodes.SpinDoctor],
+            [GatewayBatch2CardCodes.SmartwareDistributor],
+            GatewayBatch2BehaviorSpecs.BlockedDefinitionIds);
+        Assert.Equal(
+            new CardDefinitionId[]
+            {
+                GatewayBatch2CardCodes.Pennyshaver,
+                GatewayBatch2CardCodes.TeleworkContract,
+                GatewayCardCodes.NicoCampaign,
+                GatewayBatch2CardCodes.SpinDoctor,
+                GatewayBatch2CardCodes.RegolithMiningLicense,
+            },
             GatewayBatch2BehaviorSpecs.GenericSpecs.Select(static spec => spec.DefinitionId));
         Assert.Equal(first.Fingerprint, second.Fingerprint);
         Assert.Equal(first.Fingerprint, first.BehaviorRegistryFingerprint);

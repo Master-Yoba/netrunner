@@ -19,9 +19,13 @@ public static class GatewayAssetBehaviorSpecs
         GatewayBatch2CardCodes.SpinDoctor,
         trashCost: 2);
 
+    private static readonly AssetBehaviorSpec RegolithMiningLicense = new(
+        GatewayBatch2CardCodes.RegolithMiningLicense,
+        trashCost: 3);
+
     /// <summary>The compiled asset specs, in card order.</summary>
     public static IReadOnlyList<AssetBehaviorSpec> AssetSpecs { get; } =
-        new ReadOnlyCollection<AssetBehaviorSpec>(new[] { NicoCampaign, SpinDoctor });
+        new ReadOnlyCollection<AssetBehaviorSpec>(new[] { NicoCampaign, SpinDoctor, RegolithMiningLicense });
 
     /// <summary>Registers <see cref="AssetSpecs"/> into the shared catalog (idempotent).</summary>
     public static void RegisterAll() => CardBehaviorSpecCatalog.RegisterAsset(AssetSpecs);

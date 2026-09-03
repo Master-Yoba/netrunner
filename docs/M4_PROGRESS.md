@@ -3345,3 +3345,91 @@ errors; runtime action expansion and full verification remain pending.
   solution build, solution formatting, and `git diff --check`. The direct M2
   proof remains byte-stable at `faf4e631...` / `c882eb43...` /
   `d20cdef9...`, with all 32 checkpoints replay verified.
+
+### 2026-09-03 — Checkpoint D1 ENG-411 run-action architecture opened
+
+- Root fixes the generic contract before card binding: a `StartRun`
+  instruction carries one immutable typed run declaration rather than a card
+  title or free-form argument. The declaration names a fixed existing server
+  kind, an optional not-run-this-turn constraint, and optional source-counter
+  breach-access scaling with a stable public reason key. Red Team can expose
+  one action per eligible central; Conduit names R&D directly, so no new
+  server-choice frame is needed.
+- An installed-card run source is run provenance, not a played run event.
+  Executing the final instruction of a click ability must retire its behavior
+  and ability cursors before nesting the ordinary run timing frame directly
+  under the unchanged `AwaitingAction` Runner turn frame. The source remains
+  active in the Rig, `InitiatingSource` identifies it, and
+  `ActiveRunEventId` remains null; only the latter owns play-area movement,
+  run credits, and run-end trash.
+- Legality is checked both when the action is materialized and when it is
+  consumed. It requires an active faceup Runner source, a unique server of the
+  declared kind, current formal Runner turn facts for history constraints, and
+  a final `StartRun` instruction. The existing basic-run and standalone
+  run-event adapters remain byte-compatible.
+- Any extra central accesses are snapshotted at initiation into immutable
+  run-scoped modifier entries (source, attacked server, positive delta, stable
+  reason). Breach construction adds only modifiers for that exact server;
+  later source-counter mutation cannot change the active run. Empty modifiers
+  use an omitted nullable state field so legacy M2 canonical JSON and proof
+  hashes do not churn. Both observations expose detached ordered modifier
+  reasons without revealing new hidden card identity.
+
+### 2026-09-03 — Checkpoint D2 ENG-412 cost-quote architecture opened
+
+- Root separates conditional cost calculation from static board-value
+  modifiers. A behavior definition may declare an immutable self cost
+  adjustment for Runner install or icebreaker break cost, with one typed turn
+  condition, nonzero delta, and stable reason key. Slice 4.3 evaluates only
+  `SuccessfulRunThisTurn`: Carmen's own definition is evaluated while the card
+  is still in Grip, and Marjanah's own active breaker definition is evaluated
+  during its encounter interface. Other installed cards and card titles are
+  never scanned for an implicit adjustment.
+- One frozen credit quote carries the printed/base value, ordered typed
+  adjustments with their declared reason/source, and the nonnegative effective
+  value. Runner install actions and frames and encounter break actions retain
+  that exact quote across JSON boundaries; affordability, hosted/wallet split,
+  invariant re-materialization, and payment all consume the effective value.
+  Pump cost is deliberately outside this checkpoint.
+- Missing formal current-turn facts make the condition false. Forged or stale
+  base/effective/reason/source data must be rejected without mutation, checked
+  arithmetic rejects overflow, and reductions clamp at zero. Unmodified
+  actions omit the optional quote extension so existing canonical action/frame
+  bytes remain unchanged; modified legal-action observations expose the
+  detached base, effective, and ordered reason data.
+
+### 2026-09-03 — Checkpoint E1 hosted-economy binding opened
+
+- Luna Max is binding the already-expressible hosted-economy group without
+  widening Core: Pennyshaver, Telework Contract, Smartware Distributor,
+  Regolith Mining License, and Nico Campaign's missing full text. Static MU,
+  install/rez loads, successful-run/turn-begin placements or withdrawals,
+  click actions, once-per-turn use, and empty-pool cleanup must remain typed
+  catalog declarations composed in deterministic code order.
+- This checkpoint may not infer hosted credits from ordinary counters or
+  player credits. Both viewers see the public hosted pool, take/place effects
+  preserve exact wallet/pool deltas, and source-triggered empty cleanup occurs
+  after the operation that empties the pool. If Smartware's optional turn-begin
+  withdrawal from an empty pool is not safely expressible, the binding stays
+  blocked and the generic gap is returned to Root rather than handled by a
+  card-name branch.
+
+### 2026-09-04 — Checkpoint E1a hosted-economy expressible subset accepted
+
+- Luna Max bound Pennyshaver, Telework Contract, Regolith Mining License, and
+  Nico Campaign's remaining printed behavior through the existing typed
+  catalog. The declarations cover Pennyshaver's memory and successful-run
+  credit, Telework's install load and once-per-turn cashout, Regolith's rez
+  load and access trash cost, and Nico's rez load, turn-begin income, and
+  ordered empty-pool trash-then-draw cleanup.
+- Root corrected Batch 2 composition to definition-code order and reviewed the
+  production lifecycle tests: public hosted counters, exact pool/wallet
+  transfers, click and once-per-turn accounting, real install/rez/run/turn
+  occurrences, empty-pool cleanup, observation visibility, and JSON stability.
+  The complete Cards suite passes 110/110 and `git diff --check` is clean.
+- Smartware Distributor remains deliberately registered only on the audited
+  blocked surface. Its mandatory turn-begin instruction is “take up to 1,”
+  while Core's existing typed instruction is exact and correctly rejects an
+  empty pool. E1b will add a distinct take-up-to primitive, prove that exact
+  withdrawal is unchanged, and then promote Smartware into the executable
+  catalog.

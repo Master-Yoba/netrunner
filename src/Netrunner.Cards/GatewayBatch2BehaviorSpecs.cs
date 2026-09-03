@@ -65,13 +65,33 @@ public static class GatewayBatch2BehaviorSpecs
 
     /// <summary>All assigned Batch 2 definition IDs.</summary>
     public static IReadOnlyList<CardDefinitionId> AssignedDefinitionIds { get; } =
-        new ReadOnlyCollection<CardDefinitionId>([GatewayBatch2CardCodes.SpinDoctor]);
+        new ReadOnlyCollection<CardDefinitionId>
+        ([
+            GatewayBatch2CardCodes.Pennyshaver,
+            GatewayBatch2CardCodes.TeleworkContract,
+            GatewayBatch2CardCodes.SmartwareDistributor,
+            GatewayCardCodes.NicoCampaign,
+            GatewayBatch2CardCodes.SpinDoctor,
+            GatewayBatch2CardCodes.RegolithMiningLicense,
+        ]);
 
     /// <summary>Batch 2 cards intentionally withheld from this checkpoint.</summary>
     public static IReadOnlyList<CardDefinitionId> BlockedDefinitionIds { get; } =
-        new ReadOnlyCollection<CardDefinitionId>([]);
+        new ReadOnlyCollection<CardDefinitionId>
+        ([.. GatewayBatch2EconomyBehaviorSpecs.BlockedDefinitionIds]);
 
     /// <summary>Immutable generic declarations composed into Gateway.</summary>
     public static IReadOnlyList<CardBehaviorDefinition> GenericSpecs { get; } =
-        new ReadOnlyCollection<CardBehaviorDefinition>([SpinDoctor]);
+        new ReadOnlyCollection<CardBehaviorDefinition>
+        ([
+            GatewayBatch2EconomyBehaviorSpecs.GenericSpecs.Single(
+                static definition => definition.DefinitionId == GatewayBatch2CardCodes.Pennyshaver),
+            GatewayBatch2EconomyBehaviorSpecs.GenericSpecs.Single(
+                static definition => definition.DefinitionId == GatewayBatch2CardCodes.TeleworkContract),
+            GatewayBatch2EconomyBehaviorSpecs.GenericSpecs.Single(
+                static definition => definition.DefinitionId == GatewayCardCodes.NicoCampaign),
+            SpinDoctor,
+            GatewayBatch2EconomyBehaviorSpecs.GenericSpecs.Single(
+                static definition => definition.DefinitionId == GatewayBatch2CardCodes.RegolithMiningLicense),
+        ]);
 }

@@ -20,7 +20,12 @@ public sealed class GatewayAssetBehaviorSpecTests
     public void AssetSpecsBindTheImplementedAssetDefinitionsInCardOrder()
     {
         Assert.Equal(
-            new[] { GatewayCardCodes.NicoCampaign, GatewayBatch2CardCodes.SpinDoctor },
+            new[]
+            {
+                GatewayCardCodes.NicoCampaign,
+                GatewayBatch2CardCodes.SpinDoctor,
+                GatewayBatch2CardCodes.RegolithMiningLicense,
+            },
             GatewayAssetBehaviorSpecs.AssetSpecs
                 .Select(static spec => spec.DefinitionId)
                 .ToArray());
@@ -28,6 +33,9 @@ public sealed class GatewayAssetBehaviorSpecTests
         AssetBehaviorSpec spinDoctor = GatewayAssetBehaviorSpecs.AssetSpecs.Single(
             static candidate => candidate.DefinitionId == GatewayBatch2CardCodes.SpinDoctor);
         Assert.Equal(2, spinDoctor.TrashCost);
+        AssetBehaviorSpec regolith = GatewayAssetBehaviorSpecs.AssetSpecs.Single(
+            static candidate => candidate.DefinitionId == GatewayBatch2CardCodes.RegolithMiningLicense);
+        Assert.Equal(3, regolith.TrashCost);
     }
 
     [Fact]
@@ -45,6 +53,10 @@ public sealed class GatewayAssetBehaviorSpecTests
             GatewayBatch2CardCodes.SpinDoctor,
             out AssetBehaviorSpec? spinDoctor));
         Assert.Equal(2, spinDoctor.TrashCost);
+        Assert.True(CardBehaviorSpecCatalog.TryGetAsset(
+            GatewayBatch2CardCodes.RegolithMiningLicense,
+            out AssetBehaviorSpec? regolith));
+        Assert.Equal(3, regolith.TrashCost);
     }
 
     [Fact]
