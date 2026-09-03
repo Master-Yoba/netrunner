@@ -3181,6 +3181,24 @@ public static class StateInvariantValidator
                     break;
                 case EffectCheckpointFrame checkpoint:
                     RequirePlayer(playerIds, checkpoint.Controller, $"{path}.controller", violations);
+                    if (index > 0
+                        && state.ResolutionStack[index - 1] is EffectResolutionFrame occurrenceParent
+                        && occurrenceParent.Effects.Instructions.Count == 1
+                        && occurrenceParent.Effects.Instructions[0] is GameplayOccurrenceEffect parentOccurrence
+                        && checkpoint.Occurrence.Effect is GameplayOccurrenceEffect checkpointOccurrence
+                        && (parentOccurrence.Kind != checkpointOccurrence.Kind
+                            || parentOccurrence.Controller != checkpointOccurrence.Controller
+                            || parentOccurrence.SubjectCardId != checkpointOccurrence.SubjectCardId
+                            || parentOccurrence.ServerId != checkpointOccurrence.ServerId
+                            || parentOccurrence.Successful != checkpointOccurrence.Successful))
+                    {
+                        Add(
+                            violations,
+                            "resolution.gameplay-occurrence-context-mismatch",
+                            path,
+                            "A gameplay occurrence checkpoint must retain the exact typed effect context from its parent effect frame.");
+                    }
+
                     if (checkpoint.Stage == EffectCheckpointStage.AwaitingChild)
                     {
                         ResolutionFrame? child = index + 1 < state.ResolutionStack.Count

@@ -782,7 +782,8 @@ public static partial class GameEngine
                     || occurrence.Kind == OccurrenceKind.TurnBegin
                         && trigger.Scope == BehaviorTriggerScope.Self
                     || frame.AppliedTriggers.Contains(CatalogTriggerId(occurrence, source, trigger.Key))
-                    || !CatalogTriggerScopeMatches(trigger.Scope, source, occurrence, occurrenceController))
+                    || !CatalogTriggerScopeMatches(trigger.Scope, source, occurrence, occurrenceController)
+                    || !CatalogTriggerOutcomeMatches(trigger, occurrence))
                 {
                     continue;
                 }
@@ -810,6 +811,27 @@ public static partial class GameEngine
         }
 
         return materialized.ToArray();
+    }
+
+    private static bool CatalogTriggerOutcomeMatches(
+        BehaviorTrigger trigger,
+        OccurrenceSnapshot occurrence)
+    {
+        if (trigger.RunOutcomeRequirement is not { } requirement)
+        {
+            return true;
+        }
+
+        if (occurrence.Kind != OccurrenceKind.RunEnded
+            || occurrence.Effect is not GameplayOccurrenceEffect gameplay
+            || gameplay.Successful is not { } successful)
+        {
+            return false;
+        }
+
+        return requirement == (successful
+            ? RunOutcomeRequirement.Successful
+            : RunOutcomeRequirement.Unsuccessful);
     }
 
     /// <summary>

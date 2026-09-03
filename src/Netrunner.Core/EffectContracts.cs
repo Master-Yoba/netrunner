@@ -360,7 +360,8 @@ public sealed record GameplayOccurrenceEffect : EffectInstruction
         OccurrenceKind kind,
         PlayerId controller,
         CardInstanceId? subjectCardId = null,
-        ServerId? serverId = null)
+        ServerId? serverId = null,
+        bool? successful = null)
     {
         if (!Enum.IsDefined(kind)
             || kind is not (OccurrenceKind.CardInstalled
@@ -374,10 +375,25 @@ public sealed record GameplayOccurrenceEffect : EffectInstruction
             throw new ArgumentOutOfRangeException(nameof(kind));
         }
 
+        if (kind == OccurrenceKind.RunEnded && successful is null)
+        {
+            throw new ArgumentException(
+                "A RunEnded occurrence must carry its persisted success outcome.",
+                nameof(successful));
+        }
+
+        if (kind != OccurrenceKind.RunEnded && successful is not null)
+        {
+            throw new ArgumentException(
+                "Only a RunEnded occurrence may carry a success outcome.",
+                nameof(successful));
+        }
+
         Kind = kind;
         Controller = controller;
         SubjectCardId = subjectCardId;
         ServerId = serverId;
+        Successful = successful;
     }
 
     [JsonInclude]
@@ -395,6 +411,10 @@ public sealed record GameplayOccurrenceEffect : EffectInstruction
     [JsonInclude]
     [JsonRequired]
     public ServerId? ServerId { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? Successful { get; private set; }
 }
 
 /// <summary>Frozen ordered list of typed effects.</summary>
@@ -436,7 +456,7 @@ public sealed record EffectBundle
             RemoveLingeringEffect value => new RemoveLingeringEffect(value.EffectId),
             MoveCardEffect value => new MoveCardEffect(value.CardId, value.DestinationZoneId),
             TurnBoundaryEffect value => new TurnBoundaryEffect(value.Kind, value.Target, value.TurnNumber),
-            GameplayOccurrenceEffect value => new GameplayOccurrenceEffect(value.Kind, value.Controller, value.SubjectCardId, value.ServerId),
+            GameplayOccurrenceEffect value => new GameplayOccurrenceEffect(value.Kind, value.Controller, value.SubjectCardId, value.ServerId, value.Successful),
             _ => throw new ArgumentException($"Unknown effect instruction type '{instruction.GetType().Name}'.", nameof(instruction)),
         };
     }
@@ -601,6 +621,23 @@ public static class EffectInstructionValidator
                         if (occurrence.ServerId is { } serverId)
                         {
                             RequireId(serverId.Value, $"{instructionPath}.serverId", "server", violations);
+                        }
+
+                        if (occurrence.Kind == OccurrenceKind.RunEnded && occurrence.Successful is null)
+                        {
+                            Add(
+                                violations,
+                                "effects.run-ended-outcome-missing",
+                                $"{instructionPath}.successful",
+                                "A RunEnded occurrence must carry its success outcome.");
+                        }
+                        else if (occurrence.Kind != OccurrenceKind.RunEnded && occurrence.Successful is not null)
+                        {
+                            Add(
+                                violations,
+                                "effects.unexpected-run-outcome",
+                                $"{instructionPath}.successful",
+                                "Only a RunEnded occurrence may carry a success outcome.");
                         }
 
                         break;

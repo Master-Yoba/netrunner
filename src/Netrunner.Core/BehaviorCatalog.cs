@@ -977,6 +977,13 @@ public enum BehaviorTriggerScope
     Any,
 }
 
+/// <summary>Optional outcome filter for a RunEnded catalog trigger.</summary>
+public enum RunOutcomeRequirement
+{
+    Successful,
+    Unsuccessful,
+}
+
 /// <summary>
 /// Immutable typed trigger declaration. A trigger's instruction list is the
 /// complete behavior executed when its declared occurrence is dispatched.
@@ -990,7 +997,8 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         TriggerMode mode,
         BehaviorTriggerScope scope,
         BehaviorCardFilter? subjectCardFilter,
-        IReadOnlyList<BehaviorInstruction> instructions)
+        IReadOnlyList<BehaviorInstruction> instructions,
+        RunOutcomeRequirement? runOutcomeRequirement = null)
     {
         if (!StableIdentifier.TryValidate(key))
         {
@@ -1028,6 +1036,19 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
                 nameof(subjectCardFilter));
         }
 
+        if (runOutcomeRequirement is { } outcomeRequirement
+            && !Enum.IsDefined(outcomeRequirement))
+        {
+            throw new ArgumentOutOfRangeException(nameof(runOutcomeRequirement));
+        }
+
+        if (runOutcomeRequirement is not null && occurrence != OccurrenceKind.RunEnded)
+        {
+            throw new ArgumentException(
+                "A run outcome requirement is valid only for RunEnded triggers.",
+                nameof(runOutcomeRequirement));
+        }
+
         ArgumentNullException.ThrowIfNull(instructions);
         if (instructions.Count == 0)
         {
@@ -1042,6 +1063,7 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         Scope = scope;
         SubjectCardFilter = subjectCardFilter;
         Instructions = Freeze(instructions);
+        RunOutcomeRequirement = runOutcomeRequirement;
     }
 
     public string Key { get; }
@@ -1055,6 +1077,9 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public BehaviorCardFilter? SubjectCardFilter { get; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public RunOutcomeRequirement? RunOutcomeRequirement { get; }
+
     public IReadOnlyList<BehaviorInstruction> Instructions { get; }
 
     public bool Equals(BehaviorTrigger? other) =>
@@ -1064,6 +1089,7 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         && Mode == other.Mode
         && Scope == other.Scope
         && BehaviorContractStructure.AreEqual(SubjectCardFilter, other.SubjectCardFilter)
+        && RunOutcomeRequirement == other.RunOutcomeRequirement
         && BehaviorContractStructure.SequenceEquals(
             Instructions,
             other.Instructions,
@@ -1072,7 +1098,7 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
     public override bool Equals(object? obj) => Equals(obj as BehaviorTrigger);
 
     public override int GetHashCode() =>
-        HashCode.Combine(Key, Occurrence, Mode, Scope, SubjectCardFilter, Instructions.Count);
+        HashCode.Combine(Key, Occurrence, Mode, Scope, SubjectCardFilter, RunOutcomeRequirement, Instructions.Count);
 
     private static bool IsCardBearing(OccurrenceKind occurrence) => occurrence is
         OccurrenceKind.CardInstalled
@@ -2007,6 +2033,11 @@ internal static class BehaviorCatalogFingerprint
             .Append(",scope=").Append((int)value.Scope)
             .Append(",subject=");
         AppendFilter(builder, value.SubjectCardFilter);
+        if (value.RunOutcomeRequirement is { } outcomeRequirement)
+        {
+            builder.Append(",runOutcome=").Append((int)outcomeRequirement);
+        }
+
         builder.Append(",instructions=");
         AppendSequence(builder, value.Instructions, AppendInstruction);
     }

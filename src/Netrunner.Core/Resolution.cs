@@ -2474,6 +2474,22 @@ public static class ResolutionFrameValidator
                         $"{path}.effect.subjectCardId",
                         "Gameplay occurrence subject must match the occurrence source card."));
                 }
+
+                if (gameplay.Kind == OccurrenceKind.RunEnded && gameplay.Successful is null)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.gameplay-occurrence-outcome-missing",
+                        $"{path}.effect.successful",
+                        "A RunEnded occurrence must carry its success outcome."));
+                }
+                else if (gameplay.Kind != OccurrenceKind.RunEnded && gameplay.Successful is not null)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.gameplay-occurrence-outcome-unexpected",
+                        $"{path}.effect.successful",
+                        "Only a RunEnded occurrence may carry a success outcome."));
+                }
+
             }
         }
 

@@ -928,6 +928,14 @@ public static partial class GameEngine
             throw new ResolutionFailureException("Run-end cleanup requires an explicit end reason.");
         }
 
+        RunId runId = run.Id;
+        PlayerSide initiatingSide = run.InitiatingSide;
+        PlayerId initiatingPlayer = run.InitiatingPlayer;
+        CardInstanceId? initiatingSource = run.InitiatingSource;
+        ServerId attackedServer = run.AttackedServer;
+        RunEndReason endReason = run.EndReason.Value;
+        bool successful = run.Successful;
+        CardInstanceId? activeRunEventId = run.ActiveRunEventId;
         bool realTurnRun = IsRealTurnRun(working, run);
 
         // Run-scoped hosted credits (Overclock) cannot leave the run: any
@@ -935,18 +943,18 @@ public static partial class GameEngine
         if (run.RunCredits > 0)
         {
             Emit(working, EngineEventKinds.RunCreditsAdjusted, new RunCreditsAdjustedEventPayload(
-                run.Id, -run.RunCredits, 0));
+                runId, -run.RunCredits, 0));
         }
 
         Emit(working, EngineEventKinds.RunEnded, new RunEndedEventPayload(
-            run.Id,
-            run.InitiatingSide,
-            run.EndReason.Value,
-            run.Successful));
+            runId,
+            initiatingSide,
+            endReason,
+            successful));
         // CR 26.03 6.9.6/8.6.7: the played run event is trashed to the
         // Runner's heap faceup/public when the run ends; its hosted credits
         // expired with the pool above.
-        if (run.ActiveRunEventId is { } activeEvent)
+        if (activeRunEventId is { } activeEvent)
         {
             CardInstanceState eventCard = GetCard(working, activeEvent);
             ZoneState eventZone = working.Zones.Single(zone => zone.Id == eventCard.ZoneId);
@@ -989,6 +997,34 @@ public static partial class GameEngine
                 parent.ActiveSide,
                 forcedActionEnd: parent.ForcedActionEnd);
         }
+
+        if (HasActiveCatalogTrigger(working, OccurrenceKind.RunEnded))
+        {
+            QueueRunEndedOccurrence(
+                working,
+                initiatingPlayer,
+                initiatingSource,
+                attackedServer,
+                successful);
+        }
+    }
+
+    private static void QueueRunEndedOccurrence(
+        WorkingState working,
+        PlayerId controller,
+        CardInstanceId? sourceCardId,
+        ServerId serverId,
+        bool successful)
+    {
+        working.ResolutionStack.Add(new EffectResolutionFrame(
+            controller,
+            new CostBundle(),
+            new EffectBundle(new GameplayOccurrenceEffect(
+                OccurrenceKind.RunEnded,
+                controller,
+                sourceCardId,
+                serverId,
+                successful))));
     }
 
     private static bool IsRealTurnRun(WorkingState working, RunState run) =>

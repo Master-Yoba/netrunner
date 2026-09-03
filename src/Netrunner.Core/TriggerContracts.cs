@@ -180,7 +180,7 @@ public sealed record OccurrenceSnapshot
         RemoveLingeringEffect value => new RemoveLingeringEffect(value.EffectId),
         MoveCardEffect value => new MoveCardEffect(value.CardId, value.DestinationZoneId),
         TurnBoundaryEffect value => new TurnBoundaryEffect(value.Kind, value.Target, value.TurnNumber),
-        GameplayOccurrenceEffect value => new GameplayOccurrenceEffect(value.Kind, value.Controller, value.SubjectCardId, value.ServerId),
+        GameplayOccurrenceEffect value => new GameplayOccurrenceEffect(value.Kind, value.Controller, value.SubjectCardId, value.ServerId, value.Successful),
         _ => throw new ArgumentException($"Unknown effect instruction type '{effect.GetType().Name}'.", nameof(effect)),
     };
 }

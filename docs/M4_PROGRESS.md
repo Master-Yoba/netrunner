@@ -3132,3 +3132,31 @@ errors; runtime action expansion and full verification remain pending.
   warnings/errors, Core formatting and `git diff --check` pass, and the direct
   M2 proof is restored to `faf4e631...` / `c882eb43...` / `d20cdef9...` with
   32 replay-verified checkpoints. Run-end, agenda, and access hooks remain.
+
+### 2026-09-03 — Checkpoint C2b-3b run-end outcome triggers accepted
+
+- Luna Max extended a RunEnded trigger with an optional typed
+  `RunOutcomeRequirement` (`Successful` or `Unsuccessful`). The field is legal
+  only on RunEnded, participates in immutable equality, canonical JSON, and the
+  catalog fingerprint, and is matched centrally against a required persisted
+  success boolean on `GameplayOccurrenceEffect`. Other occurrence kinds reject
+  that context, while a RunEnded marker without it is invalid.
+- `CompleteRun` snapshots the initiating player/source, attacked server, and
+  outcome, then performs the complete existing run-end transaction first:
+  expire run credits, emit `RunEnded`, move the active run event, clear live run
+  state, pop its timing frame, and restore the real-turn action parent. Only
+  then does it conditionally queue the occurrence when an active declaration
+  exists. A successful-only trigger therefore fires after cleanup, while a
+  jack-out selects only an unsuccessful-only trigger. An optional real-turn
+  trigger round-trips with `RunState` already null and the turn parent already
+  at action priority, then declines without repeating cleanup or `RunEnded`.
+- Root isolated and returned an invalid unsuccessful-run fixture that omitted
+  its ICE behavior spec; the accepted Luna Max repair uses bounded timing
+  progression and the registered fixture ICE. The generic state invariant now
+  also proves an occurrence checkpoint retains the exact typed context of its
+  parent effect frame. Focused run/catalog tests pass 40/40, complete Core
+  passes 605/605, the solution build has zero warnings/errors, formatting and
+  `git diff --check` pass, and the M2 proof retains `faf4e631...` /
+  `c882eb43...` / `d20cdef9...` with 32 replay-verified checkpoints. Agenda and
+  access hooks remain C2b work; installed-card run-source self matching remains
+  coupled to ENG-411's click-run source state.
