@@ -21,7 +21,120 @@ public sealed record BoardRegionState(
     IReadOnlyList<CardViewModel> RunnerScore,
     RunFocusViewModel? Run,
     string CorpSummary,
-    string RunnerSummary);
+    string RunnerSummary)
+{
+    public HandSizeViewModel CorpHandSize { get; init; } =
+        HandSizeViewModel.Unavailable(PlayerSide.Corp, 0);
+
+    public HandSizeViewModel RunnerHandSize { get; init; } =
+        HandSizeViewModel.Unavailable(PlayerSide.Runner, 0);
+
+    public ScoreAreaViewModel CorpScoreArea { get; init; } =
+        ScoreAreaViewModel.Empty(PlayerSide.Corp);
+
+    public ScoreAreaViewModel RunnerScoreArea { get; init; } =
+        ScoreAreaViewModel.Empty(PlayerSide.Runner);
+
+    public IReadOnlyList<InstalledAdvancementViewModel> InstalledAdvancementCounters { get; init; } =
+        Array.Empty<InstalledAdvancementViewModel>();
+}
+
+/// <summary>
+/// Immutable turn/priority panel projection. It contains only values already
+/// present in the filtered Match view; missing or unknown enum values produce
+/// an unavailable panel instead of a guessed phase or priority holder.
+/// </summary>
+public sealed record TurnRegionState(
+    TurnViewModel Turn,
+    DecisionViewModel? Decision,
+    RunPriorityViewModel? Priority,
+    bool IsForcedDiscard,
+    bool IsAvailable,
+    string Summary,
+    string? Diagnostic)
+{
+    public static TurnRegionState Unavailable(string diagnostic) => new(
+        TurnViewModel.Unavailable(diagnostic),
+        null,
+        null,
+        false,
+        false,
+        "TURN / TIMING · unavailable",
+        diagnostic);
+}
+
+/// <summary>Builds the UI-403 turn, timing, and priority panel.</summary>
+public static class TurnRegionPresenter
+{
+    public static TurnRegionState Present(MatchSnapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        MatchViewModel view = snapshot.View;
+        if (!view.Turn.IsAvailable
+            || view.Turn.ActiveSide is not { } activeSide
+            || view.Turn.Phase is not { } phase
+            || !Enum.IsDefined(activeSide)
+            || !Enum.IsDefined(phase)
+            || view.Turn.TurnNumber is not { } turnNumber
+            || turnNumber < 0)
+        {
+            return TurnRegionState.Unavailable(
+                view.Turn.Diagnostic
+                ?? "Turn/timing projection is unavailable: no valid public turn values were supplied.");
+        }
+
+        if (view.Turn.Step is { } step && !Enum.IsDefined(step))
+        {
+            return TurnRegionState.Unavailable(
+                "Turn/timing projection is unavailable: the public timing step is unsupported.");
+        }
+
+        RunPriorityViewModel? priority = view.Run?.Priority;
+        if (priority is not null
+            && (!Enum.IsDefined(priority.Window)
+                || !Enum.IsDefined(priority.Holder)
+                || priority.ConsecutivePasses < 0))
+        {
+            return TurnRegionState.Unavailable(
+                "Turn/timing projection is unavailable: the issued priority window is unsupported.");
+        }
+
+        DecisionViewModel? decision = view.Decision;
+        bool knownDecision = decision is null
+            || (Enum.IsDefined(decision.Kind) && Enum.IsDefined(decision.OwnerSide));
+        if (!knownDecision)
+        {
+            return TurnRegionState.Unavailable(
+                "Turn/timing projection is unavailable: the issued decision kind is unsupported.");
+        }
+
+        string summary =
+            $"TURN {turnNumber} · ACTIVE {activeSide.ToString().ToUpperInvariant()} · PHASE {phase.ToString().ToUpperInvariant()}"
+            + (view.Turn.Step is { } timingStep
+                ? $" · TIMING {timingStep.ToString().ToUpperInvariant()}"
+                : " · TIMING STEP UNAVAILABLE");
+        if (priority is { } currentPriority)
+        {
+            summary +=
+                $" · PRIORITY {currentPriority.Holder.ToString().ToUpperInvariant()} / {currentPriority.Window.ToString().ToUpperInvariant()}";
+        }
+
+        bool forcedDiscard = decision?.Kind == DecisionKind.TurnDiscard;
+        if (decision is { } currentDecision)
+        {
+            summary += $" · DECISION {currentDecision.Kind.ToString().ToUpperInvariant()}";
+        }
+
+        return new TurnRegionState(
+            view.Turn,
+            decision,
+            priority,
+            forcedDiscard,
+            true,
+            summary,
+            null);
+    }
+}
 
 /// <summary>Builds the immutable board-region projection used by the client.</summary>
 public static class BoardRegionPresenter
@@ -29,7 +142,7 @@ public static class BoardRegionPresenter
     public static BoardRegionState Present(MatchViewModel view)
     {
         ArgumentNullException.ThrowIfNull(view);
-        return new BoardRegionState(
+        BoardRegionState board = new(
             view.Corp,
             view.Runner,
             new ReadOnlyCollection<ServerViewModel>(view.Servers.ToArray()),
@@ -45,6 +158,17 @@ public static class BoardRegionPresenter
                 view.RunnerHand.Count,
                 view.RunnerDeck.Count,
                 view.Run is { RunCredits: > 0 } runWithPool ? runWithPool.RunCredits : null));
+        return board with
+        {
+            CorpHandSize = view.CorpHandSize,
+            RunnerHandSize = view.RunnerHandSize,
+            CorpScoreArea = view.CorpScoreArea,
+            RunnerScoreArea = view.RunnerScoreArea,
+            InstalledAdvancementCounters = new ReadOnlyCollection<InstalledAdvancementViewModel>(
+                view.InstalledAdvancementCounters.ToArray()),
+            CorpSummary = board.CorpSummary + $"\n{view.CorpHandSize.Summary}",
+            RunnerSummary = board.RunnerSummary + $"\n{view.RunnerHandSize.Summary}",
+        };
     }
 
     public static string FormatPlayer(
@@ -67,14 +191,45 @@ public enum ActionsRegionStatus
     WaitingForDecision,
     AwaitingRunnerDecision,
     Complete,
+    Unsupported,
 }
+
+/// <summary>One progressive-disclosure group for the active decision kind.</summary>
+public sealed record ActionGroupViewModel(
+    DecisionKind DecisionKind,
+    string Label,
+    IReadOnlyList<LegalActionViewModel> Actions);
 
 /// <summary>Immutable action-control projection, including target semantics.</summary>
 public sealed record ActionsRegionState(
     ActionsRegionStatus Status,
     DecisionViewModel? Decision,
     IReadOnlyList<LegalActionViewModel> Actions,
-    IReadOnlySet<ActionId> TargetedActions);
+    IReadOnlySet<ActionId> TargetedActions)
+{
+    /// <summary>
+    /// Actions retained for the active decision's supported progressive
+    /// disclosure group. Unsupported/future decision kinds expose no controls.
+    /// </summary>
+    public IReadOnlyList<LegalActionViewModel> DisplayActions =>
+        new ReadOnlyCollection<LegalActionViewModel>(
+            ActionGroups.SelectMany(group => group.Actions).ToArray());
+
+    /// <summary>Alias for clients that call the visible action set controls.</summary>
+    public IReadOnlyList<LegalActionViewModel> VisibleActions => DisplayActions;
+
+    public IReadOnlyList<ActionGroupViewModel> ActionGroups =>
+        ActionsRegionPresenter.GroupActions(Decision, Actions);
+
+    public bool IsForcedDiscard => Decision?.Kind == DecisionKind.TurnDiscard
+        && Enum.IsDefined(Decision.Kind)
+        && Enum.IsDefined(Decision.OwnerSide);
+
+    public string? Diagnostic => Decision is { } decision
+        && (!Enum.IsDefined(decision.Kind) || !Enum.IsDefined(decision.OwnerSide))
+        ? $"No action controls rendered: unsupported issued decision '{decision.Kind}' for side '{decision.OwnerSide}'."
+        : null;
+}
 
 /// <summary>
 /// Reduces a Match snapshot to action controls. Action IDs and typed
@@ -86,23 +241,118 @@ public static class ActionsRegionPresenter
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         DecisionViewModel? decision = snapshot.View.Decision;
-        ActionsRegionStatus status = snapshot.IsOpponentThinking
-            ? ActionsRegionStatus.OpponentThinking
-            : decision is null || decision.OwnerSide != PlayerSide.Runner
-                ? snapshot.RunOutcome is not null && snapshot.View.Run is null
-                    ? ActionsRegionStatus.Complete
-                    : ActionsRegionStatus.WaitingForDecision
-                : ActionsRegionStatus.AwaitingRunnerDecision;
+        bool supportedDecision = decision is null
+            || (Enum.IsDefined(decision.Kind) && Enum.IsDefined(decision.OwnerSide));
+        ActionsRegionStatus status;
+        if (snapshot.IsOpponentThinking)
+        {
+            status = ActionsRegionStatus.OpponentThinking;
+        }
+        else if (!supportedDecision)
+        {
+            status = ActionsRegionStatus.Unsupported;
+        }
+        else if (decision is null || decision.OwnerSide != PlayerSide.Runner)
+        {
+            status = snapshot.RunOutcome is not null && snapshot.View.Run is null
+                ? ActionsRegionStatus.Complete
+                : ActionsRegionStatus.WaitingForDecision;
+        }
+        else
+        {
+            status = ActionsRegionStatus.AwaitingRunnerDecision;
+        }
 
         LegalActionViewModel[] actions = snapshot.View.LegalActions.ToArray();
+        IReadOnlyList<LegalActionViewModel> visibleActions = GroupActions(decision, actions)
+            .SelectMany(group => group.Actions)
+            .ToArray();
         return new ActionsRegionState(
             status,
             decision,
             new ReadOnlyCollection<LegalActionViewModel>(actions),
-            actions
+            visibleActions
                 .Where(IsTargetedAction)
                 .Select(static action => action.Id)
                 .ToFrozenSet());
+    }
+
+    /// <summary>
+    /// Groups only the action classes currently issued by the observation
+    /// contract. This is progressive disclosure: a turn-action decision does
+    /// not display run-window or discard controls that may belong to another
+    /// decision, and a future/unknown decision fails closed.
+    /// </summary>
+    public static IReadOnlyList<ActionGroupViewModel> GroupActions(
+        DecisionViewModel? decision,
+        IReadOnlyList<LegalActionViewModel> actions)
+    {
+        ArgumentNullException.ThrowIfNull(actions);
+        if (decision is null
+            || !Enum.IsDefined(decision.Kind)
+            || !Enum.IsDefined(decision.OwnerSide))
+        {
+            return Array.Empty<ActionGroupViewModel>();
+        }
+
+        ActionKind[] allowed = decision.Kind switch
+        {
+            DecisionKind.TurnTiming => [ActionKind.PassPriority],
+            DecisionKind.TurnAction =>
+            [
+                ActionKind.GainCredit,
+                ActionKind.DrawCard,
+                ActionKind.ChooseBehavior,
+            ],
+            DecisionKind.TurnDiscard => [ActionKind.ChooseCard],
+            DecisionKind.BehaviorChoice => [ActionKind.ChooseBehavior],
+            DecisionKind.ChooseCard => [ActionKind.ChooseCard],
+            DecisionKind.ChooseNumber => [ActionKind.ChooseNumber],
+            DecisionKind.RunTiming =>
+            [
+                ActionKind.PassPriority,
+                ActionKind.RezIce,
+                ActionKind.BreakSubroutines,
+                ActionKind.PumpBreaker,
+                ActionKind.JackOut,
+                ActionKind.ContinueRun,
+                ActionKind.ChooseBreachCandidate,
+                ActionKind.TrashAccessedCard,
+                ActionKind.NoAccessAction,
+            ],
+            _ => [],
+        };
+
+        if (allowed.Length == 0)
+        {
+            return Array.Empty<ActionGroupViewModel>();
+        }
+
+        HashSet<ActionKind> allowedSet = allowed.ToHashSet();
+        LegalActionViewModel[] visible = actions
+            .Where(action => Enum.IsDefined(action.Kind) && allowedSet.Contains(action.Kind))
+            .ToArray();
+        if (visible.Length == 0)
+        {
+            return Array.Empty<ActionGroupViewModel>();
+        }
+
+        string label = decision.Kind switch
+        {
+            DecisionKind.TurnTiming => "TURN TIMING / PRIORITY",
+            DecisionKind.TurnAction => "BASIC ACTIONS ISSUED BY CORE",
+            DecisionKind.TurnDiscard => "FORCED DISCARD",
+            DecisionKind.BehaviorChoice => "BEHAVIOR CHOICE ISSUED BY CORE",
+            DecisionKind.RunTiming => "RUN WINDOW ACTIONS ISSUED BY CORE",
+            _ => "ISSUED ACTIONS",
+        };
+        return
+        [
+            new ActionGroupViewModel(
+                decision.Kind,
+                label,
+                new ReadOnlyCollection<LegalActionViewModel>(visible)),
+        ];
     }
 
     public static bool IsTargetedAction(LegalActionViewModel action)
@@ -224,6 +474,11 @@ public static class FocusRegionPresenter
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         RunFocusViewModel? run = snapshot.View.Run;
+        if (run is not null && !HasKnownEnums(run))
+        {
+            return new FocusRegionState(FocusRegionMode.Empty, null, snapshot.RunOutcome);
+        }
+
         FocusRegionMode mode = snapshot.RunOutcome is not null && run is null
             ? FocusRegionMode.Outcome
             : run is null
@@ -236,6 +491,32 @@ public static class FocusRegionPresenter
                             ? FocusRegionMode.PaidWindow
                             : FocusRegionMode.Run;
         return new FocusRegionState(mode, run, snapshot.RunOutcome);
+    }
+
+    private static bool HasKnownEnums(RunFocusViewModel run)
+    {
+        if (!Enum.IsDefined(run.Phase)
+            || !Enum.IsDefined(run.Step)
+            || !Enum.IsDefined(run.InitiatingSide)
+            || !Enum.IsDefined(run.Access.State))
+        {
+            return false;
+        }
+
+        if (run.EndReason is { } endReason && !Enum.IsDefined(endReason))
+        {
+            return false;
+        }
+
+        if (run.Priority is { } priority
+            && (!Enum.IsDefined(priority.Window)
+                || !Enum.IsDefined(priority.Holder)
+                || priority.ConsecutivePasses < 0))
+        {
+            return false;
+        }
+
+        return run.Encounter is null || Enum.IsDefined(run.Encounter.Status);
     }
 }
 

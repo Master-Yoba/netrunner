@@ -29,11 +29,139 @@ public sealed record MatchViewModel(
     OutcomeViewModel Outcome,
     IReadOnlyList<LegalActionViewModel> LegalActions)
 {
+    /// <summary>
+    /// The public turn projection. Older M2 observations do not carry the
+    /// optional fine-grained step; such observations remain usable while the
+    /// step is reported as unavailable rather than inferred from a prompt.
+    /// </summary>
+    public TurnViewModel Turn { get; init; } = TurnViewModel.Unavailable();
+
+    /// <summary>Viewer-safe hand counts and optional maximum-size projection.</summary>
+    public HandSizeViewModel CorpHandSize { get; init; } = HandSizeViewModel.Unavailable(PlayerSide.Corp, 0);
+
+    public HandSizeViewModel RunnerHandSize { get; init; } = HandSizeViewModel.Unavailable(PlayerSide.Runner, 0);
+
+    /// <summary>Visible installed cards carrying advancement tokens.</summary>
+    public IReadOnlyList<InstalledAdvancementViewModel> InstalledAdvancementCounters { get; init; } =
+        Array.Empty<InstalledAdvancementViewModel>();
+
+    public ScoreAreaViewModel CorpScoreArea { get; init; } = ScoreAreaViewModel.Empty(PlayerSide.Corp);
+
+    public ScoreAreaViewModel RunnerScoreArea { get; init; } = ScoreAreaViewModel.Empty(PlayerSide.Runner);
+
+    /// <summary>Core-issued discard decision, when the active decision is forced discard.</summary>
+    public ForcedDiscardViewModel? ForcedDiscard { get; init; }
+
     public IReadOnlyList<LegalActionViewModel> Actions => LegalActions;
 
     public IReadOnlyList<CardViewModel> RunnerHandCards => RunnerHand.VisibleCards;
 
     public IReadOnlyList<CardViewModel> CorpHandCards => CorpHand.VisibleCards;
+}
+
+/// <summary>
+/// Optional Match-layer input for a viewer-safe maximum hand-size projection.
+/// This is a compatibility fallback for observations produced before Core
+/// projected the viewer-safe maximum in each public player object. The mapper
+/// never inspects GameState or derives a value from card text.
+/// </summary>
+public sealed record HandSizeProjection(
+    int? CorpMaximumHandSize,
+    int? RunnerMaximumHandSize,
+    string? UnavailableReason = null)
+{
+    public static HandSizeProjection Unavailable { get; } = new(
+        null,
+        null,
+        "Maximum hand size unavailable: observation has no viewer-safe maximum and no compatibility fallback was supplied.");
+
+    public int? For(PlayerSide side) => side switch
+    {
+        PlayerSide.Corp => CorpMaximumHandSize,
+        PlayerSide.Runner => RunnerMaximumHandSize,
+        _ => null,
+    };
+}
+
+/// <summary>Explicit public turn/timing values used by the UI-403 shell.</summary>
+public sealed record TurnViewModel(
+    bool IsAvailable,
+    PlayerSide? ActiveSide,
+    TurnPhase? Phase,
+    TurnStep? Step,
+    int? TurnNumber,
+    string? Diagnostic)
+{
+    public static TurnViewModel Unavailable(string? diagnostic = null) => new(
+        false,
+        null,
+        null,
+        null,
+        null,
+        diagnostic ?? "Turn projection unavailable: the observation did not provide a valid turn object.");
+
+    public string PhaseLabel => Phase is { } phase
+        ? phase.ToString().ToUpperInvariant()
+        : "UNKNOWN PHASE";
+
+    public string TimingLabel => Step is { } step
+        ? step.ToString().ToUpperInvariant()
+        : "TIMING STEP UNAVAILABLE";
+}
+
+/// <summary>Public hand count paired with an optional observed or fallback maximum.</summary>
+public sealed record HandSizeViewModel(
+    PlayerSide Side,
+    int Count,
+    int? MaximumHandSize,
+    string? MaximumHandSizeDiagnostic)
+{
+    public bool IsMaximumKnown => MaximumHandSize.HasValue;
+
+    public bool IsOverLimit => MaximumHandSize is { } maximum && Count > maximum;
+
+    public static HandSizeViewModel Unavailable(PlayerSide side, int count, string? diagnostic = null) => new(
+        side,
+        count,
+        null,
+        diagnostic ?? HandSizeProjection.Unavailable.UnavailableReason);
+
+    public string Summary => MaximumHandSize is { } maximum
+        ? $"Hand {Count} / max {maximum}"
+        : $"Hand {Count} / max unavailable";
+}
+
+/// <summary>One visible installed card's advancement-token presentation.</summary>
+public sealed record InstalledAdvancementViewModel(
+    string CardId,
+    string Title,
+    int Count,
+    PlayerSide Controller,
+    string? ServerId)
+{
+    public string Summary => ServerId is { } server
+        ? $"{Title} · {Count} advancement token(s) · {server}"
+        : $"{Title} · {Count} advancement token(s)";
+}
+
+/// <summary>Agenda-point total and visible scored cards for one side.</summary>
+public sealed record ScoreAreaViewModel(
+    PlayerSide Side,
+    int AgendaPoints,
+    IReadOnlyList<CardViewModel> Cards)
+{
+    public static ScoreAreaViewModel Empty(PlayerSide side) => new(side, 0, Array.Empty<CardViewModel>());
+
+    public string Summary => $"{Side} score · {AgendaPoints} agenda point(s) · {Cards.Count} visible agenda(s)";
+}
+
+/// <summary>Core-issued forced-discard prompt; no discard count is inferred.</summary>
+public sealed record ForcedDiscardViewModel(
+    PlayerSide Side,
+    string Prompt,
+    HandSizeViewModel Hand)
+{
+    public string Summary => $"FORCED DISCARD · {Prompt} · {Hand.Summary}";
 }
 
 /// <summary>Resource and score values visible for one player.</summary>
@@ -236,16 +364,31 @@ public static class ObservationViewMapper
         Observation observation,
         ICardMetadataResolver metadataResolver,
         IBehaviorCatalog behaviorCatalog)
+        => Build(observation, metadataResolver, behaviorCatalog, handSizeProjection: null);
+
+    /// <summary>
+    /// Builds a view with an optional viewer-safe hand-size projection. The
+    /// projection is deliberately supplied by composition; this mapper still
+    /// accepts only observation data and never reaches authoritative state.
+    /// </summary>
+    public static MatchViewModel Build(
+        Observation observation,
+        ICardMetadataResolver metadataResolver,
+        IBehaviorCatalog behaviorCatalog,
+        HandSizeProjection? handSizeProjection)
     {
         ArgumentNullException.ThrowIfNull(observation);
         ArgumentNullException.ThrowIfNull(metadataResolver);
         ArgumentNullException.ThrowIfNull(behaviorCatalog);
 
+        handSizeProjection ??= HandSizeProjection.Unavailable;
         IReadOnlyDictionary<string, object?> publicState = observation.PublicState;
         IReadOnlyDictionary<string, object?> privateState = observation.PrivateState;
         IReadOnlyDictionary<string, object?> players = RequiredMap(publicState, "players");
-        PlayerViewModel corp = MapPlayer(RequiredMap(players, "corp"), PlayerSide.Corp);
-        PlayerViewModel runner = MapPlayer(RequiredMap(players, "runner"), PlayerSide.Runner);
+        IReadOnlyDictionary<string, object?> corpPlayer = RequiredMap(players, "corp");
+        IReadOnlyDictionary<string, object?> runnerPlayer = RequiredMap(players, "runner");
+        PlayerViewModel corp = MapPlayer(corpPlayer, PlayerSide.Corp);
+        PlayerViewModel runner = MapPlayer(runnerPlayer, PlayerSide.Runner);
         IReadOnlyDictionary<string, object?> hidden = RequiredMap(publicState, "hiddenZoneCounts");
 
         ZoneViewModel corpHand = MapZone(
@@ -278,7 +421,7 @@ public static class ObservationViewMapper
             .Select(action => new LegalActionViewModel(action.Id, action.Kind, action.Description, action.Parameters))
             .ToArray();
 
-        return new MatchViewModel(
+        MatchViewModel view = new(
             observation.Viewer,
             corp,
             runner,
@@ -294,6 +437,33 @@ public static class ObservationViewMapper
             run,
             outcome,
             new ReadOnlyCollection<LegalActionViewModel>(actions.ToArray()));
+
+        HandSizeViewModel corpHandSize = MapHandSize(
+            PlayerSide.Corp,
+            corpHand,
+            corpPlayer,
+            handSizeProjection);
+        HandSizeViewModel runnerHandSize = MapHandSize(
+            PlayerSide.Runner,
+            runnerHand,
+            runnerPlayer,
+            handSizeProjection);
+        return view with
+        {
+            Turn = MapTurn(publicState),
+            CorpHandSize = corpHandSize,
+            RunnerHandSize = runnerHandSize,
+            InstalledAdvancementCounters = MapInstalledAdvancement(servers, runnerRig),
+            CorpScoreArea = new ScoreAreaViewModel(
+                PlayerSide.Corp,
+                corp.AgendaPoints,
+                new ReadOnlyCollection<CardViewModel>(corpScore.ToArray())),
+            RunnerScoreArea = new ScoreAreaViewModel(
+                PlayerSide.Runner,
+                runner.AgendaPoints,
+                new ReadOnlyCollection<CardViewModel>(runnerScore.ToArray())),
+            ForcedDiscard = MapForcedDiscard(decision, corpHandSize, runnerHandSize),
+        };
     }
 
     /// <summary>Legacy M2 compatibility alias; prefer explicit catalogs.</summary>
@@ -314,6 +484,186 @@ public static class ObservationViewMapper
         ICardMetadataResolver metadataResolver,
         IBehaviorCatalog behaviorCatalog) =>
         Build(observation, metadataResolver, behaviorCatalog);
+
+    /// <summary>Canonical composition alias with optional hand-size input.</summary>
+    public static MatchViewModel FromObservation(
+        Observation observation,
+        ICardMetadataResolver metadataResolver,
+        IBehaviorCatalog behaviorCatalog,
+        HandSizeProjection? handSizeProjection) =>
+        Build(observation, metadataResolver, behaviorCatalog, handSizeProjection);
+
+    private static TurnViewModel MapTurn(IReadOnlyDictionary<string, object?> publicState)
+    {
+        if (!publicState.TryGetValue("turn", out object? rawTurn)
+            || OptionalMap(rawTurn) is not { } map)
+        {
+            return TurnViewModel.Unavailable(
+                "Turn projection unavailable: observation field 'turn' is missing or is not an object.");
+        }
+
+        if (!TryReadEnum(map, "activeSide", out PlayerSide activeSide)
+            || !TryReadEnum(map, "phase", out TurnPhase phase)
+            || !TryReadRequiredInt(map, "turnNumber", out int turnNumber))
+        {
+            return TurnViewModel.Unavailable(
+                "Turn projection unavailable: observation field 'turn' contains an unsupported active side, phase, or turn number.");
+        }
+
+        TurnStep? step = null;
+        if (map.ContainsKey("step"))
+        {
+            if (!TryReadEnum(map, "step", out TurnStep parsedStep))
+            {
+                return TurnViewModel.Unavailable(
+                    "Turn timing unavailable: observation field 'turn.step' contains an unsupported value.");
+            }
+
+            step = parsedStep;
+        }
+
+        return new TurnViewModel(
+            true,
+            activeSide,
+            phase,
+            step,
+            turnNumber,
+            Diagnostic: null);
+    }
+
+    private static HandSizeViewModel MapHandSize(
+        PlayerSide side,
+        ZoneViewModel zone,
+        IReadOnlyDictionary<string, object?> observedPlayer,
+        HandSizeProjection handSizeProjection)
+    {
+        // Core's current observation carries this value in the already
+        // viewer-safe public player projection. Prefer it over compatibility
+        // injection so the UI cannot display a stale composition estimate.
+        int? maximum = TryReadOptionalInt(observedPlayer, "maximumHandSize", out int observedMaximum)
+            ? observedMaximum
+            : handSizeProjection.For(side);
+        return maximum is { } value
+            ? new HandSizeViewModel(side, zone.Count, value, null)
+            : HandSizeViewModel.Unavailable(side, zone.Count, handSizeProjection.UnavailableReason);
+    }
+
+    private static ForcedDiscardViewModel? MapForcedDiscard(
+        DecisionViewModel? decision,
+        HandSizeViewModel corpHand,
+        HandSizeViewModel runnerHand)
+    {
+        if (decision is null
+            || !Enum.IsDefined(decision.Kind)
+            || !Enum.IsDefined(decision.OwnerSide)
+            || decision.Kind != DecisionKind.TurnDiscard)
+        {
+            return null;
+        }
+
+        HandSizeViewModel hand = decision.OwnerSide == PlayerSide.Corp ? corpHand : runnerHand;
+        return new ForcedDiscardViewModel(decision.OwnerSide, decision.Prompt, hand);
+    }
+
+    private static ReadOnlyCollection<InstalledAdvancementViewModel> MapInstalledAdvancement(
+        IReadOnlyList<ServerViewModel> servers,
+        IReadOnlyList<CardViewModel> runnerRig)
+    {
+        var counters = new List<InstalledAdvancementViewModel>();
+        foreach (ServerViewModel server in servers)
+        {
+            foreach (CardViewModel? card in server.OrderedIce.Concat(server.OrderedRoot))
+            {
+                if (card is { AdvancementCounters: > 0 })
+                {
+                    counters.Add(new InstalledAdvancementViewModel(
+                        card.Id,
+                        card.Title,
+                        card.AdvancementCounters,
+                        PlayerSide.Corp,
+                        server.Id));
+                }
+            }
+        }
+
+        foreach (CardViewModel card in runnerRig)
+        {
+            if (card.AdvancementCounters > 0)
+            {
+                counters.Add(new InstalledAdvancementViewModel(
+                    card.Id,
+                    card.Title,
+                    card.AdvancementCounters,
+                    PlayerSide.Runner,
+                    ServerId: null));
+            }
+        }
+
+        return new ReadOnlyCollection<InstalledAdvancementViewModel>(counters);
+    }
+
+    private static bool TryReadRequiredInt(
+        IReadOnlyDictionary<string, object?> map,
+        string key,
+        out int value)
+    {
+        if (!map.ContainsKey(key))
+        {
+            value = default;
+            return false;
+        }
+
+        try
+        {
+            value = ReadInt(map, key);
+            return true;
+        }
+        catch (FormatException)
+        {
+            value = default;
+            return false;
+        }
+    }
+
+    private static bool TryReadOptionalInt(
+        IReadOnlyDictionary<string, object?> map,
+        string key,
+        out int value)
+    {
+        if (!map.TryGetValue(key, out object? raw)
+            || raw is null
+            || raw is JsonElement { ValueKind: JsonValueKind.Null })
+        {
+            value = default;
+            return false;
+        }
+
+        return TryReadRequiredInt(map, key, out value);
+    }
+
+    private static bool TryReadEnum<TEnum>(
+        IReadOnlyDictionary<string, object?> map,
+        string key,
+        out TEnum value)
+        where TEnum : struct, Enum
+    {
+        if (!map.ContainsKey(key))
+        {
+            value = default;
+            return false;
+        }
+
+        try
+        {
+            value = ReadEnum<TEnum>(map, key);
+            return true;
+        }
+        catch (FormatException)
+        {
+            value = default;
+            return false;
+        }
+    }
 
     private static DecisionViewModel? MapDecision(Observation observation)
     {
@@ -804,4 +1154,16 @@ public static class MatchViewModelBuilder
         ICardMetadataResolver metadataResolver,
         IBehaviorCatalog behaviorCatalog) =>
         ObservationViewMapper.Build(observation, metadataResolver, behaviorCatalog);
+
+    /// <summary>Canonical composition entry point with optional hand-size input.</summary>
+    public static MatchViewModel Build(
+        Observation observation,
+        ICardMetadataResolver metadataResolver,
+        IBehaviorCatalog behaviorCatalog,
+        HandSizeProjection? handSizeProjection) =>
+        ObservationViewMapper.Build(
+            observation,
+            metadataResolver,
+            behaviorCatalog,
+            handSizeProjection);
 }

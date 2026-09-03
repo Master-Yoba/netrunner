@@ -18,10 +18,23 @@ public static class EngineEventKinds
     public const string LingeringEffectExpired = "lingering-effect-expired";
     public const string TurnStarted = "turn-started";
     public const string TurnEnded = "turn-ended";
+    public const string TurnClicksAllotted = "turn-clicks-allotted";
+    public const string TurnTimingWindowOpened = "turn-timing-window-opened";
+    public const string TurnPriorityPassed = "turn-priority-passed";
+    public const string TurnPhaseStarted = "turn-phase-started";
+    public const string TurnPhaseEnded = "turn-phase-ended";
+    public const string TurnClicksLost = "turn-clicks-lost";
+    public const string TurnCardDiscarded = "turn-card-discarded";
     public const string ClickSpent = "click-spent";
     public const string CardMoved = "card-moved";
     public const string CardDrawn = "card-drawn";
     public const string CardInstalled = "card-installed";
+    public const string CardRezzed = "card-rezzed";
+    public const string CardPlayStarted = "card-play-started";
+    public const string CardPlayCompleted = "card-play-completed";
+    public const string BehaviorCardRevealed = "behavior-card-revealed";
+    public const string BehaviorCardsShuffled = "behavior-cards-shuffled";
+    public const string BehaviorCardAdvanced = "behavior-card-advanced";
     public const string AgendaAdvanced = "agenda-advanced";
     public const string AgendaScored = "agenda-scored";
     public const string AgendaStolen = "agenda-stolen";
@@ -64,10 +77,23 @@ public static class EngineEventKinds
 [JsonDerivedType(typeof(LingeringEffectExpiredEventPayload), "lingering-effect-expired")]
 [JsonDerivedType(typeof(TurnStartedEventPayload), "turn-started")]
 [JsonDerivedType(typeof(TurnEndedEventPayload), "turn-ended")]
+[JsonDerivedType(typeof(TurnClicksAllottedEventPayload), "turn-clicks-allotted")]
+[JsonDerivedType(typeof(TurnTimingWindowOpenedEventPayload), "turn-timing-window-opened")]
+[JsonDerivedType(typeof(TurnPriorityPassedEventPayload), "turn-priority-passed")]
+[JsonDerivedType(typeof(TurnPhaseStartedEventPayload), "turn-phase-started")]
+[JsonDerivedType(typeof(TurnPhaseEndedEventPayload), "turn-phase-ended")]
+[JsonDerivedType(typeof(TurnClicksLostEventPayload), "turn-clicks-lost")]
+[JsonDerivedType(typeof(TurnCardDiscardedEventPayload), "turn-card-discarded")]
 [JsonDerivedType(typeof(ClickSpentEventPayload), "click-spent")]
 [JsonDerivedType(typeof(CardMovedEventPayload), "card-moved")]
 [JsonDerivedType(typeof(CardDrawnEventPayload), "card-drawn")]
 [JsonDerivedType(typeof(CardInstalledEventPayload), "card-installed")]
+[JsonDerivedType(typeof(CardRezzedEventPayload), "card-rezzed")]
+[JsonDerivedType(typeof(CardPlayStartedEventPayload), "card-play-started")]
+[JsonDerivedType(typeof(CardPlayCompletedEventPayload), "card-play-completed")]
+[JsonDerivedType(typeof(BehaviorCardRevealedEventPayload), "behavior-card-revealed")]
+[JsonDerivedType(typeof(BehaviorCardsShuffledEventPayload), "behavior-cards-shuffled")]
+[JsonDerivedType(typeof(BehaviorCardAdvancedEventPayload), "behavior-card-advanced")]
 [JsonDerivedType(typeof(AgendaAdvancedEventPayload), "agenda-advanced")]
 [JsonDerivedType(typeof(AgendaScoredEventPayload), "agenda-scored")]
 [JsonDerivedType(typeof(AgendaStolenEventPayload), "agenda-stolen")]
@@ -481,6 +507,286 @@ public sealed record TurnEndedEventPayload : EngineEventPayload
     public int TurnNumber { get; private set; }
 }
 
+/// <summary>CR 5.6.1a/5.7.1a: the active side received its allotted clicks.</summary>
+public sealed record TurnClicksAllottedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public TurnClicksAllottedEventPayload(int version, PlayerSide side, int turnNumber, int clicks)
+        : base(version)
+    {
+        Side = side;
+        TurnNumber = turnNumber;
+        Clicks = clicks;
+    }
+
+    public TurnClicksAllottedEventPayload(PlayerSide side, int turnNumber, int clicks)
+        : this(1, side, turnNumber, clicks)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerSide Side { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int TurnNumber { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Clicks { get; private set; }
+}
+
+/// <summary>One CR 9.2 paid-ability window in the turn shell was opened.</summary>
+public sealed record TurnTimingWindowOpenedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public TurnTimingWindowOpenedEventPayload(
+        int version,
+        PlayerSide side,
+        int turnNumber,
+        TurnFrameStage stage,
+        TurnPriorityWindowKind window,
+        PlayerSide priorityHolder)
+        : base(version)
+    {
+        Side = side;
+        TurnNumber = turnNumber;
+        Stage = stage;
+        Window = window;
+        PriorityHolder = priorityHolder;
+    }
+
+    public TurnTimingWindowOpenedEventPayload(
+        PlayerSide side,
+        int turnNumber,
+        TurnFrameStage stage,
+        TurnPriorityWindowKind window,
+        PlayerSide priorityHolder)
+        : this(1, side, turnNumber, stage, window, priorityHolder)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerSide Side { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int TurnNumber { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public TurnFrameStage Stage { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public TurnPriorityWindowKind Window { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerSide PriorityHolder { get; private set; }
+}
+
+/// <summary>One side passed a turn paid-ability window.</summary>
+public sealed record TurnPriorityPassedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public TurnPriorityPassedEventPayload(
+        int version,
+        PlayerSide side,
+        int turnNumber,
+        TurnPriorityWindowKind window,
+        PlayerSide passedBy,
+        PlayerSide nextPriorityHolder,
+        int consecutivePasses)
+        : base(version)
+    {
+        Side = side;
+        TurnNumber = turnNumber;
+        Window = window;
+        PassedBy = passedBy;
+        NextPriorityHolder = nextPriorityHolder;
+        ConsecutivePasses = consecutivePasses;
+    }
+
+    public TurnPriorityPassedEventPayload(
+        PlayerSide side,
+        int turnNumber,
+        TurnPriorityWindowKind window,
+        PlayerSide passedBy,
+        PlayerSide nextPriorityHolder,
+        int consecutivePasses)
+        : this(1, side, turnNumber, window, passedBy, nextPriorityHolder, consecutivePasses)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerSide Side { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int TurnNumber { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public TurnPriorityWindowKind Window { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerSide PassedBy { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerSide NextPriorityHolder { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int ConsecutivePasses { get; private set; }
+}
+
+/// <summary>Formal entry into one CR turn phase.</summary>
+public sealed record TurnPhaseStartedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public TurnPhaseStartedEventPayload(int version, PlayerSide side, int turnNumber, TurnStep step)
+        : base(version)
+    {
+        Side = side;
+        TurnNumber = turnNumber;
+        Step = step;
+    }
+
+    public TurnPhaseStartedEventPayload(PlayerSide side, int turnNumber, TurnStep step)
+        : this(1, side, turnNumber, step)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerSide Side { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int TurnNumber { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public TurnStep Step { get; private set; }
+}
+
+/// <summary>Formal exit from one CR turn phase.</summary>
+public sealed record TurnPhaseEndedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public TurnPhaseEndedEventPayload(int version, PlayerSide side, int turnNumber, TurnStep step)
+        : base(version)
+    {
+        Side = side;
+        TurnNumber = turnNumber;
+        Step = step;
+    }
+
+    public TurnPhaseEndedEventPayload(PlayerSide side, int turnNumber, TurnStep step)
+        : this(1, side, turnNumber, step)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerSide Side { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int TurnNumber { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public TurnStep Step { get; private set; }
+}
+
+/// <summary>CR 5.6.1h/5.7.1g: clicks left at action end are lost.</summary>
+public sealed record TurnClicksLostEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public TurnClicksLostEventPayload(int version, PlayerSide side, int turnNumber, int clicksLost)
+        : base(version)
+    {
+        Side = side;
+        TurnNumber = turnNumber;
+        ClicksLost = clicksLost;
+    }
+
+    public TurnClicksLostEventPayload(PlayerSide side, int turnNumber, int clicksLost)
+        : this(1, side, turnNumber, clicksLost)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerSide Side { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int TurnNumber { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int ClicksLost { get; private set; }
+}
+
+/// <summary>One forced hand-size discard during CR 5.6.1g/5.7.1f.</summary>
+public sealed record TurnCardDiscardedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public TurnCardDiscardedEventPayload(
+        int version,
+        PlayerSide side,
+        int turnNumber,
+        CardInstanceId cardId,
+        int remainingHandSize,
+        int maximumHandSize)
+        : base(version)
+    {
+        Side = side;
+        TurnNumber = turnNumber;
+        CardId = cardId;
+        RemainingHandSize = remainingHandSize;
+        MaximumHandSize = maximumHandSize;
+    }
+
+    public TurnCardDiscardedEventPayload(
+        PlayerSide side,
+        int turnNumber,
+        CardInstanceId cardId,
+        int remainingHandSize,
+        int maximumHandSize)
+        : this(1, side, turnNumber, cardId, remainingHandSize, maximumHandSize)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerSide Side { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int TurnNumber { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId CardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int RemainingHandSize { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int MaximumHandSize { get; private set; }
+}
+
 public sealed record ClickSpentEventPayload : EngineEventPayload
 {
     [JsonConstructor]
@@ -616,6 +922,256 @@ public sealed record CardInstalledEventPayload : EngineEventPayload
     [JsonInclude]
     [JsonRequired]
     public int Cost { get; private set; }
+}
+
+/// <summary>Public evidence that an installed card was rezzed.</summary>
+public sealed record CardRezzedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public CardRezzedEventPayload(int version, CardInstanceId cardId, int creditCost)
+        : base(version)
+    {
+        CardId = cardId;
+        CreditCost = creditCost;
+    }
+
+    public CardRezzedEventPayload(CardInstanceId cardId, int creditCost)
+        : this(1, cardId, creditCost)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId CardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int CreditCost { get; private set; }
+}
+
+/// <summary>Public evidence that an ordinary Event or Operation entered play.</summary>
+public sealed record CardPlayStartedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public CardPlayStartedEventPayload(
+        int version,
+        PlayerSide side,
+        CardInstanceId cardId,
+        CardDefinitionId definitionId,
+        ZoneId fromZoneId,
+        ZoneId playAreaZoneId,
+        int cost)
+        : base(version)
+    {
+        Side = side;
+        CardId = cardId;
+        DefinitionId = definitionId;
+        FromZoneId = fromZoneId;
+        PlayAreaZoneId = playAreaZoneId;
+        Cost = cost;
+    }
+
+    public CardPlayStartedEventPayload(
+        PlayerSide side,
+        CardInstanceId cardId,
+        CardDefinitionId definitionId,
+        ZoneId fromZoneId,
+        ZoneId playAreaZoneId,
+        int cost)
+        : this(1, side, cardId, definitionId, fromZoneId, playAreaZoneId, cost)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerSide Side { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId CardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardDefinitionId DefinitionId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ZoneId FromZoneId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ZoneId PlayAreaZoneId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Cost { get; private set; }
+}
+
+/// <summary>Public evidence that an ordinary Event or Operation left play.</summary>
+public sealed record CardPlayCompletedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public CardPlayCompletedEventPayload(
+        int version,
+        PlayerSide side,
+        CardInstanceId cardId,
+        CardDefinitionId definitionId,
+        ZoneId playAreaZoneId,
+        ZoneId discardZoneId)
+        : base(version)
+    {
+        Side = side;
+        CardId = cardId;
+        DefinitionId = definitionId;
+        PlayAreaZoneId = playAreaZoneId;
+        DiscardZoneId = discardZoneId;
+    }
+
+    public CardPlayCompletedEventPayload(
+        PlayerSide side,
+        CardInstanceId cardId,
+        CardDefinitionId definitionId,
+        ZoneId playAreaZoneId,
+        ZoneId discardZoneId)
+        : this(1, side, cardId, definitionId, playAreaZoneId, discardZoneId)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerSide Side { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId CardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardDefinitionId DefinitionId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ZoneId PlayAreaZoneId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ZoneId DiscardZoneId { get; private set; }
+}
+
+/// <summary>
+/// Public evidence that a generic behavior revealed a card. Revealing is a
+/// rules event, not a face-up state transition (CR 1.21.3a), so the card may
+/// remain facedown while set aside or after it is returned to a hidden zone.
+/// </summary>
+public sealed record BehaviorCardRevealedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public BehaviorCardRevealedEventPayload(
+        int version,
+        CardInstanceId cardId,
+        CardDefinitionId definitionId,
+        ZoneId sourceZoneId,
+        PlayerSide ownerSide)
+        : base(version)
+    {
+        CardId = cardId;
+        DefinitionId = definitionId;
+        SourceZoneId = sourceZoneId;
+        OwnerSide = ownerSide;
+    }
+
+    public BehaviorCardRevealedEventPayload(
+        CardInstanceId cardId,
+        CardDefinitionId definitionId,
+        ZoneId sourceZoneId,
+        PlayerSide ownerSide)
+        : this(1, cardId, definitionId, sourceZoneId, ownerSide)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId CardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardDefinitionId DefinitionId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ZoneId SourceZoneId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerSide OwnerSide { get; private set; }
+}
+
+/// <summary>Public, identity-free evidence that a hidden destination was shuffled.</summary>
+public sealed record BehaviorCardsShuffledEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public BehaviorCardsShuffledEventPayload(int version, ZoneId destinationZoneId, int cardCount)
+        : base(version)
+    {
+        DestinationZoneId = destinationZoneId;
+        CardCount = cardCount;
+    }
+
+    public BehaviorCardsShuffledEventPayload(ZoneId destinationZoneId, int cardCount)
+        : this(1, destinationZoneId, cardCount)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ZoneId DestinationZoneId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int CardCount { get; private set; }
+}
+
+/// <summary>
+/// Honest evidence for generic advancement. Generic behavior contracts do
+/// not carry a printed agenda requirement, so this payload reports only the
+/// card, the applied amount, and the resulting counter value. The legacy
+/// AgendaAdvanced payload remains reserved for typed agenda rules that know
+/// the requirement.
+/// </summary>
+public sealed record BehaviorCardAdvancedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public BehaviorCardAdvancedEventPayload(
+        int version,
+        CardInstanceId cardId,
+        int amount,
+        int advancementCounters)
+        : base(version)
+    {
+        CardId = cardId;
+        Amount = amount;
+        AdvancementCounters = advancementCounters;
+    }
+
+    public BehaviorCardAdvancedEventPayload(
+        CardInstanceId cardId,
+        int amount,
+        int advancementCounters)
+        : this(1, cardId, amount, advancementCounters)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId CardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Amount { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int AdvancementCounters { get; private set; }
 }
 
 public sealed record AgendaAdvancedEventPayload : EngineEventPayload
@@ -1439,10 +1995,23 @@ public sealed record EngineEvent
         LingeringEffectExpiredEventPayload value => new EngineEvent(Version, Sequence, Kind, new LingeringEffectExpiredEventPayload(value.Version, value.EffectId, value.Expiry)),
         TurnStartedEventPayload value => new EngineEvent(Version, Sequence, Kind, new TurnStartedEventPayload(value.Version, value.ActiveSide, value.TurnNumber, value.Clicks)),
         TurnEndedEventPayload value => new EngineEvent(Version, Sequence, Kind, new TurnEndedEventPayload(value.Version, value.Side, value.TurnNumber)),
+        TurnClicksAllottedEventPayload value => new EngineEvent(Version, Sequence, Kind, new TurnClicksAllottedEventPayload(value.Version, value.Side, value.TurnNumber, value.Clicks)),
+        TurnTimingWindowOpenedEventPayload value => new EngineEvent(Version, Sequence, Kind, new TurnTimingWindowOpenedEventPayload(value.Version, value.Side, value.TurnNumber, value.Stage, value.Window, value.PriorityHolder)),
+        TurnPriorityPassedEventPayload value => new EngineEvent(Version, Sequence, Kind, new TurnPriorityPassedEventPayload(value.Version, value.Side, value.TurnNumber, value.Window, value.PassedBy, value.NextPriorityHolder, value.ConsecutivePasses)),
+        TurnPhaseStartedEventPayload value => new EngineEvent(Version, Sequence, Kind, new TurnPhaseStartedEventPayload(value.Version, value.Side, value.TurnNumber, value.Step)),
+        TurnPhaseEndedEventPayload value => new EngineEvent(Version, Sequence, Kind, new TurnPhaseEndedEventPayload(value.Version, value.Side, value.TurnNumber, value.Step)),
+        TurnClicksLostEventPayload value => new EngineEvent(Version, Sequence, Kind, new TurnClicksLostEventPayload(value.Version, value.Side, value.TurnNumber, value.ClicksLost)),
+        TurnCardDiscardedEventPayload value => new EngineEvent(Version, Sequence, Kind, new TurnCardDiscardedEventPayload(value.Version, value.Side, value.TurnNumber, value.CardId, value.RemainingHandSize, value.MaximumHandSize)),
         ClickSpentEventPayload value => new EngineEvent(Version, Sequence, Kind, new ClickSpentEventPayload(value.Version, value.Side, value.ClicksRemaining)),
         CardMovedEventPayload value => new EngineEvent(Version, Sequence, Kind, new CardMovedEventPayload(value.Version, value.CardId, value.FromZoneId, value.ToZoneId)),
         CardDrawnEventPayload value => new EngineEvent(Version, Sequence, Kind, new CardDrawnEventPayload(value.Version, value.Side, value.CardId, value.FromZoneId, value.ToZoneId)),
         CardInstalledEventPayload value => new EngineEvent(Version, Sequence, Kind, new CardInstalledEventPayload(value.Version, value.Side, value.CardId, value.FromZoneId, value.ToZoneId, value.Cost)),
+        CardRezzedEventPayload value => new EngineEvent(Version, Sequence, Kind, new CardRezzedEventPayload(value.Version, value.CardId, value.CreditCost)),
+        CardPlayStartedEventPayload value => new EngineEvent(Version, Sequence, Kind, new CardPlayStartedEventPayload(value.Version, value.Side, value.CardId, value.DefinitionId, value.FromZoneId, value.PlayAreaZoneId, value.Cost)),
+        CardPlayCompletedEventPayload value => new EngineEvent(Version, Sequence, Kind, new CardPlayCompletedEventPayload(value.Version, value.Side, value.CardId, value.DefinitionId, value.PlayAreaZoneId, value.DiscardZoneId)),
+        BehaviorCardRevealedEventPayload value => new EngineEvent(Version, Sequence, Kind, new BehaviorCardRevealedEventPayload(value.Version, value.CardId, value.DefinitionId, value.SourceZoneId, value.OwnerSide)),
+        BehaviorCardsShuffledEventPayload value => new EngineEvent(Version, Sequence, Kind, new BehaviorCardsShuffledEventPayload(value.Version, value.DestinationZoneId, value.CardCount)),
+        BehaviorCardAdvancedEventPayload value => new EngineEvent(Version, Sequence, Kind, new BehaviorCardAdvancedEventPayload(value.Version, value.CardId, value.Amount, value.AdvancementCounters)),
         AgendaAdvancedEventPayload value => new EngineEvent(Version, Sequence, Kind, new AgendaAdvancedEventPayload(value.Version, value.AgendaId, value.AdvancementCounters, value.Requirement)),
         AgendaScoredEventPayload value => new EngineEvent(Version, Sequence, Kind, new AgendaScoredEventPayload(value.Version, value.Winner, value.AgendaId, value.AgendaPoints)),
         AgendaStolenEventPayload value => new EngineEvent(Version, Sequence, Kind, new AgendaStolenEventPayload(value.Version, value.Winner, value.AgendaId, value.AgendaPoints)),
@@ -1599,6 +2168,67 @@ public static class EngineEventValidator
                 RequireSide(value.Side, $"{path}.payload.side", violations);
                 RequireNumber(value.TurnNumber, $"{path}.payload.turnNumber", "Turn number", violations, strictlyPositive: true);
                 break;
+            case TurnClicksAllottedEventPayload value:
+                RequireKind(@event, EngineEventKinds.TurnClicksAllotted, path, violations);
+                RequireSide(value.Side, $"{path}.payload.side", violations);
+                RequireNumber(value.TurnNumber, $"{path}.payload.turnNumber", "Turn number", violations, strictlyPositive: true);
+                RequireNumber(value.Clicks, $"{path}.payload.clicks", "Allotted clicks", violations, strictlyPositive: true);
+                break;
+            case TurnTimingWindowOpenedEventPayload value:
+                RequireKind(@event, EngineEventKinds.TurnTimingWindowOpened, path, violations);
+                RequireSide(value.Side, $"{path}.payload.side", violations);
+                RequireNumber(value.TurnNumber, $"{path}.payload.turnNumber", "Turn number", violations, strictlyPositive: true);
+                if (!Enum.IsDefined(value.Stage))
+                {
+                    Add(violations, "event.invalid-turn-stage", $"{path}.payload.stage", $"'{value.Stage}' is not a supported turn frame stage.");
+                }
+
+                if (!Enum.IsDefined(value.Window))
+                {
+                    Add(violations, "event.invalid-window", $"{path}.payload.window", $"'{value.Window}' is not a supported turn priority window.");
+                }
+
+                RequireSide(value.PriorityHolder, $"{path}.payload.priorityHolder", violations);
+                break;
+            case TurnPriorityPassedEventPayload value:
+                RequireKind(@event, EngineEventKinds.TurnPriorityPassed, path, violations);
+                RequireSide(value.Side, $"{path}.payload.side", violations);
+                RequireNumber(value.TurnNumber, $"{path}.payload.turnNumber", "Turn number", violations, strictlyPositive: true);
+                if (!Enum.IsDefined(value.Window))
+                {
+                    Add(violations, "event.invalid-window", $"{path}.payload.window", $"'{value.Window}' is not a supported turn priority window.");
+                }
+
+                RequireSide(value.PassedBy, $"{path}.payload.passedBy", violations);
+                RequireSide(value.NextPriorityHolder, $"{path}.payload.nextPriorityHolder", violations);
+                RequireNumber(value.ConsecutivePasses, $"{path}.payload.consecutivePasses", "Consecutive passes", violations, strictlyPositive: true);
+                break;
+            case TurnPhaseStartedEventPayload value:
+                RequireKind(@event, EngineEventKinds.TurnPhaseStarted, path, violations);
+                RequireSide(value.Side, $"{path}.payload.side", violations);
+                RequireNumber(value.TurnNumber, $"{path}.payload.turnNumber", "Turn number", violations, strictlyPositive: true);
+                ValidateTurnStep(value.Step, path, violations);
+                break;
+            case TurnPhaseEndedEventPayload value:
+                RequireKind(@event, EngineEventKinds.TurnPhaseEnded, path, violations);
+                RequireSide(value.Side, $"{path}.payload.side", violations);
+                RequireNumber(value.TurnNumber, $"{path}.payload.turnNumber", "Turn number", violations, strictlyPositive: true);
+                ValidateTurnStep(value.Step, path, violations);
+                break;
+            case TurnClicksLostEventPayload value:
+                RequireKind(@event, EngineEventKinds.TurnClicksLost, path, violations);
+                RequireSide(value.Side, $"{path}.payload.side", violations);
+                RequireNumber(value.TurnNumber, $"{path}.payload.turnNumber", "Turn number", violations, strictlyPositive: true);
+                RequireNumber(value.ClicksLost, $"{path}.payload.clicksLost", "Lost clicks", violations);
+                break;
+            case TurnCardDiscardedEventPayload value:
+                RequireKind(@event, EngineEventKinds.TurnCardDiscarded, path, violations);
+                RequireSide(value.Side, $"{path}.payload.side", violations);
+                RequireNumber(value.TurnNumber, $"{path}.payload.turnNumber", "Turn number", violations, strictlyPositive: true);
+                RequireId(value.CardId.Value, $"{path}.payload.cardId", "card", violations);
+                RequireNumber(value.RemainingHandSize, $"{path}.payload.remainingHandSize", "Remaining hand size", violations);
+                RequireNumber(value.MaximumHandSize, $"{path}.payload.maximumHandSize", "Maximum hand size", violations);
+                break;
             case ClickSpentEventPayload value:
                 RequireKind(@event, EngineEventKinds.ClickSpent, path, violations);
                 RequireSide(value.Side, $"{path}.payload.side", violations);
@@ -1629,6 +2259,56 @@ public static class EngineEventValidator
                 RequireId(value.FromZoneId.Value, $"{path}.payload.fromZoneId", "zone", violations);
                 RequireId(value.ToZoneId.Value, $"{path}.payload.toZoneId", "zone", violations);
                 RequireNumber(value.Cost, $"{path}.payload.cost", "Install cost", violations);
+                break;
+            case CardRezzedEventPayload value:
+                RequireKind(@event, EngineEventKinds.CardRezzed, path, violations);
+                RequireId(value.CardId.Value, $"{path}.payload.cardId", "card", violations);
+                RequireNumber(value.CreditCost, $"{path}.payload.creditCost", "Rez cost", violations);
+                break;
+            case CardPlayStartedEventPayload value:
+                RequireKind(@event, EngineEventKinds.CardPlayStarted, path, violations);
+                RequireSide(value.Side, $"{path}.payload.side", violations);
+                RequireId(value.CardId.Value, $"{path}.payload.cardId", "card", violations);
+                RequireId(value.DefinitionId.Value, $"{path}.payload.definitionId", "definition", violations);
+                RequireId(value.FromZoneId.Value, $"{path}.payload.fromZoneId", "zone", violations);
+                RequireId(value.PlayAreaZoneId.Value, $"{path}.payload.playAreaZoneId", "zone", violations);
+                RequireNumber(value.Cost, $"{path}.payload.cost", "Play cost", violations);
+                if (value.FromZoneId == value.PlayAreaZoneId)
+                {
+                    Add(violations, "event.same-zone-play", $"{path}.payload", "A card play must change zones.");
+                }
+
+                break;
+            case CardPlayCompletedEventPayload value:
+                RequireKind(@event, EngineEventKinds.CardPlayCompleted, path, violations);
+                RequireSide(value.Side, $"{path}.payload.side", violations);
+                RequireId(value.CardId.Value, $"{path}.payload.cardId", "card", violations);
+                RequireId(value.DefinitionId.Value, $"{path}.payload.definitionId", "definition", violations);
+                RequireId(value.PlayAreaZoneId.Value, $"{path}.payload.playAreaZoneId", "zone", violations);
+                RequireId(value.DiscardZoneId.Value, $"{path}.payload.discardZoneId", "zone", violations);
+                if (value.PlayAreaZoneId == value.DiscardZoneId)
+                {
+                    Add(violations, "event.same-zone-play", $"{path}.payload", "A completed card play must change zones.");
+                }
+
+                break;
+            case BehaviorCardRevealedEventPayload value:
+                RequireKind(@event, EngineEventKinds.BehaviorCardRevealed, path, violations);
+                RequireId(value.CardId.Value, $"{path}.payload.cardId", "card", violations);
+                RequireId(value.DefinitionId.Value, $"{path}.payload.definitionId", "definition", violations);
+                RequireId(value.SourceZoneId.Value, $"{path}.payload.sourceZoneId", "zone", violations);
+                RequireSide(value.OwnerSide, $"{path}.payload.ownerSide", violations);
+                break;
+            case BehaviorCardsShuffledEventPayload value:
+                RequireKind(@event, EngineEventKinds.BehaviorCardsShuffled, path, violations);
+                RequireId(value.DestinationZoneId.Value, $"{path}.payload.destinationZoneId", "zone", violations);
+                RequireNumber(value.CardCount, $"{path}.payload.cardCount", "Shuffled card count", violations);
+                break;
+            case BehaviorCardAdvancedEventPayload value:
+                RequireKind(@event, EngineEventKinds.BehaviorCardAdvanced, path, violations);
+                RequireId(value.CardId.Value, $"{path}.payload.cardId", "card", violations);
+                RequireNumber(value.Amount, $"{path}.payload.amount", "Advancement amount", violations, strictlyPositive: true);
+                RequireNumber(value.AdvancementCounters, $"{path}.payload.advancementCounters", "Advancement counters", violations);
                 break;
             case AgendaAdvancedEventPayload value:
                 RequireKind(@event, EngineEventKinds.AgendaAdvanced, path, violations);
@@ -1854,6 +2534,18 @@ public static class EngineEventValidator
         if (!string.Equals(@event.Kind, expected, StringComparison.Ordinal))
         {
             Add(violations, "event.kind-payload-mismatch", $"{path}.kind", $"Payload requires event kind '{expected}'.");
+        }
+    }
+
+    private static void ValidateTurnStep(TurnStep step, string path, List<StateInvariantViolation> violations)
+    {
+        if (step is not (TurnStep.CorpDraw
+            or TurnStep.CorpAction
+            or TurnStep.CorpDiscard
+            or TurnStep.RunnerAction
+            or TurnStep.RunnerDiscard))
+        {
+            Add(violations, "event.invalid-turn-step", $"{path}.payload.step", $"'{step}' is not a supported CR turn step.");
         }
     }
 

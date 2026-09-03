@@ -495,6 +495,9 @@ public sealed class StableIdAllocator
 
     public InterruptId NextInterruptId() => new(Issue("interrupt"));
 
+    /// <summary>Issues an identity for a live generic behavior frame.</summary>
+    public string NextBehaviorFrameId() => Issue("behavior-frame");
+
     private string Issue(string prefix) =>
         $"{prefix}:{TakeSequence().ToString(CultureInfo.InvariantCulture)}";
 

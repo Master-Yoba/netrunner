@@ -3,6 +3,14 @@
     <ProjectReference Include="../Netrunner.Core/Netrunner.Core.csproj" />
   </ItemGroup>
 
+  <!-- DATA-401A is code/quantity-only data. It contains no card text or
+       artwork and is parsed/validated even while its cards remain disabled
+       until the behavior coverage gate closes. -->
+  <ItemGroup>
+    <EmbeddedResource Include="../../data/m4/presets.json"
+                      LogicalName="Netrunner.Cards.Data.m4.presets.json" />
+  </ItemGroup>
+
   <!--
     DATA-400: official System Gateway metadata is a local-only, authenticated
     input.  The source directory is ignored by Git; this target turns it into

@@ -41,6 +41,18 @@ public static partial class GameEngine
                 case ToyTurnFrame toyTurn:
                     StepToyTurn(working, toyTurn);
                     break;
+                case TurnFrame turn:
+                    StepTurn(working, turn);
+                    break;
+                case TurnDiscardFrame turnDiscard:
+                    StepTurnDiscard(working, turnDiscard);
+                    break;
+                case InstallFrame install:
+                    StepInstall(working, install);
+                    break;
+                case CardPlayFrame cardPlay:
+                    StepCardPlay(working, cardPlay);
+                    break;
                 case RunTimingFrame runTiming:
                     StepRunTiming(working, runTiming);
                     break;
@@ -52,6 +64,9 @@ public static partial class GameEngine
                     break;
                 case MemoryCleanupFrame memoryCleanup:
                     StepMemoryCleanup(working, memoryCleanup);
+                    break;
+                case BehaviorResolutionFrame behavior:
+                    StepBehaviorResolution(working, behavior);
                     break;
                 default:
                     throw new ResolutionFailureException(

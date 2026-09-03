@@ -97,6 +97,7 @@ public sealed record CostBundle
 [JsonDerivedType(typeof(AddLingeringEffect), "add-lingering")]
 [JsonDerivedType(typeof(RemoveLingeringEffect), "remove-lingering")]
 [JsonDerivedType(typeof(MoveCardEffect), "move-card")]
+[JsonDerivedType(typeof(TurnBoundaryEffect), "turn-boundary")]
 public abstract record EffectInstruction;
 
 public sealed record CreditAdjustmentEffect : EffectInstruction
@@ -312,6 +313,40 @@ public sealed record MoveCardEffect : EffectInstruction
     public ZoneId DestinationZoneId { get; private set; }
 }
 
+/// <summary>
+/// A no-op instruction whose committed occurrence is a formal CR turn
+/// boundary.  Keeping the boundary as an effect instruction lets the existing
+/// serializable checkpoint/trigger machinery materialize and resolve
+/// turn-begin/end occurrences without inventing a second trigger channel.
+/// </summary>
+public sealed record TurnBoundaryEffect : EffectInstruction
+{
+    [JsonConstructor]
+    public TurnBoundaryEffect(OccurrenceKind kind, PlayerId target, int turnNumber)
+    {
+        Kind = kind;
+        Target = target;
+        TurnNumber = turnNumber;
+    }
+
+    public TurnBoundaryEffect(OccurrenceKind kind, PlayerId target)
+        : this(kind, target, 1)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public OccurrenceKind Kind { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerId Target { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int TurnNumber { get; private set; }
+}
+
 /// <summary>Frozen ordered list of typed effects.</summary>
 public sealed record EffectBundle
 {
@@ -350,6 +385,7 @@ public sealed record EffectBundle
             AddLingeringEffect value => new AddLingeringEffect(value.Effect),
             RemoveLingeringEffect value => new RemoveLingeringEffect(value.EffectId),
             MoveCardEffect value => new MoveCardEffect(value.CardId, value.DestinationZoneId),
+            TurnBoundaryEffect value => new TurnBoundaryEffect(value.Kind, value.Target, value.TurnNumber),
             _ => throw new ArgumentException($"Unknown effect instruction type '{instruction.GetType().Name}'.", nameof(instruction)),
         };
     }
@@ -482,6 +518,15 @@ public static class EffectInstructionValidator
                     case MoveCardEffect move:
                         RequireId(move.CardId.Value, $"{instructionPath}.cardId", "card", violations);
                         RequireId(move.DestinationZoneId.Value, $"{instructionPath}.destinationZoneId", "zone", violations);
+                        break;
+                    case TurnBoundaryEffect boundary:
+                        if (boundary.Kind is not (OccurrenceKind.TurnBegin or OccurrenceKind.TurnEnd))
+                        {
+                            Add(violations, "effects.invalid-turn-boundary-kind", $"{instructionPath}.kind", $"'{boundary.Kind}' is not a supported turn boundary.");
+                        }
+
+                        RequireId(boundary.Target.Value, $"{instructionPath}.target", "player", violations);
+                        RequirePositive(boundary.TurnNumber, $"{instructionPath}.turnNumber", "Turn number", violations);
                         break;
                     default:
                         violations.Add(new StateInvariantViolation(

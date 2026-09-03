@@ -1,6 +1,6 @@
 # M4 progress — System Gateway complete
 
-Status: slice 4.1 complete; PR #5 open against `dev`
+Status: slice 4.1 merged; slice 4.2 implementation in progress on `m4_2`
 
 Date started: 31 August 2026
 
@@ -9,11 +9,10 @@ vendored commit `236140cf84491c23995b028bc791281837520b97` (77 designs)
 
 ## Scope
 
-Current implementation scope is limited to Slice 4.1 of `docs/M4_PLAN.md`:
-architecture/version preparation, behavior-neutral engine organization, the
-Gateway primitive audit, CARD-401/COV-401, the explicit gitignored-metadata
-content build, catalog-driven presentation, and the first Theme/region split.
-No Slice 4.2 rules or card behavior is in scope yet.
+Slice 4.1 of `docs/M4_PLAN.md` is complete and merged. Current implementation
+scope is Slice 4.2: ENG-401 through ENG-406, MATCH-401A/B, DATA-401A, the 12
+Batch 1 designs, AGT-401, SIM-401, UI-403, OBS-401, and their documented exit
+evidence. Later M4 card batches remain out of scope.
 
 ## Baseline
 
@@ -458,3 +457,2094 @@ embed a validated generated resource and perform no runtime network fetch.
 - [x] UI-401 renders all 77 provisioned cards through an injected resolver.
 - [x] UI-402 Theme/region extraction preserves M3 smoke and latency behavior.
 - [x] Full `scripts/verify.sh` green with final test/smoke evidence recorded.
+
+## Slice 4.2 work log
+
+### 2026-09-01 — Slice 4.2 started
+
+- Started from clean branch `m4_2` at merged `dev` commit `0a46ca6`; Slice 4.1
+  and both PR-review follow-ups are present in the baseline.
+- Scope is the complete Slice 4.2 contract from `docs/M4_PLAN.md`: ENG-401–406,
+  MATCH-401A/B, DATA-401A, all 12 Batch 1 cards, AGT-401, SIM-401, UI-403, and
+  OBS-401. Later batches remain excluded.
+- Execution is dependency-phased to protect shared state/serialization seams:
+  (1) turn/timing shell in Core alongside independent deck/preset contracts;
+  (2) basic actions, run nesting, generic choices and install/play/rez;
+  (3) 12 card registrations and observation coverage; (4) setup/sim/agent and
+  client integration; (5) coverage regeneration and authoritative exit gates.
+- The primary agent owns architecture, stream boundaries, cross-stream review,
+  integration, the progress ledger, and final verification. Bounded Luna Max
+  agents implement each stream; no agent commits or pushes independently.
+
+### 2026-09-01 — ENG-404/ENG-406 declarative Core contract foundation
+
+- Added immutable Core behavior contracts for explicit chooser ownership
+  (`acting player`, controller, opponent, Corp, Runner), mode/target/order
+  choices, and exactly/up-to/any-number cardinality. Exact and up-to choices
+  require positive bounds; declared mode options are unique and frozen.
+- Added typed condition, zone, card-filter, target, instruction, branch, and
+  static-modifier vocabulary for tagged/not-tagged, remaining clicks,
+  installed-this-turn, successful-run-this-turn, hidden Deck/HQ/Archives
+  selection, reveal, trash, add-to-hand, shuffle-into-deck, optional install,
+  installed-card advancement, memory, and maximum-hand-size modifiers.
+- `CardBehaviorDefinition` freezes the instruction tree, whose nested choices
+  and branches are the sole reusable payload source. Catalog duplicate checks
+  and generic fingerprints traverse every nested contract in order, including
+  null-vs-value distinctions; no delegates, raw rules-text interpretation,
+  title branches, or runtime reducer hooks were added.
+- Focused evidence: `dotnet build
+  tests/Netrunner.Core.Tests/Netrunner.Core.Tests.csproj --no-restore --nologo
+  -m:1` passed with zero warnings/errors; the focused
+  `dotnet test tests/Netrunner.Core.Tests/Netrunner.Core.Tests.csproj
+  --no-restore --filter
+  "FullyQualifiedName~BehaviorContractsTests|FullyQualifiedName~BehaviorCatalogTests"
+  --verbosity minimal -m:1` run passed 27/27; and `dotnet format
+  tests/Netrunner.Core.Tests/Netrunner.Core.Tests.csproj --no-restore
+  --verify-no-changes` plus `git diff --check` passed. Runtime
+  execution/state/replay/card registration remains pending; no full
+  verification or CI result is claimed here.
+
+### 2026-09-01 — ENG-404/ENG-406 architect review corrections
+
+- The instruction tree is now the sole source of truth for reusable choices
+  and branches; duplicate top-level `CardBehaviorDefinition` collections were
+  removed. `Choose`/`Branch` require their matching typed payload and reject
+  payloads attached to any other instruction kind.
+- Search now requires a typed source zone, filter, and explicit zone-card
+  candidate descriptor. Corp Deck/HQ/Archives and Runner Stack are supported;
+  add-to-hand requires a destination (HQ or Grip), shuffle-into-deck requires
+  Deck or Stack, and install requires Rig, server-root/ICE, or play-area
+  destinations.
+- New executable numeric instructions (`GainCredits`, `Draw`, `LoseClicks`,
+  and `AdvanceCard`) require positive amounts. Mode choices require exactly
+  one selection; optional choices require up to one. Dynamic target choices
+  remain otherwise unconstrained.
+- Focused evidence was rerun after these corrections: Core build passed with
+  zero warnings/errors, contract/catalog tests passed 27/27, format
+  verification passed, and `git diff --check` passed. Runtime execution,
+  state/replay integration, and final Slice 4.2 verification remain pending.
+
+### 2026-09-01 — ENG-404/ENG-406 Search and tag invariant correction
+
+- Search now requires the candidate target's zone to equal its typed source
+  zone and its filter to be structurally equal to the instruction filter;
+  contradictory hidden-zone programs are rejected before cataloging.
+- `Tagged` and `NotTagged` are parameterless standard-tag conditions. Named
+  tag keys/fact payloads are not part of the Gateway contract.
+- Added mismatch and parameter-rejection regressions while retaining positive
+  Corp Deck/HQ/Archives and Runner Stack search/add-to-Grip coverage. Focused
+  Core build passed with zero warnings/errors, contract/catalog tests passed
+  27/27, format verification passed, and `git diff --check` passed. Runtime
+  execution and full Slice 4.2 verification remain pending.
+
+### 2026-09-01 — MATCH-401B / DATA-401A bounded deck and preset contracts
+
+- Added Core-owned, metadata-free `DeckRequest`/`DeckCardEntry` schema v1
+  contracts and Match-owned `MatchRequest` schema v1 plus strict deterministic
+  JSON parsing/writing. These contracts only describe composition inputs; they
+  do not create cards, shuffle, deal, or execute a setup transition.
+- Cards owns `DeckValidator` and the exact-path diagnostics. It checks side,
+  known code, identity exclusion, identity minimum size and influence by copy,
+  positive quantities, duplicate entries, three copies by printed name,
+  printed deck limits, Corp agenda ranges (40–44: 18–19; 45–49: 20–21;
+  50–54: 22–23; above 54: CR 1.4.6 increments), and authenticated metadata
+  versions. Uniqueness and console traits are intentionally not construction
+  limits. Tutorial identities `30076`/`30077` require an exact official
+  starter or expanded card/quantity list.
+- `DeveloperReduced` is an explicit developer-only profile. It can waive only
+  minimum size and Corp agenda-range checks; side, known code, identity
+  exclusion, behavior coverage, copy and printed limits remain enforced.
+  Match user-facing composition rejects the profile at the deck path and also
+  rejects composition when no behavior catalog is supplied. The behavior
+  catalog check accepts registrations from every typed or generic family and
+  reports missing compiled behavior independently of profile.
+- Checked in `data/m4/presets.json` as code/quantity-only DATA-401A data: exact
+  System Gateway basic Runner 30 / Corp 34 and expanded starter+booster Runner
+  40 / Corp 44. All four remain `playable: false` until complete behavior
+  coverage. Provenance pins the authenticated local metadata commit
+  `236140cf84491c23995b028bc791281837520b97`, the published product list at
+  `https://nullsignal.games/products/system-gateway/`, and agenda rules at
+  `https://rules.nullsignal.games/`; no card text or vendored metadata is
+  included. The parser checks schema, provenance, exact IDs/sides/identities,
+  quantities, and expanded-superset relationships before metadata validation.
+- Added focused invalid-class, exact-preset, reduced-profile, typed/generic
+  behavior-gate, parser path, and user-playability tests. Default synthetic
+  execution passed with the shared Core stream clean: Cards suite 64/64 and
+  Match suite 29/29; the authenticated-content Cards build and suite also
+  passed 64/64 with zero warnings/errors. No primary/full verification or CI
+  result is claimed.
+
+### 2026-09-01 — ENG-401 serializable CR 5 turn shell
+
+- Added `TurnFrame`, `TurnDiscardFrame`, `TurnFactsState`, and
+  `TurnHistoryState` in `src/Netrunner.Core/TurnContracts.cs`. The reducer in
+  `GameEngine.Turn.cs` now models Corp allotment (3 clicks), mandatory draw,
+  action/discard phases and Runner allotment (4 clicks), action/discard phases
+  without a mandatory draw. Alternating `(P)/(R)/(S)` capability windows,
+  formal `TurnStarted`/`TurnEnded` occurrences, forced hand-size discard,
+  leftover-click loss, and explicit side-specific current/last-turn facts are
+  persisted. `EndTurn` is never materialized while clicks remain.
+- Extended `GameState.Turn` additively with `Step`/`History`; legacy M1/M2
+  states continue to omit those default/null fields. This is a deliberate
+  no-bump decision: state schema remains 2 and frame/event payload versions
+  remain 1. Real turn frames require the explicit non-default cursor/history,
+  so a missing real-turn field cannot silently become legacy behavior.
+- Added typed turn timing/discard events and cloning/validation in
+  `TypedEvents.cs`, typed SCN-400 schema/validation in `TurnScenario.cs`,
+  stack/pending-decision invariants in `StateInvariantValidator.cs` and
+  `Resolution.cs`, turn dispatch/session adapters in `GameEngine.cs`,
+  `GameEngine.Advance.cs`, and `GameEngineSession.cs`, and observation-safe
+  step/facts projection in `ObservationBuilder.cs`. `TurnTimingTrace.cs`
+  provides CR citations and ordered evidence independent of card behavior;
+  `EngineJson.cs` validates the fixture fail-closed.
+- Added `data/m4/scenarios/scn-400-turn.json` (SCN-400, schema 1, CR 26.03
+  citations, Jinteki.net cross-check note, ENG-401-only exclusions) and
+  `TurnShellTests` covering positive/negative turn timing, mandatory/no-draw
+  boundaries, forced discard and click loss, save/load/hash and observation
+  filtering. Focused turn tests passed 9/9 before unrelated concurrent shared
+  tree edits; no primary/full verification or CI result is claimed.
+- Unresolved dependencies: ENG-402 must replace the minimal gain/draw action
+  set with the full basic-action catalog and connect direct-effect action-phase
+  termination; MATCH/setup must enter this turn shell after mulligan. The
+  shared tree currently also has unrelated in-progress validator/test syntax
+  and analyzer errors, so integration/full verification remains pending.
+
+Architect follow-up corrections (ENG-401): startup now exposes
+`GameEngine.TurnStartResult`/`BeginTurnWithEvents` plus injected-catalog session
+adapters, and the turn tests consume the actual startup event batch rather than
+reconstructing `LastBeginEvents` from state. Formal `TurnBegin`/`TurnEnd`
+boundaries are serializable `OccurrenceKind` values routed through the existing
+effect checkpoint/trigger machinery; a boundary checkpoint is tied by state
+invariants to its matching turn frame, side, and exact turn number, while
+free-standing public boundary resolutions are rejected. Effect-imminent and
+effect-resolved wildcard conditions no longer match turn-boundary occurrences.
+The trace validator now requires click allotment, ordered paid windows and
+passes, formal phase boundaries, Corp's mandatory draw (and no Runner
+mandatory draw), discard/click-loss, and formal turn end; SCN-400 evidence runs
+a real Corp+Runner pair and round-trips every yielded state/hash. Click-loss
+facts intentionally allow loss above the baseline allotment for granted-click
+forced boundaries. Focused `TurnShellTests` passed 15/15 with zero warnings or
+errors; runtime action expansion and full verification remain pending.
+
+### 2026-09-01 — Slice 4.2 Batch-1 Cards behavior registrations
+
+- Added the focused `GatewayBatch1BehaviorSpecs` Cards module and composed its
+  ten complete generic declarations through `GatewayBehaviorCatalog.Create`.
+  The declarations cover the ordinary economy/draw cards, Corp-owned Wildcat
+  and Planogram choices (including the tagged both/order branch), Sprint and
+  Hansei hidden HQ choices, conditional click loss, and T400's two static
+  modifiers. The module carries all twelve assignment IDs and an explicit
+  blocked-ID list; it does not alter legacy `RegisterAll` registrations.
+- Two assigned designs remain intentionally outside `AllDefinitionIds`, the
+  authoritative behavior gate: Mutual Favor (30011) needs a serializable
+  hidden search set-aside/reveal/shuffle boundary before its install-or-grip
+  branch can be executable, and Seamless Launch (30040) needs a typed target
+  predicate excluding cards installed during the current turn. No title branch,
+  invented fact, or approximate target was added for either gap.
+- Provenance is the authenticated local System Gateway snapshot identified by
+  `data/vendor/system-gateway/manifest.json`, with CR-26.03 citations recorded
+  in the module comments and corresponding audit rows in `docs/M4_PRIMITIVES.md`.
+  No card text or vendored metadata was copied into the registrations.
+- Focused evidence: Cards build passed with zero warnings/errors; the Cards
+  suite passed 69/69; the Core behavior-contract/catalog filter passed 27/27;
+  formatting verification and `git diff --check` passed. No primary/full
+  verification or CI result is claimed. The two blocked designs remain the
+  next Core contract/runtime dependency before the Batch-1 behavior gate can
+  report all twelve as executable.
+
+### 2026-09-01 — Foundation-wave architect integration gate
+
+- Primary review accepted ENG-401 after two correction rounds. Startup events
+  are returned rather than reconstructed, SCN-400 drives an actual full
+  Corp/Runner turn pair with a save/load/hash check at every yield, formal
+  begin/end occurrences use the existing checkpoint registry, and boundary
+  effects are fail-closed to their exact parent turn cursor. Generic effect
+  wildcard conditions cannot observe turn-boundary occurrences.
+- Primary review accepted MATCH-401B/DATA-401A after correcting typed-catalog
+  coverage, Corp influence enforcement, duplicate diagnostics, and the
+  user-facing null-catalog gate. The four code/quantity preset lists were also
+  compared with Null Signal Games' published System Gateway starter/booster
+  lists; their 30/34/40/44 totals and quantities match the published source.
+- Primary review accepted the declarative ENG-404/ENG-406 contract foundation
+  and ten representable Batch-1 declarations. Mutual Favor and Seamless Launch
+  remain deliberately outside `AllDefinitionIds` until the next runtime wave
+  supplies the serialized set-aside boundary and installed-not-this-turn
+  target predicate; they are not counted as registered or complete.
+- Independent integrated evidence after all corrections: `dotnet build
+  Netrunner.sln --no-restore -m:1` passed with zero warnings/errors; the full
+  solution test run passed 456/456 (Core 297, Cards 69, AI 9, CLI 52, Match
+  29); `dotnet format Netrunner.sln --no-restore --verify-no-changes` and
+  `git diff --check` passed. This is a foundation-wave gate, not final Slice
+  4.2 verification or CI evidence.
+
+### 2026-09-01 — SIM-401 developer fixture contract/data foundation
+
+- Added the Match-owned `SimulationFixtureDocument`, strict JSON parser/writer,
+  explicit-path provider, and duplicate-detecting `SimulationFixtureCatalog`.
+  The version-1 contract carries rules/card-data/behavior registry pins,
+  SHA-256 behavior fingerprint, deterministic seed, bounded action cap,
+  optional per-side action ordering, and an ongoing/won outcome expectation.
+  Parsing and structural validation never construct `GameState`, shuffle,
+  deal, or enter setup; MATCH-401A/AGT-401 remain the future consumer.
+- Checked in `data/m4/sim/basic-system-gateway.json` and
+  `data/m4/sim/expanded-system-gateway.json`. Each is code/quantity-only,
+  uses the explicit `DeveloperReduced` profile for both sides, and contains a
+  bespoke reduced deck over the seven M2 baseline registrations plus all
+  twelve Slice 4.2 Batch-1 assignment codes. They intentionally omit
+  `presetId`: neither reduced list is an exact official 30/34/40/44 preset.
+  The fixtures pin rules `26.03`, metadata commit
+  `236140cf84491c23995b028bc791281837520b97`, behavior registry
+  `gateway-m2-3`, and the current catalog fingerprint
+  `609d83418823cd629d6b763cd3a2b9ab401cb39cadfa5a23bb237bd800d3a063`.
+  That fingerprint is provisional for the ten complete declarations and must
+  be refreshed only when Mutual Favor and Seamless Launch complete their
+  required Core predicates. Provenance cites D-405/CR-26.03 and records the
+  no-headless-outcome status; no card text or vendored metadata is checked in.
+- Validation is fail-closed for schema/version/profile/pin/side/deck/preset,
+  duplicate fixture/card/action IDs, invalid JSON shape, action-cap bounds,
+  and outcome fields. The execution-bound overload requires both an
+  authenticated `CardDataSet` and behavior catalog before any future runner
+  can proceed; it does not waive unknown cards or missing behavior for
+  `DeveloperReduced`.
+- Focused evidence: owned Match source and test projects build cleanly with
+  zero warnings/errors; the complete Match test project passed 35/35 and the
+  SIM-401 filter passed 6/6 after covering allowed-code reduced decks and stable
+  serialization, parser unknown/missing/duplicate/side paths, all pins,
+  reduced-profile and deck/preset failures, duplicate fixtures, action caps,
+  outcome shape, and fail-closed metadata/catalog validation. Full Match
+  verification remains pending the concurrent Core ENG-404/406 compile lane
+  (the normal dependency build currently stops on Core `CA1512` in
+  `BehaviorRuntimeContracts.cs`, outside this stream);
+  the future execution gate also needs MATCH-401A/deck-validation's explicit
+  no-gameplay-behavior capability for tutorial identities (the current blanket
+  identity behavior check rejects these intentionally ability-less identities)
+  and the Mutual Favor/Seamless Launch Core work. No primary/full Slice 4.2
+  verification or headless exit proof is claimed.
+
+- Architect correction recorded: the fixtures use tutorial identities `30077`
+  and `30076` without `presetId` because the bespoke lists are not official
+  presets; active Slice 4.7 identities would make this Slice 4.2 fixture
+  knowingly depend on later identity abilities. The behavior fingerprint
+  remains provisional and must be regenerated only after all twelve Batch-1
+  declarations are executable.
+
+### 2026-09-01 — AGT-401 observation-only v1 takeover
+
+- Took over the interrupted `FullGameContractAgent` foundation. The owned
+  implementation is limited to `FullGameContractAgent` v1 and its immutable,
+  versioned `FullGameContractPolicy`; `RunContractAgent` remains untouched as
+  the M2 timing anchor. The public agent API accepts only the Core
+  `Observation` boundary (viewer-owned `ObservationDecision` metadata plus
+  visible `LegalAction` values) and returns an existing engine-issued
+  `ActionId`. It has no `GameState`, catalog, RNG, or card-data dependency.
+- The implemented v1 dispatch subset is exactly the currently materialized
+  Slice-4.2 surface: `TurnTiming` (`PassPriority`), `TurnAction`
+  (`GainCredit`/`DrawCard`), `TurnDiscard` (`ChooseCard`), `BehaviorChoice`
+  (`ChooseBehavior` option/target payloads), and M2 `RunTiming`
+  (`PassPriority`, `RezIce`, `BreakSubroutines`, `PumpBreaker`,
+  `ChooseBreachCandidate`, `TrashAccessedCard`, `NoAccessAction`,
+  `ContinueRun`, `JackOut`). Empty, malformed, unsupported, wrong-viewer, and
+  mismatched-decision metadata fail closed. `EndTurn` is never selected (and
+  is not a v1 policy priority); ENG-401's zero-click reducer remains the
+  authority for action-phase timing.
+- Selection uses typed payloads only. Gain is the deterministic economy
+  preference when a behavior mode offers `gain`; card/target/payment payloads
+  are ordered by semantic typed keys and then stable `ActionId`, independent
+  of legal-action list order. Action descriptions/prompts and observation
+  public/private dictionaries are never consulted; hidden parameters are only
+  consumed when Core has materialized them in the viewer's legal-action
+  surface. The decision-kind switch leaves explicit fail-closed extension
+  points for future setup/ENG-402/403/405 action classes without claiming that
+  those classes are implemented here.
+- Added 23 AI contract tests covering schema/policy immutability, controlled
+  owner and decision metadata, cancellation, pass/timing and no-`EndTurn`,
+  gain/draw preference, deterministic visible discard and behavior targets,
+  every currently materialized M2 run action, typed payload validation,
+  unsupported/empty/future decisions, description neutrality, hidden-state
+  non-access, legal-action reorder stability, stable-ID ties, and typed
+  legal-action serialization/replay neutrality.
+- Evidence using `source scripts/env.sh`: AI and AI-test projects build cleanly
+  with zero warnings/errors against the already-built Core binary via
+  `-p:BuildProjectReferences=false`; the AI test project passes 23/23; both
+  AI-owned `dotnet format ... --no-restore --verify-no-changes` checks and
+  `git diff --check` pass. The normal dependency build is currently blocked by
+  concurrent out-of-scope Core edits (`GameEngine.Behavior.cs` and
+  `Resolution.cs`, 18 compile errors); no full-solution or primary
+  verification result is claimed.
+- Blockers and explicit non-claims: v1 does not implement setup/mulligan,
+  full-turn action execution, run initiation, install/play/rez, advance/score,
+  tag removal/resource trash/purge, endgame policy, or a headless full-match
+  proof. Those require the pending ENG-402/403/405 and MATCH-401A/setup work;
+  AGT-401 is not complete and Slice-4.2 completion is not claimed.
+
+### 2026-09-01 — UI-403 bounded observation/presentation foundation
+
+- Added a Match-owned UI-403 projection over the existing filtered
+  `Observation`: explicit public turn (`activeSide`, `phase`, `turnNumber`,
+  optional `step`), active player clicks/credits through the existing player
+  view, viewer-safe hand counts, visible installed-card advancement counters,
+  score-area cards/agenda points, and a forced-discard view when Core issues
+  `DecisionKind.TurnDiscard`. Existing metadata resolver injection, hidden-card
+  nulls, and typed action parameters remain unchanged.
+- Maximum hand size is intentionally nullable. Core's current observation
+  contract does not project `RulesState.MaximumHandSize`; the Match model emits
+  the exact dependency diagnostic and accepts an optional injected
+  `HandSizeProjection` for a future viewer-safe Core/Match projection. No
+  default hand size or card-text/rules inference is used.
+- Added `TurnRegionPresenter` for text turn/phase/timing/priority status with
+  unknown/malformed enum values rendered unavailable, and progressive
+  `ActionsRegionPresenter` groups keyed by active `DecisionKind`. The current
+  display subset is `TurnTiming` pass priority, `TurnAction`
+  gain/draw/issued behavior choice, `TurnDiscard` card choices,
+  `BehaviorChoice`, generic card/number compatibility choices, and the
+  currently materialized M2 `RunTiming` action classes. Godot renders only
+  these Core-issued actions, keeps target staging ID-only, and shows forced
+  discard text cues; it creates no setup/mulligan/install/run-initiation
+  actions and does not parse descriptions or card text.
+- Added Match tests for turn/hand/score/counter mappings, injected hand-size
+  values and unavailable diagnostics, forced-discard presentation, decision
+  progressive disclosure, hidden-state-safe visible counters, focus behavior,
+  and unknown turn/decision/run enum fail-closed handling. Godot uses the
+  existing M3 scene and smoke paths; no UI-403 full-game smoke claim is made.
+- Evidence using `source scripts/env.sh`: owned Match build with
+  `-p:BuildProjectReferences=false` (0 warnings/errors), Match tests 40/40,
+  Match/Godot targeted format verification and `git diff --check` pass;
+  Godot build with `-p:BuildProjectReferences=false` (0 warnings/errors);
+  existing `--smoke-test` reports `M3_SMOKE PASS`, and
+  `--m3-responsiveness-smoke` reports `M3_LATENCY_SMOKE PASS` with 10-second
+  agent delay, one-frame interaction checks, and both viewport layouts.
+  Dependency builds remain blocked by concurrent out-of-scope Core analyzer
+  edits; no primary/full UI-403 or Slice-4.2 claim is made.
+
+### 2026-09-01 — ENG-404/ENG-406 behavior runtime takeover and architect corrections
+
+- Took over the interrupted Core runtime/classification stream after restoring
+  compile integrity. `BehaviorCatalog` now treats `TryGetCardType` metadata as
+  an adjunct only: classification keys are excluded from `AllDefinitionIds`,
+  and `Build` fails closed when a classification has no corresponding typed or
+  generic executable definition. Equivalent catalog construction, slices,
+  fingerprints, and classification-only regression tests prove deterministic
+  behavior coverage cannot be satisfied by metadata alone.
+- Generic behavior invocation is catalog-driven and engine-owned. Public
+  `BeginBehavior` session/static entry points were removed; Core keeps only the
+  internal engine composition seam plus an explicitly friend-visible,
+  non-production fixture seam. The private `WorkingState` child push/resume
+  path binds controller, acting player, source card/zone, immediate parent ID,
+  and exact serialized parent-frame identity. Deck, heap, discard, score, and
+  arbitrary installed/hand activation are rejected at the boundary as
+  applicable; future ENG-405 play/install reducers remain the production
+  authorization owner.
+- Persisted frames contain catalog/definition fingerprints, cursor and a
+  catalog-derived continuation path, bindings, choice materialization, and
+  physical transient set-aside metadata. Executable instruction lists remain
+  non-serialized projections. Validation replays the injected catalog and
+  rejects mismatched catalogs, forged continuations/bindings, stale physical
+  candidates, parent identity changes, and invalid source/set-aside locations
+  before mutation. Nested mode/target/branch choices preserve chooser
+  ownership; exact/up-to/any-number semantics use a bounded incremental
+  protocol rather than exponential `LegalAction` enumeration, including
+  mandatory-empty completion.
+- ENG-404 search physically moves selected cards to `BehaviorSetAside` before
+  reveal, emits typed reveal evidence without changing hidden cards to
+  `FaceUp`, excludes selected cards from the deterministic shuffle, then
+  reinserts them while retaining the `chosen` binding for a later grip/install
+  disposition. HQ/Archives add/trash and HQ/Archives-to-deck shuffle paths
+  include opponent-observation leak coverage. Corp empty required draw ends in
+  Runner deck-out; Runner empty draw consumes no card and permits later effects
+  to resolve. Static memory/hand-size modifiers are projected from active
+  installed cards and disappear after trash/deactivation instead of mutating
+  base values or stacking on repeated activation.
+- Turn facts now mark actual installs and successful runs, reset at formal turn
+  boundaries, and are observation-filtered. `InstalledCardNotThisTurn` is a
+  typed target predicate feeding `ChosenCard`, not an implicit effect over all
+  installed cards. Generic advancement emits the honest
+  `BehaviorCardAdvancedEventPayload` (card, amount, resulting counter); the
+  legacy `AgendaAdvanced` payload remains reserved for rules that know the
+  printed advancement requirement.
+- Focused Core evidence after the takeover: Core build is warning/error-free;
+  the behavior runtime filter passes 51/51, including provenance/zone/parent
+  nesting, catalog mismatch and forged/stale continuation/candidate rejection,
+  bounded choice round-trips, set-aside/reveal/shuffle/binding and observation
+  checks, draw/deck-out, static lifecycle, turn-fact transitions, typed
+  advancement, and JSON/hash yields. Formatting verification and
+  `git diff --check` are run on the owned Core scope. This is focused evidence,
+  not a primary/full Slice-4.2 or CI claim.
+- Remaining dependency: ENG-405 must own full CR 8.5/8.6 install/play/rez
+  legality, printed costs, uniqueness/console/memory checks, destination and
+  play-area lifecycle, and the authorized production handoff into the private
+  behavior child seam. Generic `InstallCard` in the runtime tests is an
+  explicitly provisional binding primitive and does not register or expose a
+  zero-cost public install path; Cards registrations, Match/SIM, AI, and UI
+  remain outside this takeover.
+
+### 2026-09-01 — primary integration gate after ENG-404/406 and UI/agent foundations
+
+- The primary architect reviewed the finalized behavior-runtime persistence,
+  invocation, choice, set-aside, static-projection, turn-fact, and typed-event
+  seams and accepted the bounded ENG-404/406 gate. The full solution dependency
+  build passes with zero warnings/errors; the complete Core suite passes
+  319/319, including the 51-test behavior filter.
+- The previously provisional observation-only agent and UI foundations were
+  rechecked against the integrated Core output: AI passes 23/23 and Match
+  passes 40/40. The primary full-solution no-build regression gate passes
+  503/503 (Core 319, Cards 69, AI 23, CLI 52, Match 40). These counts validate
+  the currently materialized surfaces only;
+  AGT-401/UI-403 remain incomplete until ENG-402/403/405 and MATCH-401A expose
+  setup, install/play/rez, scoring, and base-run actions.
+- Started the Luna Max Core ENG-402/403/405 stream under primary architectural
+  review. Its contract requires typed fingerprinted runtime-card metadata that
+  cannot inflate behavior coverage, engine-issued/replayable basic actions and
+  install destinations, atomic printed/click costs, full install/play/rez
+  lifecycle, M2 run nesting, score/win resolution, viewer-safe maximum-hand
+  projection, and focused compatibility evidence. Cards/Match/AI/UI registration
+  and presentation changes remain outside that stream.
+
+### 2026-09-01 — authenticated Batch-1 metadata/declaration audit
+
+- A read-only Luna Max audit checked all twelve Batch-1 designs and the seven
+  existing registrations against the authenticated local System Gateway
+  snapshot at commit `236140cf84491c23995b028bc791281837520b97` / output SHA
+  `a190e6e63a6d58734d915258ebb6b5659ffef0e253fc4c5128776256ee3d699b`.
+  No files were changed by the audit. Exact printed costs are: Corp operations
+  30064=10, 30075=5, 30041=0, 30048=5, 30056=0, 30040=1; Runner events
+  30030=5, 30002=2, 30020=1, 30021=1, 30011=0; hardware 30031 install=2.
+  T400 is Chip, non-unique/non-console, with +1 MU/+1 maximum hand size.
+  Baseline runtime metadata is 30005 program 4/MU1, 30006 program 3/MU1,
+  30029 event 1, 30037 asset rez2/trash2, 30067 agenda 4/2, 30072 ICE rez3,
+  and 30074 ICE rez2.
+- The audit confirmed ten current generic declarations structurally match
+  their printed effects except for two required runtime corrections: Predictive
+  Planogram's tagged condition must explicitly inspect the Runner rather than
+  the Corp controller, and Hansei Review's mandatory HQ trash must resolve
+  without a prompt when HQ is empty. Creative Commission/VRcation must evaluate
+  their conditional click loss after the play click has been paid.
+- Mutual Favor and Seamless Launch remain correctly blocked. Mutual needs typed
+  Icebreaker filtering, retained search/reveal/shuffle binding, Runner-scoped
+  successful-run-this-turn, optional legal install, and Grip fallback through
+  ENG-405. Seamless needs an owner-filtered installed-Corp-card-not-this-turn
+  target and two advancement counters. Printed play/install costs must have one
+  authoritative owner: the action pipeline, never duplicated by behavior costs;
+  T400 static modifiers likewise never constitute an activation cost/effect.
+- Coverage expectations are now explicit: the worktree catalog currently has
+  17 definitions but checked-in coverage still reports 7 registered/tested,
+  5 complete, 2 partial. The completed batch must reach 19 registered/tested,
+  17 complete, 2 partial, 58 unregistered. The provisional behavior fingerprint
+  `609d83418823cd629d6b763cd3a2b9ab401cb39cadfa5a23bb237bd800d3a063`
+  must be recomputed once after 30011/30040 land and both SIM pins refreshed;
+  existing M2 definition fingerprints/traces remain pinned.
+
+### 2026-09-01 — Core ENG-402/403/405 Phase-A metadata and observation checkpoint
+
+- The stream was narrowed by primary review to Phase A. Core now has one
+  canonical immutable `CardRuntimeSpec` type and `RuntimeCardCatalog` adjunct,
+  keyed only by `CardDefinitionId`, with deterministic sorted fingerprinting.
+  Runtime metadata contains typed class/side/cost/MU/trash/agenda/subtype and
+  uniqueness/console fields, performs class-shape validation, and never enters
+  `BehaviorCatalog.AllDefinitionIds`; no raw-ID or title/text inference path was
+  added. Identity is valid for either side; Corp agenda/asset/upgrade/ICE
+  install cost is the rules-owned zero-cost path (no printed install field),
+  Runner program/hardware/resource require printed install cost, play costs are
+  limited to operation/event, rez costs to asset/upgrade/ICE, and printed trash
+  cost is limited to Corp asset/upgrade.
+- Runtime catalog version/fingerprint are optional state/snapshot metadata, so
+  M1/M2 states retain their prior JSON/hash shape. The injected catalog has
+  explicit state compatibility validation and round-trip/hash coverage;
+  runtime IDs remain independent of executable behavior coverage.
+- `ObservationBuilder.Build(state, viewer, behaviorCatalog)` now projects an
+  effective viewer-safe `maximumHandSize` only when the optional rules
+  aggregate exists. The value derives from base hand size/core damage plus
+  active `BehaviorStaticModifierProjection`; base state is never mutated and
+  the legacy two-argument observation adapter/goldens remain unchanged.
+- Architect review rejected speculative public transaction shells and unused
+  action DTOs in this metadata-only checkpoint. Install/play/rez reducers,
+  serializable paid handoff, no-double-pay behavior invocation, typed action
+  enumeration/consumption, and nested base-run resume remain explicitly
+  deferred to the next reviewed Phase-B ENG-402/403/405 stream. In particular,
+  Cards registration must continue to pass printed costs through one future
+  authoritative Core action boundary; current generic behavior costs were not
+  silently changed.
+- Focused evidence: `dotnet build
+  src/Netrunner.Core/Netrunner.Core.csproj --no-restore -m:1` passed with zero
+  warnings/errors; `dotnet test
+  tests/Netrunner.Core.Tests/Netrunner.Core.Tests.csproj --no-restore
+  --filter FullyQualifiedName~RuntimeCardCatalogTests -m:1` passed 9/9 (the
+  first sandbox testhost attempt was permission-denied before rerunning with
+  the approved testhost socket); the complete Core suite then passed 328/328.
+  Core formatter verification passed for the touched source/test files and
+  `git diff --check` passed. Full/primary solution claims are not made by this
+  Phase-A checkpoint.
+
+### 2026-09-01 — Phase-A independent review corrections assigned
+
+- Primary and independent Luna Max review accepted the typed metadata and
+  observation model but rejected four persistence/composition gaps before
+  Phase B: runtime version/fingerprint were not enforced both-or-neither;
+  session BeginResolution/BeginTurn/BeginRun boundaries did not thread or check
+  their bound runtime catalog; `Scenario.AddCards` and `ToyRules.Expand` could
+  drop runtime pins while reconstructing state; and EngineJson had no atomic
+  behavior+runtime-catalog deserialize boundary. Subtype input order also needs
+  ordinal canonicalization before fingerprinting.
+- A bounded correction pass is in progress with required wrong-catalog checks
+  at every session boundary, asymmetric-pin rejection, clone/save-load
+  regressions, equivalent-subtype-order fingerprint coverage, full Core
+  regression/format evidence, and no ENG-402/403/405 Phase-B reducer work.
+
+### 2026-09-01 — Phase-A independent review correction pass completed
+
+- Runtime-card state identity is now symmetric: version and fingerprint are
+  accepted only as a pair, or both omitted for legacy M1/M2 states. The
+  invariant validator reports the same incomplete-pin violation for either
+  asymmetry; both directions are covered by `RuntimeCardCatalogTests`.
+- `GameEngineSession` and its `EngineSession` compatibility alias retain one
+  optional immutable runtime catalog and pass it through Apply,
+  BeginResolution, BeginTurn/BeginTurnWithEvents, and
+  BeginRun/BeginRunWithEvents. Each injected setup boundary checks the runtime
+  pin before terminal/pending/turn/server/source legality or working-state
+  construction, so a wrong pinned catalog cannot mutate or advance state.
+  Existing behavior-only and legacy static overloads remain available.
+- All owned Core reconstruction paths preserve both runtime pins, including
+  `ScenarioBuilder.AddCards`, `ToyGameSetup` expansion, engine working-state
+  builds, and snapshot conversion. Explicit regression tests exercise the
+  Scenario and Toy helpers through internal `ForTesting` seams and verify
+  version, fingerprint, serialized equality, and state-hash equality after
+  reconstruction.
+- `EngineJson` now exposes dual behavior/runtime catalog validation for generic
+  string and UTF-8 deserialization plus `DeserializeState` and
+  `DeserializeSnapshot`. Validation is performed at the atomic restore
+  boundary and wrong runtime catalogs fail closed; no runtime-only nullable
+  overload was added, avoiding ambiguity with the legacy behavior overload.
+- `CardRuntimeSpec` canonicalizes subtype values by ordinal distinctness and
+  ordinal sort before catalog fingerprinting. A reorder/duplicate semantic
+  equivalence regression test proves the fingerprint is stable.
+- Evidence from this correction pass: Core build completed with 0 warnings and
+  0 errors; focused `RuntimeCardCatalogTests` passed 16/16; the complete Core
+  suite passed 335/335; Core and Core-test `dotnet format --verify-no-changes`
+  passed; and `git diff --check` passed.
+- Nonclaims: ENG-402/403/405 Phase B remains deferred. This pass adds no
+  install/play/rez reducers, transaction/action shells, or broader turn/run
+  lifecycle work, and makes no full-solution, CI, Cards, Match, AI, or Godot
+  verification claim. Existing unrelated worktree changes remain outside this
+  correction scope.
+
+### 2026-09-01 — Phase-B architecture audit and B1 install stream
+
+- A read-only Luna Max audit mapped the safe Phase-B integration around the
+  real `TurnFrame`, runtime catalog, typed pending actions, serialized child
+  frames, and existing M2 run reducer. It explicitly rejects routing real
+  actions through toy reducers, caller-authored costs/targets, public arbitrary
+  card reducers, executable serialized instructions, or title/text parsing.
+  The recommended sequence is install, immediate/scoring/rez actions, play
+  lifecycle with prepaid behavior provenance, then nested M2 base runs.
+- Started a bounded Luna Max B1 stream for authoritative basic installs only.
+  Primary review corrected the initial flattened-choice contract against CR
+  26.03 rules 3.9.3b and 8.5.6: an over-memory Program install remains possible
+  by first choosing installed Programs to trash; Corp root/ICE installs may
+  first trash any number of like-location cards, with mandatory agenda/asset
+  and Region constraints; ICE install cost counts protectors remaining after
+  selected trash. B1 therefore requires a serialized, bounded incremental
+  install frame/selection protocol with save/load/hash yields, rather than
+  exponential action materialization or simply hiding over-memory installs.
+- Play/rez/run/score/tag/purge remain outside B1. The primary architect will
+  review B1 state transitions, costs, hidden visibility, remote topology,
+  invariants, and compatibility before authorizing the next phase.
+
+### 2026-09-01 — Phase-B B1a takeover and compile audit
+
+- The first B1 implementer exhausted its Luna Max run after leaving an
+  incomplete mixed Runner/Corp install draft. Primary review narrowed the
+  recovery to Runner Grip-to-Rig installs only; Corp server destinations,
+  replacement topology, remote creation, and ICE cost calculation remain
+  unclaimed and deferred to a separate B1b stream.
+- A first recovery assignment was stopped after it produced no edits or status.
+  The work was reassigned as smaller Luna Max checkpoints, beginning with
+  compile repair and exact TurnAction projection before the mandatory bounded
+  Program-memory selection pass.
+- Primary compile evidence currently fails with four known inherited errors:
+  missing `IsInstallFrameTop`, one nullable-value diagnostic, and two CA1859
+  return-type diagnostics. Primary architecture review also found that
+  `YieldTurnActionDecision` does not yet issue install actions and
+  `ValidateTurnActions` still rejects every typed install action because it
+  assumes all turn actions use `NoActionParameters`. B1a therefore remains in
+  progress and no install behavior or test-pass claim is made at this point.
+
+### 2026-09-01 — Phase-B B1a compile/projection checkpoint
+
+- Repaired the inherited Runner-only install path: `IsInstallFrameTop` is now
+  available to action dispatch, nullable server lookup and CA1859 array
+  diagnostics are resolved, and `BuildInstallPlan` looks up the physical card
+  directly in Runner Grip. `YieldTurnActionDecision` and `AddInstallActions`
+  both gate issuance on positive clicks; Corp install issuance remains disabled
+  in this slice. `ConsumeTurnInstallAction` now requires a real AwaitingAction
+  Runner frame and checks the card owner/source before constructing the frozen
+  install frame.
+- Kept one canonical `InstallCardParameters` constructor vocabulary and wired
+  exact materializer/validator parity: Runner TurnAction installs must match
+  the current state, injected runtime catalog, destination, printed cost, and
+  frozen replacement fields; arbitrary typed install payloads are rejected.
+- Added `RunnerInstallActionTests.cs`, including a legal non-program hardware
+  install that round-trips through JSON, spends exactly one click and its
+  printed two-credit cost, moves Grip to face-up Rig, marks the turn fact, and
+  resumes the action-priority window, plus an unaffordable resource
+  non-issuance check. Evidence using `source scripts/env.sh`: Core build passes
+  with 0 warnings/errors; the focused Runner install filter passes 2/2; the
+  combined Runner-install/turn-shell focus passes 17/17; primary review's full
+  Core regression passes 337/337; and `git diff --check` passes.
+- B1a remains IN PROGRESS. The bounded memory-over-limit selection protocol
+  (including incremental `InstallFrame` replacement choices), its dedicated
+  tests, and broader save/load/hash negative coverage remain to be completed;
+  Corp destinations, play/rez, and any wider ENG-405 behavior are out of scope.
+
+### 2026-09-01 — Phase-B B1a Program-memory stream assigned
+
+- Started the second bounded Luna Max implementation checkpoint on top of the
+  accepted non-Program projection: runtime-MU registration, incremental
+  installed-Program trash selection, effective-memory static modifiers,
+  owner-only observation, forged/stale rejection, and pending-frame
+  save/load/hash coverage. A separate Luna Max agent is independently reviewing
+  the compile/projection checkpoint while this implementation proceeds.
+- Acceptance requires focused and full Core regression evidence plus formatter
+  and diff hygiene. Corp installs remain disabled and are not part of this
+  assignment.
+- The first broad Program-memory implementation and broad independent-review
+  assignments were stopped after extended runs produced neither edits nor a
+  status response. They made no worktree changes. The stream was split again:
+  one Luna Max checkpoint now covers only a Program that fits under MU plus
+  safe RulesState initialization, and a separate fast read-only Luna Max review
+  covers the accepted non-Program action boundary. Over-MU selection remains a
+  subsequent checkpoint.
+
+### 2026-09-01 — Phase-B B1a Program-under-MU checkpoint in progress
+
+- Added the bounded Runner Program install path on top of the accepted
+  Grip-to-Rig action boundary: printed install cost and one-click payment,
+  face-up Rig movement, runtime memory-unit registration, `UsedMemory`
+  recalculation, typed memory event emission, and return to action priority.
+  Existing `RulesState` aggregates remain authoritative; when the aggregate is
+  absent, initialization reconstructs all runtime-known Runner Programs already
+  in the Rig before registering the incoming Program, preventing undercount.
+- Focused verification passes the five `RunnerInstallActionTests` (including
+  the Program-under-MU, pre-existing-Rig/null-`RulesState`, and unknown-Rig
+  fail-closed regressions), and the Core build passes with 0 warnings/errors.
+  Primary review's full Core regression passes 340/340. This remains an
+  in-progress bounded result; no formatter claim is made here.
+- Remaining in B1a is the explicit incremental over-MU selection protocol and
+  its save/load/hash and forged/stale-action coverage. Corp destinations,
+  play/rez, and broader ENG-405 behavior remain out of scope.
+
+### 2026-09-01 — Phase-B B1a install-frame invariant review correction
+
+- Closed the review gap where a structurally self-consistent Corp parent,
+  Corp-owned pending InstallChoice, and Corp install frame could pass
+  `StateInvariantValidator` even though the reducer was Runner-only. Install
+  frames now require Runner ownership and parent side, the canonical Runner
+  Grip source, Runner Rig destination with no server/new-remote marker, and a
+  Runner Program/Hardware/Resource class when the runtime catalog is injected.
+- The materialized Runner frame now captures `DestinationZoneId`; state/frame
+  cloning preserves it, and invariants reject a missing or stale Rig identity.
+  `RunnerInstallActionTests` covers the forged Corp frame/pending decision with
+  actionable Runner-only rejection plus snapshot clone preservation.
+- Focused review-correction evidence passes 6/6 Runner install tests, Core
+  build with 0 warnings/errors, and `git diff --check`.
+
+### 2026-09-01 — Phase-B B1a over-MU selection checkpoint assigned
+
+- Started a final bounded Luna Max B1a implementation pass for incremental
+  over-memory Program replacement selection, finalization-only payment,
+  save/load/hash and owner-only observation, stale/forged rejection, linear
+  action cardinality, and incoming/lost static MU modifiers. Corp installs
+  remain disabled. Full-suite, formatter, and final independent-review claims
+  wait until this checkpoint is complete.
+- Focused evidence: `RunnerInstallActionTests` passes 6/6; the Core project
+  builds with zero warnings/errors; and `git diff --check` passes.
+
+### 2026-09-01 — Phase-B B1a over-MU selection checkpoint completed
+
+- Completed the bounded Runner over-memory Program protocol. A TurnAction
+  opens a serialized `InstallFrame`/`InstallChoice` without movement or
+  payment; each continuation appends exactly one remaining frozen candidate,
+  with at most one finalize action once the selected set fits. Finalization
+  re-resolves the destination after replacement moves, trashes selected Rig
+  Programs to Heap, unregisters them, installs the incoming Grip card face-up,
+  pays its printed runtime cost and one click once, recalculates runtime MU,
+  emits typed movement/payment/memory/install events, and resumes priority.
+  Runtime MU registrations are now checked against the injected metadata
+  catalog, and missing installed Program registrations fail closed.
+- Added focused coverage for linear cardinality, pending-frame dual-catalog
+  JSON/hash preservation, Runner-only observations, stale decisions and
+  destination/resource rejection, incoming active static +1 MU, and loss of
+  an active +MU Program's modifier when selected for trash. Corp installs
+  remain unreachable.
+- Evidence: `RunnerInstallActionTests` passed 10/10; the combined
+  Runner-install/TurnShell focus passed 25/25; the Core project built with
+  zero warnings/errors; and `git diff --check` passed. Full-suite execution,
+  formatter verification, and final independent review remain pending; Corp
+  destinations, play/rez, and broader ENG-405 behavior remain out of scope.
+
+### 2026-09-01 — Phase-B B1a unknown-Rig metadata fail-closed correction
+
+- Root finding: `BuildInstallPlan` previously rejected an incoming Runner
+  Program when an existing Rig card lacked runtime metadata only while
+  `RulesState` was null. With a non-null internally consistent aggregate, the
+  unknown card was skipped by Program registration and `CurrentUsedMemory`,
+  allowing a Program install to undercount memory if that card was actually a
+  Program. Runtime metadata is authoritative, so this boundary must fail
+  closed independently of `RulesState` presence.
+- Corrected the shared install planner so every incoming Runner Program checks
+  that all current Rig cards resolve in `RuntimeCardCatalog`; Hardware and
+  Resource installation behavior is unchanged. Initial issuance, materialized
+  turn-action parity, and install-frame revalidation all use this same planner
+  check.
+- Added the focused non-null-`RulesState` regression with a valid default
+  aggregate, an unknown face-up Rig card omitted from registrations, and a
+  known incoming Program; the Runner turn still opens but no `InstallCard`
+  action is offered. The existing null-`RulesState` regression remains.
+
+### 2026-09-01 — Phase-B B1a exit review and unknown-Rig correction
+
+- Primary exit verification passes the complete Core suite 345/345, Core and
+  Core-test formatter verification, and `git diff --check`. A broad final Luna
+  Max review was stopped after producing no output; a narrowed independent
+  Luna Max review found no defect in the registration/commit path and confirmed
+  that injected runtime metadata now enforces exact MU plus one registration
+  for every runtime-known installed Program.
+- Primary follow-up found a narrower fail-closed gap outside that review: an
+  unknown Rig card blocked Program installation only when `RulesState` was
+  null. With a non-null aggregate, the card could not be classified and might
+  be skipped by memory accounting. The shared `BuildInstallPlan` boundary now
+  blocks every incoming Runner Program whenever any Rig card lacks runtime
+  metadata, regardless of aggregate presence; Hardware and Resource behavior
+  is unchanged, and frame revalidation reuses the same check.
+- Added the non-null-`RulesState` regression with a valid default aggregate,
+  an unknown face-up Rig card omitted from registrations, and a known incoming
+  Program. The Runner turn opens but no `InstallCard` action is offered; the
+  existing null-`RulesState` regression remains. Focused evidence passes
+  `RunnerInstallActionTests` 11/11, the Core build with zero warnings/errors,
+  and `git diff --check`.
+
+### 2026-09-01 — Phase-B B1a Runner install accepted
+
+- Primary architecture review accepts the Runner Grip-to-Rig install boundary:
+  engine-issued typed actions, printed runtime cost and MU, Program memory
+  registration, bounded incremental replacement selection, frozen physical
+  Rig identity, owner-only observation, dual-catalog save/load/hash,
+  finalization-only payment, active static-MU handling, and stale/forged
+  rejection. The stale destination object defect and both independent/root
+  fail-closed findings were corrected before acceptance.
+- Final evidence after the unknown-Rig correction: focused
+  `RunnerInstallActionTests` passes 11/11; combined Runner-install/TurnShell
+  focus passes 26/26; complete Core regression passes 346/346; Core and
+  Core-test `dotnet format --verify-no-changes` passes; Core build has zero
+  warnings/errors; and `git diff --check` passes.
+- ENG-405 is not complete. Corp root installs and new remotes move to B1b;
+  Corp ICE installs/dynamic protector cost remain a separate checkpoint.
+  Play/rez/run/score/tag/purge remain outside B1.
+
+### 2026-09-02 — Phase-B B1b Corp-root stream assigned
+
+- Started a bounded Luna Max implementation stream for Corp Agenda, Asset, and
+  Upgrade installs from HQ into explicit existing roots or a newly created
+  remote. The same serialized incremental replacement protocol must cover
+  optional root trash, mandatory Agenda/Asset coexistence removal, and Region
+  replacement without exposing facedown identities to the Runner. ICE is
+  explicitly excluded from this checkpoint.
+
+### 2026-09-02 — Phase-B B1b Corp empty-root checkpoint completed
+
+- Completed the first bounded Corp-root slice: engine-issued `InstallCard`
+  actions now cover zero-credit, one-click Agenda/Asset installs into empty
+  existing Remote roots and Upgrade installs into empty existing server roots,
+  plus explicit new-Remote choices for all three runtime classes. Corp cards
+  move from HQ facedown and unrezzed, receive `MarkInstalledThisTurn`, emit
+  typed movement/install/click events, and return the real TurnFrame to action
+  priority. Agenda and Asset are never issued for central roots, and occupied
+  roots are omitted until the replacement/Region checkpoint.
+- Install planning is pure: a new-Remote action retains a null physical zone
+  until final commit, while an existing destination freezes and revalidates its
+  physical root zone. Commit allocates exactly one Remote server and its ICE
+  and root zones; rejected or detached validation cannot mutate topology.
+  Corp action materialization and state invariants require exact typed parity
+  with the engine-issued action set without weakening the Runner boundary.
+- Corp-private observations retain HQ definitions and legal target actions;
+  Runner observations expose neither Corp action IDs/parameters nor the
+  identity of the resulting facedown card. Legacy Runner install behavior is
+  unchanged.
+- Evidence: sourced `scripts/env.sh`; the focused Corp+Runner install filter
+  passes 21/21; the Core project builds with zero warnings/errors; and
+  `git diff --check` passes. Added coverage includes empty Remote Agenda/Asset,
+  central-root Upgrade, exact payment/status/event/resume behavior, one-remote
+  topology commits, illegal/occupied target nonissuance, owner-only
+  observation, and stale/forged target rejection.
+- Nonclaims: occupied-root replacement and Region selection (B1b2), Corp ICE
+  installs/protector costs, Corp play/rez/score/advance behavior, and broader
+  ENG-405 remain outside this checkpoint. Full-suite and formatter verification
+  remain intentionally deferred.
+
+### 2026-09-02 — Phase-B InstallChoice continuation parity correction
+
+- Finding: `StateInvariantValidator` checked each serialized Runner
+  `InstallCard` payload against its frozen `InstallFrame`, but did not compare
+  the whole `InstallChoice` continuation set. A loaded decision could omit a
+  remaining-candidate or finalization action, or duplicate one under a fresh
+  `ActionId`, without violating the individual payload checks.
+- Correction: extracted the exact read-only `InstallCardParameters` projection
+  from `YieldInstallChoice`; the engine wraps that projection in allocator IDs,
+  while validation re-materializes it from a detached working copy without
+  consuming allocator state or mutating the validated `GameState`. Validator
+  parity now requires exact count and semantic payload-set equality independent
+  of `ActionId`, with stable missing/extra/duplicate continuation violations.
+- Evidence: focused Runner+Corp install tests pass 25/25; Core.Tests build passes
+  with zero warnings/errors; and the pre-existing unaffordable stale-choice
+  regression now correctly expects `InvalidInputState` with the stable
+  `decision.install-materialization-failed` diagnostic and unchanged hash.
+- Nonclaims: this correction does not expand install rules, alter action ID or
+  JSON/hash semantics, change owner visibility, or claim full Core/solution,
+  formatter, CI, Corp ICE, B1b2 replacement/Region, or broader ENG-405 gates.
+
+### 2026-09-02 — Phase-B B1b1 Corp empty-root install accepted
+
+- Independent Luna Max review accepted pure new-Remote allocation, exact
+  existing-root targeting, source/destination revalidation, Corp
+  facedown/unrezzed state, click and typed-event ordering, TurnFrame resume,
+  owner-only action visibility, and the explicit occupied-root/ICE omissions.
+  Its one medium finding was the pre-existing whole-set validation gap for a
+  serialized `InstallChoice`; that finding was corrected before acceptance.
+- Root architecture review accepts the shared, allocator-free continuation
+  projection: issuance alone assigns action IDs, while detached invariant
+  validation requires the exact semantic payload multiset and rejects missing,
+  extra, or duplicate continuations. This closes the loaded-state boundary
+  needed by both Runner memory replacement and the next Corp root-selection
+  checkpoint.
+- Final evidence: combined Runner/Corp install tests pass 25/25; the complete
+  Core suite passes 360/360; Core and Core-test formatter verification passes;
+  the Core.Tests build is warning/error-free; and `git diff --check` passes.
+- B1b1 is complete. Occupied-root optional/mandatory replacement and Region
+  rules start in B1b2; Corp ICE installation and dynamic protector cost remain
+  B1b3. Play/rez/score and the rest of ENG-402 through ENG-406 remain open.
+
+### 2026-09-02 — Phase-B B1b2 Corp occupied-root replacement implemented
+
+- Extended the existing serialized `InstallFrame`/`InstallChoice` protocol to
+  Corp Agenda, Asset, and Upgrade installs into occupied existing ServerRoots.
+  A Corp turn action now freezes the exact Corp/HQ source, server/root
+  destination, stable ordered physical-root candidates, required coexistence
+  or Region subset, and candidate definition identities without moving a card,
+  spending a click, changing credits, allocating topology, or emitting events.
+  Empty roots and explicit new-Remote choices retain the direct B1b1 path.
+- Agenda and Asset incoming cards require every existing Agenda or Asset in
+  the root (combined classes); Region Upgrade replacement uses case-insensitive
+  `Region` subtype matching; ordinary Upgrade replacement may finalize with no
+  selection. Occupied roots with unknown runtime metadata fail closed. Generic
+  finalization trashes selected root cards once to CorpDiscard, preserves their
+  faceup/facedown knowledge, installs the incoming Corp card facedown/unrezzed
+  into the same physical root, spends exactly one click and zero credits,
+  emits deterministic typed movement/click/install events, marks the install,
+  and resumes real TurnFrame action priority.
+- Generalized state/frame checks now enforce the Corp owner, HQ source,
+  existing ServerRoot and exact physical zone, Corp install class/cost,
+  candidate/required/selected sets, frozen candidate definitions, current root
+  membership, and stale topology/resource rejection while retaining Runner
+  invariants. Corp InstallChoice actions remain owner-only; Runner observations
+  receive neither Corp actions nor facedown candidate identities.
+- Added `CorpInstallReplacementTests` for cross-class and multiple mandatory
+  replacement, Region/non-Region behavior, linear bounded action counts,
+  atomic resources/events/final state, unknown metadata, stale movement and
+  classification, forged frame fields, continuation omission/duplication,
+  owner-only observation, and dual-catalog JSON/hash roundtrip. Updated the
+  occupied-root regression in `CorpInstallActionTests` to assert frame entry.
+- Evidence: the new Corp replacement focus passes 9/9; combined
+  `CorpInstallReplacementTests|CorpInstallActionTests|RunnerInstallActionTests`
+  passes 34/34; Core build passes with zero warnings/errors; Core formatter
+  verification passes; and `git diff --check` passes. Root architecture
+  verification reports the integrated Core suite at 370/370.
+- Nonclaims: Corp ICE/protector costs, play/rez/score/advance, remote
+  destruction between trash/install, unique-install gating, broader ENG-405,
+  solution-wide formatter/CI, and commits/pushes remain outside this slice.
+
+### 2026-09-02 — Phase-B B1b2 Corp occupied-root replacement coverage added
+
+- Coverage-only test additions exercise mixed Agenda/Asset mandatory
+  replacement, optional and Region Upgrade selection, atomic final commit
+  events/state, unknown-root metadata fail-closed behavior, dual-catalog
+  pending-frame JSON/hash preservation, allocator-free invariant/materialized
+  projections, Corp-only observation, and stale/forged loaded-state and
+  continuation rejection with unchanged hashes.
+- Evidence: focused `CorpInstallReplacementTests` passes 10/10; the combined
+  `CorpInstallReplacementTests` + `CorpInstallActionTests` +
+  `RunnerInstallActionTests` filter passes 35/35. The test build used the
+  existing in-progress CA1859 analyzer suppression; production acceptance and
+  the final B1b2 gate remain with the primary agent.
+
+### 2026-09-02 — Phase-B B1b2 Corp occupied-root replacement accepted
+
+- Independent Luna Max review found no concrete high- or medium-severity
+  defects in the combined production and test implementation. Root review
+  accepts the single bounded transaction: stable physical-root candidates and
+  their definition identities are frozen in a side-specific Corp frame;
+  exact allocator-free continuation parity governs incremental selection; and
+  trash, zero-credit install, click payment, events, and turn resume occur only
+  at finalization.
+- Root verification passes the replacement/Corp-action/Runner-action focus
+  35/35, the complete Core suite 370/370, Core and Core-test formatter
+  verification, a warning/error-free Core build, and `git diff --check`.
+- Four non-blocking coverage follow-ups remain recorded for later regression
+  hardening: Runner observation after every intermediate Corp selection;
+  occupied central-root Upgrade selection with multiple optional candidates;
+  legacy Runner-frame roundtrip with omitted candidate-definition identities;
+  and CorpDiscard observation containing both facedown and previously faceup
+  replacements. None changes the accepted B1b2 rules boundary.
+- B1b2 is complete. The next install checkpoint is B1b3 Corp ICE installation,
+  outermost topology, optional protector trash, and dynamic remaining-ICE
+  cost. Per user request, the accumulated Slice 4.2 work through B1b2 will be
+  captured in an interim commit after the repository pre-commit gate.
+
+### 2026-09-02 — B1b2 interim-commit gate
+
+- `./scripts/verify.sh` built the complete solution with zero warnings/errors
+  and passed all 554 tests: Core 370, Cards 69, AI 23, CLI 52, and Match 40.
+  Runtime/version, authenticated 77-card source, content-build, and missing or
+  non-opted-in card-data diagnostics also passed.
+- The script stopped at the expected Slice 4.2 coverage gate because ten
+  already compiled Batch-1 declarations still have `unregistered` batch
+  registry status and lack final `GatewayCard` test metadata. The report is
+  therefore 17 compiled registrations but only the prior 7 tested registry
+  entries (5 complete, 2 partial). This is an honest open-slice gate, not a
+  B1b2 regression; declaration binding/tests/report completion remain later
+  Slice 4.2 work.
+- The interim commit is authorized at the completed B1b2 checkpoint despite
+  that expected final-slice coverage failure. No push or PR is part of this
+  checkpoint commit.
+
+### 2026-09-02 — Phase-B B1b3 Corp ICE stream assigned
+
+- Started the bounded Corp basic-ICE install checkpoint on top of the accepted
+  B1b2 root replacement protocol. This stream covers HQ-to-existing-server
+  and explicit-new-Remote ICE choices, outermost placement, optional linear
+  protector trash, dynamic remaining-protector cost, atomic final payment and
+  events, and allocator-free materialization/invariant checks.
+- Root installs, Runner installs, play/rez/score/advance, card-effect and
+  Archives installs, inward insertion, active-run topology changes, and remote
+  destruction remain outside this checkpoint.
+
+### 2026-09-02 — Phase-B B1b3 Corp ICE install accepted
+
+- Completed basic Corp HQ-to-ICE installs for every existing central/remote
+  server and one explicit new-Remote choice. Existing ICE zones preserve their
+  physical innermost-to-outermost order; accepted installs append the incoming
+  facedown/unrezzed ICE outermost. A new-Remote commit allocates exactly one
+  server and its ICE/root zones, places the incoming card in the ICE zone, and
+  leaves the root empty; detached planning and validation allocate nothing.
+- An occupied ICE zone opens the shared serialized Corp `InstallFrame` with
+  every physical protector in order, no mandatory candidates, frozen
+  definition identities, and the exact physical destination. Incremental
+  selection may trash any number; the dynamic credit cost is the number of
+  protectors remaining after the selected set. Unaffordable finalize actions
+  are omitted while cost-reducing candidate actions remain, and zero-cost
+  commits emit no spurious credit event.
+- Generalized Corp frame/action invariants to the ICE destination/class and
+  authoritative remaining-protector cost. Unknown or non-ICE runtime metadata,
+  rebuilt destinations, moved candidates, forged costs, and inexact
+  continuations fail closed without mutation. Runner and Corp-root install
+  invariants remain unchanged.
+- Added `CorpIceInstallTests` covering destination enumeration, empty and new
+  servers, physical ordering, dynamic nonzero/zero cost, affordability-driven
+  finalize visibility, linear selection, exact events/resources, owner-only
+  observation, pending-frame JSON/hash, allocator purity, metadata fail-closed
+  behavior, and stale/forged rejection.
+- Both Luna Max implementation streams reached the environment's usage limit
+  after their production and test edits had landed, so they could not provide
+  normal final handoffs. Root inspected the complete diff, corrected only
+  formatter/test-fixture issues, and found no high- or medium-severity defect.
+- Final evidence: focused Corp-ICE/Corp-root/Runner-install tests pass 45/45;
+  the complete Core suite passes 380/380; Core and Core-test formatter
+  verification passes; Core builds with zero warnings/errors; and
+  `git diff --check` passes.
+- B1b3 is complete. Basic Runner and Corp install topology/cost/replacement is
+  now accepted. Card-effect/Archives/inward installs remain later-slice work;
+  Slice 4.2 next continues ENG-402/403/405 with play, rez, basic run/action,
+  scoring, tag/resource, and purge behavior.
+
+### 2026-09-02 — Phase-B Slice 4.2 ordinary card-play seam assigned
+
+- `/root/slice42_b2_play_core` owns only the production Core seam for typed
+  ordinary Runner Event and Corp Operation play: legal-action projection,
+  serializable play frames, atomic card movement/costs, generic behavior
+  continuation, completion events, play-area topology/observation, and whole-
+  state stale/forged validation. Tests, UI, Match, run-event/install semantics,
+  and card registrations remain outside this assignment.
+
+### 2026-09-02 — Architect contract for ordinary card play
+
+- The primary agent stopped the exploratory Luna pass before production edits
+  and owns the hard design. Luna implementation is constrained to the contract
+  below; it does not choose the state machine, trust boundary, cost source, or
+  run-event interaction.
+- `PlayCardParameters` is the complete turn-action payload: physical card ID
+  plus the frozen nonnegative printed credit cost. The allocator-free play
+  projection walks the active side's physical HQ/Grip order and emits an
+  action only when all of these facts agree: one or more clicks remain; the
+  runtime catalog identifies the card as the same-side Corp Operation or
+  Runner Event and supplies `PlayCost`; the generic behavior catalog contains
+  the same definition with that side as controller; every up-front behavior
+  cost is `Credits`; their checked sum exactly equals `PlayCost`; and current
+  wallet credits cover it. A legacy `RunEventBehaviorSpec` without a generic
+  definition is therefore not an ordinary play action.
+- Accepted play uses stack `[TurnFrame(AwaitingAction), CardPlayFrame,
+  BehaviorResolutionFrame]`. `CardPlayFrame` is version 1 with behavior ID
+  `rules.card-play-26.03` and freezes player/side, card/definition/class,
+  canonical source, play-area and discard zone IDs, printed cost, behavior
+  catalog fingerprint, and definition fingerprint. It is immutable and has a
+  single resolving state; the generic child binds its exact parent through
+  existing `ParentBehaviorId` plus `BehaviorFrameIdentity.Compute(parent)`.
+- Before the child is pushed, the reducer re-materializes and exactly matches
+  the issued action, creates or reuses an empty canonical side play area,
+  spends exactly one action click, moves the card there faceup/unrezzed, and
+  emits typed play-start evidence. The existing generic `PayCosts` stage is
+  the only executor of the printed credit cost. Zero-credit behavior costs
+  must not emit a zero `CreditsAdjusted` event. All work occurs on the normal
+  `WorkingState`, so any later failure rejects without mutating the supplied
+  state.
+- A yielded generic choice serializes all three frames. The played card remains
+  the only card in its public side play area, and the existing choice owner is
+  the only viewer receiving legal actions. Once the generic child pops,
+  `CardPlayFrame` revalidates its frozen topology/catalog facts, moves the card
+  faceup from the play area to the canonical Corp discard or Runner heap,
+  emits typed completion evidence, pops itself, and replaces the underlying
+  turn frame with `ActionPriority` for the active side. This remains true when
+  the play leaves zero clicks; the normal two-pass action-priority path owns
+  transition to forced action-phase end.
+- Add lazy `CorpPlayArea`; retain lazy `RunnerPlayArea`. Both are public,
+  side-owned, serverless, unique-at-most-one zones and are forbidden as
+  prepopulated compact-scenario inputs. Lazy creation preserves existing state
+  topology/hashes. A populated Runner play area is legal either for this exact
+  ordinary-play frame/child topology or for the existing exact live run-event
+  lifecycle, never both. Overclock/run initiation, payment, active-event
+  identity, and run-end trash remain unchanged.
+- Whole-state validation requires the play frame immediately above the matching
+  active-side `TurnFrame(AwaitingAction)` and immediately below its matching
+  generic child. The physical card must match the frozen definition/owner,
+  occupy the frozen correct-side play area faceup/unrezzed, and be its sole
+  member; source/discard IDs must be the canonical side zones. Injected runtime
+  metadata, generic definition/controller, fingerprints, supported credit-only
+  cost sum, printed-cost equality, child source location, and exact parent
+  identity are all rechecked. Turn-action validation compares the serialized
+  play actions bijectively with the same allocator-free projection. Unknown,
+  stale, forged, mismatched, or unsupported data fails closed.
+- Typed event order is fixed for review: `ClickSpent`, hand-to-play-area
+  `CardMoved`, `CardPlayStarted`, nonzero `CreditsAdjusted`, behavior effects
+  and choices, play-area-to-discard `CardMoved`, then `CardPlayCompleted`.
+  Choice-bearing plays split this evidence across accepted submissions without
+  changing the global sequence. This checkpoint does not bind cards, add
+  play UI, implement run actions/rez/scoring, or generalize play to any class
+  beyond ordinary Event/Operation.
+
+### 2026-09-02 — Ordinary card-play checkpoint A contract landed
+
+- Added the typed `PlayCardParameters` action payload, lazy `CorpPlayArea`
+  topology kind, and immutable version-1 `CardPlayFrame` JSON contract with
+  strict frame validation and cloning. Reducers, state invariants, events,
+  observations, scenarios, and tests remain for the follow-up implementation
+  checkpoint.
+
+### 2026-09-02 — Ordinary card-play checkpoint B reducer landed
+
+- Luna implemented the fixed reducer contract without changing its design:
+  allocator-free runtime/behavior-cost-parity projection, typed turn-action
+  dispatch, lazy side play-area creation, one-click/card-move/start ordering,
+  private generic child push, zero-credit event suppression, completion trash
+  and action-priority resume, plus typed start/completion events and their
+  immutable validation/clone surfaces.
+- Root reviewed the reducer line by line. It re-materializes before mutation,
+  leaves generic `PayCosts` as the sole printed-credit executor, binds the
+  child to the exact play parent, and does not touch the run-event reducer.
+  The Luna turn was interrupted only after its patches had landed because its
+  verification phase did not return; root's direct Core build passes with zero
+  warnings/errors and `git diff --check` passes.
+- This checkpoint is not yet behaviorally accepted: whole-state play-frame,
+  play-area/run exclusivity, and TurnAction-bijection validation; public
+  observation/scenario wiring; and focused/full tests remain pending.
+
+### 2026-09-02 — Ordinary card-play checkpoint C invariant/observation surfaces landed
+
+- Added whole-state `CardPlayFrame` checks for canonical side-owned source,
+  discard, and lazy play-area zones; active-side/current-turn parent placement;
+  required generic behavior child; physical card definition/owner/location,
+  faceup/unrezzed, and sole play-area membership; injected runtime metadata;
+  generic definition/controller, catalog/definition fingerprints, checked
+  credit-only up-front cost parity; and child card/controller/acting-player,
+  source location, parent behavior ID, and serialized parent-frame identity.
+  Malformed cost sums and parent identity serialization are reported as
+  violations instead of escaping validation.
+- Added typed `PlayCard` decision validation and allocator-free
+  `TurnAction` play-action bijection checks by physical card ID plus frozen
+  credit cost, including missing, extra, duplicate, stale-cost, and
+  materialization-failure diagnostics. `TurnAction` action-kind messages now
+  include ordinary play.
+- `CorpPlayArea` now has Corp zone semantics and an at-most-one constraint
+  parallel to `RunnerPlayArea`. Populated play areas require their exact
+  active card-play frame; Runner play areas retain the live-run lifecycle and
+  reject ordinary Runner play frames while `RunState` exists. Existing exact
+  active-run-event checks remain in force.
+- Added conditional public `corpPlayArea` CardView exposure for both viewers,
+  while preserving lazy topology and existing conditional Runner exposure.
+  Compact scenarios now recognize Corp play-area ownership but reject either
+  play-area kind as active card-play/run zones.
+- Evidence: `bash -c 'source scripts/env.sh && dotnet build
+  src/Netrunner.Core/Netrunner.Core.csproj --no-restore --nologo'` passed with
+  0 warnings and 0 errors; targeted `dotnet format` completed successfully;
+  `git diff --check` passed.
+- Nonclaims: no reducers, contracts, events, or run reducer were changed in
+  checkpoint C; no focused/full test suite was run in this checkpoint, and
+  card registrations/UI/Match behavior remain outside its scope.
+
+### 2026-09-02 — Ordinary card-play architect review before tests
+
+- Root reviewed checkpoints A–C against the recorded contract. Production
+  projection, mutation order, generic cost ownership, frame/catalog binding,
+  public-zone ownership, TurnAction bijection, and run-event separation match
+  the design. The warning-free Core build and all pre-existing Core tests pass
+  380/380; `git diff --check` remains clean.
+- Test hardening must prove the persisted play stack is exactly Turn/Play/
+  Behavior, not only locally adjacent; reject extra nested frames, forged
+  parent identity/cost/source/class/catalog facts, and orphaned or run-
+  conflicting play areas. No ordinary card-play checkpoint is accepted until
+  those adversarial cases and both side lifecycles pass.
+
+### 2026-09-02 — Ordinary card-play lifecycle tests accepted
+
+- Luna added `OrdinaryCardPlayTests` for physical-order Runner/Corp action
+  projection; no-click, affordability, class, missing-definition, catalog-cost,
+  unsupported-cost, and legacy-run-event exclusions; exact Runner paid/effect/
+  trash event order; zero-cost Corp play without a zero credit event; and a
+  Corp-owned mode choice that persists the public Runner play area and exact
+  three-frame stack across JSON/hash round trip before completing to heap and
+  Runner action priority.
+- Root review corrected two test-fixture defects before acceptance: no-click
+  and unaffordable rows now isolate those predicates instead of also failing
+  catalog cost parity, and the Corp chooser test correctly credits the Runner
+  controller rather than the player who chose the mode. No production behavior
+  changed.
+- Evidence passes: ordinary-play focus 12/12, existing `RunEventTests` 19/19,
+  complete Core 392/392, Core/test formatting, and `git diff --check`.
+  Adversarial forged-state/atomicity coverage remains the final gate for this
+  ordinary-play checkpoint.
+
+### 2026-09-02 — Ordinary card-play adversarial gate accepted
+
+- Luna implemented only the adversarial coverage and the one production
+  hardening authorized by the architect contract. `CardPlayFrame` now requires
+  its bound generic behavior child to be the final/top resolution frame and
+  reports `resolution.card-play-child-not-top` for injected nesting.
+- The added tests prove play-action decision bijection diagnostics for altered,
+  duplicate, missing, and extra actions; atomic rejection when an issued play
+  becomes unaffordable; no-throw, specific diagnostics for forged frozen cost,
+  catalog/definition fingerprints and identities, runtime class, source/play/
+  discard topology, card definition/owner/visibility/rez state, child parent
+  identity, and play-area membership; rejection of populated orphan Corp and
+  Runner play areas; and exclusion of an ordinary Runner play frame during a
+  live run.
+- Root reviewed the production and test changes against the recorded contract.
+  The hardening is local to the ordinary-play stack invariant, preserves the
+  separate legacy run-event lifecycle, and all invalid-input applications
+  checked by the suite return the supplied state with no events.
+- Evidence: `OrdinaryCardPlayTests` passes 19/19; the complete Core suite passes
+  399/399; Core builds with zero warnings/errors; Core/test formatter
+  verification passes; and `git diff --check` passes. The ordinary Event/
+  Operation play primitive is accepted; Batch-1 card bindings remain later
+  Slice 4.2 work.
+
+### 2026-09-02 — Architect contract for basic run actions inside real turns
+
+- Root owns this state-machine and compatibility design. Luna is assigned only
+  its mechanical implementation and tests; it must not choose a second run
+  lifecycle, alter M2 timing, or broaden card-run semantics.
+- Add typed `StartRun` plus immutable `RunServerParameters(ServerId)`. During a
+  Runner `TurnFrame(AwaitingAction)` with at least one click, no live run, and
+  no occupied transient play area, allocator-free projection emits exactly one
+  basic-run action for every existing server in physical `GameState.Servers`
+  order. Corp never receives it. Link and credits are deliberately absent: a
+  basic run costs exactly one click and nothing else.
+- Consumption re-materializes the complete current run set and exactly matches
+  the issued server ID before mutation. It spends one Runner click, then uses a
+  single shared internal M2 run-start routine to create the same `RunState`,
+  `RunTimingFrame`, first priority decision, and `RunInitiated` evidence as the
+  existing public `BeginRunWithEvents` boundary. Do not duplicate run setup.
+  Event order begins `ClickSpent`, then `RunInitiated`; no synthetic credit or
+  link event is emitted.
+- The persisted action lifecycle is exactly `[TurnFrame(AwaitingAction),
+  RunTimingFrame]` while the ordinary basic run is active. The run frame is the
+  top frame and retains all existing M2 timing/choice semantics. The no-source
+  basic action must not populate `RunnerPlayArea`, `InitiatingSource`, or
+  `ActiveRunEventId`. Standalone public `BeginRun*` remains exactly the legacy
+  one-frame boundary and registered run-event behavior remains unchanged.
+- `CompleteRun` detects the matching real-turn parent after popping its run
+  child and replaces that parent with Runner `ActionPriority`, even when the
+  run spent the final click. The normal two-pass turn window then decides
+  whether another action is available or the phase ends. Standalone M2 runs
+  still finish with an empty stack and no new turn decision.
+- A real-turn run uses the CR victory threshold of seven agenda points. An
+  automatic steal during such a run completes `RunEnded` first and then uses
+  the real-turn terminal cleanup. Existing standalone M2 fixtures retain their
+  three-point compatibility threshold and event ordering; this compatibility
+  rule is contextual to presence of the exact real-turn parent, not inferred
+  from mutable catalog or caller flags.
+- Whole-state validation accepts only the two explicit run topologies: one
+  standalone matching `RunTimingFrame`, or the exact Runner Turn/Run nesting
+  above. A nested basic run requires current active Runner/turn number,
+  `AwaitingAction`, null source/event, and matching top run frame; extra,
+  reordered, Corp, stale, or card-sourced nesting fails closed. TurnAction
+  validation compares run actions bijectively with the same allocator-free
+  projection and emits run-specific missing/extra/duplicate diagnostics.
+- Tests must cover both-side action projection, all physical servers/order,
+  exact click/event/stack initiation, mid-run JSON/hash roundtrip, action-
+  priority resumption with and without remaining clicks, forged and stale
+  decision atomic rejection, invalid nested topology without validator throws,
+  real-turn seven-point win/non-win boundaries, and unchanged standalone M2
+  run/run-event tests. No rez redesign, run-event turn action, card binding,
+  UI, Match, scoring action, tags, purge, or broader run primitive belongs to
+  this checkpoint.
+
+### 2026-09-02 — Basic-run action verification
+
+- Added focused `BasicRunActionTests` for both-side projection in persisted
+  server order, transient play-area exclusion, exact click/event/stack
+  initiation, mid-run JSON/hash continuation, action-priority resumption with
+  remaining and final clicks, forged/missing/extra/duplicate/wrong/stale
+  decisions with atomic rejection, malformed nested topology diagnostics, and
+  real-turn seven-point automatic-steal boundaries. The nested-source case
+  explicitly verifies that non-null initiating source/event data is diagnosed
+  without a validator throw and rejects atomically. Standalone BeginRun smoke
+  coverage remains in the same focused suite; existing RunEvent coverage was
+  retained.
+- Removed the unused `MaterializeStartRunParameters` alias. No other
+  production behavior was changed during this verification pass; one
+  whitespace-only indentation defect exposed by formatter verification was
+  corrected.
+- Evidence: `BasicRunActionTests` 12/12, `RunTimingTests` 11/11,
+  `RunEventTests` 19/19, `BreachAccessTests` 24/24, and the complete Core
+  suite 411/411. Core builds with zero warnings/errors; Core and focused-test
+  formatter verification pass; `git diff --check` passes.
+- Nonclaims: this checkpoint does not add rez redesign, run-event turn
+  actions, card bindings, UI/Match changes, scoring actions, tags, purge, or
+  broader run primitives.
+
+### 2026-09-02 — Basic-run action architect acceptance
+
+- Root reviewed the shared start routine, typed action projection/dispatch,
+  exact nested topology checks, completion continuation, contextual victory
+  branch, and all focused tests against the preceding architect contract. The
+  implementation has one run lifecycle: the new turn action and legacy public
+  boundary converge before `RunState` creation and diverge only at the
+  explicitly validated parent/continuation boundary.
+- Root corrected two test-contract mistakes during review: a one-point agenda
+  added to six points must win, and removing a Turn parent produces the valid
+  standalone topology rather than a distinguishable malformed state. An
+  explicit non-null source/event nesting forgery now covers the invalid case.
+- Independent evidence: combined BasicRun/RunTiming/RunEvent/BreachAccess
+  coverage passes 66/66; complete Core passes 411/411; Core builds with zero
+  warnings/errors; formatter verification and `git diff --check` pass. The
+  basic one-click run action inside a real Runner turn is accepted.
+
+### 2026-09-02 — Architect contract for real advance and score actions
+
+- Root owns the hard timing and trust-boundary design below. Luna will receive
+  these decisions as an implementation contract and must not choose alternate
+  payloads, put scoring in the click-action prompt, reuse toy reducers, or add
+  score/steal triggers.
+- Add `RealGameRules.AgendaPointsToWin = 7` and replace the basic-run literal
+  with that single authority. Preserve `ToyRules.AgendaPointsToWin = 3` only
+  for standalone M1/M2 compatibility. Add immutable typed
+  `AdvanceCardParameters(CardId, CreditCost)` and
+  `ScoreAgendaParameters(CardId, AgendaPoints, AdvancementRequirement)`;
+  `CreditCost` is exactly one for this basic action. Keep legacy
+  `AdvanceAgenda`/card-choice and `ScoreAgenda`/card-choice toy actions intact;
+  use new `AdvanceCard` for the real click action and the existing
+  `ScoreAgenda` kind with its new typed score payload in real turn timing.
+- Runtime metadata is the sole printed-data authority in this checkpoint.
+  Allocator-free advance projection exists only in a Corp
+  `TurnFrame(AwaitingAction)` with a click and credit, and walks physical
+  `GameState.Servers` order then each physical root order. It emits installed,
+  Corp-owned, facedown/unrezzed runtime Agendas in any remote root, including
+  agendas already at or above their requirement: overadvancement is legal.
+  This checkpoint deliberately does not make non-agenda cards advanceable;
+  explicit advanceable-card metadata arrives with the owning later batch.
+- Accepted advance re-materializes the full current set, spends exactly one
+  click and one credit, checked-increments the counter, emits the existing
+  typed `AgendaAdvanced` evidence using the authoritative requirement, and
+  resumes Corp `ActionPriority`. Exact evidence order is `ClickSpent`,
+  `CreditsAdjusted`, `AgendaAdvanced`; the supplied state remains untouched on
+  any stale/overflow/resource failure.
+- Scoring is never a TurnAction. It is materialized alongside Pass only for
+  the Corp holder of the Corp `ActionPriority` `PaidRezAndScore` window. It
+  walks the same physical server/root order and offers only installed Corp
+  runtime Agendas whose counters meet or exceed their positive requirement.
+  Score payload points/requirement must exactly match the injected runtime
+  catalog; no behavior registration is required merely to score printed
+  agenda metadata.
+- Accepted scoring re-materializes the current score set, spends no click or
+  credit, moves the agenda faceup/unrezzed from its server root to canonical
+  `CorpScore`, adds its positive printed points, and emits `CardMoved` then
+  `AgendaScored`. If the total is at least seven, real-turn terminal cleanup
+  emits `GameWon` last. Otherwise it restarts the Corp action-priority window
+  with Corp as holder and zero passes. If movement leaves a remote with both
+  root and ICE empty, remove that remote and its two empty zones atomically;
+  retain the server when either zone still contains a card.
+- Pending TurnAction validation compares real advance actions bijectively with
+  the advance projection. Pending TurnTiming validation retains exactly one
+  Pass and compares score actions bijectively with the score projection.
+  Missing, extra, duplicate, wrong-payload, forged cost/points/requirement,
+  unknown target, stale counters/topology/resources, catalog mismatch, and
+  invalid timing owner/window all fail closed before mutation with specific
+  advance/score diagnostics. Projections consume no allocator state.
+- Tests must prove physical ordering and side/phase/window/resource/class/
+  topology exclusions; overadvancement; exact advance and score event/resource
+  sequences; pending-score JSON/hash roundtrip; nonterminal window restart;
+  six-to-seven and below-seven outcomes; empty-versus-protected/occupied remote
+  cleanup; forged/stale decision atomicity and no-throw validation; and full
+  toy, turn, install, play, and basic-run regression safety. Rez, non-agenda
+  advanceability, score/steal triggers, Runner steals, card bindings, UI, and
+  Match remain outside this checkpoint.
+
+### 2026-09-02 — Real advance/score implementation and adversarial evidence
+
+- Added the fixed real-turn advance and score payloads, runtime-catalog-backed
+  allocator-free projections, Corp turn-action/timing dispatch, exact resource
+  and typed-event reducers, nonterminal priority-window restart, seven-point
+  real-turn victory branch, and empty-remote cleanup. Legacy toy
+  `AdvanceAgenda`/`ScoreAgenda` card-choice reducers remain separate.
+- Focused `RealAdvanceScoreTests` now cover two-remote physical ordering with a
+  deliberately reversed root-card list, overadvancement, all requested context,
+  resource, topology, owner, class, face-up, rezzed, and requirement
+  exclusions, exact event/resource/zone outcomes, score JSON/hash roundtrip,
+  terminal and nonterminal scoring, separate ICE-only and root-card-only remote
+  retention, and forged missing/extra/duplicate/wrong/stale/cost/points/
+  requirement decisions. Invalid pending states are checked for specific
+  diagnostics, no validator throw, same-state rejection, and empty events.
+- Evidence: the final `RealAdvanceScoreTests` run passed 15/15; the focused
+  Turn/Toy/Install/Play/BasicRun selection passed 124/124; before the final
+  overflow-only test was appended, the complete Core suite passed 425/425,
+  Core build with warnings as errors passed with 0 warnings and 0 errors, Core
+  and Core-test `dotnet format --verify-no-changes` passed, and
+  `git diff --check` passed.
+- Nonclaims: this checkpoint does not add rez redesign, non-agenda
+  advanceability, score/steal triggers, Runner steals, card bindings, UI,
+  Match, or broader run primitives. Full solution/Godot/card-data verification
+  is not claimed here.
+
+### 2026-09-02 — Real advance/score architect acceptance
+
+- Root reviewed the final reducer, projection, dispatch, invariant, and test
+  diff against the preceding contract. The implementation preserves the toy
+  agenda path, trusts only injected runtime printed values, keeps scoring out
+  of the click-action prompt, restarts nonterminal Corp priority correctly,
+  and removes a remote only when both of its physical zones are empty.
+- Root required and reviewed additional adversarial rows for face-up/rezzed
+  cards, wrong timing holder/window, physical order across multiple remotes,
+  separate ICE/root remote-retention cases, missing/extra/duplicate and frozen
+  cost/points/requirement forgeries, stale metadata/resources/topology, the
+  complete post-action event tails, and checked counter overflow. Invalid
+  inputs reject with the supplied state instance, no events, and no validator
+  exception.
+- Independent final evidence after the overflow row landed:
+  `RealAdvanceScoreTests` passes 15/15; the complete Core suite passes 426/426;
+  Core builds with zero warnings/errors; Core/test formatter verification and
+  `git diff --check` pass. The real agenda advance/score checkpoint is
+  accepted.
+
+### 2026-09-02 — Architect contract for runtime-catalog rez actions
+
+- Root owns the hard rez timing, compatibility, printed-cost, and event design
+  below. Luna is limited to implementing this fixed contract and its tests; it
+  must not replace M2 run timing, infer card classes or costs from behavior
+  text, expose hidden Corp identities, or introduce derez/trigger behavior.
+- Add immutable `RezCardParameters(CardId, CreditCost)` and a new
+  `ActionKind.RezCard`. The frozen nonnegative cost must equal the injected
+  `CardRuntimeSpec.RezCost` at validation and consumption. Retain the existing
+  `RezIce`/`RunIceParameters` path only for runtime-catalog-free standalone M2
+  compatibility; a runtime-catalog-backed decision uses `RezCard` and never
+  emits a second legacy rez action for the same ICE.
+- A turn-timing rez is materialized alongside Pass (and any legal Score) when
+  the priority holder is Corp in either `PaidRezAndScore` or `PaidAndRez`.
+  This is independent of whose turn it is. It walks physical server order and
+  each physical root order, offering installed Corp-owned, unrezzed runtime
+  Assets and Upgrades whose printed rez cost is present and affordable. It
+  accepts both facedown newly installed cards and faceup derezzed cards, and
+  rejects agendas, ICE outside an approach, wrong/missing zones or metadata,
+  Runner-owned cards, and already-rezzed cards.
+- A runtime-catalog-backed run decision uses the persisted capability flags.
+  When `CorpMayRezApproachedIce` is true, only the exact current approached
+  ICE may be offered, and only if it is the Corp-owned unrezzed runtime ICE at
+  the current index of the attacked server's ICE zone. When
+  `CorpMayRezNonIce` is true, the same physical Asset/Upgrade root projection
+  is offered. Projection order is physical server order, and within a server
+  the eligible approached ICE precedes that server's physical root cards.
+  No other ICE can be rezzed. Corp must hold priority and afford each card.
+- Consumption re-materializes the complete current rez set before mutation.
+  It pays exactly the frozen printed credit cost, suppressing a zero-credit
+  adjustment event, then replaces the installed card with the same physical
+  identity/location/owner/counters but `FaceUp=true` and `Rezzed=true`, and
+  emits a new typed `CardRezzed(CardId, CreditCost)` event. No behavior child,
+  activation effect, trigger, click, or topology mutation belongs here.
+- A successful rez resets consecutive passes to zero, retains Corp priority in
+  the same turn/run window, disables only the consumed approached-ICE rez
+  capability for that ICE, and yields a fresh decision. Exact evidence is an
+  optional nonzero `CreditsAdjusted`, then `CardRezzed`, then the existing
+  matching timing-window-opened event. Other eligible rez and score actions
+  are freshly reprojected. A later external derez represented by
+  `FaceUp=true/Rezzed=false` is eligible to be re-rezzed.
+- TurnTiming and RunTiming invariant validation compare typed runtime rez
+  actions bijectively with the same allocator-free projections. They diagnose
+  missing, extra, duplicate, wrong-payload, unknown target, frozen-cost
+  mismatch, stale credits/rez state/topology/capability, and catalog failures
+  without throwing. Observation continues to expose legal actions only to the
+  Corp decision owner; the opponent learns a formerly hidden card definition
+  only after accepted rez makes it faceup.
+- Tests must cover Corp priority during both sides' turns; both turn window
+  kinds; physical multi-server/root order; zero/nonzero payment and exact
+  event tails; same-window/same-holder continuation; faceup derezzed re-rez;
+  all class/owner/zone/metadata/affordability exclusions; run approached-ICE
+  and non-ICE flags/order; a non-current ICE exclusion; JSON/hash roundtrip;
+  allocator purity; stale/forged decision atomicity/no-throw diagnostics; and
+  unchanged standalone M2 run/trace/hash behavior. Derez actions, rez effects,
+  paid abilities, triggers, uniqueness cleanup, card bindings, UI, and Match
+  remain outside this checkpoint.
+
+### 2026-09-02 — Runtime-catalog rez implementation/evidence
+
+- Implemented the fixed runtime rez contract in `ActionContracts`, typed event
+  serialization/validation, `GameEngine.Rez`, turn/run dispatch, and invariant
+  projection. Runtime-backed decisions use `RezCard` with frozen printed costs;
+  runtime-null standalone M2 `RezIce` behavior remains available.
+- Added focused coverage for both turn windows and physical ordering, payment
+  and event tails, same-window continuation, face-up derezzed re-rez, run ICE
+  and non-ICE capabilities, secrecy/observation, exclusions, round trips,
+  forged actions, stale topology, and catalog compatibility. The focused
+  `RuntimeRezActionTests` filter passes 16/16, and the combined rez/run timing
+  regression filter passes 103/103.
+- Evidence also includes a zero-warning/error Core build, solution formatter
+  verification, and `git diff --check`. This checkpoint does not claim derez,
+  rez effects/triggers, paid abilities, UI, Match integration, or full
+  Godot/card-data verification.
+
+### 2026-09-02 — Runtime-catalog rez architect acceptance
+
+- Root reviewed the action/event schema, turn and run projections, reducer,
+  runtime-versus-legacy dispatch, decision bijections, secrecy boundary, and
+  final tests. During review, root corrected the topology design explicitly:
+  Assets are rezzable only from Remote roots, while Upgrades may be rezzed
+  from central or Remote roots. Luna applied that fixed rule and added the
+  central-Asset exclusion; no test relies on an illegal central Asset as a
+  positive fixture.
+- The runtime path freezes and rechecks printed cost, preserves physical
+  order, retains Corp priority with reset passes, exposes a formerly hidden
+  definition only after the accepted faceup transition, and never co-issues
+  legacy `RezIce`. Runtime-catalog-free standalone M2 retains its original ICE
+  cost/action/event path. Stale topology, catalog, credits and rez state plus
+  malformed/missing/extra/duplicate/cost-forged turn and run sets reject
+  without validator exceptions, mutation, or events.
+- Independent final evidence: `RuntimeRezActionTests` passes 16/16; the
+  combined runtime-rez, `RunRezCost`, `RunTiming`, `RunTimingTrace`, and
+  `RunEvent` gate passes 69/69; complete Core passes 442/442; Core builds with
+  zero warnings/errors; full-solution formatter verification and
+  `git diff --check` pass. The bounded runtime-catalog rez checkpoint is
+  accepted.
+
+### 2026-09-02 — Architect contract for remaining tag/resource/purge basic actions
+
+- Root owns the action-cost, state, counter, observation, and trust-boundary
+  design below. Luna is assigned only its mechanical implementation and tests;
+  it must not infer resource class from card text/behavior, reinterpret losing
+  clicks as spending clicks, add tag avoidance, or broaden counter cleanup.
+- Add immutable action-specific payloads:
+  `RemoveTagParameters(ClickCost, CreditCost)`,
+  `TrashTaggedResourceParameters(CardId, ClickCost, CreditCost)`, and
+  `PurgeVirusCountersParameters(ClickCost)`, with new matching action kinds.
+  Authoritative constants are remove-tag `1 click + 2 credits`, tagged-resource
+  trash `1 click + 2 credits`, and purge `3 clicks`. Pending validation and
+  consumption require the frozen values to equal those constants exactly;
+  callers still submit only an issued action ID.
+- Remove-tag is a Runner `TurnFrame(AwaitingAction)` option only when the
+  Runner has at least one standard tag in `RulesState`, at least one click,
+  and at least two credits. Missing `RulesState` means zero tags, not an
+  implicit tagged state. Accepted removal re-materializes, spends one click,
+  pays two credits, removes exactly one tag through the existing checked tag
+  primitive, then resumes Runner ActionPriority. Exact evidence is
+  `ClickSpent`, `CreditsAdjusted`, `TagsAdjusted(-1)`, and the fresh
+  `TurnTimingWindowOpened` tail.
+- Tagged-resource trash is a Corp `TurnFrame(AwaitingAction)` option only when
+  the Runner has at least one standard tag and Corp has one click plus two
+  credits. Runtime metadata is the sole class authority. Projection walks the
+  canonical RunnerRig physical card order and offers only cards that agree in
+  every layer: physical membership/location, Runner ownership, faceup and
+  unrezzed installed state, and an injected Runner `Resource` runtime spec.
+  Accepted trash re-materializes the whole target set, spends one Corp click,
+  pays two credits, moves the selected card to canonical RunnerHeap (whose
+  existing move boundary preserves public faceup state), and resumes Corp
+  ActionPriority. Exact evidence is `ClickSpent`, `CreditsAdjusted`,
+  `CardMoved`, then `TurnTimingWindowOpened`. Resource abilities, hosted state,
+  and card-counter cleanup are later owning primitives.
+- Purge is a Corp `TurnFrame(AwaitingAction)` option whenever Corp has at least
+  three clicks, even when no virus counter exists and whether or not optional
+  `RulesState` has previously been materialized. Accepted purge re-materializes
+  and spends exactly three clicks through the ordinary spend-click boundary,
+  producing three ordered `ClickSpent` events with each remaining-click value.
+  It then ensures default RulesState exists, removes every physical
+  `CardCounterState` whose case-sensitive name is `virus`, preserves all other
+  counter records/order, and emits one `VirusPurged` payload whose
+  `CountersRemoved` is the checked sum of removed token counts (not the number
+  of records). It resumes Corp ActionPriority, so the timing-window event is
+  last. A total that cannot fit the existing integer payload rejects atomically.
+- All three projections require the exact active real-turn action topology,
+  no live run, and no occupied transient play area. They allocate nothing.
+  TurnAction issuance has deterministic existing base/install/play/run/advance
+  ordering followed by the applicable new action(s); tagged-resource targets
+  retain rig order. TurnAction invariants compare each new typed family
+  bijectively with the same projection and diagnose missing, extra, duplicate,
+  wrong payload/cost/target, stale tags/clicks/credits/card location/metadata,
+  and materialization failures without throwing.
+- Standard tag count is public information. When `RulesState` exists,
+  `ObservationBuilder.PlayerView` adds each player's nonnegative `tags` value;
+  legacy observations without RulesState retain their prior byte shape.
+  Decision actions remain visible only to their owner; no hidden hand/deck
+  identity is exposed.
+- Tests must cover both-side projection and action ordering; exact thresholds
+  and one-below exclusions; multi-tag single removal; physical resource order
+  and all owner/class/visibility/rez/location/catalog exclusions; exact
+  resources/zones/events; purge with zero and multiple virus records plus
+  preserved non-virus counters and corrected token total; null-RulesState
+  purge; JSON/hash and allocator purity; public tag observation; all stale and
+  forged decision families with same-state/no-events/no-throw rejection; and
+  turn/install/play/run/effect compatibility. Tag gain/avoidance, hosted-card
+  cleanup, resource abilities, UI, Match, agent policy, and card bindings are
+  outside this checkpoint.
+
+### 2026-09-02 — Tag/resource/purge implementation and architect acceptance
+
+- Luna implemented the three fixed action families without changing the root
+  design: typed/frozen payloads and constants, allocator-free projections,
+  deterministic TurnAction issuance, atomic reducers, public standard-tag
+  observation, and exact decision-family validation. The purge reducer reuses
+  the shared effect primitive; that primitive now reports the checked sum of
+  removed virus tokens rather than the number of counter records and preserves
+  every non-virus counter in order.
+- Root reviewed the production paths and required a second adversarial pass.
+  That pass added both-side thresholds and action ordering, physical resource
+  order plus owner/visibility/rez/location/runtime-class exclusions, allocator
+  purity, all three pending-payload JSON/hash round trips, public tags for both
+  viewers with the null-RulesState legacy shape retained, wrong payload/cost and
+  missing/extra/duplicate decision families, stale wallet/tag/card/catalog
+  rejection, and checked purge-total overflow. Root caught and returned three
+  transient test merge artifacts, one analyzer return-type issue, and one
+  two-resource selector mistake; no production correction was required.
+- Independent final evidence: the combined `RealBasicActionTests` and
+  `RulesEffectsTests` gate passes 22/22; complete Core passes 451/451; the Core
+  test project builds with zero warnings/errors; solution formatter
+  verification and `git diff --check` pass. The bounded remaining-basic-action
+  checkpoint is accepted. Tag avoidance/gain, hosted cleanup, resource
+  abilities, UI, Match, agent policy, and card bindings remain outside it.
+
+### 2026-09-02 — Architect contract for authenticated runtime composition and ten-card lifecycle gate
+
+- Root owns this composition and evidence design. Luna may implement only the
+  fixed mappings and tests below; it must not interpret card text, couple
+  runtime metadata to behavior coverage, silently admit incomplete metadata,
+  or claim Mutual Favor/Seamless Launch complete in this checkpoint.
+- Add a Cards-owned static `GatewayRuntimeCardCatalog` composition root whose
+  methods return Core's concrete immutable `RuntimeCardCatalog`; the Cards
+  layer must not wrap the catalog or retain/expose the source dataset or rules
+  text through the engine dependency.
+  `Create(CardDataSet)` revalidates the supplied normalized dataset and builds
+  exactly one `CardRuntimeSpec` for every supplied definition, independent of
+  whether executable behavior exists. Its stable version is
+  `gateway-runtime-v1-<manifest commitSha>` and its existing Core fingerprint
+  remains the content identity. `CreateEmbedded()` is only a convenience over
+  the already authenticated offline `CardDataResource`; neither path performs
+  I/O or network access after the dataset has been loaded.
+- Mapping is exhaustive and ordinal over normalized tokens: corp/runner map to
+  their exact sides; identity, agenda, asset, upgrade, ice, operation, event,
+  program, hardware, and resource map to the matching runtime classes. Cost is
+  required and becomes PlayCost for Operation/Event, RezCost for
+  Asset/Upgrade/ICE, and InstallCost for Program/Hardware/Resource. Agenda
+  points and advancement requirement are both required only for Agenda;
+  program memory cost is required only for Program; printed trash cost is
+  required only for Asset/Upgrade. Applicable missing/negative or forbidden
+  metadata fails with a Cards-layer validation exception naming the card code.
+  Identities carry none of those fields. Subtype keys come only from normalized
+  metadata through a lexical, non-semantic key conversion: invariant lowercase,
+  runs of spaces become one hyphen, existing ASCII letters/digits/hyphens are
+  retained, and every other character, empty result, or post-conversion
+  duplicate fails closed. Thus `Code Gate`, `G-mod`, and `AI` become
+  `code-gate`, `g-mod`, and `ai`. A console is exactly Runner Hardware with the
+  resulting `console` subtype and receives the single stable `runner-console` key.
+  Uniqueness comes only from normalized `Uniqueness`; its whitespace-safe key
+  is `unique-title-sha256:<lowercase SHA-256 of the exact normalized UTF-8
+  title>`, so equal normalized names converge without putting titles in engine
+  identifiers. No title, code, or rules text determines class/cost/effects.
+- The existing typed declarative condition gains an optional explicit subject
+  side for standard `Tagged`/`NotTagged` only. Omitted subject preserves the
+  controller-relative behavior and its existing definition fingerprint bytes;
+  an explicit subject is serialized, compared, fingerprinted, and evaluated
+  against that side's player/rules state. Predictive Planogram must use
+  `Tagged(PlayerSide.Runner)`, proving Corp tags cannot unlock `both` while one
+  Runner tag does. This additive correction is the only Core behavior-contract
+  change in this checkpoint.
+- Add real action-lifecycle evidence for the ten already executable Batch-1
+  declarations, using `GatewayBehaviorCatalog` plus runtime specs compiled from
+  normalized metadata. Event/Operation tests enter through real TurnAction
+  `PlayCard`; T400 enters through real Runner `InstallCard`. Prove printed costs
+  are paid once, play-area/heap-or-Archives cleanup, exact credit/click/draw
+  results, Creative Commission/VRcation post-play conditional click loss,
+  Wildcat's Corp-owned choice with Runner-owned result, Sprint's private exact
+  HQ selection/shuffle, Hansei's private mandatory-if-able trash and empty-HQ
+  continuation, Planogram's untagged/tagged option sets and both orders, and
+  T400's active +1 MU/+1 maximum-hand projections after its paid install.
+  Every yielded choice must round-trip JSON/hash and remain visible only to its
+  owner; opponent observations must not reveal HQ/Grip/Deck identities.
+- Runtime composition tests cover every supplied definition, deterministic
+  input reordering/fingerprint equivalence, all ten type mappings, uniqueness/
+  console keys, required-field failures, duplicate definitions, and the
+  synthetic and official embedded modes without weakening the official opt-in
+  boundary. Lifecycle tests receive positive card-test metadata only after the
+  real path passes. Mutual Favor and Seamless Launch remain explicitly blocked:
+  their search-to-authoritative-install and required-target play-legality
+  contracts are the next root-owned design checkpoint.
+
+### 2026-09-03 — Authenticated runtime composition and ten-card lifecycle accepted
+
+- Luna implemented the fixed Cards composition root, explicit condition
+  subject, and ten-card real-lifecycle evidence. Root reviewed the mappings,
+  provenance/fingerprint boundaries, condition byte compatibility, action
+  entry points, choice ownership, events, and cleanup paths. The resulting
+  `GatewayRuntimeCardCatalog` returns Core's immutable runtime catalog from
+  either an already authenticated dataset or the embedded authenticated
+  resource; it maps all supplied definitions independently of behavior
+  coverage and retains no rules text or dataset object.
+- Root's adversarial review found two production gaps that the positive tests
+  exposed. Multi-card behavior selection was resolving every subsequent move
+  against the first card's stale transient-zone snapshot; selection now
+  resolves the current set-aside zone for every card, with a Core regression.
+  A mandatory choice with an authoritative empty candidate set was skipped but
+  a later `ChosenCard` instruction still failed. Empty finalization now removes
+  the projected `Choose`, appends an explicit empty choice continuation, and
+  permits only that proven-empty selector to resolve as an empty no-op; missing
+  or forged bindings still reject atomically. Root also corrected test setup
+  errors around real T400 install finalization and Hansei's nonempty deck
+  precondition before accepting the checkpoint.
+- Predictive Planogram now explicitly tests Runner tags. That additive
+  serialized subject changed the interim behavior-catalog fingerprint to
+  `a74c26c41c2262d9aacfbdedb61c781045d2d344efbc61b2d9c40425b09af15d`;
+  both checked-in SIM fixtures carry that provisional value and must be
+  refreshed again when the two remaining declarations land.
+- Independent final evidence: the focused Core behavior gate passes 29/29;
+  the focused Cards runtime/lifecycle/batch gate passes 24/24; complete Cards
+  passes 88/88; complete Core, AI, CLI, and Match pass 455/455, 23/23, 52/52,
+  and 40/40 respectively. Full-solution formatter verification and
+  `git diff --check` pass. The composition/ten-card checkpoint is accepted.
+
+### 2026-09-03 — Architect contract for Seamless Launch and Mutual Favor
+
+- Root owns this remaining Slice 4.2 design. Work is staged deliberately:
+  Luna first implements the shared target/precondition seam and Seamless
+  Launch; only after root review does Luna implement Mutual Favor on the
+  root-designed authoritative install handoff. Luna must not invent free
+  installs, infer subtypes from text/behavior coverage, move an installed
+  target into the transient zone, or weaken stale/forged validation.
+- A declaration's top-level `Targets` are conjunctive play preconditions for
+  ordinary Event/Operation `PlayCard`. Every target must materialize at least
+  one candidate both when actions are projected and when the submitted turn
+  action is revalidated, before clicks, credits, zones, or events mutate. The
+  preconditions are not re-applied after `CardPlayFrame` entry because a
+  behavior may legitimately consume or move its target. No-target cards are
+  absent from the issued action set; stale target availability rejects the
+  formerly issued action atomically.
+- Installed target contracts may carry an owner filter. Dynamic selection of
+  an installed/public target freezes its identity in the behavior binding but
+  does not move it to set-aside; only zone/search selections use the transient
+  custody path. `AdvanceCard(ChosenCard)` is valid when the frozen chosen card
+  still satisfies its original installed-target selector. Seamless Launch is
+  a Corp Operation costing its printed one credit, with a top-level and
+  mandatory exactly-one `InstalledCardNotThisTurn(owner: Corp)` target. Its
+  chosen card remains installed, is revalidated for Corp ownership/location
+  and absence from Corp's installed-this-turn facts, then gains exactly two
+  advancement counters through the existing checked primitive/event. Tests
+  cover projection/no-target exclusion, owner/location/installed-this-turn
+  filtering, physical non-movement during choice, exact cost/counters/events,
+  save-load/hash, observation ownership, and stale/forged atomic rejection.
+- Runtime metadata is authoritative for behavior card filters whenever an
+  injected runtime catalog exists. Exact card classes match their runtime
+  class; `Icebreaker` means Runner `Program` with normalized `icebreaker`
+  subtype; an optional subtype filter is ordinal against runtime subtypes.
+  The existing behavior-catalog classification remains only as a catalog-free
+  Core-fixture fallback. Mutual Favor searches canonical Runner Stack for one
+  runtime Program/Icebreaker, reveals the selected card, shuffles it back into
+  Stack deterministically, then adds it to Grip unless Runner made a successful
+  run this turn. After such a run it offers Grip and, only when currently
+  legal, Install. Search/disposition decisions are Runner-private and preserve
+  binding, JSON/hash, and catalog provenance across save/load.
+- Mutual's Install instruction never uses the provisional direct transfer.
+  It opens the ordinary install pipeline with an additive persisted
+  `BehaviorEffect` initiation kind and an exact serialized identity of its
+  parent behavior frame. The only admitted topology is Turn, CardPlay,
+  BehaviorResolution, then its one owned InstallFrame. Its frozen card must be
+  the current `chosen` binding, be a runtime Program in canonical Runner Stack,
+  and target Runner Rig. It spends no additional click but pays the printed
+  install cost exactly once, applies ordinary uniqueness/console, MU,
+  replacement, installed-this-turn, static-modifier, move, and CardInstalled
+  semantics, then verifies/restores the exact parent and advances the behavior
+  cursor once. Existing basic installs retain their click/source/topology and
+  serialized behavior.
+- Mutual's Install disposition option is materialized only if that owned
+  install plan has at least one legal completion: authoritative metadata and
+  source agree, printed cost is affordable, uniqueness permits it, and memory
+  can be made legal through the normal replacement choice. The option is
+  revalidated when consumed; forged or stale option/binding/source/catalog/
+  parent state rejects atomically. If install is unavailable, Grip remains the
+  sole disposition. Tests cover search filtering and privacy, reveal/shuffle,
+  unsuccessful-run automatic Grip, successful-run option sets, decline,
+  unaffordable/unique/MU exclusions, paid no-extra-click authoritative install,
+  over-memory replacement, installed facts/modifiers, every yielded
+  save-load/hash boundary, and stale/forged trust boundaries.
+- Once both declarations pass root review, remove only their explicit blocked
+  IDs, require all 12 Batch-1 declarations, refresh the checked-in SIM behavior
+  fingerprint, run focused and complete solution gates, then regenerate the
+  Slice 4.2 coverage evidence before the completion commit/PR workflow.
+
+### 2026-09-03 — Seamless Launch target/precondition checkpoint accepted
+
+- Luna implemented the bounded shared target seam and Seamless declaration
+  from root's contract. Top-level behavior targets now gate ordinary play at
+  allocator-free action projection and at the pre-mutation submitted-action
+  revalidation boundary. Installed selectors accept only the explicit owner
+  filter in this slice; installed choices retain physical custody and freeze
+  only their card IDs. `AdvanceCard(ChosenCard)` reconstructs the originating
+  catalog choice and continuation, requires an installed-target selector, and
+  re-materializes it before applying counters rather than trusting the binding
+  or current zone alone.
+- Root interrupted the initial worker pass after production/Core changes
+  stopped making observable progress, independently ran the partial gate, and
+  returned a test-only correction contract. Luna then added the missing real
+  Gateway lifecycle and adversarial origin evidence. Root reviewed the final
+  production diff, removed acceptance dependence on a bare happy path, and
+  verified that Seamless pays one click and one credit once, exposes only the
+  Corp-owned target decision, never sets the installed target aside, places
+  exactly two counters with `BehaviorCardAdvanced`, and cleans the operation
+  to Archives. No-target, wrong-owner, moved, and installed-this-turn cases are
+  excluded or reject atomically; a reachable non-installed origin cannot
+  authorize chosen-card advancement.
+- Seamless Launch is now the eleventh immutable Batch-1 generic declaration
+  and only Mutual Favor remains explicitly blocked. Independent evidence:
+  focused Core behavior/contracts/play passes 53/53; focused Cards batch and
+  lifecycle passes 18/18; complete Core passes 460/460; complete Cards passes
+  91/91; full-solution formatter verification and `git diff --check` pass.
+  The combined behavior fingerprint remains provisional until Mutual Favor is
+  registered, so the SIM pins are intentionally not refreshed at this point.
+
+### 2026-09-03 — Mutual Favor hidden-search architecture amendment
+
+- Root reviewed the current Search cursor against authenticated CR 8.7.2e,
+  8.7.3, and 8.7.4 before delegating the final card declaration. A deck search
+  with specified criteria must let its controller fail to find even when a
+  matching card exists; the searched deck must still be shuffled immediately,
+  and instructions referring to a card that was not found fail while the
+  remaining effect continues. Mutual Favor therefore must not be gated by a
+  top-level Stack target and must not force disclosure of an available
+  icebreaker.
+- The fixed Core contract is: a one-card Search over Deck/Stack with a
+  non-`Any` filter materializes an up-to-one private selection; a zero-card
+  result, whether chosen or forced by no candidates, records a reachable empty
+  Search `ChoiceSelection` continuation without a binding or set-aside card.
+  A following chosen-card `ShuffleIntoDeck` must shuffle its declared Deck or
+  Stack and emit a zero-found shuffle event even for that proven-empty result.
+  Selected cards remain facedown in transient custody until the shuffle is
+  complete. Mutual declares Search without eager reveal, then Shuffle, and
+  only then Reveal, preserving CR ordering.
+- Add a parameterless serializable `FoundCard` behavior condition so the
+  declaration can skip all found-card disposition UI after a failed search.
+  Mutual branches on `FoundCard`; only its true arm reveals and then branches
+  on `SuccessfulRunThisTurn`. The no-run arm adds the found program directly
+  to Grip. The successful-run arm offers `install` plus `grip`, with `install`
+  dynamically present only when the already-designed authoritative behavior
+  install can complete. Engine and invariant projections must agree on Search
+  cardinality, empty continuation reachability, deterministic shuffle state
+  and event order, condition evaluation, and all JSON/hash boundaries.
+
+### 2026-09-03 — Mutual Favor authoritative install checkpoint accepted
+
+- Luna implemented root's bounded behavior-owned install handoff and runtime
+  Icebreaker filter contract. Runtime metadata is authoritative when injected;
+  catalog-free Core fixtures retain the behavior-classification fallback.
+  `InstallFrame` now persists an additive `BehaviorEffect` initiation kind and
+  exact parent behavior-frame identity while omitted/default fields preserve
+  the legacy BasicAction JSON shape. The only accepted behavior topology is
+  Turn, CardPlay, BehaviorResolution, InstallFrame for the current canonical
+  `chosen` Runner Program proven by a reachable Stack selection.
+- Root reviewed the first pass and required parity corrections before
+  acceptance: unknown Rig metadata and non-Stack origins fail closed; candidate
+  Programs and their exact definition snapshot are frozen in ordinal order;
+  alternate chosen selectors are rejected; option projection catches catalog,
+  static-modifier, and arithmetic failures; and BehaviorEffect frames require
+  a non-null exact candidate-definition snapshot even when empty. Luna also
+  added the missing real-path exclusions for unaffordable printed cost,
+  impossible MU after every replacement, and active unique conflict.
+- The accepted install path spends only the Event's ordinary play click, pays
+  the found Program's printed install cost exactly once, reuses normal memory,
+  replacement, uniqueness, installed-fact, static-modifier, movement, and
+  `CardInstalled` semantics, then verifies and resumes the exact behavior
+  parent once. Root independently passed the combined focused behavior,
+  contract, play, install, and runtime-filter gate at 90/90, the final
+  behavior-install suite at 10/10, and complete Core at 475/475. Luna's full
+  Core and formatter gates plus root's `git diff --check` also pass. Mutual's
+  remaining work is the accepted hidden-search amendment and card declaration/
+  lifecycle integration; this checkpoint does not yet unblock the card ID.
+
+### 2026-09-03 — Hidden-search and FoundCard checkpoint accepted
+
+- Luna implemented root's CR 8.7 amendment as a reusable Core contract. A
+  constrained one-card Deck/Stack Search is now a private mandatory up-to-one
+  decision with an explicit fail-to-find action; a proven-empty result records
+  an authenticated empty Search continuation, clears both the search-key and
+  canonical `chosen` bindings, and still performs the declared deterministic
+  shuffle with a zero-card typed event. Deck/Stack Search cannot reveal
+  eagerly, so found cards remain private until a later explicit `Reveal`.
+- The new parameterless `FoundCard` condition is strict, serializable, and
+  catalog-fingerprinted. It resolves only from the latest reachable Search
+  selection, allowing failed searches to bypass every found-card instruction.
+  Runtime and invariant projections agree on Search mode, up-to-one
+  cardinality, count, empty continuation provenance, and shuffle source. Forged
+  cardinality, non-Search empty continuations, and stale bindings reject.
+- Root reviewed the implementation while it was in progress and required both
+  Deck and Stack eager-reveal rejection, an actually submitted forged-action
+  regression, two consecutive empty-search stale-binding coverage, a
+  nonempty-candidate forged-continuation case, and legacy declaration ordering
+  updates. After those corrections, root independently passed the combined
+  hidden-search/behavior/runtime gate at 54/54 and complete Core at 484/484;
+  Luna's formatter and `git diff --check` gates also pass.
+
+### 2026-09-03 — Mutual Favor declaration and lifecycle checkpoint accepted
+
+- Luna implemented the final Cards declaration from root's fixed contract.
+  Mutual Favor has no eager play target: it privately searches Runner Stack
+  for an authoritative runtime Program/Icebreaker, shuffles before revealing,
+  branches away all disposition work when no card was found, returns the card
+  automatically to Grip without a successful run, and after a successful run
+  offers `install` before `grip` only when the owned real install can complete.
+  All twelve assigned Batch-1 definitions are now registered and the explicit
+  blocked-definition set is empty.
+- Root reviewed six official real-turn lifecycle scenarios. They cover
+  subtype filtering and Corp privacy, explicit failure despite an available
+  match, automatic empty search, shuffle/reveal/move ordering, an actual
+  successful run followed by Grip decline with save/load/hash stability, a
+  paid four-credit over-MU install through replacement with no extra click,
+  exact installed facts/memory/events, and unaffordable-install suppression.
+  The declaration cites CR 8.7 and preserves the zero-credit Event cost.
+- Root independently passed complete Core at 484/484 and the complete official
+  content-enabled Cards lane at 97/97 after review. Luna also passed the
+  default synthetic Cards lane at 97/97, the Cards build without warnings or
+  errors, solution-wide formatter verification, and `git diff --check`. The
+  executable Slice 4.2 card work is accepted; final SIM fingerprint, generated
+  coverage, and full repository verification remain before completion.
+
+### 2026-09-03 — Final architect review amendment and integration artifacts
+
+- Root's final adversarial review found that `FoundCard` authenticated a
+  reachable latest card selection and matching canonical binding but did not
+  require that selection to originate from `Search`. Root fixed the contract:
+  replay the immutable continuation path, inspect the instruction at each
+  selection cursor before applying it, and return true only when the latest
+  card selection is a nonempty Search result matching the sole canonical
+  `chosen` binding. Luna implemented that narrow correction and an executed
+  ordinary-Choose false-arm regression. Root independently passed the combined
+  hidden-search/runtime/install gate at 50/50; Luna passed Hidden Search at
+  10/10, its adjacent gate at 40/40, complete Core at 485/485, formatter, and
+  `git diff --check`.
+- Root derived the completed immutable Gateway behavior fingerprint as
+  `19c8800481f0b65935d4420f0bef019746b5039b5b0159217cc59ae051dc0a66`
+  from the authoritative catalog/fixture mismatch, replaced both provisional
+  SIM pins, and removed their stale blocked-card note without claiming a
+  headless MATCH-401A/AGT-401 outcome. All six simulation-fixture contract
+  tests then passed independently.
+- From root's fixed metadata contract, Luna marked only Slice 4.2 and its
+  twelve owned cards complete, set the batch completion gate, and regenerated
+  both checked-in coverage reports. Root reviewed the exact twelve-card
+  registry projection and generated counts: `total=77 registered=19 tested=19
+  fullTextComplete=17 partial=2 unregistered=58`, with no diagnostics. Luna's
+  focused coverage metadata tests pass 8/8, and its fresh-report comparison,
+  formatter, and `git diff --check` gates pass. Full repository verification
+  remains the final Slice 4.2 acceptance gate.
+
+### 2026-09-03 — Slice 4.2 implementation gate complete
+
+- Root ran `./scripts/verify.sh` after all architect-review corrections and
+  generated artifacts were stable. Restore and the full solution build pass
+  with zero warnings/errors; complete suites pass Core 485/485, Cards 97/97,
+  AI 23/23, CLI 52/52, and Match 40/40. The solution formatter reports no
+  changes.
+- CLI self-test/doctor, three deterministic M1 outcomes, replay verification,
+  and the 32-checkpoint M2 scripted-human/contract-agent proof pass. Official
+  System Gateway data validates at 77 cards; every official content-enabled
+  Cards/Match/CLI/Godot build passes; missing-input and opt-in diagnostics
+  remain exact.
+- The freshly generated coverage report matches both checked-in artifacts at
+  19 registered/tested, 17 full-text-complete, two partial, and 58
+  unregistered. The official 77-card Godot gallery smoke and complete M3 UI
+  smoke pass, and the repository secret scan finds no high-confidence secret
+  patterns. Slice 4.2 implementation is ready for its completion commit and PR
+  into `dev`; remote review feedback remains part of the handoff workflow.
+
+### 2026-09-03 — Slice 4.2 PR handoff
+
+- Root created completion commit `402a7e6` (`feat: complete M4 slice 4.2`),
+  pushed branch `m4_2`, and opened GitHub PR #6 into `dev`:
+  `https://github.com/Master-Yoba/netrunner/pull/6`.
+- GitHub's `build-and-test` check passed in 2m30s. A post-CI sweep found the PR
+  merge state clean and found no general comments, submitted reviews, or inline
+  review comments, so there is currently no remote feedback requiring a Luna
+  correction. The PR remains open for maintainer review.
+
+### 2026-09-03 — PR #6 automated review architecture
+
+- A review submitted after the first handoff sweep raised three P2 findings;
+  root inspected each against the production call graph and local M4 rules and
+  accepted all three. `MatchCoordinator.Publish` owns the composed behavior
+  catalog but calls the legacy two-argument observation adapter, so T400's
+  static hand-size modifier is lost. The normal observation-to-view mapper
+  then ignores the now-present per-player `maximumHandSize` field and replaces
+  it with an unavailable projection. Production must pass the composed catalog
+  to `ObservationBuilder`, and the mapper must prefer observed maximums while
+  retaining the injected projection only as a legacy-observation fallback.
+- The Runner install planner also rejects an active unique/console conflict at
+  action materialization. This contradicts the checked-in CR 2.2/3.8/10.3
+  contract: installing the newest active copy is legal and older conflicts are
+  repaired at checkpoint. Root's bounded correction is to freeze every active
+  matching unique/console card into the install candidate set and require its
+  removal in the existing serialized install transaction. Program installs
+  retain all ordinary MU replacement candidates plus the conflict union;
+  non-program Runner installs expose only their exact conflicts. Basic and
+  behavior-owned installs, option projection, frame invariants, save/load, and
+  stale/forged validation must share the same sorted metadata-derived set.
+- Root delegated only these fixed implementations and regressions to Luna Max.
+  No Corp rez/activation cleanup or unrelated checkpoint subsystem is added by
+  this review correction; facedown Corp installs remain inactive and their
+  later activation timing stays with its owning checkpoint.
+
+### 2026-09-03 — PR #6 automated review corrections accepted
+
+- Luna implemented root's observation boundary contract at all three
+  `MatchCoordinator` call sites. Explicit requests, Corp-agent input, and the
+  published Runner snapshot now use the coordinator's composed behavior
+  catalog, so installed static modifiers survive into the public observation.
+  The Match mapper consumes the observed per-player `maximumHandSize` first,
+  including zero and negative values, and uses the injected projection only
+  for legacy observations that omit the field. A coordinator-level T400
+  regression proves the composed value reaches both observation and view.
+- Luna also implemented root's shared Runner conflict transaction. Active
+  matching unique cards and active Consoles are derived solely from canonical
+  face-up Rig state plus authoritative runtime metadata, sorted ordinally,
+  frozen as required replacements, and trashed before the incoming card is
+  activated. Program installs retain their ordinary MU candidates plus that
+  conflict union; non-Program installs expose the exact conflict set. Basic
+  and behavior-owned planning, option projection, persisted frames, and state
+  invariants now derive the same candidates, required IDs, and definition
+  snapshot. Unknown active Rig metadata fails closed where a non-Program
+  unique/Console decision would otherwise be inferred.
+- Root reviewed and accepted the implementation after requiring ordinary and
+  behavior-path invariant parity, a coordinator-level observation regression,
+  and real basic-action coverage. The final regressions prove behavior-owned
+  unique replacement through save/load without an extra click, basic unique
+  Program replacement, multi-Console Hardware replacement, and unknown active
+  metadata suppression. Root independently passed complete Core at 488/488
+  and complete Match at 43/43.
+- Root's first repository-wide run passed the zero-warning build and every
+  test suite but stopped at three formatter diagnostics in Luna's validator
+  edit. Luna made only those whitespace corrections; root identified and sent
+  back one additional visually misaligned diagnostic argument. The clean
+  rerun of `./scripts/verify.sh` then passed end to end: Core 488/488, Cards
+  97/97, AI 23/23, CLI 52/52, Match 43/43, formatter, official builds and
+  77-card validation, coverage drift, deterministic CLI/replay proofs, the
+  32-checkpoint M2 proof, both Godot smoke lanes, and secret scan. The review
+  corrections are ready for commit and PR #6 update.
+
+### 2026-09-03 — PR #6 feedback resolution handoff
+
+- Root committed the accepted corrections as `a21f419` (`fix: address Slice
+  4.2 review feedback`) and pushed them to `m4_2`. Each of the three accepted
+  inline findings now has a reply identifying the commit and the corresponding
+  production/regression correction.
+- GitHub's updated `build-and-test` check passed in 2m55s. The post-CI sweep
+  confirms PR #6 remains open and mergeable at `a21f419`, with no general
+  comments and no new review or inline findings. The only remote feedback is
+  the original three P2 findings and root's resolution replies.
+- Root pushed the ledger handoff as `662750a`; its branch-head
+  `build-and-test` check passed in 2m05s. A final GraphQL review-thread audit
+  found exactly the same three replied-to threads and no new findings. Root
+  explicitly resolved all three verified threads. PR #6 is therefore green,
+  mergeable, and has no outstanding review feedback.
+
+### 2026-09-03 — PR #6 second automated review architecture
+
+- A maintainer-requested second Codex review of branch head `a0936ab` raised
+  one new P1 finding. Root reproduced the control flow and accepts it: a Corp
+  Draw instruction that exhausts R&D calls the terminal game helper while the
+  ordinary Operation still occupies `CorpPlayArea` below its active behavior
+  child. Clearing every frame first leaves that public transient card without
+  its `CardPlayFrame`; final invariant validation rejects the prospective
+  terminal state and rolls the submitted action back.
+- The fixed contract is to finish the active ordinary card play before the
+  terminal stack clear. At a fatal behavior-owned Corp draw, restore any
+  behavior set-aside custody, close the exact behavior child, run the existing
+  validated `CardPlayFrame` completion so the Operation moves faceup to
+  Archives and emits `CardPlayCompleted`, then complete the real game and emit
+  `GameWon`. No later behavior instruction may execute. Standalone behavior
+  fixtures without an ordinary-play parent retain their compatibility terminal
+  path; transient-zone invariants remain strict.
+- Root delegated only that lifecycle implementation and its regressions to
+  Luna Max. Required proof covers a real-turn immediate draw Operation and a
+  decision-resumed Predictive Planogram draw: the action is accepted, partial
+  draws remain committed, all players have zero clicks, the Operation is in
+  Archives with an empty play area, pending decision and frames are empty,
+  `CardPlayCompleted` precedes `GameWon`, terminal save/load/hash is stable,
+  and the final state has no invariant violations.
+
+### 2026-09-03 — PR #6 terminal draw correction accepted
+
+- Luna implemented the bounded fatal-draw handoff using the exact immediate
+  Turn/`CardPlayFrame`/behavior-child topology. The helper fails closed when a
+  behavior claims CardPlay provenance without that parent, restores any
+  set-aside custody, removes only the active behavior child, and reuses normal
+  card-play validation/completion before `CompleteTurnGame`. The Operation is
+  therefore moved faceup to Archives and `CardPlayCompleted` is emitted before
+  the terminal stack clear and `GameWon`; real-turn history is preserved and
+  standalone behavior fixtures retain the compatibility path.
+- Root rejected Luna's first test-fixture accounting: its sole Core deck card
+  was consumed by the Corp turn-start draw, and its official HQ assertion
+  counted the Operation after it had entered the play area. Luna corrected the
+  proofs to leave exactly one R&D card after turn start and identify that card
+  as the behavior-owned partial draw before the next draw fails.
+- The accepted regressions cover an immediate synthetic real-turn Operation
+  and a save/loaded, decision-resumed Predictive Planogram `draw-first` branch.
+  Both prove accepted terminal actions, committed partial draw, zero clicks,
+  empty Corp play area, faceup Operation in Archives, empty pending/stack,
+  preserved history, `CardDrawn` then `CardPlayCompleted` then final `GameWon`,
+  invariant cleanliness, and stable terminal JSON/hash. Root independently
+  passed complete Core at 489/489 and complete Cards at 98/98. Full repository
+  verification remains before the PR correction commit.
+- Root's first full verification passed the zero-warning build and all suites
+  (Core 489, Cards 98, AI 23, CLI 52, Match 43), then correctly stopped on
+  generated coverage drift because Predictive Planogram gained a second
+  lifecycle evidence test. Luna regenerated only the Markdown and JSON
+  coverage artifacts; their counts remain `77/19/19/17/2/58` with no
+  diagnostics, and fresh-report comparisons are exact.
+- The clean `./scripts/verify.sh` rerun then passed end to end: formatter,
+  official data and content-enabled builds, coverage drift, deterministic CLI
+  outcomes and replay, the 32-checkpoint M2 proof, both Godot smoke lanes, and
+  secret scan in addition to all five suites. The P1 correction is ready for
+  commit and PR #6 update.
+
+### 2026-09-03 — PR #6 second feedback resolution handoff
+
+- Root committed the accepted P1 correction and regenerated evidence as
+  `177da0f` (`fix: complete card play before draw deck-out`), pushed it to
+  `m4_2`, and replied to the inline review with the exact lifecycle and
+  regression proof. GitHub's `build-and-test` check passed in 2m20s.
+- The post-CI review-thread audit found the prior three threads still resolved
+  and exactly one new thread: the replied-to P1. Root explicitly resolved that
+  verified thread. No other new inline feedback was present at that audit.

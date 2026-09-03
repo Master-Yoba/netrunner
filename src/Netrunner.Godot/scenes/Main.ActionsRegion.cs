@@ -14,10 +14,19 @@ public partial class Main
 	{
 		ActionsRegionState region = ActionsRegionPresenter.Present(snapshot);
 		ClearChildren(_actions);
-		UpdateTargetHighlights(region.Actions);
+		UpdateTargetHighlights(region.DisplayActions);
 		if (region.Status == ActionsRegionStatus.OpponentThinking)
 		{
 			_actions.AddChild(MakeLabel("Opponent thinking…", 13, Warning));
+			return;
+		}
+
+		if (region.Status == ActionsRegionStatus.Unsupported)
+		{
+			_actions.AddChild(MakeWrappedLabel(
+				region.Diagnostic ?? "No controls rendered for the unsupported issued decision.",
+				12,
+				Warning));
 			return;
 		}
 
@@ -38,6 +47,24 @@ public partial class Main
 			// The presenter only emits AwaitingRunnerDecision with a decision;
 			// keep the renderer fail-closed if a future projection changes.
 			_actions.AddChild(MakeLabel("Waiting for the next issued Runner decision.", 12, Muted));
+			return;
+		}
+
+		if (region.IsForcedDiscard)
+		{
+			_actions.AddChild(MakeWrappedLabel(
+				$"FORCED DISCARD · {decision.Prompt}\n"
+				+ "Choose only from the discard actions issued by Core.",
+				12,
+				Warning));
+		}
+
+		if (region.ActionGroups.Count == 0)
+		{
+			_actions.AddChild(MakeWrappedLabel(
+				"No supported action controls are currently issued for this decision.",
+				12,
+				Muted));
 			return;
 		}
 
@@ -73,27 +100,32 @@ public partial class Main
 			_actions.AddChild(selected);
 		}
 
-		foreach (LegalActionViewModel action in region.Actions)
+		foreach (ActionGroupViewModel group in region.ActionGroups)
 		{
-			bool targeted = ActionsRegionPresenter.GetTargetCardId(action.Parameters) is not null
-				|| action.Parameters is BreachCandidateParameters;
-			Button button = new()
+			_actions.AddChild(MakeLabel(group.Label, 11, Accent));
+			foreach (LegalActionViewModel action in group.Actions)
 			{
-				Text = targeted
-					? $"SELECT TARGET · {action.Kind}: {action.Description}"
-					: $"{action.Kind}: {action.Description}",
-				Alignment = HorizontalAlignment.Left,
-				Disabled = Volatile.Read(ref _submissionInFlight) != 0,
-			};
-			if (targeted)
-			{
-				button.Pressed += () => StageTargetAction(decision, action);
+				bool targeted = ActionsRegionPresenter.GetTargetCardId(action.Parameters) is not null
+					|| action.Parameters is BreachCandidateParameters;
+				Button button = new()
+				{
+					Text = targeted
+						? $"SELECT TARGET · {action.Kind}: {action.Description}"
+						: $"{action.Kind}: {action.Description}",
+					Alignment = HorizontalAlignment.Left,
+					Disabled = Volatile.Read(ref _submissionInFlight) != 0,
+				};
+				if (targeted)
+				{
+					button.Pressed += () => StageTargetAction(decision, action);
+				}
+				else
+				{
+					button.Pressed += () => SubmitAction(decision, action);
+				}
+
+				_actions.AddChild(button);
 			}
-			else
-			{
-				button.Pressed += () => SubmitAction(decision, action);
-			}
-			_actions.AddChild(button);
 		}
 	}
 

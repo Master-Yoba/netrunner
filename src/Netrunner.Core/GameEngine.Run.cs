@@ -33,6 +33,7 @@ public static partial class GameEngine
             initiatingPlayer,
             initiatingSource,
             CardBehaviorSpecCatalog.Default,
+            runtimeCardCatalog: null,
             enforceCatalogCompatibility: false).State;
 
     /// <summary>Begins a run with an explicitly injected immutable catalog.</summary>
@@ -48,6 +49,24 @@ public static partial class GameEngine
             initiatingPlayer,
             initiatingSource,
             behaviorCatalog,
+            runtimeCardCatalog: null,
+            enforceCatalogCompatibility: true).State;
+
+    /// <summary>Begins a run with both injected immutable catalogs.</summary>
+    public static GameState BeginRun(
+        GameState state,
+        ServerId serverId,
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog runtimeCardCatalog,
+        PlayerId? initiatingPlayer = null,
+        CardInstanceId? initiatingSource = null) =>
+        BeginRunWithEvents(
+            state,
+            serverId,
+            initiatingPlayer,
+            initiatingSource,
+            behaviorCatalog,
+            runtimeCardCatalog,
             enforceCatalogCompatibility: true).State;
 
     /// <summary>Parameter-order adapter for callers that append dependencies.</summary>
@@ -71,6 +90,7 @@ public static partial class GameEngine
             initiatingPlayer,
             initiatingSource,
             CardBehaviorSpecCatalog.Default,
+            runtimeCardCatalog: null,
             enforceCatalogCompatibility: false);
     }
 
@@ -87,6 +107,24 @@ public static partial class GameEngine
             initiatingPlayer,
             initiatingSource,
             behaviorCatalog,
+            runtimeCardCatalog: null,
+            enforceCatalogCompatibility: true);
+
+    /// <summary>Begins a run with both injected immutable catalogs.</summary>
+    public static RunStartResult BeginRunWithEvents(
+        GameState state,
+        ServerId serverId,
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog runtimeCardCatalog,
+        PlayerId? initiatingPlayer = null,
+        CardInstanceId? initiatingSource = null) =>
+        BeginRunWithEvents(
+            state,
+            serverId,
+            initiatingPlayer,
+            initiatingSource,
+            behaviorCatalog,
+            runtimeCardCatalog,
             enforceCatalogCompatibility: true);
 
     /// <summary>Parameter-order adapter for callers that append dependencies.</summary>
@@ -104,6 +142,7 @@ public static partial class GameEngine
         PlayerId? initiatingPlayer,
         CardInstanceId? initiatingSource,
         IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog,
         bool enforceCatalogCompatibility)
     {
         ArgumentNullException.ThrowIfNull(state);
@@ -114,9 +153,16 @@ public static partial class GameEngine
             throw new ResolutionFailureException(catalogMismatch!);
         }
 
+        if (runtimeCardCatalog is not null
+            && !CatalogMatchesState(state, runtimeCardCatalog, out string? runtimeMismatch))
+        {
+            throw new ResolutionFailureException(runtimeMismatch!);
+        }
+
         StateInvariantValidator.Validate(
             state,
-            enforceCatalogCompatibility ? behaviorCatalog : null);
+            enforceCatalogCompatibility ? behaviorCatalog : null,
+            runtimeCardCatalog);
 
         if (state.Outcome.Kind != GameOutcomeKind.Ongoing)
         {
@@ -138,33 +184,71 @@ public static partial class GameEngine
             throw new ResolutionFailureException("A run can begin only during the Runner turn.");
         }
 
-        PlayerState runner = state.Players.Single(player => player.Side == PlayerSide.Runner);
+        var working = WorkingState.From(state, behaviorCatalog, runtimeCardCatalog);
+        try
+        {
+            StartRunInWorkingState(
+                working,
+                serverId,
+                initiatingPlayer,
+                initiatingSource);
+            Advance(working, DefaultResolutionStepBudget);
+            GameState next = working.Build(state);
+            StateInvariantValidator.Validate(
+                next,
+                enforceCatalogCompatibility ? behaviorCatalog : null,
+                runtimeCardCatalog);
+            return new RunStartResult(next, working.Events.ToList());
+        }
+        catch (ResolutionFailureException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is StateInvariantException or ArgumentException or InvalidOperationException or OverflowException)
+        {
+            throw new ResolutionFailureException(
+                $"The run could not be started: {exception.Message}",
+                exception);
+        }
+    }
+
+    /// <summary>
+    /// Shared M2 run-start routine used by the standalone compatibility
+    /// boundary and the real-turn basic-run action. It owns run setup, the
+    /// optional legacy run-event play, initiation evidence, and the first
+    /// timing decision so the two entry points cannot drift apart.
+    /// </summary>
+    private static void StartRunInWorkingState(
+        WorkingState working,
+        ServerId serverId,
+        PlayerId? initiatingPlayer,
+        CardInstanceId? initiatingSource)
+    {
+        PlayerState runner = GetPlayer(working, PlayerSide.Runner);
         if (initiatingPlayer.HasValue && initiatingPlayer.Value != runner.Id)
         {
             throw new ResolutionFailureException("The initiating player must be the Runner.");
         }
 
-        ServerState server = state.Servers.SingleOrDefault(candidate => candidate.Id == serverId)
+        ServerState server = working.Servers.SingleOrDefault(candidate => candidate.Id == serverId)
             ?? throw new ResolutionFailureException($"Server '{serverId}' does not exist.");
-        ZoneState iceZone = state.Zones.SingleOrDefault(zone => zone.Id == server.IceZoneId)
+        ZoneState iceZone = working.Zones.SingleOrDefault(zone => zone.Id == server.IceZoneId)
             ?? throw new ResolutionFailureException($"Server '{serverId}' has no ICE zone.");
 
-        // A registered run event (Overclock) is played at initiation.  CR 26.03
-        // 1.10.3c: the event's printed cost is paid from the Runner's credit
-        // pool (wallet) only; the hosted credits are not paid — they are
-        // placed on the event (1.10.4) and become the run's spendable
-        // run-scoped credit pool for the run's duration (1.10.4b/c).
+        // A registered run event (Overclock) is played at initiation. CR 26.03
+        // 1.10.3c: its printed cost comes from the Runner wallet, while hosted
+        // credits become the run-scoped pool (1.10.4b/c).
         RunEventBehaviorSpec? runEventSpec = null;
         if (initiatingSource.HasValue)
         {
-            CardInstanceState source = state.Cards.SingleOrDefault(card => card.Id == initiatingSource.Value)
+            CardInstanceState source = working.Cards.SingleOrDefault(card => card.Id == initiatingSource.Value)
                 ?? throw new ResolutionFailureException($"Run source card '{initiatingSource.Value}' does not exist.");
             if (source.OwnerSide != PlayerSide.Runner)
             {
                 throw new ResolutionFailureException("A run source must be owned by the Runner.");
             }
 
-            runEventSpec = ValidateRunEventSource(state, initiatingSource.Value, source, behaviorCatalog);
+            runEventSpec = ValidateRunEventSource(working, initiatingSource.Value, source);
             if (runner.Credits < runEventSpec.Cost)
             {
                 throw new ResolutionFailureException(
@@ -173,7 +257,6 @@ public static partial class GameEngine
             }
         }
 
-        var working = WorkingState.From(state, behaviorCatalog);
         RunId runId = working.Allocator.NextRunId();
         int currentIceIndex = iceZone.CardIds.Count - 1;
         CardInstanceId? currentIceId = currentIceIndex >= 0
@@ -194,10 +277,8 @@ public static partial class GameEngine
         working.RunState = run;
 
         // CR 26.03 8.6.7: a played event leaves the Runner's grip and enters a
-        // public play area faceup while the nested run ability resolves. The
-        // play-area zone is deliberately created lazily so ordinary M1 states
-        // retain their canonical topology and hashes. Keeping the card out of
-        // the grip also prevents grip damage from selecting an active event.
+        // public play area faceup for the run's duration. The zone is lazy so
+        // ordinary M1/M2 states retain their canonical topology and hashes.
         if (initiatingSource.HasValue)
         {
             ZoneState grip = GetZone(working, ZoneKind.RunnerGrip);
@@ -235,58 +316,118 @@ public static partial class GameEngine
         }
 
         working.ResolutionStack.Add(new RunTimingFrame(runId, RunTimingStep.InitiationPaidWindow));
-
-        try
+        if (runEventSpec is not null)
         {
-            if (runEventSpec is not null)
-            {
-                // CR 26.03 1.10.3c: the wallet pays the printed cost only.
-                // The hosted credits enter the run-scoped pool (the run state
-                // was constructed with runEventSpec.HostedCredits) and are
-                // spent during the run as if they were in the pool (1.10.4b/c).
-                ApplyCreditDelta(working, runner.Id, -runEventSpec.Cost);
-                Emit(working, EngineEventKinds.RunEventPlayed, new RunEventPlayedEventPayload(
-                    runId,
-                    initiatingSource!.Value,
-                    runEventSpec.DefinitionId,
-                    runEventSpec.Cost,
-                    runEventSpec.HostedCredits,
-                    runner.Id,
-                    GetPlayer(working, runner.Id).Credits));
-            }
+            // The wallet pays the printed cost only; hosted credits are already
+            // represented in RunState and are untouched by this payment.
+            ApplyCreditDelta(working, runner.Id, -runEventSpec.Cost);
+            Emit(working, EngineEventKinds.RunEventPlayed, new RunEventPlayedEventPayload(
+                runId,
+                initiatingSource!.Value,
+                runEventSpec.DefinitionId,
+                runEventSpec.Cost,
+                runEventSpec.HostedCredits,
+                runner.Id,
+                GetPlayer(working, runner.Id).Credits));
+        }
 
-            // CR 6.9.1: the run is initiated after the event's play/payment
-            // boundary. This ordering keeps the enclosing run event after the
-            // event has been placed and paid, while all subsequent run timing
-            // windows remain nested under this typed initiation event.
-            Emit(working, EngineEventKinds.RunInitiated, new RunInitiatedEventPayload(
-                run.Id, server.Id, runner.Id));
+        // CR 6.9.1: initiation follows event placement/payment. The first
+        // decision is yielded directly, preserving the standalone M2 boundary
+        // and giving a basic turn action the same run timing cursor.
+        Emit(working, EngineEventKinds.RunInitiated, new RunInitiatedEventPayload(
+            run.Id, server.Id, runner.Id));
+        YieldRunPriorityDecision(
+            working,
+            run,
+            "CR 6.9.1e: choose a paid ability or pass.",
+            emitWindowEvent: false);
+    }
 
-            // The setup boundary yields the first choice directly.  The
-            // following accepted action records the opening evidence in its
-            // event batch; no event sequence is consumed and then discarded.
-            YieldRunPriorityDecision(
-                working,
-                run,
-                "CR 6.9.1e: choose a paid ability or pass.",
-                emitWindowEvent: false);
-            Advance(working, DefaultResolutionStepBudget);
-            GameState next = working.Build(state);
-            StateInvariantValidator.Validate(
-                next,
-                enforceCatalogCompatibility ? behaviorCatalog : null);
-            return new RunStartResult(next, working.Events.ToList());
-        }
-        catch (ResolutionFailureException)
+    /// <summary>
+    /// Re-materializes basic-run payloads without consuming allocator state or
+    /// reading any mutable card registry. The returned order is the physical
+    /// <see cref="GameState.Servers"/> order captured by the current state.
+    /// </summary>
+    internal static IReadOnlyList<RunServerParameters> MaterializeRunServerParameters(GameState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        WorkingState working = WorkingState.From(state);
+        return MaterializeRunServerParameters(working);
+    }
+
+    private static List<RunServerParameters> MaterializeRunServerParameters(WorkingState working)
+    {
+        if (working.Turn.ActiveSide != PlayerSide.Runner
+            || working.Turn.Phase != TurnPhase.Runner
+            || working.RunState is not null
+            || working.ResolutionStack.Count == 0
+            || working.ResolutionStack[^1] is not TurnFrame
+            )
         {
-            throw;
+            return [];
         }
-        catch (Exception exception) when (exception is StateInvariantException or ArgumentException or InvalidOperationException or OverflowException)
+
+        TurnFrame turn = (TurnFrame)working.ResolutionStack[^1];
+        if (turn.ActiveSide != PlayerSide.Runner
+            || turn.Stage != TurnFrameStage.AwaitingAction
+            || turn.TurnNumber != working.Turn.TurnNumber)
         {
-            throw new ResolutionFailureException(
-                $"The run could not be started: {exception.Message}",
-                exception);
+            return [];
         }
+
+        PlayerState? runner = working.Players.FirstOrDefault(player => player.Side == PlayerSide.Runner);
+        if (runner is null || runner.Clicks < 1 || HasOccupiedTransientPlayArea(working))
+        {
+            return [];
+        }
+
+        // Deliberately do not sort: this is the persisted server topology
+        // order, and each action is a complete immutable server payload.
+        return working.Servers
+            .Select(server => new RunServerParameters(server.Id))
+            .ToList();
+    }
+
+    private static bool HasOccupiedTransientPlayArea(WorkingState working) =>
+        working.Zones.Any(zone =>
+            (zone.Kind is ZoneKind.CorpPlayArea or ZoneKind.RunnerPlayArea)
+            && zone.CardIds.Count > 0);
+
+    private static void AddRunActions(WorkingState working, List<LegalAction> actions)
+    {
+        foreach (RunServerParameters parameters in MaterializeRunServerParameters(working))
+        {
+            actions.Add(new LegalAction(
+                working.Allocator.NextActionId(),
+                ActionKind.StartRun,
+                $"Run {parameters.ServerId.Value}",
+                parameters));
+        }
+    }
+
+    private static void ConsumeTurnStartRunAction(WorkingState working, RunServerParameters parameters)
+    {
+        if (working.ResolutionStack.Count == 0
+            || working.ResolutionStack[^1] is not TurnFrame turnFrame
+            || turnFrame.Stage != TurnFrameStage.AwaitingAction
+            || turnFrame.ActiveSide != PlayerSide.Runner
+            || working.Turn.ActiveSide != PlayerSide.Runner
+            || working.RunState is not null)
+        {
+            throw new ResolutionFailureException("A basic run requires the active Runner turn action frame.");
+        }
+
+        IReadOnlyList<RunServerParameters> materialized = MaterializeRunServerParameters(working);
+        if (!materialized.Any(candidate => candidate.ServerId == parameters.ServerId))
+        {
+            throw new ResolutionFailureException("The basic-run action does not match the materialized server set.");
+        }
+
+        // The click is the complete basic-run cost. Setup and initiation then
+        // flow through the same M2 routine used by BeginRunWithEvents.
+        PlayerState runner = GetPlayer(working, PlayerSide.Runner);
+        SpendClick(working, runner.Id);
+        StartRunInWorkingState(working, parameters.ServerId, runner.Id, initiatingSource: null);
     }
 
     public static GameState InitiateRun(
@@ -315,12 +456,11 @@ public static partial class GameEngine
     /// action, so a second play is an illegal action by construction.
     /// </summary>
     private static RunEventBehaviorSpec ValidateRunEventSource(
-        GameState state,
+        WorkingState working,
         CardInstanceId sourceId,
-        CardInstanceState source,
-        IBehaviorCatalog behaviorCatalog)
+        CardInstanceState source)
     {
-        ZoneState? grip = state.Zones.FirstOrDefault(zone =>
+        ZoneState? grip = working.Zones.FirstOrDefault(zone =>
             zone.Kind == ZoneKind.RunnerGrip && zone.OwnerSide == PlayerSide.Runner);
         if (grip is null || grip.Id != source.ZoneId)
         {
@@ -328,7 +468,7 @@ public static partial class GameEngine
                 $"Run source '{sourceId.Value}' must be a card in the Runner's grip.");
         }
 
-        if (!behaviorCatalog.TryGetRunEvent(source.DefinitionId, out RunEventBehaviorSpec? spec))
+        if (!working.BehaviorCatalog.TryGetRunEvent(source.DefinitionId, out RunEventBehaviorSpec? spec))
         {
             throw new ResolutionFailureException(
                 $"Card definition '{source.DefinitionId.Value}' is not a registered run event "
@@ -338,7 +478,7 @@ public static partial class GameEngine
         // Defense in depth: unreachable from the current BeginRun call site
         // (a second BeginRun is rejected before validation), but it pins the
         // one-event-per-run invariant for future call sites.
-        if (state.RunState is { ActiveRunEventId: { } active } && active == sourceId)
+        if (working.RunState is { ActiveRunEventId: { } active } && active == sourceId)
         {
             throw new ResolutionFailureException(
                 $"Run source '{sourceId.Value}' is already the active run event; a run plays at most one run event.");
@@ -648,6 +788,7 @@ public static partial class GameEngine
         }
 
         Emit(working, EngineEventKinds.RunSuccessful, new RunSuccessfulEventPayload(run.Id, run.AttackedServer));
+        MarkSuccessfulRunThisTurn(working, run.InitiatingSide);
         SetRunTiming(working, run.WithTiming(
             RunTimingStep.BreachBoundary,
             -1,
@@ -765,6 +906,8 @@ public static partial class GameEngine
             throw new ResolutionFailureException("Run-end cleanup requires an explicit end reason.");
         }
 
+        bool realTurnRun = IsRealTurnRun(working, run);
+
         // Run-scoped hosted credits (Overclock) cannot leave the run: any
         // unspent pool expires at run end without returning to the wallet.
         if (run.RunCredits > 0)
@@ -801,7 +944,43 @@ public static partial class GameEngine
 
         working.ResolutionStack.RemoveAt(working.ResolutionStack.Count - 1);
         working.PendingDecision = null;
+
+        if (realTurnRun)
+        {
+            if (working.ResolutionStack.Count != 1
+                || working.ResolutionStack[^1] is not TurnFrame parent
+                || parent.Stage != TurnFrameStage.AwaitingAction
+                || parent.ActiveSide != PlayerSide.Runner
+                || parent.TurnNumber != working.Turn.TurnNumber)
+            {
+                throw new ResolutionFailureException(
+                    "A real-turn run ended without its matching Runner action frame.");
+            }
+
+            working.ResolutionStack[^1] = new TurnFrame(
+                parent.Version,
+                parent.BehaviorId,
+                parent.ActiveSide,
+                parent.TurnNumber,
+                TurnFrameStage.ActionPriority,
+                TurnWindow(parent.ActiveSide),
+                parent.ActiveSide,
+                forcedActionEnd: parent.ForcedActionEnd);
+        }
     }
+
+    private static bool IsRealTurnRun(WorkingState working, RunState run) =>
+        run.InitiatingSide == PlayerSide.Runner
+        && run.InitiatingSource is null
+        && run.ActiveRunEventId is null
+        && working.ResolutionStack.Count == 2
+        && working.ResolutionStack[^1] is RunTimingFrame timing
+        && timing.RunId == run.Id
+        && working.ResolutionStack[^2] is TurnFrame parent
+        && parent.Stage == TurnFrameStage.AwaitingAction
+        && parent.ActiveSide == PlayerSide.Runner
+        && parent.TurnNumber == working.Turn.TurnNumber
+        && working.Turn.ActiveSide == PlayerSide.Runner;
 
     private static void ConsumeRunAction(WorkingState working, ActionKind kind, ActionParameters parameters)
     {
@@ -1062,10 +1241,16 @@ public static partial class GameEngine
         AddAgendaPoints(working, PlayerSide.Runner, spec.AgendaPoints);
         Emit(working, EngineEventKinds.AgendaStolen, new AgendaStolenEventPayload(PlayerSide.Runner, cardId, spec.AgendaPoints));
 
-        if (GetPlayer(working, PlayerSide.Runner).AgendaPoints >= ToyRules.AgendaPointsToWin)
+        bool realTurnRun = IsRealTurnRun(working, run);
+        int agendaPointsToWin = realTurnRun
+            ? RealGameRules.AgendaPointsToWin
+            : ToyRules.AgendaPointsToWin;
+        if (GetPlayer(working, PlayerSide.Runner).AgendaPoints >= agendaPointsToWin)
         {
             // CR 7.2.3: the run completes normally first (RunEnded, frame
-            // pop) and only then the game ends.
+            // pop) and only then the game ends. Real CR turns use seven
+            // agenda points; standalone M2 fixtures retain their three-point
+            // compatibility threshold.
             RunState terminal = run.WithTiming(
                 RunTimingStep.RunEnd,
                 -1,
@@ -1077,7 +1262,14 @@ public static partial class GameEngine
                 null,
                 RunAccessState.Completed);
             CompleteRun(working, terminal);
-            CompleteToyGame(working, PlayerSide.Runner, GameWinReason.AgendaPoints);
+            if (!realTurnRun)
+            {
+                CompleteToyGame(working, PlayerSide.Runner, GameWinReason.AgendaPoints);
+            }
+            else
+            {
+                CompleteTurnGame(working, PlayerSide.Runner, GameWinReason.AgendaPoints);
+            }
             return;
         }
 
@@ -1250,6 +1442,12 @@ public static partial class GameEngine
 
     private static void ConsumeRunRez(WorkingState working, RunState run, CardInstanceId iceId)
     {
+        if (working.RuntimeCardCatalog is not null)
+        {
+            throw new ResolutionFailureException(
+                "Runtime-catalog-backed runs must use the typed RezCard action.");
+        }
+
         if (run.Step != RunTimingStep.ApproachPaidWindow
             || run.Priority is not { PriorityHolder: PlayerSide.Corp, CorpMayRezApproachedIce: true }
             || run.CurrentIceId != iceId)
@@ -1593,7 +1791,11 @@ public static partial class GameEngine
         {
             new(working.Allocator.NextActionId(), ActionKind.PassPriority, "Pass priority", new NoActionParameters()),
         };
-        if (run.Step == RunTimingStep.ApproachPaidWindow
+        if (working.RuntimeCardCatalog is not null)
+        {
+            AddRezCardActions(working, actions);
+        }
+        else if (run.Step == RunTimingStep.ApproachPaidWindow
             && priority.PriorityHolder == PlayerSide.Corp
             && priority.CorpMayRezApproachedIce
             && run.CurrentIceId.HasValue)

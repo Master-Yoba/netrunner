@@ -88,6 +88,11 @@ public partial class Main
 		VBoxContainer center = new();
 		center.AddThemeConstantOverride("separation", 7);
 		_centerPanel.AddChild(center);
+		_turnSummary = MakeWrappedLabel(
+			"TURN / TIMING · waiting for a valid observation projection",
+			12,
+			Warning);
+		center.AddChild(_turnSummary);
 		_decision = MakeLabel("No decision", 15, Colors.White);
 		_decision.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		center.AddChild(_decision);

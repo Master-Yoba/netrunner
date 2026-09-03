@@ -12,6 +12,8 @@ public enum OccurrenceKind
 {
     EffectImminent,
     EffectResolved,
+    TurnBegin,
+    TurnEnd,
     CreditAdjustment,
     ClickAdjustment,
     Damage,
@@ -170,6 +172,7 @@ public sealed record OccurrenceSnapshot
         AddLingeringEffect value => new AddLingeringEffect(value.Effect),
         RemoveLingeringEffect value => new RemoveLingeringEffect(value.EffectId),
         MoveCardEffect value => new MoveCardEffect(value.CardId, value.DestinationZoneId),
+        TurnBoundaryEffect value => new TurnBoundaryEffect(value.Kind, value.Target, value.TurnNumber),
         _ => throw new ArgumentException($"Unknown effect instruction type '{effect.GetType().Name}'.", nameof(effect)),
     };
 }
@@ -245,13 +248,18 @@ public sealed record TriggerCondition
     internal bool Matches(OccurrenceSnapshot occurrence)
     {
         ArgumentNullException.ThrowIfNull(occurrence);
-        if (Version != 1
-            || occurrence.Version != 1
-            || (OccurrenceKind != occurrence.Kind
-                && !(OccurrenceKind == Netrunner.Core.OccurrenceKind.EffectImminent
-                    && occurrence.Phase == OccurrencePhase.Imminent)
-                && !(OccurrenceKind == Netrunner.Core.OccurrenceKind.EffectResolved
-                    && occurrence.Phase == OccurrencePhase.Resolved)))
+        if (Version != 1 || occurrence.Version != 1)
+        {
+            return false;
+        }
+
+        bool kindMatches = OccurrenceKind == occurrence.Kind
+            || IsEffectOccurrenceKind(occurrence.Kind)
+                && ((OccurrenceKind == Netrunner.Core.OccurrenceKind.EffectImminent
+                        && occurrence.Phase == OccurrencePhase.Imminent)
+                    || (OccurrenceKind == Netrunner.Core.OccurrenceKind.EffectResolved
+                        && occurrence.Phase == OccurrencePhase.Resolved));
+        if (!kindMatches)
         {
             return false;
         }
@@ -286,6 +294,19 @@ public sealed record TriggerCondition
         }
 
         return !SourceCardId.HasValue || SourceCardId == occurrence.SourceCardId;
+
+        static bool IsEffectOccurrenceKind(OccurrenceKind kind) => kind is
+            OccurrenceKind.EffectImminent
+            or OccurrenceKind.EffectResolved
+            or OccurrenceKind.CreditAdjustment
+            or OccurrenceKind.ClickAdjustment
+            or OccurrenceKind.Damage
+            or OccurrenceKind.Tags
+            or OccurrenceKind.Memory
+            or OccurrenceKind.CardMove
+            or OccurrenceKind.CounterAdjustment
+            or OccurrenceKind.LingeringEffectAdded
+            or OccurrenceKind.LingeringEffectRemoved;
 
         static bool TryGetAmount(EffectInstruction effect, out int amount)
         {

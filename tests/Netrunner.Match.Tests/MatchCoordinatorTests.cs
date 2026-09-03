@@ -1,4 +1,6 @@
+using System.Reflection;
 using Netrunner.AI;
+using Netrunner.Cards;
 using Netrunner.Core;
 using Xunit;
 
@@ -25,6 +27,64 @@ public sealed class MatchCoordinatorTests
         Assert.Contains(snapshot.View.LegalActions, value => value.Kind == ActionKind.PassPriority);
         Assert.NotNull(snapshot.View.Run);
         Assert.Equal("card:7", snapshot.View.Run!.InitiatingSource!.Id);
+    }
+
+    [Fact]
+    public void PublicationUsesComposedCatalogForInstalledStaticHandModifier()
+    {
+        BehaviorCatalog behaviorCatalog = GatewayBehaviorCatalog.Create();
+        GameState baseline = GameState.CreateNew(
+            seed: 42,
+            behaviorRegistryVersion: behaviorCatalog.Version,
+            behaviorCatalogFingerprint: behaviorCatalog.Fingerprint);
+        ZoneState runnerRig = baseline.GetZone(ZoneKind.RunnerRig);
+        CardInstanceState t400 = new(
+            new CardInstanceId("card:t400"),
+            GatewayBatch1CardCodes.T400MemoryDiamond,
+            runnerRig.Id,
+            PlayerSide.Runner,
+            faceUp: true);
+        ZoneState[] zones = baseline.Zones
+            .Select(zone => zone.Id == runnerRig.Id
+                ? new ZoneState(zone.Id, zone.Kind, zone.OwnerSide, zone.ServerId, [t400.Id])
+                : zone)
+            .ToArray();
+        RulesState rules = RulesState.CreateDefault(baseline.Players);
+        GameState state = new(
+            baseline.GameId,
+            baseline.RulesVersion,
+            baseline.CardDataVersion,
+            baseline.Players,
+            [t400],
+            zones,
+            baseline.Servers,
+            baseline.Turn,
+            baseline.Outcome,
+            baseline.RandomState,
+            baseline.Allocator,
+            initialSeed: baseline.InitialSeed,
+            rulesState: rules,
+            behaviorRegistryVersion: behaviorCatalog.Version,
+            behaviorCatalogFingerprint: behaviorCatalog.Fingerprint);
+        Assert.Empty(StateInvariantValidator.Collect(state, behaviorCatalog));
+
+        using MatchCoordinator coordinator = new(
+            M2ScenarioProvider.LoadRepresentative(),
+            new FirstLegalAgent(),
+            new MatchCoordinatorOptions { BehaviorCatalog = behaviorCatalog });
+        typeof(MatchCoordinator)
+            .GetField("_state", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(coordinator, state);
+
+        MatchSnapshot snapshot = (MatchSnapshot)typeof(MatchCoordinator)
+            .GetMethod("Publish", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(coordinator, [Array.Empty<EngineEvent>(), null, false])!;
+
+        var players = Assert.IsType<Dictionary<string, object?>>(
+            snapshot.Observation.PublicState["players"]);
+        var runner = Assert.IsType<Dictionary<string, object?>>(players["runner"]);
+        Assert.Equal(6, runner["maximumHandSize"]);
+        Assert.Equal(6, snapshot.View.RunnerHandSize.MaximumHandSize);
     }
 
     [Fact]
