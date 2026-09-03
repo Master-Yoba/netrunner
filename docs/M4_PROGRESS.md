@@ -2538,3 +2538,13 @@ errors; runtime action expansion and full verification remain pending.
   outcomes and replay, the 32-checkpoint M2 proof, both Godot smoke lanes, and
   secret scan in addition to all five suites. The P1 correction is ready for
   commit and PR #6 update.
+
+### 2026-09-03 — PR #6 second feedback resolution handoff
+
+- Root committed the accepted P1 correction and regenerated evidence as
+  `177da0f` (`fix: complete card play before draw deck-out`), pushed it to
+  `m4_2`, and replied to the inline review with the exact lifecycle and
+  regression proof. GitHub's `build-and-test` check passed in 2m20s.
+- The post-CI review-thread audit found the prior three threads still resolved
+  and exactly one new thread: the replied-to P1. Root explicitly resolved that
+  verified thread. No other new inline feedback was present at that audit.
