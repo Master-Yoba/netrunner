@@ -196,6 +196,40 @@ internal static class BehaviorContinuation
 }
 
 /// <summary>
+/// Small, data-only queries over the catalog-derived behavior program.  The
+/// continuation is replayed before inspecting the cursor so lifecycle
+/// validation never trusts an in-memory instruction projection.
+/// </summary>
+internal static class BehaviorInstructionPath
+{
+    public static bool HasReached(
+        IReadOnlyList<BehaviorInstruction> root,
+        IReadOnlyList<BehaviorContinuationStep> continuation,
+        int instructionCursor,
+        BehaviorInstructionKind kind)
+    {
+        if (instructionCursor <= 0)
+        {
+            return false;
+        }
+
+        List<BehaviorInstruction> instructions = root.ToList();
+        foreach (BehaviorContinuationStep step in continuation)
+        {
+            if (!BehaviorContinuation.TryApply(instructions, step, out _))
+            {
+                return false;
+            }
+        }
+
+        int count = Math.Min(instructionCursor, instructions.Count);
+        return instructions
+            .Take(count)
+            .Any(instruction => instruction.Kind == kind);
+    }
+}
+
+/// <summary>
 /// Stable identity for the exact parent frame captured by a child behavior.
 /// It is derived from the serialized data-only frame, so changing a parent
 /// cursor, owner, or context invalidates a resumed child before mutation.
@@ -459,7 +493,8 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
         ZoneKind? sourceZoneKind = null,
         string? parentFrameIdentity = null,
         string? abilityKey = null,
-        string? triggerKey = null)
+        string? triggerKey = null,
+        bool catalogTriggerSourceMovedBeforeStart = false)
         : base(version, behaviorId)
     {
         if (abilityKey is not null && triggerKey is not null)
@@ -512,6 +547,7 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
         ParentFrameIdentity = parentFrameIdentity;
         AbilityKey = abilityKey;
         TriggerKey = triggerKey;
+        CatalogTriggerSourceMovedBeforeStart = catalogTriggerSourceMovedBeforeStart;
     }
 
     public BehaviorResolutionFrame(
@@ -555,7 +591,8 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
         string? abilityKey = null,
         string? triggerKey = null,
         IReadOnlyList<BehaviorInstruction>? rootInstructions = null,
-        IReadOnlyList<BehaviorInstruction>? instructions = null)
+        IReadOnlyList<BehaviorInstruction>? instructions = null,
+        bool catalogTriggerSourceMovedBeforeStart = false)
         : this(
             1,
             ResolutionBehaviorIds.CardBehavior,
@@ -574,7 +611,8 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
             sourceZoneKind: sourceZoneKind,
             parentFrameIdentity: parentFrameIdentity,
             abilityKey: abilityKey,
-            triggerKey: triggerKey)
+            triggerKey: triggerKey,
+            catalogTriggerSourceMovedBeforeStart: catalogTriggerSourceMovedBeforeStart)
     {
         RootInstructions = Freeze(rootInstructions ?? definition.Instructions);
         Instructions = Freeze(instructions ?? rootInstructions ?? definition.Instructions);
@@ -690,6 +728,16 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? TriggerKey { get; private set; }
 
+    /// <summary>
+    /// Engine-issued authorization for a catalog trigger whose source moved
+    /// after materialization but before its child was started. It remains
+    /// valid for the entire detached trigger child, including cursor
+    /// progress, yielded decisions, and save/load resumes.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool CatalogTriggerSourceMovedBeforeStart { get; private set; }
+
     internal BehaviorResolutionFrame With(
         BehaviorResolutionStage? stage = null,
         IReadOnlyList<BehaviorInstruction>? instructions = null,
@@ -702,7 +750,8 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
         ZoneId? setAsideZoneId = null,
         bool clearSetAsideZone = false,
         string? abilityKey = null,
-        string? triggerKey = null) =>
+        string? triggerKey = null,
+        bool? catalogTriggerSourceMovedBeforeStart = null) =>
         new(
             Version,
             BehaviorId,
@@ -725,7 +774,8 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
             sourceZoneKind: SourceZoneKind,
             parentFrameIdentity: ParentFrameIdentity,
             abilityKey: AbilityKey,
-            triggerKey: TriggerKey)
+            triggerKey: TriggerKey,
+            catalogTriggerSourceMovedBeforeStart: catalogTriggerSourceMovedBeforeStart ?? CatalogTriggerSourceMovedBeforeStart)
         {
             RootInstructions = Freeze(RootInstructions),
             Instructions = Freeze(instructions ?? Instructions),

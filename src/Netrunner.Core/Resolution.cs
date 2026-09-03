@@ -2459,7 +2459,9 @@ public static class ResolutionFrameValidator
 
         bool catalogFieldPresent = invocation.TriggerKey is not null
             || invocation.CatalogFingerprint is not null
-            || invocation.DefinitionFingerprint is not null;
+            || invocation.DefinitionFingerprint is not null
+            || invocation.SourceOwnerSide is not null
+            || invocation.SourceZoneKind is not null;
         if (catalogFieldPresent)
         {
             if (!StableIdentifier.TryValidate(invocation.TriggerKey))
@@ -2490,12 +2492,32 @@ public static class ResolutionFrameValidator
 
             if (invocation.SourceCardId is null
                 || invocation.SourceDefinitionId is null
-                || invocation.SourceZoneId is null)
+                || invocation.SourceZoneId is null
+                || invocation.SourceOwnerSide is null
+                || invocation.SourceZoneKind is null)
             {
                 violations.Add(new StateInvariantViolation(
                     "resolution.missing-trigger-source-snapshot",
                     path,
-                    "A catalog trigger invocation must retain its source card, definition, and zone snapshot."));
+                    "A catalog trigger invocation must retain its source card, owner, definition, and zone snapshot."));
+            }
+
+            if (invocation.SourceOwnerSide is { } sourceOwnerSide
+                && !Enum.IsDefined(sourceOwnerSide))
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.invalid-trigger-source-owner",
+                    $"{path}.sourceOwnerSide",
+                    "A catalog trigger source owner side must be Corp or Runner."));
+            }
+
+            if (invocation.SourceZoneKind is { } sourceZoneKind
+                && !Enum.IsDefined(sourceZoneKind))
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.invalid-trigger-source-zone-kind",
+                    $"{path}.sourceZoneKind",
+                    "A catalog trigger source zone kind must be a defined zone kind."));
             }
 
             if (invocation.Costs.Instructions.Count != 0 || invocation.Effects.Instructions.Count != 0)
@@ -2679,7 +2701,8 @@ internal static class ResolutionFrameCloner
             behavior.SourceZoneKind,
             behavior.ParentFrameIdentity,
             behavior.AbilityKey,
-            behavior.TriggerKey),
+            behavior.TriggerKey,
+            behavior.CatalogTriggerSourceMovedBeforeStart),
         AbilityFrame ability => new AbilityFrame(
             ability.Version,
             ability.BehaviorId,

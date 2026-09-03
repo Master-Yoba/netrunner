@@ -724,6 +724,8 @@ public static partial class GameEngine
                 || invocation.SourceCardId != frame.SourceCardId
                 || invocation.SourceDefinitionId != frame.DefinitionId
                 || invocation.SourceZoneId != frame.SourceZoneId
+                || invocation.SourceOwnerSide != GetCard(working, frame.SourceCardId).OwnerSide
+                || invocation.SourceZoneKind != frame.SourceZoneKind
                 || invocation.Controller != frame.Controller
                 || !string.Equals(invocation.CatalogFingerprint, frame.CatalogFingerprint, StringComparison.Ordinal)
                 || !string.Equals(invocation.DefinitionFingerprint, frame.DefinitionFingerprint, StringComparison.Ordinal))
@@ -748,6 +750,12 @@ public static partial class GameEngine
                 throw new ResolutionFailureException(
                     "The trigger-subject binding must equal the exact checkpoint invocation subject.");
             }
+        }
+
+        if (frame.TriggerKey is null && frame.CatalogTriggerSourceMovedBeforeStart)
+        {
+            throw new ResolutionFailureException(
+                "Only a catalog trigger behavior child may retain detached-source authorization.");
         }
 
         if (!string.Equals(frame.CatalogFingerprint, working.BehaviorCatalog.Fingerprint, StringComparison.Ordinal))
@@ -856,8 +864,20 @@ public static partial class GameEngine
                 : definition.Costs.Any(static cost => cost.Kind == BehaviorCostKind.RemoveSelfFromGame);
             ZoneState currentSourceZone = working.Zones.SingleOrDefault(zone => zone.Id == source.ZoneId)
                 ?? throw new ResolutionFailureException("Behavior source card current zone no longer exists.");
-            bool validLifecycleZone = (selfTrash && IsAbilityTrashZone(currentSourceZone, source))
-                || (selfRemove && IsAbilityRemoveZone(currentSourceZone, source));
+            bool catalogTriggerSelfTrashReached = frame.TriggerKey is not null
+                && BehaviorInstructionPath.HasReached(
+                    rootInstructions,
+                    frame.Continuation,
+                    frame.InstructionCursor,
+                    BehaviorInstructionKind.TrashSelf);
+            bool catalogTriggerLifecycleZone = catalogTriggerSelfTrashReached
+                && IsAbilityTrashZone(currentSourceZone, source);
+            bool catalogTriggerDetachedSource = frame.TriggerKey is not null
+                && frame.CatalogTriggerSourceMovedBeforeStart;
+            bool validLifecycleZone = frame.TriggerKey is not null
+                ? catalogTriggerDetachedSource || catalogTriggerLifecycleZone
+                : (selfTrash && IsAbilityTrashZone(currentSourceZone, source))
+                    || (selfRemove && IsAbilityRemoveZone(currentSourceZone, source));
             if (!validLifecycleZone
                 || frame.Stage != BehaviorResolutionStage.Execute
                 || (selfTrash && selfRemove))

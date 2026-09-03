@@ -2,7 +2,7 @@ using Xunit;
 
 namespace Netrunner.Core.Tests;
 
-/// <summary>Focused C2a-1 coverage for catalog trigger materialization.</summary>
+/// <summary>Focused C2a-2 coverage for catalog trigger materialization.</summary>
 public sealed class CatalogTriggerRuntimeTests
 {
     [Fact]
@@ -292,6 +292,388 @@ public sealed class CatalogTriggerRuntimeTests
     }
 
     [Fact]
+    public void MaterializedCatalogTriggerUsesDetachedSourceSnapshotAfterMoveAndJsonRoundTrip()
+    {
+        CardDefinitionId definitionId = new("test:c2a-detached-source");
+        CardInstanceId sourceId = new("card:c2a-detached-source");
+        BehaviorCatalog catalog = Catalog(
+            new CardBehaviorDefinition(
+                definitionId,
+                PlayerSide.Runner,
+                triggers:
+                [
+                    Trigger("optional", TriggerMode.Optional, BehaviorTriggerScope.Self, null, 2),
+                ]));
+        GameState state = CreateState(catalog, (sourceId, definitionId, PlayerSide.Runner, true));
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+        GameplayOccurrenceEffect occurrence = new(OccurrenceKind.CardInstalled, runner, sourceId);
+
+        GameState materialized = GameEngine.BeginGameplayOccurrenceForTesting(state, occurrence, catalog);
+        Assert.Equal(DecisionKind.TriggerChoice, Assert.IsType<PendingDecision>(materialized.PendingDecision).Kind);
+        EffectCheckpointFrame checkpoint = Assert.IsType<EffectCheckpointFrame>(materialized.ResolutionStack[^1]);
+        TriggerInvocation invocation = Assert.Single(checkpoint.TriggerQueue);
+        Assert.Equal(ZoneKind.RunnerRig, invocation.SourceZoneKind);
+        Assert.Equal(PlayerSide.Runner, invocation.SourceOwnerSide);
+
+        GameState moved = MoveCard(materialized, sourceId, ZoneKind.RunnerHeap);
+        ApplyResult direct = ApplyCurrentTriggerChoice(moved, catalog);
+        Assert.True(direct.Accepted, direct.Rejection?.Message);
+        Assert.Equal(7, direct.State.GetPlayer(runner).Credits);
+        Assert.Contains(sourceId, direct.State.GetZone(ZoneKind.RunnerHeap).CardIds);
+        Assert.Empty(direct.State.ResolutionStack);
+
+        GameState movedForLoad = MoveCard(materialized, sourceId, ZoneKind.RunnerHeap);
+        string json = EngineJson.Serialize(movedForLoad);
+        GameState restored = EngineJson.DeserializeState(json, catalog);
+        Assert.Equal(json, EngineJson.Serialize(restored));
+        ApplyResult afterLoad = ApplyCurrentTriggerChoice(restored, catalog);
+        Assert.True(afterLoad.Accepted, afterLoad.Rejection?.Message);
+        Assert.Equal(7, afterLoad.State.GetPlayer(runner).Credits);
+        Assert.Contains(sourceId, afterLoad.State.GetZone(ZoneKind.RunnerHeap).CardIds);
+        Assert.Empty(afterLoad.State.ResolutionStack);
+    }
+
+    [Fact]
+    public void DetachedCatalogTriggerAuthorizationSurvivesCursorProgressAndJsonResume()
+    {
+        CardDefinitionId definitionId = new("test:c2a-detached-yield");
+        CardInstanceId sourceId = new("card:c2a-detached-yield");
+        BehaviorChoiceSpec choice = new(
+            "resume-choice",
+            BehaviorChooser.Controller,
+            BehaviorChoiceMode.Mode,
+            BehaviorChoiceCardinality.Exactly(1),
+            options:
+            [
+                new BehaviorChoiceOption("continue", [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]),
+                new BehaviorChoiceOption("skip", [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]),
+            ]);
+        BehaviorCatalog catalog = Catalog(
+            new CardBehaviorDefinition(
+                definitionId,
+                PlayerSide.Runner,
+                triggers:
+                [
+                    new BehaviorTrigger(
+                        "yield",
+                        OccurrenceKind.CardInstalled,
+                        TriggerMode.Optional,
+                        BehaviorTriggerScope.Self,
+                        null,
+                        [
+                            new BehaviorInstruction(BehaviorInstructionKind.GainCredits, 1),
+                            new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: choice),
+                        ]),
+                ]));
+        GameState state = CreateState(catalog, (sourceId, definitionId, PlayerSide.Runner, true));
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+        GameState materialized = GameEngine.BeginGameplayOccurrenceForTesting(
+            state,
+            new GameplayOccurrenceEffect(OccurrenceKind.CardInstalled, runner, sourceId),
+            catalog);
+        GameState moved = MoveCard(materialized, sourceId, ZoneKind.RunnerHeap);
+        ApplyResult started = ApplyCurrentTriggerChoice(moved, catalog);
+        Assert.True(started.Accepted, started.Rejection?.Message);
+        BehaviorResolutionFrame child = Assert.IsType<BehaviorResolutionFrame>(started.State.ResolutionStack[^1]);
+        Assert.True(child.CatalogTriggerSourceMovedBeforeStart);
+        Assert.Equal(1, child.InstructionCursor);
+        Assert.Contains(sourceId, started.State.GetZone(ZoneKind.RunnerHeap).CardIds);
+
+        string json = EngineJson.Serialize(started.State);
+        GameState restored = EngineJson.DeserializeState(json, catalog);
+        BehaviorResolutionFrame restoredChild = Assert.IsType<BehaviorResolutionFrame>(restored.ResolutionStack[^1]);
+        Assert.True(restoredChild.CatalogTriggerSourceMovedBeforeStart);
+        Assert.Equal(json, EngineJson.Serialize(restored));
+
+        ApplyResult completed = ApplyCurrentBehaviorChoice(restored, catalog);
+        Assert.True(completed.Accepted, completed.Rejection?.Message);
+        Assert.Equal(6, completed.State.GetPlayer(runner).Credits);
+        Assert.Contains(sourceId, completed.State.GetZone(ZoneKind.RunnerHeap).CardIds);
+        Assert.Empty(completed.State.ResolutionStack);
+    }
+
+    [Fact]
+    public void MaterializedCatalogTriggerRejectsChangedDefinitionAndOwner()
+    {
+        CardDefinitionId definitionId = new("test:c2a-detached-provenance");
+        CardDefinitionId changedDefinitionId = new("test:c2a-detached-changed");
+        CardInstanceId sourceId = new("card:c2a-detached-provenance");
+        BehaviorCatalog catalog = Catalog(
+            new CardBehaviorDefinition(
+                definitionId,
+                PlayerSide.Runner,
+                triggers:
+                [
+                    Trigger("optional", TriggerMode.Optional, BehaviorTriggerScope.Self, null, 2),
+                ]),
+            new CardBehaviorDefinition(changedDefinitionId, PlayerSide.Runner));
+        GameState state = CreateState(catalog, (sourceId, definitionId, PlayerSide.Runner, true));
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+        GameplayOccurrenceEffect occurrence = new(OccurrenceKind.CardInstalled, runner, sourceId);
+        GameState materialized = GameEngine.BeginGameplayOccurrenceForTesting(state, occurrence, catalog);
+
+        GameState changedDefinition = ReplaceCard(
+            materialized,
+            sourceId,
+            changedDefinitionId,
+            PlayerSide.Runner);
+        ApplyResult definitionRejected = ApplyCurrentTriggerChoice(changedDefinition, catalog);
+        Assert.False(definitionRejected.Accepted);
+        Assert.Equal(ApplyRejectionCode.ResolutionFailure, definitionRejected.Rejection?.Code);
+        Assert.Equal(DeterministicHash.ForState(changedDefinition), DeterministicHash.ForState(definitionRejected.State));
+
+        GameState changedOwner = ReplaceCard(
+            materialized,
+            sourceId,
+            definitionId,
+            PlayerSide.Corp);
+        ApplyResult ownerRejected = ApplyCurrentTriggerChoice(changedOwner, catalog);
+        Assert.False(ownerRejected.Accepted);
+        Assert.Equal(ApplyRejectionCode.InvalidInputState, ownerRejected.Rejection?.Code);
+        Assert.Equal(DeterministicHash.ForState(changedOwner), DeterministicHash.ForState(ownerRejected.State));
+    }
+
+    [Fact]
+    public void SameControllerCatalogTriggerOrderingIsStableAcrossJsonLoad()
+    {
+        CardDefinitionId definitionId = new("test:c2a-same-controller-order");
+        CardInstanceId zuluId = new("card:c2a-order-zulu");
+        CardInstanceId alphaId = new("card:c2a-order-alpha");
+        BehaviorCatalog catalog = Catalog(
+            new CardBehaviorDefinition(
+                definitionId,
+                PlayerSide.Runner,
+                triggers:
+                [
+                    Trigger("optional", TriggerMode.Optional, BehaviorTriggerScope.Any, null, 1),
+                ]));
+        GameState state = CreateState(
+            catalog,
+            (zuluId, definitionId, PlayerSide.Runner, true),
+            (alphaId, definitionId, PlayerSide.Runner, true));
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+        GameState prompt = GameEngine.BeginGameplayOccurrenceForTesting(
+            state,
+            new GameplayOccurrenceEffect(OccurrenceKind.CardInstalled, runner, alphaId),
+            catalog);
+        PendingDecision decision = Assert.IsType<PendingDecision>(prompt.PendingDecision);
+        Assert.Equal(DecisionKind.TriggerOrdering, decision.Kind);
+        TriggerId[] expectedActions = decision.LegalActions
+            .Where(action => action.Kind == ActionKind.OrderTriggers)
+            .Select(action => Assert.IsType<TriggerOrderParameters>(action.Parameters).TriggerId)
+            .ToArray();
+        Assert.Equal(2, expectedActions.Length);
+
+        string json = EngineJson.Serialize(prompt);
+        GameState restored = EngineJson.DeserializeState(json, catalog);
+        PendingDecision restoredDecision = Assert.IsType<PendingDecision>(restored.PendingDecision);
+        TriggerId[] restoredActions = restoredDecision.LegalActions
+            .Where(action => action.Kind == ActionKind.OrderTriggers)
+            .Select(action => Assert.IsType<TriggerOrderParameters>(action.Parameters).TriggerId)
+            .ToArray();
+        Assert.Equal(expectedActions, restoredActions);
+
+        LegalAction originalChoice = decision.LegalActions
+            .First(action => action.Kind == ActionKind.OrderTriggers);
+        LegalAction restoredChoice = restoredDecision.LegalActions
+            .Single(action => action.Kind == ActionKind.OrderTriggers
+                && Assert.IsType<TriggerOrderParameters>(action.Parameters).TriggerId
+                    == Assert.IsType<TriggerOrderParameters>(originalChoice.Parameters).TriggerId);
+        ApplyResult originalOrdered = GameEngine.Apply(
+            prompt,
+            new ActionSubmission(decision.Owner, decision.Id, decision.Revision, originalChoice.Id),
+            catalog);
+        ApplyResult restoredOrdered = GameEngine.Apply(
+            restored,
+            new ActionSubmission(restoredDecision.Owner, restoredDecision.Id, restoredDecision.Revision, restoredChoice.Id),
+            catalog);
+        Assert.True(originalOrdered.Accepted, originalOrdered.Rejection?.Message);
+        Assert.True(restoredOrdered.Accepted, restoredOrdered.Rejection?.Message);
+        Assert.Equal(
+            DeterministicHash.ForState(originalOrdered.State),
+            DeterministicHash.ForState(restoredOrdered.State));
+    }
+
+    [Fact]
+    public void ActivePlayerControllerPrecedesInactiveControllerForCatalogTriggers()
+    {
+        CardDefinitionId corpDefinitionId = new("test:c2a-active-corp");
+        CardDefinitionId runnerDefinitionId = new("test:c2a-active-runner");
+        CardInstanceId corpSourceId = new("card:c2a-active-corp");
+        CardInstanceId runnerSourceId = new("card:c2a-active-runner");
+        BehaviorCatalog catalog = Catalog(
+            new CardBehaviorDefinition(
+                corpDefinitionId,
+                PlayerSide.Corp,
+                triggers:
+                [
+                    Trigger("corp", TriggerMode.Optional, BehaviorTriggerScope.Any, null, 1),
+                ]),
+            new CardBehaviorDefinition(
+                runnerDefinitionId,
+                PlayerSide.Runner,
+                triggers:
+                [
+                    Trigger("runner", TriggerMode.Optional, BehaviorTriggerScope.Any, null, 1),
+                ]));
+        GameState state = CreateControllerState(
+            catalog,
+            corpSourceId,
+            corpDefinitionId,
+            runnerSourceId,
+            runnerDefinitionId);
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+
+        GameState prompt = GameEngine.BeginGameplayOccurrenceForTesting(
+            state,
+            new GameplayOccurrenceEffect(OccurrenceKind.CardInstalled, runner, runnerSourceId),
+            catalog,
+            maxResolutionSteps: 32);
+        EffectCheckpointFrame checkpoint = Assert.IsType<EffectCheckpointFrame>(prompt.ResolutionStack[^1]);
+        Assert.Equal(2, checkpoint.TriggerQueue.Count);
+        Assert.Equal(PlayerSide.Corp, state.GetPlayer(checkpoint.TriggerQueue[0].Controller).Side);
+        Assert.Equal(PlayerSide.Runner, state.GetPlayer(checkpoint.TriggerQueue[1].Controller).Side);
+        PendingDecision decision = Assert.IsType<PendingDecision>(prompt.PendingDecision);
+        Assert.Equal(DecisionKind.TriggerChoice, decision.Kind);
+        Assert.Equal(PlayerSide.Corp, state.GetPlayer(decision.Owner).Side);
+        TriggerChoiceParameters choice = Assert.IsType<TriggerChoiceParameters>(
+            Assert.Single(decision.LegalActions, action => action.Kind == ActionKind.UseTrigger).Parameters);
+        Assert.Equal(checkpoint.TriggerQueue[0].Id, choice.TriggerId);
+    }
+
+    [Fact]
+    public void CatalogTriggerTrashSelfThenGainRunsOnceAndClearsTypedCounters()
+    {
+        CardDefinitionId definitionId = new("test:c2a-trash-self");
+        CardInstanceId sourceId = new("card:c2a-trash-self");
+        BehaviorCatalog catalog = Catalog(
+            new CardBehaviorDefinition(
+                definitionId,
+                PlayerSide.Runner,
+                triggers:
+                [
+                    new BehaviorTrigger(
+                        "trash-self",
+                        OccurrenceKind.CardInstalled,
+                        TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Self,
+                        null,
+                        [
+                            new BehaviorInstruction(BehaviorInstructionKind.TrashSelf),
+                            new BehaviorInstruction(BehaviorInstructionKind.GainCredits, 2),
+                        ]),
+                ]));
+        GameState state = AddCounter(
+            CreateState(catalog, (sourceId, definitionId, PlayerSide.Runner, true)),
+            sourceId,
+            new CardCounterState(sourceId, "virus", 2));
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+
+        GameState result = GameEngine.BeginGameplayOccurrenceForTesting(
+            state,
+            new GameplayOccurrenceEffect(OccurrenceKind.CardInstalled, runner, sourceId),
+            catalog);
+
+        Assert.Equal(7, result.GetPlayer(runner).Credits);
+        Assert.Contains(sourceId, result.GetZone(ZoneKind.RunnerHeap).CardIds);
+        Assert.DoesNotContain(result.RulesState!.Counters, counter => counter.CardId == sourceId);
+        Assert.Empty(result.ResolutionStack);
+        Assert.Null(result.PendingDecision);
+    }
+
+    [Fact]
+    public void CatalogTriggerRejectsForgedMovementBeforeAndAfterTrashSelf()
+    {
+        CardDefinitionId definitionId = new("test:c2a-trash-self-forged");
+        CardInstanceId sourceId = new("card:c2a-trash-self-forged");
+        BehaviorChoiceSpec pause = new(
+            "pause",
+            BehaviorChooser.Controller,
+            BehaviorChoiceMode.Mode,
+            BehaviorChoiceCardinality.Exactly(1),
+            options:
+            [
+                new BehaviorChoiceOption("continue", [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]),
+                new BehaviorChoiceOption("skip", [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]),
+            ]);
+        BehaviorCatalog beforeTrashCatalog = Catalog(
+            new CardBehaviorDefinition(
+                definitionId,
+                PlayerSide.Runner,
+                triggers:
+                [
+                    new BehaviorTrigger(
+                        "before-trash",
+                        OccurrenceKind.CardInstalled,
+                        TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Self,
+                        null,
+                        [
+                            new BehaviorInstruction(BehaviorInstructionKind.NoOp),
+                            new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: pause),
+                            new BehaviorInstruction(BehaviorInstructionKind.TrashSelf),
+                            new BehaviorInstruction(BehaviorInstructionKind.GainCredits, 1),
+                        ]),
+                ]));
+        GameState beforeTrashState = CreateState(
+            beforeTrashCatalog,
+            (sourceId, definitionId, PlayerSide.Runner, true));
+        PlayerId runner = beforeTrashState.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+        GameState beforeTrashPrompt = GameEngine.BeginGameplayOccurrenceForTesting(
+            beforeTrashState,
+            new GameplayOccurrenceEffect(OccurrenceKind.CardInstalled, runner, sourceId),
+            beforeTrashCatalog,
+            maxResolutionSteps: 32);
+        BehaviorResolutionFrame beforeTrashChild = Assert.IsType<BehaviorResolutionFrame>(beforeTrashPrompt.ResolutionStack[^1]);
+        Assert.False(beforeTrashChild.CatalogTriggerSourceMovedBeforeStart);
+        Assert.Equal(1, beforeTrashChild.InstructionCursor);
+        GameState movedBeforeTrash = MoveCard(beforeTrashPrompt, sourceId, ZoneKind.RunnerHeap);
+        ApplyResult beforeTrashRejected = ApplyCurrentBehaviorChoice(movedBeforeTrash, beforeTrashCatalog);
+        Assert.False(beforeTrashRejected.Accepted);
+        Assert.Equal(ApplyRejectionCode.InvalidInputState, beforeTrashRejected.Rejection?.Code);
+        Assert.Equal(DeterministicHash.ForState(movedBeforeTrash), DeterministicHash.ForState(beforeTrashRejected.State));
+
+        BehaviorCatalog afterTrashCatalog = Catalog(
+            new CardBehaviorDefinition(
+                definitionId,
+                PlayerSide.Runner,
+                triggers:
+                [
+                    new BehaviorTrigger(
+                        "after-trash",
+                        OccurrenceKind.CardInstalled,
+                        TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Self,
+                        null,
+                        [
+                            new BehaviorInstruction(BehaviorInstructionKind.TrashSelf),
+                            new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: pause),
+                            new BehaviorInstruction(BehaviorInstructionKind.GainCredits, 1),
+                        ]),
+                ]));
+        GameState afterTrashState = CreateState(
+            afterTrashCatalog,
+            (sourceId, definitionId, PlayerSide.Runner, true));
+        runner = afterTrashState.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+        GameState afterTrashPrompt = GameEngine.BeginGameplayOccurrenceForTesting(
+            afterTrashState,
+            new GameplayOccurrenceEffect(OccurrenceKind.CardInstalled, runner, sourceId),
+            afterTrashCatalog,
+            maxResolutionSteps: 32);
+        BehaviorResolutionFrame afterTrashChild = Assert.IsType<BehaviorResolutionFrame>(afterTrashPrompt.ResolutionStack[^1]);
+        Assert.False(afterTrashChild.CatalogTriggerSourceMovedBeforeStart);
+        Assert.Equal(1, afterTrashChild.InstructionCursor);
+        Assert.Contains(sourceId, afterTrashPrompt.GetZone(ZoneKind.RunnerHeap).CardIds);
+        GameState movedToWrongDestination = MoveCard(afterTrashPrompt, sourceId, ZoneKind.RunnerGrip);
+        ApplyResult wrongDestinationRejected = ApplyCurrentBehaviorChoice(movedToWrongDestination, afterTrashCatalog);
+        Assert.False(wrongDestinationRejected.Accepted);
+        Assert.Equal(ApplyRejectionCode.InvalidInputState, wrongDestinationRejected.Rejection?.Code);
+        Assert.Equal(
+            DeterministicHash.ForState(movedToWrongDestination),
+            DeterministicHash.ForState(wrongDestinationRejected.State));
+    }
+
+    [Fact]
     public void MarkerAndCatalogInvocationDiscriminatorsRoundTripAndRejectMixedFrameKeys()
     {
         PlayerId runner = new("player:runner");
@@ -352,6 +734,168 @@ public sealed class CatalogTriggerRuntimeTests
 
         return builder.Build();
     }
+
+    private static GameState CreateControllerState(
+        BehaviorCatalog catalog,
+        CardInstanceId corpSourceId,
+        CardDefinitionId corpDefinitionId,
+        CardInstanceId runnerSourceId,
+        CardDefinitionId runnerDefinitionId)
+    {
+        GameState baseline = GameState.CreateNew(
+            4302,
+            behaviorRegistryVersion: catalog.Version,
+            behaviorCatalogFingerprint: catalog.Fingerprint);
+        ZoneState corpRoot = baseline.Zones.Single(zone => zone.Id == baseline.GetServer(
+            baseline.Servers.Single(server => server.Kind == ServerKind.Headquarters).Id).RootZoneId);
+        ZoneState runnerRig = baseline.GetZone(ZoneKind.RunnerRig);
+        CardInstanceState corpSource = new(
+            corpSourceId,
+            corpDefinitionId,
+            corpRoot.Id,
+            PlayerSide.Corp,
+            faceUp: true,
+            rezzed: true);
+        CardInstanceState runnerSource = new(
+            runnerSourceId,
+            runnerDefinitionId,
+            runnerRig.Id,
+            PlayerSide.Runner,
+            faceUp: true);
+        ZoneState[] zones = baseline.Zones
+            .Select(zone => zone.Id == corpRoot.Id
+                ? new ZoneState(zone.Id, zone.Kind, zone.OwnerSide, zone.ServerId, zone.CardIds.Append(corpSourceId).ToArray())
+                : zone.Id == runnerRig.Id
+                    ? new ZoneState(zone.Id, zone.Kind, zone.OwnerSide, zone.ServerId, zone.CardIds.Append(runnerSourceId).ToArray())
+                    : zone)
+            .ToArray();
+        return CopyState(
+            baseline,
+            cards: [corpSource, runnerSource],
+            zones: zones);
+    }
+
+    private static ApplyResult ApplyCurrentTriggerChoice(GameState state, BehaviorCatalog catalog)
+    {
+        PendingDecision decision = Assert.IsType<PendingDecision>(state.PendingDecision);
+        LegalAction use = Assert.Single(decision.LegalActions, action => action.Kind == ActionKind.UseTrigger);
+        return GameEngine.Apply(
+            state,
+            new ActionSubmission(decision.Owner, decision.Id, decision.Revision, use.Id),
+            catalog);
+    }
+
+    private static ApplyResult ApplyCurrentBehaviorChoice(GameState state, BehaviorCatalog catalog)
+    {
+        PendingDecision decision = Assert.IsType<PendingDecision>(state.PendingDecision);
+        LegalAction choice = decision.LegalActions.First(action => action.Kind == ActionKind.ChooseBehavior);
+        return GameEngine.Apply(
+            state,
+            new ActionSubmission(decision.Owner, decision.Id, decision.Revision, choice.Id),
+            catalog);
+    }
+
+    private static GameState AddCounter(
+        GameState state,
+        CardInstanceId cardId,
+        CardCounterState counter)
+    {
+        RulesState rules = state.RulesState ?? RulesState.CreateDefault(state.Players);
+        RulesState withCounter = new(
+            rules.Version,
+            rules.Players,
+            rules.Programs,
+            rules.Counters.Append(counter).ToArray(),
+            rules.LingeringEffects,
+            rules.Triggers,
+            rules.Interrupts);
+        return CopyState(state, rulesState: withCounter);
+    }
+
+    private static GameState MoveCard(
+        GameState state,
+        CardInstanceId cardId,
+        ZoneKind destinationKind)
+    {
+        CardInstanceState card = state.Cards.Single(candidate => candidate.Id == cardId);
+        ZoneState source = state.Zones.Single(zone => zone.Id == card.ZoneId);
+        ZoneState destination = state.GetZone(destinationKind);
+        CardInstanceState moved = new(
+            card.Id,
+            card.DefinitionId,
+            destination.Id,
+            card.OwnerSide,
+            faceUp: destination.Kind is ZoneKind.CorpDiscard
+                or ZoneKind.RunnerHeap
+                or ZoneKind.CorpRemovedFromGame
+                or ZoneKind.RunnerRemovedFromGame
+                || card.FaceUp,
+            rezzed: destination.Kind is ZoneKind.ServerRoot or ZoneKind.ServerIce && card.Rezzed,
+            card.AdvancementCounters);
+        ZoneState[] zones = state.Zones
+            .Select(zone => zone.Id == source.Id
+                ? new ZoneState(zone.Id, zone.Kind, zone.OwnerSide, zone.ServerId, zone.CardIds.Where(id => id != cardId).ToArray())
+                : zone.Id == destination.Id
+                    ? new ZoneState(zone.Id, zone.Kind, zone.OwnerSide, zone.ServerId, zone.CardIds.Append(cardId).ToArray())
+                    : zone)
+            .ToArray();
+        return CopyState(
+            state,
+            cards: state.Cards.Select(candidate => candidate.Id == cardId ? moved : candidate).ToArray(),
+            zones: zones);
+    }
+
+    private static GameState ReplaceCard(
+        GameState state,
+        CardInstanceId cardId,
+        CardDefinitionId definitionId,
+        PlayerSide ownerSide)
+    {
+        CardInstanceState card = state.Cards.Single(candidate => candidate.Id == cardId);
+        CardInstanceState replacement = new(
+            card.Id,
+            definitionId,
+            card.ZoneId,
+            ownerSide,
+            card.FaceUp,
+            card.Rezzed,
+            card.AdvancementCounters);
+        return CopyState(
+            state,
+            cards: state.Cards.Select(candidate => candidate.Id == cardId ? replacement : candidate).ToArray());
+    }
+
+    private static GameState CopyState(
+        GameState state,
+        IReadOnlyList<CardInstanceState>? cards = null,
+        IReadOnlyList<ZoneState>? zones = null,
+        IReadOnlyList<ResolutionFrame>? resolutionStack = null,
+        RulesState? rulesState = null) =>
+        new(
+            state.SchemaVersion,
+            state.GameId,
+            state.RulesVersion,
+            state.CardDataVersion,
+            state.Players,
+            cards ?? state.Cards,
+            zones ?? state.Zones,
+            state.Servers,
+            state.Turn,
+            state.Outcome,
+            state.RandomState,
+            state.Allocator,
+            state.DecisionRevision,
+            state.EventSequence,
+            resolutionStack ?? state.ResolutionStack,
+            state.PendingDecision,
+            state.ActionSequence,
+            state.InitialSeed,
+            state.RunState,
+            rulesState ?? state.RulesState,
+            state.BehaviorRegistryVersion,
+            state.BehaviorCatalogFingerprint,
+            state.RuntimeCardCatalogVersion,
+            state.RuntimeCardCatalogFingerprint);
 
     private static GameState CreateState(
         BehaviorCatalog catalog,

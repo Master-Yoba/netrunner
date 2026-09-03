@@ -380,7 +380,9 @@ public static partial class GameEngine
                 || invocation.DefinitionFingerprint is null
                 || invocation.SourceCardId is not { } sourceCardId
                 || invocation.SourceDefinitionId is not { } sourceDefinitionId
-                || invocation.SourceZoneId is not { } sourceZoneId)
+                || invocation.SourceZoneId is not { } sourceZoneId
+                || invocation.SourceOwnerSide is not { } sourceOwnerSide
+                || invocation.SourceZoneKind is not { } sourceZoneKind)
             {
                 throw new ResolutionFailureException("A catalog trigger invocation is missing its reconstruction provenance.");
             }
@@ -394,16 +396,24 @@ public static partial class GameEngine
                 throw new ResolutionFailureException("Catalog trigger invocation provenance does not match the injected catalog.");
             }
 
-            CardInstanceState source = GetCard(working, sourceCardId);
-            if (source.DefinitionId != sourceDefinitionId || source.ZoneId != sourceZoneId)
+            ZoneState sourceSnapshotZone = working.Zones.SingleOrDefault(zone => zone.Id == sourceZoneId)
+                ?? throw new ResolutionFailureException("Catalog trigger source snapshot zone no longer exists.");
+            if (sourceSnapshotZone.Kind != sourceZoneKind)
             {
-                throw new ResolutionFailureException("Catalog trigger source snapshot is stale.");
+                throw new ResolutionFailureException("Catalog trigger source snapshot zone kind no longer matches.");
+            }
+
+            CardInstanceState source = GetCard(working, sourceCardId);
+            PlayerState sourceController = GetPlayer(working, sourceOwnerSide);
+            if (source.DefinitionId != sourceDefinitionId
+                || source.OwnerSide != sourceOwnerSide
+                || sourceController.Id != invocation.Controller)
+            {
+                throw new ResolutionFailureException("Catalog trigger source snapshot owner or definition is stale.");
             }
 
             CardBehaviorDefinition definition = GetBehaviorDefinition(working, sourceDefinitionId);
             BehaviorTrigger trigger = GetTriggerDeclaration(definition, invocation.TriggerKey);
-            ZoneState sourceZone = working.Zones.SingleOrDefault(zone => zone.Id == source.ZoneId)
-                ?? throw new ResolutionFailureException("Catalog trigger source zone no longer exists.");
             EffectCheckpointFrame awaiting = (EffectCheckpointFrame)working.ResolutionStack[^1];
             BehaviorResolutionFrame child = new(
                 definition,
@@ -411,13 +421,14 @@ public static partial class GameEngine
                 working.BehaviorCatalog.Fingerprint,
                 working.BehaviorCatalog.GetDefinitionFingerprint(sourceDefinitionId),
                 working.Allocator.NextBehaviorFrameId(),
-                source.ZoneId,
-                sourceZone.Kind,
+                sourceZoneId,
+                sourceZoneKind,
                 awaiting.BehaviorId,
                 BehaviorFrameIdentity.Compute(awaiting),
                 triggerKey: trigger.Key,
                 rootInstructions: trigger.Instructions,
-                instructions: trigger.Instructions);
+                instructions: trigger.Instructions,
+                catalogTriggerSourceMovedBeforeStart: source.ZoneId != sourceZoneId);
             var bindings = invocation.Occurrence.SourceCardId is { } subjectCardId
                 ? new[] { new BehaviorBinding("trigger-subject", [subjectCardId]) }
                 : Array.Empty<BehaviorBinding>();
@@ -787,6 +798,8 @@ public static partial class GameEngine
                     source.Id,
                     source.DefinitionId,
                     source.ZoneId,
+                    source.OwnerSide,
+                    working.Zones.Single(zone => zone.Id == source.ZoneId).Kind,
                     occurrence,
                     working.BehaviorCatalog.Fingerprint,
                     working.BehaviorCatalog.GetDefinitionFingerprint(source.DefinitionId)));

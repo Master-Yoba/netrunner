@@ -559,7 +559,9 @@ public sealed record TriggerInvocation
         EffectBundle effects,
         string? triggerKey = null,
         string? catalogFingerprint = null,
-        string? definitionFingerprint = null)
+        string? definitionFingerprint = null,
+        PlayerSide? sourceOwnerSide = null,
+        ZoneKind? sourceZoneKind = null)
     {
         ArgumentNullException.ThrowIfNull(behaviorId);
         ArgumentNullException.ThrowIfNull(occurrence);
@@ -567,7 +569,9 @@ public sealed record TriggerInvocation
         ArgumentNullException.ThrowIfNull(effects);
         bool catalogFieldPresent = triggerKey is not null
             || catalogFingerprint is not null
-            || definitionFingerprint is not null;
+            || definitionFingerprint is not null
+            || sourceOwnerSide is not null
+            || sourceZoneKind is not null;
         if (catalogFieldPresent
             && (!StableIdentifier.TryValidate(triggerKey)
                 || !StableIdentifier.TryValidate(catalogFingerprint)
@@ -584,6 +588,17 @@ public sealed record TriggerInvocation
                 "Catalog trigger invocations must not persist executable cost or effect bodies.");
         }
 
+        if (catalogFieldPresent
+            && (sourceCardId is null
+                || sourceDefinitionId is null
+                || sourceZoneId is null
+                || sourceOwnerSide is null
+                || sourceZoneKind is null))
+        {
+            throw new ArgumentException(
+                "A catalog trigger invocation requires a complete source card, owner, definition, and zone snapshot.");
+        }
+
         Version = version;
         Id = id;
         Controller = controller;
@@ -592,6 +607,8 @@ public sealed record TriggerInvocation
         SourceCardId = sourceCardId;
         SourceDefinitionId = sourceDefinitionId;
         SourceZoneId = sourceZoneId;
+        SourceOwnerSide = sourceOwnerSide;
+        SourceZoneKind = sourceZoneKind;
         Occurrence = occurrence.Copy();
         Costs = costs.Copy();
         Effects = effects.Copy();
@@ -637,6 +654,8 @@ public sealed record TriggerInvocation
         CardInstanceId sourceCardId,
         CardDefinitionId sourceDefinitionId,
         ZoneId sourceZoneId,
+        PlayerSide sourceOwnerSide,
+        ZoneKind sourceZoneKind,
         OccurrenceSnapshot occurrence,
         string catalogFingerprint,
         string definitionFingerprint)
@@ -654,7 +673,9 @@ public sealed record TriggerInvocation
             new EffectBundle(),
             trigger.Key,
             catalogFingerprint,
-            definitionFingerprint)
+            definitionFingerprint,
+            sourceOwnerSide,
+            sourceZoneKind)
     {
     }
 
@@ -689,6 +710,16 @@ public sealed record TriggerInvocation
     [JsonInclude]
     [JsonRequired]
     public ZoneId? SourceZoneId { get; private set; }
+
+    /// <summary>Owner side captured with a catalog trigger's source snapshot.</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public PlayerSide? SourceOwnerSide { get; private set; }
+
+    /// <summary>Zone kind captured with a catalog trigger's source snapshot.</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ZoneKind? SourceZoneKind { get; private set; }
 
     [JsonInclude]
     [JsonRequired]
@@ -734,7 +765,9 @@ public sealed record TriggerInvocation
         Effects,
         TriggerKey,
         CatalogFingerprint,
-        DefinitionFingerprint);
+        DefinitionFingerprint,
+        SourceOwnerSide,
+        SourceZoneKind);
 }
 
 /// <summary>Detached interrupt invocation materialized at an occurrence.</summary>

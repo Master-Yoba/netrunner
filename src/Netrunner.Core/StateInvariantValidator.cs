@@ -2715,26 +2715,66 @@ public static class StateInvariantValidator
                             ZoneState? currentSourceZone = sourceCard is null
                                 ? null
                                 : state.Zones.FirstOrDefault(zone => zone?.Id == sourceCard.ZoneId);
+                            bool catalogTriggerSelfTrashReached = false;
+                            if (behaviorFrame.TriggerKey is not null
+                                && behaviorCatalog.TryGet(
+                                    behaviorFrame.DefinitionId,
+                                    out CardBehaviorDefinition? triggerSourceDefinition))
+                            {
+                                BehaviorTrigger? trigger = triggerSourceDefinition.Triggers
+                                    .SingleOrDefault(candidate => string.Equals(
+                                        candidate.Key,
+                                        behaviorFrame.TriggerKey,
+                                        StringComparison.Ordinal));
+                                catalogTriggerSelfTrashReached = trigger is not null
+                                    && BehaviorInstructionPath.HasReached(
+                                        trigger.Instructions,
+                                        behaviorFrame.Continuation,
+                                        behaviorFrame.InstructionCursor,
+                                        BehaviorInstructionKind.TrashSelf);
+                            }
+
+                            bool catalogTriggerDetachedSource = behaviorFrame.TriggerKey is not null
+                                && behaviorFrame.CatalogTriggerSourceMovedBeforeStart;
                             bool movedAfterPayment = behaviorFrame.Stage == BehaviorResolutionStage.Execute
-                                && ((selfTrash
+                                && ((behaviorFrame.TriggerKey is null
+                                        && selfTrash
                                         && sourceCard is not null
                                         && currentSourceZone is not null
                                         && (sourceCard.OwnerSide == PlayerSide.Corp
                                             ? currentSourceZone.Kind == ZoneKind.CorpDiscard
                                             : currentSourceZone.Kind == ZoneKind.RunnerHeap))
-                                    || (selfRemove
+                                    || (behaviorFrame.TriggerKey is null
+                                        && selfRemove
                                         && sourceCard is not null
                                         && currentSourceZone is not null
                                         && (sourceCard.OwnerSide == PlayerSide.Corp
                                             ? currentSourceZone.Kind == ZoneKind.CorpRemovedFromGame
-                                            : currentSourceZone.Kind == ZoneKind.RunnerRemovedFromGame)));
+                                            : currentSourceZone.Kind == ZoneKind.RunnerRemovedFromGame))
+                                    || (catalogTriggerSelfTrashReached
+                                        && sourceCard is not null
+                                        && currentSourceZone is not null
+                                        && (sourceCard.OwnerSide == PlayerSide.Corp
+                                            ? currentSourceZone.Kind == ZoneKind.CorpDiscard
+                                            : currentSourceZone.Kind == ZoneKind.RunnerHeap)));
                             if (sourceCard is not null
                                 && sourceCard.ZoneId != sourceZone.Id
+                                && !catalogTriggerDetachedSource
                                 && !movedAfterPayment)
                             {
                                 Add(violations, "resolution.behavior-source-location-mismatch", $"{path}.sourceZoneId", "Behavior source card no longer occupies its captured invocation location.");
                             }
                         }
+                    }
+
+                    if (behaviorFrame.TriggerKey is null
+                        && behaviorFrame.CatalogTriggerSourceMovedBeforeStart)
+                    {
+                        Add(
+                            violations,
+                            "resolution.behavior-detached-source-unexpected",
+                            path,
+                            "Detached-source authorization is reserved for catalog trigger behavior children.");
                     }
 
                     BehaviorBinding[] triggerSubjectBindings = behaviorFrame.Bindings
@@ -3096,7 +3136,10 @@ public static class StateInvariantValidator
                                         || behaviorChild.SourceCardId != invocation.SourceCardId
                                         || behaviorChild.DefinitionId != invocation.SourceDefinitionId
                                         || behaviorChild.SourceZoneId != invocation.SourceZoneId
+                                        || behaviorChild.SourceZoneKind != invocation.SourceZoneKind
                                         || behaviorChild.Controller != invocation.Controller
+                                        || invocation.SourceOwnerSide is not { } sourceOwnerSide
+                                        || state.Cards.FirstOrDefault(card => card?.Id == behaviorChild.SourceCardId)?.OwnerSide != sourceOwnerSide
                                         || !string.Equals(behaviorChild.CatalogFingerprint, invocation.CatalogFingerprint, StringComparison.Ordinal)
                                         || !string.Equals(behaviorChild.DefinitionFingerprint, invocation.DefinitionFingerprint, StringComparison.Ordinal))
                                     {

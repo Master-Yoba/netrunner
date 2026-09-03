@@ -2983,3 +2983,28 @@ errors; runtime action expansion and full verification remain pending.
   the schema-3 hashes with 32 replay-verified checkpoints. Source movement after
   materialization, trigger-body self movement, fuller simultaneous ordering,
   and real lifecycle hooks remain explicit C2a-2/C2b work.
+
+### 2026-09-03 — Checkpoint C2a-2 detached trigger timing accepted
+
+- Luna Max completed the CR source-snapshot contract. Catalog invocations now
+  retain source owner side and zone kind as well as card/definition/zone IDs.
+  Once an active source has materialized a trigger, later physical movement no
+  longer erases the pending object: child creation proves the same owned card
+  and definition against the frozen snapshot and executes from that snapshot
+  without retargeting to the card's current zone. Missing, changed-definition,
+  changed-owner, malformed, or provenance-mismatched sources fail closed.
+- A persisted detached-before-start authorization remains valid for the whole
+  trigger child, including cursor progress, yielded choices, and JSON resume.
+  A source that was still in place when its child began receives no blanket
+  movement exception. It may continue after moving only when its reconstructed,
+  reachable instruction prefix has actually passed `TrashSelf`, and then only
+  from its owner's discard. The central movement boundary clears typed counters;
+  forged movement before that cursor or to a wrong destination is rejected.
+- Simultaneous catalog triggers retain the existing timing rules: active-player
+  controller first, explicit same-controller ordering, stable deterministic IDs,
+  and identical order/hash after save/load. Root independently passed the
+  expanded focused catalog-trigger gate 13/13, complete Core 580/580, the
+  zero-warning solution build, Core formatting, and `git diff --check`. The
+  direct M2 proof remains byte-stable at the schema-3 hashes with all 32
+  checkpoints replay verified. Generic trigger execution and movement timing
+  are complete; production lifecycle occurrence hooks remain C2b.
