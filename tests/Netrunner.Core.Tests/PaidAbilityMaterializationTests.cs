@@ -160,6 +160,33 @@ public sealed class PaidAbilityMaterializationTests
     }
 
     [Fact]
+    public void GenericCounterAbilityCannotSpendHostedCreditByName()
+    {
+        BehaviorPaidAbility paid = Ability(
+            "ability:generic-credit-counter",
+            BehaviorAbilityTiming.AnyPaidWindow,
+            BehaviorAbilityActivation.PaidAbility,
+            [new BehaviorCost(BehaviorCostKind.Counter, 1, counterName: "credit")]);
+        CardDefinitionId definition = new("test:materialize-generic-credit-counter");
+        CardInstanceId sourceId = new("card:materialize-generic-credit-counter");
+        BehaviorCatalog catalog = new BehaviorCatalogBuilder("test:materialize-generic-credit-counter")
+            .Add(new CardBehaviorDefinition(definition, PlayerSide.Runner, paidAbilities: [paid]))
+            .Build();
+
+        GameState state = BuildState(
+            catalog,
+            PlayerSide.Runner,
+            TurnFrameStage.BeforeTurnPriority,
+            [Source(sourceId.Value, definition, PlayerSide.Runner, ZoneKind.RunnerRig)],
+            counters: [CardCounterState.CreateHostedCredit(
+                sourceId,
+                1,
+                HostedCreditSpendRestriction.AbilityCost)]);
+
+        Assert.Empty(GameEngine.MaterializeAbilityActionParameters(state, catalog));
+    }
+
+    [Fact]
     public void OncePerTurnUsageDisappearsAndNewTurnFactsResetIt()
     {
         BehaviorPaidAbility once = Ability(

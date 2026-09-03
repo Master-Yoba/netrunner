@@ -1082,6 +1082,12 @@ public static partial class GameEngine
             counter.CardId == cardId
             && string.Equals(counter.CounterName, counterName, StringComparison.Ordinal))?.Count ?? 0;
 
+    private static int CurrentAbilityCounter(WorkingState working, CardInstanceId cardId, string counterName) =>
+        working.RulesState?.Counters.SingleOrDefault(counter =>
+            counter.CardId == cardId
+            && counter.Purpose != CardCounterPurpose.HostedCredit
+            && string.Equals(counter.CounterName, counterName, StringComparison.Ordinal))?.Count ?? 0;
+
     private static TurnFactsState? CurrentFacts(WorkingState working, PlayerId playerId)
     {
         PlayerSide side = GetPlayer(working, playerId).Side;

@@ -493,7 +493,11 @@ public static partial class GameEngine
             owner.UsedMemory));
     }
 
-    private static void AdjustCounter(WorkingState working, CardInstanceId cardId, string counterName, int delta)
+    private static void AdjustCounter(
+        WorkingState working,
+        CardInstanceId cardId,
+        string counterName,
+        int delta)
     {
         _ = GetCard(working, cardId);
         if (!StableIdentifier.TryValidate(counterName))
@@ -504,6 +508,12 @@ public static partial class GameEngine
         RulesState rules = RequireRulesState(working);
         CardCounterState? current = rules.Counters.SingleOrDefault(counter =>
             counter.CardId == cardId && string.Equals(counter.CounterName, counterName, StringComparison.Ordinal));
+        if (current?.Purpose == CardCounterPurpose.HostedCredit)
+        {
+            throw new ResolutionFailureException(
+                $"Hosted-credit counter '{counterName}' cannot be adjusted by a generic counter effect.");
+        }
+
         long next = checked((long)(current?.Count ?? 0) + delta);
         if (next is < 0 or > int.MaxValue)
         {
@@ -511,7 +521,17 @@ public static partial class GameEngine
         }
 
         var counters = rules.Counters.Where(counter => counter != current).ToList();
-        if (next > 0) counters.Add(new CardCounterState(cardId, counterName, (int)next));
+        if (next > 0)
+        {
+            counters.Add(current is null
+                ? new CardCounterState(cardId, counterName, (int)next)
+                : new CardCounterState(
+                    cardId,
+                    counterName,
+                    (int)next,
+                    current.Purpose,
+                    current.SpendRestriction));
+        }
         SetRulesState(working, counters: counters);
         Emit(working, EngineEventKinds.CounterAdjusted, new CounterAdjustedEventPayload(
             cardId,
@@ -526,7 +546,7 @@ public static partial class GameEngine
         long removed = 0;
         foreach (CardCounterState counter in rules.Counters)
         {
-            if (string.Equals(counter.CounterName, "virus", StringComparison.Ordinal))
+            if (counter.Purpose == CardCounterPurpose.Virus)
             {
                 removed = checked(removed + counter.Count);
             }
@@ -539,7 +559,7 @@ public static partial class GameEngine
         }
 
         SetRulesState(working, counters: rules.Counters
-            .Where(counter => !string.Equals(counter.CounterName, "virus", StringComparison.Ordinal)).ToArray());
+            .Where(counter => counter.Purpose != CardCounterPurpose.Virus).ToArray());
         Emit(working, EngineEventKinds.VirusPurged, new VirusPurgedEventPayload((int)removed));
     }
 

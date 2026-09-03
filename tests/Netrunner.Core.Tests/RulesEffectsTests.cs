@@ -243,13 +243,34 @@ public sealed class RulesEffectsTests
         Assert.Equal(3, withCounters.RulesState.Counters.Single(value => value.CardId == secondCardId && value.CounterName == "virus").Count);
         Assert.Single(withCounters.RulesState.Counters, value => value.CounterName == "power");
 
-        GameState purged = GameEngine.ResolveEffects(
+        RulesState counterRules = withCounters.RulesState;
+        GameState withHostedCredit = Rebuild(
             withCounters,
+            new RulesState(
+                counterRules.Version,
+                counterRules.Players,
+                counterRules.Programs,
+                counterRules.Counters
+                    .Append(CardCounterState.CreateHostedCredit(
+                        cardId,
+                        4,
+                        HostedCreditSpendRestriction.AnyCost))
+                    .ToArray(),
+                counterRules.LingeringEffects,
+                counterRules.Triggers,
+                counterRules.Interrupts));
+        StateInvariantValidator.Validate(withHostedCredit);
+        GameState purged = GameEngine.ResolveEffects(
+            withHostedCredit,
             fixture.Corp,
             new CostBundle(),
             new EffectBundle(new VirusPurgeEffect()));
         Assert.DoesNotContain(purged.RulesState!.Counters, value => value.CounterName == "virus");
         Assert.Contains(purged.RulesState.Counters, value => value.CounterName == "power");
+        CardCounterState hostedCredit = Assert.Single(
+            purged.RulesState.Counters,
+            value => value.Purpose == CardCounterPurpose.HostedCredit);
+        Assert.Equal(4, hostedCredit.Count);
 
         string before = EngineJson.Serialize(withCounters);
         Assert.Throws<ResolutionFailureException>(() => GameEngine.ResolveEffects(

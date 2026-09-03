@@ -1948,6 +1948,40 @@ public static class StateInvariantValidator
             {
                 Add(violations, "rules.nonpositive-counter", $"{counterPath}.count", "Stored counter entries must be positive; zero-count entries are omitted.");
             }
+
+            if (!Enum.IsDefined(counter.Purpose))
+            {
+                Add(
+                    violations,
+                    "rules.invalid-counter-purpose",
+                    $"{counterPath}.purpose",
+                    $"'{counter.Purpose}' is not a supported card-counter purpose.");
+            }
+
+            if (counter.SpendRestriction is { } spendRestriction
+                && !Enum.IsDefined(spendRestriction))
+            {
+                Add(
+                    violations,
+                    "rules.invalid-counter-spend-restriction",
+                    $"{counterPath}.spendRestriction",
+                    $"'{spendRestriction}' is not a supported hosted-credit spend restriction.");
+            }
+
+            if (Enum.IsDefined(counter.Purpose)
+                && (counter.SpendRestriction is null
+                    || Enum.IsDefined(counter.SpendRestriction.Value))
+                && !CardCounterState.IsValidPurposeNameRestriction(
+                    counter.CounterName,
+                    counter.Purpose,
+                    counter.SpendRestriction))
+            {
+                Add(
+                    violations,
+                    "rules.invalid-counter-purpose-name-restriction",
+                    counterPath,
+                    "Counter purpose, name, and hosted-credit spend restriction do not form a valid combination.");
+            }
         }
 
         var effectIds = new HashSet<RunEffectId>();

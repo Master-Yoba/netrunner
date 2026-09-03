@@ -20,6 +20,29 @@ public enum LingeringEffectExpiry
 }
 
 /// <summary>
+/// The rules meaning of a named card counter.  Generic counters retain the
+/// existing name-based behavior; the two named meanings are reserved for the
+/// typed virus and hosted-credit primitives.
+/// </summary>
+public enum CardCounterPurpose
+{
+    Generic,
+    Virus,
+    HostedCredit,
+}
+
+/// <summary>
+/// The kind of cost for which a hosted credit counter may be spent.
+/// </summary>
+public enum HostedCreditSpendRestriction
+{
+    CardEffectOnly,
+    AbilityCost,
+    RunCost,
+    AnyCost,
+}
+
+/// <summary>
 /// Per-player M2 resources that are not part of the M1 turn economy.  Keeping
 /// this in the optional rules aggregate leaves no-run M1 state bytes intact.
 /// </summary>
@@ -109,17 +132,101 @@ public sealed record ProgramMemoryState
     internal ProgramMemoryState Copy() => new(CardId, Owner, MemoryCost);
 }
 
-/// <summary>A named, non-negative counter attached to a physical card.</summary>
+/// <summary>
+/// A named, positive counter attached to a physical card. Zero-count
+/// counters are omitted from serialized state and are represented by the
+/// zero result of <see cref="CardCounterRules"/> transitions.
+/// </summary>
 public sealed record CardCounterState
 {
-    [JsonConstructor]
+    /// <summary>
+    /// Creates a legacy named counter. The reserved name <c>virus</c> receives
+    /// its typed virus purpose; all other names use the generic purpose. The
+    /// reserved name <c>credit</c> must be created through
+    /// <see cref="CreateHostedCredit"/> (or the explicit hosted-credit
+    /// constructor).
+    /// </summary>
     public CardCounterState(CardInstanceId cardId, string counterName, int count)
+        : this(
+            cardId,
+            counterName,
+            count,
+            string.Equals(counterName, "virus", StringComparison.Ordinal)
+                ? CardCounterPurpose.Virus
+                : CardCounterPurpose.Generic,
+            spendRestriction: null)
     {
-        ArgumentNullException.ThrowIfNull(counterName);
+    }
+
+    /// <summary>Creates a counter with an explicit typed purpose.</summary>
+    [JsonConstructor]
+    public CardCounterState(
+        CardInstanceId cardId,
+        string counterName,
+        int count,
+        CardCounterPurpose purpose,
+        HostedCreditSpendRestriction? spendRestriction)
+    {
+        if (!StableIdentifier.TryValidate(counterName))
+        {
+            throw new ArgumentException(
+                "Counter name must be a stable nonblank identifier.",
+                nameof(counterName));
+        }
+
+        if (count <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(count),
+                count,
+                "Counter count must be positive; zero-count counters are omitted.");
+        }
+
+        if (!Enum.IsDefined(purpose))
+        {
+            throw new ArgumentOutOfRangeException(nameof(purpose));
+        }
+
+        if (spendRestriction is { } restriction && !Enum.IsDefined(restriction))
+        {
+            throw new ArgumentOutOfRangeException(nameof(spendRestriction));
+        }
+
+        ValidatePurposeNameRestriction(counterName, purpose, spendRestriction);
         CardId = cardId;
         CounterName = counterName;
         Count = count;
+        Purpose = purpose;
+        SpendRestriction = spendRestriction;
     }
+
+    /// <summary>Creates an explicitly typed hosted-credit pool.</summary>
+    public CardCounterState(
+        CardInstanceId cardId,
+        int count,
+        HostedCreditSpendRestriction spendRestriction = HostedCreditSpendRestriction.CardEffectOnly)
+        : this(
+            cardId,
+            "credit",
+            count,
+            CardCounterPurpose.HostedCredit,
+            spendRestriction)
+    {
+    }
+
+    /// <summary>Creates a hosted-credit pool named <c>credit</c>.</summary>
+    public static CardCounterState CreateHostedCredit(
+        CardInstanceId cardId,
+        int count,
+        HostedCreditSpendRestriction spendRestriction = HostedCreditSpendRestriction.CardEffectOnly) =>
+        new(cardId, count, spendRestriction);
+
+    /// <summary>Alias for <see cref="CreateHostedCredit"/>.</summary>
+    public static CardCounterState HostedCredit(
+        CardInstanceId cardId,
+        int count,
+        HostedCreditSpendRestriction spendRestriction = HostedCreditSpendRestriction.CardEffectOnly) =>
+        CreateHostedCredit(cardId, count, spendRestriction);
 
     [JsonInclude]
     [JsonRequired]
@@ -133,7 +240,200 @@ public sealed record CardCounterState
     [JsonRequired]
     public int Count { get; private set; }
 
-    internal CardCounterState Copy() => new(CardId, CounterName, Count);
+    [JsonInclude]
+    [JsonRequired]
+    public CardCounterPurpose Purpose { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public HostedCreditSpendRestriction? SpendRestriction { get; private set; }
+
+    internal CardCounterState Copy() => new(
+        CardId,
+        CounterName,
+        Count,
+        Purpose,
+        SpendRestriction);
+
+    internal static bool IsValidPurposeNameRestriction(
+        string? counterName,
+        CardCounterPurpose purpose,
+        HostedCreditSpendRestriction? spendRestriction)
+    {
+        if (!StableIdentifier.TryValidate(counterName)
+            || !Enum.IsDefined(purpose)
+            || (spendRestriction is { } restriction && !Enum.IsDefined(restriction)))
+        {
+            return false;
+        }
+
+        return purpose switch
+        {
+            CardCounterPurpose.Generic =>
+                !string.Equals(counterName, "virus", StringComparison.Ordinal)
+                && !string.Equals(counterName, "credit", StringComparison.Ordinal)
+                && spendRestriction is null,
+            CardCounterPurpose.Virus =>
+                string.Equals(counterName, "virus", StringComparison.Ordinal)
+                && spendRestriction is null,
+            CardCounterPurpose.HostedCredit =>
+                string.Equals(counterName, "credit", StringComparison.Ordinal)
+                && spendRestriction is not null,
+            _ => false,
+        };
+    }
+
+    private static void ValidatePurposeNameRestriction(
+        string counterName,
+        CardCounterPurpose purpose,
+        HostedCreditSpendRestriction? spendRestriction)
+    {
+        if (!IsValidPurposeNameRestriction(counterName, purpose, spendRestriction))
+        {
+            throw new ArgumentException(
+                "Counter purpose, name, and hosted-credit spend restriction do not form a valid combination.",
+                nameof(purpose));
+        }
+    }
+}
+
+/// <summary>
+/// Pure arithmetic and legality helpers for card counters. These helpers do
+/// not mutate a <see cref="CardCounterState"/>; a zero result means the caller
+/// should omit the counter from the next RulesState aggregate.
+/// </summary>
+public static class CardCounterRules
+{
+    /// <summary>
+    /// Returns the count after loading a hosted-credit pool. A generic or
+    /// virus counter cannot be silently converted into hosted credits.
+    /// </summary>
+    public static int Load(CardCounterState? counter, int amount)
+    {
+        if (counter is not null && counter.Purpose != CardCounterPurpose.HostedCredit)
+        {
+            throw new InvalidOperationException(
+                $"Counter '{counter.CounterName}' is not a hosted-credit pool.");
+        }
+
+        return Add(counter?.Count ?? 0, amount);
+    }
+
+    /// <summary>Returns the count after placing additional counters.</summary>
+    public static int Place(CardCounterState? counter, int amount) =>
+        Add(counter?.Count ?? 0, amount);
+
+    /// <summary>Returns the count after taking counters, without spend restrictions.</summary>
+    public static int Take(CardCounterState counter, int amount)
+    {
+        ArgumentNullException.ThrowIfNull(counter);
+        return Remove(counter.Count, amount);
+    }
+
+    /// <summary>
+    /// Returns whether a hosted-credit counter can be spent for the supplied
+    /// concrete cost kind. Generic and virus counters are not credit pools;
+    /// <see cref="HostedCreditSpendRestriction.CardEffectOnly"/> describes a
+    /// placement source and is never a spend permission. An AnyCost pool
+    /// matches either concrete ability or run cost.
+    /// </summary>
+    public static bool CanSpend(
+        CardCounterState counter,
+        HostedCreditSpendRestriction costKind)
+    {
+        ArgumentNullException.ThrowIfNull(counter);
+        if (!Enum.IsDefined(costKind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(costKind));
+        }
+
+        if (counter.Purpose != CardCounterPurpose.HostedCredit
+            || costKind is HostedCreditSpendRestriction.CardEffectOnly
+                or HostedCreditSpendRestriction.AnyCost)
+        {
+            return false;
+        }
+
+        return counter.SpendRestriction is { } restriction
+            && (restriction == HostedCreditSpendRestriction.AnyCost
+                || restriction == costKind);
+    }
+
+    /// <summary>Alias for <see cref="CanSpend"/> used by legality projections.</summary>
+    public static bool IsSpendLegal(
+        CardCounterState counter,
+        HostedCreditSpendRestriction costKind) =>
+        CanSpend(counter, costKind);
+
+    /// <summary>
+    /// Returns the count after spending counters for a cost kind. Unlike
+    /// <see cref="Take(CardCounterState, int)"/>, this enforces a hosted-credit
+    /// spend restriction.
+    /// </summary>
+    public static int Spend(
+        CardCounterState counter,
+        int amount,
+        HostedCreditSpendRestriction costKind)
+    {
+        ArgumentNullException.ThrowIfNull(counter);
+        if (!CanSpend(counter, costKind))
+        {
+            throw new InvalidOperationException(
+                $"Counter '{counter.CounterName}' cannot be spent for '{costKind}'.");
+        }
+
+        return Remove(counter.Count, amount);
+    }
+
+    private static int Add(int currentCount, int amount)
+    {
+        ValidateCurrentCount(currentCount);
+        ValidateAmount(amount);
+
+        long next = checked((long)currentCount + amount);
+        if (next > int.MaxValue)
+        {
+            throw new OverflowException("The resulting card-counter count exceeds Int32.MaxValue.");
+        }
+
+        return (int)next;
+    }
+
+    private static int Remove(int currentCount, int amount)
+    {
+        ValidateCurrentCount(currentCount);
+        ValidateAmount(amount);
+
+        long next = checked((long)currentCount - amount);
+        if (next < 0)
+        {
+            throw new InvalidOperationException("The card-counter count cannot underflow.");
+        }
+
+        return (int)next;
+    }
+
+    private static void ValidateCurrentCount(int currentCount)
+    {
+        if (currentCount < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(currentCount),
+                currentCount,
+                "A card-counter count cannot be negative.");
+        }
+    }
+
+    private static void ValidateAmount(int amount)
+    {
+        if (amount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(amount),
+                amount,
+                "A card-counter transition amount must be positive.");
+        }
+    }
 }
 
 /// <summary>

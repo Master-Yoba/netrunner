@@ -404,7 +404,7 @@ public static partial class GameEngine
             return credits <= controller.Credits
                 && clicks <= controller.Clicks
                 && tags <= availableTags
-                && counters.All(pair => CurrentCounter(working, source.Id, pair.Key) >= pair.Value);
+                && counters.All(pair => CurrentAbilityCounter(working, source.Id, pair.Key) >= pair.Value);
         }
         catch (OverflowException)
         {
@@ -762,7 +762,11 @@ public static partial class GameEngine
                         throw new ResolutionFailureException("Ability counter cost has no stable counter name.");
                     }
 
-                    AdjustCounter(working, frame.SourceCardId, cost.CounterName!, checked(-cost.Amount));
+                    AdjustCounter(
+                        working,
+                        frame.SourceCardId,
+                        cost.CounterName!,
+                        checked(-cost.Amount));
                     break;
                 case BehaviorCostKind.TrashSelf:
                     MoveBehaviorCardToTrash(working, source);

@@ -2728,3 +2728,30 @@ errors; runtime action expansion and full verification remain pending.
   `git diff --check`; the delegated whole-solution gate passed 746/746 with a
   zero-warning build. The direct M2 proof retains the schema-3 hashes and 32
   replay-verified checkpoints recorded above.
+
+### 2026-09-03 — Checkpoint B1 typed counter/pool state accepted
+
+- Luna Max implemented the state-level half of ENG-408. The canonical
+  `RulesState.Counters` collection now distinguishes Generic, Virus, and
+  HostedCredit purposes. Hosted-credit entries use the reserved `credit` key
+  and carry an explicit CardEffectOnly, AbilityCost, RunCost, or AnyCost
+  restriction; legacy three-argument `virus` construction normalizes to the
+  typed Virus purpose, while forged purpose/name/restriction combinations and
+  nonpositive stored entries fail closed.
+- Root rejected the first permissive draft: new loaded pools now default to
+  CardEffectOnly rather than AnyCost, generic and Virus counters cannot satisfy
+  hosted-credit spending, CardEffectOnly is not a cost permission, and generic
+  counter reducers/paid `Counter` costs cannot consume a HostedCredit pool by
+  merely naming `credit`. The accepted pure transition service distinguishes
+  load/place/take/spend, checks overflow and underflow, and returns zero for
+  callers to omit at the immutable state boundary. Virus purge now selects the
+  typed purpose and leaves hosted credits untouched.
+- Deep copies, canonical JSON, invariant validation, and existing generic
+  adjustment/payment paths retain the complete typed data. Declarative hosted
+  credit instructions, typed pool events, public observation, empty-pool
+  follow-up, and card bindings intentionally remain in B2/C.
+- Root independently passed 25/25 focused counter/effect/ability tests,
+  complete Core 535/535, Core formatting, and `git diff --check`; the delegated
+  Release solution build completed with zero warnings/errors. The direct M2
+  proof remains byte-stable at the schema-3 hashes above with 32 replay-verified
+  checkpoints.
