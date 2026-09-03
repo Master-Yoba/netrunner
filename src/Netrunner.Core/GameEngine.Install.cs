@@ -470,6 +470,11 @@ public static partial class GameEngine
             AdvanceBehaviorCursor(
                 working,
                 behaviorParent.With(bindings: bindings));
+            QueueCardInstalledOccurrence(
+                working,
+                player.Id,
+                frame.CardId,
+                destination.ServerId);
             return;
         }
 
@@ -489,6 +494,11 @@ public static partial class GameEngine
             TurnWindow(parent.ActiveSide),
             parent.ActiveSide,
             forcedActionEnd: parent.ForcedActionEnd);
+        QueueCardInstalledOccurrence(
+            working,
+            player.Id,
+            frame.CardId,
+            destination.ServerId);
     }
 
     private static void CommitInstall(
@@ -554,6 +564,34 @@ public static partial class GameEngine
             plan.InstallCost));
 
         ResumeTurnAfterInstall(working, parent);
+        QueueCardInstalledOccurrence(
+            working,
+            corp.Id,
+            plan.Card.Id,
+            destination.ServerId);
+    }
+
+    /// <summary>
+    /// Opens the normal occurrence/checkpoint pipeline after an install has
+    /// committed all of its own mutations and its parent continuation has
+    /// been advanced.  Keeping the marker as a regular effect preserves
+    /// trigger ordering and makes optional choices serializable without
+    /// repeating payment or install work.
+    /// </summary>
+    private static void QueueCardInstalledOccurrence(
+        WorkingState working,
+        PlayerId controller,
+        CardInstanceId cardId,
+        ServerId? serverId)
+    {
+        working.ResolutionStack.Add(new EffectResolutionFrame(
+            controller,
+            new CostBundle(),
+            new EffectBundle(new GameplayOccurrenceEffect(
+                OccurrenceKind.CardInstalled,
+                controller,
+                cardId,
+                serverId))));
     }
 
     private static void ApplyCreditDeltaIfNonZero(WorkingState working, PlayerId playerId, int delta)

@@ -3054,3 +3054,30 @@ errors; runtime action expansion and full verification remain pending.
   `git diff --check`. The direct M2 proof retains all schema-3 hashes and 32
   replay-verified checkpoints. Ability-cost Spend depletion and other lifecycle
   occurrence hooks remain separate work.
+
+### 2026-09-03 — Checkpoint C2b-2a card-install triggers accepted
+
+- Luna Max connected every production runtime-catalog install completion to
+  the typed `CardInstalled` occurrence: basic Runner installs (including
+  required replacement selection), Corp root/ICE installs, and installs driven
+  by a behavior instruction. The install mutation and `CardInstalled` event
+  commit first, the install frame is removed, and the turn or behavior parent
+  is advanced before the ordinary serialized occurrence/checkpoint effect is
+  pushed. Optional triggers can therefore yield and round-trip without paying,
+  moving, or emitting the install a second time.
+- Eligibility observes the committed board. A newly installed faceup Runner
+  source can trigger itself; a facedown Corp subject remains available to an
+  already-active external Corp source through its typed subject filter. On a
+  required Runner Console replacement, the old source reaches Heap before
+  collection and cannot contribute a controller trigger, while the incoming
+  active Console can contribute its self trigger. A behavior-effect install
+  resumes the already-advanced outer instruction exactly once after nested
+  install triggers finish.
+- Root corrected two delegated fixture/API defects and required the missing
+  replacement-order evidence before acceptance. The final focused install and
+  catalog-trigger gate passes 65/65, complete Core passes 594/594, the solution
+  build completes with zero warnings/errors, Core formatting and
+  `git diff --check` pass, and the direct M2 proof retains initial/final/event
+  hashes `faf4e631...` / `c882eb43...` / `d20cdef9...` with all 32 checkpoints
+  replay verified. Rez, run, agenda, and access lifecycle hooks remain separate
+  C2b work.
