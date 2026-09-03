@@ -319,6 +319,65 @@ public sealed record RunLingeringEffect
 }
 
 /// <summary>
+/// A run-scoped increase to the number of hidden central cards that may be
+/// accessed during the breach. The value is snapshotted when the run starts;
+/// later source-counter changes cannot alter an active run.
+/// </summary>
+public sealed record RunBreachAccessModifier
+{
+    [JsonConstructor]
+    public RunBreachAccessModifier(
+        CardInstanceId sourceCardId,
+        ServerId attackedServerId,
+        int delta,
+        string reasonKey)
+    {
+        if (!StableIdentifier.TryValidate(sourceCardId.Value))
+        {
+            throw new ArgumentException("A breach modifier requires a stable source card ID.", nameof(sourceCardId));
+        }
+
+        if (!StableIdentifier.TryValidate(attackedServerId.Value))
+        {
+            throw new ArgumentException("A breach modifier requires a stable attacked server ID.", nameof(attackedServerId));
+        }
+
+        if (delta <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(delta), "A breach modifier delta must be positive.");
+        }
+
+        if (!StableIdentifier.TryValidate(reasonKey))
+        {
+            throw new ArgumentException("A breach modifier requires a stable reason key.", nameof(reasonKey));
+        }
+
+        SourceCardId = sourceCardId;
+        AttackedServerId = attackedServerId;
+        Delta = delta;
+        ReasonKey = reasonKey;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId SourceCardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ServerId AttackedServerId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Delta { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string ReasonKey { get; private set; }
+
+    internal RunBreachAccessModifier Copy() => new(SourceCardId, AttackedServerId, Delta, ReasonKey);
+}
+
+/// <summary>
 /// Authoritative, optional state for one run.  It is omitted entirely when no
 /// run is active, preserving M1 state bytes and hashes for default games.
 /// </summary>
@@ -348,7 +407,8 @@ public sealed record RunState
         RunAccessState accessState,
         int runCredits,
         CardInstanceId? activeRunEventId,
-        IReadOnlyList<RunLingeringEffect> lingeringEffects)
+        IReadOnlyList<RunLingeringEffect> lingeringEffects,
+        IReadOnlyList<RunBreachAccessModifier>? breachAccessModifiers = null)
     {
         ArgumentNullException.ThrowIfNull(breachCandidates);
         ArgumentNullException.ThrowIfNull(chosenAccessCards);
@@ -381,6 +441,13 @@ public sealed record RunState
             ArgumentNullException.ThrowIfNull(value);
             return value.Copy();
         }).ToArray());
+        BreachAccessModifiers = breachAccessModifiers is { Count: > 0 }
+            ? new ReadOnlyCollection<RunBreachAccessModifier>(breachAccessModifiers.Select(static value =>
+            {
+                ArgumentNullException.ThrowIfNull(value);
+                return value.Copy();
+            }).ToArray())
+            : null;
     }
 
     public RunState(
@@ -394,7 +461,8 @@ public sealed record RunState
         RunPriorityState? priority = null,
         CardInstanceId? initiatingSource = null,
         int runCredits = 0,
-        CardInstanceId? activeRunEventId = null)
+        CardInstanceId? activeRunEventId = null,
+        IReadOnlyList<RunBreachAccessModifier>? breachAccessModifiers = null)
         : this(
             1,
             id,
@@ -418,7 +486,8 @@ public sealed record RunState
             RunAccessState.NotStarted,
             runCredits,
             activeRunEventId,
-            [])
+            [],
+            breachAccessModifiers)
     {
     }
 
@@ -522,6 +591,14 @@ public sealed record RunState
     public IReadOnlyList<RunLingeringEffect> LingeringEffects { get; private set; }
 
     /// <summary>
+    /// Immutable run-start snapshots that increase hidden central access. The
+    /// field is omitted from legacy/basic/event runs when no modifier exists.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<RunBreachAccessModifier>? BreachAccessModifiers { get; private set; }
+
+    /// <summary>
     /// The card currently being accessed: the last chosen access card that is
     /// not yet in the accessed list, or null when access is complete.
     /// Sequential access guarantees at most one such card; the last is used
@@ -566,7 +643,8 @@ public sealed record RunState
         AccessState,
         RunCredits,
         ActiveRunEventId,
-        LingeringEffects);
+        LingeringEffects,
+        BreachAccessModifiers);
 
     /// <summary>
     /// Creates the next immutable timing cursor while retaining the run's
@@ -605,7 +683,8 @@ public sealed record RunState
             accessState,
             RunCredits,
             ActiveRunEventId,
-            LingeringEffects);
+            LingeringEffects,
+            BreachAccessModifiers);
 
     /// <summary>
     /// Replaces the run's encounter while retaining every other field; the
@@ -638,7 +717,8 @@ public sealed record RunState
         AccessState,
         RunCredits,
         ActiveRunEventId,
-        lingeringEffects);
+        lingeringEffects,
+        BreachAccessModifiers);
 
     /// <summary>
     /// Replaces the run's run-scoped hosted credits while retaining every
@@ -667,7 +747,8 @@ public sealed record RunState
         AccessState,
         runCredits,
         ActiveRunEventId,
-        LingeringEffects);
+        LingeringEffects,
+        BreachAccessModifiers);
 
     /// <summary>
     /// Replaces the live run priority cursor while retaining the exact run
@@ -697,7 +778,8 @@ public sealed record RunState
         AccessState,
         RunCredits,
         ActiveRunEventId,
-        LingeringEffects);
+        LingeringEffects,
+        BreachAccessModifiers);
 
     internal RunState WithEncounter(RunEncounterState encounter) => new(
         Version,
@@ -722,7 +804,8 @@ public sealed record RunState
         AccessState,
         RunCredits,
         ActiveRunEventId,
-        LingeringEffects);
+        LingeringEffects,
+        BreachAccessModifiers);
 
     /// <summary>
     /// Replaces the run's breach candidate/access fields while retaining every
@@ -756,22 +839,39 @@ public sealed record RunState
         accessState,
         RunCredits,
         ActiveRunEventId,
-        LingeringEffects);
+        LingeringEffects,
+        BreachAccessModifiers);
 
     private static ReadOnlyCollection<CardInstanceId> FreezeIds(IEnumerable<CardInstanceId> values) =>
         new(values.ToArray());
 
     /// <summary>
+    /// Returns the currently available hidden cards for a multi-access
+    /// breach.  Physical cards remain in their source zone while accessed, so
+    /// a card already recorded by this run must not be offered again.
+    /// </summary>
+    internal static IReadOnlyList<CardInstanceId> AvailableHiddenBreachCards(
+        ZoneState? hiddenZone,
+        IReadOnlyList<CardInstanceId> accessedCards) =>
+        hiddenZone is null
+            ? []
+            : hiddenZone.CardIds
+                .Where(cardId => !accessedCards.Contains(cardId))
+                .ToArray();
+
+    /// <summary>
     /// The hidden pool a random breach candidate is drawn from: the Corp hand
     /// for Headquarters or the R&amp;D deck for R&amp;D, only while the random
-    /// access limit remains and the pool still holds cards; null otherwise.
+    /// access limit remains and an unaccessed card remains in the pool; null
+    /// otherwise.
     /// </summary>
     internal static BreachHiddenCandidateSource? HiddenBreachCandidate(
         ServerKind kind,
         ZoneState? hiddenZone,
-        int randomAccessLimit) =>
+        int randomAccessLimit,
+        IReadOnlyList<CardInstanceId>? accessedCards = null) =>
         randomAccessLimit > 0
-            && hiddenZone is { CardIds.Count: > 0 }
+            && AvailableHiddenBreachCards(hiddenZone, accessedCards ?? []) is { Count: > 0 }
             && kind is ServerKind.Headquarters or ServerKind.RAndD
             ? kind == ServerKind.Headquarters
                 ? BreachHiddenCandidateSource.CorpHand

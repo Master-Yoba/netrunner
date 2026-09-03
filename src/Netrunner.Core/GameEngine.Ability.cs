@@ -71,6 +71,12 @@ public static partial class GameEngine
                     continue;
                 }
 
+                if (BehaviorRunRules.TryGetFinalStartRun(ability, out BehaviorRunOperand startRun)
+                    && !CanStartRunAbility(working, source, definition, startRun, out _))
+                {
+                    continue;
+                }
+
                 TurnFactsState? facts = CurrentAbilityFacts(working, window.ControllerId);
                 int uses = ability.UsageLimit == BehaviorAbilityUsageLimit.OncePerTurn
                     && facts?.HasUsedAbility(source.Id, ability.Key) == true
@@ -98,6 +104,54 @@ public static partial class GameEngine
         }
 
         return materialized;
+    }
+
+    private static bool CanStartRunAbility(
+        WorkingState working,
+        CardInstanceState source,
+        CardBehaviorDefinition definition,
+        BehaviorRunOperand operand,
+        out ServerState? server)
+    {
+        server = null;
+        if (definition.Controller != PlayerSide.Runner
+            || source.OwnerSide != PlayerSide.Runner
+            || !source.FaceUp
+            || working.RunState is not null
+            || !EnumerateAbilitySources(working).Any(candidate =>
+                candidate.Card.Id == source.Id
+                && candidate.Zone.Kind == ZoneKind.RunnerRig))
+        {
+            return false;
+        }
+
+        ServerState[] matchingServers = working.Servers
+            .Where(candidate => candidate.Kind == operand.ServerKind)
+            .ToArray();
+        if (matchingServers.Length != 1)
+        {
+            return false;
+        }
+
+        ServerState selectedServer = matchingServers[0];
+        server = selectedServer;
+        if (!working.Zones.Any(zone => zone.Id == selectedServer.IceZoneId))
+        {
+            server = null;
+            return false;
+        }
+
+        if (operand.RequireNotRunThisTurn)
+        {
+            TurnFactsState? facts = CurrentAbilityFacts(working, GetPlayer(working, PlayerSide.Runner).Id);
+            if (facts is null || facts.AttemptedRunServerIds.Contains(selectedServer.Id))
+            {
+                server = null;
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private readonly record struct AbilityWindow(
@@ -624,6 +678,14 @@ public static partial class GameEngine
         CardBehaviorDefinition definition = GetAbilityDefinition(working, frame);
         BehaviorPaidAbility declaration = GetAbilityDeclaration(definition, frame.AbilityKey);
         CardInstanceState source = GetCard(working, frame.SourceCardId);
+
+        if (BehaviorRunRules.TryGetFinalStartRun(declaration, out BehaviorRunOperand startRun)
+            && !CanStartRunAbility(working, source, definition, startRun, out _))
+        {
+            throw new ResolutionFailureException(
+                "The StartRun ability is no longer legal for its source, server topology, or turn facts.");
+        }
+
         ZoneState sourceZone = working.Zones.SingleOrDefault(zone => zone.Id == frame.SourceZoneId)
             ?? throw new ResolutionFailureException("Ability source zone no longer exists.");
         if (sourceZone.Kind != frame.SourceZoneKind)

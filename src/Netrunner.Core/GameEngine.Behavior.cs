@@ -419,6 +419,8 @@ public static partial class GameEngine
                 AdvanceBehaviorCursor(working, frame);
                 return;
             case BehaviorInstructionKind.StartRun:
+                ResolveBehaviorStartRun(working, frame, instruction, instructions);
+                return;
             case BehaviorInstructionKind.EndRun:
             case BehaviorInstructionKind.DealDamage:
                 throw new ResolutionFailureException(
@@ -426,6 +428,61 @@ public static partial class GameEngine
             default:
                 throw new ResolutionFailureException($"Behavior instruction '{instruction.Kind}' is not executable.");
         }
+    }
+
+    private static void ResolveBehaviorStartRun(
+        WorkingState working,
+        BehaviorResolutionFrame frame,
+        BehaviorInstruction instruction,
+        List<BehaviorInstruction> instructions)
+    {
+        if (frame.AbilityKey is null
+            || instruction.RunOperand is not { } operand
+            || frame.InstructionCursor != instructions.Count - 1
+            || working.ResolutionStack.Count != 3
+            || working.ResolutionStack[^2] is not AbilityFrame ability
+            || working.ResolutionStack[^3] is not TurnFrame turn
+            || ability.Activation != BehaviorAbilityActivation.ClickAction
+            || ability.Stage != AbilityLifecycleStage.AwaitingChild
+            || turn.ActiveSide != PlayerSide.Runner
+            || turn.Stage != TurnFrameStage.AwaitingAction
+            || working.RunState is not null)
+        {
+            throw new ResolutionFailureException(
+                "StartRun must be the final instruction of a click ability under an AwaitingAction Runner turn.");
+        }
+
+        CardBehaviorDefinition definition = GetBehaviorDefinition(working, frame);
+        BehaviorPaidAbility declaration = GetAbilityDeclaration(definition, frame.AbilityKey);
+        if (!BehaviorRunRules.TryGetFinalStartRun(declaration, out BehaviorRunOperand declared)
+            || !Equals(declared, operand)
+            || ability.SourceCardId != frame.SourceCardId
+            || ability.DefinitionId != frame.DefinitionId
+            || ability.Controller != frame.Controller)
+        {
+            throw new ResolutionFailureException(
+                "The StartRun instruction no longer matches its exact paid-ability declaration.");
+        }
+
+        CardInstanceState source = GetCard(working, frame.SourceCardId);
+        if (!CanStartRunAbility(working, source, definition, operand, out ServerState? server)
+            || server is null)
+        {
+            throw new ResolutionFailureException(
+                "The StartRun ability is no longer legal for its source, server topology, or turn facts.");
+        }
+
+        // Payment and once-per-turn usage have already committed in the
+        // AbilityFrame. Retire both cursors before starting the ordinary run,
+        // leaving the original AwaitingAction turn frame untouched beneath it.
+        working.ResolutionStack.RemoveAt(working.ResolutionStack.Count - 1);
+        working.ResolutionStack.RemoveAt(working.ResolutionStack.Count - 1);
+        StartRunInWorkingState(
+            working,
+            server.Id,
+            GetPlayer(working, PlayerSide.Runner).Id,
+            frame.SourceCardId,
+            operand);
     }
 
     private enum BehaviorTransferKind
@@ -465,7 +522,8 @@ public static partial class GameEngine
             plan.DestinationZoneId,
             plan.CandidateReplacementDefinitionIds,
             InstallInitiationKind.BehaviorEffect,
-            BehaviorFrameIdentity.Compute(frame));
+            BehaviorFrameIdentity.Compute(frame),
+            plan.InstallCostQuote);
         working.ResolutionStack.Add(installFrame);
     }
 

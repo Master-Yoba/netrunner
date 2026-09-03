@@ -472,6 +472,96 @@ public enum BehaviorTargetKind
     ZoneCards,
 }
 
+/// <summary>
+/// Immutable declaration for a behavior-owned click that starts a normal
+/// Runner run.  The declaration is intentionally structural: it names the
+/// server kind and, optionally, a source counter whose value is snapshotted
+/// into the run's breach-access modifiers at initiation.
+/// </summary>
+public sealed record BehaviorRunOperand
+{
+    [JsonConstructor]
+    public BehaviorRunOperand(
+        ServerKind serverKind,
+        bool requireNotRunThisTurn = false,
+        string? sourceCounterName = null,
+        int? breachAccessDeltaPerCounter = null,
+        string? breachAccessReasonKey = null)
+    {
+        if (!Enum.IsDefined(serverKind)
+            || serverKind is not (ServerKind.Headquarters or ServerKind.RAndD or ServerKind.Archives))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(serverKind),
+                "A click-run operand must name an existing central server kind.");
+        }
+
+        if (sourceCounterName is null
+            && (breachAccessDeltaPerCounter is not null || breachAccessReasonKey is not null))
+        {
+            throw new ArgumentException(
+                "A breach-access scale and reason require a source counter name.",
+                nameof(sourceCounterName));
+        }
+
+        if (sourceCounterName is not null && !StableIdentifier.TryValidate(sourceCounterName))
+        {
+            throw new ArgumentException(
+                "A run source counter name must be a stable identifier.",
+                nameof(sourceCounterName));
+        }
+
+        if (breachAccessDeltaPerCounter is null && breachAccessReasonKey is not null)
+        {
+            throw new ArgumentException(
+                "A breach-access reason requires a positive per-counter delta.",
+                nameof(breachAccessReasonKey));
+        }
+
+        if (sourceCounterName is not null && breachAccessDeltaPerCounter is null)
+        {
+            throw new ArgumentException(
+                "A source counter name requires a breach-access scale and reason.",
+                nameof(breachAccessDeltaPerCounter));
+        }
+
+        if (breachAccessDeltaPerCounter is not null
+            && breachAccessDeltaPerCounter <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(breachAccessDeltaPerCounter),
+                "A breach-access scale must be positive.");
+        }
+
+        if (breachAccessDeltaPerCounter is not null
+            && !StableIdentifier.TryValidate(breachAccessReasonKey))
+        {
+            throw new ArgumentException(
+                "A breach-access scale requires a stable reason key.",
+                nameof(breachAccessReasonKey));
+        }
+
+        ServerKind = serverKind;
+        RequireNotRunThisTurn = requireNotRunThisTurn;
+        SourceCounterName = sourceCounterName;
+        BreachAccessDeltaPerCounter = breachAccessDeltaPerCounter;
+        BreachAccessReasonKey = breachAccessReasonKey;
+    }
+
+    public ServerKind ServerKind { get; }
+
+    public bool RequireNotRunThisTurn { get; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SourceCounterName { get; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? BreachAccessDeltaPerCounter { get; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? BreachAccessReasonKey { get; }
+}
+
 /// <summary>One inert, typed instruction in a compiled behavior program.</summary>
 public sealed record BehaviorInstruction
 {
@@ -488,7 +578,8 @@ public sealed record BehaviorInstruction
         BehaviorChoiceSpec? choice = null,
         BehaviorBranchSpec? branch = null,
         bool optional = false,
-        HostedCreditSpendRestriction? spendRestriction = null)
+        HostedCreditSpendRestriction? spendRestriction = null,
+        BehaviorRunOperand? runOperand = null)
     {
         if (!Enum.IsDefined(kind))
         {
@@ -509,6 +600,7 @@ public sealed record BehaviorInstruction
         Branch = branch;
         Optional = optional;
         SpendRestriction = NormalizeSpendRestriction(kind, spendRestriction);
+        RunOperand = runOperand;
         ValidateOperands();
     }
 
@@ -550,11 +642,41 @@ public sealed record BehaviorInstruction
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public HostedCreditSpendRestriction? SpendRestriction { get; }
 
+    /// <summary>
+    /// Optional typed run declaration. It is present only on a final
+    /// <see cref="BehaviorInstructionKind.StartRun"/> instruction.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BehaviorRunOperand? RunOperand { get; }
+
     private void ValidateOperands()
     {
         if (SpendRestriction is { } spendRestriction && !Enum.IsDefined(spendRestriction))
         {
             throw new ArgumentOutOfRangeException(nameof(SpendRestriction));
+        }
+
+        if (Kind == BehaviorInstructionKind.StartRun)
+        {
+            if (RunOperand is null)
+            {
+                throw new ArgumentNullException(
+                    nameof(RunOperand),
+                    "StartRun instructions require a typed run operand.");
+            }
+
+            if (Amount != 0 || Argument is not null)
+            {
+                throw new ArgumentException(
+                    "StartRun instructions carry only their typed run operand.",
+                    nameof(Amount));
+            }
+        }
+        else if (RunOperand is not null)
+        {
+            throw new ArgumentException(
+                "A typed run operand is valid only for StartRun instructions.",
+                nameof(RunOperand));
         }
 
         bool hostedCreditInstruction = Kind is BehaviorInstructionKind.LoadHostedCredits
@@ -1063,6 +1185,7 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         Scope = scope;
         SubjectCardFilter = subjectCardFilter;
         Instructions = Freeze(instructions);
+        BehaviorRunOperandValidation.RequireNoStartRun(Instructions, nameof(instructions));
         RunOutcomeRequirement = runOutcomeRequirement;
     }
 
@@ -1152,7 +1275,8 @@ public sealed class CardBehaviorDefinition
         IReadOnlyList<BehaviorStaticModifier>? staticModifiers = null,
         IReadOnlyList<BehaviorTrigger>? triggers = null,
         string? extensionHandlerId = null,
-        IReadOnlyList<BehaviorPaidAbility>? paidAbilities = null)
+        IReadOnlyList<BehaviorPaidAbility>? paidAbilities = null,
+        IReadOnlyList<BehaviorCostModifier>? costModifiers = null)
     {
         DefinitionId = definitionId;
         if (!Enum.IsDefined(controller))
@@ -1171,6 +1295,7 @@ public sealed class CardBehaviorDefinition
         Conditions = Freeze(conditions);
         Targets = Freeze(targets);
         Instructions = Freeze(instructions);
+        BehaviorRunOperandValidation.RequireNoStartRun(Instructions, nameof(instructions));
         StaticModifiers = Freeze(staticModifiers);
         Triggers = Freeze(triggers);
         var triggerKeys = new HashSet<string>(StringComparer.Ordinal);
@@ -1185,6 +1310,7 @@ public sealed class CardBehaviorDefinition
         }
 
         PaidAbilities = FreezePaidAbilities(paidAbilities);
+        CostModifiers = FreezeCostModifiers(costModifiers);
         if (!string.IsNullOrWhiteSpace(extensionHandlerId))
         {
             ExtensionHandlerId = extensionHandlerId;
@@ -1214,6 +1340,15 @@ public sealed class CardBehaviorDefinition
     /// materialization and execution are owned by later engine checkpoints.
     /// </summary>
     public IReadOnlyList<BehaviorPaidAbility> PaidAbilities { get; }
+
+    /// <summary>
+    /// Immutable self-cost adjustments projected only while this definition's
+    /// physical source is the card being paid for.  The list is optional in
+    /// the JSON contract so definitions that predate conditional costs keep
+    /// their canonical byte shape.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<BehaviorCostModifier>? CostModifiers { get; }
 
     private static ReadOnlyCollection<T> Freeze<T>(IEnumerable<T>? values)
         where T : class
@@ -1250,6 +1385,30 @@ public sealed class CardBehaviorDefinition
         }
 
         return new ReadOnlyCollection<BehaviorPaidAbility>(copy);
+    }
+
+    private static ReadOnlyCollection<BehaviorCostModifier>? FreezeCostModifiers(
+        IEnumerable<BehaviorCostModifier>? costModifiers)
+    {
+        if (costModifiers is null)
+        {
+            return null;
+        }
+
+        BehaviorCostModifier[] copy = costModifiers.ToArray();
+        if (copy.Length == 0)
+        {
+            return null;
+        }
+
+        if (copy.Any(static value => value is null))
+        {
+            throw new ArgumentException(
+                "Cost modifier declarations must not contain null entries.",
+                nameof(costModifiers));
+        }
+
+        return new ReadOnlyCollection<BehaviorCostModifier>(copy);
     }
 }
 
@@ -1787,6 +1946,10 @@ internal static class BehaviorCatalogStructure
                     a.PaidAbilities,
                     b.PaidAbilities,
                     static (left, right) => left.Equals(right))
+                && BehaviorContractStructure.SequenceEquals(
+                    a.CostModifiers ?? [],
+                    b.CostModifiers ?? [],
+                    static (left, right) => left.Equals(right))
                 && a.ExtensionHandlerId == b.ExtensionHandlerId,
             _ => false,
         };
@@ -1895,6 +2058,24 @@ internal static class BehaviorCatalogFingerprint
         {
             AppendSequence(builder, value.PaidAbilities, AppendPaidAbility);
         }
+
+        // Preserve historical M2 fingerprint bytes for definitions that do
+        // not use conditional cost modifiers. The new segment is present only
+        // for definitions that actually declare one.
+        if (value.CostModifiers is { Count: > 0 })
+        {
+            AppendSequence(builder, value.CostModifiers, AppendCostModifier);
+        }
+    }
+
+    private static void AppendCostModifier(StringBuilder builder, BehaviorCostModifier value)
+    {
+        builder.Append("kind=").Append((int)value.Kind)
+            .Append(",delta=").Append(value.Delta)
+            .Append(",condition=");
+        AppendCondition(builder, value.Condition);
+        builder.Append(",reason=");
+        AppendString(builder, value.ReasonKey);
     }
 
     private static void AppendPaidAbility(StringBuilder builder, BehaviorPaidAbility value)
@@ -2010,6 +2191,21 @@ internal static class BehaviorCatalogFingerprint
         if (value.SpendRestriction is { } spendRestriction)
         {
             builder.Append(",spendRestriction=").Append((int)spendRestriction);
+        }
+
+        // Keep the historical byte projection for instructions that do not
+        // declare a run operand. Only the new non-null typed operand receives
+        // this additional fingerprint segment.
+        if (value.RunOperand is { } runOperand)
+        {
+            builder.Append(",runOperand=serverKind=").Append((int)runOperand.ServerKind)
+                .Append(",requireNotRunThisTurn=").Append(runOperand.RequireNotRunThisTurn ? '1' : '0')
+                .Append(",sourceCounter=");
+            AppendString(builder, runOperand.SourceCounterName);
+            builder.Append(",delta=");
+            AppendNullableInt(builder, runOperand.BreachAccessDeltaPerCounter);
+            builder.Append(",reason=");
+            AppendString(builder, runOperand.BreachAccessReasonKey);
         }
     }
 

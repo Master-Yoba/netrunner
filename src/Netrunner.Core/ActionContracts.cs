@@ -319,7 +319,8 @@ public sealed record InstallCardParameters : ActionParameters
         IReadOnlyList<CardInstanceId>? candidateReplacementCardIds = null,
         IReadOnlyList<CardInstanceId>? requiredReplacementCardIds = null,
         IReadOnlyList<CardInstanceId>? selectedReplacementCardIds = null,
-        bool finalizeSelection = true)
+        bool finalizeSelection = true,
+        CostQuote? costQuote = null)
     {
         if (!Enum.IsDefined(destinationKind))
         {
@@ -329,6 +330,13 @@ public sealed record InstallCardParameters : ActionParameters
         if (creditCost < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(creditCost), "Install credit cost must not be negative.");
+        }
+
+        if (costQuote is not null && costQuote.EffectiveCost != creditCost)
+        {
+            throw new ArgumentException(
+                "The install credit cost must equal the effective cost in the frozen quote.",
+                nameof(creditCost));
         }
 
         bool serverDestination = destinationKind is InstallDestinationKind.ServerRoot or InstallDestinationKind.ServerIce;
@@ -353,6 +361,7 @@ public sealed record InstallCardParameters : ActionParameters
         RequiredReplacementCardIds = Freeze(requiredReplacementCardIds);
         SelectedReplacementCardIds = Freeze(selectedReplacementCardIds);
         FinalizeSelection = finalizeSelection;
+        CostQuote = costQuote;
     }
 
     [JsonInclude]
@@ -397,6 +406,14 @@ public sealed record InstallCardParameters : ActionParameters
     [JsonInclude]
     [JsonRequired]
     public bool FinalizeSelection { get; private set; }
+
+    /// <summary>
+    /// Optional detached cost explanation. It is omitted for unmodified
+    /// installs so legacy action JSON remains byte-compatible.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CostQuote? CostQuote { get; private set; }
 
     private static ReadOnlyCollection<CardInstanceId> Freeze(IEnumerable<CardInstanceId>? values) =>
         new((values ?? []).ToArray());
@@ -448,7 +465,11 @@ public sealed record RunBreakerParameters : ActionParameters
 public sealed record RunBreakParameters : ActionParameters
 {
     [JsonConstructor]
-    public RunBreakParameters(CardInstanceId breakerId, int quantity, int hostedCredits = 0)
+    public RunBreakParameters(
+        CardInstanceId breakerId,
+        int quantity,
+        int hostedCredits = 0,
+        CostQuote? costQuote = null)
     {
         if (quantity < 1)
         {
@@ -460,9 +481,15 @@ public sealed record RunBreakParameters : ActionParameters
             throw new ArgumentOutOfRangeException(nameof(hostedCredits), "Hosted credits spent must not be negative.");
         }
 
+        if (costQuote is not null && costQuote.EffectiveCost < 0)
+        {
+            throw new ArgumentException("A break quote must have a nonnegative effective cost.", nameof(costQuote));
+        }
+
         BreakerId = breakerId;
         Quantity = quantity;
         HostedCredits = hostedCredits;
+        CostQuote = costQuote;
     }
 
     [JsonInclude]
@@ -476,6 +503,14 @@ public sealed record RunBreakParameters : ActionParameters
     [JsonInclude]
     [JsonRequired]
     public int HostedCredits { get; private set; }
+
+    /// <summary>
+    /// Optional detached cost explanation. It is omitted for unmodified
+    /// breaks so legacy action JSON remains byte-compatible.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CostQuote? CostQuote { get; private set; }
 
     [JsonIgnore]
     public int RunCredits => HostedCredits;
@@ -1044,11 +1079,16 @@ public sealed class PendingDecision
             install.CandidateReplacementCardIds,
             install.RequiredReplacementCardIds,
             install.SelectedReplacementCardIds,
-            install.FinalizeSelection),
+            install.FinalizeSelection,
+            install.CostQuote),
         RunCardPaymentParameters payment => new RunCardPaymentParameters(payment.CardId, payment.HostedCredits),
         RunIceParameters runIce => new RunIceParameters(runIce.IceId),
         RunBreakerParameters breaker => new RunBreakerParameters(breaker.BreakerId, breaker.HostedCredits),
-        RunBreakParameters runBreak => new RunBreakParameters(runBreak.BreakerId, runBreak.Quantity, runBreak.HostedCredits),
+        RunBreakParameters runBreak => new RunBreakParameters(
+            runBreak.BreakerId,
+            runBreak.Quantity,
+            runBreak.HostedCredits,
+            runBreak.CostQuote),
         NoActionParameters => new NoActionParameters(),
         TriggerChoiceParameters trigger => new TriggerChoiceParameters(trigger.TriggerId),
         TriggerOrderParameters order => new TriggerOrderParameters(order.TriggerId),

@@ -222,7 +222,8 @@ public static partial class GameEngine
         WorkingState working,
         ServerId serverId,
         PlayerId? initiatingPlayer,
-        CardInstanceId? initiatingSource)
+        CardInstanceId? initiatingSource,
+        BehaviorRunOperand? runOperand = null)
     {
         PlayerState runner = GetPlayer(working, PlayerSide.Runner);
         if (initiatingPlayer.HasValue && initiatingPlayer.Value != runner.Id)
@@ -235,11 +236,50 @@ public static partial class GameEngine
         ZoneState iceZone = working.Zones.SingleOrDefault(zone => zone.Id == server.IceZoneId)
             ?? throw new ResolutionFailureException($"Server '{serverId}' has no ICE zone.");
 
+        if (working.RunState is not null)
+        {
+            throw new ResolutionFailureException("A run is already active.");
+        }
+
+        bool installedRunSource = runOperand is not null;
+        if (installedRunSource && !initiatingSource.HasValue)
+        {
+            throw new ResolutionFailureException("An installed run source must identify its source card.");
+        }
+
+        CardInstanceState? installedSource = null;
+        if (installedRunSource)
+        {
+            installedSource = working.Cards.SingleOrDefault(card => card.Id == initiatingSource!.Value)
+                ?? throw new ResolutionFailureException($"Run source card '{initiatingSource}' does not exist.");
+            ZoneState sourceZone = working.Zones.SingleOrDefault(zone => zone.Id == installedSource.ZoneId)
+                ?? throw new ResolutionFailureException($"Run source card '{installedSource.Id}' references no zone.");
+            if (installedSource.OwnerSide != PlayerSide.Runner
+                || !installedSource.FaceUp
+                || sourceZone.Kind != ZoneKind.RunnerRig
+                || sourceZone.OwnerSide != PlayerSide.Runner
+                || !sourceZone.CardIds.Contains(installedSource.Id)
+                || !working.BehaviorCatalog.TryGet(installedSource.DefinitionId, out CardBehaviorDefinition? sourceDefinition)
+                || !BehaviorRunRules.DefinitionHasStartRunForServer(sourceDefinition, server.Kind))
+            {
+                throw new ResolutionFailureException(
+                    "An installed run source must be an active face-up Runner Rig card with a matching click StartRun declaration.");
+            }
+
+            if (runOperand!.RequireNotRunThisTurn
+                && (working.Turn.History?.ThisTurn(PlayerSide.Runner) is not { } facts
+                    || facts.AttemptedRunServerIds.Contains(server.Id)))
+            {
+                throw new ResolutionFailureException(
+                    $"The Runner has already attempted server '{server.Id}' this turn.");
+            }
+        }
+
         // A registered run event (Overclock) is played at initiation. CR 26.03
         // 1.10.3c: its printed cost comes from the Runner wallet, while hosted
         // credits become the run-scoped pool (1.10.4b/c).
         RunEventBehaviorSpec? runEventSpec = null;
-        if (initiatingSource.HasValue)
+        if (initiatingSource.HasValue && !installedRunSource)
         {
             CardInstanceState source = working.Cards.SingleOrDefault(card => card.Id == initiatingSource.Value)
                 ?? throw new ResolutionFailureException($"Run source card '{initiatingSource.Value}' does not exist.");
@@ -257,6 +297,14 @@ public static partial class GameEngine
             }
         }
 
+        IReadOnlyList<RunBreachAccessModifier>? breachModifiers = installedRunSource
+            ? SnapshotRunBreachAccessModifiers(
+                working,
+                installedSource!,
+                server.Id,
+                runOperand!)
+            : null;
+
         RunId runId = working.Allocator.NextRunId();
         int currentIceIndex = iceZone.CardIds.Count - 1;
         CardInstanceId? currentIceId = currentIceIndex >= 0
@@ -273,13 +321,14 @@ public static partial class GameEngine
             CreatePriority(RunPriorityWindowKind.InitiationPaid, corpMayRezNonIce: true),
             initiatingSource,
             runEventSpec?.HostedCredits ?? 0,
-            runEventSpec is null ? null : initiatingSource);
+            runEventSpec is null ? null : initiatingSource,
+            breachModifiers);
         working.RunState = run;
 
         // CR 26.03 8.6.7: a played event leaves the Runner's grip and enters a
         // public play area faceup for the run's duration. The zone is lazy so
         // ordinary M1/M2 states retain their canonical topology and hashes.
-        if (initiatingSource.HasValue)
+        if (runEventSpec is not null)
         {
             ZoneState grip = GetZone(working, ZoneKind.RunnerGrip);
             ZoneState? existingPlayArea = working.Zones.SingleOrDefault(zone =>
@@ -300,7 +349,9 @@ public static partial class GameEngine
             {
                 working.Zones.Add(playArea);
             }
-            CardInstanceState sourceCard = GetCard(working, initiatingSource.Value);
+            CardInstanceId sourceId = initiatingSource
+                ?? throw new ResolutionFailureException("A run event requires a source card.");
+            CardInstanceState sourceCard = GetCard(working, sourceId);
             MoveCard(
                 working,
                 new CardInstanceState(
@@ -321,9 +372,11 @@ public static partial class GameEngine
             // The wallet pays the printed cost only; hosted credits are already
             // represented in RunState and are untouched by this payment.
             ApplyCreditDelta(working, runner.Id, -runEventSpec.Cost);
+            CardInstanceId eventSourceId = initiatingSource
+                ?? throw new ResolutionFailureException("A run event requires a source card.");
             Emit(working, EngineEventKinds.RunEventPlayed, new RunEventPlayedEventPayload(
                 runId,
-                initiatingSource!.Value,
+                eventSourceId,
                 runEventSpec.DefinitionId,
                 runEventSpec.Cost,
                 runEventSpec.HostedCredits,
@@ -343,6 +396,29 @@ public static partial class GameEngine
             run,
             "CR 6.9.1e: choose a paid ability or pass.",
             emitWindowEvent: false);
+    }
+
+    private static IReadOnlyList<RunBreachAccessModifier>? SnapshotRunBreachAccessModifiers(
+        WorkingState working,
+        CardInstanceState source,
+        ServerId attackedServer,
+        BehaviorRunOperand operand)
+    {
+        if (operand.BreachAccessDeltaPerCounter is not { } deltaPerCounter)
+        {
+            return null;
+        }
+
+        int counter = CurrentCounter(working, source.Id, operand.SourceCounterName!);
+        if (counter <= 0)
+        {
+            return null;
+        }
+
+        int delta = checked(counter * deltaPerCounter);
+        return delta > 0
+            ? [new RunBreachAccessModifier(source.Id, attackedServer, delta, operand.BreachAccessReasonKey!)]
+            : null;
     }
 
     /// <summary>
@@ -860,7 +936,24 @@ public static partial class GameEngine
             ServerKind.Headquarters or ServerKind.RAndD => new(rootZone.CardIds),
             _ => new List<CardInstanceId>(),
         };
-        int randomAccessLimit = hiddenZone is { CardIds.Count: > 0 } ? 1 : 0;
+        int baseRandomAccessLimit = hiddenZone is { CardIds.Count: > 0 } ? 1 : 0;
+        int additionalRandomAccess = 0;
+        if (run.BreachAccessModifiers is { } modifiers)
+        {
+            foreach (RunBreachAccessModifier modifier in modifiers)
+            {
+                if (modifier.AttackedServerId == server.Id)
+                {
+                    additionalRandomAccess = checked(additionalRandomAccess + modifier.Delta);
+                }
+            }
+        }
+
+        int requestedRandomAccessLimit = checked(baseRandomAccessLimit + additionalRandomAccess);
+        int availableHiddenCount = RunState.AvailableHiddenBreachCards(hiddenZone, run.AccessedCards).Count;
+        int randomAccessLimit = availableHiddenCount > 0
+            ? Math.Min(availableHiddenCount, requestedRandomAccessLimit)
+            : 0;
 
         // CR 26.03 7.5.2: at the beginning of an Archives breach, every card
         // in the Corp discard is turned faceup authoritatively and remains
@@ -1047,7 +1140,6 @@ public static partial class GameEngine
 
     private static bool IsRealTurnRun(WorkingState working, RunState run) =>
         run.InitiatingSide == PlayerSide.Runner
-        && run.InitiatingSource is null
         && run.ActiveRunEventId is null
         && working.ResolutionStack.Count == 2
         && working.ResolutionStack[^1] is RunTimingFrame timing
@@ -1056,7 +1148,30 @@ public static partial class GameEngine
         && parent.Stage == TurnFrameStage.AwaitingAction
         && parent.ActiveSide == PlayerSide.Runner
         && parent.TurnNumber == working.Turn.TurnNumber
-        && working.Turn.ActiveSide == PlayerSide.Runner;
+        && working.Turn.ActiveSide == PlayerSide.Runner
+        && (run.InitiatingSource is null || IsValidInstalledRunSource(working, run));
+
+    private static bool IsValidInstalledRunSource(WorkingState working, RunState run)
+    {
+        if (run.InitiatingSource is not { } sourceId
+            || run.ActiveRunEventId is not null)
+        {
+            return false;
+        }
+
+        CardInstanceState? source = working.Cards.FirstOrDefault(card => card.Id == sourceId);
+        ZoneState? sourceZone = source is null
+            ? null
+            : working.Zones.FirstOrDefault(zone => zone.Id == source.ZoneId);
+        ServerState? server = working.Servers.FirstOrDefault(candidate => candidate.Id == run.AttackedServer);
+        return source is not null
+            && source.OwnerSide == PlayerSide.Runner
+            && sourceZone is not null
+            && sourceZone.CardIds.Contains(sourceId)
+            && server is not null
+            && working.BehaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? definition)
+            && BehaviorRunRules.DefinitionHasStartRunForServer(definition!, server.Kind);
+    }
 
     private static void ConsumeRunAction(WorkingState working, ActionKind kind, ActionParameters parameters)
     {
@@ -1084,7 +1199,8 @@ public static partial class GameEngine
                     run,
                     runBreak.BreakerId,
                     runBreak.Quantity,
-                    runBreak.HostedCredits);
+                    runBreak.HostedCredits,
+                    runBreak.CostQuote);
                 break;
             case (ActionKind.PumpBreaker, RunBreakerParameters pump):
                 ConsumeRunPumpBreaker(working, run, pump.BreakerId, pump.HostedCredits);
@@ -1118,7 +1234,11 @@ public static partial class GameEngine
 
         ServerState server = GetBreachServer(working, run);
         ZoneState? hiddenZone = GetBreachHiddenZone(working, server);
-        BreachHiddenCandidateSource? hiddenSource = RunState.HiddenBreachCandidate(server.Kind, hiddenZone, run.RandomAccessLimit);
+        BreachHiddenCandidateSource? hiddenSource = RunState.HiddenBreachCandidate(
+            server.Kind,
+            hiddenZone,
+            run.RandomAccessLimit,
+            run.AccessedCards);
 
         CardInstanceId cardId;
         BreachHiddenCandidateSource? chosenSource = null;
@@ -1140,16 +1260,23 @@ public static partial class GameEngine
             }
 
             chosenSource = source;
+            IReadOnlyList<CardInstanceId> availableHiddenCards =
+                RunState.AvailableHiddenBreachCards(hiddenZone, run.AccessedCards);
+            if (availableHiddenCards.Count == 0)
+            {
+                throw new ResolutionFailureException("No unaccessed hidden breach card remains.");
+            }
+
             if (source == BreachHiddenCandidateSource.CorpHand)
             {
                 var random = DeterministicRandom.Restore(working.RandomState);
-                int index = random.NextInt(hiddenZone!.CardIds.Count);
+                int index = random.NextInt(availableHiddenCards.Count);
                 working.RandomState = random.State;
-                cardId = hiddenZone.CardIds[index];
+                cardId = availableHiddenCards[index];
             }
             else
             {
-                cardId = hiddenZone!.CardIds[0];
+                cardId = availableHiddenCards[0];
             }
         }
 
@@ -1387,7 +1514,11 @@ public static partial class GameEngine
         ServerState server = GetBreachServer(working, run);
         ZoneState? hiddenZone = GetBreachHiddenZone(working, server);
         if (run.BreachCandidates.Count > 0
-            || RunState.HiddenBreachCandidate(server.Kind, hiddenZone, run.RandomAccessLimit) is not null)
+            || RunState.HiddenBreachCandidate(
+                server.Kind,
+                hiddenZone,
+                run.RandomAccessLimit,
+                run.AccessedCards) is not null)
         {
             run = run.WithTiming(
                 RunTimingStep.BreachCandidateSelection,
@@ -1620,7 +1751,8 @@ public static partial class GameEngine
         RunState run,
         CardInstanceId breakerId,
         int quantity,
-        int hostedCredits)
+        int hostedCredits,
+        CostQuote? suppliedCostQuote)
     {
         RunPriorityState? priority = run.Priority;
         RunEncounterState? encounter = run.Encounter;
@@ -1707,15 +1839,25 @@ public static partial class GameEngine
                 + "per interface ability activation.");
         }
 
+        CostQuote? expectedCostQuote = CostModifierProjection.IcebreakerBreak(
+            working,
+            breaker,
+            breakerSpec.BreakCost);
+        int effectiveBreakCost = expectedCostQuote?.EffectiveCost ?? breakerSpec.BreakCost;
+        if (!CostQuotesEqual(suppliedCostQuote, expectedCostQuote))
+        {
+            throw new ResolutionFailureException("The frozen break cost quote is stale or forged.");
+        }
+
         PlayerState runner = GetPlayer(working, PlayerSide.Runner);
-        if (!CanAffordRunCredits(runner, run, breakerSpec.BreakCost))
+        if (!CanAffordRunCredits(runner, run, effectiveBreakCost))
         {
             throw new ResolutionFailureException(
-                $"The Runner cannot pay the {breakerSpec.BreakCost} credit break cost of breaker "
+                $"The Runner cannot pay the {effectiveBreakCost} credit break cost of breaker "
                 + $"'{breakerSpec.DefinitionId}' from {runner.Credits} wallet and {run.RunCredits} run credits.");
         }
 
-        run = PayRunnerRunCredits(working, run, breakerSpec.BreakCost, hostedCredits);
+        run = PayRunnerRunCredits(working, run, effectiveBreakCost, hostedCredits);
 
         var nextSubroutines = new List<RunSubroutineState>(encounter.Subroutines.Count);
         int brokenSoFar = 0;
@@ -1967,29 +2109,36 @@ public static partial class GameEngine
 
                 foreach (CardInstanceId cardId in rigZone.CardIds)
                 {
+                    CardInstanceState breaker = GetCard(working, cardId);
                     if (!working.BehaviorCatalog.TryGetIcebreaker(
-                        GetCard(working, cardId).DefinitionId,
+                        breaker.DefinitionId,
                         out IcebreakerBehaviorSpec? breakerSpec))
                     {
                         continue;
                     }
 
+                    CostQuote? breakCostQuote = CostModifierProjection.IcebreakerBreak(
+                        working,
+                        breaker,
+                        breakerSpec.BreakCost);
+                    int effectiveBreakCost = breakCostQuote?.EffectiveCost ?? breakerSpec.BreakCost;
+
                     if (IceInterfaceMatcher.Matches(iceSpec, breakerSpec)
                         && EncounterStrength.Breaker(breakerSpec, run.LingeringEffects, cardId) >= iceStrength
-                        && availableCredits >= breakerSpec.BreakCost)
+                        && availableCredits >= effectiveBreakCost)
                     {
                         for (int quantity = 1;
                             quantity <= Math.Min(breakerSpec.BreakLimit, unbrokenCount);
                             quantity++)
                         {
-                            foreach (int hostedCredits in LegalHostedCreditSplits(runner, run, breakerSpec.BreakCost))
+                            foreach (int hostedCredits in LegalHostedCreditSplits(runner, run, effectiveBreakCost))
                             {
                                 actions.Add(new LegalAction(
                                     working.Allocator.NextActionId(),
                                     ActionKind.BreakSubroutines,
                                     $"Break {quantity} {(quantity == 1 ? "subroutine" : "subroutines")} on {run.Encounter.IceId.Value} "
-                                    + $"with {cardId.Value} ({FormatPaymentSplit(breakerSpec.BreakCost, hostedCredits)})",
-                                    new RunBreakParameters(cardId, quantity, hostedCredits)));
+                                    + $"with {cardId.Value} ({FormatPaymentSplit(effectiveBreakCost, hostedCredits)})",
+                                    new RunBreakParameters(cardId, quantity, hostedCredits, breakCostQuote)));
                             }
                         }
                     }
@@ -2040,7 +2189,11 @@ public static partial class GameEngine
     {
         ServerState server = GetBreachServer(working, run);
         ZoneState? hiddenZone = GetBreachHiddenZone(working, server);
-        BreachHiddenCandidateSource? hiddenSource = RunState.HiddenBreachCandidate(server.Kind, hiddenZone, run.RandomAccessLimit);
+        BreachHiddenCandidateSource? hiddenSource = RunState.HiddenBreachCandidate(
+            server.Kind,
+            hiddenZone,
+            run.RandomAccessLimit,
+            run.AccessedCards);
 
         Emit(working, EngineEventKinds.RunTimingWindowOpened, new RunTimingWindowOpenedEventPayload(
             run.Id,

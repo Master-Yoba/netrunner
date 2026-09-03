@@ -60,10 +60,23 @@ public static class ObservationBuilder
 
         PendingDecision? pending = state.PendingDecision;
         string decisionId = pending?.Id.Value ?? "";
+        // PendingDecision owns the authoritative action objects. Once a
+        // frozen cost quote is present, project a fresh immutable copy so an
+        // adapter cannot retain the engine's quote payload across a state
+        // transition. Leave legacy unmodified action lists untouched to
+        // preserve their historical DTO equality/byte shape.
+        bool hasCostQuote = pending?.LegalActions.Any(action => action.Parameters switch
+        {
+            InstallCardParameters install => install.CostQuote is not null,
+            RunBreakParameters breakParameters => breakParameters.CostQuote is not null,
+            _ => false,
+        }) == true;
         IReadOnlyList<LegalAction> legalActions = pending is null
             || state.GetPlayer(pending.Owner).Side != viewer
             ? []
-            : pending.LegalActions;
+            : hasCostQuote
+                ? pending.Copy().LegalActions
+                : pending.LegalActions;
 
         return new Observation(viewer, decisionId, legalActions, publicState, privateState)
         {
@@ -333,7 +346,8 @@ public static class ObservationBuilder
         BreachHiddenCandidateSource? hiddenSource = RunState.HiddenBreachCandidate(
             attackedServer.Kind,
             hiddenZone,
-            run.RandomAccessLimit);
+            run.RandomAccessLimit,
+            run.AccessedCards);
 
         var breach = new Dictionary<string, object?>
         {
@@ -347,7 +361,7 @@ public static class ObservationBuilder
             ["accessState"] = run.AccessState,
         };
 
-        return new Dictionary<string, object?>
+        var view = new Dictionary<string, object?>
         {
             ["id"] = run.Id.Value,
             ["attackedServer"] = run.AttackedServer.Value,
@@ -402,6 +416,35 @@ public static class ObservationBuilder
                     ["sourceCard"] = effect.SourceCardId is { } sourceCard ? CandidateView(state, sourceCard, viewer, accessVisible) : null,
                     ["expiry"] = effect.Expiry,
                 }).ToArray(),
+        };
+
+        // Keep the M1/M2 run-view byte shape unchanged when no D1 modifier
+        // was snapshotted. The list itself is detached for every observer.
+        if (run.BreachAccessModifiers is { } modifiers)
+        {
+            view["breachAccessModifiers"] = modifiers
+                .Select(modifier => RunBreachAccessModifierView(state, modifier, viewer, accessVisible))
+                .ToArray();
+        }
+
+        return view;
+    }
+
+    private static Dictionary<string, object?> RunBreachAccessModifierView(
+        GameState state,
+        RunBreachAccessModifier modifier,
+        PlayerSide viewer,
+        IReadOnlySet<CardInstanceId> accessVisible)
+    {
+        CardInstanceState? source = state.Cards.FirstOrDefault(card => card.Id == modifier.SourceCardId);
+        bool sourceVisible = source is not null
+            && IsVisibleTo(source, state.GetZone(source.ZoneId), viewer, accessVisible);
+        return new Dictionary<string, object?>
+        {
+            ["sourceCardId"] = sourceVisible ? modifier.SourceCardId.Value : null,
+            ["attackedServerId"] = modifier.AttackedServerId.Value,
+            ["delta"] = modifier.Delta,
+            ["reasonKey"] = modifier.ReasonKey,
         };
     }
 

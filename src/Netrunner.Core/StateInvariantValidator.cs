@@ -1127,19 +1127,174 @@ public static class StateInvariantValidator
             Add(violations, "run.negative-credits", $"{path}.runCredits", "Run credits must be nonnegative.");
         }
 
-        // The initiating source and active event are the same card identity.
-        // Once the event is played it must leave RunnerGrip, remain faceup in
-        // the single public RunnerPlayArea for the nested run, and be owned by
-        // the Runner. These checks deliberately validate both IDs and the
-        // physical card/zone topology so a restored or scenario-authored
-        // state cannot smuggle an unregistered event into an active run.
-        if (run.InitiatingSource != run.ActiveRunEventId)
+        // A played run event uses the same card identity for both fields. An
+        // installed click-run source is provenance only and deliberately has
+        // no active run-event field; after initiation it may leave the Rig.
+        bool installedRunSource = run.InitiatingSource.HasValue && !run.ActiveRunEventId.HasValue;
+
+        if (run.BreachAccessModifiers is { } breachModifiers)
+        {
+            HashSet<(CardInstanceId Source, ServerId Server, string Reason)> seenModifiers = [];
+            ServerState? attackedServer = state.Servers.FirstOrDefault(server => server?.Id == run.AttackedServer);
+            CardInstanceState? initiatingSource = run.InitiatingSource is { } initiatingSourceId
+                ? state.Cards.FirstOrDefault(card => card?.Id == initiatingSourceId)
+                : null;
+            CardBehaviorDefinition? sourceDefinition = null;
+            bool modifiersHaveInstalledSource = installedRunSource
+                && initiatingSource is not null
+                && initiatingSource.OwnerSide == PlayerSide.Runner
+                && behaviorCatalog.TryGet(initiatingSource.DefinitionId, out sourceDefinition);
+
+            for (int index = 0; index < breachModifiers.Count; index++)
+            {
+                RunBreachAccessModifier? modifier = breachModifiers[index];
+                string modifierPath = $"{path}.breachAccessModifiers[{index}]";
+                if (modifier is null)
+                {
+                    Add(violations, "run.null-breach-modifier", modifierPath, "Breach access modifiers must not contain null entries.");
+                    continue;
+                }
+
+                if (!seenModifiers.Add((modifier.SourceCardId, modifier.AttackedServerId, modifier.ReasonKey)))
+                {
+                    Add(
+                        violations,
+                        "run.duplicate-breach-modifier",
+                        modifierPath,
+                        "Breach access modifiers must not repeat a source, attacked server, and reason key.");
+                }
+
+                if (!StableIdentifier.TryValidate(modifier.SourceCardId.Value))
+                {
+                    Add(violations, "id.invalid", $"{modifierPath}.sourceCardId", "Breach modifier source card ID is empty or invalid.");
+                }
+                else
+                {
+                    CardInstanceState? source = state.Cards.FirstOrDefault(card => card?.Id == modifier.SourceCardId);
+                    if (source is null)
+                    {
+                        Add(violations, "run.breach-modifier-unknown-source", $"{modifierPath}.sourceCardId", $"Breach modifier references unknown source card '{modifier.SourceCardId}'.");
+                    }
+                    else if (source.OwnerSide != PlayerSide.Runner)
+                    {
+                        Add(violations, "run.breach-modifier-source-owner", $"{modifierPath}.sourceCardId", "Breach modifier sources must be Runner-owned.");
+                    }
+                }
+
+                if (!installedRunSource)
+                {
+                    Add(
+                        violations,
+                        run.ActiveRunEventId.HasValue
+                            ? "run.breach-modifier-run-event"
+                            : "run.breach-modifier-no-source",
+                        modifierPath,
+                        "Breach access modifiers require an installed Runner run source and are not valid on basic or run-event runs.");
+                }
+                else if (run.InitiatingSource is { } sourceId && modifier.SourceCardId != sourceId)
+                {
+                    Add(
+                        violations,
+                        "run.breach-modifier-source-mismatch",
+                        $"{modifierPath}.sourceCardId",
+                        "Every breach access modifier must identify the run's installed initiating source.");
+                }
+
+                if (modifier.AttackedServerId != run.AttackedServer)
+                {
+                    Add(
+                        violations,
+                        "run.breach-modifier-server-mismatch",
+                        $"{modifierPath}.attackedServerId",
+                        "Every breach access modifier must identify the run's attacked server.");
+                }
+
+                if (!StableIdentifier.TryValidate(modifier.AttackedServerId.Value))
+                {
+                    Add(violations, "id.invalid", $"{modifierPath}.attackedServerId", "Breach modifier attacked server ID is empty or invalid.");
+                }
+                else if (!state.Servers.Any(server => server?.Id == modifier.AttackedServerId))
+                {
+                    Add(violations, "run.breach-modifier-unknown-server", $"{modifierPath}.attackedServerId", $"Breach modifier references unknown server '{modifier.AttackedServerId}'.");
+                }
+
+                if (modifier.Delta <= 0)
+                {
+                    Add(violations, "run.breach-modifier-nonpositive", $"{modifierPath}.delta", "Breach modifier delta must be positive.");
+                }
+
+                if (!StableIdentifier.TryValidate(modifier.ReasonKey))
+                {
+                    Add(violations, "id.invalid", $"{modifierPath}.reasonKey", "Breach modifier reason key is empty or invalid.");
+                }
+
+                if (modifiersHaveInstalledSource
+                    && sourceDefinition is { } definition
+                    && attackedServer is not null
+                    && !BehaviorRunRules.HasBreachAccessModifierDeclaration(
+                        definition,
+                        attackedServer.Kind,
+                        modifier.ReasonKey,
+                        modifier.Delta))
+                {
+                    Add(
+                        violations,
+                        "run.breach-modifier-undeclared",
+                        modifierPath,
+                        "Breach access modifiers must match the installed source's declared reason and positive counter scale.");
+                }
+                else if (installedRunSource && initiatingSource is not null && !modifiersHaveInstalledSource)
+                {
+                    Add(
+                        violations,
+                        "run.breach-modifier-source-definition",
+                        modifierPath,
+                        "Breach access modifiers require a valid installed source definition.");
+                }
+            }
+        }
+
+        if (!installedRunSource && run.InitiatingSource != run.ActiveRunEventId)
         {
             Add(
                 violations,
                 "run.active-event-source-mismatch",
                 $"{path}.activeRunEventId",
-                "InitiatingSource and ActiveRunEventId must identify the same card.");
+                "InitiatingSource and ActiveRunEventId must identify the same card unless the source is an installed click-run card.");
+        }
+
+        if (installedRunSource)
+        {
+            CardInstanceId sourceId = run.InitiatingSource!.Value;
+            CardInstanceState? source = state.Cards.FirstOrDefault(card => card?.Id == sourceId);
+            ZoneState? sourceZone = source is null
+                ? null
+                : state.Zones.FirstOrDefault(zone => zone?.Id == source.ZoneId);
+            bool validInstalledSource = source is not null
+                && source.OwnerSide == PlayerSide.Runner
+                && sourceZone is not null
+                && sourceZone.CardIds.Contains(sourceId)
+                && behaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? sourceDefinition)
+                && BehaviorRunRules.DefinitionHasStartRunForServer(
+                    sourceDefinition!,
+                    state.Servers.FirstOrDefault(server => server?.Id == run.AttackedServer)?.Kind ?? (ServerKind)(-1));
+            if (!validInstalledSource)
+            {
+                Add(
+                    violations,
+                    "run.installed-source-invalid",
+                    $"{path}.initiatingSource",
+                    "A click-run source must remain a physical Runner-owned card with a matching click StartRun declaration for the attacked server.");
+            }
+
+            if (state.Zones.Any(zone => zone?.Kind == ZoneKind.RunnerPlayArea && zone.CardIds.Count > 0))
+            {
+                Add(
+                    violations,
+                    "run.play-area-without-event",
+                    "zones",
+                    "An installed click-run source must not populate the Runner play area.");
+            }
         }
 
         if (run.ActiveRunEventId is { } activeEventId)
@@ -1223,11 +1378,14 @@ public static class StateInvariantValidator
                 && zone.Kind == ZoneKind.RunnerPlayArea
                 && zone.CardIds.Count > 0))
             {
-                Add(
-                    violations,
-                    "run.play-area-without-event",
-                    $"zones[{populatedPlayArea!.Id}].cardIds",
-                    "A populated Runner play area requires ActiveRunEventId.");
+                if (!installedRunSource)
+                {
+                    Add(
+                        violations,
+                        "run.play-area-without-event",
+                        $"zones[{populatedPlayArea!.Id}].cardIds",
+                        "A populated Runner play area requires ActiveRunEventId.");
+                }
             }
         }
 
@@ -1364,7 +1522,7 @@ public static class StateInvariantValidator
             Add(violations, "run.frame-count", "resolutionStack", $"Live run '{run.Id}' requires exactly one matching RunTimingFrame; found {runFrameCount}.");
         }
 
-        ValidateRunStackTopology(state, run, violations);
+        ValidateRunStackTopology(state, run, behaviorCatalog, violations);
 
         void ValidateRunIdList(IReadOnlyList<CardInstanceId> ids, string property)
         {
@@ -1393,6 +1551,7 @@ public static class StateInvariantValidator
     private static void ValidateRunStackTopology(
         GameState state,
         RunState run,
+        IBehaviorCatalog behaviorCatalog,
         List<StateInvariantViolation> violations)
     {
         int[] matchingRunFrameIndexes = state.ResolutionStack
@@ -1418,6 +1577,15 @@ public static class StateInvariantValidator
                 "resolutionStack",
                 "A live run must begin with one standalone RunTimingFrame or an exact Runner TurnFrame/RunTimingFrame nesting.");
             return;
+        }
+
+        if (standalone && run.InitiatingSource is not null && run.ActiveRunEventId is null)
+        {
+            Add(
+                violations,
+                "run.standalone-installed-source",
+                "runState.initiatingSource",
+                "An installed click-run source may be nested only under its real Runner turn frame.");
         }
 
         bool hasSuffix = state.ResolutionStack.Count > runFrameIndex + 1;
@@ -1516,13 +1684,40 @@ public static class StateInvariantValidator
                 "A nested basic run parent turn number must match the active turn.");
         }
 
-        if (run.InitiatingSource is not null || run.ActiveRunEventId is not null)
+        if (run.ActiveRunEventId is not null)
         {
             Add(
                 violations,
                 "run.nested-source",
                 "runState.initiatingSource",
-                "A basic run nested under a real turn must not carry a card source or active run event.");
+                "A run event cannot be nested under a real Runner turn.");
+        }
+        else if (run.InitiatingSource is { } installedSource)
+        {
+            CardInstanceState? source = state.Cards.FirstOrDefault(card => card?.Id == installedSource);
+            ZoneState? sourceZone = source is null
+                ? null
+                : state.Zones.FirstOrDefault(zone => zone?.Id == source.ZoneId);
+            bool validInstalledSource = source is not null
+                && source.OwnerSide == PlayerSide.Runner
+                && sourceZone is not null
+                && sourceZone.CardIds.Contains(installedSource)
+                && behaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? sourceDefinition)
+                && BehaviorRunRules.DefinitionHasStartRunForServer(
+                    sourceDefinition!,
+                    state.Servers.FirstOrDefault(server => server?.Id == run.AttackedServer)?.Kind ?? (ServerKind)(-1));
+            if (!validInstalledSource)
+            {
+                Add(
+                    violations,
+                    "run.nested-source",
+                    "runState.initiatingSource",
+                    "A click-run source must remain a physical Runner-owned card with a matching click StartRun declaration.");
+            }
+        }
+        else if (run.InitiatingSource is null)
+        {
+            // The ordinary real-turn basic run has no card provenance.
         }
     }
 
@@ -2610,6 +2805,33 @@ public static class StateInvariantValidator
                                         "resolution.install-runtime-class-mismatch",
                                         $"{path}.cardClass",
                                         $"Install frame class '{install.CardClass}' must match runtime class '{runtimeSpec.CardClass}' for '{installCard.DefinitionId}'.");
+                                }
+
+                                CostQuote? expectedInstallQuote = GameEngine.ProjectCostQuote(
+                                    state,
+                                    behaviorCatalog,
+                                    install.CardId,
+                                    BehaviorCostModifierKind.RunnerInstallCreditCost,
+                                    runtimeSpec.InstallCost ?? 0);
+                                int expectedInstallCost = expectedInstallQuote?.EffectiveCost ?? (runtimeSpec.InstallCost ?? 0);
+                                if (install.InstallCost != expectedInstallCost)
+                                {
+                                    Add(
+                                        violations,
+                                        "resolution.install-cost-mismatch",
+                                        $"{path}.installCost",
+                                        "Runner install frame cost must match the authoritative base cost plus its current self-cost quote.");
+                                }
+
+                                if (install.CostQuote is null
+                                    ? expectedInstallQuote is not null
+                                    : !install.CostQuote.Equals(expectedInstallQuote))
+                                {
+                                    Add(
+                                        violations,
+                                        "resolution.install-cost-quote-mismatch",
+                                        $"{path}.costQuote",
+                                        "Runner install frame cost quote must match the authoritative source definition and current turn facts.");
                                 }
                             }
                         }
@@ -6188,8 +6410,20 @@ public static class StateInvariantValidator
                                 if (runnerPlayer is not null
                                     && IceInterfaceMatcher.Matches(expectedIceSpec, expectedBreakerSpec)
                                     && EncounterStrength.Breaker(expectedBreakerSpec, run.LingeringEffects, cardId) >= iceStrength
-                                    && (long)runnerPlayer.Credits + run.RunCredits >= expectedBreakerSpec.BreakCost)
+                                    && (long)runnerPlayer.Credits + run.RunCredits >= (GameEngine.ProjectCostQuote(
+                                        state,
+                                        behaviorCatalog,
+                                        cardId,
+                                        BehaviorCostModifierKind.IcebreakerBreakCreditCost,
+                                        expectedBreakerSpec.BreakCost)?.EffectiveCost ?? expectedBreakerSpec.BreakCost))
                                 {
+                                    CostQuote? expectedBreakQuote = GameEngine.ProjectCostQuote(
+                                        state,
+                                        behaviorCatalog,
+                                        cardId,
+                                        BehaviorCostModifierKind.IcebreakerBreakCreditCost,
+                                        expectedBreakerSpec.BreakCost);
+                                    int expectedBreakCost = expectedBreakQuote?.EffectiveCost ?? expectedBreakerSpec.BreakCost;
                                     for (int quantity = 1;
                                         quantity <= Math.Min(expectedBreakerSpec.BreakLimit, unbrokenCount);
                                         quantity++)
@@ -6197,7 +6431,7 @@ public static class StateInvariantValidator
                                         foreach (int hostedCredits in LegalHostedCreditSplits(
                                             runnerPlayer,
                                             run,
-                                            expectedBreakerSpec.BreakCost))
+                                            expectedBreakCost))
                                         {
                                             expected.Add((
                                                 ActionKind.BreakSubroutines,
@@ -6247,7 +6481,11 @@ public static class StateInvariantValidator
                     _ => null,
                 };
                 if (breachServer is not null
-                    && RunState.HiddenBreachCandidate(breachServer.Kind, hiddenZone, run.RandomAccessLimit) is not null)
+                    && RunState.HiddenBreachCandidate(
+                        breachServer.Kind,
+                        hiddenZone,
+                        run.RandomAccessLimit,
+                        run.AccessedCards) is not null)
                 {
                     expected.Add((ActionKind.ChooseBreachCandidate, null, 0, 0));
                 }
@@ -6336,6 +6574,33 @@ public static class StateInvariantValidator
                     actualRuntimeRezes.Add(rez);
                     break;
                 case (ActionKind.BreakSubroutines, RunBreakParameters breakSubroutinesAction):
+                    CardInstanceState? breakSource = state.Cards.FirstOrDefault(
+                        candidate => candidate?.Id == breakSubroutinesAction.BreakerId);
+                    CostQuote? expectedBreakQuote = null;
+                    if (breakSource is not null
+                        && behaviorCatalog.TryGetIcebreaker(
+                            breakSource.DefinitionId,
+                            out IcebreakerBehaviorSpec? breakSourceSpec))
+                    {
+                        expectedBreakQuote = GameEngine.ProjectCostQuote(
+                            state,
+                            behaviorCatalog,
+                            breakSource.Id,
+                            BehaviorCostModifierKind.IcebreakerBreakCreditCost,
+                            breakSourceSpec.BreakCost);
+                    }
+
+                    if (breakSubroutinesAction.CostQuote is null
+                        ? expectedBreakQuote is not null
+                        : !breakSubroutinesAction.CostQuote.Equals(expectedBreakQuote))
+                    {
+                        Add(
+                            violations,
+                            "run.break-cost-quote-mismatch",
+                            $"{path}.legalActions",
+                            "Break action cost quote must match the authoritative breaker definition and current turn facts.");
+                    }
+
                     actual.Add((
                         action.Kind,
                         breakSubroutinesAction.BreakerId,
@@ -6865,14 +7130,32 @@ public static class StateInvariantValidator
                         "Behavior-effect installs require Runner Program runtime metadata.");
                 }
 
+                CostQuote? expectedInstallQuote = GameEngine.ProjectCostQuote(
+                    state,
+                    behaviorCatalog,
+                    install.CardId,
+                    BehaviorCostModifierKind.RunnerInstallCreditCost,
+                    spec.InstallCost ?? 0);
+                int expectedInstallCost = expectedInstallQuote?.EffectiveCost ?? (spec.InstallCost ?? 0);
                 if (install.CardClass != spec.CardClass
-                    || install.InstallCost != (spec.InstallCost ?? 0))
+                    || install.InstallCost != expectedInstallCost)
                 {
                     Add(
                         violations,
                         "resolution.install-runtime-mismatch",
                         path,
                         "Behavior-effect install class and cost must match authoritative runtime metadata.");
+                }
+
+                if (install.CostQuote is null
+                    ? expectedInstallQuote is not null
+                    : !install.CostQuote.Equals(expectedInstallQuote))
+                {
+                    Add(
+                        violations,
+                        "resolution.install-cost-quote-mismatch",
+                        $"{path}.costQuote",
+                        "Behavior-effect install cost quote must match the authoritative source definition and current turn facts.");
                 }
             }
         }
@@ -6977,6 +7260,15 @@ public static class StateInvariantValidator
         IRuntimeCardCatalog? runtimeCardCatalog,
         List<StateInvariantViolation> violations)
     {
+        if (install.CostQuote is not null)
+        {
+            Add(
+                violations,
+                "resolution.install-cost-quote-invalid",
+                $"{path}.costQuote",
+                "Corp install frames must not carry a Runner self-cost quote.");
+        }
+
         if (index != state.ResolutionStack.Count - 1)
         {
             Add(violations, "resolution.install-not-top", path, "An install selection frame must remain the top frame while its decision is pending.");
@@ -7524,6 +7816,17 @@ public static class StateInvariantValidator
                     "decision.install-cost-mismatch",
                     $"{path}.parameters.creditCost",
                     "Install action cost must match the authoritative dynamic cost for the current selection.");
+            }
+
+            if (action.CostQuote is null
+                ? frame.CostQuote is not null
+                : !action.CostQuote.Equals(frame.CostQuote))
+            {
+                Add(
+                    violations,
+                    "decision.install-cost-quote-mismatch",
+                    $"{path}.parameters.costQuote",
+                    "Install action cost quote must match the frozen install frame quote.");
             }
         }
         else if (pending.Kind != DecisionKind.TurnAction)
@@ -8554,6 +8857,9 @@ public static class StateInvariantValidator
         && actual.ServerId == expected.ServerId
         && actual.CreateNewRemote == expected.CreateNewRemote
         && actual.CreditCost == expected.CreditCost
+        && (actual.CostQuote is null
+            ? expected.CostQuote is null
+            : actual.CostQuote.Equals(expected.CostQuote))
         && actual.FinalizeSelection == expected.FinalizeSelection
         && actual.CandidateReplacementCardIds.SequenceEqual(expected.CandidateReplacementCardIds)
         && actual.RequiredReplacementCardIds.SequenceEqual(expected.RequiredReplacementCardIds)

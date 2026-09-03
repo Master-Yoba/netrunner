@@ -3433,3 +3433,33 @@ errors; runtime action expansion and full verification remain pending.
   empty pool. E1b will add a distinct take-up-to primitive, prove that exact
   withdrawal is unchanged, and then promote Smartware into the executable
   catalog.
+
+### 2026-09-04 — Checkpoint D1/D2 ENG-411/ENG-412 infrastructure accepted
+
+- Luna Max added typed final-instruction click-run declarations for fixed
+  central servers, formal-turn attempt constraints, and counter-scaled breach
+  access. Installed sources are validated while the action is issued and
+  consumed, then retained as detached run provenance; they may leave play
+  without breaking real-turn cleanup. Access modifiers snapshot at initiation,
+  round-trip in run state, project detached public reasons, and are rejected
+  when duplicated, forged, attached to a basic/event run, or inconsistent with
+  the source declaration.
+- Root's review found and closed two lifecycle defects: the first draft kept
+  requiring a run source to remain active after initiation, and extended R&D
+  access repeatedly selected the same physical top card. Hidden HQ/R&D
+  selection now excludes already-accessed identities while preserving the
+  deterministic random stream and authoritative deck order.
+- Luna Max also added immutable self cost-modifier declarations and checked,
+  nonnegative cost quotes for Runner installs and icebreaker break costs under
+  the formal `SuccessfulRunThisTurn` fact. Issued actions and pending install
+  frames retain base/effective values and ordered source/reason adjustments;
+  affordability, every hosted/wallet split, and payment use the effective
+  value. Re-materialization rejects stale or forged quotes atomically, while
+  unmodified DTOs omit the extension and retain their prior JSON shape.
+- Root passed the combined focused gate 16/16, complete Core 642/642, a
+  zero-warning/error solution build, formatter checks after three mechanical
+  whitespace corrections, and `git diff --check`. The M2 proof then exposed a
+  pre-existing D-401 integration defect triggered by Nico's E1a completion:
+  its capability slice included the new generic definition in addition to the
+  legacy asset contract. A separate compatibility checkpoint is open to make
+  the M2 slice depend only on the five legacy families it actually consumes.

@@ -148,6 +148,15 @@ public sealed class BehaviorPaidAbility : IEquatable<BehaviorPaidAbility>
         Conditions = Freeze(conditions, nameof(conditions));
         Targets = Freeze(targets, nameof(targets));
         Instructions = Freeze(instructions, nameof(instructions));
+        BehaviorRunOperandValidation.RequireFinalStartRun(Instructions, nameof(instructions));
+        if (Instructions.Any(static instruction => instruction.Kind == BehaviorInstructionKind.StartRun)
+            && (Activation != BehaviorAbilityActivation.ClickAction
+                || Timing != BehaviorAbilityTiming.ActionPhase))
+        {
+            throw new ArgumentException(
+                "A StartRun declaration must be the final instruction of an action-phase click ability.",
+                nameof(instructions));
+        }
         ValidateCombinations();
     }
 

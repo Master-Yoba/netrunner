@@ -358,7 +358,8 @@ public sealed record InstallFrame : ResolutionFrame
         ZoneId? destinationZoneId = null,
         IReadOnlyList<CardDefinitionId>? candidateReplacementDefinitionIds = null,
         InstallInitiationKind initiationKind = InstallInitiationKind.BasicAction,
-        string? parentFrameIdentity = null)
+        string? parentFrameIdentity = null,
+        CostQuote? costQuote = null)
         : base(version, behaviorId)
     {
         if (!Enum.IsDefined(cardClass))
@@ -392,6 +393,12 @@ public sealed record InstallFrame : ResolutionFrame
         }
 
         ArgumentOutOfRangeException.ThrowIfNegative(installCost);
+        if (costQuote is not null && costQuote.EffectiveCost != installCost)
+        {
+            throw new ArgumentException(
+                "The install cost must equal the effective cost in the frozen quote.",
+                nameof(installCost));
+        }
 
         Owner = owner;
         CardId = cardId;
@@ -410,6 +417,7 @@ public sealed record InstallFrame : ResolutionFrame
         CandidateReplacementDefinitionIds = FreezeDefinitions(candidateReplacementDefinitionIds);
         InitiationKind = initiationKind;
         ParentFrameIdentity = parentFrameIdentity;
+        CostQuote = costQuote;
     }
 
     public InstallFrame(
@@ -429,7 +437,8 @@ public sealed record InstallFrame : ResolutionFrame
         ZoneId? destinationZoneId = null,
         IReadOnlyList<CardDefinitionId>? candidateReplacementDefinitionIds = null,
         InstallInitiationKind initiationKind = InstallInitiationKind.BasicAction,
-        string? parentFrameIdentity = null)
+        string? parentFrameIdentity = null,
+        CostQuote? costQuote = null)
         : this(
             1,
             ResolutionBehaviorIds.Install,
@@ -449,7 +458,8 @@ public sealed record InstallFrame : ResolutionFrame
             destinationZoneId,
             candidateReplacementDefinitionIds,
             initiationKind,
-            parentFrameIdentity)
+            parentFrameIdentity,
+            costQuote)
     {
     }
 
@@ -543,7 +553,15 @@ public sealed record InstallFrame : ResolutionFrame
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ParentFrameIdentity { get; private set; }
 
-    internal InstallFrame Select(CardInstanceId cardId, int installCost) => new(
+    /// <summary>
+    /// Optional detached install-cost explanation. It is omitted for
+    /// unmodified installs so legacy frame JSON remains byte-compatible.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CostQuote? CostQuote { get; private set; }
+
+    internal InstallFrame Select(CardInstanceId cardId, int installCost, CostQuote? costQuote = null) => new(
         Version,
         BehaviorId,
         Owner,
@@ -562,9 +580,10 @@ public sealed record InstallFrame : ResolutionFrame
         DestinationZoneId,
         CandidateReplacementDefinitionIds,
         InitiationKind,
-        ParentFrameIdentity);
+        ParentFrameIdentity,
+        costQuote);
 
-    internal InstallFrame WithInstallCost(int installCost) => new(
+    internal InstallFrame WithInstallCost(int installCost, CostQuote? costQuote = null) => new(
         Version,
         BehaviorId,
         Owner,
@@ -583,7 +602,8 @@ public sealed record InstallFrame : ResolutionFrame
         DestinationZoneId,
         CandidateReplacementDefinitionIds,
         InitiationKind,
-        ParentFrameIdentity);
+        ParentFrameIdentity,
+        costQuote);
 
     private static ReadOnlyCollection<CardInstanceId> Freeze(IEnumerable<CardInstanceId>? values) =>
         new((values ?? []).ToArray());
@@ -2727,7 +2747,8 @@ internal static class ResolutionFrameCloner
             install.DestinationZoneId,
             install.CandidateReplacementDefinitionIds,
             install.InitiationKind,
-            install.ParentFrameIdentity),
+            install.ParentFrameIdentity,
+            install.CostQuote),
         CardPlayFrame cardPlay => new CardPlayFrame(
             cardPlay.Version,
             cardPlay.BehaviorId,
