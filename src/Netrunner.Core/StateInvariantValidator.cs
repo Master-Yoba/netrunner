@@ -143,6 +143,10 @@ public static class StateInvariantValidator
         ValidatePlayers(state, violations);
         ValidateZonesAndCards(state, behaviorCatalog, violations);
         ValidateServers(state, violations);
+        if (runtimeCardCatalog is not null)
+        {
+            ValidateRuntimeCardActivity(state, runtimeCardCatalog, violations);
+        }
         ValidateTurnAndOutcome(state, violations);
         ValidateRunState(state, behaviorCatalog, violations);
         ValidateRulesState(state, behaviorCatalog, runtimeCardCatalog, violations);
@@ -806,6 +810,53 @@ public static class StateInvariantValidator
         if (!zoneReferences.TryAdd(zoneId.Value, (server.Id, propertyName)))
         {
             Add(violations, "servers.zone-reused", path, $"Server zone '{zoneId}' is reused by multiple server references.");
+        }
+    }
+
+    private static void ValidateRuntimeCardActivity(
+        GameState state,
+        IRuntimeCardCatalog runtimeCardCatalog,
+        List<StateInvariantViolation> violations)
+    {
+        (CardInstanceState Card, CardRuntimeSpec Spec)[] activeCards = RuntimeCardActivity
+            .EnumerateKnownActive(state.Cards, state.Zones, runtimeCardCatalog)
+            .ToArray();
+
+        foreach (var group in activeCards
+            .Where(value => value.Spec.Unique && value.Spec.UniquenessKey is not null)
+            .GroupBy(value => (value.Card.OwnerSide, UniquenessKey: value.Spec.UniquenessKey!)))
+        {
+            if (group.Count() <= 1)
+            {
+                continue;
+            }
+
+            string cardIds = string.Join(
+                ", ",
+                group.Select(value => value.Card.Id.Value).OrderBy(value => value, StringComparer.Ordinal));
+            Add(
+                violations,
+                "cards.active-duplicate-uniqueness",
+                "cards",
+                $"Active {group.Key.OwnerSide} cards share uniqueness key '{group.Key.UniquenessKey}': {cardIds}.");
+        }
+
+        (CardInstanceState Card, CardRuntimeSpec Spec)[] activeConsoles = activeCards
+            .Where(value => value.Card.OwnerSide == PlayerSide.Runner
+                && value.Spec.Console
+                && value.Spec.ConsoleKey is not null
+                && StableIdentifier.TryValidate(value.Spec.ConsoleKey))
+            .ToArray();
+        if (activeConsoles.Length > 1)
+        {
+            string cardIds = string.Join(
+                ", ",
+                activeConsoles.Select(value => value.Card.Id.Value).OrderBy(value => value, StringComparer.Ordinal));
+            Add(
+                violations,
+                "cards.active-duplicate-console",
+                "cards",
+                $"Runner has more than one active Console: {cardIds}.");
         }
     }
 

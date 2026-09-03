@@ -308,12 +308,13 @@ public static partial class GameEngine
 
         CardInstanceId[] conflicts = working.Cards
             .Where(card => card.Id != incomingCardId)
-            .Where(card => IsActiveRezzedCorpCard(working, card))
-            .Where(card => runtimeCardCatalog.TryGet(card.DefinitionId, out CardRuntimeSpec? spec)
+            .Select(card => (Card: card, IsActive: RuntimeCardActivity.IsActive(card, working.Zones)))
+            .Where(value => value.IsActive)
+            .Where(value => runtimeCardCatalog.TryGet(value.Card.DefinitionId, out CardRuntimeSpec? spec)
                 && spec.Side == PlayerSide.Corp
                 && spec.Unique
                 && string.Equals(spec.UniquenessKey, uniquenessKey, StringComparison.Ordinal))
-            .Select(card => card.Id)
+            .Select(value => value.Card.Id)
             .OrderBy(cardId => cardId.Value, StringComparer.Ordinal)
             .ToArray();
 
@@ -326,22 +327,4 @@ public static partial class GameEngine
         }
     }
 
-    private static bool IsActiveRezzedCorpCard(
-        WorkingState working,
-        CardInstanceState card)
-    {
-        if (card.OwnerSide != PlayerSide.Corp
-            || !card.FaceUp
-            || !card.Rezzed)
-        {
-            return false;
-        }
-
-        ZoneState? zone = working.Zones.FirstOrDefault(candidate => candidate.Id == card.ZoneId);
-        return zone is not null
-            && zone.OwnerSide == PlayerSide.Corp
-            && zone.ServerId is not null
-            && zone.Kind is ZoneKind.ServerRoot or ZoneKind.ServerIce
-            && zone.CardIds.Contains(card.Id);
-    }
 }

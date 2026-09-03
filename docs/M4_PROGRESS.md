@@ -2904,3 +2904,23 @@ errors; runtime action expansion and full verification remain pending.
   `git diff --check`. The direct M2 proof retains the schema-3 hashes and 32
   replay-verified checkpoints. Catalog-aware forged active-conflict invariants
   remain B4b.
+
+### 2026-09-03 — Checkpoint B4b active unique/Console invariant accepted
+
+- Luna Max extracted one pure runtime-card activity projection used by both
+  rez cleanup and catalog-aware state validation. A known Runner card is active
+  only while faceup in the Rig; a known Corp card is active only while faceup
+  and rezzed in a server root or ICE zone. Hidden/inactive cards and unknown
+  definitions are never classified from title text.
+- With the injected runtime catalog, state validation now rejects more than one
+  active card controlled by a side for the same non-null uniqueness key and
+  rejects more than one active Runner Console, regardless of the individual
+  Console keys. Opposite sides do not conflict. Because install and rez frames
+  serialize the single newest activation and cleanup is synchronous, no
+  separate activation ledger or persistable illegal intermediate is needed.
+- Root required the B4a normal-path fixture to begin from one valid older copy;
+  multiple active copies now belong only to forged-state tests. Root
+  independently passed 48/48 focused install/rez tests, complete Core 564/564,
+  the zero-warning solution build, Core formatting, and `git diff --check`.
+  The direct M2 proof retains the schema-3 hashes and 32 replay-verified
+  checkpoints. ENG-407 unique/Console enforcement is complete at this boundary.
