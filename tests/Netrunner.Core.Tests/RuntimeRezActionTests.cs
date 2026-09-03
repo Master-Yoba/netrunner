@@ -198,6 +198,72 @@ public sealed class RuntimeRezActionTests
     }
 
     [Fact]
+    public void CorpUniqueRezTrashesOlderCopiesAcrossServersAfterCardRezzed()
+    {
+        Fixture fixture = CreateFixture(PlayerSide.Corp, corpCredits: 3, uniqueAsset: true);
+        CardDefinitionId definitionId = fixture.State.GetCard(fixture.AssetZeroId).DefinitionId;
+        CardInstanceId firstOldCopyId = new("card:rez-unique-old-a");
+        CardInstanceId secondOldCopyId = new("card:rez-unique-old-z");
+        ServerId[] remotes = fixture.State.Servers
+            .Where(server => server.Kind == ServerKind.Remote)
+            .OrderBy(server => server.Id.Value, StringComparer.Ordinal)
+            .Select(server => server.Id)
+            .ToArray();
+        GameState withCopies = AddCardsToRoots(
+            fixture.State,
+            definitionId,
+            (firstOldCopyId, fixture.State.GetServer(remotes[0]).RootZoneId),
+            (secondOldCopyId, fixture.State.GetServer(remotes[1]).RootZoneId));
+        withCopies = AddCounters(
+            withCopies,
+            new CardCounterState(firstOldCopyId, "charge", 1),
+            new CardCounterState(secondOldCopyId, "charge", 1));
+        fixture = fixture with { State = withCopies };
+
+        GameState prompt = OpenTurnRezWindow(fixture);
+        LegalAction rez = Assert.Single(
+            prompt.PendingDecision!.LegalActions,
+            action => action.Kind == ActionKind.RezCard
+                && Assert.IsType<RezCardParameters>(action.Parameters).CardId == fixture.AssetZeroId);
+        Assert.False(prompt.GetCard(fixture.AssetZeroId).FaceUp);
+        Assert.False(prompt.GetCard(fixture.AssetZeroId).Rezzed);
+
+        ApplyResult result = Apply(fixture, prompt, rez);
+
+        Assert.True(result.Accepted, result.Rejection?.Message);
+        Assert.Equal(
+            [
+                EngineEventKinds.CardRezzed,
+                EngineEventKinds.CardMoved,
+                EngineEventKinds.CardMoved,
+                EngineEventKinds.TurnTimingWindowOpened,
+            ],
+            result.Events.Select(@event => @event.Kind));
+        Assert.Equal(
+            [firstOldCopyId, secondOldCopyId],
+            result.Events
+                .Where(@event => @event.Kind == EngineEventKinds.CardMoved)
+                .Select(@event => Assert.IsType<CardMovedEventPayload>(@event.Payload).CardId));
+        Assert.Equal(
+            [firstOldCopyId, secondOldCopyId],
+            result.State.GetZone(ZoneKind.CorpDiscard).CardIds);
+        Assert.DoesNotContain(
+            result.State.RulesState?.Counters ?? [],
+            counter => counter.CardId == firstOldCopyId
+                || counter.CardId == secondOldCopyId);
+        Assert.True(result.State.GetCard(fixture.AssetZeroId).FaceUp);
+        Assert.True(result.State.GetCard(fixture.AssetZeroId).Rezzed);
+
+        string json = EngineJson.Serialize(result.State);
+        GameState restored = EngineJson.DeserializeState(
+            json,
+            fixture.BehaviorCatalog,
+            fixture.RuntimeCatalog);
+        Assert.Equal(json, EngineJson.Serialize(restored));
+        Assert.Equal(DeterministicHash.ForState(result.State), DeterministicHash.ForState(restored));
+    }
+
+    [Fact]
     public void RuntimeRunOffersApproachedIceBeforeAttackedRootAndNeverLegacyRezIce()
     {
         Fixture fixture = CreateFixture(PlayerSide.Runner, corpCredits: 3);
@@ -657,13 +723,15 @@ public sealed class RuntimeRezActionTests
         return Apply(fixture, state, pass);
     }
 
-    private static Fixture CreateFixture(PlayerSide activeSide, int corpCredits)
+    private static Fixture CreateFixture(PlayerSide activeSide, int corpCredits, bool uniqueAsset = false)
     {
         CardRuntimeSpec assetZero = new(
             new CardDefinitionId("test:rez-asset-zero"),
             PlayerSide.Corp,
             RuntimeCardClass.Upgrade,
-            rezCost: 0);
+            rezCost: 0,
+            unique: uniqueAsset,
+            uniquenessKey: uniqueAsset ? "test:rez-asset-zero" : null);
         CardRuntimeSpec upgrade = new(
             new CardDefinitionId("test:rez-upgrade"),
             PlayerSide.Corp,
@@ -832,6 +900,59 @@ public sealed class RuntimeRezActionTests
         return Rebuild(source, cards: cards);
     }
 
+    private static GameState AddCardsToRoots(
+        GameState source,
+        CardDefinitionId definitionId,
+        params (CardInstanceId CardId, ZoneId RootZoneId)[] copies)
+    {
+        ZoneState[] zones = source.Zones
+            .Select(zone =>
+            {
+                CardInstanceId[] additions = copies
+                    .Where(copy => copy.RootZoneId == zone.Id)
+                    .Select(copy => copy.CardId)
+                    .ToArray();
+                return additions.Length == 0
+                    ? zone
+                    : new ZoneState(
+                        zone.Id,
+                        zone.Kind,
+                        zone.OwnerSide,
+                        zone.ServerId,
+                        zone.CardIds.Concat(additions).ToArray());
+            })
+            .ToArray();
+        CardInstanceState[] cards = source.Cards
+            .Concat(copies.Select(copy => new CardInstanceState(
+                copy.CardId,
+                definitionId,
+                copy.RootZoneId,
+                PlayerSide.Corp,
+                faceUp: true,
+                rezzed: true)))
+            .ToArray();
+        return RebuildExact(source, cards, source.ResolutionStack, source.PendingDecision, zones);
+    }
+
+    private static GameState AddCounters(GameState source, params CardCounterState[] additions)
+    {
+        RulesState baseline = source.RulesState ?? RulesState.CreateDefault(source.Players);
+        RulesState rules = new(
+            baseline.Version,
+            baseline.Players,
+            baseline.Programs,
+            baseline.Counters.Concat(additions).ToArray(),
+            baseline.LingeringEffects,
+            baseline.Triggers,
+            baseline.Interrupts);
+        return RebuildExact(
+            source,
+            source.Cards,
+            source.ResolutionStack,
+            source.PendingDecision,
+            rulesState: rules);
+    }
+
     private static GameState MoveCardToRoot(
         GameState source,
         CardInstanceId cardId,
@@ -975,7 +1096,8 @@ public sealed class RuntimeRezActionTests
         IReadOnlyList<CardInstanceState> cards,
         IReadOnlyList<ResolutionFrame> resolutionStack,
         PendingDecision? pendingDecision,
-        IReadOnlyList<ZoneState>? zones = null) => new(
+        IReadOnlyList<ZoneState>? zones = null,
+        RulesState? rulesState = null) => new(
             source.SchemaVersion,
             source.GameId,
             source.RulesVersion,
@@ -995,7 +1117,7 @@ public sealed class RuntimeRezActionTests
             source.ActionSequence,
             source.InitialSeed,
             source.RunState,
-            source.RulesState,
+            rulesState ?? source.RulesState,
             source.BehaviorRegistryVersion,
             source.BehaviorCatalogFingerprint,
             source.RuntimeCardCatalogVersion,

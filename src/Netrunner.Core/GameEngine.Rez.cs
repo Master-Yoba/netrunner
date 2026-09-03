@@ -249,6 +249,7 @@ public static partial class GameEngine
         Emit(working, EngineEventKinds.CardRezzed, new CardRezzedEventPayload(
             parameters.CardId,
             parameters.CreditCost));
+        TrashCorpUniqueRezConflicts(working, card.Id);
 
         if (IsTurnRezTimingWindow(working))
         {
@@ -290,5 +291,57 @@ public static partial class GameEngine
             run.Encounter,
             run.AccessState);
         working.ResolutionStack[^1] = new RunTimingFrame(run.Id, run.Step);
+    }
+
+    private static void TrashCorpUniqueRezConflicts(
+        WorkingState working,
+        CardInstanceId incomingCardId)
+    {
+        if (working.RuntimeCardCatalog is not { } runtimeCardCatalog
+            || !runtimeCardCatalog.TryGet(GetCard(working, incomingCardId).DefinitionId, out CardRuntimeSpec? incomingSpec)
+            || incomingSpec.Side != PlayerSide.Corp
+            || !incomingSpec.Unique
+            || incomingSpec.UniquenessKey is not { } uniquenessKey)
+        {
+            return;
+        }
+
+        CardInstanceId[] conflicts = working.Cards
+            .Where(card => card.Id != incomingCardId)
+            .Where(card => IsActiveRezzedCorpCard(working, card))
+            .Where(card => runtimeCardCatalog.TryGet(card.DefinitionId, out CardRuntimeSpec? spec)
+                && spec.Side == PlayerSide.Corp
+                && spec.Unique
+                && string.Equals(spec.UniquenessKey, uniquenessKey, StringComparison.Ordinal))
+            .Select(card => card.Id)
+            .OrderBy(cardId => cardId.Value, StringComparer.Ordinal)
+            .ToArray();
+
+        foreach (CardInstanceId conflictId in conflicts)
+        {
+            CardInstanceState conflict = GetCard(working, conflictId);
+            ZoneState source = ZoneForCard(working, conflict.Id);
+            ZoneState archives = GetZone(working, ZoneKind.CorpDiscard);
+            MoveCard(working, conflict, source, archives);
+        }
+    }
+
+    private static bool IsActiveRezzedCorpCard(
+        WorkingState working,
+        CardInstanceState card)
+    {
+        if (card.OwnerSide != PlayerSide.Corp
+            || !card.FaceUp
+            || !card.Rezzed)
+        {
+            return false;
+        }
+
+        ZoneState? zone = working.Zones.FirstOrDefault(candidate => candidate.Id == card.ZoneId);
+        return zone is not null
+            && zone.OwnerSide == PlayerSide.Corp
+            && zone.ServerId is not null
+            && zone.Kind is ZoneKind.ServerRoot or ZoneKind.ServerIce
+            && zone.CardIds.Contains(card.Id);
     }
 }

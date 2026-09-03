@@ -2884,3 +2884,23 @@ errors; runtime action expansion and full verification remain pending.
   tests, complete Core 560/560, the zero-warning solution build, Core
   formatting, and `git diff --check`; the direct M2 proof remains byte-stable
   at the schema-3 hashes with 32 replay-verified checkpoints.
+
+### 2026-09-03 — Checkpoint B4a Corp unique rez cleanup accepted
+
+- Luna Max added the missing activation checkpoint for Corp unique cards.
+  After a card is successfully rezzed, that serialized action identifies it
+  as the newest active copy; every other known, faceup, rezzed Corp card with
+  the same non-null uniqueness key is moved from any server root or ICE zone
+  to Archives in stable physical-card-ID order. Unknown and non-unique runtime
+  definitions are not inferred from title text and remain unaffected.
+- The checkpoint emits CardRezzed before the deterministic CardMoved cleanup
+  sequence. Cleanup uses the central movement boundary, so all typed counters
+  on the older copies are removed. Corp installation remains legal while the
+  incoming unique card is facedown; uniqueness becomes active at rez. Runner
+  installs retain their existing exact required-replacement contract for all
+  active unique/Console conflicts, making the incoming install the newest.
+- Root independently passed focused runtime rez tests 17/17, complete Core
+  561/561, the zero-warning solution build, Core formatting, and
+  `git diff --check`. The direct M2 proof retains the schema-3 hashes and 32
+  replay-verified checkpoints. Catalog-aware forged active-conflict invariants
+  remain B4b.
