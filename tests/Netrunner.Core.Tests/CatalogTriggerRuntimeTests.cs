@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Xunit;
 
 namespace Netrunner.Core.Tests;
@@ -674,6 +675,382 @@ public sealed class CatalogTriggerRuntimeTests
         Assert.DoesNotContain(
             used.State.ResolutionStack.OfType<EffectCheckpointFrame>(),
             frame => frame.TriggerQueue.Any(invocation => invocation.SourceCardId == activeSourceId));
+    }
+
+    [Theory]
+    [InlineData(BehaviorInstructionKind.TakeHostedCredits)]
+    [InlineData(BehaviorInstructionKind.TakeAllHostedCredits)]
+    public void HostedCreditTakeToZeroRunsOccurrenceAndOuterContinuationOnce(
+        BehaviorInstructionKind takeKind)
+    {
+        CardDefinitionId definitionId = new("test:c2b-hosted-empty");
+        CardInstanceId sourceId = new("card:c2b-hosted-empty");
+        BehaviorInstruction take = new(takeKind, amount: takeKind == BehaviorInstructionKind.TakeHostedCredits ? 1 : 0);
+        BehaviorCatalog catalog = Catalog(
+            new CardBehaviorDefinition(
+                definitionId,
+                PlayerSide.Runner,
+                instructions:
+                [
+                    take,
+                    new BehaviorInstruction(BehaviorInstructionKind.GainCredits, 3),
+                ],
+                triggers:
+                [
+                    new BehaviorTrigger(
+                        "empty",
+                        OccurrenceKind.HostedCreditPoolEmptied,
+                        TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Self,
+                        null,
+                        [
+                            new BehaviorInstruction(BehaviorInstructionKind.TrashSelf),
+                            new BehaviorInstruction(BehaviorInstructionKind.GainCredits, 2),
+                        ]),
+                ]));
+        GameState state = AddCounter(
+            CreateState(catalog, (sourceId, definitionId, PlayerSide.Runner, true)),
+            sourceId,
+            CardCounterState.CreateHostedCredit(sourceId, 1, HostedCreditSpendRestriction.AnyCost));
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+
+        GameState result = GameEngine.BeginBehaviorForTesting(
+            state,
+            new BehaviorInvocationContext(sourceId, runner),
+            catalog);
+
+        Assert.Equal(11, result.GetPlayer(runner).Credits);
+        Assert.Contains(sourceId, result.GetZone(ZoneKind.RunnerHeap).CardIds);
+        Assert.DoesNotContain(result.RulesState!.Counters, counter => counter.CardId == sourceId);
+        Assert.Equal(5, result.EventSequence);
+        Assert.Empty(result.ResolutionStack);
+        Assert.Null(result.PendingDecision);
+    }
+
+    [Fact]
+    public void HostedCreditTakeLeavingPoolNonEmptyDoesNotRaiseOccurrence()
+    {
+        CardDefinitionId definitionId = new("test:c2b-hosted-nonempty");
+        CardInstanceId sourceId = new("card:c2b-hosted-nonempty");
+        BehaviorCatalog catalog = Catalog(
+            new CardBehaviorDefinition(
+                definitionId,
+                PlayerSide.Runner,
+                instructions: [new BehaviorInstruction(BehaviorInstructionKind.TakeHostedCredits, amount: 1)],
+                triggers:
+                [
+                    new BehaviorTrigger(
+                        "must-not-fire",
+                        OccurrenceKind.HostedCreditPoolEmptied,
+                        TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Self,
+                        null,
+                        [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, 4)]),
+                ]));
+        GameState state = AddCounter(
+            CreateState(catalog, (sourceId, definitionId, PlayerSide.Runner, true)),
+            sourceId,
+            CardCounterState.CreateHostedCredit(sourceId, 2, HostedCreditSpendRestriction.AnyCost));
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+
+        GameState result = GameEngine.BeginBehaviorForTesting(
+            state,
+            new BehaviorInvocationContext(sourceId, runner),
+            catalog);
+
+        Assert.Equal(6, result.GetPlayer(runner).Credits);
+        Assert.Equal(1, Assert.Single(result.RulesState!.Counters).Count);
+        Assert.Equal(2, result.EventSequence);
+        Assert.Null(result.PendingDecision);
+        Assert.Empty(result.ResolutionStack);
+
+        GameState moved = MoveCard(state, sourceId, ZoneKind.RunnerHeap);
+        const string forgedFrameIdentity = "behavior-frame:1";
+        BehaviorResolutionFrame forged = new(
+            1,
+            ResolutionBehaviorIds.CardBehavior,
+            definitionId,
+            sourceId,
+            runner,
+            runner,
+            catalog.Fingerprint,
+            catalog.GetDefinitionFingerprint(definitionId),
+            BehaviorResolutionStage.Execute,
+            instructionCursor: 1,
+            bindings: [],
+            setAside: [],
+            continuation: [],
+            frameIdentity: forgedFrameIdentity,
+            sourceZoneId: state.GetZone(ZoneKind.RunnerRig).Id,
+            sourceZoneKind: ZoneKind.RunnerRig,
+            occurrenceContinuation: new BehaviorOccurrenceContinuation(
+                OccurrenceKind.HostedCreditPoolEmptied,
+                sourceId,
+                forgedFrameIdentity,
+                instructionCursor: 1,
+                sourceMovedAfterCompletion: true));
+        GameState forgedState = ReplaceResolutionStack(moved, [forged]);
+        Assert.Contains(
+            StateInvariantValidator.Collect(forgedState, catalog),
+            violation => violation.Code == "resolution.behavior-source-location-mismatch");
+        Assert.Throws<JsonException>(() => EngineJson.DeserializeState(
+            EngineJson.Serialize(forgedState),
+            catalog));
+    }
+
+    [Fact]
+    public void HostedCreditEmptyEventOrderDebitsBeforeWalletAndTriggerEffects()
+    {
+        CardDefinitionId definitionId = new("test:c2b-hosted-event-order");
+        CardInstanceId sourceId = new("card:c2b-hosted-event-order");
+        BehaviorChoiceSpec gate = new(
+            "event-order-gate",
+            BehaviorChooser.Controller,
+            BehaviorChoiceMode.Mode,
+            BehaviorChoiceCardinality.Exactly(1),
+            options:
+            [
+                new BehaviorChoiceOption("continue", [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]),
+                new BehaviorChoiceOption("skip", [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]),
+            ]);
+        BehaviorCatalog catalog = Catalog(
+            new CardBehaviorDefinition(
+                definitionId,
+                PlayerSide.Runner,
+                instructions:
+                [
+                    new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: gate),
+                    new BehaviorInstruction(BehaviorInstructionKind.TakeHostedCredits, amount: 1),
+                    new BehaviorInstruction(BehaviorInstructionKind.GainCredits, 3),
+                ],
+                triggers:
+                [
+                    new BehaviorTrigger(
+                        "empty",
+                        OccurrenceKind.HostedCreditPoolEmptied,
+                        TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Self,
+                        null,
+                        [
+                            new BehaviorInstruction(BehaviorInstructionKind.TrashSelf),
+                            new BehaviorInstruction(BehaviorInstructionKind.GainCredits, 2),
+                        ]),
+                ]));
+        GameState state = AddCounter(
+            CreateState(catalog, (sourceId, definitionId, PlayerSide.Runner, true)),
+            sourceId,
+            CardCounterState.CreateHostedCredit(sourceId, 1, HostedCreditSpendRestriction.AnyCost));
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+        GameState prompt = GameEngine.BeginBehaviorForTesting(
+            state,
+            new BehaviorInvocationContext(sourceId, runner),
+            catalog);
+        PendingDecision decision = Assert.IsType<PendingDecision>(prompt.PendingDecision);
+        LegalAction continueAction = Assert.Single(
+            decision.LegalActions,
+            action => action.Parameters is BehaviorChoiceParameters parameters
+                && parameters.OptionKeys.SequenceEqual(["continue"]));
+
+        ApplyResult result = GameEngine.Apply(
+            prompt,
+            new ActionSubmission(decision.Owner, decision.Id, decision.Revision, continueAction.Id),
+            catalog);
+
+        Assert.True(result.Accepted, result.Rejection?.Message);
+        Assert.Equal(
+            [
+                EngineEventKinds.HostedCreditPoolChanged,
+                EngineEventKinds.CreditsAdjusted,
+                EngineEventKinds.CardMoved,
+                EngineEventKinds.CreditsAdjusted,
+                EngineEventKinds.CreditsAdjusted,
+            ],
+            result.Events.Select(@event => @event.Kind));
+        HostedCreditPoolChangedEventPayload pool = Assert.IsType<HostedCreditPoolChangedEventPayload>(result.Events[0].Payload);
+        Assert.True(pool.Emptied);
+        Assert.Equal(11, result.State.GetPlayer(runner).Credits);
+        Assert.Empty(result.State.ResolutionStack);
+    }
+
+    [Fact]
+    public void HostedCreditOptionalEmptyTriggerDeclineOrUseRoundTripsWithoutDoubleTransfer()
+    {
+        CardDefinitionId definitionId = new("test:c2b-hosted-optional");
+        CardInstanceId sourceId = new("card:c2b-hosted-optional");
+        BehaviorCatalog catalog = Catalog(
+            new CardBehaviorDefinition(
+                definitionId,
+                PlayerSide.Runner,
+                instructions:
+                [
+                    new BehaviorInstruction(BehaviorInstructionKind.TakeHostedCredits, amount: 1),
+                    new BehaviorInstruction(BehaviorInstructionKind.GainCredits, 3),
+                ],
+                triggers:
+                [
+                    new BehaviorTrigger(
+                        "optional-empty",
+                        OccurrenceKind.HostedCreditPoolEmptied,
+                        TriggerMode.Optional,
+                        BehaviorTriggerScope.Self,
+                        null,
+                        [
+                            new BehaviorInstruction(BehaviorInstructionKind.TrashSelf),
+                            new BehaviorInstruction(BehaviorInstructionKind.GainCredits, 2),
+                        ]),
+                ]));
+        GameState state = AddCounter(
+            CreateState(catalog, (sourceId, definitionId, PlayerSide.Runner, true)),
+            sourceId,
+            CardCounterState.CreateHostedCredit(sourceId, 1, HostedCreditSpendRestriction.AnyCost));
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+
+        GameState prompt = GameEngine.BeginBehaviorForTesting(
+            state,
+            new BehaviorInvocationContext(sourceId, runner),
+            catalog);
+        Assert.Equal(DecisionKind.TriggerChoice, prompt.PendingDecision?.Kind);
+
+        BehaviorResolutionFrame awaitingParent = Assert.IsType<BehaviorResolutionFrame>(prompt.ResolutionStack[0]);
+        BehaviorResolutionFrame missingContinuation = awaitingParent.With(clearOccurrenceContinuation: true);
+        GameState missingContinuationState = ReplaceResolutionStack(
+            prompt,
+            prompt.ResolutionStack
+                .Select((frame, index) => index == 0 ? missingContinuation : frame)
+                .ToArray());
+        ApplyResult missingContinuationRejected = ApplyCurrentTriggerDecline(missingContinuationState, catalog);
+        Assert.False(missingContinuationRejected.Accepted);
+        Assert.Equal(ApplyRejectionCode.InvalidInputState, missingContinuationRejected.Rejection?.Code);
+
+        BehaviorOccurrenceContinuation wrongSubject = new(
+            OccurrenceKind.HostedCreditPoolEmptied,
+            new CardInstanceId("card:c2b-forged-occurrence-subject"),
+            awaitingParent.FrameIdentity!,
+            awaitingParent.InstructionCursor);
+        BehaviorResolutionFrame wrongSubjectParent = awaitingParent.With(occurrenceContinuation: wrongSubject);
+        GameState wrongSubjectState = ReplaceResolutionStack(
+            prompt,
+            prompt.ResolutionStack
+                .Select((frame, index) => index == 0 ? wrongSubjectParent : frame)
+                .ToArray());
+        ApplyResult wrongSubjectRejected = ApplyCurrentTriggerDecline(wrongSubjectState, catalog);
+        Assert.False(wrongSubjectRejected.Accepted);
+        Assert.Equal(ApplyRejectionCode.InvalidInputState, wrongSubjectRejected.Rejection?.Code);
+
+        GameState missingOccurrenceChildState = ReplaceResolutionStack(
+            prompt,
+            prompt.ResolutionStack.Where((_, index) => index != 1).ToArray());
+        Assert.Contains(
+            StateInvariantValidator.Collect(missingOccurrenceChildState, catalog),
+            violation => violation.Code == "resolution.behavior-occurrence-child-mismatch");
+        Assert.Throws<JsonException>(() => EngineJson.DeserializeState(
+            EngineJson.Serialize(missingOccurrenceChildState),
+            catalog));
+
+        GameState restored = EngineJson.DeserializeState(EngineJson.Serialize(prompt), catalog);
+        ApplyResult declined = ApplyCurrentTriggerDecline(restored, catalog);
+        Assert.True(declined.Accepted, declined.Rejection?.Message);
+        Assert.Equal(9, declined.State.GetPlayer(runner).Credits);
+        Assert.Contains(sourceId, declined.State.GetZone(ZoneKind.RunnerRig).CardIds);
+        Assert.Empty(declined.State.ResolutionStack);
+
+        GameState usePrompt = GameEngine.BeginBehaviorForTesting(
+            state,
+            new BehaviorInvocationContext(sourceId, runner),
+            catalog);
+        GameState useRestored = EngineJson.DeserializeState(EngineJson.Serialize(usePrompt), catalog);
+        ApplyResult used = ApplyCurrentTriggerChoice(useRestored, catalog);
+        Assert.True(used.Accepted, used.Rejection?.Message);
+        Assert.Equal(11, used.State.GetPlayer(runner).Credits);
+        Assert.Contains(sourceId, used.State.GetZone(ZoneKind.RunnerHeap).CardIds);
+        Assert.Empty(used.State.ResolutionStack);
+    }
+
+    [Fact]
+    public void HostedCreditNestedTriggerChoiceRoundTripsAfterSelfTrashAndRunsOuterInstruction()
+    {
+        CardDefinitionId definitionId = new("test:c2b-hosted-nested-choice");
+        CardInstanceId sourceId = new("card:c2b-hosted-nested-choice");
+        BehaviorChoiceSpec choice = new(
+            "empty-choice",
+            BehaviorChooser.Controller,
+            BehaviorChoiceMode.Mode,
+            BehaviorChoiceCardinality.Exactly(1),
+            options:
+            [
+                new BehaviorChoiceOption("gain", [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, 2)]),
+                new BehaviorChoiceOption("skip", [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]),
+            ]);
+        BehaviorCatalog catalog = Catalog(
+            new CardBehaviorDefinition(
+                definitionId,
+                PlayerSide.Runner,
+                instructions:
+                [
+                    new BehaviorInstruction(BehaviorInstructionKind.TakeHostedCredits, amount: 1),
+                    new BehaviorInstruction(BehaviorInstructionKind.GainCredits, 3),
+                ],
+                triggers:
+                [
+                    new BehaviorTrigger(
+                        "empty-choice",
+                        OccurrenceKind.HostedCreditPoolEmptied,
+                        TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Self,
+                        null,
+                        [
+                            new BehaviorInstruction(BehaviorInstructionKind.TrashSelf),
+                            new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: choice),
+                        ]),
+                ]));
+        GameState state = AddCounter(
+            CreateState(catalog, (sourceId, definitionId, PlayerSide.Runner, true)),
+            sourceId,
+            CardCounterState.CreateHostedCredit(sourceId, 1, HostedCreditSpendRestriction.AnyCost));
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+
+        GameState prompt = GameEngine.BeginBehaviorForTesting(
+            state,
+            new BehaviorInvocationContext(sourceId, runner),
+            catalog);
+        Assert.Equal(DecisionKind.BehaviorChoice, prompt.PendingDecision?.Kind);
+        Assert.Contains(
+            prompt.ResolutionStack,
+            frame => frame is BehaviorResolutionFrame behavior
+                && behavior.Stage == BehaviorResolutionStage.AwaitingOccurrence);
+
+        GameState movedToWrongDestination = MoveCard(prompt, sourceId, ZoneKind.RunnerGrip);
+        PendingDecision wrongDestinationDecision = Assert.IsType<PendingDecision>(movedToWrongDestination.PendingDecision);
+        ApplyResult wrongDestinationRejected = GameEngine.Apply(
+            movedToWrongDestination,
+            new ActionSubmission(
+                wrongDestinationDecision.Owner,
+                wrongDestinationDecision.Id,
+                wrongDestinationDecision.Revision,
+                wrongDestinationDecision.LegalActions[0].Id),
+            catalog);
+        Assert.False(wrongDestinationRejected.Accepted);
+        Assert.Equal(ApplyRejectionCode.InvalidInputState, wrongDestinationRejected.Rejection?.Code);
+        Assert.Equal(
+            DeterministicHash.ForState(movedToWrongDestination),
+            DeterministicHash.ForState(wrongDestinationRejected.State));
+
+        GameState restored = EngineJson.DeserializeState(EngineJson.Serialize(prompt), catalog);
+        PendingDecision decision = Assert.IsType<PendingDecision>(restored.PendingDecision);
+        LegalAction gain = Assert.Single(
+            decision.LegalActions,
+            action => action.Parameters is BehaviorChoiceParameters parameters
+                && parameters.OptionKeys.SequenceEqual(["gain"]));
+        ApplyResult completed = GameEngine.Apply(
+            restored,
+            new ActionSubmission(decision.Owner, decision.Id, decision.Revision, gain.Id),
+            catalog);
+
+        Assert.True(completed.Accepted, completed.Rejection?.Message);
+        Assert.Equal(11, completed.State.GetPlayer(runner).Credits);
+        Assert.Contains(sourceId, completed.State.GetZone(ZoneKind.RunnerHeap).CardIds);
+        Assert.DoesNotContain(completed.State.RulesState!.Counters, counter => counter.CardId == sourceId);
+        Assert.Empty(completed.State.ResolutionStack);
     }
 
     [Fact]

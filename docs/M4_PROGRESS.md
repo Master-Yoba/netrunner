@@ -3028,3 +3028,29 @@ errors; runtime action expansion and full verification remain pending.
   solution build, Core formatting, and `git diff --check`. The direct M2 proof
   remains byte-stable at the schema-3 hashes with 32 replay-verified checkpoints.
   Hosted-credit empty, install, and rez production hooks remain unclaimed.
+
+### 2026-09-03 — Checkpoint C2b-1b hosted-pool empty triggers accepted
+
+- Luna Max routed behavior-driven Take and TakeAll positive-to-zero transitions
+  through `HostedCreditPoolEmptied`. A non-empty remainder raises no occurrence.
+  The transfer instruction advances first, then a serialized
+  `AwaitingOccurrence` behavior continuation sits below the ordinary effect /
+  checkpoint pipeline, preventing save/load or resume from repeating either the
+  debit or the occurrence.
+- The continuation is tied to the exact behavior frame, post-instruction cursor,
+  source card, controller, and typed empty marker. When the nested occurrence
+  finishes, the outer source must still occupy its captured zone unless a
+  reachable empty-pool trigger explicitly moved it to its owner's discard with
+  no hosted-credit counter remaining. Only that completed result receives a
+  narrow persisted authorization to run later outer instructions; wrong subject,
+  missing continuation, wrong destination, stale owner/definition, or an
+  unrelated movement fails closed.
+- Event evidence fixes the order as hosted-pool debit, wallet credit, then
+  nested trigger movement/effects. Mandatory self-trash completes both inner
+  and outer frames and clears all counters; optional use/decline and an inner
+  post-trash choice round-trip through JSON without duplication. Root passed
+  the catalog/hosted focused gate 22/22, behavior/ability regressions 51/51,
+  complete Core 589/589, the zero-warning solution build, Core formatting, and
+  `git diff --check`. The direct M2 proof retains all schema-3 hashes and 32
+  replay-verified checkpoints. Ability-cost Spend depletion and other lifecycle
+  occurrence hooks remain separate work.

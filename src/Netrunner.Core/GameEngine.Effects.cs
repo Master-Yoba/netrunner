@@ -184,6 +184,7 @@ public static partial class GameEngine
             .FirstOrDefault(player => player.UsedMemory > EffectiveMemoryLimit(working, player.PlayerId));
         if (overMemory is null)
         {
+            CompleteHostedCreditOccurrenceParent(working, frame);
             working.ResolutionStack.RemoveAt(working.ResolutionStack.Count - 1);
             return;
         }
@@ -210,6 +211,124 @@ public static partial class GameEngine
             overMemory.PlayerId,
             overMemory.UsedMemory - EffectiveMemoryLimit(working, overMemory.PlayerId),
             candidates));
+    }
+
+    private static void CompleteHostedCreditOccurrenceParent(
+        WorkingState working,
+        EffectResolutionFrame occurrenceFrame)
+    {
+        if (occurrenceFrame.Effects.Instructions.Count != 1
+            || occurrenceFrame.Effects.Instructions[0] is not GameplayOccurrenceEffect occurrence
+            || occurrence.Kind != OccurrenceKind.HostedCreditPoolEmptied)
+        {
+            return;
+        }
+
+        if (working.ResolutionStack.Count < 2
+            || working.ResolutionStack[^2] is not BehaviorResolutionFrame parent)
+        {
+            return;
+        }
+
+        BehaviorOccurrenceContinuation continuation = parent.OccurrenceContinuation
+            ?? throw new ResolutionFailureException(
+                "A hosted-credit occurrence effect returned without its awaiting behavior continuation.");
+        if (parent.Stage != BehaviorResolutionStage.AwaitingOccurrence
+            || continuation.Kind != occurrence.Kind
+            || continuation.SourceCardId != occurrence.SubjectCardId
+            || continuation.SourceCardId != parent.SourceCardId
+            || continuation.FrameIdentity != parent.FrameIdentity
+            || continuation.InstructionCursor != parent.InstructionCursor
+            || occurrence.Controller != parent.Controller)
+        {
+            throw new ResolutionFailureException(
+                "A hosted-credit occurrence effect does not match its exact awaiting behavior parent.");
+        }
+
+        CardInstanceState source = GetCard(working, parent.SourceCardId);
+        PlayerState controller = GetPlayer(working, parent.Controller);
+        if (source.DefinitionId != parent.DefinitionId
+            || source.OwnerSide != controller.Side)
+        {
+            throw new ResolutionFailureException(
+                "The hosted-credit occurrence parent source definition or owner is stale.");
+        }
+
+        if (working.RulesState is null
+            || working.RulesState.Counters.Any(counter =>
+                counter.CardId == parent.SourceCardId
+                && counter.Purpose == CardCounterPurpose.HostedCredit))
+        {
+            throw new ResolutionFailureException(
+                "A hosted-credit occurrence parent must have an exhausted hosted-credit pool.");
+        }
+
+        bool sourceMoved = parent.SourceZoneId is not { } sourceZoneId
+            || source.ZoneId != sourceZoneId;
+        if (!sourceMoved)
+        {
+            ReplaceFrameAfterHostedCreditOccurrence(working, parent, occurrenceContinuation: null);
+            return;
+        }
+
+        ZoneState currentSourceZone = ZoneForCard(working, source.Id);
+        ZoneKind expectedDiscard = source.OwnerSide == PlayerSide.Corp
+            ? ZoneKind.CorpDiscard
+            : ZoneKind.RunnerHeap;
+        if (currentSourceZone.Kind != expectedDiscard
+            || !HasReachableHostedCreditSelfTrashTrigger(working, parent))
+        {
+            throw new ResolutionFailureException(
+                "A hosted-credit occurrence may authorize only its source owner's discard after an explicit self-trash trigger.");
+        }
+
+        ReplaceFrameAfterHostedCreditOccurrence(
+            working,
+            parent,
+            new BehaviorOccurrenceContinuation(
+                continuation.Kind,
+                continuation.SourceCardId,
+                continuation.FrameIdentity,
+                continuation.InstructionCursor,
+                sourceMovedAfterCompletion: true));
+    }
+
+    private static void ReplaceFrameAfterHostedCreditOccurrence(
+        WorkingState working,
+        BehaviorResolutionFrame parent,
+        BehaviorOccurrenceContinuation? occurrenceContinuation)
+    {
+        int parentIndex = working.ResolutionStack.Count - 2;
+        if (parentIndex < 0 || working.ResolutionStack[parentIndex] is not BehaviorResolutionFrame)
+        {
+            throw new ResolutionFailureException(
+                "A hosted-credit occurrence parent is no longer on the active resolution stack.");
+        }
+
+        BehaviorResolutionFrame completed = occurrenceContinuation is null
+            ? parent.With(
+                stage: BehaviorResolutionStage.Execute,
+                clearOccurrenceContinuation: true)
+            : parent.With(
+                stage: BehaviorResolutionStage.Execute,
+                occurrenceContinuation: occurrenceContinuation);
+        working.ResolutionStack[parentIndex] = completed;
+    }
+
+    private static bool HasReachableHostedCreditSelfTrashTrigger(
+        WorkingState working,
+        BehaviorResolutionFrame parent)
+    {
+        if (!working.BehaviorCatalog.TryGet(parent.DefinitionId, out CardBehaviorDefinition? definition))
+        {
+            return false;
+        }
+
+        return definition.Triggers.Any(trigger =>
+            trigger.Occurrence == OccurrenceKind.HostedCreditPoolEmptied
+            && BehaviorInstructionPath.CanReach(
+                trigger.Instructions,
+                BehaviorInstructionKind.TrashSelf));
     }
 
     private static bool IsTurnBoundaryBundle(EffectBundle effects) =>
@@ -574,7 +693,7 @@ public static partial class GameEngine
     /// credit. The enclosing reducer discards the whole working copy on any
     /// failure, keeping pool and wallet changes atomic.
     /// </summary>
-    private static void ChangeHostedCreditPool(
+    private static bool ChangeHostedCreditPool(
         WorkingState working,
         CardInstanceId cardId,
         HostedCreditPoolOperation operation,
@@ -788,6 +907,8 @@ public static partial class GameEngine
         {
             ApplyCreditDelta(working, transferRecipient, checked(-transitionAmount));
         }
+
+        return transitionAmount < 0 && nextCount == 0;
     }
 
     private static void PurgeVirusCounters(WorkingState working)

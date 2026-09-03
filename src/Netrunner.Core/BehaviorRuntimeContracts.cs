@@ -202,6 +202,25 @@ internal static class BehaviorContinuation
 /// </summary>
 internal static class BehaviorInstructionPath
 {
+    public static bool CanReach(
+        IReadOnlyList<BehaviorInstruction> instructions,
+        BehaviorInstructionKind kind)
+    {
+        foreach (BehaviorInstruction instruction in instructions)
+        {
+            if (instruction.Kind == kind
+                || instruction.Branch is { } branch
+                    && (CanReach(branch.WhenTrue, kind) || CanReach(branch.WhenFalse, kind))
+                || instruction.Choice is { } choice
+                    && choice.Options.Any(option => CanReach(option.Instructions, kind)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public static bool HasReached(
         IReadOnlyList<BehaviorInstruction> root,
         IReadOnlyList<BehaviorContinuationStep> continuation,
@@ -454,6 +473,67 @@ public enum BehaviorResolutionStage
 {
     PayCosts,
     Execute,
+    AwaitingOccurrence,
+}
+
+/// <summary>
+/// Engine-issued continuation context for the occurrence raised by a behavior
+/// instruction. The context remains on the parent cursor while the nested
+/// occurrence effect resolves, and is retained only as a narrow authorization
+/// when that child moved the same source card to its owner's discard.
+/// </summary>
+public sealed record BehaviorOccurrenceContinuation
+{
+    [JsonConstructor]
+    public BehaviorOccurrenceContinuation(
+        OccurrenceKind kind,
+        CardInstanceId sourceCardId,
+        string frameIdentity,
+        int instructionCursor,
+        bool sourceMovedAfterCompletion = false)
+    {
+        if (kind != OccurrenceKind.HostedCreditPoolEmptied)
+        {
+            throw new ArgumentException(
+                "Behavior occurrence continuations currently support only hosted-credit pool exhaustion.",
+                nameof(kind));
+        }
+
+        if (!BehaviorFrameIdentity.TryValidateIssued(frameIdentity, out _))
+        {
+            throw new ArgumentException(
+                "A behavior occurrence continuation requires a stable frame identity.",
+                nameof(frameIdentity));
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegative(instructionCursor);
+
+        Kind = kind;
+        SourceCardId = sourceCardId;
+        FrameIdentity = frameIdentity;
+        InstructionCursor = instructionCursor;
+        SourceMovedAfterCompletion = sourceMovedAfterCompletion;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public OccurrenceKind Kind { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId SourceCardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string FrameIdentity { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int InstructionCursor { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public bool SourceMovedAfterCompletion { get; private set; }
 }
 
 /// <summary>
@@ -494,7 +574,8 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
         string? parentFrameIdentity = null,
         string? abilityKey = null,
         string? triggerKey = null,
-        bool catalogTriggerSourceMovedBeforeStart = false)
+        bool catalogTriggerSourceMovedBeforeStart = false,
+        BehaviorOccurrenceContinuation? occurrenceContinuation = null)
         : base(version, behaviorId)
     {
         if (abilityKey is not null && triggerKey is not null)
@@ -548,6 +629,7 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
         AbilityKey = abilityKey;
         TriggerKey = triggerKey;
         CatalogTriggerSourceMovedBeforeStart = catalogTriggerSourceMovedBeforeStart;
+        OccurrenceContinuation = occurrenceContinuation;
     }
 
     public BehaviorResolutionFrame(
@@ -592,7 +674,8 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
         string? triggerKey = null,
         IReadOnlyList<BehaviorInstruction>? rootInstructions = null,
         IReadOnlyList<BehaviorInstruction>? instructions = null,
-        bool catalogTriggerSourceMovedBeforeStart = false)
+        bool catalogTriggerSourceMovedBeforeStart = false,
+        BehaviorOccurrenceContinuation? occurrenceContinuation = null)
         : this(
             1,
             ResolutionBehaviorIds.CardBehavior,
@@ -612,7 +695,8 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
             parentFrameIdentity: parentFrameIdentity,
             abilityKey: abilityKey,
             triggerKey: triggerKey,
-            catalogTriggerSourceMovedBeforeStart: catalogTriggerSourceMovedBeforeStart)
+            catalogTriggerSourceMovedBeforeStart: catalogTriggerSourceMovedBeforeStart,
+            occurrenceContinuation: occurrenceContinuation)
     {
         RootInstructions = Freeze(rootInstructions ?? definition.Instructions);
         Instructions = Freeze(instructions ?? rootInstructions ?? definition.Instructions);
@@ -738,6 +822,16 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool CatalogTriggerSourceMovedBeforeStart { get; private set; }
 
+    /// <summary>
+    /// Typed parent continuation for a hosted-credit exhaustion occurrence.
+    /// While the frame is AwaitingOccurrence this identifies the exact nested
+    /// occurrence effect; after completion it is retained only when that
+    /// occurrence moved the parent source to its owner's discard.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BehaviorOccurrenceContinuation? OccurrenceContinuation { get; private set; }
+
     internal BehaviorResolutionFrame With(
         BehaviorResolutionStage? stage = null,
         IReadOnlyList<BehaviorInstruction>? instructions = null,
@@ -751,7 +845,9 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
         bool clearSetAsideZone = false,
         string? abilityKey = null,
         string? triggerKey = null,
-        bool? catalogTriggerSourceMovedBeforeStart = null) =>
+        bool? catalogTriggerSourceMovedBeforeStart = null,
+        BehaviorOccurrenceContinuation? occurrenceContinuation = null,
+        bool clearOccurrenceContinuation = false) =>
         new(
             Version,
             BehaviorId,
@@ -775,7 +871,10 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
             parentFrameIdentity: ParentFrameIdentity,
             abilityKey: AbilityKey,
             triggerKey: TriggerKey,
-            catalogTriggerSourceMovedBeforeStart: catalogTriggerSourceMovedBeforeStart ?? CatalogTriggerSourceMovedBeforeStart)
+            catalogTriggerSourceMovedBeforeStart: catalogTriggerSourceMovedBeforeStart ?? CatalogTriggerSourceMovedBeforeStart,
+            occurrenceContinuation: clearOccurrenceContinuation
+                ? null
+                : occurrenceContinuation ?? OccurrenceContinuation)
         {
             RootInstructions = Freeze(RootInstructions),
             Instructions = Freeze(instructions ?? Instructions),

@@ -2648,6 +2648,36 @@ public static class StateInvariantValidator
                             "Behavior parent ID and parent frame identity must be present together.");
                     }
 
+                    bool awaitingHostedCreditOccurrence = false;
+                    if (behaviorFrame.Stage == BehaviorResolutionStage.AwaitingOccurrence)
+                    {
+                        BehaviorOccurrenceContinuation? continuation = behaviorFrame.OccurrenceContinuation;
+                        EffectResolutionFrame? occurrenceChild = index + 1 < state.ResolutionStack.Count
+                            ? state.ResolutionStack[index + 1] as EffectResolutionFrame
+                            : null;
+                        GameplayOccurrenceEffect? occurrence = occurrenceChild?.Effects.Instructions.Count == 1
+                            ? occurrenceChild.Effects.Instructions[0] as GameplayOccurrenceEffect
+                            : null;
+                        awaitingHostedCreditOccurrence = continuation is not null
+                            && continuation.Kind == OccurrenceKind.HostedCreditPoolEmptied
+                            && continuation.SourceCardId == behaviorFrame.SourceCardId
+                            && continuation.FrameIdentity == behaviorFrame.FrameIdentity
+                            && !continuation.SourceMovedAfterCompletion
+                            && continuation.InstructionCursor == behaviorFrame.InstructionCursor
+                            && occurrence is not null
+                            && occurrence.Kind == OccurrenceKind.HostedCreditPoolEmptied
+                            && occurrence.Controller == behaviorFrame.Controller
+                            && occurrence.SubjectCardId == behaviorFrame.SourceCardId;
+                        if (!awaitingHostedCreditOccurrence)
+                        {
+                            Add(
+                                violations,
+                                "resolution.behavior-occurrence-child-mismatch",
+                                path,
+                                "An awaiting behavior occurrence must retain the exact nested hosted-credit occurrence effect for its source card.");
+                        }
+                    }
+
                     if (behaviorFrame.AbilityKey is not null)
                     {
                         if (index == 0
@@ -2736,7 +2766,43 @@ public static class StateInvariantValidator
 
                             bool catalogTriggerDetachedSource = behaviorFrame.TriggerKey is not null
                                 && behaviorFrame.CatalogTriggerSourceMovedBeforeStart;
-                            bool movedAfterPayment = behaviorFrame.Stage == BehaviorResolutionStage.Execute
+                            PlayerSide? controllerSide = state.Players
+                                .SingleOrDefault(player => player.Id == behaviorFrame.Controller)
+                                ?.Side;
+                            bool hostedCreditOccurrencePendingMovement = awaitingHostedCreditOccurrence
+                                && sourceCard is not null
+                                && currentSourceZone is not null
+                                && controllerSide.HasValue
+                                && sourceCard.OwnerSide == controllerSide.Value
+                                && IsOwnerDiscard(currentSourceZone, sourceCard.OwnerSide);
+                            bool hostedCreditSelfTrashDeclared = behaviorCatalog.TryGet(
+                                    behaviorFrame.DefinitionId,
+                                    out CardBehaviorDefinition? occurrenceDefinition)
+                                && occurrenceDefinition is not null
+                                && occurrenceDefinition.Triggers.Any(trigger =>
+                                    trigger.Occurrence == OccurrenceKind.HostedCreditPoolEmptied
+                                    && BehaviorInstructionPath.CanReach(
+                                        trigger.Instructions,
+                                        BehaviorInstructionKind.TrashSelf));
+                            bool hostedCreditOccurrenceCompletedMovement = behaviorFrame.Stage == BehaviorResolutionStage.Execute
+                                && behaviorFrame.OccurrenceContinuation is
+                                {
+                                    Kind: OccurrenceKind.HostedCreditPoolEmptied,
+                                    SourceMovedAfterCompletion: true,
+                                } occurrenceContinuation
+                                && occurrenceContinuation.SourceCardId == behaviorFrame.SourceCardId
+                                && occurrenceContinuation.FrameIdentity == behaviorFrame.FrameIdentity
+                                && sourceCard is not null
+                                && currentSourceZone is not null
+                                && controllerSide.HasValue
+                                && sourceCard.OwnerSide == controllerSide.Value
+                                && IsOwnerDiscard(currentSourceZone, sourceCard.OwnerSide)
+                                && state.RulesState is not null
+                                && !state.RulesState.Counters.Any(counter =>
+                                    counter.CardId == behaviorFrame.SourceCardId
+                                    && counter.Purpose == CardCounterPurpose.HostedCredit)
+                                && hostedCreditSelfTrashDeclared;
+                            bool movedAfterPayment = (behaviorFrame.Stage == BehaviorResolutionStage.Execute
                                 && ((behaviorFrame.TriggerKey is null
                                         && selfTrash
                                         && sourceCard is not null
@@ -2756,7 +2822,9 @@ public static class StateInvariantValidator
                                         && currentSourceZone is not null
                                         && (sourceCard.OwnerSide == PlayerSide.Corp
                                             ? currentSourceZone.Kind == ZoneKind.CorpDiscard
-                                            : currentSourceZone.Kind == ZoneKind.RunnerHeap)));
+                                            : currentSourceZone.Kind == ZoneKind.RunnerHeap))))
+                                || hostedCreditOccurrencePendingMovement
+                                || hostedCreditOccurrenceCompletedMovement;
                             if (sourceCard is not null
                                 && sourceCard.ZoneId != sourceZone.Id
                                 && !catalogTriggerDetachedSource
@@ -2933,7 +3001,8 @@ public static class StateInvariantValidator
                                 $"Trigger key '{behaviorFrame.TriggerKey}' is not declared by definition '{behaviorFrame.DefinitionId}'.");
                         }
 
-                        if (behaviorFrame.TriggerKey is not null && behaviorFrame.Stage != BehaviorResolutionStage.Execute)
+                        if (behaviorFrame.TriggerKey is not null
+                            && behaviorFrame.Stage is not (BehaviorResolutionStage.Execute or BehaviorResolutionStage.AwaitingOccurrence))
                         {
                             Add(
                                 violations,
@@ -9742,6 +9811,12 @@ public static class StateInvariantValidator
             }
         }
     }
+
+    private static bool IsOwnerDiscard(ZoneState? zone, PlayerSide ownerSide) =>
+        zone is not null
+        && zone.Kind == (ownerSide == PlayerSide.Corp
+            ? ZoneKind.CorpDiscard
+            : ZoneKind.RunnerHeap);
 
     private static bool IsPlayerSide(PlayerSide side) =>
         side is PlayerSide.Corp or PlayerSide.Runner;

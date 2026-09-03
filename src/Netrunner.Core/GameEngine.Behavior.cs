@@ -232,6 +232,12 @@ public static partial class GameEngine
     private static void StepBehaviorResolution(WorkingState working, BehaviorResolutionFrame frame)
     {
         ValidateBehaviorRuntimeFrame(working, frame);
+        if (frame.Stage == BehaviorResolutionStage.AwaitingOccurrence)
+        {
+            throw new ResolutionFailureException(
+                "A behavior occurrence continuation cannot resume before its nested occurrence child completes.");
+        }
+
         List<BehaviorInstruction> instructions = GetBehaviorInstructions(working, frame);
         if (frame.Stage == BehaviorResolutionStage.PayCosts)
         {
@@ -359,24 +365,40 @@ public static partial class GameEngine
                 AdvanceBehaviorCursor(working, frame);
                 return;
             case BehaviorInstructionKind.TakeHostedCredits:
-                ChangeHostedCreditPool(
+                bool poolEmptied = ChangeHostedCreditPool(
                     working,
                     frame.SourceCardId,
                     HostedCreditPoolOperation.Take,
                     instruction.Amount,
                     declaredRestriction: null,
                     recipient: frame.Controller);
-                AdvanceBehaviorCursor(working, frame);
+                if (poolEmptied)
+                {
+                    QueueHostedCreditPoolEmptiedOccurrence(working, frame);
+                }
+                else
+                {
+                    AdvanceBehaviorCursor(working, frame);
+                }
+
                 return;
             case BehaviorInstructionKind.TakeAllHostedCredits:
-                ChangeHostedCreditPool(
+                bool poolEmptiedByTakeAll = ChangeHostedCreditPool(
                     working,
                     frame.SourceCardId,
                     HostedCreditPoolOperation.TakeAll,
                     amount: 0,
                     declaredRestriction: null,
                     recipient: frame.Controller);
-                AdvanceBehaviorCursor(working, frame);
+                if (poolEmptiedByTakeAll)
+                {
+                    QueueHostedCreditPoolEmptiedOccurrence(working, frame);
+                }
+                else
+                {
+                    AdvanceBehaviorCursor(working, frame);
+                }
+
                 return;
             case BehaviorInstructionKind.AddCounter:
                 AdjustCounter(working, frame.SourceCardId, instruction.Argument ?? "counter", instruction.Amount);
@@ -662,7 +684,7 @@ public static partial class GameEngine
 
             abilityDeclaration = GetAbilityDeclaration(definition, frame.AbilityKey);
             rootInstructions = abilityDeclaration.Instructions;
-            if (frame.Stage != BehaviorResolutionStage.Execute)
+            if (frame.Stage is not (BehaviorResolutionStage.Execute or BehaviorResolutionStage.AwaitingOccurrence))
             {
                 throw new ResolutionFailureException(
                     "An ability behavior child must begin and remain in Execute stage.");
@@ -672,7 +694,7 @@ public static partial class GameEngine
         {
             triggerDeclaration = GetTriggerDeclaration(definition, frame.TriggerKey);
             rootInstructions = triggerDeclaration.Instructions;
-            if (frame.Stage != BehaviorResolutionStage.Execute)
+            if (frame.Stage is not (BehaviorResolutionStage.Execute or BehaviorResolutionStage.AwaitingOccurrence))
             {
                 throw new ResolutionFailureException(
                     "A catalog trigger behavior child must begin and remain in Execute stage.");
@@ -752,6 +774,8 @@ public static partial class GameEngine
             }
         }
 
+        ValidateBehaviorOccurrenceContinuation(working, frame);
+
         if (frame.TriggerKey is null && frame.CatalogTriggerSourceMovedBeforeStart)
         {
             throw new ResolutionFailureException(
@@ -814,7 +838,13 @@ public static partial class GameEngine
             throw new ResolutionFailureException("Behavior source card definition no longer matches the invocation.");
         }
 
-        _ = GetPlayer(working, frame.Controller);
+        PlayerState controller = GetPlayer(working, frame.Controller);
+        if (source.OwnerSide != controller.Side)
+        {
+            throw new ResolutionFailureException(
+                "Behavior source card owner no longer matches its controller.");
+        }
+
         if (frame.ActingPlayer.HasValue)
         {
             _ = GetPlayer(working, frame.ActingPlayer.Value);
@@ -874,10 +904,16 @@ public static partial class GameEngine
                 && IsAbilityTrashZone(currentSourceZone, source);
             bool catalogTriggerDetachedSource = frame.TriggerKey is not null
                 && frame.CatalogTriggerSourceMovedBeforeStart;
+            bool hostedCreditOccurrenceAuthorized = IsAuthorizedHostedCreditMovement(
+                working,
+                frame,
+                source,
+                currentSourceZone);
             bool validLifecycleZone = frame.TriggerKey is not null
-                ? catalogTriggerDetachedSource || catalogTriggerLifecycleZone
+                ? catalogTriggerDetachedSource || catalogTriggerLifecycleZone || hostedCreditOccurrenceAuthorized
                 : (selfTrash && IsAbilityTrashZone(currentSourceZone, source))
-                    || (selfRemove && IsAbilityRemoveZone(currentSourceZone, source));
+                    || (selfRemove && IsAbilityRemoveZone(currentSourceZone, source))
+                    || hostedCreditOccurrenceAuthorized;
             if (!validLifecycleZone
                 || frame.Stage != BehaviorResolutionStage.Execute
                 || (selfTrash && selfRemove))
@@ -885,6 +921,11 @@ public static partial class GameEngine
                 throw new ResolutionFailureException(
                     "Behavior source card no longer occupies its captured invocation location.");
             }
+        }
+        else if (frame.OccurrenceContinuation?.SourceMovedAfterCompletion == true)
+        {
+            throw new ResolutionFailureException(
+                "A completed hosted-credit occurrence cannot retain moved-source authorization after the source returned to its captured zone.");
         }
 
         if (frame.ParentFrameIdentity is not null)
@@ -2679,6 +2720,103 @@ public static partial class GameEngine
             ? throw new ArgumentNullException(nameof(frame))
             : frame.With(instructionCursor: checked(frame.InstructionCursor + 1), clearChoice: true);
         ReplaceTopFrame(working, next);
+    }
+
+    private static void ValidateBehaviorOccurrenceContinuation(
+        WorkingState working,
+        BehaviorResolutionFrame frame)
+    {
+        BehaviorOccurrenceContinuation? continuation = frame.OccurrenceContinuation;
+        if (frame.Stage == BehaviorResolutionStage.AwaitingOccurrence)
+        {
+            if (continuation is null
+                || continuation.Kind != OccurrenceKind.HostedCreditPoolEmptied
+                || continuation.SourceCardId != frame.SourceCardId
+                || continuation.FrameIdentity != frame.FrameIdentity
+                || continuation.InstructionCursor != frame.InstructionCursor
+                || continuation.SourceMovedAfterCompletion
+                || frame.Choice is not null)
+            {
+                throw new ResolutionFailureException(
+                    "An awaiting hosted-credit occurrence continuation is malformed or stale.");
+            }
+
+            if (working.ResolutionStack.Count < 2
+                || working.ResolutionStack[^2] is not EffectResolutionFrame)
+            {
+                throw new ResolutionFailureException(
+                    "An awaiting hosted-credit occurrence must retain its nested effect child.");
+            }
+        }
+        else if (continuation is not null
+            && (!continuation.SourceMovedAfterCompletion
+                || frame.Stage != BehaviorResolutionStage.Execute
+                || continuation.SourceCardId != frame.SourceCardId
+                || continuation.FrameIdentity != frame.FrameIdentity))
+        {
+            throw new ResolutionFailureException(
+                "A hosted-credit occurrence continuation is only retained as completed moved-source authorization.");
+        }
+    }
+
+    private static bool IsAuthorizedHostedCreditMovement(
+        WorkingState working,
+        BehaviorResolutionFrame frame,
+        CardInstanceState source,
+        ZoneState currentSourceZone)
+    {
+        BehaviorOccurrenceContinuation? continuation = frame.OccurrenceContinuation;
+        if (frame.Stage != BehaviorResolutionStage.Execute
+            || continuation is null
+            || !continuation.SourceMovedAfterCompletion
+            || continuation.Kind != OccurrenceKind.HostedCreditPoolEmptied
+            || continuation.SourceCardId != frame.SourceCardId
+            || continuation.FrameIdentity != frame.FrameIdentity
+            || source.OwnerSide != GetPlayer(working, frame.Controller).Side
+            || currentSourceZone.Kind != (source.OwnerSide == PlayerSide.Corp
+                ? ZoneKind.CorpDiscard
+                : ZoneKind.RunnerHeap)
+            || working.RulesState is null
+            || working.RulesState.Counters.Any(counter =>
+                counter.CardId == frame.SourceCardId
+                && counter.Purpose == CardCounterPurpose.HostedCredit))
+        {
+            return false;
+        }
+
+        return HasReachableHostedCreditSelfTrashTrigger(working, frame);
+    }
+
+    private static void QueueHostedCreditPoolEmptiedOccurrence(
+        WorkingState working,
+        BehaviorResolutionFrame frame)
+    {
+        if (frame.FrameIdentity is not { } frameIdentity)
+        {
+            throw new ResolutionFailureException(
+                "A hosted-credit occurrence continuation requires an issued behavior frame identity.");
+        }
+
+        int nextCursor = checked(frame.InstructionCursor + 1);
+        BehaviorOccurrenceContinuation continuation = new(
+            OccurrenceKind.HostedCreditPoolEmptied,
+            frame.SourceCardId,
+            frameIdentity,
+            nextCursor);
+        ReplaceTopFrame(
+            working,
+            frame.With(
+                stage: BehaviorResolutionStage.AwaitingOccurrence,
+                instructionCursor: nextCursor,
+                clearChoice: true,
+                occurrenceContinuation: continuation));
+        working.ResolutionStack.Add(new EffectResolutionFrame(
+            frame.Controller,
+            new CostBundle(),
+            new EffectBundle(new GameplayOccurrenceEffect(
+                OccurrenceKind.HostedCreditPoolEmptied,
+                frame.Controller,
+                frame.SourceCardId))));
     }
 
     private static bool IsInstalledCard(WorkingState working, CardInstanceId cardId)

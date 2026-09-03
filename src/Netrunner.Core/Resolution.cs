@@ -1638,6 +1638,69 @@ public static class ResolutionFrameValidator
                         $"'{behavior.Stage}' is not a supported behavior resolution stage."));
                 }
 
+                if (behavior.Stage == BehaviorResolutionStage.AwaitingOccurrence
+                    && behavior.OccurrenceContinuation is null)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.behavior-occurrence-continuation-missing",
+                        path,
+                        "An awaiting behavior occurrence must retain its typed continuation context."));
+                }
+                else if (behavior.OccurrenceContinuation is { } occurrenceContinuation)
+                {
+                    if (occurrenceContinuation.Kind != OccurrenceKind.HostedCreditPoolEmptied)
+                    {
+                        violations.Add(new StateInvariantViolation(
+                            "resolution.behavior-occurrence-kind-invalid",
+                            $"{path}.occurrenceContinuation.kind",
+                            "Behavior occurrence continuations currently support only hosted-credit exhaustion."));
+                    }
+
+                    if (occurrenceContinuation.SourceCardId != behavior.SourceCardId)
+                    {
+                        violations.Add(new StateInvariantViolation(
+                            "resolution.behavior-occurrence-source-mismatch",
+                            $"{path}.occurrenceContinuation.sourceCardId",
+                            "A behavior occurrence continuation must identify its parent source card."));
+                    }
+
+                    if (!BehaviorFrameIdentity.TryValidateIssued(occurrenceContinuation.FrameIdentity, out _)
+                        || !string.Equals(occurrenceContinuation.FrameIdentity, behavior.FrameIdentity, StringComparison.Ordinal))
+                    {
+                        violations.Add(new StateInvariantViolation(
+                            "resolution.behavior-occurrence-frame-mismatch",
+                            $"{path}.occurrenceContinuation.frameIdentity",
+                            "A behavior occurrence continuation must identify its exact parent frame."));
+                    }
+
+                    if (occurrenceContinuation.InstructionCursor < 0)
+                    {
+                        violations.Add(new StateInvariantViolation(
+                            "resolution.behavior-occurrence-cursor-invalid",
+                            $"{path}.occurrenceContinuation.instructionCursor",
+                            "A behavior occurrence continuation cursor must be nonnegative."));
+                    }
+
+                    if (behavior.Stage == BehaviorResolutionStage.AwaitingOccurrence
+                        && (occurrenceContinuation.SourceMovedAfterCompletion
+                            || occurrenceContinuation.InstructionCursor != behavior.InstructionCursor))
+                    {
+                        violations.Add(new StateInvariantViolation(
+                            "resolution.behavior-occurrence-pending-mismatch",
+                            path,
+                            "An awaiting behavior occurrence must retain the post-instruction cursor without completed movement authorization."));
+                    }
+
+                    if (behavior.Stage != BehaviorResolutionStage.AwaitingOccurrence
+                        && !occurrenceContinuation.SourceMovedAfterCompletion)
+                    {
+                        violations.Add(new StateInvariantViolation(
+                            "resolution.behavior-occurrence-completion-mismatch",
+                            path,
+                            "A completed behavior occurrence continuation may only remain as moved-source authorization."));
+                    }
+                }
+
                 if (!BehaviorFrameIdentity.TryValidateIssued(behavior.FrameIdentity, out _))
                 {
                     violations.Add(new StateInvariantViolation(
@@ -1725,6 +1788,14 @@ public static class ResolutionFrameValidator
                 }
                 if (behavior.Choice is not null)
                 {
+                    if (behavior.Stage == BehaviorResolutionStage.AwaitingOccurrence)
+                    {
+                        violations.Add(new StateInvariantViolation(
+                            "resolution.behavior-occurrence-choice-mismatch",
+                            path,
+                            "A behavior frame awaiting a hosted-credit occurrence cannot retain a pending choice."));
+                    }
+
                     BehaviorChoiceMaterialization choice = behavior.Choice;
                     ValidatePlayer(choice.Owner, $"{path}.choice.owner", violations);
                     if (!Enum.IsDefined(choice.Mode)
@@ -2702,7 +2773,8 @@ internal static class ResolutionFrameCloner
             behavior.ParentFrameIdentity,
             behavior.AbilityKey,
             behavior.TriggerKey,
-            behavior.CatalogTriggerSourceMovedBeforeStart),
+            behavior.CatalogTriggerSourceMovedBeforeStart,
+            behavior.OccurrenceContinuation),
         AbilityFrame ability => new AbilityFrame(
             ability.Version,
             ability.BehaviorId,
