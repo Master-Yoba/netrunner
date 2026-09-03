@@ -105,6 +105,7 @@ public sealed class RealBasicActionTests
         CardInstanceState trashed = result.State.GetCard(fixture.ResourceIds[0]);
         Assert.Equal(ZoneKind.RunnerHeap, result.State.GetZone(trashed.ZoneId).Kind);
         Assert.True(trashed.FaceUp);
+        Assert.Equal([fixture.ResourceIds[0]], result.State.Turn.ThisTurnFacts!.TrashedCardOccurrenceIds);
         Assert.Contains(fixture.ResourceIds[1], result.State.GetZone(ZoneKind.RunnerRig).CardIds);
         Assert.Equal(DecisionKind.TurnTiming, result.State.PendingDecision!.Kind);
     }

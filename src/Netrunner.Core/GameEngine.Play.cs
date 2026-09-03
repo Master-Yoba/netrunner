@@ -323,7 +323,7 @@ public static partial class GameEngine
         ZoneState playArea = working.Zones.Single(zone => zone.Id == frame.PlayAreaZoneId);
         ZoneState discard = working.Zones.Single(zone => zone.Id == frame.DiscardZoneId);
 
-        MoveCard(working, card, playArea, discard);
+        TrashCard(working, card, playArea, discard);
         Emit(working, EngineEventKinds.CardPlayCompleted, new CardPlayCompletedEventPayload(
             frame.Side,
             frame.CardId,

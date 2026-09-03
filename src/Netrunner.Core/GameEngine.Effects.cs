@@ -393,7 +393,7 @@ public static partial class GameEngine
             throw new ResolutionFailureException($"Program '{cardId}' is no longer installed in the Runner rig.");
         }
 
-        MoveCard(working, card, source, GetZone(working, ZoneKind.RunnerHeap));
+        TrashCard(working, card, source, GetZone(working, ZoneKind.RunnerHeap));
         RemoveProgramRegistration(working, cardId);
         Emit(working, EngineEventKinds.ProgramTrashedForMemory, new ProgramTrashedForMemoryEventPayload(
             cardId,
@@ -518,7 +518,7 @@ public static partial class GameEngine
         {
             ZoneState currentGrip = GetZone(working, ZoneKind.RunnerGrip);
             CardInstanceState card = GetCard(working, currentGrip.CardIds[random.NextInt(currentGrip.CardIds.Count)]);
-            MoveCard(working, card, currentGrip, GetZone(working, ZoneKind.RunnerHeap));
+            TrashCard(working, card, currentGrip, GetZone(working, ZoneKind.RunnerHeap));
         }
 
         working.RandomState = random.State;

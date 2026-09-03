@@ -354,7 +354,7 @@ public static partial class GameEngine
             CardInstanceState conflict = GetCard(working, conflictId);
             ZoneState source = ZoneForCard(working, conflict.Id);
             ZoneState archives = GetZone(working, ZoneKind.CorpDiscard);
-            MoveCard(working, conflict, source, archives);
+            TrashCard(working, conflict, source, archives);
         }
     }
 

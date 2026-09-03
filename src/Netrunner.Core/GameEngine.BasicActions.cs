@@ -233,7 +233,7 @@ public static partial class GameEngine
         PlayerState corp = GetPlayer(working, PlayerSide.Corp);
         SpendClick(working, corp.Id);
         ApplyCreditDelta(working, corp.Id, -RealGameRules.TrashTaggedResourceCreditCost);
-        MoveCard(working, card, rig, heap);
+        TrashCard(working, card, rig, heap);
         StartNextTurnActionWindow(working, (TurnFrame)working.ResolutionStack[^1]);
     }
 

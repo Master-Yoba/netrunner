@@ -3293,3 +3293,29 @@ errors; runtime action expansion and full verification remain pending.
   formatting, and `git diff --check`. The direct M2 proof remains byte-stable
   at `faf4e631...` / `c882eb43...` / `d20cdef9...`, with all 32 checkpoints
   replay verified.
+
+### 2026-09-03 — Checkpoint C3c-2 ENG-413 semantic trash recording accepted
+
+- Luna Max completed the trash half of ENG-413 through one validated
+  `TrashCard` boundary. A semantic trash must move a physical card to its
+  owner's root Archives/Heap and then append exactly one active-turn
+  occurrence. Destination alone never implies trash: ordinary discard,
+  generic move effects, set-aside restoration, shuffle, score/steal,
+  install/play-area entry, draw, and remove-from-game remain plain movement.
+- The audited trash paths are behavior-selected/additional trash and TrashSelf
+  instructions/costs, access trash, damage, memory cleanup, tagged-resource
+  trash, event/operation completion, active run-event completion, Runner
+  Console/unique replacement, and Corp unique cleanup on rez. Existing event
+  order, visibility normalization, counter cleanup deferral, and program-memory
+  cleanup remain unchanged; working-copy failure remains atomic.
+- Production coverage proves ordered physical IDs from damage, one access
+  trash, a self-trash cost retained exactly once across a yielded JSON resume,
+  tagged-resource trash, terminal operation cleanup, and the formal-discard
+  exclusion. Root reviewed every remaining raw `MoveCard` call to confirm it is
+  one of the explicit non-trash movements.
+- Root independently passed a broad affected-subsystem gate 218/218, complete
+  Core 623/623, the zero-warning/error solution build, Core formatting, and
+  `git diff --check`. The direct M2 proof remains byte-stable at
+  `faf4e631...` / `c882eb43...` / `d20cdef9...`, with all 32 checkpoints
+  replay verified. ENG-413's schema, observation, lifecycle, reset, and trash
+  recording contracts are now complete; later cards consume the first-X API.

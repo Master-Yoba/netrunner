@@ -806,9 +806,9 @@ public sealed class BreachAccessTests
     public void RemoteBreachOffersTrashForPayableAssetAndTrashesIt()
     {
         EnsureFixtureAsset();
-        GameState fixture = CreateBreachState(
+        GameState fixture = WithFormalRunnerFacts(CreateBreachState(
             remoteRoot: [false, false],
-            remoteRootDefinitions: [FixtureAsset, FixturePlain]);
+            remoteRootDefinitions: [FixtureAsset, FixturePlain]));
         ServerId remoteId = fixture.Servers.Single(server => server.Kind == ServerKind.Remote).Id;
         ZoneState root = fixture.Zones.Single(zone => zone.Id == fixture.GetServer(remoteId).RootZoneId);
         CardInstanceId asset = root.CardIds[0];
@@ -857,6 +857,7 @@ public sealed class BreachAccessTests
         CardInstanceState trashedCard = trashed.State.GetCard(asset);
         Assert.Equal(discard.Id, trashedCard.ZoneId);
         Assert.True(trashedCard.FaceUp);
+        Assert.Equal([asset], trashed.State.Turn.ThisTurnFacts!.TrashedCardOccurrenceIds);
         ZoneState rootAfter = trashed.State.Zones.Single(zone => zone.Id == root.Id);
         Assert.DoesNotContain(asset, rootAfter.CardIds);
         Assert.Contains(plain, rootAfter.CardIds);
@@ -1434,6 +1435,50 @@ public sealed class BreachAccessTests
     {
         // Idempotent: re-registering a structurally identical spec is a no-op.
         CardBehaviorSpecCatalog.RegisterAsset(new AssetBehaviorSpec(FixtureAsset, 2));
+    }
+
+    private static GameState WithFormalRunnerFacts(GameState state)
+    {
+        TurnFactsState facts = new(
+            1,
+            PlayerSide.Runner,
+            state.Turn.TurnNumber,
+            clicksAllotted: 4,
+            clicksLost: 0,
+            turnBegan: true,
+            mandatoryDrawPerformed: false,
+            actionPhaseEnded: false,
+            discardPhaseEnded: false);
+        return new GameState(
+            state.GameId,
+            state.RulesVersion,
+            state.CardDataVersion,
+            state.Players,
+            state.Cards,
+            state.Zones,
+            state.Servers,
+            new TurnState(
+                PlayerSide.Runner,
+                TurnPhase.Runner,
+                state.Turn.TurnNumber,
+                TurnStep.RunnerAction,
+                new TurnHistoryState(1, null, null, facts, null)),
+            state.Outcome,
+            state.RandomState,
+            state.Allocator,
+            state.SchemaVersion,
+            state.DecisionRevision,
+            state.EventSequence,
+            state.ResolutionStack,
+            state.PendingDecision,
+            state.ActionSequence,
+            state.InitialSeed,
+            state.RunState,
+            state.RulesState,
+            state.BehaviorRegistryVersion,
+            state.BehaviorCatalogFingerprint,
+            state.RuntimeCardCatalogVersion,
+            state.RuntimeCardCatalogFingerprint);
     }
 
     private static void EnsureFixtureAgenda()

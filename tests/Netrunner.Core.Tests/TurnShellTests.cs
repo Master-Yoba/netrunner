@@ -139,6 +139,7 @@ public sealed class TurnShellTests
         Assert.Equal(0, state.Players.Single(player => player.Side == PlayerSide.Corp).Clicks);
         Assert.Equal(5, state.Turn.History!.CorpThisTurn!.ClicksLost);
         Assert.Contains(state.GetZone(ZoneKind.CorpDiscard).CardIds, state.Cards.Select(card => card.Id).Contains);
+        Assert.Empty(state.Turn.History.CorpThisTurn.TrashedCardOccurrenceIds);
     }
 
     [Fact]

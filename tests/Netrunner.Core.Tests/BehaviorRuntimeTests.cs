@@ -49,6 +49,16 @@ public sealed class BehaviorRuntimeTests
     {
         CardDefinitionId definitionId = new("test:runtime-trash-first-behavior-cost");
         CardInstanceId sourceId = new("card:runtime-trash-first-behavior-cost");
+        BehaviorChoiceSpec continuation = new(
+            "trash-self-resume",
+            BehaviorChooser.Runner,
+            BehaviorChoiceMode.Mode,
+            BehaviorChoiceCardinality.Exactly(1),
+            options:
+            [
+                new BehaviorChoiceOption("continue"),
+                new BehaviorChoiceOption("skip"),
+            ]);
         BehaviorCatalog catalog = Catalog(new CardBehaviorDefinition(
             definitionId,
             PlayerSide.Runner,
@@ -57,20 +67,46 @@ public sealed class BehaviorRuntimeTests
                 new BehaviorCost(BehaviorCostKind.TrashSelf),
                 new BehaviorCost(BehaviorCostKind.Counter, 1, counterName: "charge"),
             ],
-            instructions: [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]));
+            instructions: [new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: continuation)]));
         GameState state = WithCounters(
             CreateState(catalog, (sourceId, definitionId, ZoneKind.RunnerRig, PlayerSide.Runner)),
             new CardCounterState(sourceId, "charge", 1));
         PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+        state = ReplaceTurn(state, new TurnState(
+            PlayerSide.Runner,
+            TurnPhase.Runner,
+            1,
+            TurnStep.RunnerAction,
+            new TurnHistoryState(
+                1,
+                null,
+                null,
+                new TurnFactsState(1, PlayerSide.Runner, 1, 4, 0, true, false, false, false),
+                null)));
 
-        GameState result = GameEngine.BeginBehaviorForTesting(
+        GameState prompt = GameEngine.BeginBehaviorForTesting(
             state,
             new BehaviorInvocationContext(sourceId, runner),
             catalog);
 
-        Assert.Equal(ZoneKind.RunnerHeap, result.GetZone(result.GetCard(sourceId).ZoneId).Kind);
-        Assert.DoesNotContain(result.RulesState!.Counters, counter => counter.CardId == sourceId);
-        Assert.Empty(result.ResolutionStack);
+        Assert.Equal(ZoneKind.RunnerHeap, prompt.GetZone(prompt.GetCard(sourceId).ZoneId).Kind);
+        Assert.DoesNotContain(prompt.RulesState!.Counters, counter => counter.CardId == sourceId);
+        Assert.Equal([sourceId], prompt.Turn.ThisTurnFacts!.TrashedCardOccurrenceIds);
+        PendingDecision decision = Assert.IsType<PendingDecision>(prompt.PendingDecision);
+        string json = EngineJson.Serialize(prompt);
+        GameState restored = EngineJson.DeserializeState(json, catalog);
+        Assert.Equal(json, EngineJson.Serialize(restored));
+        LegalAction continueAction = Assert.Single(
+            decision.LegalActions,
+            action => action.Parameters is BehaviorChoiceParameters choice
+                && choice.OptionKeys.SequenceEqual(["continue"]));
+        ApplyResult resumed = GameEngine.Apply(
+            restored,
+            new ActionSubmission(decision.Owner, decision.Id, decision.Revision, continueAction.Id),
+            catalog);
+        Assert.True(resumed.Accepted, resumed.Rejection?.Message);
+        Assert.Equal([sourceId], resumed.State.Turn.ThisTurnFacts!.TrashedCardOccurrenceIds);
+        Assert.Empty(resumed.State.ResolutionStack);
     }
 
     [Theory]

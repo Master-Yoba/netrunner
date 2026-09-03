@@ -76,6 +76,49 @@ public sealed class TurnFactRuntimeTests
     }
 
     [Fact]
+    public void FormalDamageRecordsEachSelectedGripCardInPhysicalOrder()
+    {
+        GameState baseState = RunTimingTests.CreateRunState(iceCount: 0, rezzed: false);
+        CardInstanceId[] gripCards =
+        [
+            new("card:turn-fact-damage-a"),
+            new("card:turn-fact-damage-b"),
+            new("card:turn-fact-damage-c"),
+        ];
+        GameState state = AddRunnerGripCards(
+            WithRunnerFacts(
+                baseState,
+                new TurnFactsState(
+                    1,
+                    PlayerSide.Runner,
+                    baseState.Turn.TurnNumber,
+                    clicksAllotted: 4,
+                    clicksLost: 0,
+                    turnBegan: true,
+                    mandatoryDrawPerformed: false,
+                    actionPhaseEnded: false,
+                    discardPhaseEnded: false)),
+            gripCards);
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+        CardInstanceId[] heapBefore = state.GetZone(ZoneKind.RunnerHeap).CardIds.ToArray();
+
+        GameState result = GameEngine.ResolveEffects(
+            state,
+            runner,
+            new CostBundle(),
+            new EffectBundle(new DamageEffect(runner, DamageKind.Net, 2)));
+
+        CardInstanceId[] moved = result.GetZone(ZoneKind.RunnerHeap).CardIds
+            .Except(heapBefore)
+            .ToArray();
+        Assert.Equal(2, moved.Length);
+        Assert.Equal(moved, result.Turn.ThisTurnFacts!.TrashedCardOccurrenceIds);
+        Assert.All(moved, cardId => Assert.Contains(cardId, gripCards));
+        Assert.Single(result.GetZone(ZoneKind.RunnerGrip).CardIds);
+        Assert.Empty(StateInvariantValidator.Collect(result));
+    }
+
+    [Fact]
     public void StandaloneRunRecordingRemainsFactsFreeAndKeepsLegacyTurnShape()
     {
         GameState initial = RunTimingTests.CreateRunState(iceCount: 0, rezzed: false);
@@ -140,4 +183,47 @@ public sealed class TurnFactRuntimeTests
         behaviorCatalogFingerprint: source.BehaviorCatalogFingerprint,
         runtimeCardCatalogVersion: source.RuntimeCardCatalogVersion,
         runtimeCardCatalogFingerprint: source.RuntimeCardCatalogFingerprint);
+
+    private static GameState AddRunnerGripCards(GameState source, IReadOnlyList<CardInstanceId> cardIds)
+    {
+        ZoneState grip = source.GetZone(ZoneKind.RunnerGrip);
+        CardInstanceState[] additions = cardIds
+            .Select(cardId => new CardInstanceState(
+                cardId,
+                new CardDefinitionId($"test:{cardId.Value}"),
+                grip.Id,
+                PlayerSide.Runner))
+            .ToArray();
+        ZoneState populatedGrip = new(
+            grip.Id,
+            grip.Kind,
+            grip.OwnerSide,
+            grip.ServerId,
+            grip.CardIds.Concat(cardIds).ToArray());
+        return new GameState(
+            source.GameId,
+            source.RulesVersion,
+            source.CardDataVersion,
+            source.Players,
+            source.Cards.Concat(additions),
+            source.Zones.Select(zone => zone.Id == grip.Id ? populatedGrip : zone),
+            source.Servers,
+            source.Turn,
+            source.Outcome,
+            source.RandomState,
+            source.Allocator,
+            source.SchemaVersion,
+            source.DecisionRevision,
+            source.EventSequence,
+            source.ResolutionStack,
+            source.PendingDecision,
+            source.ActionSequence,
+            source.InitialSeed,
+            source.RunState,
+            source.RulesState,
+            source.BehaviorRegistryVersion,
+            source.BehaviorCatalogFingerprint,
+            source.RuntimeCardCatalogVersion,
+            source.RuntimeCardCatalogFingerprint);
+    }
 }

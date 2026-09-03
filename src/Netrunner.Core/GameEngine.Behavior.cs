@@ -2364,18 +2364,21 @@ public static partial class GameEngine
             // legal same-zone shuffle.
             if (source.Id != destination.Id)
             {
-                MoveCard(
-                    working,
-                    card,
-                    source,
-                    destination,
-                    emit: source.Kind != ZoneKind.BehaviorSetAside
-                        || destination.Kind is ZoneKind.CorpDiscard
-                            or ZoneKind.RunnerHeap
-                            or ZoneKind.RunnerRig
-                            or ZoneKind.RunnerPlayArea
-                            or ZoneKind.ServerIce
-                            or ZoneKind.ServerRoot);
+                bool emit = source.Kind != ZoneKind.BehaviorSetAside
+                    || destination.Kind is ZoneKind.CorpDiscard
+                        or ZoneKind.RunnerHeap
+                        or ZoneKind.RunnerRig
+                        or ZoneKind.RunnerPlayArea
+                        or ZoneKind.ServerIce
+                        or ZoneKind.ServerRoot;
+                if (kind == BehaviorTransferKind.Trash)
+                {
+                    TrashCard(working, card, source, destination, emit);
+                }
+                else
+                {
+                    MoveCard(working, card, source, destination, emit);
+                }
             }
             else if (source.Kind == ZoneKind.BehaviorSetAside)
             {
@@ -2828,11 +2831,20 @@ public static partial class GameEngine
     private static void MoveBehaviorCardToTrash(WorkingState working, CardInstanceState card)
     {
         ZoneState source = ZoneForCard(working, card.Id);
-        MoveBehaviorCardToCostZone(
+        ZoneState destination = GetBehaviorZone(
             working,
-            card,
             card.OwnerSide == PlayerSide.Corp ? BehaviorZone.Archives : BehaviorZone.Heap,
-            source);
+            card.OwnerSide);
+        // Cost payment may declare TrashSelf before a counter or hosted-credit
+        // cost. Keep the card's counters available until the complete payment
+        // loop has run; the caller clears them at that boundary.
+        TrashCard(working, card, source, destination, cleanupCounters: false);
+        if (card.OwnerSide == PlayerSide.Runner
+            && source.Kind == ZoneKind.RunnerRig
+            && working.RulesState?.Programs.Any(program => program.CardId == card.Id) == true)
+        {
+            RemoveProgramRegistration(working, card.Id);
+        }
     }
 
     private static void MoveBehaviorCardToRemovedFromGame(WorkingState working, CardInstanceState card)

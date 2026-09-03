@@ -61,6 +61,24 @@ public static partial class GameEngine
             history.RecordAccess(turn.ActiveSide, cardId));
     }
 
+    private static void RecordTurnTrash(WorkingState working, CardInstanceId cardId)
+    {
+        TurnState turn = working.Turn;
+        TurnHistoryState? history = turn.History;
+        if (history is null || history.ThisTurn(turn.ActiveSide) is null)
+        {
+            return;
+        }
+
+        ReplaceTurn(
+            working,
+            turn.ActiveSide,
+            turn.Phase,
+            turn.TurnNumber,
+            turn.Step,
+            history.RecordTrash(turn.ActiveSide, cardId));
+    }
+
     private static void RecordTurnAgendaChange(
         WorkingState working,
         CardInstanceId cardId,

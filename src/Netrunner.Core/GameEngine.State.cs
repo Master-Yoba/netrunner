@@ -65,6 +65,35 @@ public static partial class GameEngine
         }
     }
 
+    /// <summary>
+    /// Performs a rules-defined trash transfer and records the physical card
+    /// occurrence in the active formal turn facts.  Ordinary movement remains
+    /// deliberately separate: a destination discard/heap alone does not make
+    /// a move a trash operation.
+    /// </summary>
+    private static void TrashCard(
+        WorkingState working,
+        CardInstanceState card,
+        ZoneState source,
+        ZoneState destination,
+        bool emit = true,
+        bool cleanupCounters = true)
+    {
+        ZoneKind expectedKind = card.OwnerSide == PlayerSide.Corp
+            ? ZoneKind.CorpDiscard
+            : ZoneKind.RunnerHeap;
+        if (destination.Kind != expectedKind
+            || destination.OwnerSide != card.OwnerSide
+            || destination.ServerId is not null)
+        {
+            throw new ResolutionFailureException(
+                $"Card '{card.Id}' must be trashed to its owner's {expectedKind} zone.");
+        }
+
+        MoveCard(working, card, source, destination, emit, cleanupCounters);
+        RecordTurnTrash(working, card.Id);
+    }
+
     private static bool IsInstalledZone(ZoneKind kind) =>
         kind is ZoneKind.RunnerRig or ZoneKind.ServerIce or ZoneKind.ServerRoot;
 

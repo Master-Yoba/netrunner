@@ -380,7 +380,7 @@ public static partial class GameEngine
             ZoneState discard = GetZone(
                 working,
                 player.Side == PlayerSide.Corp ? ZoneKind.CorpDiscard : ZoneKind.RunnerHeap);
-            MoveCard(working, replacement, replacementSource, discard);
+            TrashCard(working, replacement, replacementSource, discard);
         }
 
         // MoveCard replaces both source and destination zone records.  The

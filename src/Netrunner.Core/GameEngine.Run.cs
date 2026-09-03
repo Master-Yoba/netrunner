@@ -961,7 +961,7 @@ public static partial class GameEngine
             CardInstanceState eventCard = GetCard(working, activeEvent);
             ZoneState eventZone = working.Zones.Single(zone => zone.Id == eventCard.ZoneId);
             ZoneState heap = GetZone(working, ZoneKind.RunnerHeap);
-            MoveCard(working, eventCard, eventZone, heap);
+            TrashCard(working, eventCard, eventZone, heap);
         }
         // CR 26.03 6.5/9.8: breakers never leave the rig; encounter-scoped
         // pump effects live on the run/encounter state, so no per-server
@@ -1267,7 +1267,7 @@ public static partial class GameEngine
         }
 
         run = PayRunnerRunCredits(working, run, spec.TrashCost, hostedCredits);
-        MoveCard(working, card, working.Zones.Single(zone => zone.Id == card.ZoneId), discardZone);
+        TrashCard(working, card, working.Zones.Single(zone => zone.Id == card.ZoneId), discardZone);
         // A card trashed through access is revealed: it enters the Corp
         // discard faceup so both viewers can see what left the breach.
         if (!card.FaceUp)
