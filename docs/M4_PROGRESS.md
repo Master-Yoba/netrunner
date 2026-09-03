@@ -1,6 +1,7 @@
 # M4 progress — System Gateway complete
 
-Status: slice 4.1 merged; slice 4.2 implementation in progress on `m4_2`
+Status: slices 4.1 and 4.2 merged; slice 4.3 implementation in progress on
+`m4_3`
 
 Date started: 31 August 2026
 
@@ -9,10 +10,10 @@ vendored commit `236140cf84491c23995b028bc791281837520b97` (77 designs)
 
 ## Scope
 
-Slice 4.1 of `docs/M4_PLAN.md` is complete and merged. Current implementation
-scope is Slice 4.2: ENG-401 through ENG-406, MATCH-401A/B, DATA-401A, the 12
-Batch 1 designs, AGT-401, SIM-401, UI-403, OBS-401, and their documented exit
-evidence. Later M4 card batches remain out of scope.
+Slices 4.1 and 4.2 of `docs/M4_PLAN.md` are complete and merged. Current
+implementation scope is Slice 4.3: ENG-407 through ENG-413, the 13 new Batch 2
+designs plus Nico Campaign completion, AGT-401 v2, SIM-401, UI-404, OBS-401,
+and their documented exit evidence. Later M4 card batches remain out of scope.
 
 ## Baseline
 
@@ -2548,3 +2549,66 @@ errors; runtime action expansion and full verification remain pending.
 - The post-CI review-thread audit found the prior three threads still resolved
   and exactly one new thread: the replied-to P1. Root explicitly resolved that
   verified thread. No other new inline feedback was present at that audit.
+
+## Slice 4.3 work log
+
+### 2026-09-03 — Slice 4.3 architecture and execution checkpoints
+
+- Started from clean branch `m4_3` at merged Slice 4.2 commit `ea6da2b`.
+  The baseline contains 489 Core, 98 Cards, 23 AI, 52 CLI, and 43 Match tests;
+  the last authoritative `scripts/verify.sh` run is green and coverage is
+  19 registered / 17 complete / 2 partial / 58 unregistered of 77.
+- Scope is the complete Slice 4.3 contract in `docs/M4_PLAN.md`: ENG-407,
+  ENG-407A, ENG-408–413; cards 30003, 30007, 30009, 30014–16, 30018, 30023,
+  30024, 30027, 30033, 30053, 30071; full-text completion of 30037; AGT-401
+  v2, SIM-401, UI-404, OBS-401, and the standard batch proof/client gates.
+  Slice 4.4 mechanics and cards remain excluded even where Slice 4.3 records
+  facts that later batches consume.
+- Root owns architecture, checkpoint contracts, integration review, the
+  progress ledger, independent verification, and local commits. Luna Max owns
+  implementation within each bounded checkpoint and does not commit.
+- The slice is dependency-ordered into locally committable checkpoints:
+  (A) paid-ability declaration/action/frame/cost foundation plus generalized
+  encountered-ICE subtype legality; (B) card counters, hosted credit pools,
+  removed-from-game movement, typed events, observation, and invariant/schema
+  surfaces; (C) active-source occurrence bindings and per-turn/run facts;
+  (D) click-run source context, breach modifiers, conditional cost modifiers,
+  and their UI calculation projections; (E) Batch 2 declarations and
+  card-level lifecycle/hidden-information tests in small related groups;
+  (F) contract-agent, sim/headless proof, UI-404 client smoke, coverage/rulings
+  regeneration, full verification, and exit evidence.
+- Checkpoint A contract: ability activation is a distinct engine-issued action
+  carrying source card, stable ability key, frozen typed costs, target snapshot,
+  and usage limit. Click-prefixed abilities consume allotted clicks as an
+  action; `lose click` is a paid cost and is not interchangeable. Costs are
+  validated atomically before mutation, then paid in declared order with the
+  existing cost checkpoints. The immutable behavior catalog fingerprints the
+  complete ability declaration. A serialized ability frame is reconstructed
+  only from that catalog declaration and resumes its behavior child through a
+  parent identity, rejecting stale source, zone, target, affordability, or
+  usage state. Existing install-time/play-time generic behavior remains
+  unchanged. Sentry and `any encountered ICE` matching use normalized subtype
+  metadata and the same strength/break-limit legality path as Barrier and Code
+  Gate; no title switch is permitted.
+- Checkpoint B contract: generic named counters remain canonical in
+  `RulesState`; hosted credits are a typed public counter purpose with an
+  explicit spending restriction, never recurring credits or player credits.
+  Load/place/take/spend operations reject underflow and overflow atomically.
+  An empty-pool follow-up runs after the instruction that emptied the pool.
+  Removed-from-game is an explicit public zone and self-removal is paid before
+  the ability effect; all additions participate in deep copy, canonical JSON,
+  replay, invariant validation, and observation filtering.
+- Checkpoint C contract: triggers bind typed occurrence keys to an active
+  physical source and a controller snapshot. Install, rez, turn-begin,
+  successful-run, run-end, score/steal, and access occurrences carry the
+  minimum typed context required by declarations. Eligibility is collected at
+  the checkpoint from active sources; an invocation retains only the source
+  snapshot needed by CR timing after movement. Turn facts are explicit,
+  controller-scoped, reset only at formal boundaries, and include successful
+  server/central runs, accessed/trashed cards, agenda changes, tag changes,
+  and consumed first/once-per-turn keys.
+- Every accepted checkpoint requires focused positive/negative, forged/stale,
+  save/load, invariant, observation (where applicable), catalog-fingerprint,
+  and formatter checks proportional to its schema impact. Root reviews the
+  diff and reruns the focused gate before updating this ledger and creating a
+  local commit. A checkpoint is not accepted merely because it compiles.
