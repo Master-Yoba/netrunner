@@ -38,7 +38,9 @@ public sealed class M2ScenarioSetupTests
 
     private static BehaviorCatalog RebuildGatewayCatalog(
         string? excludedDefinitionId = null,
-        IceBehaviorSpec? replacementIce = null)
+        IceBehaviorSpec? replacementIce = null,
+        AssetBehaviorSpec? replacementAsset = null,
+        bool includeGeneric = true)
     {
         BehaviorCatalog gateway = GatewayBehaviorCatalog.Create();
         var builder = new BehaviorCatalogBuilder(gateway.Version)
@@ -46,11 +48,20 @@ public sealed class M2ScenarioSetupTests
             .AddIcebreaker(gateway.IcebreakerSpecs.Where(spec => spec.DefinitionId.Value != excludedDefinitionId))
             .AddAsset(gateway.AssetSpecs.Where(spec => spec.DefinitionId.Value != excludedDefinitionId))
             .AddAgenda(gateway.AgendaSpecs.Where(spec => spec.DefinitionId.Value != excludedDefinitionId))
-            .AddRunEvent(gateway.RunEventSpecs.Where(spec => spec.DefinitionId.Value != excludedDefinitionId))
-            .Add(gateway.GenericSpecs.Where(spec => spec.DefinitionId.Value != excludedDefinitionId));
+            .AddRunEvent(gateway.RunEventSpecs.Where(spec => spec.DefinitionId.Value != excludedDefinitionId));
+        if (includeGeneric)
+        {
+            builder.Add(gateway.GenericSpecs.Where(spec => spec.DefinitionId.Value != excludedDefinitionId));
+        }
+
         if (replacementIce is not null)
         {
             builder.AddIce(replacementIce);
+        }
+
+        if (replacementAsset is not null)
+        {
+            builder.AddAsset(replacementAsset);
         }
 
         return builder.Build();
@@ -129,6 +140,32 @@ public sealed class M2ScenarioSetupTests
     }
 
     [Fact]
+    public void GenericOverlayOnReferencedLegacyAssetDoesNotChangeScenarioSliceOrPinnedStateHash()
+    {
+        M2ScenarioDocument document = LoadDocument(RepresentativeRunJson);
+        BehaviorCatalog legacy = RebuildGatewayCatalog(includeGeneric: false);
+        BehaviorCatalog expanded = new BehaviorCatalogBuilder(legacy.Version, legacy)
+            .Add(new CardBehaviorDefinition(
+                GatewayCardCodes.NicoCampaign,
+                PlayerSide.Corp,
+                instructions: [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]))
+            .Build();
+
+        BehaviorCatalog legacySlice = document.CreateBehaviorCatalog(legacy);
+        BehaviorCatalog expandedSlice = document.CreateBehaviorCatalog(expanded);
+
+        Assert.Equal(legacy.Version, expanded.Version);
+        Assert.Equal(legacySlice.Version, expandedSlice.Version);
+        Assert.Equal(document.BehaviorCatalogFingerprint, legacySlice.Fingerprint);
+        Assert.Equal(legacySlice.Fingerprint, expandedSlice.Fingerprint);
+        Assert.DoesNotContain(expandedSlice.GenericSpecs, static definition =>
+            definition.DefinitionId == GatewayCardCodes.NicoCampaign);
+        Assert.Equal(
+            DeterministicHash.ForState(M2ScenarioSetup.Build(document, legacy)),
+            DeterministicHash.ForState(M2ScenarioSetup.Build(document, expanded)));
+    }
+
+    [Fact]
     public void MissingInjectedBehaviorReportsTheReferencingCardPath()
     {
         M2ScenarioDocument document = LoadDocument(RepresentativeRunJson);
@@ -157,6 +194,26 @@ public sealed class M2ScenarioSetupTests
                 original.RezCost,
                 original.Subroutines,
                 original.StrengthModifiers));
+
+        M2ScenarioException exception = Assert.Throws<M2ScenarioException>(
+            () => document.Validate(changed));
+
+        Assert.Contains("behaviorCatalogFingerprint:", exception.Message);
+        Assert.Contains("scenario behavior catalog fingerprint", exception.Message);
+    }
+
+    [Fact]
+    public void ChangedReferencedAssetBehaviorStillFailsTheScenarioFingerprintPin()
+    {
+        M2ScenarioDocument document = LoadDocument(RepresentativeRunJson);
+        AssetBehaviorSpec original = Assert.Single(
+            GatewayBehaviorCatalog.Create().AssetSpecs,
+            spec => spec.DefinitionId == GatewayCardCodes.NicoCampaign);
+        BehaviorCatalog changed = RebuildGatewayCatalog(
+            excludedDefinitionId: GatewayCardCodes.NicoCampaign.Value,
+            replacementAsset: new AssetBehaviorSpec(
+                original.DefinitionId,
+                trashCost: original.TrashCost + 1));
 
         M2ScenarioException exception = Assert.Throws<M2ScenarioException>(
             () => document.Validate(changed));

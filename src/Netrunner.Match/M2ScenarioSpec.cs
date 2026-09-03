@@ -597,7 +597,54 @@ public sealed class M2ScenarioDocument
             }
         }
 
-        return BehaviorCatalog.CreateSlice(behaviorCatalog, definitionIds);
+        return CreateLegacyBehaviorCatalog(behaviorCatalog, definitionIds);
+    }
+
+    /// <summary>
+    /// Builds the M2 compatibility catalog from the injected composition
+    /// catalog. M2 predates generic card behavior definitions and requires
+    /// only its five typed families; generic overlays for an ID are therefore
+    /// intentionally not carried into the scenario slice. This policy stays
+    /// in the Match adapter so Core's general definition slicing remains
+    /// generic and reusable by later milestones.
+    /// </summary>
+    private static BehaviorCatalog CreateLegacyBehaviorCatalog(
+        IBehaviorCatalog source,
+        IEnumerable<CardDefinitionId> definitionIds)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(definitionIds);
+
+        var builder = new BehaviorCatalogBuilder(source.Version);
+        foreach (CardDefinitionId definitionId in definitionIds.Distinct())
+        {
+            if (source.TryGetIce(definitionId, out IceBehaviorSpec? ice))
+            {
+                builder.AddIce(ice);
+            }
+
+            if (source.TryGetIcebreaker(definitionId, out IcebreakerBehaviorSpec? icebreaker))
+            {
+                builder.AddIcebreaker(icebreaker);
+            }
+
+            if (source.TryGetAsset(definitionId, out AssetBehaviorSpec? asset))
+            {
+                builder.AddAsset(asset);
+            }
+
+            if (source.TryGetAgenda(definitionId, out AgendaBehaviorSpec? agenda))
+            {
+                builder.AddAgenda(agenda);
+            }
+
+            if (source.TryGetRunEvent(definitionId, out RunEventBehaviorSpec? runEvent))
+            {
+                builder.AddRunEvent(runEvent);
+            }
+        }
+
+        return builder.Build();
     }
 
     public static bool TryParseServerRef(string reference, int remotes, out (ServerKind Kind, int RemoteIndex) server)

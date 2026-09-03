@@ -3463,3 +3463,18 @@ errors; runtime action expansion and full verification remain pending.
   its capability slice included the new generic definition in addition to the
   legacy asset contract. A separate compatibility checkpoint is open to make
   the M2 slice depend only on the five legacy families it actually consumes.
+
+### 2026-09-04 — Checkpoint D-401 M2 capability slicing repaired
+
+- Root traced the failed replay gate to Nico Campaign's completed generic
+  behavior being included alongside its legacy M2 asset capability. Luna Max
+  moved the policy to the Match-owned M2 document boundary: its immutable
+  scenario catalog now contains only the referenced ICE, icebreaker, asset,
+  agenda, and run-event contracts. Core's general catalog slicing remains
+  unaware of M2 policy.
+- Regression coverage proves that a generic overlay on referenced asset 30037
+  does not change the M2 scenario fingerprint or initial state, while changing
+  Nico's required asset trash-cost contract still fails the pin. Root passed
+  the focused CLI/Match gate 24/24 and the direct proof returned the unchanged
+  `faf4e631...` / `c882eb43...` / `d20cdef9...` hashes with all 32 checkpoints
+  replay verified.

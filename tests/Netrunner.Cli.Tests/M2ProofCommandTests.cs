@@ -19,6 +19,17 @@ public sealed class M2ProofCommandTests
     private const string ExpectedEventStreamHash =
         "d20cdef94e97ac928ca088e14952b65d2116fecda00485fff5c3b05e1b6e9e20";
 
+    private static BehaviorCatalog BuildLegacyGatewayCatalog(BehaviorCatalog gateway)
+    {
+        return new BehaviorCatalogBuilder(gateway.Version)
+            .AddIce(gateway.IceSpecs)
+            .AddIcebreaker(gateway.IcebreakerSpecs)
+            .AddAsset(gateway.AssetSpecs)
+            .AddAgenda(gateway.AgendaSpecs)
+            .AddRunEvent(gateway.RunEventSpecs)
+            .Build();
+    }
+
     [Fact]
     public void M2ProofCommandSucceedsAndReportsPinnedHashes()
     {
@@ -50,8 +61,12 @@ public sealed class M2ProofCommandTests
     {
         string path = Path.Combine(AppContext.BaseDirectory, "M2Scenarios", "representative-run.json");
         BehaviorCatalog gateway = GatewayBehaviorCatalog.Create();
-        BehaviorCatalog expanded = new BehaviorCatalogBuilder(gateway.Version, gateway)
-            .AddAsset(new AssetBehaviorSpec(new CardDefinitionId("test:m2-command-unrelated"), trashCost: 1))
+        BehaviorCatalog legacy = BuildLegacyGatewayCatalog(gateway);
+        BehaviorCatalog expanded = new BehaviorCatalogBuilder(legacy.Version, legacy)
+            .Add(new CardBehaviorDefinition(
+                GatewayCardCodes.NicoCampaign,
+                PlayerSide.Corp,
+                instructions: [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]))
             .Build();
         var output = new StringWriter();
         var error = new StringWriter();
