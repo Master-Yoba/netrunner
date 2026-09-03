@@ -61,7 +61,16 @@ public static partial class GameEngine
 
         if (emit)
         {
-            Emit(working, EngineEventKinds.CardMoved, new CardMovedEventPayload(card.Id, source.Id, destination.Id));
+            CardMovedEventPayload movement = source.Kind is ZoneKind.CorpRemovedFromGame
+                or ZoneKind.RunnerRemovedFromGame
+                || destination.Kind is ZoneKind.CorpRemovedFromGame
+                or ZoneKind.RunnerRemovedFromGame
+                ? new CardMovedEventPayload(card.Id, source.Id, destination.Id, source.Kind, destination.Kind)
+                : new CardMovedEventPayload(card.Id, source.Id, destination.Id);
+            Emit(
+                working,
+                EngineEventKinds.CardMoved,
+                movement);
         }
     }
 

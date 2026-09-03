@@ -57,6 +57,18 @@ public sealed record MatchViewModel(
     public IReadOnlyList<CardViewModel> RunnerHandCards => RunnerHand.VisibleCards;
 
     public IReadOnlyList<CardViewModel> CorpHandCards => CorpHand.VisibleCards;
+
+    /// <summary>
+    /// Ability uses from the current visible turn-fact projection. The list is
+    /// detached by the observation mapper and contains no authoritative state.
+    /// Older observations omit this optional projection and therefore expose an
+    /// empty list.
+    /// </summary>
+    public IReadOnlyList<AbilityUseViewModel> UsedAbilityKeys { get; init; } =
+        Array.Empty<AbilityUseViewModel>();
+
+    /// <summary>Alias used by clients that prefer an explicit current-turn name.</summary>
+    public IReadOnlyList<AbilityUseViewModel> CurrentTurnUsedAbilityKeys => UsedAbilityKeys;
 }
 
 /// <summary>
@@ -209,9 +221,75 @@ public sealed record CardViewModel(
     int? MemoryCost = null,
     int? AdvancementRequirement = null)
 {
+    /// <summary>
+    /// Typed rules counters projected by Core. This is intentionally separate
+    /// from the legacy advancement-counter presentation so a UI cannot mistake
+    /// an advancement token for a hosted credit or virus counter.
+    /// </summary>
+    public IReadOnlyList<CardCounterViewModel> TypedCounters { get; init; } =
+        Array.Empty<CardCounterViewModel>();
+
+    /// <summary>Compatibility alias for callers that call these card counters.</summary>
+    public IReadOnlyList<CardCounterViewModel> CardCounters => TypedCounters;
+
+    /// <summary>Non-colour counter-chip text derived from typed counter meaning.</summary>
+    public IReadOnlyList<string> CounterChips => TypedCounters
+        .Select(static counter => counter.ChipText)
+        .ToArray();
+
+    /// <summary>
+    /// Viewer-safe ability affordance. It is populated only from an issued
+    /// <see cref="ActionKind.UseAbility"/> action and current visible facts;
+    /// card metadata/rules text is never consulted to infer it.
+    /// </summary>
+    public string? AbilityCue { get; init; }
+
+    public bool IsAbilityReady => string.Equals(AbilityCue, AbilityCueLabels.Ready, StringComparison.Ordinal);
+
+    public bool IsAbilityUsed => string.Equals(AbilityCue, AbilityCueLabels.Used, StringComparison.Ordinal);
+
     public IReadOnlyList<string> Counters => AdvancementCounters > 0
         ? new[] { $"Advancement ×{AdvancementCounters}" }
         : Array.Empty<string>();
+}
+
+/// <summary>Typed counter state retained by the Match presentation boundary.</summary>
+public sealed record CardCounterViewModel(
+    string CounterName,
+    CardCounterPurpose Purpose,
+    int Count,
+    HostedCreditSpendRestriction? SpendRestriction)
+{
+    /// <summary>
+    /// Stable non-colour label for a counter chip. Generic counters named
+    /// <c>power</c> receive the familiar POWER label; other generic names are
+    /// deliberately rendered as GENERIC rather than guessed from card text.
+    /// </summary>
+    public string Label => Purpose switch
+    {
+        CardCounterPurpose.HostedCredit => "HOSTED CREDIT",
+        CardCounterPurpose.Virus => "VIRUS",
+        CardCounterPurpose.Generic when string.Equals(CounterName, "power", StringComparison.OrdinalIgnoreCase)
+            => "POWER",
+        CardCounterPurpose.Generic => "GENERIC",
+        _ => "UNKNOWN",
+    };
+
+    public string ChipText => $"{Label} ×{Count}";
+
+    public string Summary => SpendRestriction is { } restriction
+        ? $"{ChipText} · {restriction.ToString().ToUpperInvariant()}"
+        : ChipText;
+}
+
+/// <summary>One visible current-turn use of a physical card ability.</summary>
+public sealed record AbilityUseViewModel(string SourceCardId, string AbilityKey);
+
+/// <summary>Stable text values for the derived per-card ability cue.</summary>
+public static class AbilityCueLabels
+{
+    public const string Ready = "ABILITY READY";
+    public const string Used = "USED";
 }
 
 /// <summary>Current decision prompt and the legal actions issued to this viewer.</summary>
@@ -334,6 +412,17 @@ public sealed record RunOutcomeViewModel(
 /// <summary>Maps filtered Core observations to immutable typed UI data.</summary>
 public static class ObservationViewMapper
 {
+    private sealed record CardAbilityCueContext(
+        IReadOnlySet<string> ReadySourceIds,
+        IReadOnlySet<string> UsedSourceIds)
+    {
+        public string? For(string cardId) => ReadySourceIds.Contains(cardId)
+            ? AbilityCueLabels.Ready
+            : UsedSourceIds.Contains(cardId)
+                ? AbilityCueLabels.Used
+                : null;
+    }
+
     /// <summary>
     /// Legacy M2 compatibility adapter. New composition code must provide the
     /// immutable behavior catalog explicitly through the three-argument
@@ -390,35 +479,74 @@ public static class ObservationViewMapper
         PlayerViewModel corp = MapPlayer(corpPlayer, PlayerSide.Corp);
         PlayerViewModel runner = MapPlayer(runnerPlayer, PlayerSide.Runner);
         IReadOnlyDictionary<string, object?> hidden = RequiredMap(publicState, "hiddenZoneCounts");
+        IReadOnlyList<AbilityUseViewModel> usedAbilityKeys = MapVisibleCurrentTurnUsedAbilityKeys(publicState);
+        IReadOnlySet<string> usedAbilitySourceIds = usedAbilityKeys
+            .Select(static use => use.SourceCardId)
+            .ToHashSet(StringComparer.Ordinal);
+        IReadOnlySet<string> readyAbilitySourceIds = observation.LegalActions
+            .Where(static action => action.Kind == ActionKind.UseAbility)
+            .Select(static action => action.Parameters as AbilityActionParameters)
+            .Where(static parameters => parameters is not null)
+            .Select(static parameters => parameters!.SourceCardId.Value)
+            .ToHashSet(StringComparer.Ordinal);
+        var abilityCue = new CardAbilityCueContext(readyAbilitySourceIds, usedAbilitySourceIds);
 
         ZoneViewModel corpHand = MapZone(
             ZoneKind.CorpHand,
             ReadInt(hidden, "corpHand"),
-            observation.Viewer == PlayerSide.Corp ? ReadCards(privateState, "hand", metadataResolver) : Array.Empty<CardViewModel>());
+            observation.Viewer == PlayerSide.Corp
+                ? ReadCards(privateState, "hand", metadataResolver, abilityCue)
+                : Array.Empty<CardViewModel>());
         ZoneViewModel corpDeck = MapZone(
             ZoneKind.CorpDeck,
             ReadInt(hidden, "corpDeck"),
-            observation.Viewer == PlayerSide.Corp ? ReadCards(privateState, "deck", metadataResolver) : Array.Empty<CardViewModel>());
+            observation.Viewer == PlayerSide.Corp
+                ? ReadCards(privateState, "deck", metadataResolver, abilityCue)
+                : Array.Empty<CardViewModel>());
         ZoneViewModel runnerHand = MapZone(
             ZoneKind.RunnerGrip,
             ReadInt(hidden, "runnerGrip"),
-            observation.Viewer == PlayerSide.Runner ? ReadCards(privateState, "grip", metadataResolver) : Array.Empty<CardViewModel>());
+            observation.Viewer == PlayerSide.Runner
+                ? ReadCards(privateState, "grip", metadataResolver, abilityCue)
+                : Array.Empty<CardViewModel>());
         ZoneViewModel runnerDeck = MapZone(
             ZoneKind.RunnerStack,
             ReadInt(hidden, "runnerStack"),
-            observation.Viewer == PlayerSide.Runner ? ReadCards(privateState, "stack", metadataResolver) : Array.Empty<CardViewModel>());
+            observation.Viewer == PlayerSide.Runner
+                ? ReadCards(privateState, "stack", metadataResolver, abilityCue)
+                : Array.Empty<CardViewModel>());
 
         IReadOnlyList<ServerViewModel> servers = ReadList(publicState, "servers")
-            .Select(value => MapServer(value, metadataResolver))
+            .Select(value => MapServer(value, metadataResolver, abilityCue))
             .ToArray();
-        IReadOnlyList<CardViewModel> runnerRig = ReadCards(publicState, "runnerRig", metadataResolver);
-        IReadOnlyList<CardViewModel> corpScore = ReadCards(publicState, "corpScore", metadataResolver);
-        IReadOnlyList<CardViewModel> runnerScore = ReadCards(publicState, "runnerScore", metadataResolver);
+        IReadOnlyList<CardViewModel> runnerRig = ReadCards(
+            publicState,
+            "runnerRig",
+            metadataResolver,
+            abilityCue);
+        IReadOnlyList<CardViewModel> corpScore = ReadCards(
+            publicState,
+            "corpScore",
+            metadataResolver,
+            abilityCue);
+        IReadOnlyList<CardViewModel> runnerScore = ReadCards(
+            publicState,
+            "runnerScore",
+            metadataResolver,
+            abilityCue);
         DecisionViewModel? decision = MapDecision(observation);
-        RunFocusViewModel? run = MapRun(publicState, metadataResolver, behaviorCatalog);
+        RunFocusViewModel? run = MapRun(
+            publicState,
+            metadataResolver,
+            behaviorCatalog,
+            abilityCue);
         OutcomeViewModel outcome = MapOutcome(RequiredMap(publicState, "outcome"));
         IReadOnlyList<LegalActionViewModel> actions = observation.LegalActions
-            .Select(action => new LegalActionViewModel(action.Id, action.Kind, action.Description, action.Parameters))
+            .Select(action => new LegalActionViewModel(
+                action.Id,
+                action.Kind,
+                ActionsRegionPresenter.Describe(action.Kind, action.Description, action.Parameters),
+                action.Parameters))
             .ToArray();
 
         MatchViewModel view = new(
@@ -463,6 +591,7 @@ public static class ObservationViewMapper
                 runner.AgendaPoints,
                 new ReadOnlyCollection<CardViewModel>(runnerScore.ToArray())),
             ForcedDiscard = MapForcedDiscard(decision, corpHandSize, runnerHandSize),
+            UsedAbilityKeys = usedAbilityKeys,
         };
     }
 
@@ -492,6 +621,76 @@ public static class ObservationViewMapper
         IBehaviorCatalog behaviorCatalog,
         HandSizeProjection? handSizeProjection) =>
         Build(observation, metadataResolver, behaviorCatalog, handSizeProjection);
+
+    private static IReadOnlyList<AbilityUseViewModel> MapVisibleCurrentTurnUsedAbilityKeys(
+        IReadOnlyDictionary<string, object?> publicState)
+    {
+        if (!publicState.TryGetValue("turnFacts", out object? rawFacts)
+            || rawFacts is null
+            || rawFacts is JsonElement { ValueKind: JsonValueKind.Null })
+        {
+            return Array.Empty<AbilityUseViewModel>();
+        }
+
+        IReadOnlyDictionary<string, object?> turnFacts = RequiredMap(rawFacts, "turnFacts");
+        var uses = new List<AbilityUseViewModel>();
+        var keys = new HashSet<(string SourceCardId, string AbilityKey)>();
+        foreach (string side in new[] { "corp", "runner" })
+        {
+            if (!turnFacts.TryGetValue(side, out object? rawSideFacts)
+                || rawSideFacts is null
+                || rawSideFacts is JsonElement { ValueKind: JsonValueKind.Null })
+            {
+                continue;
+            }
+
+            IReadOnlyDictionary<string, object?> sideFacts = RequiredMap(rawSideFacts, $"turnFacts.{side}");
+            if (!sideFacts.TryGetValue("thisTurn", out object? rawThisTurn)
+                || rawThisTurn is null
+                || rawThisTurn is JsonElement { ValueKind: JsonValueKind.Null })
+            {
+                continue;
+            }
+
+            IReadOnlyDictionary<string, object?> thisTurn = RequiredMap(rawThisTurn, $"turnFacts.{side}.thisTurn");
+            if (!thisTurn.ContainsKey("usedAbilityKeys"))
+            {
+                continue;
+            }
+
+            if (!thisTurn.TryGetValue("usedAbilityKeys", out object? rawUses)
+                || rawUses is null
+                || rawUses is JsonElement { ValueKind: JsonValueKind.Null })
+            {
+                throw new FormatException(
+                    $"Observation field 'turnFacts.{side}.thisTurn.usedAbilityKeys' must be an array when supplied.");
+            }
+
+            foreach (object? rawUse in ReadList(thisTurn, "usedAbilityKeys"))
+            {
+                IReadOnlyDictionary<string, object?> use = RequiredMap(
+                    rawUse,
+                    $"turnFacts.{side}.thisTurn.usedAbilityKeys");
+                string sourceCardId = ReadString(use, "sourceCardId");
+                string abilityKey = ReadString(use, "abilityKey");
+                if (!IsStableCounterName(sourceCardId) || !IsStableCounterName(abilityKey))
+                {
+                    throw new FormatException(
+                        $"Observation field 'turnFacts.{side}.thisTurn.usedAbilityKeys' contains an invalid identifier.");
+                }
+
+                if (!keys.Add((sourceCardId, abilityKey)))
+                {
+                    throw new FormatException(
+                        $"Observation field 'turnFacts.{side}.thisTurn.usedAbilityKeys' contains duplicate use '{sourceCardId}/{abilityKey}'.");
+                }
+
+                uses.Add(new AbilityUseViewModel(sourceCardId, abilityKey));
+            }
+        }
+
+        return new ReadOnlyCollection<AbilityUseViewModel>(uses.ToArray());
+    }
 
     private static TurnViewModel MapTurn(IReadOnlyDictionary<string, object?> publicState)
     {
@@ -692,26 +891,28 @@ public static class ObservationViewMapper
 
     private static ServerViewModel MapServer(
         object? value,
-        ICardMetadataResolver metadataResolver)
+        ICardMetadataResolver metadataResolver,
+        CardAbilityCueContext abilityCue)
     {
         IReadOnlyDictionary<string, object?> map = RequiredMap(value, "server");
         // Core stores server ICE from innermost to outermost (the active
         // approach index starts at Count - 1). Presentation uses the spatial
         // order promised by ServerViewModel: outermost to innermost.
-        IReadOnlyList<CardViewModel?> orderedIce = ReadNullableCards(map, "ice", metadataResolver)
+        IReadOnlyList<CardViewModel?> orderedIce = ReadNullableCards(map, "ice", metadataResolver, abilityCue)
             .Reverse()
             .ToArray();
         return new ServerViewModel(
             ReadString(map, "id"),
             ReadEnum<ServerKind>(map, "kind"),
             orderedIce,
-            ReadNullableCards(map, "root", metadataResolver));
+            ReadNullableCards(map, "root", metadataResolver, abilityCue));
     }
 
     private static RunFocusViewModel? MapRun(
         IReadOnlyDictionary<string, object?> publicState,
         ICardMetadataResolver metadataResolver,
-        IBehaviorCatalog behaviorCatalog)
+        IBehaviorCatalog behaviorCatalog,
+        CardAbilityCueContext abilityCue)
     {
         if (!publicState.TryGetValue("run", out object? rawRun) || rawRun is null)
         {
@@ -738,7 +939,7 @@ public static class ObservationViewMapper
                         ReadBool(item, "resolved"));
                 })
                 .ToArray();
-            CardViewModel? encounterIce = ReadNullableCard(encounter, "ice", metadataResolver);
+            CardViewModel? encounterIce = ReadNullableCard(encounter, "ice", metadataResolver, abilityCue);
             encounterView = new EncounterViewModel(
                 ReadString(encounter, "id"),
                 encounterIce,
@@ -746,7 +947,7 @@ public static class ObservationViewMapper
                 new ReadOnlyCollection<SubroutineViewModel>(subroutines.ToArray()))
             {
                 EffectiveStrength = CalculateEffectiveStrength(encounterIce, attackedServerKind, behaviorCatalog),
-                Breakers = CalculateBreakerStrengths(publicState, map, metadataResolver, behaviorCatalog),
+                Breakers = CalculateBreakerStrengths(publicState, map, metadataResolver, behaviorCatalog, abilityCue),
             };
         }
 
@@ -777,21 +978,21 @@ public static class ObservationViewMapper
             ReadEnum<RunCrPhase>(map, "phase"),
             ReadEnum<RunTimingStep>(map, "step"),
             ReadInt(map, "currentIceIndex"),
-            ReadNullableCard(map, "currentIce", metadataResolver),
+            ReadNullableCard(map, "currentIce", metadataResolver, abilityCue),
             ReadBool(map, "successful"),
             ReadBool(map, "unsuccessful"),
             ReadNullableEnum<RunEndReason>(map, "endReason"),
             priorityView,
             encounterView,
             new AccessViewModel(
-                ReadNullableCards(breach, "candidates", metadataResolver),
+                ReadNullableCards(breach, "candidates", metadataResolver, abilityCue),
                 ReadInt(breach, "randomAccessLimit"),
                 hiddenSource,
-                ReadNullableCards(breach, "chosen", metadataResolver),
-                ReadNullableCards(breach, "accessed", metadataResolver),
+                ReadNullableCards(breach, "chosen", metadataResolver, abilityCue),
+                ReadNullableCards(breach, "accessed", metadataResolver, abilityCue),
                 ReadEnum<RunAccessState>(breach, "accessState")),
             ReadInt(map, "runCredits"),
-            ReadNullableCard(map, "initiatingSource", metadataResolver));
+            ReadNullableCard(map, "initiatingSource", metadataResolver, abilityCue));
     }
 
     private static ServerKind? FindServerKind(
@@ -832,7 +1033,8 @@ public static class ObservationViewMapper
         IReadOnlyDictionary<string, object?> publicState,
         IReadOnlyDictionary<string, object?> run,
         ICardMetadataResolver metadataResolver,
-        IBehaviorCatalog behaviorCatalog)
+        IBehaviorCatalog behaviorCatalog,
+        CardAbilityCueContext abilityCue)
     {
         RunLingeringEffect[] effects = ReadList(run, "lingeringEffects")
             .Select(value =>
@@ -848,7 +1050,7 @@ public static class ObservationViewMapper
             .ToArray();
 
         var breakers = new List<EncounterBreakerViewModel>();
-        foreach (CardViewModel card in ReadCards(publicState, "runnerRig", metadataResolver))
+        foreach (CardViewModel card in ReadCards(publicState, "runnerRig", metadataResolver, abilityCue))
         {
             if (card.DefinitionId is not { } definitionId
                 || !CardDefinitionId.TryParse(definitionId, out CardDefinitionId parsedDefinition))
@@ -885,36 +1087,41 @@ public static class ObservationViewMapper
     private static CardViewModel?[] ReadNullableCards(
         IReadOnlyDictionary<string, object?> map,
         string key,
-        ICardMetadataResolver metadataResolver) => ReadList(map, key)
-            .Select(value => ReadNullableCard(value, metadataResolver))
+        ICardMetadataResolver metadataResolver,
+        CardAbilityCueContext abilityCue) => ReadList(map, key)
+            .Select(value => ReadNullableCard(value, metadataResolver, abilityCue))
             .ToArray();
 
     private static CardViewModel? ReadNullableCard(
         object? value,
-        ICardMetadataResolver metadataResolver) => value is null
+        ICardMetadataResolver metadataResolver,
+        CardAbilityCueContext abilityCue) => value is null
         || value is JsonElement { ValueKind: JsonValueKind.Null }
         ? null
-        : MapCard(value, metadataResolver);
+        : MapCard(value, metadataResolver, abilityCue);
 
     private static CardViewModel? ReadNullableCard(
         IReadOnlyDictionary<string, object?> map,
         string key,
-        ICardMetadataResolver metadataResolver) => map.TryGetValue(key, out object? value)
-            ? ReadNullableCard(value, metadataResolver)
+        ICardMetadataResolver metadataResolver,
+        CardAbilityCueContext abilityCue) => map.TryGetValue(key, out object? value)
+            ? ReadNullableCard(value, metadataResolver, abilityCue)
             : null;
 
     private static CardViewModel[] ReadCards(
         IReadOnlyDictionary<string, object?> map,
         string key,
-        ICardMetadataResolver metadataResolver) => ReadList(map, key)
+        ICardMetadataResolver metadataResolver,
+        CardAbilityCueContext abilityCue) => ReadList(map, key)
             .Select(value => value is null
                 ? throw new FormatException($"Observation field '{key}' contains a null card.")
-                : MapCard(value, metadataResolver))
+                : MapCard(value, metadataResolver, abilityCue))
             .ToArray();
 
     private static CardViewModel MapCard(
         object value,
-        ICardMetadataResolver metadataResolver)
+        ICardMetadataResolver metadataResolver,
+        CardAbilityCueContext abilityCue)
     {
         IReadOnlyDictionary<string, object?> map = RequiredMap(value, "card");
         string id = ReadString(map, "id");
@@ -927,7 +1134,7 @@ public static class ObservationViewMapper
             metadata = resolved;
             known = true;
         }
-        return new CardViewModel(
+        CardViewModel mapped = new(
             id,
             definitionId,
             metadata.Title,
@@ -944,6 +1151,99 @@ public static class ObservationViewMapper
             metadata.Faction,
             metadata.MemoryCost,
             metadata.AdvancementRequirement);
+        return mapped with
+        {
+            TypedCounters = MapCounters(map, id),
+            AbilityCue = abilityCue.For(id),
+        };
+    }
+
+    private static IReadOnlyList<CardCounterViewModel> MapCounters(
+        IReadOnlyDictionary<string, object?> card,
+        string cardId)
+    {
+        if (!card.ContainsKey("counters"))
+        {
+            return Array.Empty<CardCounterViewModel>();
+        }
+
+        if (!card.TryGetValue("counters", out object? rawValue)
+            || rawValue is null
+            || rawValue is JsonElement { ValueKind: JsonValueKind.Null })
+        {
+            throw new FormatException($"Observation field 'card {cardId}.counters' must be an array when supplied.");
+        }
+
+        IReadOnlyList<object?> rawCounters = ReadList(card, "counters");
+        var counters = new List<CardCounterViewModel>(rawCounters.Count);
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (object? rawCounter in rawCounters)
+        {
+            IReadOnlyDictionary<string, object?> counter = RequiredMap(rawCounter, $"card '{cardId}' counter");
+            string counterName = ReadString(counter, "counterName");
+            if (!IsStableCounterName(counterName))
+            {
+                throw new FormatException(
+                    $"Observation field 'card {cardId}.counters.counterName' must be a stable nonblank identifier.");
+            }
+
+            if (!names.Add(counterName))
+            {
+                throw new FormatException(
+                    $"Observation field 'card {cardId}.counters' contains duplicate counter '{counterName}'.");
+            }
+
+            int count = ReadInt(counter, "count");
+            if (count <= 0)
+            {
+                throw new FormatException(
+                    $"Observation field 'card {cardId}.counters.count' must be positive.");
+            }
+
+            CardCounterPurpose purpose = ReadEnum<CardCounterPurpose>(counter, "purpose");
+            HostedCreditSpendRestriction? restriction = ReadNullableEnum<HostedCreditSpendRestriction>(
+                counter,
+                "spendRestriction");
+            bool validPurposeName = purpose switch
+            {
+                CardCounterPurpose.Generic => !string.Equals(counterName, "virus", StringComparison.Ordinal)
+                    && !string.Equals(counterName, "credit", StringComparison.Ordinal),
+                CardCounterPurpose.Virus => string.Equals(counterName, "virus", StringComparison.Ordinal),
+                CardCounterPurpose.HostedCredit => string.Equals(counterName, "credit", StringComparison.Ordinal),
+                _ => false,
+            };
+            if (!validPurposeName)
+            {
+                throw new FormatException(
+                    $"Observation field 'card {cardId}.counters' has an invalid purpose/name combination.");
+            }
+
+            if (purpose == CardCounterPurpose.HostedCredit && restriction is null)
+            {
+                throw new FormatException(
+                    $"Observation field 'card {cardId}.counters.spendRestriction' is required for hosted credits.");
+            }
+
+            if (purpose != CardCounterPurpose.HostedCredit && restriction is not null)
+            {
+                throw new FormatException(
+                    $"Observation field 'card {cardId}.counters.spendRestriction' is only valid for hosted credits.");
+            }
+
+            counters.Add(new CardCounterViewModel(counterName, purpose, count, restriction));
+        }
+
+        return new ReadOnlyCollection<CardCounterViewModel>(counters.ToArray());
+    }
+
+    private static bool IsStableCounterName(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 128)
+        {
+            return false;
+        }
+
+        return value.All(character => !char.IsWhiteSpace(character) && !char.IsControl(character));
     }
 
     private static IReadOnlyDictionary<string, object?> RequiredMap(object? value, string path)

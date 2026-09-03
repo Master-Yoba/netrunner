@@ -524,6 +524,10 @@ public sealed class PaidAbilityRuntimeTests
                     or EngineEventKinds.CounterAdjusted
                     or EngineEventKinds.HostedCreditPoolChanged)
                 .Select(@event => @event.Kind));
+        CardMovedEventPayload moved = Assert.IsType<CardMovedEventPayload>(
+            result.Events.Single(@event => @event.Kind == EngineEventKinds.CardMoved).Payload);
+        Assert.Equal(ZoneKind.RunnerRig, moved.FromZoneKind);
+        Assert.Equal(ZoneKind.RunnerRemovedFromGame, moved.ToZoneKind);
         HostedCreditPoolChangedEventPayload hosted = Assert.IsType<HostedCreditPoolChangedEventPayload>(
             result.Events.Single(@event => @event.Kind == EngineEventKinds.HostedCreditPoolChanged).Payload);
         Assert.Equal(-1, hosted.Delta);

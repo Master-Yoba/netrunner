@@ -3503,3 +3503,27 @@ errors; runtime action expansion and full verification remain pending.
   build, formatter verification, and `git diff --check`. The direct M2 proof
   retained the pinned `faf4e631...` / `c882eb43...` / `d20cdef9...` hashes and
   replayed all 32 checkpoints.
+
+### 2026-09-04 — Checkpoint UI-404 paid-ability presentation accepted
+
+- Luna Max mapped detached typed card counters and visible current-turn ability
+  uses into Match view models. `ABILITY READY` is derived only from an issued
+  `UseAbility` action and takes precedence over `USED`; no cue is inferred from
+  card text. The cue is threaded through every visible card projection,
+  including server roots/ICE, rig and score areas, private viewer zones, and
+  run encounter/access/source views.
+- Text cards and inspection show non-color ability cues and typed `HOSTED
+  CREDIT`, `VIRUS`, `POWER`, or `GENERIC` counter chips. Install actions explain
+  cleanup only from frozen required/selected replacement IDs, while malformed
+  counter purpose/restriction enums and stale/duplicate use facts fail closed.
+- Root kept the RFG feed requirement open until Core supplied truthful typed
+  provenance. `CardMovedEventPayload` now optionally carries both endpoint zone
+  kinds only for movement into or out of RFG; ordinary and legacy movements
+  retain their exact JSON shape. Match reports removal only from a typed RFG
+  destination and never guesses from opaque IDs or card titles.
+- The focused presentation gate passes 6/6 and the focused movement/provenance
+  gate passes 23/23; complete Core passes 654/654, and Core, Match, Godot, and
+  the full solution build without warnings or errors. Full Match is 48/49 with
+  only the known SIM-401 checked-in fixture fingerprint pending regeneration.
+  Formatter and diff checks pass, and the direct M2 proof retains all pinned
+  hashes with 32 replayed checkpoints.

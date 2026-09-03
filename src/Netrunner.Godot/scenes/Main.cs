@@ -876,6 +876,8 @@ public partial class Main : Control
 
 		_inspectedCard = card;
 		_details.Text = $"{card.Title}\n{card.Type} · {card.DefinitionId}\n"
+			+ (card.AbilityCue is { Length: > 0 } cue ? $"{cue}\n" : string.Empty)
+			+ (card.CounterChips.Count == 0 ? string.Empty : $"{string.Join("  ", card.CounterChips)}\n")
 			+ $"{FormatCardRules(card.RulesText)}\n\nClick feedback is local and immediate; engine actions remain ID-only.\n"
 			+ "Use Zoom inspected card for an enlarged, complete text view.";
 		_details.AddThemeColorOverride("font_color", Colors.White);

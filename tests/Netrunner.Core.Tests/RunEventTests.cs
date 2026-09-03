@@ -363,6 +363,9 @@ public sealed class RunEventTests
         Assert.Equal(eventId.Value, moved.CardId);
         Assert.Equal(playArea.Id, moved.FromZoneId);
         Assert.Equal(heap.Id, moved.ToZoneId);
+        Assert.Null(moved.FromZoneKind);
+        Assert.Null(moved.ToZoneKind);
+        Assert.DoesNotContain("fromZoneKind", EngineJson.Serialize(finished.Events.Single(value => value.Kind == EngineEventKinds.CardMoved)), StringComparison.Ordinal);
         StateInvariantValidator.Validate(finished.State);
     }
 

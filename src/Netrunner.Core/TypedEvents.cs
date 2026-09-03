@@ -896,16 +896,35 @@ public sealed record ClickSpentEventPayload : EngineEventPayload
 public sealed record CardMovedEventPayload : EngineEventPayload
 {
     [JsonConstructor]
-    public CardMovedEventPayload(int version, CardInstanceId cardId, ZoneId fromZoneId, ZoneId toZoneId)
+    public CardMovedEventPayload(
+        int version,
+        CardInstanceId cardId,
+        ZoneId fromZoneId,
+        ZoneId toZoneId,
+        ZoneKind? fromZoneKind = null,
+        ZoneKind? toZoneKind = null)
         : base(version)
     {
+        ValidateZoneKindPair(fromZoneKind, toZoneKind);
         CardId = cardId;
         FromZoneId = fromZoneId;
         ToZoneId = toZoneId;
+        FromZoneKind = fromZoneKind;
+        ToZoneKind = toZoneKind;
     }
 
     public CardMovedEventPayload(CardInstanceId cardId, ZoneId fromZoneId, ZoneId toZoneId)
-        : this(1, cardId, fromZoneId, toZoneId)
+        : this(1, cardId, fromZoneId, toZoneId, null, null)
+    {
+    }
+
+    public CardMovedEventPayload(
+        CardInstanceId cardId,
+        ZoneId fromZoneId,
+        ZoneId toZoneId,
+        ZoneKind fromZoneKind,
+        ZoneKind toZoneKind)
+        : this(1, cardId, fromZoneId, toZoneId, fromZoneKind, toZoneKind)
     {
     }
 
@@ -920,6 +939,38 @@ public sealed record CardMovedEventPayload : EngineEventPayload
     [JsonInclude]
     [JsonRequired]
     public ZoneId ToZoneId { get; private set; }
+
+    /// <summary>
+    /// Optional zone provenance. It is omitted for legacy/direct payloads so
+    /// their canonical JSON remains byte-for-byte compatible; engine-owned
+    /// movement events populate both kinds at the single MoveCard seam.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ZoneKind? FromZoneKind { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ZoneKind? ToZoneKind { get; private set; }
+
+    private static void ValidateZoneKindPair(ZoneKind? fromZoneKind, ZoneKind? toZoneKind)
+    {
+        if (fromZoneKind.HasValue != toZoneKind.HasValue)
+        {
+            throw new ArgumentException(
+                "Card movement zone provenance must specify both fromZoneKind and toZoneKind, or neither.");
+        }
+
+        if (fromZoneKind is { } from && !Enum.IsDefined(from))
+        {
+            throw new ArgumentOutOfRangeException(nameof(fromZoneKind), from, "The source zone kind is not defined.");
+        }
+
+        if (toZoneKind is { } to && !Enum.IsDefined(to))
+        {
+            throw new ArgumentOutOfRangeException(nameof(toZoneKind), to, "The destination zone kind is not defined.");
+        }
+    }
 }
 
 public sealed record CardDrawnEventPayload : EngineEventPayload
@@ -2086,7 +2137,7 @@ public sealed record EngineEvent
         TurnClicksLostEventPayload value => new EngineEvent(Version, Sequence, Kind, new TurnClicksLostEventPayload(value.Version, value.Side, value.TurnNumber, value.ClicksLost)),
         TurnCardDiscardedEventPayload value => new EngineEvent(Version, Sequence, Kind, new TurnCardDiscardedEventPayload(value.Version, value.Side, value.TurnNumber, value.CardId, value.RemainingHandSize, value.MaximumHandSize)),
         ClickSpentEventPayload value => new EngineEvent(Version, Sequence, Kind, new ClickSpentEventPayload(value.Version, value.Side, value.ClicksRemaining)),
-        CardMovedEventPayload value => new EngineEvent(Version, Sequence, Kind, new CardMovedEventPayload(value.Version, value.CardId, value.FromZoneId, value.ToZoneId)),
+        CardMovedEventPayload value => new EngineEvent(Version, Sequence, Kind, new CardMovedEventPayload(value.Version, value.CardId, value.FromZoneId, value.ToZoneId, value.FromZoneKind, value.ToZoneKind)),
         CardDrawnEventPayload value => new EngineEvent(Version, Sequence, Kind, new CardDrawnEventPayload(value.Version, value.Side, value.CardId, value.FromZoneId, value.ToZoneId)),
         CardInstalledEventPayload value => new EngineEvent(Version, Sequence, Kind, new CardInstalledEventPayload(value.Version, value.Side, value.CardId, value.FromZoneId, value.ToZoneId, value.Cost)),
         CardRezzedEventPayload value => new EngineEvent(Version, Sequence, Kind, new CardRezzedEventPayload(value.Version, value.CardId, value.CreditCost)),
@@ -2419,6 +2470,33 @@ public static class EngineEventValidator
                 if (value.FromZoneId == value.ToZoneId)
                 {
                     Add(violations, "event.same-zone-move", $"{path}.payload", "A card move must change zones.");
+                }
+
+                if (value.FromZoneKind.HasValue != value.ToZoneKind.HasValue)
+                {
+                    Add(
+                        violations,
+                        "event.invalid-zone-provenance",
+                        $"{path}.payload",
+                        "Card movement zone provenance must specify both zone kinds, or neither.");
+                }
+
+                if (value.FromZoneKind is { } fromZoneKind && !Enum.IsDefined(fromZoneKind))
+                {
+                    Add(
+                        violations,
+                        "event.invalid-zone-kind",
+                        $"{path}.payload.fromZoneKind",
+                        $"'{fromZoneKind}' is not a supported source zone kind.");
+                }
+
+                if (value.ToZoneKind is { } toZoneKind && !Enum.IsDefined(toZoneKind))
+                {
+                    Add(
+                        violations,
+                        "event.invalid-zone-kind",
+                        $"{path}.payload.toZoneKind",
+                        $"'{toZoneKind}' is not a supported destination zone kind.");
                 }
 
                 break;
