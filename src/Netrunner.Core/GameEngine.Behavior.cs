@@ -797,7 +797,15 @@ public static partial class GameEngine
 
             if (side == PlayerSide.Corp)
             {
-                CompleteToyGame(working, PlayerSide.Runner, GameWinReason.DeckOut);
+                if (!CompleteOrdinaryCorpPlayDeckOut(working, frame))
+                {
+                    // Standalone behavior fixtures intentionally retain the
+                    // legacy terminal outcome.  Ordinary card plays take a
+                    // bounded lifecycle path below so the played Operation
+                    // is completed before the real-turn terminal cleanup.
+                    CompleteToyGame(working, PlayerSide.Runner, GameWinReason.DeckOut);
+                }
+
                 return;
             }
 
@@ -806,6 +814,71 @@ public static partial class GameEngine
             // surrounding behavior continues atomically.
             return;
         }
+    }
+
+    /// <summary>
+    /// Completes the narrow ordinary Corp Operation lifecycle when its
+    /// behavior's mandatory draw reaches an empty R&amp;D.  The behavior frame
+    /// must be the exact child of a CardPlayFrame, which in turn must be the
+    /// exact child of an active AwaitingAction TurnFrame.  A behavior opened
+    /// through the standalone test seam deliberately returns false and keeps
+    /// its existing toy terminal semantics.
+    /// </summary>
+    private static bool CompleteOrdinaryCorpPlayDeckOut(
+        WorkingState working,
+        BehaviorResolutionFrame frame)
+    {
+        if (working.ResolutionStack.Count < 2
+            || working.ResolutionStack[^2] is not CardPlayFrame cardPlay)
+        {
+            if (string.Equals(frame.ParentBehaviorId, ResolutionBehaviorIds.CardPlay, StringComparison.Ordinal))
+            {
+                throw new ResolutionFailureException(
+                    "A behavior frame claiming CardPlay parent provenance is not immediately above a CardPlayFrame.");
+            }
+
+            return false;
+        }
+
+        if (working.ResolutionStack[^1] is not BehaviorResolutionFrame activeBehavior
+            || !string.Equals(activeBehavior.FrameIdentity, frame.FrameIdentity, StringComparison.Ordinal))
+        {
+            throw new ResolutionFailureException(
+                "The active behavior frame changed before ordinary Corp play deck-out completion.");
+        }
+
+        if (working.ResolutionStack.Count < 3
+            || working.ResolutionStack[^3] is not TurnFrame turn
+            || turn.Stage != TurnFrameStage.AwaitingAction
+            || turn.ActiveSide != PlayerSide.Corp
+            || working.Turn.ActiveSide != PlayerSide.Corp
+            || cardPlay.Side != PlayerSide.Corp
+            || frame.Controller != cardPlay.Owner
+            || !string.Equals(frame.ParentBehaviorId, cardPlay.BehaviorId, StringComparison.Ordinal)
+            || frame.ParentFrameIdentity is null
+            || !string.Equals(
+                frame.ParentFrameIdentity,
+                BehaviorFrameIdentity.Compute(cardPlay),
+                StringComparison.Ordinal))
+        {
+            throw new ResolutionFailureException(
+                "The Corp draw behavior has a malformed ordinary card-play parent topology.");
+        }
+
+        // Hidden cards selected by the active behavior remain in its private
+        // set-aside custody until the child closes, including on terminal
+        // draw failure. Restore them before popping the child so no transient
+        // BehaviorSetAside zone survives the terminal state.
+        RestoreBehaviorSetAside(working, frame);
+        working.ResolutionStack.RemoveAt(working.ResolutionStack.Count - 1);
+
+        // StepCardPlay performs the existing frozen-frame validation and
+        // emits CardPlayCompleted after moving the faceup Operation from the
+        // canonical CorpPlayArea to CorpDiscard. Only then may terminal turn
+        // cleanup clear the remaining stack and emit GameWon.
+        StepCardPlay(working, cardPlay);
+        CompleteTurnGame(working, PlayerSide.Runner, GameWinReason.DeckOut);
+        return true;
     }
 
     private static void ResolveBehaviorBranch(

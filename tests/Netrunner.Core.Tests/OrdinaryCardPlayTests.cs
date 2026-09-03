@@ -325,6 +325,82 @@ public sealed class OrdinaryCardPlayTests
     }
 
     [Fact]
+    public void CorpOperationDrawDeckOutCompletesPlayBeforeRealTurnTerminalCleanup()
+    {
+        const PlayerSide side = PlayerSide.Corp;
+        CardDefinitionId definitionId = new("test:ordinary-corp-draw-deck-out");
+        CardInstanceId cardId = new("card:ordinary-corp-draw-deck-out");
+        BehaviorCatalog behaviorCatalog = new BehaviorCatalogBuilder("test:ordinary-corp-draw-deck-out")
+            .Add(new CardBehaviorDefinition(
+                definitionId,
+                side,
+                instructions: [new BehaviorInstruction(BehaviorInstructionKind.Draw, amount: 2)]))
+            .Build();
+        RuntimeCardCatalog runtimeCatalog = new RuntimeCardCatalogBuilder("runtime:ordinary-corp-draw-deck-out")
+            .Add(Runtime(definitionId, side, playCost: 0))
+            .Build();
+        Fixture fixture = CreateFixture(
+            side,
+            [new FixtureCard(cardId, definitionId)],
+            behaviorCatalog,
+            runtimeCatalog,
+            credits: 5);
+        CardInstanceId drawnCardId = new("card:ordinary-corp-draw-deck-out-second");
+        fixture = fixture with
+        {
+            State = AddCorpDeckCard(
+                fixture.State,
+                drawnCardId,
+                new CardDefinitionId("test:ordinary-corp-draw-deck-out-filler")),
+        };
+        Assert.Equal(
+            [new CardInstanceId("card:ordinary-corp-draw"), drawnCardId],
+            fixture.State.GetZone(ZoneKind.CorpDeck).CardIds);
+
+        GameState turnAction = OpenTurnAction(fixture);
+        Assert.Equal([drawnCardId], turnAction.GetZone(ZoneKind.CorpDeck).CardIds);
+        TurnHistoryState historyBeforePlay = Assert.IsType<TurnHistoryState>(turnAction.Turn.History);
+        string historyJson = EngineJson.Serialize(historyBeforePlay);
+        ApplyResult result = Apply(
+            turnAction,
+            fixture,
+            Assert.Single(
+                turnAction.PendingDecision!.LegalActions,
+                action => action.Kind == ActionKind.PlayCard));
+
+        Assert.True(result.Accepted, result.Rejection?.Message);
+        Assert.Equal(GameOutcomeKind.Won, result.State.Outcome.Kind);
+        Assert.Equal(PlayerSide.Runner, result.State.Outcome.Winner);
+        Assert.Equal(GameWinReason.DeckOut, result.State.Outcome.Reason);
+        Assert.Equal(historyJson, EngineJson.Serialize(result.State.Turn.History));
+        Assert.All(result.State.Players, player => Assert.Equal(0, player.Clicks));
+        Assert.Single(result.State.GetZone(ZoneKind.CorpDiscard).CardIds, cardId);
+        Assert.True(result.State.GetCard(cardId).FaceUp);
+        Assert.Contains(drawnCardId, result.State.GetZone(ZoneKind.CorpHand).CardIds);
+        Assert.Empty(result.State.GetZone(ZoneKind.CorpPlayArea).CardIds);
+        Assert.Empty(result.State.GetZone(ZoneKind.CorpDeck).CardIds);
+        Assert.Null(result.State.PendingDecision);
+        Assert.Empty(result.State.ResolutionStack);
+
+        int completedIndex = result.Events.ToList().FindIndex(value => value.Kind == EngineEventKinds.CardPlayCompleted);
+        int wonIndex = result.Events.ToList().FindIndex(value => value.Kind == EngineEventKinds.GameWon);
+        int drawIndex = result.Events.ToList().FindIndex(value => value.Kind == EngineEventKinds.CardDrawn);
+        Assert.True(drawIndex >= 0);
+        CardDrawnEventPayload drawn = Assert.IsType<CardDrawnEventPayload>(result.Events[drawIndex].Payload);
+        Assert.Equal(drawnCardId, drawn.CardId);
+        Assert.True(drawIndex < completedIndex);
+        Assert.True(completedIndex >= 0);
+        Assert.True(completedIndex < wonIndex);
+        Assert.Equal(result.Events.Count - 1, wonIndex);
+        Assert.Empty(StateInvariantValidator.Collect(result.State, behaviorCatalog, runtimeCatalog));
+
+        string json = EngineJson.Serialize(result.State);
+        GameState restored = EngineJson.DeserializeState(json, behaviorCatalog, runtimeCatalog);
+        Assert.Equal(json, EngineJson.Serialize(restored));
+        Assert.Equal(DeterministicHash.ForState(result.State), DeterministicHash.ForState(restored));
+    }
+
+    [Fact]
     public void BehaviorInstallOptionIsOmittedWhenPhysicalRigMetadataIsUnknown()
     {
         const PlayerSide side = PlayerSide.Runner;
@@ -1359,6 +1435,29 @@ public sealed class OrdinaryCardPlayTests
             faceUp);
         ZoneState[] zones = source.Zones
             .Select(zone => zone.Id == destination.Id
+                ? new ZoneState(
+                    zone.Id,
+                    zone.Kind,
+                    zone.OwnerSide,
+                    zone.ServerId,
+                    zone.CardIds.Append(cardId).ToArray())
+                : zone)
+            .ToArray();
+        return RebuildState(
+            source,
+            cards: source.Cards.Append(card).ToArray(),
+            zones: zones);
+    }
+
+    private static GameState AddCorpDeckCard(
+        GameState source,
+        CardInstanceId cardId,
+        CardDefinitionId definitionId)
+    {
+        ZoneState deck = source.GetZone(ZoneKind.CorpDeck);
+        CardInstanceState card = new(cardId, definitionId, deck.Id, PlayerSide.Corp, faceUp: false);
+        ZoneState[] zones = source.Zones
+            .Select(zone => zone.Id == deck.Id
                 ? new ZoneState(
                     zone.Id,
                     zone.Kind,

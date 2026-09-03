@@ -782,6 +782,86 @@ public sealed class GatewayBatch1LifecycleTests
     }
 
     [Fact]
+    [Trait("GatewayCard", "30056")]
+    public void PredictivePlanogramDrawDeckOutCompletesResumedPlayBeforeTerminalCleanup()
+    {
+        if (!LifecycleAvailable())
+        {
+            return;
+        }
+
+        Fixture fixture = CreateFixture(
+            PlayerSide.Corp,
+            GatewayBatch1CardCodes.PredictivePlanogram,
+            credits: 0,
+            corpDeckCount: 2,
+            runnerTags: 1);
+        GameState turnAction = OpenTurnAction(fixture);
+        CardInstanceId remainingDeckCardId = new("card:gateway-lifecycle-corp-deck-1");
+        Assert.Equal([remainingDeckCardId], turnAction.GetZone(ZoneKind.CorpDeck).CardIds);
+        ApplyResult opened = Apply(
+            fixture,
+            turnAction,
+            SinglePlay(turnAction, fixture.CardId));
+        Assert.True(opened.Accepted, opened.Rejection?.Message);
+
+        LegalAction both = Assert.Single(
+            opened.State.PendingDecision!.LegalActions,
+            action => HasBehaviorOption(action, "predictive-planogram-tagged-effect", "both"));
+        ApplyResult orderOpened = Apply(fixture, opened.State, both);
+        Assert.True(orderOpened.Accepted, orderOpened.Rejection?.Message);
+        string historyJson = EngineJson.Serialize(orderOpened.State.Turn.History);
+
+        string orderJson = EngineJson.Serialize(orderOpened.State);
+        GameState restored = EngineJson.DeserializeState(
+            orderJson,
+            fixture.BehaviorCatalog,
+            fixture.RuntimeCatalog);
+        Assert.Equal(orderJson, EngineJson.Serialize(restored));
+        Assert.Equal(DeterministicHash.ForState(orderOpened.State), DeterministicHash.ForState(restored));
+        LegalAction drawFirst = Assert.Single(
+            restored.PendingDecision!.LegalActions,
+            action => HasBehaviorOption(action, "predictive-planogram-both-order", "draw-first"));
+
+        ApplyResult completed = Apply(fixture, restored, drawFirst);
+
+        Assert.True(completed.Accepted, completed.Rejection?.Message);
+        Assert.Equal(GameOutcomeKind.Won, completed.State.Outcome.Kind);
+        Assert.Equal(PlayerSide.Runner, completed.State.Outcome.Winner);
+        Assert.Equal(GameWinReason.DeckOut, completed.State.Outcome.Reason);
+        Assert.Equal(historyJson, EngineJson.Serialize(completed.State.Turn.History));
+        Assert.All(completed.State.Players, player => Assert.Equal(0, player.Clicks));
+        Assert.Single(completed.State.GetZone(ZoneKind.CorpDiscard).CardIds, fixture.CardId);
+        Assert.True(completed.State.GetCard(fixture.CardId).FaceUp);
+        Assert.Empty(completed.State.GetZone(ZoneKind.CorpPlayArea).CardIds);
+        Assert.Empty(completed.State.GetZone(ZoneKind.CorpDeck).CardIds);
+        Assert.Contains(remainingDeckCardId, completed.State.GetZone(ZoneKind.CorpHand).CardIds);
+        Assert.Equal(2, completed.State.GetZone(ZoneKind.CorpHand).CardIds.Count);
+        Assert.Null(completed.State.PendingDecision);
+        Assert.Empty(completed.State.ResolutionStack);
+
+        int drawIndex = completed.Events.ToList().FindIndex(value => value.Kind == EngineEventKinds.CardDrawn);
+        int completedIndex = completed.Events.ToList().FindIndex(value => value.Kind == EngineEventKinds.CardPlayCompleted);
+        int wonIndex = completed.Events.ToList().FindIndex(value => value.Kind == EngineEventKinds.GameWon);
+        Assert.True(drawIndex >= 0);
+        Assert.True(completedIndex > drawIndex);
+        Assert.True(wonIndex > completedIndex);
+        Assert.Equal(completed.Events.Count - 1, wonIndex);
+        Assert.Empty(StateInvariantValidator.Collect(
+            completed.State,
+            fixture.BehaviorCatalog,
+            fixture.RuntimeCatalog));
+
+        string terminalJson = EngineJson.Serialize(completed.State);
+        GameState terminalRestored = EngineJson.DeserializeState(
+            terminalJson,
+            fixture.BehaviorCatalog,
+            fixture.RuntimeCatalog);
+        Assert.Equal(terminalJson, EngineJson.Serialize(terminalRestored));
+        Assert.Equal(DeterministicHash.ForState(completed.State), DeterministicHash.ForState(terminalRestored));
+    }
+
+    [Fact]
     [Trait("GatewayCard", "30011")]
     public void MutualFavorPrivatelyFindsIcebreakerAndReturnsItToGripWithoutARun()
     {

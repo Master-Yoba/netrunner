@@ -2478,3 +2478,63 @@ errors; runtime action expansion and full verification remain pending.
   found exactly the same three replied-to threads and no new findings. Root
   explicitly resolved all three verified threads. PR #6 is therefore green,
   mergeable, and has no outstanding review feedback.
+
+### 2026-09-03 — PR #6 second automated review architecture
+
+- A maintainer-requested second Codex review of branch head `a0936ab` raised
+  one new P1 finding. Root reproduced the control flow and accepts it: a Corp
+  Draw instruction that exhausts R&D calls the terminal game helper while the
+  ordinary Operation still occupies `CorpPlayArea` below its active behavior
+  child. Clearing every frame first leaves that public transient card without
+  its `CardPlayFrame`; final invariant validation rejects the prospective
+  terminal state and rolls the submitted action back.
+- The fixed contract is to finish the active ordinary card play before the
+  terminal stack clear. At a fatal behavior-owned Corp draw, restore any
+  behavior set-aside custody, close the exact behavior child, run the existing
+  validated `CardPlayFrame` completion so the Operation moves faceup to
+  Archives and emits `CardPlayCompleted`, then complete the real game and emit
+  `GameWon`. No later behavior instruction may execute. Standalone behavior
+  fixtures without an ordinary-play parent retain their compatibility terminal
+  path; transient-zone invariants remain strict.
+- Root delegated only that lifecycle implementation and its regressions to
+  Luna Max. Required proof covers a real-turn immediate draw Operation and a
+  decision-resumed Predictive Planogram draw: the action is accepted, partial
+  draws remain committed, all players have zero clicks, the Operation is in
+  Archives with an empty play area, pending decision and frames are empty,
+  `CardPlayCompleted` precedes `GameWon`, terminal save/load/hash is stable,
+  and the final state has no invariant violations.
+
+### 2026-09-03 — PR #6 terminal draw correction accepted
+
+- Luna implemented the bounded fatal-draw handoff using the exact immediate
+  Turn/`CardPlayFrame`/behavior-child topology. The helper fails closed when a
+  behavior claims CardPlay provenance without that parent, restores any
+  set-aside custody, removes only the active behavior child, and reuses normal
+  card-play validation/completion before `CompleteTurnGame`. The Operation is
+  therefore moved faceup to Archives and `CardPlayCompleted` is emitted before
+  the terminal stack clear and `GameWon`; real-turn history is preserved and
+  standalone behavior fixtures retain the compatibility path.
+- Root rejected Luna's first test-fixture accounting: its sole Core deck card
+  was consumed by the Corp turn-start draw, and its official HQ assertion
+  counted the Operation after it had entered the play area. Luna corrected the
+  proofs to leave exactly one R&D card after turn start and identify that card
+  as the behavior-owned partial draw before the next draw fails.
+- The accepted regressions cover an immediate synthetic real-turn Operation
+  and a save/loaded, decision-resumed Predictive Planogram `draw-first` branch.
+  Both prove accepted terminal actions, committed partial draw, zero clicks,
+  empty Corp play area, faceup Operation in Archives, empty pending/stack,
+  preserved history, `CardDrawn` then `CardPlayCompleted` then final `GameWon`,
+  invariant cleanliness, and stable terminal JSON/hash. Root independently
+  passed complete Core at 489/489 and complete Cards at 98/98. Full repository
+  verification remains before the PR correction commit.
+- Root's first full verification passed the zero-warning build and all suites
+  (Core 489, Cards 98, AI 23, CLI 52, Match 43), then correctly stopped on
+  generated coverage drift because Predictive Planogram gained a second
+  lifecycle evidence test. Luna regenerated only the Markdown and JSON
+  coverage artifacts; their counts remain `77/19/19/17/2/58` with no
+  diagnostics, and fresh-report comparisons are exact.
+- The clean `./scripts/verify.sh` rerun then passed end to end: formatter,
+  official data and content-enabled builds, coverage drift, deterministic CLI
+  outcomes and replay, the 32-checkpoint M2 proof, both Godot smoke lanes, and
+  secret scan in addition to all five suites. The P1 correction is ready for
+  commit and PR #6 update.
