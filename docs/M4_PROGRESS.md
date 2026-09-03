@@ -3081,3 +3081,29 @@ errors; runtime action expansion and full verification remain pending.
   hashes `faf4e631...` / `c882eb43...` / `d20cdef9...` with all 32 checkpoints
   replay verified. Rez, run, agenda, and access lifecycle hooks remain separate
   C2b work.
+
+### 2026-09-03 — Checkpoint C2b-2b card-rez triggers accepted
+
+- Luna Max connected the production runtime-catalog rez reducer to
+  `CardRezzed`. The reducer captures the installed server, pays the exact issued
+  cost, commits faceup/rezzed state, emits `CardRezzed`, and completes stable
+  Corp unique cleanup before restoring its parent. It then resets the existing
+  Corp turn priority or run priority (including consuming the approached-ICE
+  rez permission) before pushing the ordinary serialized occurrence effect.
+- Trigger collection therefore sees the post-rez board. The incoming card is
+  active and may trigger itself; an older rezzed unique copy has already moved
+  to Archives and cannot contribute its controller trigger. Turn and approach
+  run tests fix event ordering and prove the run parent retains its step,
+  priority holder, zero consecutive passes, non-ICE permission, and consumed
+  approached-ICE permission. An optional turn-rez trigger round-trips through
+  canonical JSON and declines without repeating payment, rez state, or the
+  `CardRezzed` event.
+- The initial delegated run terminated before its final report; a fresh Luna
+  Max pass repaired its one incomplete fixture declaration, after which root
+  independently reviewed and gated the resulting patch. Focused
+  rez/catalog-trigger tests pass 46/46, complete Core
+  passes 598/598, the solution build has zero warnings/errors, Core formatting
+  and `git diff --check` pass, and the direct M2 proof remains byte-stable at
+  `faf4e631...` / `c882eb43...` / `d20cdef9...` with 32 replay-verified
+  checkpoints. Run-success/end, agenda, and access hooks remain separate C2b
+  work.
