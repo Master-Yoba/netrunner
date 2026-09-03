@@ -1331,10 +1331,22 @@ public static partial class GameEngine
             return;
         }
 
-        AdvanceBreachAfterAccess(working, run);
+        bool hasAgendaTrigger = HasActiveCatalogTrigger(working, OccurrenceKind.AgendaScoredOrStolen);
+        AdvanceBreachAfterAccess(working, run, yieldDecision: !hasAgendaTrigger);
+        if (hasAgendaTrigger)
+        {
+            QueueAgendaScoredOrStolenOccurrence(
+                working,
+                GetPlayer(working, PlayerSide.Runner).Id,
+                card.Id,
+                run.AttackedServer);
+        }
     }
 
-    private static void AdvanceBreachAfterAccess(WorkingState working, RunState run)
+    private static void AdvanceBreachAfterAccess(
+        WorkingState working,
+        RunState run,
+        bool yieldDecision = true)
     {
         ServerState server = GetBreachServer(working, run);
         ZoneState? hiddenZone = GetBreachHiddenZone(working, server);
@@ -1352,7 +1364,11 @@ public static partial class GameEngine
                 null,
                 RunAccessState.InProgress);
             SetRunTiming(working, run);
-            YieldBreachCandidateDecision(working, run);
+            if (yieldDecision)
+            {
+                YieldBreachCandidateDecision(working, run);
+            }
+
             return;
         }
 

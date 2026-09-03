@@ -3160,3 +3160,28 @@ errors; runtime action expansion and full verification remain pending.
   `c882eb43...` / `d20cdef9...` with 32 replay-verified checkpoints. Agenda and
   access hooks remain C2b work; installed-card run-source self matching remains
   coupled to ENG-411's click-run source state.
+
+### 2026-09-03 — Checkpoint C2b-4 agenda score/steal triggers accepted
+
+- Luna Max connected the two production agenda paths to the shared
+  `AgendaScoredOrStolen` occurrence without touching the toy reducer. A
+  nonterminal Corp score moves and reveals the agenda, adds points, emits
+  `AgendaScored`, cleans its empty remote, and advances the turn frame to fresh
+  action priority before dispatch. A nonterminal automatic Runner steal moves
+  and reveals the agenda, adds points, emits `AgendaStolen`, and advances the
+  breach cursor before dispatch.
+- The steal path now separates breach-state advancement from immediate decision
+  yielding only when a matching active declaration exists. After its nested
+  trigger finishes, ordinary run advancement yields the next candidate or ends
+  the run; the no-trigger path is unchanged. Typed agenda subject filtering and
+  Controller/Any scope are evaluated from the winner, agenda, and attacked
+  server snapshot. An optional score round-trips after move/points/remote
+  cleanup and declines without duplicating any of them.
+- The seven-point score/steal boundary remains terminal and does not leave a
+  post-score trigger frame beneath `CompleteTurnGame`; later agenda-self source
+  activity is outside this Slice 4.3 external Pantograph vertical. Root passed
+  the focused score/access/catalog gate 25/25, complete Core 608/608, a
+  zero-warning/error solution build, Core formatting, and `git diff --check`.
+  The direct M2 proof remains `faf4e631...` / `c882eb43...` / `d20cdef9...`
+  with 32 replay-verified checkpoints. Card-access dispatch is the remaining
+  C2b lifecycle hook.
