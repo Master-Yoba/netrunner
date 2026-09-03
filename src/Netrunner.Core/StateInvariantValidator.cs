@@ -4890,6 +4890,7 @@ public static class StateInvariantValidator
                     or BehaviorCostKind.LoseClick
                     or BehaviorCostKind.Counter
                     or BehaviorCostKind.Tags
+                    or BehaviorCostKind.HostedCredits
                     or BehaviorCostKind.Additional => cost.Amount <= 0,
                 BehaviorCostKind.TrashSelf => cost.Amount != 1,
                 _ => false,

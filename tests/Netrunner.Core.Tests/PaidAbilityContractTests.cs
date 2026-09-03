@@ -63,6 +63,7 @@ public sealed class PaidAbilityContractTests
             new BehaviorCost(BehaviorCostKind.LoseClick, 1),
             new BehaviorCost(BehaviorCostKind.Counter, 1, counterName: "counter"),
             new BehaviorCost(BehaviorCostKind.Tags, 1),
+            new BehaviorCost(BehaviorCostKind.HostedCredits, 1),
             new BehaviorCost(BehaviorCostKind.Additional, 1, additionalKey: "additional"),
             new BehaviorCost(BehaviorCostKind.TrashSelf, 1),
         })
@@ -74,9 +75,19 @@ public sealed class PaidAbilityContractTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorCost(BehaviorCostKind.LoseClick, 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorCost(BehaviorCostKind.Counter, 0, counterName: "counter"));
         Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorCost(BehaviorCostKind.Tags, 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorCost(BehaviorCostKind.HostedCredits, 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorCost(BehaviorCostKind.HostedCredits, -1));
         Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorCost(BehaviorCostKind.Additional, 0, additionalKey: "additional"));
         Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorCost(BehaviorCostKind.TrashSelf, 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorCost(BehaviorCostKind.TrashSelf, 2));
+        Assert.Throws<ArgumentException>(() => new BehaviorCost(
+            BehaviorCostKind.HostedCredits,
+            1,
+            counterName: "counter"));
+        Assert.Throws<ArgumentException>(() => new BehaviorCost(
+            BehaviorCostKind.HostedCredits,
+            1,
+            additionalKey: "additional"));
     }
 
     [Fact]
@@ -209,7 +220,7 @@ public sealed class PaidAbilityContractTests
     [Fact]
     public void ActionAndPendingDecisionRoundTripAndCloneWithoutSharedCollections()
     {
-        var costs = new List<BehaviorCost> { new(BehaviorCostKind.Credits, 2) };
+        var costs = new List<BehaviorCost> { new(BehaviorCostKind.HostedCredits, 2) };
         var targets = new List<CardInstanceId> { new("card:ability-target") };
         AbilityActionParameters action = new(
             SourceCardId,
@@ -261,7 +272,7 @@ public sealed class PaidAbilityContractTests
     [Fact]
     public void FrameRoundTripAndCloneWithoutSharedCollections()
     {
-        var costs = new List<BehaviorCost> { new(BehaviorCostKind.LoseClick) };
+        var costs = new List<BehaviorCost> { new(BehaviorCostKind.HostedCredits) };
         var targets = new List<CardInstanceId> { new("card:ability-target") };
         AbilityUsageSnapshot usage = new(BehaviorAbilityUsageLimit.OncePerTurn, 1);
         AbilityFrame frame = new(

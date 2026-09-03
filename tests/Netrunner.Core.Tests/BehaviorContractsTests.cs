@@ -349,6 +349,59 @@ public sealed class BehaviorContractsTests
     }
 
     [Fact]
+    public void HostedCreditInstructionsValidateAmountAndRestrictionMatrix()
+    {
+        BehaviorInstruction load = new(
+            BehaviorInstructionKind.LoadHostedCredits,
+            amount: 3);
+        BehaviorInstruction place = new(
+            BehaviorInstructionKind.PlaceHostedCredits,
+            amount: 2,
+            spendRestriction: HostedCreditSpendRestriction.RunCost);
+        BehaviorInstruction take = new(
+            BehaviorInstructionKind.TakeHostedCredits,
+            amount: 1);
+        BehaviorInstruction takeAll = new(BehaviorInstructionKind.TakeAllHostedCredits);
+
+        Assert.Equal(HostedCreditSpendRestriction.CardEffectOnly, load.SpendRestriction);
+        Assert.Equal(HostedCreditSpendRestriction.RunCost, place.SpendRestriction);
+        Assert.Null(take.SpendRestriction);
+        Assert.Equal(0, takeAll.Amount);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorInstruction(
+            BehaviorInstructionKind.LoadHostedCredits));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorInstruction(
+            BehaviorInstructionKind.PlaceHostedCredits));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorInstruction(
+            BehaviorInstructionKind.TakeHostedCredits));
+        Assert.Throws<ArgumentException>(() => new BehaviorInstruction(
+            BehaviorInstructionKind.TakeAllHostedCredits,
+            amount: 1));
+        Assert.Throws<ArgumentException>(() => new BehaviorInstruction(
+            BehaviorInstructionKind.TakeHostedCredits,
+            amount: 1,
+            spendRestriction: HostedCreditSpendRestriction.AbilityCost));
+        Assert.Throws<ArgumentException>(() => new BehaviorInstruction(
+            BehaviorInstructionKind.TakeAllHostedCredits,
+            spendRestriction: HostedCreditSpendRestriction.RunCost));
+        Assert.Throws<ArgumentException>(() => new BehaviorInstruction(
+            BehaviorInstructionKind.GainCredits,
+            amount: 1,
+            spendRestriction: HostedCreditSpendRestriction.RunCost));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorInstruction(
+            BehaviorInstructionKind.LoadHostedCredits,
+            amount: 1,
+            spendRestriction: (HostedCreditSpendRestriction)99));
+
+        string json = EngineJson.Serialize(place);
+        Assert.Contains("\"kind\":\"placeHostedCredits\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"spendRestriction\":\"runCost\"", json, StringComparison.Ordinal);
+        BehaviorInstruction restored = EngineJson.Deserialize<BehaviorInstruction>(json);
+        Assert.Equal(place, restored);
+        Assert.Equal(json, EngineJson.Serialize(restored));
+    }
+
+    [Fact]
     public void CardDefinitionFreezesInstructionTreeAndStaticModifiers()
     {
         BehaviorChoiceSpec choice = new(
@@ -449,6 +502,49 @@ public sealed class BehaviorContractsTests
                 .Add(CreateTaggedDefinition(new BehaviorCondition(BehaviorConditionKind.Tagged)))
                 .Build()
                 .GetDefinitionFingerprint(SearchCardId));
+    }
+
+    [Fact]
+    public void HostedCreditOperandAndCostParticipateInCatalogEqualityAndFingerprint()
+    {
+        CardBehaviorDefinition defaultLoad = new(
+            SearchCardId,
+            PlayerSide.Runner,
+            costs: [new BehaviorCost(BehaviorCostKind.HostedCredits, 1)],
+            instructions: [new BehaviorInstruction(
+                BehaviorInstructionKind.LoadHostedCredits,
+                amount: 2)]);
+        CardBehaviorDefinition explicitLoad = new(
+            SearchCardId,
+            PlayerSide.Runner,
+            costs: [new BehaviorCost(BehaviorCostKind.HostedCredits, 1)],
+            instructions: [new BehaviorInstruction(
+                BehaviorInstructionKind.LoadHostedCredits,
+                amount: 2,
+                spendRestriction: HostedCreditSpendRestriction.CardEffectOnly)]);
+        CardBehaviorDefinition runLoad = new(
+            SearchCardId,
+            PlayerSide.Runner,
+            costs: [new BehaviorCost(BehaviorCostKind.HostedCredits, 2)],
+            instructions: [new BehaviorInstruction(
+                BehaviorInstructionKind.LoadHostedCredits,
+                amount: 2,
+                spendRestriction: HostedCreditSpendRestriction.RunCost)]);
+
+        BehaviorCatalog defaultCatalog = new BehaviorCatalogBuilder("test:hosted-credit")
+            .Add(defaultLoad)
+            .Build();
+        BehaviorCatalog explicitCatalog = new BehaviorCatalogBuilder("test:hosted-credit")
+            .Add(explicitLoad)
+            .Build();
+        BehaviorCatalog changedCatalog = new BehaviorCatalogBuilder("test:hosted-credit")
+            .Add(runLoad)
+            .Build();
+
+        Assert.Equal(defaultLoad.Instructions[0], explicitLoad.Instructions[0]);
+        Assert.Equal(defaultCatalog.Fingerprint, explicitCatalog.Fingerprint);
+        Assert.NotEqual(defaultCatalog.Fingerprint, changedCatalog.Fingerprint);
+        Assert.NotEqual(defaultLoad.Costs[0], runLoad.Costs[0]);
     }
 
     private static CardBehaviorDefinition CreateTaggedDefinition(BehaviorCondition condition) =>

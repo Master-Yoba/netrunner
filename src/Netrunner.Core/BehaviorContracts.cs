@@ -503,7 +503,8 @@ internal static class BehaviorContractStructure
                 && Equals(left.Condition, right.Condition)
                 && AreEqual(left.Choice, right.Choice)
                 && AreEqual(left.Branch, right.Branch)
-                && left.Optional == right.Optional;
+                && left.Optional == right.Optional
+                && left.SpendRestriction == right.SpendRestriction;
 
     public static bool AreEqual(BehaviorChoiceOption? left, BehaviorChoiceOption? right) =>
         left is null ? right is null : right is not null && left.Equals(right);

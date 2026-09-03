@@ -96,6 +96,7 @@ public sealed record BehaviorCost
             or BehaviorCostKind.LoseClick
             or BehaviorCostKind.Counter
             or BehaviorCostKind.Tags
+            or BehaviorCostKind.HostedCredits
             or BehaviorCostKind.Additional)
         {
             ArgumentOutOfRangeException.ThrowIfLessThan(
@@ -169,6 +170,7 @@ public enum BehaviorCostKind
     TrashSelf,
     LoseClick,
     Additional,
+    HostedCredits,
 }
 
 /// <summary>A serializable condition term in a compiled behavior contract.</summary>
@@ -482,7 +484,8 @@ public sealed record BehaviorInstruction
         BehaviorCondition? condition = null,
         BehaviorChoiceSpec? choice = null,
         BehaviorBranchSpec? branch = null,
-        bool optional = false)
+        bool optional = false,
+        HostedCreditSpendRestriction? spendRestriction = null)
     {
         if (!Enum.IsDefined(kind))
         {
@@ -502,6 +505,7 @@ public sealed record BehaviorInstruction
         Choice = choice;
         Branch = branch;
         Optional = optional;
+        SpendRestriction = NormalizeSpendRestriction(kind, spendRestriction);
         ValidateOperands();
     }
 
@@ -535,8 +539,71 @@ public sealed record BehaviorInstruction
     /// <summary>Whether this instruction opens an optional install decision.</summary>
     public bool Optional { get; }
 
+    /// <summary>
+    /// Optional restriction for a hosted-credit pool instruction. Loading and
+    /// placing credits are card effects by default, while take instructions
+    /// deliberately do not carry a spend restriction.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public HostedCreditSpendRestriction? SpendRestriction { get; }
+
     private void ValidateOperands()
     {
+        if (SpendRestriction is { } spendRestriction && !Enum.IsDefined(spendRestriction))
+        {
+            throw new ArgumentOutOfRangeException(nameof(SpendRestriction));
+        }
+
+        bool hostedCreditInstruction = Kind is BehaviorInstructionKind.LoadHostedCredits
+            or BehaviorInstructionKind.PlaceHostedCredits
+            or BehaviorInstructionKind.TakeHostedCredits
+            or BehaviorInstructionKind.TakeAllHostedCredits;
+        if (!hostedCreditInstruction && SpendRestriction is not null)
+        {
+            throw new ArgumentException(
+                "A hosted-credit spend restriction is valid only for hosted-credit instructions.",
+                nameof(SpendRestriction));
+        }
+
+        switch (Kind)
+        {
+            case BehaviorInstructionKind.LoadHostedCredits:
+            case BehaviorInstructionKind.PlaceHostedCredits:
+            case BehaviorInstructionKind.TakeHostedCredits:
+                if (Amount <= 0)
+                {
+                    throw new ArgumentOutOfRangeException(
+                        nameof(Amount),
+                        "Hosted-credit load, place, and take instructions require a positive amount.");
+                }
+
+                if (Kind is BehaviorInstructionKind.TakeHostedCredits
+                    && SpendRestriction is not null)
+                {
+                    throw new ArgumentException(
+                        "TakeHostedCredits instructions do not carry a spend restriction.",
+                        nameof(SpendRestriction));
+                }
+
+                break;
+            case BehaviorInstructionKind.TakeAllHostedCredits:
+                if (Amount != 0)
+                {
+                    throw new ArgumentException(
+                        "TakeAllHostedCredits instructions must not carry an amount.",
+                        nameof(Amount));
+                }
+
+                if (SpendRestriction is not null)
+                {
+                    throw new ArgumentException(
+                        "TakeAllHostedCredits instructions do not carry a spend restriction.",
+                        nameof(SpendRestriction));
+                }
+
+                break;
+        }
+
         if (SourceZone is { } sourceZone && !Enum.IsDefined(sourceZone))
         {
             throw new ArgumentOutOfRangeException(nameof(SourceZone));
@@ -778,6 +845,13 @@ public sealed record BehaviorInstruction
         }
     }
 
+    private static HostedCreditSpendRestriction? NormalizeSpendRestriction(
+        BehaviorInstructionKind kind,
+        HostedCreditSpendRestriction? spendRestriction) =>
+        kind is BehaviorInstructionKind.LoadHostedCredits or BehaviorInstructionKind.PlaceHostedCredits
+            ? spendRestriction ?? HostedCreditSpendRestriction.CardEffectOnly
+            : spendRestriction;
+
     private void RequireDestination(string parameterName, params BehaviorZone[] allowed)
     {
         if (DestinationZone is not { } destination)
@@ -829,6 +903,10 @@ public enum BehaviorInstructionKind
     TrashCard,
     InstallCard,
     AdvanceCard,
+    LoadHostedCredits,
+    PlaceHostedCredits,
+    TakeHostedCredits,
+    TakeAllHostedCredits,
 
     // Short aliases keep the contract pleasant for callers while the longer
     // names remain unambiguous in serialized/fingerprint output.
@@ -1771,6 +1849,14 @@ internal static class BehaviorCatalogFingerprint
         builder.Append(",branch=");
         AppendBranch(builder, value.Branch);
         builder.Append(",optional=").Append(value.Optional ? '1' : '0');
+        // Preserve historical fingerprint bytes for instructions that do not
+        // use the hosted-credit operand. Hosted-credit load/place declarations
+        // carry the normalized restriction, including the default
+        // CardEffectOnly value.
+        if (value.SpendRestriction is { } spendRestriction)
+        {
+            builder.Append(",spendRestriction=").Append((int)spendRestriction);
+        }
     }
 
     private static void AppendStaticModifier(StringBuilder builder, BehaviorStaticModifier value)

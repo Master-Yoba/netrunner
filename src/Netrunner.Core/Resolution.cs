@@ -1999,6 +1999,7 @@ public static class ResolutionFrameValidator
                     or BehaviorCostKind.LoseClick
                     or BehaviorCostKind.Counter
                     or BehaviorCostKind.Tags
+                    or BehaviorCostKind.HostedCredits
                     or BehaviorCostKind.Additional => cost.Amount <= 0,
                 BehaviorCostKind.TrashSelf => cost.Amount != 1,
                 _ => false,
@@ -2027,6 +2028,22 @@ public static class ResolutionFrameValidator
                     "resolution.invalid-ability-additional-cost",
                     $"{costPath}.additionalKey",
                     "Additional costs must carry a stable additional-cost key."));
+            }
+
+            if (cost.Kind != BehaviorCostKind.Counter && cost.CounterName is not null)
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.invalid-ability-counter-cost",
+                    $"{costPath}.counterName",
+                    "Only counter costs may carry a counter name."));
+            }
+
+            if (cost.Kind != BehaviorCostKind.Additional && cost.AdditionalKey is not null)
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.invalid-ability-additional-cost",
+                    $"{costPath}.additionalKey",
+                    "Only additional costs may carry an additional-cost key."));
             }
         }
     }

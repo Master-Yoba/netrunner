@@ -2755,3 +2755,22 @@ errors; runtime action expansion and full verification remain pending.
   Release solution build completed with zero warnings/errors. The direct M2
   proof remains byte-stable at the schema-3 hashes above with 32 replay-verified
   checkpoints.
+
+### 2026-09-03 — Checkpoint B2a hosted-credit declaration schema accepted
+
+- Luna Max added the declarative half of ENG-408 on top of the typed B1 state.
+  Behavior programs now distinguish load, place, take-exact, and take-all
+  hosted-credit instructions. Load/place normalize an omitted restriction to
+  CardEffectOnly; take instructions carry no spending permission. Their amount
+  and operand matrices are constructor-validated and preserved by canonical
+  JSON, structural equality, behavior-frame replay, and catalog fingerprints.
+- Paid abilities now have a distinct positive `HostedCredits` cost kind. It
+  cannot carry a generic counter name or additional-cost key and is retained
+  by action/frame validation and cloning. Runtime affordability/payment remains
+  deliberately fail-closed until B2b wires the declaration to the typed pool;
+  generic `Counter` costs continue to reject hosted credits.
+- Root independently passed the focused declaration/action/frame gate 17/17,
+  complete Core 537/537, the zero-warning solution build, Core formatting, and
+  `git diff --check`. The direct M2 proof remains byte-stable at the schema-3
+  hashes above with 32 replay-verified checkpoints. No runtime pool mutation,
+  events, observation, empty follow-up, or card binding is claimed here.
