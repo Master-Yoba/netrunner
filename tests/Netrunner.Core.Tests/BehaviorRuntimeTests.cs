@@ -45,6 +45,237 @@ public sealed class BehaviorRuntimeTests
     }
 
     [Fact]
+    public void HostedCreditInstructionsLoadPlaceTakeAndTakeAll()
+    {
+        CardDefinitionId definitionId = new("test:runtime-hosted-credit");
+        CardInstanceId sourceId = new("card:runtime-hosted-credit-source");
+        PlayerSide owner = PlayerSide.Corp;
+
+        BehaviorCatalog loadCatalog = Catalog(new CardBehaviorDefinition(
+            definitionId,
+            owner,
+            instructions:
+            [
+                new BehaviorInstruction(
+                    BehaviorInstructionKind.LoadHostedCredits,
+                    amount: 3,
+                    spendRestriction: HostedCreditSpendRestriction.AbilityCost),
+            ]));
+        GameState loadState = CreateState(
+            loadCatalog,
+            (sourceId, definitionId, ZoneKind.CorpHand, owner));
+        PlayerId corp = loadState.Players.Single(player => player.Side == owner).Id;
+        GameState loaded = GameEngine.BeginBehaviorForTesting(
+            loadState,
+            new BehaviorInvocationContext(sourceId, corp),
+            loadCatalog);
+        CardCounterState loadedPool = Assert.Single(loaded.RulesState!.Counters);
+        Assert.Equal(3, loadedPool.Count);
+        Assert.Equal(HostedCreditSpendRestriction.AbilityCost, loadedPool.SpendRestriction);
+
+        BehaviorCatalog placeCatalog = Catalog(new CardBehaviorDefinition(
+            definitionId,
+            owner,
+            instructions:
+            [
+                new BehaviorInstruction(
+                    BehaviorInstructionKind.PlaceHostedCredits,
+                    amount: 2,
+                    spendRestriction: HostedCreditSpendRestriction.AbilityCost),
+            ]));
+        GameState placed = GameEngine.BeginBehaviorForTesting(
+            WithCounters(
+                CreateState(placeCatalog, (sourceId, definitionId, ZoneKind.CorpHand, owner)),
+                CardCounterState.CreateHostedCredit(sourceId, 3, HostedCreditSpendRestriction.AbilityCost)),
+            new BehaviorInvocationContext(sourceId, corp),
+            placeCatalog);
+        Assert.Equal(5, Assert.Single(placed.RulesState!.Counters).Count);
+
+        BehaviorCatalog takeCatalog = Catalog(new CardBehaviorDefinition(
+            definitionId,
+            owner,
+            instructions: [new BehaviorInstruction(BehaviorInstructionKind.TakeHostedCredits, amount: 2)]));
+        GameState taken = GameEngine.BeginBehaviorForTesting(
+            WithCounters(
+                CreateState(takeCatalog, (sourceId, definitionId, ZoneKind.CorpHand, owner)),
+                CardCounterState.CreateHostedCredit(sourceId, 5, HostedCreditSpendRestriction.AbilityCost)),
+            new BehaviorInvocationContext(sourceId, corp),
+            takeCatalog);
+        Assert.Equal(7, taken.GetPlayer(corp).Credits);
+        Assert.Equal(3, Assert.Single(taken.RulesState!.Counters).Count);
+
+        BehaviorCatalog takeAllCatalog = Catalog(new CardBehaviorDefinition(
+            definitionId,
+            owner,
+            instructions: [new BehaviorInstruction(BehaviorInstructionKind.TakeAllHostedCredits)]));
+        GameState takenAll = GameEngine.BeginBehaviorForTesting(
+            WithCounters(
+                CreateState(takeAllCatalog, (sourceId, definitionId, ZoneKind.CorpHand, owner)),
+                CardCounterState.CreateHostedCredit(sourceId, 3, HostedCreditSpendRestriction.AbilityCost)),
+            new BehaviorInvocationContext(sourceId, corp),
+            takeAllCatalog);
+        Assert.Equal(8, takenAll.GetPlayer(corp).Credits);
+        Assert.Empty(takenAll.RulesState!.Counters);
+    }
+
+    [Fact]
+    public void HostedCreditInstructionsRejectRestrictionMismatchEmptyUnderflowAndOverflowAtomically()
+    {
+        CardDefinitionId definitionId = new("test:runtime-hosted-credit-failures");
+        CardInstanceId sourceId = new("card:runtime-hosted-credit-failures-source");
+        PlayerId corp;
+
+        BehaviorCatalog mismatchCatalog = Catalog(new CardBehaviorDefinition(
+            definitionId,
+            PlayerSide.Corp,
+            instructions:
+            [new BehaviorInstruction(
+                BehaviorInstructionKind.LoadHostedCredits,
+                amount: 1,
+                spendRestriction: HostedCreditSpendRestriction.RunCost)]));
+        GameState mismatchState = WithCounters(
+            CreateState(mismatchCatalog, (sourceId, definitionId, ZoneKind.CorpHand, PlayerSide.Corp)),
+            CardCounterState.CreateHostedCredit(sourceId, 1, HostedCreditSpendRestriction.AbilityCost));
+        corp = mismatchState.Players.Single(player => player.Side == PlayerSide.Corp).Id;
+        string mismatchJson = EngineJson.Serialize(mismatchState);
+        Assert.Throws<ResolutionFailureException>(() => GameEngine.BeginBehaviorForTesting(
+            mismatchState,
+            new BehaviorInvocationContext(sourceId, corp),
+            mismatchCatalog));
+        Assert.Equal(mismatchJson, EngineJson.Serialize(mismatchState));
+
+        BehaviorCatalog takeCatalog = Catalog(new CardBehaviorDefinition(
+            definitionId,
+            PlayerSide.Corp,
+            instructions: [new BehaviorInstruction(BehaviorInstructionKind.TakeHostedCredits, amount: 2)]));
+        GameState underflowState = WithCounters(
+            CreateState(takeCatalog, (sourceId, definitionId, ZoneKind.CorpHand, PlayerSide.Corp)),
+            CardCounterState.CreateHostedCredit(sourceId, 1, HostedCreditSpendRestriction.AnyCost));
+        corp = underflowState.Players.Single(player => player.Side == PlayerSide.Corp).Id;
+        Assert.Throws<ResolutionFailureException>(() => GameEngine.BeginBehaviorForTesting(
+            underflowState,
+            new BehaviorInvocationContext(sourceId, corp),
+            takeCatalog));
+        Assert.Equal(5, underflowState.GetPlayer(corp).Credits);
+        Assert.Equal(1, Assert.Single(underflowState.RulesState!.Counters).Count);
+
+        BehaviorCatalog emptyCatalog = Catalog(new CardBehaviorDefinition(
+            definitionId,
+            PlayerSide.Corp,
+            instructions: [new BehaviorInstruction(BehaviorInstructionKind.TakeAllHostedCredits)]));
+        GameState emptyState = CreateState(
+            emptyCatalog,
+            (sourceId, definitionId, ZoneKind.CorpHand, PlayerSide.Corp));
+        corp = emptyState.Players.Single(player => player.Side == PlayerSide.Corp).Id;
+        Assert.Throws<ResolutionFailureException>(() => GameEngine.BeginBehaviorForTesting(
+            emptyState,
+            new BehaviorInvocationContext(sourceId, corp),
+            emptyCatalog));
+
+        BehaviorCatalog overflowCatalog = Catalog(new CardBehaviorDefinition(
+            definitionId,
+            PlayerSide.Corp,
+            instructions:
+            [new BehaviorInstruction(
+                BehaviorInstructionKind.PlaceHostedCredits,
+                amount: 1,
+                spendRestriction: HostedCreditSpendRestriction.AnyCost)]));
+        GameState overflowState = WithCounters(
+            CreateState(overflowCatalog, (sourceId, definitionId, ZoneKind.CorpHand, PlayerSide.Corp)),
+            CardCounterState.CreateHostedCredit(sourceId, int.MaxValue, HostedCreditSpendRestriction.AnyCost));
+        corp = overflowState.Players.Single(player => player.Side == PlayerSide.Corp).Id;
+        Assert.Throws<ResolutionFailureException>(() => GameEngine.BeginBehaviorForTesting(
+            overflowState,
+            new BehaviorInvocationContext(sourceId, corp),
+            overflowCatalog));
+        Assert.Equal(int.MaxValue, Assert.Single(overflowState.RulesState!.Counters).Count);
+    }
+
+    [Fact]
+    public void HostedCreditTakeEmitsTypedPoolEventBeforeWalletTransferAndRoundTrips()
+    {
+        CardDefinitionId definitionId = new("test:runtime-hosted-credit-event");
+        CardInstanceId sourceId = new("card:runtime-hosted-credit-event-source");
+        BehaviorChoiceSpec gate = new(
+            "hosted-credit-event-gate",
+            BehaviorChooser.Corp,
+            BehaviorChoiceMode.Mode,
+            BehaviorChoiceCardinality.Exactly(1),
+            options:
+            [
+                new BehaviorChoiceOption("take", [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]),
+                new BehaviorChoiceOption("skip", [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]),
+            ]);
+        BehaviorCatalog catalog = Catalog(new CardBehaviorDefinition(
+            definitionId,
+            PlayerSide.Corp,
+            instructions:
+            [
+                new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: gate),
+                new BehaviorInstruction(BehaviorInstructionKind.TakeHostedCredits, amount: 1),
+            ]));
+        GameState state = WithCounters(
+            CreateState(catalog, (sourceId, definitionId, ZoneKind.CorpHand, PlayerSide.Corp)),
+            CardCounterState.CreateHostedCredit(sourceId, 1, HostedCreditSpendRestriction.RunCost));
+        PlayerId corp = state.Players.Single(player => player.Side == PlayerSide.Corp).Id;
+        GameState prompt = GameEngine.BeginBehaviorForTesting(
+            state,
+            new BehaviorInvocationContext(sourceId, corp),
+            catalog);
+        PendingDecision decision = Assert.IsType<PendingDecision>(prompt.PendingDecision);
+        LegalAction action = decision.LegalActions.Single(candidate =>
+            candidate.Parameters is BehaviorChoiceParameters choice
+            && choice.OptionKeys.SequenceEqual(["take"]));
+        ApplyResult applied = GameEngine.Apply(
+            prompt,
+            new ActionSubmission(decision.Owner, decision.Id, decision.Revision, action.Id),
+            catalog);
+        Assert.True(applied.Accepted, applied.Rejection?.Message);
+        Assert.Equal(
+            [EngineEventKinds.HostedCreditPoolChanged, EngineEventKinds.CreditsAdjusted],
+            applied.Events.Select(@event => @event.Kind));
+        HostedCreditPoolChangedEventPayload pool = Assert.IsType<HostedCreditPoolChangedEventPayload>(applied.Events[0].Payload);
+        Assert.Equal(HostedCreditPoolOperation.Take, pool.Operation);
+        Assert.Equal(sourceId, pool.CardId);
+        Assert.Equal(-1, pool.Delta);
+        Assert.Equal(0, pool.CountAfter);
+        Assert.Equal(HostedCreditSpendRestriction.RunCost, pool.Restriction);
+        Assert.Equal(corp, pool.Recipient);
+        Assert.True(pool.Emptied);
+        Assert.Equal(6, applied.State.GetPlayer(corp).Credits);
+
+        string eventJson = EngineJson.Serialize(applied.Events[0]);
+        EngineEvent restoredEvent = EngineJson.Deserialize<EngineEvent>(eventJson);
+        Assert.Equal(eventJson, EngineJson.Serialize(restoredEvent));
+        Assert.Equal(applied.Events[0], restoredEvent);
+        string stateJson = EngineJson.Serialize(applied.State);
+        GameState restoredState = EngineJson.DeserializeState(stateJson, catalog);
+        Assert.Equal(stateJson, EngineJson.Serialize(restoredState));
+        Assert.Equal(DeterministicHash.ForState(applied.State), DeterministicHash.ForState(restoredState));
+    }
+
+    [Fact]
+    public void GenericAddCounterCannotCreateOrAdjustHostedCreditPool()
+    {
+        CardDefinitionId definitionId = new("test:runtime-hosted-credit-generic-isolation");
+        CardInstanceId sourceId = new("card:runtime-hosted-credit-generic-isolation-source");
+        BehaviorCatalog catalog = Catalog(new CardBehaviorDefinition(
+            definitionId,
+            PlayerSide.Corp,
+            instructions: [new BehaviorInstruction(BehaviorInstructionKind.AddCounter, amount: 1, argument: "credit")]));
+        GameState state = WithCounters(
+            CreateState(catalog, (sourceId, definitionId, ZoneKind.CorpHand, PlayerSide.Corp)),
+            CardCounterState.CreateHostedCredit(sourceId, 1, HostedCreditSpendRestriction.AnyCost));
+        PlayerId corp = state.Players.Single(player => player.Side == PlayerSide.Corp).Id;
+
+        Assert.Throws<ResolutionFailureException>(() => GameEngine.BeginBehaviorForTesting(
+            state,
+            new BehaviorInvocationContext(sourceId, corp),
+            catalog));
+        Assert.Equal(1, Assert.Single(state.RulesState!.Counters).Count);
+    }
+
+    [Fact]
     public void NestedModeChoiceRoundTripsAndPreservesOwnerAndHash()
     {
         CardDefinitionId definitionId = new("test:runtime-mode");
@@ -1518,6 +1749,44 @@ public sealed class BehaviorRuntimeTests
 
     private static BehaviorCatalog Catalog(CardBehaviorDefinition definition) =>
         new BehaviorCatalogBuilder("test:behavior-runtime").Add(definition).Build();
+
+    private static GameState WithCounters(GameState state, params CardCounterState[] counters)
+    {
+        RulesState defaults = state.RulesState ?? RulesState.CreateDefault(state.Players);
+        RulesState rules = new(
+            defaults.Version,
+            defaults.Players,
+            defaults.Programs,
+            counters,
+            defaults.LingeringEffects,
+            defaults.Triggers,
+            defaults.Interrupts);
+        return new GameState(
+            gameId: state.GameId,
+            rulesVersion: state.RulesVersion,
+            cardDataVersion: state.CardDataVersion,
+            players: state.Players,
+            cards: state.Cards,
+            zones: state.Zones,
+            servers: state.Servers,
+            turn: state.Turn,
+            outcome: state.Outcome,
+            randomState: state.RandomState,
+            allocator: state.Allocator,
+            schemaVersion: state.SchemaVersion,
+            decisionRevision: state.DecisionRevision,
+            eventSequence: state.EventSequence,
+            resolutionStack: state.ResolutionStack,
+            pendingDecision: state.PendingDecision,
+            actionSequence: state.ActionSequence,
+            initialSeed: state.InitialSeed,
+            runState: state.RunState,
+            rulesState: rules,
+            behaviorRegistryVersion: state.BehaviorRegistryVersion,
+            behaviorCatalogFingerprint: state.BehaviorCatalogFingerprint,
+            runtimeCardCatalogVersion: state.RuntimeCardCatalogVersion,
+            runtimeCardCatalogFingerprint: state.RuntimeCardCatalogFingerprint);
+    }
 
     private static GameState ReplaceResolutionStack(
         GameState state,

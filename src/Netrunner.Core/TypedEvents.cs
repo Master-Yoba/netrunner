@@ -12,6 +12,7 @@ public static class EngineEventKinds
     public const string MemoryAdjusted = "memory-adjusted";
     public const string ProgramTrashedForMemory = "program-trashed-for-memory";
     public const string CounterAdjusted = "counter-adjusted";
+    public const string HostedCreditPoolChanged = "hosted-credit-pool-changed";
     public const string VirusPurged = "virus-purged";
     public const string LingeringEffectAdded = "lingering-effect-added";
     public const string LingeringEffectRemoved = "lingering-effect-removed";
@@ -59,6 +60,16 @@ public static class EngineEventKinds
     public const string RunEnded = "run-ended";
 }
 
+/// <summary>Operation represented by a hosted-credit pool change event.</summary>
+public enum HostedCreditPoolOperation
+{
+    Load,
+    Place,
+    Take,
+    TakeAll,
+    Spend,
+}
+
 /// <summary>
 /// Typed diagnostic/presentation payloads. Events are never replay inputs and
 /// contain no dictionaries, object values, or executable references.
@@ -71,6 +82,7 @@ public static class EngineEventKinds
 [JsonDerivedType(typeof(MemoryAdjustedEventPayload), "memory-adjusted")]
 [JsonDerivedType(typeof(ProgramTrashedForMemoryEventPayload), "program-trashed-for-memory")]
 [JsonDerivedType(typeof(CounterAdjustedEventPayload), "counter-adjusted")]
+[JsonDerivedType(typeof(HostedCreditPoolChangedEventPayload), "hosted-credit-pool-changed")]
 [JsonDerivedType(typeof(VirusPurgedEventPayload), "virus-purged")]
 [JsonDerivedType(typeof(LingeringEffectAddedEventPayload), "lingering-effect-added")]
 [JsonDerivedType(typeof(LingeringEffectRemovedEventPayload), "lingering-effect-removed")]
@@ -360,6 +372,75 @@ public sealed record CounterAdjustedEventPayload : EngineEventPayload
     [JsonInclude]
     [JsonRequired]
     public int CountAfter { get; private set; }
+}
+
+/// <summary>One typed hosted-credit pool changed on a physical card.</summary>
+public sealed record HostedCreditPoolChangedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public HostedCreditPoolChangedEventPayload(
+        int version,
+        HostedCreditPoolOperation operation,
+        CardInstanceId cardId,
+        int delta,
+        int countAfter,
+        HostedCreditSpendRestriction restriction,
+        bool emptied,
+        PlayerId? recipient)
+        : base(version)
+    {
+        Operation = operation;
+        CardId = cardId;
+        Delta = delta;
+        CountAfter = countAfter;
+        Restriction = restriction;
+        Emptied = emptied;
+        Recipient = recipient;
+    }
+
+    public HostedCreditPoolChangedEventPayload(
+        HostedCreditPoolOperation operation,
+        CardInstanceId cardId,
+        int delta,
+        int countAfter,
+        HostedCreditSpendRestriction restriction,
+        bool emptied,
+        PlayerId? recipient = null)
+        : this(1, operation, cardId, delta, countAfter, restriction, emptied, recipient)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public HostedCreditPoolOperation Operation { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId CardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Delta { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int CountAfter { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public HostedCreditSpendRestriction Restriction { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public bool Emptied { get; private set; }
+
+    /// <summary>
+    /// The recipient is populated only for Take and TakeAll transfers. It is
+    /// null for pool loading, placement, and ability-cost spending.
+    /// </summary>
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerId? Recipient { get; private set; }
 }
 
 public sealed record VirusPurgedEventPayload : EngineEventPayload
@@ -1989,6 +2070,7 @@ public sealed record EngineEvent
         MemoryAdjustedEventPayload value => new EngineEvent(Version, Sequence, Kind, new MemoryAdjustedEventPayload(value.Version, value.Target, value.BaseMemory, value.UsedMemory)),
         ProgramTrashedForMemoryEventPayload value => new EngineEvent(Version, Sequence, Kind, new ProgramTrashedForMemoryEventPayload(value.Version, value.CardId, value.Owner, value.MemoryCost)),
         CounterAdjustedEventPayload value => new EngineEvent(Version, Sequence, Kind, new CounterAdjustedEventPayload(value.Version, value.CardId, value.CounterName, value.Delta, value.CountAfter)),
+        HostedCreditPoolChangedEventPayload value => new EngineEvent(Version, Sequence, Kind, new HostedCreditPoolChangedEventPayload(value.Version, value.Operation, value.CardId, value.Delta, value.CountAfter, value.Restriction, value.Emptied, value.Recipient)),
         VirusPurgedEventPayload value => new EngineEvent(Version, Sequence, Kind, new VirusPurgedEventPayload(value.Version, value.CountersRemoved)),
         LingeringEffectAddedEventPayload value => new EngineEvent(Version, Sequence, Kind, new LingeringEffectAddedEventPayload(value.Version, value.EffectId, value.BehaviorId, value.Expiry)),
         LingeringEffectRemovedEventPayload value => new EngineEvent(Version, Sequence, Kind, new LingeringEffectRemovedEventPayload(value.Version, value.EffectId)),
@@ -2129,6 +2211,98 @@ public static class EngineEventValidator
                 RequireId(value.CardId.Value, $"{path}.payload.cardId", "card", violations);
                 RequireId(value.CounterName, $"{path}.payload.counterName", "counter", violations);
                 RequireNumber(value.CountAfter, $"{path}.payload.countAfter", "Counter value", violations);
+                break;
+            case HostedCreditPoolChangedEventPayload value:
+                RequireKind(@event, EngineEventKinds.HostedCreditPoolChanged, path, violations);
+                RequireId(value.CardId.Value, $"{path}.payload.cardId", "card", violations);
+                RequireNumber(value.CountAfter, $"{path}.payload.countAfter", "Hosted-credit pool value", violations);
+                if (!Enum.IsDefined(value.Operation))
+                {
+                    Add(
+                        violations,
+                        "event.invalid-hosted-credit-operation",
+                        $"{path}.payload.operation",
+                        $"'{value.Operation}' is not a supported hosted-credit pool operation.");
+                }
+
+                if (!Enum.IsDefined(value.Restriction))
+                {
+                    Add(
+                        violations,
+                        "event.invalid-hosted-credit-restriction",
+                        $"{path}.payload.restriction",
+                        $"'{value.Restriction}' is not a supported hosted-credit spend restriction.");
+                }
+
+                bool loading = value.Operation is HostedCreditPoolOperation.Load or HostedCreditPoolOperation.Place;
+                bool transfer = value.Operation is HostedCreditPoolOperation.Take or HostedCreditPoolOperation.TakeAll;
+                if (loading && value.Delta <= 0)
+                {
+                    Add(
+                        violations,
+                        "event.invalid-hosted-credit-delta",
+                        $"{path}.payload.delta",
+                        "Hosted-credit load and place deltas must be positive.");
+                }
+                else if (!loading && value.Delta >= 0)
+                {
+                    Add(
+                        violations,
+                        "event.invalid-hosted-credit-delta",
+                        $"{path}.payload.delta",
+                        "Hosted-credit take and spend deltas must be negative.");
+                }
+
+                if (loading && value.CountAfter == 0)
+                {
+                    Add(
+                        violations,
+                        "event.invalid-hosted-credit-count",
+                        $"{path}.payload.countAfter",
+                        "A positive hosted-credit load or place cannot leave an empty pool.");
+                }
+
+                if (value.Operation == HostedCreditPoolOperation.TakeAll && value.CountAfter != 0)
+                {
+                    Add(
+                        violations,
+                        "event.invalid-hosted-credit-count",
+                        $"{path}.payload.countAfter",
+                        "A hosted-credit take-all operation must leave an empty pool.");
+                }
+
+                if (transfer && value.Recipient is null)
+                {
+                    Add(
+                        violations,
+                        "event.missing-hosted-credit-recipient",
+                        $"{path}.payload.recipient",
+                        "Hosted-credit transfer events require a recipient.");
+                }
+                else if (!transfer && value.Recipient is not null)
+                {
+                    Add(
+                        violations,
+                        "event.unexpected-hosted-credit-recipient",
+                        $"{path}.payload.recipient",
+                        "Only hosted-credit transfer events may carry a recipient.");
+                }
+
+                if (value.Recipient is { } recipient)
+                {
+                    RequireId(recipient.Value, $"{path}.payload.recipient", "player", violations);
+                }
+
+                bool expectedEmptied = value.Delta < 0 && value.CountAfter == 0;
+                if (value.Emptied != expectedEmptied)
+                {
+                    Add(
+                        violations,
+                        "event.hosted-credit-empty-mismatch",
+                        $"{path}.payload.emptied",
+                        "Emptied must be true exactly when a negative pool change reaches zero.");
+                }
+
                 break;
             case VirusPurgedEventPayload value:
                 RequireKind(@event, EngineEventKinds.VirusPurged, path, violations);

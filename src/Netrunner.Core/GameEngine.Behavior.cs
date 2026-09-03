@@ -338,6 +338,46 @@ public static partial class GameEngine
             case BehaviorInstructionKind.MoveCard:
                 ResolveBehaviorTransfer(working, frame, instruction, BehaviorTransferKind.Move);
                 return;
+            case BehaviorInstructionKind.LoadHostedCredits:
+                ChangeHostedCreditPool(
+                    working,
+                    frame.SourceCardId,
+                    HostedCreditPoolOperation.Load,
+                    instruction.Amount,
+                    instruction.SpendRestriction,
+                    recipient: null);
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.PlaceHostedCredits:
+                ChangeHostedCreditPool(
+                    working,
+                    frame.SourceCardId,
+                    HostedCreditPoolOperation.Place,
+                    instruction.Amount,
+                    instruction.SpendRestriction,
+                    recipient: null);
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.TakeHostedCredits:
+                ChangeHostedCreditPool(
+                    working,
+                    frame.SourceCardId,
+                    HostedCreditPoolOperation.Take,
+                    instruction.Amount,
+                    declaredRestriction: null,
+                    recipient: frame.Controller);
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.TakeAllHostedCredits:
+                ChangeHostedCreditPool(
+                    working,
+                    frame.SourceCardId,
+                    HostedCreditPoolOperation.TakeAll,
+                    amount: 0,
+                    declaredRestriction: null,
+                    recipient: frame.Controller);
+                AdvanceBehaviorCursor(working, frame);
+                return;
             case BehaviorInstructionKind.AddCounter:
                 AdjustCounter(working, frame.SourceCardId, instruction.Argument ?? "counter", instruction.Amount);
                 AdvanceBehaviorCursor(working, frame);

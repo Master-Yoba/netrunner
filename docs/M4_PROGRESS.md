@@ -2774,3 +2774,27 @@ errors; runtime action expansion and full verification remain pending.
   `git diff --check`. The direct M2 proof remains byte-stable at the schema-3
   hashes above with 32 replay-verified checkpoints. No runtime pool mutation,
   events, observation, empty follow-up, or card binding is claimed here.
+
+### 2026-09-03 — Checkpoint B2b-1 hosted-credit instruction runtime accepted
+
+- Luna Max implemented the four declared hosted-credit instruction verbs through
+  one engine-owned transition boundary. Load and place create or increment only
+  a typed pool with the declaration's preserved restriction; take-exact and
+  take-all debit that pool, credit the bound controller, reject insufficient or
+  empty pools, and remove the counter entry when its count reaches zero. Generic
+  counter adjustment remains unable to create or mutate the reserved pool.
+- Root verified the mutation ordering and atomicity contract. Arithmetic and
+  restriction failures abandon the working copy without changing the input;
+  transfers emit the pool debit before the wallet credit. A new typed
+  `HostedCreditPoolChanged` event records Load, Place, Take, TakeAll, or Spend,
+  the physical source, signed delta, count after, restriction, transfer
+  recipient where applicable, and the positive-to-zero `Emptied` transition.
+  The payload participates in polymorphic JSON, deep cloning, and event
+  invariant validation. Spend is intentionally declared in this shared event
+  vocabulary but will first be emitted by B2b-2 ability-cost payment.
+- Root independently passed the focused behavior-runtime gate 31/31, complete
+  Core 541/541, the zero-warning solution build, Core formatting, and
+  `git diff --check`. The direct M2 proof remains byte-stable at the schema-3
+  hashes above with 32 replay-verified checkpoints. Hosted-credit ability
+  affordability and payment, public observation, leave-play cleanup,
+  empty-pool follow-up, and card bindings remain separate unclaimed checkpoints.

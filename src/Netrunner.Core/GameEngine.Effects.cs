@@ -540,6 +540,229 @@ public static partial class GameEngine
             (int)next));
     }
 
+    /// <summary>
+    /// Applies one typed hosted-credit pool transition. The counter aggregate
+    /// and its event are changed together; transfers then credit the recipient
+    /// after the pool event so event order follows source debit before wallet
+    /// credit. The enclosing reducer discards the whole working copy on any
+    /// failure, keeping pool and wallet changes atomic.
+    /// </summary>
+    private static void ChangeHostedCreditPool(
+        WorkingState working,
+        CardInstanceId cardId,
+        HostedCreditPoolOperation operation,
+        int amount,
+        HostedCreditSpendRestriction? declaredRestriction,
+        PlayerId? recipient)
+    {
+        if (!Enum.IsDefined(operation))
+        {
+            throw new ResolutionFailureException($"Hosted-credit operation '{operation}' is not supported.");
+        }
+
+        CardInstanceState source = GetCard(working, cardId);
+        EnsureRulesState(working);
+        RulesState rules = RequireRulesState(working);
+        CardCounterState? current = rules.Counters.SingleOrDefault(counter =>
+            counter.CardId == cardId
+            && string.Equals(counter.CounterName, "credit", StringComparison.Ordinal));
+        if (current is not null && current.Purpose != CardCounterPurpose.HostedCredit)
+        {
+            throw new ResolutionFailureException(
+                $"Counter '{current.CounterName}' on '{cardId}' is not a hosted-credit pool.");
+        }
+
+        HostedCreditSpendRestriction restriction;
+        int nextCount;
+        int transitionAmount;
+
+        switch (operation)
+        {
+            case HostedCreditPoolOperation.Load:
+            case HostedCreditPoolOperation.Place:
+                if (amount <= 0)
+                {
+                    throw new ResolutionFailureException("Hosted-credit load and place amounts must be positive.");
+                }
+
+                if (declaredRestriction is not { } loadRestriction
+                    || !Enum.IsDefined(loadRestriction))
+                {
+                    throw new ResolutionFailureException(
+                        "Hosted-credit load and place operations require a valid spend restriction.");
+                }
+
+                if (recipient is not null)
+                {
+                    throw new ResolutionFailureException(
+                        "Hosted-credit load and place operations cannot have a recipient.");
+                }
+
+                if (current is not null && current.SpendRestriction != loadRestriction)
+                {
+                    throw new ResolutionFailureException(
+                        $"Hosted-credit pool '{cardId}' has restriction '{current.SpendRestriction}', not '{loadRestriction}'.");
+                }
+
+                nextCount = operation == HostedCreditPoolOperation.Load
+                    ? CardCounterRules.Load(current, amount)
+                    : CardCounterRules.Place(current, amount);
+                restriction = current?.SpendRestriction ?? loadRestriction;
+                transitionAmount = amount;
+                break;
+
+            case HostedCreditPoolOperation.Take:
+                if (amount <= 0)
+                {
+                    throw new ResolutionFailureException("Hosted-credit take amounts must be positive.");
+                }
+
+                if (declaredRestriction is not null)
+                {
+                    throw new ResolutionFailureException("Hosted-credit take operations do not declare a restriction.");
+                }
+
+                if (recipient is not { } takeRecipient)
+                {
+                    throw new ResolutionFailureException("Hosted-credit take operations require a recipient.");
+                }
+
+                _ = GetPlayer(working, takeRecipient);
+                if (current?.SpendRestriction is not { } takeRestriction)
+                {
+                    throw new ResolutionFailureException($"Card '{cardId}' has no hosted-credit pool restriction.");
+                }
+
+                nextCount = current is null
+                    ? throw new ResolutionFailureException($"Card '{cardId}' has no hosted-credit pool.")
+                    : CardCounterRules.Take(current, amount);
+                restriction = takeRestriction;
+                transitionAmount = -amount;
+                break;
+
+            case HostedCreditPoolOperation.TakeAll:
+                if (amount != 0)
+                {
+                    throw new ResolutionFailureException("TakeAllHostedCredits does not carry an amount.");
+                }
+
+                if (declaredRestriction is not null)
+                {
+                    throw new ResolutionFailureException("Hosted-credit take-all operations do not declare a restriction.");
+                }
+
+                if (recipient is not { } takeAllRecipient)
+                {
+                    throw new ResolutionFailureException("Hosted-credit take-all operations require a recipient.");
+                }
+
+                _ = GetPlayer(working, takeAllRecipient);
+                if (current?.SpendRestriction is not { } takeAllRestriction)
+                {
+                    throw new ResolutionFailureException($"Card '{cardId}' has no hosted-credit pool restriction.");
+                }
+
+                if (current.Count <= 0)
+                {
+                    throw new ResolutionFailureException($"Card '{cardId}' has no hosted credits to take.");
+                }
+
+                transitionAmount = -current.Count;
+                nextCount = CardCounterRules.Take(current, current.Count);
+                restriction = takeAllRestriction;
+                break;
+
+            case HostedCreditPoolOperation.Spend:
+                if (amount <= 0)
+                {
+                    throw new ResolutionFailureException("Hosted-credit spend amounts must be positive.");
+                }
+
+                if (declaredRestriction is not { } spendRestriction
+                    || spendRestriction is HostedCreditSpendRestriction.CardEffectOnly
+                    or HostedCreditSpendRestriction.AnyCost)
+                {
+                    throw new ResolutionFailureException(
+                        "Hosted-credit spend operations require a concrete cost restriction.");
+                }
+
+                if (recipient is not null)
+                {
+                    throw new ResolutionFailureException("Hosted-credit spend operations cannot have a recipient.");
+                }
+
+                if (current?.SpendRestriction is not { } currentRestriction)
+                {
+                    throw new ResolutionFailureException($"Card '{cardId}' has no hosted-credit pool restriction.");
+                }
+
+                nextCount = current is null
+                    ? throw new ResolutionFailureException($"Card '{cardId}' has no hosted-credit pool.")
+                    : CardCounterRules.Spend(current, amount, spendRestriction);
+                restriction = currentRestriction;
+                transitionAmount = -amount;
+                break;
+
+            default:
+                throw new ResolutionFailureException($"Hosted-credit operation '{operation}' is not executable.");
+        }
+
+        if (recipient is { } recipientId)
+        {
+            PlayerState player = GetPlayer(working, recipientId);
+            if (checked((long)player.Credits + -transitionAmount) > int.MaxValue)
+            {
+                throw new ResolutionFailureException("Hosted-credit transfer would overflow the recipient wallet.");
+            }
+        }
+
+        var counters = rules.Counters.ToList();
+        int counterIndex = current is null
+            ? -1
+            : counters.Select((counter, index) => (counter, index))
+                .Where(value => value.counter == current)
+                .Select(value => value.index)
+                .DefaultIfEmpty(-1)
+                .First();
+        if (nextCount == 0)
+        {
+            if (counterIndex >= 0)
+            {
+                counters.RemoveAt(counterIndex);
+            }
+        }
+        else
+        {
+            CardCounterState replacement = CardCounterState.CreateHostedCredit(cardId, nextCount, restriction);
+            if (counterIndex >= 0)
+            {
+                counters[counterIndex] = replacement;
+            }
+            else
+            {
+                counters.Add(replacement);
+            }
+        }
+
+        SetRulesState(working, counters: counters);
+        Emit(
+            working,
+            EngineEventKinds.HostedCreditPoolChanged,
+            new HostedCreditPoolChangedEventPayload(
+                operation,
+                source.Id,
+                transitionAmount,
+                nextCount,
+                restriction,
+                transitionAmount < 0 && nextCount == 0,
+                recipient));
+
+        if (recipient is { } transferRecipient)
+        {
+            ApplyCreditDelta(working, transferRecipient, checked(-transitionAmount));
+        }
+    }
+
     private static void PurgeVirusCounters(WorkingState working)
     {
         RulesState rules = RequireRulesState(working);
