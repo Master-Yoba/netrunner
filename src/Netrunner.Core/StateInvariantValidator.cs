@@ -2641,28 +2641,42 @@ public static class StateInvariantValidator
                                 Add(violations, "resolution.behavior-source-location-mismatch", path, "Behavior source location kind does not match the captured invocation context.");
                             }
 
-                            bool selfTrash = behaviorCatalog.TryGet(
+                            bool selfTrash = false;
+                            bool selfRemove = false;
+                            if (behaviorCatalog.TryGet(
                                     behaviorFrame.DefinitionId,
-                                    out CardBehaviorDefinition? sourceDefinition)
-                                && (behaviorFrame.AbilityKey is not null
-                                    ? sourceDefinition.PaidAbilities
+                                    out CardBehaviorDefinition? sourceDefinition))
+                            {
+                                IReadOnlyList<BehaviorCost> costs = behaviorFrame.AbilityKey is null
+                                    ? sourceDefinition.Costs
+                                    : sourceDefinition.PaidAbilities
                                         .SingleOrDefault(ability => string.Equals(
                                             ability.Key,
                                             behaviorFrame.AbilityKey,
                                             StringComparison.Ordinal))?.Costs
-                                        .Any(cost => cost.Kind == BehaviorCostKind.TrashSelf) == true
-                                    : sourceDefinition.Costs.Any(cost => cost.Kind == BehaviorCostKind.TrashSelf));
+                                        ?? [];
+                                selfTrash = costs.Any(cost => cost.Kind == BehaviorCostKind.TrashSelf);
+                                selfRemove = costs.Any(cost => cost.Kind == BehaviorCostKind.RemoveSelfFromGame);
+                            }
                             CardInstanceState? sourceCard = cardIds.Contains(behaviorFrame.SourceCardId)
                                 ? state.Cards.Single(card => card.Id == behaviorFrame.SourceCardId)
                                 : null;
                             ZoneState? currentSourceZone = sourceCard is null
                                 ? null
                                 : state.Zones.FirstOrDefault(zone => zone?.Id == sourceCard.ZoneId);
-                            bool movedAfterPayment = selfTrash
-                                && behaviorFrame.Stage == BehaviorResolutionStage.Execute
-                                && currentSourceZone is not null
-                                && (currentSourceZone.Kind == ZoneKind.RunnerHeap
-                                    || currentSourceZone.Kind == ZoneKind.CorpDiscard);
+                            bool movedAfterPayment = behaviorFrame.Stage == BehaviorResolutionStage.Execute
+                                && ((selfTrash
+                                        && sourceCard is not null
+                                        && currentSourceZone is not null
+                                        && (sourceCard.OwnerSide == PlayerSide.Corp
+                                            ? currentSourceZone.Kind == ZoneKind.CorpDiscard
+                                            : currentSourceZone.Kind == ZoneKind.RunnerHeap))
+                                    || (selfRemove
+                                        && sourceCard is not null
+                                        && currentSourceZone is not null
+                                        && (sourceCard.OwnerSide == PlayerSide.Corp
+                                            ? currentSourceZone.Kind == ZoneKind.CorpRemovedFromGame
+                                            : currentSourceZone.Kind == ZoneKind.RunnerRemovedFromGame)));
                             if (sourceCard is not null
                                 && sourceCard.ZoneId != sourceZone.Id
                                 && !movedAfterPayment)
@@ -3311,22 +3325,28 @@ public static class StateInvariantValidator
 
         bool paymentAccepted = frame.Stage != AbilityLifecycleStage.PayCosts;
         bool selfTrash = declaration?.Costs.Any(static cost => cost.Kind == BehaviorCostKind.TrashSelf) == true;
+        bool selfRemove = declaration?.Costs.Any(static cost => cost.Kind == BehaviorCostKind.RemoveSelfFromGame) == true;
         if (source is not null && source.ZoneId != frame.SourceZoneId)
         {
             ZoneState? currentZone = state.Zones.FirstOrDefault(zone => zone?.Id == source.ZoneId);
-            bool validTrash = paymentAccepted
-                && selfTrash
-                && currentZone is not null
-                && (source.OwnerSide == PlayerSide.Runner
-                    ? currentZone.Kind == ZoneKind.RunnerHeap
-                    : currentZone.Kind == ZoneKind.CorpDiscard);
-            if (!validTrash)
+            bool validLifecycleZone = paymentAccepted
+                && ((selfTrash
+                        && currentZone is not null
+                        && (source.OwnerSide == PlayerSide.Runner
+                            ? currentZone.Kind == ZoneKind.RunnerHeap
+                            : currentZone.Kind == ZoneKind.CorpDiscard))
+                    || (selfRemove
+                        && currentZone is not null
+                        && (source.OwnerSide == PlayerSide.Runner
+                            ? currentZone.Kind == ZoneKind.RunnerRemovedFromGame
+                            : currentZone.Kind == ZoneKind.CorpRemovedFromGame)));
+            if (!validLifecycleZone || (selfTrash && selfRemove))
             {
                 Add(
                     violations,
                     "resolution.ability-source-location-mismatch",
                     $"{path}.sourceZoneId",
-                    "Ability source may move only to its owner discard after a declared TrashSelf payment.");
+                    "Ability source may move only to its owner discard or removed-from-game zone after its declared self-movement payment.");
             }
         }
 

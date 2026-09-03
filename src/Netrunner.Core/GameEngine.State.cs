@@ -41,14 +41,15 @@ public static partial class GameEngine
         // this normalization at the single card-movement boundary so damage,
         // memory cleanup, explicit move effects, and run-event cleanup all
         // agree—even when a facedown Runner card enters the heap.
-        bool entersRunnerHeap = destination.Kind == ZoneKind.RunnerHeap
-            && destination.OwnerSide == PlayerSide.Runner;
+        bool entersPublicFaceUpZone = (destination.Kind == ZoneKind.RunnerHeap
+                && destination.OwnerSide == PlayerSide.Runner)
+            || destination.Kind is ZoneKind.CorpRemovedFromGame or ZoneKind.RunnerRemovedFromGame;
         ReplaceCard(working, new CardInstanceState(
             card.Id,
             card.DefinitionId,
             destination.Id,
             card.OwnerSide,
-            entersRunnerHeap || card.FaceUp,
+            entersPublicFaceUpZone || card.FaceUp,
             card.Rezzed,
             card.AdvancementCounters));
         if (cleanupCounters

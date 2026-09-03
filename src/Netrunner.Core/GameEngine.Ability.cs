@@ -395,6 +395,8 @@ public static partial class GameEngine
                         break;
                     case BehaviorCostKind.TrashSelf:
                         break;
+                    case BehaviorCostKind.RemoveSelfFromGame:
+                        break;
                     case BehaviorCostKind.Additional:
                         return false;
                     default:
@@ -687,11 +689,14 @@ public static partial class GameEngine
         }
 
         bool selfTrash = declaration.Costs.Any(static cost => cost.Kind == BehaviorCostKind.TrashSelf);
+        bool selfRemove = declaration.Costs.Any(static cost => cost.Kind == BehaviorCostKind.RemoveSelfFromGame);
         if (source.ZoneId != frame.SourceZoneId)
         {
             ZoneState currentSourceZone = working.Zones.SingleOrDefault(zone => zone.Id == source.ZoneId)
                 ?? throw new ResolutionFailureException("Ability source card current zone no longer exists.");
-            if (!paid || !selfTrash || !IsAbilityTrashZone(currentSourceZone, source))
+            bool validLifecycleZone = (selfTrash && IsAbilityTrashZone(currentSourceZone, source))
+                || (selfRemove && IsAbilityRemoveZone(currentSourceZone, source));
+            if (!paid || !validLifecycleZone || (selfTrash && selfRemove))
             {
                 throw new ResolutionFailureException("Ability source card moved outside its permitted lifecycle.");
             }
@@ -726,6 +731,11 @@ public static partial class GameEngine
             ? zone.Kind == ZoneKind.CorpDiscard
             : zone.Kind == ZoneKind.RunnerHeap;
 
+    private static bool IsAbilityRemoveZone(ZoneState zone, CardInstanceState source) =>
+        source.OwnerSide == PlayerSide.Corp
+            ? zone.Kind == ZoneKind.CorpRemovedFromGame
+            : zone.Kind == ZoneKind.RunnerRemovedFromGame;
+
     private static void PreflightAbilityPayment(
         WorkingState working,
         AbilityFrame frame,
@@ -742,7 +752,7 @@ public static partial class GameEngine
 
         if (declaration.Costs.Any(static cost => cost.Kind == BehaviorCostKind.Additional)
             || declaration.Targets.Count != 0
-            || declaration.Costs.Count(static cost => cost.Kind == BehaviorCostKind.TrashSelf) > 1)
+            || declaration.Costs.Count(static cost => cost.Kind is BehaviorCostKind.TrashSelf or BehaviorCostKind.RemoveSelfFromGame) > 1)
         {
             throw new ResolutionFailureException("This ability contains an unsupported cost or target.");
         }
@@ -797,6 +807,11 @@ public static partial class GameEngine
                     break;
                 case BehaviorCostKind.TrashSelf:
                     MoveBehaviorCardToTrash(working, source);
+                    source = GetCard(working, frame.SourceCardId);
+                    deferredCounterCleanup = true;
+                    break;
+                case BehaviorCostKind.RemoveSelfFromGame:
+                    MoveBehaviorCardToRemovedFromGame(working, source);
                     source = GetCard(working, frame.SourceCardId);
                     deferredCounterCleanup = true;
                     break;

@@ -472,6 +472,199 @@ public sealed class PaidAbilityRuntimeTests
     }
 
     [Fact]
+    public void RemoveSelfFromGameMayPrecedeCounterAndHostedCreditCostsUntilPaymentCompletes()
+    {
+        CardDefinitionId definitionId = new("test:runtime-remove-self-paid");
+        CardInstanceId sourceId = new("card:runtime-remove-self-paid");
+        BehaviorPaidAbility ability = Ability(
+            "ability:remove-self-paid",
+            BehaviorAbilityTiming.AnyPaidWindow,
+            BehaviorAbilityActivation.PaidAbility,
+            [
+                new BehaviorCost(BehaviorCostKind.RemoveSelfFromGame),
+                new BehaviorCost(BehaviorCostKind.Counter, 1, counterName: "charge"),
+                new BehaviorCost(BehaviorCostKind.HostedCredits, 1),
+            ],
+            [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]);
+        BehaviorCatalog catalog = Catalog(definitionId, PlayerSide.Runner, [ability]);
+        GameState state = BuildRunnerState(
+            catalog,
+            definitionId,
+            sourceId,
+            credits: 5,
+            clicks: 4,
+            counters:
+            [
+                new CardCounterState(sourceId, "charge", 2),
+                CardCounterState.CreateHostedCredit(sourceId, 2, HostedCreditSpendRestriction.AbilityCost),
+            ]);
+        GameState prompt = BeginPaidPrompt(state, catalog);
+        LegalAction action = Assert.Single(
+            prompt.PendingDecision!.LegalActions,
+            candidate => candidate.Kind == ActionKind.UseAbility);
+
+        ApplyResult result = GameEngine.Apply(
+            prompt,
+            new ActionSubmission(
+                prompt.PendingDecision.Owner,
+                prompt.PendingDecision.Id,
+                prompt.PendingDecision.Revision,
+                action.Id),
+            catalog);
+
+        Assert.True(result.Accepted, result.Rejection?.Message);
+        CardInstanceState source = result.State.GetCard(sourceId);
+        Assert.Equal(ZoneKind.RunnerRemovedFromGame, result.State.GetZone(source.ZoneId).Kind);
+        Assert.True(source.FaceUp);
+        Assert.Empty(result.State.RulesState!.Counters);
+        Assert.Equal(
+            [EngineEventKinds.CardMoved, EngineEventKinds.CounterAdjusted, EngineEventKinds.HostedCreditPoolChanged],
+            result.Events
+                .Where(@event => @event.Kind is EngineEventKinds.CardMoved
+                    or EngineEventKinds.CounterAdjusted
+                    or EngineEventKinds.HostedCreditPoolChanged)
+                .Select(@event => @event.Kind));
+        HostedCreditPoolChangedEventPayload hosted = Assert.IsType<HostedCreditPoolChangedEventPayload>(
+            result.Events.Single(@event => @event.Kind == EngineEventKinds.HostedCreditPoolChanged).Payload);
+        Assert.Equal(-1, hosted.Delta);
+        Assert.Equal(1, hosted.CountAfter);
+        Assert.Null(hosted.Recipient);
+        Assert.False(hosted.Emptied);
+    }
+
+    [Fact]
+    public void RemoveSelfCostCheckpointRoundTripsWithoutRepeatingTheMove()
+    {
+        CardDefinitionId definitionId = new("test:runtime-remove-self-checkpoint");
+        CardInstanceId sourceId = new("card:runtime-remove-self-checkpoint");
+        BehaviorPaidAbility ability = Ability(
+            "ability:remove-self-checkpoint",
+            BehaviorAbilityTiming.AnyPaidWindow,
+            BehaviorAbilityActivation.PaidAbility,
+            [new BehaviorCost(BehaviorCostKind.RemoveSelfFromGame)],
+            [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]);
+        BehaviorCatalog catalog = Catalog(definitionId, PlayerSide.Runner, [ability]);
+        GameState state = BuildRunnerState(catalog, definitionId, sourceId, credits: 5, clicks: 4);
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+        TurnFrame parent = new(
+            1,
+            ResolutionBehaviorIds.Turn,
+            PlayerSide.Runner,
+            state.Turn.TurnNumber,
+            TurnFrameStage.BeforeTurnPriority,
+            TurnPriorityWindowKind.PaidAndRez,
+            PlayerSide.Runner);
+        AbilityActionParameters parameters = Assert.Single(
+            GameEngine.MaterializeAbilityActionParameters(
+                ReplaceStack(state, [parent]),
+                catalog));
+        AbilityFrame frame = new(
+            1,
+            ResolutionBehaviorIds.Ability,
+            parameters.DefinitionId,
+            parameters.SourceCardId,
+            parameters.AbilityKey,
+            runner,
+            parameters.Timing,
+            parameters.Activation,
+            parameters.Costs,
+            parameters.TargetCardIds,
+            parameters.Usage,
+            parameters.CatalogFingerprint,
+            parameters.DefinitionFingerprint,
+            parameters.SourceZoneId,
+            parameters.SourceZoneKind,
+            AbilityLifecycleStage.PayCosts,
+            BehaviorFrameIdentity.Compute(parent));
+
+        GameState checkpoint = GameEngine.BeginResolution(
+            ReplaceStack(state, [parent, frame]),
+            frame,
+            catalog,
+            maxResolutionSteps: 1);
+        Assert.Equal(
+            AbilityLifecycleStage.CostCheckpoint,
+            Assert.IsType<AbilityFrame>(checkpoint.ResolutionStack[^1]).Stage);
+        Assert.Equal(
+            ZoneKind.RunnerRemovedFromGame,
+            checkpoint.GetZone(checkpoint.GetCard(sourceId).ZoneId).Kind);
+        long checkpointSequence = checkpoint.EventSequence;
+
+        string json = EngineJson.Serialize(checkpoint);
+        GameState restored = EngineJson.DeserializeState(json, catalog);
+        Assert.Equal(json, EngineJson.Serialize(restored));
+        AbilityFrame restoredFrame = Assert.IsType<AbilityFrame>(restored.ResolutionStack[^1]);
+        GameState resumed = GameEngine.BeginResolution(restored, restoredFrame, catalog);
+
+        Assert.Equal(
+            ZoneKind.RunnerRemovedFromGame,
+            resumed.GetZone(resumed.GetCard(sourceId).ZoneId).Kind);
+        Assert.Equal(checkpointSequence + 1, resumed.EventSequence);
+    }
+
+    [Fact]
+    public void ForgedRemoveSelfFromGameDestinationIsRejectedAfterPayment()
+    {
+        CardDefinitionId definitionId = new("test:runtime-remove-self-forged-destination");
+        CardInstanceId sourceId = new("card:runtime-remove-self-forged-destination");
+        BehaviorPaidAbility ability = Ability(
+            "ability:remove-self-forged-destination",
+            BehaviorAbilityTiming.AnyPaidWindow,
+            BehaviorAbilityActivation.PaidAbility,
+            [new BehaviorCost(BehaviorCostKind.RemoveSelfFromGame)],
+            [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]);
+        BehaviorCatalog catalog = Catalog(definitionId, PlayerSide.Runner, [ability]);
+        GameState state = BuildRunnerState(catalog, definitionId, sourceId, credits: 5, clicks: 4);
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+        TurnFrame parent = new(
+            1,
+            ResolutionBehaviorIds.Turn,
+            PlayerSide.Runner,
+            state.Turn.TurnNumber,
+            TurnFrameStage.BeforeTurnPriority,
+            TurnPriorityWindowKind.PaidAndRez,
+            PlayerSide.Runner);
+        AbilityActionParameters parameters = Assert.Single(
+            GameEngine.MaterializeAbilityActionParameters(
+                ReplaceStack(state, [parent]),
+                catalog));
+        AbilityFrame frame = new(
+            1,
+            ResolutionBehaviorIds.Ability,
+            parameters.DefinitionId,
+            parameters.SourceCardId,
+            parameters.AbilityKey,
+            runner,
+            parameters.Timing,
+            parameters.Activation,
+            parameters.Costs,
+            parameters.TargetCardIds,
+            parameters.Usage,
+            parameters.CatalogFingerprint,
+            parameters.DefinitionFingerprint,
+            parameters.SourceZoneId,
+            parameters.SourceZoneKind,
+            AbilityLifecycleStage.PayCosts,
+            BehaviorFrameIdentity.Compute(parent));
+
+        GameState checkpoint = GameEngine.BeginResolution(
+            ReplaceStack(state, [parent, frame]),
+            frame,
+            catalog,
+            maxResolutionSteps: 1);
+        AbilityFrame paidFrame = Assert.IsType<AbilityFrame>(checkpoint.ResolutionStack[^1]);
+        GameState forged = MoveCardFixture(checkpoint, sourceId, ZoneKind.RunnerHeap);
+
+        Assert.Contains(
+            StateInvariantValidator.Collect(forged, catalog),
+            violation => violation.Code == "resolution.ability-source-location-mismatch");
+        Assert.Throws<StateInvariantException>(() => GameEngine.BeginResolution(
+            forged,
+            paidFrame,
+            catalog));
+    }
+
+    [Fact]
     public void StaleInsufficientCreditsAreRejectedAtomically()
     {
         CardDefinitionId definitionId = new("test:runtime-stale");
@@ -874,6 +1067,40 @@ public sealed class PaidAbilityRuntimeTests
 
     private static GameState ReplaceStack(GameState state, IReadOnlyList<ResolutionFrame> stack) =>
         ReplaceState(state, resolutionStack: stack);
+
+    private static GameState MoveCardFixture(GameState state, CardInstanceId cardId, ZoneKind destinationKind)
+    {
+        CardInstanceState card = state.GetCard(cardId);
+        ZoneState source = state.Zones.Single(zone => zone.Id == card.ZoneId);
+        ZoneState destination = state.GetZone(destinationKind);
+        if (source.Id == destination.Id)
+        {
+            return state;
+        }
+
+        var sourceIds = source.CardIds.Where(id => id != cardId).ToArray();
+        var destinationIds = destination.CardIds.Append(cardId).ToArray();
+        var zones = state.Zones.Select(zone => zone.Id == source.Id
+            ? new ZoneState(zone.Id, zone.Kind, zone.OwnerSide, zone.ServerId, sourceIds)
+            : zone.Id == destination.Id
+                ? new ZoneState(zone.Id, zone.Kind, zone.OwnerSide, zone.ServerId, destinationIds)
+                : zone).ToArray();
+        bool faceUp = destination.Kind is ZoneKind.RunnerRig
+            or ZoneKind.RunnerPlayArea
+            or ZoneKind.RunnerHeap
+            or ZoneKind.CorpDiscard;
+        var cards = state.Cards.Select(value => value.Id == cardId
+            ? new CardInstanceState(
+                value.Id,
+                value.DefinitionId,
+                destination.Id,
+                value.OwnerSide,
+                faceUp,
+                value.Rezzed && faceUp,
+                value.AdvancementCounters)
+            : value).ToArray();
+        return ReplaceState(state, cards: cards, zones: zones);
+    }
 
     private static GameState ReplaceState(
         GameState state,

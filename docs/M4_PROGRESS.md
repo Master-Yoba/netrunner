@@ -2861,3 +2861,26 @@ errors; runtime action expansion and full verification remain pending.
   contract/topology tests, complete Core 555/555, the zero-warning solution
   build, Core formatting, and `git diff --check`; the direct M2 proof remains
   byte-stable at the schema-3 hashes with 32 replay-verified checkpoints.
+
+### 2026-09-03 — Checkpoint B3a-2 self-removal runtime accepted
+
+- Luna Max wired the distinct self-removal cost through generic behavior and
+  paid-ability payment. The engine lazily creates the source owner's RFG zone,
+  moves the physical source there faceup, emits the ordinary typed CardMoved
+  history entry, and continues the already-authorized instruction child from
+  its frozen source/catalog snapshot. Affordability recognizes the cost as a
+  supported non-resource term but still requires an active source at payment.
+- Runtime and state invariants now distinguish the two legal post-payment
+  exceptions exactly: TrashSelf permits only the owner's discard, while
+  RemoveSelfFromGame permits only the owner's RFG zone. Counter cleanup remains
+  deferred through the full cost loop, so a declared removal before generic or
+  hosted-credit costs pays in order and clears all residual counters only at
+  the bundle boundary. Save/load at CostCheckpoint proves the move is not
+  repeated on resume.
+- Root required an additional forged-state test after the first report lacked
+  the claimed evidence. The accepted test relocates a removal-paid source to
+  heap and proves both the source-location invariant and resolution fail
+  closed. Root independently passed 51/51 focused behavior/ability runtime
+  tests, complete Core 560/560, the zero-warning solution build, Core
+  formatting, and `git diff --check`; the direct M2 proof remains byte-stable
+  at the schema-3 hashes with 32 replay-verified checkpoints.

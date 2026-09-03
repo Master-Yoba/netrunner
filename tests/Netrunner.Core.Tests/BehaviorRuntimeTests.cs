@@ -73,6 +73,47 @@ public sealed class BehaviorRuntimeTests
         Assert.Empty(result.ResolutionStack);
     }
 
+    [Theory]
+    [InlineData(PlayerSide.Corp, ZoneKind.CorpHand, ZoneKind.CorpRemovedFromGame)]
+    [InlineData(PlayerSide.Runner, ZoneKind.RunnerRig, ZoneKind.RunnerRemovedFromGame)]
+    public void BehaviorRemoveSelfFromGameMovesFaceupAndDefersCounterCleanup(
+        PlayerSide owner,
+        ZoneKind sourceZone,
+        ZoneKind removedZone)
+    {
+        CardDefinitionId definitionId = new($"test:runtime-remove-self-{owner.ToString().ToLowerInvariant()}");
+        CardInstanceId sourceId = new($"card:runtime-remove-self-{owner.ToString().ToLowerInvariant()}");
+        BehaviorCatalog catalog = Catalog(new CardBehaviorDefinition(
+            definitionId,
+            owner,
+            costs:
+            [
+                new BehaviorCost(BehaviorCostKind.RemoveSelfFromGame),
+                new BehaviorCost(BehaviorCostKind.Counter, 1, counterName: "charge"),
+            ],
+            instructions: [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]));
+        GameState state = WithCounters(
+            CreateState(catalog, (sourceId, definitionId, sourceZone, owner)),
+            new CardCounterState(sourceId, "charge", 1));
+        PlayerId controller = state.Players.Single(player => player.Side == owner).Id;
+
+        GameState result = GameEngine.BeginBehaviorForTesting(
+            state,
+            new BehaviorInvocationContext(sourceId, controller),
+            catalog);
+
+        CardInstanceState source = result.GetCard(sourceId);
+        Assert.Equal(removedZone, result.GetZone(source.ZoneId).Kind);
+        Assert.True(source.FaceUp);
+        Assert.DoesNotContain(result.RulesState!.Counters, counter => counter.CardId == sourceId);
+        Assert.Equal(2, result.EventSequence);
+
+        string json = EngineJson.Serialize(result);
+        GameState restored = EngineJson.DeserializeState(json, catalog);
+        Assert.Equal(json, EngineJson.Serialize(restored));
+        Assert.Equal(DeterministicHash.ForState(result), DeterministicHash.ForState(restored));
+    }
+
     [Fact]
     public void HostedCreditInstructionsLoadPlaceTakeAndTakeAll()
     {
