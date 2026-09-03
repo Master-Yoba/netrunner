@@ -728,12 +728,12 @@ public static partial class GameEngine
 
         if (source.ZoneId != frame.SourceZoneId.Value)
         {
-            bool abilitySelfTrash = abilityDeclaration is not null
-                && abilityDeclaration.Costs.Any(static cost => cost.Kind == BehaviorCostKind.TrashSelf);
+            bool selfTrash = abilityDeclaration is not null
+                ? abilityDeclaration.Costs.Any(static cost => cost.Kind == BehaviorCostKind.TrashSelf)
+                : definition.Costs.Any(static cost => cost.Kind == BehaviorCostKind.TrashSelf);
             ZoneState currentSourceZone = working.Zones.SingleOrDefault(zone => zone.Id == source.ZoneId)
                 ?? throw new ResolutionFailureException("Behavior source card current zone no longer exists.");
-            if (!abilitySelfTrash
-                || frame.AbilityKey is null
+            if (!selfTrash
                 || frame.Stage != BehaviorResolutionStage.Execute
                 || !IsAbilityTrashZone(currentSourceZone, source))
             {
@@ -793,6 +793,7 @@ public static partial class GameEngine
     {
         CardInstanceState source = GetCard(working, frame.SourceCardId);
         PlayerId payer = GetPlayer(working, source.OwnerSide).Id;
+        bool deferredCounterCleanup = false;
         foreach (BehaviorCost cost in definition.Costs)
         {
             switch (cost.Kind)
@@ -813,10 +814,16 @@ public static partial class GameEngine
                 case BehaviorCostKind.TrashSelf:
                     MoveBehaviorCardToTrash(working, source);
                     source = GetCard(working, frame.SourceCardId);
+                    deferredCounterCleanup = true;
                     break;
                 default:
                     throw new ResolutionFailureException($"Behavior cost '{cost.Kind}' is not executable.");
             }
+        }
+
+        if (deferredCounterCleanup)
+        {
+            ClearCardCounters(working, frame.SourceCardId);
         }
     }
 
@@ -2528,7 +2535,10 @@ public static partial class GameEngine
             working,
             card.OwnerSide == PlayerSide.Corp ? BehaviorZone.Archives : BehaviorZone.Heap,
             card.OwnerSide);
-        MoveCard(working, card, source, destination);
+        // Cost payment may declare TrashSelf before a counter or hosted-credit
+        // cost. Keep the card's counters available until the complete payment
+        // loop has run; the caller clears them at that boundary.
+        MoveCard(working, card, source, destination, cleanupCounters: false);
         if (card.OwnerSide == PlayerSide.Runner
             && source.Kind == ZoneKind.RunnerRig
             && working.RulesState?.Programs.Any(program => program.CardId == card.Id) == true)

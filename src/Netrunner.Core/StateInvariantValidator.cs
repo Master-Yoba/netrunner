@@ -2618,29 +2618,31 @@ public static class StateInvariantValidator
                                 Add(violations, "resolution.behavior-source-location-mismatch", path, "Behavior source location kind does not match the captured invocation context.");
                             }
 
-                            bool abilitySelfTrash = behaviorFrame.AbilityKey is not null
-                                && behaviorCatalog.TryGet(behaviorFrame.DefinitionId, out CardBehaviorDefinition? sourceDefinition)
-                                && sourceDefinition.PaidAbilities
-                                    .SingleOrDefault(ability => string.Equals(
-                                        ability.Key,
-                                        behaviorFrame.AbilityKey,
-                                        StringComparison.Ordinal))?.Costs
-                                    .Any(cost => cost.Kind == BehaviorCostKind.TrashSelf) == true;
+                            bool selfTrash = behaviorCatalog.TryGet(
+                                    behaviorFrame.DefinitionId,
+                                    out CardBehaviorDefinition? sourceDefinition)
+                                && (behaviorFrame.AbilityKey is not null
+                                    ? sourceDefinition.PaidAbilities
+                                        .SingleOrDefault(ability => string.Equals(
+                                            ability.Key,
+                                            behaviorFrame.AbilityKey,
+                                            StringComparison.Ordinal))?.Costs
+                                        .Any(cost => cost.Kind == BehaviorCostKind.TrashSelf) == true
+                                    : sourceDefinition.Costs.Any(cost => cost.Kind == BehaviorCostKind.TrashSelf));
                             CardInstanceState? sourceCard = cardIds.Contains(behaviorFrame.SourceCardId)
                                 ? state.Cards.Single(card => card.Id == behaviorFrame.SourceCardId)
                                 : null;
                             ZoneState? currentSourceZone = sourceCard is null
                                 ? null
                                 : state.Zones.FirstOrDefault(zone => zone?.Id == sourceCard.ZoneId);
-                            bool movedAfterAbilityPayment = abilitySelfTrash
-                                && behaviorFrame.AbilityKey is not null
+                            bool movedAfterPayment = selfTrash
                                 && behaviorFrame.Stage == BehaviorResolutionStage.Execute
                                 && currentSourceZone is not null
                                 && (currentSourceZone.Kind == ZoneKind.RunnerHeap
                                     || currentSourceZone.Kind == ZoneKind.CorpDiscard);
                             if (sourceCard is not null
                                 && sourceCard.ZoneId != sourceZone.Id
-                                && !movedAfterAbilityPayment)
+                                && !movedAfterPayment)
                             {
                                 Add(violations, "resolution.behavior-source-location-mismatch", $"{path}.sourceZoneId", "Behavior source card no longer occupies its captured invocation location.");
                             }

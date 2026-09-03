@@ -2820,3 +2820,25 @@ errors; runtime action expansion and full verification remain pending.
   `git diff --check`. The direct M2 proof remains byte-stable at the schema-3
   hashes above with 32 replay-verified checkpoints. Observation, leave-play
   cleanup, empty-pool follow-up, and card bindings remain unclaimed.
+
+### 2026-09-03 — Checkpoint B2c counter observation and leave-play cleanup accepted
+
+- Luna Max completed the viewer boundary for ENG-408. Every visible card path
+  conditionally projects a deterministic counter list containing the stable
+  name, Generic/Virus/HostedCredit purpose, count, and hosted spend
+  restriction. Faceup/public cards expose the same pool to both viewers; a
+  hidden HQ/grip/deck/stack/ICE/Archives card exposes its counters only in its
+  owner's private card view. Cards without counters omit the property, keeping
+  the pinned pre-4.3 observation JSON byte-identical.
+- The single card-movement boundary now removes every typed counter when an
+  installed card leaves Runner Rig, a server root, or a server ICE position.
+  Cost-driven self-trash temporarily defers this cleanup until the complete
+  declared cost loop finishes, so TrashSelf may precede generic-counter or
+  hosted-credit debits without creating a partial-payment failure. The same
+  lifecycle exception is invariant-checked for both ordinary behavior and
+  paid-ability children; no counter survives the completed move.
+- Root independently passed 75/75 focused observation/effect/behavior/ability
+  tests, complete Core 550/550, the zero-warning solution build, Core
+  formatting, and `git diff --check`. The direct M2 proof retains the schema-3
+  initial/final/event hashes and all 32 replay-verified checkpoints. Triggered
+  empty-pool follow-up and card bindings remain unclaimed.

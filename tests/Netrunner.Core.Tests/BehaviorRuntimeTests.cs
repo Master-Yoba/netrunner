@@ -45,6 +45,35 @@ public sealed class BehaviorRuntimeTests
     }
 
     [Fact]
+    public void BehaviorTrashSelfDefersCounterCleanupUntilItsEntireCostLoopFinishes()
+    {
+        CardDefinitionId definitionId = new("test:runtime-trash-first-behavior-cost");
+        CardInstanceId sourceId = new("card:runtime-trash-first-behavior-cost");
+        BehaviorCatalog catalog = Catalog(new CardBehaviorDefinition(
+            definitionId,
+            PlayerSide.Runner,
+            costs:
+            [
+                new BehaviorCost(BehaviorCostKind.TrashSelf),
+                new BehaviorCost(BehaviorCostKind.Counter, 1, counterName: "charge"),
+            ],
+            instructions: [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]));
+        GameState state = WithCounters(
+            CreateState(catalog, (sourceId, definitionId, ZoneKind.RunnerRig, PlayerSide.Runner)),
+            new CardCounterState(sourceId, "charge", 1));
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+
+        GameState result = GameEngine.BeginBehaviorForTesting(
+            state,
+            new BehaviorInvocationContext(sourceId, runner),
+            catalog);
+
+        Assert.Equal(ZoneKind.RunnerHeap, result.GetZone(result.GetCard(sourceId).ZoneId).Kind);
+        Assert.DoesNotContain(result.RulesState!.Counters, counter => counter.CardId == sourceId);
+        Assert.Empty(result.ResolutionStack);
+    }
+
+    [Fact]
     public void HostedCreditInstructionsLoadPlaceTakeAndTakeAll()
     {
         CardDefinitionId definitionId = new("test:runtime-hosted-credit");

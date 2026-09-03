@@ -65,6 +65,84 @@ public sealed class ObservationTests
     }
 
     [Fact]
+    public void TypedCountersFollowCardVisibilityAndUseDeterministicOptionalProjection()
+    {
+        (GameState state, FixtureIds ids) = BuildState();
+        state = WithCounters(
+            state,
+            [
+                // Deliberately reverse the insertion order: observation order
+                // is canonicalized by counter name.
+                new CardCounterState(ids.RunnerProgram, "virus", 1),
+                new CardCounterState(ids.RunnerProgram, "charge", 2),
+                CardCounterState.CreateHostedCredit(ids.CorpRootAsset, 3, HostedCreditSpendRestriction.AnyCost),
+                new CardCounterState(ids.CorpHandOne, "corp-secret", 2),
+                new CardCounterState(ids.RunnerGripOne, "runner-secret", 4),
+            ]);
+
+        Observation runnerView = ObservationBuilder.Build(state, PlayerSide.Runner);
+        Observation corpView = ObservationBuilder.Build(state, PlayerSide.Corp);
+
+        Dictionary<string, object?> runnerProgram = Assert.IsType<Dictionary<string, object?>>(
+            ((IReadOnlyList<object?>)runnerView.PublicState["runnerRig"]!).Single());
+        IReadOnlyList<object?> runnerCounters = Assert.IsAssignableFrom<IReadOnlyList<object?>>(
+            runnerProgram["counters"]);
+        Assert.Equal(["charge", "virus"], runnerCounters
+            .Select(counter => (string)((Dictionary<string, object?>)counter!)!["counterName"]!)
+            .ToArray());
+        Dictionary<string, object?> charge = (Dictionary<string, object?>)runnerCounters[0]!;
+        Assert.Equal(CardCounterPurpose.Generic, charge["purpose"]);
+        Assert.Equal(2, charge["count"]);
+        Assert.Null(charge["spendRestriction"]);
+
+        // The same public card view, including its hosted-credit restriction,
+        // is visible to both viewers.
+        foreach (Observation view in new[] { runnerView, corpView })
+        {
+            Dictionary<string, object?> root = RootEntry(view, 0, 0)!;
+            Dictionary<string, object?> hosted = Assert.IsType<Dictionary<string, object?>>(
+                Assert.Single(Assert.IsAssignableFrom<IReadOnlyList<object?>>(root["counters"])));
+            Assert.Equal("credit", hosted["counterName"]);
+            Assert.Equal(CardCounterPurpose.HostedCredit, hosted["purpose"]);
+            Assert.Equal(3, hosted["count"]);
+            Assert.Equal(HostedCreditSpendRestriction.AnyCost, hosted["spendRestriction"]);
+        }
+
+        // The Corp owns the hidden hand card and sees its typed counter only
+        // in the Corp-private view. The Runner never receives its identity or
+        // the counter metadata.
+        Dictionary<string, object?> corpHidden = Assert.IsType<Dictionary<string, object?>>(
+            ((IReadOnlyList<object?>)corpView.PrivateState["hand"]!).Single(
+                value => ((Dictionary<string, object?>)value!)!["id"]!.Equals(ids.CorpHandOne.Value)));
+        Dictionary<string, object?> corpCounter = Assert.IsType<Dictionary<string, object?>>(
+            Assert.Single(Assert.IsAssignableFrom<IReadOnlyList<object?>>(corpHidden["counters"])));
+        Assert.Equal("corp-secret", corpCounter["counterName"]);
+        string runnerJson = EngineJson.Serialize(runnerView);
+        Assert.DoesNotContain(ids.CorpHandOne.Value, runnerJson);
+        Assert.DoesNotContain("corp-secret", runnerJson);
+
+        // Likewise the Runner's hidden grip counter is private to the Runner.
+        Dictionary<string, object?> runnerHidden = Assert.IsType<Dictionary<string, object?>>(
+            ((IReadOnlyList<object?>)runnerView.PrivateState["grip"]!).Single());
+        Assert.Equal("runner-secret", ((Dictionary<string, object?>)Assert.Single(
+            Assert.IsAssignableFrom<IReadOnlyList<object?>>(runnerHidden["counters"]))!)["counterName"]);
+        string corpJson = EngineJson.Serialize(corpView);
+        Assert.DoesNotContain(ids.RunnerGripOne.Value, corpJson);
+        Assert.DoesNotContain("runner-secret", corpJson);
+    }
+
+    [Fact]
+    public void CardsWithoutTypedCountersRetainThePinnedObservationShape()
+    {
+        (GameState state, _) = BuildState();
+
+        // The existing exact golden is also the regression assertion that the
+        // optional counters key is omitted for every zero-counter card.
+        Assert.Equal(Goldens.BeforeRunner, EngineJson.Serialize(ObservationBuilder.Build(state, PlayerSide.Runner)));
+        Assert.Equal(Goldens.BeforeCorp, EngineJson.Serialize(ObservationBuilder.Build(state, PlayerSide.Corp)));
+    }
+
+    [Fact]
     public void FacedownCorpArchivesCardIsVisibleToTheCorpOnly()
     {
         // CR 26.03 4.4.6c: facedown cards in Archives are visible only to
@@ -530,7 +608,8 @@ public sealed class ObservationTests
         bool revealArchivesFacedown = false,
         bool rootAssetFaceUp = true,
         RunState? run = null,
-        PendingDecision? pending = null)
+        PendingDecision? pending = null,
+        IReadOnlyList<CardCounterState>? counters = null)
     {
         StableIdAllocator allocator = new();
         GameId gameId = allocator.NextGameId();
@@ -658,7 +737,12 @@ public sealed class ObservationTests
                 : [new RunTimingFrame(run.Id, run.Step)],
             // A pending decision must carry the state's current revision.
             decisionRevision: pending?.Revision ?? 0,
-            pendingDecision: pending);
+            pendingDecision: pending,
+            rulesState: counters is null
+                ? null
+                : new RulesState(
+                    [new PlayerRulesState(corp), new PlayerRulesState(runner)],
+                    counters: counters));
 
         var ids = new FixtureIds(
             corp,
@@ -679,6 +763,37 @@ public sealed class ObservationTests
             program);
         return (state, ids);
     }
+
+    private static GameState WithCounters(
+        GameState state,
+        IReadOnlyList<CardCounterState> counters) =>
+        new(
+            state.SchemaVersion,
+            state.GameId,
+            state.RulesVersion,
+            state.CardDataVersion,
+            state.Players,
+            state.Cards,
+            state.Zones,
+            state.Servers,
+            state.Turn,
+            state.Outcome,
+            state.RandomState,
+            state.Allocator,
+            state.DecisionRevision,
+            state.EventSequence,
+            state.ResolutionStack,
+            state.PendingDecision,
+            state.ActionSequence,
+            state.InitialSeed,
+            state.RunState,
+            new RulesState(
+                state.Players.Select(player => new PlayerRulesState(player.Id)).ToArray(),
+                counters: counters),
+            state.BehaviorRegistryVersion,
+            state.BehaviorCatalogFingerprint,
+            state.RuntimeCardCatalogVersion,
+            state.RuntimeCardCatalogFingerprint);
 
     private static class Goldens
     {

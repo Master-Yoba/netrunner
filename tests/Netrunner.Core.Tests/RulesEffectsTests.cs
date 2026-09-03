@@ -221,6 +221,42 @@ public sealed class RulesEffectsTests
     }
 
     [Fact]
+    public void LeavingInstalledPlayCleansEveryTypedCounterOnTheCard()
+    {
+        Fixture fixture = CreateFixture(
+            780,
+            withRules: true,
+            new Placement("countered-installed", PlayerSide.Runner, ZoneKind.RunnerRig));
+        CardInstanceId cardId = fixture.Cards["countered-installed"];
+        RulesState defaults = fixture.State.RulesState!;
+        GameState seeded = Rebuild(
+            fixture.State,
+            rulesState: new RulesState(
+                defaults.Version,
+                defaults.Players,
+                defaults.Programs,
+                [
+                    new CardCounterState(cardId, "charge", 2),
+                    new CardCounterState(cardId, "virus", 3),
+                    CardCounterState.CreateHostedCredit(cardId, 4, HostedCreditSpendRestriction.AnyCost),
+                ],
+                defaults.LingeringEffects,
+                defaults.Triggers,
+                defaults.Interrupts));
+
+        GameState result = GameEngine.ResolveEffects(
+            seeded,
+            fixture.Corp,
+            new CostBundle(),
+            new EffectBundle(new MoveCardEffect(cardId, seeded.GetZone(ZoneKind.RunnerHeap).Id)));
+
+        Assert.Equal(ZoneKind.RunnerHeap, result.GetZone(result.GetCard(cardId).ZoneId).Kind);
+        Assert.DoesNotContain(result.RulesState!.Counters, counter => counter.CardId == cardId);
+        Assert.True(StateInvariantValidator.TryValidate(result, out IReadOnlyList<StateInvariantViolation> violations),
+            string.Join(" | ", violations.Select(violation => violation.ToString())));
+    }
+
+    [Fact]
     public void CountersSupportAddRemoveUnderflowAndGlobalVirusPurge()
     {
         Fixture fixture = CreateFixture(

@@ -133,11 +133,11 @@ public static class ObservationBuilder
                 ["runnerGrip"] = ZoneCount(state, ZoneKind.RunnerGrip),
                 ["runnerStack"] = ZoneCount(state, ZoneKind.RunnerStack),
             },
-            ["corpDiscard"] = ZoneCards(state, ZoneKind.CorpDiscard).Select(card => CardView(card)).ToArray(),
-            ["runnerHeap"] = ZoneCards(state, ZoneKind.RunnerHeap).Select(card => CardView(card)).ToArray(),
-            ["runnerRig"] = ZoneCards(state, ZoneKind.RunnerRig).Select(card => CardView(card)).ToArray(),
-            ["corpScore"] = ZoneCards(state, ZoneKind.CorpScore).Select(card => CardView(card)).ToArray(),
-            ["runnerScore"] = ZoneCards(state, ZoneKind.RunnerScore).Select(card => CardView(card)).ToArray(),
+            ["corpDiscard"] = ZoneCards(state, ZoneKind.CorpDiscard).Select(card => CardView(state, card)).ToArray(),
+            ["runnerHeap"] = ZoneCards(state, ZoneKind.RunnerHeap).Select(card => CardView(state, card)).ToArray(),
+            ["runnerRig"] = ZoneCards(state, ZoneKind.RunnerRig).Select(card => CardView(state, card)).ToArray(),
+            ["corpScore"] = ZoneCards(state, ZoneKind.CorpScore).Select(card => CardView(state, card)).ToArray(),
+            ["runnerScore"] = ZoneCards(state, ZoneKind.RunnerScore).Select(card => CardView(state, card)).ToArray(),
         };
 
         // Real CR turns carry an explicit step/facts projection. Keep these
@@ -164,7 +164,7 @@ public static class ObservationBuilder
         if (state.Zones.Any(zone => zone.Kind == ZoneKind.RunnerPlayArea && zone.ServerId is null))
         {
             publicState["runnerPlayArea"] = ZoneCards(state, ZoneKind.RunnerPlayArea)
-                .Select(card => CardView(card))
+                .Select(card => CardView(state, card))
                 .ToArray();
         }
 
@@ -174,7 +174,7 @@ public static class ObservationBuilder
         if (state.Zones.Any(zone => zone.Kind == ZoneKind.CorpPlayArea && zone.ServerId is null))
         {
             publicState["corpPlayArea"] = ZoneCards(state, ZoneKind.CorpPlayArea)
-                .Select(card => CardView(card))
+                .Select(card => CardView(state, card))
                 .ToArray();
         }
 
@@ -229,7 +229,7 @@ public static class ObservationBuilder
         foreach (CardInstanceId iceCardId in iceZone.CardIds)
         {
             CardInstanceState iceCard = state.GetCard(iceCardId);
-            ice.Add(IsVisibleTo(iceCard, iceZone, viewer, accessVisible) ? CardView(iceCard) : null);
+            ice.Add(IsVisibleTo(iceCard, iceZone, viewer, accessVisible) ? CardView(state, iceCard) : null);
         }
 
         return new Dictionary<string, object?>
@@ -240,7 +240,7 @@ public static class ObservationBuilder
             ["root"] = rootZone.CardIds
                 .Select(state.GetCard)
                 .Select(card => IsVisibleTo(card, rootZone, viewer, accessVisible)
-                    ? CardView(card)
+                    ? CardView(state, card)
                     : null)
                 .ToArray(),
         };
@@ -343,7 +343,7 @@ public static class ObservationBuilder
                     CardInstanceState iceCard = state.GetCard(iceCardId);
                     if (iceCard.OwnerSide == PlayerSide.Corp && !iceCard.FaceUp)
                     {
-                        faceDownIce.Add(PrivateCardView(iceCard));
+                        faceDownIce.Add(PrivateCardView(state, iceCard));
                     }
                 }
             }
@@ -361,15 +361,15 @@ public static class ObservationBuilder
                     CardInstanceState discardCard = state.GetCard(discardCardId);
                     if (discardCard.OwnerSide == PlayerSide.Corp && !discardCard.FaceUp)
                     {
-                        faceDownArchives.Add(PrivateCardView(discardCard));
+                        faceDownArchives.Add(PrivateCardView(state, discardCard));
                     }
                 }
             }
 
             return new Dictionary<string, object?>
             {
-                ["hand"] = PrivateZoneCards(state, ZoneKind.CorpHand).Select(card => PrivateCardView(card)).ToArray(),
-                ["deck"] = PrivateZoneCards(state, ZoneKind.CorpDeck).Select(card => PrivateCardView(card)).ToArray(),
+                ["hand"] = PrivateZoneCards(state, ZoneKind.CorpHand).Select(card => PrivateCardView(state, card)).ToArray(),
+                ["deck"] = PrivateZoneCards(state, ZoneKind.CorpDeck).Select(card => PrivateCardView(state, card)).ToArray(),
                 ["faceDownIce"] = faceDownIce,
                 ["faceDownArchives"] = faceDownArchives,
             };
@@ -377,8 +377,8 @@ public static class ObservationBuilder
 
         return new Dictionary<string, object?>
         {
-            ["grip"] = PrivateZoneCards(state, ZoneKind.RunnerGrip).Select(card => PrivateCardView(card)).ToArray(),
-            ["stack"] = PrivateZoneCards(state, ZoneKind.RunnerStack).Select(card => PrivateCardView(card)).ToArray(),
+            ["grip"] = PrivateZoneCards(state, ZoneKind.RunnerGrip).Select(card => PrivateCardView(state, card)).ToArray(),
+            ["stack"] = PrivateZoneCards(state, ZoneKind.RunnerStack).Select(card => PrivateCardView(state, card)).ToArray(),
         };
     }
 
@@ -428,19 +428,58 @@ public static class ObservationBuilder
         return view;
     }
 
-    private static Dictionary<string, object?> CardView(CardInstanceState card) => new()
+    private static Dictionary<string, object?> CardView(GameState state, CardInstanceState card)
     {
-        ["id"] = card.Id.Value,
-        ["definitionId"] = card.DefinitionId.Value,
-        ["rezzed"] = card.Rezzed,
-        ["advancementCounters"] = card.AdvancementCounters,
-    };
+        var view = new Dictionary<string, object?>
+        {
+            ["id"] = card.Id.Value,
+            ["definitionId"] = card.DefinitionId.Value,
+            ["rezzed"] = card.Rezzed,
+            ["advancementCounters"] = card.AdvancementCounters,
+        };
+        AddCounters(view, state, card.Id);
+        return view;
+    }
 
-    private static Dictionary<string, object?> PrivateCardView(CardInstanceState card) => new()
+    private static Dictionary<string, object?> PrivateCardView(GameState state, CardInstanceState card)
     {
-        ["id"] = card.Id.Value,
-        ["definitionId"] = card.DefinitionId.Value,
-    };
+        var view = new Dictionary<string, object?>
+        {
+            ["id"] = card.Id.Value,
+            ["definitionId"] = card.DefinitionId.Value,
+        };
+        AddCounters(view, state, card.Id);
+        return view;
+    }
+
+    /// <summary>
+    /// Adds the optional typed-counter projection without changing the shape
+    /// of cards that have no rules counters. Counter order is canonicalized by
+    /// name so observations do not depend on reducer insertion order.
+    /// </summary>
+    private static void AddCounters(
+        Dictionary<string, object?> view,
+        GameState state,
+        CardInstanceId cardId)
+    {
+        CardCounterState[] counters = state.RulesState?.Counters
+            .Where(counter => counter.CardId == cardId)
+            .OrderBy(counter => counter.CounterName, StringComparer.Ordinal)
+            .ToArray()
+            ?? [];
+        if (counters.Length == 0)
+        {
+            return;
+        }
+
+        view["counters"] = counters.Select(counter => (object?)new Dictionary<string, object?>
+        {
+            ["counterName"] = counter.CounterName,
+            ["purpose"] = counter.Purpose,
+            ["count"] = counter.Count,
+            ["spendRestriction"] = counter.SpendRestriction,
+        }).ToArray();
+    }
 
     /// <summary>
     /// The card view for a run-referenced card (candidates, ICE, sources):
@@ -452,7 +491,7 @@ public static class ObservationBuilder
     {
         CardInstanceState card = state.GetCard(cardId);
         ZoneState zone = state.GetZone(card.ZoneId);
-        return IsVisibleTo(card, zone, viewer, accessVisible) ? CardView(card) : null;
+        return IsVisibleTo(card, zone, viewer, accessVisible) ? CardView(state, card) : null;
     }
 
     private static int ZoneCount(GameState state, ZoneKind kind)

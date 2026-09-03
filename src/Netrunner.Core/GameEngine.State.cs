@@ -12,7 +12,8 @@ public static partial class GameEngine
         CardInstanceState card,
         ZoneState source,
         ZoneState destination,
-        bool emit = true)
+        bool emit = true,
+        bool cleanupCounters = true)
     {
         if (card.ZoneId != source.Id || !source.CardIds.Contains(card.Id))
         {
@@ -50,9 +51,43 @@ public static partial class GameEngine
             entersRunnerHeap || card.FaceUp,
             card.Rezzed,
             card.AdvancementCounters));
+        if (cleanupCounters
+            && IsInstalledZone(source.Kind)
+            && !IsInstalledZone(destination.Kind))
+        {
+            ClearCardCounters(working, card.Id);
+        }
+
         if (emit)
         {
             Emit(working, EngineEventKinds.CardMoved, new CardMovedEventPayload(card.Id, source.Id, destination.Id));
+        }
+    }
+
+    private static bool IsInstalledZone(ZoneKind kind) =>
+        kind is ZoneKind.RunnerRig or ZoneKind.ServerIce or ZoneKind.ServerRoot;
+
+    /// <summary>
+    /// Removes every typed counter attached to a card after it leaves play.
+    /// This is deliberately silent: the counter entries are derived state
+    /// owned by the card, and the enclosing card-move event is the public
+    /// movement boundary. Cost payment can opt out temporarily and invokes
+    /// this helper after its complete declaration-order loop.
+    /// </summary>
+    private static void ClearCardCounters(WorkingState working, CardInstanceId cardId)
+    {
+        RulesState? rules = working.RulesState;
+        if (rules is null)
+        {
+            return;
+        }
+
+        CardCounterState[] remaining = rules.Counters
+            .Where(counter => counter.CardId != cardId)
+            .ToArray();
+        if (remaining.Length != rules.Counters.Count)
+        {
+            SetRulesState(working, counters: remaining);
         }
     }
 

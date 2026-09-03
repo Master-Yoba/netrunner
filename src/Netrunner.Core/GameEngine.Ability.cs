@@ -757,6 +757,7 @@ public static partial class GameEngine
     private static void PayAbilityCosts(WorkingState working, AbilityFrame frame)
     {
         CardInstanceState source = GetCard(working, frame.SourceCardId);
+        bool deferredCounterCleanup = false;
         foreach (BehaviorCost cost in frame.Costs)
         {
             switch (cost.Kind)
@@ -797,10 +798,16 @@ public static partial class GameEngine
                 case BehaviorCostKind.TrashSelf:
                     MoveBehaviorCardToTrash(working, source);
                     source = GetCard(working, frame.SourceCardId);
+                    deferredCounterCleanup = true;
                     break;
                 default:
                     throw new ResolutionFailureException($"Ability cost '{cost.Kind}' is not executable.");
             }
+        }
+
+        if (deferredCounterCleanup)
+        {
+            ClearCardCounters(working, frame.SourceCardId);
         }
     }
 

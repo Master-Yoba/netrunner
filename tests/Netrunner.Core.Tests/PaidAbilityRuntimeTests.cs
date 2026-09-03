@@ -414,6 +414,64 @@ public sealed class PaidAbilityRuntimeTests
     }
 
     [Fact]
+    public void TrashSelfMayPrecedeCounterAndHostedCreditCostsUntilPaymentCompletes()
+    {
+        CardDefinitionId definitionId = new("test:runtime-trash-first-costs");
+        CardInstanceId sourceId = new("card:runtime-trash-first-costs");
+        BehaviorPaidAbility ability = Ability(
+            "ability:trash-first-costs",
+            BehaviorAbilityTiming.AnyPaidWindow,
+            BehaviorAbilityActivation.PaidAbility,
+            [
+                new BehaviorCost(BehaviorCostKind.TrashSelf),
+                new BehaviorCost(BehaviorCostKind.Counter, 1, counterName: "charge"),
+                new BehaviorCost(BehaviorCostKind.HostedCredits, 1),
+            ],
+            [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]);
+        BehaviorCatalog catalog = Catalog(definitionId, PlayerSide.Runner, [ability]);
+        GameState state = BuildRunnerState(
+            catalog,
+            definitionId,
+            sourceId,
+            credits: 5,
+            clicks: 4,
+            counters:
+            [
+                new CardCounterState(sourceId, "charge", 2),
+                CardCounterState.CreateHostedCredit(sourceId, 2, HostedCreditSpendRestriction.AbilityCost),
+            ]);
+        GameState prompt = BeginPaidPrompt(state, catalog);
+        LegalAction action = Assert.Single(
+            prompt.PendingDecision!.LegalActions,
+            candidate => candidate.Kind == ActionKind.UseAbility);
+
+        ApplyResult result = GameEngine.Apply(
+            prompt,
+            new ActionSubmission(
+                prompt.PendingDecision.Owner,
+                prompt.PendingDecision.Id,
+                prompt.PendingDecision.Revision,
+                action.Id),
+            catalog);
+
+        Assert.True(result.Accepted, result.Rejection?.Message);
+        Assert.Equal(ZoneKind.RunnerHeap, result.State.GetZone(result.State.GetCard(sourceId).ZoneId).Kind);
+        Assert.DoesNotContain(result.State.RulesState!.Counters, counter => counter.CardId == sourceId);
+        Assert.Equal(
+            [EngineEventKinds.CardMoved, EngineEventKinds.CounterAdjusted, EngineEventKinds.HostedCreditPoolChanged],
+            result.Events
+                .Where(@event => @event.Kind is EngineEventKinds.CardMoved
+                    or EngineEventKinds.CounterAdjusted
+                    or EngineEventKinds.HostedCreditPoolChanged)
+                .Select(@event => @event.Kind));
+        HostedCreditPoolChangedEventPayload hosted = Assert.IsType<HostedCreditPoolChangedEventPayload>(
+            result.Events.Single(@event => @event.Kind == EngineEventKinds.HostedCreditPoolChanged).Payload);
+        Assert.Equal(-1, hosted.Delta);
+        Assert.Equal(1, hosted.CountAfter);
+        Assert.False(hosted.Emptied);
+    }
+
+    [Fact]
     public void StaleInsufficientCreditsAreRejectedAtomically()
     {
         CardDefinitionId definitionId = new("test:runtime-stale");
