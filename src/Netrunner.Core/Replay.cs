@@ -12,7 +12,7 @@ public static class EngineArtifactKinds
 public static class EngineCompatibility
 {
     public const int ArtifactSchemaVersion = 1;
-    public const int StateSchemaVersion = 2;
+    public const int StateSchemaVersion = 3;
     public const string RulesVersion = "26.03";
     public const string CardDataVersion = "fixture-1";
     /// <summary>

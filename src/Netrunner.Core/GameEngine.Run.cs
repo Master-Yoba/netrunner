@@ -1898,6 +1898,8 @@ public static partial class GameEngine
             }
         }
 
+        AddAbilityActions(working, actions);
+
         YieldRunDecision(working, GetPlayer(working, priority.PriorityHolder).Id, prompt, actions);
     }
 

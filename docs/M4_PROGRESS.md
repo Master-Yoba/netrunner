@@ -2643,3 +2643,35 @@ errors; runtime action expansion and full verification remain pending.
   `a61f20c7...` / `950d1b0d...` / `d20cdef9...`, 32 checkpoints, and verified
   replay. Existing definition fingerprints are unchanged when no ability or
   additional-cost field is present.
+
+### 2026-09-03 — Checkpoint A2a ability materialization and schema 3 accepted
+
+- Luna Max implemented the first runtime vertical: Core now discovers paid
+  abilities only on active installed sources (faceup Runner Rig cards and
+  faceup/rezzed Corp server cards), matches click actions to the real action
+  window and paid abilities to the current turn/run priority holder, evaluates
+  typed conditions and aggregate affordability, and issues exact frozen
+  `UseAbility` payloads in physical zone/card/declaration order. Declarations
+  needing target selection or an unregistered additional-cost reducer remain
+  deliberately fail-closed until their later checkpoint.
+- Root rejected the first pass because it normalized duplicate usage records,
+  checked repeated counter costs independently, made `Encountering` false in
+  the encounter paid window, and did not prove a legal-action bijection. The
+  accepted revision preserves forged duplicates for invariant rejection,
+  aggregates all wallet/click/tag/named-counter costs with checked arithmetic,
+  recognizes an initialized encounter, rejects duplicate self-trash costs,
+  and requires an exact missing/extra/duplicate/payload-checked ability action
+  set for turn actions, turn timing, and run timing.
+- D-416 is applied at this first Slice 4.3 state expansion: engine state schema
+  moved from 2 to 3 and `TurnFactsState` now serializes canonical physical
+  source/ability usage keys. A new side-turn fact aggregate starts empty;
+  mutation is deferred to the execution checkpoint. Replay artifact schema
+  remains 1. The M2 semantic proof is unchanged but state hashes were
+  deliberately re-pinned: initial `faf4e631...`, final `c882eb43...`, events
+  `d20cdef9...`, 32 checkpoints, replay verified.
+- Root independently passed the zero-warning solution build, Core formatting,
+  `git diff --check`, focused ability schema/materialization tests 17/17,
+  complete Core 506/506, and focused CLI/M2 regression tests 32/32. Ability
+  consumption, cost mutation/checkpointing, target choices, and child behavior
+  execution are explicitly not part of A2a and remain required before ENG-407
+  is complete.

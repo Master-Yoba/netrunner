@@ -240,6 +240,13 @@ public sealed class BehaviorPaidAbility : IEquatable<BehaviorPaidAbility>
                 nameof(Costs));
         }
 
+        if (Costs.Count(static cost => cost.Kind == BehaviorCostKind.TrashSelf) > 1)
+        {
+            throw new ArgumentException(
+                "An ability may not declare TrashSelf more than once.",
+                nameof(Costs));
+        }
+
         bool hasAccessTarget = Targets.Any(static target =>
             target.Kind == BehaviorTargetKind.AccessedCard);
         if (hasAccessTarget

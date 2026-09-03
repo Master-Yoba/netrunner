@@ -187,7 +187,7 @@ public sealed class TurnShellTests
         Assert.Equal(1, root.GetProperty("schemaVersion").GetInt32());
         Assert.Equal("SCN-400", root.GetProperty("scenarioId").GetString());
         Assert.Equal("ENG-401", root.GetProperty("scope").GetString());
-        Assert.Equal(2, root.GetProperty("engineStateSchemaVersion").GetInt32());
+        Assert.Equal(3, root.GetProperty("engineStateSchemaVersion").GetInt32());
         Assert.Contains("CR 26.03 5.6.1", root.GetProperty("citations").EnumerateArray().Select(value => value.GetString()));
         Assert.Contains("turn-timing-window-opened", root.GetProperty("requiredEvents").EnumerateArray().Select(value => value.GetString()));
         Assert.Contains("Jinteki.net", root.GetProperty("crossCheckNote").GetString(), StringComparison.Ordinal);

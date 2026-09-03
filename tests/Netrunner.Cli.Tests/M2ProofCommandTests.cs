@@ -11,10 +11,11 @@ public sealed class M2ProofCommandTests
     // by M2 rework U5 and kept stable by U6 — the agenda mid-access window
     // (pass only) and the automatic 7.2.3 steal emit the same event stream
     // as the pre-U6 player-steal action, see M2ProofTests); the same
-    // constants M2ProofTests pins for both policies. The M4-4.1 state schema
-    // migration intentionally changed state hashes; the event hash is stable.
+    // constants M2ProofTests pins for both policies. The Slice 4.3 A2 state
+    // schema migration (schema 2 -> 3) intentionally changed state hashes;
+    // the event hash is stable because the usage ledger is state-only.
     private const string ExpectedFinalStateHash =
-        "950d1b0d44da26d5ba9a688b83b7ac8202850d8337a8c0609eaf47269b1387ed";
+        "c882eb43f2057073cf138511ac0d5834c20822a7c4a490d8e73cd6c402c682c5";
     private const string ExpectedEventStreamHash =
         "d20cdef94e97ac928ca088e14952b65d2116fecda00485fff5c3b05e1b6e9e20";
 

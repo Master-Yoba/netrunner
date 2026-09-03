@@ -482,8 +482,9 @@ public sealed class PaidAbilityContractTests
     {
         BehaviorPaidAbility declaration = Ability(
             key: "ability:state",
-            activation: BehaviorAbilityActivation.ClickAction,
-            costs: [new BehaviorCost(BehaviorCostKind.Clicks)]);
+            timing: BehaviorAbilityTiming.AnyPaidWindow,
+            activation: BehaviorAbilityActivation.PaidAbility,
+            costs: [new BehaviorCost(BehaviorCostKind.Credits)]);
         BehaviorCatalog catalog = new BehaviorCatalogBuilder("test:ability-state-catalog")
             .Add(new CardBehaviorDefinition(DefinitionId, PlayerSide.Corp, paidAbilities: [declaration]))
             .Build();
@@ -503,11 +504,11 @@ public sealed class PaidAbilityContractTests
             new AbilityUsageSnapshot(declaration.UsageLimit, 0),
             catalog.Fingerprint,
             catalog.GetDefinitionFingerprint(DefinitionId),
-            hand.Id,
-            hand.Kind);
+            seed.Servers.Single(value => value.Kind == ServerKind.Headquarters).RootZoneId,
+            ZoneKind.ServerRoot);
 
         Assert.Empty(StateInvariantValidator.Collect(
-            BuildAbilityState(seed, action),
+            BuildAbilityState(seed, action, DecisionKind.TurnTiming, activePaidSource: true),
             catalog));
 
         AbilityActionParameters wrongShape = new(
@@ -524,7 +525,9 @@ public sealed class PaidAbilityContractTests
             action.SourceZoneId,
             action.SourceZoneKind);
         Assert.Contains(
-            StateInvariantValidator.Collect(BuildAbilityState(seed, wrongShape), catalog),
+            StateInvariantValidator.Collect(
+                BuildAbilityState(seed, wrongShape, DecisionKind.TurnTiming, activePaidSource: true),
+                catalog),
             violation => violation.Code == "decision.ability-costs-mismatch");
     }
 
@@ -537,17 +540,24 @@ public sealed class PaidAbilityContractTests
         DecisionKind decisionKind = DecisionKind.TurnAction,
         ActionParameters? parameters = null,
         string? behaviorRegistryVersion = null,
-        string? behaviorCatalogFingerprint = null)
+        string? behaviorCatalogFingerprint = null,
+        bool activePaidSource = false)
     {
         PlayerId owner = seed.Players.Single(player => player.Side == PlayerSide.Corp).Id;
         ZoneState hand = seed.GetZone(ZoneKind.CorpHand);
+        ServerState headquarters = seed.Servers.Single(value => value.Kind == ServerKind.Headquarters);
+        ZoneState sourceZone = activePaidSource
+            ? seed.GetZone(headquarters.RootZoneId)
+            : hand;
         CardInstanceState sourceCard = new(
             action.SourceCardId,
             action.DefinitionId,
-            hand.Id,
-            PlayerSide.Corp);
+            sourceZone.Id,
+            PlayerSide.Corp,
+            faceUp: activePaidSource,
+            rezzed: activePaidSource);
         ZoneState[] zones = seed.Zones
-            .Select(zone => zone.Id == hand.Id
+            .Select(zone => zone.Id == sourceZone.Id
                 ? new ZoneState(
                     zone.Id,
                     zone.Kind,
@@ -575,7 +585,16 @@ public sealed class PaidAbilityContractTests
                     "Purge viruses",
                     new PurgeVirusCountersParameters(RealGameRules.PurgeVirusCountersClickCost)),
             ]
-            : [ability];
+            : activePaidSource
+                ? [
+                    new LegalAction(
+                        new ActionId("action:ability-pass"),
+                        ActionKind.PassPriority,
+                        "Pass priority",
+                        new NoActionParameters()),
+                    ability,
+                ]
+                : [ability];
         PendingDecision pending = new(
             new DecisionId("decision:ability-state"),
             1,
@@ -583,6 +602,38 @@ public sealed class PaidAbilityContractTests
             decisionKind,
             "Choose an ability",
             actions);
+        TurnState turn = activePaidSource
+            ? new TurnState(
+                PlayerSide.Corp,
+                TurnPhase.Corp,
+                seed.Turn.TurnNumber,
+                TurnStep.CorpDraw,
+                new TurnHistoryState(
+                    1,
+                    new TurnFactsState(
+                        1,
+                        PlayerSide.Corp,
+                        seed.Turn.TurnNumber,
+                        3,
+                        0,
+                        turnBegan: true,
+                        mandatoryDrawPerformed: true,
+                        actionPhaseEnded: false,
+                        discardPhaseEnded: false),
+                    null,
+                    null,
+                    null))
+            : seed.Turn;
+        TurnFrame frame = activePaidSource
+            ? new TurnFrame(
+                1,
+                ResolutionBehaviorIds.Turn,
+                PlayerSide.Corp,
+                seed.Turn.TurnNumber,
+                TurnFrameStage.BeforeTurnPriority,
+                TurnPriorityWindowKind.PaidRezAndScore,
+                PlayerSide.Corp)
+            : new TurnFrame(PlayerSide.Corp, seed.Turn.TurnNumber, TurnFrameStage.AwaitingAction);
         return new GameState(
             seed.SchemaVersion,
             seed.GameId,
@@ -592,13 +643,13 @@ public sealed class PaidAbilityContractTests
             [sourceCard],
             zones,
             seed.Servers,
-            seed.Turn,
+            turn,
             seed.Outcome,
             seed.RandomState,
             seed.Allocator,
             decisionRevision: 1,
             eventSequence: seed.EventSequence,
-            resolutionStack: [new TurnFrame(PlayerSide.Corp, seed.Turn.TurnNumber, TurnFrameStage.AwaitingAction)],
+            resolutionStack: [frame],
             pendingDecision: pending,
             actionSequence: seed.ActionSequence,
             initialSeed: seed.InitialSeed,

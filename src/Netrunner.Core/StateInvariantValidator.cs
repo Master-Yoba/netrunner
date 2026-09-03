@@ -3898,7 +3898,7 @@ public static class StateInvariantValidator
                     or TurnFrameStage.DiscardPriority,
             } turnTiming)
         {
-            ValidateTurnTimingActions(state, runtimeCardCatalog, pending, turnTiming, path, violations);
+            ValidateTurnTimingActions(state, behaviorCatalog, runtimeCardCatalog, pending, turnTiming, path, violations);
         }
 
         if (pending.Kind == DecisionKind.TurnDiscard
@@ -5249,6 +5249,7 @@ public static class StateInvariantValidator
 
         var actual = new List<(ActionKind Kind, CardInstanceId? Target, int Quantity, int HostedCredits)>();
         var actualRuntimeRezes = new List<RezCardParameters>();
+        var actualAbilities = new List<AbilityActionParameters>();
         foreach (LegalAction? action in pending.LegalActions)
         {
             if (action is null)
@@ -5258,6 +5259,11 @@ public static class StateInvariantValidator
 
             if (action.Kind == ActionKind.UseAbility)
             {
+                if (action.Parameters is AbilityActionParameters ability)
+                {
+                    actualAbilities.Add(ability);
+                }
+
                 continue;
             }
 
@@ -5343,6 +5349,31 @@ public static class StateInvariantValidator
             extraCode: "run.extra-rez-action",
             duplicateCode: "run.duplicate-rez-action",
             costMismatchCode: "run.rez-cost-mismatch",
+            windowName: "Run timing");
+
+        IReadOnlyList<AbilityActionParameters> expectedAbilities = [];
+        try
+        {
+            expectedAbilities = GameEngine.MaterializeAbilityActionParameters(state, behaviorCatalog);
+        }
+        catch (Exception exception) when (exception is ResolutionFailureException
+            or InvalidOperationException
+            or KeyNotFoundException
+            or ArgumentException
+            or OverflowException)
+        {
+            Add(
+                violations,
+                "decision.ability-materialization-failed",
+                $"{path}.legalActions",
+                $"Run timing ability actions could not be materialized from the authoritative state: {exception.Message}");
+        }
+
+        ValidateAbilityActionBijection(
+            expectedAbilities,
+            actualAbilities,
+            path,
+            violations,
             windowName: "Run timing");
 
         if (pending.Owner != RunDecisionOwner(state, run))
@@ -6561,6 +6592,7 @@ public static class StateInvariantValidator
         var actualRemoveTagParameters = new List<RemoveTagParameters>();
         var actualTrashTaggedResourceParameters = new List<TrashTaggedResourceParameters>();
         var actualPurgeVirusCountersParameters = new List<PurgeVirusCountersParameters>();
+        var actualAbilityParameters = new List<AbilityActionParameters>();
         foreach (LegalAction? action in pending.LegalActions)
         {
             if (action is null)
@@ -6570,6 +6602,11 @@ public static class StateInvariantValidator
 
             if (action.Kind == ActionKind.UseAbility)
             {
+                if (action.Parameters is AbilityActionParameters ability)
+                {
+                    actualAbilityParameters.Add(ability);
+                }
+
                 continue;
             }
 
@@ -6658,6 +6695,23 @@ public static class StateInvariantValidator
         IReadOnlyList<RemoveTagParameters> expectedRemoveTags = [];
         IReadOnlyList<TrashTaggedResourceParameters> expectedTrashTaggedResources = [];
         IReadOnlyList<PurgeVirusCountersParameters> expectedPurgeVirusCounters = [];
+        IReadOnlyList<AbilityActionParameters> expectedAbilities = [];
+        try
+        {
+            expectedAbilities = GameEngine.MaterializeAbilityActionParameters(state, behaviorCatalog);
+        }
+        catch (Exception exception) when (exception is ResolutionFailureException
+            or InvalidOperationException
+            or KeyNotFoundException
+            or ArgumentException
+            or OverflowException)
+        {
+            Add(
+                violations,
+                "decision.ability-materialization-failed",
+                path + ".legalActions",
+                $"{frame.ActiveSide} turn ability actions could not be materialized from the authoritative state: {exception.Message}");
+        }
         if (runtimeCardCatalog is not null)
         {
             try
@@ -6962,6 +7016,13 @@ public static class StateInvariantValidator
             actualPurgeVirusCountersParameters,
             path,
             violations);
+
+        ValidateAbilityActionBijection(
+            expectedAbilities,
+            actualAbilityParameters,
+            path,
+            violations,
+            windowName: "Turn action");
     }
 
     private static void ValidateRemoveTagActionBijection(
@@ -7120,8 +7181,74 @@ public static class StateInvariantValidator
         }
     }
 
+    private static void ValidateAbilityActionBijection(
+        IReadOnlyList<AbilityActionParameters> expected,
+        List<AbilityActionParameters> actual,
+        string path,
+        List<StateInvariantViolation> violations,
+        string windowName)
+    {
+        if (actual.Count != expected.Count)
+        {
+            Add(
+                violations,
+                actual.Count < expected.Count
+                    ? "decision.missing-ability-action"
+                    : "decision.extra-ability-action",
+                $"{path}.legalActions",
+                $"{windowName} decision contains {actual.Count} ability action(s), expected {expected.Count}.");
+        }
+
+        for (int index = 0; index < actual.Count; index++)
+        {
+            AbilityActionParameters candidate = actual[index];
+            if (actual.Take(index).Any(previous => AbilityParametersMatch(previous, candidate)))
+            {
+                Add(
+                    violations,
+                    "decision.duplicate-ability-action",
+                    $"{path}.legalActions",
+                    "Ability actions must be semantically unique.");
+            }
+
+            AbilityActionParameters? sameIdentity = expected.FirstOrDefault(issued =>
+                issued.SourceCardId == candidate.SourceCardId
+                && string.Equals(issued.AbilityKey, candidate.AbilityKey, StringComparison.Ordinal));
+            if (sameIdentity is not null && !AbilityParametersMatch(candidate, sameIdentity))
+            {
+                Add(
+                    violations,
+                    "decision.ability-action-payload-mismatch",
+                    $"{path}.legalActions",
+                    "Ability action payload does not match the current materialized source, timing, costs, or usage snapshot.");
+            }
+
+            if (!expected.Any(issued => AbilityParametersMatch(candidate, issued)))
+            {
+                Add(
+                    violations,
+                    "decision.extra-ability-action",
+                    $"{path}.legalActions",
+                    "Decision contains an unmaterialized ability action.");
+            }
+        }
+
+        foreach (AbilityActionParameters issued in expected)
+        {
+            if (!actual.Any(candidate => AbilityParametersMatch(candidate, issued)))
+            {
+                Add(
+                    violations,
+                    "decision.missing-ability-action",
+                    $"{path}.legalActions",
+                    "Decision is missing a materialized ability action.");
+            }
+        }
+    }
+
     private static void ValidateTurnTimingActions(
         GameState state,
+        IBehaviorCatalog behaviorCatalog,
         IRuntimeCardCatalog? runtimeCardCatalog,
         PendingDecision pending,
         TurnFrame frame,
@@ -7143,6 +7270,7 @@ public static class StateInvariantValidator
 
         var actualScores = new List<ScoreAgendaParameters>();
         var actualRezes = new List<RezCardParameters>();
+        var actualAbilities = new List<AbilityActionParameters>();
         foreach (LegalAction? action in pending.LegalActions)
         {
             if (action is null)
@@ -7150,7 +7278,12 @@ public static class StateInvariantValidator
                 continue;
             }
 
-            if (action.Kind == ActionKind.ScoreAgenda
+            if (action.Kind == ActionKind.UseAbility
+                && action.Parameters is AbilityActionParameters ability)
+            {
+                actualAbilities.Add(ability);
+            }
+            else if (action.Kind == ActionKind.ScoreAgenda
                 && action.Parameters is ScoreAgendaParameters score)
             {
                 actualScores.Add(score);
@@ -7192,6 +7325,31 @@ public static class StateInvariantValidator
             extraCode: "decision.extra-rez-action",
             duplicateCode: "decision.duplicate-rez-action",
             costMismatchCode: "decision.rez-cost-mismatch",
+            windowName: "Turn timing");
+
+        IReadOnlyList<AbilityActionParameters> expectedAbilities = [];
+        try
+        {
+            expectedAbilities = GameEngine.MaterializeAbilityActionParameters(state, behaviorCatalog);
+        }
+        catch (Exception exception) when (exception is ResolutionFailureException
+            or InvalidOperationException
+            or KeyNotFoundException
+            or ArgumentException
+            or OverflowException)
+        {
+            Add(
+                violations,
+                "decision.ability-materialization-failed",
+                $"{path}.legalActions",
+                $"Turn timing ability actions could not be materialized from the authoritative state: {exception.Message}");
+        }
+
+        ValidateAbilityActionBijection(
+            expectedAbilities,
+            actualAbilities,
+            path,
+            violations,
             windowName: "Turn timing");
 
         IReadOnlyList<ScoreAgendaParameters> expectedScores = [];
@@ -7288,6 +7446,28 @@ public static class StateInvariantValidator
         PurgeVirusCountersParameters actual,
         PurgeVirusCountersParameters expected) =>
         actual.ClickCost == expected.ClickCost;
+
+    private static bool AbilityParametersMatch(
+        AbilityActionParameters actual,
+        AbilityActionParameters expected) =>
+        actual.SourceCardId == expected.SourceCardId
+        && actual.DefinitionId == expected.DefinitionId
+        && string.Equals(actual.AbilityKey, expected.AbilityKey, StringComparison.Ordinal)
+        && actual.Timing == expected.Timing
+        && actual.Activation == expected.Activation
+        && actual.Costs is not null
+        && expected.Costs is not null
+        && actual.Costs.SequenceEqual(expected.Costs)
+        && actual.TargetCardIds is not null
+        && expected.TargetCardIds is not null
+        && actual.TargetCardIds.SequenceEqual(expected.TargetCardIds)
+        && actual.Usage is not null
+        && expected.Usage is not null
+        && actual.Usage.Equals(expected.Usage)
+        && string.Equals(actual.CatalogFingerprint, expected.CatalogFingerprint, StringComparison.Ordinal)
+        && string.Equals(actual.DefinitionFingerprint, expected.DefinitionFingerprint, StringComparison.Ordinal)
+        && actual.SourceZoneId == expected.SourceZoneId
+        && actual.SourceZoneKind == expected.SourceZoneKind;
 
     private static bool ScoreParametersMatch(
         ScoreAgendaParameters actual,
@@ -8627,6 +8807,32 @@ public static class StateInvariantValidator
             else if (!installed.Add(cardId))
             {
                 Add(violations, "turn.duplicate-installed-card", $"{path}.installedCardIds[{index}]", $"Installed card '{cardId}' is duplicated.");
+            }
+        }
+
+        var usedAbilities = new HashSet<AbilityUseKey>();
+        for (int index = 0; index < facts.UsedAbilityKeys.Count; index++)
+        {
+            AbilityUseKey? use = facts.UsedAbilityKeys[index];
+            if (use is null)
+            {
+                Add(violations, "turn.null-ability-use", $"{path}.usedAbilityKeys[{index}]", "Ability usage entries must not be null.");
+                continue;
+            }
+
+            if (!StableIdentifier.TryValidate(use.SourceCardId.Value))
+            {
+                Add(violations, "id.invalid", $"{path}.usedAbilityKeys[{index}].sourceCardId", "Ability usage source card ID must be non-empty and stable.");
+            }
+
+            if (!StableIdentifier.TryValidate(use.AbilityKey))
+            {
+                Add(violations, "id.invalid", $"{path}.usedAbilityKeys[{index}].abilityKey", "Ability usage keys must be non-empty and stable.");
+            }
+
+            if (!usedAbilities.Add(use))
+            {
+                Add(violations, "turn.duplicate-ability-use", $"{path}.usedAbilityKeys[{index}]", $"Ability usage '{use.SourceCardId}/{use.AbilityKey}' is duplicated.");
             }
         }
     }

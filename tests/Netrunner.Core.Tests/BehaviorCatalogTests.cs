@@ -356,7 +356,9 @@ public sealed class BehaviorCatalogTests
     [Fact]
     public void StateMigrationDoesNotBumpTheReplayActionArtifactContract()
     {
-        Assert.Equal(2, BuildMetadata.SaveSchemaVersion);
+        // Slice 4.3 A2 expands persisted turn facts for the once-per-turn
+        // ability ledger; replay/action artifacts remain schema 1.
+        Assert.Equal(3, BuildMetadata.SaveSchemaVersion);
         Assert.Equal(EngineCompatibility.ArtifactSchemaVersion, BuildMetadata.ActionLogSchemaVersion);
         Assert.Equal(1, EngineCompatibility.ArtifactSchemaVersion);
     }

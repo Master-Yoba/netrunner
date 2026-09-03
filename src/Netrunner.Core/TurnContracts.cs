@@ -47,6 +47,39 @@ public enum TurnFrameStage
 }
 
 /// <summary>
+/// Canonical once-per-turn identity for a behavior-owned ability.  The source
+/// card instance is part of the key: two physical copies of the same printed
+/// definition do not share a usage limit.
+/// </summary>
+public sealed record AbilityUseKey
+{
+    [JsonConstructor]
+    public AbilityUseKey(CardInstanceId sourceCardId, string abilityKey)
+    {
+        if (!StableIdentifier.TryValidate(sourceCardId.Value))
+        {
+            throw new ArgumentException("An ability-use key requires a stable source card ID.", nameof(sourceCardId));
+        }
+
+        if (!StableIdentifier.TryValidate(abilityKey))
+        {
+            throw new ArgumentException("An ability-use key requires a stable ability key.", nameof(abilityKey));
+        }
+
+        SourceCardId = sourceCardId;
+        AbilityKey = abilityKey;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId SourceCardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string AbilityKey { get; private set; }
+}
+
+/// <summary>
 /// Explicit facts for one side's current or immediately preceding turn.  The
 /// fields are intentionally data-only so card behavior can query facts later
 /// without persisting delegates or deriving meaning from event text.
@@ -65,7 +98,8 @@ public sealed record TurnFactsState
         bool actionPhaseEnded,
         bool discardPhaseEnded,
         IReadOnlyList<CardInstanceId>? installedCardIds = null,
-        bool successfulRun = false)
+        bool successfulRun = false,
+        IReadOnlyList<AbilityUseKey>? usedAbilityKeys = null)
     {
         Version = version;
         Side = side;
@@ -78,6 +112,13 @@ public sealed record TurnFactsState
         DiscardPhaseEnded = discardPhaseEnded;
         InstalledCardIds = new ReadOnlyCollection<CardInstanceId>((installedCardIds ?? []).Distinct().ToArray());
         SuccessfulRun = successfulRun;
+        UsedAbilityKeys = new ReadOnlyCollection<AbilityUseKey>((usedAbilityKeys ?? [])
+            .Select(value =>
+            {
+                ArgumentNullException.ThrowIfNull(value);
+                return new AbilityUseKey(value.SourceCardId, value.AbilityKey);
+            })
+            .ToArray());
     }
 
     public TurnFactsState(PlayerSide side, int turnNumber, int clicksAllotted)
@@ -131,6 +172,15 @@ public sealed record TurnFactsState
     [JsonRequired]
     public bool SuccessfulRun { get; private set; }
 
+    /// <summary>
+    /// Physical source/ability pairs used during this side's current turn.
+    /// The list is serialized even when empty so schema-3 states cannot hide
+    /// usage semantics behind an omitted compatibility field.
+    /// </summary>
+    [JsonInclude]
+    [JsonRequired]
+    public IReadOnlyList<AbilityUseKey> UsedAbilityKeys { get; private set; }
+
     internal TurnFactsState MarkTurnBegan() => New(
         turnBegan: true,
         mandatoryDrawPerformed: MandatoryDrawPerformed,
@@ -138,7 +188,8 @@ public sealed record TurnFactsState
         discardPhaseEnded: DiscardPhaseEnded,
         clicksLost: ClicksLost,
         installedCardIds: InstalledCardIds,
-        successfulRun: SuccessfulRun);
+        successfulRun: SuccessfulRun,
+        usedAbilityKeys: UsedAbilityKeys);
 
     internal TurnFactsState MarkMandatoryDraw() => New(
         turnBegan: TurnBegan,
@@ -147,7 +198,8 @@ public sealed record TurnFactsState
         discardPhaseEnded: DiscardPhaseEnded,
         clicksLost: ClicksLost,
         installedCardIds: InstalledCardIds,
-        successfulRun: SuccessfulRun);
+        successfulRun: SuccessfulRun,
+        usedAbilityKeys: UsedAbilityKeys);
 
     internal TurnFactsState MarkActionPhaseEnded() => New(
         turnBegan: TurnBegan,
@@ -156,7 +208,8 @@ public sealed record TurnFactsState
         discardPhaseEnded: DiscardPhaseEnded,
         clicksLost: ClicksLost,
         installedCardIds: InstalledCardIds,
-        successfulRun: SuccessfulRun);
+        successfulRun: SuccessfulRun,
+        usedAbilityKeys: UsedAbilityKeys);
 
     internal TurnFactsState MarkDiscardPhaseEnded(int clicksLost) => New(
         turnBegan: TurnBegan,
@@ -165,7 +218,8 @@ public sealed record TurnFactsState
         discardPhaseEnded: true,
         clicksLost: clicksLost,
         installedCardIds: InstalledCardIds,
-        successfulRun: SuccessfulRun);
+        successfulRun: SuccessfulRun,
+        usedAbilityKeys: UsedAbilityKeys);
 
     internal TurnFactsState MarkInstalled(CardInstanceId cardId) => New(
         turnBegan: TurnBegan,
@@ -174,7 +228,8 @@ public sealed record TurnFactsState
         discardPhaseEnded: DiscardPhaseEnded,
         clicksLost: ClicksLost,
         installedCardIds: InstalledCardIds.Append(cardId).ToArray(),
-        successfulRun: SuccessfulRun);
+        successfulRun: SuccessfulRun,
+        usedAbilityKeys: UsedAbilityKeys);
 
     internal TurnFactsState MarkSuccessfulRun() => New(
         turnBegan: TurnBegan,
@@ -183,7 +238,30 @@ public sealed record TurnFactsState
         discardPhaseEnded: DiscardPhaseEnded,
         clicksLost: ClicksLost,
         installedCardIds: InstalledCardIds,
-        successfulRun: true);
+        successfulRun: true,
+        usedAbilityKeys: UsedAbilityKeys);
+
+    internal bool HasUsedAbility(CardInstanceId sourceCardId, string abilityKey) =>
+        UsedAbilityKeys.Any(value => value.SourceCardId == sourceCardId
+            && string.Equals(value.AbilityKey, abilityKey, StringComparison.Ordinal));
+
+    internal TurnFactsState MarkAbilityUsed(CardInstanceId sourceCardId, string abilityKey)
+    {
+        if (HasUsedAbility(sourceCardId, abilityKey))
+        {
+            return this;
+        }
+
+        return New(
+            turnBegan: TurnBegan,
+            mandatoryDrawPerformed: MandatoryDrawPerformed,
+            actionPhaseEnded: ActionPhaseEnded,
+            discardPhaseEnded: DiscardPhaseEnded,
+            clicksLost: ClicksLost,
+            installedCardIds: InstalledCardIds,
+            successfulRun: SuccessfulRun,
+            usedAbilityKeys: UsedAbilityKeys.Append(new AbilityUseKey(sourceCardId, abilityKey)).ToArray());
+    }
 
     internal TurnFactsState Copy() => New(
         turnBegan: TurnBegan,
@@ -192,7 +270,8 @@ public sealed record TurnFactsState
         discardPhaseEnded: DiscardPhaseEnded,
         clicksLost: ClicksLost,
         installedCardIds: InstalledCardIds,
-        successfulRun: SuccessfulRun);
+        successfulRun: SuccessfulRun,
+        usedAbilityKeys: UsedAbilityKeys);
 
     private TurnFactsState New(
         bool turnBegan,
@@ -201,7 +280,8 @@ public sealed record TurnFactsState
         bool discardPhaseEnded,
         int clicksLost,
         IReadOnlyList<CardInstanceId>? installedCardIds = null,
-        bool successfulRun = false) => new(
+        bool successfulRun = false,
+        IReadOnlyList<AbilityUseKey>? usedAbilityKeys = null) => new(
         Version,
         Side,
         TurnNumber,
@@ -212,7 +292,8 @@ public sealed record TurnFactsState
         actionPhaseEnded,
         discardPhaseEnded,
         installedCardIds,
-        successfulRun);
+        successfulRun,
+        usedAbilityKeys);
 }
 
 /// <summary>
