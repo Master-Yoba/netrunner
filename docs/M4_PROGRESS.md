@@ -3185,3 +3185,30 @@ errors; runtime action expansion and full verification remain pending.
   The direct M2 proof remains `faf4e631...` / `c882eb43...` / `d20cdef9...`
   with 32 replay-verified checkpoints. Card-access dispatch is the remaining
   C2b lifecycle hook.
+
+### 2026-09-03 — Checkpoint C2b-5 card-access triggers accepted
+
+- Luna Max connected real breach candidate selection to `CardAccessed`. The
+  reducer removes or deterministically selects the candidate, persists the
+  chosen/accessed IDs, emits `BreachCandidateChosen` and `CardAccessed`, and
+  advances the run state/frame to `BreachAccessAbility` before dispatch. With
+  an active declaration, the normal mid-access decision is delayed until the
+  nested trigger finishes; without one, the existing direct yield is unchanged.
+- Mandatory evidence fixes the ordering as candidate chosen → card accessed →
+  trigger effect → access window. An optional typed agenda-filter trigger
+  round-trips with the exact candidate already consumed, then declines into the
+  ordinary `NoAccessAction` decision without rerandomizing, reselecting, or
+  emitting either access event again. Inactive same-definition and active
+  unknown cards do not contribute invocations, and the completed trace through
+  automatic agenda steal and run end remains valid.
+- The first optional test exposed that live-run stack validation recognized
+  only RunSuccessful occurrence suspension. Root required an exact generalized
+  predicate: RunSuccessful at `BreachBoundary`, CardAccessed at the matching
+  latest access, AgendaScoredOrStolen at its post-steal cursor, and CardRezzed
+  for the matching active rezzed Corp card/server during a paid run step.
+  Arbitrary effect frames or mismatched controller/subject/server/step remain
+  invalid. Root passed 58/58 combined lifecycle tests, complete Core 610/610,
+  the zero-warning/error solution build, formatting, and `git diff --check`;
+  M2 stays at `faf4e631...` / `c882eb43...` / `d20cdef9...` with 32 verified
+  checkpoints. All ENG-409 occurrence kinds now have production dispatch;
+  card bindings and ENG-411 installed run-source state remain later work.

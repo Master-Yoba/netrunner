@@ -1027,6 +1027,22 @@ public static partial class GameEngine
                 successful))));
     }
 
+    private static void QueueCardAccessedOccurrence(
+        WorkingState working,
+        PlayerId controller,
+        CardInstanceId cardId,
+        ServerId serverId)
+    {
+        working.ResolutionStack.Add(new EffectResolutionFrame(
+            controller,
+            new CostBundle(),
+            new EffectBundle(new GameplayOccurrenceEffect(
+                OccurrenceKind.CardAccessed,
+                controller,
+                cardId,
+                serverId))));
+    }
+
     private static bool IsRealTurnRun(WorkingState working, RunState run) =>
         run.InitiatingSide == PlayerSide.Runner
         && run.InitiatingSource is null
@@ -1162,7 +1178,18 @@ public static partial class GameEngine
             null,
             RunAccessState.InProgress);
         SetRunTiming(working, run);
-        YieldBreachAccessDecision(working, run);
+        if (HasActiveCatalogTrigger(working, OccurrenceKind.CardAccessed))
+        {
+            QueueCardAccessedOccurrence(
+                working,
+                GetPlayer(working, PlayerSide.Runner).Id,
+                cardId,
+                server.Id);
+        }
+        else
+        {
+            YieldBreachAccessDecision(working, run);
+        }
     }
 
     private static void ConsumeRunAccessNoAction(WorkingState working, RunState run)

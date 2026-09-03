@@ -1400,26 +1400,25 @@ public static class StateInvariantValidator
         else
         {
             // A2b may suspend an ability directly beneath the live run timing
-            // frame. C2b-3a may also suspend the generic occurrence pipeline
-            // after success has advanced the run cursor to BreachBoundary.
-            // The effect/checkpoint validators prove the nested suffix; this
+            // frame. Production occurrence hooks may also suspend their exact
+            // typed marker after advancing the run cursor. The
+            // effect/checkpoint validators prove the nested suffix; this
             // check only ensures no unrelated frame can be smuggled into a
             // run stack prefix.
             ResolutionFrame suffixRoot = state.ResolutionStack[runFrameIndex + 1];
-            bool runSuccessfulOccurrence = run.Step == RunTimingStep.BreachBoundary
-                && suffixRoot is EffectResolutionFrame occurrenceFrame
-                && IsRunSuccessfulOccurrenceFrame(occurrenceFrame, run);
-            if (suffixRoot is not AbilityFrame && !runSuccessfulOccurrence)
+            bool expectedGameplayOccurrence = suffixRoot is EffectResolutionFrame occurrenceFrame
+                && IsExpectedRunGameplayOccurrenceFrame(state, occurrenceFrame, run);
+            if (suffixRoot is not AbilityFrame && !expectedGameplayOccurrence)
             {
                 Add(
                     violations,
                     "run.stack-topology",
                     "resolutionStack",
-                    "Only an ability lifecycle or the exact RunSuccessful occurrence pipeline may follow the live run timing frame.");
+                    "Only an ability lifecycle or an exact production gameplay occurrence pipeline may follow the live run timing frame.");
                 return;
             }
 
-            if (!runSuccessfulOccurrence)
+            if (!expectedGameplayOccurrence)
             {
                 for (int index = runFrameIndex + 2; index < state.ResolutionStack.Count; index++)
                 {
@@ -1494,21 +1493,78 @@ public static class StateInvariantValidator
         }
     }
 
-    private static bool IsRunSuccessfulOccurrenceFrame(
+    private static bool IsExpectedRunGameplayOccurrenceFrame(
+        GameState state,
         EffectResolutionFrame frame,
         RunState run)
     {
-        if (frame.Controller != run.InitiatingPlayer
-            || frame.Effects.Instructions.Count != 1
-            || frame.Effects.Instructions[0] is not GameplayOccurrenceEffect occurrence)
+        if (frame.Effects.Instructions.Count != 1
+            || frame.Effects.Instructions[0] is not GameplayOccurrenceEffect occurrence
+            || frame.Controller != occurrence.Controller
+            || occurrence.Successful is not null)
         {
             return false;
         }
 
-        return occurrence.Kind == OccurrenceKind.RunSuccessful
-            && occurrence.Controller == run.InitiatingPlayer
-            && occurrence.SubjectCardId == run.InitiatingSource
-            && occurrence.ServerId == run.AttackedServer;
+        return occurrence.Kind switch
+        {
+            OccurrenceKind.RunSuccessful => frame.Controller == run.InitiatingPlayer
+                && run.Successful
+                && run.Step == RunTimingStep.BreachBoundary
+                && occurrence.Controller == run.InitiatingPlayer
+                && occurrence.SubjectCardId == run.InitiatingSource
+                && occurrence.ServerId == run.AttackedServer,
+            OccurrenceKind.CardAccessed => run.Step == RunTimingStep.BreachAccessAbility
+                && frame.Controller == run.InitiatingPlayer
+                && occurrence.Controller == run.InitiatingPlayer
+                && occurrence.SubjectCardId is { } accessed
+                && run.ChosenAccessCards.Count > 0
+                && run.ChosenAccessCards[^1] == accessed
+                && run.AccessedCards.Contains(accessed)
+                && occurrence.ServerId == run.AttackedServer,
+            OccurrenceKind.AgendaScoredOrStolen => run.InitiatingSide == PlayerSide.Runner
+                && run.Successful
+                && run.Step is RunTimingStep.BreachCandidateSelection or RunTimingStep.RunEnd
+                && frame.Controller == run.InitiatingPlayer
+                && occurrence.Controller == run.InitiatingPlayer
+                && occurrence.SubjectCardId is { } agenda
+                && run.ChosenAccessCards.Contains(agenda)
+                && run.AccessedCards.Contains(agenda)
+                && state.Zones.Any(zone =>
+                    zone.Kind == ZoneKind.RunnerScore
+                    && zone.OwnerSide == PlayerSide.Runner
+                    && zone.CardIds.Contains(agenda))
+                && occurrence.ServerId == run.AttackedServer,
+            OccurrenceKind.CardRezzed => IsExpectedRunCardRezzedOccurrence(state, run, occurrence),
+            _ => false,
+        };
+    }
+
+    private static bool IsExpectedRunCardRezzedOccurrence(
+        GameState state,
+        RunState run,
+        GameplayOccurrenceEffect occurrence)
+    {
+        if (!IsRunPriorityStep(run.Step)
+            || occurrence.Controller != state.Players.FirstOrDefault(player => player.Side == PlayerSide.Corp)?.Id
+            || occurrence.SubjectCardId is not { } cardId
+            || occurrence.ServerId is not { } serverId)
+        {
+            return false;
+        }
+
+        CardInstanceState? card = state.Cards.FirstOrDefault(candidate => candidate.Id == cardId);
+        if (card is null
+            || card.OwnerSide != PlayerSide.Corp
+            || !card.FaceUp
+            || !card.Rezzed
+            || !RuntimeCardActivity.IsActive(card, state.Zones))
+        {
+            return false;
+        }
+
+        ZoneState? installedZone = state.Zones.FirstOrDefault(zone => zone.Id == card.ZoneId);
+        return installedZone?.ServerId == serverId;
     }
 
     /// <summary>
