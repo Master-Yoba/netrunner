@@ -153,8 +153,8 @@ public static class ObservationBuilder
         {
             publicState["turnFacts"] = new Dictionary<string, object?>
             {
-                ["corp"] = TurnFactsView(state, viewer, history.CorpThisTurn, history.CorpLastTurn),
-                ["runner"] = TurnFactsView(state, viewer, history.RunnerThisTurn, history.RunnerLastTurn),
+                ["corp"] = TurnFactsView(state, viewer, accessVisible, history.CorpThisTurn, history.CorpLastTurn),
+                ["runner"] = TurnFactsView(state, viewer, accessVisible, history.RunnerThisTurn, history.RunnerLastTurn),
             };
         }
 
@@ -207,17 +207,19 @@ public static class ObservationBuilder
     private static Dictionary<string, object?> TurnFactsView(
         GameState state,
         PlayerSide viewer,
+        IReadOnlySet<CardInstanceId> accessVisible,
         TurnFactsState? thisTurn,
         TurnFactsState? lastTurn) =>
         new()
         {
-            ["thisTurn"] = thisTurn is null ? null : FactsView(state, viewer, thisTurn),
-            ["lastTurn"] = lastTurn is null ? null : FactsView(state, viewer, lastTurn),
+            ["thisTurn"] = thisTurn is null ? null : FactsView(state, viewer, accessVisible, thisTurn),
+            ["lastTurn"] = lastTurn is null ? null : FactsView(state, viewer, accessVisible, lastTurn),
         };
 
     private static Dictionary<string, object?> FactsView(
         GameState state,
         PlayerSide viewer,
+        IReadOnlySet<CardInstanceId> accessVisible,
         TurnFactsState facts) =>
         new()
         {
@@ -230,12 +232,68 @@ public static class ObservationBuilder
             ["actionPhaseEnded"] = facts.ActionPhaseEnded,
             ["discardPhaseEnded"] = facts.DiscardPhaseEnded,
             ["installedCardIds"] = facts.InstalledCardIds
-                .Where(cardId => state.Cards.FirstOrDefault(card => card.Id == cardId) is { } card
-                    && IsVisibleTo(card, state.GetZone(card.ZoneId), viewer, new HashSet<CardInstanceId>()))
+                .Where(cardId => IsFactCardVisible(state, cardId, viewer, accessVisible))
                 .Select(static cardId => cardId.Value)
                 .ToArray(),
             ["successfulRun"] = facts.SuccessfulRun,
+            ["attemptedRunServerIds"] = facts.AttemptedRunServerIds
+                .Select(static serverId => serverId.Value)
+                .ToArray(),
+            ["successfulRunServerIds"] = facts.SuccessfulRunServerIds
+                .Select(static serverId => serverId.Value)
+                .ToArray(),
+            ["accessedCardCount"] = facts.AccessedCardOccurrenceIds.Count,
+            ["accessedCardIds"] = facts.AccessedCardOccurrenceIds
+                .Where(cardId => IsFactCardVisible(state, cardId, viewer, accessVisible))
+                .Select(static cardId => cardId.Value)
+                .ToArray(),
+            ["trashedCardCount"] = facts.TrashedCardOccurrenceIds.Count,
+            ["trashedCardIds"] = facts.TrashedCardOccurrenceIds
+                .Where(cardId => IsFactCardVisible(state, cardId, viewer, accessVisible))
+                .Select(static cardId => cardId.Value)
+                .ToArray(),
+            ["agendaTurnChanges"] = facts.AgendaTurnChanges
+                .Select(static change => (object?)new Dictionary<string, object?>
+                {
+                    ["cardId"] = change.CardId.Value,
+                    ["beneficiarySide"] = change.BeneficiarySide,
+                    ["points"] = change.Points,
+                    ["kind"] = change.Kind,
+                })
+                .ToArray(),
+            ["tagTurnChanges"] = facts.TagTurnChanges
+                .Select(static change => (object?)new Dictionary<string, object?>
+                {
+                    ["affectedPlayerId"] = change.AffectedPlayerId.Value,
+                    ["delta"] = change.Delta,
+                })
+                .ToArray(),
+            ["usedAbilityKeys"] = facts.UsedAbilityKeys
+                .Where(use => IsFactCardVisible(state, use.SourceCardId, viewer, accessVisible))
+                .Select(static use => (object?)new Dictionary<string, object?>
+                {
+                    ["sourceCardId"] = use.SourceCardId.Value,
+                    ["abilityKey"] = use.AbilityKey,
+                })
+                .ToArray(),
+            ["firstXUseKeys"] = facts.FirstXUseKeys
+                .Where(use => IsFactCardVisible(state, use.SourceCardId, viewer, accessVisible))
+                .Select(static use => (object?)new Dictionary<string, object?>
+                {
+                    ["sourceCardId"] = use.SourceCardId.Value,
+                    ["key"] = use.Key,
+                    ["count"] = use.Count,
+                })
+                .ToArray(),
         };
+
+    private static bool IsFactCardVisible(
+        GameState state,
+        CardInstanceId cardId,
+        PlayerSide viewer,
+        IReadOnlySet<CardInstanceId> accessVisible) =>
+        state.Cards.FirstOrDefault(card => card.Id == cardId) is { } card
+        && IsVisibleTo(card, state.GetZone(card.ZoneId), viewer, accessVisible);
 
     private static Dictionary<string, object?> ServerView(GameState state, ServerState server, PlayerSide viewer, IReadOnlySet<CardInstanceId> accessVisible)
     {

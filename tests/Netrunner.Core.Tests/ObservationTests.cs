@@ -12,6 +12,9 @@ namespace Netrunner.Core.Tests;
 /// </summary>
 public sealed class ObservationTests
 {
+    private static readonly string[] AgendaChangeFields = ["cardId", "beneficiarySide", "points", "kind"];
+    private static readonly string[] TagChangeFields = ["affectedPlayerId", "delta"];
+
     [Fact]
     public void RemovedFromGameZonesArePublicOnlyAfterTheirLazyZoneExists()
     {
@@ -356,6 +359,152 @@ public sealed class ObservationTests
     }
 
     [Fact]
+    public void TurnFactsExposeTypedLedgersWithViewerFilteringAndOccurrenceCounts()
+    {
+        (GameState seed, FixtureIds ids) = BuildState();
+        RunState run = BuildHqBreachRun(
+            ids,
+            step: RunTimingStep.BreachAccessAbility,
+            chosen: [ids.CorpHandOne],
+            accessed: [ids.CorpHandOne]);
+        TurnFactsState runnerFacts = new(
+            1,
+            PlayerSide.Runner,
+            1,
+            4,
+            0,
+            true,
+            false,
+            false,
+            false,
+            successfulRun: true,
+            usedAbilityKeys:
+            [
+                new AbilityUseKey(ids.CorpHandTwo, "ability:hidden-corp"),
+                new AbilityUseKey(ids.RunnerGripOne, "ability:own-hidden"),
+                new AbilityUseKey(ids.RunnerProgram, "ability:faceup"),
+                new AbilityUseKey(ids.CorpHandOne, "ability:access-visible"),
+            ],
+            attemptedRunServerIds: [ids.Headquarters, ids.Archives],
+            successfulRunServerIds: [ids.Headquarters],
+            accessedCardOccurrenceIds: [ids.CorpHandOne, ids.CorpHandOne, ids.CorpHandTwo],
+            trashedCardOccurrenceIds: [ids.CorpHandOne, ids.CorpHandTwo],
+            agendaTurnChanges:
+            [
+                new AgendaTurnChange(ids.CorpHandOne, PlayerSide.Runner, 2, AgendaTurnChangeKind.Steal),
+            ],
+            tagTurnChanges:
+            [
+                new TagTurnChange(ids.Runner, -1),
+            ],
+            firstXUseKeys:
+            [
+                new FirstXUseKey(ids.CorpHandTwo, "first:hidden-corp", 1),
+                new FirstXUseKey(ids.RunnerGripOne, "first:own-hidden", 2),
+                new FirstXUseKey(ids.RunnerProgram, "first:faceup", 3),
+                new FirstXUseKey(ids.CorpHandOne, "first:access-visible", 4),
+            ]);
+        GameState state = WithTurnHistory(
+            seed,
+            run,
+            new TurnHistoryState(1, null, null, runnerFacts, null));
+
+        Observation runnerView = ObservationBuilder.Build(state, PlayerSide.Runner);
+        Observation corpView = ObservationBuilder.Build(state, PlayerSide.Corp);
+        Dictionary<string, object?> runnerFactsView = FactsEntry(runnerView, "runner", "thisTurn");
+        Dictionary<string, object?> corpFactsView = FactsEntry(corpView, "runner", "thisTurn");
+
+        Assert.Equal([ids.Headquarters.Value, ids.Archives.Value], (string[])runnerFactsView["attemptedRunServerIds"]!);
+        Assert.Equal([ids.Headquarters.Value], (string[])runnerFactsView["successfulRunServerIds"]!);
+        Assert.Equal(3, runnerFactsView["accessedCardCount"]);
+        Assert.Equal(2, runnerFactsView["trashedCardCount"]);
+        Assert.Equal(
+            [ids.CorpHandOne.Value, ids.CorpHandOne.Value],
+            (string[])runnerFactsView["accessedCardIds"]!);
+        Assert.Equal([ids.CorpHandOne.Value], (string[])runnerFactsView["trashedCardIds"]!);
+        Assert.Equal(
+            [ids.CorpHandOne.Value, ids.CorpHandOne.Value, ids.CorpHandTwo.Value],
+            (string[])corpFactsView["accessedCardIds"]!);
+        Assert.Equal(
+            [ids.CorpHandOne.Value, ids.CorpHandTwo.Value],
+            (string[])corpFactsView["trashedCardIds"]!);
+
+        Assert.Equal(
+            [ids.RunnerGripOne.Value, ids.RunnerProgram.Value, ids.CorpHandOne.Value],
+            VisibleSourceIds(runnerFactsView["usedAbilityKeys"]));
+        Assert.Equal(
+            [ids.CorpHandTwo.Value, ids.RunnerProgram.Value, ids.CorpHandOne.Value],
+            VisibleSourceIds(corpFactsView["usedAbilityKeys"]));
+        Assert.Equal(
+            [ids.RunnerGripOne.Value, ids.RunnerProgram.Value, ids.CorpHandOne.Value],
+            VisibleSourceIds(runnerFactsView["firstXUseKeys"]));
+        Assert.Equal(
+            [ids.CorpHandTwo.Value, ids.RunnerProgram.Value, ids.CorpHandOne.Value],
+            VisibleSourceIds(corpFactsView["firstXUseKeys"]));
+
+        Dictionary<string, object?>[] runnerAgenda = TypedEntries(runnerFactsView["agendaTurnChanges"]);
+        Assert.Single(runnerAgenda);
+        Assert.Equal(
+            AgendaChangeFields,
+            runnerAgenda[0].Keys.ToArray());
+        Assert.Equal(ids.CorpHandOne.Value, runnerAgenda[0]["cardId"]);
+        Assert.Equal(PlayerSide.Runner, runnerAgenda[0]["beneficiarySide"]);
+        Assert.Equal(2, runnerAgenda[0]["points"]);
+        Assert.Equal(AgendaTurnChangeKind.Steal, runnerAgenda[0]["kind"]);
+
+        Dictionary<string, object?>[] runnerTags = TypedEntries(runnerFactsView["tagTurnChanges"]);
+        Assert.Single(runnerTags);
+        Assert.Equal(TagChangeFields, runnerTags[0].Keys.ToArray());
+        Assert.Equal(ids.Runner.Value, runnerTags[0]["affectedPlayerId"]);
+        Assert.Equal(-1, runnerTags[0]["delta"]);
+
+        string runnerJson = EngineJson.Serialize(runnerView);
+        string corpJson = EngineJson.Serialize(corpView);
+        Assert.Contains(ids.CorpHandOne.Value, runnerJson);
+        Assert.DoesNotContain(ids.CorpHandTwo.Value, runnerJson);
+        Assert.Contains(ids.CorpHandTwo.Value, corpJson);
+        Assert.DoesNotContain(ids.RunnerGripOne.Value, corpJson);
+        Assert.Contains("\"accessedCardCount\":3", runnerJson);
+        Assert.Contains("\"accessedCardCount\":3", corpJson);
+    }
+
+    [Fact]
+    public void TurnFactsObservationJsonIsDeterministicAndDetachedFromProjectedArrays()
+    {
+        (GameState seed, FixtureIds ids) = BuildState();
+        TurnFactsState facts = new(
+            1,
+            PlayerSide.Runner,
+            1,
+            4,
+            0,
+            true,
+            false,
+            false,
+            false,
+            accessedCardOccurrenceIds: [ids.RunnerProgram, ids.RunnerProgram],
+            trashedCardOccurrenceIds: [ids.RunnerProgram],
+            attemptedRunServerIds: [ids.Headquarters]);
+        GameState state = WithTurnHistory(
+            seed,
+            run: null,
+            new TurnHistoryState(1, null, null, facts, null));
+
+        Observation first = ObservationBuilder.Build(state, PlayerSide.Runner);
+        string firstJson = EngineJson.Serialize(first);
+        string secondJson = EngineJson.Serialize(ObservationBuilder.Build(state, PlayerSide.Runner));
+        Assert.Equal(firstJson, secondJson);
+
+        Dictionary<string, object?> factsView = FactsEntry(first, "runner", "thisTurn");
+        string[] projectedAccesses = (string[])factsView["accessedCardIds"]!;
+        projectedAccesses[0] = "card:tampered-observation";
+        Assert.Equal(
+            [ids.RunnerProgram.Value, ids.RunnerProgram.Value],
+            (string[])FactsEntry(ObservationBuilder.Build(state, PlayerSide.Runner), "runner", "thisTurn")["accessedCardIds"]!);
+        Assert.DoesNotContain("card:tampered-observation", EngineJson.Serialize(state));
+    }
+
+    [Fact]
     public void AfterRunTheScoredCardIsPublicAndTheRemainingHandStaysHidden()
     {
         (GameState state, FixtureIds ids) = BuildState(scoreHandOne: true);
@@ -499,6 +648,59 @@ public sealed class ObservationTests
         IReadOnlyList<object?> root = (IReadOnlyList<object?>)server["root"]!;
         return (Dictionary<string, object?>?)root[rootIndex];
     }
+
+    private static Dictionary<string, object?> FactsEntry(
+        Observation observation,
+        string side,
+        string turn)
+    {
+        Dictionary<string, object?> allFacts = (Dictionary<string, object?>)observation.PublicState["turnFacts"]!;
+        Dictionary<string, object?> sideFacts = (Dictionary<string, object?>)allFacts[side]!;
+        return (Dictionary<string, object?>)sideFacts[turn]!;
+    }
+
+    private static string[] VisibleSourceIds(object? value) => TypedEntries(value)
+        .Select(entry => (string)entry["sourceCardId"]!)
+        .ToArray();
+
+    private static Dictionary<string, object?>[] TypedEntries(object? value) =>
+        ((IReadOnlyList<object?>)value!)
+            .Select(entry => (Dictionary<string, object?>)entry!)
+            .ToArray();
+
+    private static GameState WithTurnHistory(
+        GameState state,
+        RunState? run,
+        TurnHistoryState history) => new(
+        state.SchemaVersion,
+        state.GameId,
+        state.RulesVersion,
+        state.CardDataVersion,
+        state.Players,
+        state.Cards,
+        state.Zones,
+        state.Servers,
+        new TurnState(
+            state.Turn.ActiveSide,
+            state.Turn.Phase,
+            state.Turn.TurnNumber,
+            state.Turn.Step,
+            history),
+        state.Outcome,
+        state.RandomState,
+        state.Allocator,
+        state.DecisionRevision,
+        state.EventSequence,
+        state.ResolutionStack,
+        state.PendingDecision,
+        state.ActionSequence,
+        state.InitialSeed,
+        run,
+        state.RulesState,
+        state.BehaviorRegistryVersion,
+        state.BehaviorCatalogFingerprint,
+        state.RuntimeCardCatalogVersion,
+        state.RuntimeCardCatalogFingerprint);
 
     [Fact]
     public void AllFixturesValidateAsProducibleEngineStates()

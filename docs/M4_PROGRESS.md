@@ -3241,3 +3241,27 @@ errors; runtime action expansion and full verification remain pending.
   event hashes `faf4e631...` / `c882eb43...` / `d20cdef9...`, with all 32
   checkpoints replay verified. Production fact recording and observation
   projection remain the next ENG-413 checkpoints.
+
+### 2026-09-03 — Checkpoint C3b ENG-413 observation projection accepted
+
+- Luna Max extended the existing viewer-scoped turn-facts projection with
+  ordered attempted/successful server IDs, total access/trash occurrence
+  counts, visibility-filtered occurrence IDs, public typed agenda/tag changes,
+  and visibility-filtered once-per-turn/first-X source keys. The projection
+  reuses the observation's live breach-visible set, so a currently accessed
+  hidden Corp card is visible without making unrelated HQ/R&D cards public.
+- Root fixed two privacy-fixture expectations during review: each owner may
+  see its own hidden card/source IDs, while the opponent may not, and a
+  detached-array test must use a card actually visible to its viewer. Repeated
+  visible occurrence IDs retain order, but total public counts do not shrink
+  when hidden identities are filtered. Agenda and tag records are projected as
+  value dictionaries rather than leaking engine record objects.
+- The new fields remain conditional on existing formal turn history, preserving
+  the exact M1/M2 observation shape when history is absent. Every projected
+  array/dictionary is detached, repeated builds serialize byte-identically,
+  and hidden source IDs cannot leak their stable ability/first-X keys.
+- Root independently passed focused observation tests 18/18, complete Core
+  619/619, the zero-warning/error solution build, Core formatting, and
+  `git diff --check`. The direct M2 proof remains byte-stable at
+  `faf4e631...` / `c882eb43...` / `d20cdef9...`, with all 32 checkpoints
+  replay verified. Production ENG-413 recording remains the next checkpoint.
