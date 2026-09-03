@@ -542,6 +542,141 @@ public sealed class CatalogTriggerRuntimeTests
     }
 
     [Fact]
+    public void TurnBeginControllerTriggerRunsOnlyForTheActiveControllerSource()
+    {
+        CardDefinitionId corpDefinitionId = new("test:c2b-turn-controller-corp");
+        CardDefinitionId runnerDefinitionId = new("test:c2b-turn-controller-runner");
+        CardInstanceId corpSourceId = new("card:c2b-turn-controller-corp");
+        CardInstanceId runnerSourceId = new("card:c2b-turn-controller-runner");
+        BehaviorCatalog catalog = Catalog(
+            new CardBehaviorDefinition(
+                corpDefinitionId,
+                PlayerSide.Corp,
+                triggers:
+                [
+                    TurnTrigger("corp", TriggerMode.Mandatory, BehaviorTriggerScope.Controller, 4),
+                ]),
+            new CardBehaviorDefinition(
+                runnerDefinitionId,
+                PlayerSide.Runner,
+                triggers:
+                [
+                    TurnTrigger("runner", TriggerMode.Mandatory, BehaviorTriggerScope.Controller, 2),
+                ]));
+        GameState state = SetActiveSide(
+            CreateControllerState(
+                catalog,
+                corpSourceId,
+                corpDefinitionId,
+                runnerSourceId,
+                runnerDefinitionId),
+            PlayerSide.Runner);
+        PlayerId corp = state.Players.Single(player => player.Side == PlayerSide.Corp).Id;
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+
+        state = BeginFormalTurn(state, catalog);
+
+        Assert.Equal(5, state.GetPlayer(corp).Credits);
+        Assert.Equal(7, state.GetPlayer(runner).Credits);
+        Assert.Equal(DecisionKind.TurnTiming, state.PendingDecision?.Kind);
+        Assert.True(state.Turn.ThisTurnFacts!.TurnBegan);
+    }
+
+    [Fact]
+    public void TurnBeginAnyTriggersUseActivePlayerOrderingAcrossJsonLoad()
+    {
+        CardDefinitionId corpDefinitionId = new("test:c2b-turn-any-corp");
+        CardDefinitionId runnerDefinitionId = new("test:c2b-turn-any-runner");
+        CardInstanceId corpSourceId = new("card:c2b-turn-any-corp");
+        CardInstanceId runnerSourceId = new("card:c2b-turn-any-runner");
+        BehaviorCatalog catalog = Catalog(
+            new CardBehaviorDefinition(
+                corpDefinitionId,
+                PlayerSide.Corp,
+                triggers:
+                [
+                    TurnTrigger("corp", TriggerMode.Optional, BehaviorTriggerScope.Any, 1),
+                ]),
+            new CardBehaviorDefinition(
+                runnerDefinitionId,
+                PlayerSide.Runner,
+                triggers:
+                [
+                    TurnTrigger("runner", TriggerMode.Optional, BehaviorTriggerScope.Any, 1),
+                ]));
+        GameState state = SetActiveSide(
+            CreateControllerState(
+                catalog,
+                corpSourceId,
+                corpDefinitionId,
+                runnerSourceId,
+                runnerDefinitionId),
+            PlayerSide.Runner);
+        PlayerId corp = state.Players.Single(player => player.Side == PlayerSide.Corp).Id;
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+
+        GameState prompt = BeginFormalTurn(state, catalog, stopAtCheckpoint: true);
+        PendingDecision decision = Assert.IsType<PendingDecision>(prompt.PendingDecision);
+        Assert.Equal(DecisionKind.TriggerChoice, decision.Kind);
+        EffectCheckpointFrame checkpoint = Assert.IsType<EffectCheckpointFrame>(prompt.ResolutionStack[^1]);
+        Assert.Equal([runnerSourceId, corpSourceId], checkpoint.TriggerQueue.Select(invocation => invocation.SourceCardId));
+        Assert.Equal(runner, decision.Owner);
+
+        string json = EngineJson.Serialize(prompt);
+        GameState restored = EngineJson.DeserializeState(json, catalog);
+        Assert.Equal(json, EngineJson.Serialize(restored));
+        Assert.Equal(DeterministicHash.ForState(prompt), DeterministicHash.ForState(restored));
+
+        ApplyResult used = ApplyCurrentTriggerChoice(restored, catalog);
+        Assert.True(used.Accepted, used.Rejection?.Message);
+        PendingDecision inactiveControllerChoice = Assert.IsType<PendingDecision>(used.State.PendingDecision);
+        Assert.Equal(corp, inactiveControllerChoice.Owner);
+        ApplyResult declined = ApplyCurrentTriggerDecline(used.State, catalog);
+        Assert.True(declined.Accepted, declined.Rejection?.Message);
+        Assert.Equal(6, declined.State.GetPlayer(runner).Credits);
+        Assert.Equal(5, declined.State.GetPlayer(corp).Credits);
+        Assert.Equal(DecisionKind.TurnTiming, declined.State.PendingDecision?.Kind);
+    }
+
+    [Fact]
+    public void TurnBeginIgnoresHiddenSourcesAndDoesNotFireTwiceAfterJsonResume()
+    {
+        CardDefinitionId definitionId = new("test:c2b-turn-hidden");
+        CardInstanceId activeSourceId = new("card:c2b-turn-hidden-active");
+        CardInstanceId hiddenSourceId = new("card:c2b-turn-hidden-hidden");
+        BehaviorCatalog catalog = Catalog(
+            new CardBehaviorDefinition(
+                definitionId,
+                PlayerSide.Runner,
+                triggers:
+                [
+                    TurnTrigger("optional", TriggerMode.Optional, BehaviorTriggerScope.Any, 3),
+                ]));
+        GameState state = SetActiveSide(
+            CreateState(
+                catalog,
+                (activeSourceId, definitionId, PlayerSide.Runner, true),
+                (hiddenSourceId, definitionId, PlayerSide.Runner, false)),
+            PlayerSide.Runner);
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+
+        GameState prompt = BeginFormalTurn(state, catalog, stopAtCheckpoint: true);
+        EffectCheckpointFrame checkpoint = Assert.IsType<EffectCheckpointFrame>(prompt.ResolutionStack[^1]);
+        Assert.Single(checkpoint.TriggerQueue);
+        Assert.Equal(activeSourceId, checkpoint.TriggerQueue[0].SourceCardId);
+        Assert.Equal(DecisionKind.TriggerChoice, prompt.PendingDecision?.Kind);
+
+        GameState restored = EngineJson.DeserializeState(EngineJson.Serialize(prompt), catalog);
+        ApplyResult used = ApplyCurrentTriggerChoice(restored, catalog);
+        Assert.True(used.Accepted, used.Rejection?.Message);
+        Assert.Equal(8, used.State.GetPlayer(runner).Credits);
+        Assert.Equal(DecisionKind.TurnTiming, used.State.PendingDecision?.Kind);
+        Assert.DoesNotContain(
+            used.State.ResolutionStack.OfType<EffectCheckpointFrame>(),
+            frame => frame.TriggerQueue.Any(invocation => invocation.SourceCardId == activeSourceId));
+    }
+
+    [Fact]
     public void CatalogTriggerTrashSelfThenGainRunsOnceAndClearsTypedCounters()
     {
         CardDefinitionId definitionId = new("test:c2a-trash-self");
@@ -724,6 +859,18 @@ public sealed class CatalogTriggerRuntimeTests
         filter,
         [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount)]);
 
+    private static BehaviorTrigger TurnTrigger(
+        string key,
+        TriggerMode mode,
+        BehaviorTriggerScope scope,
+        int amount) => new(
+        key,
+        OccurrenceKind.TurnBegin,
+        mode,
+        scope,
+        null,
+        [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount)]);
+
     private static BehaviorCatalog Catalog(params CardBehaviorDefinition[] definitions)
     {
         var builder = new BehaviorCatalogBuilder("test:c2a-catalog");
@@ -783,6 +930,51 @@ public sealed class CatalogTriggerRuntimeTests
             state,
             new ActionSubmission(decision.Owner, decision.Id, decision.Revision, use.Id),
             catalog);
+    }
+
+    private static ApplyResult ApplyCurrentTriggerDecline(GameState state, BehaviorCatalog catalog)
+    {
+        PendingDecision decision = Assert.IsType<PendingDecision>(state.PendingDecision);
+        LegalAction decline = Assert.Single(decision.LegalActions, action => action.Kind == ActionKind.DeclineTrigger);
+        return GameEngine.Apply(
+            state,
+            new ActionSubmission(decision.Owner, decision.Id, decision.Revision, decline.Id),
+            catalog);
+    }
+
+    private static GameState BeginFormalTurn(
+        GameState state,
+        BehaviorCatalog catalog,
+        bool stopAtCheckpoint = false)
+    {
+        state = GameEngine.BeginTurn(
+            state,
+            state.Turn.ActiveSide,
+            catalog,
+            maxResolutionSteps: stopAtCheckpoint ? 128 : GameEngine.DefaultResolutionStepBudget);
+        state = Pass(state, catalog);
+        if (stopAtCheckpoint)
+        {
+            PendingDecision pending = Assert.IsType<PendingDecision>(state.PendingDecision);
+            if (pending.Kind == DecisionKind.TriggerChoice)
+            {
+                return state;
+            }
+        }
+
+        return Pass(state, catalog);
+    }
+
+    private static GameState Pass(GameState state, BehaviorCatalog catalog)
+    {
+        PendingDecision decision = Assert.IsType<PendingDecision>(state.PendingDecision);
+        LegalAction pass = Assert.Single(decision.LegalActions, action => action.Kind == ActionKind.PassPriority);
+        ApplyResult result = GameEngine.Apply(
+            state,
+            new ActionSubmission(decision.Owner, decision.Id, decision.Revision, pass.Id),
+            catalog);
+        Assert.True(result.Accepted, result.Rejection?.Message);
+        return result.State;
     }
 
     private static ApplyResult ApplyCurrentBehaviorChoice(GameState state, BehaviorCatalog catalog)
@@ -870,7 +1062,8 @@ public sealed class CatalogTriggerRuntimeTests
         IReadOnlyList<CardInstanceState>? cards = null,
         IReadOnlyList<ZoneState>? zones = null,
         IReadOnlyList<ResolutionFrame>? resolutionStack = null,
-        RulesState? rulesState = null) =>
+        RulesState? rulesState = null,
+        TurnState? turn = null) =>
         new(
             state.SchemaVersion,
             state.GameId,
@@ -880,7 +1073,7 @@ public sealed class CatalogTriggerRuntimeTests
             cards ?? state.Cards,
             zones ?? state.Zones,
             state.Servers,
-            state.Turn,
+            turn ?? state.Turn,
             state.Outcome,
             state.RandomState,
             state.Allocator,
@@ -896,6 +1089,15 @@ public sealed class CatalogTriggerRuntimeTests
             state.BehaviorCatalogFingerprint,
             state.RuntimeCardCatalogVersion,
             state.RuntimeCardCatalogFingerprint);
+
+    private static GameState SetActiveSide(GameState state, PlayerSide side) => CopyState(
+        state,
+        turn: new TurnState(
+            side,
+            side == PlayerSide.Corp ? TurnPhase.Corp : TurnPhase.Runner,
+            state.Turn.TurnNumber,
+            TurnStep.None,
+            state.Turn.History));
 
     private static GameState CreateState(
         BehaviorCatalog catalog,

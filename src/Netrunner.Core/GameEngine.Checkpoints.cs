@@ -759,7 +759,8 @@ public static partial class GameEngine
             or OccurrenceKind.RunEnded
             or OccurrenceKind.AgendaScoredOrStolen
             or OccurrenceKind.CardAccessed
-            or OccurrenceKind.HostedCreditPoolEmptied))
+            or OccurrenceKind.HostedCreditPoolEmptied
+            or OccurrenceKind.TurnBegin))
         {
             return [];
         }
@@ -778,6 +779,8 @@ public static partial class GameEngine
             foreach (BehaviorTrigger trigger in definition.Triggers)
             {
                 if (trigger.Occurrence != occurrence.Kind
+                    || occurrence.Kind == OccurrenceKind.TurnBegin
+                        && trigger.Scope == BehaviorTriggerScope.Self
                     || frame.AppliedTriggers.Contains(CatalogTriggerId(occurrence, source, trigger.Key))
                     || !CatalogTriggerScopeMatches(trigger.Scope, source, occurrence, occurrenceController))
                 {

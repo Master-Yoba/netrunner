@@ -3008,3 +3008,23 @@ errors; runtime action expansion and full verification remain pending.
   direct M2 proof remains byte-stable at the schema-3 hashes with all 32
   checkpoints replay verified. Generic trigger execution and movement timing
   are complete; production lifecycle occurrence hooks remain C2b.
+
+### 2026-09-03 — Checkpoint C2b-1a formal turn-begin triggers accepted
+
+- Luna Max connected catalog declarations to the already-serialized formal
+  `TurnBegin` boundary. The normal active-source scan and detached snapshot
+  machinery now collects Controller-scoped triggers only for the beginning
+  player's sources and Any-scoped triggers across both sides; hidden/inactive
+  cards remain ineligible. Self scope is rejected defensively because a turn
+  boundary has no card subject.
+- Cross-controller ordering still begins with the active player, and a yielded
+  boundary resumes with the same queue after JSON load without collecting or
+  applying a trigger twice. Root split hosted-pool empty integration out after
+  identifying that an inner empty trigger can trash the source of its outer
+  transfer behavior; that parent lifecycle needs an explicit narrow contract,
+  not a general moved-source exception.
+- Root independently passed the expanded catalog-trigger gate 16/16, focused
+  TurnShell/Checkpoint regressions 32/32, complete Core 583/583, the zero-warning
+  solution build, Core formatting, and `git diff --check`. The direct M2 proof
+  remains byte-stable at the schema-3 hashes with 32 replay-verified checkpoints.
+  Hosted-credit empty, install, and rez production hooks remain unclaimed.
