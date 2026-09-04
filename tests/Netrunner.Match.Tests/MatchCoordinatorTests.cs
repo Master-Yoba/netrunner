@@ -209,6 +209,10 @@ public sealed class MatchCoordinatorTests
         Assert.Equal("30072", liveIce.DefinitionId);
         Assert.Equal(2, liveIce.Strength);
         Assert.Equal(4, liveEncounter.EffectiveStrength);
+        Assert.Equal(2, liveEncounter.StrengthQuote!.BaseValue);
+        Assert.Equal(4, liveEncounter.StrengthQuote.EffectiveValue);
+        Assert.Equal("ice-strength-protecting-remote", Assert.Single(liveEncounter.StrengthQuote.Terms).ReasonKey);
+        Assert.DoesNotContain("STR", EngineJson.Serialize(liveEncounter.StrengthQuote), StringComparison.Ordinal);
 
         Observation restoredObservation = EngineJson.Deserialize<Observation>(
             EngineJson.Serialize(liveObservation));
@@ -218,6 +222,7 @@ public sealed class MatchCoordinatorTests
         CardViewModel restoredIce = Assert.IsType<CardViewModel>(restoredEncounter.Ice);
         Assert.Equal(2, restoredIce.Strength);
         Assert.Equal(4, restoredEncounter.EffectiveStrength);
+        Assert.Equal(liveEncounter.StrengthQuote, restoredEncounter.StrengthQuote);
     }
 
     [Fact]
@@ -273,6 +278,7 @@ public sealed class MatchCoordinatorTests
             breaker => breaker.CardId == "card:5");
         Assert.Equal(3, beforeCleaver.PrintedStrength);
         Assert.Equal(3, beforeCleaver.EffectiveStrength);
+        Assert.Empty(beforeCleaver.StrengthQuote!.Terms);
 
         LegalAction pump = Assert.Single(beforePump.LegalActions, action =>
             action.Kind == ActionKind.PumpBreaker
@@ -298,6 +304,7 @@ public sealed class MatchCoordinatorTests
             breaker => breaker.CardId == "card:5");
         Assert.Equal(3, afterCleaver.PrintedStrength);
         Assert.Equal(4, afterCleaver.EffectiveStrength);
+        Assert.Equal("icebreaker-pump", Assert.Single(afterCleaver.StrengthQuote!.Terms).ReasonKey);
     }
 
     [Fact]

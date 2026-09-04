@@ -1827,8 +1827,27 @@ public static partial class GameEngine
 
         // CR 26.03 3.9.5g: the interface ability is usable only at breaker
         // strength greater than or equal to the encountered ice's strength.
-        int breakerStrength = EncounterStrength.Breaker(breakerSpec, run.LingeringEffects, breakerId);
-        int iceStrength = EncounterStrength.Ice(iceSpec, server.Kind);
+        ValueQuote breakerQuote = EncounterStrength.ProjectBreakerQuote(
+                working.BehaviorCatalog,
+                working.Cards,
+                working.Zones,
+                working.RulesState,
+                run,
+                breaker)
+            ?? throw new ResolutionFailureException(
+                $"Breaker '{breakerSpec.DefinitionId}' has no executable strength quote.");
+        ValueQuote iceQuote = EncounterStrength.ProjectIceQuote(
+                working.BehaviorCatalog,
+                working.Cards,
+                working.Zones,
+                working.RulesState,
+                run,
+                ice,
+                server.Kind)
+            ?? throw new ResolutionFailureException(
+                $"Encounter ICE '{iceSpec.DefinitionId}' has no executable strength quote.");
+        int breakerStrength = breakerQuote.EffectiveValue;
+        int iceStrength = iceQuote.EffectiveValue;
         if (breakerStrength < iceStrength)
         {
             throw new ResolutionFailureException(
@@ -1950,6 +1969,35 @@ public static partial class GameEngine
                 + "it cannot be pumped.");
         }
 
+        RunValueAdjustment? dynamicAdjustment = null;
+        if (breakerSpec.DynamicPump is { } dynamicPump)
+        {
+            if (!EncounterStrength.TryResolveDynamicPump(
+                    breakerSpec,
+                    breakerId,
+                    working.Cards,
+                    working.Zones,
+                    working.BehaviorCatalog,
+                    out int dynamicQuantity,
+                    out int dynamicDelta))
+            {
+                throw new ResolutionFailureException(
+                    $"Breaker '{breakerSpec.DefinitionId}' has no active installed cards for its dynamic pump.");
+            }
+
+            dynamicAdjustment = new RunValueAdjustment(
+                BehaviorValueKind.Strength,
+                BehaviorValueSourceKind.Variable,
+                BehaviorValueOperation.Add,
+                breakerId,
+                breakerId,
+                dynamicDelta,
+                dynamicPump.ReasonKey,
+                dynamicPump.VariableKey,
+                quantity: dynamicQuantity,
+                unitDelta: dynamicPump.UnitDelta);
+        }
+
         PlayerState runner = GetPlayer(working, PlayerSide.Runner);
         if (!CanAffordRunCredits(runner, run, breakerSpec.PumpCost))
         {
@@ -1966,7 +2014,8 @@ public static partial class GameEngine
                     effectId,
                     EncounterStrength.IcebreakerPumpBehavior,
                     breakerId,
-                    RunLingeringEffectExpiry.Encounter)).ToArray());
+                    RunLingeringEffectExpiry.Encounter,
+                    dynamicAdjustment)).ToArray());
         Emit(working, EngineEventKinds.BreakerPumped, new BreakerPumpedEventPayload(run.Id, breakerId));
         SetRunTiming(working, pumpedRun.WithTiming(
             RunTimingStep.EncounterPaidWindow,
@@ -2102,7 +2151,17 @@ public static partial class GameEngine
                     + "the encounter window cannot be yielded.");
             }
 
-            int iceStrength = EncounterStrength.Ice(iceSpec, attackedServer.Kind);
+            ValueQuote iceQuote = EncounterStrength.ProjectIceQuote(
+                    working.BehaviorCatalog,
+                    working.Cards,
+                    working.Zones,
+                    working.RulesState,
+                    run,
+                    encounteredIce,
+                    attackedServer.Kind)
+                ?? throw new ResolutionFailureException(
+                    $"Encounter ICE '{iceSpec.DefinitionId}' has no executable strength quote.");
+            int iceStrength = iceQuote.EffectiveValue;
             int unbrokenCount = run.Encounter.Subroutines.Count(subroutine => !subroutine.Broken);
             PlayerState runner = GetPlayer(working, PlayerSide.Runner);
             long availableCredits = (long)runner.Credits + run.RunCredits;
@@ -2130,8 +2189,18 @@ public static partial class GameEngine
                         breakerSpec.BreakCost);
                     int effectiveBreakCost = breakCostQuote?.EffectiveCost ?? breakerSpec.BreakCost;
 
+                    ValueQuote breakerQuote = EncounterStrength.ProjectBreakerQuote(
+                            working.BehaviorCatalog,
+                            working.Cards,
+                            working.Zones,
+                            working.RulesState,
+                            run,
+                            breaker)
+                        ?? throw new ResolutionFailureException(
+                            $"Breaker '{breakerSpec.DefinitionId}' has no executable strength quote.");
+
                     if (IceInterfaceMatcher.Matches(iceSpec, breakerSpec)
-                        && EncounterStrength.Breaker(breakerSpec, run.LingeringEffects, cardId) >= iceStrength
+                        && breakerQuote.EffectiveValue >= iceStrength
                         && availableCredits >= effectiveBreakCost)
                     {
                         for (int quantity = 1;
@@ -2150,7 +2219,16 @@ public static partial class GameEngine
                         }
                     }
 
-                    if (availableCredits >= breakerSpec.PumpCost)
+                    bool dynamicPumpAvailable = breakerSpec.DynamicPump is null
+                        || EncounterStrength.TryResolveDynamicPump(
+                            breakerSpec,
+                            cardId,
+                            working.Cards,
+                            working.Zones,
+                            working.BehaviorCatalog,
+                            out _,
+                            out _);
+                    if (dynamicPumpAvailable && availableCredits >= breakerSpec.PumpCost)
                     {
                         foreach (int hostedCredits in LegalHostedCreditSplits(runner, run, breakerSpec.PumpCost))
                         {

@@ -535,6 +535,20 @@ internal static class BehaviorContractStructure
     public static bool AreEqual(BehaviorCardFilter? left, BehaviorCardFilter? right) =>
         left is null ? right is null : left.Equals(right);
 
+    public static bool AreEqual(
+        BehaviorDynamicPumpDeclaration? left,
+        BehaviorDynamicPumpDeclaration? right) =>
+        left is null
+            ? right is null
+            : right is not null
+                && left.ValueKind == right.ValueKind
+                && left.Source == right.Source
+                && left.Operation == right.Operation
+                && left.UnitDelta == right.UnitDelta
+                && string.Equals(left.VariableKey, right.VariableKey, StringComparison.Ordinal)
+                && string.Equals(left.ReasonKey, right.ReasonKey, StringComparison.Ordinal)
+                && AreEqual(left.InstalledFilter, right.InstalledFilter);
+
     public static bool AreEqual(BehaviorTarget? left, BehaviorTarget? right) =>
         left is null
             ? right is null
@@ -581,4 +595,19 @@ internal static class BehaviorContractStructure
                 && left.Delta == right.Delta
                 && string.Equals(left.ReasonKey, right.ReasonKey, StringComparison.Ordinal)
                 && left.Kind == right.Kind;
+
+    public static bool AreEqual(BehaviorValueModifier? left, BehaviorValueModifier? right) =>
+        left is null
+            ? right is null
+            : right is not null
+                && left.ValueKind == right.ValueKind
+                && left.Source == right.Source
+                && left.Operation == right.Operation
+                && left.Delta == right.Delta
+                && string.Equals(left.ReasonKey, right.ReasonKey, StringComparison.Ordinal)
+                && Equals(left.Condition, right.Condition)
+                && AreEqual(left.InstalledFilter, right.InstalledFilter)
+                && string.Equals(left.VariableKey, right.VariableKey, StringComparison.Ordinal)
+                && string.Equals(left.CounterName, right.CounterName, StringComparison.Ordinal)
+                && left.Threshold == right.Threshold;
 }

@@ -20,12 +20,11 @@ public sealed class M2ProofTests
     // with the same AgendaStolen event, so the event stream, the terminal
     // state, and the 32-decision count are unchanged (only the checkpoint
     // state hash at the agenda mid-access decision differs). The initial
-    // The Slice 4.3 A2 state-schema migration (schema 2 -> 3) adds the
-    // once-per-turn ability-use ledger to turn facts, so state hashes are
-    // intentionally re-pinned; event hashes remain stable because event
-    // payloads are unchanged.
+    // Slice 4.4 Checkpoint A adds the serialized run value-adjustment payload
+    // (schema 3 -> 4), so state hashes are intentionally re-pinned. The
+    // event stream remains stable because no M2 event payload changed.
     private const string ExpectedFinalStateHash =
-        "c882eb43f2057073cf138511ac0d5834c20822a7c4a490d8e73cd6c402c682c5";
+        "b658d4e15dd4c0d68c89bf2dd07dc1e6e33befd48be35b6d891cd2ea595764c2";
     private const string ExpectedEventStreamHash =
         "d20cdef94e97ac928ca088e14952b65d2116fecda00485fff5c3b05e1b6e9e20";
 

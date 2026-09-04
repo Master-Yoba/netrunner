@@ -3793,3 +3793,40 @@ errors; runtime action expansion and full verification remain pending.
   generated coverage to 39 registered / 38 complete / one partial, then runs
   the full repository gate. Each accepted checkpoint is recorded here and
   committed locally before the next checkpoint begins.
+
+### 2026-09-04 — Checkpoint A ENG-414 value calculations accepted
+
+- Luna Max implemented the immutable strength-calculation boundary and Root
+  accepted it after three architecture corrections. `ValueQuote` retains one
+  canonical base/effective/ordered-term vocabulary; terms carry typed source
+  and operation, stable reason keys, realized quantity/unit values, and
+  visibility-filtered definition/physical-source provenance. Negative
+  effective strength remains legal, preserving the previous calculation
+  semantics rather than borrowing the credit-cost floor.
+- Static, per-installed-card, counter-threshold, fixed pump, activation-time
+  dynamic pump, and external encounter-scoped adjustments now converge on the
+  same projection. Unity-style pumps declare no fake constant: activation
+  counts active installed Runner icebreakers (including the source), snapshots
+  quantity/unit/total into an encounter-expiring adjustment targeted at the
+  breaker, and repeated pumps compose without later board changes re-deriving
+  X. Leech-style adjustments retain distinct source and exact encountered-ICE
+  target IDs and survive source movement until encounter cleanup.
+- Break action issuance/consumption and invariant reconstruction use the same
+  authoritative quote. Core observations expose only visible raw terms, and
+  Match carries those terms without parsing or independently recreating rules
+  arithmetic. Immutable catalog equality/fingerprints include passive value
+  and dynamic-pump declarations; legacy M2 strength APIs remain adapters over
+  the shared quote and existing definitions keep their old fingerprint bytes
+  when the new optional fields are absent.
+- D-416 applies because run state gained the typed adjustment payload: engine
+  state schema moved from 3 to 4 and checked-in scenarios were re-pinned. The
+  representative M2 hashes changed from `faf4e631…` / `c882eb43…` to
+  `fa7421b4…` / `b658d4e1…`; its event hash remains `d20cdef9…`, with 32
+  checkpoints and replay verification. The evidence scenarios were likewise
+  re-pinned without semantic event changes.
+- Root independently passed the complete 962-test solution gate (Core 674,
+  Cards 153, AI 30, CLI 54, Match 51), the direct M2 proof, touched-project
+  formatter checks, and `git diff --check`. Luna independently passed the
+  zero-warning solution build, the same complete suites, solution formatting,
+  and the focused 10-test value-calculation gate. ENG-415–418 and all Gateway
+  Batch 3 bindings remain outside this checkpoint.

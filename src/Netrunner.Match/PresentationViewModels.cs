@@ -354,6 +354,13 @@ public sealed record EncounterViewModel(
     public int? EffectiveStrength { get; init; }
 
     /// <summary>
+    /// The authoritative typed strength calculation projected by Core. Match
+    /// retains the raw terms so presentation can localize them without
+    /// re-deriving rules or parsing a display string.
+    /// </summary>
+    public ValueQuote? StrengthQuote { get; init; }
+
+    /// <summary>
     /// Current encounter strength of each visible installed icebreaker. Printed
     /// card strength remains immutable; encounter-scoped pumps are reflected
     /// here so clients can explain why an interface ability is or is not legal.
@@ -368,7 +375,11 @@ public sealed record EncounterBreakerViewModel(
     string CardId,
     string Title,
     int PrintedStrength,
-    int EffectiveStrength);
+    int EffectiveStrength)
+{
+    /// <summary>Authoritative typed breaker-strength calculation from Core.</summary>
+    public ValueQuote? StrengthQuote { get; init; }
+}
 
 public sealed record SubroutineViewModel(
     int Ordinal,
@@ -940,14 +951,27 @@ public static class ObservationViewMapper
                 })
                 .ToArray();
             CardViewModel? encounterIce = ReadNullableCard(encounter, "ice", metadataResolver, abilityCue);
+            ValueQuote? observedIceQuote = ReadValueQuote(encounter, "strengthQuote");
+            ValueQuote? iceQuote = SelectIceQuote(
+                encounterIce,
+                attackedServerKind,
+                behaviorCatalog,
+                observedIceQuote);
             encounterView = new EncounterViewModel(
                 ReadString(encounter, "id"),
                 encounterIce,
                 ReadEnum<RunEncounterStatus>(encounter, "status"),
                 new ReadOnlyCollection<SubroutineViewModel>(subroutines.ToArray()))
             {
-                EffectiveStrength = CalculateEffectiveStrength(encounterIce, attackedServerKind, behaviorCatalog),
-                Breakers = CalculateBreakerStrengths(publicState, map, metadataResolver, behaviorCatalog, abilityCue),
+                EffectiveStrength = iceQuote?.EffectiveValue,
+                StrengthQuote = iceQuote,
+                Breakers = CalculateBreakerStrengths(
+                    publicState,
+                    map,
+                    encounter,
+                    metadataResolver,
+                    behaviorCatalog,
+                    abilityCue),
             };
         }
 
@@ -1011,10 +1035,11 @@ public static class ObservationViewMapper
         return null;
     }
 
-    private static int? CalculateEffectiveStrength(
+    private static ValueQuote? SelectIceQuote(
         CardViewModel? encounterIce,
         ServerKind? attackedServerKind,
-        IBehaviorCatalog behaviorCatalog)
+        IBehaviorCatalog behaviorCatalog,
+        ValueQuote? observedQuote)
     {
         if (encounterIce?.DefinitionId is not { } definitionId
             || attackedServerKind is not { } serverKind
@@ -1026,12 +1051,25 @@ public static class ObservationViewMapper
         IceBehaviorSpec? spec = behaviorCatalog.TryGetIce(parsedDefinition, out IceBehaviorSpec? registered)
             ? registered
             : null;
-        return spec is null ? null : EncounterStrength.Ice(spec, serverKind);
+        if (spec is null)
+        {
+            return null;
+        }
+
+        // An observation quote is authoritative when it is for the same
+        // printed definition/base. The base check preserves the historical
+        // injected-catalog compatibility test: an intentionally alternate
+        // catalog can still provide its own pure quote when its printed value
+        // differs from the observation.
+        return observedQuote is not null && observedQuote.BaseValue == spec.Strength
+            ? observedQuote
+            : EncounterStrength.IceQuote(spec, serverKind);
     }
 
     private static ReadOnlyCollection<EncounterBreakerViewModel> CalculateBreakerStrengths(
         IReadOnlyDictionary<string, object?> publicState,
         IReadOnlyDictionary<string, object?> run,
+        IReadOnlyDictionary<string, object?> encounter,
         ICardMetadataResolver metadataResolver,
         IBehaviorCatalog behaviorCatalog,
         CardAbilityCueContext abilityCue)
@@ -1041,13 +1079,52 @@ public static class ObservationViewMapper
             {
                 IReadOnlyDictionary<string, object?> effect = RequiredMap(value, "lingeringEffect");
                 IReadOnlyDictionary<string, object?>? source = OptionalMap(effect, "sourceCard");
+                IReadOnlyDictionary<string, object?>? rawAdjustment = OptionalMap(effect, "valueAdjustment");
+                RunValueAdjustment? adjustment = rawAdjustment is null
+                    ? null
+                    : new RunValueAdjustment(
+                        ReadEnum<BehaviorValueKind>(rawAdjustment, "valueKind"),
+                        ReadEnum<BehaviorValueSourceKind>(rawAdjustment, "source"),
+                        ReadEnum<BehaviorValueOperation>(rawAdjustment, "operation"),
+                        ReadCardInstanceId(rawAdjustment, "sourceCardId")
+                            ?? throw new FormatException("A value adjustment requires a source card ID."),
+                        ReadCardInstanceId(rawAdjustment, "targetCardId")
+                            ?? throw new FormatException("A value adjustment requires a target card ID."),
+                        ReadInt(rawAdjustment, "delta"),
+                        ReadString(rawAdjustment, "reasonKey"),
+                        ReadNullableString(rawAdjustment, "variableKey"),
+                        ReadNullableInt(rawAdjustment, "quantity"),
+                        ReadNullableInt(rawAdjustment, "unitDelta"));
                 return new RunLingeringEffect(
                     new RunEffectId(ReadString(effect, "id")),
                     ReadString(effect, "behaviorId"),
                     source is null ? null : new CardInstanceId(ReadString(source, "id")),
-                    ReadEnum<RunLingeringEffectExpiry>(effect, "expiry"));
+                    ReadEnum<RunLingeringEffectExpiry>(effect, "expiry"),
+                    adjustment);
             })
             .ToArray();
+
+        Dictionary<string, ValueQuote> observedQuotes = ReadList(encounter, "breakerStrengths")
+            .Select(value =>
+            {
+                IReadOnlyDictionary<string, object?> entry = RequiredMap(value, "breakerStrength");
+                string cardId = ReadString(entry, "cardId");
+                ValueQuote quote = ReadValueQuote(entry, "strengthQuote")
+                    ?? throw new FormatException(
+                        $"Observation field 'breakerStrength {cardId}.strengthQuote' must be a value quote.");
+                return (cardId, quote);
+            })
+            .GroupBy(pair => pair.cardId, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group =>
+            {
+                if (group.Count() != 1)
+                {
+                    throw new FormatException(
+                        $"Observation field 'breakerStrengths' contains duplicate card '{group.Key}'.");
+                }
+
+                return group.Single().quote;
+            }, StringComparer.Ordinal);
 
         var breakers = new List<EncounterBreakerViewModel>();
         foreach (CardViewModel card in ReadCards(publicState, "runnerRig", metadataResolver, abilityCue))
@@ -1068,11 +1145,18 @@ public static class ObservationViewMapper
                 continue;
             }
 
+            ValueQuote quote = observedQuotes.TryGetValue(card.Id, out ValueQuote? observedQuote)
+                && observedQuote.BaseValue == spec.BaseStrength
+                ? observedQuote
+                : EncounterStrength.BreakerQuote(spec, effects, new CardInstanceId(card.Id));
             breakers.Add(new EncounterBreakerViewModel(
                 card.Id,
                 card.Title,
                 spec.BaseStrength,
-                EncounterStrength.Breaker(spec, effects, new CardInstanceId(card.Id))));
+                quote.EffectiveValue)
+            {
+                StrengthQuote = quote,
+            });
         }
 
         return new ReadOnlyCollection<EncounterBreakerViewModel>(breakers);
@@ -1083,6 +1167,71 @@ public static class ObservationViewMapper
             ReadEnum<GameOutcomeKind>(map, "kind"),
             ReadNullableEnum<PlayerSide>(map, "winner"),
             ReadNullableEnum<GameWinReason>(map, "reason"));
+
+    private static ValueQuote? ReadValueQuote(
+        IReadOnlyDictionary<string, object?> map,
+        string key)
+    {
+        if (!map.TryGetValue(key, out object? rawValue)
+            || rawValue is null
+            || rawValue is JsonElement { ValueKind: JsonValueKind.Null })
+        {
+            return null;
+        }
+
+        IReadOnlyDictionary<string, object?> quote = RequiredMap(rawValue, key);
+        if (!quote.ContainsKey("terms"))
+        {
+            throw new FormatException($"Observation field '{key}.terms' is required.");
+        }
+
+        ValueCalculationTerm[] terms = ReadList(quote, "terms")
+            .Select(value =>
+            {
+                IReadOnlyDictionary<string, object?> term = RequiredMap(value, $"{key}.terms");
+                return new ValueCalculationTerm(
+                    ReadEnum<BehaviorValueSourceKind>(term, "source"),
+                    ReadEnum<BehaviorValueOperation>(term, "operation"),
+                    ReadInt(term, "delta"),
+                    ReadString(term, "reasonKey"),
+                    ReadCardDefinitionId(term, "sourceDefinitionId"),
+                    ReadCardInstanceId(term, "sourceCardId"),
+                    ReadNullableInt(term, "quantity"),
+                    ReadNullableInt(term, "unitDelta"),
+                    ReadNullableString(term, "variableKey"));
+            })
+            .ToArray();
+
+        return new ValueQuote(
+            ReadEnum<BehaviorValueKind>(quote, "valueKind"),
+            ReadInt(quote, "baseValue"),
+            ReadInt(quote, "effectiveValue"),
+            terms);
+    }
+
+    private static CardDefinitionId? ReadCardDefinitionId(
+        IReadOnlyDictionary<string, object?> map,
+        string key)
+    {
+        string? value = ReadNullableString(map, key);
+        return value is null ? null : new CardDefinitionId(value);
+    }
+
+    private static CardInstanceId? ReadCardInstanceId(
+        IReadOnlyDictionary<string, object?> map,
+        string key)
+    {
+        string? value = ReadNullableString(map, key);
+        return value is null ? null : new CardInstanceId(value);
+    }
+
+    private static int? ReadNullableInt(
+        IReadOnlyDictionary<string, object?> map,
+        string key) => map.TryGetValue(key, out object? value)
+        && value is not null
+        && value is not JsonElement { ValueKind: JsonValueKind.Null }
+        ? ReadInt(map, key)
+        : null;
 
     private static CardViewModel?[] ReadNullableCards(
         IReadOnlyDictionary<string, object?> map,

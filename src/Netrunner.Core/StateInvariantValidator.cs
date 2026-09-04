@@ -1497,6 +1497,77 @@ public static class StateInvariantValidator
             {
                 Add(violations, "run.invalid-effect-expiry", $"{effectPath}.expiry", $"'{effect.Expiry}' is not supported inside RunState.");
             }
+
+            if (effect.ValueAdjustment is { } adjustment)
+            {
+                if (effect.Expiry != RunLingeringEffectExpiry.Encounter)
+                {
+                    Add(
+                        violations,
+                        "run.value-adjustment-expiry",
+                        $"{effectPath}.valueAdjustment",
+                        "Typed value adjustments must expire at encounter end.");
+                }
+
+                if (effect.SourceCardId != adjustment.SourceCardId)
+                {
+                    Add(
+                        violations,
+                        "run.value-adjustment-source",
+                        $"{effectPath}.valueAdjustment.sourceCardId",
+                        "A typed value adjustment source must match its enclosing effect source.");
+                }
+
+                if (!state.Cards.Any(card => card.Id == adjustment.SourceCardId))
+                {
+                    Add(
+                        violations,
+                        "run.value-adjustment-source-missing",
+                        $"{effectPath}.valueAdjustment.sourceCardId",
+                        $"Typed value adjustment source '{adjustment.SourceCardId}' is not present in state.");
+                }
+
+                if (!state.Cards.Any(card => card.Id == adjustment.TargetCardId))
+                {
+                    Add(
+                        violations,
+                        "run.value-adjustment-target-missing",
+                        $"{effectPath}.valueAdjustment.targetCardId",
+                        $"Typed value adjustment target '{adjustment.TargetCardId}' is not present in state.");
+                }
+
+                bool initializedEncounter = (run.Step is
+                    RunTimingStep.Encounter or RunTimingStep.EncounterPaidWindow)
+                    && run.Encounter is { Status: RunEncounterStatus.Initialized };
+                bool targetMatchesEncounter = adjustment.Source switch
+                {
+                    // Encounter-scoped effects (for example a successful-run
+                    // Leech reduction) always target the exact ICE that
+                    // initialized this encounter. Their source may move after
+                    // activation without changing the target.
+                    BehaviorValueSourceKind.EncounterScoped => initializedEncounter
+                        && run.Encounter!.IceId == adjustment.TargetCardId,
+                    // A dynamic pump snapshots onto its activating breaker;
+                    // an active Runner Rig breaker is the only executable
+                    // target for this realized variable adjustment.
+                    BehaviorValueSourceKind.Variable => initializedEncounter
+                        && adjustment.SourceCardId == adjustment.TargetCardId
+                        && state.Cards.FirstOrDefault(card => card.Id == adjustment.TargetCardId) is { } targetCard
+                        && state.Zones.FirstOrDefault(zone => zone.Id == targetCard.ZoneId) is
+                        { Kind: ZoneKind.RunnerRig, OwnerSide: PlayerSide.Runner } targetZone
+                        && targetZone.CardIds.Contains(adjustment.TargetCardId)
+                        && behaviorCatalog.TryGetIcebreaker(targetCard.DefinitionId, out _),
+                    _ => false,
+                };
+                if (!targetMatchesEncounter)
+                {
+                    Add(
+                        violations,
+                        "run.value-adjustment-target",
+                        $"{effectPath}.valueAdjustment.targetCardId",
+                        "A typed run value adjustment must target the current initialized encounter ICE or its active breaker.");
+                }
+            }
         }
 
         if (run.Priority is null)
@@ -6779,7 +6850,22 @@ public static class StateInvariantValidator
                             state.GetCard(run.Encounter.IceId).DefinitionId,
                             out IceBehaviorSpec? expectedIceSpec))
                     {
-                        int iceStrength = EncounterStrength.Ice(expectedIceSpec, attackedServer.Kind);
+                        ValueQuote? expectedIceQuote = EncounterStrength.ProjectIceQuote(
+                            state,
+                            behaviorCatalog,
+                            run.Encounter.IceId,
+                            attackedServer.Kind);
+                        if (expectedIceQuote is null)
+                        {
+                            Add(
+                                violations,
+                                "run.strength-quote-missing",
+                                $"{path}.encounter",
+                                "The encountered ICE has no authoritative strength quote.");
+                            break;
+                        }
+
+                        int iceStrength = expectedIceQuote.EffectiveValue;
                         int unbrokenCount = run.Encounter.Subroutines.Count(subroutine => !subroutine.Broken);
                         // Run-scoped hosted credits (Overclock) are spendable
                         // during the run, so they count toward the offer. Each
@@ -6804,9 +6890,14 @@ public static class StateInvariantValidator
                                     continue;
                                 }
 
+                                ValueQuote? expectedBreakerQuote = EncounterStrength.ProjectBreakerQuote(
+                                    state,
+                                    behaviorCatalog,
+                                    cardId);
                                 if (runnerPlayer is not null
+                                    && expectedBreakerQuote is not null
                                     && IceInterfaceMatcher.Matches(expectedIceSpec, expectedBreakerSpec)
-                                    && EncounterStrength.Breaker(expectedBreakerSpec, run.LingeringEffects, cardId) >= iceStrength
+                                    && expectedBreakerQuote.EffectiveValue >= iceStrength
                                     && (long)runnerPlayer.Credits + run.RunCredits >= (GameEngine.ProjectCostQuote(
                                         state,
                                         behaviorCatalog,
@@ -6839,7 +6930,17 @@ public static class StateInvariantValidator
                                     }
                                 }
 
+                                bool dynamicPumpAvailable = expectedBreakerSpec.DynamicPump is null
+                                    || EncounterStrength.TryResolveDynamicPump(
+                                        expectedBreakerSpec,
+                                        cardId,
+                                        state.Cards,
+                                        state.Zones,
+                                        behaviorCatalog,
+                                        out _,
+                                        out _);
                                 if (runnerPlayer is not null
+                                    && dynamicPumpAvailable
                                     && (long)runnerPlayer.Credits + run.RunCredits >= expectedBreakerSpec.PumpCost)
                                 {
                                     foreach (int hostedCredits in LegalHostedCreditSplits(

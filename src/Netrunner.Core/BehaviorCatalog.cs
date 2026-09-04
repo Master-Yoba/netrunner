@@ -1460,7 +1460,8 @@ public sealed class CardBehaviorDefinition
         IReadOnlyList<BehaviorTrigger>? triggers = null,
         string? extensionHandlerId = null,
         IReadOnlyList<BehaviorPaidAbility>? paidAbilities = null,
-        IReadOnlyList<BehaviorCostModifier>? costModifiers = null)
+        IReadOnlyList<BehaviorCostModifier>? costModifiers = null,
+        IReadOnlyList<BehaviorValueModifier>? valueModifiers = null)
     {
         DefinitionId = definitionId;
         if (!Enum.IsDefined(controller))
@@ -1495,6 +1496,7 @@ public sealed class CardBehaviorDefinition
 
         PaidAbilities = FreezePaidAbilities(paidAbilities);
         CostModifiers = FreezeCostModifiers(costModifiers);
+        ValueModifiers = FreezeValueModifiers(valueModifiers);
         if (!string.IsNullOrWhiteSpace(extensionHandlerId))
         {
             ExtensionHandlerId = extensionHandlerId;
@@ -1533,6 +1535,14 @@ public sealed class CardBehaviorDefinition
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<BehaviorCostModifier>? CostModifiers { get; }
+
+    /// <summary>
+    /// Generic calculated-value declarations owned by this physical card's
+    /// behavior definition. Null is preserved for legacy definitions so their
+    /// JSON and compatibility fingerprints remain stable.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<BehaviorValueModifier>? ValueModifiers { get; }
 
     private static ReadOnlyCollection<T> Freeze<T>(IEnumerable<T>? values)
         where T : class
@@ -1593,6 +1603,30 @@ public sealed class CardBehaviorDefinition
         }
 
         return new ReadOnlyCollection<BehaviorCostModifier>(copy);
+    }
+
+    private static ReadOnlyCollection<BehaviorValueModifier>? FreezeValueModifiers(
+        IEnumerable<BehaviorValueModifier>? valueModifiers)
+    {
+        if (valueModifiers is null)
+        {
+            return null;
+        }
+
+        BehaviorValueModifier[] copy = valueModifiers.ToArray();
+        if (copy.Length == 0)
+        {
+            return null;
+        }
+
+        if (copy.Any(static value => value is null))
+        {
+            throw new ArgumentException(
+                "Value modifier declarations must not contain null entries.",
+                nameof(valueModifiers));
+        }
+
+        return new ReadOnlyCollection<BehaviorValueModifier>(copy);
     }
 }
 
@@ -2100,14 +2134,23 @@ internal static class BehaviorCatalogStructure
                 && a.IceType == b.IceType
                 && a.RezCost == b.RezCost
                 && SequenceEquals(a.Subroutines, b.Subroutines)
-                && SequenceEquals(a.StrengthModifiers, b.StrengthModifiers),
+                && SequenceEquals(a.StrengthModifiers, b.StrengthModifiers)
+                && BehaviorContractStructure.SequenceEquals(
+                    a.ValueModifiers ?? [],
+                    b.ValueModifiers ?? [],
+                    BehaviorContractStructure.AreEqual),
             (IcebreakerBehaviorSpec a, IcebreakerBehaviorSpec b) => a.DefinitionId == b.DefinitionId
                 && a.BaseStrength == b.BaseStrength
                 && a.InterfaceType == b.InterfaceType
                 && a.BreakCost == b.BreakCost
                 && a.BreakLimit == b.BreakLimit
                 && a.PumpCost == b.PumpCost
-                && a.PumpStrength == b.PumpStrength,
+                && a.PumpStrength == b.PumpStrength
+                && BehaviorContractStructure.AreEqual(a.DynamicPump, b.DynamicPump)
+                && BehaviorContractStructure.SequenceEquals(
+                    a.ValueModifiers ?? [],
+                    b.ValueModifiers ?? [],
+                    BehaviorContractStructure.AreEqual),
             (AssetBehaviorSpec a, AssetBehaviorSpec b) => a.DefinitionId == b.DefinitionId && a.TrashCost == b.TrashCost,
             (AgendaBehaviorSpec a, AgendaBehaviorSpec b) => a.DefinitionId == b.DefinitionId && a.AgendaPoints == b.AgendaPoints,
             (RunEventBehaviorSpec a, RunEventBehaviorSpec b) => a.DefinitionId == b.DefinitionId
@@ -2141,6 +2184,10 @@ internal static class BehaviorCatalogStructure
                     a.CostModifiers ?? [],
                     b.CostModifiers ?? [],
                     static (left, right) => left.Equals(right))
+                && BehaviorContractStructure.SequenceEquals(
+                    a.ValueModifiers ?? [],
+                    b.ValueModifiers ?? [],
+                    BehaviorContractStructure.AreEqual)
                 && a.ExtensionHandlerId == b.ExtensionHandlerId,
             _ => false,
         };
@@ -2214,12 +2261,29 @@ internal static class BehaviorCatalogFingerprint
         {
             builder.Append('|').Append(modifier.Delta).Append(':').Append(modifier.Condition);
         }
+
+        if (value.ValueModifiers is { Count: > 0 })
+        {
+            AppendSequence(builder, value.ValueModifiers, AppendValueModifier);
+        }
     }
 
-    private static void AppendIcebreaker(StringBuilder builder, IcebreakerBehaviorSpec value) => builder
-        .Append(value.BaseStrength).Append('|').Append(value.InterfaceType).Append('|')
-        .Append(value.BreakCost).Append('|').Append(value.BreakLimit).Append('|')
-        .Append(value.PumpCost).Append('|').Append(value.PumpStrength);
+    private static void AppendIcebreaker(StringBuilder builder, IcebreakerBehaviorSpec value)
+    {
+        builder.Append(value.BaseStrength).Append('|').Append(value.InterfaceType).Append('|')
+            .Append(value.BreakCost).Append('|').Append(value.BreakLimit).Append('|')
+            .Append(value.PumpCost).Append('|').Append(value.PumpStrength);
+        if (value.DynamicPump is { } dynamicPump)
+        {
+            builder.Append("|dynamic-pump=");
+            AppendDynamicPump(builder, dynamicPump);
+        }
+
+        if (value.ValueModifiers is { Count: > 0 })
+        {
+            AppendSequence(builder, value.ValueModifiers, AppendValueModifier);
+        }
+    }
 
     private static void AppendAsset(StringBuilder builder, AssetBehaviorSpec value) => builder.Append(value.TrashCost);
 
@@ -2257,6 +2321,11 @@ internal static class BehaviorCatalogFingerprint
         {
             AppendSequence(builder, value.CostModifiers, AppendCostModifier);
         }
+
+        if (value.ValueModifiers is { Count: > 0 })
+        {
+            AppendSequence(builder, value.ValueModifiers, AppendValueModifier);
+        }
     }
 
     private static void AppendCostModifier(StringBuilder builder, BehaviorCostModifier value)
@@ -2267,6 +2336,42 @@ internal static class BehaviorCatalogFingerprint
         AppendCondition(builder, value.Condition);
         builder.Append(",reason=");
         AppendString(builder, value.ReasonKey);
+    }
+
+    private static void AppendValueModifier(StringBuilder builder, BehaviorValueModifier value)
+    {
+        builder.Append("value=").Append((int)value.ValueKind)
+            .Append(",source=").Append((int)value.Source)
+            .Append(",operation=").Append((int)value.Operation)
+            .Append(",delta=").Append(value.Delta)
+            .Append(",reason=");
+        AppendString(builder, value.ReasonKey);
+        builder.Append(",condition=");
+        AppendCondition(builder, value.Condition);
+        builder.Append(",filter=");
+        AppendFilter(builder, value.InstalledFilter);
+        builder.Append(",variable=");
+        AppendString(builder, value.VariableKey);
+        builder.Append(",counter=");
+        AppendString(builder, value.CounterName);
+        builder.Append(",threshold=");
+        AppendNullableInt(builder, value.Threshold);
+    }
+
+    private static void AppendDynamicPump(
+        StringBuilder builder,
+        BehaviorDynamicPumpDeclaration value)
+    {
+        builder.Append("value=").Append((int)value.ValueKind)
+            .Append(",source=").Append((int)value.Source)
+            .Append(",operation=").Append((int)value.Operation)
+            .Append(",unitDelta=").Append(value.UnitDelta)
+            .Append(",variable=");
+        AppendString(builder, value.VariableKey);
+        builder.Append(",reason=");
+        AppendString(builder, value.ReasonKey);
+        builder.Append(",filter=");
+        AppendFilter(builder, value.InstalledFilter);
     }
 
     private static void AppendPaidAbility(StringBuilder builder, BehaviorPaidAbility value)

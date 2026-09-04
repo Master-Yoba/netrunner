@@ -497,7 +497,7 @@ public sealed class PaidAbilityMaterializationTests
     }
 
     [Fact]
-    public void AbilityDecisionRoundTripsAtSchemaThreeWithExactPayload()
+    public void AbilityDecisionRoundTripsAtCurrentStateSchemaWithExactPayload()
     {
         BehaviorPaidAbility paid = Ability(
             "ability:roundtrip",
@@ -523,9 +523,9 @@ public sealed class PaidAbilityMaterializationTests
             ]);
 
         string json = EngineJson.Serialize(withDecision);
-        Assert.Contains("\"schemaVersion\":3", json, StringComparison.Ordinal);
+        Assert.Contains($"\"schemaVersion\":{GameState.CurrentSchemaVersion}", json, StringComparison.Ordinal);
         GameState restored = EngineJson.DeserializeState(json, catalog);
-        Assert.Equal(3, restored.SchemaVersion);
+        Assert.Equal(GameState.CurrentSchemaVersion, restored.SchemaVersion);
         Assert.Equal(json, EngineJson.Serialize(restored));
         AbilityActionParameters actual = Assert.IsType<AbilityActionParameters>(
             restored.PendingDecision!.LegalActions.Single(action => action.Kind == ActionKind.UseAbility).Parameters);

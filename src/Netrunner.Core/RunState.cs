@@ -90,6 +90,200 @@ public enum RunLingeringEffectExpiry
     Run,
 }
 
+/// <summary>
+/// A typed value adjustment carried by a run lingering effect. The enclosing
+/// effect supplies the expiry boundary; this payload supplies both physical
+/// provenance and the target so a source may be removed without changing an
+/// already-created encounter adjustment.
+/// </summary>
+public sealed record RunValueAdjustment
+{
+    [JsonConstructor]
+    public RunValueAdjustment(
+        BehaviorValueKind valueKind,
+        BehaviorValueSourceKind source,
+        BehaviorValueOperation operation,
+        CardInstanceId sourceCardId,
+        CardInstanceId targetCardId,
+        int delta,
+        string reasonKey,
+        string? variableKey = null,
+        int? quantity = null,
+        int? unitDelta = null)
+    {
+        if (!Enum.IsDefined(valueKind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(valueKind));
+        }
+
+        if (valueKind != BehaviorValueKind.Strength)
+        {
+            throw new ArgumentOutOfRangeException(nameof(valueKind));
+        }
+
+        if (!Enum.IsDefined(operation))
+        {
+            throw new ArgumentOutOfRangeException(nameof(operation));
+        }
+
+        if (operation != BehaviorValueOperation.Add)
+        {
+            throw new ArgumentException(
+                "Only additive run value adjustments are executable in this checkpoint.",
+                nameof(operation));
+        }
+
+        if (source is not (BehaviorValueSourceKind.Variable or BehaviorValueSourceKind.EncounterScoped))
+        {
+            throw new ArgumentException(
+                "Run value adjustments may only be variable or encounter-scoped realized terms.",
+                nameof(source));
+        }
+
+        if (source == BehaviorValueSourceKind.Variable
+            ? !StableIdentifier.TryValidate(variableKey)
+            : variableKey is not null)
+        {
+            throw new ArgumentException(
+                source == BehaviorValueSourceKind.Variable
+                    ? "Variable run value adjustments require a stable variable key."
+                    : "Encounter-scoped run value adjustments must not carry variable metadata.",
+                nameof(variableKey));
+        }
+
+        if (source == BehaviorValueSourceKind.Variable)
+        {
+            if (quantity is not (> 0) || unitDelta is 0 or null)
+            {
+                throw new ArgumentException(
+                    "Variable run value adjustments require a positive quantity and nonzero unit delta.",
+                    nameof(quantity));
+            }
+
+            int expectedDelta;
+            try
+            {
+                expectedDelta = checked(quantity.Value * unitDelta.Value);
+            }
+            catch (OverflowException exception)
+            {
+                throw new ArgumentException(
+                    "Variable run value adjustment quantity and unit delta overflow.",
+                    nameof(delta),
+                    exception);
+            }
+
+            if (delta != expectedDelta)
+            {
+                throw new ArgumentException(
+                    "Variable run value adjustment delta must equal quantity multiplied by unit delta.",
+                    nameof(delta));
+            }
+        }
+        else if (quantity is not null || unitDelta is not null)
+        {
+            throw new ArgumentException(
+                "Encounter-scoped run value adjustments must not carry quantity or unit metadata.",
+                nameof(quantity));
+        }
+
+        if (!StableIdentifier.TryValidate(sourceCardId.Value))
+        {
+            throw new ArgumentException(
+                "A run value adjustment source card ID must be a stable identifier.",
+                nameof(sourceCardId));
+        }
+
+        if (!StableIdentifier.TryValidate(targetCardId.Value))
+        {
+            throw new ArgumentException(
+                "A run value adjustment target card ID must be a stable identifier.",
+                nameof(targetCardId));
+        }
+
+        if (delta == 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(delta),
+                "A run value adjustment delta must be nonzero.");
+        }
+
+        if (!StableIdentifier.TryValidate(reasonKey))
+        {
+            throw new ArgumentException(
+                "A run value adjustment reason key must be a stable identifier.",
+                nameof(reasonKey));
+        }
+
+        ValueKind = valueKind;
+        Source = source;
+        Operation = operation;
+        SourceCardId = sourceCardId;
+        TargetCardId = targetCardId;
+        Delta = delta;
+        ReasonKey = reasonKey;
+        VariableKey = variableKey;
+        Quantity = quantity;
+        UnitDelta = unitDelta;
+    }
+
+    public RunValueAdjustment(
+        CardInstanceId sourceCardId,
+        CardInstanceId targetCardId,
+        int delta,
+        string reasonKey)
+        : this(
+            BehaviorValueKind.Strength,
+            BehaviorValueSourceKind.EncounterScoped,
+            BehaviorValueOperation.Add,
+            sourceCardId,
+            targetCardId,
+            delta,
+            reasonKey)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public BehaviorValueKind ValueKind { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public BehaviorValueSourceKind Source { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public BehaviorValueOperation Operation { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId SourceCardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId TargetCardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Delta { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string ReasonKey { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? VariableKey { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? Quantity { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? UnitDelta { get; private set; }
+}
+
 /// <summary>The hidden Corp pool a random breach candidate is drawn from.</summary>
 public enum BreachHiddenCandidateSource
 {
@@ -276,22 +470,39 @@ public sealed record RunLingeringEffect
         RunEffectId id,
         string behaviorId,
         CardInstanceId? sourceCardId,
-        RunLingeringEffectExpiry expiry)
+        RunLingeringEffectExpiry expiry,
+        RunValueAdjustment? valueAdjustment = null)
     {
         ArgumentNullException.ThrowIfNull(behaviorId);
+        if (valueAdjustment is not null && expiry != RunLingeringEffectExpiry.Encounter)
+        {
+            throw new ArgumentException(
+                "Typed run value adjustments must expire with the encounter.",
+                nameof(expiry));
+        }
+
+        if (valueAdjustment is not null && sourceCardId != valueAdjustment.SourceCardId)
+        {
+            throw new ArgumentException(
+                "A run value adjustment source must match its enclosing lingering effect source.",
+                nameof(sourceCardId));
+        }
+
         Version = version;
         Id = id;
         BehaviorId = behaviorId;
         SourceCardId = sourceCardId;
         Expiry = expiry;
+        ValueAdjustment = valueAdjustment;
     }
 
     public RunLingeringEffect(
         RunEffectId id,
         string behaviorId,
         CardInstanceId? sourceCardId,
-        RunLingeringEffectExpiry expiry)
-        : this(1, id, behaviorId, sourceCardId, expiry)
+        RunLingeringEffectExpiry expiry,
+        RunValueAdjustment? valueAdjustment = null)
+        : this(1, id, behaviorId, sourceCardId, expiry, valueAdjustment)
     {
     }
 
@@ -315,7 +526,15 @@ public sealed record RunLingeringEffect
     [JsonRequired]
     public RunLingeringEffectExpiry Expiry { get; private set; }
 
-    internal RunLingeringEffect Copy() => new(Version, Id, BehaviorId, SourceCardId, Expiry);
+    /// <summary>
+    /// Optional typed value contribution. Null preserves the legacy M2
+    /// lingering-effect JSON shape for pump and other effects.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public RunValueAdjustment? ValueAdjustment { get; private set; }
+
+    internal RunLingeringEffect Copy() => new(Version, Id, BehaviorId, SourceCardId, Expiry, ValueAdjustment);
 }
 
 /// <summary>

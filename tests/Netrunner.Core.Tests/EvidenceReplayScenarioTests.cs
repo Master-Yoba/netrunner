@@ -379,9 +379,9 @@ public sealed class CanonicalEvidenceTests
     }
 
     [Theory]
-    [InlineData("base.json", "c7c915f985676863a3d5f735558a9df6f89212bc5c8dcfa81d8114826a6c1e01")]
-    [InlineData("nested-outer.json", "352bd93d1b61e41d12c1cf8fed89dd906167100e0e8501e04583dc0c0186b018")]
-    [InlineData("nested-inner.json", "60bdeb1c6a34b1a99729e13f5ccaae860edee0387526eeac143b95baceeba256")]
+    [InlineData("base.json", "0fc46fa8811517c94c1daf0bbd1b185b438ae898cecb40bd8d56ce0c10197efc")]
+    [InlineData("nested-outer.json", "90641581e574bef499da1e9d285c938c47c2c168358265d79e02bfd575569122")]
+    [InlineData("nested-inner.json", "0493799b74679bde1bc83d4a3d0a5ce16e3da2543b3175df6ad272ed724ee973")]
     public void CheckedInScenarioFixturesBuildToExactDeterministicStates(string fileName, string expectedHash)
     {
         string path = Path.Combine(AppContext.BaseDirectory, "Scenarios", fileName);
@@ -420,13 +420,13 @@ public sealed class CanonicalEvidenceTests
         Assert.Throws<JsonException>(() => EngineJson.Deserialize<ScenarioArtifact>(baseJson.Replace("\"rulesVersion\": \"26.03\"", "\"rulesVersion\": \"unsupported\"", StringComparison.Ordinal)));
 
         string invalidDefinition = baseJson.Replace(
-            "\"expectedStateHash\": \"c7c915f985676863a3d5f735558a9df6f89212bc5c8dcfa81d8114826a6c1e01\"",
+            "\"expectedStateHash\": \"0fc46fa8811517c94c1daf0bbd1b185b438ae898cecb40bd8d56ce0c10197efc\"",
             "\"cards\":[{\"id\":\"card:100\",\"definitionId\":\"fixture:missing\",\"zone\":\"corpDeck\",\"ownerSide\":\"corp\"}]",
             StringComparison.Ordinal);
         Assert.Throws<JsonException>(() => EngineJson.Deserialize<ScenarioArtifact>(invalidDefinition));
 
         string invalidOwner = baseJson.Replace(
-            "\"expectedStateHash\": \"c7c915f985676863a3d5f735558a9df6f89212bc5c8dcfa81d8114826a6c1e01\"",
+            "\"expectedStateHash\": \"0fc46fa8811517c94c1daf0bbd1b185b438ae898cecb40bd8d56ce0c10197efc\"",
             "\"cards\":[{\"id\":\"card:101\",\"definitionId\":\"fixture:first\",\"zone\":\"corpDeck\",\"ownerSide\":\"runner\"}]",
             StringComparison.Ordinal);
         Assert.Throws<JsonException>(() => EngineJson.Deserialize<ScenarioArtifact>(invalidOwner));
