@@ -4,11 +4,11 @@
   "rulesVersion": "CR-26.03",
   "counts": {
     "total": 77,
-    "registered": 32,
-    "tested": 32,
-    "fullTextComplete": 31,
+    "registered": 39,
+    "tested": 39,
+    "fullTextComplete": 38,
     "partial": 1,
-    "unregistered": 45
+    "unregistered": 38
   },
   "diagnostics": [],
   "cards": [
@@ -181,13 +181,18 @@
       "title": "Leech",
       "batch": "slice-4.4",
       "slice": "4.4",
-      "status": "unregistered",
-      "textStatus": "audited",
-      "reviewStatus": "pending",
-      "reviewer": "",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
+      "reviewer": "architect",
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch3C1RuntimeTests.LeechCatalogEffectRejectsForgedBehaviorDeltaReasonAndSourceProvenance",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch3C1RuntimeTests.LeechCentralSuccessAddsVirusAndItsPaidEncounterAdjustmentExpires",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch3C1RuntimeTests.LeechDoesNotTriggerOnACompletedRemoteRunAndCannotPayWithoutVirus",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch3C1RuntimeTests.LeechStacksEncounterAdjustmentsAndMakesAnEchelonBreakLegal"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "CR-6.7-success",
@@ -276,13 +281,15 @@
       "title": "Tread Lightly",
       "batch": "slice-4.4",
       "slice": "4.4",
-      "status": "unregistered",
-      "textStatus": "audited",
-      "reviewStatus": "pending",
-      "reviewer": "",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
+      "reviewer": "architect",
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch3C2TreadDzmzRuntimeTests.TreadLightlyPaysOneSelectsTheRequestedServerRaisesRezCostAndExpiresAtRunEnd"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "CR-6.7-success",
@@ -297,13 +304,15 @@
       "title": "Docklands Pass",
       "batch": "slice-4.4",
       "slice": "4.4",
-      "status": "unregistered",
-      "textStatus": "audited",
-      "reviewStatus": "pending",
-      "reviewer": "",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
+      "reviewer": "architect",
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch3C2DocklandsVerbalRuntimeTests.DocklandsPassAddsOneActualRandomHqAccessOnlyOnTheFirstBreach"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "CR-7.3-breach"
@@ -497,13 +506,15 @@
       "title": "DZMZ Optimizer",
       "batch": "slice-4.4",
       "slice": "4.4",
-      "status": "unregistered",
-      "textStatus": "audited",
-      "reviewStatus": "pending",
-      "reviewer": "",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
+      "reviewer": "architect",
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch3C2TreadDzmzRuntimeTests.DzmzAddsMemoryAndDiscountsOnlyTheFirstProgramInstallThenChargesTheSecondInFull"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "CR-3.8-console",
@@ -570,13 +581,16 @@
       "title": "Echelon",
       "batch": "slice-4.4",
       "slice": "4.4",
-      "status": "unregistered",
-      "textStatus": "audited",
-      "reviewStatus": "pending",
-      "reviewer": "",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
+      "reviewer": "architect",
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch3C1RuntimeTests.EchelonCountsItselfAndItsBreakOfferUsesThePassiveStrength",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch3C1RuntimeTests.EchelonCountsMultipleInstalledIcebreakersInItsPassiveQuote"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "CR-6.2-run-position"
@@ -590,13 +604,16 @@
       "title": "Unity",
       "batch": "slice-4.4",
       "slice": "4.4",
-      "status": "unregistered",
-      "textStatus": "audited",
-      "reviewStatus": "pending",
-      "reviewer": "",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
+      "reviewer": "architect",
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch3C1RuntimeTests.UnityCanStackTwoActivationSnapshotsDeterministically",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch3C1RuntimeTests.UnitySnapshotsAllInstalledIcebreakersAndTheSnapshotEnablesBreaking"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "CR-6.2-run-position"
@@ -766,13 +783,16 @@
       "title": "Verbal Plasticity",
       "batch": "slice-4.4",
       "slice": "4.4",
-      "status": "unregistered",
-      "textStatus": "audited",
-      "reviewStatus": "pending",
-      "reviewer": "",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
+      "reviewer": "architect",
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch3C2DocklandsVerbalRuntimeTests.VerbalPlasticityReplacesTheFirstRealBasicDrawAndLeavesTheSecondNormal",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch3C2DocklandsVerbalRuntimeTests.VerbalPlasticityShortStackStopsAfterAvailableCardsWithoutAReplacementDeadlock"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "CR-5.2-basic-actions",

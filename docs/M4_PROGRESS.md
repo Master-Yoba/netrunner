@@ -4117,3 +4117,30 @@ errors; runtime action expansion and full verification remain pending.
   focused UI-405 tests, the complete Match suite at 60/60, a zero-warning
   Godot build, Match/Godot/test formatting, and `git diff --check`.
   Registry/evidence closure and the final repository gate remain.
+
+### 2026-09-04 — Checkpoint E Slice 4.4 registry and exit gate accepted
+
+- Luna Max marked `slice-4.4` complete and completion-required, then closed the
+  seven Batch 3 card records as registered, full-text complete, reviewed by the
+  architect, and backed by their existing CR/ruling citations plus observation,
+  hidden-information, serialization, and positive lifecycle evidence. No new
+  ruling record or synthetic test marker was needed.
+- Fresh CARD-401 reports contain 77 expected cards, 39 registered, all 39 with
+  positive compiled test metadata, 38 full-text complete, the sole explicit
+  Offworld Office partial, and 38 unregistered future cards, with zero
+  diagnostics. The Slice 4.4 total therefore matches the plan's exit contract.
+- Root ran `./scripts/verify.sh` successfully. The solution restored and built
+  with zero warnings/errors; all 1,040 tests passed (Core 717, Cards 175, AI
+  34, CLI 54, Match 60); solution formatting, CLI self-test/doctor, official
+  77-card validation and downstream content-enabled builds, missing/opt-in data
+  negatives, fresh coverage comparison, all three M1 outcomes and replay,
+  Godot editor import, official gallery, Slice 4.3 and Slice 4.4 UI smokes,
+  the full M3 client smoke, and the repository secret scan passed.
+- The representative M2 proof remains stable at initial
+  `4460bc239b386ec53259af1f5110f0a14db000d552a0e1efbe6950771f6d5215`,
+  final `023bd7ae1f9eccb0329f4b6ad0e56c2801b9ab5a56b288469809b2666a494947`,
+  and event
+  `d20cdef94e97ac928ca088e14952b65d2116fecda00485fff5c3b05e1b6e9e20`,
+  with 32 actions/checkpoints, replay verification, and no trace problems.
+  Slice 4.4 is complete; the pre-existing standard full-game setup/mulligan
+  SIM-401 outcome remains explicitly outside this slice's bounded claim.
