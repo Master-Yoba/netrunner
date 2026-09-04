@@ -3660,3 +3660,20 @@ errors; runtime action expansion and full verification remain pending.
   setup/mulligan transition is still absent, so the fixtures remain validated
   inputs and this checkpoint does not claim the standard full-game SIM-401
   outcome.
+
+### 2026-09-04 — Checkpoint F4 UI-404 client smoke accepted
+
+- Luna Max added a dedicated `--m4-slice43-ui-smoke` path, separate from the
+  existing gallery and M3 lanes. It mounts the production `TextCardControl` in
+  the real scene tree, verifies the non-colour `ABILITY READY` cue and typed
+  hosted-credit/virus/power chips, updates the same control to `USED` without
+  losing its chips, renders an engine-shaped `UseAbility` action through the
+  Match action presenter, and sends typed removed-from-game provenance through
+  the event-feed presenter.
+- `scripts/verify.sh` runs the lane with a 30-second bound, requires the exact
+  stable PASS record, rejects any FAIL record, and preserves the pre-existing
+  gallery, M3 smoke, and responsiveness lanes. Root independently built the
+  Godot project with zero warnings/errors and observed
+  `M4_SLICE43_UI PASS card_in_scene_tree=true ready_cue=true ready_chips=true
+  used_cue=true used_chips=true ability_affordance=true rfg_removed=true` with
+  exit code zero.
