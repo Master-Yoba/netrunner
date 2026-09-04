@@ -12,7 +12,7 @@ public static class GatewayBehaviorCatalog
     /// <summary>
     /// Version of the current immutable Gateway behavior composition.
     /// </summary>
-    public const string Version = "gateway-m4-4.4";
+    public const string Version = "gateway-m4-4.5-c1";
 
     /// <summary>
     /// Builds the immutable Gateway behavior catalog used by a production
@@ -31,6 +31,7 @@ public static class GatewayBehaviorCatalog
             .Add(GatewayBatch1BehaviorSpecs.GenericSpecs)
             .Add(GatewayBatch2BehaviorSpecs.GenericSpecs)
             .Add(GatewayBatch3BehaviorSpecs.GenericSpecs)
+            .Add(GatewayBatch4BehaviorSpecs.GenericSpecs)
             .Build();
     }
 

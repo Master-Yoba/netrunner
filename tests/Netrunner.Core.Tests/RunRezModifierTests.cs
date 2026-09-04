@@ -392,6 +392,11 @@ public sealed class RunRezModifierTests
         RuntimeCardCatalog runtimeCatalog = new RuntimeCardCatalogBuilder(
                 "runtime:run-rez-modifier")
             .Add(new CardRuntimeSpec(
+                RunEventDefinitionId,
+                PlayerSide.Runner,
+                RuntimeCardClass.Event,
+                playCost: 0))
+            .Add(new CardRuntimeSpec(
                 FixtureIceBehaviorSpecs.RezCost,
                 PlayerSide.Corp,
                 RuntimeCardClass.Ice,

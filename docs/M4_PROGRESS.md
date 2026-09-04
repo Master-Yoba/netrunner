@@ -4207,3 +4207,48 @@ errors; runtime action expansion and full verification remain pending.
   Luna Max agents own bounded implementation checkpoints. The primary agent
   owns architecture, adversarial review, integration, schema/pin decisions,
   verification, and acceptance commits.
+
+### 2026-09-04 — Checkpoint A-C timing, alternatives, Jailbreak, and AGT v4 accepted
+
+- Added the explicit CR 6.9.4g `ApproachServer` cursor plus typed
+  `ServerApproached` and `IceEncountered` occurrences. The run cursor advances
+  before a reaction checkpoint is queued, so save/load cannot emit either
+  occurrence twice. Catalog triggers can require their active source to be on
+  the attacked server, while encounter-self triggers bind the exact ICE.
+- Structured mode options now carry typed credit, click, and exact additional
+  card costs plus normal/fallback semantics. Materialization filters
+  unaffordable options, enumerates bounded private card combinations, and
+  revalidates and pays the selected payload atomically. `EndRun` is accepted
+  only from an authenticated reaction child and unwinds the live run once.
+  Review corrected optional-trigger preflight so Anoetic Void is not offered
+  unless its non-fallback 2-credit plus 2-HQ-card alternative is payable.
+- Bound Manegarm Skunkworks, Anoetic Void, and Funhouse to the new generic
+  reactions. Manegarm gives the Runner its click/credit/end-run alternatives;
+  Anoetic uses the Corp-owned optional reaction and keeps HQ selections
+  chooser-private; Funhouse's encounter ability offers the Runner tag or
+  end-run without yet claiming its ICE subroutine binding.
+- Jailbreak is a real 1-click Runner event action with distinct HQ and R&D
+  targets. Its source remains in the play area for the run, its successful-run
+  draw enters the shared CR 9.2.8 trigger checkpoint, and its +1 breach access
+  is snapshotted with typed run-event provenance. Runtime metadata, source,
+  target, click, cost, catalog fingerprint, and stale action payloads are all
+  revalidated.
+- AGT-401 v4 handles typed trigger choices and structured behavior alternatives
+  from observation-issued payloads only, including chooser-private card-cost
+  IDs. Root review removed trigger actions from the ordinary run-window policy,
+  retained their dedicated `TriggerChoice` dispatch, and fixed stable semantic
+  ordering without reading descriptions or authoritative state.
+- Persisted approach state first moved schema 9 to 10; targeted play payloads
+  and run-event breach provenance then moved it to 11. The representative M2
+  proof is re-pinned at initial
+  `b964e5c037e7f470c9d64cbceba371c39aad806e0f46f3518be1a2818012b423`,
+  final `7da1beb7aa61527ffa4e0cb9095397cc7809d481f34d1966826991ac5d411486`,
+  and event
+  `33af2b049fbad324ed5ff0ee130740c3d65c03f2cb1196100afbdc73e9f0e67c`.
+  The event pin changes because `server-approached` is now explicit.
+- Root verification passed all 1,081 solution tests (Core 734, Cards 189, AI
+  42, CLI 54, Match 62), focused reaction/Jailbreak tests, a warning-free
+  build of every touched project, solution formatting, and `git diff --check`.
+  Encountered-bioroid abilities, Mayfly cleanup, ICE subroutine effects and
+  topology, run restrictions, SCN-401, simulation/UI, and registry closure
+  remain for later checkpoints.

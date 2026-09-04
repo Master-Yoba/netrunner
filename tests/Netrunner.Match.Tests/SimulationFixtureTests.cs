@@ -8,8 +8,8 @@ public sealed class SimulationFixtureTests
 {
     private const string BasicFixtureId = "sim-slice44-batch3-basic";
     private const string ExpandedFixtureId = "sim-slice44-batch3-expanded";
-    private const string GatewayBehaviorRegistryVersion = "gateway-m4-4.4";
-    private const string GatewayBehaviorCatalogFingerprint = "1d7a527112152ea16164da4def624ca0dbb83e477d06323ecfc86c2f837a2fc4";
+    private const string GatewayBehaviorRegistryVersion = "gateway-m4-4.5-c1";
+    private const string GatewayBehaviorCatalogFingerprint = "53b1aa3cf6656f1e837d1c2ecfcad6f9680254d78410b709e1bab20b6d7a4396";
 
     private static readonly HashSet<string> AllowedCorpCodes = new(StringComparer.Ordinal)
     {
@@ -76,14 +76,10 @@ public sealed class SimulationFixtureTests
                 .Select(static card => card.Code)
                 .Distinct(StringComparer.Ordinal)
                 .OrderBy(static code => code));
-        Assert.Equal(39, fullCatalog.AllDefinitionIds.Count);
-        Assert.Equal(
-            fullCatalog.AllDefinitionIds
-                .Select(static definitionId => definitionId.Value)
-                .OrderBy(static code => code, StringComparer.Ordinal),
-            AllowedCorpCodes
-                .Concat(AllowedRunnerCodes)
-                .OrderBy(static code => code, StringComparer.Ordinal));
+        Assert.Equal(43, fullCatalog.AllDefinitionIds.Count);
+        Assert.All(
+            AllowedCorpCodes.Concat(AllowedRunnerCodes),
+            code => Assert.Contains(new CardDefinitionId(code), fullCatalog.AllDefinitionIds));
 
         foreach (SimulationFixtureDocument fixture in catalog.Fixtures)
         {

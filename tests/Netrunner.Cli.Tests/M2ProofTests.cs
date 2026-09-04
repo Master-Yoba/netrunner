@@ -19,14 +19,15 @@ public sealed class M2ProofTests
     // and the mandatory steal (7.2.3) resolves automatically on progression
     // with the same AgendaStolen event, so the event stream, the terminal
     // state, and the 32-decision count are unchanged (only the checkpoint
-    // state hash at the agenda mid-access decision differs). Slice 4.4
-    // Checkpoint C1 adds the serialized catalog encounter-strength provenance
-    // payload (schema 8 -> 9), so state hashes are intentionally re-pinned. The
-    // event stream remains stable because no M2 event payload changed.
+    // state hash at the agenda mid-access decision differs). Slice 4.4 moved
+    // schema 8 -> 9. Slice 4.5 adds the serialized approach occurrence
+    // (schema 9 -> 10), then targeted run-event play and breach provenance
+    // (schema 10 -> 11), so state hashes are intentionally re-pinned. The
+    // explicit 6.9.4g server-approach event is now part of the run stream.
     private const string ExpectedFinalStateHash =
-        "023bd7ae1f9eccb0329f4b6ad0e56c2801b9ab5a56b288469809b2666a494947";
+        "7da1beb7aa61527ffa4e0cb9095397cc7809d481f34d1966826991ac5d411486";
     private const string ExpectedEventStreamHash =
-        "d20cdef94e97ac928ca088e14952b65d2116fecda00485fff5c3b05e1b6e9e20";
+        "33af2b049fbad324ed5ff0ee130740c3d65c03f2cb1196100afbdc73e9f0e67c";
 
     private static M2ScenarioDocument LoadScenario()
     {

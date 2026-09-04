@@ -72,6 +72,7 @@ public static class RunTimingCitations
         EngineEventKinds.RunInitiated => "CR 26.03 6.9.1: the run is initiated",
         EngineEventKinds.RunEventPlayed => "CR 26.03 6.9.1: the run is initiated by playing a run event",
         EngineEventKinds.IceApproached => "CR 26.03 6.9.2a: the run approaches the next outermost remaining ICE",
+        EngineEventKinds.ServerApproached => "CR 26.03 6.9.4g: the Runner approaches the attacked server",
         EngineEventKinds.IceRezzed => "CR 26.03 8.1: the Corp rezzes the approached ICE during the approach window",
         EngineEventKinds.EncounterInitialized => "CR 26.03 6.9.3a: the encounter is initialized",
         EngineEventKinds.BreakerPumped => "CR 26.03 6.5/3.9.5: the Runner pumps an installed icebreaker's strength for the encounter",
@@ -102,6 +103,7 @@ public static class RunTimingCitations
         RunTimingStep.JackOutDecision => "CR 26.03 6.9.4c: the Runner decides to jack out or continue",
         RunTimingStep.MoveInward => "CR 26.03 6.9.4d: the run moves inward automatically",
         RunTimingStep.AfterMovePaidWindow => "CR 26.03 6.9.4e: after-movement paid window (P)(R)",
+        RunTimingStep.ApproachServer => "CR 26.03 6.9.4g: the Runner approaches the attacked server",
         RunTimingStep.Success => "CR 26.03 6.9.5a: the run is declared successful without a paid window",
         RunTimingStep.BreachBoundary => "CR 26.03 6.9.5b: the nested breach boundary starts candidate selection",
         RunTimingStep.BreachCandidateSelection => "CR 26.03 7.5.4: the Runner selects a breach candidate to access",
@@ -135,6 +137,7 @@ public static class RunTimingTraceValidator
         EngineEventKinds.RunEventPlayed,
         EngineEventKinds.RunTimingWindowOpened,
         EngineEventKinds.IceApproached,
+        EngineEventKinds.ServerApproached,
         EngineEventKinds.IceRezzed,
         EngineEventKinds.EncounterInitialized,
         EngineEventKinds.BreakerPumped,
@@ -228,6 +231,11 @@ public static class RunTimingTraceValidator
         var runSuccessful = runEvents
             .Where(entry => entry.Event.Kind == EngineEventKinds.RunSuccessful)
             .Select(entry => entry.Index)
+            .ToList();
+
+        var serverApproached = runEvents
+            .Where(entry => entry.Event.Kind == EngineEventKinds.ServerApproached)
+            .Select(entry => (entry.Index, Payload: (ServerApproachedEventPayload)entry.Event.Payload))
             .ToList();
 
         var breachStarted = runEvents
@@ -438,6 +446,29 @@ public static class RunTimingTraceValidator
         if (breachStarted.Count == 1 && runSuccessful.Count == 1 && breachStarted[0].Index < runSuccessful[0])
         {
             problems.Add("the breach started before the run was successful (CR 26.03 6.9.5b).");
+        }
+
+        if (serverApproached.Count > 1)
+        {
+            problems.Add($"the attacked server was approached {serverApproached.Count} times; expected at most once (CR 26.03 6.9.4g).");
+        }
+
+        if (serverApproached.Count == 1 && runSuccessful.Count == 1
+            && serverApproached[0].Index > runSuccessful[0])
+        {
+            problems.Add("the attacked server was approached after the run was successful (CR 26.03 6.9.4g/6.9.5a).");
+        }
+
+        int finalAfterMoveWindow = windows
+            .Where(window => window.Payload.Step == RunTimingStep.AfterMovePaidWindow)
+            .Select(window => window.Index)
+            .DefaultIfEmpty(-1)
+            .Max();
+        if (serverApproached.Count == 1
+            && finalAfterMoveWindow >= 0
+            && serverApproached[0].Index <= finalAfterMoveWindow)
+        {
+            problems.Add("the attacked server was approached before the final 6.9.4e after-movement paid window completed (CR 26.03 6.9.4e/6.9.4g).");
         }
 
         // 4. Breach access: every chosen candidate has its own 7.5.4 selection
@@ -840,6 +871,9 @@ public static class RunTimingTraceValidator
             case IceApproachedEventPayload approached:
                 runId = approached.RunId;
                 return true;
+            case ServerApproachedEventPayload serverApproached:
+                runId = serverApproached.RunId;
+                return true;
             case IceRezzedEventPayload iceRezzed:
                 runId = iceRezzed.RunId;
                 return true;
@@ -899,6 +933,7 @@ public static class RunTimingTraceValidator
         {
             RunTimingWindowOpenedEventPayload window => $"{window.Step} (priority window: {window.PriorityWindow?.ToString().ToLowerInvariant() ?? "none"}, holder: {window.PriorityHolder?.ToString().ToLowerInvariant() ?? "none"})",
             IceApproachedEventPayload approached => $"approached ICE '{approached.IceId.Value}'",
+            ServerApproachedEventPayload serverApproached => $"approached server '{serverApproached.ServerId.Value}'",
             IceRezzedEventPayload rezzed => $"rezzed ICE '{rezzed.IceId.Value}'",
             EncounterInitializedEventPayload initialized => $"encounter initialized against '{initialized.IceId.Value}'",
             BreakerPumpedEventPayload pumped => $"pumped breaker '{pumped.BreakerId.Value}'",

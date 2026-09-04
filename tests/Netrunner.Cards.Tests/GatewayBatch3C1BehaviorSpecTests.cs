@@ -108,7 +108,7 @@ public sealed class GatewayBatch3C1BehaviorSpecTests
     {
         BehaviorCatalog first = GatewayBehaviorCatalog.Create();
         BehaviorCatalog second = GatewayBehaviorCatalog.Create();
-        Assert.Equal("gateway-m4-4.4", first.Version);
+        Assert.Equal("gateway-m4-4.5-c1", first.Version);
         Assert.Equal(first.Fingerprint, second.Fingerprint);
         Assert.Equal(
             first.GetDefinitionFingerprint(GatewayBatch3CardCodes.Leech),

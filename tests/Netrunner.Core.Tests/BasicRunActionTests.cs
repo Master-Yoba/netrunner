@@ -334,7 +334,7 @@ public sealed class BasicRunActionTests
         Exception? sourcedException = Record.Exception(() =>
             sourcedViolations = StateInvariantValidator.Collect(sourced));
         Assert.Null(sourcedException);
-        Assert.Contains(sourcedViolations!, violation => violation.Code == "run.nested-source");
+        Assert.Contains(sourcedViolations!, violation => violation.Code == "run.active-event-unknown-card");
 
         ApplyResult sourcedRejected = GameEngine.Apply(
             sourced,

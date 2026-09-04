@@ -450,7 +450,17 @@ public static partial class GameEngine
                 AdvanceBehaviorCursor(working, frame);
                 return;
             case BehaviorInstructionKind.AddTags:
-                ApplyTags(working, frame.Controller, instruction.Amount);
+                PlayerId tagRecipient = instruction.Recipient switch
+                {
+                    null or BehaviorPlayerSelector.Controller => frame.Controller,
+                    BehaviorPlayerSelector.ActingPlayer => frame.ActingPlayer
+                        ?? throw new ResolutionFailureException(
+                            "An AddTags instruction targeting ActingPlayer requires an acting player."),
+                    BehaviorPlayerSelector.Corp => GetPlayer(working, PlayerSide.Corp).Id,
+                    BehaviorPlayerSelector.Runner => GetPlayer(working, PlayerSide.Runner).Id,
+                    _ => throw new ResolutionFailureException("The AddTags recipient is invalid."),
+                };
+                ApplyTags(working, tagRecipient, instruction.Amount);
                 AdvanceBehaviorCursor(working, frame);
                 return;
             case BehaviorInstructionKind.TrashSelf:
@@ -467,6 +477,8 @@ public static partial class GameEngine
                 ResolveBehaviorStartRun(working, frame, instruction, instructions);
                 return;
             case BehaviorInstructionKind.EndRun:
+                ResolveBehaviorEndRun(working, frame);
+                return;
             case BehaviorInstructionKind.DealDamage:
                 throw new ResolutionFailureException(
                     $"Behavior instruction '{instruction.Kind}' belongs to a later runtime slice.");
@@ -528,6 +540,92 @@ public static partial class GameEngine
             GetPlayer(working, PlayerSide.Runner).Id,
             frame.SourceCardId,
             operand);
+    }
+
+    /// <summary>
+    /// Ends a live run from an engine-owned catalog reaction. The behavior
+    /// child is deliberately allowed to sit above the run timing frame (and
+    /// its occurrence/checkpoint parents), so ending the run must first
+    /// discard that stale reaction suffix and then enter the ordinary
+    /// serialized RunEnd cleanup exactly once.
+    /// </summary>
+    private static void ResolveBehaviorEndRun(
+        WorkingState working,
+        BehaviorResolutionFrame frame)
+    {
+        if (frame.TriggerKey is null || frame.AbilityKey is not null)
+        {
+            throw new ResolutionFailureException(
+                "EndRun is executable only from an engine-owned catalog reaction.");
+        }
+
+        RunState run = working.RunState
+            ?? throw new ResolutionFailureException("EndRun requires a live run.");
+        int runFrameIndex = -1;
+        for (int index = working.ResolutionStack.Count - 1; index >= 0; index--)
+        {
+            if (working.ResolutionStack[index] is RunTimingFrame timing
+                && timing.RunId == run.Id
+                && timing.Step == run.Step)
+            {
+                runFrameIndex = index;
+                break;
+            }
+        }
+
+        if (runFrameIndex < 0
+            || working.ResolutionStack[^1] is not BehaviorResolutionFrame active
+            || !string.Equals(active.FrameIdentity, frame.FrameIdentity, StringComparison.Ordinal)
+            || runFrameIndex >= working.ResolutionStack.Count - 1)
+        {
+            throw new ResolutionFailureException(
+                "EndRun requires the exact live run timing frame beneath its reaction child.");
+        }
+
+        // The immediate parent must be an effect checkpoint for a gameplay
+        // occurrence tied to this run. This excludes a forgeable standalone
+        // behavior frame and prevents an old/non-run trigger from ending a
+        // later run.
+        if (working.ResolutionStack[^2] is not EffectCheckpointFrame checkpoint
+            || checkpoint.ChildKind != EffectCheckpointChildKind.Trigger
+            || checkpoint.Occurrence.Effect is not GameplayOccurrenceEffect occurrence
+            || occurrence.ServerId != run.AttackedServer
+            || occurrence.Kind == OccurrenceKind.RunEnded
+            || checkpoint.ChildTriggerId is not { } childTriggerId
+            || !checkpoint.TriggerQueue.Any(invocation =>
+                invocation.Id == childTriggerId
+                && invocation.IsCatalogTrigger
+                && string.Equals(invocation.TriggerKey, frame.TriggerKey, StringComparison.Ordinal)
+                && invocation.SourceCardId == frame.SourceCardId
+                && invocation.SourceDefinitionId == frame.DefinitionId
+                && invocation.Controller == frame.Controller))
+        {
+            throw new ResolutionFailureException(
+                "EndRun requires a current run-owned catalog reaction occurrence.");
+        }
+
+        RunState ending = run.WithTiming(
+            RunTimingStep.RunEnd,
+            -1,
+            null,
+            run.Successful,
+            true,
+            RunEndReason.EndedByRule,
+            null,
+            run.Encounter,
+            run.AccessState);
+        working.RunState = ending;
+        working.PendingDecision = null;
+
+        // Remove the behavior child and every reaction/checkpoint frame above
+        // the authoritative run cursor. CompleteRun expects that cursor to
+        // be the top frame and owns all normal event/turn cleanup from there.
+        while (working.ResolutionStack.Count - 1 > runFrameIndex)
+        {
+            working.ResolutionStack.RemoveAt(working.ResolutionStack.Count - 1);
+        }
+
+        CompleteRun(working, ending);
     }
 
     private enum BehaviorTransferKind
@@ -1836,11 +1934,26 @@ public static partial class GameEngine
         string[] optionKeys = spec.Options
             .Where(option => !IsBehaviorInstallOption(option)
                 || IsBehaviorInstallOptionAvailable(working, frame, option))
+            .Where(option => IsBehaviorChoiceOptionAffordable(working, owner, option))
             .Select(option => option.Key)
             .ToArray();
         if (spec.Mode == BehaviorChoiceMode.Mode && optionKeys.Length == 0)
         {
             throw new ResolutionFailureException($"Behavior choice '{spec.Key}' has no currently legal mode option.");
+        }
+
+        // A choice option may carry a private additional card cost even when
+        // the choice itself has no target. Keep the materialization's common
+        // candidate projection empty in that case: the exact option-specific
+        // combinations are issued below and are validated against the typed
+        // cost descriptor again on submission.
+        bool hasOptionCardCost = spec.Options
+            .Where(option => optionKeys.Contains(option.Key, StringComparer.Ordinal))
+            .Any(HasBehaviorChoiceAdditionalCardCost);
+        if (hasOptionCardCost && candidates.Length > 0)
+        {
+            throw new ResolutionFailureException(
+                $"Behavior choice '{spec.Key}' cannot combine a target card selection with an option card cost.");
         }
 
         var choice = new BehaviorChoiceMaterialization(
@@ -1985,7 +2098,58 @@ public static partial class GameEngine
         BehaviorChoiceMaterialization choice)
     {
         var actions = new List<LegalAction>();
-        if (choice.CandidateCardIds.Count > 0)
+        BehaviorChoiceSpec? specification = GetCurrentBehaviorChoiceSpecification(working, frame);
+        BehaviorChoiceOption[] optionCardCostOptions = specification?.Options
+            .Where(option => choice.OptionKeys.Contains(option.Key, StringComparer.Ordinal))
+            .Where(HasBehaviorChoiceAdditionalCardCost)
+            .ToArray()
+            ?? [];
+
+        if (optionCardCostOptions.Length > 0 && choice.CandidateCardIds.Count == 0)
+        {
+            foreach (BehaviorChoiceOption option in optionCardCostOptions)
+            {
+                foreach (CardInstanceId[] selection in EnumerateBehaviorChoiceAdditionalSelections(working, option))
+                {
+                    actions.Add(new LegalAction(
+                        working.Allocator.NextActionId(),
+                        ActionKind.ChooseBehavior,
+                        DescribeBehaviorChoiceOption(option, selection),
+                        new BehaviorChoiceParameters(
+                            choice.Key,
+                            [option.Key],
+                            selection,
+                            finalizeSelection: true)));
+                }
+            }
+
+            // A fallback/optional option without a card cost remains a normal
+            // option action in the same prompt. Its semantic marker is carried
+            // by the catalog and is exposed only through the issued action
+            // projection, never inferred from its key or description.
+            foreach (string optionKey in choice.OptionKeys
+                .Where(key => optionCardCostOptions.All(option => option.Key != key)))
+            {
+                BehaviorChoiceOption option = specification!.Options.Single(candidate => candidate.Key == optionKey);
+                actions.Add(new LegalAction(
+                    working.Allocator.NextActionId(),
+                    ActionKind.ChooseBehavior,
+                    DescribeBehaviorChoiceOption(option, []),
+                    new BehaviorChoiceParameters(choice.Key, optionKey)));
+            }
+
+            if (choice.Mode == BehaviorChoiceMode.Optional
+                && choice.CardinalityKind == BehaviorChoiceCardinalityKind.UpTo
+                && choice.CardinalityCount == 1)
+            {
+                actions.Add(new LegalAction(
+                    working.Allocator.NextActionId(),
+                    ActionKind.ChooseBehavior,
+                    "Skip optional choice",
+                    new BehaviorChoiceParameters(choice.Key)));
+            }
+        }
+        else if (choice.CandidateCardIds.Count > 0)
         {
             if (RequiresIncrementalSelection(choice))
             {
@@ -2044,10 +2208,12 @@ public static partial class GameEngine
         {
             foreach (string optionKey in choice.OptionKeys)
             {
+                BehaviorChoiceOption? option = specification?.Options
+                    .SingleOrDefault(candidate => candidate.Key == optionKey);
                 actions.Add(new LegalAction(
                     working.Allocator.NextActionId(),
                     ActionKind.ChooseBehavior,
-                    $"Choose '{optionKey}'",
+                    option is null ? $"Choose '{optionKey}'" : DescribeBehaviorChoiceOption(option, []),
                     new BehaviorChoiceParameters(choice.Key, optionKey)));
             }
 
@@ -2076,6 +2242,430 @@ public static partial class GameEngine
             DecisionKind.BehaviorChoice,
             $"Choose behavior option '{choice.Key}'",
             actions);
+    }
+
+    private static BehaviorChoiceSpec? GetCurrentBehaviorChoiceSpecification(
+        WorkingState working,
+        BehaviorResolutionFrame frame)
+    {
+        List<BehaviorInstruction> instructions = GetBehaviorInstructions(working, frame);
+        return frame.InstructionCursor >= 0
+            && frame.InstructionCursor < instructions.Count
+            && instructions[frame.InstructionCursor] is { Kind: BehaviorInstructionKind.Choose } instruction
+            ? instruction.Choice
+            : null;
+    }
+
+    private static bool HasBehaviorChoiceAdditionalCardCost(BehaviorChoiceOption option) =>
+        option.Costs?.Any(static cost => cost.Kind == BehaviorCostKind.Additional) == true;
+
+    private static string DescribeBehaviorChoiceOption(
+        BehaviorChoiceOption option,
+        CardInstanceId[] selectedCards)
+    {
+        string semantic = option.Semantic is { } value
+            ? $" [{value}]"
+            : string.Empty;
+        if (selectedCards.Length == 0)
+        {
+            return $"Choose '{option.Key}'{semantic}";
+        }
+
+        return $"Choose '{option.Key}'{semantic} (additional cost: {selectedCards.Length} card(s))";
+    }
+
+    private static bool IsBehaviorChoiceOptionAffordable(
+        WorkingState working,
+        PlayerId owner,
+        BehaviorChoiceOption option)
+    {
+        try
+        {
+            PlayerState payer = GetPlayer(working, owner);
+            long credits = 0;
+            long clicks = 0;
+            foreach (BehaviorCost cost in option.Costs ?? [])
+            {
+                switch (cost.Kind)
+                {
+                    case BehaviorCostKind.Credits:
+                        credits = checked(credits + cost.Amount);
+                        break;
+                    case BehaviorCostKind.Clicks:
+                        clicks = checked(clicks + cost.Amount);
+                        break;
+                    case BehaviorCostKind.Additional:
+                        // Exact candidate cardinality and source ownership are
+                        // checked by the bounded combination materializer.
+                        break;
+                    default:
+                        return false;
+                }
+            }
+
+            return credits <= payer.Credits
+                && clicks <= payer.Clicks
+                && (!HasBehaviorChoiceAdditionalCardCost(option)
+                    || EnumerateBehaviorChoiceAdditionalSelections(working, option).Any());
+        }
+        catch (Exception exception) when (exception is ResolutionFailureException
+            or InvalidOperationException
+            or KeyNotFoundException
+            or OverflowException
+            or ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    // StateInvariantValidator deliberately has no access to the mutable
+    // reducer workspace.  These read-only seams replay the exact reducer
+    // validation against a cloned workspace so a forged legal-action payload
+    // cannot pass validation merely because it has a plausible shape.
+    internal static bool IsBehaviorChoiceOptionAffordable(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog,
+        PlayerId owner,
+        BehaviorChoiceOption option)
+    {
+        try
+        {
+            WorkingState working = WorkingState.From(state, behaviorCatalog, runtimeCardCatalog);
+            return IsBehaviorChoiceOptionAffordable(working, owner, option);
+        }
+        catch (Exception exception) when (exception is ResolutionFailureException
+            or InvalidOperationException
+            or KeyNotFoundException
+            or OverflowException
+            or ArgumentException)
+        {
+            return false;
+        }
+    }
+
+    internal static bool IsBehaviorChoiceActionLegal(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog,
+        BehaviorChoiceParameters parameters)
+    {
+        try
+        {
+            WorkingState working = WorkingState.From(state, behaviorCatalog, runtimeCardCatalog);
+            if (working.ResolutionStack[^1] is not BehaviorResolutionFrame frame
+                || frame.Choice is not BehaviorChoiceMaterialization choice
+                || !string.Equals(choice.Key, parameters.ChoiceKey, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            ValidateBehaviorChoiceParameters(working, frame, choice, parameters);
+            if (parameters.FinalizeSelection && parameters.OptionKeys.Count == 1)
+            {
+                List<BehaviorInstruction> instructions = GetBehaviorInstructions(working, frame);
+                if (frame.InstructionCursor < 0
+                    || frame.InstructionCursor >= instructions.Count
+                    || instructions[frame.InstructionCursor].Choice is not { } specification)
+                {
+                    return false;
+                }
+
+                BehaviorChoiceOption? option = specification.Options.SingleOrDefault(candidate =>
+                    string.Equals(candidate.Key, parameters.OptionKeys[0], StringComparison.Ordinal));
+                if (option is null || !IsBehaviorChoiceOptionAffordable(working, choice.Owner, option))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        catch (Exception exception) when (exception is ResolutionFailureException
+            or InvalidOperationException
+            or KeyNotFoundException
+            or OverflowException
+            or ArgumentException
+            or IndexOutOfRangeException)
+        {
+            return false;
+        }
+    }
+
+    private static IEnumerable<CardInstanceId[]> EnumerateBehaviorChoiceAdditionalSelections(
+        WorkingState working,
+        BehaviorChoiceOption option)
+    {
+        BehaviorCost[] additionalCosts = (option.Costs ?? [])
+            .Where(static cost => cost.Kind == BehaviorCostKind.Additional)
+            .ToArray();
+        if (additionalCosts.Length == 0)
+        {
+            yield return [];
+            yield break;
+        }
+
+        var candidateSets = new List<(BehaviorCost Cost, CardInstanceId[] Candidates)>();
+        foreach (BehaviorCost cost in additionalCosts)
+        {
+            if (cost.AdditionalKind != BehaviorAdditionalCostKind.TrashCards
+                || cost.AdditionalTarget is not
+                {
+                    Kind: BehaviorTargetKind.ZoneCards,
+                    Zone: { } sourceZone,
+                    Filter: not null,
+                    Reveal: false,
+                }
+                || cost.AdditionalTarget.Filter.OwnerSide is not { } ownerSide
+                || FindExistingBehaviorChoiceCostZone(working, sourceZone, ownerSide) is not { } zone
+                || !BehaviorZoneMatches(sourceZone, zone.Kind, ownerSide))
+            {
+                yield break;
+            }
+
+            CardInstanceId[] candidates = zone.CardIds
+                .Where(cardId => GetCard(working, cardId).OwnerSide == ownerSide
+                    && BehaviorCardMatches(working, cardId, cost.AdditionalTarget.Filter))
+                .ToArray();
+            if (candidates.Length < cost.Amount)
+            {
+                yield break;
+            }
+
+            candidateSets.Add((cost, candidates));
+        }
+
+        var results = new List<CardInstanceId[]>();
+        var used = new HashSet<CardInstanceId>();
+        var selected = new List<CardInstanceId>();
+        int explorations = 0;
+        bool exceeded = false;
+
+        void Visit(int index)
+        {
+            if (exceeded || ++explorations > 4096)
+            {
+                exceeded = true;
+                return;
+            }
+
+            if (index == candidateSets.Count)
+            {
+                results.Add(selected.ToArray());
+                if (results.Count >= 256)
+                {
+                    exceeded = true;
+                }
+
+                return;
+            }
+
+            (BehaviorCost cost, CardInstanceId[] candidates) = candidateSets[index];
+            foreach (CardInstanceId[] choice in EnumerateExactSelections(candidates, cost.Amount))
+            {
+                if (choice.Any(used.Contains))
+                {
+                    continue;
+                }
+
+                foreach (CardInstanceId cardId in choice)
+                {
+                    used.Add(cardId);
+                    selected.Add(cardId);
+                }
+
+                Visit(index + 1);
+
+                foreach (CardInstanceId cardId in choice)
+                {
+                    selected.RemoveAt(selected.Count - 1);
+                    used.Remove(cardId);
+                }
+
+                if (exceeded)
+                {
+                    return;
+                }
+            }
+        }
+
+        Visit(0);
+        foreach (CardInstanceId[] result in results)
+        {
+            yield return result;
+        }
+    }
+
+    private static ZoneState? FindExistingBehaviorChoiceCostZone(
+        WorkingState working,
+        BehaviorZone zone,
+        PlayerSide ownerSide)
+    {
+        ZoneKind kind = zone switch
+        {
+            BehaviorZone.Headquarters => ZoneKind.CorpHand,
+            BehaviorZone.Archives => ZoneKind.CorpDiscard,
+            BehaviorZone.Grip => ZoneKind.RunnerGrip,
+            BehaviorZone.Stack => ZoneKind.RunnerStack,
+            BehaviorZone.Deck => ownerSide == PlayerSide.Corp ? ZoneKind.CorpDeck : ZoneKind.RunnerStack,
+            BehaviorZone.Heap => ZoneKind.RunnerHeap,
+            _ => (ZoneKind)(-1),
+        };
+        return Enum.IsDefined(kind)
+            ? working.Zones.FirstOrDefault(candidate => candidate.Kind == kind
+                && candidate.OwnerSide == ownerSide
+                && candidate.ServerId is null)
+            : null;
+    }
+
+    private static void ValidateBehaviorChoiceOptionCards(
+        WorkingState working,
+        BehaviorChoiceOption option,
+        IReadOnlyList<CardInstanceId> selected)
+    {
+        if (!HasBehaviorChoiceAdditionalCardCost(option))
+        {
+            throw new ResolutionFailureException("The behavior option does not declare a card cost.");
+        }
+
+        BehaviorCost[] additionalCosts = (option.Costs ?? [])
+            .Where(static cost => cost.Kind == BehaviorCostKind.Additional)
+            .ToArray();
+        int requiredCount = additionalCosts.Sum(static cost => cost.Amount);
+        if (selected.Count != requiredCount || selected.Distinct().Count() != selected.Count)
+        {
+            throw new ResolutionFailureException(
+                "A structured behavior option must submit the exact distinct card-cost selection.");
+        }
+
+        int offset = 0;
+        var used = new HashSet<CardInstanceId>();
+        foreach (BehaviorCost cost in additionalCosts)
+        {
+            if (cost.AdditionalTarget is not
+                {
+                    Kind: BehaviorTargetKind.ZoneCards,
+                    Zone: { } sourceZone,
+                    Filter: not null,
+                    Reveal: false,
+                }
+                || cost.AdditionalTarget.Filter.OwnerSide is not { } ownerSide
+                || FindExistingBehaviorChoiceCostZone(working, sourceZone, ownerSide) is not { } source
+                || !BehaviorZoneMatches(sourceZone, source.Kind, ownerSide))
+            {
+                throw new ResolutionFailureException(
+                    "The structured behavior option has no valid private owned source zone.");
+            }
+
+            foreach (CardInstanceId cardId in selected.Skip(offset).Take(cost.Amount))
+            {
+                if (!used.Add(cardId)
+                    || !source.CardIds.Contains(cardId)
+                    || !BehaviorCardMatches(working, cardId, cost.AdditionalTarget.Filter)
+                    || GetCard(working, cardId).OwnerSide != ownerSide)
+                {
+                    throw new ResolutionFailureException(
+                        $"Behavior option card '{cardId}' is stale or not a legal private cost card.");
+                }
+            }
+
+            offset += cost.Amount;
+        }
+    }
+
+    private static void PayBehaviorChoiceCosts(
+        WorkingState working,
+        PlayerId owner,
+        BehaviorChoiceOption option,
+        IReadOnlyList<CardInstanceId> selectedCards)
+    {
+        if (HasBehaviorChoiceAdditionalCardCost(option))
+        {
+            ValidateBehaviorChoiceOptionCards(working, option, selectedCards);
+        }
+        else if (selectedCards.Count > 0)
+        {
+            throw new ResolutionFailureException(
+                "A behavior option without a card cost cannot carry selected card IDs.");
+        }
+
+        PlayerState payer = GetPlayer(working, owner);
+        long credits = 0;
+        long clicks = 0;
+        foreach (BehaviorCost cost in option.Costs ?? [])
+        {
+            switch (cost.Kind)
+            {
+                case BehaviorCostKind.Credits:
+                    credits = checked(credits + cost.Amount);
+                    break;
+                case BehaviorCostKind.Clicks:
+                    clicks = checked(clicks + cost.Amount);
+                    break;
+                case BehaviorCostKind.Additional:
+                    break;
+                default:
+                    throw new ResolutionFailureException(
+                        $"Choice option cost '{cost.Kind}' is not executable.");
+            }
+        }
+
+        if (credits > payer.Credits || clicks > payer.Clicks)
+        {
+            throw new ResolutionFailureException(
+                "The behavior option cost is no longer affordable by its chooser.");
+        }
+
+        // All validation above runs before the first mutation, preserving the
+        // atomic rejection contract for stale/forged option payloads.
+        if (credits != 0)
+        {
+            ApplyCreditDeltaIfNonZero(working, owner, checked(-(int)credits));
+        }
+
+        if (clicks != 0)
+        {
+            ApplyClickDelta(working, owner, checked(-(int)clicks));
+        }
+
+        int offset = 0;
+        foreach (BehaviorCost cost in (option.Costs ?? [])
+            .Where(static cost => cost.Kind == BehaviorCostKind.Additional))
+        {
+            BehaviorTarget target = cost.AdditionalTarget!;
+            PlayerSide ownerSide = target.Filter!.OwnerSide!.Value;
+            ZoneState source = FindExistingBehaviorChoiceCostZone(
+                    working,
+                    target.Zone!.Value,
+                    ownerSide)
+                ?? throw new ResolutionFailureException("The behavior option source zone disappeared during payment.");
+            ZoneState destination = GetBehaviorZone(
+                working,
+                ownerSide == PlayerSide.Corp ? BehaviorZone.Archives : BehaviorZone.Heap,
+                ownerSide);
+            foreach (CardInstanceId cardId in selectedCards.Skip(offset).Take(cost.Amount).ToArray())
+            {
+                CardInstanceState card = GetCard(working, cardId);
+                TrashCard(working, card, source, destination);
+                CardInstanceState trashed = GetCard(working, cardId);
+                ReplaceCard(working, new CardInstanceState(
+                    trashed.Id,
+                    trashed.DefinitionId,
+                    trashed.ZoneId,
+                    trashed.OwnerSide,
+                    faceUp: true,
+                    rezzed: false,
+                    trashed.AdvancementCounters));
+                source = FindExistingBehaviorChoiceCostZone(working, target.Zone.Value, ownerSide)
+                    ?? throw new ResolutionFailureException("The behavior option source zone disappeared during payment.");
+                destination = GetBehaviorZone(
+                    working,
+                    ownerSide == PlayerSide.Corp ? BehaviorZone.Archives : BehaviorZone.Heap,
+                    ownerSide);
+            }
+
+            offset += cost.Amount;
+        }
     }
 
     private static bool RequiresIncrementalSelection(BehaviorChoiceMaterialization choice)
@@ -2457,11 +3047,32 @@ public static partial class GameEngine
 
         List<BehaviorInstruction> currentInstructions = GetBehaviorInstructions(working, frame);
         BehaviorInstruction current = currentInstructions[frame.InstructionCursor];
+        BehaviorChoiceOption? option = parameters.OptionKeys.Count == 0
+            ? null
+            : current.Choice?.Options.SingleOrDefault(candidate => candidate.Key == parameters.OptionKeys[0]);
+        if (parameters.OptionKeys.Count > 0 && option is null)
+        {
+            throw new ResolutionFailureException("The submitted behavior option is not part of the current declaration.");
+        }
+
+        bool optionHasCardCost = option is not null && HasBehaviorChoiceAdditionalCardCost(option);
         IReadOnlyList<CardInstanceId> selected = parameters.CardIds;
         IReadOnlyList<BehaviorSetAsideCard> setAside = frame.SetAside;
         IReadOnlyList<BehaviorBinding> bindings = frame.Bindings;
         ZoneId? setAsideZoneId = frame.SetAsideZoneId;
-        if (choice.CandidateCardIds.Count > 0 && selected.Count > 0)
+        if (option is not null && option.Costs is { Count: > 0 })
+        {
+            // Additional card costs remain in their private source zone until
+            // this authenticated option is accepted. PayBehaviorChoiceCosts
+            // validates the complete bundle before mutating any wallet,
+            // click, or card state and then trashes the exact IDs.
+            PayBehaviorChoiceCosts(working, choice.Owner, option!, selected);
+            if (optionHasCardCost)
+            {
+                selected = [];
+            }
+        }
+        else if (choice.CandidateCardIds.Count > 0 && selected.Count > 0)
         {
             BehaviorTarget? candidateTarget = current.Kind == BehaviorInstructionKind.Search
                 ? current.Target
@@ -2494,14 +3105,6 @@ public static partial class GameEngine
             // must not leave an older key or canonical chosen binding
             // consumable by downstream instructions.
             bindings = ClearBehaviorSelectionBindings(bindings, choice.Key);
-        }
-
-        BehaviorChoiceOption? option = parameters.OptionKeys.Count == 0
-            ? null
-            : current.Choice?.Options.SingleOrDefault(candidate => candidate.Key == parameters.OptionKeys[0]);
-        if (parameters.OptionKeys.Count > 0 && option is null)
-        {
-            throw new ResolutionFailureException("The submitted behavior option is not part of the current declaration.");
         }
 
         if (option is not null
@@ -2553,9 +3156,30 @@ public static partial class GameEngine
     {
         bool hasOptions = parameters.OptionKeys.Count > 0;
         bool hasCards = parameters.CardIds.Count > 0;
-        if (hasOptions && hasCards)
+        List<BehaviorInstruction> currentInstructions = GetBehaviorInstructions(working, frame);
+        BehaviorInstruction current = currentInstructions[frame.InstructionCursor];
+        BehaviorChoiceOption? option = parameters.OptionKeys.Count == 1
+            ? current.Choice?.Options.SingleOrDefault(candidate => candidate.Key == parameters.OptionKeys[0])
+            : null;
+        bool optionHasCardCost = option is not null && HasBehaviorChoiceAdditionalCardCost(option);
+        if (hasOptions && hasCards && !optionHasCardCost)
         {
             throw new ResolutionFailureException("A behavior choice cannot select both options and cards.");
+        }
+
+        if (optionHasCardCost)
+        {
+            if (choice.CandidateCardIds.Count != 0
+                || !parameters.FinalizeSelection
+                || parameters.OptionKeys.Count != 1
+                || !choice.OptionKeys.Contains(option!.Key, StringComparer.Ordinal))
+            {
+                throw new ResolutionFailureException(
+                    "A structured card-cost option must submit one frozen option key and a complete card selection.");
+            }
+
+            ValidateBehaviorChoiceOptionCards(working, option, parameters.CardIds);
+            return;
         }
 
         if (!parameters.FinalizeSelection)
@@ -2623,7 +3247,6 @@ public static partial class GameEngine
             foreach (CardInstanceId cardId in parameters.CardIds)
             {
                 CardInstanceState card = GetCard(working, cardId);
-                List<BehaviorInstruction> currentInstructions = GetBehaviorInstructions(working, frame);
                 BehaviorInstruction instruction = currentInstructions[frame.InstructionCursor];
                 BehaviorTarget target = instruction.Kind == BehaviorInstructionKind.Search
                     ? instruction.Target!

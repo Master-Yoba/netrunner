@@ -289,6 +289,8 @@ public static partial class GameEngine
             }
 
             runEventSpec = ValidateRunEventSource(working, initiatingSource.Value, source);
+            ValidateRunEventTarget(working, runEventSpec, server);
+            ValidateRunEventSuccessDraw(working, source, runEventSpec);
             if (runner.Credits < runEventSpec.Cost)
             {
                 throw new ResolutionFailureException(
@@ -303,7 +305,14 @@ public static partial class GameEngine
                 installedSource!,
                 server.Id,
                 runOperand!)
-            : null;
+            : runEventSpec is not null
+                ? SnapshotRunEventBreachAccessModifiers(
+                    working,
+                    initiatingSource
+                        ?? throw new ResolutionFailureException("A run event requires a source card."),
+                    runEventSpec,
+                    server)
+                : null;
         IReadOnlyList<RunRezCostModifier>? rezCostModifiers = runEventSpec is not null
             ? SnapshotRunRezCostModifiers(
                 runEventSpec,
@@ -426,6 +435,44 @@ public static partial class GameEngine
         return delta > 0
             ? [new RunBreachAccessModifier(source.Id, attackedServer, delta, operand.BreachAccessReasonKey!)]
             : null;
+    }
+
+    private static IReadOnlyList<RunBreachAccessModifier>? SnapshotRunEventBreachAccessModifiers(
+        WorkingState working,
+        CardInstanceId sourceCardId,
+        RunEventBehaviorSpec runEventSpec,
+        ServerState attackedServer)
+    {
+        if (runEventSpec.BreachAccessModifier is not { } declaration)
+        {
+            return null;
+        }
+
+        return [new RunBreachAccessModifier(
+            sourceCardId,
+            attackedServer.Id,
+            declaration.Delta,
+            declaration.ReasonKey,
+            RunBreachAccessModifierSourceKind.RunEvent)];
+
+    }
+
+    private static void ValidateRunEventSuccessDraw(
+        WorkingState working,
+        CardInstanceState source,
+        RunEventBehaviorSpec runEventSpec)
+    {
+        if (runEventSpec.SuccessDraw is not { } declaration)
+        {
+            return;
+        }
+
+        if (!working.BehaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? definition)
+            || !BehaviorRunRules.IsRunEventSuccessDrawDefinition(definition, declaration))
+        {
+            throw new ResolutionFailureException(
+                $"Run event '{runEventSpec.DefinitionId}' has no authenticated RunSuccessful draw trigger binding.");
+        }
     }
 
     private static List<RunBreachAccessModifier> SnapshotFirstHqBreachAccessModifiers(
@@ -633,6 +680,29 @@ public static partial class GameEngine
         return spec;
     }
 
+    private static void ValidateRunEventTarget(
+        WorkingState working,
+        RunEventBehaviorSpec spec,
+        ServerState target)
+    {
+        if (spec.AllowedTargetServers is { } allowed
+            && !allowed.Contains(target.Kind))
+        {
+            throw new ResolutionFailureException(
+                $"Run event '{spec.DefinitionId.Value}' cannot attack server '{target.Id.Value}'.");
+        }
+
+        if (working.RuntimeCardCatalog is not null
+            && (!working.RuntimeCardCatalog.TryGet(spec.DefinitionId, out CardRuntimeSpec? runtime)
+                || runtime.Side != PlayerSide.Runner
+                || runtime.CardClass != RuntimeCardClass.Event
+                || runtime.PlayCost != spec.Cost))
+        {
+            throw new ResolutionFailureException(
+                $"Run event '{spec.DefinitionId.Value}' does not match authenticated runtime card metadata.");
+        }
+    }
+
     private static void StepRunTiming(WorkingState working, RunTimingFrame frame)
     {
         RunState run = working.RunState
@@ -674,6 +744,9 @@ public static partial class GameEngine
             case RunTimingStep.AfterMovePaidWindow:
                 YieldRunPriorityDecision(working, run, "CR 6.9.4e: after-movement paid/rez window.");
                 break;
+            case RunTimingStep.ApproachServer:
+                StepRunApproachServer(working, run);
+                break;
             case RunTimingStep.Success:
                 StepRunSuccess(working, run);
                 break;
@@ -700,7 +773,7 @@ public static partial class GameEngine
         if (run.CurrentIceIndex < 0)
         {
             SetRunTiming(working, run.WithTiming(
-                RunTimingStep.Success,
+                RunTimingStep.ApproachServer,
                 -1,
                 null,
                 run.Successful,
@@ -773,6 +846,10 @@ public static partial class GameEngine
             CreatePriority(RunPriorityWindowKind.EncounterPaid),
             encounter,
             run.AccessState));
+        if (HasActiveCatalogTrigger(working, OccurrenceKind.IceEncountered, run.AttackedServer, ice.Id))
+        {
+            QueueIceEncounteredOccurrence(working, run, ice.Id);
+        }
     }
 
     private static void StepEncounter(WorkingState working, RunState run)
@@ -926,6 +1003,32 @@ public static partial class GameEngine
             run.AccessState));
     }
 
+    private static void StepRunApproachServer(WorkingState working, RunState run)
+    {
+        if (run.CurrentIceIndex >= 0 || run.CurrentIceId is not null)
+        {
+            throw new ResolutionFailureException("A run can approach the server only after passing all ICE.");
+        }
+
+        Emit(working, EngineEventKinds.ServerApproached, new ServerApproachedEventPayload(
+            run.Id,
+            run.AttackedServer));
+        SetRunTiming(working, run.WithTiming(
+            RunTimingStep.Success,
+            -1,
+            null,
+            run.Successful,
+            run.Unsuccessful,
+            run.EndReason,
+            null,
+            null,
+            run.AccessState));
+        if (HasActiveCatalogTrigger(working, OccurrenceKind.ServerApproached, run.AttackedServer))
+        {
+            QueueServerApproachedOccurrence(working, run);
+        }
+    }
+
     private static void StepRunSuccess(WorkingState working, RunState run)
     {
         if (run.CurrentIceIndex >= 0)
@@ -945,7 +1048,11 @@ public static partial class GameEngine
             null,
             null,
             RunAccessState.NotStarted));
-        if (HasActiveCatalogTrigger(working, OccurrenceKind.RunSuccessful, run.AttackedServer))
+        if (HasActiveCatalogTrigger(
+                working,
+                OccurrenceKind.RunSuccessful,
+                run.AttackedServer,
+                run.InitiatingSource))
         {
             QueueRunSuccessfulOccurrence(working, run);
         }
@@ -967,6 +1074,32 @@ public static partial class GameEngine
                 run.InitiatingPlayer,
                 run.InitiatingSource,
                 run.AttackedServer))));
+    }
+
+    private static void QueueServerApproachedOccurrence(WorkingState working, RunState run)
+    {
+        working.ResolutionStack.Add(new EffectResolutionFrame(
+            run.InitiatingPlayer,
+            new CostBundle(),
+            new EffectBundle(new GameplayOccurrenceEffect(
+                OccurrenceKind.ServerApproached,
+                run.InitiatingPlayer,
+                serverId: run.AttackedServer))));
+    }
+
+    private static void QueueIceEncounteredOccurrence(
+        WorkingState working,
+        RunState run,
+        CardInstanceId iceId)
+    {
+        working.ResolutionStack.Add(new EffectResolutionFrame(
+            run.InitiatingPlayer,
+            new CostBundle(),
+            new EffectBundle(new GameplayOccurrenceEffect(
+                OccurrenceKind.IceEncountered,
+                run.InitiatingPlayer,
+                subjectCardId: iceId,
+                serverId: run.AttackedServer))));
     }
 
     private static void StepBreachBoundary(WorkingState working, RunState run)
@@ -1230,7 +1363,6 @@ public static partial class GameEngine
 
     private static bool IsRealTurnRun(WorkingState working, RunState run) =>
         run.InitiatingSide == PlayerSide.Runner
-        && run.ActiveRunEventId is null
         && working.ResolutionStack.Count == 2
         && working.ResolutionStack[^1] is RunTimingFrame timing
         && timing.RunId == run.Id
@@ -1239,7 +1371,36 @@ public static partial class GameEngine
         && parent.ActiveSide == PlayerSide.Runner
         && parent.TurnNumber == working.Turn.TurnNumber
         && working.Turn.ActiveSide == PlayerSide.Runner
-        && (run.InitiatingSource is null || IsValidInstalledRunSource(working, run));
+        && (run.ActiveRunEventId is { } activeEventId
+            ? run.InitiatingSource == activeEventId
+                && IsValidActiveRunEvent(working, run, activeEventId)
+            : run.InitiatingSource is null || IsValidInstalledRunSource(working, run));
+
+    private static bool IsValidActiveRunEvent(WorkingState working, RunState run, CardInstanceId activeEventId)
+    {
+        CardInstanceState? source = working.Cards.FirstOrDefault(card => card.Id == activeEventId);
+        ZoneState? sourceZone = source is null
+            ? null
+            : working.Zones.FirstOrDefault(zone => zone.Id == source.ZoneId);
+        if (source is null
+            || source.OwnerSide != PlayerSide.Runner
+            || !source.FaceUp
+            || sourceZone is null
+            || sourceZone.Kind != ZoneKind.RunnerPlayArea
+            || sourceZone.OwnerSide != PlayerSide.Runner
+            || sourceZone.ServerId is not null
+            || sourceZone.CardIds.Count != 1
+            || sourceZone.CardIds[0] != activeEventId
+            || !working.BehaviorCatalog.TryGetRunEvent(source.DefinitionId, out RunEventBehaviorSpec? spec))
+        {
+            return false;
+        }
+
+        ServerState? attackedServer = working.Servers.FirstOrDefault(server => server.Id == run.AttackedServer);
+        return attackedServer is not null
+            && (spec.AllowedTargetServers is null
+                || spec.AllowedTargetServers.Contains(attackedServer.Kind));
+    }
 
     private static bool IsValidInstalledRunSource(WorkingState working, RunState run)
     {
@@ -1763,7 +1924,7 @@ public static partial class GameEngine
                 break;
             case RunPriorityWindowKind.AfterMovePaid:
                 SetRunTiming(working, run.WithTiming(
-                    run.CurrentIceIndex >= 0 ? RunTimingStep.Approach : RunTimingStep.Success,
+                    run.CurrentIceIndex >= 0 ? RunTimingStep.Approach : RunTimingStep.ApproachServer,
                     run.CurrentIceIndex,
                     run.CurrentIceId,
                     run.Successful,

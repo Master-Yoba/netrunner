@@ -2509,6 +2509,8 @@ public static class ResolutionFrameValidator
 
         if (occurrence.Kind is OccurrenceKind.CardInstalled
             or OccurrenceKind.CardRezzed
+            or OccurrenceKind.ServerApproached
+            or OccurrenceKind.IceEncountered
             or OccurrenceKind.RunSuccessful
             or OccurrenceKind.RunEnded
             or OccurrenceKind.AgendaScoredOrStolen
@@ -2546,6 +2548,24 @@ public static class ResolutionFrameValidator
                         "resolution.gameplay-occurrence-subject-mismatch",
                         $"{path}.effect.subjectCardId",
                         "Gameplay occurrence subject must match the occurrence source card."));
+                }
+
+                if (gameplay.Kind == OccurrenceKind.ServerApproached
+                    && (gameplay.ServerId is null || gameplay.SubjectCardId is not null))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.server-approached-context",
+                        $"{path}.effect",
+                        "A ServerApproached occurrence must identify its server and must not identify a subject card."));
+                }
+
+                if (gameplay.Kind == OccurrenceKind.IceEncountered
+                    && (gameplay.ServerId is null || gameplay.SubjectCardId is null))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.ice-encountered-context",
+                        $"{path}.effect",
+                        "An IceEncountered occurrence must identify both its encountered ICE subject and server."));
                 }
 
                 if (gameplay.Kind == OccurrenceKind.RunEnded && gameplay.Successful is null)

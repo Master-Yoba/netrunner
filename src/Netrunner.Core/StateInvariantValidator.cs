@@ -1312,6 +1312,53 @@ public static class StateInvariantValidator
                         }
                         break;
 
+                    case RunBreachAccessModifierSourceKind.RunEvent:
+                        if (run.ActiveRunEventId is not { } activeRunEventId)
+                        {
+                            Add(
+                                violations,
+                                "run.breach-modifier-run-event",
+                                modifierPath,
+                                "Run-event breach access modifiers require an active run event source.");
+                        }
+                        else if (modifier.SourceCardId != activeRunEventId)
+                        {
+                            Add(
+                                violations,
+                                "run.breach-modifier-source-mismatch",
+                                $"{modifierPath}.sourceCardId",
+                                "Every run-event breach access modifier must identify the active run event source.");
+                        }
+
+                        if (source is not null
+                            && (!behaviorCatalog.TryGetRunEvent(
+                                    source.DefinitionId,
+                                    out RunEventBehaviorSpec? runEventSpec)
+                                || runEventSpec.BreachAccessModifier is not { } declared
+                                || declared.Delta != modifier.Delta
+                                || !string.Equals(
+                                    declared.ReasonKey,
+                                    modifier.ReasonKey,
+                                    StringComparison.Ordinal)))
+                        {
+                            Add(
+                                violations,
+                                "run.breach-modifier-undeclared",
+                                modifierPath,
+                                "Run-event breach access modifiers must match the active event's exact declaration.");
+                        }
+
+                        if (source is not null
+                            && !source.FaceUp)
+                        {
+                            Add(
+                                violations,
+                                "run.breach-modifier-source-facedown",
+                                modifierPath,
+                                "A run-event breach access modifier source must remain faceup while the run is active.");
+                        }
+                        break;
+
                     default:
                         Add(
                             violations,
@@ -1322,6 +1369,28 @@ public static class StateInvariantValidator
                 }
             }
 
+        }
+
+        if (run.ActiveRunEventId is { } activeEventForModifier
+            && state.Cards.FirstOrDefault(card => card?.Id == activeEventForModifier) is { } eventSourceForModifier
+            && behaviorCatalog.TryGetRunEvent(eventSourceForModifier.DefinitionId, out RunEventBehaviorSpec? eventSpecForModifier)
+            && eventSpecForModifier.BreachAccessModifier is { } declaredEventModifier
+            && (run.BreachAccessModifiers is null
+                || !run.BreachAccessModifiers.Any(modifier => modifier is not null
+                    && modifier.SourceKind == RunBreachAccessModifierSourceKind.RunEvent
+                    && modifier.SourceCardId == activeEventForModifier
+                    && modifier.AttackedServerId == run.AttackedServer
+                    && modifier.Delta == declaredEventModifier.Delta
+                    && string.Equals(
+                        modifier.ReasonKey,
+                        declaredEventModifier.ReasonKey,
+                        StringComparison.Ordinal))))
+        {
+            Add(
+                violations,
+                "run.missing-breach-access-modifier",
+                $"{path}.breachAccessModifiers",
+                "The active run event's declared breach access modifier must be snapshotted into the run state.");
         }
 
         ValidateRunRandomAccessLimit(state, run, path, violations);
@@ -1393,13 +1462,40 @@ public static class StateInvariantValidator
                         "The active run event must be Runner-owned.");
                 }
 
-                if (!behaviorCatalog.TryGetRunEvent(activeEvent.DefinitionId, out _))
+                RunEventBehaviorSpec? activeRunEventSpec = null;
+                if (!behaviorCatalog.TryGetRunEvent(activeEvent.DefinitionId, out activeRunEventSpec))
                 {
                     Add(
                         violations,
                         "run.active-event-unregistered",
                         $"{path}.activeRunEventId",
                         $"Active run event definition '{activeEvent.DefinitionId}' is not registered as a run event.");
+                }
+                else
+                {
+                    ServerKind? attackedKind = state.Servers
+                        .FirstOrDefault(candidate => candidate?.Id == run.AttackedServer)
+                        ?.Kind;
+                    if (activeRunEventSpec.AllowedTargetServers is { } allowed
+                        && (attackedKind is null || !allowed.Contains(attackedKind.Value)))
+                    {
+                        Add(
+                            violations,
+                            "run.active-event-target-invalid",
+                            $"{path}.attackedServer",
+                            "The active run event does not allow the run's attacked server.");
+                    }
+
+                    if (activeRunEventSpec.SuccessDraw is { } successDraw
+                        && (!behaviorCatalog.TryGet(activeEvent.DefinitionId, out CardBehaviorDefinition? successDefinition)
+                            || !BehaviorRunRules.IsRunEventSuccessDrawDefinition(successDefinition, successDraw)))
+                    {
+                        Add(
+                            violations,
+                            "run.active-event-success-draw-undeclared",
+                            $"{path}.activeRunEventId",
+                            "A run event success draw requires an exact authenticated generic draw binding.");
+                    }
                 }
 
                 ZoneState? activeZone = state.Zones.FirstOrDefault(zone => zone?.Id == activeEvent.ZoneId);
@@ -2125,21 +2221,22 @@ public static class StateInvariantValidator
         else
         {
             // A2b may suspend an ability directly beneath the live run timing
-            // frame. Production occurrence hooks may also suspend their exact
-            // typed marker after advancing the run cursor. The
-            // effect/checkpoint validators prove the nested suffix; this
-            // check only ensures no unrelated frame can be smuggled into a
-            // run stack prefix.
+            // frame. Production occurrence hooks may also suspend the exact
+            // typed gameplay occurrence checkpoint after advancing the run
+            // cursor. The effect/checkpoint validators prove the nested
+            // suffix; this check only ensures no unrelated frame can be
+            // smuggled into a run stack prefix.
             ResolutionFrame suffixRoot = state.ResolutionStack[runFrameIndex + 1];
             bool expectedGameplayOccurrence = suffixRoot is EffectResolutionFrame occurrenceFrame
                 && IsExpectedRunGameplayOccurrenceFrame(state, occurrenceFrame, run);
-            if (suffixRoot is not AbilityFrame && !expectedGameplayOccurrence)
+            if (suffixRoot is not AbilityFrame
+                && !expectedGameplayOccurrence)
             {
                 Add(
                     violations,
                     "run.stack-topology",
                     "resolutionStack",
-                    "Only an ability lifecycle or an exact production gameplay occurrence pipeline may follow the live run timing frame.");
+                    "Only an ability lifecycle or exact production gameplay occurrence pipeline may follow the live run timing frame.");
                 return;
             }
 
@@ -2208,13 +2305,16 @@ public static class StateInvariantValidator
                 "A nested basic run parent turn number must match the active turn.");
         }
 
-        if (run.ActiveRunEventId is not null)
+        if (run.ActiveRunEventId is { } activeEventId)
         {
-            Add(
-                violations,
-                "run.nested-source",
-                "runState.initiatingSource",
-                "A run event cannot be nested under a real Runner turn.");
+            if (run.InitiatingSource != activeEventId)
+            {
+                Add(
+                    violations,
+                    "run.nested-source",
+                    "runState.initiatingSource",
+                    "A real-turn run event must use the same source identity for InitiatingSource and ActiveRunEventId.");
+            }
         }
         else if (run.InitiatingSource is { } installedSource)
         {
@@ -2265,6 +2365,20 @@ public static class StateInvariantValidator
                 && run.Step == RunTimingStep.BreachBoundary
                 && occurrence.Controller == run.InitiatingPlayer
                 && occurrence.SubjectCardId == run.InitiatingSource
+                && occurrence.ServerId == run.AttackedServer,
+            OccurrenceKind.ServerApproached => run.Step == RunTimingStep.Success
+                && !run.Successful
+                && frame.Controller == run.InitiatingPlayer
+                && occurrence.Controller == run.InitiatingPlayer
+                && occurrence.SubjectCardId is null
+                && occurrence.ServerId == run.AttackedServer,
+            OccurrenceKind.IceEncountered => run.Step == RunTimingStep.EncounterPaidWindow
+                && frame.Controller == run.InitiatingPlayer
+                && occurrence.Controller == run.InitiatingPlayer
+                && occurrence.SubjectCardId is { } encounteredIce
+                && run.CurrentIceId == encounteredIce
+                && run.Encounter is { Status: RunEncounterStatus.Initialized, IceId: var encounterIce }
+                && encounterIce == encounteredIce
                 && occurrence.ServerId == run.AttackedServer,
             OccurrenceKind.CardAccessed => run.Step == RunTimingStep.BreachAccessAbility
                 && frame.Controller == run.InitiatingPlayer
@@ -2555,7 +2669,7 @@ public static class StateInvariantValidator
         RunTimingStep.InitiationPaidWindow => RunCrPhase.Initiation,
         RunTimingStep.Approach or RunTimingStep.ApproachPaidWindow => RunCrPhase.Approach,
         RunTimingStep.EncounterInitialization or RunTimingStep.EncounterPaidWindow or RunTimingStep.Encounter => RunCrPhase.Encounter,
-        RunTimingStep.MovementPaidWindow or RunTimingStep.JackOutDecision or RunTimingStep.MoveInward or RunTimingStep.AfterMovePaidWindow => RunCrPhase.Movement,
+        RunTimingStep.MovementPaidWindow or RunTimingStep.JackOutDecision or RunTimingStep.MoveInward or RunTimingStep.AfterMovePaidWindow or RunTimingStep.ApproachServer => RunCrPhase.Movement,
         RunTimingStep.Success
             or RunTimingStep.BreachBoundary
             or RunTimingStep.BreachCandidateSelection
@@ -5492,8 +5606,7 @@ public static class StateInvariantValidator
                             Add(violations, "decision.behavior-choice-key-mismatch", $"{actionPath}.parameters.choiceKey", "Behavior action key does not match the materialized choice.");
                         }
 
-                        if (behaviorChoice.OptionKeys.Count > 1
-                            || (behaviorChoice.CardIds.Count > 0 && behaviorChoice.OptionKeys.Count > 0))
+                        if (behaviorChoice.OptionKeys.Count > 1)
                         {
                             Add(violations, "decision.behavior-choice-payload", $"{actionPath}.parameters", "Behavior action must select one option or a card set, never both.");
                         }
@@ -5528,9 +5641,23 @@ public static class StateInvariantValidator
                             Add(violations, "decision.behavior-option-not-offered", $"{actionPath}.parameters.optionKeys", "Behavior option is not one of the frozen materialized options.");
                         }
 
-                        if (behaviorChoice.CardIds.Any(id => !materialized.CandidateCardIds.Contains(id)))
+                        if (behaviorChoice.OptionKeys.Count == 0
+                            && behaviorChoice.CardIds.Any(id => !materialized.CandidateCardIds.Contains(id)))
                         {
                             Add(violations, "decision.behavior-card-not-offered", $"{actionPath}.parameters.cardIds", "Behavior card is not one of the frozen materialized candidates.");
+                        }
+
+                        if (!GameEngine.IsBehaviorChoiceActionLegal(
+                                state,
+                                behaviorCatalog,
+                                runtimeCardCatalog,
+                                behaviorChoice))
+                        {
+                            Add(
+                                violations,
+                                "decision.behavior-choice-payload-invalid",
+                                $"{actionPath}.parameters",
+                                "Behavior choice parameters do not satisfy the current catalog declaration and authenticated candidate/cost rules.");
                         }
                     }
 
@@ -5574,6 +5701,16 @@ public static class StateInvariantValidator
                             "decision.invalid-play-cost",
                             $"{actionPath}.parameters.creditCost",
                             "Play action credit cost must not be negative.");
+                    }
+
+                    if (playCard.TargetServerId is { } targetServerId
+                        && !state.Servers.Any(server => server?.Id == targetServerId))
+                    {
+                        Add(
+                            violations,
+                            "decision.unknown-play-target-server",
+                            $"{actionPath}.parameters.targetServerId",
+                            $"Run-event play action references unknown server '{targetServerId}'.");
                     }
 
                     break;
@@ -10285,7 +10422,8 @@ public static class StateInvariantValidator
         PlayCardParameters actual,
         PlayCardParameters expected) =>
         actual.CardId == expected.CardId
-        && actual.CreditCost == expected.CreditCost;
+        && actual.CreditCost == expected.CreditCost
+        && actual.TargetServerId == expected.TargetServerId;
 
     private static bool AdvanceParametersMatch(
         AdvanceCardParameters actual,
@@ -10981,6 +11119,12 @@ public static class StateInvariantValidator
                         runtimeCardCatalog,
                         frame,
                         option))
+                .Where(option => GameEngine.IsBehaviorChoiceOptionAffordable(
+                    state,
+                    behaviorCatalog,
+                    runtimeCardCatalog,
+                    choice.Owner,
+                    option))
                 .Select(option => option.Key)
                 .ToArray();
             if (!choice.OptionKeys.SequenceEqual(expectedOptions, StringComparer.Ordinal))

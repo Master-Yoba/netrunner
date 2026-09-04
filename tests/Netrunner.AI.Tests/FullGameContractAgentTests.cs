@@ -18,9 +18,9 @@ public sealed class FullGameContractAgentTests
 
         Assert.Equal(FullGameContractAgentVersion.SchemaVersion, policy.SchemaVersion);
         Assert.Equal(FullGameContractAgentVersion.PolicyVersion, policy.PolicyVersion);
-        Assert.Equal(3, FullGameContractAgentVersion.SchemaVersion);
-        Assert.Equal("full-game-contract-agent-v3", FullGameContractAgentVersion.AgentVersion);
-        Assert.Equal("full-game-contract-policy-v3", FullGameContractAgentVersion.PolicyVersion);
+        Assert.Equal(4, FullGameContractAgentVersion.SchemaVersion);
+        Assert.Equal("full-game-contract-agent-v4", FullGameContractAgentVersion.AgentVersion);
+        Assert.Equal("full-game-contract-policy-v4", FullGameContractAgentVersion.PolicyVersion);
         Assert.Equal(PlayerSide.Runner, policy.ControlledSide);
         Assert.Equal(ActionKind.DrawCard, policy.TurnActionOrder[0]);
         Assert.Equal(ActionKind.JackOut, policy.RunActionOrder[0]);
@@ -331,6 +331,155 @@ public sealed class FullGameContractAgentTests
             targetLow.Id,
             await agent.ChooseActionAsync(
                 ObservationFor(PlayerSide.Corp, DecisionKind.BehaviorChoice, targetHigh, targetLow)));
+    }
+
+    [Fact]
+    public async Task TriggerChoicePrefersUseAndIsNeutralToActionOrderAndJson()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Corp);
+        LegalAction decline = Action(
+            "trigger-decline-z",
+            ActionKind.DeclineTrigger,
+            new TriggerChoiceParameters(new TriggerId("trigger:z")),
+            "decline the trigger");
+        LegalAction useLater = Action(
+            "trigger-use-z",
+            ActionKind.UseTrigger,
+            new TriggerChoiceParameters(new TriggerId("trigger:z")),
+            "use the trigger");
+        LegalAction useEarlier = Action(
+            "trigger-use-a",
+            ActionKind.UseTrigger,
+            new TriggerChoiceParameters(new TriggerId("trigger:a")),
+            "use the other trigger");
+
+        ActionId selected = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Corp, DecisionKind.TriggerChoice, decline, useLater, useEarlier));
+        ActionId reordered = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Corp, DecisionKind.TriggerChoice, useEarlier, decline, useLater));
+        LegalAction[] restored = JsonSerializer.Deserialize<LegalAction[]>(
+                JsonSerializer.Serialize(new[] { useLater, decline, useEarlier }))
+            ?? throw new InvalidOperationException("The serialized trigger payload was empty.");
+        ActionId roundTrip = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Corp, DecisionKind.TriggerChoice, restored));
+
+        Assert.Equal(useEarlier.Id, selected);
+        Assert.Equal(selected, reordered);
+        Assert.Equal(selected, roundTrip);
+    }
+
+    [Fact]
+    public async Task BehaviorChoicePrefersStructuredPrivateCardCostAndPreservesIssuedPayload()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Corp);
+        CardInstanceId first = new("card:hq-a");
+        CardInstanceId second = new("card:hq-b");
+        LegalAction fallback = Action(
+            "alternative-fallback",
+            ActionKind.ChooseBehavior,
+            new BehaviorChoiceParameters("anoetic-choice", "decline"),
+            "decline and continue");
+        LegalAction pay = Action(
+            "alternative-pay",
+            ActionKind.ChooseBehavior,
+            new BehaviorChoiceParameters(
+                "anoetic-choice",
+                ["pay-and-trash-hq"],
+                [first, second]),
+            "pay and trash two hidden cards");
+
+        ActionId selected = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Corp, DecisionKind.BehaviorChoice, fallback, pay));
+        LegalAction selectedAction = Assert.Single(
+            new[] { fallback, pay },
+            action => action.Id == selected);
+        BehaviorChoiceParameters payload = Assert.IsType<BehaviorChoiceParameters>(selectedAction.Parameters);
+
+        Assert.Equal(pay.Id, selected);
+        Assert.Equal(["pay-and-trash-hq"], payload.OptionKeys);
+        Assert.Equal([first, second], payload.CardIds);
+        Assert.True(payload.FinalizeSelection);
+
+        LegalAction[] restored = JsonSerializer.Deserialize<LegalAction[]>(
+                JsonSerializer.Serialize(new[] { fallback, pay }))
+            ?? throw new InvalidOperationException("The serialized behavior payload was empty.");
+        Assert.Equal(selected, await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Corp, DecisionKind.BehaviorChoice, restored)));
+    }
+
+    [Fact]
+    public async Task StructuredBehaviorAlternativesUseFirstMaterializedDeclaration()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Runner);
+        LegalAction first = Action(
+            "action:100",
+            ActionKind.ChooseBehavior,
+            new BehaviorChoiceParameters("manegarm-choice", "spend-clicks"),
+            "spend two clicks");
+        LegalAction fallback = Action(
+            "action:101",
+            ActionKind.ChooseBehavior,
+            new BehaviorChoiceParameters("manegarm-choice", "end-run"),
+            "end the run");
+        Assert.Equal(
+            first.Id,
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Runner, DecisionKind.BehaviorChoice, fallback, first)));
+
+        LegalAction takeTag = Action(
+            "action:200",
+            ActionKind.ChooseBehavior,
+            new BehaviorChoiceParameters("funhouse-choice", "take-tag"),
+            "take a tag");
+        LegalAction endRun = Action(
+            "action:201",
+            ActionKind.ChooseBehavior,
+            new BehaviorChoiceParameters("funhouse-choice", "end-run"),
+            "end the run");
+        Assert.Equal(
+            takeTag.Id,
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Runner, DecisionKind.BehaviorChoice, endRun, takeTag)));
+    }
+
+    [Fact]
+    public async Task TriggerAndBehaviorDuplicateOrMalformedPayloadsFailClosed()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Corp);
+        LegalAction duplicateActionId = Action(
+            "duplicate",
+            ActionKind.UseTrigger,
+            new TriggerChoiceParameters(new TriggerId("trigger:1")));
+        LegalAction sameActionId = new(
+            duplicateActionId.Id,
+            ActionKind.DeclineTrigger,
+            "different action",
+            new TriggerChoiceParameters(new TriggerId("trigger:1")));
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Corp, DecisionKind.TriggerChoice, duplicateActionId, sameActionId)));
+
+        LegalAction duplicateOption = Action(
+            "duplicate-option",
+            ActionKind.ChooseBehavior,
+            new BehaviorChoiceParameters(
+                "malformed-choice",
+                ["same", "same"],
+                [new CardInstanceId("card:a")]));
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Corp, DecisionKind.BehaviorChoice, duplicateOption)));
+
+        LegalAction duplicateCard = Action(
+            "duplicate-card",
+            ActionKind.ChooseBehavior,
+            new BehaviorChoiceParameters(
+                "malformed-choice",
+                ["pay"],
+                [new CardInstanceId("card:a"), new CardInstanceId("card:a")]));
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Corp, DecisionKind.BehaviorChoice, duplicateCard)));
     }
 
     [Fact]
@@ -898,12 +1047,22 @@ public sealed class FullGameContractAgentTests
                     PlayerSide.Corp,
                     DecisionKind.TurnAction,
                     Action("legacy", ActionKind.Legacy, new LegacyActionParameters("draw")))));
-        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        LegalAction useTrigger = Action(
+            "trigger-use",
+            ActionKind.UseTrigger,
+            new TriggerChoiceParameters(new TriggerId("trigger:1")));
+        LegalAction declineTrigger = Action(
+            "trigger-decline",
+            ActionKind.DeclineTrigger,
+            new TriggerChoiceParameters(new TriggerId("trigger:1")));
+        Assert.Equal(
+            useTrigger.Id,
             await agent.ChooseActionAsync(
                 ObservationFor(
                     PlayerSide.Corp,
                     DecisionKind.TriggerChoice,
-                    Action("trigger", ActionKind.UseTrigger, new TriggerChoiceParameters(new TriggerId("trigger:1"))))));
+                    declineTrigger,
+                    useTrigger)));
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await agent.ChooseActionAsync(
                 ObservationFor(

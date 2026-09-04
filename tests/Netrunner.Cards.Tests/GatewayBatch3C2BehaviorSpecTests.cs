@@ -16,8 +16,8 @@ public sealed class GatewayBatch3C2BehaviorSpecTests
     {
         BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();
 
-        Assert.Equal("gateway-m4-4.4", catalog.Version);
-        Assert.Equal(39, catalog.AllDefinitionIds.Count);
+        Assert.Equal("gateway-m4-4.5-c1", catalog.Version);
+        Assert.Equal(43, catalog.AllDefinitionIds.Count);
         Assert.Equal(
             new[]
             {
@@ -54,7 +54,12 @@ public sealed class GatewayBatch3C2BehaviorSpecTests
         Assert.Equal(3, modifier.Delta);
         Assert.Equal("tread-lightly-ice-rez-cost", modifier.ReasonKey);
         Assert.Equal(
-            new[] { GatewayCardCodes.Overclock, GatewayBatch3CardCodes.TreadLightly },
+            new[]
+            {
+                GatewayCardCodes.Overclock,
+                GatewayBatch3CardCodes.TreadLightly,
+                GatewayBatch4CardCodes.Jailbreak,
+            },
             GatewayRunEventBehaviorSpecs.RunEventSpecs.Select(candidate => candidate.DefinitionId));
 
         string json = EngineJson.Serialize(spec);

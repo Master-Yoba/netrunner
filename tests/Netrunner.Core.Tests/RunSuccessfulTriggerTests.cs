@@ -238,6 +238,7 @@ public sealed class RunSuccessfulTriggerTests
         Assert.Equal(
             [
                 EngineEventKinds.RunPriorityPassed,
+                EngineEventKinds.ServerApproached,
                 EngineEventKinds.RunSuccessful,
                 EngineEventKinds.CreditsAdjusted,
                 EngineEventKinds.CreditsAdjusted,
@@ -269,13 +270,6 @@ public sealed class RunSuccessfulTriggerTests
         CardInstanceId eventId = new("card:success-run-event");
         BehaviorCatalog catalog = new BehaviorCatalogBuilder("test:success-source-catalog")
             .AddRunEvent(new RunEventBehaviorSpec(eventDefinition, cost: 0, hostedCredits: 0))
-            .Add(new CardBehaviorDefinition(
-                eventDefinition,
-                PlayerSide.Runner,
-                triggers:
-                [
-                    Trigger("source-self", TriggerMode.Mandatory, BehaviorTriggerScope.Self, 100),
-                ]))
             .Add(new CardBehaviorDefinition(
                 observerDefinition,
                 PlayerSide.Runner,

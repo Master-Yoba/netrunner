@@ -46,6 +46,7 @@ public static class EngineEventKinds
     public const string RunPriorityPassed = "run-priority-passed";
     public const string RunTimingWindowOpened = "run-timing-window-opened";
     public const string IceApproached = "ice-approached";
+    public const string ServerApproached = "server-approached";
     public const string IceRezzed = "ice-rezzed";
     public const string SubroutinesBroken = "subroutines-broken";
     public const string BreakerPumped = "breaker-pumped";
@@ -117,6 +118,7 @@ public enum HostedCreditPoolOperation
 [JsonDerivedType(typeof(RunPriorityPassedEventPayload), "run-priority-passed")]
 [JsonDerivedType(typeof(RunTimingWindowOpenedEventPayload), "run-timing-window-opened")]
 [JsonDerivedType(typeof(IceApproachedEventPayload), "ice-approached")]
+[JsonDerivedType(typeof(ServerApproachedEventPayload), "server-approached")]
 [JsonDerivedType(typeof(IceRezzedEventPayload), "ice-rezzed")]
 [JsonDerivedType(typeof(SubroutinesBrokenEventPayload), "subroutines-broken")]
 [JsonDerivedType(typeof(BreakerPumpedEventPayload), "breaker-pumped")]
@@ -1679,6 +1681,30 @@ public sealed record IceApproachedEventPayload : EngineEventPayload
     public CardInstanceId IceId { get; private set; }
 }
 
+public sealed record ServerApproachedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public ServerApproachedEventPayload(int version, RunId runId, ServerId serverId)
+        : base(version)
+    {
+        RunId = runId;
+        ServerId = serverId;
+    }
+
+    public ServerApproachedEventPayload(RunId runId, ServerId serverId)
+        : this(1, runId, serverId)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunId RunId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ServerId ServerId { get; private set; }
+}
+
 public sealed record IceRezzedEventPayload : EngineEventPayload
 {
     [JsonConstructor]
@@ -2156,6 +2182,7 @@ public sealed record EngineEvent
         RunPriorityPassedEventPayload value => new EngineEvent(Version, Sequence, Kind, new RunPriorityPassedEventPayload(value.Version, value.RunId, value.Window, value.PassedBy, value.NextPriorityHolder, value.ConsecutivePasses)),
         RunTimingWindowOpenedEventPayload value => new EngineEvent(Version, Sequence, Kind, new RunTimingWindowOpenedEventPayload(value.Version, value.RunId, value.Phase, value.Step, value.PriorityWindow, value.PriorityHolder)),
         IceApproachedEventPayload value => new EngineEvent(Version, Sequence, Kind, new IceApproachedEventPayload(value.Version, value.RunId, value.IceId)),
+        ServerApproachedEventPayload value => new EngineEvent(Version, Sequence, Kind, new ServerApproachedEventPayload(value.Version, value.RunId, value.ServerId)),
         IceRezzedEventPayload value => new EngineEvent(Version, Sequence, Kind, new IceRezzedEventPayload(value.Version, value.RunId, value.IceId)),
         SubroutinesBrokenEventPayload value => new EngineEvent(Version, Sequence, Kind, new SubroutinesBrokenEventPayload(value.Version, value.RunId, value.EncounterId, value.BreakerId, value.BrokenCount)),
         BreakerPumpedEventPayload value => new EngineEvent(Version, Sequence, Kind, new BreakerPumpedEventPayload(value.Version, value.RunId, value.BreakerId)),
@@ -2654,6 +2681,11 @@ public static class EngineEventValidator
                 RequireKind(@event, EngineEventKinds.IceApproached, path, violations);
                 RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
                 RequireId(value.IceId.Value, $"{path}.payload.iceId", "card", violations);
+                break;
+            case ServerApproachedEventPayload value:
+                RequireKind(@event, EngineEventKinds.ServerApproached, path, violations);
+                RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
+                RequireId(value.ServerId.Value, $"{path}.payload.serverId", "server", violations);
                 break;
             case IceRezzedEventPayload value:
                 RequireKind(@event, EngineEventKinds.IceRezzed, path, violations);

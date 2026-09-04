@@ -40,6 +40,8 @@ public enum RunTimingStep
     MoveInward,
     // 6.9.4e: paid/non-ICE-rez window after movement (P + non-ICE R).
     AfterMovePaidWindow,
+    // 6.9.4g: the Runner approaches the attacked server.
+    ApproachServer,
     // 6.9.5a: success is declared without a paid window.
     Success,
     // 6.9.5b: the nested breach boundary that starts candidate selection.
@@ -88,6 +90,8 @@ public enum RunBreachAccessModifierSourceKind
 {
     InstalledRunSource,
     FirstHeadquartersBreach,
+    /// <summary>Additional access declared by the run event that started this run.</summary>
+    RunEvent,
 }
 
 public enum RunEncounterStatus
@@ -1263,7 +1267,7 @@ public sealed record RunState
         RunTimingStep.InitiationPaidWindow => RunCrPhase.Initiation,
         RunTimingStep.Approach or RunTimingStep.ApproachPaidWindow => RunCrPhase.Approach,
         RunTimingStep.EncounterInitialization or RunTimingStep.EncounterPaidWindow or RunTimingStep.Encounter => RunCrPhase.Encounter,
-        RunTimingStep.MovementPaidWindow or RunTimingStep.JackOutDecision or RunTimingStep.MoveInward or RunTimingStep.AfterMovePaidWindow => RunCrPhase.Movement,
+        RunTimingStep.MovementPaidWindow or RunTimingStep.JackOutDecision or RunTimingStep.MoveInward or RunTimingStep.AfterMovePaidWindow or RunTimingStep.ApproachServer => RunCrPhase.Movement,
         RunTimingStep.Success
             or RunTimingStep.BreachBoundary
             or RunTimingStep.BreachCandidateSelection

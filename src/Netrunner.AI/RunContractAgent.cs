@@ -62,7 +62,38 @@ public sealed class RunContractAgent : IGameAgent
     public ValueTask<ActionId> ChooseActionAsync(Observation observation, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(observation);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (observation.LegalActions is null)
+        {
+            throw new InvalidOperationException("The run contract agent received no legal-action list.");
+        }
+
+        EnsureActionShapes(observation.LegalActions);
         IReadOnlyList<LegalAction> actions = observation.LegalActions;
+
+        // Reactions are checkpoint decisions, not replacement paid windows.
+        // Core normally issues only UseTrigger/DeclineTrigger here; accepting
+        // the typed actions directly also lets the contract progress through
+        // an optional approach reaction without parsing its prompt.
+        LegalAction? trigger = SelectTriggerAction(actions);
+        if (trigger is not null)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult(trigger.Id);
+        }
+
+        // A trigger child may yield a structured BehaviorChoice before the
+        // run timing frame resumes. Choose an existing materialized option or
+        // target action; this is the common path for Manegarm, Anoetic Void,
+        // and Funhouse. The private card IDs on an Anoetic action are retained
+        // exactly because the agent returns only that issued ActionId.
+        LegalAction? behaviorChoice = SelectBehaviorChoice(actions);
+        if (behaviorChoice is not null)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult(behaviorChoice.Id);
+        }
 
         LegalAction? pass = actions.FirstOrDefault(action => action.Kind == ActionKind.PassPriority);
 
@@ -135,7 +166,171 @@ public sealed class RunContractAgent : IGameAgent
                 "The contract agent found no pass action in a run window; the observation is malformed.");
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return ValueTask.FromResult(pass.Id);
+    }
+
+    private static void EnsureActionShapes(IReadOnlyList<LegalAction> actions)
+    {
+        var actionIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (LegalAction? action in actions)
+        {
+            if (action is null
+                || !HasStableId(action.Id.Value)
+                || !actionIds.Add(action.Id.Value))
+            {
+                throw new InvalidOperationException(
+                    "The run contract agent received a missing or duplicate engine-issued ActionId.");
+            }
+
+            bool valid = action.Kind switch
+            {
+                ActionKind.PassPriority
+                    or ActionKind.NoAccessAction
+                    or ActionKind.ContinueRun
+                    or ActionKind.JackOut => action.Parameters is NoActionParameters,
+                ActionKind.UseTrigger
+                    or ActionKind.DeclineTrigger => action.Parameters is TriggerChoiceParameters trigger
+                    && HasStableId(trigger.TriggerId.Value),
+                ActionKind.ChooseBehavior => action.Parameters is BehaviorChoiceParameters behavior
+                    && HasValidBehaviorChoiceParameters(behavior),
+                ActionKind.RezIce => action.Parameters is RunIceParameters ice
+                    && HasStableId(ice.IceId.Value),
+                ActionKind.BreakSubroutines => action.Parameters is RunBreakParameters runBreak
+                    && HasStableId(runBreak.BreakerId.Value)
+                    && runBreak.Quantity > 0
+                    && runBreak.HostedCredits >= 0,
+                ActionKind.PumpBreaker => action.Parameters is RunBreakerParameters breaker
+                    && HasStableId(breaker.BreakerId.Value)
+                    && breaker.HostedCredits >= 0,
+                ActionKind.ChooseBreachCandidate => action.Parameters is BreachCandidateParameters candidate
+                    && ((candidate.CardId is { } card
+                        && HasStableId(card.Value)
+                        && candidate.Source is null)
+                        || (candidate.CardId is null
+                            && candidate.Source is { } source
+                            && Enum.IsDefined(source))),
+                ActionKind.TrashAccessedCard => action.Parameters is RunCardPaymentParameters payment
+                    && HasStableId(payment.CardId.Value)
+                    && payment.HostedCredits >= 0,
+                _ => true,
+            };
+
+            if (!valid)
+            {
+                throw new InvalidOperationException(
+                    $"The run contract agent received malformed parameters for '{action.Kind}'.");
+            }
+        }
+    }
+
+    private static LegalAction? SelectTriggerAction(IEnumerable<LegalAction> actions)
+    {
+        LegalAction[] use = actions
+            .Where(static action => action.Kind == ActionKind.UseTrigger)
+            .OrderBy(TriggerKey, StringComparer.Ordinal)
+            .ThenBy(static action => action.Id.Value, StringComparer.Ordinal)
+            .ToArray();
+        if (use.Length > 0)
+        {
+            return use[0];
+        }
+
+        return actions
+            .Where(static action => action.Kind == ActionKind.DeclineTrigger)
+            .OrderBy(TriggerKey, StringComparer.Ordinal)
+            .ThenBy(static action => action.Id.Value, StringComparer.Ordinal)
+            .FirstOrDefault();
+    }
+
+    private static LegalAction? SelectBehaviorChoice(IEnumerable<LegalAction> actions)
+    {
+        LegalAction[] choices = actions
+            .Where(static action => action.Kind == ActionKind.ChooseBehavior)
+            .OrderBy(BehaviorChoiceOrderKey, StringComparer.Ordinal)
+            .ThenBy(SemanticKey, StringComparer.Ordinal)
+            .ThenBy(static action => action.Id.Value, StringComparer.Ordinal)
+            .ToArray();
+        return choices.FirstOrDefault();
+    }
+
+    private static bool HasValidBehaviorChoiceParameters(BehaviorChoiceParameters? behavior)
+    {
+        if (behavior is null
+            || !HasStableId(behavior.ChoiceKey)
+            || behavior.OptionKeys is null
+            || behavior.CardIds is null
+            || behavior.OptionKeys.Count > 1
+            || behavior.OptionKeys.Any(option => !HasStableId(option))
+            || behavior.CardIds.Any(card => !HasStableId(card.Value))
+            || behavior.OptionKeys.Distinct(StringComparer.Ordinal).Count() != behavior.OptionKeys.Count
+            || behavior.CardIds.Distinct().Count() != behavior.CardIds.Count)
+        {
+            return false;
+        }
+
+        if (!behavior.FinalizeSelection)
+        {
+            return behavior.OptionKeys.Count == 0
+                && behavior.CardIds.Count == 1;
+        }
+
+        return behavior.OptionKeys.Count == 0
+            || behavior.CardIds.Count > 0
+            || behavior.OptionKeys.Count == 1;
+    }
+
+    private static string BehaviorChoiceOrderKey(LegalAction action)
+    {
+        BehaviorChoiceParameters behavior = (BehaviorChoiceParameters)action.Parameters;
+        int rank = behavior.OptionKeys.Count > 0 && behavior.CardIds.Count > 0
+            ? 0
+            : behavior.OptionKeys.Count > 0
+                ? 1
+                : behavior.CardIds.Count > 0
+                    ? 2
+                    : 3;
+        int gainPreference = behavior.OptionKeys.Any(static option =>
+            string.Equals(option, "gain", StringComparison.Ordinal))
+            ? 0
+            : 1;
+        return $"{rank}:{gainPreference}:"
+            + (behavior.OptionKeys.Count > 0
+                ? $"action:{action.Id.Value}"
+                : $"semantic:{SemanticKey(action)}");
+    }
+
+    private static string TriggerKey(LegalAction action) =>
+        $"trigger:{((TriggerChoiceParameters)action.Parameters).TriggerId.Value}";
+
+    private static string SemanticKey(LegalAction action) => action.Parameters switch
+    {
+        BehaviorChoiceParameters behavior => BehaviorKey(behavior),
+        _ => action.Kind.ToString(),
+    };
+
+    private static string BehaviorKey(BehaviorChoiceParameters behavior)
+    {
+        string options = string.Join(
+            ",",
+            behavior.OptionKeys.OrderBy(static value => value, StringComparer.Ordinal));
+        string cards = string.Join(
+            ",",
+            behavior.CardIds
+                .Select(static card => card.Value)
+                .OrderBy(static value => value, StringComparer.Ordinal));
+        return $"behavior:{behavior.ChoiceKey}:options:{options}:cards:{cards}:final:{behavior.FinalizeSelection}";
+    }
+
+    private static bool HasStableId(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 128)
+        {
+            return false;
+        }
+
+        return value.All(static character =>
+            !char.IsControl(character) && !char.IsWhiteSpace(character));
     }
 
     /// <summary>

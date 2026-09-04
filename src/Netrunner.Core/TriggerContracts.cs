@@ -31,6 +31,8 @@ public enum OccurrenceKind
     CardAccessed,
     HostedCreditPoolEmptied,
     BasicDraw,
+    ServerApproached,
+    IceEncountered,
 }
 
 public enum OccurrencePhase

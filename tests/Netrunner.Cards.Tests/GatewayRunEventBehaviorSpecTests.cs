@@ -14,13 +14,43 @@ public sealed class GatewayRunEventBehaviorSpecTests
 
         Assert.Equal(1, spec.Cost);
         Assert.Equal(5, spec.HostedCredits);
+        Assert.Null(spec.AllowedTargetServers);
+        Assert.Null(spec.SuccessDraw);
+        Assert.Null(spec.BreachAccessModifier);
+    }
+
+    [Fact]
+    public void JailbreakSpecDeclaresItsTypedRunVariants()
+    {
+        RunEventBehaviorSpec spec = GatewayRunEventBehaviorSpecs.RunEventSpecs.Single(
+            static candidate => candidate.DefinitionId == GatewayBatch4CardCodes.Jailbreak);
+
+        Assert.Equal(0, spec.Cost);
+        Assert.Equal(0, spec.HostedCredits);
+        Assert.Equal(
+            new[] { ServerKind.Headquarters, ServerKind.RAndD },
+            spec.AllowedTargetServers);
+
+        BehaviorRunSuccessDraw draw = Assert.IsType<BehaviorRunSuccessDraw>(spec.SuccessDraw);
+        Assert.Equal(1, draw.DrawCount);
+        Assert.Equal("jailbreak-success-draw", draw.ReasonKey);
+
+        BehaviorRunBreachAccessModifier access =
+            Assert.IsType<BehaviorRunBreachAccessModifier>(spec.BreachAccessModifier);
+        Assert.Equal(1, access.Delta);
+        Assert.Equal("jailbreak-additional-access", access.ReasonKey);
     }
 
     [Fact]
     public void RunEventSpecsBindTheCompiledRunEventDefinitions()
     {
         Assert.Equal(
-            new[] { GatewayCardCodes.Overclock, GatewayBatch3CardCodes.TreadLightly },
+            new[]
+            {
+                GatewayCardCodes.Overclock,
+                GatewayBatch3CardCodes.TreadLightly,
+                GatewayBatch4CardCodes.Jailbreak,
+            },
             GatewayRunEventBehaviorSpecs.RunEventSpecs
                 .Select(static spec => spec.DefinitionId)
                 .ToArray());

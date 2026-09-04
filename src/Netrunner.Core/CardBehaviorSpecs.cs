@@ -355,7 +355,10 @@ public sealed record RunEventBehaviorSpec
         CardDefinitionId definitionId,
         int cost,
         int hostedCredits,
-        IReadOnlyList<BehaviorRunRezCostModifier>? rezCostModifiers = null)
+        IReadOnlyList<BehaviorRunRezCostModifier>? rezCostModifiers = null,
+        IReadOnlyList<ServerKind>? allowedTargetServers = null,
+        BehaviorRunSuccessDraw? successDraw = null,
+        BehaviorRunBreachAccessModifier? breachAccessModifier = null)
     {
         DefinitionId = definitionId;
         Cost = cost;
@@ -373,6 +376,9 @@ public sealed record RunEventBehaviorSpec
         }
 
         RezCostModifiers = FreezeRezCostModifiers(rezCostModifiers);
+        AllowedTargetServers = FreezeAllowedTargetServers(allowedTargetServers);
+        SuccessDraw = successDraw;
+        BreachAccessModifier = breachAccessModifier;
     }
 
     public CardDefinitionId DefinitionId { get; }
@@ -389,6 +395,28 @@ public sealed record RunEventBehaviorSpec
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<BehaviorRunRezCostModifier>? RezCostModifiers { get; }
+
+    /// <summary>
+    /// Optional central servers that this event may attack. A populated list
+    /// is an allow-list, not a hint; only Headquarters and R&amp;D are valid
+    /// targets for this run-event contract. Null means that the event keeps
+    /// the legacy unrestricted-server behavior.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<ServerKind>? AllowedTargetServers { get; }
+
+    /// <summary>
+    /// Optional draw performed after this event's run is declared successful.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BehaviorRunSuccessDraw? SuccessDraw { get; }
+
+    /// <summary>
+    /// Optional additional access applied when this event's attacked server
+    /// is breached.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BehaviorRunBreachAccessModifier? BreachAccessModifier { get; }
 
     private static ReadOnlyCollection<BehaviorRunRezCostModifier>? FreezeRezCostModifiers(
         IReadOnlyList<BehaviorRunRezCostModifier>? modifiers)
@@ -416,5 +444,31 @@ public sealed record RunEventBehaviorSpec
         }
 
         return new ReadOnlyCollection<BehaviorRunRezCostModifier>(copy);
+    }
+
+    private static ReadOnlyCollection<ServerKind>? FreezeAllowedTargetServers(
+        IReadOnlyList<ServerKind>? servers)
+    {
+        if (servers is null or { Count: 0 })
+        {
+            return null;
+        }
+
+        ServerKind[] copy = servers.ToArray();
+        if (copy.Any(static server => server is not (ServerKind.Headquarters or ServerKind.RAndD)))
+        {
+            throw new ArgumentException(
+                "Run event target declarations may name only Headquarters or R&D.",
+                nameof(servers));
+        }
+
+        if (copy.Distinct().Count() != copy.Length)
+        {
+            throw new ArgumentException(
+                "Run event target declarations must not repeat a server.",
+                nameof(servers));
+        }
+
+        return new ReadOnlyCollection<ServerKind>(copy);
     }
 }

@@ -244,6 +244,17 @@ public enum BehaviorZone
     RemovedFromGame,
 }
 
+/// <summary>
+/// Explicit presentation meaning for a declarative choice option. The value
+/// is metadata for clients; reducers never infer a fallback from card text or
+/// an option key.
+/// </summary>
+public enum BehaviorChoiceOptionSemantic
+{
+    Normal,
+    Fallback,
+}
+
 /// <summary>One option in a mode, target, or ordered choice.</summary>
 public sealed class BehaviorChoiceOption : IEquatable<BehaviorChoiceOption>
 {
@@ -251,7 +262,9 @@ public sealed class BehaviorChoiceOption : IEquatable<BehaviorChoiceOption>
     public BehaviorChoiceOption(
         string key,
         IReadOnlyList<BehaviorInstruction>? instructions = null,
-        BehaviorTarget? target = null)
+        BehaviorTarget? target = null,
+        IReadOnlyList<BehaviorCost>? costs = null,
+        BehaviorChoiceOptionSemantic? semantic = null)
     {
         if (!StableIdentifier.TryValidate(key))
         {
@@ -263,6 +276,13 @@ public sealed class BehaviorChoiceOption : IEquatable<BehaviorChoiceOption>
         Key = key;
         Instructions = Freeze(instructions);
         Target = target;
+        Costs = FreezeCosts(costs);
+        if (semantic is { } value && !Enum.IsDefined(value))
+        {
+            throw new ArgumentOutOfRangeException(nameof(semantic));
+        }
+
+        Semantic = semantic;
     }
 
     public string Key { get; }
@@ -271,16 +291,92 @@ public sealed class BehaviorChoiceOption : IEquatable<BehaviorChoiceOption>
 
     public BehaviorTarget? Target { get; }
 
+    /// <summary>
+    /// Typed costs paid by the materialized choice owner immediately before
+    /// this option's instructions are expanded. An omitted value preserves
+    /// the legacy no-cost option shape.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<BehaviorCost>? Costs { get; }
+
+    /// <summary>
+    /// Optional client-facing semantic marker. It has no executable meaning;
+    /// fallback behavior is represented explicitly instead of inferred from
+    /// labels or instruction text.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BehaviorChoiceOptionSemantic? Semantic { get; }
+
     public bool Equals(BehaviorChoiceOption? other) =>
         other is not null
         && string.Equals(Key, other.Key, StringComparison.Ordinal)
         && BehaviorContractStructure.SequenceEquals(Instructions, other.Instructions, BehaviorContractStructure.AreEqual)
-        && BehaviorContractStructure.AreEqual(Target, other.Target);
+        && BehaviorContractStructure.AreEqual(Target, other.Target)
+        && SequenceEquals(Costs, other.Costs)
+        && Semantic == other.Semantic;
 
     public override bool Equals(object? obj) => Equals(obj as BehaviorChoiceOption);
 
     public override int GetHashCode() =>
-        HashCode.Combine(Key, Instructions.Count, Target);
+        HashCode.Combine(Key, Instructions.Count, Target, Costs?.Count ?? 0, Semantic);
+
+    private static bool SequenceEquals(
+        IReadOnlyList<BehaviorCost>? left,
+        IReadOnlyList<BehaviorCost>? right)
+    {
+        if (left is null || right is null)
+        {
+            return left is null && right is null;
+        }
+
+        return left.SequenceEqual(right);
+    }
+
+    private static ReadOnlyCollection<BehaviorCost>? FreezeCosts(
+        IReadOnlyList<BehaviorCost>? values)
+    {
+        if (values is null || values.Count == 0)
+        {
+            return null;
+        }
+
+        BehaviorCost[] copy = values.ToArray();
+        if (copy.Any(static value => value is null))
+        {
+            throw new ArgumentException(
+                "Behavior choice option cost collections must not contain null entries.",
+                nameof(values));
+        }
+
+        foreach (BehaviorCost cost in copy)
+        {
+            if (cost.Kind is not (BehaviorCostKind.Credits
+                or BehaviorCostKind.Clicks
+                or BehaviorCostKind.Additional))
+            {
+                throw new ArgumentException(
+                    $"Choice options support only Credits, Clicks, and structured Additional costs; '{cost.Kind}' is not supported.",
+                    nameof(values));
+            }
+
+            if (cost.Kind == BehaviorCostKind.Additional
+                && (cost.AdditionalKind != BehaviorAdditionalCostKind.TrashCards
+                    || cost.AdditionalTarget is not
+                    {
+                        Kind: BehaviorTargetKind.ZoneCards,
+                        Zone: not null,
+                        Filter.OwnerSide: not null,
+                        Reveal: false,
+                    }))
+            {
+                throw new ArgumentException(
+                    "Choice Additional costs must be typed private TrashCards operations over an explicitly owned, unrevealed ZoneCards target.",
+                    nameof(values));
+            }
+        }
+
+        return new ReadOnlyCollection<BehaviorCost>(copy);
+    }
 
     private static ReadOnlyCollection<T> Freeze<T>(IEnumerable<T>? values)
         where T : class

@@ -169,7 +169,7 @@ public sealed record PurgeVirusCountersParameters : ActionParameters
 public sealed record PlayCardParameters : ActionParameters
 {
     [JsonConstructor]
-    public PlayCardParameters(CardInstanceId cardId, int creditCost)
+    public PlayCardParameters(CardInstanceId cardId, int creditCost, ServerId? targetServerId = null)
     {
         if (creditCost < 0)
         {
@@ -178,6 +178,7 @@ public sealed record PlayCardParameters : ActionParameters
 
         CardId = cardId;
         CreditCost = creditCost;
+        TargetServerId = targetServerId;
     }
 
     [JsonInclude]
@@ -187,6 +188,19 @@ public sealed record PlayCardParameters : ActionParameters
     [JsonInclude]
     [JsonRequired]
     public int CreditCost { get; private set; }
+
+    /// <summary>
+    /// Optional attacked-server payload for a Runner run-event play. Ordinary
+    /// Operation/Event actions retain a null target and their legacy JSON
+    /// shape; a run event is materialized once per legal target server.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ServerId? TargetServerId { get; private set; }
+
+    /// <summary>Compatibility alias for callers that name the target server simply ServerId.</summary>
+    [JsonIgnore]
+    public ServerId? ServerId => TargetServerId;
 }
 
 /// <summary>
@@ -1220,7 +1234,7 @@ public sealed class PendingDecision
             trashTaggedResource.ClickCost,
             trashTaggedResource.CreditCost),
         PurgeVirusCountersParameters purgeVirusCounters => new PurgeVirusCountersParameters(purgeVirusCounters.ClickCost),
-        PlayCardParameters playCard => new PlayCardParameters(playCard.CardId, playCard.CreditCost),
+        PlayCardParameters playCard => new PlayCardParameters(playCard.CardId, playCard.CreditCost, playCard.TargetServerId),
         RunServerParameters runServer => new RunServerParameters(runServer.ServerId),
         RezCardParameters rezCard => new RezCardParameters(rezCard.CardId, rezCard.CreditCost, rezCard.CostQuote),
         AdvanceCardParameters advanceCard => new AdvanceCardParameters(advanceCard.CardId, advanceCard.CreditCost),

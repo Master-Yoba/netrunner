@@ -11,15 +11,15 @@ namespace Netrunner.AI;
 /// </summary>
 public static class FullGameContractAgentVersion
 {
-    public const int SchemaVersion = 3;
+    public const int SchemaVersion = 4;
 
-    public const string AgentVersion = "full-game-contract-agent-v3";
+    public const string AgentVersion = "full-game-contract-agent-v4";
 
-    public const string PolicyVersion = "full-game-contract-policy-v3";
+    public const string PolicyVersion = "full-game-contract-policy-v4";
 }
 
 /// <summary>
-/// Action-class policy for <see cref="FullGameContractAgent"/> v3.
+/// Action-class policy for <see cref="FullGameContractAgent"/> v4.
 ///
 /// The action lists are typed <see cref="ActionKind"/> values, not prompt or
 /// description text. The dispatcher is deliberately organized by
@@ -143,7 +143,7 @@ public sealed class FullGameContractPolicy
             if (!allowed.Contains(action))
             {
                 throw new ArgumentException(
-                    $"Action kind '{action}' is not supported by this v3 policy.",
+                    $"Action kind '{action}' is not supported by this v4 policy.",
                     parameterName);
             }
 
@@ -160,11 +160,12 @@ public sealed class FullGameContractPolicy
 }
 
 /// <summary>
-/// Deterministic observation-only v3 agent for the Slice 4.2 shell.
+/// Deterministic observation-only v4 agent for the Slice 4.5 shell.
 ///
 /// It currently dispatches typed decision classes for turn timing, turn
 /// actions (bounded abilities/install/gain/draw), forced discard, generic
-/// behavior choices, and M2 run windows. It returns an existing engine-issued
+/// behavior choices, engine-owned trigger choices, and M2 run windows. It
+/// returns an existing engine-issued
 /// <see cref="ActionId"/> only;
 /// it never synthesizes a submission and never chooses <see
 /// cref="ActionKind.EndTurn"/>.
@@ -222,6 +223,7 @@ public sealed class FullGameContractAgent : IGameAgent
             DecisionKind.BehaviorChoice => SelectBehaviorChoice(observation.LegalActions),
             DecisionKind.InstallChoice => SelectInstallChoice(observation.LegalActions),
             DecisionKind.InterruptChoice => SelectInterruptChoice(observation.LegalActions),
+            DecisionKind.TriggerChoice => SelectTriggerChoice(observation.LegalActions),
             DecisionKind.RunTiming => SelectByPriority(
                 observation.LegalActions,
                 _policy.RunActionOrder,
@@ -258,10 +260,13 @@ public sealed class FullGameContractAgent : IGameAgent
                 && action.Parameters is BehaviorChoiceParameters)
             .ToArray();
 
-        // The v3 teaching policy prefers an economy mode when one is offered
-        // (for example Predictive Planogram's typed `gain` option), then
-        // falls back to the complete typed semantic key. This is deliberately
-        // keyed by the option payload, never by the action description.
+        // The v4 teaching policy prefers an economy mode when one is offered
+        // (for example Predictive Planogram's typed `gain` option). Structured
+        // option/card payloads then outrank an optional skip, and the issued
+        // action ID preserves Core's declaration/materialization order for
+        // alternatives such as Manegarm and Funhouse. Target selections use
+        // the complete typed semantic key. None of these choices inspect an
+        // action description or observation state.
         return SelectSemantic(
             choices,
             FullGameActionClass.BehaviorChoice,
@@ -306,12 +311,39 @@ public sealed class FullGameContractAgent : IGameAgent
             .ToArray();
         if (use.Length > 0)
         {
-            // Replacement use is the deterministic v3 preference. The typed
+            // Replacement use is the deterministic v4 preference. The typed
             // interrupt ID and then the issued ActionId break any tie.
             return SelectSemantic(use, FullGameActionClass.InterruptChoice);
         }
 
         return SelectSemantic(replacements, FullGameActionClass.InterruptChoice);
+    }
+
+    private static LegalAction SelectTriggerChoice(IReadOnlyList<LegalAction> actions)
+    {
+        EnsureActionShapes(actions, FullGameActionClass.TriggerChoice);
+        LegalAction[] triggers = actions
+            .Where(static action =>
+                action.Kind is ActionKind.UseTrigger or ActionKind.DeclineTrigger
+                && action.Parameters is TriggerChoiceParameters)
+            .ToArray();
+
+        // Trigger decisions are emitted by Core's checkpoint machinery. Use
+        // is the progress-making choice whenever it is legal; decline is a
+        // fail-closed fallback only when no use action was materialized. The
+        // trigger ID and issued ActionId make ties independent of list order.
+        LegalAction[] use = triggers
+            .Where(static action => action.Kind == ActionKind.UseTrigger)
+            .ToArray();
+        if (use.Length > 0)
+        {
+            return SelectSemantic(use, FullGameActionClass.TriggerChoice, TriggerKey);
+        }
+
+        return SelectSemantic(
+            triggers.Where(static action => action.Kind == ActionKind.DeclineTrigger),
+            FullGameActionClass.TriggerChoice,
+            TriggerKey);
     }
 
     private static int BehaviorPreference(LegalAction action) =>
@@ -322,7 +354,32 @@ public sealed class FullGameContractAgent : IGameAgent
             : 1;
 
     private static string BehaviorOrderKey(LegalAction action) =>
-        $"{BehaviorPreference(action)}:{SemanticKey(action)}";
+        action.Parameters is BehaviorChoiceParameters behavior
+            ? $"{BehaviorChoiceProgressRank(behavior)}:{BehaviorPreference(action)}:"
+                + (behavior.OptionKeys.Count > 0
+                    // Core materializes option alternatives in declaration
+                    // order. The issued ID is the only observation-safe
+                    // representation of that order; labels and descriptions
+                    // are intentionally not consulted.
+                    ? $"action:{action.Id.Value}"
+                    : $"semantic:{SemanticKey(action)}")
+            : throw new InvalidOperationException(
+                "The full-game agent cannot order a malformed behavior choice.");
+
+    private static int BehaviorChoiceProgressRank(BehaviorChoiceParameters behavior) =>
+        behavior.OptionKeys.Count > 0 && behavior.CardIds.Count > 0
+            ? 0 // Structured option plus its frozen private card-cost payload.
+            : behavior.OptionKeys.Count > 0
+                ? 1 // A materialized option, including a normal/fallback mode.
+                : behavior.CardIds.Count > 0
+                    ? 2 // A target/search selection.
+                    : 3; // Explicit optional skip.
+
+    private static string TriggerKey(LegalAction action) =>
+        action.Parameters is TriggerChoiceParameters trigger
+            ? $"trigger:{trigger.TriggerId.Value}"
+            : throw new InvalidOperationException(
+                "The full-game agent cannot order a malformed trigger choice.");
 
     private LegalAction SelectTurnAction(IReadOnlyList<LegalAction> actions)
     {
@@ -448,7 +505,7 @@ public sealed class FullGameContractAgent : IGameAgent
             }
 
             // EndTurn is intentionally ignored rather than selected. The
-            // Slice 4.2 turn reducer ends an action phase at zero clicks, and
+            // Slice 4.5 turn reducer ends an action phase at zero clicks, and
             // a legacy/forged EndTurn offer must never become an agent move.
             if (action.Kind == ActionKind.EndTurn)
             {
@@ -483,6 +540,9 @@ public sealed class FullGameContractAgent : IGameAgent
             FullGameActionClass.InterruptChoice => action.Kind is
                 ActionKind.UseReplacement
                 or ActionKind.DeclineReplacement,
+            FullGameActionClass.TriggerChoice => action.Kind is
+                ActionKind.UseTrigger
+                or ActionKind.DeclineTrigger,
             FullGameActionClass.RunWindow => action.Kind is
                 ActionKind.PassPriority
                 or ActionKind.RezIce
@@ -511,11 +571,7 @@ public sealed class FullGameContractAgent : IGameAgent
                 or (ActionKind.NoAccessAction, NoActionParameters) => true,
             (ActionKind.ChooseCard, CardChoiceParameters card) => HasStableId(card.CardId.Value),
             (ActionKind.ChooseBehavior, BehaviorChoiceParameters behavior) =>
-                HasStableId(behavior.ChoiceKey)
-                && behavior.OptionKeys is not null
-                && behavior.CardIds is not null
-                && behavior.OptionKeys.All(HasStableId)
-                && behavior.CardIds.All(card => HasStableId(card.Value)),
+                HasValidBehaviorChoiceParameters(behavior),
             (ActionKind.RezIce, RunIceParameters ice) => HasStableId(ice.IceId.Value),
             (ActionKind.BreakSubroutines, RunBreakParameters runBreak) =>
                 HasStableId(runBreak.BreakerId.Value)
@@ -538,8 +594,44 @@ public sealed class FullGameContractAgent : IGameAgent
                 IsValidInstallAction(install, actionClass),
             (ActionKind.UseReplacement or ActionKind.DeclineReplacement, ReplacementChoiceParameters replacement) =>
                 HasStableId(replacement.InterruptId.Value),
+            (ActionKind.UseTrigger or ActionKind.DeclineTrigger, TriggerChoiceParameters trigger) =>
+                HasStableId(trigger.TriggerId.Value),
             _ => false,
         };
+    }
+
+    private static bool HasValidBehaviorChoiceParameters(BehaviorChoiceParameters? behavior)
+    {
+        if (behavior is null
+            || !HasStableId(behavior.ChoiceKey)
+            || behavior.OptionKeys is null
+            || behavior.CardIds is null
+            || behavior.OptionKeys.Count > 1
+            || behavior.OptionKeys.Any(option => !HasStableId(option))
+            || behavior.CardIds.Any(card => !HasStableId(card.Value))
+            || behavior.OptionKeys.Distinct(StringComparer.Ordinal).Count() != behavior.OptionKeys.Count
+            || behavior.CardIds.Distinct().Count() != behavior.CardIds.Count)
+        {
+            return false;
+        }
+
+        // The Core choice reducer accepts one of three complete typed
+        // shapes: a materialized option, a card selection, or an explicit
+        // optional skip. An option plus card IDs is the structured private
+        // card-cost form used by Anoetic Void and remains a single issued
+        // action; it is never synthesized by the agent.
+        if (!behavior.FinalizeSelection)
+        {
+            return behavior.OptionKeys.Count == 0
+                && behavior.CardIds.Count == 1;
+        }
+
+        if (behavior.OptionKeys.Count > 0 && behavior.CardIds.Count > 0)
+        {
+            return behavior.OptionKeys.Count == 1;
+        }
+
+        return true;
     }
 
     private static bool IsValidInstallAction(
@@ -1008,6 +1100,8 @@ public sealed class FullGameContractAgent : IGameAgent
         AbilityActionParameters ability => AbilityKey(ability),
         ReplacementChoiceParameters replacement =>
             $"replacement:{replacement.InterruptId.Value}",
+        TriggerChoiceParameters trigger =>
+            $"trigger:{trigger.TriggerId.Value}",
         _ => throw new InvalidOperationException(
             $"The full-game agent cannot derive a semantic key for '{action.Kind}'."),
     };
@@ -1128,7 +1222,7 @@ public sealed class FullGameContractAgent : IGameAgent
     }
 
     private static InvalidOperationException UnsupportedDecision(DecisionKind kind) =>
-        new($"The full-game agent does not support decision kind '{kind}' in v3.");
+        new($"The full-game agent does not support decision kind '{kind}' in v4.");
 
     private enum FullGameActionClass
     {
@@ -1138,6 +1232,7 @@ public sealed class FullGameContractAgent : IGameAgent
         BehaviorChoice,
         InstallChoice,
         InterruptChoice,
+        TriggerChoice,
         RunWindow,
     }
 }

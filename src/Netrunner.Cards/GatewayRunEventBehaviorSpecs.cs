@@ -30,11 +30,31 @@ public static class GatewayRunEventBehaviorSpecs
         hostedCredits: 0,
         rezCostModifiers:
         [
-            new BehaviorRunRezCostModifier(3, "tread-lightly-ice-rez-cost"),
+                new BehaviorRunRezCostModifier(3, "tread-lightly-ice-rez-cost"),
         ]);
+
+    /// <summary>
+    /// Jailbreak: cost 0 event — "Run HQ or R&amp;D. If successful, draw 1 card
+    /// and when you breach the attacked server, access 1 additional card."
+    /// </summary>
+    private static readonly RunEventBehaviorSpec Jailbreak = new(
+        GatewayBatch4CardCodes.Jailbreak,
+        cost: 0,
+        hostedCredits: 0,
+        allowedTargetServers:
+        [
+            ServerKind.Headquarters,
+            ServerKind.RAndD,
+        ],
+        successDraw: new BehaviorRunSuccessDraw(
+            drawCount: 1,
+            reasonKey: "jailbreak-success-draw"),
+        breachAccessModifier: new BehaviorRunBreachAccessModifier(
+            delta: 1,
+            reasonKey: "jailbreak-additional-access"));
 
     /// <summary>The compiled run event specs, in stable card order.</summary>
     public static IReadOnlyList<RunEventBehaviorSpec> RunEventSpecs { get; } =
-        new ReadOnlyCollection<RunEventBehaviorSpec>(new[] { Overclock, TreadLightly });
+        new ReadOnlyCollection<RunEventBehaviorSpec>(new[] { Overclock, TreadLightly, Jailbreak });
 
 }
