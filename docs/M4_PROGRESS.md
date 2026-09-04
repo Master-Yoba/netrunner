@@ -3751,3 +3751,45 @@ errors; runtime action expansion and full verification remain pending.
   formatting and `git diff --check` passed; and the direct M2 proof replayed
   32 checkpoints with `replayVerified: true` and unchanged hashes
   (`faf4e631…` / `c882eb43…` / `d20cdef9…`).
+
+## Slice 4.4 work log
+
+### 2026-09-04 — Slice 4.4 architecture and execution checkpoints
+
+- Started from clean branch `m4_4` at merged Slice 4.3 commit `f2bf590`.
+  The accepted baseline is 952 tests (Core 664, Cards 153, AI 30, CLI 54,
+  Match 51), coverage 32 registered / 31 complete / one partial / 45
+  unregistered, and a green `scripts/verify.sh` gate.
+- Scope is the complete Slice 4.4 contract from `docs/M4_PLAN.md`: ENG-414
+  through ENG-418; Echelon (30025), Unity (30026), Leech (30008), Tread
+  Lightly (30012), DZMZ Optimizer (30022), Docklands Pass (30013), and Verbal
+  Plasticity (30034); AGT-401 v3; SIM-401 extension; UI-405; CARD-401 evidence;
+  and the required combined Tread Lightly/Leech encounter proof. Later M4
+  mechanics and cards remain excluded.
+- Root owns architecture, checkpoint contracts, integration review, the
+  progress ledger, independent verification, and local commits. Luna Max owns
+  implementation inside each bounded checkpoint and does not commit.
+- Checkpoint A (ENG-414) replaces the M2-only strength helpers with one typed,
+  immutable value-calculation contract. A quote retains the printed/base
+  value, effective value, and deterministically ordered terms with stable
+  reason keys and physical/definition provenance. Static, per-installed-X,
+  variable pump, counter-threshold, and encounter-scoped terms compose without
+  title switches. Authoritative break legality, invariant reconstruction,
+  observation, and Match presentation must consume the same calculation.
+- Checkpoint B (ENG-415–418) adds four orthogonal primitives: run-scoped rez
+  cost quotes; first-HQ-breach-this-turn access count; a replacement interrupt
+  on the real basic-draw occurrence; and source-keyed first-program-install
+  consumption in the active formal turn. Issued actions/quotes and any new
+  state must round-trip, validate against the immutable catalog, and remain
+  observation-safe.
+- Checkpoint C binds and proves the seven Batch 3 cards in two groups: the
+  strength cards (Echelon, Unity, Leech), then cost/access/replacement cards
+  (Tread Lightly, DZMZ, Docklands Pass, Verbal Plasticity). Positive lifecycle,
+  expiry/reset, forged/stale, ordering, and hidden-information cases are
+  required; catalog fingerprints must cover every new declaration.
+- Checkpoint D delivers AGT-401 v3, the versioned simulation fixtures and
+  combined Tread Lightly/Leech timing proof, plus UI-405 and a dedicated client
+  smoke. Checkpoint E updates the batch registry, rulings/review evidence and
+  generated coverage to 39 registered / 38 complete / one partial, then runs
+  the full repository gate. Each accepted checkpoint is recorded here and
+  committed locally before the next checkpoint begins.
