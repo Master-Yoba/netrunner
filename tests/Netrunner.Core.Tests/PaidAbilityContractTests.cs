@@ -347,6 +347,176 @@ public sealed class PaidAbilityContractTests
     }
 
     [Fact]
+    public void AdditionalCostSelectionsAreFrozenRoundTripAndLegacyEmptyFormsNormalize()
+    {
+        BehaviorTarget gripTarget = BehaviorTarget.CardsInZone(
+            BehaviorZone.Grip,
+            new BehaviorCardFilter(ownerSide: PlayerSide.Runner));
+        BehaviorCost trashCost = new(
+            BehaviorCostKind.Additional,
+            amount: 2,
+            additionalKey: "trash-cards",
+            additionalTarget: gripTarget,
+            additionalKind: BehaviorAdditionalCostKind.TrashCards);
+        CardInstanceId accessedCardId = new("card:ability-accessed");
+        CardInstanceId[] expectedCostCards =
+        [
+            new CardInstanceId("card:ability-cost-a"),
+            new CardInstanceId("card:ability-cost-b"),
+        ];
+        var mutableCostCards = expectedCostCards.ToList();
+        var mutableSelections = new List<AbilityAdditionalCostSelection>
+        {
+            new(0, "trash-cards", mutableCostCards),
+        };
+        AbilityActionParameters action = new(
+            SourceCardId,
+            DefinitionId,
+            "ability:structured-action",
+            BehaviorAbilityTiming.AnyPaidWindow,
+            BehaviorAbilityActivation.PaidAbility,
+            [trashCost],
+            [accessedCardId],
+            new AbilityUsageSnapshot(BehaviorAbilityUsageLimit.OncePerTurn, 0),
+            CatalogFingerprint,
+            DefinitionFingerprint,
+            SourceZoneId,
+            SourceZoneKind,
+            mutableSelections);
+
+        mutableCostCards.Add(new CardInstanceId("card:detached"));
+        mutableSelections.Clear();
+        AbilityAdditionalCostSelection actionSelection = Assert.Single(
+            action.AdditionalCostSelectionsOrEmpty);
+        Assert.Equal(0, actionSelection.CostIndex);
+        Assert.Equal("trash-cards", actionSelection.CostKey);
+        Assert.Equal(expectedCostCards, actionSelection.CardIds);
+
+        string actionJson = EngineJson.Serialize(action);
+        AbilityActionParameters restoredAction = EngineJson.Deserialize<AbilityActionParameters>(actionJson);
+        Assert.Equal(actionJson, EngineJson.Serialize(restoredAction));
+        AbilityAdditionalCostSelection restoredActionSelection = Assert.Single(
+            restoredAction.AdditionalCostSelectionsOrEmpty);
+        Assert.Equal(actionSelection.CostIndex, restoredActionSelection.CostIndex);
+        Assert.Equal(actionSelection.CostKey, restoredActionSelection.CostKey);
+        Assert.Equal(actionSelection.CardIds, restoredActionSelection.CardIds);
+
+        var frameCostCards = new List<CardInstanceId>(expectedCostCards);
+        var frameSelections = new List<AbilityAdditionalCostSelection>
+        {
+            new(0, "trash-cards", frameCostCards),
+        };
+        AbilityFrame frame = new(
+            1,
+            ResolutionBehaviorIds.Ability,
+            DefinitionId,
+            SourceCardId,
+            "ability:structured-frame",
+            Controller,
+            BehaviorAbilityTiming.BreachAccessPaidWindow,
+            BehaviorAbilityActivation.PaidAbility,
+            [trashCost],
+            [accessedCardId],
+            new AbilityUsageSnapshot(BehaviorAbilityUsageLimit.OncePerTurn, 0),
+            CatalogFingerprint,
+            DefinitionFingerprint,
+            SourceZoneId,
+            SourceZoneKind,
+            AbilityLifecycleStage.AwaitingChild,
+            parentFrameIdentity: "parent:ability",
+            additionalCostSelections: frameSelections);
+        frameCostCards.Add(new CardInstanceId("card:frame-detached"));
+        frameSelections.Clear();
+        AbilityAdditionalCostSelection frameSelection = Assert.Single(
+            frame.AdditionalCostSelectionsOrEmpty);
+        Assert.Equal(expectedCostCards, frameSelection.CardIds);
+
+        string frameJson = EngineJson.Serialize<ResolutionFrame>(frame);
+        AbilityFrame restoredFrame = Assert.IsType<AbilityFrame>(
+            EngineJson.Deserialize<ResolutionFrame>(frameJson));
+        Assert.Equal(frameJson, EngineJson.Serialize<ResolutionFrame>(restoredFrame));
+        AbilityAdditionalCostSelection restoredFrameSelection = Assert.Single(
+            restoredFrame.AdditionalCostSelectionsOrEmpty);
+        Assert.Equal(frameSelection.CostIndex, restoredFrameSelection.CostIndex);
+        Assert.Equal(frameSelection.CostKey, restoredFrameSelection.CostKey);
+        Assert.Equal(frameSelection.CardIds, restoredFrameSelection.CardIds);
+
+        AbilityActionParameters omittedAction = new(
+            SourceCardId,
+            DefinitionId,
+            "ability:legacy-empty",
+            BehaviorAbilityTiming.AnyPaidWindow,
+            BehaviorAbilityActivation.PaidAbility,
+            [],
+            [],
+            new AbilityUsageSnapshot(BehaviorAbilityUsageLimit.Unlimited, 0),
+            CatalogFingerprint,
+            DefinitionFingerprint,
+            SourceZoneId,
+            SourceZoneKind);
+        AbilityActionParameters emptyAction = new(
+            SourceCardId,
+            DefinitionId,
+            "ability:legacy-empty",
+            BehaviorAbilityTiming.AnyPaidWindow,
+            BehaviorAbilityActivation.PaidAbility,
+            [],
+            [],
+            new AbilityUsageSnapshot(BehaviorAbilityUsageLimit.Unlimited, 0),
+            CatalogFingerprint,
+            DefinitionFingerprint,
+            SourceZoneId,
+            SourceZoneKind,
+            []);
+        Assert.Null(omittedAction.AdditionalCostSelections);
+        Assert.Null(emptyAction.AdditionalCostSelections);
+        Assert.Equal(EngineJson.Serialize(omittedAction), EngineJson.Serialize(emptyAction));
+        Assert.Null(EngineJson.Deserialize<AbilityActionParameters>(
+            EngineJson.Serialize(omittedAction)).AdditionalCostSelections);
+
+        AbilityFrame omittedFrame = new(
+            1,
+            ResolutionBehaviorIds.Ability,
+            DefinitionId,
+            SourceCardId,
+            "ability:legacy-frame",
+            Controller,
+            BehaviorAbilityTiming.AnyPaidWindow,
+            BehaviorAbilityActivation.PaidAbility,
+            [],
+            [],
+            new AbilityUsageSnapshot(BehaviorAbilityUsageLimit.Unlimited, 0),
+            CatalogFingerprint,
+            DefinitionFingerprint,
+            SourceZoneId,
+            SourceZoneKind,
+            AbilityLifecycleStage.Complete);
+        AbilityFrame emptyFrame = new(
+            1,
+            ResolutionBehaviorIds.Ability,
+            DefinitionId,
+            SourceCardId,
+            "ability:legacy-frame",
+            Controller,
+            BehaviorAbilityTiming.AnyPaidWindow,
+            BehaviorAbilityActivation.PaidAbility,
+            [],
+            [],
+            new AbilityUsageSnapshot(BehaviorAbilityUsageLimit.Unlimited, 0),
+            CatalogFingerprint,
+            DefinitionFingerprint,
+            SourceZoneId,
+            SourceZoneKind,
+            AbilityLifecycleStage.Complete,
+            additionalCostSelections: []);
+        Assert.Null(omittedFrame.AdditionalCostSelections);
+        Assert.Null(emptyFrame.AdditionalCostSelections);
+        Assert.Equal(
+            EngineJson.Serialize<ResolutionFrame>(omittedFrame),
+            EngineJson.Serialize<ResolutionFrame>(emptyFrame));
+    }
+
+    [Fact]
     public void ConstructorsRequireExactPinsAndUsageAndValidatorRejectsStaleShape()
     {
         Assert.Throws<ArgumentException>(() => new AbilityActionParameters(

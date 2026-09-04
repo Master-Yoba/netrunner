@@ -3558,3 +3558,35 @@ errors; runtime action expansion and full verification remain pending.
   solution build, solution formatter verification, and `git diff --check`.
   The direct M2 proof remains byte-stable at `faf4e631...` / `c882eb43...` /
   `d20cdef9...`, with all 32 checkpoints replay verified.
+
+### 2026-09-04 — Checkpoint E3 ENG-407 Carnivore access ability accepted
+
+- Luna Max bound Carnivore's +1 MU and once-per-turn breach-access ability.
+  Additional card-trash costs are now a typed operation with an explicitly
+  owned zone target; engine-issued actions and serialized ability frames keep
+  those cost selections separate from effect targets and bind each selection
+  to its declaration cost index and stable key. Empty legacy payloads retain
+  their prior JSON shape.
+- The access window now materializes the exact accessed card and deterministic
+  Grip-card pairs, keeps those private to the Runner, pays the complete frozen
+  bundle atomically, and returns to the same priority-free access cursor. The
+  accessed card enters Archives faceup with a zero-credit
+  `AccessedCardTrashed` event. An agenda moved there by Carnivore is not then
+  stolen, while an agenda originally accessed from Archives still is.
+- Root review replaced string-key dispatch with a typed additional-cost enum,
+  separated access provenance from remaining trashability, and required hard
+  result/exploration bounds. Focused tests exposed two further defects before
+  acceptance: invariant bijection treated legal pair variants as forged, and
+  a stale destination-zone snapshot orphaned the first of two trashed Grip
+  cards. Both paths now use structural pair comparison and refreshed immutable
+  zone snapshots.
+- Contract tests cover strict operation/target combinations, fingerprint
+  sensitivity, defensive copies, JSON resume, and null/empty compatibility.
+  Production card tests cover deterministic pair enumeration, observation
+  privacy, insufficient and oversized Grips, ordinary and agenda access,
+  once-per-turn use, exact semantic trash order, and stale/forged atomic
+  rejection. The Carnivore gate passes 9/9, focused Core passes 69/69, complete
+  Core passes 661/661, and complete Cards passes 153/153. The solution builds
+  with zero warnings/errors; formatter and diff checks pass. The direct M2
+  proof remains byte-stable at `faf4e631...` / `c882eb43...` /
+  `d20cdef9...`, with all 32 checkpoints replay verified.

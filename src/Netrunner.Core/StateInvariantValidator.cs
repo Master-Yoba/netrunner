@@ -2947,6 +2947,7 @@ public static class StateInvariantValidator
                         cardIds,
                         cardsById,
                         behaviorCatalog,
+                        runtimeCardCatalog,
                         violations);
                     break;
                 case BehaviorResolutionFrame behaviorFrame:
@@ -3831,6 +3832,7 @@ public static class StateInvariantValidator
         HashSet<CardInstanceId> cardIds,
         Dictionary<CardInstanceId, CardInstanceState> cardsById,
         IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog,
         List<StateInvariantViolation> violations)
     {
         RequirePlayer(playerIds, frame.Controller, $"{path}.controller", violations);
@@ -4020,14 +4022,42 @@ public static class StateInvariantValidator
                 Add(violations, "resolution.ability-costs-mismatch", $"{path}.costs", "Ability costs must match the declaration.");
             }
 
-            if (declaration.Targets.Count != 0 || frame.TargetCardIds.Count != 0)
+            bool supportedTargetShape = declaration.Targets.Count == 0
+                || declaration.Targets.Count == 1
+                    && declaration.Targets[0].Kind == BehaviorTargetKind.AccessedCard;
+            if (!supportedTargetShape)
             {
-                Add(violations, "resolution.ability-targets-unsupported", $"{path}.targetCardIds", "A2 ability frames must not retain targets.");
+                Add(
+                    violations,
+                    "resolution.ability-targets-unsupported",
+                    $"{path}.targetCardIds",
+                    "Only one AccessedCard target is executable in this ability lifecycle.");
+            }
+            else if (declaration.Targets.Count == 0
+                ? frame.TargetCardIds.Count != 0
+                : !AbilityFrameAccessTargetMatches(state, frame, requireLiveSource: frame.Stage is
+                    AbilityLifecycleStage.PayCosts
+                        or AbilityLifecycleStage.CostCheckpoint
+                        or AbilityLifecycleStage.Execute))
+            {
+                Add(
+                    violations,
+                    "resolution.ability-target-mismatch",
+                    $"{path}.targetCardIds",
+                    "Ability targets must retain exactly the current accessed card while live and its exact provenance after resolution.");
             }
 
             if (declaration.Costs.Any(static cost => cost.Kind == BehaviorCostKind.Additional))
             {
-                Add(violations, "resolution.ability-additional-cost-unsupported", $"{path}.costs", "A2 ability frames must not retain additional costs.");
+                ValidateAbilityAdditionalCostSelections(
+                    state,
+                    frame.AdditionalCostSelections,
+                    declaration,
+                    path,
+                    violations,
+                    behaviorCatalog,
+                    runtimeCardCatalog,
+                    requireLiveSources: frame.Stage == AbilityLifecycleStage.PayCosts);
             }
         }
 
@@ -4133,22 +4163,30 @@ public static class StateInvariantValidator
         }
         else if (parent is RunTimingFrame runFrame && state.RunState is { } run)
         {
-            parentMatches = frame.Activation == BehaviorAbilityActivation.PaidAbility
-                && IsRunPriorityStep(run.Step)
-                && runFrame.RunId == run.Id
-                && runFrame.Step == run.Step
-                && run.Priority is not null
-                && state.Players.FirstOrDefault(player => player.Side == run.Priority.PriorityHolder)?.Id == frame.Controller
-                && (frame.Timing == BehaviorAbilityTiming.AnyPaidWindow
-                    || frame.Timing == (run.Step switch
-                    {
-                        RunTimingStep.InitiationPaidWindow => BehaviorAbilityTiming.InitiationPaidWindow,
-                        RunTimingStep.ApproachPaidWindow => BehaviorAbilityTiming.ApproachPaidWindow,
-                        RunTimingStep.EncounterPaidWindow => BehaviorAbilityTiming.EncounterPaidWindow,
-                        RunTimingStep.MovementPaidWindow => BehaviorAbilityTiming.MovementPaidWindow,
-                        RunTimingStep.AfterMovePaidWindow => BehaviorAbilityTiming.AfterMovePaidWindow,
-                        _ => (BehaviorAbilityTiming?)null,
-                    }));
+            parentMatches = run.Step == RunTimingStep.BreachAccessAbility
+                ? frame.Activation == BehaviorAbilityActivation.PaidAbility
+                    && (frame.Timing is BehaviorAbilityTiming.AnyPaidWindow
+                        or BehaviorAbilityTiming.BreachAccessPaidWindow)
+                    && runFrame.RunId == run.Id
+                    && runFrame.Step == run.Step
+                    && run.Priority is null
+                    && controller?.Side == PlayerSide.Runner
+                : frame.Activation == BehaviorAbilityActivation.PaidAbility
+                    && IsRunPriorityStep(run.Step)
+                    && runFrame.RunId == run.Id
+                    && runFrame.Step == run.Step
+                    && run.Priority is not null
+                    && state.Players.FirstOrDefault(player => player.Side == run.Priority.PriorityHolder)?.Id == frame.Controller
+                    && (frame.Timing == BehaviorAbilityTiming.AnyPaidWindow
+                        || frame.Timing == (run.Step switch
+                        {
+                            RunTimingStep.InitiationPaidWindow => BehaviorAbilityTiming.InitiationPaidWindow,
+                            RunTimingStep.ApproachPaidWindow => BehaviorAbilityTiming.ApproachPaidWindow,
+                            RunTimingStep.EncounterPaidWindow => BehaviorAbilityTiming.EncounterPaidWindow,
+                            RunTimingStep.MovementPaidWindow => BehaviorAbilityTiming.MovementPaidWindow,
+                            RunTimingStep.AfterMovePaidWindow => BehaviorAbilityTiming.AfterMovePaidWindow,
+                            _ => (BehaviorAbilityTiming?)null,
+                        }));
         }
 
         if (!parentMatches)
@@ -4200,6 +4238,208 @@ public static class StateInvariantValidator
             && source.FaceUp
             && source.Rezzed;
     }
+
+    private static bool AbilityFrameAccessTargetMatches(
+        GameState state,
+        AbilityFrame frame,
+        bool requireLiveSource)
+    {
+        if (frame.TargetCardIds.Count != 1
+            || state.RunState is not { } run
+            || run.Step != RunTimingStep.BreachAccessAbility
+            || run.ChosenAccessCards.Count == 0
+            || run.ChosenAccessCards[^1] != frame.TargetCardIds[0]
+            || !run.AccessedCards.Contains(frame.TargetCardIds[0]))
+        {
+            return false;
+        }
+
+        return !requireLiveSource || IsLiveAccessCard(state, run, frame.TargetCardIds[0]);
+    }
+
+    /// <summary>
+    /// State-only counterpart of the reducer's shared access-source guard.
+    /// It is intentionally identical in topology: hidden central source or
+    /// the attacked server root. Archives is admitted only for a caller that
+    /// does not require a still-trashable source; score, RFG, and another root
+    /// are never admitted.
+    /// </summary>
+    private static bool IsLiveAccessCard(
+        GameState state,
+        RunState run,
+        CardInstanceId cardId,
+        bool requireTrashableSource = true)
+    {
+        CardInstanceState? card = state.Cards.FirstOrDefault(candidate => candidate?.Id == cardId);
+        ServerState? server = state.Servers.FirstOrDefault(candidate => candidate?.Id == run.AttackedServer);
+        ZoneState? zone = card is null
+            ? null
+            : state.Zones.FirstOrDefault(candidate => candidate?.Id == card.ZoneId
+                && candidate.CardIds.Contains(cardId));
+        if (card is null
+            || card.OwnerSide != PlayerSide.Corp
+            || server is null
+            || zone is null
+            || (zone.ServerId is not null && zone.ServerId != server.Id)
+            || zone.OwnerSide != PlayerSide.Corp)
+        {
+            return false;
+        }
+
+        bool inAccessSource = zone.Kind == ZoneKind.ServerRoot
+            ? zone.Id == server.RootZoneId
+            : server.Kind switch
+            {
+                ServerKind.Headquarters => zone.Kind == ZoneKind.CorpHand && zone.ServerId is null,
+                ServerKind.RAndD => zone.Kind == ZoneKind.CorpDeck && zone.ServerId is null,
+                ServerKind.Archives => zone.Kind == ZoneKind.CorpDiscard && zone.ServerId is null,
+                _ => false,
+            };
+        return inAccessSource
+            && (!requireTrashableSource || zone.Kind != ZoneKind.CorpDiscard);
+    }
+
+    private static void ValidateAbilityAdditionalCostSelections(
+        GameState state,
+        IReadOnlyList<AbilityAdditionalCostSelection>? selectionSnapshot,
+        BehaviorPaidAbility declaration,
+        string path,
+        List<StateInvariantViolation> violations,
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog,
+        bool requireLiveSources)
+    {
+        (BehaviorCost Cost, int Index)[] additional = declaration.Costs
+            .Select((cost, index) => (Cost: cost, Index: index))
+            .Where(value => value.Cost.Kind == BehaviorCostKind.Additional)
+            .ToArray();
+        AbilityAdditionalCostSelection[] selections = (selectionSnapshot ?? []).ToArray();
+        if (selections.Length != additional.Length)
+        {
+            Add(
+                violations,
+                "resolution.ability-additional-cost-selection-mismatch",
+                $"{path}.additionalCostSelections",
+                "A structured additional cost requires exactly one selection entry per declaration cost.");
+            return;
+        }
+
+        var used = new HashSet<CardInstanceId>();
+        foreach ((BehaviorCost cost, int index) in additional)
+        {
+            AbilityAdditionalCostSelection[] matches = selections
+                .Where(value => value.CostIndex == index)
+                .ToArray();
+            AbilityAdditionalCostSelection? selection = matches.Length == 1 ? matches[0] : null;
+            if (selection is null
+                || !string.Equals(selection.CostKey, cost.AdditionalKey, StringComparison.Ordinal))
+            {
+                Add(
+                    violations,
+                    "resolution.ability-additional-cost-selection-mismatch",
+                    $"{path}.additionalCostSelections",
+                    $"Selection for additional cost index {index} does not match its stable declaration key.");
+                continue;
+            }
+
+            if (cost.AdditionalKind != BehaviorAdditionalCostKind.TrashCards
+                || cost.AdditionalTarget is not
+                {
+                    Kind: BehaviorTargetKind.ZoneCards,
+                    Zone: { } sourceZone,
+                    Filter: not null,
+                    Reveal: false,
+                }
+                || cost.AdditionalTarget.Filter.OwnerSide is not { } ownerSide)
+            {
+                Add(
+                    violations,
+                    "resolution.invalid-ability-additional-cost",
+                    $"{path}.costs[{index}]",
+                    "TrashCards requires a ZoneCards target with an explicit owner and reveal=false.");
+                continue;
+            }
+
+            if (selection.CardIds.Count != cost.Amount
+                || selection.CardIds.Distinct().Count() != selection.CardIds.Count)
+            {
+                Add(
+                    violations,
+                    "resolution.ability-additional-cost-selection-mismatch",
+                    $"{path}.additionalCostSelections",
+                    $"Selection for additional cost index {index} must contain exactly {cost.Amount} distinct cards.");
+                continue;
+            }
+
+            BehaviorTarget additionalTarget = cost.AdditionalTarget!;
+            BehaviorCardFilter filter = additionalTarget.Filter!;
+            ZoneKind expectedZoneKind;
+            try
+            {
+                expectedZoneKind = BehaviorZoneKind(sourceZone, ownerSide);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                Add(
+                    violations,
+                    "resolution.invalid-ability-additional-cost",
+                    $"{path}.costs[{index}]",
+                    "The additional-cost source zone is not supported.");
+                continue;
+            }
+
+            ZoneState? source = state.Zones.FirstOrDefault(zone => zone.Kind == expectedZoneKind
+                && (expectedZoneKind is ZoneKind.ServerRoot or ZoneKind.ServerIce
+                    ? zone.OwnerSide == ownerSide
+                    : zone.ServerId is null));
+            foreach (CardInstanceId cardId in selection.CardIds)
+            {
+                bool unique = used.Add(cardId);
+                CardInstanceState? card = state.Cards.FirstOrDefault(candidate => candidate?.Id == cardId);
+                bool stable = StableIdentifier.TryValidate(cardId.Value);
+                bool exists = card is not null;
+                bool inSource = !requireLiveSources || source is not null
+                    && source.CardIds.Contains(cardId)
+                    && card?.ZoneId == source.Id
+                    && card.OwnerSide == ownerSide;
+                bool matchesFilter = !requireLiveSources
+                    || BehaviorCardMatches(state, behaviorCatalog, runtimeCardCatalog, cardId, filter);
+                if (!stable || !exists || !unique || !inSource || !matchesFilter)
+                {
+                    Add(
+                        violations,
+                        "resolution.ability-additional-cost-selection-stale",
+                        $"{path}.additionalCostSelections",
+                        !stable || !exists
+                            ? $"Selected additional-cost card '{cardId}' is unknown or has an invalid stable identifier."
+                            : !unique
+                                ? $"Selected additional-cost card '{cardId}' is reused by multiple costs."
+                                : !inSource
+                                    ? $"Selected additional-cost card '{cardId}' is no longer in its owned source zone."
+                                    : $"Selected additional-cost card '{cardId}' no longer matches its declared filter.");
+                }
+            }
+        }
+    }
+
+    private static ZoneKind BehaviorZoneKind(BehaviorZone zone, PlayerSide ownerSide) => zone switch
+    {
+        BehaviorZone.Deck => ownerSide == PlayerSide.Corp ? ZoneKind.CorpDeck : ZoneKind.RunnerStack,
+        BehaviorZone.Headquarters => ZoneKind.CorpHand,
+        BehaviorZone.Archives => ZoneKind.CorpDiscard,
+        BehaviorZone.Grip => ZoneKind.RunnerGrip,
+        BehaviorZone.Stack => ZoneKind.RunnerStack,
+        BehaviorZone.Heap => ZoneKind.RunnerHeap,
+        BehaviorZone.Rig => ZoneKind.RunnerRig,
+        BehaviorZone.PlayArea => ZoneKind.RunnerPlayArea,
+        BehaviorZone.ScoreArea => ownerSide == PlayerSide.Corp ? ZoneKind.CorpScore : ZoneKind.RunnerScore,
+        BehaviorZone.ServerIce => ZoneKind.ServerIce,
+        BehaviorZone.ServerRoot => ZoneKind.ServerRoot,
+        BehaviorZone.RemovedFromGame => ownerSide == PlayerSide.Corp
+            ? ZoneKind.CorpRemovedFromGame
+            : ZoneKind.RunnerRemovedFromGame,
+        _ => throw new ArgumentOutOfRangeException(nameof(zone)),
+    };
 
     private static void ValidatePendingDecision(
         GameState state,
@@ -4576,6 +4816,7 @@ public static class StateInvariantValidator
                         cardIds,
                         cardsById,
                         behaviorCatalog,
+                        runtimeCardCatalog,
                         enforceCatalogCompatibility,
                         actionPath,
                         violations);
@@ -5236,6 +5477,7 @@ public static class StateInvariantValidator
         HashSet<CardInstanceId> cardIds,
         Dictionary<CardInstanceId, CardInstanceState> cardsById,
         IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog,
         bool enforceCatalogCompatibility,
         string path,
         List<StateInvariantViolation> violations)
@@ -5626,6 +5868,61 @@ public static class StateInvariantValidator
                 $"{path}.parameters.costs",
                 "Ability costs must match the declared ability shape.");
         }
+
+        bool supportedTargetShape = declaration.Targets.Count == 0
+            || declaration.Targets.Count == 1
+                && declaration.Targets[0].Kind == BehaviorTargetKind.AccessedCard;
+        IReadOnlyList<CardInstanceId> actionTargetSnapshot = ability.TargetCardIds ?? [];
+        if (!supportedTargetShape)
+        {
+            Add(
+                violations,
+                "decision.ability-targets-unsupported",
+                $"{path}.parameters.targetCardIds",
+                "Only one AccessedCard target is executable in this ability lifecycle.");
+        }
+        else if (declaration.Targets.Count == 0)
+        {
+            if (actionTargetSnapshot.Count != 0)
+            {
+                Add(
+                    violations,
+                    "decision.ability-target-mismatch",
+                    $"{path}.parameters.targetCardIds",
+                    "A no-target ability must carry an empty target snapshot.");
+            }
+        }
+        else if (actionTargetSnapshot.Count != 1
+            || state.RunState is not { Step: RunTimingStep.BreachAccessAbility } accessRun
+            || !IsLiveAccessCard(state, accessRun, actionTargetSnapshot[0]))
+        {
+            Add(
+                violations,
+                "decision.ability-target-mismatch",
+                $"{path}.parameters.targetCardIds",
+                "An AccessedCard target must be exactly the current live access card.");
+        }
+
+        if (declaration.Costs.Any(static cost => cost.Kind == BehaviorCostKind.Additional))
+        {
+            ValidateAbilityAdditionalCostSelections(
+                state,
+                ability.AdditionalCostSelections,
+                declaration,
+                path,
+                violations,
+                behaviorCatalog,
+                runtimeCardCatalog,
+                requireLiveSources: true);
+        }
+        else if (ability.AdditionalCostSelections is { Count: > 0 })
+        {
+            Add(
+                violations,
+                "decision.ability-additional-cost-selection-mismatch",
+                $"{path}.parameters.additionalCostSelections",
+                "An ability without structured additional costs must not carry card selections.");
+        }
     }
 
     private static void ValidateAbilityActionCosts(
@@ -5683,6 +5980,64 @@ public static class StateInvariantValidator
                 && !StableIdentifier.TryValidate(cost.AdditionalKey))
             {
                 Add(violations, "decision.invalid-ability-additional-cost", $"{costPath}.additionalKey", "Additional costs must carry a stable additional-cost key.");
+            }
+
+            if (cost.AdditionalKind is { } additionalKind
+                && !Enum.IsDefined(additionalKind))
+            {
+                Add(
+                    violations,
+                    "decision.invalid-ability-additional-cost",
+                    $"{costPath}.additionalKind",
+                    "Additional-cost operation is not a supported value.");
+            }
+
+            if (cost.Kind == BehaviorCostKind.Additional)
+            {
+                if (cost.AdditionalKind is null && cost.AdditionalTarget is not null)
+                {
+                    Add(
+                        violations,
+                        "decision.invalid-ability-additional-cost",
+                        costPath,
+                        "A structured additional-cost target requires a typed operation.");
+                }
+
+                if (cost.AdditionalKind == BehaviorAdditionalCostKind.TrashCards
+                    && (cost.AdditionalTarget is not
+                    {
+                        Kind: BehaviorTargetKind.ZoneCards,
+                        Filter: not null,
+                        Reveal: false,
+                    }
+                    || cost.AdditionalTarget.Filter.OwnerSide is null))
+                {
+                    Add(
+                        violations,
+                        "decision.invalid-ability-additional-cost",
+                        costPath,
+                        "TrashCards requires a ZoneCards target with an explicit owner and reveal=false.");
+                }
+            }
+            else
+            {
+                if (cost.AdditionalTarget is not null)
+                {
+                    Add(
+                        violations,
+                        "decision.invalid-ability-additional-cost",
+                        $"{costPath}.additionalTarget",
+                        "Only additional costs may carry an additional-cost target.");
+                }
+
+                if (cost.AdditionalKind is not null)
+                {
+                    Add(
+                        violations,
+                        "decision.invalid-ability-additional-cost",
+                        $"{costPath}.additionalKind",
+                        "Only additional costs may carry an additional-cost operation.");
+                }
             }
 
             if (cost.Kind != BehaviorCostKind.Counter && cost.CounterName is not null)
@@ -6533,24 +6888,24 @@ public static class StateInvariantValidator
                 if (run.ChosenAccessCards.Count > 0)
                 {
                     CardInstanceId accessedCardId = run.ChosenAccessCards[^1];
-                    CardInstanceState accessedCard = state.GetCard(accessedCardId);
+                    CardInstanceState? accessedCard = state.Cards.FirstOrDefault(
+                        candidate => candidate?.Id == accessedCardId);
+                    bool currentAccess = accessedCard is not null
+                        && IsLiveAccessCard(state, run, accessedCardId, requireTrashableSource: false);
+                    bool trashableAccess = currentAccess
+                        && IsLiveAccessCard(state, run, accessedCardId, requireTrashableSource: true);
 
-                    // CR 7.2.2/7.1.5: an accessed agenda has no mid-access
-                    // ability in the M2 card set (agendas have no trash cost),
-                    // so the window offers the pass only; CR 7.2.3 then steals
-                    // the agenda automatically on progression. Mirror the
-                    // engine's basic-trash offer for every other accessed card.
-                    bool accessedAgenda = behaviorCatalog.TryGetAgenda(accessedCard.DefinitionId, out _);
-                    if (!accessedAgenda)
+                    // The basic trash is available only while the exact
+                    // accessed card remains in the attacked server's source
+                    // zone. A moved/discarded/replaced card leaves only the
+                    // no-action path; the ability bijection below separately
+                    // materializes structured access abilities for both
+                    // agendas and non-agendas.
+                    bool accessedAgenda = currentAccess
+                        && behaviorCatalog.TryGetAgenda(accessedCard!.DefinitionId, out _);
+                    if (trashableAccess && !accessedAgenda)
                     {
-                        // CR 7.1.5/7.1.5b: mirrors the engine's basic-trash offer —
-                        // the accessed card has a registered asset spec with a
-                        // trash cost the Runner can pay, and is not already in
-                        // the Corp discard.
-                        ZoneState? discardZone = state.Zones.FirstOrDefault(zone => zone?.Kind == ZoneKind.CorpDiscard && zone.ServerId is null);
-                        if (discardZone is not null
-                            && accessedCard.ZoneId != discardZone.Id
-                            && behaviorCatalog.TryGetAsset(accessedCard.DefinitionId, out AssetBehaviorSpec? assetSpec))
+                        if (behaviorCatalog.TryGetAsset(accessedCard!.DefinitionId, out AssetBehaviorSpec? assetSpec))
                         {
                             PlayerState? trashRunner = state.Players.FirstOrDefault(player => player?.Side == PlayerSide.Runner);
                             if (trashRunner is not null && (long)trashRunner.Credits + run.RunCredits >= assetSpec.TrashCost)
@@ -8669,7 +9024,13 @@ public static class StateInvariantValidator
             AbilityActionParameters? sameIdentity = expected.FirstOrDefault(issued =>
                 issued.SourceCardId == candidate.SourceCardId
                 && string.Equals(issued.AbilityKey, candidate.AbilityKey, StringComparison.Ordinal));
-            if (sameIdentity is not null && !AbilityParametersMatch(candidate, sameIdentity))
+            // One source/key may intentionally have several issued variants
+            // when a structured additional cost offers multiple legal card
+            // combinations. Only report a payload mismatch when the complete
+            // candidate matches none of those variants; comparing every
+            // variant to the first would reject all but the first pair.
+            if (sameIdentity is not null
+                && !expected.Any(issued => AbilityParametersMatch(candidate, issued)))
             {
                 Add(
                     violations,
@@ -8916,6 +9277,9 @@ public static class StateInvariantValidator
         && actual.TargetCardIds is not null
         && expected.TargetCardIds is not null
         && actual.TargetCardIds.SequenceEqual(expected.TargetCardIds)
+        && AbilityAdditionalCostSelectionsMatch(
+            actual.AdditionalCostSelections,
+            expected.AdditionalCostSelections)
         && actual.Usage is not null
         && expected.Usage is not null
         && actual.Usage.Equals(expected.Usage)
@@ -8923,6 +9287,19 @@ public static class StateInvariantValidator
         && string.Equals(actual.DefinitionFingerprint, expected.DefinitionFingerprint, StringComparison.Ordinal)
         && actual.SourceZoneId == expected.SourceZoneId
         && actual.SourceZoneKind == expected.SourceZoneKind;
+
+    private static bool AbilityAdditionalCostSelectionsMatch(
+        IReadOnlyList<AbilityAdditionalCostSelection>? actual,
+        IReadOnlyList<AbilityAdditionalCostSelection>? expected)
+    {
+        AbilityAdditionalCostSelection[] left = (actual ?? []).ToArray();
+        AbilityAdditionalCostSelection[] right = (expected ?? []).ToArray();
+        return left.Length == right.Length
+            && left.Zip(right).All(pair =>
+                pair.First.CostIndex == pair.Second.CostIndex
+                && string.Equals(pair.First.CostKey, pair.Second.CostKey, StringComparison.Ordinal)
+                && pair.First.CardIds.SequenceEqual(pair.Second.CardIds));
+    }
 
     private static bool ScoreParametersMatch(
         ScoreAgendaParameters actual,

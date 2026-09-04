@@ -33,7 +33,8 @@ public sealed record AbilityFrame : ResolutionFrame
         ZoneId sourceZoneId,
         ZoneKind sourceZoneKind,
         AbilityLifecycleStage stage,
-        string? parentFrameIdentity = null)
+        string? parentFrameIdentity = null,
+        IReadOnlyList<AbilityAdditionalCostSelection>? additionalCostSelections = null)
         : base(version, behaviorId)
     {
         ArgumentNullException.ThrowIfNull(behaviorId);
@@ -131,6 +132,7 @@ public sealed record AbilityFrame : ResolutionFrame
         CatalogFingerprint = catalogFingerprint;
         DefinitionFingerprint = definitionFingerprint;
         ParentFrameIdentity = parentFrameIdentity;
+        AdditionalCostSelections = FreezeAdditionalCostSelections(additionalCostSelections);
     }
 
     [JsonInclude]
@@ -177,6 +179,19 @@ public sealed record AbilityFrame : ResolutionFrame
     [JsonRequired]
     public IReadOnlyList<CardInstanceId> TargetCardIds { get; private set; }
 
+    /// <summary>
+    /// Immutable selections captured for structured additional costs. Null
+    /// is the omitted/empty legacy representation; non-null values are
+    /// keyed by declaration cost index and stable cost key.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<AbilityAdditionalCostSelection>? AdditionalCostSelections { get; private set; }
+
+    [JsonIgnore]
+    public IReadOnlyList<AbilityAdditionalCostSelection> AdditionalCostSelectionsOrEmpty =>
+        AdditionalCostSelections ?? [];
+
     [JsonInclude]
     [JsonRequired]
     public AbilityUsageSnapshot Usage { get; private set; }
@@ -210,7 +225,8 @@ public sealed record AbilityFrame : ResolutionFrame
         SourceZoneId,
         SourceZoneKind,
         stage,
-        ParentFrameIdentity);
+        ParentFrameIdentity,
+        AdditionalCostSelections);
 
     private static ReadOnlyCollection<BehaviorCost> Freeze(
         IReadOnlyList<BehaviorCost> values,
@@ -230,4 +246,30 @@ public sealed record AbilityFrame : ResolutionFrame
     private static ReadOnlyCollection<CardInstanceId> FreezeIds(
         IReadOnlyList<CardInstanceId> values) =>
         new(values.ToArray());
+
+    private static ReadOnlyCollection<AbilityAdditionalCostSelection>? FreezeAdditionalCostSelections(
+        IReadOnlyList<AbilityAdditionalCostSelection>? values)
+    {
+        if (values is null || values.Count == 0)
+        {
+            return null;
+        }
+
+        AbilityAdditionalCostSelection[] copy = values.ToArray();
+        if (copy.Any(static value => value is null))
+        {
+            throw new ArgumentException(
+                "Ability frame additional-cost selections must not contain null entries.",
+                nameof(values));
+        }
+
+        if (copy.Select(static value => value.CostIndex).Distinct().Count() != copy.Length)
+        {
+            throw new ArgumentException(
+                "Ability frame additional-cost selections must have distinct cost indexes.",
+                nameof(values));
+        }
+
+        return new ReadOnlyCollection<AbilityAdditionalCostSelection>(copy);
+    }
 }

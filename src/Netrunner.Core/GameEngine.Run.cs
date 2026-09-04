@@ -1331,21 +1331,15 @@ public static partial class GameEngine
 
         // CR 26.03 7.2.3/7.1.6: after the mid-access window resolves without
         // an ability, an agenda that is still being accessed must be stolen.
-        // No mid-access ability in the M2 card set removes an accessed
-        // agenda, so the steal is automatic unless the agenda already left
-        // the access (a corrupted-state guard; fail closed).
-        if (run.ChosenAccessCards.Count > 0)
+        // The source-zone guard is essential here: an agenda moved out of the
+        // attacked server is no longer an accessed agenda and must not be
+        // auto-stolen.
+        if (run.ChosenAccessCards.Count > 0
+            && TryGetCurrentAccessCard(working, run, out CardInstanceState? card, requireTrashableSource: false)
+            && working.BehaviorCatalog.TryGetAgenda(card!.DefinitionId, out _))
         {
-            CardInstanceId accessed = run.ChosenAccessCards[^1];
-            CardInstanceState card = GetCard(working, accessed);
-            ZoneState? scoreZone = working.Zones.FirstOrDefault(zone =>
-                zone.Kind == ZoneKind.RunnerScore && zone.ServerId is null);
-            if (working.BehaviorCatalog.TryGetAgenda(card.DefinitionId, out _)
-                && (scoreZone is null || card.ZoneId != scoreZone.Id))
-            {
-                StealAccessedAgendaInternal(working, run, accessed);
-                return;
-            }
+            StealAccessedAgendaInternal(working, run, card.Id);
+            return;
         }
 
         AdvanceBreachAfterAccess(working, run);
@@ -1373,7 +1367,13 @@ public static partial class GameEngine
             throw new ResolutionFailureException($"Card '{cardId}' is not the accessed card '{accessed}'.");
         }
 
-        CardInstanceState card = GetCard(working, accessed);
+        if (!TryGetCurrentAccessCard(working, run, out CardInstanceState? card, requireTrashableSource: true)
+            || card!.Id != accessed)
+        {
+            throw new ResolutionFailureException(
+                $"The accessed card '{accessed}' is no longer in the authoritative source zone.");
+        }
+
         if (!working.BehaviorCatalog.TryGetAsset(card.DefinitionId, out AssetBehaviorSpec? spec))
         {
             throw new ResolutionFailureException($"The accessed card '{accessed}' has no registered asset behavior spec.");
@@ -1396,8 +1396,9 @@ public static partial class GameEngine
         run = PayRunnerRunCredits(working, run, spec.TrashCost, hostedCredits);
         TrashCard(working, card, working.Zones.Single(zone => zone.Id == card.ZoneId), discardZone);
         // A card trashed through access is revealed: it enters the Corp
-        // discard faceup so both viewers can see what left the breach.
-        if (!card.FaceUp)
+        // discard faceup and unrezzed so both viewers can see what left the
+        // breach.
+        if (!card.FaceUp || card.Rezzed)
         {
             ReplaceCard(working, new CardInstanceState(
                 card.Id,
@@ -1405,7 +1406,7 @@ public static partial class GameEngine
                 discardZone.Id,
                 card.OwnerSide,
                 true,
-                card.Rezzed,
+                false,
                 card.AdvancementCounters));
         }
         Emit(working, EngineEventKinds.AccessedCardTrashed, new AccessedCardTrashedEventPayload(run.Id, accessed, spec.TrashCost));
@@ -1437,7 +1438,13 @@ public static partial class GameEngine
             throw new ResolutionFailureException($"Card '{cardId}' is not the accessed card '{accessed}'.");
         }
 
-        CardInstanceState card = GetCard(working, accessed);
+        if (!TryGetCurrentAccessCard(working, run, out CardInstanceState? card, requireTrashableSource: false)
+            || card!.Id != accessed)
+        {
+            throw new ResolutionFailureException(
+                $"The accessed agenda '{accessed}' is no longer in the authoritative source zone.");
+        }
+
         if (!working.BehaviorCatalog.TryGetAgenda(card.DefinitionId, out AgendaBehaviorSpec? spec))
         {
             throw new ResolutionFailureException($"The accessed card '{accessed}' is not a registered agenda.");
@@ -2336,39 +2343,38 @@ public static partial class GameEngine
         }
 
         CardInstanceId accessed = run.ChosenAccessCards[^1];
-        CardInstanceState card = GetCard(working, accessed);
-
-        // CR 26.03 7.2.2/7.1.5: an accessed agenda has no mid-access ability
-        // in the M2 card set (agendas have no trash cost and no other
-        // mid-access ability is registered), so the window offers the pass
-        // only. CR 7.2.3/7.1.6 then steals the still-accessed agenda
-        // automatically when the window is passed — the steal is not a
-        // player action.
-        if (working.BehaviorCatalog.TryGetAgenda(card.DefinitionId, out _))
-        {
-            List<LegalAction> passActions = new()
-            {
-                new(
-                    working.Allocator.NextActionId(),
-                    ActionKind.NoAccessAction,
-                    "No action",
-                    new NoActionParameters()),
-            };
-            YieldRunDecision(
-                working,
-                run.InitiatingPlayer,
-                "CR 7.2.2: pass the mid-access window; the accessed agenda is then stolen automatically (CR 7.2.3).",
-                passActions);
-            return;
-        }
-
         var actions = new List<LegalAction>();
 
-        // CR 7.1.5/7.1.5b: the basic trash is offered only for a registered
-        // asset with a trash cost the Runner can pay, and never for a card
-        // that is already in the Corp discard.
-        if (card.ZoneId != GetZone(working, ZoneKind.CorpDiscard).Id
-            && working.BehaviorCatalog.TryGetAsset(card.DefinitionId, out AssetBehaviorSpec? assetSpec)
+        // A child ability may have moved the card to Corp discard. In that
+        // case this resumed access window is intentionally NoAction-only. A
+        // moved/replaced card in any other zone likewise cannot be retargeted
+        // by a newly materialized ability or the basic access trash.
+        bool currentAccess = TryGetCurrentAccessCard(
+            working,
+            run,
+            out CardInstanceState? liveCard,
+            requireTrashableSource: false);
+        bool trashableAccess = currentAccess
+            && TryGetCurrentAccessCard(
+                working,
+                run,
+                out _,
+                requireTrashableSource: true);
+        CardInstanceState? accessedCard = liveCard
+            ?? working.Cards.FirstOrDefault(card => card.Id == accessed);
+
+        if (trashableAccess)
+        {
+            AddAbilityActions(working, actions);
+        }
+
+        // CR 26.03 7.2.2/7.1.5: the basic trash is offered only for a
+        // registered asset with a trash cost the Runner can pay. Agendas
+        // instead resolve an automatic steal after NoAction.
+        if (trashableAccess
+            && accessedCard is not null
+            && !working.BehaviorCatalog.TryGetAgenda(accessedCard.DefinitionId, out _)
+            && working.BehaviorCatalog.TryGetAsset(accessedCard.DefinitionId, out AssetBehaviorSpec? assetSpec)
             && CanAffordRunCredits(GetPlayer(working, PlayerSide.Runner), run, assetSpec.TrashCost))
         {
             PlayerState runner = GetPlayer(working, PlayerSide.Runner);
@@ -2388,7 +2394,12 @@ public static partial class GameEngine
             ActionKind.NoAccessAction,
             "No action",
             new NoActionParameters()));
-        YieldRunDecision(working, run.InitiatingPlayer, "CR 7.2.2: take the mid-access ability or no action.", actions);
+        string prompt = currentAccess
+            && accessedCard is not null
+            && working.BehaviorCatalog.TryGetAgenda(accessedCard.DefinitionId, out _)
+            ? "CR 7.2.2: take the mid-access ability or pass; the accessed agenda is then stolen automatically (CR 7.2.3)."
+            : "CR 7.2.2: take the mid-access ability or no action.";
+        YieldRunDecision(working, run.InitiatingPlayer, prompt, actions);
     }
 
     private static ServerState GetBreachServer(WorkingState working, RunState run) =>

@@ -2157,6 +2157,59 @@ public static class ResolutionFrameValidator
                     "Additional costs must carry a stable additional-cost key."));
             }
 
+            if (cost.AdditionalKind is { } additionalKind
+                && !Enum.IsDefined(additionalKind))
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.invalid-ability-additional-cost",
+                    $"{costPath}.additionalKind",
+                    "Additional-cost operation is not a supported value."));
+            }
+
+            if (cost.Kind == BehaviorCostKind.Additional)
+            {
+                if (cost.AdditionalKind is null && cost.AdditionalTarget is not null)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-ability-additional-cost",
+                        costPath,
+                        "A structured additional-cost target requires a typed operation."));
+                }
+
+                if (cost.AdditionalKind == BehaviorAdditionalCostKind.TrashCards
+                    && (cost.AdditionalTarget is not
+                    {
+                        Kind: BehaviorTargetKind.ZoneCards,
+                        Filter: not null,
+                        Reveal: false,
+                    }
+                    || cost.AdditionalTarget.Filter.OwnerSide is null))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-ability-additional-cost",
+                        costPath,
+                        "TrashCards requires a ZoneCards target with an explicit owner and reveal=false."));
+                }
+            }
+            else
+            {
+                if (cost.AdditionalTarget is not null)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-ability-additional-cost",
+                        $"{costPath}.additionalTarget",
+                        "Only additional costs may carry an additional-cost target."));
+                }
+
+                if (cost.AdditionalKind is not null)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-ability-additional-cost",
+                        $"{costPath}.additionalKind",
+                        "Only additional costs may carry an additional-cost operation."));
+                }
+            }
+
             if (cost.Kind != BehaviorCostKind.Counter && cost.CounterName is not null)
             {
                 violations.Add(new StateInvariantViolation(
@@ -2829,7 +2882,8 @@ internal static class ResolutionFrameCloner
             ability.SourceZoneId,
             ability.SourceZoneKind,
             ability.Stage,
-            ability.ParentFrameIdentity),
+            ability.ParentFrameIdentity,
+            ability.AdditionalCostSelections),
         _ => throw new InvalidOperationException($"No cloner is registered for frame type '{frame.GetType().Name}'."),
     };
 }

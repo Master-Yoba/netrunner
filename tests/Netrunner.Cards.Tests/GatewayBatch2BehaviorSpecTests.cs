@@ -15,6 +15,7 @@ public sealed class GatewayBatch2BehaviorSpecTests
         Assert.Equal(
             new CardDefinitionId[]
             {
+                GatewayBatch2CardCodes.Carnivore,
                 GatewayBatch2CardCodes.Fermenter,
                 GatewayBatch2CardCodes.Cookbook,
                 GatewayBatch2CardCodes.Pennyshaver,
@@ -34,6 +35,7 @@ public sealed class GatewayBatch2BehaviorSpecTests
         Assert.Equal(
             new CardDefinitionId[]
             {
+                GatewayBatch2CardCodes.Carnivore,
                 GatewayBatch2CardCodes.Fermenter,
                 GatewayBatch2CardCodes.Cookbook,
                 GatewayBatch2CardCodes.Pennyshaver,

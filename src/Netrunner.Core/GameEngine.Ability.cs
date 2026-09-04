@@ -10,6 +10,18 @@ namespace Netrunner.Core;
 /// </summary>
 public static partial class GameEngine
 {
+    // Keep additional-cost materialization deterministic and bounded. The
+    // cap is deliberately small enough to keep an observation responsive,
+    // while still covering ordinary Gateway grip sizes and future costs.
+    private const int MaxAdditionalCostCombinations = 256;
+
+    // A result cap alone is not enough: overlapping additional costs can
+    // enumerate a large number of rejected branches without ever producing
+    // more than the result cap. Count both recursion nodes and candidate
+    // selections so materialization fails closed before that search becomes
+    // unbounded.
+    private const int MaxAdditionalCostExplorations = 4096;
+
     /// <summary>
     /// Re-materializes every legal behavior-owned ability payload for the
     /// current formal turn/run window. The returned order is the physical
@@ -63,10 +75,42 @@ public static partial class GameEngine
             foreach (BehaviorPaidAbility ability in definition.PaidAbilities)
             {
                 if (!AbilityWindowMatches(window, ability)
-                    || ability.Targets.Count != 0
-                    || ability.Costs.Any(static cost => cost.Kind == BehaviorCostKind.Additional)
                     || !AbilityConditionsMatch(working, source, window.ControllerId, ability.Conditions)
                     || !CanAffordAbility(working, source, window.ControllerId, ability))
+                {
+                    continue;
+                }
+
+                IReadOnlyList<CardInstanceId> targetCardIds;
+                try
+                {
+                    targetCardIds = MaterializeAbilityTargets(working, ability, window);
+                }
+                catch (ResolutionFailureException)
+                {
+                    continue;
+                }
+
+                // A declaration with a target that this materializer cannot
+                // prove must not silently become a target-less action.  This
+                // keeps the executable vocabulary fail-closed while allowing
+                // legacy no-target abilities to retain their empty snapshot.
+                if (ability.Targets.Count > 0 && targetCardIds.Count == 0)
+                {
+                    continue;
+                }
+
+                List<IReadOnlyList<AbilityAdditionalCostSelection>> additionalSelections;
+                try
+                {
+                    additionalSelections = MaterializeAdditionalCostSelections(working, ability);
+                }
+                catch (ResolutionFailureException)
+                {
+                    continue;
+                }
+
+                if (additionalSelections.Count == 0)
                 {
                     continue;
                 }
@@ -87,23 +131,348 @@ public static partial class GameEngine
                     continue;
                 }
 
-                materialized.Add(new AbilityActionParameters(
-                    source.Id,
-                    source.DefinitionId,
-                    ability.Key,
-                    ability.Timing,
-                    ability.Activation,
-                    ability.Costs,
-                    [],
-                    new AbilityUsageSnapshot(ability.UsageLimit, uses),
-                    working.BehaviorCatalog.Fingerprint,
-                    definitionFingerprint,
-                    sourceZone.Id,
-                    sourceZone.Kind));
+                foreach (IReadOnlyList<AbilityAdditionalCostSelection> selections in additionalSelections)
+                {
+                    materialized.Add(new AbilityActionParameters(
+                        source.Id,
+                        source.DefinitionId,
+                        ability.Key,
+                        ability.Timing,
+                        ability.Activation,
+                        ability.Costs,
+                        targetCardIds,
+                        new AbilityUsageSnapshot(ability.UsageLimit, uses),
+                        working.BehaviorCatalog.Fingerprint,
+                        definitionFingerprint,
+                        sourceZone.Id,
+                        sourceZone.Kind,
+                        selections));
+                }
             }
         }
 
         return materialized;
+    }
+
+    private static IReadOnlyList<CardInstanceId> MaterializeAbilityTargets(
+        WorkingState working,
+        BehaviorPaidAbility ability,
+        AbilityWindow window)
+    {
+        if (ability.Targets.Count == 0)
+        {
+            return [];
+        }
+
+        // AccessedCard is the first target descriptor whose identity depends
+        // on a live run. It is intentionally the only target materialized by
+        // this checkpoint; all other target vocabularies remain fail-closed.
+        if (ability.Targets.Count != 1
+            || ability.Targets[0].Kind != BehaviorTargetKind.AccessedCard
+            || window.RunTiming != BehaviorAbilityTiming.BreachAccessPaidWindow
+            || working.RunState is not { Step: RunTimingStep.BreachAccessAbility } run
+            || !TryGetCurrentAccessCard(working, run, out CardInstanceState? card))
+        {
+            return [];
+        }
+
+        return [card!.Id];
+    }
+
+    /// <summary>
+    /// Resolves the one card that is currently being accessed and proves it
+    /// still occupies the attacked server's authoritative source zone. This
+    /// shared guard prevents a moved/replaced card from being retargeted by a
+    /// resumed access ability or by automatic agenda progression.
+    /// </summary>
+    private static bool TryGetCurrentAccessCard(
+        WorkingState working,
+        RunState run,
+        out CardInstanceState? card,
+        bool requireTrashableSource = true)
+    {
+        card = null;
+        if (run.Step != RunTimingStep.BreachAccessAbility
+            || run.ChosenAccessCards.Count == 0)
+        {
+            return false;
+        }
+
+        CardInstanceId accessed = run.ChosenAccessCards[^1];
+        if (!run.AccessedCards.Contains(accessed))
+        {
+            return false;
+        }
+
+        CardInstanceState? candidate = working.Cards.FirstOrDefault(value => value.Id == accessed);
+        if (candidate is null || candidate.OwnerSide != PlayerSide.Corp)
+        {
+            return false;
+        }
+
+        ZoneState? zone = working.Zones.FirstOrDefault(value =>
+            value.Id == candidate.ZoneId && value.CardIds.Contains(candidate.Id));
+        ServerState? server = working.Servers.FirstOrDefault(value => value.Id == run.AttackedServer);
+        if (zone is null || server is null || zone.ServerId is not null && zone.ServerId != server.Id)
+        {
+            return false;
+        }
+
+        // A central breach can access both its hidden zone and cards installed
+        // in that server's root (for example a central upgrade). Archives is
+        // recognized for automatic agenda stealing but excluded below when a
+        // caller requires a source from which the card can still be trashed.
+        // Score, RFG, another server root, and every unrelated zone fail this
+        // exact server/source relation.
+        bool inAccessSource = zone.OwnerSide == PlayerSide.Corp
+            && (zone.Kind == ZoneKind.ServerRoot
+                ? zone.Id == server.RootZoneId
+                : server.Kind switch
+                {
+                    ServerKind.Headquarters => zone.Kind == ZoneKind.CorpHand
+                        && zone.ServerId is null,
+                    ServerKind.RAndD => zone.Kind == ZoneKind.CorpDeck
+                        && zone.ServerId is null,
+                    ServerKind.Archives => zone.Kind == ZoneKind.CorpDiscard
+                        && zone.ServerId is null,
+                    _ => false,
+                });
+        if (!inAccessSource)
+        {
+            return false;
+        }
+
+        if (requireTrashableSource && zone.Kind == ZoneKind.CorpDiscard)
+        {
+            return false;
+        }
+
+        card = candidate;
+        return true;
+    }
+
+    private static bool AbilityTargetSnapshotMatches(
+        WorkingState working,
+        AbilityFrame frame,
+        BehaviorPaidAbility declaration,
+        bool requireLiveSource)
+    {
+        if (declaration.Targets.Count == 0)
+        {
+            return frame.TargetCardIds.Count == 0;
+        }
+
+        if (declaration.Targets.Count != 1
+            || declaration.Targets[0].Kind != BehaviorTargetKind.AccessedCard
+            || frame.TargetCardIds.Count != 1
+            || working.RunState is not { } run
+            || run.Step != RunTimingStep.BreachAccessAbility
+            || run.ChosenAccessCards.Count == 0
+            || run.ChosenAccessCards[^1] != frame.TargetCardIds[0]
+            || !run.AccessedCards.Contains(frame.TargetCardIds[0]))
+        {
+            return false;
+        }
+
+        return !requireLiveSource
+            || TryGetCurrentAccessCard(working, run, out CardInstanceState? card)
+                && card!.Id == frame.TargetCardIds[0];
+    }
+
+    private static bool AdditionalCostSelectionsMatchDeclaration(
+        IReadOnlyList<AbilityAdditionalCostSelection>? selections,
+        IReadOnlyList<BehaviorCost> costs)
+    {
+        AbilityAdditionalCostSelection[] actual = (selections ?? []).ToArray();
+        (BehaviorCost Cost, int Index)[] additional = costs
+            .Select((cost, index) => (Cost: cost, Index: index))
+            .Where(value => value.Cost.Kind == BehaviorCostKind.Additional)
+            .ToArray();
+        if (additional.Length == 0)
+        {
+            return actual.Length == 0;
+        }
+
+        if (additional.Any(value => value.Cost.AdditionalKind is null)
+            || actual.Length != additional.Length)
+        {
+            return false;
+        }
+
+        foreach ((BehaviorCost cost, int index) in additional)
+        {
+            AbilityAdditionalCostSelection? selection = actual.SingleOrDefault(
+                value => value.CostIndex == index);
+            if (selection is null
+                || !string.Equals(selection.CostKey, cost.AdditionalKey, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static List<IReadOnlyList<AbilityAdditionalCostSelection>>
+        MaterializeAdditionalCostSelections(
+            WorkingState working,
+            BehaviorPaidAbility ability)
+    {
+        if (!ability.Costs.Any(static cost => cost.Kind == BehaviorCostKind.Additional))
+        {
+            return [new ReadOnlyCollection<AbilityAdditionalCostSelection>([])];
+        }
+
+        var candidateSets = new List<(int CostIndex, BehaviorCost Cost, CardInstanceId[] Candidates)>();
+        foreach ((BehaviorCost cost, int costIndex) in ability.Costs
+            .Select((cost, index) => (cost, index))
+            .Where(value => value.cost.Kind == BehaviorCostKind.Additional))
+        {
+            if (cost.AdditionalTarget is not
+                {
+                    Kind: BehaviorTargetKind.ZoneCards,
+                    Zone: { } sourceZone,
+                    Filter: not null,
+                    Reveal: false,
+                }
+                || cost.AdditionalKind != BehaviorAdditionalCostKind.TrashCards
+                || cost.AdditionalTarget.Filter.OwnerSide is not { } ownerSide)
+            {
+                return [];
+            }
+
+            ZoneState source = GetBehaviorZone(working, sourceZone, ownerSide);
+            if (!BehaviorZoneMatches(sourceZone, source.Kind, ownerSide))
+            {
+                return [];
+            }
+            CardInstanceId[] candidates = source.CardIds
+                .Where(cardId =>
+                {
+                    CardInstanceState card = GetCard(working, cardId);
+                    return card.OwnerSide == ownerSide
+                        && BehaviorCardMatches(working, cardId, cost.AdditionalTarget.Filter);
+                })
+                .ToArray();
+            if (candidates.Length < cost.Amount)
+            {
+                return [];
+            }
+
+            candidateSets.Add((costIndex, cost, candidates));
+        }
+
+        var combinations = new List<IReadOnlyList<AbilityAdditionalCostSelection>>();
+        var selected = new List<AbilityAdditionalCostSelection>();
+        var used = new HashSet<CardInstanceId>();
+        bool exceeded = false;
+        int explorations = 0;
+
+        bool SpendExploration()
+        {
+            if (explorations >= MaxAdditionalCostExplorations)
+            {
+                exceeded = true;
+                return false;
+            }
+
+            explorations++;
+            return true;
+        }
+
+        void AppendCost(int ordinal)
+        {
+            if (exceeded || !SpendExploration())
+            {
+                return;
+            }
+
+            if (ordinal == candidateSets.Count)
+            {
+                combinations.Add(new ReadOnlyCollection<AbilityAdditionalCostSelection>(selected.ToArray()));
+                if (combinations.Count > MaxAdditionalCostCombinations)
+                {
+                    exceeded = true;
+                }
+
+                return;
+            }
+
+            (int costIndex, BehaviorCost cost, CardInstanceId[] candidates) = candidateSets[ordinal];
+            foreach (CardInstanceId[] pair in EnumerateExactSelections(candidates, cost.Amount))
+            {
+                if (!SpendExploration())
+                {
+                    return;
+                }
+
+                if (pair.Any(used.Contains))
+                {
+                    continue;
+                }
+
+                foreach (CardInstanceId cardId in pair)
+                {
+                    used.Add(cardId);
+                }
+
+                selected.Add(new AbilityAdditionalCostSelection(costIndex, cost.AdditionalKey!, pair));
+                AppendCost(ordinal + 1);
+                selected.RemoveAt(selected.Count - 1);
+                foreach (CardInstanceId cardId in pair)
+                {
+                    used.Remove(cardId);
+                }
+
+                if (exceeded)
+                {
+                    return;
+                }
+            }
+        }
+
+        AppendCost(0);
+        if (exceeded)
+        {
+            return [];
+        }
+
+        return combinations;
+    }
+
+    private static IEnumerable<CardInstanceId[]> EnumerateExactSelections(
+        CardInstanceId[] candidates,
+        int count)
+    {
+        if (count <= 0 || count > candidates.Length)
+        {
+            yield break;
+        }
+
+        var selection = new CardInstanceId[count];
+        IEnumerable<CardInstanceId[]> Visit(int start, int depth)
+        {
+            if (depth == count)
+            {
+                yield return selection.ToArray();
+                yield break;
+            }
+
+            int remaining = count - depth;
+            for (int index = start; index <= candidates.Length - remaining; index++)
+            {
+                selection[depth] = candidates[index];
+                foreach (CardInstanceId[] result in Visit(index + 1, depth + 1))
+                {
+                    yield return result;
+                }
+            }
+        }
+
+        foreach (CardInstanceId[] result in Visit(0, 0))
+        {
+            yield return result;
+        }
     }
 
     private static bool CanStartRunAbility(
@@ -216,18 +585,34 @@ public static partial class GameEngine
         }
 
         if (working.RunState is { } run
-            && run.Priority is { } priority
             && top is RunTimingFrame runFrame
             && runFrame.RunId == run.Id
             && runFrame.Step == run.Step
-            && IsPaidWindow(run.Step))
+            && run.Step == RunTimingStep.BreachAccessAbility
+            && run.Priority is null)
+        {
+            window = new AbilityWindow(
+                GetPlayer(working, PlayerSide.Runner).Id,
+                PlayerSide.Runner,
+                BehaviorAbilityActivation.PaidAbility,
+                BehaviorAbilityTiming.BreachAccessPaidWindow,
+                IsTurnWindow: false);
+            return PendingOwnerMatches(working, window.ControllerId);
+        }
+
+        if (working.RunState is { } runWithPriority
+            && runWithPriority.Priority is { } priority
+            && top is RunTimingFrame priorityRunFrame
+            && priorityRunFrame.RunId == runWithPriority.Id
+            && priorityRunFrame.Step == runWithPriority.Step
+            && IsPaidWindow(runWithPriority.Step))
         {
             PlayerState holder = GetPlayer(working, priority.PriorityHolder);
             window = new AbilityWindow(
                 holder.Id,
                 holder.Side,
                 BehaviorAbilityActivation.PaidAbility,
-                RunTimingFor(run.Step),
+                RunTimingFor(runWithPriority.Step),
                 IsTurnWindow: false);
             return PendingOwnerMatches(working, window.ControllerId);
         }
@@ -245,6 +630,7 @@ public static partial class GameEngine
         RunTimingStep.EncounterPaidWindow => BehaviorAbilityTiming.EncounterPaidWindow,
         RunTimingStep.MovementPaidWindow => BehaviorAbilityTiming.MovementPaidWindow,
         RunTimingStep.AfterMovePaidWindow => BehaviorAbilityTiming.AfterMovePaidWindow,
+        RunTimingStep.BreachAccessAbility => BehaviorAbilityTiming.BreachAccessPaidWindow,
         _ => null,
     };
 
@@ -452,7 +838,18 @@ public static partial class GameEngine
                     case BehaviorCostKind.RemoveSelfFromGame:
                         break;
                     case BehaviorCostKind.Additional:
-                        return false;
+                        // Structured additional costs are validated against
+                        // their frozen card selections before payment. The
+                        // affordability pass only rejects an untyped or
+                        // unknown operation; it does not infer semantics
+                        // from AdditionalKey.
+                        if (cost.AdditionalKind != BehaviorAdditionalCostKind.TrashCards
+                            || cost.AdditionalTarget is null)
+                        {
+                            return false;
+                        }
+
+                        break;
                     default:
                         return false;
                 }
@@ -546,7 +943,8 @@ public static partial class GameEngine
             expected.SourceZoneId,
             expected.SourceZoneKind,
             AbilityLifecycleStage.PayCosts,
-            parentIdentity));
+            parentIdentity,
+            expected.AdditionalCostSelections));
     }
 
     /// <summary>Advances the serialized ability lifecycle one boundary.</summary>
@@ -645,6 +1043,23 @@ public static partial class GameEngine
             case RunTimingFrame runFrame:
                 RunState run = working.RunState
                     ?? throw new ResolutionFailureException("A run ability requires live run state.");
+                if (run.Step == RunTimingStep.BreachAccessAbility)
+                {
+                    if (parameters.Activation != BehaviorAbilityActivation.PaidAbility
+                        || parameters.Timing is not (BehaviorAbilityTiming.BreachAccessPaidWindow
+                            or BehaviorAbilityTiming.AnyPaidWindow)
+                        || runFrame.RunId != run.Id
+                        || runFrame.Step != run.Step
+                        || run.Priority is not null
+                        || controller.Side != PlayerSide.Runner)
+                    {
+                        throw new ResolutionFailureException(
+                            "An access ability requires the Runner's priority-free breach-access window.");
+                    }
+
+                    return;
+                }
+
                 BehaviorAbilityTiming? runTiming = RunTimingFor(run.Step);
                 if (parameters.Activation != BehaviorAbilityActivation.PaidAbility
                     || runFrame.RunId != run.Id
@@ -708,15 +1123,30 @@ public static partial class GameEngine
             throw new ResolutionFailureException("Ability frame catalog provenance does not match the injected catalog.");
         }
 
+        bool requireLiveAccessTarget = frame.Stage is
+            AbilityLifecycleStage.PayCosts
+                or AbilityLifecycleStage.CostCheckpoint
+                or AbilityLifecycleStage.Execute;
         if (frame.Timing != declaration.Timing
             || frame.Activation != declaration.Activation
             || frame.Usage.Limit != declaration.UsageLimit
             || !frame.Costs.SequenceEqual(declaration.Costs)
-            || frame.TargetCardIds.Count != 0
-            || declaration.Targets.Count != 0
-            || declaration.Costs.Any(static cost => cost.Kind == BehaviorCostKind.Additional))
+            || !AbilityTargetSnapshotMatches(working, frame, declaration, requireLiveAccessTarget)
+            || !AdditionalCostSelectionsMatchDeclaration(frame.AdditionalCostSelections, declaration.Costs))
         {
             throw new ResolutionFailureException("Ability frame no longer matches the declared executable shape.");
+        }
+
+        if (declaration.Targets.Any(static target => target.Kind != BehaviorTargetKind.AccessedCard)
+            || declaration.Targets.Count > 1)
+        {
+            throw new ResolutionFailureException("This ability contains an unsupported target.");
+        }
+
+        if (frame.Stage == AbilityLifecycleStage.PayCosts
+            && declaration.Costs.Any(static cost => cost.Kind == BehaviorCostKind.Additional))
+        {
+            ValidateAdditionalCostSelections(working, frame, declaration);
         }
 
         ResolutionFrame parent = working.ResolutionStack[^2];
@@ -741,7 +1171,8 @@ public static partial class GameEngine
             frame.CatalogFingerprint,
             frame.DefinitionFingerprint,
             frame.SourceZoneId,
-            frame.SourceZoneKind);
+            frame.SourceZoneKind,
+            frame.AdditionalCostSelections);
         ValidateAbilityParent(working, parent, parentParameters, frame.Controller);
 
         bool paid = frame.Stage != AbilityLifecycleStage.PayCosts;
@@ -812,11 +1243,98 @@ public static partial class GameEngine
             throw new ResolutionFailureException("Ability costs or source state are no longer affordable.");
         }
 
-        if (declaration.Costs.Any(static cost => cost.Kind == BehaviorCostKind.Additional)
-            || declaration.Targets.Count != 0
-            || declaration.Costs.Count(static cost => cost.Kind is BehaviorCostKind.TrashSelf or BehaviorCostKind.RemoveSelfFromGame) > 1)
+        if (declaration.Targets.Any(static target => target.Kind != BehaviorTargetKind.AccessedCard)
+            || declaration.Targets.Count > 1)
         {
-            throw new ResolutionFailureException("This ability contains an unsupported cost or target.");
+            throw new ResolutionFailureException("This ability contains an unsupported target.");
+        }
+
+        if (declaration.Costs.Any(static cost => cost.Kind == BehaviorCostKind.Additional))
+        {
+            // Validate every selected card before the first ordinary cost is
+            // mutated. Apply works on an isolated copy, but this explicit
+            // preflight is what makes a stale/forged bundle fail atomically at
+            // the payment boundary as well as at action materialization.
+            ValidateAdditionalCostSelections(working, frame, declaration);
+        }
+
+        if (declaration.Targets.Count > 0
+            && (declaration.Targets.Count != 1
+                || declaration.Targets[0].Kind != BehaviorTargetKind.AccessedCard
+                || frame.TargetCardIds.Count != 1
+                || working.RunState is not { } run
+                || !TryGetCurrentAccessCard(working, run, out CardInstanceState? accessed)
+                || frame.TargetCardIds[0] != accessed!.Id))
+        {
+            throw new ResolutionFailureException("The ability target no longer matches the current accessed card.");
+        }
+    }
+
+    private static void ValidateAdditionalCostSelections(
+        WorkingState working,
+        AbilityFrame frame,
+        BehaviorPaidAbility declaration)
+    {
+        if (!AdditionalCostSelectionsMatchDeclaration(frame.AdditionalCostSelections, declaration.Costs))
+        {
+            throw new ResolutionFailureException(
+                "The ability additional-cost selections no longer match the declared cost bundle.");
+        }
+
+        AbilityAdditionalCostSelection[] selections = frame.AdditionalCostSelections!.ToArray();
+        var globallySelected = new HashSet<CardInstanceId>();
+        foreach ((BehaviorCost cost, int costIndex) in declaration.Costs
+            .Select((cost, index) => (cost, index))
+            .Where(value => value.cost.Kind == BehaviorCostKind.Additional))
+        {
+            if (cost.AdditionalKind != BehaviorAdditionalCostKind.TrashCards
+                || cost.AdditionalTarget is not
+                {
+                    Kind: BehaviorTargetKind.ZoneCards,
+                    Zone: { } sourceZone,
+                    Filter: not null,
+                    Reveal: false,
+                }
+                || cost.AdditionalTarget.Filter.OwnerSide is not { } ownerSide)
+            {
+                throw new ResolutionFailureException(
+                    "The ability contains an unsupported structured additional-cost descriptor.");
+            }
+
+            AbilityAdditionalCostSelection selection = selections.Single(value => value.CostIndex == costIndex);
+            if (selection.CardIds.Count != cost.Amount
+                || selection.CardIds.Distinct().Count() != selection.CardIds.Count)
+            {
+                throw new ResolutionFailureException(
+                    "An additional-cost selection has the wrong cardinality or duplicate cards.");
+            }
+
+            ZoneState source = GetBehaviorZone(working, sourceZone, ownerSide);
+            if (!BehaviorZoneMatches(sourceZone, source.Kind, ownerSide))
+            {
+                throw new ResolutionFailureException(
+                    "The additional-cost target zone does not match its explicit owner side.");
+            }
+            BehaviorTarget additionalTarget = cost.AdditionalTarget!;
+            BehaviorCardFilter filter = additionalTarget.Filter!;
+            foreach (CardInstanceId cardId in selection.CardIds)
+            {
+                if (!globallySelected.Add(cardId))
+                {
+                    throw new ResolutionFailureException(
+                        "Additional-cost selections may not reuse a physical card.");
+                }
+
+                CardInstanceState card = GetCard(working, cardId);
+                if (card.OwnerSide != ownerSide
+                    || card.ZoneId != source.Id
+                    || !source.CardIds.Contains(cardId)
+                    || !BehaviorCardMatches(working, cardId, filter))
+                {
+                    throw new ResolutionFailureException(
+                        $"Additional-cost card '{cardId}' is stale or no longer occupies its declared source zone.");
+                }
+            }
         }
     }
 
@@ -845,8 +1363,9 @@ public static partial class GameEngine
     {
         CardInstanceState source = GetCard(working, frame.SourceCardId);
         bool deferredCounterCleanup = false;
-        foreach (BehaviorCost cost in frame.Costs)
+        for (int costIndex = 0; costIndex < frame.Costs.Count; costIndex++)
         {
+            BehaviorCost cost = frame.Costs[costIndex];
             switch (cost.Kind)
             {
                 case BehaviorCostKind.Credits:
@@ -892,6 +1411,9 @@ public static partial class GameEngine
                     source = GetCard(working, frame.SourceCardId);
                     deferredCounterCleanup = true;
                     break;
+                case BehaviorCostKind.Additional:
+                    PayAdditionalCost(working, frame, cost, costIndex);
+                    break;
                 default:
                     throw new ResolutionFailureException($"Ability cost '{cost.Kind}' is not executable.");
             }
@@ -901,6 +1423,79 @@ public static partial class GameEngine
             && !AbilityRetainsSourceCountersThroughChild(working, frame))
         {
             ClearCardCounters(working, frame.SourceCardId);
+        }
+    }
+
+    private static void PayAdditionalCost(
+        WorkingState working,
+        AbilityFrame frame,
+        BehaviorCost cost,
+        int costIndex)
+    {
+        if (cost.AdditionalKind != BehaviorAdditionalCostKind.TrashCards
+            || cost.AdditionalTarget is not
+            {
+                Kind: BehaviorTargetKind.ZoneCards,
+                Zone: { } sourceZone,
+                Filter: not null,
+                Reveal: false,
+            }
+            || cost.AdditionalTarget.Filter.OwnerSide is not { } ownerSide
+            || frame.AdditionalCostSelections is null)
+        {
+            throw new ResolutionFailureException(
+                "An additional ability cost has no executable typed card-trash operation.");
+        }
+
+        if (costIndex < 0 || costIndex >= frame.Costs.Count)
+        {
+            throw new ResolutionFailureException("The additional ability cost is not present in its declaration.");
+        }
+
+        AbilityAdditionalCostSelection selection = frame.AdditionalCostSelections
+            .SingleOrDefault(value => value.CostIndex == costIndex)
+            ?? throw new ResolutionFailureException("The additional ability cost selection is missing.");
+        ZoneState sourceZoneState = GetBehaviorZone(working, sourceZone, ownerSide);
+        if (!BehaviorZoneMatches(sourceZone, sourceZoneState.Kind, ownerSide))
+        {
+            throw new ResolutionFailureException(
+                "The additional ability cost source zone does not match its explicit owner.");
+        }
+
+        BehaviorCardFilter filter = cost.AdditionalTarget.Filter;
+        foreach (CardInstanceId cardId in selection.CardIds)
+        {
+            CardInstanceState card = GetCard(working, cardId);
+            if (card.OwnerSide != ownerSide
+                || card.ZoneId != sourceZoneState.Id
+                || !sourceZoneState.CardIds.Contains(cardId)
+                || !BehaviorCardMatches(working, cardId, filter))
+            {
+                // This is a defensive second check. The complete bundle was
+                // preflight before any payment mutation; keeping the guard at
+                // the operation boundary also protects future callers.
+                throw new ResolutionFailureException(
+                    $"Additional-cost card '{cardId}' moved before payment.");
+            }
+
+            // TrashCard returns a replacement state for the destination
+            // zone. Refresh it for every selected card so a second movement
+            // cannot be based on the first iteration's stale zone snapshot.
+            ZoneState destination = GetBehaviorZone(
+                working,
+                ownerSide == PlayerSide.Corp ? BehaviorZone.Archives : BehaviorZone.Heap,
+                ownerSide);
+            TrashCard(working, card, sourceZoneState, destination);
+            CardInstanceState trashed = GetCard(working, cardId);
+            ReplaceCard(working, new CardInstanceState(
+                trashed.Id,
+                trashed.DefinitionId,
+                trashed.ZoneId,
+                trashed.OwnerSide,
+                faceUp: true,
+                rezzed: false,
+                trashed.AdvancementCounters));
+            sourceZoneState = GetBehaviorZone(working, sourceZone, ownerSide);
         }
     }
 
@@ -1000,9 +1595,31 @@ public static partial class GameEngine
             case RunTimingFrame runFrame when frame.Activation == BehaviorAbilityActivation.PaidAbility:
                 RunState run = working.RunState
                     ?? throw new ResolutionFailureException("A run ability parent lost its live run state.");
-                if (run.Id != runFrame.RunId || run.Step != runFrame.Step || run.Priority is null)
+                if (run.Id != runFrame.RunId || run.Step != runFrame.Step)
                 {
                     throw new ResolutionFailureException("A run ability parent changed before completion.");
+                }
+
+                if (run.Step == RunTimingStep.BreachAccessAbility)
+                {
+                    if (run.Priority is not null)
+                    {
+                        throw new ResolutionFailureException(
+                            "A breach-access ability must restore a priority-free run timing frame.");
+                    }
+
+                    working.ResolutionStack[^1] = new RunTimingFrame(
+                        runFrame.Version,
+                        runFrame.BehaviorId,
+                        runFrame.RunId,
+                        runFrame.Step);
+                    YieldBreachAccessDecision(working, run);
+                    return;
+                }
+
+                if (run.Priority is null)
+                {
+                    throw new ResolutionFailureException("A run ability parent lost its priority context.");
                 }
 
                 RunPriorityState priority = run.Priority;
@@ -1034,6 +1651,7 @@ public static partial class GameEngine
         && actual.Activation == expected.Activation
         && actual.Costs.SequenceEqual(expected.Costs)
         && actual.TargetCardIds.SequenceEqual(expected.TargetCardIds)
+        && AdditionalCostSelectionsEqual(actual.AdditionalCostSelections, expected.AdditionalCostSelections)
         && actual.Usage.Equals(expected.Usage)
         && string.Equals(actual.CatalogFingerprint, expected.CatalogFingerprint, StringComparison.Ordinal)
         && string.Equals(actual.DefinitionFingerprint, expected.DefinitionFingerprint, StringComparison.Ordinal)
@@ -1053,6 +1671,7 @@ public static partial class GameEngine
         && actual.Activation == expected.Activation
         && actual.Costs.SequenceEqual(expected.Costs)
         && actual.TargetCardIds.SequenceEqual(expected.TargetCardIds)
+        && AdditionalCostSelectionsEqual(actual.AdditionalCostSelections, expected.AdditionalCostSelections)
         && actual.Usage.Equals(expected.Usage)
         && string.Equals(actual.CatalogFingerprint, expected.CatalogFingerprint, StringComparison.Ordinal)
         && string.Equals(actual.DefinitionFingerprint, expected.DefinitionFingerprint, StringComparison.Ordinal)
@@ -1065,11 +1684,40 @@ public static partial class GameEngine
     {
         foreach (AbilityActionParameters parameters in MaterializeAbilityActionParameters(working))
         {
+            string description = $"Use ability {parameters.SourceCardId.Value}/{parameters.AbilityKey}";
+            if (parameters.AdditionalCostSelections is { Count: > 0 } selections)
+            {
+                // The card choices are part of the issued payload, so make
+                // otherwise-identical combinations distinguishable to the
+                // decision owner.  Cost and card order are declaration and
+                // physical-zone order respectively and therefore stable.
+                string selectedCards = string.Join(
+                    "; ",
+                    selections
+                        .OrderBy(selection => selection.CostIndex)
+                        .Select(selection =>
+                            $"{selection.CostKey}: {string.Join(',', selection.CardIds.Select(cardId => cardId.Value))}"));
+                description += $" (additional cost {selectedCards})";
+            }
+
             actions.Add(new LegalAction(
                 working.Allocator.NextActionId(),
                 ActionKind.UseAbility,
-                $"Use ability {parameters.SourceCardId.Value}/{parameters.AbilityKey}",
+                description,
                 parameters));
         }
+    }
+
+    private static bool AdditionalCostSelectionsEqual(
+        IReadOnlyList<AbilityAdditionalCostSelection>? actual,
+        IReadOnlyList<AbilityAdditionalCostSelection>? expected)
+    {
+        AbilityAdditionalCostSelection[] left = (actual ?? []).ToArray();
+        AbilityAdditionalCostSelection[] right = (expected ?? []).ToArray();
+        return left.Length == right.Length
+            && left.Zip(right).All(pair =>
+                pair.First.CostIndex == pair.Second.CostIndex
+                && string.Equals(pair.First.CostKey, pair.Second.CostKey, StringComparison.Ordinal)
+                && pair.First.CardIds.SequenceEqual(pair.Second.CardIds));
     }
 }

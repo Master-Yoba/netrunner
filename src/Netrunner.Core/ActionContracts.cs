@@ -707,7 +707,8 @@ public sealed record AbilityActionParameters : ActionParameters
         string catalogFingerprint,
         string definitionFingerprint,
         ZoneId sourceZoneId,
-        ZoneKind sourceZoneKind)
+        ZoneKind sourceZoneKind,
+        IReadOnlyList<AbilityAdditionalCostSelection>? additionalCostSelections = null)
     {
         if (!StableIdentifier.TryValidate(sourceCardId.Value))
         {
@@ -773,6 +774,7 @@ public sealed record AbilityActionParameters : ActionParameters
         DefinitionFingerprint = definitionFingerprint;
         SourceZoneId = sourceZoneId;
         SourceZoneKind = sourceZoneKind;
+        AdditionalCostSelections = FreezeAdditionalCostSelections(additionalCostSelections);
     }
 
     [JsonInclude]
@@ -811,6 +813,19 @@ public sealed record AbilityActionParameters : ActionParameters
     [JsonRequired]
     public IReadOnlyList<CardInstanceId> TargetCardIds { get; private set; }
 
+    /// <summary>
+    /// Immutable, separately represented selections used to pay structured
+    /// additional costs. A null value is the legacy/empty representation;
+    /// executable actions with an additional cost carry one entry per cost.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<AbilityAdditionalCostSelection>? AdditionalCostSelections { get; private set; }
+
+    [JsonIgnore]
+    public IReadOnlyList<AbilityAdditionalCostSelection> AdditionalCostSelectionsOrEmpty =>
+        AdditionalCostSelections ?? [];
+
     [JsonInclude]
     [JsonRequired]
     public AbilityUsageSnapshot Usage { get; private set; }
@@ -843,6 +858,93 @@ public sealed record AbilityActionParameters : ActionParameters
         ArgumentNullException.ThrowIfNull(values);
         return new ReadOnlyCollection<CardInstanceId>(values.ToArray());
     }
+
+    private static ReadOnlyCollection<AbilityAdditionalCostSelection>? FreezeAdditionalCostSelections(
+        IReadOnlyList<AbilityAdditionalCostSelection>? values)
+    {
+        if (values is null || values.Count == 0)
+        {
+            return null;
+        }
+
+        AbilityAdditionalCostSelection[] copy = values.ToArray();
+        if (copy.Any(static value => value is null))
+        {
+            throw new ArgumentException(
+                "Ability additional-cost selections must not contain null entries.",
+                nameof(values));
+        }
+
+        if (copy.Select(static value => value.CostIndex).Distinct().Count() != copy.Length)
+        {
+            throw new ArgumentException(
+                "Ability additional-cost selections must have distinct cost indexes.",
+                nameof(values));
+        }
+
+        return new ReadOnlyCollection<AbilityAdditionalCostSelection>(copy);
+    }
+}
+
+/// <summary>
+/// One immutable selection for one structured additional-cost declaration.
+/// Cost indexes and keys bind the selected cards to the exact declaration;
+/// the card list remains independent from the ability effect targets.
+/// </summary>
+public sealed record AbilityAdditionalCostSelection
+{
+    [JsonConstructor]
+    public AbilityAdditionalCostSelection(
+        int costIndex,
+        string costKey,
+        IReadOnlyList<CardInstanceId> cardIds)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(costIndex);
+        if (!StableIdentifier.TryValidate(costKey))
+        {
+            throw new ArgumentException(
+                "An additional-cost selection requires a stable cost key.",
+                nameof(costKey));
+        }
+
+        ArgumentNullException.ThrowIfNull(cardIds);
+        if (cardIds.Count == 0)
+        {
+            throw new ArgumentException(
+                "An additional-cost selection must contain at least one card.",
+                nameof(cardIds));
+        }
+
+        if (cardIds.Distinct().Count() != cardIds.Count)
+        {
+            throw new ArgumentException(
+                "An additional-cost selection must contain distinct cards.",
+                nameof(cardIds));
+        }
+
+        if (cardIds.Any(cardId => !StableIdentifier.TryValidate(cardId.Value)))
+        {
+            throw new ArgumentException(
+                "An additional-cost selection must contain stable card IDs.",
+                nameof(cardIds));
+        }
+
+        CostIndex = costIndex;
+        CostKey = costKey;
+        CardIds = new ReadOnlyCollection<CardInstanceId>(cardIds.ToArray());
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int CostIndex { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string CostKey { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public IReadOnlyList<CardInstanceId> CardIds { get; private set; }
 }
 
 public sealed record LegalAction
@@ -1113,7 +1215,8 @@ public sealed class PendingDecision
             ability.CatalogFingerprint,
             ability.DefinitionFingerprint,
             ability.SourceZoneId,
-            ability.SourceZoneKind),
+            ability.SourceZoneKind,
+            ability.AdditionalCostSelections),
         _ => throw new InvalidOperationException(
             $"No immutable clone is registered for action parameter type '{parameters.GetType().Name}'."),
     };

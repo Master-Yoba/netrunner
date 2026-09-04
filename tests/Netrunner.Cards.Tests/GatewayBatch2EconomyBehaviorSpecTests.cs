@@ -14,6 +14,7 @@ public sealed class GatewayBatch2EconomyBehaviorSpecTests
 
         CardDefinitionId[] expectedAssigned =
         [
+            GatewayBatch2CardCodes.Carnivore,
             GatewayBatch2CardCodes.Fermenter,
             GatewayBatch2CardCodes.Cookbook,
             GatewayBatch2CardCodes.Pennyshaver,

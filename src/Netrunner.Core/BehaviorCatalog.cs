@@ -80,7 +80,9 @@ public sealed record BehaviorCost
         BehaviorCostKind kind,
         int amount = 1,
         string? counterName = null,
-        string? additionalKey = null)
+        string? additionalKey = null,
+        BehaviorTarget? additionalTarget = null,
+        BehaviorAdditionalCostKind? additionalKind = null)
     {
         if (!Enum.IsDefined(kind))
         {
@@ -128,6 +130,11 @@ public sealed record BehaviorCost
                 nameof(additionalKey));
         }
 
+        if (additionalKind is { } operation && !Enum.IsDefined(operation))
+        {
+            throw new ArgumentOutOfRangeException(nameof(additionalKind));
+        }
+
         if (kind != BehaviorCostKind.Counter && counterName is not null)
         {
             throw new ArgumentException(
@@ -142,10 +149,48 @@ public sealed record BehaviorCost
                 nameof(additionalKey));
         }
 
+        if (kind != BehaviorCostKind.Additional && additionalTarget is not null)
+        {
+            throw new ArgumentException(
+                "Only additional costs may carry an additional-cost target.",
+                nameof(additionalTarget));
+        }
+
+        if (kind != BehaviorCostKind.Additional && additionalKind is not null)
+        {
+            throw new ArgumentException(
+                "Only additional costs may carry an additional-cost operation.",
+                nameof(additionalKind));
+        }
+
+        // The historical Additional shape was intentionally inert and is
+        // retained for old compatibility fixtures. A structured additional
+        // cost carries an explicit operation and an explicitly owned zone
+        // target; the pair is never inferred from a string key.
+        if (kind == BehaviorCostKind.Additional
+            && additionalKind is null
+            && additionalTarget is not null)
+        {
+            throw new ArgumentException(
+                "A structured additional cost target requires a typed operation.",
+                nameof(additionalKind));
+        }
+
+        if (kind == BehaviorCostKind.Additional
+            && additionalKind is not null
+            && !IsStructuredCardTrash(additionalTarget))
+        {
+            throw new ArgumentException(
+                "A card-trash additional cost requires a ZoneCards target with an explicit owner and no reveal.",
+                nameof(additionalTarget));
+        }
+
         Kind = kind;
         Amount = amount;
         CounterName = counterName;
         AdditionalKey = additionalKey;
+        AdditionalTarget = additionalTarget;
+        AdditionalKind = additionalKind;
     }
 
     public BehaviorCostKind Kind { get; }
@@ -161,6 +206,27 @@ public sealed record BehaviorCost
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? AdditionalKey { get; }
 
+    /// <summary>
+    /// Typed source/target descriptor for a structured additional cost. The
+    /// descriptor is deliberately separate from the ability's effect target
+    /// list: paying a cost must not retarget the effect itself.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BehaviorTarget? AdditionalTarget { get; }
+
+    /// <summary>Typed operation implemented by a structured additional cost.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BehaviorAdditionalCostKind? AdditionalKind { get; }
+
+    private static bool IsStructuredCardTrash(BehaviorTarget? target) =>
+        target is
+        {
+            Kind: BehaviorTargetKind.ZoneCards,
+            Filter: not null,
+            Reveal: false,
+        }
+        && target.Filter.OwnerSide is not null;
+
 }
 
 public enum BehaviorCostKind
@@ -174,6 +240,12 @@ public enum BehaviorCostKind
     Additional,
     HostedCredits,
     RemoveSelfFromGame,
+}
+
+/// <summary>Typed operation represented by a structured additional cost.</summary>
+public enum BehaviorAdditionalCostKind
+{
+    TrashCards,
 }
 
 /// <summary>A serializable condition term in a compiled behavior contract.</summary>
@@ -2231,6 +2303,17 @@ internal static class BehaviorCatalogFingerprint
         {
             builder.Append(",additional=");
             AppendString(builder, value.AdditionalKey);
+        }
+
+        if (value.AdditionalTarget is not null)
+        {
+            builder.Append(",additionalTarget=");
+            AppendTarget(builder, value.AdditionalTarget);
+        }
+
+        if (value.AdditionalKind is { } additionalKind)
+        {
+            builder.Append(",additionalKind=").Append((int)additionalKind);
         }
     }
 

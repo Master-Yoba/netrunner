@@ -2719,6 +2719,37 @@ public static partial class GameEngine
             return;
         }
 
+        if (kind == BehaviorTransferKind.Trash
+            && instruction.Target is { Kind: BehaviorTargetKind.AccessedCard })
+        {
+            CardInstanceState accessed = ResolveAccessedCardTarget(working, frame);
+            ZoneState source = ZoneForCard(working, accessed.Id);
+            ZoneState discard = GetBehaviorZone(working, BehaviorZone.Archives, PlayerSide.Corp);
+            TrashCard(working, accessed, source, discard);
+
+            // Access trash is a public reveal even when the card was an
+            // unrevealed root card.  Keep this normalization local to the
+            // special operation so ordinary behavior trash retains its
+            // existing visibility contract.
+            CardInstanceState trashed = GetCard(working, accessed.Id);
+            ReplaceCard(working, new CardInstanceState(
+                trashed.Id,
+                trashed.DefinitionId,
+                trashed.ZoneId,
+                trashed.OwnerSide,
+                faceUp: true,
+                rezzed: false,
+                trashed.AdvancementCounters));
+            RunState run = working.RunState
+                ?? throw new ResolutionFailureException("An accessed-card trash requires a live run.");
+            Emit(
+                working,
+                EngineEventKinds.AccessedCardTrashed,
+                new AccessedCardTrashedEventPayload(run.Id, accessed.Id, trashCost: 0));
+            AdvanceBehaviorCursor(working, frame);
+            return;
+        }
+
         IReadOnlyList<CardInstanceId> cardIds = ResolveBehaviorCards(working, frame, instruction.Target);
         if (cardIds.Count == 0)
         {
@@ -3204,6 +3235,8 @@ public static partial class GameEngine
 
                 CardInstanceState? match = working.Cards.FirstOrDefault(card => card.DefinitionId.Value == target.Selector);
                 return match is null ? [] : [match.Id];
+            case BehaviorTargetKind.AccessedCard:
+                return [ResolveAccessedCardTarget(working, frame).Id];
             case BehaviorTargetKind.InstalledCard:
             case BehaviorTargetKind.InstalledCardNotThisTurn:
                 CardInstanceId[] installed = MaterializeBehaviorCandidates(working, target);
@@ -3219,6 +3252,24 @@ public static partial class GameEngine
             default:
                 throw new ResolutionFailureException($"Card target kind '{target.Kind}' is not executable.");
         }
+    }
+
+    private static CardInstanceState ResolveAccessedCardTarget(
+        WorkingState working,
+        BehaviorResolutionFrame frame)
+    {
+        if (working.ResolutionStack.Count < 2
+            || working.ResolutionStack[^2] is not AbilityFrame ability
+            || ability.TargetCardIds.Count != 1
+            || working.RunState is not { } run
+            || !TryGetCurrentAccessCard(working, run, out CardInstanceState? accessed)
+            || ability.TargetCardIds[0] != accessed!.Id)
+        {
+            throw new ResolutionFailureException(
+                "The accessed-card target is not the exact live target frozen by its ability frame.");
+        }
+
+        return accessed;
     }
 
     private static void AdvanceBehaviorCursor(WorkingState working, BehaviorResolutionFrame frame)

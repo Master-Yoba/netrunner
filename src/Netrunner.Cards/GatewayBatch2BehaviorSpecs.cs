@@ -12,6 +12,47 @@ namespace Netrunner.Cards;
 public static class GatewayBatch2BehaviorSpecs
 {
     private const string SpinDoctorArchivesChoiceKey = "spin-doctor-archives";
+    private const string CarnivoreTrashCardsCostKey = "trash-cards";
+
+    private static readonly BehaviorTarget CarnivoreGripCards =
+        BehaviorTarget.CardsInZone(
+            BehaviorZone.Grip,
+            new BehaviorCardFilter(ownerSide: PlayerSide.Runner));
+
+    private static readonly CardBehaviorDefinition Carnivore = new(
+        GatewayBatch2CardCodes.Carnivore,
+        PlayerSide.Runner,
+        staticModifiers:
+        [
+            new BehaviorStaticModifier(
+                BehaviorStaticModifierKind.MemoryUnits,
+                delta: 1),
+        ],
+        paidAbilities:
+        [
+            new BehaviorPaidAbility(
+                "carnivore-access",
+                BehaviorAbilityTiming.BreachAccessPaidWindow,
+                BehaviorAbilityActivation.PaidAbility,
+                costs:
+                [
+                    new BehaviorCost(
+                        BehaviorCostKind.Additional,
+                        amount: 2,
+                        additionalKey: CarnivoreTrashCardsCostKey,
+                        additionalTarget: CarnivoreGripCards,
+                        additionalKind: BehaviorAdditionalCostKind.TrashCards),
+                ],
+                conditions: [],
+                targets: [new BehaviorTarget(BehaviorTargetKind.AccessedCard)],
+                instructions:
+                [
+                    new BehaviorInstruction(
+                        BehaviorInstructionKind.TrashCard,
+                        target: new BehaviorTarget(BehaviorTargetKind.AccessedCard)),
+                ],
+                BehaviorAbilityUsageLimit.OncePerTurn),
+        ]);
 
     private static readonly BehaviorTarget ChosenArchivesCards =
         BehaviorTarget.CardsInZone(
@@ -67,6 +108,7 @@ public static class GatewayBatch2BehaviorSpecs
     public static IReadOnlyList<CardDefinitionId> AssignedDefinitionIds { get; } =
         new ReadOnlyCollection<CardDefinitionId>
         ([
+            GatewayBatch2CardCodes.Carnivore,
             GatewayBatch2CardCodes.Fermenter,
             GatewayBatch2CardCodes.Cookbook,
             GatewayBatch2CardCodes.Pennyshaver,
@@ -91,6 +133,7 @@ public static class GatewayBatch2BehaviorSpecs
     public static IReadOnlyList<CardBehaviorDefinition> GenericSpecs { get; } =
         new ReadOnlyCollection<CardBehaviorDefinition>
         ([
+            Carnivore,
             GatewayBatch2TriggerBehaviorSpecs.GenericSpecs.Single(
                 static definition => definition.DefinitionId == GatewayBatch2CardCodes.Fermenter),
             GatewayBatch2TriggerBehaviorSpecs.GenericSpecs.Single(

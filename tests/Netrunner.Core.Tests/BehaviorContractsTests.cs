@@ -439,6 +439,101 @@ public sealed class BehaviorContractsTests
     }
 
     [Fact]
+    public void StructuredTrashCardsAdditionalCostHasAClosedSchemaAndFingerprint()
+    {
+        BehaviorTarget runnerGrip = BehaviorTarget.CardsInZone(
+            BehaviorZone.Grip,
+            new BehaviorCardFilter(ownerSide: PlayerSide.Runner));
+        BehaviorTarget runnerHeap = BehaviorTarget.CardsInZone(
+            BehaviorZone.Heap,
+            new BehaviorCardFilter(ownerSide: PlayerSide.Runner));
+        BehaviorCost trashGrip = new(
+            BehaviorCostKind.Additional,
+            amount: 2,
+            additionalKey: "trash-cards",
+            additionalTarget: runnerGrip,
+            additionalKind: BehaviorAdditionalCostKind.TrashCards);
+
+        string json = EngineJson.Serialize(trashGrip);
+        BehaviorCost restored = EngineJson.Deserialize<BehaviorCost>(json);
+        Assert.Equal(trashGrip, restored);
+        Assert.Equal(json, EngineJson.Serialize(restored));
+        Assert.Contains("\"additionalKind\":\"trashCards\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"zone\":\"grip\"", json, StringComparison.Ordinal);
+        Assert.Equal(BehaviorAdditionalCostKind.TrashCards, restored.AdditionalKind);
+        Assert.Equal(runnerGrip, restored.AdditionalTarget);
+
+        BehaviorCost legacyAdditional = new(
+            BehaviorCostKind.Additional,
+            amount: 2,
+            additionalKey: "trash-cards");
+        BehaviorCost changedTarget = new(
+            BehaviorCostKind.Additional,
+            amount: 2,
+            additionalKey: "trash-cards",
+            additionalTarget: runnerHeap,
+            additionalKind: BehaviorAdditionalCostKind.TrashCards);
+        string fingerprint = new BehaviorCatalogBuilder("test:structured-cost")
+            .Add(new CardBehaviorDefinition(SearchCardId, PlayerSide.Runner, costs: [trashGrip]))
+            .Build()
+            .Fingerprint;
+        string legacyFingerprint = new BehaviorCatalogBuilder("test:structured-cost")
+            .Add(new CardBehaviorDefinition(SearchCardId, PlayerSide.Runner, costs: [legacyAdditional]))
+            .Build()
+            .Fingerprint;
+        string targetFingerprint = new BehaviorCatalogBuilder("test:structured-cost")
+            .Add(new CardBehaviorDefinition(SearchCardId, PlayerSide.Runner, costs: [changedTarget]))
+            .Build()
+            .Fingerprint;
+        Assert.NotEqual(fingerprint, legacyFingerprint);
+        Assert.NotEqual(fingerprint, targetFingerprint);
+        Assert.NotEqual(trashGrip, legacyAdditional);
+        Assert.NotEqual(trashGrip, changedTarget);
+
+        Assert.Throws<ArgumentException>(() => new BehaviorCost(
+            BehaviorCostKind.Additional,
+            amount: 2,
+            additionalKey: "trash-cards",
+            additionalKind: BehaviorAdditionalCostKind.TrashCards));
+        Assert.Throws<ArgumentException>(() => new BehaviorCost(
+            BehaviorCostKind.Additional,
+            amount: 2,
+            additionalKey: "trash-cards",
+            additionalTarget: runnerGrip));
+        Assert.Throws<ArgumentException>(() => new BehaviorCost(
+            BehaviorCostKind.Credits,
+            amount: 2,
+            additionalKind: BehaviorAdditionalCostKind.TrashCards));
+        Assert.Throws<ArgumentException>(() => new BehaviorCost(
+            BehaviorCostKind.Credits,
+            amount: 2,
+            additionalTarget: runnerGrip));
+        Assert.Throws<ArgumentException>(() => new BehaviorCost(
+            BehaviorCostKind.Additional,
+            amount: 2,
+            additionalKey: "trash-cards",
+            additionalTarget: BehaviorTarget.CardsInZone(BehaviorZone.Grip),
+            additionalKind: BehaviorAdditionalCostKind.TrashCards));
+        Assert.Throws<ArgumentException>(() => new BehaviorCost(
+            BehaviorCostKind.Additional,
+            amount: 2,
+            additionalKey: "trash-cards",
+            additionalTarget: BehaviorTarget.CardsInZone(
+                BehaviorZone.Grip,
+                new BehaviorCardFilter(ownerSide: PlayerSide.Runner),
+                reveal: true),
+            additionalKind: BehaviorAdditionalCostKind.TrashCards));
+        Assert.Throws<ArgumentException>(() => new BehaviorCost(
+            BehaviorCostKind.Additional,
+            amount: 2,
+            additionalKey: "trash-cards",
+            additionalTarget: BehaviorTarget.CardInZone(
+                BehaviorZone.Grip,
+                new BehaviorCardFilter(ownerSide: PlayerSide.Runner)),
+            additionalKind: BehaviorAdditionalCostKind.TrashCards));
+    }
+
+    [Fact]
     public void CardDefinitionFreezesInstructionTreeAndStaticModifiers()
     {
         BehaviorChoiceSpec choice = new(
