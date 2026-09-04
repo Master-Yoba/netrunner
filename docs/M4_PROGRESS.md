@@ -1,8 +1,7 @@
 # M4 progress — System Gateway complete
 
-Status: Slice 4.3 engine/card/agent/client work is implemented on `m4_3`;
-the standard full-game SIM-401 exit remains open on the pre-existing
-MATCH-401A setup/mulligan dependency
+Status: Slice 4.5 implementation started on `m4_5`; Slice 4.4 is complete and
+merged into `dev`
 
 Date started: 31 August 2026
 
@@ -4172,3 +4171,39 @@ errors; runtime action expansion and full verification remain pending.
   CLI 54, Match 62), zero build warnings/errors, formatting, coverage, content,
   simulation/replay, Godot, UI smoke, and secret-scan checks green. The M2
   hashes remain unchanged.
+
+## Slice 4.5 work log
+
+### 2026-09-04 — architecture and execution started
+
+- Started Slice 4.5 on its dedicated `m4_5` branch from merged Slice 4.4
+  commit `2737ae4`. The complete slice contract remains ENG-419 through
+  ENG-425A, SCN-401, the seven Batch 4 cards, AGT-401 v4, SIM-401, UI-406,
+  registry/coverage closure, and the full repository gate.
+- CR 26.03 fixes the new reaction boundaries precisely. Manegarm Skunkworks
+  and Anoetic Void meet their conditions when the Runner approaches the
+  attacked server at 6.9.4g, after the final after-movement paid/rez window
+  and before success at 6.9.5a. Funhouse meets its condition when encounter
+  initialization begins at 6.9.3a, before the encounter paid window at
+  6.9.3b. These reactions will use the existing serialized occurrence and
+  checkpoint machinery; they are not paid-window actions.
+- The engine will add an explicit serialized approach-server timing step and
+  typed approach/encounter occurrences. Installed-card reaction declarations
+  must match the attacked server through stable zone/server topology, while an
+  encounter-self declaration must match the exact encountered ICE. The run
+  timing frame remains below any reaction child so save/load resumes at the
+  already-committed next boundary without re-emitting the occurrence.
+- ENG-420 will extend declarative choices with structured alternatives whose
+  acting player, typed cost, effect, and fallback meaning are explicit.
+  Paying credits, spending clicks, taking a tag, and accepting an end-run
+  effect remain distinct operations. Illegal costs are omitted when actions
+  are materialized and revalidated atomically when submitted; hidden
+  additional-cost card IDs are present only in the chooser's observation.
+- Execution checkpoints are: (A) timing occurrences and source-server scope;
+  (B) structured alternatives and compound trigger costs; (C) approach and
+  encounter card bindings; (D) bioroid, topology, restriction, delayed
+  cleanup, and Jailbreak primitives/bindings; (E) agent/simulation/UI; and
+  (F) registry, coverage, full verification, push, and PR into `dev`.
+  Luna Max agents own bounded implementation checkpoints. The primary agent
+  owns architecture, adversarial review, integration, schema/pin decisions,
+  verification, and acceptance commits.
