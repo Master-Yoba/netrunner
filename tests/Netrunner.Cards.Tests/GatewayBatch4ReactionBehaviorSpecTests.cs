@@ -180,6 +180,71 @@ public sealed class GatewayBatch4ReactionBehaviorSpecTests
         }
     }
 
+    [Fact]
+    [Trait("GatewayCard", "30032")]
+    public void MayflyDeclaresTypedAiBreakerAndRunEndCleanup()
+    {
+        IcebreakerBehaviorSpec mayfly = Assert.Single(
+            GatewayBatch4IcebreakerBehaviorSpecs.IcebreakerSpecs);
+
+        Assert.Equal(GatewayBatch4CardCodes.Mayfly, mayfly.DefinitionId);
+        Assert.Equal(1, mayfly.BaseStrength);
+        Assert.Equal(IceType.Any, mayfly.InterfaceType);
+        Assert.Equal(1, mayfly.BreakCost);
+        Assert.Equal(1, mayfly.BreakLimit);
+        Assert.Equal(1, mayfly.PumpCost);
+        Assert.Equal(1, mayfly.PumpStrength);
+        Assert.Equal(
+            GatewayBatch4IcebreakerBehaviorSpecs.MayflyRunEndCleanupBehaviorId,
+            mayfly.RunEndCleanup?.BehaviorId);
+    }
+
+    [Fact]
+    [Trait("GatewayCard", "30038")]
+    [Trait("GatewayCard", "30039")]
+    public void AnselAndBranShareOneTypedRunnerBioroidDeclaration()
+    {
+        Assert.Equal(
+            [GatewayBatch4CardCodes.Ansel, GatewayBatch4CardCodes.Bran],
+            GatewayBatch4BioroidBehaviorSpecs.BoundIceDefinitionIds);
+        EncounteredBioroidAbilitySpec shared =
+            Assert.Single(GatewayBatch4BioroidBehaviorSpecs.BioroidAbilities);
+        Assert.Equal(GatewayBatch4BioroidBehaviorSpecs.BioroidBreakAbility, shared);
+        Assert.Equal(BehaviorCostKind.LoseClick, shared.Cost.Kind);
+        Assert.Equal(1, shared.Cost.Amount);
+        Assert.Equal(1, shared.BreakCount);
+
+        IceBehaviorSpec ansel = GatewayBatch4BioroidBehaviorSpecs.Bind(
+            new IceBehaviorSpec(
+                GatewayBatch4CardCodes.Ansel,
+                strength: 4,
+                iceType: IceType.Sentry,
+                rezCost: 6,
+                subroutines: [new EndRunSubroutineSpec()],
+                strengthModifiers: []));
+        IceBehaviorSpec bran = GatewayBatch4BioroidBehaviorSpecs.Bind(
+            new IceBehaviorSpec(
+                GatewayBatch4CardCodes.Bran,
+                strength: 6,
+                iceType: IceType.Barrier,
+                rezCost: 6,
+                subroutines: [new EndRunSubroutineSpec(), new EndRunSubroutineSpec()],
+                strengthModifiers: []));
+
+        Assert.Same(shared, Assert.Single(ansel.EncounteredBioroidAbilities!));
+        Assert.Same(shared, Assert.Single(bran.EncounteredBioroidAbilities!));
+        Assert.Single(ansel.Subroutines);
+        Assert.Equal(2, bran.Subroutines.Count);
+        Assert.Throws<ArgumentException>(() => GatewayBatch4BioroidBehaviorSpecs.Bind(
+            new IceBehaviorSpec(
+                GatewayCardCodes.Palisade,
+                strength: 2,
+                iceType: IceType.Barrier,
+                rezCost: 3,
+                subroutines: [new EndRunSubroutineSpec()],
+                strengthModifiers: [])));
+    }
+
     private static CardBehaviorDefinition Definition(CardDefinitionId definitionId) =>
         GatewayBehaviorCatalog.Create().GenericSpecs.Single(
             definition => definition.DefinitionId == definitionId);

@@ -598,6 +598,14 @@ public static class ObservationBuilder
             ["expiry"] = effect.Expiry,
         };
 
+        // Typed run-end cleanup provenance is public once its Runner-rig
+        // source is public. Keep the nullable field additive so legacy run
+        // effects retain their historical observation shape.
+        if (effect.Kind is { } kind)
+        {
+            view["kind"] = kind;
+        }
+
         // Keep the legacy effect shape byte-identical when no typed value is
         // attached. When present, expose it only if both physical endpoints
         // are visible to this viewer; the encounter quote independently

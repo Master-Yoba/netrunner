@@ -713,6 +713,7 @@ public static partial class GameEngine
             case (ActionKind.RezIce, RunIceParameters runIce):
             case (ActionKind.BreakSubroutines, RunBreakParameters):
             case (ActionKind.PumpBreaker, RunBreakerParameters):
+            case (ActionKind.UseBioroidAbility, RunBioroidAbilityParameters):
             case (ActionKind.JackOut, NoActionParameters):
             case (ActionKind.ContinueRun, NoActionParameters):
             case (ActionKind.ChooseBreachCandidate, BreachCandidateParameters):

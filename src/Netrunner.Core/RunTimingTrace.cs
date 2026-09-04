@@ -77,6 +77,7 @@ public static class RunTimingCitations
         EngineEventKinds.EncounterInitialized => "CR 26.03 6.9.3a: the encounter is initialized",
         EngineEventKinds.BreakerPumped => "CR 26.03 6.5/3.9.5: the Runner pumps an installed icebreaker's strength for the encounter",
         EngineEventKinds.SubroutinesBroken => "CR 26.03 6.5/3.9.5: the Runner breaks subroutines with an installed icebreaker of sufficient strength and matching subtype",
+        EngineEventKinds.BioroidAbilityUsed => "CR 26.03 6.5/3.9.5: the Runner loses one click to break one named subroutine with the encountered bioroid ability",
         EngineEventKinds.EncounterCompleted => "CR 26.03 6.5/6.9.3: encounter processing completes",
         EngineEventKinds.RunMoved => "CR 26.03 6.9.4d: the run moves inward to the next position",
         EngineEventKinds.RunSuccessful => "CR 26.03 6.9.5a: the run is successful",
@@ -142,6 +143,7 @@ public static class RunTimingTraceValidator
         EngineEventKinds.EncounterInitialized,
         EngineEventKinds.BreakerPumped,
         EngineEventKinds.SubroutinesBroken,
+        EngineEventKinds.BioroidAbilityUsed,
         EngineEventKinds.EncounterCompleted,
         EngineEventKinds.RunMoved,
         EngineEventKinds.RunSuccessful,
@@ -880,6 +882,9 @@ public static class RunTimingTraceValidator
             case SubroutinesBrokenEventPayload broken:
                 runId = broken.RunId;
                 return true;
+            case BioroidAbilityUsedEventPayload bioroid:
+                runId = bioroid.RunId;
+                return true;
             case BreakerPumpedEventPayload pumped:
                 runId = pumped.RunId;
                 return true;
@@ -938,6 +943,7 @@ public static class RunTimingTraceValidator
             EncounterInitializedEventPayload initialized => $"encounter initialized against '{initialized.IceId.Value}'",
             BreakerPumpedEventPayload pumped => $"pumped breaker '{pumped.BreakerId.Value}'",
             SubroutinesBrokenEventPayload broken => $"broke subroutines with '{broken.BreakerId.Value}'",
+            BioroidAbilityUsedEventPayload bioroid => $"used bioroid ability '{bioroid.AbilityKey}' on subroutine '{bioroid.SubroutineId.Value}'",
             RunSuccessfulEventPayload successful => $"the run reached server '{successful.ServerId.Value}'",
             BreachStartedEventPayload breach => $"the breach has {breach.CandidateCount} candidate(s)",
             BreachCandidateChosenEventPayload chosen => $"chose candidate '{chosen.CardId.Value}'",

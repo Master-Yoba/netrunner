@@ -40,6 +40,7 @@ public partial class Main
 		{
 			_smokeEncounterFocusObserved |= _smokeTest;
 			RenderEncounterFocusRegion(snapshot, run, encounter);
+			RenderSlice45DecisionFocus(snapshot.View);
 			return;
 		}
 
@@ -61,6 +62,7 @@ public partial class Main
 			15,
 			Warning));
 		AddBreachAccessModifierCues(run);
+		RenderSlice45DecisionFocus(snapshot.View);
 		_focusPresentation.AddChild(MakeWrappedLabel(
 			"The current timing step is owned by Core. Legal actions below are the only actions that can mutate the run.",
 			12,
@@ -143,8 +145,10 @@ public partial class Main
 		string breakerCue = string.Join(
 			" · ",
 			snapshot.View.LegalActions
-				.Where(action => action.Kind is ActionKind.PumpBreaker or ActionKind.BreakSubroutines)
-				.Select(action => $"{action.Kind}: {action.Description}"));
+				.Where(action => action.Kind is ActionKind.PumpBreaker
+					or ActionKind.BreakSubroutines
+					or ActionKind.UseBioroidAbility)
+				.Select(Slice45PresentationProjector.Label));
 		_focusPresentation.AddChild(MakeWrappedLabel(
 			string.IsNullOrWhiteSpace(breakerCue)
 				? "BREAKER OPTIONS · no breaker action is currently issued"
@@ -154,6 +158,33 @@ public partial class Main
 		if (run.Priority is { } priority)
 		{
 			AddPriorityCueRegion(priority);
+		}
+	}
+
+	private void RenderSlice45DecisionFocus(MatchViewModel view)
+	{
+		Slice45DecisionViewModel decision = Slice45PresentationProjector.Present(view);
+		if (!decision.IsProminent)
+		{
+			return;
+		}
+
+		_focusPresentation.AddChild(MakeLabel(
+			$"SLICE 4.5 {decision.Surface.ToString().ToUpperInvariant()} DECISION · "
+			+ $"ACTING PLAYER {decision.ActingPlayer!.Value.ToString().ToUpperInvariant()}",
+			14,
+			Accent));
+		if (decision.Prompt is { } prompt && !string.IsNullOrWhiteSpace(prompt))
+		{
+			_focusPresentation.AddChild(MakeWrappedLabel(prompt, 12, Colors.White));
+		}
+
+		foreach (Slice45ActionPresentationViewModel option in decision.Options)
+		{
+			_focusPresentation.AddChild(MakeWrappedLabel(
+				option.PresentationLabel,
+				11,
+				option.IsFallback ? Warning : Colors.White));
 		}
 	}
 

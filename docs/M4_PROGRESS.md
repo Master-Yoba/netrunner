@@ -4252,3 +4252,43 @@ errors; runtime action expansion and full verification remain pending.
   Encountered-bioroid abilities, Mayfly cleanup, ICE subroutine effects and
   topology, run restrictions, SCN-401, simulation/UI, and registry closure
   remain for later checkpoints.
+
+### 2026-09-04 — Checkpoint D1 bioroid, Mayfly, SCN-401, and UI foundation accepted
+
+- Added a dedicated encountered-bioroid action whose authenticated payload
+  names the physical ICE, exact unbroken subroutine, shared ability key, and
+  typed `LoseClick` cost. Ansel 1.0 and Brân 1.0 share one immutable card-layer
+  declaration; repeated uses remain legal while the Runner has clicks and
+  unbroken subroutines, without passing through an icebreaker or basic-action
+  path.
+- Mayfly now carries its printed AI interface and a typed run-end cleanup
+  declaration. A successful Mayfly break arms one catalog-provenanced,
+  run-expiring effect; pumping or merely installing it does not. Multiple
+  breaks deduplicate, a moved/inactive source is left alone, and an
+  authenticated active source is trashed through the ordinary typed card-move
+  boundary at run end. Review required an explicit cleanup-kind discriminator
+  so a forged generic lingering effect cannot move a physical card.
+- Checked in the first SCN-401 executable fixture cases for optional Anoetic,
+  mandatory Manegarm, and Funhouse encounter reactions. They validate the
+  timing trace, round-trip every yielded boundary, and prove Corp-only HQ cost
+  IDs remain absent from the Runner observation. The fixture remains explicit
+  about the later bioroid, install, restriction, and Mayfly cases still to add.
+- UI-406 now has a Match-owned typed projector for prominent approach and
+  encounter decisions. It preserves engine option order and acting-player
+  ownership, renders typed costs/fallbacks/card and server targets, exposes
+  the bioroid action, fails closed on malformed payloads, and keeps Godot as a
+  renderer rather than a rules interpreter. Restriction and Mayfly cues remain
+  nullable until Core publishes their final typed observation fields.
+- New serialized bioroid action and cleanup state moved the engine schema from
+  11 to 12. Canonical scenarios were re-pinned; the representative M2 proof is
+  now initial `1537ca1cef72e962329e2f1340e77a25b0c22e907c6f402972506aae1dccbf41`,
+  final `e04e0e01c1abe93dc18a7a29d236b2a43f78ade13a60a9f9f4553d805f334581`,
+  and event `33af2b049fbad324ed5ff0ee130740c3d65c03f2cb1196100afbdc73e9f0e67c`.
+  The event hash is unchanged because the representative run does not use the
+  new actions.
+- Root independently passed all 1,104 solution tests (Core 742, Cards 197, AI
+  42, CLI 54, Match 69), the focused bioroid/Mayfly, reaction/SCN-401, UI, and
+  M2 proof suites, solution formatting, and `git diff --check`. The remaining
+  hard checkpoint is serialized choice-bearing ICE subroutine resolution,
+  hidden-safe Corp installs/topology, Ansel's run restriction and trash target,
+  followed by final SCN/simulation/UI/registry closure.

@@ -1668,6 +1668,45 @@ public static class StateInvariantValidator
                 Add(violations, "run.invalid-effect-expiry", $"{effectPath}.expiry", $"'{effect.Expiry}' is not supported inside RunState.");
             }
 
+            // A run-expiring effect with a physical source is the
+            // icebreaker run-end-cleanup contract. Keep the source identity
+            // authoritative and cross-check the behavior ID against the
+            // injected catalog; a caller cannot forge a cleanup by merely
+            // placing a source card and arbitrary string in RunState.
+            if (effect.Expiry == RunLingeringEffectExpiry.Run
+                && effect.SourceCardId is { } cleanupSourceId)
+            {
+                if (effect.Kind != RunLingeringEffectKind.IcebreakerRunEndCleanup)
+                {
+                    Add(
+                        violations,
+                        "run.cleanup-kind-missing",
+                        $"{effectPath}.kind",
+                        "A run-end cleanup with a physical source must carry the typed icebreaker cleanup kind.");
+                }
+
+                CardInstanceState? cleanupSource = state.Cards.FirstOrDefault(card => card?.Id == cleanupSourceId);
+                if (cleanupSource is null)
+                {
+                    Add(
+                        violations,
+                        "run.cleanup-source-missing",
+                        $"{effectPath}.sourceCardId",
+                        $"Run-end cleanup source '{cleanupSourceId}' is not present in state.");
+                }
+                else if (cleanupSource.OwnerSide != PlayerSide.Runner
+                    || !behaviorCatalog.TryGetIcebreaker(cleanupSource.DefinitionId, out IcebreakerBehaviorSpec? cleanupBreaker)
+                    || cleanupBreaker.RunEndCleanup is not { } cleanupDeclaration
+                    || cleanupDeclaration.BehaviorId != effect.BehaviorId)
+                {
+                    Add(
+                        violations,
+                        "run.cleanup-provenance",
+                        $"{effectPath}.behaviorId",
+                        "A run-end cleanup must match the exact run-end declaration of its Runner icebreaker source.");
+                }
+            }
+
             if (effect.ValueAdjustment is { } adjustment)
             {
                 if (effect.Expiry != RunLingeringEffectExpiry.Encounter)
@@ -6051,6 +6090,34 @@ public static class StateInvariantValidator
                     }
 
                     break;
+                case (ActionKind.UseBioroidAbility, RunBioroidAbilityParameters bioroidAbility):
+                    if (pending.Kind != DecisionKind.RunTiming)
+                    {
+                        Add(violations, "decision.action-kind-mismatch", $"{actionPath}.kind", "Run timing actions require a RunTiming decision.");
+                    }
+
+                    if (!cardIds.Contains(bioroidAbility.IceId))
+                    {
+                        Add(violations, "decision.unknown-card-action", $"{actionPath}.parameters.iceId", $"Run action references unknown encountered ICE '{bioroidAbility.IceId}'.");
+                    }
+
+                    if (!StableIdentifier.TryValidate(bioroidAbility.SubroutineId.Value))
+                    {
+                        Add(violations, "decision.invalid-subroutine-action", $"{actionPath}.parameters.subroutineId", "A bioroid ability must identify a stable subroutine.");
+                    }
+
+                    if (!StableIdentifier.TryValidate(bioroidAbility.AbilityKey))
+                    {
+                        Add(violations, "decision.invalid-ability-action", $"{actionPath}.parameters.abilityKey", "A bioroid ability must identify a stable ability key.");
+                    }
+
+                    if (bioroidAbility.Cost.Kind != BehaviorCostKind.LoseClick
+                        || bioroidAbility.Cost.Amount != 1)
+                    {
+                        Add(violations, "decision.invalid-bioroid-cost", $"{actionPath}.parameters.cost", "A bioroid ability action must carry exactly one typed lost click.");
+                    }
+
+                    break;
                 case (ActionKind.PumpBreaker, RunBreakerParameters pumpBreaker):
                     if (pending.Kind != DecisionKind.RunTiming)
                     {
@@ -6192,6 +6259,9 @@ public static class StateInvariantValidator
                 case (ActionKind.UseAbility, _):
                     Add(violations, "decision.action-parameters-mismatch", $"{actionPath}.parameters", "UseAbility requires AbilityActionParameters.");
                     break;
+                case (ActionKind.UseBioroidAbility, _):
+                    Add(violations, "decision.action-parameters-mismatch", $"{actionPath}.parameters", "UseBioroidAbility requires RunBioroidAbilityParameters.");
+                    break;
                 default:
                     Add(violations, "decision.invalid-action-kind", $"{actionPath}.kind", $"Action kind '{action.Kind}' is not supported.");
                     break;
@@ -6238,7 +6308,8 @@ public static class StateInvariantValidator
                         or ActionKind.ChooseBreachCandidate
                         or ActionKind.TrashAccessedCard
                         or ActionKind.NoAccessAction
-                        or ActionKind.UseAbility))
+                        or ActionKind.UseAbility
+                        or ActionKind.UseBioroidAbility))
                 || (pending.Kind == DecisionKind.MemoryCleanup
                     && action.Kind != ActionKind.TrashProgram)
                 || (pending.Kind == DecisionKind.TriggerChoice
@@ -7809,6 +7880,7 @@ public static class StateInvariantValidator
         var expected = new List<(ActionKind Kind, CardInstanceId? Target, int Quantity, int HostedCredits)>();
         IReadOnlyList<RezCardParameters> expectedRuntimeRezes = [];
         var expectedRunRezes = new List<RunIceParameters>();
+        var expectedBioroidAbilities = new List<RunBioroidAbilityParameters>();
         switch (run.Step)
         {
             case RunTimingStep.InitiationPaidWindow:
@@ -7901,6 +7973,33 @@ public static class StateInvariantValidator
                         // during the run, so they count toward the offer. Each
                         // legal wallet/hosted division is a distinct action.
                         PlayerState? runnerPlayer = state.Players.FirstOrDefault(player => player?.Side == PlayerSide.Runner);
+
+                        if (runnerPlayer is not null
+                            && expectedIceSpec.EncounteredBioroidAbilities is { Count: > 0 } bioroidAbilities
+                            && runnerPlayer.Clicks > 0)
+                        {
+                            foreach (EncounteredBioroidAbilitySpec ability in bioroidAbilities)
+                            {
+                                if (runnerPlayer.Clicks < ability.Cost.Amount)
+                                {
+                                    continue;
+                                }
+
+                                foreach (RunSubroutineState subroutine in run.Encounter.Subroutines)
+                                {
+                                    if (subroutine.Broken || subroutine.Resolved)
+                                    {
+                                        continue;
+                                    }
+
+                                    expectedBioroidAbilities.Add(new RunBioroidAbilityParameters(
+                                        run.Encounter.IceId,
+                                        subroutine.Id,
+                                        ability.Key,
+                                        ability.Cost));
+                                }
+                            }
+                        }
 
                         foreach (ZoneState? rigZone in state.Zones)
                         {
@@ -8071,6 +8170,7 @@ public static class StateInvariantValidator
         var actual = new List<(ActionKind Kind, CardInstanceId? Target, int Quantity, int HostedCredits)>();
         var actualRuntimeRezes = new List<RezCardParameters>();
         var actualRunRezes = new List<RunIceParameters>();
+        var actualBioroidAbilities = new List<RunBioroidAbilityParameters>();
         var actualAbilities = new List<AbilityActionParameters>();
         foreach (LegalAction? action in pending.LegalActions)
         {
@@ -8084,6 +8184,16 @@ public static class StateInvariantValidator
                 if (action.Parameters is AbilityActionParameters ability)
                 {
                     actualAbilities.Add(ability);
+                }
+
+                continue;
+            }
+
+            if (action.Kind == ActionKind.UseBioroidAbility)
+            {
+                if (action.Parameters is RunBioroidAbilityParameters bioroidAbility)
+                {
+                    actualBioroidAbilities.Add(bioroidAbility);
                 }
 
                 continue;
@@ -8204,6 +8314,12 @@ public static class StateInvariantValidator
         ValidateRunIceActionBijection(
             expectedRunRezes,
             actualRunRezes,
+            path,
+            violations);
+
+        ValidateBioroidAbilityActionBijection(
+            expectedBioroidAbilities,
+            actualBioroidAbilities,
             path,
             violations);
 
@@ -8350,6 +8466,47 @@ public static class StateInvariantValidator
                     "run.missing-rez-action",
                     $"{path}.legalActions",
                     $"Run timing decision is missing the materialized approached ICE rez action for '{candidate.IceId}'.");
+            }
+        }
+    }
+
+    private static void ValidateBioroidAbilityActionBijection(
+        IReadOnlyList<RunBioroidAbilityParameters> expected,
+        List<RunBioroidAbilityParameters> actual,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        for (int index = 0; index < actual.Count; index++)
+        {
+            RunBioroidAbilityParameters candidate = actual[index];
+            if (actual.Take(index).Any(item => item == candidate))
+            {
+                Add(
+                    violations,
+                    "run.duplicate-bioroid-action",
+                    $"{path}.legalActions",
+                    $"Bioroid ability action for ICE '{candidate.IceId}', subroutine '{candidate.SubroutineId}', and ability '{candidate.AbilityKey}' is duplicated.");
+            }
+
+            if (!expected.Any(item => item == candidate))
+            {
+                Add(
+                    violations,
+                    "run.extra-bioroid-action",
+                    $"{path}.legalActions",
+                    $"Run timing decision contains an unmaterialized bioroid ability action for ICE '{candidate.IceId}', subroutine '{candidate.SubroutineId}', and ability '{candidate.AbilityKey}'.");
+            }
+        }
+
+        foreach (RunBioroidAbilityParameters candidate in expected)
+        {
+            if (!actual.Any(item => item == candidate))
+            {
+                Add(
+                    violations,
+                    "run.missing-bioroid-action",
+                    $"{path}.legalActions",
+                    $"Run timing decision is missing the materialized bioroid ability action for ICE '{candidate.IceId}', subroutine '{candidate.SubroutineId}', and ability '{candidate.AbilityKey}'.");
             }
         }
     }

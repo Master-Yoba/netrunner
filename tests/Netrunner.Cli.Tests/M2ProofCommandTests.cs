@@ -17,7 +17,7 @@ public sealed class M2ProofCommandTests
     // play and breach provenance (schema 10 -> 11). The explicit 6.9.4g
     // server-approach event also changes the event-stream pin.
     private const string ExpectedFinalStateHash =
-        "7da1beb7aa61527ffa4e0cb9095397cc7809d481f34d1966826991ac5d411486";
+        "e04e0e01c1abe93dc18a7a29d236b2a43f78ade13a60a9f9f4553d805f334581";
     private const string ExpectedEventStreamHash =
         "33af2b049fbad324ed5ff0ee130740c3d65c03f2cb1196100afbdc73e9f0e67c";
 

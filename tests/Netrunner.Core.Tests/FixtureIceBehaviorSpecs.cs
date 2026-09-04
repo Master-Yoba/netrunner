@@ -17,10 +17,18 @@ internal static class FixtureIceBehaviorSpecs
     public static readonly CardDefinitionId ThreeSubroutines = new("fixture:ice-three-subroutines");
     public static readonly CardDefinitionId CodeGateLoseCredits = new("fixture:ice-codegate-lose-credits");
     public static readonly CardDefinitionId SentryLoseCredits = new("fixture:ice-sentry-lose-credits");
+    public static readonly CardDefinitionId Bioroid = new("fixture:ice-bioroid");
     public static readonly CardDefinitionId BreakerBarrier = new("fixture:breaker-barrier");
     public static readonly CardDefinitionId BreakerCodeGate = new("fixture:breaker-codgate");
     public static readonly CardDefinitionId BreakerSentry = new("fixture:breaker-sentry");
     public static readonly CardDefinitionId BreakerAny = new("fixture:breaker-any");
+    public static readonly CardDefinitionId Mayfly = new("fixture:breaker-mayfly");
+
+    public const string BioroidAbilityKey = "fixture-bioroid-break-one";
+    public const string MayflyCleanupBehaviorId = "fixture-mayfly-run-end-trash";
+
+    private static readonly EncounteredBioroidAbilitySpec BioroidBreakAbility =
+        new(BioroidAbilityKey, new BehaviorCost(BehaviorCostKind.LoseClick, amount: 1));
 
     private static readonly IceBehaviorSpec PlainSpec = new(
         Plain,
@@ -124,6 +132,20 @@ internal static class FixtureIceBehaviorSpecs
         subroutines: [new LoseCreditsSubroutineSpec(PlayerSide.Runner, 1)],
         strengthModifiers: []);
 
+    private static readonly IceBehaviorSpec BioroidSpec = new(
+        Bioroid,
+        strength: 0,
+        iceType: IceType.Sentry,
+        rezCost: 0,
+        subroutines:
+        [
+            new LoseCreditsSubroutineSpec(PlayerSide.Runner, 1),
+            new LoseCreditsSubroutineSpec(PlayerSide.Runner, 1),
+            new EndRunSubroutineSpec(),
+        ],
+        strengthModifiers: [],
+        encounteredBioroidAbilities: [BioroidBreakAbility]);
+
     private static readonly IcebreakerBehaviorSpec BreakerBarrierSpec = new(
         BreakerBarrier,
         baseStrength: 3,
@@ -160,6 +182,16 @@ internal static class FixtureIceBehaviorSpecs
         pumpCost: 2,
         pumpStrength: 1);
 
+    private static readonly IcebreakerBehaviorSpec MayflySpec = new(
+        Mayfly,
+        baseStrength: 1,
+        interfaceType: IceType.Any,
+        breakCost: 1,
+        breakLimit: 1,
+        pumpCost: 1,
+        pumpStrength: 1,
+        runEndCleanup: new IcebreakerRunEndCleanupSpec(MayflyCleanupBehaviorId));
+
     public static IReadOnlyList<IceBehaviorSpec> IceSpecs { get; } =
     [
         PlainSpec,
@@ -172,6 +204,7 @@ internal static class FixtureIceBehaviorSpecs
         CodeGateLoseCreditsSpec,
         EndRunIfCreditsSpec,
         SentryLoseCreditsSpec,
+        BioroidSpec,
     ];
 
     public static IReadOnlyList<IcebreakerBehaviorSpec> IcebreakerSpecs { get; } =
@@ -180,5 +213,6 @@ internal static class FixtureIceBehaviorSpecs
         BreakerCodeGateSpec,
         BreakerSentrySpec,
         BreakerAnySpec,
+        MayflySpec,
     ];
 }

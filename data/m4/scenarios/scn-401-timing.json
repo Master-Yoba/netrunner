@@ -1,0 +1,228 @@
+{
+  "schemaVersion": 1,
+  "scenarioId": "SCN-401",
+  "seed": 45041,
+  "rulesVersion": "26.03",
+  "engineStateSchemaVersion": 12,
+  "behaviorRegistryVersion": "gateway-m4-4.5-c1",
+  "catalog": {
+    "version": "gateway-m4-4.5-c1",
+    "testOnlyIceDefinitions": [
+      "fixture:scn401-plain-ice",
+      "30054"
+    ]
+  },
+  "cases": [
+    {
+      "id": "approach-anoetic-void",
+      "kind": "approachServer",
+      "targetServer": "remote:0",
+      "sourceCardId": "card:scn401-anoetic",
+      "runnerCredits": 10,
+      "runnerClicks": 4,
+      "corpCredits": 5,
+      "cards": [
+        {
+        "id": "card:scn401-anoetic",
+          "definitionId": "30050",
+          "zone": "serverRoot",
+          "ownerSide": "corp",
+          "server": "remote:0",
+        "faceUp": true,
+        "rezzed": true
+        },
+        {
+          "id": "card:scn401-anoetic-hq-a",
+          "definitionId": "fixture:scn401-hq-a",
+          "zone": "corpHand",
+          "ownerSide": "corp"
+        },
+        {
+          "id": "card:scn401-anoetic-hq-b",
+          "definitionId": "fixture:scn401-hq-b",
+          "zone": "corpHand",
+          "ownerSide": "corp"
+        },
+        {
+          "id": "card:scn401-approach-ice",
+          "definitionId": "fixture:scn401-plain-ice",
+          "zone": "serverIce",
+          "ownerSide": "corp",
+          "server": "remote:0",
+          "faceUp": false,
+          "rezzed": false
+        }
+      ],
+      "reaction": {
+        "occurrence": "serverApproached",
+        "triggerId": "anoetic-void-server-approached",
+        "mode": "optional",
+        "ownerSide": "corp",
+        "decisionKind": "triggerChoice",
+        "runStep": "success",
+        "acceptedAction": "useTrigger",
+        "continuation": "run-successful",
+        "mustNotOpenPaidWindow": true
+      },
+      "yieldedBoundaries": [
+        {
+          "name": "after-movement-paid-window",
+          "decisionKind": "runTiming",
+          "runStep": "afterMovePaidWindow",
+          "ownerSide": "runner",
+          "saveLoad": true
+        },
+        {
+          "name": "optional-anoetic-trigger",
+          "decisionKind": "triggerChoice",
+          "runStep": "success",
+          "ownerSide": "corp",
+          "saveLoad": true
+        },
+        {
+          "name": "anoetic-hidden-cost-choice",
+          "decisionKind": "behaviorChoice",
+          "runStep": "success",
+          "ownerSide": "corp",
+          "saveLoad": true
+        }
+      ],
+      "expectedEventOrder": [
+        "run-timing-window-opened:afterMovePaidWindow",
+        "server-approached",
+        "run-successful"
+      ]
+    },
+    {
+      "id": "approach-manegarm-skunkworks",
+      "kind": "approachServer",
+      "targetServer": "remote:0",
+      "sourceCardId": "card:scn401-manegarm",
+      "runnerCredits": 10,
+      "runnerClicks": 4,
+      "corpCredits": 5,
+      "cards": [
+        {
+          "id": "card:scn401-manegarm",
+          "definitionId": "30042",
+          "zone": "serverRoot",
+          "ownerSide": "corp",
+          "server": "remote:0",
+          "faceUp": true,
+          "rezzed": true
+        },
+        {
+          "id": "card:scn401-manegarm-ice",
+          "definitionId": "fixture:scn401-plain-ice",
+          "zone": "serverIce",
+          "ownerSide": "corp",
+          "server": "remote:0",
+          "faceUp": false,
+          "rezzed": false
+        }
+      ],
+      "reaction": {
+        "occurrence": "serverApproached",
+        "triggerId": "manegarm-server-approached",
+        "mode": "mandatory",
+        "ownerSide": "runner",
+        "decisionKind": "behaviorChoice",
+        "runStep": "success",
+        "acceptedAction": "chooseBehavior:spend-clicks",
+        "continuation": "run-successful",
+        "mustNotOpenPaidWindow": true
+      },
+      "yieldedBoundaries": [
+        {
+          "name": "after-movement-paid-window",
+          "decisionKind": "runTiming",
+          "runStep": "afterMovePaidWindow",
+          "ownerSide": "runner",
+          "saveLoad": true
+        },
+        {
+          "name": "mandatory-manegarm-choice",
+          "decisionKind": "behaviorChoice",
+          "runStep": "success",
+          "ownerSide": "runner",
+          "saveLoad": true
+        }
+      ],
+      "expectedEventOrder": [
+        "run-timing-window-opened:afterMovePaidWindow",
+        "server-approached",
+        "run-successful"
+      ]
+    },
+    {
+      "id": "encounter-funhouse",
+      "kind": "encounter",
+      "targetServer": "remote:0",
+      "sourceCardId": "card:scn401-funhouse",
+      "runnerCredits": 10,
+      "runnerClicks": 4,
+      "corpCredits": 5,
+      "cards": [
+        {
+        "id": "card:scn401-funhouse",
+          "definitionId": "30054",
+          "zone": "serverIce",
+          "ownerSide": "corp",
+          "server": "remote:0",
+        "faceUp": false,
+        "rezzed": false
+        }
+      ],
+      "reaction": {
+        "occurrence": "iceEncountered",
+        "triggerId": "funhouse-ice-encountered",
+        "mode": "mandatory",
+        "ownerSide": "runner",
+        "decisionKind": "behaviorChoice",
+        "runStep": "encounterPaidWindow",
+        "acceptedAction": "chooseBehavior:take-tag",
+        "continuation": "run-timing-window-opened:encounterPaidWindow",
+        "mustNotOpenPaidWindow": false
+      },
+      "yieldedBoundaries": [
+        {
+          "name": "encounter-reaction",
+          "decisionKind": "behaviorChoice",
+          "runStep": "encounterPaidWindow",
+          "ownerSide": "runner",
+          "saveLoad": true
+        },
+        {
+          "name": "encounter-paid-window",
+          "decisionKind": "runTiming",
+          "runStep": "encounterPaidWindow",
+          "ownerSide": "runner",
+          "saveLoad": true
+        }
+      ],
+      "expectedEventOrder": [
+        "encounter-initialized",
+        "run-timing-window-opened:encounterPaidWindow"
+      ]
+    }
+  ],
+  "citations": [
+    "CR 26.03 6.9.3a: encounter initialization creates the encounter before the encounter paid window",
+    "CR 26.03 6.9.3b: the existing encounter paid window follows encounter initialization",
+    "CR 26.03 6.9.4e: the final after-movement paid window completes before the Runner approaches the server",
+    "CR 26.03 6.9.4g: the Runner approaches the attacked server after the final after-movement window",
+    "CR 26.03 6.9.5a: success is declared after the approach-server reaction boundary without a new paid window",
+    "CR 26.03 9.1.1-9.1.8: mandatory and optional triggered abilities are ordered at the occurrence checkpoint",
+    "CR 26.03 9.2.8: checkpoint effects resolve before the next timing decision",
+    "CR 26.03 4.3: hidden HQ card identities are visible only to the Corp chooser"
+  ],
+  "crossCheckNote": "Jinteki.net was used as a behavioral cross-check for the compressed approach/encounter prompts; CR 26.03 is authoritative. The fixture keeps the engine's existing paid windows explicit and records reactions as checkpoint boundaries, not invented paid windows. HQ cost-card IDs are present only in the Corp-owned chooser observation.",
+  "excluded": [
+    "ENG-421 repeated bioroid abilities",
+    "ENG-422 normal versus ignore-cost Corp ICE installs",
+    "ENG-423 run-scoped steal/trash restrictions",
+    "ENG-424 Mayfly delayed run-end trash",
+    "ENG-425 Jailbreak run-event lifecycle",
+    "SCN-401 full repeated-reaction and topology evidence"
+  ]
+}

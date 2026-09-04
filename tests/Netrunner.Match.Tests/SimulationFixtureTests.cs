@@ -9,7 +9,7 @@ public sealed class SimulationFixtureTests
     private const string BasicFixtureId = "sim-slice44-batch3-basic";
     private const string ExpandedFixtureId = "sim-slice44-batch3-expanded";
     private const string GatewayBehaviorRegistryVersion = "gateway-m4-4.5-c1";
-    private const string GatewayBehaviorCatalogFingerprint = "53b1aa3cf6656f1e837d1c2ecfcad6f9680254d78410b709e1bab20b6d7a4396";
+    private const string GatewayBehaviorCatalogFingerprint = "c170516786fef0130e37153f246faf3a2d74249311ec6e49751727a9429f1a25";
 
     private static readonly HashSet<string> AllowedCorpCodes = new(StringComparer.Ordinal)
     {
@@ -76,7 +76,7 @@ public sealed class SimulationFixtureTests
                 .Select(static card => card.Code)
                 .Distinct(StringComparer.Ordinal)
                 .OrderBy(static code => code));
-        Assert.Equal(43, fullCatalog.AllDefinitionIds.Count);
+        Assert.Equal(44, fullCatalog.AllDefinitionIds.Count);
         Assert.All(
             AllowedCorpCodes.Concat(AllowedRunnerCodes),
             code => Assert.Contains(new CardDefinitionId(code), fullCatalog.AllDefinitionIds));

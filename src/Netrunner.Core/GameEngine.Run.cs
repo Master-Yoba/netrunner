@@ -1269,6 +1269,7 @@ public static partial class GameEngine
             initiatingSide,
             endReason,
             successful));
+        ExpireRunLingeringEffects(working, run);
         // CR 26.03 6.9.6/8.6.7: the played run event is trashed to the
         // Runner's heap faceup/public when the run ends; its hosted credits
         // expired with the pool above.
@@ -1324,6 +1325,50 @@ public static partial class GameEngine
                 initiatingSource,
                 attackedServer,
                 successful);
+        }
+    }
+
+    /// <summary>
+    /// Expires every run-local effect at the single run-end boundary. An
+    /// authenticated icebreaker cleanup may move its still-active physical
+    /// source to the Runner heap; a source that moved or became inactive is
+    /// intentionally left untouched. Matching the catalog declaration keeps
+    /// this generic for future breakers without definition-ID branches.
+    /// </summary>
+    private static void ExpireRunLingeringEffects(WorkingState working, RunState run)
+    {
+        foreach (RunLingeringEffect effect in run.LingeringEffects)
+        {
+            Emit(working, EngineEventKinds.LingeringEffectExpired, new LingeringEffectExpiredEventPayload(
+                effect.Id,
+                effect.Expiry == RunLingeringEffectExpiry.Run
+                    ? LingeringEffectExpiry.Run
+                    : LingeringEffectExpiry.Encounter));
+
+            if (effect.Expiry != RunLingeringEffectExpiry.Run
+                || effect.Kind != RunLingeringEffectKind.IcebreakerRunEndCleanup
+                || effect.SourceCardId is not { } sourceCardId)
+            {
+                continue;
+            }
+
+            CardInstanceState? source = working.Cards.FirstOrDefault(card => card.Id == sourceCardId);
+            if (source is null
+                || source.OwnerSide != PlayerSide.Runner
+                || !RuntimeCardActivity.IsActive(source, working.Zones)
+                || !working.BehaviorCatalog.TryGetIcebreaker(source.DefinitionId, out IcebreakerBehaviorSpec? sourceSpec)
+                || sourceSpec.RunEndCleanup is not { } cleanup
+                || cleanup.BehaviorId != effect.BehaviorId)
+            {
+                continue;
+            }
+
+            ZoneState sourceZone = working.Zones.Single(zone => zone.Id == source.ZoneId);
+            TrashCard(working, source, sourceZone, GetZone(working, ZoneKind.RunnerHeap));
+            if (working.RulesState?.Programs.Any(program => program.CardId == sourceCardId) == true)
+            {
+                RemoveProgramRegistration(working, sourceCardId);
+            }
         }
     }
 
@@ -1455,6 +1500,9 @@ public static partial class GameEngine
                 break;
             case (ActionKind.PumpBreaker, RunBreakerParameters pump):
                 ConsumeRunPumpBreaker(working, run, pump.BreakerId, pump.HostedCredits);
+                break;
+            case (ActionKind.UseBioroidAbility, RunBioroidAbilityParameters bioroid):
+                ConsumeRunBioroidAbility(working, run, bioroid);
                 break;
             case (ActionKind.JackOut, NoActionParameters):
                 ConsumeRunJackOut(working, run);
@@ -2174,11 +2222,149 @@ public static partial class GameEngine
             iceId,
             encounter.Status,
             nextSubroutines));
+        if (breakerSpec.RunEndCleanup is { } runEndCleanup
+            && !brokenRun.LingeringEffects.Any(effect =>
+                effect.Expiry == RunLingeringEffectExpiry.Run
+                && effect.Kind == RunLingeringEffectKind.IcebreakerRunEndCleanup
+                && effect.SourceCardId == breakerId
+                && effect.BehaviorId == runEndCleanup.BehaviorId))
+        {
+            RunEffectId effectId = new($"effect:run-end:{run.Id.Value}:{breakerId.Value}:{runEndCleanup.BehaviorId}");
+            brokenRun = brokenRun.WithLingeringEffects(
+                brokenRun.LingeringEffects.Append(
+                    new RunLingeringEffect(
+                        effectId,
+                        runEndCleanup.BehaviorId,
+                        breakerId,
+                        RunLingeringEffectExpiry.Run,
+                        valueAdjustment: null,
+                        kind: RunLingeringEffectKind.IcebreakerRunEndCleanup)).ToArray());
+            Emit(working, EngineEventKinds.LingeringEffectAdded, new LingeringEffectAddedEventPayload(
+                effectId,
+                runEndCleanup.BehaviorId,
+                LingeringEffectExpiry.Run));
+        }
+
         Emit(working, EngineEventKinds.SubroutinesBroken, new SubroutinesBrokenEventPayload(
             run.Id,
             encounter.Id,
             breakerId,
             quantity));
+        SetRunTiming(working, brokenRun.WithTiming(
+            RunTimingStep.EncounterPaidWindow,
+            brokenRun.CurrentIceIndex,
+            brokenRun.CurrentIceId,
+            brokenRun.Successful,
+            brokenRun.Unsuccessful,
+            brokenRun.EndReason,
+            new RunPriorityState(
+                priority.Version,
+                RunPriorityWindowKind.EncounterPaid,
+                PlayerSide.Runner,
+                0,
+                priority.CorpMayRezApproachedIce,
+                priority.CorpMayRezNonIce),
+            brokenRun.Encounter,
+            brokenRun.AccessState));
+    }
+
+    private static void ConsumeRunBioroidAbility(
+        WorkingState working,
+        RunState run,
+        RunBioroidAbilityParameters parameters)
+    {
+        RunPriorityState priority = run.Priority
+            ?? throw new ResolutionFailureException("A bioroid ability requires encounter priority state.");
+        RunEncounterState encounter = run.Encounter
+            ?? throw new ResolutionFailureException("A bioroid ability requires an initialized encounter.");
+        if (run.Step != RunTimingStep.EncounterPaidWindow
+            || priority.PriorityHolder != PlayerSide.Runner
+            || encounter.Status != RunEncounterStatus.Initialized)
+        {
+            throw new ResolutionFailureException(
+                "A bioroid ability is legal only while the Runner has priority in an initialized encounter paid window.");
+        }
+
+        if (encounter.IceId != parameters.IceId)
+        {
+            throw new ResolutionFailureException(
+                $"Bioroid ability target ICE '{parameters.IceId}' is not the current encountered ICE '{encounter.IceId}'.");
+        }
+
+        CardInstanceState ice = GetCard(working, encounter.IceId);
+        if (!working.BehaviorCatalog.TryGetIce(ice.DefinitionId, out IceBehaviorSpec? iceSpec))
+        {
+            throw new ResolutionFailureException(
+                $"Encounter ICE '{ice.DefinitionId}' is not registered in the ICE behavior spec catalog.");
+        }
+
+        EncounteredBioroidAbilitySpec? declaration = iceSpec.EncounteredBioroidAbilities?
+            .SingleOrDefault(ability => ability.Key == parameters.AbilityKey);
+        if (declaration is null)
+        {
+            throw new ResolutionFailureException(
+                $"ICE '{ice.DefinitionId}' does not declare encountered-bioroid ability '{parameters.AbilityKey}'.");
+        }
+
+        if (parameters.Cost != declaration.Cost)
+        {
+            throw new ResolutionFailureException("The frozen bioroid ability cost is stale or forged.");
+        }
+
+        RunSubroutineState subroutine = encounter.Subroutines
+            .SingleOrDefault(candidate => candidate.Id == parameters.SubroutineId)
+            ?? throw new ResolutionFailureException(
+                $"Subroutine '{parameters.SubroutineId}' is not part of the current encounter.");
+        if (subroutine.Broken || subroutine.Resolved)
+        {
+            throw new ResolutionFailureException(
+                $"Subroutine '{parameters.SubroutineId}' is no longer an unbroken encounter subroutine.");
+        }
+
+        if (subroutine.Ordinal < 0 || subroutine.Ordinal >= iceSpec.Subroutines.Count)
+        {
+            throw new ResolutionFailureException(
+                $"Subroutine '{parameters.SubroutineId}' has an ordinal outside the encountered ICE declaration.");
+        }
+
+        PlayerState runner = GetPlayer(working, PlayerSide.Runner);
+        if (runner.Clicks < declaration.Cost.Amount)
+        {
+            throw new ResolutionFailureException(
+                $"The Runner cannot pay the {declaration.Cost.Amount} click cost of bioroid ability '{declaration.Key}'.");
+        }
+
+        // LoseClick is intentionally paid through the typed behavior-cost
+        // path, not SpendClick: this preserves the semantic distinction from
+        // a structured option that spends a click as an action cost.
+        ApplyClickDelta(working, runner.Id, -declaration.Cost.Amount);
+
+        var nextSubroutines = new List<RunSubroutineState>(encounter.Subroutines.Count);
+        foreach (RunSubroutineState candidate in encounter.Subroutines)
+        {
+            nextSubroutines.Add(candidate.Id == subroutine.Id
+                ? new RunSubroutineState(
+                    candidate.Version,
+                    candidate.Id,
+                    candidate.Ordinal,
+                    true,
+                    candidate.Resolved)
+                : candidate);
+        }
+
+        RunState brokenRun = run.WithEncounter(new RunEncounterState(
+            encounter.Version,
+            encounter.Id,
+            encounter.IceId,
+            encounter.Status,
+            nextSubroutines));
+        Emit(working, EngineEventKinds.BioroidAbilityUsed, new BioroidAbilityUsedEventPayload(
+            run.Id,
+            encounter.Id,
+            encounter.IceId,
+            subroutine.Id,
+            declaration.Key,
+            declaration.Cost.Amount));
         SetRunTiming(working, brokenRun.WithTiming(
             RunTimingStep.EncounterPaidWindow,
             brokenRun.CurrentIceIndex,
@@ -2433,6 +2619,40 @@ public static partial class GameEngine
             int unbrokenCount = run.Encounter.Subroutines.Count(subroutine => !subroutine.Broken);
             PlayerState runner = GetPlayer(working, PlayerSide.Runner);
             long availableCredits = (long)runner.Credits + run.RunCredits;
+
+            // Encountered bioroid interface abilities are separate from the
+            // installed icebreaker loop below. They do not inspect breaker
+            // subtype or strength, and each action names one exact currently
+            // unbroken subroutine so repeated uses remain independently
+            // materialized until clicks or targets are exhausted.
+            if (iceSpec.EncounteredBioroidAbilities is { Count: > 0 } bioroidAbilities)
+            {
+                foreach (EncounteredBioroidAbilitySpec ability in bioroidAbilities)
+                {
+                    if (runner.Clicks < ability.Cost.Amount)
+                    {
+                        continue;
+                    }
+
+                    foreach (RunSubroutineState subroutine in run.Encounter.Subroutines)
+                    {
+                        if (subroutine.Broken || subroutine.Resolved)
+                        {
+                            continue;
+                        }
+
+                        actions.Add(new LegalAction(
+                            working.Allocator.NextActionId(),
+                            ActionKind.UseBioroidAbility,
+                            $"Use {ability.Key} to break subroutine {subroutine.Ordinal + 1} on {encounteredIce.Id.Value} (lose {ability.Cost.Amount} click)",
+                            new RunBioroidAbilityParameters(
+                                encounteredIce.Id,
+                                subroutine.Id,
+                                ability.Key,
+                                ability.Cost)));
+                    }
+                }
+            }
 
             foreach (ZoneState rigZone in working.Zones)
             {

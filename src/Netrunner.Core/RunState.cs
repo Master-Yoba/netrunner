@@ -107,6 +107,16 @@ public enum RunLingeringEffectExpiry
 }
 
 /// <summary>
+/// Optional provenance discriminator for a run-local lingering effect. The
+/// legacy null shape remains valid for existing effects; an effect that may
+/// move a physical source at run end must carry the explicit cleanup kind.
+/// </summary>
+public enum RunLingeringEffectKind
+{
+    IcebreakerRunEndCleanup,
+}
+
+/// <summary>
 /// A typed value adjustment carried by a run lingering effect. The enclosing
 /// effect supplies the expiry boundary; this payload supplies both physical
 /// provenance and the target so a source may be removed without changing an
@@ -562,9 +572,23 @@ public sealed record RunLingeringEffect
         string behaviorId,
         CardInstanceId? sourceCardId,
         RunLingeringEffectExpiry expiry,
-        RunValueAdjustment? valueAdjustment = null)
+        RunValueAdjustment? valueAdjustment = null,
+        RunLingeringEffectKind? kind = null)
     {
         ArgumentNullException.ThrowIfNull(behaviorId);
+        if (kind is { } declaredKind && !Enum.IsDefined(declaredKind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(kind));
+        }
+
+        if (kind == RunLingeringEffectKind.IcebreakerRunEndCleanup
+            && (expiry != RunLingeringEffectExpiry.Run || sourceCardId is null || valueAdjustment is not null))
+        {
+            throw new ArgumentException(
+                "An icebreaker run-end cleanup must expire at run end, identify a physical source, and carry no value adjustment.",
+                nameof(kind));
+        }
+
         if (valueAdjustment is not null && expiry != RunLingeringEffectExpiry.Encounter)
         {
             throw new ArgumentException(
@@ -585,6 +609,7 @@ public sealed record RunLingeringEffect
         SourceCardId = sourceCardId;
         Expiry = expiry;
         ValueAdjustment = valueAdjustment;
+        Kind = kind;
     }
 
     public RunLingeringEffect(
@@ -592,8 +617,9 @@ public sealed record RunLingeringEffect
         string behaviorId,
         CardInstanceId? sourceCardId,
         RunLingeringEffectExpiry expiry,
-        RunValueAdjustment? valueAdjustment = null)
-        : this(1, id, behaviorId, sourceCardId, expiry, valueAdjustment)
+        RunValueAdjustment? valueAdjustment = null,
+        RunLingeringEffectKind? kind = null)
+        : this(1, id, behaviorId, sourceCardId, expiry, valueAdjustment, kind)
     {
     }
 
@@ -625,7 +651,15 @@ public sealed record RunLingeringEffect
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public RunValueAdjustment? ValueAdjustment { get; private set; }
 
-    internal RunLingeringEffect Copy() => new(Version, Id, BehaviorId, SourceCardId, Expiry, ValueAdjustment);
+    /// <summary>
+    /// Explicit effect provenance. Null is retained for legacy encounter and
+    /// generic run effects; run-end physical cleanup uses the typed kind.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public RunLingeringEffectKind? Kind { get; private set; }
+
+    internal RunLingeringEffect Copy() => new(Version, Id, BehaviorId, SourceCardId, Expiry, ValueAdjustment, Kind);
 }
 
 /// <summary>

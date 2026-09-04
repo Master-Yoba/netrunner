@@ -42,6 +42,7 @@ public enum ActionKind
     RezIce,
     BreakSubroutines,
     PumpBreaker,
+    UseBioroidAbility,
     JackOut,
     ContinueRun,
     TrashProgram,
@@ -80,6 +81,7 @@ public enum ActionKind
 [JsonDerivedType(typeof(RunIceParameters), "run-ice")]
 [JsonDerivedType(typeof(RunBreakerParameters), "run-breaker")]
 [JsonDerivedType(typeof(RunBreakParameters), "run-break")]
+[JsonDerivedType(typeof(RunBioroidAbilityParameters), "run-bioroid-ability")]
 [JsonDerivedType(typeof(NoActionParameters), "none")]
 [JsonDerivedType(typeof(TriggerChoiceParameters), "trigger")]
 [JsonDerivedType(typeof(TriggerOrderParameters), "trigger-order")]
@@ -584,6 +586,82 @@ public sealed record RunBreakParameters : ActionParameters
 
     [JsonIgnore]
     public int RunCredits => HostedCredits;
+}
+
+/// <summary>
+/// Typed target for the Runner's dedicated encountered-bioroid interface
+/// ability. The action names the physical ICE, the exact subroutine to break,
+/// and the frozen typed lose-click cost. It never carries an installed
+/// icebreaker identity or a structured option click cost.
+/// </summary>
+public sealed record RunBioroidAbilityParameters : ActionParameters
+{
+    [JsonConstructor]
+    public RunBioroidAbilityParameters(
+        CardInstanceId iceId,
+        SubroutineId subroutineId,
+        string abilityKey,
+        BehaviorCost cost)
+    {
+        if (!StableIdentifier.TryValidate(iceId.Value))
+        {
+            throw new ArgumentException("A bioroid ability must identify a stable ICE card.", nameof(iceId));
+        }
+
+        if (!StableIdentifier.TryValidate(subroutineId.Value))
+        {
+            throw new ArgumentException("A bioroid ability must identify a stable subroutine.", nameof(subroutineId));
+        }
+
+        if (!StableIdentifier.TryValidate(abilityKey))
+        {
+            throw new ArgumentException("A bioroid ability key must be a stable identifier.", nameof(abilityKey));
+        }
+
+        ArgumentNullException.ThrowIfNull(cost);
+        if (cost.Kind != BehaviorCostKind.LoseClick || cost.Amount != 1)
+        {
+            throw new ArgumentException(
+                "A bioroid ability action must carry exactly one typed lost click.",
+                nameof(cost));
+        }
+
+        IceId = iceId;
+        SubroutineId = subroutineId;
+        AbilityKey = abilityKey;
+        Cost = cost;
+    }
+
+    public RunBioroidAbilityParameters(
+        CardInstanceId iceId,
+        SubroutineId subroutineId,
+        string abilityKey)
+        : this(
+            iceId,
+            subroutineId,
+            abilityKey,
+            new BehaviorCost(BehaviorCostKind.LoseClick, 1))
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId IceId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public SubroutineId SubroutineId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string AbilityKey { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public BehaviorCost Cost { get; private set; }
+
+    [JsonIgnore]
+    public int ClickCost => Cost.Amount;
 }
 
 /// <summary>
@@ -1261,6 +1339,11 @@ public sealed class PendingDecision
             runBreak.Quantity,
             runBreak.HostedCredits,
             runBreak.CostQuote),
+        RunBioroidAbilityParameters bioroid => new RunBioroidAbilityParameters(
+            bioroid.IceId,
+            bioroid.SubroutineId,
+            bioroid.AbilityKey,
+            bioroid.Cost),
         NoActionParameters => new NoActionParameters(),
         TriggerChoiceParameters trigger => new TriggerChoiceParameters(trigger.TriggerId),
         TriggerOrderParameters order => new TriggerOrderParameters(order.TriggerId),

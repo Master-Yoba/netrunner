@@ -372,11 +372,13 @@ public static class ActionsRegionPresenter
             [
                 ActionKind.GainCredit,
                 ActionKind.DrawCard,
+                ActionKind.PlayCard,
                 ActionKind.InstallCard,
                 ActionKind.ChooseBehavior,
             ],
             DecisionKind.TurnDiscard => [ActionKind.ChooseCard],
             DecisionKind.BehaviorChoice => [ActionKind.ChooseBehavior],
+            DecisionKind.TriggerChoice => [ActionKind.UseTrigger, ActionKind.DeclineTrigger],
             DecisionKind.InstallChoice => [ActionKind.InstallCard],
             DecisionKind.InterruptChoice =>
             [
@@ -394,6 +396,7 @@ public static class ActionsRegionPresenter
                 ActionKind.RezIce,
                 ActionKind.BreakSubroutines,
                 ActionKind.PumpBreaker,
+                ActionKind.UseBioroidAbility,
                 ActionKind.JackOut,
                 ActionKind.ContinueRun,
                 ActionKind.ChooseBreachCandidate,
@@ -423,6 +426,7 @@ public static class ActionsRegionPresenter
             DecisionKind.TurnAction => "BASIC ACTIONS ISSUED BY CORE",
             DecisionKind.TurnDiscard => "FORCED DISCARD",
             DecisionKind.BehaviorChoice => "BEHAVIOR CHOICE ISSUED BY CORE",
+            DecisionKind.TriggerChoice => "TRIGGER CHOICE ISSUED BY CORE",
             DecisionKind.InstallChoice => "INSTALL CHOICE ISSUED BY CORE",
             DecisionKind.InterruptChoice => "INTERRUPT CHOICE ISSUED BY CORE",
             DecisionKind.RunTiming => "RUN WINDOW ACTIONS ISSUED BY CORE",
@@ -441,7 +445,8 @@ public static class ActionsRegionPresenter
     {
         ArgumentNullException.ThrowIfNull(action);
         return GetTargetCardId(action.Parameters) is not null
-            || action.Parameters is BreachCandidateParameters;
+            || action.Parameters is BreachCandidateParameters
+            || Slice45PresentationProjector.GetTargetServerId(action.Parameters) is not null;
     }
 
     public static bool IsAccessAction(LegalActionViewModel action)
@@ -459,6 +464,7 @@ public static class ActionsRegionPresenter
         CardChoiceParameters value => value.CardId.Value,
         InstallCardParameters value => value.CardId.Value,
         RezCardParameters value => value.CardId.Value,
+        RunBioroidAbilityParameters value => value.IceId.Value,
         RunIceParameters value => value.IceId.Value,
         RunBreakerParameters value => value.BreakerId.Value,
         RunBreakParameters value => value.BreakerId.Value,
@@ -466,6 +472,14 @@ public static class ActionsRegionPresenter
         BreachCandidateParameters { CardId: { } cardId } => cardId.Value,
         _ => null,
     };
+
+    /// <summary>
+    /// Returns a viewer-safe typed server target for a run-event play. The
+    /// action payload is the only source; card text and definition IDs are
+    /// never consulted.
+    /// </summary>
+    public static string? GetTargetServerId(ActionParameters parameters) =>
+        Slice45PresentationProjector.GetTargetServerId(parameters);
 
     private static string FormatCardIds(IReadOnlyList<CardInstanceId> cardIds) =>
         string.Join(", ", cardIds.Select(static cardId => cardId.Value));

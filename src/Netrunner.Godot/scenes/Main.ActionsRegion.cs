@@ -68,6 +68,16 @@ public partial class Main
 			return;
 		}
 
+		Slice45DecisionViewModel slice45 = Slice45PresentationProjector.Present(snapshot.View);
+		if (slice45.IsProminent)
+		{
+			_actions.AddChild(MakeLabel(
+				$"SLICE 4.5 OPTIONS · {slice45.Surface.ToString().ToUpperInvariant()} · "
+				+ $"ACTING PLAYER {slice45.ActingPlayer!.Value.ToString().ToUpperInvariant()}",
+				11,
+				Warning));
+		}
+
 		if (_stagedAction is { } staged && _stagedDecision is { } stagedDecision)
 		{
 			_smokeTargetControlsObserved |= _smokeTest;
@@ -77,7 +87,7 @@ public partial class Main
 			selected.AddChild(selectedContent);
 			selectedContent.AddChild(MakeLabel("TARGET SELECTED · confirm or cancel", 12, Warning));
 			selectedContent.AddChild(MakeLabel(
-				$"{staged.Kind.ToString().ToUpperInvariant()} · {staged.Description}\n"
+				$"{Slice45PresentationProjector.Label(staged)}\n"
 				+ "No engine action has been submitted yet.",
 				11,
 				Colors.White));
@@ -105,13 +115,12 @@ public partial class Main
 			_actions.AddChild(MakeLabel(group.Label, 11, Accent));
 			foreach (LegalActionViewModel action in group.Actions)
 			{
-				bool targeted = ActionsRegionPresenter.GetTargetCardId(action.Parameters) is not null
-					|| action.Parameters is BreachCandidateParameters;
+				bool targeted = ActionsRegionPresenter.IsTargetedAction(action);
 				Button button = new()
 				{
 					Text = targeted
-						? $"SELECT TARGET · {action.Kind}: {action.Description}"
-						: $"{action.Kind}: {action.Description}",
+						? $"SELECT TARGET · {Slice45PresentationProjector.Label(action)}"
+						: Slice45PresentationProjector.Label(action),
 					Alignment = HorizontalAlignment.Left,
 					Disabled = Volatile.Read(ref _submissionInFlight) != 0,
 				};

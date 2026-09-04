@@ -25,6 +25,7 @@ public static class GatewayBehaviorCatalog
             .AddIce(GatewayIceBehaviorSpecs.IceSpecs)
             .AddIcebreaker(GatewayIcebreakerBehaviorSpecs.IcebreakerSpecs)
             .AddIcebreaker(GatewayBatch3StrengthBehaviorSpecs.IcebreakerSpecs)
+            .AddIcebreaker(GatewayBatch4IcebreakerBehaviorSpecs.IcebreakerSpecs)
             .AddRunEvent(GatewayRunEventBehaviorSpecs.RunEventSpecs)
             .AddAgenda(GatewayAgendaBehaviorSpecs.AgendaSpecs)
             .AddAsset(GatewayAssetBehaviorSpecs.AssetSpecs)

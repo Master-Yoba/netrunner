@@ -17,7 +17,8 @@ public sealed record IceBehaviorSpec
         int rezCost,
         IReadOnlyList<IceSubroutineSpec> subroutines,
         IReadOnlyList<IceStrengthModifierSpec> strengthModifiers,
-        IReadOnlyList<BehaviorValueModifier>? valueModifiers = null)
+        IReadOnlyList<BehaviorValueModifier>? valueModifiers = null,
+        IReadOnlyList<EncounteredBioroidAbilitySpec>? encounteredBioroidAbilities = null)
     {
         DefinitionId = definitionId;
         Strength = strength;
@@ -28,6 +29,7 @@ public sealed record IceBehaviorSpec
         Subroutines = new ReadOnlyCollection<IceSubroutineSpec>(subroutines.ToArray());
         StrengthModifiers = new ReadOnlyCollection<IceStrengthModifierSpec>(strengthModifiers.ToArray());
         ValueModifiers = FreezeValueModifiers(valueModifiers);
+        EncounteredBioroidAbilities = FreezeEncounteredBioroidAbilities(encounteredBioroidAbilities);
         if (strength < 0)
         {
             throw new ArgumentException(
@@ -73,6 +75,15 @@ public sealed record IceBehaviorSpec
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<BehaviorValueModifier>? ValueModifiers { get; }
 
+    /// <summary>
+    /// Optional Runner interface abilities printed on an encountered bioroid
+    /// ICE. The engine materializes these as dedicated encounter actions;
+    /// they are deliberately not generic installed-card abilities or
+    /// icebreaker declarations.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<EncounteredBioroidAbilitySpec>? EncounteredBioroidAbilities { get; }
+
     private static ReadOnlyCollection<BehaviorValueModifier>? FreezeValueModifiers(
         IReadOnlyList<BehaviorValueModifier>? valueModifiers)
     {
@@ -91,6 +102,91 @@ public sealed record IceBehaviorSpec
 
         return new ReadOnlyCollection<BehaviorValueModifier>(copy);
     }
+
+    private static ReadOnlyCollection<EncounteredBioroidAbilitySpec>? FreezeEncounteredBioroidAbilities(
+        IReadOnlyList<EncounteredBioroidAbilitySpec>? abilities)
+    {
+        if (abilities is null or { Count: 0 })
+        {
+            return null;
+        }
+
+        EncounteredBioroidAbilitySpec[] copy = abilities.ToArray();
+        if (copy.Any(static ability => ability is null))
+        {
+            throw new ArgumentException(
+                "Encountered-bioroid ability declarations must not contain null entries.",
+                nameof(abilities));
+        }
+
+        if (copy.Select(static ability => ability.Key).Distinct(StringComparer.Ordinal).Count() != copy.Length)
+        {
+            throw new ArgumentException(
+                "Encountered-bioroid ability declarations must not repeat an ability key.",
+                nameof(abilities));
+        }
+
+        return new ReadOnlyCollection<EncounteredBioroidAbilitySpec>(copy);
+    }
+}
+
+/// <summary>
+/// A typed ability that a Runner may use while an ICE carrying the
+/// declaration is encountered. This contract is intentionally narrower than
+/// a generic paid ability: the ability pays a typed lose-click cost and names
+/// one exact unbroken encounter subroutine to break.
+/// </summary>
+public sealed record EncounteredBioroidAbilitySpec
+{
+    [JsonConstructor]
+    public EncounteredBioroidAbilitySpec(
+        string key,
+        BehaviorCost cost,
+        int breakCount = 1)
+    {
+        if (!StableIdentifier.TryValidate(key))
+        {
+            throw new ArgumentException(
+                "An encountered-bioroid ability key must be a stable identifier.",
+                nameof(key));
+        }
+
+        ArgumentNullException.ThrowIfNull(cost);
+        if (cost.Kind != BehaviorCostKind.LoseClick || cost.Amount != 1)
+        {
+            throw new ArgumentException(
+                "An encountered-bioroid ability must cost exactly one typed lost click.",
+                nameof(cost));
+        }
+
+        if (breakCount != 1)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(breakCount),
+                "An encountered-bioroid ability must break exactly one subroutine.");
+        }
+
+        Key = key;
+        Cost = cost;
+        BreakCount = breakCount;
+    }
+
+    public EncounteredBioroidAbilitySpec(string key)
+        : this(key, new BehaviorCost(BehaviorCostKind.LoseClick, 1))
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string Key { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public BehaviorCost Cost { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int BreakCount { get; private set; }
 }
 
 /// <summary>One printed ICE subroutine, in printed order.</summary>
@@ -187,7 +283,8 @@ public sealed record IcebreakerBehaviorSpec
         int pumpCost,
         int pumpStrength,
         IReadOnlyList<BehaviorValueModifier>? valueModifiers = null,
-        BehaviorDynamicPumpDeclaration? dynamicPump = null)
+        BehaviorDynamicPumpDeclaration? dynamicPump = null,
+        IcebreakerRunEndCleanupSpec? runEndCleanup = null)
     {
         DefinitionId = definitionId;
         BaseStrength = baseStrength;
@@ -198,6 +295,7 @@ public sealed record IcebreakerBehaviorSpec
         PumpStrength = pumpStrength;
         ValueModifiers = FreezeValueModifiers(valueModifiers);
         DynamicPump = dynamicPump;
+        RunEndCleanup = runEndCleanup;
         if (baseStrength < 0)
         {
             throw new ArgumentException(
@@ -275,6 +373,14 @@ public sealed record IcebreakerBehaviorSpec
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public BehaviorDynamicPumpDeclaration? DynamicPump { get; }
 
+    /// <summary>
+    /// Optional typed run-end cleanup declaration. It identifies the
+    /// behavior declaration that may arm a run-scoped cleanup effect; it does
+    /// not arm or execute anything by itself.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IcebreakerRunEndCleanupSpec? RunEndCleanup { get; }
+
     private static ReadOnlyCollection<BehaviorValueModifier>? FreezeValueModifiers(
         IReadOnlyList<BehaviorValueModifier>? valueModifiers)
     {
@@ -293,6 +399,31 @@ public sealed record IcebreakerBehaviorSpec
 
         return new ReadOnlyCollection<BehaviorValueModifier>(copy);
     }
+}
+
+/// <summary>
+/// Authenticated declaration for a run-end cleanup created by an
+/// icebreaker ability. The source card and declaration are retained in the
+/// run effect so cleanup can fail closed if the source later moves zones.
+/// </summary>
+public sealed record IcebreakerRunEndCleanupSpec
+{
+    [JsonConstructor]
+    public IcebreakerRunEndCleanupSpec(string behaviorId)
+    {
+        if (!StableIdentifier.TryValidate(behaviorId))
+        {
+            throw new ArgumentException(
+                "An icebreaker run-end cleanup behavior ID must be a stable identifier.",
+                nameof(behaviorId));
+        }
+
+        BehaviorId = behaviorId;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string BehaviorId { get; private set; }
 }
 
 /// <summary>
