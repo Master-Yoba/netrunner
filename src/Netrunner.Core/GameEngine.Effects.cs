@@ -37,6 +37,12 @@ public static partial class GameEngine
     {
         ArgumentNullException.ThrowIfNull(costs);
         ArgumentNullException.ThrowIfNull(effects);
+        if (effects.Instructions.Any(static instruction => instruction is BasicDrawEffect))
+        {
+            throw new ResolutionFailureException(
+                "BasicDrawEffect is reserved for the real click-for-card action and cannot be injected as a generic card effect.");
+        }
+
         return BeginResolution(state, new EffectResolutionFrame(controller, costs, effects), maxResolutionSteps);
     }
 
@@ -490,10 +496,46 @@ public static partial class GameEngine
             case AddLingeringEffect value: AddLingering(working, value.Effect); break;
             case RemoveLingeringEffect value: RemoveLingering(working, value.EffectId); break;
             case MoveCardEffect value: ApplyMoveCard(working, value.CardId, value.DestinationZoneId); break;
+            case BasicDrawEffect value: ApplyBasicDraw(working, value); break;
             case TurnBoundaryEffect:
             case GameplayOccurrenceEffect:
                 break;
             default: throw new ResolutionFailureException($"Unsupported effect instruction '{instruction.GetType().Name}'.");
+        }
+    }
+
+    private static void ApplyBasicDraw(WorkingState working, BasicDrawEffect effect)
+    {
+        if (effect.Side is not (PlayerSide.Corp or PlayerSide.Runner)
+            || effect.DrawCount <= 0)
+        {
+            throw new ResolutionFailureException("Basic draw side and count must be valid.");
+        }
+
+        for (int index = 0; index < effect.DrawCount; index++)
+        {
+            if (TryDrawCard(working, effect.Side))
+            {
+                continue;
+            }
+
+            if (effect.Side == PlayerSide.Corp)
+            {
+                CompleteTurnGame(working, PlayerSide.Runner, GameWinReason.DeckOut);
+                return;
+            }
+
+            // A replacement is a configured card effect and follows the
+            // existing behavior-draw Runner semantics: resolve whatever is
+            // available, then stop cleanly at an empty Stack.  A direct real
+            // click-for-card draw retains its historical rejection when no
+            // card is available at all.
+            if (effect.IsReplacement)
+            {
+                return;
+            }
+
+            throw new ResolutionFailureException("The Runner cannot draw from an empty stack.");
         }
     }
 

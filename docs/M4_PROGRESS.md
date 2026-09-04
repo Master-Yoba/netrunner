@@ -3923,3 +3923,38 @@ errors; runtime action expansion and full verification remain pending.
   CLI 54, Match 53), the direct M2 proof, solution formatting, and
   `git diff --check`. Docklands Pass remains unbound until the card-binding
   checkpoint; ENG-417 remains outside this commit.
+
+### 2026-09-04 — Checkpoint B2c ENG-417 basic-draw replacement accepted
+
+- Luna Max routed the real click-for-card action through a typed
+  `BasicDrawEffect` and the existing imminent-effect checkpoint/replacement
+  pipeline. A typed installed-source declaration supplies the replacement draw
+  count and stable reason key; catalog equality and fingerprints include that
+  declaration while absent/empty declarations preserve legacy JSON.
+- Every accepted real basic draw records an ordered occurrence ID in the active
+  formal-turn ledger, even when no replacement source is installed. Only the
+  first occurrence can materialize a replacement, so a late source cannot
+  re-arm it. The mandatory interrupt spends the click exactly once, consumes
+  its source-keyed First-X use only when accepted, deterministically arbitrates
+  multiple active sources without stacking them, and resets with the next
+  formal turn. Corp mandatory draws and generic card-effect draws remain on
+  their original paths and do not touch this ledger.
+- Materialized catalog interrupts retain source, definition, captured zone,
+  catalog/definition fingerprints, reason, count, controller, target, and
+  occurrence provenance. Runtime and load-time invariant reconstruction reject
+  forged declarations, fingerprints, inactive captured zones, controllers,
+  targets, first flags, duplicate/missing ledgers, and pre-consumed First-X
+  uses while still allowing the physical source to move after materialization.
+  Runner replacement draws stop cleanly when fewer than the configured cards
+  remain, avoiding an unresolvable mandatory interrupt; Corp exhaustion keeps
+  the existing deck-out rule.
+- D-416 applies because turn facts and pending effect frames gained persisted
+  fields: engine state schema moved from 7 to 8 and checked-in state fixtures
+  were re-pinned. The representative M2 initial/final hashes are now
+  `f135f1fc…` / `42d38c1c…`; its event hash remains `d20cdef9…`, with 32
+  actions/checkpoints, replay verification, and no trace problems.
+- Root independently passed the focused 13-test ENG-417 suite, all 1,007
+  solution tests (Core 717, Cards 153, AI 30, CLI 54, Match 53), the direct M2
+  proof, solution formatting, and `git diff --check`. Verbal Plasticity remains
+  unbound until the Batch 3 card-binding checkpoint. ENG-414 through ENG-418
+  are now accepted as reusable primitives.

@@ -108,7 +108,8 @@ public sealed record TurnFactsState
         IReadOnlyList<TagTurnChange>? tagTurnChanges = null,
         IReadOnlyList<FirstXUseKey>? firstXUseKeys = null,
         IReadOnlyList<CardInstanceId>? programInstallOccurrenceIds = null,
-        IReadOnlyList<ServerId>? hqBreachOccurrenceServerIds = null)
+        IReadOnlyList<ServerId>? hqBreachOccurrenceServerIds = null,
+        IReadOnlyList<OccurrenceId>? basicDrawOccurrenceIds = null)
     {
         Version = version;
         Side = side;
@@ -157,6 +158,8 @@ public sealed record TurnFactsState
             (programInstallOccurrenceIds ?? []).ToArray());
         HqBreachOccurrenceServerIds = new ReadOnlyCollection<ServerId>(
             (hqBreachOccurrenceServerIds ?? []).ToArray());
+        BasicDrawOccurrenceIds = new ReadOnlyCollection<OccurrenceId>(
+            (basicDrawOccurrenceIds ?? []).ToArray());
     }
 
     public TurnFactsState(PlayerSide side, int turnNumber, int clicksAllotted)
@@ -222,6 +225,15 @@ public sealed record TurnFactsState
     [JsonInclude]
     [JsonRequired]
     public IReadOnlyList<ServerId> HqBreachOccurrenceServerIds { get; private set; }
+
+    /// <summary>
+    /// Every accepted real click-for-card draw action in this formal turn.
+    /// The list is global to the turn facts, so installing a source after the
+    /// first draw cannot re-arm its declaration.
+    /// </summary>
+    [JsonInclude]
+    [JsonRequired]
+    public IReadOnlyList<OccurrenceId> BasicDrawOccurrenceIds { get; private set; }
 
     /// <summary>Whether this side has completed a successful run this turn.</summary>
     [JsonInclude]
@@ -368,6 +380,11 @@ public sealed record TurnFactsState
         WithFactCollections(
             hqBreachOccurrenceServerIds: HqBreachOccurrenceServerIds.Append(serverId).ToArray());
 
+    /// <summary>Records one accepted real basic-draw occurrence.</summary>
+    internal TurnFactsState RecordBasicDraw(OccurrenceId occurrenceId) =>
+        WithFactCollections(
+            basicDrawOccurrenceIds: BasicDrawOccurrenceIds.Append(occurrenceId).ToArray());
+
     /// <summary>Records a run attempt once, preserving first-seen server order.</summary>
     internal TurnFactsState MarkRunAttempted(ServerId serverId)
     {
@@ -509,7 +526,8 @@ public sealed record TurnFactsState
         IReadOnlyList<TagTurnChange>? tagTurnChanges = null,
         IReadOnlyList<FirstXUseKey>? firstXUseKeys = null,
         IReadOnlyList<CardInstanceId>? programInstallOccurrenceIds = null,
-        IReadOnlyList<ServerId>? hqBreachOccurrenceServerIds = null) => New(
+        IReadOnlyList<ServerId>? hqBreachOccurrenceServerIds = null,
+        IReadOnlyList<OccurrenceId>? basicDrawOccurrenceIds = null) => New(
         turnBegan: TurnBegan,
         mandatoryDrawPerformed: MandatoryDrawPerformed,
         actionPhaseEnded: ActionPhaseEnded,
@@ -526,7 +544,8 @@ public sealed record TurnFactsState
         tagTurnChanges: tagTurnChanges ?? TagTurnChanges,
         firstXUseKeys: firstXUseKeys ?? FirstXUseKeys,
         programInstallOccurrenceIds: programInstallOccurrenceIds ?? ProgramInstallOccurrenceIds,
-        hqBreachOccurrenceServerIds: hqBreachOccurrenceServerIds ?? HqBreachOccurrenceServerIds);
+        hqBreachOccurrenceServerIds: hqBreachOccurrenceServerIds ?? HqBreachOccurrenceServerIds,
+        basicDrawOccurrenceIds: basicDrawOccurrenceIds ?? BasicDrawOccurrenceIds);
 
     internal bool HasUsedAbility(CardInstanceId sourceCardId, string abilityKey) =>
         UsedAbilityKeys.Any(value => value.SourceCardId == sourceCardId
@@ -591,7 +610,8 @@ public sealed record TurnFactsState
         IReadOnlyList<TagTurnChange>? tagTurnChanges = null,
         IReadOnlyList<FirstXUseKey>? firstXUseKeys = null,
         IReadOnlyList<CardInstanceId>? programInstallOccurrenceIds = null,
-        IReadOnlyList<ServerId>? hqBreachOccurrenceServerIds = null) => new(
+        IReadOnlyList<ServerId>? hqBreachOccurrenceServerIds = null,
+        IReadOnlyList<OccurrenceId>? basicDrawOccurrenceIds = null) => new(
         Version,
         Side,
         TurnNumber,
@@ -612,7 +632,8 @@ public sealed record TurnFactsState
         tagTurnChanges,
         firstXUseKeys,
         programInstallOccurrenceIds ?? ProgramInstallOccurrenceIds,
-        hqBreachOccurrenceServerIds ?? HqBreachOccurrenceServerIds);
+        hqBreachOccurrenceServerIds ?? HqBreachOccurrenceServerIds,
+        basicDrawOccurrenceIds ?? BasicDrawOccurrenceIds);
 
 }
 
@@ -715,6 +736,12 @@ public sealed record TurnHistoryState
     {
         TurnFactsState current = RequireCurrent(side);
         return ReplaceCurrent(side, current.RecordHqBreach(serverId));
+    }
+
+    internal TurnHistoryState RecordBasicDraw(PlayerSide side, OccurrenceId occurrenceId)
+    {
+        TurnFactsState current = RequireCurrent(side);
+        return ReplaceCurrent(side, current.RecordBasicDraw(occurrenceId));
     }
 
     internal TurnHistoryState MarkRunAttempted(PlayerSide side, ServerId serverId)

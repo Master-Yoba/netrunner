@@ -604,18 +604,8 @@ public static partial class GameEngine
                 break;
             case ActionKind.DrawCard:
                 SpendClick(working, player.Id);
-                if (!TryDrawCard(working, frame.ActiveSide))
-                {
-                    if (frame.ActiveSide == PlayerSide.Corp)
-                    {
-                        CompleteTurnGame(working, PlayerSide.Runner, GameWinReason.DeckOut);
-                        return;
-                    }
-
-                    throw new ResolutionFailureException("The Runner cannot draw from an empty stack.");
-                }
-
-                break;
+                QueueBasicDrawAction(working, frame);
+                return;
             case ActionKind.EndTurn:
                 throw new ResolutionFailureException("EndTurn is not legal while clicks remain.");
             default:
@@ -630,6 +620,38 @@ public static partial class GameEngine
             TurnFrameStage.ActionPriority,
             TurnWindow(frame.ActiveSide),
             frame.ActiveSide);
+    }
+
+    /// <summary>
+    /// Opens the real click-for-card action as a typed effect transaction.
+    /// The click and turn fact are committed before the imminent checkpoint;
+    /// replacement declarations can therefore observe that this is the first
+    /// action while a stale/declined source can never re-arm it.
+    /// </summary>
+    private static void QueueBasicDrawAction(WorkingState working, TurnFrame frame)
+    {
+        TurnFactsState? facts = working.Turn.History?.ThisTurn(frame.ActiveSide);
+        bool firstBasicDraw = facts is { TurnBegan: true, BasicDrawOccurrenceIds.Count: 0 };
+        OccurrenceId occurrenceId = working.Allocator.NextOccurrenceId();
+        RecordTurnBasicDraw(working, occurrenceId);
+
+        working.ResolutionStack[^1] = new TurnFrame(
+            frame.Version,
+            frame.BehaviorId,
+            frame.ActiveSide,
+            frame.TurnNumber,
+            TurnFrameStage.ActionPriority,
+            TurnWindow(frame.ActiveSide),
+            frame.ActiveSide);
+        working.ResolutionStack.Add(new EffectResolutionFrame(
+            GetPlayer(working, frame.ActiveSide).Id,
+            new CostBundle(),
+            new EffectBundle(new BasicDrawEffect(
+                frame.ActiveSide,
+                1,
+                false,
+                occurrenceId,
+                firstBasicDraw))));
     }
 
     private static void EndTurnActionPhase(WorkingState working, TurnFrame frame)

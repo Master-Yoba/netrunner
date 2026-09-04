@@ -356,6 +356,13 @@ public static partial class GameEngine
                 "Turn-boundary occurrences may only be opened by the active turn frame.");
         }
 
+        if (frame is EffectResolutionFrame { Effects: { } basicDrawEffects }
+            && basicDrawEffects.Instructions.Any(static instruction => instruction is BasicDrawEffect))
+        {
+            throw new ResolutionFailureException(
+                "BasicDrawEffect may only be opened by the real click-for-card turn action.");
+        }
+
         var working = WorkingState.From(state, behaviorCatalog, runtimeCardCatalog);
         try
         {

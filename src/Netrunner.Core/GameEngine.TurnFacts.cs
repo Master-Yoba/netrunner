@@ -107,6 +107,34 @@ public static partial class GameEngine
     }
 
     /// <summary>
+    /// Records an accepted real click-for-card action in the active formal
+    /// turn. The occurrence ID is allocated before the checkpoint opens, so
+    /// the first-draw fact remains authoritative while a replacement choice
+    /// is pending and cannot be re-armed by a late source.
+    /// </summary>
+    private static void RecordTurnBasicDraw(WorkingState working, OccurrenceId occurrenceId)
+    {
+        TurnState turn = working.Turn;
+        TurnHistoryState? history = turn.History;
+        TurnFactsState? facts = history?.ThisTurn(turn.ActiveSide);
+        if (facts is null
+            || facts.Side != turn.ActiveSide
+            || facts.TurnNumber != turn.TurnNumber
+            || !facts.TurnBegan)
+        {
+            return;
+        }
+
+        ReplaceTurn(
+            working,
+            turn.ActiveSide,
+            turn.Phase,
+            turn.TurnNumber,
+            turn.Step,
+            history!.RecordBasicDraw(turn.ActiveSide, occurrenceId));
+    }
+
+    /// <summary>
     /// Records an actual HQ breach in the current formal turn and returns
     /// whether this occurrence is the first HQ breach of that turn. The
     /// occurrence is appended even when the server has already appeared so
@@ -134,6 +162,44 @@ public static partial class GameEngine
             turn.Step,
             history!.RecordHqBreach(turn.ActiveSide, serverId));
         return first;
+    }
+
+    /// <summary>
+    /// Consumes the FirstX source/key only after a catalog basic-draw
+    /// replacement has been selected. The invocation is already detached
+    /// from the source's live zone, so moving that source after materializing
+    /// the checkpoint does not invalidate the accepted use.
+    /// </summary>
+    private static void RecordTurnFirstBasicDrawUse(
+        WorkingState working,
+        InterruptInvocation invocation)
+    {
+        if (!invocation.IsCatalogInterrupt
+            || invocation.SourceCardId is not { } sourceCardId
+            || invocation.ReplacementReasonKey is not { } reasonKey
+            || invocation.SourceOwnerSide is not { } sourceSide)
+        {
+            return;
+        }
+
+        TurnState turn = working.Turn;
+        TurnHistoryState? history = turn.History;
+        TurnFactsState? facts = history?.ThisTurn(sourceSide);
+        if (facts is null
+            || facts.Side != sourceSide
+            || facts.TurnNumber != turn.TurnNumber
+            || !facts.TurnBegan)
+        {
+            throw new ResolutionFailureException("Basic-draw replacement use requires current formal-turn facts.");
+        }
+
+        ReplaceTurn(
+            working,
+            sourceSide,
+            turn.Phase,
+            turn.TurnNumber,
+            turn.Step,
+            history!.ConsumeFirstX(sourceSide, sourceCardId, reasonKey));
     }
 
     /// <summary>

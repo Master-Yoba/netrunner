@@ -99,6 +99,7 @@ public sealed record CostBundle
 [JsonDerivedType(typeof(MoveCardEffect), "move-card")]
 [JsonDerivedType(typeof(TurnBoundaryEffect), "turn-boundary")]
 [JsonDerivedType(typeof(GameplayOccurrenceEffect), "gameplay-occurrence")]
+[JsonDerivedType(typeof(BasicDrawEffect), "basic-draw")]
 public abstract record EffectInstruction;
 
 public sealed record CreditAdjustmentEffect : EffectInstruction
@@ -417,6 +418,50 @@ public sealed record GameplayOccurrenceEffect : EffectInstruction
     public bool? Successful { get; private set; }
 }
 
+/// <summary>
+/// Typed draw instruction for the real click-for-card action.  Replacement
+/// children carry the same primitive with <see cref="IsReplacement"/> set so
+/// they resolve as ordinary draws and cannot recursively re-materialize the
+/// first-draw replacement window.
+/// </summary>
+public sealed record BasicDrawEffect : EffectInstruction
+{
+    [JsonConstructor]
+    public BasicDrawEffect(
+        PlayerSide side,
+        int drawCount,
+        bool isReplacement = false,
+        OccurrenceId? occurrenceId = null,
+        bool isFirstBasicDraw = false)
+    {
+        Side = side;
+        DrawCount = drawCount;
+        IsReplacement = isReplacement;
+        OccurrenceId = occurrenceId;
+        IsFirstBasicDraw = isFirstBasicDraw;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerSide Side { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int DrawCount { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public bool IsReplacement { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public OccurrenceId? OccurrenceId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public bool IsFirstBasicDraw { get; private set; }
+}
+
 /// <summary>Frozen ordered list of typed effects.</summary>
 public sealed record EffectBundle
 {
@@ -457,6 +502,7 @@ public sealed record EffectBundle
             MoveCardEffect value => new MoveCardEffect(value.CardId, value.DestinationZoneId),
             TurnBoundaryEffect value => new TurnBoundaryEffect(value.Kind, value.Target, value.TurnNumber),
             GameplayOccurrenceEffect value => new GameplayOccurrenceEffect(value.Kind, value.Controller, value.SubjectCardId, value.ServerId, value.Successful),
+            BasicDrawEffect value => new BasicDrawEffect(value.Side, value.DrawCount, value.IsReplacement, value.OccurrenceId, value.IsFirstBasicDraw),
             _ => throw new ArgumentException($"Unknown effect instruction type '{instruction.GetType().Name}'.", nameof(instruction)),
         };
     }
@@ -638,6 +684,34 @@ public static class EffectInstructionValidator
                                 "effects.unexpected-run-outcome",
                                 $"{instructionPath}.successful",
                                 "Only a RunEnded occurrence may carry a success outcome.");
+                        }
+
+                        break;
+                    case BasicDrawEffect draw:
+                        if (draw.Side is not (PlayerSide.Corp or PlayerSide.Runner))
+                        {
+                            Add(violations, "effects.invalid-basic-draw-side", $"{instructionPath}.side", $"'{draw.Side}' is not a supported draw side.");
+                        }
+
+                        RequirePositive(draw.DrawCount, $"{instructionPath}.drawCount", "Basic draw count", violations);
+                        if (draw.IsReplacement && draw.IsFirstBasicDraw)
+                        {
+                            Add(violations, "effects.invalid-basic-draw-flags", instructionPath, "A replacement draw cannot also mark the first basic draw action.");
+                        }
+
+                        if (draw.IsReplacement && draw.OccurrenceId is not null)
+                        {
+                            Add(violations, "effects.unexpected-basic-draw-occurrence", $"{instructionPath}.occurrenceId", "A replacement draw must not carry the root basic-draw occurrence ID.");
+                        }
+
+                        if (!draw.IsReplacement && draw.OccurrenceId is null)
+                        {
+                            Add(violations, "effects.missing-basic-draw-occurrence", $"{instructionPath}.occurrenceId", "A real basic draw must carry its materialized occurrence ID.");
+                        }
+
+                        if (draw.OccurrenceId is { } occurrenceId)
+                        {
+                            RequireId(occurrenceId.Value, $"{instructionPath}.occurrenceId", "occurrence", violations);
                         }
 
                         break;

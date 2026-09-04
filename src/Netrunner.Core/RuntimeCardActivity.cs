@@ -6,6 +6,36 @@ namespace Netrunner.Core;
 /// </summary>
 internal static class RuntimeCardActivity
 {
+    /// <summary>
+    /// Checks the canonical installed-zone topology represented by a frozen
+    /// source snapshot. This deliberately does not inspect current card
+    /// membership: a source may move after an invocation is materialized.
+    /// </summary>
+    internal static bool IsActiveInstalledZone(
+        PlayerSide ownerSide,
+        ZoneState zone,
+        IReadOnlyList<ZoneState> zones,
+        IReadOnlyList<ServerState> servers)
+    {
+        return ownerSide switch
+        {
+            PlayerSide.Runner => zone.Kind == ZoneKind.RunnerRig
+                && zone.OwnerSide == PlayerSide.Runner
+                && zone.ServerId is null
+                && zones.Count(candidate => candidate.Kind == ZoneKind.RunnerRig
+                    && candidate.OwnerSide == PlayerSide.Runner
+                    && candidate.ServerId is null) == 1,
+            PlayerSide.Corp => zone.Kind is ZoneKind.ServerRoot or ZoneKind.ServerIce
+                && zone.OwnerSide == PlayerSide.Corp
+                && zone.ServerId is { } serverId
+                && servers.Any(server => server.Id == serverId
+                    && (zone.Kind == ZoneKind.ServerRoot
+                        ? server.RootZoneId == zone.Id
+                        : server.IceZoneId == zone.Id)),
+            _ => false,
+        };
+    }
+
     internal static bool IsActive(
         CardInstanceState card,
         IReadOnlyList<ZoneState> zones)

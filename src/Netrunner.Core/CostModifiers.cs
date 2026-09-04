@@ -92,6 +92,44 @@ public sealed record BehaviorFirstHqBreachAccessModifier
 }
 
 /// <summary>
+/// Typed declaration for an installed source that replaces the first real
+/// basic draw action of each formal turn with a draw of the declared count.
+/// The declaration is data-only; the source card and use ledger are supplied
+/// by the engine when the draw occurrence is materialized.
+/// </summary>
+public sealed record BehaviorFirstBasicDrawReplacement
+{
+    [JsonConstructor]
+    public BehaviorFirstBasicDrawReplacement(int drawCount, string reasonKey)
+    {
+        if (drawCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(drawCount),
+                "A first-basic-draw replacement count must be positive.");
+        }
+
+        if (!StableIdentifier.TryValidate(reasonKey))
+        {
+            throw new ArgumentException(
+                "A first-basic-draw replacement reason key must be a stable identifier.",
+                nameof(reasonKey));
+        }
+
+        DrawCount = drawCount;
+        ReasonKey = reasonKey;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int DrawCount { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string ReasonKey { get; private set; }
+}
+
+/// <summary>
 /// A typed run-source declaration for a credit adjustment to ICE rez costs.
 /// The declaration is copied onto the immutable run state when a run event
 /// starts a run; it is never re-read from the physical source while the run

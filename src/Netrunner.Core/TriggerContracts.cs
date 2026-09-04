@@ -30,6 +30,7 @@ public enum OccurrenceKind
     AgendaScoredOrStolen,
     CardAccessed,
     HostedCreditPoolEmptied,
+    BasicDraw,
 }
 
 public enum OccurrencePhase
@@ -181,6 +182,7 @@ public sealed record OccurrenceSnapshot
         MoveCardEffect value => new MoveCardEffect(value.CardId, value.DestinationZoneId),
         TurnBoundaryEffect value => new TurnBoundaryEffect(value.Kind, value.Target, value.TurnNumber),
         GameplayOccurrenceEffect value => new GameplayOccurrenceEffect(value.Kind, value.Controller, value.SubjectCardId, value.ServerId, value.Successful),
+        BasicDrawEffect value => new BasicDrawEffect(value.Side, value.DrawCount, value.IsReplacement, value.OccurrenceId, value.IsFirstBasicDraw),
         _ => throw new ArgumentException($"Unknown effect instruction type '{effect.GetType().Name}'.", nameof(effect)),
     };
 }
@@ -314,7 +316,8 @@ public sealed record TriggerCondition
             or OccurrenceKind.CardMove
             or OccurrenceKind.CounterAdjustment
             or OccurrenceKind.LingeringEffectAdded
-            or OccurrenceKind.LingeringEffectRemoved;
+            or OccurrenceKind.LingeringEffectRemoved
+            or OccurrenceKind.BasicDraw;
 
         static bool TryGetAmount(EffectInstruction effect, out int amount)
         {
@@ -787,12 +790,49 @@ public sealed record InterruptInvocation
         OccurrenceSnapshot occurrence,
         CostBundle costs,
         int maximumPreventionAmount,
-        EffectBundle replacementEffects)
+        EffectBundle replacementEffects,
+        string? interruptKey = null,
+        string? catalogFingerprint = null,
+        string? definitionFingerprint = null,
+        PlayerSide? sourceOwnerSide = null,
+        ZoneKind? sourceZoneKind = null,
+        int? basicDrawCount = null,
+        string? replacementReasonKey = null)
     {
         ArgumentNullException.ThrowIfNull(behaviorId);
         ArgumentNullException.ThrowIfNull(occurrence);
         ArgumentNullException.ThrowIfNull(costs);
         ArgumentNullException.ThrowIfNull(replacementEffects);
+        bool catalogFieldPresent = interruptKey is not null
+            || catalogFingerprint is not null
+            || definitionFingerprint is not null
+            || sourceOwnerSide is not null
+            || sourceZoneKind is not null
+            || basicDrawCount is not null
+            || replacementReasonKey is not null;
+        if (catalogFieldPresent
+            && (!StableIdentifier.TryValidate(interruptKey)
+                || !StableIdentifier.TryValidate(catalogFingerprint)
+                || !StableIdentifier.TryValidate(definitionFingerprint)
+                || sourceCardId is null
+                || sourceDefinitionId is null
+                || sourceZoneId is null
+                || sourceOwnerSide is null
+                || sourceZoneKind is null
+                || !Enum.IsDefined(sourceOwnerSide.Value)
+                || !Enum.IsDefined(sourceZoneKind.Value)
+                || !StableIdentifier.TryValidate(replacementReasonKey)
+                || basicDrawCount is null
+                || basicDrawCount <= 0))
+        {
+            throw new ArgumentException(
+                "A catalog interrupt invocation requires stable provenance, a complete source snapshot, and a positive replacement count.");
+        }
+
+        if (catalogFieldPresent && replacementEffects.Instructions.Count == 0)
+        {
+            throw new ArgumentException("A catalog interrupt invocation requires a replacement effect.", nameof(replacementEffects));
+        }
         Version = version;
         Id = id;
         Controller = controller;
@@ -806,6 +846,13 @@ public sealed record InterruptInvocation
         Costs = costs.Copy();
         MaximumPreventionAmount = maximumPreventionAmount;
         ReplacementEffects = replacementEffects.Copy();
+        InterruptKey = interruptKey;
+        CatalogFingerprint = catalogFingerprint;
+        DefinitionFingerprint = definitionFingerprint;
+        SourceOwnerSide = sourceOwnerSide;
+        SourceZoneKind = sourceZoneKind;
+        BasicDrawCount = basicDrawCount;
+        ReplacementReasonKey = replacementReasonKey;
     }
 
     public InterruptInvocation(InterruptRegistration registration, OccurrenceSnapshot occurrence)
@@ -887,6 +934,40 @@ public sealed record InterruptInvocation
     [JsonRequired]
     public EffectBundle ReplacementEffects { get; private set; }
 
+    /// <summary>Null for state-owned legacy interrupt invocations.</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? InterruptKey { get; private set; }
+
+    /// <summary>Catalog provenance for a materialized replacement.</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CatalogFingerprint { get; private set; }
+
+    /// <summary>Source-definition provenance for a materialized replacement.</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? DefinitionFingerprint { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public PlayerSide? SourceOwnerSide { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ZoneKind? SourceZoneKind { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? BasicDrawCount { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ReplacementReasonKey { get; private set; }
+
+    [JsonIgnore]
+    public bool IsCatalogInterrupt => InterruptKey is not null;
+
     internal InterruptInvocation Copy() => new(
         Version,
         Id,
@@ -900,7 +981,14 @@ public sealed record InterruptInvocation
         Occurrence,
         Costs,
         MaximumPreventionAmount,
-        ReplacementEffects);
+        ReplacementEffects,
+        InterruptKey,
+        CatalogFingerprint,
+        DefinitionFingerprint,
+        SourceOwnerSide,
+        SourceZoneKind,
+        BasicDrawCount,
+        ReplacementReasonKey);
 }
 
 /// <summary>

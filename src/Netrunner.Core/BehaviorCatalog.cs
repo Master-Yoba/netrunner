@@ -1463,7 +1463,8 @@ public sealed class CardBehaviorDefinition
         IReadOnlyList<BehaviorCostModifier>? costModifiers = null,
         IReadOnlyList<BehaviorValueModifier>? valueModifiers = null,
         IReadOnlyList<BehaviorFirstProgramInstallCostModifier>? firstProgramInstallCostModifiers = null,
-        IReadOnlyList<BehaviorFirstHqBreachAccessModifier>? firstHqBreachAccessModifiers = null)
+        IReadOnlyList<BehaviorFirstHqBreachAccessModifier>? firstHqBreachAccessModifiers = null,
+        IReadOnlyList<BehaviorFirstBasicDrawReplacement>? firstBasicDrawReplacements = null)
     {
         DefinitionId = definitionId;
         if (!Enum.IsDefined(controller))
@@ -1501,6 +1502,7 @@ public sealed class CardBehaviorDefinition
         ValueModifiers = FreezeValueModifiers(valueModifiers);
         FirstProgramInstallCostModifiers = FreezeFirstProgramInstallCostModifiers(firstProgramInstallCostModifiers);
         FirstHqBreachAccessModifiers = FreezeFirstHqBreachAccessModifiers(firstHqBreachAccessModifiers);
+        FirstBasicDrawReplacements = FreezeFirstBasicDrawReplacements(firstBasicDrawReplacements);
         if (!string.IsNullOrWhiteSpace(extensionHandlerId))
         {
             ExtensionHandlerId = extensionHandlerId;
@@ -1563,6 +1565,14 @@ public sealed class CardBehaviorDefinition
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<BehaviorFirstHqBreachAccessModifier>? FirstHqBreachAccessModifiers { get; }
+
+    /// <summary>
+    /// Optional installed-source declarations that replace the first real
+    /// basic draw action of the formal turn. Null preserves the legacy generic
+    /// definition JSON shape and fingerprint input.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<BehaviorFirstBasicDrawReplacement>? FirstBasicDrawReplacements { get; }
 
     private static ReadOnlyCollection<T> Freeze<T>(IEnumerable<T>? values)
         where T : class
@@ -1709,6 +1719,37 @@ public sealed class CardBehaviorDefinition
         }
 
         return new ReadOnlyCollection<BehaviorFirstHqBreachAccessModifier>(copy);
+    }
+
+    private static ReadOnlyCollection<BehaviorFirstBasicDrawReplacement>? FreezeFirstBasicDrawReplacements(
+        IEnumerable<BehaviorFirstBasicDrawReplacement>? replacements)
+    {
+        if (replacements is null)
+        {
+            return null;
+        }
+
+        BehaviorFirstBasicDrawReplacement[] copy = replacements.ToArray();
+        if (copy.Length == 0)
+        {
+            return null;
+        }
+
+        if (copy.Any(static value => value is null))
+        {
+            throw new ArgumentException(
+                "First-basic-draw replacement declarations must not contain null entries.",
+                nameof(replacements));
+        }
+
+        if (copy.Select(static replacement => replacement.ReasonKey).Distinct(StringComparer.Ordinal).Count() != copy.Length)
+        {
+            throw new ArgumentException(
+                "First-basic-draw replacement declarations must use a unique reason key per source.",
+                nameof(replacements));
+        }
+
+        return new ReadOnlyCollection<BehaviorFirstBasicDrawReplacement>(copy);
     }
 }
 
@@ -2282,6 +2323,10 @@ internal static class BehaviorCatalogStructure
                     a.FirstHqBreachAccessModifiers ?? [],
                     b.FirstHqBreachAccessModifiers ?? [],
                     static (left, right) => left.Equals(right))
+                && BehaviorContractStructure.SequenceEquals(
+                    a.FirstBasicDrawReplacements ?? [],
+                    b.FirstBasicDrawReplacements ?? [],
+                    static (left, right) => left.Equals(right))
                 && a.ExtensionHandlerId == b.ExtensionHandlerId,
             _ => false,
         };
@@ -2449,6 +2494,12 @@ internal static class BehaviorCatalogFingerprint
             builder.Append("|firstHqBreachAccessModifiers=");
             AppendSequence(builder, value.FirstHqBreachAccessModifiers, AppendFirstHqBreachAccessModifier);
         }
+
+        if (value.FirstBasicDrawReplacements is { Count: > 0 })
+        {
+            builder.Append("|firstBasicDrawReplacements=");
+            AppendSequence(builder, value.FirstBasicDrawReplacements, AppendFirstBasicDrawReplacement);
+        }
     }
 
     private static void AppendCostModifier(StringBuilder builder, BehaviorCostModifier value)
@@ -2474,6 +2525,14 @@ internal static class BehaviorCatalogFingerprint
         BehaviorFirstHqBreachAccessModifier value)
     {
         builder.Append("delta=").Append(value.Delta).Append(",reason=");
+        AppendString(builder, value.ReasonKey);
+    }
+
+    private static void AppendFirstBasicDrawReplacement(
+        StringBuilder builder,
+        BehaviorFirstBasicDrawReplacement value)
+    {
+        builder.Append("drawCount=").Append(value.DrawCount).Append(",reason=");
         AppendString(builder, value.ReasonKey);
     }
 

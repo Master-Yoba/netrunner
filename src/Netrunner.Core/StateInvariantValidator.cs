@@ -3816,6 +3816,12 @@ public static class StateInvariantValidator
                         index,
                         path,
                         violations);
+                    ValidateBasicDrawEffectFrameContext(
+                        state,
+                        effectFrame,
+                        index,
+                        path,
+                        violations);
                     if (effectFrame.Stage == EffectResolutionStage.AwaitingMemoryCleanup)
                     {
                         if (index + 1 >= state.ResolutionStack.Count
@@ -3841,6 +3847,35 @@ public static class StateInvariantValidator
                     break;
                 case EffectCheckpointFrame checkpoint:
                     RequirePlayer(playerIds, checkpoint.Controller, $"{path}.controller", violations);
+                    int catalogBasicDrawReplacementCount = 0;
+                    for (int interruptIndex = 0; interruptIndex < checkpoint.InterruptQueue.Count; interruptIndex++)
+                    {
+                        InterruptInvocation interrupt = checkpoint.InterruptQueue[interruptIndex];
+                        if (interrupt.IsCatalogInterrupt)
+                        {
+                            ValidateCatalogBasicDrawReplacementInvocation(
+                                state,
+                                behaviorCatalog,
+                                checkpoint,
+                                interrupt,
+                                $"{path}.interruptQueue[{interruptIndex}]",
+                                violations);
+                            if (interrupt.Occurrence.Kind == OccurrenceKind.BasicDraw)
+                            {
+                                catalogBasicDrawReplacementCount++;
+                            }
+                        }
+                    }
+
+                    if (catalogBasicDrawReplacementCount > 1)
+                    {
+                        Add(
+                            violations,
+                            "resolution.basic-draw-replacement-stack",
+                            $"{path}.interruptQueue",
+                            "A basic-draw occurrence may retain at most one catalog replacement invocation.");
+                    }
+
                     if (index > 0
                         && state.ResolutionStack[index - 1] is EffectResolutionFrame occurrenceParent
                         && occurrenceParent.Effects.Instructions.Count == 1
@@ -4143,6 +4178,159 @@ public static class StateInvariantValidator
                     "resolution.turn-boundary-context-mismatch",
                     $"{path}.effects.instructions",
                     $"Turn boundary '{boundary.Kind}' does not match the parent turn cursor context.");
+            }
+        }
+    }
+
+    private static void ValidateBasicDrawEffectFrameContext(
+        GameState state,
+        EffectResolutionFrame frame,
+        int index,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        BasicDrawEffect[] draws = frame.Effects.Instructions
+            .OfType<BasicDrawEffect>()
+            .ToArray();
+        if (draws.Length == 0)
+        {
+            return;
+        }
+
+        if (draws.Length != 1 || frame.Effects.Instructions.Count != 1)
+        {
+            Add(
+                violations,
+                "resolution.basic-draw-bundle-shape",
+                $"{path}.effects.instructions",
+                "A typed basic draw must be the sole instruction in its effect transaction.");
+            return;
+        }
+
+        BasicDrawEffect draw = draws[0];
+        PlayerState? controller = state.Players.FirstOrDefault(player => player?.Id == frame.Controller);
+        if (controller is null || controller.Side != draw.Side)
+        {
+            Add(
+                violations,
+                "resolution.basic-draw-controller-mismatch",
+                $"{path}.controller",
+                "A typed basic draw controller must be the player who performs the draw.");
+        }
+
+        if (!draw.IsReplacement)
+        {
+            if (draw.OccurrenceId is not { } occurrenceId)
+            {
+                Add(
+                    violations,
+                    "resolution.basic-draw-occurrence-missing",
+                    $"{path}.effects.instructions[0].occurrenceId",
+                    "A real basic draw must retain its materialized occurrence ID.");
+            }
+            else
+            {
+                TurnFactsState? facts = state.Turn.History?.ThisTurn(draw.Side);
+                bool hasCurrentFacts = facts is not null
+                    && facts.Side == draw.Side
+                    && facts.TurnNumber == state.Turn.TurnNumber
+                    && facts.TurnBegan
+                    && facts.BasicDrawOccurrenceIds.Contains(occurrenceId);
+                if (!hasCurrentFacts)
+                {
+                    Add(
+                        violations,
+                        "turn.basic-draw-ledger-mismatch",
+                        $"{path}.effects.instructions[0].occurrenceId",
+                        "A real basic draw must retain its accepted occurrence in the current formal-turn ledger.");
+                }
+                else
+                {
+                    bool isFirst = facts!.BasicDrawOccurrenceIds[0] == occurrenceId;
+                    if (draw.IsFirstBasicDraw != isFirst)
+                    {
+                        Add(
+                            violations,
+                            "turn.basic-draw-first-flag-mismatch",
+                            $"{path}.effects.instructions[0].isFirstBasicDraw",
+                            "The first-basic-draw flag must agree with the first entry in the global formal-turn ledger.");
+                    }
+                }
+            }
+
+            if (frame.SourceOccurrence is not null)
+            {
+                Add(
+                    violations,
+                    "resolution.basic-draw-source-occurrence-unexpected",
+                    $"{path}.sourceOccurrence",
+                    "A real basic draw must not carry a replacement source occurrence.");
+            }
+
+            if (index == 0
+                || state.ResolutionStack[index - 1] is not TurnFrame parent
+                || parent.ActiveSide != draw.Side
+                || parent.TurnNumber != state.Turn.TurnNumber
+                || parent.Stage != TurnFrameStage.ActionPriority)
+            {
+                Add(
+                    violations,
+                    "resolution.basic-draw-parent-context-mismatch",
+                    path,
+                    "A real basic draw must be opened by the active turn action-priority frame.");
+            }
+        }
+        else
+        {
+            if (frame.SourceOccurrence is not { } sourceOccurrence
+                || sourceOccurrence.Kind != OccurrenceKind.BasicDraw
+                || sourceOccurrence.Phase != OccurrencePhase.Imminent
+                || sourceOccurrence.Effect is not BasicDrawEffect sourceDraw
+                || sourceDraw.IsReplacement
+                || !sourceDraw.IsFirstBasicDraw
+                || sourceDraw.OccurrenceId is not { } sourceOccurrenceId
+                || sourceOccurrenceId != sourceOccurrence.Id
+                || sourceOccurrenceId != frame.SourceOccurrence.Id)
+            {
+                Add(
+                    violations,
+                    "resolution.basic-draw-replacement-source-context-mismatch",
+                    $"{path}.sourceOccurrence",
+                    "A replacement basic draw must retain the exact frozen first-draw occurrence context.");
+            }
+
+            if (index == 0
+                || state.ResolutionStack[index - 1] is not EffectCheckpointFrame checkpoint
+                || checkpoint.Stage != EffectCheckpointStage.AwaitingChild
+                || checkpoint.ChildKind != EffectCheckpointChildKind.Replacement
+                || checkpoint.ChildInterruptId is null
+                || checkpoint.Occurrence.Kind != OccurrenceKind.BasicDraw
+                || checkpoint.Occurrence.Phase != OccurrencePhase.Imminent
+                || checkpoint.Occurrence.Id != frame.SourceOccurrence?.Id)
+            {
+                Add(
+                    violations,
+                    "resolution.basic-draw-replacement-parent-context-mismatch",
+                    path,
+                    "A replacement basic draw must be the child of its awaiting replacement checkpoint.");
+            }
+
+            if (draw.IsFirstBasicDraw || draw.OccurrenceId is not null)
+            {
+                Add(
+                    violations,
+                    "resolution.basic-draw-replacement-flags",
+                    $"{path}.effects.instructions[0]",
+                    "A replacement basic draw must not carry first-action or root-occurrence flags.");
+            }
+
+            if (frame.Controller != controller?.Id)
+            {
+                Add(
+                    violations,
+                    "resolution.basic-draw-replacement-controller-mismatch",
+                    $"{path}.controller",
+                    "A replacement basic draw controller must match its source occurrence controller.");
             }
         }
     }
@@ -6902,6 +7090,234 @@ public static class StateInvariantValidator
                 "resolution.card-play-child-parent-identity-mismatch",
                 $"{path}.child.parentFrameIdentity",
                 "Card-play behavior child parent frame identity must match the exact serialized CardPlayFrame.");
+        }
+    }
+
+    private static void ValidateCatalogBasicDrawReplacementInvocation(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        EffectCheckpointFrame checkpoint,
+        InterruptInvocation invocation,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        if (invocation.Kind != InterruptKind.Replacement
+            || !invocation.Mandatory
+            || invocation.BehaviorId != ResolutionBehaviorIds.CardBehavior
+            || !string.Equals(invocation.InterruptKey, invocation.ReplacementReasonKey, StringComparison.Ordinal))
+        {
+            Add(
+                violations,
+                "resolution.basic-draw-replacement-kind",
+                path,
+                "A catalog basic-draw invocation must be a mandatory replacement.");
+        }
+
+        if (!StableIdentifier.TryValidate(invocation.InterruptKey)
+            || !StableIdentifier.TryValidate(invocation.CatalogFingerprint)
+            || !StableIdentifier.TryValidate(invocation.DefinitionFingerprint)
+            || !StableIdentifier.TryValidate(invocation.ReplacementReasonKey))
+        {
+            Add(
+                violations,
+                "resolution.basic-draw-replacement-provenance",
+                path,
+                "A catalog basic-draw invocation must retain stable interrupt, catalog, definition, and reason provenance.");
+        }
+
+        if (invocation.SourceCardId is not { } sourceCardId
+            || invocation.SourceDefinitionId is not { } sourceDefinitionId
+            || invocation.SourceZoneId is not { } sourceZoneId
+            || invocation.SourceOwnerSide is not { } sourceOwnerSide
+            || invocation.SourceZoneKind is not { } sourceZoneKind
+            || invocation.BasicDrawCount is not { } drawCount
+            || invocation.ReplacementReasonKey is not { } reasonKey)
+        {
+            Add(
+                violations,
+                "resolution.basic-draw-replacement-source-missing",
+                path,
+                "A catalog basic-draw invocation must retain a complete source and replacement snapshot.");
+            return;
+        }
+
+        RequirePlayer(
+            new HashSet<PlayerId>(state.Players.Where(player => player is not null).Select(player => player!.Id)),
+            invocation.Controller,
+            $"{path}.controller",
+            violations);
+        if (!Enum.IsDefined(sourceOwnerSide) || !Enum.IsDefined(sourceZoneKind))
+        {
+            Add(violations, "resolution.basic-draw-replacement-source-invalid", path, "A catalog basic-draw source side and zone kind must be defined.");
+        }
+
+        CardInstanceState? source = state.Cards.FirstOrDefault(card => card?.Id == sourceCardId);
+        if (source is null)
+        {
+            Add(violations, "resolution.basic-draw-replacement-source-missing", $"{path}.sourceCardId", "The catalog basic-draw source card does not exist.");
+        }
+        else
+        {
+            if (source.DefinitionId != sourceDefinitionId)
+            {
+                Add(violations, "resolution.basic-draw-replacement-definition-mismatch", path, "The catalog basic-draw source definition must match its physical card.");
+            }
+
+            if (source.OwnerSide != sourceOwnerSide)
+            {
+                Add(violations, "resolution.basic-draw-replacement-owner-mismatch", path, "The catalog basic-draw source owner must match its captured owner side.");
+            }
+        }
+
+        ZoneState? sourceZone = state.Zones.FirstOrDefault(zone => zone?.Id == sourceZoneId);
+        if (sourceZone is null || sourceZone.Kind != sourceZoneKind)
+        {
+            Add(violations, "resolution.basic-draw-replacement-zone-mismatch", $"{path}.sourceZoneId", "The catalog basic-draw source zone snapshot must retain its original zone kind.");
+        }
+        else if (!RuntimeCardActivity.IsActiveInstalledZone(
+                     sourceOwnerSide,
+                     sourceZone,
+                     state.Zones,
+                     state.Servers))
+        {
+            Add(
+                violations,
+                "resolution.basic-draw-replacement-source-zone-inactive",
+                $"{path}.sourceZoneId",
+                "The catalog basic-draw source zone snapshot must be an active installed zone for its captured owner.");
+        }
+
+        if (!string.Equals(invocation.CatalogFingerprint, behaviorCatalog.Fingerprint, StringComparison.Ordinal))
+        {
+            Add(violations, "resolution.basic-draw-replacement-catalog-mismatch", $"{path}.catalogFingerprint", "The catalog basic-draw invocation fingerprint must match the injected catalog.");
+        }
+        else if (behaviorCatalog.TryGet(sourceDefinitionId, out _)
+                 && !string.Equals(
+                     invocation.DefinitionFingerprint,
+                     behaviorCatalog.GetDefinitionFingerprint(sourceDefinitionId),
+                     StringComparison.Ordinal))
+        {
+            Add(violations, "resolution.basic-draw-replacement-definition-fingerprint-mismatch", $"{path}.definitionFingerprint", "The catalog basic-draw source definition fingerprint must match the injected catalog.");
+        }
+
+        if (!Enum.IsDefined(invocation.Occurrence.Kind)
+            || invocation.Occurrence.Kind != OccurrenceKind.BasicDraw
+            || invocation.Occurrence.Phase != OccurrencePhase.Imminent
+            || invocation.Occurrence.Effect is not BasicDrawEffect basicDraw
+            || basicDraw.IsReplacement
+            || !basicDraw.IsFirstBasicDraw
+            || basicDraw.OccurrenceId is not { } occurrenceId
+            || occurrenceId != invocation.Occurrence.Id
+            || invocation.BasicDrawCount != drawCount
+            || invocation.ReplacementEffects.Instructions.Count != 1
+            || invocation.ReplacementEffects.Instructions[0] is not BasicDrawEffect replacement
+            || !replacement.IsReplacement
+            || replacement.IsFirstBasicDraw
+            || replacement.Side != basicDraw.Side
+            || replacement.DrawCount != drawCount)
+        {
+            Add(violations, "resolution.basic-draw-replacement-effect-mismatch", path, "The catalog basic-draw invocation must retain the exact typed imminent and replacement effects.");
+        }
+
+        if (checkpoint.Occurrence.Id != invocation.Occurrence.Id)
+        {
+            Add(violations, "resolution.basic-draw-replacement-occurrence-mismatch", path, "The catalog basic-draw invocation occurrence must match its checkpoint.");
+        }
+
+        PlayerSide basicDrawSide = invocation.Occurrence.Effect is BasicDrawEffect drawEffect
+            ? drawEffect.Side
+            : sourceOwnerSide;
+        if (sourceOwnerSide != basicDrawSide)
+        {
+            Add(
+                violations,
+                "resolution.basic-draw-replacement-side-mismatch",
+                path,
+                "A catalog basic-draw source must belong to the side performing the draw.");
+        }
+
+        PlayerState? sourcePlayer = state.Players.FirstOrDefault(player => player?.Side == sourceOwnerSide);
+        PlayerState? drawPlayer = state.Players.FirstOrDefault(player => player?.Side == basicDrawSide);
+        if (sourcePlayer is null
+            || invocation.Controller != sourcePlayer.Id
+            || checkpoint.Controller != sourcePlayer.Id)
+        {
+            Add(
+                violations,
+                "resolution.basic-draw-replacement-controller-mismatch",
+                path,
+                "A catalog basic-draw invocation controller must match the captured source owner and checkpoint controller.");
+        }
+
+        if (sourcePlayer is null
+            || checkpoint.Occurrence.Controller != sourcePlayer.Id
+            || checkpoint.Occurrence.Controller != checkpoint.Controller
+            || invocation.Occurrence.Controller != checkpoint.Occurrence.Controller)
+        {
+            Add(
+                violations,
+                "resolution.basic-draw-replacement-occurrence-controller-mismatch",
+                path,
+                "A catalog basic-draw invocation occurrence controller must match the source owner and checkpoint occurrence.");
+        }
+
+        if (drawPlayer is null
+            || checkpoint.Occurrence.TargetPlayer != drawPlayer.Id
+            || invocation.Occurrence.TargetPlayer != checkpoint.Occurrence.TargetPlayer)
+        {
+            Add(
+                violations,
+                "resolution.basic-draw-replacement-target-mismatch",
+                path,
+                "A catalog basic-draw invocation target player must match the basic-draw side and checkpoint occurrence.");
+        }
+
+        TurnFactsState? facts = state.Turn.History?.ThisTurn(basicDrawSide);
+        if (facts is null
+            || facts.Side != basicDrawSide
+            || facts.TurnNumber != state.Turn.TurnNumber
+            || !facts.TurnBegan
+            || facts.BasicDrawOccurrenceIds.Count == 0
+            || facts.BasicDrawOccurrenceIds[0] != checkpoint.Occurrence.Id
+            || !facts.BasicDrawOccurrenceIds.Contains(checkpoint.Occurrence.Id))
+        {
+            Add(
+                violations,
+                "turn.basic-draw-first-ledger-mismatch",
+                path,
+                "A first basic-draw replacement must retain the matching occurrence as the first global formal-turn ledger entry.");
+        }
+
+        if (facts is not null && facts.GetFirstXCount(sourceCardId, reasonKey) != 0)
+        {
+            Add(
+                violations,
+                "turn.basic-draw-first-x-already-consumed",
+                path,
+                "A pending basic-draw replacement source must not already be consumed.");
+        }
+
+        if (behaviorCatalog.TryGet(sourceDefinitionId, out CardBehaviorDefinition? definition)
+            && definition.FirstBasicDrawReplacements is { Count: > 0 } declarations)
+        {
+            BehaviorFirstBasicDrawReplacement? declaration = declarations
+                .SingleOrDefault(candidate => string.Equals(candidate.ReasonKey, reasonKey, StringComparison.Ordinal));
+            if (declaration is null || declaration.DrawCount != drawCount)
+            {
+                Add(
+                    violations,
+                    "resolution.basic-draw-replacement-declaration-mismatch",
+                    path,
+                    "The materialized basic-draw replacement must match a declaration in the pinned source definition.");
+            }
+        }
+        else
+        {
+            Add(
+                violations,
+                "resolution.basic-draw-replacement-declaration-missing",
+                path,
+                "The materialized basic-draw replacement source definition must declare its replacement.");
         }
     }
 
@@ -11312,6 +11728,35 @@ public static class StateInvariantValidator
                     "turn.hq-breach-server-kind",
                     itemPath,
                     $"HQ-breach occurrence '{serverId}' must identify a Headquarters server, not '{server.Kind}'.");
+            }
+        }
+
+        if (facts.BasicDrawOccurrenceIds.Count > 0 && !facts.TurnBegan)
+        {
+            Add(
+                violations,
+                "turn.basic-draw-before-begin",
+                $"{path}.basicDrawOccurrenceIds",
+                "Basic-draw occurrences require a formally begun turn.");
+        }
+
+        var basicDrawOccurrences = new HashSet<OccurrenceId>();
+        for (int index = 0; index < facts.BasicDrawOccurrenceIds.Count; index++)
+        {
+            OccurrenceId occurrenceId = facts.BasicDrawOccurrenceIds[index];
+            string itemPath = $"{path}.basicDrawOccurrenceIds[{index}]";
+            bool validId = StableIdentifier.TryValidate(occurrenceId.Value);
+            if (!validId)
+            {
+                Add(violations, "id.invalid", itemPath, "Basic-draw occurrence ID must be non-empty and stable.");
+            }
+            else if (!basicDrawOccurrences.Add(occurrenceId))
+            {
+                Add(
+                    violations,
+                    "turn.duplicate-basic-draw-occurrence",
+                    itemPath,
+                    $"Basic-draw occurrence '{occurrenceId}' is duplicated.");
             }
         }
 
