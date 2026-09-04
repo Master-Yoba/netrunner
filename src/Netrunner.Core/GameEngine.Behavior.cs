@@ -232,6 +232,12 @@ public static partial class GameEngine
     private static void StepBehaviorResolution(WorkingState working, BehaviorResolutionFrame frame)
     {
         ValidateBehaviorRuntimeFrame(working, frame);
+        if (frame.Stage == BehaviorResolutionStage.AwaitingOccurrence)
+        {
+            throw new ResolutionFailureException(
+                "A behavior occurrence continuation cannot resume before its nested occurrence child completes.");
+        }
+
         List<BehaviorInstruction> instructions = GetBehaviorInstructions(working, frame);
         if (frame.Stage == BehaviorResolutionStage.PayCosts)
         {
@@ -255,6 +261,17 @@ public static partial class GameEngine
             // and the original order.
             RestoreBehaviorSetAside(working, frame);
 
+            // A source counter retained across a self-movement ability is
+            // consumed only by that ability's child. The parent ability
+            // clears the counters at its own completion boundary; a
+            // top-level behavior has no such parent and therefore performs
+            // the cleanup here.
+            if (frame.AbilityKey is null
+                && ShouldRetainSourceCountersThroughChild(working, frame))
+            {
+                ClearCardCounters(working, frame.SourceCardId);
+            }
+
             working.ResolutionStack.RemoveAt(working.ResolutionStack.Count - 1);
             return;
         }
@@ -272,7 +289,10 @@ public static partial class GameEngine
                 ResolveBehaviorBranch(working, frame, instruction);
                 return;
             case BehaviorInstructionKind.GainCredits:
-                ApplyCreditDelta(working, frame.Controller, instruction.Amount);
+                int creditGain = instruction.AmountOperand is null
+                    ? instruction.Amount
+                    : ResolveBehaviorDynamicAmount(working, frame, instruction);
+                ApplyCreditDeltaIfNonZero(working, frame.Controller, creditGain);
                 AdvanceBehaviorCursor(working, frame);
                 return;
             case BehaviorInstructionKind.LoseCredits:
@@ -338,8 +358,92 @@ public static partial class GameEngine
             case BehaviorInstructionKind.MoveCard:
                 ResolveBehaviorTransfer(working, frame, instruction, BehaviorTransferKind.Move);
                 return;
+            case BehaviorInstructionKind.LoadHostedCredits:
+                ChangeHostedCreditPool(
+                    working,
+                    frame.SourceCardId,
+                    HostedCreditPoolOperation.Load,
+                    instruction.Amount,
+                    instruction.SpendRestriction,
+                    recipient: null);
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.PlaceHostedCredits:
+                ChangeHostedCreditPool(
+                    working,
+                    frame.SourceCardId,
+                    HostedCreditPoolOperation.Place,
+                    instruction.Amount,
+                    instruction.SpendRestriction,
+                    recipient: null);
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.TakeHostedCredits:
+                bool poolEmptied = ChangeHostedCreditPool(
+                    working,
+                    frame.SourceCardId,
+                    HostedCreditPoolOperation.Take,
+                    instruction.Amount,
+                    declaredRestriction: null,
+                    recipient: frame.Controller);
+                if (poolEmptied)
+                {
+                    QueueHostedCreditPoolEmptiedOccurrence(working, frame);
+                }
+                else
+                {
+                    AdvanceBehaviorCursor(working, frame);
+                }
+
+                return;
+            case BehaviorInstructionKind.TakeUpToHostedCredits:
+                bool poolEmptiedByTakeUpTo = ChangeHostedCreditPool(
+                    working,
+                    frame.SourceCardId,
+                    HostedCreditPoolOperation.TakeUpTo,
+                    instruction.Amount,
+                    declaredRestriction: null,
+                    recipient: frame.Controller);
+                if (poolEmptiedByTakeUpTo)
+                {
+                    QueueHostedCreditPoolEmptiedOccurrence(working, frame);
+                }
+                else
+                {
+                    AdvanceBehaviorCursor(working, frame);
+                }
+
+                return;
+            case BehaviorInstructionKind.TakeAllHostedCredits:
+                bool poolEmptiedByTakeAll = ChangeHostedCreditPool(
+                    working,
+                    frame.SourceCardId,
+                    HostedCreditPoolOperation.TakeAll,
+                    amount: 0,
+                    declaredRestriction: null,
+                    recipient: frame.Controller);
+                if (poolEmptiedByTakeAll)
+                {
+                    QueueHostedCreditPoolEmptiedOccurrence(working, frame);
+                }
+                else
+                {
+                    AdvanceBehaviorCursor(working, frame);
+                }
+
+                return;
             case BehaviorInstructionKind.AddCounter:
-                AdjustCounter(working, frame.SourceCardId, instruction.Argument ?? "counter", instruction.Amount);
+                IReadOnlyList<CardInstanceId> counterTargets = instruction.Target is null
+                    || instruction.Target.Kind == BehaviorTargetKind.Self
+                    ? [frame.SourceCardId]
+                    : ResolveBehaviorCards(working, frame, instruction.Target);
+                if (counterTargets.Count != 1)
+                {
+                    throw new ResolutionFailureException(
+                        "A counter instruction must resolve exactly one card target.");
+                }
+
+                AdjustCounter(working, counterTargets[0], instruction.Argument ?? "counter", instruction.Amount);
                 AdvanceBehaviorCursor(working, frame);
                 return;
             case BehaviorInstructionKind.AddTags:
@@ -357,6 +461,8 @@ public static partial class GameEngine
                 AdvanceBehaviorCursor(working, frame);
                 return;
             case BehaviorInstructionKind.StartRun:
+                ResolveBehaviorStartRun(working, frame, instruction, instructions);
+                return;
             case BehaviorInstructionKind.EndRun:
             case BehaviorInstructionKind.DealDamage:
                 throw new ResolutionFailureException(
@@ -364,6 +470,61 @@ public static partial class GameEngine
             default:
                 throw new ResolutionFailureException($"Behavior instruction '{instruction.Kind}' is not executable.");
         }
+    }
+
+    private static void ResolveBehaviorStartRun(
+        WorkingState working,
+        BehaviorResolutionFrame frame,
+        BehaviorInstruction instruction,
+        List<BehaviorInstruction> instructions)
+    {
+        if (frame.AbilityKey is null
+            || instruction.RunOperand is not { } operand
+            || frame.InstructionCursor != instructions.Count - 1
+            || working.ResolutionStack.Count != 3
+            || working.ResolutionStack[^2] is not AbilityFrame ability
+            || working.ResolutionStack[^3] is not TurnFrame turn
+            || ability.Activation != BehaviorAbilityActivation.ClickAction
+            || ability.Stage != AbilityLifecycleStage.AwaitingChild
+            || turn.ActiveSide != PlayerSide.Runner
+            || turn.Stage != TurnFrameStage.AwaitingAction
+            || working.RunState is not null)
+        {
+            throw new ResolutionFailureException(
+                "StartRun must be the final instruction of a click ability under an AwaitingAction Runner turn.");
+        }
+
+        CardBehaviorDefinition definition = GetBehaviorDefinition(working, frame);
+        BehaviorPaidAbility declaration = GetAbilityDeclaration(definition, frame.AbilityKey);
+        if (!BehaviorRunRules.TryGetFinalStartRun(declaration, out BehaviorRunOperand declared)
+            || !Equals(declared, operand)
+            || ability.SourceCardId != frame.SourceCardId
+            || ability.DefinitionId != frame.DefinitionId
+            || ability.Controller != frame.Controller)
+        {
+            throw new ResolutionFailureException(
+                "The StartRun instruction no longer matches its exact paid-ability declaration.");
+        }
+
+        CardInstanceState source = GetCard(working, frame.SourceCardId);
+        if (!CanStartRunAbility(working, source, definition, operand, out ServerState? server)
+            || server is null)
+        {
+            throw new ResolutionFailureException(
+                "The StartRun ability is no longer legal for its source, server topology, or turn facts.");
+        }
+
+        // Payment and once-per-turn usage have already committed in the
+        // AbilityFrame. Retire both cursors before starting the ordinary run,
+        // leaving the original AwaitingAction turn frame untouched beneath it.
+        working.ResolutionStack.RemoveAt(working.ResolutionStack.Count - 1);
+        working.ResolutionStack.RemoveAt(working.ResolutionStack.Count - 1);
+        StartRunInWorkingState(
+            working,
+            server.Id,
+            GetPlayer(working, PlayerSide.Runner).Id,
+            frame.SourceCardId,
+            operand);
     }
 
     private enum BehaviorTransferKind
@@ -376,18 +537,33 @@ public static partial class GameEngine
 
     /// <summary>
     /// Expands a declarative InstallCard instruction into the authoritative
-    /// Runner install cursor. The instruction is intentionally narrow: it may
-    /// consume only a single card binding proven to originate in a reachable
-    /// Runner Stack search/choice, and it always targets the Runner Rig.
+    /// Runner install cursor.  The instruction consumes one stable binding
+    /// proven to originate in a reachable hidden-zone choice and always uses
+    /// the ordinary Runner install pipeline.  Hidden Grip selections remain
+    /// in the transient set-aside zone while the choice is pending; they are
+    /// restored to Grip immediately before the install frame is created so
+    /// the normal install reducer owns custody and privacy from that point.
     /// </summary>
     private static void ResolveBehaviorInstall(
         WorkingState working,
         BehaviorResolutionFrame frame,
         BehaviorInstruction instruction)
     {
-        InstallPlan plan = ValidateBehaviorInstallInstruction(working, frame, instruction);
+        if (instruction.Optional
+            && instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } optionalTarget
+            && IsProvenEmptyChosenCard(frame, optionalTarget))
+        {
+            AdvanceBehaviorCursor(working, frame);
+            return;
+        }
+
+        BehaviorResolutionFrame preparedFrame = RestoreBehaviorInstallSelection(
+            working,
+            frame,
+            instruction);
+        InstallPlan plan = ValidateBehaviorInstallInstruction(working, preparedFrame, instruction);
         var installFrame = new InstallFrame(
-            frame.Controller,
+            preparedFrame.Controller,
             plan.Card.Id,
             plan.Card.DefinitionId,
             plan.Spec.CardClass,
@@ -403,8 +579,59 @@ public static partial class GameEngine
             plan.DestinationZoneId,
             plan.CandidateReplacementDefinitionIds,
             InstallInitiationKind.BehaviorEffect,
-            BehaviorFrameIdentity.Compute(frame));
+            BehaviorFrameIdentity.Compute(preparedFrame),
+            plan.InstallCostQuote);
         working.ResolutionStack.Add(installFrame);
+    }
+
+    private static BehaviorResolutionFrame RestoreBehaviorInstallSelection(
+        WorkingState working,
+        BehaviorResolutionFrame frame,
+        BehaviorInstruction instruction)
+    {
+        if (instruction.Target is not { Kind: BehaviorTargetKind.ChosenCard } target)
+        {
+            return frame;
+        }
+
+        string bindingKey = StableIdentifier.TryValidate(target.Selector)
+            ? target.Selector!
+            : "chosen";
+        BehaviorBinding binding = frame.Bindings.SingleOrDefault(candidate => candidate.Key == bindingKey)
+            ?? throw new ResolutionFailureException($"Behavior binding '{bindingKey}' is not available for install.");
+        if (binding.CardIds.Count != 1)
+        {
+            throw new ResolutionFailureException("A behavior install must consume exactly one bound card.");
+        }
+
+        CardInstanceId cardId = binding.CardIds[0];
+        ZoneState source = ZoneForCard(working, cardId);
+        if (source.Kind != ZoneKind.BehaviorSetAside)
+        {
+            return frame;
+        }
+
+        BehaviorSetAsideCard frozenSelection = frame.SetAside.SingleOrDefault(
+                selected => selected.CardId == cardId)
+            ?? throw new ResolutionFailureException(
+                "A behavior install card in the set-aside zone has no authenticated selection record.");
+        var selectedOnly = frame.SetAside
+            .Where(selected => selected.CardId == cardId)
+            .ToArray();
+        RestoreBehaviorSetAside(
+            working,
+            frame.With(
+                setAside: selectedOnly,
+                clearSetAsideZone: false));
+
+        BehaviorSetAsideCard[] remaining = frame.SetAside
+            .Where(selected => selected.CardId != frozenSelection.CardId)
+            .ToArray();
+        BehaviorResolutionFrame prepared = frame.With(
+            setAside: remaining,
+            clearSetAsideZone: remaining.Length == 0);
+        ReplaceTopFrame(working, prepared);
+        return prepared;
     }
 
     private static InstallPlan ValidateBehaviorInstallInstruction(
@@ -414,25 +641,16 @@ public static partial class GameEngine
     {
         if (instruction.Kind != BehaviorInstructionKind.InstallCard
             || instruction.Target is not { Kind: BehaviorTargetKind.ChosenCard } target
-            || instruction.SourceZone != BehaviorZone.Stack
+            || instruction.SourceZone is not (BehaviorZone.Stack or BehaviorZone.Grip)
             || instruction.DestinationZone != BehaviorZone.Rig)
         {
             throw new ResolutionFailureException(
-                "Behavior installs must target one chosen Runner Stack card and the Runner Rig.");
+                "Behavior installs must target one chosen Runner Stack or Grip card and the Runner Rig.");
         }
 
-        // Behavior-owned installs consume the canonical `chosen` binding
-        // produced by the reachable Stack search/choice.  Accepting an
-        // arbitrary stable selector here would let the reducer and invariant
-        // projection disagree about which binding an install may consume.
-        if (target.Selector is not null
-            && !string.Equals(target.Selector, "chosen", StringComparison.Ordinal))
-        {
-            throw new ResolutionFailureException(
-                "Behavior installs must target the canonical chosen binding.");
-        }
-
-        const string bindingKey = "chosen";
+        string bindingKey = StableIdentifier.TryValidate(target.Selector)
+            ? target.Selector!
+            : "chosen";
         BehaviorBinding binding = frame.Bindings.SingleOrDefault(candidate => candidate.Key == bindingKey)
             ?? throw new ResolutionFailureException($"Behavior binding '{bindingKey}' is not available for install.");
         if (binding.CardIds.Count != 1)
@@ -447,7 +665,12 @@ public static partial class GameEngine
             throw new ResolutionFailureException("The behavior install binding does not resolve to exactly one card.");
         }
 
-        ValidateBehaviorInstallOrigin(working, frame, bindingKey, binding.CardIds);
+        ValidateBehaviorInstallOrigin(
+            working,
+            frame,
+            bindingKey,
+            binding.CardIds,
+            instruction.SourceZone.Value);
         InstallPlan plan = BuildInstallPlan(
                 working,
                 PlayerSide.Runner,
@@ -464,18 +687,28 @@ public static partial class GameEngine
         WorkingState working,
         BehaviorResolutionFrame frame,
         string bindingKey,
-        IReadOnlyList<CardInstanceId> cardIds)
+        IReadOnlyList<CardInstanceId> cardIds,
+        BehaviorZone expectedSourceZone)
     {
         CardInstanceState card = GetCard(working, cardIds.Single());
         ZoneState source = ZoneForCard(working, card.Id);
-        if (card.OwnerSide != PlayerSide.Runner || source.Kind != ZoneKind.RunnerStack)
+        ZoneKind expectedSourceKind = expectedSourceZone == BehaviorZone.Grip
+            ? ZoneKind.RunnerGrip
+            : ZoneKind.RunnerStack;
+        if (card.OwnerSide != PlayerSide.Runner
+            || source.Kind != expectedSourceKind)
         {
             throw new ResolutionFailureException(
-                "A behavior install card must remain Runner-owned in the canonical Runner Stack.");
+                $"A behavior install card must remain Runner-owned in the declared Runner {expectedSourceZone}.");
         }
 
         CardBehaviorDefinition definition = GetBehaviorDefinition(working, frame);
-        List<BehaviorInstruction> replay = definition.Instructions.ToList();
+        IReadOnlyList<BehaviorInstruction> rootInstructions = frame.AbilityKey is not null
+            ? GetAbilityDeclaration(definition, frame.AbilityKey).Instructions
+            : frame.TriggerKey is not null
+                ? GetTriggerDeclaration(definition, frame.TriggerKey).Instructions
+                : definition.Instructions;
+        List<BehaviorInstruction> replay = rootInstructions.ToList();
         BehaviorTarget? originatingTarget = null;
         IReadOnlyList<CardInstanceId>? originatingSelection = null;
         foreach (BehaviorContinuationStep step in frame.Continuation)
@@ -512,18 +745,18 @@ public static partial class GameEngine
 
         if (originatingTarget is null
             || originatingTarget.Kind is not (BehaviorTargetKind.ZoneCard or BehaviorTargetKind.ZoneCards)
-            || originatingTarget.Zone != BehaviorZone.Stack
+            || originatingTarget.Zone != expectedSourceZone
             || originatingSelection is null
             || !originatingSelection.SequenceEqual(cardIds))
         {
             throw new ResolutionFailureException(
-                "A behavior install requires a reachable Stack search or choice as its origin.");
+                $"A behavior install requires a reachable {expectedSourceZone} search or choice as its origin.");
         }
 
         if (!MaterializeBehaviorCandidates(working, originatingTarget).Contains(card.Id))
         {
             throw new ResolutionFailureException(
-                "The chosen behavior install card no longer matches its Stack origin selector.");
+                "The chosen behavior install card no longer matches its declared origin selector.");
         }
     }
 
@@ -537,6 +770,33 @@ public static partial class GameEngine
         return definition;
     }
 
+    private static CardBehaviorDefinition GetBehaviorDefinition(
+        WorkingState working,
+        CardDefinitionId definitionId)
+    {
+        if (!working.BehaviorCatalog.TryGet(definitionId, out CardBehaviorDefinition? definition))
+        {
+            throw new ResolutionFailureException($"Behavior definition '{definitionId}' is unavailable.");
+        }
+
+        return definition;
+    }
+
+    private static BehaviorTrigger GetTriggerDeclaration(
+        CardBehaviorDefinition definition,
+        string triggerKey)
+    {
+        if (!StableIdentifier.TryValidate(triggerKey))
+        {
+            throw new ResolutionFailureException("Behavior trigger key is missing or invalid.");
+        }
+
+        return definition.Triggers.SingleOrDefault(trigger =>
+                   string.Equals(trigger.Key, triggerKey, StringComparison.Ordinal))
+            ?? throw new ResolutionFailureException(
+                $"Behavior trigger '{triggerKey}' is not declared by definition '{definition.DefinitionId}'.");
+    }
+
     /// <summary>
     /// Replays the immutable continuation path from the catalog root. The
     /// resulting list is a transient execution projection only; it is never
@@ -547,7 +807,17 @@ public static partial class GameEngine
         BehaviorResolutionFrame frame)
     {
         CardBehaviorDefinition definition = GetBehaviorDefinition(working, frame);
-        var instructions = definition.Instructions.ToList();
+        IReadOnlyList<BehaviorInstruction> root = definition.Instructions;
+        if (frame.AbilityKey is not null)
+        {
+            root = GetAbilityDeclaration(definition, frame.AbilityKey).Instructions;
+        }
+        else if (frame.TriggerKey is not null)
+        {
+            root = GetTriggerDeclaration(definition, frame.TriggerKey).Instructions;
+        }
+
+        var instructions = root.ToList();
         foreach (BehaviorContinuationStep step in frame.Continuation)
         {
             if (!BehaviorContinuation.TryApply(instructions, step, out string? continuationError))
@@ -563,6 +833,121 @@ public static partial class GameEngine
     private static void ValidateBehaviorRuntimeFrame(WorkingState working, BehaviorResolutionFrame frame)
     {
         CardBehaviorDefinition definition = GetBehaviorDefinition(working, frame);
+        IReadOnlyList<BehaviorInstruction> rootInstructions = definition.Instructions;
+        BehaviorPaidAbility? abilityDeclaration = null;
+        BehaviorTrigger? triggerDeclaration = null;
+        if (frame.AbilityKey is not null && frame.TriggerKey is not null)
+        {
+            throw new ResolutionFailureException("A behavior frame cannot carry both an ability key and a trigger key.");
+        }
+
+        if (frame.AbilityKey is not null)
+        {
+            if (!StableIdentifier.TryValidate(frame.AbilityKey))
+            {
+                throw new ResolutionFailureException("Behavior ability child key is missing or invalid.");
+            }
+
+            abilityDeclaration = GetAbilityDeclaration(definition, frame.AbilityKey);
+            rootInstructions = abilityDeclaration.Instructions;
+            if (frame.Stage is not (BehaviorResolutionStage.Execute or BehaviorResolutionStage.AwaitingOccurrence))
+            {
+                throw new ResolutionFailureException(
+                    "An ability behavior child must begin and remain in Execute stage.");
+            }
+        }
+        else if (frame.TriggerKey is not null)
+        {
+            triggerDeclaration = GetTriggerDeclaration(definition, frame.TriggerKey);
+            rootInstructions = triggerDeclaration.Instructions;
+            if (frame.Stage is not (BehaviorResolutionStage.Execute or BehaviorResolutionStage.AwaitingOccurrence))
+            {
+                throw new ResolutionFailureException(
+                    "A catalog trigger behavior child must begin and remain in Execute stage.");
+            }
+        }
+
+        // `trigger-subject` is an engine-seeded binding, never a general
+        // behavior binding. It is valid only on a catalog-trigger child and
+        // must remain exactly equal to the subject captured by that child's
+        // current checkpoint invocation. Keeping this check in the runtime
+        // validator protects both yielded execution and save/load resumes;
+        // the state validator mirrors it for the persisted boundary.
+        BehaviorBinding[] triggerSubjectBindings = frame.Bindings
+            .Where(binding => string.Equals(binding.Key, "trigger-subject", StringComparison.Ordinal))
+            .ToArray();
+        if (frame.TriggerKey is null)
+        {
+            if (triggerSubjectBindings.Length > 0)
+            {
+                throw new ResolutionFailureException(
+                    "The trigger-subject binding is reserved for catalog trigger children.");
+            }
+        }
+        else
+        {
+            if (working.ResolutionStack.Count < 2
+                || working.ResolutionStack[^2] is not EffectCheckpointFrame triggerParent
+                || triggerParent.Stage != EffectCheckpointStage.AwaitingChild
+                || triggerParent.ChildKind != EffectCheckpointChildKind.Trigger
+                || triggerParent.ChildTriggerId is not { } childTriggerId)
+            {
+                throw new ResolutionFailureException(
+                    "A catalog trigger behavior child requires an awaiting effect checkpoint parent.");
+            }
+
+            TriggerInvocation[] matchingInvocations = triggerParent.TriggerQueue
+                .Where(candidate => candidate.Id == childTriggerId)
+                .Take(2)
+                .ToArray();
+            if (matchingInvocations.Length != 1)
+            {
+                throw new ResolutionFailureException(
+                    "A catalog trigger behavior child no longer matches its checkpoint invocation.");
+            }
+
+            TriggerInvocation invocation = matchingInvocations[0];
+            if (!invocation.IsCatalogTrigger
+                || !string.Equals(invocation.TriggerKey, frame.TriggerKey, StringComparison.Ordinal)
+                || invocation.SourceCardId != frame.SourceCardId
+                || invocation.SourceDefinitionId != frame.DefinitionId
+                || invocation.SourceZoneId != frame.SourceZoneId
+                || invocation.SourceOwnerSide != GetCard(working, frame.SourceCardId).OwnerSide
+                || invocation.SourceZoneKind != frame.SourceZoneKind
+                || invocation.Controller != frame.Controller
+                || !string.Equals(invocation.CatalogFingerprint, frame.CatalogFingerprint, StringComparison.Ordinal)
+                || !string.Equals(invocation.DefinitionFingerprint, frame.DefinitionFingerprint, StringComparison.Ordinal))
+            {
+                throw new ResolutionFailureException(
+                    "A catalog trigger behavior child does not match its exact checkpoint invocation.");
+            }
+
+            CardInstanceId? subjectCardId = invocation.Occurrence.SourceCardId;
+            if (subjectCardId is null)
+            {
+                if (triggerSubjectBindings.Length > 0)
+                {
+                    throw new ResolutionFailureException(
+                        "A catalog trigger without an occurrence subject must not retain a trigger-subject binding.");
+                }
+            }
+            else if (triggerSubjectBindings.Length != 1
+                || triggerSubjectBindings[0].CardIds.Count != 1
+                || triggerSubjectBindings[0].CardIds[0] != subjectCardId.Value)
+            {
+                throw new ResolutionFailureException(
+                    "The trigger-subject binding must equal the exact checkpoint invocation subject.");
+            }
+        }
+
+        ValidateBehaviorOccurrenceContinuation(working, frame);
+
+        if (frame.TriggerKey is null && frame.CatalogTriggerSourceMovedBeforeStart)
+        {
+            throw new ResolutionFailureException(
+                "Only a catalog trigger behavior child may retain detached-source authorization.");
+        }
+
         if (!string.Equals(frame.CatalogFingerprint, working.BehaviorCatalog.Fingerprint, StringComparison.Ordinal))
         {
             throw new ResolutionFailureException("Behavior frame catalog provenance does not match the injected catalog.");
@@ -576,7 +961,7 @@ public static partial class GameEngine
             throw new ResolutionFailureException("Behavior frame definition provenance does not match the injected catalog.");
         }
 
-        var derivedInstructions = definition.Instructions.ToList();
+        var derivedInstructions = rootInstructions.ToList();
         foreach (BehaviorContinuationStep step in frame.Continuation)
         {
             if (!BehaviorContinuation.TryApply(derivedInstructions, step, out string? continuationError))
@@ -597,7 +982,7 @@ public static partial class GameEngine
         if (frame.RootInstructions.Count > 0
             && !BehaviorContractStructure.SequenceEquals(
                 frame.RootInstructions,
-                definition.Instructions,
+                rootInstructions,
                 BehaviorContractStructure.AreEqual))
         {
             throw new ResolutionFailureException("Behavior frame root instructions do not match the injected catalog.");
@@ -619,7 +1004,13 @@ public static partial class GameEngine
             throw new ResolutionFailureException("Behavior source card definition no longer matches the invocation.");
         }
 
-        _ = GetPlayer(working, frame.Controller);
+        PlayerState controller = GetPlayer(working, frame.Controller);
+        if (source.OwnerSide != controller.Side)
+        {
+            throw new ResolutionFailureException(
+                "Behavior source card owner no longer matches its controller.");
+        }
+
         if (frame.ActingPlayer.HasValue)
         {
             _ = GetPlayer(working, frame.ActingPlayer.Value);
@@ -659,6 +1050,50 @@ public static partial class GameEngine
             throw new ResolutionFailureException("Behavior frame source location kind no longer matches its invocation context.");
         }
 
+        if (source.ZoneId != frame.SourceZoneId.Value)
+        {
+            bool selfTrash = abilityDeclaration is not null
+                ? abilityDeclaration.Costs.Any(static cost => cost.Kind == BehaviorCostKind.TrashSelf)
+                : definition.Costs.Any(static cost => cost.Kind == BehaviorCostKind.TrashSelf);
+            bool selfRemove = abilityDeclaration is not null
+                ? abilityDeclaration.Costs.Any(static cost => cost.Kind == BehaviorCostKind.RemoveSelfFromGame)
+                : definition.Costs.Any(static cost => cost.Kind == BehaviorCostKind.RemoveSelfFromGame);
+            ZoneState currentSourceZone = working.Zones.SingleOrDefault(zone => zone.Id == source.ZoneId)
+                ?? throw new ResolutionFailureException("Behavior source card current zone no longer exists.");
+            bool catalogTriggerSelfTrashReached = frame.TriggerKey is not null
+                && BehaviorInstructionPath.HasReached(
+                    rootInstructions,
+                    frame.Continuation,
+                    frame.InstructionCursor,
+                    BehaviorInstructionKind.TrashSelf);
+            bool catalogTriggerLifecycleZone = catalogTriggerSelfTrashReached
+                && IsAbilityTrashZone(currentSourceZone, source);
+            bool catalogTriggerDetachedSource = frame.TriggerKey is not null
+                && frame.CatalogTriggerSourceMovedBeforeStart;
+            bool hostedCreditOccurrenceAuthorized = IsAuthorizedHostedCreditMovement(
+                working,
+                frame,
+                source,
+                currentSourceZone);
+            bool validLifecycleZone = frame.TriggerKey is not null
+                ? catalogTriggerDetachedSource || catalogTriggerLifecycleZone || hostedCreditOccurrenceAuthorized
+                : (selfTrash && IsAbilityTrashZone(currentSourceZone, source))
+                    || (selfRemove && IsAbilityRemoveZone(currentSourceZone, source))
+                    || hostedCreditOccurrenceAuthorized;
+            if (!validLifecycleZone
+                || frame.Stage != BehaviorResolutionStage.Execute
+                || (selfTrash && selfRemove))
+            {
+                throw new ResolutionFailureException(
+                    "Behavior source card no longer occupies its captured invocation location.");
+            }
+        }
+        else if (frame.OccurrenceContinuation?.SourceMovedAfterCompletion == true)
+        {
+            throw new ResolutionFailureException(
+                "A completed hosted-credit occurrence cannot retain moved-source authorization after the source returned to its captured zone.");
+        }
+
         if (frame.ParentFrameIdentity is not null)
         {
             if (working.ResolutionStack.Count < 2
@@ -669,6 +1104,21 @@ public static partial class GameEngine
             {
                 throw new ResolutionFailureException(
                     "Behavior frame parent identity no longer matches the active parent frame context.");
+            }
+        }
+
+        if (frame.AbilityKey is not null)
+        {
+            if (working.ResolutionStack.Count < 2
+                || working.ResolutionStack[^2] is not AbilityFrame abilityParent
+                || abilityParent.Stage != AbilityLifecycleStage.AwaitingChild
+                || !string.Equals(abilityParent.AbilityKey, frame.AbilityKey, StringComparison.Ordinal)
+                || abilityParent.SourceCardId != frame.SourceCardId
+                || abilityParent.DefinitionId != frame.DefinitionId
+                || abilityParent.Controller != frame.Controller)
+            {
+                throw new ResolutionFailureException(
+                    "Ability behavior child no longer matches its exact awaiting ability parent.");
             }
         }
 
@@ -695,6 +1145,7 @@ public static partial class GameEngine
     {
         CardInstanceState source = GetCard(working, frame.SourceCardId);
         PlayerId payer = GetPlayer(working, source.OwnerSide).Id;
+        bool deferredCounterCleanup = false;
         foreach (BehaviorCost cost in definition.Costs)
         {
             switch (cost.Kind)
@@ -715,10 +1166,22 @@ public static partial class GameEngine
                 case BehaviorCostKind.TrashSelf:
                     MoveBehaviorCardToTrash(working, source);
                     source = GetCard(working, frame.SourceCardId);
+                    deferredCounterCleanup = true;
+                    break;
+                case BehaviorCostKind.RemoveSelfFromGame:
+                    MoveBehaviorCardToRemovedFromGame(working, source);
+                    source = GetCard(working, frame.SourceCardId);
+                    deferredCounterCleanup = true;
                     break;
                 default:
                     throw new ResolutionFailureException($"Behavior cost '{cost.Kind}' is not executable.");
             }
+        }
+
+        if (deferredCounterCleanup
+            && !ShouldRetainSourceCountersThroughChild(working, frame))
+        {
+            ClearCardCounters(working, frame.SourceCardId);
         }
     }
 
@@ -948,7 +1411,13 @@ public static partial class GameEngine
         // the condition itself. StepBehaviorResolution already performs this
         // check for normal execution; retaining it here keeps the condition
         // fail-closed when called from a future resolution path.
-        List<BehaviorInstruction> replay = GetBehaviorDefinition(working, frame).Instructions.ToList();
+        CardBehaviorDefinition definition = GetBehaviorDefinition(working, frame);
+        IReadOnlyList<BehaviorInstruction> rootInstructions = frame.AbilityKey is not null
+            ? GetAbilityDeclaration(definition, frame.AbilityKey).Instructions
+            : frame.TriggerKey is not null
+                ? GetTriggerDeclaration(definition, frame.TriggerKey).Instructions
+                : definition.Instructions;
+        List<BehaviorInstruction> replay = rootInstructions.ToList();
         BehaviorContinuationStep? latestSelection = null;
         bool latestSelectionWasSearch = false;
         foreach (BehaviorContinuationStep step in frame.Continuation)
@@ -1019,6 +1488,144 @@ public static partial class GameEngine
         working.RulesState?.Counters.SingleOrDefault(counter =>
             counter.CardId == cardId
             && string.Equals(counter.CounterName, counterName, StringComparison.Ordinal))?.Count ?? 0;
+
+    private static int CurrentAbilityCounter(WorkingState working, CardInstanceId cardId, string counterName) =>
+        working.RulesState?.Counters.SingleOrDefault(counter =>
+            counter.CardId == cardId
+            && counter.Purpose != CardCounterPurpose.HostedCredit
+            && string.Equals(counter.CounterName, counterName, StringComparison.Ordinal))?.Count ?? 0;
+
+    private static int ResolveBehaviorDynamicAmount(
+        WorkingState working,
+        BehaviorResolutionFrame frame,
+        BehaviorInstruction instruction)
+    {
+        BehaviorAmountOperand operand = instruction.AmountOperand
+            ?? throw new ResolutionFailureException("A dynamic credit amount is missing its typed operand.");
+        if (instruction.Kind != BehaviorInstructionKind.GainCredits)
+        {
+            throw new ResolutionFailureException("A dynamic amount is executable only on GainCredits.");
+        }
+
+        CardInstanceState source = GetCard(working, frame.SourceCardId);
+        ZoneState sourceZone = ZoneForCard(working, source.Id);
+        bool active = RuntimeCardActivity.IsActive(source, working.Zones);
+        if (!active
+            && (!IsAbilitySourceCounterRetention(working, frame, operand)
+                || !IsAbilityCounterRetentionZone(working, frame, sourceZone, source)))
+        {
+            throw new ResolutionFailureException(
+                "A source counter may be read after movement only by its exact self-movement ability child.");
+        }
+
+        CardCounterState? counter = working.RulesState?.Counters.SingleOrDefault(candidate =>
+            candidate.CardId == frame.SourceCardId
+            && string.Equals(candidate.CounterName, operand.SourceCounterName, StringComparison.Ordinal));
+        if (counter?.Purpose == CardCounterPurpose.HostedCredit)
+        {
+            throw new ResolutionFailureException(
+                "A dynamic behavior amount may not read a hosted-credit pool as a generic counter.");
+        }
+
+        int count = counter?.Count ?? 0;
+        return checked(count * operand.Multiplier);
+    }
+
+    private static bool IsAbilitySourceCounterRetention(
+        WorkingState working,
+        BehaviorResolutionFrame frame,
+        BehaviorAmountOperand operand)
+    {
+        if (frame.AbilityKey is null
+            || !working.BehaviorCatalog.TryGet(frame.DefinitionId, out CardBehaviorDefinition? definition))
+        {
+            return false;
+        }
+
+        BehaviorPaidAbility declaration = GetAbilityDeclaration(definition, frame.AbilityKey);
+        if (!declaration.Costs.Any(static cost =>
+                cost.Kind is BehaviorCostKind.TrashSelf or BehaviorCostKind.RemoveSelfFromGame))
+        {
+            return false;
+        }
+
+        return ContainsDynamicAmount(declaration.Instructions, operand);
+    }
+
+    private static bool ShouldRetainSourceCountersThroughChild(
+        WorkingState working,
+        BehaviorResolutionFrame frame)
+    {
+        IReadOnlyList<BehaviorInstruction> instructions = GetBehaviorInstructions(working, frame);
+        if (!ContainsDynamicAmount(instructions))
+        {
+            return false;
+        }
+
+        CardBehaviorDefinition definition = GetBehaviorDefinition(working, frame);
+        IReadOnlyList<BehaviorCost> costs = frame.AbilityKey is null
+            ? definition.Costs
+            : GetAbilityDeclaration(definition, frame.AbilityKey).Costs;
+        return costs.Any(static cost =>
+            cost.Kind is BehaviorCostKind.TrashSelf or BehaviorCostKind.RemoveSelfFromGame);
+    }
+
+    private static bool ContainsDynamicAmount(
+        IReadOnlyList<BehaviorInstruction> instructions,
+        BehaviorAmountOperand? expected = null)
+    {
+        foreach (BehaviorInstruction instruction in instructions)
+        {
+            if (instruction.Kind == BehaviorInstructionKind.GainCredits
+                && instruction.AmountOperand is { } amount
+                && (expected is null || amount.Equals(expected)))
+            {
+                return true;
+            }
+
+            if (instruction.Branch is { } branch
+                && (ContainsDynamicAmount(branch.WhenTrue, expected)
+                    || ContainsDynamicAmount(branch.WhenFalse, expected)))
+            {
+                return true;
+            }
+
+            if (instruction.Choice is { } choice
+                && choice.Options.Any(option => ContainsDynamicAmount(option.Instructions, expected)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsAbilityCounterRetentionZone(
+        WorkingState working,
+        BehaviorResolutionFrame frame,
+        ZoneState zone,
+        CardInstanceState source)
+    {
+        if (frame.AbilityKey is null
+            || !working.BehaviorCatalog.TryGet(frame.DefinitionId, out CardBehaviorDefinition? definition))
+        {
+            return false;
+        }
+
+        BehaviorPaidAbility declaration = GetAbilityDeclaration(definition, frame.AbilityKey);
+        bool selfRemove = declaration.Costs.Any(static cost => cost.Kind == BehaviorCostKind.RemoveSelfFromGame);
+        bool selfTrash = declaration.Costs.Any(static cost => cost.Kind == BehaviorCostKind.TrashSelf);
+        return source.OwnerSide switch
+        {
+            PlayerSide.Corp => selfRemove
+                ? zone.Kind == ZoneKind.CorpRemovedFromGame
+                : selfTrash && zone.Kind == ZoneKind.CorpDiscard,
+            PlayerSide.Runner => selfRemove
+                ? zone.Kind == ZoneKind.RunnerRemovedFromGame
+                : selfTrash && zone.Kind == ZoneKind.RunnerHeap,
+            _ => false,
+        };
+    }
 
     private static TurnFactsState? CurrentFacts(WorkingState working, PlayerId playerId)
     {
@@ -1099,6 +1706,7 @@ public static partial class GameEngine
         CardInstanceId[] candidates = spec.Target is null
             ? []
             : MaterializeBehaviorCandidates(working, spec.Target, frame.SourceCardId);
+        candidates = FilterImmediateInstallCandidates(working, frame, spec, candidates);
         if (spec.Target is not null && candidates.Length == 0)
         {
             if (spec.Mode is BehaviorChoiceMode.Mandatory
@@ -1140,6 +1748,107 @@ public static partial class GameEngine
             candidates);
         ReplaceTopFrame(working, frame.With(choice: choice));
         YieldBehaviorActions(working, frame.With(choice: choice), choice);
+    }
+
+    /// <summary>
+    /// A target choice immediately followed by an InstallCard instruction is
+    /// a single authenticated install decision (Pantograph).  Do not offer a
+    /// hidden card that the shared install planner would reject later: doing
+    /// so would expose a dead choice and make an optional empty selection
+    /// impossible to finalize.  The hypothetical continuation carries the
+    /// same stable binding and choice key that the real reducer will issue,
+    /// so this check exercises the same origin, replacement, memory, and
+    /// affordability gates without mutating state.
+    /// </summary>
+    private static CardInstanceId[] FilterImmediateInstallCandidates(
+        WorkingState working,
+        BehaviorResolutionFrame frame,
+        BehaviorChoiceSpec spec,
+        CardInstanceId[] candidates)
+    {
+        if (spec.Target is not { Kind: BehaviorTargetKind.ZoneCard } target
+            || target.Zone is not (BehaviorZone.Grip or BehaviorZone.Stack))
+        {
+            return candidates.ToArray();
+        }
+
+        List<BehaviorInstruction> instructions = GetBehaviorInstructions(working, frame);
+        int consumerCursor = frame.InstructionCursor + 1;
+        if (consumerCursor >= instructions.Count
+            || instructions[consumerCursor] is not
+            {
+                Kind: BehaviorInstructionKind.InstallCard,
+                Target: { Kind: BehaviorTargetKind.ChosenCard } installTarget,
+                SourceZone: { } sourceZone,
+                DestinationZone: BehaviorZone.Rig,
+            }
+            || sourceZone != target.Zone)
+        {
+            return candidates.ToArray();
+        }
+
+        // The reducer binds the selection under both the choice key and the
+        // conventional "chosen" key. A different stable selector denotes a
+        // separate binding, so this choice must not accidentally filter its
+        // candidates as though it were the install origin.
+        string bindingKey = StableIdentifier.TryValidate(installTarget.Selector)
+            ? installTarget.Selector!
+            : "chosen";
+        if (!string.Equals(bindingKey, "chosen", StringComparison.Ordinal)
+            && !string.Equals(bindingKey, spec.Key, StringComparison.Ordinal))
+        {
+            return candidates.ToArray();
+        }
+
+        var filtered = new List<CardInstanceId>(candidates.Length);
+        foreach (CardInstanceId candidate in candidates)
+        {
+            BehaviorContinuationStep selectionStep = new(
+                frame.InstructionCursor,
+                spec.Key,
+                BehaviorContinuationKind.ChoiceSelection,
+                cardIds: [candidate]);
+            IReadOnlyList<BehaviorBinding> bindings = SetBehaviorBinding(
+                SetBehaviorBinding(frame.Bindings, spec.Key, [candidate]),
+                "chosen",
+                [candidate]);
+            BehaviorResolutionFrame hypothetical = frame.With(
+                bindings: bindings,
+                continuation: frame.Continuation.Append(selectionStep).ToArray());
+            try
+            {
+                _ = ValidateBehaviorInstallInstruction(
+                    working,
+                    hypothetical,
+                    instructions[consumerCursor]);
+                filtered.Add(candidate);
+            }
+            catch (ResolutionFailureException)
+            {
+                // Candidate projections fail closed. The real reducer will
+                // re-run the same validation after the private choice is
+                // consumed and the selected card is restored from set-aside.
+            }
+            catch (InvalidOperationException)
+            {
+                // A malformed catalog/state cannot make an install option
+                // visible; it simply leaves the optional choice empty.
+            }
+            catch (ArgumentException)
+            {
+                // See the fail-closed rule above.
+            }
+            catch (OverflowException)
+            {
+                // See the fail-closed rule above.
+            }
+            catch (KeyNotFoundException)
+            {
+                // See the fail-closed rule above.
+            }
+        }
+
+        return filtered.ToArray();
     }
 
     private static void FinalizeEmptyBehaviorChoice(
@@ -1394,7 +2103,7 @@ public static partial class GameEngine
     {
         if (target.Kind is BehaviorTargetKind.ZoneCard or BehaviorTargetKind.ZoneCards)
         {
-            ZoneState zone = GetBehaviorZone(working, target.Zone!.Value, null);
+            ZoneState zone = GetBehaviorZone(working, target.Zone!.Value, target.Filter?.OwnerSide);
             return zone.CardIds
                 .Where(cardId => !excludedCardId.HasValue || cardId != excludedCardId.Value)
                 .Where(cardId => BehaviorCardMatches(working, cardId, target.Filter))
@@ -1577,6 +2286,7 @@ public static partial class GameEngine
                 BehaviorCardType.Ice => runtimeSpec.CardClass == RuntimeCardClass.Ice,
                 BehaviorCardType.Icebreaker => runtimeSpec.CardClass == RuntimeCardClass.Program
                     && runtimeSpec.Subtypes.Contains("icebreaker", StringComparer.Ordinal),
+                BehaviorCardType.Program => runtimeSpec.CardClass == RuntimeCardClass.Program,
                 BehaviorCardType.Identity => runtimeSpec.CardClass == RuntimeCardClass.Identity,
                 BehaviorCardType.Operation => runtimeSpec.CardClass == RuntimeCardClass.Operation,
                 BehaviorCardType.Resource => runtimeSpec.CardClass == RuntimeCardClass.Resource,
@@ -2005,7 +2715,38 @@ public static partial class GameEngine
             && instruction.Target is { Kind: BehaviorTargetKind.ChosenCard }
             && IsProvenEmptyChosenCard(frame, instruction.Target))
         {
-            ResolveProvenEmptySearchShuffle(working, frame, instruction);
+            ResolveProvenEmptySelectionShuffle(working, frame, instruction);
+            return;
+        }
+
+        if (kind == BehaviorTransferKind.Trash
+            && instruction.Target is { Kind: BehaviorTargetKind.AccessedCard })
+        {
+            CardInstanceState accessed = ResolveAccessedCardTarget(working, frame);
+            ZoneState source = ZoneForCard(working, accessed.Id);
+            ZoneState discard = GetBehaviorZone(working, BehaviorZone.Archives, PlayerSide.Corp);
+            TrashCard(working, accessed, source, discard);
+
+            // Access trash is a public reveal even when the card was an
+            // unrevealed root card.  Keep this normalization local to the
+            // special operation so ordinary behavior trash retains its
+            // existing visibility contract.
+            CardInstanceState trashed = GetCard(working, accessed.Id);
+            ReplaceCard(working, new CardInstanceState(
+                trashed.Id,
+                trashed.DefinitionId,
+                trashed.ZoneId,
+                trashed.OwnerSide,
+                faceUp: true,
+                rezzed: false,
+                trashed.AdvancementCounters));
+            RunState run = working.RunState
+                ?? throw new ResolutionFailureException("An accessed-card trash requires a live run.");
+            Emit(
+                working,
+                EngineEventKinds.AccessedCardTrashed,
+                new AccessedCardTrashedEventPayload(run.Id, accessed.Id, trashCost: 0));
+            AdvanceBehaviorCursor(working, frame);
             return;
         }
 
@@ -2030,11 +2771,12 @@ public static partial class GameEngine
             ZoneState source = ZoneForCard(working, cardId);
             BehaviorSetAsideCard? frozenSelection = frame.SetAside.SingleOrDefault(selected => selected.CardId == cardId);
             if (instruction.SourceZone.HasValue
-                && !BehaviorZoneMatches(instruction.SourceZone.Value, source.Kind)
+                && !BehaviorZoneMatches(instruction.SourceZone.Value, source.Kind, card.OwnerSide)
                 && (frozenSelection is null
                     || !BehaviorZoneMatches(
                         instruction.SourceZone.Value,
-                        working.Zones.Single(zone => zone.Id == frozenSelection.OriginalZoneId).Kind)))
+                        working.Zones.Single(zone => zone.Id == frozenSelection.OriginalZoneId).Kind,
+                        card.OwnerSide)))
             {
                 throw new ResolutionFailureException($"Behavior card '{cardId}' is not in the declared source zone.");
             }
@@ -2055,18 +2797,21 @@ public static partial class GameEngine
             // legal same-zone shuffle.
             if (source.Id != destination.Id)
             {
-                MoveCard(
-                    working,
-                    card,
-                    source,
-                    destination,
-                    emit: source.Kind != ZoneKind.BehaviorSetAside
-                        || destination.Kind is ZoneKind.CorpDiscard
-                            or ZoneKind.RunnerHeap
-                            or ZoneKind.RunnerRig
-                            or ZoneKind.RunnerPlayArea
-                            or ZoneKind.ServerIce
-                            or ZoneKind.ServerRoot);
+                bool emit = source.Kind != ZoneKind.BehaviorSetAside
+                    || destination.Kind is ZoneKind.CorpDiscard
+                        or ZoneKind.RunnerHeap
+                        or ZoneKind.RunnerRig
+                        or ZoneKind.RunnerPlayArea
+                        or ZoneKind.ServerIce
+                        or ZoneKind.ServerRoot;
+                if (kind == BehaviorTransferKind.Trash)
+                {
+                    TrashCard(working, card, source, destination, emit);
+                }
+                else
+                {
+                    MoveCard(working, card, source, destination, emit);
+                }
             }
             else if (source.Kind == ZoneKind.BehaviorSetAside)
             {
@@ -2077,7 +2822,9 @@ public static partial class GameEngine
             if (kind != BehaviorTransferKind.Shuffle)
             {
                 remainingBindings = remainingBindings
-                    .Select(binding => new BehaviorBinding(binding.Key, binding.CardIds.Where(id => id != cardId).ToArray()))
+                    .Select(binding => string.Equals(binding.Key, "trigger-subject", StringComparison.Ordinal)
+                        ? binding
+                        : new BehaviorBinding(binding.Key, binding.CardIds.Where(id => id != cardId).ToArray()))
                     .Where(binding => binding.CardIds.Count > 0)
                     .ToList();
             }
@@ -2122,7 +2869,7 @@ public static partial class GameEngine
                 clearSetAsideZone: remainingSetAside.Count == 0));
     }
 
-    private static void ResolveProvenEmptySearchShuffle(
+    private static void ResolveProvenEmptySelectionShuffle(
         WorkingState working,
         BehaviorResolutionFrame frame,
         BehaviorInstruction shuffleInstruction)
@@ -2130,19 +2877,82 @@ public static partial class GameEngine
         BehaviorInstruction? searchInstruction = LatestEmptySearchContinuation(
             working,
             frame);
-        if (searchInstruction?.SourceZone is not (BehaviorZone.Deck or BehaviorZone.Stack)
-            || shuffleInstruction.SourceZone != searchInstruction.SourceZone
-            || shuffleInstruction.DestinationZone != searchInstruction.SourceZone)
+        if (searchInstruction is not null)
         {
-            throw new ResolutionFailureException(
-                "An empty chosen-card shuffle must immediately follow a reachable empty Deck or Stack search and name the same source and destination zone.");
+            if (searchInstruction.SourceZone is not (BehaviorZone.Deck or BehaviorZone.Stack)
+                || shuffleInstruction.SourceZone != searchInstruction.SourceZone
+                || shuffleInstruction.DestinationZone != searchInstruction.SourceZone)
+            {
+                throw new ResolutionFailureException(
+                    "An empty chosen-card shuffle must immediately follow a reachable empty Deck or Stack search and name the same source and destination zone.");
+            }
+
+            ShuffleProvenEmptyZone(
+                working,
+                frame,
+                searchInstruction.SourceZone.Value,
+                GetPlayer(working, frame.Controller).Side);
+            return;
         }
 
-        PlayerSide controllerSide = GetPlayer(working, frame.Controller).Side;
+        (BehaviorInstruction Instruction, BehaviorChoiceSpec Choice, BehaviorContinuationStep Selection)? choiceOrigin =
+            LatestEmptyChoiceContinuation(working, frame);
+        if (choiceOrigin is not
+            {
+                Instruction: { Kind: BehaviorInstructionKind.Choose },
+                Choice: { Target: { } target } choice,
+                Selection: { } selection
+            })
+        {
+            throw new ResolutionFailureException(
+                "An empty chosen-card shuffle must be backed by a reachable empty search or target choice.");
+        }
+
+        if (shuffleInstruction.Target?.Selector is not { } selector
+            || !StableIdentifier.TryValidate(selector)
+            || !string.Equals(selector, selection.Key, StringComparison.Ordinal)
+            || target.Kind is not (BehaviorTargetKind.ZoneCard or BehaviorTargetKind.ZoneCards)
+            || target.Zone is not { } sourceZone
+            || shuffleInstruction.SourceZone != sourceZone
+            || choice.Cardinality.Kind is not
+                (BehaviorChoiceCardinalityKind.UpTo or BehaviorChoiceCardinalityKind.AnyNumber)
+            || shuffleInstruction.DestinationZone is not { } destinationZone
+            || destinationZone != (ResolveBehaviorOwner(target, frame, working) == PlayerSide.Corp
+                ? BehaviorZone.Deck
+                : BehaviorZone.Stack))
+        {
+            throw new ResolutionFailureException(
+                "An empty chosen-card shuffle must match a reachable zero-permitted target choice, source zone, selector, and owner-correct Deck or Stack destination.");
+        }
+
+        PlayerSide ownerSide = ResolveBehaviorOwner(target, frame, working);
+        ZoneState source = GetBehaviorZone(working, sourceZone, ownerSide);
+        if (source.OwnerSide != ownerSide)
+        {
+            throw new ResolutionFailureException(
+                "An empty chosen-card shuffle target owner does not match its source zone.");
+        }
+
+        ShuffleProvenEmptyZone(working, frame, destinationZone, ownerSide);
+    }
+
+    private static PlayerSide ResolveBehaviorOwner(
+        BehaviorTarget target,
+        BehaviorResolutionFrame frame,
+        WorkingState working) =>
+        target.Filter?.OwnerSide
+        ?? GetPlayer(working, frame.Controller).Side;
+
+    private static void ShuffleProvenEmptyZone(
+        WorkingState working,
+        BehaviorResolutionFrame frame,
+        BehaviorZone destinationZone,
+        PlayerSide ownerSide)
+    {
         ZoneState destination = GetBehaviorZone(
             working,
-            searchInstruction.SourceZone.Value,
-            controllerSide);
+            destinationZone,
+            ownerSide);
         var shuffled = destination.CardIds.ToList();
         var random = DeterministicRandom.Restore(working.RandomState);
         random.Shuffle(shuffled);
@@ -2162,11 +2972,56 @@ public static partial class GameEngine
         AdvanceBehaviorCursor(working, frame);
     }
 
+    private static (BehaviorInstruction Instruction, BehaviorChoiceSpec Choice, BehaviorContinuationStep Selection)?
+        LatestEmptyChoiceContinuation(
+            WorkingState working,
+            BehaviorResolutionFrame frame)
+    {
+        CardBehaviorDefinition definition = GetBehaviorDefinition(working, frame);
+        IReadOnlyList<BehaviorInstruction> rootInstructions = frame.AbilityKey is not null
+            ? GetAbilityDeclaration(definition, frame.AbilityKey).Instructions
+            : frame.TriggerKey is not null
+                ? GetTriggerDeclaration(definition, frame.TriggerKey).Instructions
+                : definition.Instructions;
+        List<BehaviorInstruction> replay = rootInstructions.ToList();
+        (BehaviorInstruction Instruction, BehaviorChoiceSpec Choice, BehaviorContinuationStep Selection)? latest = null;
+        foreach (BehaviorContinuationStep step in frame.Continuation)
+        {
+            if (step.InstructionCursor < 0 || step.InstructionCursor >= replay.Count)
+            {
+                return null;
+            }
+
+            BehaviorInstruction instruction = replay[step.InstructionCursor];
+            if (step.Kind == BehaviorContinuationKind.ChoiceSelection)
+            {
+                latest = step.CardIds.Count == 0
+                    && instruction.Kind == BehaviorInstructionKind.Choose
+                    && instruction.Choice is { } choice
+                    ? (instruction, choice, step)
+                    : null;
+            }
+
+            if (!BehaviorContinuation.TryApply(replay, step, out _))
+            {
+                return null;
+            }
+        }
+
+        return latest;
+    }
+
     private static BehaviorInstruction? LatestEmptySearchContinuation(
         WorkingState working,
         BehaviorResolutionFrame frame)
     {
-        List<BehaviorInstruction> replay = GetBehaviorDefinition(working, frame).Instructions.ToList();
+        CardBehaviorDefinition definition = GetBehaviorDefinition(working, frame);
+        IReadOnlyList<BehaviorInstruction> rootInstructions = frame.AbilityKey is not null
+            ? GetAbilityDeclaration(definition, frame.AbilityKey).Instructions
+            : frame.TriggerKey is not null
+                ? GetTriggerDeclaration(definition, frame.TriggerKey).Instructions
+                : definition.Instructions;
+        List<BehaviorInstruction> replay = rootInstructions.ToList();
         BehaviorInstruction? latestEmptySearch = null;
         foreach (BehaviorContinuationStep step in frame.Continuation)
         {
@@ -2203,6 +3058,7 @@ public static partial class GameEngine
         CardInstanceState card = GetCard(working, cardId);
         bool faceUp = kind switch
         {
+            BehaviorTransferKind.Shuffle when destination.Kind is ZoneKind.CorpDeck or ZoneKind.RunnerStack => false,
             BehaviorTransferKind.Shuffle => frozenSelection?.OriginalFaceUp ?? card.FaceUp,
             BehaviorTransferKind.AddToHand => false,
             BehaviorTransferKind.Trash => destination.Kind is ZoneKind.CorpDiscard or ZoneKind.RunnerHeap,
@@ -2279,7 +3135,12 @@ public static partial class GameEngine
         }
 
         CardBehaviorDefinition definition = GetBehaviorDefinition(working, frame);
-        List<BehaviorInstruction> replay = definition.Instructions.ToList();
+        IReadOnlyList<BehaviorInstruction> rootInstructions = frame.AbilityKey is not null
+            ? GetAbilityDeclaration(definition, frame.AbilityKey).Instructions
+            : frame.TriggerKey is not null
+                ? GetTriggerDeclaration(definition, frame.TriggerKey).Instructions
+                : definition.Instructions;
+        List<BehaviorInstruction> replay = rootInstructions.ToList();
         BehaviorTarget? originatingTarget = null;
         IReadOnlyList<CardInstanceId>? originatingSelection = null;
         foreach (BehaviorContinuationStep step in frame.Continuation)
@@ -2375,6 +3236,8 @@ public static partial class GameEngine
 
                 CardInstanceState? match = working.Cards.FirstOrDefault(card => card.DefinitionId.Value == target.Selector);
                 return match is null ? [] : [match.Id];
+            case BehaviorTargetKind.AccessedCard:
+                return [ResolveAccessedCardTarget(working, frame).Id];
             case BehaviorTargetKind.InstalledCard:
             case BehaviorTargetKind.InstalledCardNotThisTurn:
                 CardInstanceId[] installed = MaterializeBehaviorCandidates(working, target);
@@ -2392,12 +3255,127 @@ public static partial class GameEngine
         }
     }
 
+    private static CardInstanceState ResolveAccessedCardTarget(
+        WorkingState working,
+        BehaviorResolutionFrame frame)
+    {
+        if (working.ResolutionStack.Count < 2
+            || working.ResolutionStack[^2] is not AbilityFrame ability
+            || ability.TargetCardIds.Count != 1
+            || working.RunState is not { } run
+            || !TryGetCurrentAccessCard(working, run, out CardInstanceState? accessed)
+            || ability.TargetCardIds[0] != accessed!.Id)
+        {
+            throw new ResolutionFailureException(
+                "The accessed-card target is not the exact live target frozen by its ability frame.");
+        }
+
+        return accessed;
+    }
+
     private static void AdvanceBehaviorCursor(WorkingState working, BehaviorResolutionFrame frame)
     {
         BehaviorResolutionFrame next = frame is null
             ? throw new ArgumentNullException(nameof(frame))
             : frame.With(instructionCursor: checked(frame.InstructionCursor + 1), clearChoice: true);
         ReplaceTopFrame(working, next);
+    }
+
+    private static void ValidateBehaviorOccurrenceContinuation(
+        WorkingState working,
+        BehaviorResolutionFrame frame)
+    {
+        BehaviorOccurrenceContinuation? continuation = frame.OccurrenceContinuation;
+        if (frame.Stage == BehaviorResolutionStage.AwaitingOccurrence)
+        {
+            if (continuation is null
+                || continuation.Kind != OccurrenceKind.HostedCreditPoolEmptied
+                || continuation.SourceCardId != frame.SourceCardId
+                || continuation.FrameIdentity != frame.FrameIdentity
+                || continuation.InstructionCursor != frame.InstructionCursor
+                || continuation.SourceMovedAfterCompletion
+                || frame.Choice is not null)
+            {
+                throw new ResolutionFailureException(
+                    "An awaiting hosted-credit occurrence continuation is malformed or stale.");
+            }
+
+            if (working.ResolutionStack.Count < 2
+                || working.ResolutionStack[^2] is not EffectResolutionFrame)
+            {
+                throw new ResolutionFailureException(
+                    "An awaiting hosted-credit occurrence must retain its nested effect child.");
+            }
+        }
+        else if (continuation is not null
+            && (!continuation.SourceMovedAfterCompletion
+                || frame.Stage != BehaviorResolutionStage.Execute
+                || continuation.SourceCardId != frame.SourceCardId
+                || continuation.FrameIdentity != frame.FrameIdentity))
+        {
+            throw new ResolutionFailureException(
+                "A hosted-credit occurrence continuation is only retained as completed moved-source authorization.");
+        }
+    }
+
+    private static bool IsAuthorizedHostedCreditMovement(
+        WorkingState working,
+        BehaviorResolutionFrame frame,
+        CardInstanceState source,
+        ZoneState currentSourceZone)
+    {
+        BehaviorOccurrenceContinuation? continuation = frame.OccurrenceContinuation;
+        if (frame.Stage != BehaviorResolutionStage.Execute
+            || continuation is null
+            || !continuation.SourceMovedAfterCompletion
+            || continuation.Kind != OccurrenceKind.HostedCreditPoolEmptied
+            || continuation.SourceCardId != frame.SourceCardId
+            || continuation.FrameIdentity != frame.FrameIdentity
+            || source.OwnerSide != GetPlayer(working, frame.Controller).Side
+            || currentSourceZone.Kind != (source.OwnerSide == PlayerSide.Corp
+                ? ZoneKind.CorpDiscard
+                : ZoneKind.RunnerHeap)
+            || working.RulesState is null
+            || working.RulesState.Counters.Any(counter =>
+                counter.CardId == frame.SourceCardId
+                && counter.Purpose == CardCounterPurpose.HostedCredit))
+        {
+            return false;
+        }
+
+        return HasReachableHostedCreditSelfTrashTrigger(working, frame);
+    }
+
+    private static void QueueHostedCreditPoolEmptiedOccurrence(
+        WorkingState working,
+        BehaviorResolutionFrame frame)
+    {
+        if (frame.FrameIdentity is not { } frameIdentity)
+        {
+            throw new ResolutionFailureException(
+                "A hosted-credit occurrence continuation requires an issued behavior frame identity.");
+        }
+
+        int nextCursor = checked(frame.InstructionCursor + 1);
+        BehaviorOccurrenceContinuation continuation = new(
+            OccurrenceKind.HostedCreditPoolEmptied,
+            frame.SourceCardId,
+            frameIdentity,
+            nextCursor);
+        ReplaceTopFrame(
+            working,
+            frame.With(
+                stage: BehaviorResolutionStage.AwaitingOccurrence,
+                instructionCursor: nextCursor,
+                clearChoice: true,
+                occurrenceContinuation: continuation));
+        working.ResolutionStack.Add(new EffectResolutionFrame(
+            frame.Controller,
+            new CostBundle(),
+            new EffectBundle(new GameplayOccurrenceEffect(
+                OccurrenceKind.HostedCreditPoolEmptied,
+                frame.Controller,
+                frame.SourceCardId))));
     }
 
     private static bool IsInstalledCard(WorkingState working, CardInstanceId cardId)
@@ -2413,28 +3391,71 @@ public static partial class GameEngine
             working,
             card.OwnerSide == PlayerSide.Corp ? BehaviorZone.Archives : BehaviorZone.Heap,
             card.OwnerSide);
-        MoveCard(working, card, source, destination);
+        // Cost payment may declare TrashSelf before a counter or hosted-credit
+        // cost. Keep the card's counters available until the complete payment
+        // loop has run; the caller clears them at that boundary.
+        TrashCard(working, card, source, destination, cleanupCounters: false);
+        if (card.OwnerSide == PlayerSide.Runner
+            && source.Kind == ZoneKind.RunnerRig
+            && working.RulesState?.Programs.Any(program => program.CardId == card.Id) == true)
+        {
+            RemoveProgramRegistration(working, card.Id);
+        }
+    }
+
+    private static void MoveBehaviorCardToRemovedFromGame(WorkingState working, CardInstanceState card)
+    {
+        ZoneState source = ZoneForCard(working, card.Id);
+        MoveBehaviorCardToCostZone(working, card, BehaviorZone.RemovedFromGame, source);
+    }
+
+    private static void MoveBehaviorCardToCostZone(
+        WorkingState working,
+        CardInstanceState card,
+        BehaviorZone destinationZone,
+        ZoneState source)
+    {
+        ZoneState destination = GetBehaviorZone(working, destinationZone, card.OwnerSide);
+        // Cost payment may declare TrashSelf before a counter or hosted-credit
+        // cost. Keep the card's counters available until the complete payment
+        // loop has run; the caller clears them at that boundary.
+        MoveCard(working, card, source, destination, cleanupCounters: false);
+        if (card.OwnerSide == PlayerSide.Runner
+            && source.Kind == ZoneKind.RunnerRig
+            && working.RulesState?.Programs.Any(program => program.CardId == card.Id) == true)
+        {
+            RemoveProgramRegistration(working, card.Id);
+        }
     }
 
     private static ZoneState ZoneForCard(WorkingState working, CardInstanceId cardId) =>
         working.Zones.SingleOrDefault(zone => zone.CardIds.Contains(cardId))
         ?? throw new ResolutionFailureException($"Card '{cardId}' does not belong to a zone.");
 
-    private static bool BehaviorZoneMatches(BehaviorZone expected, ZoneKind actual) => expected switch
-    {
-        BehaviorZone.Deck => actual is ZoneKind.CorpDeck or ZoneKind.RunnerStack,
-        BehaviorZone.Headquarters => actual == ZoneKind.CorpHand,
-        BehaviorZone.Archives => actual == ZoneKind.CorpDiscard,
-        BehaviorZone.Grip => actual == ZoneKind.RunnerGrip,
-        BehaviorZone.Stack => actual == ZoneKind.RunnerStack,
-        BehaviorZone.Heap => actual == ZoneKind.RunnerHeap,
-        BehaviorZone.Rig => actual == ZoneKind.RunnerRig,
-        BehaviorZone.PlayArea => actual == ZoneKind.RunnerPlayArea,
-        BehaviorZone.ScoreArea => actual is ZoneKind.CorpScore or ZoneKind.RunnerScore,
-        BehaviorZone.ServerIce => actual == ZoneKind.ServerIce,
-        BehaviorZone.ServerRoot => actual == ZoneKind.ServerRoot,
-        _ => false,
-    };
+    private static bool BehaviorZoneMatches(
+        BehaviorZone expected,
+        ZoneKind actual,
+        PlayerSide? ownerSide = null) => expected switch
+        {
+            BehaviorZone.Deck => actual is ZoneKind.CorpDeck or ZoneKind.RunnerStack,
+            BehaviorZone.Headquarters => actual == ZoneKind.CorpHand,
+            BehaviorZone.Archives => actual == ZoneKind.CorpDiscard,
+            BehaviorZone.Grip => actual == ZoneKind.RunnerGrip,
+            BehaviorZone.Stack => actual == ZoneKind.RunnerStack,
+            BehaviorZone.Heap => actual == ZoneKind.RunnerHeap,
+            BehaviorZone.Rig => actual == ZoneKind.RunnerRig,
+            BehaviorZone.PlayArea => actual == ZoneKind.RunnerPlayArea,
+            BehaviorZone.ScoreArea => actual is ZoneKind.CorpScore or ZoneKind.RunnerScore,
+            BehaviorZone.ServerIce => actual == ZoneKind.ServerIce,
+            BehaviorZone.ServerRoot => actual == ZoneKind.ServerRoot,
+            BehaviorZone.RemovedFromGame => ownerSide switch
+            {
+                PlayerSide.Corp => actual == ZoneKind.CorpRemovedFromGame,
+                PlayerSide.Runner => actual == ZoneKind.RunnerRemovedFromGame,
+                _ => false,
+            },
+            _ => false,
+        };
 
     private static ZoneState GetBehaviorZone(WorkingState working, BehaviorZone zone, PlayerSide? ownerSide)
     {
@@ -2452,6 +3473,9 @@ public static partial class GameEngine
             BehaviorZone.ScoreArea => side == PlayerSide.Corp ? ZoneKind.CorpScore : ZoneKind.RunnerScore,
             BehaviorZone.ServerIce => ZoneKind.ServerIce,
             BehaviorZone.ServerRoot => ZoneKind.ServerRoot,
+            BehaviorZone.RemovedFromGame => side == PlayerSide.Corp
+                ? ZoneKind.CorpRemovedFromGame
+                : ZoneKind.RunnerRemovedFromGame,
             _ => throw new ResolutionFailureException($"Behavior zone '{zone}' is not executable."),
         };
 
@@ -2464,6 +3488,19 @@ public static partial class GameEngine
             }
 
             var created = new ZoneState(working.Allocator.NextZoneId(), kind, PlayerSide.Runner);
+            working.Zones.Add(created);
+            return created;
+        }
+
+        if (kind is ZoneKind.CorpRemovedFromGame or ZoneKind.RunnerRemovedFromGame)
+        {
+            ZoneState? existing = working.Zones.FirstOrDefault(candidate => candidate.Kind == kind && candidate.ServerId is null);
+            if (existing is not null)
+            {
+                return existing;
+            }
+
+            var created = new ZoneState(working.Allocator.NextZoneId(), kind, side);
             working.Zones.Add(created);
             return created;
         }
@@ -2486,9 +3523,14 @@ public static partial class GameEngine
         return GetZone(working, kind);
     }
 
-    private static void MarkInstalledThisTurn(WorkingState working, PlayerSide side, CardInstanceId cardId)
+    private static void MarkInstalledThisTurn(WorkingState working, CardInstanceId cardId)
     {
-        if (working.Turn.History is null || working.Turn.History.ThisTurn(side) is null)
+        PlayerSide activeSide = working.Turn.ActiveSide;
+        TurnHistoryState? history = working.Turn.History;
+        TurnFactsState? facts = history?.ThisTurn(activeSide);
+        if (facts is null
+            || facts.Side != activeSide
+            || facts.TurnNumber != working.Turn.TurnNumber)
         {
             return;
         }
@@ -2499,22 +3541,7 @@ public static partial class GameEngine
             working.Turn.Phase,
             working.Turn.TurnNumber,
             working.Turn.Step,
-            working.Turn.History.MarkInstalled(side, cardId));
+            history!.MarkInstalled(activeSide, cardId));
     }
 
-    private static void MarkSuccessfulRunThisTurn(WorkingState working, PlayerSide side)
-    {
-        if (working.Turn.History is null || working.Turn.History.ThisTurn(side) is null)
-        {
-            return;
-        }
-
-        ReplaceTurn(
-            working,
-            working.Turn.ActiveSide,
-            working.Turn.Phase,
-            working.Turn.TurnNumber,
-            working.Turn.Step,
-            working.Turn.History.MarkSuccessfulRun(side));
-    }
 }

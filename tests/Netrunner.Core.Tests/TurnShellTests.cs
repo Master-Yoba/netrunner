@@ -139,6 +139,7 @@ public sealed class TurnShellTests
         Assert.Equal(0, state.Players.Single(player => player.Side == PlayerSide.Corp).Clicks);
         Assert.Equal(5, state.Turn.History!.CorpThisTurn!.ClicksLost);
         Assert.Contains(state.GetZone(ZoneKind.CorpDiscard).CardIds, state.Cards.Select(card => card.Id).Contains);
+        Assert.Empty(state.Turn.History.CorpThisTurn.TrashedCardOccurrenceIds);
     }
 
     [Fact]
@@ -187,7 +188,7 @@ public sealed class TurnShellTests
         Assert.Equal(1, root.GetProperty("schemaVersion").GetInt32());
         Assert.Equal("SCN-400", root.GetProperty("scenarioId").GetString());
         Assert.Equal("ENG-401", root.GetProperty("scope").GetString());
-        Assert.Equal(2, root.GetProperty("engineStateSchemaVersion").GetInt32());
+        Assert.Equal(3, root.GetProperty("engineStateSchemaVersion").GetInt32());
         Assert.Contains("CR 26.03 5.6.1", root.GetProperty("citations").EnumerateArray().Select(value => value.GetString()));
         Assert.Contains("turn-timing-window-opened", root.GetProperty("requiredEvents").EnumerateArray().Select(value => value.GetString()));
         Assert.Contains("Jinteki.net", root.GetProperty("crossCheckNote").GetString(), StringComparison.Ordinal);

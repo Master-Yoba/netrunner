@@ -182,6 +182,13 @@ public sealed class RealAdvanceScoreTests
         Assert.Equal(PlayerSide.Corp, scored.Winner);
         Assert.Equal(fixture.AgendaIds[0], scored.AgendaId);
         Assert.Equal(fixture.AgendaPoints, scored.AgendaPoints);
+        Assert.Equal(
+            [new AgendaTurnChange(
+                fixture.AgendaIds[0],
+                PlayerSide.Corp,
+                fixture.AgendaPoints,
+                AgendaTurnChangeKind.Score)],
+            result.State.Turn.ThisTurnFacts!.AgendaTurnChanges);
         Assert.Equal(TurnFrameStage.ActionPriority, Assert.IsType<TurnFrame>(result.State.ResolutionStack.Single()).Stage);
         Assert.Equal(PlayerSide.Corp, Assert.IsType<TurnFrame>(result.State.ResolutionStack.Single()).PriorityHolder);
         Assert.Equal(DecisionKind.TurnTiming, result.State.PendingDecision!.Kind);
@@ -361,6 +368,13 @@ public sealed class RealAdvanceScoreTests
         Assert.Equal(GameOutcomeKind.Won, result.State.Outcome.Kind);
         Assert.Equal(PlayerSide.Corp, result.State.Outcome.Winner);
         Assert.Equal(RealGameRules.AgendaPointsToWin, result.State.GetPlayer(fixture.CorpId).AgendaPoints);
+        Assert.Equal(
+            [new AgendaTurnChange(
+                fixture.AgendaIds[0],
+                PlayerSide.Corp,
+                fixture.AgendaPoints,
+                AgendaTurnChangeKind.Score)],
+            result.State.Turn.ThisTurnFacts!.AgendaTurnChanges);
         Assert.DoesNotContain(result.State.Servers, server => server.Id == fixture.RemoteId);
         Assert.DoesNotContain(result.State.Zones, zone => zone.Id == fixture.RootZoneId || zone.Id == fixture.IceZoneId);
     }
@@ -650,7 +664,7 @@ public sealed class RealAdvanceScoreTests
                 pending.Id,
                 pending.Revision,
                 submittedActionId ?? pending.LegalActions[0].Id),
-            CardBehaviorSpecCatalog.Default,
+            FixtureBehaviorCatalog.Catalog,
             runtimeCatalog);
         Assert.False(rejected.Accepted);
         Assert.Equal(ApplyRejectionCode.InvalidInputState, rejected.Rejection?.Code);
@@ -665,7 +679,7 @@ public sealed class RealAdvanceScoreTests
         return GameEngine.Apply(
             state,
             new ActionSubmission(pending.Owner, pending.Id, pending.Revision, action.Id),
-            CardBehaviorSpecCatalog.Default,
+            FixtureBehaviorCatalog.Catalog,
             fixture.RuntimeCatalog);
     }
 
@@ -691,7 +705,7 @@ public sealed class RealAdvanceScoreTests
         GameState state = GameEngine.BeginTurn(
             fixture.State,
             PlayerSide.Corp,
-            CardBehaviorSpecCatalog.Default,
+            FixtureBehaviorCatalog.Catalog,
             fixture.RuntimeCatalog);
         while (state.PendingDecision?.Kind != DecisionKind.TurnTiming)
         {
@@ -866,7 +880,7 @@ public sealed class RealAdvanceScoreTests
 
         GameState baseState = GameState.CreateNew(
             449,
-            behaviorRegistryVersion: CardBehaviorSpecCatalog.Version,
+            behaviorRegistryVersion: FixtureBehaviorCatalog.Catalog.Version,
             runtimeCardCatalogVersion: runtimeCatalog.Version,
             runtimeCardCatalogFingerprint: runtimeCatalog.Fingerprint);
         ServerId zuluId = new("server:real-zulu");
@@ -998,7 +1012,7 @@ public sealed class RealAdvanceScoreTests
 
         GameState baseState = GameState.CreateNew(
             401,
-            behaviorRegistryVersion: CardBehaviorSpecCatalog.Version,
+            behaviorRegistryVersion: FixtureBehaviorCatalog.Catalog.Version,
             runtimeCardCatalogVersion: runtimeCatalog.Version,
             runtimeCardCatalogFingerprint: runtimeCatalog.Fingerprint);
         var allocator = new StableIdAllocator(baseState.Allocator);

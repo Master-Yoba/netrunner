@@ -18,6 +18,7 @@ public partial class TextCardControl : PanelContainer
 	private Label _type = null!;
 	private Label _stats = null!;
 	private Label _status = null!;
+	private Label _abilityCue = null!;
 	private Label _counters = null!;
 	private CardViewModel? _card;
 	private int? _encounterStrength;
@@ -44,6 +45,12 @@ public partial class TextCardControl : PanelContainer
 
 	public bool IsTargetCandidate => _targetCandidate;
 
+	/// <summary>Text-only ability affordance retained for smoke/accessibility checks.</summary>
+	public string DisplayedAbilityCue => _abilityCue?.Text ?? string.Empty;
+
+	/// <summary>Text-only typed counter chips retained for smoke/accessibility checks.</summary>
+	public string DisplayedCounterChips => _counters?.Text ?? string.Empty;
+
 	public override void _Ready()
 	{
 		MouseFilter = MouseFilterEnum.Stop;
@@ -65,6 +72,9 @@ public partial class TextCardControl : PanelContainer
 		_status = MakeLabel(10, new Color(0.72f, 0.76f, 0.78f));
 		_status.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		content.AddChild(_status);
+		_abilityCue = MakeLabel(10, new Color(0.98f, 0.74f, 0.28f));
+		_abilityCue.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		content.AddChild(_abilityCue);
 		_counters = MakeLabel(10, new Color(0.98f, 0.74f, 0.28f));
 		content.AddChild(_counters);
 
@@ -91,6 +101,7 @@ public partial class TextCardControl : PanelContainer
 			_type.Text = "Hidden information";
 			_stats.Text = "Identity concealed";
 			_status.Text = "The card remains face-down.";
+			_abilityCue.Text = string.Empty;
 			_counters.Text = string.Empty;
 		}
 		else
@@ -99,7 +110,8 @@ public partial class TextCardControl : PanelContainer
 			_type.Text = card.Type + (card.Subtypes.Count == 0 ? string.Empty : " · " + string.Join(" · ", card.Subtypes));
 			_stats.Text = FormatStats(card, _encounterStrength);
 			_status.Text = card.Rezzed ? "REZZED" : card.IsKnown ? "KNOWN" : "FACE-DOWN";
-			_counters.Text = string.Join("  ", card.Counters);
+			_abilityCue.Text = card.AbilityCue ?? string.Empty;
+			_counters.Text = string.Join("  ", card.CounterChips);
 		}
 
 		UpdateStatusCue();

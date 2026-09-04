@@ -149,7 +149,7 @@ public sealed class RunBreakTests
             new RunBreakParameters(breakerId, 5));
         GameState tampered = EncounterBreakerTests.WithPendingDecision(encounter, [.. pending.LegalActions, forged]);
 
-        IReadOnlyList<StateInvariantViolation> violations = StateInvariantValidator.Collect(tampered);
+        IReadOnlyList<StateInvariantViolation> violations = StateInvariantValidator.Collect(tampered, FixtureBehaviorCatalog.Catalog);
         Assert.Contains(violations, violation => violation.Code == "run.extra-action");
     }
 
@@ -159,7 +159,7 @@ public sealed class RunBreakTests
         (GameState preRun, CardInstanceId breakerId, _) = EncounterBreakerTests.CreateRunStateWithBreaker(
             FixtureIceBehaviorSpecs.BreakerBarrier,
             iceDefinition: FixtureIceBehaviorSpecs.TwoSubroutines);
-        GameState prompt = GameEngine.BeginRun(preRun, RunTimingTests.RemoteId(preRun));
+        GameState prompt = GameEngine.BeginRun(preRun, RunTimingTests.RemoteId(preRun), FixtureBehaviorCatalog.Catalog);
         GameState approach = RunTimingTests.PassTwice(prompt).State;
         Assert.Equal(RunTimingStep.ApproachPaidWindow, approach.RunState!.Step);
 
@@ -179,7 +179,8 @@ public sealed class RunBreakTests
                 tampered.PendingDecision!.Owner,
                 tampered.PendingDecision.Id,
                 tampered.PendingDecision.Revision,
-                forged.Id));
+                forged.Id),
+            FixtureBehaviorCatalog.Catalog);
         Assert.Equal(ApplyRejectionCode.InvalidInputState, rejected.Rejection?.Code);
         Assert.Same(tampered, rejected.State);
         Assert.Equal(before, EngineJson.Serialize(rejected.State));
@@ -197,7 +198,7 @@ public sealed class RunBreakTests
         GameState afterBreak = firstBreak.State;
 
         string json = EngineJson.Serialize(afterBreak);
-        GameState restored = EngineJson.DeserializeState(json);
+        GameState restored = EngineJson.DeserializeState(json, FixtureBehaviorCatalog.Catalog);
         Assert.Equal(json, EngineJson.Serialize(restored));
         LegalAction left = Assert.Single(afterBreak.PendingDecision!.LegalActions, action =>
             action.Kind == ActionKind.BreakSubroutines);
@@ -210,7 +211,7 @@ public sealed class RunBreakTests
         Assert.Equal(EngineJson.Serialize(leftBreak.State), EngineJson.Serialize(rightBreak.State));
         Assert.Equal(DeterministicHash.ForEvents(leftBreak.Events), DeterministicHash.ForEvents(rightBreak.Events));
         Assert.Equal(2, leftBreak.State.RunState!.Encounter!.Subroutines.Count(subroutine => subroutine.Broken));
-        StateInvariantValidator.Validate(leftBreak.State);
+        StateInvariantValidator.Validate(leftBreak.State, FixtureBehaviorCatalog.Catalog);
     }
 
     private static GameState ReachBreakWindow(CardDefinitionId breakerDefinition, CardDefinitionId? iceDefinition = null)

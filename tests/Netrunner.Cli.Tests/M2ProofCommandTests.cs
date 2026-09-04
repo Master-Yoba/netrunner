@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Netrunner.Cards;
 using Netrunner.Core;
+using Netrunner.Match;
 using Xunit;
 
 namespace Netrunner.Cli.Tests;
@@ -11,12 +12,24 @@ public sealed class M2ProofCommandTests
     // by M2 rework U5 and kept stable by U6 — the agenda mid-access window
     // (pass only) and the automatic 7.2.3 steal emit the same event stream
     // as the pre-U6 player-steal action, see M2ProofTests); the same
-    // constants M2ProofTests pins for both policies. The M4-4.1 state schema
-    // migration intentionally changed state hashes; the event hash is stable.
+    // constants M2ProofTests pins for both policies. The Slice 4.3 A2 state
+    // schema migration (schema 2 -> 3) intentionally changed state hashes;
+    // the event hash is stable because the usage ledger is state-only.
     private const string ExpectedFinalStateHash =
-        "950d1b0d44da26d5ba9a688b83b7ac8202850d8337a8c0609eaf47269b1387ed";
+        "c882eb43f2057073cf138511ac0d5834c20822a7c4a490d8e73cd6c402c682c5";
     private const string ExpectedEventStreamHash =
         "d20cdef94e97ac928ca088e14952b65d2116fecda00485fff5c3b05e1b6e9e20";
+
+    private static BehaviorCatalog BuildLegacyGatewayCatalog(BehaviorCatalog gateway)
+    {
+        return new BehaviorCatalogBuilder(gateway.Version)
+            .AddIce(gateway.IceSpecs)
+            .AddIcebreaker(gateway.IcebreakerSpecs)
+            .AddAsset(gateway.AssetSpecs)
+            .AddAgenda(gateway.AgendaSpecs)
+            .AddRunEvent(gateway.RunEventSpecs)
+            .Build();
+    }
 
     [Fact]
     public void M2ProofCommandSucceedsAndReportsPinnedHashes()
@@ -49,9 +62,18 @@ public sealed class M2ProofCommandTests
     {
         string path = Path.Combine(AppContext.BaseDirectory, "M2Scenarios", "representative-run.json");
         BehaviorCatalog gateway = GatewayBehaviorCatalog.Create();
-        BehaviorCatalog expanded = new BehaviorCatalogBuilder(gateway.Version, gateway)
-            .AddAsset(new AssetBehaviorSpec(new CardDefinitionId("test:m2-command-unrelated"), trashCost: 1))
+        Assert.Equal("gateway-m4-4.3", gateway.Version);
+        BehaviorCatalog legacy = BuildLegacyGatewayCatalog(gateway);
+        BehaviorCatalog expanded = new BehaviorCatalogBuilder(legacy.Version, legacy)
+            .Add(new CardBehaviorDefinition(
+                GatewayCardCodes.NicoCampaign,
+                PlayerSide.Corp,
+                instructions: [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]))
             .Build();
+        M2ScenarioDocument scenario = EngineJson.Deserialize<M2ScenarioDocument>(File.ReadAllText(path));
+        BehaviorCatalog scenarioSlice = scenario.CreateBehaviorCatalog(expanded);
+        Assert.Equal(EngineCompatibility.GatewayBehaviorRegistryVersion, scenarioSlice.Version);
+        Assert.Equal(scenario.BehaviorCatalogFingerprint, scenarioSlice.Fingerprint);
         var output = new StringWriter();
         var error = new StringWriter();
 

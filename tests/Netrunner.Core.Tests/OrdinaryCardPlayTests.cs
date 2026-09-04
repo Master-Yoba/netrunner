@@ -359,8 +359,6 @@ public sealed class OrdinaryCardPlayTests
 
         GameState turnAction = OpenTurnAction(fixture);
         Assert.Equal([drawnCardId], turnAction.GetZone(ZoneKind.CorpDeck).CardIds);
-        TurnHistoryState historyBeforePlay = Assert.IsType<TurnHistoryState>(turnAction.Turn.History);
-        string historyJson = EngineJson.Serialize(historyBeforePlay);
         ApplyResult result = Apply(
             turnAction,
             fixture,
@@ -372,7 +370,9 @@ public sealed class OrdinaryCardPlayTests
         Assert.Equal(GameOutcomeKind.Won, result.State.Outcome.Kind);
         Assert.Equal(PlayerSide.Runner, result.State.Outcome.Winner);
         Assert.Equal(GameWinReason.DeckOut, result.State.Outcome.Reason);
-        Assert.Equal(historyJson, EngineJson.Serialize(result.State.Turn.History));
+        Assert.Equal(
+            [cardId],
+            result.State.Turn.History!.CorpThisTurn!.TrashedCardOccurrenceIds);
         Assert.All(result.State.Players, player => Assert.Equal(0, player.Clicks));
         Assert.Single(result.State.GetZone(ZoneKind.CorpDiscard).CardIds, cardId);
         Assert.True(result.State.GetCard(cardId).FaceUp);

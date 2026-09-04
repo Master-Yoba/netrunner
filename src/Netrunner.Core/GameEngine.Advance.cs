@@ -10,6 +10,19 @@ public static partial class GameEngine
         {
             if (steps >= maxResolutionSteps)
             {
+                // Ability payment commits at an explicit serialized
+                // checkpoint. Permit a deliberately tiny budget to return
+                // that checkpoint so a caller can persist and resume it;
+                // every other incomplete resolution remains bounded-failure
+                // compatible with the existing reducer contract.
+                if (working.ResolutionStack[^1] is AbilityFrame
+                    {
+                        Stage: AbilityLifecycleStage.CostCheckpoint,
+                    })
+                {
+                    break;
+                }
+
                 throw new ResolutionStepBudgetExceededException(maxResolutionSteps);
             }
 
@@ -67,6 +80,9 @@ public static partial class GameEngine
                     break;
                 case BehaviorResolutionFrame behavior:
                     StepBehaviorResolution(working, behavior);
+                    break;
+                case AbilityFrame ability:
+                    StepAbility(working, ability);
                     break;
                 default:
                     throw new ResolutionFailureException(

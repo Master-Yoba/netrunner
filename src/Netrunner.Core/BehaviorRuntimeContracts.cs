@@ -196,6 +196,59 @@ internal static class BehaviorContinuation
 }
 
 /// <summary>
+/// Small, data-only queries over the catalog-derived behavior program.  The
+/// continuation is replayed before inspecting the cursor so lifecycle
+/// validation never trusts an in-memory instruction projection.
+/// </summary>
+internal static class BehaviorInstructionPath
+{
+    public static bool CanReach(
+        IReadOnlyList<BehaviorInstruction> instructions,
+        BehaviorInstructionKind kind)
+    {
+        foreach (BehaviorInstruction instruction in instructions)
+        {
+            if (instruction.Kind == kind
+                || instruction.Branch is { } branch
+                    && (CanReach(branch.WhenTrue, kind) || CanReach(branch.WhenFalse, kind))
+                || instruction.Choice is { } choice
+                    && choice.Options.Any(option => CanReach(option.Instructions, kind)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public static bool HasReached(
+        IReadOnlyList<BehaviorInstruction> root,
+        IReadOnlyList<BehaviorContinuationStep> continuation,
+        int instructionCursor,
+        BehaviorInstructionKind kind)
+    {
+        if (instructionCursor <= 0)
+        {
+            return false;
+        }
+
+        List<BehaviorInstruction> instructions = root.ToList();
+        foreach (BehaviorContinuationStep step in continuation)
+        {
+            if (!BehaviorContinuation.TryApply(instructions, step, out _))
+            {
+                return false;
+            }
+        }
+
+        int count = Math.Min(instructionCursor, instructions.Count);
+        return instructions
+            .Take(count)
+            .Any(instruction => instruction.Kind == kind);
+    }
+}
+
+/// <summary>
 /// Stable identity for the exact parent frame captured by a child behavior.
 /// It is derived from the serialized data-only frame, so changing a parent
 /// cursor, owner, or context invalidates a resumed child before mutation.
@@ -420,6 +473,67 @@ public enum BehaviorResolutionStage
 {
     PayCosts,
     Execute,
+    AwaitingOccurrence,
+}
+
+/// <summary>
+/// Engine-issued continuation context for the occurrence raised by a behavior
+/// instruction. The context remains on the parent cursor while the nested
+/// occurrence effect resolves, and is retained only as a narrow authorization
+/// when that child moved the same source card to its owner's discard.
+/// </summary>
+public sealed record BehaviorOccurrenceContinuation
+{
+    [JsonConstructor]
+    public BehaviorOccurrenceContinuation(
+        OccurrenceKind kind,
+        CardInstanceId sourceCardId,
+        string frameIdentity,
+        int instructionCursor,
+        bool sourceMovedAfterCompletion = false)
+    {
+        if (kind != OccurrenceKind.HostedCreditPoolEmptied)
+        {
+            throw new ArgumentException(
+                "Behavior occurrence continuations currently support only hosted-credit pool exhaustion.",
+                nameof(kind));
+        }
+
+        if (!BehaviorFrameIdentity.TryValidateIssued(frameIdentity, out _))
+        {
+            throw new ArgumentException(
+                "A behavior occurrence continuation requires a stable frame identity.",
+                nameof(frameIdentity));
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegative(instructionCursor);
+
+        Kind = kind;
+        SourceCardId = sourceCardId;
+        FrameIdentity = frameIdentity;
+        InstructionCursor = instructionCursor;
+        SourceMovedAfterCompletion = sourceMovedAfterCompletion;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public OccurrenceKind Kind { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId SourceCardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string FrameIdentity { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int InstructionCursor { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public bool SourceMovedAfterCompletion { get; private set; }
 }
 
 /// <summary>
@@ -457,9 +571,28 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
         string? frameIdentity = null,
         ZoneId? sourceZoneId = null,
         ZoneKind? sourceZoneKind = null,
-        string? parentFrameIdentity = null)
+        string? parentFrameIdentity = null,
+        string? abilityKey = null,
+        string? triggerKey = null,
+        bool catalogTriggerSourceMovedBeforeStart = false,
+        BehaviorOccurrenceContinuation? occurrenceContinuation = null)
         : base(version, behaviorId)
     {
+        if (abilityKey is not null && triggerKey is not null)
+        {
+            throw new ArgumentException("A behavior frame cannot carry both an ability key and a trigger key.");
+        }
+
+        if (abilityKey is not null && !StableIdentifier.TryValidate(abilityKey))
+        {
+            throw new ArgumentException("An ability key must be a stable identifier.", nameof(abilityKey));
+        }
+
+        if (triggerKey is not null && !StableIdentifier.TryValidate(triggerKey))
+        {
+            throw new ArgumentException("A trigger key must be a stable identifier.", nameof(triggerKey));
+        }
+
         if (!StableIdentifier.TryValidate(catalogFingerprint))
         {
             throw new ArgumentException("A behavior frame requires a catalog fingerprint.", nameof(catalogFingerprint));
@@ -493,6 +626,10 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
         SourceZoneId = sourceZoneId;
         SourceZoneKind = sourceZoneKind;
         ParentFrameIdentity = parentFrameIdentity;
+        AbilityKey = abilityKey;
+        TriggerKey = triggerKey;
+        CatalogTriggerSourceMovedBeforeStart = catalogTriggerSourceMovedBeforeStart;
+        OccurrenceContinuation = occurrenceContinuation;
     }
 
     public BehaviorResolutionFrame(
@@ -532,7 +669,13 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
         ZoneId sourceZoneId,
         ZoneKind sourceZoneKind,
         string? parentBehaviorId,
-        string? parentFrameIdentity)
+        string? parentFrameIdentity,
+        string? abilityKey = null,
+        string? triggerKey = null,
+        IReadOnlyList<BehaviorInstruction>? rootInstructions = null,
+        IReadOnlyList<BehaviorInstruction>? instructions = null,
+        bool catalogTriggerSourceMovedBeforeStart = false,
+        BehaviorOccurrenceContinuation? occurrenceContinuation = null)
         : this(
             1,
             ResolutionBehaviorIds.CardBehavior,
@@ -549,10 +692,14 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
             frameIdentity: frameIdentity,
             sourceZoneId: sourceZoneId,
             sourceZoneKind: sourceZoneKind,
-            parentFrameIdentity: parentFrameIdentity)
+            parentFrameIdentity: parentFrameIdentity,
+            abilityKey: abilityKey,
+            triggerKey: triggerKey,
+            catalogTriggerSourceMovedBeforeStart: catalogTriggerSourceMovedBeforeStart,
+            occurrenceContinuation: occurrenceContinuation)
     {
-        RootInstructions = Freeze(definition.Instructions);
-        Instructions = Freeze(definition.Instructions);
+        RootInstructions = Freeze(rootInstructions ?? definition.Instructions);
+        Instructions = Freeze(instructions ?? rootInstructions ?? definition.Instructions);
     }
 
     [JsonInclude]
@@ -647,6 +794,44 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
     [JsonRequired]
     public string? ParentFrameIdentity { get; private set; }
 
+    /// <summary>
+    /// When present, this behavior cursor is the execution child of an
+    /// AbilityFrame. The declaration is selected by key from the injected
+    /// catalog; a null value preserves the pre-4.3 generic behavior shape.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? AbilityKey { get; private set; }
+
+    /// <summary>
+    /// When present, this behavior cursor executes the immutable trigger
+    /// declaration selected by key from the injected catalog. It is mutually
+    /// exclusive with <see cref="AbilityKey"/>.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? TriggerKey { get; private set; }
+
+    /// <summary>
+    /// Engine-issued authorization for a catalog trigger whose source moved
+    /// after materialization but before its child was started. It remains
+    /// valid for the entire detached trigger child, including cursor
+    /// progress, yielded decisions, and save/load resumes.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool CatalogTriggerSourceMovedBeforeStart { get; private set; }
+
+    /// <summary>
+    /// Typed parent continuation for a hosted-credit exhaustion occurrence.
+    /// While the frame is AwaitingOccurrence this identifies the exact nested
+    /// occurrence effect; after completion it is retained only when that
+    /// occurrence moved the parent source to its owner's discard.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BehaviorOccurrenceContinuation? OccurrenceContinuation { get; private set; }
+
     internal BehaviorResolutionFrame With(
         BehaviorResolutionStage? stage = null,
         IReadOnlyList<BehaviorInstruction>? instructions = null,
@@ -657,7 +842,12 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
         bool clearChoice = false,
         IReadOnlyList<BehaviorContinuationStep>? continuation = null,
         ZoneId? setAsideZoneId = null,
-        bool clearSetAsideZone = false) =>
+        bool clearSetAsideZone = false,
+        string? abilityKey = null,
+        string? triggerKey = null,
+        bool? catalogTriggerSourceMovedBeforeStart = null,
+        BehaviorOccurrenceContinuation? occurrenceContinuation = null,
+        bool clearOccurrenceContinuation = false) =>
         new(
             Version,
             BehaviorId,
@@ -678,7 +868,13 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
             frameIdentity: FrameIdentity,
             sourceZoneId: SourceZoneId,
             sourceZoneKind: SourceZoneKind,
-            parentFrameIdentity: ParentFrameIdentity)
+            parentFrameIdentity: ParentFrameIdentity,
+            abilityKey: AbilityKey,
+            triggerKey: TriggerKey,
+            catalogTriggerSourceMovedBeforeStart: catalogTriggerSourceMovedBeforeStart ?? CatalogTriggerSourceMovedBeforeStart,
+            occurrenceContinuation: clearOccurrenceContinuation
+                ? null
+                : occurrenceContinuation ?? OccurrenceContinuation)
         {
             RootInstructions = Freeze(RootInstructions),
             Instructions = Freeze(instructions ?? Instructions),

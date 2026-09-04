@@ -252,7 +252,10 @@ public sealed class M2ScenarioDocument
     /// <summary>Every problem with its exact document path; empty when valid.</summary>
     public IReadOnlyList<string> CollectProblems()
     {
-        return CollectProblems(GatewayBehaviorCatalog.Create());
+        // Keep overload resolution on the injected-catalog path so the
+        // parameterless legacy entry point validates the M2 slice rather
+        // than the complete (newer) Gateway catalog.
+        return CollectProblems((IBehaviorCatalog)GatewayBehaviorCatalog.Create());
     }
 
     /// <summary>
@@ -264,18 +267,11 @@ public sealed class M2ScenarioDocument
     {
         ArgumentNullException.ThrowIfNull(behaviorCatalog);
         BehaviorCatalog scenarioCatalog = CreateBehaviorCatalog(behaviorCatalog);
-        return CollectProblems(behaviorCatalog, scenarioCatalog);
+        return CollectProblems(scenarioCatalog);
     }
 
-    private ReadOnlyCollection<string> CollectProblems(
-        IBehaviorCatalog suppliedCatalog,
-        BehaviorCatalog behaviorCatalog)
+    private ReadOnlyCollection<string> CollectProblems(BehaviorCatalog behaviorCatalog)
     {
-        // M2 callers still use the legacy static lookup/ReplayVerifier APIs;
-        // keep this idempotent adapter registration until those callers are
-        // fully migrated. All document capability checks below use the
-        // immutable scenario slice.
-        GatewayBehaviorCatalog.RegisterAll();
         var problems = new List<string>();
 
         if (SchemaVersion != EngineCompatibility.ArtifactSchemaVersion)
@@ -308,17 +304,10 @@ public sealed class M2ScenarioDocument
         {
             problems.Add("behaviorRegistryVersion: must be an explicit compiled behavior catalog version.");
         }
-        else if (BehaviorRegistryVersion != CardBehaviorSpecCatalog.Version)
+        else if (BehaviorRegistryVersion != EngineCompatibility.GatewayBehaviorRegistryVersion)
         {
             problems.Add(
-                $"behaviorRegistryVersion: '{BehaviorRegistryVersion}' is not the Gateway compiled behavior version '{CardBehaviorSpecCatalog.Version}'.");
-        }
-
-        if (!string.IsNullOrWhiteSpace(BehaviorRegistryVersion)
-            && !string.Equals(BehaviorRegistryVersion, suppliedCatalog.Version, StringComparison.Ordinal))
-        {
-            problems.Add(
-                $"behaviorRegistryVersion: '{BehaviorRegistryVersion}' does not match the supplied behavior catalog version '{suppliedCatalog.Version}'.");
+                $"behaviorRegistryVersion: '{BehaviorRegistryVersion}' is not the Gateway compiled behavior version '{EngineCompatibility.GatewayBehaviorRegistryVersion}'.");
         }
 
         string scenarioFingerprint = behaviorCatalog.Fingerprint;
@@ -570,7 +559,7 @@ public sealed class M2ScenarioDocument
     {
         ArgumentNullException.ThrowIfNull(behaviorCatalog);
         BehaviorCatalog scenarioCatalog = CreateBehaviorCatalog(behaviorCatalog);
-        ReadOnlyCollection<string> problems = CollectProblems(behaviorCatalog, scenarioCatalog);
+        ReadOnlyCollection<string> problems = CollectProblems(scenarioCatalog);
         if (problems.Count > 0)
         {
             throw new M2ScenarioException(problems);
@@ -597,7 +586,75 @@ public sealed class M2ScenarioDocument
             }
         }
 
-        return BehaviorCatalog.CreateSlice(behaviorCatalog, definitionIds);
+        return CreateLegacyBehaviorCatalog(behaviorCatalog, definitionIds, BehaviorRegistryVersion);
+    }
+
+    /// <summary>
+    /// Builds the M2 compatibility catalog from the injected composition
+    /// catalog. M2 predates generic card behavior definitions and requires
+    /// only its five typed families; generic overlays for an ID are therefore
+    /// intentionally not carried into the scenario slice. This policy stays
+    /// in the Match adapter so Core's general definition slicing remains
+    /// generic and reusable by later milestones.
+    /// </summary>
+    private static BehaviorCatalog CreateLegacyBehaviorCatalog(
+        IBehaviorCatalog source,
+        IEnumerable<CardDefinitionId> definitionIds,
+        string documentBehaviorRegistryVersion)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(definitionIds);
+
+        // The M2 document owns the compatibility pin. A newer full Gateway
+        // composition may be injected as long as it supplies the required
+        // legacy capabilities; carrying its full-catalog version into the
+        // slice would churn the pinned fingerprint and every derived proof.
+        // Invalid/missing document pins still need to reach CollectProblems so
+        // use the legacy constant only as a construction fallback.
+        string legacyVersion = IsStableIdentifier(documentBehaviorRegistryVersion)
+            ? documentBehaviorRegistryVersion
+            : EngineCompatibility.GatewayBehaviorRegistryVersion;
+        var builder = new BehaviorCatalogBuilder(legacyVersion);
+        foreach (CardDefinitionId definitionId in definitionIds.Distinct())
+        {
+            if (source.TryGetIce(definitionId, out IceBehaviorSpec? ice))
+            {
+                builder.AddIce(ice);
+            }
+
+            if (source.TryGetIcebreaker(definitionId, out IcebreakerBehaviorSpec? icebreaker))
+            {
+                builder.AddIcebreaker(icebreaker);
+            }
+
+            if (source.TryGetAsset(definitionId, out AssetBehaviorSpec? asset))
+            {
+                builder.AddAsset(asset);
+            }
+
+            if (source.TryGetAgenda(definitionId, out AgendaBehaviorSpec? agenda))
+            {
+                builder.AddAgenda(agenda);
+            }
+
+            if (source.TryGetRunEvent(definitionId, out RunEventBehaviorSpec? runEvent))
+            {
+                builder.AddRunEvent(runEvent);
+            }
+        }
+
+        return builder.Build();
+    }
+
+    private static bool IsStableIdentifier(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 128)
+        {
+            return false;
+        }
+
+        return value.All(static character =>
+            !char.IsWhiteSpace(character) && !char.IsControl(character));
     }
 
     public static bool TryParseServerRef(string reference, int remotes, out (ServerKind Kind, int RemoteIndex) server)
@@ -627,9 +684,6 @@ public sealed class M2ScenarioDocument
                 return false;
         }
     }
-
-    internal static bool IsRegisteredBehavior(CardDefinitionId definitionId) =>
-        IsRegisteredBehavior(definitionId, CardBehaviorSpecCatalog.Default);
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage(
         "Performance",

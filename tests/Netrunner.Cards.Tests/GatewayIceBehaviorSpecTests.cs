@@ -53,31 +53,30 @@ public sealed class GatewayIceBehaviorSpecTests
     }
 
     [Fact]
-    public void RegisterAllIsIdempotentAndRetrievalSucceeds()
+    public void ImmutableGatewayCatalogContainsTheCompiledIceSpecs()
     {
-        GatewayIceBehaviorSpecs.RegisterAll();
-        GatewayIceBehaviorSpecs.RegisterAll();
+        BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();
 
-        IReadOnlyCollection<CardDefinitionId> definitionIds = CardBehaviorSpecCatalog.DefinitionIds;
+        IReadOnlyCollection<CardDefinitionId> definitionIds = catalog.DefinitionIds;
         Assert.Equal(2, definitionIds.Count);
         Assert.Contains(GatewayCardCodes.Palisade, definitionIds);
         Assert.Contains(GatewayCardCodes.Whitespace, definitionIds);
 
         Assert.Equal(
             GatewayIceBehaviorSpecs.IceSpecs[0],
-            CardBehaviorSpecCatalog.GetIce(GatewayCardCodes.Palisade));
+            catalog.IceSpecs.Single(spec => spec.DefinitionId == GatewayCardCodes.Palisade));
         Assert.Equal(
             GatewayIceBehaviorSpecs.IceSpecs[1],
-            CardBehaviorSpecCatalog.GetIce(GatewayCardCodes.Whitespace));
+            catalog.IceSpecs.Single(spec => spec.DefinitionId == GatewayCardCodes.Whitespace));
     }
 
     [Fact]
     public void GetIceFailsClosedForUnregisteredDefinitions()
     {
         CardDefinitionId unregistered = new("30001");
+        BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();
 
-        Assert.False(CardBehaviorSpecCatalog.TryGetIce(unregistered, out _));
-        Assert.Throws<ArgumentException>(() => CardBehaviorSpecCatalog.GetIce(unregistered));
+        Assert.False(catalog.TryGetIce(unregistered, out _));
     }
 
     [Fact]
@@ -85,7 +84,8 @@ public sealed class GatewayIceBehaviorSpecTests
     {
         IceBehaviorSpec canonical = GatewayIceBehaviorSpecs.IceSpecs[0];
         Assert.Equal(GatewayCardCodes.Palisade, canonical.DefinitionId);
-        CardBehaviorSpecCatalog.RegisterIce(canonical);
+        BehaviorCatalogBuilder builder = new(GatewayBehaviorCatalog.Version);
+        builder.AddIce(canonical);
 
         IceBehaviorSpec conflicting = new(
             canonical.DefinitionId,
@@ -96,8 +96,8 @@ public sealed class GatewayIceBehaviorSpecTests
             strengthModifiers: canonical.StrengthModifiers);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
-            () => CardBehaviorSpecCatalog.RegisterIce(conflicting));
+            () => builder.AddIce(conflicting));
         Assert.Contains(canonical.DefinitionId.Value, exception.Message);
-        Assert.Equal(canonical, CardBehaviorSpecCatalog.GetIce(canonical.DefinitionId));
+        Assert.Equal(canonical, builder.Build().IceSpecs.Single());
     }
 }

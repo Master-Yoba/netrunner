@@ -195,6 +195,23 @@ if ((card_data_content_enabled == 1)); then
   fi
   echo "m4-card-gallery-smoke=PASS cards=77 mode=official"
 fi
+slice43_ui_smoke_log="$coverage_report_dir/slice43-ui-smoke.log"
+slice43_ui_expected="M4_SLICE43_UI PASS card_in_scene_tree=true ready_cue=true ready_chips=true used_cue=true used_chips=true ability_affordance=true rfg_removed=true"
+if ! run_with_timeout 30 env \
+  XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
+  "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \
+  -- --m4-slice43-ui-smoke >"$slice43_ui_smoke_log" 2>&1; then
+  echo "M4 Slice 4.3 UI smoke failed or timed out; see $slice43_ui_smoke_log." >&2
+  sed -n '1,120p' "$slice43_ui_smoke_log" >&2
+  exit 1
+fi
+if ! grep -Fq "$slice43_ui_expected" "$slice43_ui_smoke_log" \
+  || grep -Fq "M4_SLICE43_UI FAIL" "$slice43_ui_smoke_log"; then
+  echo "M4 Slice 4.3 UI smoke did not prove the client affordance path; see $slice43_ui_smoke_log." >&2
+  sed -n '1,120p' "$slice43_ui_smoke_log" >&2
+  exit 1
+fi
+echo "m4-slice43-ui-smoke=PASS card_in_scene_tree=true ready_cue=true ready_chips=true used_cue=true used_chips=true ability_affordance=true rfg_removed=true"
 XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
   "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" -- --smoke-test
 "$verify_root/scripts/check-secrets.sh"

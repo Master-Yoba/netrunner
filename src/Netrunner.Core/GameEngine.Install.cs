@@ -12,6 +12,7 @@ public static partial class GameEngine
         bool CreateNewRemote,
         ZoneId? DestinationZoneId,
         int InstallCost,
+        CostQuote? InstallCostQuote,
         IReadOnlyList<CardInstanceId> CandidateReplacementCardIds,
         IReadOnlyList<CardInstanceId> RequiredReplacementCardIds,
         IReadOnlyList<CardDefinitionId> CandidateReplacementDefinitionIds);
@@ -49,7 +50,7 @@ public static partial class GameEngine
         }
 
         MoveCard(working, card, hand, destination);
-        MarkInstalledThisTurn(working, side, cardId);
+        MarkInstalledThisTurn(working, cardId);
         ApplyCreditDelta(working, player.Id, -behavior.InstallCost);
         Emit(working, EngineEventKinds.CardInstalled, new CardInstalledEventPayload(
             side,
@@ -123,27 +124,32 @@ public static partial class GameEngine
                      .Where(cardId => !frame.SelectedReplacementCardIds.Contains(cardId)))
         {
             IReadOnlyList<CardInstanceId> selected = frame.SelectedReplacementCardIds.Append(candidate).ToArray();
-            int cost = CalculateInstallCost(working, plan.Spec, frame.DestinationKind, frame.ServerId, frame.CreateNewRemote, selected);
+            int baseCost = CalculateInstallCost(working, plan.Spec, frame.DestinationKind, frame.ServerId, frame.CreateNewRemote, selected);
+            CostQuote? quote = CostModifierProjection.RunnerInstall(working, plan.Card, baseCost);
+            int effectiveCost = quote?.EffectiveCost ?? baseCost;
             materialized.Add(new InstallCardParameters(
                 frame.CardId,
                 frame.DestinationKind,
                 frame.ServerId,
                 frame.CreateNewRemote,
-                cost,
+                effectiveCost,
                 frame.CandidateReplacementCardIds,
                 frame.RequiredReplacementCardIds,
                 selected,
-                finalizeSelection: false));
+                finalizeSelection: false,
+                costQuote: quote));
         }
 
         PlayerState player = GetPlayer(working, frame.Owner);
-        int selectedCost = CalculateInstallCost(
+        int selectedBaseCost = CalculateInstallCost(
             working,
             plan.Spec,
             frame.DestinationKind,
             frame.ServerId,
             frame.CreateNewRemote,
             frame.SelectedReplacementCardIds);
+        CostQuote? selectedQuote = CostModifierProjection.RunnerInstall(working, plan.Card, selectedBaseCost);
+        int selectedCost = selectedQuote?.EffectiveCost ?? selectedBaseCost;
         if (InstallSelectionSatisfiesRequirements(working, frame, plan, frame.SelectedReplacementCardIds)
             && (frame.InitiationKind == InstallInitiationKind.BehaviorEffect || player.Clicks >= 1)
             && player.Credits >= selectedCost)
@@ -157,7 +163,8 @@ public static partial class GameEngine
                 frame.CandidateReplacementCardIds,
                 frame.RequiredReplacementCardIds,
                 frame.SelectedReplacementCardIds,
-                finalizeSelection: true));
+                finalizeSelection: true,
+                costQuote: selectedQuote));
         }
 
         return materialized;
@@ -199,7 +206,8 @@ public static partial class GameEngine
             || !parameters.RequiredReplacementCardIds.SequenceEqual(plan.RequiredReplacementCardIds)
             || parameters.SelectedReplacementCardIds.Count != 0
             || parameters.FinalizeSelection != (plan.CandidateReplacementCardIds.Count == 0)
-            || parameters.CreditCost != plan.InstallCost)
+            || parameters.CreditCost != plan.InstallCost
+            || !CostQuotesEqual(parameters.CostQuote, plan.InstallCostQuote))
         {
             throw new ResolutionFailureException("The install action does not match the materialized install plan.");
         }
@@ -234,7 +242,8 @@ public static partial class GameEngine
                     plan.RequiredReplacementCardIds,
                     [],
                     plan.DestinationZoneId,
-                    plan.CandidateReplacementDefinitionIds);
+                    plan.CandidateReplacementDefinitionIds,
+                    costQuote: plan.InstallCostQuote);
                 working.ResolutionStack.Add(corpFrame);
                 return;
             }
@@ -264,7 +273,8 @@ public static partial class GameEngine
             plan.RequiredReplacementCardIds,
             [],
             plan.DestinationZoneId,
-            plan.CandidateReplacementDefinitionIds);
+            plan.CandidateReplacementDefinitionIds,
+            costQuote: plan.InstallCostQuote);
 
         if (plan.CandidateReplacementCardIds.Count == 0)
         {
@@ -298,14 +308,21 @@ public static partial class GameEngine
 
         if (parameters.FinalizeSelection)
         {
+            int expectedFinalBaseCost = CalculateInstallCost(
+                working,
+                plan.Spec,
+                frame.DestinationKind,
+                frame.ServerId,
+                frame.CreateNewRemote,
+                frame.SelectedReplacementCardIds);
+            CostQuote? expectedFinalQuote = CostModifierProjection.RunnerInstall(
+                working,
+                plan.Card,
+                expectedFinalBaseCost);
+            int expectedFinalCost = expectedFinalQuote?.EffectiveCost ?? expectedFinalBaseCost;
             if (!parameters.SelectedReplacementCardIds.SequenceEqual(frame.SelectedReplacementCardIds)
-                || parameters.CreditCost != CalculateInstallCost(
-                    working,
-                    plan.Spec,
-                    frame.DestinationKind,
-                    frame.ServerId,
-                    frame.CreateNewRemote,
-                    frame.SelectedReplacementCardIds)
+                || parameters.CreditCost != expectedFinalCost
+                || !CostQuotesEqual(parameters.CostQuote, expectedFinalQuote)
                 || !InstallSelectionSatisfiesRequirements(working, frame, plan, frame.SelectedReplacementCardIds))
             {
                 throw new ResolutionFailureException("The final install selection is stale or incomplete.");
@@ -331,19 +348,22 @@ public static partial class GameEngine
             throw new ResolutionFailureException("The incremental install selection is not a remaining frozen candidate.");
         }
 
-        int expectedCost = CalculateInstallCost(
+        int expectedBaseCost = CalculateInstallCost(
             working,
             plan.Spec,
             frame.DestinationKind,
             frame.ServerId,
             frame.CreateNewRemote,
             parameters.SelectedReplacementCardIds);
-        if (parameters.CreditCost != expectedCost)
+        CostQuote? expectedQuote = CostModifierProjection.RunnerInstall(working, plan.Card, expectedBaseCost);
+        int expectedCost = expectedQuote?.EffectiveCost ?? expectedBaseCost;
+        if (parameters.CreditCost != expectedCost
+            || !CostQuotesEqual(parameters.CostQuote, expectedQuote))
         {
             throw new ResolutionFailureException("The incremental install cost is stale.");
         }
 
-        working.ResolutionStack[^1] = frame.Select(selected, expectedCost);
+        working.ResolutionStack[^1] = frame.Select(selected, expectedCost, expectedQuote);
     }
 
     private static void CommitInstall(
@@ -358,13 +378,18 @@ public static partial class GameEngine
             throw new ResolutionFailureException("Installing a card requires one click.");
         }
 
-        int cost = CalculateInstallCost(
+        int baseCost = CalculateInstallCost(
             working,
             plan.Spec,
             frame.DestinationKind,
             frame.ServerId,
             frame.CreateNewRemote,
             frame.SelectedReplacementCardIds);
+        // ValidateInstallFrame above has already checked that the frozen
+        // quote is the current quote for this card and selection.  Use its
+        // effective amount for the actual payment so the transaction cannot
+        // silently fall back to the printed/base cost.
+        int cost = frame.CostQuote?.EffectiveCost ?? baseCost;
         if (player.Credits < cost)
         {
             throw new ResolutionFailureException($"Installing '{frame.CardId}' requires {cost} credits.");
@@ -380,7 +405,7 @@ public static partial class GameEngine
             ZoneState discard = GetZone(
                 working,
                 player.Side == PlayerSide.Corp ? ZoneKind.CorpDiscard : ZoneKind.RunnerHeap);
-            MoveCard(working, replacement, replacementSource, discard);
+            TrashCard(working, replacement, replacementSource, discard);
         }
 
         // MoveCard replaces both source and destination zone records.  The
@@ -424,7 +449,7 @@ public static partial class GameEngine
             frame.CardClass is RuntimeCardClass.Program or RuntimeCardClass.Hardware or RuntimeCardClass.Resource,
             false,
             installed.AdvancementCounters));
-        MarkInstalledThisTurn(working, player.Side, frame.CardId);
+        MarkInstalledThisTurn(working, frame.CardId);
 
         if (frame.CardClass == RuntimeCardClass.Program)
         {
@@ -470,6 +495,11 @@ public static partial class GameEngine
             AdvanceBehaviorCursor(
                 working,
                 behaviorParent.With(bindings: bindings));
+            QueueCardInstalledOccurrence(
+                working,
+                player.Id,
+                frame.CardId,
+                destination.ServerId);
             return;
         }
 
@@ -489,6 +519,11 @@ public static partial class GameEngine
             TurnWindow(parent.ActiveSide),
             parent.ActiveSide,
             forcedActionEnd: parent.ForcedActionEnd);
+        QueueCardInstalledOccurrence(
+            working,
+            player.Id,
+            frame.CardId,
+            destination.ServerId);
     }
 
     private static void CommitInstall(
@@ -545,7 +580,7 @@ public static partial class GameEngine
             faceUp: false,
             rezzed: false,
             installed.AdvancementCounters));
-        MarkInstalledThisTurn(working, PlayerSide.Corp, plan.Card.Id);
+        MarkInstalledThisTurn(working, plan.Card.Id);
         Emit(working, EngineEventKinds.CardInstalled, new CardInstalledEventPayload(
             PlayerSide.Corp,
             plan.Card.Id,
@@ -554,6 +589,34 @@ public static partial class GameEngine
             plan.InstallCost));
 
         ResumeTurnAfterInstall(working, parent);
+        QueueCardInstalledOccurrence(
+            working,
+            corp.Id,
+            plan.Card.Id,
+            destination.ServerId);
+    }
+
+    /// <summary>
+    /// Opens the normal occurrence/checkpoint pipeline after an install has
+    /// committed all of its own mutations and its parent continuation has
+    /// been advanced.  Keeping the marker as a regular effect preserves
+    /// trigger ordering and makes optional choices serializable without
+    /// repeating payment or install work.
+    /// </summary>
+    private static void QueueCardInstalledOccurrence(
+        WorkingState working,
+        PlayerId controller,
+        CardInstanceId cardId,
+        ServerId? serverId)
+    {
+        working.ResolutionStack.Add(new EffectResolutionFrame(
+            controller,
+            new CostBundle(),
+            new EffectBundle(new GameplayOccurrenceEffect(
+                OccurrenceKind.CardInstalled,
+                controller,
+                cardId,
+                serverId))));
     }
 
     private static void ApplyCreditDeltaIfNonZero(WorkingState working, PlayerId playerId, int delta)
@@ -723,7 +786,11 @@ public static partial class GameEngine
             return null;
         }
 
-        int installCost = CalculateInstallCost(working, spec, destinationKind, serverId, createNewRemote, []);
+        int baseInstallCost = CalculateInstallCost(working, spec, destinationKind, serverId, createNewRemote, []);
+        CostQuote? installCostQuote = spec.Side == PlayerSide.Runner
+            ? CostModifierProjection.RunnerInstall(working, card, baseInstallCost)
+            : null;
+        int installCost = installCostQuote?.EffectiveCost ?? baseInstallCost;
         if (side == PlayerSide.Corp
             && spec.CardClass is not RuntimeCardClass.Ice
             && installCost != 0)
@@ -765,6 +832,7 @@ public static partial class GameEngine
             createNewRemote,
             destination?.Id,
             installCost,
+            installCostQuote,
             candidates,
             required,
             candidateDefinitions);
@@ -793,16 +861,17 @@ public static partial class GameEngine
         CardInstanceState card = GetCard(working, cardId);
         if (!working.RuntimeCardCatalog.TryGet(card.DefinitionId, out CardRuntimeSpec? spec)
             || spec.Side != PlayerSide.Runner
-            || spec.CardClass != RuntimeCardClass.Program
+            || !IsBasicInstallClass(PlayerSide.Runner, spec.CardClass)
             || card.OwnerSide != PlayerSide.Runner)
         {
             return null;
         }
 
         ZoneState? source = working.Zones.FirstOrDefault(
-            zone => zone.Kind == ZoneKind.RunnerStack
+            zone => zone.Kind is (ZoneKind.RunnerStack or ZoneKind.RunnerGrip)
                 && zone.OwnerSide == PlayerSide.Runner
-                && zone.ServerId is null);
+                && zone.ServerId is null
+                && zone.Id == card.ZoneId);
         ZoneState? destination = working.Zones.FirstOrDefault(
             zone => zone.Kind == ZoneKind.RunnerRig
                 && zone.OwnerSide == PlayerSide.Runner
@@ -832,13 +901,15 @@ public static partial class GameEngine
 
         CardInstanceId[] required = ActiveRunnerInstallConflictIds(working, spec);
 
-        int installCost = CalculateInstallCost(
+        int baseInstallCost = CalculateInstallCost(
             working,
             spec,
             destinationKind,
             serverId,
             createNewRemote,
             []);
+        CostQuote? installCostQuote = CostModifierProjection.RunnerInstall(working, card, baseInstallCost);
+        int installCost = installCostQuote?.EffectiveCost ?? baseInstallCost;
         PlayerState player = GetPlayer(working, PlayerSide.Runner);
         if (player.Credits < installCost)
         {
@@ -857,6 +928,7 @@ public static partial class GameEngine
             createNewRemote,
             destination.Id,
             installCost,
+            installCostQuote,
             candidates,
             required,
             candidateDefinitions);
@@ -1342,8 +1414,8 @@ public static partial class GameEngine
                     || !frame.CandidateReplacementDefinitionIds.SequenceEqual(plan.CandidateReplacementDefinitionIds)))
             || (frame.InitiationKind == InstallInitiationKind.BehaviorEffect
                 && (frame.Owner != GetPlayer(working, PlayerSide.Runner).Id
-                    || frame.CardClass != RuntimeCardClass.Program
-                    || frame.SourceZoneKind != ZoneKind.RunnerStack
+                    || !IsBasicInstallClass(PlayerSide.Runner, frame.CardClass)
+                    || frame.SourceZoneKind is not (ZoneKind.RunnerStack or ZoneKind.RunnerGrip)
                     || frame.DestinationKind != InstallDestinationKind.RunnerRig
                     || frame.ServerId is not null
                     || frame.CreateNewRemote)))
@@ -1358,9 +1430,16 @@ public static partial class GameEngine
             frame.ServerId,
             frame.CreateNewRemote,
             frame.SelectedReplacementCardIds);
-        if (frame.InstallCost != expectedCost)
+        CostQuote? expectedQuote = CostModifierProjection.RunnerInstall(working, plan.Card, expectedCost);
+        int expectedEffectiveCost = expectedQuote?.EffectiveCost ?? expectedCost;
+        if (frame.InstallCost != expectedEffectiveCost)
         {
             throw new ResolutionFailureException("The frozen install cost is stale.");
+        }
+
+        if (!CostQuotesEqual(frame.CostQuote, expectedQuote))
+        {
+            throw new ResolutionFailureException("The frozen install cost quote is stale or forged.");
         }
 
         // The destination kind is only a logical selector.  The physical zone
@@ -1425,7 +1504,7 @@ public static partial class GameEngine
 
             PlayerState player = GetPlayer(working, frame.Owner);
             if ((frame.InitiationKind == InstallInitiationKind.BasicAction && player.Clicks < 1)
-                || player.Credits < expectedCost)
+                || player.Credits < expectedEffectiveCost)
             {
                 throw new ResolutionFailureException("The install is no longer affordable.");
             }
@@ -1555,7 +1634,8 @@ public static partial class GameEngine
                         plan.CandidateReplacementCardIds,
                         plan.RequiredReplacementCardIds,
                         [],
-                        finalizeSelection: plan.CandidateReplacementCardIds.Count == 0)));
+                        finalizeSelection: plan.CandidateReplacementCardIds.Count == 0,
+                        costQuote: plan.InstallCostQuote)));
             }
         }
     }

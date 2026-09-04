@@ -5,21 +5,21 @@ using Netrunner.Core;
 namespace Netrunner.AI;
 
 /// <summary>
-/// Stable version for the first full-game contract-agent policy. The policy
+/// Stable version for the bounded full-game contract-agent policy. The policy
 /// consumes only the typed legal-action surface; it never receives a
 /// <see cref="GameState"/>, card catalog, RNG, or hidden-zone data.
 /// </summary>
 public static class FullGameContractAgentVersion
 {
-    public const int SchemaVersion = 1;
+    public const int SchemaVersion = 2;
 
-    public const string AgentVersion = "full-game-contract-agent-v1";
+    public const string AgentVersion = "full-game-contract-agent-v2";
 
-    public const string PolicyVersion = "full-game-contract-policy-v1";
+    public const string PolicyVersion = "full-game-contract-policy-v2";
 }
 
 /// <summary>
-/// Action-class policy for <see cref="FullGameContractAgent"/> v1.
+/// Action-class policy for <see cref="FullGameContractAgent"/> v2.
 ///
 /// The action lists are typed <see cref="ActionKind"/> values, not prompt or
 /// description text. The dispatcher is deliberately organized by
@@ -34,12 +34,14 @@ public sealed class FullGameContractPolicy
 
     private static readonly ActionKind[] DefaultTurnActionOrder =
     [
+        ActionKind.UseAbility,
         ActionKind.GainCredit,
         ActionKind.DrawCard,
     ];
 
     private static readonly ActionKind[] DefaultRunActionOrder =
     [
+        ActionKind.UseAbility,
         ActionKind.RezIce,
         ActionKind.BreakSubroutines,
         ActionKind.PumpBreaker,
@@ -98,6 +100,7 @@ public sealed class FullGameContractPolicy
     private static IReadOnlySet<ActionKind> AllowedTurnActions { get; } =
         new HashSet<ActionKind>
         {
+            ActionKind.UseAbility,
             ActionKind.GainCredit,
             ActionKind.DrawCard,
         };
@@ -105,6 +108,7 @@ public sealed class FullGameContractPolicy
     private static IReadOnlySet<ActionKind> AllowedRunActions { get; } =
         new HashSet<ActionKind>
         {
+            ActionKind.UseAbility,
             ActionKind.PassPriority,
             ActionKind.RezIce,
             ActionKind.BreakSubroutines,
@@ -137,7 +141,7 @@ public sealed class FullGameContractPolicy
             if (!allowed.Contains(action))
             {
                 throw new ArgumentException(
-                    $"Action kind '{action}' is not supported by this v1 policy.",
+                    $"Action kind '{action}' is not supported by this v2 policy.",
                     parameterName);
             }
 
@@ -154,11 +158,12 @@ public sealed class FullGameContractPolicy
 }
 
 /// <summary>
-/// Deterministic observation-only v1 agent for the Slice 4.2 shell.
+/// Deterministic observation-only v2 agent for the Slice 4.2 shell.
 ///
 /// It currently dispatches typed decision classes for turn timing, turn
-/// actions (gain/draw), forced discard, generic behavior choices, and M2 run
-/// windows. It returns an existing engine-issued <see cref="ActionId"/> only;
+/// actions (bounded abilities/gain/draw), forced discard, generic behavior
+/// choices, and M2 run windows. It returns an existing engine-issued <see
+/// cref="ActionId"/> only;
 /// it never synthesizes a submission and never chooses <see
 /// cref="ActionKind.EndTurn"/>.
 /// </summary>
@@ -228,7 +233,10 @@ public sealed class FullGameContractAgent : IGameAgent
     }
 
     private static LegalAction SelectTurnTiming(IReadOnlyList<LegalAction> actions) =>
-        SelectByPriority(actions, [ActionKind.PassPriority], FullGameActionClass.TurnTiming);
+        SelectByPriority(
+            actions,
+            [ActionKind.UseAbility, ActionKind.PassPriority],
+            FullGameActionClass.TurnTiming);
 
     private static LegalAction SelectTurnDiscard(IReadOnlyList<LegalAction> actions)
     {
@@ -249,7 +257,7 @@ public sealed class FullGameContractAgent : IGameAgent
                 && action.Parameters is BehaviorChoiceParameters)
             .ToArray();
 
-        // The v1 teaching policy prefers an economy mode when one is offered
+        // The v2 teaching policy prefers an economy mode when one is offered
         // (for example Predictive Planogram's typed `gain` option), then
         // falls back to the complete typed semantic key. This is deliberately
         // keyed by the option payload, never by the action description.
@@ -278,7 +286,10 @@ public sealed class FullGameContractAgent : IGameAgent
         foreach (ActionKind priority in priorities)
         {
             LegalAction[] candidates = actions
-                .Where(action => action.Kind == priority && HasExpectedParameters(action))
+                .Where(action =>
+                    action.Kind == priority
+                    && HasExpectedParameters(action, actionClass)
+                    && IsProactivelySelectable(action))
                 .ToArray();
             if (candidates.Length > 0)
             {
@@ -303,7 +314,7 @@ public sealed class FullGameContractAgent : IGameAgent
                     $"The full-game agent received a null legal action in the {actionClass} decision.");
             }
 
-            if (string.IsNullOrWhiteSpace(action.Id.Value)
+            if (!HasStableId(action.Id.Value)
                 || !actionIds.Add(action.Id.Value))
             {
                 throw new InvalidOperationException(
@@ -318,13 +329,12 @@ public sealed class FullGameContractAgent : IGameAgent
                 continue;
             }
 
-            if (!IsActionAllowed(action, actionClass))
-            {
-                throw new InvalidOperationException(
-                    $"The full-game agent received unsupported action '{action.Kind}' in the {actionClass} decision.");
-            }
-
-            if (!HasExpectedParameters(action))
+            // Real engine decisions may contain action classes that this
+            // teaching policy does not yet select (install, play, score,
+            // and so on). They remain opaque observations and are ignored;
+            // policy-supported candidates still receive strict validation.
+            if (IsActionAllowed(action, actionClass)
+                && !HasExpectedParameters(action, actionClass))
             {
                 throw new InvalidOperationException(
                     $"The full-game agent received malformed parameters for '{action.Kind}' in the {actionClass} decision.");
@@ -335,8 +345,11 @@ public sealed class FullGameContractAgent : IGameAgent
     private static bool IsActionAllowed(LegalAction action, FullGameActionClass actionClass) =>
         actionClass switch
         {
-            FullGameActionClass.TurnTiming => action.Kind == ActionKind.PassPriority,
-            FullGameActionClass.TurnAction => action.Kind is ActionKind.GainCredit or ActionKind.DrawCard,
+            FullGameActionClass.TurnTiming => action.Kind is ActionKind.UseAbility or ActionKind.PassPriority,
+            FullGameActionClass.TurnAction => action.Kind is
+                ActionKind.UseAbility
+                or ActionKind.GainCredit
+                or ActionKind.DrawCard,
             FullGameActionClass.TurnDiscard => action.Kind == ActionKind.ChooseCard,
             FullGameActionClass.BehaviorChoice => action.Kind == ActionKind.ChooseBehavior,
             FullGameActionClass.RunWindow => action.Kind is
@@ -348,11 +361,14 @@ public sealed class FullGameContractAgent : IGameAgent
                 or ActionKind.ContinueRun
                 or ActionKind.ChooseBreachCandidate
                 or ActionKind.TrashAccessedCard
-                or ActionKind.NoAccessAction,
+                or ActionKind.NoAccessAction
+                or ActionKind.UseAbility,
             _ => false,
         };
 
-    private static bool HasExpectedParameters(LegalAction action)
+    private static bool HasExpectedParameters(
+        LegalAction action,
+        FullGameActionClass actionClass)
     {
         return (action.Kind, action.Parameters) switch
         {
@@ -385,11 +401,286 @@ public sealed class FullGameContractAgent : IGameAgent
             (ActionKind.TrashAccessedCard, RunCardPaymentParameters payment) =>
                 HasStableId(payment.CardId.Value)
                 && payment.HostedCredits >= 0,
+            (ActionKind.UseAbility, AbilityActionParameters ability) =>
+                IsValidAbilityAction(ability, actionClass),
             _ => false,
         };
     }
 
-    private static bool HasStableId(string? value) => !string.IsNullOrWhiteSpace(value);
+    private static bool IsProactivelySelectable(LegalAction action) =>
+        action.Kind != ActionKind.UseAbility
+        || action.Parameters is AbilityActionParameters ability
+            && IsBoundedAbility(ability);
+
+    private static bool IsBoundedAbility(AbilityActionParameters ability) =>
+        ability.Costs.Any(static cost =>
+            cost is not null
+            && cost.Amount > 0
+            && cost.Kind is BehaviorCostKind.Clicks or BehaviorCostKind.LoseClick)
+        || ability.Usage is
+        {
+            Limit: BehaviorAbilityUsageLimit.OncePerTurn,
+            UsesThisTurn: 0,
+        };
+
+    private static bool HasStableId(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 128)
+        {
+            return false;
+        }
+
+        return value.All(static character =>
+            !char.IsControl(character) && !char.IsWhiteSpace(character));
+    }
+
+    private static bool IsValidAbilityAction(
+        AbilityActionParameters? ability,
+        FullGameActionClass actionClass)
+    {
+        if (ability is null
+            || !HasStableId(ability.SourceCardId.Value)
+            || !HasStableId(ability.DefinitionId.Value)
+            || !HasStableId(ability.SourceZoneId.Value)
+            || !HasStableId(ability.AbilityKey)
+            || !Enum.IsDefined(ability.SourceZoneKind)
+            || !Enum.IsDefined(ability.Timing)
+            || !Enum.IsDefined(ability.Activation)
+            || !DeterministicHash.IsSha256Hex(ability.CatalogFingerprint)
+            || !DeterministicHash.IsSha256Hex(ability.DefinitionFingerprint)
+            || !IsAbilityTimingCompatible(ability, actionClass)
+            || ability.Costs is null
+            || ability.TargetCardIds is null
+            || ability.Usage is null)
+        {
+            return false;
+        }
+
+        if (!HasValidAbilityCosts(ability.Costs, ability.Activation))
+        {
+            return false;
+        }
+
+        var targetIds = new HashSet<CardInstanceId>();
+        foreach (CardInstanceId targetId in ability.TargetCardIds)
+        {
+            if (!HasStableId(targetId.Value) || !targetIds.Add(targetId))
+            {
+                return false;
+            }
+        }
+
+        if (!Enum.IsDefined(ability.Usage.Limit)
+            || ability.Usage.UsesThisTurn < 0
+            || (ability.Usage.Limit == BehaviorAbilityUsageLimit.OncePerTurn
+                && ability.Usage.UsesThisTurn > 1))
+        {
+            return false;
+        }
+
+        return HasValidAdditionalCostSelections(ability);
+    }
+
+    private static bool IsAbilityTimingCompatible(
+        AbilityActionParameters ability,
+        FullGameActionClass actionClass) =>
+        actionClass switch
+        {
+            // The engine materializes ClickAction abilities only in the
+            // active turn's AwaitingAction window.
+            FullGameActionClass.TurnAction =>
+                ability.Activation == BehaviorAbilityActivation.ClickAction
+                && ability.Timing == BehaviorAbilityTiming.ActionPhase,
+
+            // Turn priority exposes the engine's generic paid window; no
+            // run-specific timing can be issued from this parent frame.
+            FullGameActionClass.TurnTiming =>
+                ability.Activation == BehaviorAbilityActivation.PaidAbility
+                && ability.Timing == BehaviorAbilityTiming.AnyPaidWindow,
+
+            // RunTiming does not expose the concrete run step in the typed
+            // observation. Accept exactly the paid timings currently emitted
+            // by Core, including the priority-free breach-access window.
+            FullGameActionClass.RunWindow =>
+                ability.Activation == BehaviorAbilityActivation.PaidAbility
+                && ability.Timing is
+                    BehaviorAbilityTiming.AnyPaidWindow
+                    or BehaviorAbilityTiming.InitiationPaidWindow
+                    or BehaviorAbilityTiming.ApproachPaidWindow
+                    or BehaviorAbilityTiming.EncounterPaidWindow
+                    or BehaviorAbilityTiming.MovementPaidWindow
+                    or BehaviorAbilityTiming.AfterMovePaidWindow
+                    or BehaviorAbilityTiming.BreachAccessPaidWindow,
+            _ => false,
+        };
+
+    private static bool HasValidAbilityCosts(
+        IReadOnlyList<BehaviorCost> costs,
+        BehaviorAbilityActivation activation)
+    {
+        int selfMovementCostCount = 0;
+        foreach (BehaviorCost? cost in costs)
+        {
+            if (!IsValidAbilityCost(cost))
+            {
+                return false;
+            }
+
+            if (cost!.Kind is BehaviorCostKind.TrashSelf or BehaviorCostKind.RemoveSelfFromGame
+                && ++selfMovementCostCount > 1)
+            {
+                return false;
+            }
+        }
+
+        int clickCostCount = costs.Count(static cost =>
+            cost is not null && cost.Kind == BehaviorCostKind.Clicks);
+        bool hasLoseClickCost = costs.Any(static cost =>
+            cost is not null && cost.Kind == BehaviorCostKind.LoseClick);
+
+        return activation switch
+        {
+            BehaviorAbilityActivation.ClickAction =>
+                clickCostCount == 1
+                && costs.Single(static cost => cost.Kind == BehaviorCostKind.Clicks).Amount == 1
+                && !hasLoseClickCost,
+            BehaviorAbilityActivation.PaidAbility => clickCostCount == 0,
+            _ => false,
+        };
+    }
+
+    private static bool IsValidAbilityCost(BehaviorCost? cost)
+    {
+        if (cost is null || !Enum.IsDefined(cost.Kind))
+        {
+            return false;
+        }
+
+        bool validAmount = cost.Kind switch
+        {
+            BehaviorCostKind.Credits => cost.Amount >= 0,
+            BehaviorCostKind.Clicks
+                or BehaviorCostKind.LoseClick
+                or BehaviorCostKind.Counter
+                or BehaviorCostKind.Tags
+                or BehaviorCostKind.HostedCredits
+                or BehaviorCostKind.Additional => cost.Amount > 0,
+            BehaviorCostKind.TrashSelf
+                or BehaviorCostKind.RemoveSelfFromGame => cost.Amount == 1,
+            _ => false,
+        };
+        if (!validAmount)
+        {
+            return false;
+        }
+
+        if (cost.Kind == BehaviorCostKind.Counter)
+        {
+            if (!HasStableId(cost.CounterName))
+            {
+                return false;
+            }
+        }
+        else if (cost.CounterName is not null)
+        {
+            return false;
+        }
+
+        if (cost.Kind != BehaviorCostKind.Additional)
+        {
+            return cost.AdditionalKey is null
+                && cost.AdditionalTarget is null
+                && cost.AdditionalKind is null;
+        }
+
+        if (!HasStableId(cost.AdditionalKey))
+        {
+            return false;
+        }
+
+        return cost.AdditionalKind is { } additionalKind
+            && Enum.IsDefined(additionalKind)
+            && additionalKind == BehaviorAdditionalCostKind.TrashCards
+            && IsValidStructuredAdditionalTarget(cost.AdditionalTarget);
+    }
+
+    private static bool IsValidStructuredAdditionalTarget(BehaviorTarget? target) =>
+        target is not null
+        && target.Kind == BehaviorTargetKind.ZoneCards
+        && target.Selector is null
+        && target.Zone is { } zone
+        && Enum.IsDefined(zone)
+        && !target.Reveal
+        && IsValidCardFilter(target.Filter)
+        && target.Filter!.OwnerSide is { } ownerSide
+        && Enum.IsDefined(ownerSide);
+
+    private static bool IsValidCardFilter(BehaviorCardFilter? filter) =>
+        filter is not null
+        && Enum.IsDefined(filter.CardType)
+        && (filter.DefinitionId is null || HasStableId(filter.DefinitionId.Value.Value))
+        && (filter.OwnerSide is null || Enum.IsDefined(filter.OwnerSide.Value))
+        && (filter.Subtype is null || HasStableId(filter.Subtype));
+
+    private static bool HasValidAdditionalCostSelections(AbilityActionParameters ability)
+    {
+        int additionalCostCount = ability.Costs.Count(static cost =>
+            cost.Kind == BehaviorCostKind.Additional);
+        IReadOnlyList<AbilityAdditionalCostSelection>? selections =
+            ability.AdditionalCostSelections;
+
+        // Core's constructor normalizes an empty optional list to null. A
+        // null list therefore represents the valid no-additional-cost shape;
+        // structured additional costs must carry one selection per cost.
+        if (selections is null)
+        {
+            return additionalCostCount == 0;
+        }
+
+        if (selections.Count == 0 || selections.Count != additionalCostCount)
+        {
+            return false;
+        }
+
+        var seenIndexes = new HashSet<int>();
+        var allSelectedCards = new HashSet<CardInstanceId>();
+        foreach (AbilityAdditionalCostSelection? selection in selections)
+        {
+            if (selection is null
+                || selection.CostIndex < 0
+                || selection.CostIndex >= ability.Costs.Count
+                || !seenIndexes.Add(selection.CostIndex)
+                || ability.Costs[selection.CostIndex].Kind != BehaviorCostKind.Additional
+                || !string.Equals(
+                    selection.CostKey,
+                    ability.Costs[selection.CostIndex].AdditionalKey,
+                    StringComparison.Ordinal)
+                || !HasStableId(selection.CostKey)
+                || selection.CardIds is null
+                || selection.CardIds.Count == 0)
+            {
+                return false;
+            }
+
+            var selectedCards = new HashSet<CardInstanceId>();
+            if (selection.CardIds.Count != ability.Costs[selection.CostIndex].Amount)
+            {
+                return false;
+            }
+
+            foreach (CardInstanceId cardId in selection.CardIds)
+            {
+                if (!HasStableId(cardId.Value)
+                    || !selectedCards.Add(cardId)
+                    || !allSelectedCards.Add(cardId))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return seenIndexes.Count == additionalCostCount;
+    }
 
     private static LegalAction SelectSemantic(
         IEnumerable<LegalAction> source,
@@ -430,9 +721,47 @@ public sealed class FullGameContractAgent : IGameAgent
         BreachCandidateParameters candidate when candidate.CardId is { } card => $"breach-card:{card.Value}",
         BreachCandidateParameters candidate when candidate.Source is { } source => $"breach-source:{source}",
         BehaviorChoiceParameters behavior => BehaviorKey(behavior),
+        AbilityActionParameters ability => AbilityKey(ability),
         _ => throw new InvalidOperationException(
             $"The full-game agent cannot derive a semantic key for '{action.Kind}'."),
     };
+
+    private static string AbilityKey(AbilityActionParameters ability)
+    {
+        // Costs, effect target IDs, and card IDs within a selection retain
+        // their declaration/physical-zone order. Selections themselves are
+        // keyed by CostIndex, so their transport order is not semantic and
+        // is normalized here. CanonicalJson then freezes every immutable
+        // field (including nested additional-target/filter data) without
+        // consulting descriptions or mutable state.
+        var selections = ability.AdditionalCostSelections?
+            .OrderBy(static selection => selection.CostIndex)
+            .Select(static selection => new
+            {
+                selection.CostIndex,
+                selection.CostKey,
+                CardIds = selection.CardIds,
+            })
+            .ToArray();
+
+        return CanonicalJson.Serialize(new
+        {
+            Kind = ActionKind.UseAbility,
+            ability.SourceCardId,
+            ability.DefinitionId,
+            ability.SourceZoneId,
+            ability.SourceZoneKind,
+            ability.AbilityKey,
+            ability.Timing,
+            ability.Activation,
+            ability.Costs,
+            ability.TargetCardIds,
+            AdditionalCostSelections = selections,
+            ability.Usage,
+            ability.CatalogFingerprint,
+            ability.DefinitionFingerprint,
+        });
+    }
 
     private static string BehaviorKey(BehaviorChoiceParameters behavior)
     {
@@ -497,7 +826,7 @@ public sealed class FullGameContractAgent : IGameAgent
     }
 
     private static InvalidOperationException UnsupportedDecision(DecisionKind kind) =>
-        new($"The full-game agent does not support decision kind '{kind}' in v1.");
+        new($"The full-game agent does not support decision kind '{kind}' in v2.");
 
     private enum FullGameActionClass
     {

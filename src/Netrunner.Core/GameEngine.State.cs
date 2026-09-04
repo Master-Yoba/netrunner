@@ -12,7 +12,8 @@ public static partial class GameEngine
         CardInstanceState card,
         ZoneState source,
         ZoneState destination,
-        bool emit = true)
+        bool emit = true,
+        bool cleanupCounters = true)
     {
         if (card.ZoneId != source.Id || !source.CardIds.Contains(card.Id))
         {
@@ -40,19 +41,92 @@ public static partial class GameEngine
         // this normalization at the single card-movement boundary so damage,
         // memory cleanup, explicit move effects, and run-event cleanup all
         // agree—even when a facedown Runner card enters the heap.
-        bool entersRunnerHeap = destination.Kind == ZoneKind.RunnerHeap
-            && destination.OwnerSide == PlayerSide.Runner;
+        bool entersPublicFaceUpZone = (destination.Kind == ZoneKind.RunnerHeap
+                && destination.OwnerSide == PlayerSide.Runner)
+            || destination.Kind is ZoneKind.CorpRemovedFromGame or ZoneKind.RunnerRemovedFromGame;
         ReplaceCard(working, new CardInstanceState(
             card.Id,
             card.DefinitionId,
             destination.Id,
             card.OwnerSide,
-            entersRunnerHeap || card.FaceUp,
+            entersPublicFaceUpZone || card.FaceUp,
             card.Rezzed,
             card.AdvancementCounters));
+        if (cleanupCounters
+            && IsInstalledZone(source.Kind)
+            && !IsInstalledZone(destination.Kind))
+        {
+            ClearCardCounters(working, card.Id);
+        }
+
         if (emit)
         {
-            Emit(working, EngineEventKinds.CardMoved, new CardMovedEventPayload(card.Id, source.Id, destination.Id));
+            CardMovedEventPayload movement = source.Kind is ZoneKind.CorpRemovedFromGame
+                or ZoneKind.RunnerRemovedFromGame
+                || destination.Kind is ZoneKind.CorpRemovedFromGame
+                or ZoneKind.RunnerRemovedFromGame
+                ? new CardMovedEventPayload(card.Id, source.Id, destination.Id, source.Kind, destination.Kind)
+                : new CardMovedEventPayload(card.Id, source.Id, destination.Id);
+            Emit(
+                working,
+                EngineEventKinds.CardMoved,
+                movement);
+        }
+    }
+
+    /// <summary>
+    /// Performs a rules-defined trash transfer and records the physical card
+    /// occurrence in the active formal turn facts.  Ordinary movement remains
+    /// deliberately separate: a destination discard/heap alone does not make
+    /// a move a trash operation.
+    /// </summary>
+    private static void TrashCard(
+        WorkingState working,
+        CardInstanceState card,
+        ZoneState source,
+        ZoneState destination,
+        bool emit = true,
+        bool cleanupCounters = true)
+    {
+        ZoneKind expectedKind = card.OwnerSide == PlayerSide.Corp
+            ? ZoneKind.CorpDiscard
+            : ZoneKind.RunnerHeap;
+        if (destination.Kind != expectedKind
+            || destination.OwnerSide != card.OwnerSide
+            || destination.ServerId is not null)
+        {
+            throw new ResolutionFailureException(
+                $"Card '{card.Id}' must be trashed to its owner's {expectedKind} zone.");
+        }
+
+        MoveCard(working, card, source, destination, emit, cleanupCounters);
+        RecordTurnTrash(working, card.Id);
+    }
+
+    private static bool IsInstalledZone(ZoneKind kind) =>
+        kind is ZoneKind.RunnerRig or ZoneKind.ServerIce or ZoneKind.ServerRoot;
+
+    /// <summary>
+    /// Removes every typed counter attached to a card after it leaves play.
+    /// This is deliberately silent: the counter entries are derived state
+    /// owned by the card, and the enclosing card-move event is the public
+    /// movement boundary. Cost payment can opt out temporarily and invokes
+    /// this helper after its complete declaration-order loop.
+    /// </summary>
+    private static void ClearCardCounters(WorkingState working, CardInstanceId cardId)
+    {
+        RulesState? rules = working.RulesState;
+        if (rules is null)
+        {
+            return;
+        }
+
+        CardCounterState[] remaining = rules.Counters
+            .Where(counter => counter.CardId != cardId)
+            .ToArray();
+        if (remaining.Length != rules.Counters.Count)
+        {
+            SetRulesState(working, counters: remaining);
         }
     }
 
@@ -256,7 +330,7 @@ public static partial class GameEngine
             GameState source,
             IBehaviorCatalog? behaviorCatalog = null,
             IRuntimeCardCatalog? runtimeCardCatalog = null) =>
-            new(source, behaviorCatalog ?? CardBehaviorSpecCatalog.Default, runtimeCardCatalog);
+            new(source, behaviorCatalog ?? Netrunner.Core.BehaviorCatalog.Empty, runtimeCardCatalog);
 
         public GameState Build(GameState source) => new(
             source.SchemaVersion,

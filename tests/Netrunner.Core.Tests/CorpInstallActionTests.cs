@@ -5,6 +5,69 @@ namespace Netrunner.Core.Tests;
 public sealed class CorpInstallActionTests
 {
     [Fact]
+    public void CorpInstallDispatchesActiveControllerTriggerForFacedownTypedSubject()
+    {
+        CardDefinitionId targetDefinitionId = new("test:corp-install-trigger-target");
+        CardInstanceId targetCardId = new("card:corp-install-trigger-target");
+        CardDefinitionId sourceDefinitionId = new("test:corp-install-trigger-source");
+        CardInstanceId sourceCardId = new("card:corp-install-trigger-source");
+        CardBehaviorDefinition targetBehavior = new(
+            targetDefinitionId,
+            PlayerSide.Corp,
+            triggers:
+            [
+                new BehaviorTrigger(
+                    "target-self",
+                    OccurrenceKind.CardInstalled,
+                    TriggerMode.Mandatory,
+                    BehaviorTriggerScope.Self,
+                    subjectCardFilter: null,
+                    [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, 5)]),
+            ]);
+        CardBehaviorDefinition sourceBehavior = new(
+            sourceDefinitionId,
+            PlayerSide.Corp,
+            triggers:
+            [
+                new BehaviorTrigger(
+                    "controller-agenda",
+                    OccurrenceKind.CardInstalled,
+                    TriggerMode.Mandatory,
+                    BehaviorTriggerScope.Controller,
+                    new BehaviorCardFilter(BehaviorCardType.Agenda, ownerSide: PlayerSide.Corp),
+                    [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, 2)]),
+            ]);
+        CardRuntimeSpec sourceSpec = Asset(sourceDefinitionId);
+        CorpFixture fixture = CreateFixture(
+            Agenda(targetDefinitionId),
+            targetCardId,
+            activeSources: [(sourceCardId, sourceSpec)],
+            extraBehaviorDefinitions: [targetBehavior, sourceBehavior]);
+        BehaviorCatalog behaviorCatalog = fixture.BehaviorCatalog;
+        GameState state = OpenCorpAction(fixture);
+        LegalAction install = Assert.Single(
+            state.PendingDecision!.LegalActions,
+            action => action.Kind == ActionKind.InstallCard
+                && Assert.IsType<InstallCardParameters>(action.Parameters).ServerId == fixture.RemoteId);
+
+        ApplyResult result = Apply(state, fixture, install);
+
+        Assert.True(result.Accepted, result.Rejection?.Message);
+        Assert.False(result.State.GetCard(targetCardId).FaceUp);
+        Assert.False(result.State.GetCard(targetCardId).Rezzed);
+        Assert.Equal(7, result.State.GetPlayer(fixture.CorpId).Credits);
+        int installedIndex = Array.FindIndex(result.Events.ToArray(), value => value.Kind == EngineEventKinds.CardInstalled);
+        int triggerCreditIndex = Array.FindIndex(
+            result.Events.ToArray(),
+            value => value.Kind == EngineEventKinds.CreditsAdjusted
+                && Assert.IsType<CreditsAdjustedEventPayload>(value.Payload).Delta == 2);
+        Assert.True(installedIndex >= 0);
+        Assert.True(triggerCreditIndex > installedIndex);
+        Assert.Equal(1, result.Events.Count(value => value.Kind == EngineEventKinds.CardInstalled));
+        Assert.Empty(StateInvariantValidator.Collect(result.State, behaviorCatalog, fixture.RuntimeCardCatalog));
+    }
+
+    [Fact]
     public void CorpAgendaInstallIntoEmptyRemotePaysZeroCreditsOneClickAndResumesPriority()
     {
         CardDefinitionId definitionId = new("test:corp-agenda-install");
@@ -378,17 +441,30 @@ public sealed class CorpInstallActionTests
     private static CorpFixture CreateFixture(
         CardRuntimeSpec targetSpec,
         CardInstanceId targetCardId,
-        bool occupyRemote = false)
+        bool occupyRemote = false,
+        IReadOnlyList<(CardInstanceId CardId, CardRuntimeSpec Spec)>? activeSources = null,
+        IReadOnlyList<CardBehaviorDefinition>? extraBehaviorDefinitions = null)
     {
         CardDefinitionId drawDefinitionId = new("test:corp-install-draw");
         CardInstanceId drawCardId = new("card:corp-install-draw");
         CardDefinitionId occupiedDefinitionId = new("test:corp-install-occupied");
         CardInstanceId occupiedCardId = new("card:corp-install-occupied");
-        RuntimeCardCatalog runtimeCardCatalog = new RuntimeCardCatalogBuilder("runtime:corp-install")
+        RuntimeCardCatalogBuilder runtimeBuilder = new RuntimeCardCatalogBuilder("runtime:corp-install")
             .Add(targetSpec)
-            .Add(Asset(occupiedDefinitionId))
-            .Build();
-        BehaviorCatalog behaviorCatalog = new BehaviorCatalogBuilder(EngineCompatibility.BehaviorRegistryVersion).Build();
+            .Add(Asset(occupiedDefinitionId));
+        foreach (var activeSource in activeSources ?? [])
+        {
+            runtimeBuilder.Add(activeSource.Spec);
+        }
+
+        RuntimeCardCatalog runtimeCardCatalog = runtimeBuilder.Build();
+        BehaviorCatalogBuilder behaviorBuilder = new BehaviorCatalogBuilder(EngineCompatibility.BehaviorRegistryVersion);
+        foreach (CardBehaviorDefinition definition in extraBehaviorDefinitions ?? [])
+        {
+            behaviorBuilder.Add(definition);
+        }
+
+        BehaviorCatalog behaviorCatalog = behaviorBuilder.Build();
         GameState baseline = GameState.CreateNew(
             seed: 405,
             behaviorRegistryVersion: EngineCompatibility.BehaviorRegistryVersion,
@@ -422,6 +498,18 @@ public sealed class CorpInstallActionTests
             PlayerSide.Corp,
             remoteId,
             occupyRemote ? [occupiedCardId] : []));
+        ServerState headquarters = baseline.Servers.Single(server => server.Kind == ServerKind.Headquarters);
+        ZoneState headquartersRoot = zones.Single(zone => zone.Id == headquarters.RootZoneId);
+        if (activeSources is { Count: > 0 })
+        {
+            zones[zones.IndexOf(headquartersRoot)] = new ZoneState(
+                headquartersRoot.Id,
+                headquartersRoot.Kind,
+                headquartersRoot.OwnerSide,
+                headquartersRoot.ServerId,
+                headquartersRoot.CardIds.Concat(activeSources.Select(source => source.CardId)).ToArray());
+        }
+
         var cards = new List<CardInstanceState>
         {
             new(targetCardId, targetSpec.DefinitionId, hand.Id, PlayerSide.Corp),
@@ -430,6 +518,17 @@ public sealed class CorpInstallActionTests
         if (occupyRemote)
         {
             cards.Add(new CardInstanceState(occupiedCardId, occupiedDefinitionId, remoteRootId, PlayerSide.Corp));
+        }
+
+        foreach ((CardInstanceId cardId, CardRuntimeSpec spec) in activeSources ?? [])
+        {
+            cards.Add(new CardInstanceState(
+                cardId,
+                spec.DefinitionId,
+                headquartersRoot.Id,
+                PlayerSide.Corp,
+                faceUp: true,
+                rezzed: true));
         }
 
         GameState state = new(

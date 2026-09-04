@@ -19,7 +19,7 @@ public static partial class GameEngine
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(runtimeCardCatalog);
         return MaterializeAdvanceCardParameters(
-            WorkingState.From(state, CardBehaviorSpecCatalog.Default, runtimeCardCatalog));
+            WorkingState.From(state, BehaviorCatalog.Empty, runtimeCardCatalog));
     }
 
     private static List<AdvanceCardParameters> MaterializeAdvanceCardParameters(WorkingState working)
@@ -141,7 +141,7 @@ public static partial class GameEngine
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(runtimeCardCatalog);
         return MaterializeScoreAgendaParameters(
-            WorkingState.From(state, CardBehaviorSpecCatalog.Default, runtimeCardCatalog));
+            WorkingState.From(state, BehaviorCatalog.Empty, runtimeCardCatalog));
     }
 
     private static List<ScoreAgendaParameters> MaterializeScoreAgendaParameters(WorkingState working)
@@ -251,11 +251,20 @@ public static partial class GameEngine
             PlayerSide.Corp,
             card.Id,
             spec.AgendaPoints));
+        RecordTurnAgendaChange(
+            working,
+            card.Id,
+            PlayerSide.Corp,
+            spec.AgendaPoints,
+            AgendaTurnChangeKind.Score);
 
         CleanupEmptyRemote(working, server);
 
         if (GetPlayer(working, PlayerSide.Corp).AgendaPoints >= RealGameRules.AgendaPointsToWin)
         {
+            // A terminal score ends the game immediately. CompleteTurnGame
+            // clears the resolution stack, so no post-score trigger marker is
+            // left beneath a terminal outcome.
             CompleteTurnGame(working, PlayerSide.Corp, GameWinReason.AgendaPoints);
             return;
         }
@@ -264,6 +273,36 @@ public static partial class GameEngine
         // the following Advance pass yields a fresh timing decision with
         // Corp as holder and zero passes.
         StartNextTurnActionWindow(working, (TurnFrame)working.ResolutionStack[^1]);
+        if (HasActiveCatalogTrigger(working, OccurrenceKind.AgendaScoredOrStolen))
+        {
+            QueueAgendaScoredOrStolenOccurrence(
+                working,
+                GetPlayer(working, PlayerSide.Corp).Id,
+                card.Id,
+                server.Id);
+        }
+    }
+
+    /// <summary>
+    /// Opens the normal occurrence/checkpoint pipeline after a real agenda
+    /// score or steal has committed its card, points, and event evidence.
+    /// The caller has already advanced its parent continuation, so a yielded
+    /// trigger cannot repeat the move or points change.
+    /// </summary>
+    private static void QueueAgendaScoredOrStolenOccurrence(
+        WorkingState working,
+        PlayerId controller,
+        CardInstanceId agendaId,
+        ServerId serverId)
+    {
+        working.ResolutionStack.Add(new EffectResolutionFrame(
+            controller,
+            new CostBundle(),
+            new EffectBundle(new GameplayOccurrenceEffect(
+                OccurrenceKind.AgendaScoredOrStolen,
+                controller,
+                agendaId,
+                serverId))));
     }
 
     private static bool IsCorpTurnActionWindow(WorkingState working) =>

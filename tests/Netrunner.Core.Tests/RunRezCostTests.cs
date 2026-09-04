@@ -89,6 +89,6 @@ public sealed class RunRezCostTests
     private static GameState BeginFixtureRun(CardDefinitionId iceDefinition, int? corpCredits)
     {
         GameState state = RunTimingTests.CreateRunState(iceCount: 1, rezzed: false, iceDefinition: iceDefinition, corpCredits: corpCredits);
-        return GameEngine.BeginRun(state, RunTimingTests.RemoteId(state));
+        return GameEngine.BeginRun(state, RunTimingTests.RemoteId(state), FixtureBehaviorCatalog.Catalog);
     }
 }

@@ -51,7 +51,7 @@ public static partial class GameEngine
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(runtimeCardCatalog);
         return MaterializeTrashTaggedResourceParameters(
-            WorkingState.From(state, CardBehaviorSpecCatalog.Default, runtimeCardCatalog));
+            WorkingState.From(state, BehaviorCatalog.Empty, runtimeCardCatalog));
     }
 
     private static List<TrashTaggedResourceParameters> MaterializeTrashTaggedResourceParameters(
@@ -233,7 +233,7 @@ public static partial class GameEngine
         PlayerState corp = GetPlayer(working, PlayerSide.Corp);
         SpendClick(working, corp.Id);
         ApplyCreditDelta(working, corp.Id, -RealGameRules.TrashTaggedResourceCreditCost);
-        MoveCard(working, card, rig, heap);
+        TrashCard(working, card, rig, heap);
         StartNextTurnActionWindow(working, (TurnFrame)working.ResolutionStack[^1]);
     }
 

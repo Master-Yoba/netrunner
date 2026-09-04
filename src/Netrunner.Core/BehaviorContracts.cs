@@ -166,6 +166,62 @@ public enum BehaviorCardType
     Operation,
     Resource,
     Upgrade,
+    /// <summary>
+    /// A Runner program, including programs that are not icebreakers.  This
+    /// remains distinct from <see cref="Icebreaker"/> so trigger filters can
+    /// express a printed "virus program" condition without relying on a
+    /// title-specific catalog branch.
+    /// </summary>
+    Program,
+}
+
+/// <summary>
+/// A data-only dynamic amount used by an executable behavior instruction.
+/// The initial vocabulary intentionally has one closed form: read a named
+/// counter from the behavior source card and multiply it by a positive
+/// constant.  The source and multiplier are structural catalog data, not a
+/// persisted computed value, so a resumed frame re-derives the amount from
+/// the same authoritative state.
+/// </summary>
+public sealed class BehaviorAmountOperand : IEquatable<BehaviorAmountOperand>
+{
+    [JsonConstructor]
+    public BehaviorAmountOperand(string sourceCounterName, int multiplier)
+    {
+        if (!StableIdentifier.TryValidate(sourceCounterName))
+        {
+            throw new ArgumentException(
+                "A dynamic amount source counter name must be a stable identifier.",
+                nameof(sourceCounterName));
+        }
+
+        if (multiplier <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(multiplier),
+                "A dynamic amount multiplier must be positive.");
+        }
+
+        SourceCounterName = sourceCounterName;
+        Multiplier = multiplier;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string SourceCounterName { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Multiplier { get; private set; }
+
+    public bool Equals(BehaviorAmountOperand? other) =>
+        other is not null
+        && string.Equals(SourceCounterName, other.SourceCounterName, StringComparison.Ordinal)
+        && Multiplier == other.Multiplier;
+
+    public override bool Equals(object? obj) => Equals(obj as BehaviorAmountOperand);
+
+    public override int GetHashCode() => HashCode.Combine(SourceCounterName, Multiplier);
 }
 
 /// <summary>
@@ -503,7 +559,10 @@ internal static class BehaviorContractStructure
                 && Equals(left.Condition, right.Condition)
                 && AreEqual(left.Choice, right.Choice)
                 && AreEqual(left.Branch, right.Branch)
-                && left.Optional == right.Optional;
+                && left.Optional == right.Optional
+                && left.SpendRestriction == right.SpendRestriction
+                && Equals(left.RunOperand, right.RunOperand)
+                && Equals(left.AmountOperand, right.AmountOperand);
 
     public static bool AreEqual(BehaviorChoiceOption? left, BehaviorChoiceOption? right) =>
         left is null ? right is null : right is not null && left.Equals(right);

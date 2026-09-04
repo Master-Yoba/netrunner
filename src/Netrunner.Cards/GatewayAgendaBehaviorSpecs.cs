@@ -19,6 +19,4 @@ public static class GatewayAgendaBehaviorSpecs
     public static IReadOnlyList<AgendaBehaviorSpec> AgendaSpecs { get; } =
         new ReadOnlyCollection<AgendaBehaviorSpec>(new[] { OffworldOffice });
 
-    /// <summary>Registers <see cref="AgendaSpecs"/> into the shared catalog (idempotent).</summary>
-    public static void RegisterAll() => CardBehaviorSpecCatalog.RegisterAgenda(AgendaSpecs);
 }

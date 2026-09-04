@@ -18,7 +18,7 @@ public static partial class GameEngine
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(runtimeCardCatalog);
         return MaterializeRezCardParameters(
-            WorkingState.From(state, CardBehaviorSpecCatalog.Default, runtimeCardCatalog));
+            WorkingState.From(state, BehaviorCatalog.Empty, runtimeCardCatalog));
     }
 
     private static List<RezCardParameters> MaterializeRezCardParameters(WorkingState working)
@@ -232,6 +232,14 @@ public static partial class GameEngine
         }
 
         CardInstanceState card = GetCard(working, parameters.CardId);
+        ZoneState installedZone = working.Zones.FirstOrDefault(zone => zone.Id == card.ZoneId)
+            ?? throw new ResolutionFailureException("The runtime rez card has no installed source zone.");
+        ServerId? installedServerId = installedZone.ServerId;
+        bool isTurnRez = IsTurnRezTimingWindow(working);
+        TurnFrame? turnParent = isTurnRez
+            ? working.ResolutionStack[^1] as TurnFrame
+            : null;
+        RunState? runParent = isTurnRez ? null : working.RunState;
         PlayerState corp = GetPlayer(working, PlayerSide.Corp);
         if (parameters.CreditCost > 0)
         {
@@ -249,10 +257,10 @@ public static partial class GameEngine
         Emit(working, EngineEventKinds.CardRezzed, new CardRezzedEventPayload(
             parameters.CardId,
             parameters.CreditCost));
+        TrashCorpUniqueRezConflicts(working, card.Id);
 
-        if (IsTurnRezTimingWindow(working))
+        if (turnParent is { } frame)
         {
-            TurnFrame frame = (TurnFrame)working.ResolutionStack[^1];
             working.ResolutionStack[^1] = new TurnFrame(
                 frame.Version,
                 frame.BehaviorId,
@@ -263,10 +271,11 @@ public static partial class GameEngine
                 PlayerSide.Corp,
                 consecutivePasses: 0,
                 frame.ForcedActionEnd);
+            QueueCardRezzedOccurrence(working, corp.Id, card.Id, installedServerId);
             return;
         }
 
-        RunState run = working.RunState
+        RunState run = runParent
             ?? throw new ResolutionFailureException("A runtime rez action requires live run state.");
         RunPriorityState priority = run.Priority
             ?? throw new ResolutionFailureException("A runtime rez action requires run priority state.");
@@ -290,5 +299,63 @@ public static partial class GameEngine
             run.Encounter,
             run.AccessState);
         working.ResolutionStack[^1] = new RunTimingFrame(run.Id, run.Step);
+        QueueCardRezzedOccurrence(working, corp.Id, card.Id, installedServerId);
     }
+
+    /// <summary>
+    /// Routes the committed runtime rez through the normal serializable
+    /// occurrence/checkpoint pipeline.  The parent timing continuation is
+    /// already advanced before this marker is pushed, so a yielded trigger
+    /// cannot repeat payment, rez state, or unique cleanup.
+    /// </summary>
+    private static void QueueCardRezzedOccurrence(
+        WorkingState working,
+        PlayerId controller,
+        CardInstanceId cardId,
+        ServerId? serverId)
+    {
+        working.ResolutionStack.Add(new EffectResolutionFrame(
+            controller,
+            new CostBundle(),
+            new EffectBundle(new GameplayOccurrenceEffect(
+                OccurrenceKind.CardRezzed,
+                controller,
+                cardId,
+                serverId))));
+    }
+
+    private static void TrashCorpUniqueRezConflicts(
+        WorkingState working,
+        CardInstanceId incomingCardId)
+    {
+        if (working.RuntimeCardCatalog is not { } runtimeCardCatalog
+            || !runtimeCardCatalog.TryGet(GetCard(working, incomingCardId).DefinitionId, out CardRuntimeSpec? incomingSpec)
+            || incomingSpec.Side != PlayerSide.Corp
+            || !incomingSpec.Unique
+            || incomingSpec.UniquenessKey is not { } uniquenessKey)
+        {
+            return;
+        }
+
+        CardInstanceId[] conflicts = working.Cards
+            .Where(card => card.Id != incomingCardId)
+            .Select(card => (Card: card, IsActive: RuntimeCardActivity.IsActive(card, working.Zones)))
+            .Where(value => value.IsActive)
+            .Where(value => runtimeCardCatalog.TryGet(value.Card.DefinitionId, out CardRuntimeSpec? spec)
+                && spec.Side == PlayerSide.Corp
+                && spec.Unique
+                && string.Equals(spec.UniquenessKey, uniquenessKey, StringComparison.Ordinal))
+            .Select(value => value.Card.Id)
+            .OrderBy(cardId => cardId.Value, StringComparer.Ordinal)
+            .ToArray();
+
+        foreach (CardInstanceId conflictId in conflicts)
+        {
+            CardInstanceState conflict = GetCard(working, conflictId);
+            ZoneState source = ZoneForCard(working, conflict.Id);
+            ZoneState archives = GetZone(working, ZoneKind.CorpDiscard);
+            TrashCard(working, conflict, source, archives);
+        }
+    }
+
 }

@@ -953,7 +953,7 @@ internal sealed class CoverageReport
         builder.Append("- Registered: `").Append(Counts.Registered).AppendLine("`");
         builder.Append("- Registered with positive test metadata: `").Append(Counts.Tested).AppendLine("`");
         builder.Append("- Full-text complete: `").Append(Counts.FullTextComplete).AppendLine("`");
-        builder.Append("- Partial registrations: `").Append(Counts.Partial).AppendLine("` (Nico Campaign and Offworld Office remain explicitly incomplete)");
+        builder.Append("- Partial registrations: `").Append(Counts.Partial).AppendLine("` (Offworld Office remains explicitly incomplete)");
         builder.Append("- Unregistered: `").Append(Counts.Unregistered).AppendLine("`");
         builder.AppendLine();
         builder.AppendLine("A partial registration is not full coverage. A completed batch requires full behavior registration, a positive test marker, review, citations, and an observation note.");

@@ -71,6 +71,7 @@ public partial class Main : Control
 	private bool _smokeTest;
 	private bool _responsivenessSmoke;
 	private bool _gallerySmoke;
+	private bool _slice43UiSmoke;
 	private bool _gallerySmokePassed;
 	private bool _animationRunning;
 	private bool _skipAnimation;
@@ -92,11 +93,16 @@ public partial class Main : Control
 	{
 		IReadOnlyList<string> arguments = OS.GetCmdlineUserArgs();
 		_gallerySmoke = arguments.Contains("--m4-card-gallery-smoke", StringComparer.Ordinal);
+		_slice43UiSmoke = arguments.Contains("--m4-slice43-ui-smoke", StringComparer.Ordinal);
 		_smokeTest = arguments.Contains("--smoke-test", StringComparer.Ordinal)
 			|| arguments.Contains("--m3-responsiveness-smoke", StringComparer.Ordinal);
 		_responsivenessSmoke = arguments.Contains("--m3-responsiveness-smoke", StringComparer.Ordinal);
 		BuildShell();
-		if (_gallerySmoke)
+		if (_slice43UiSmoke)
+		{
+			_ = RunSlice43UiSmokeAsync();
+		}
+		else if (_gallerySmoke)
 		{
 			RunGallerySmoke();
 		}
@@ -876,6 +882,8 @@ public partial class Main : Control
 
 		_inspectedCard = card;
 		_details.Text = $"{card.Title}\n{card.Type} · {card.DefinitionId}\n"
+			+ (card.AbilityCue is { Length: > 0 } cue ? $"{cue}\n" : string.Empty)
+			+ (card.CounterChips.Count == 0 ? string.Empty : $"{string.Join("  ", card.CounterChips)}\n")
 			+ $"{FormatCardRules(card.RulesText)}\n\nClick feedback is local and immediate; engine actions remain ID-only.\n"
 			+ "Use Zoom inspected card for an enlarged, complete text view.";
 		_details.AddThemeColorOverride("font_color", Colors.White);

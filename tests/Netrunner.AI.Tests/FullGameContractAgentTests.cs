@@ -18,6 +18,9 @@ public sealed class FullGameContractAgentTests
 
         Assert.Equal(FullGameContractAgentVersion.SchemaVersion, policy.SchemaVersion);
         Assert.Equal(FullGameContractAgentVersion.PolicyVersion, policy.PolicyVersion);
+        Assert.Equal(2, FullGameContractAgentVersion.SchemaVersion);
+        Assert.Equal("full-game-contract-agent-v2", FullGameContractAgentVersion.AgentVersion);
+        Assert.Equal("full-game-contract-policy-v2", FullGameContractAgentVersion.PolicyVersion);
         Assert.Equal(PlayerSide.Runner, policy.ControlledSide);
         Assert.Equal(ActionKind.DrawCard, policy.TurnActionOrder[0]);
         Assert.Equal(ActionKind.JackOut, policy.RunActionOrder[0]);
@@ -45,6 +48,202 @@ public sealed class FullGameContractAgentTests
         Assert.Equal(
             draw.Id,
             await agent.ChooseActionAsync(ObservationFor(PlayerSide.Corp, DecisionKind.TurnAction, draw)));
+    }
+
+    [Fact]
+    public async Task BoundedClickAbilityPrecedesEconomyActions()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Runner);
+        LegalAction ability = Action(
+            "click-ability",
+            ActionKind.UseAbility,
+            AbilityParameters(
+                "click-ability",
+                timing: BehaviorAbilityTiming.ActionPhase,
+                activation: BehaviorAbilityActivation.ClickAction,
+                costs: [new BehaviorCost(BehaviorCostKind.Clicks)]));
+        LegalAction gain = Action("gain-after-ability", ActionKind.GainCredit, new NoActionParameters());
+        LegalAction draw = Action("draw-after-ability", ActionKind.DrawCard, new NoActionParameters());
+
+        Assert.Equal(
+            ability.Id,
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Runner, DecisionKind.TurnAction, draw, gain, ability)));
+    }
+
+    [Fact]
+    public async Task PaidLoseClickAbilityIsBoundedAndPreferredInRunTiming()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Runner);
+        LegalAction ability = Action(
+            "paid-lose-click",
+            ActionKind.UseAbility,
+            AbilityParameters(
+                "paid-lose-click",
+                timing: BehaviorAbilityTiming.AnyPaidWindow,
+                activation: BehaviorAbilityActivation.PaidAbility,
+                costs: [new BehaviorCost(BehaviorCostKind.LoseClick)]));
+        LegalAction pass = Action("run-pass", ActionKind.PassPriority, new NoActionParameters());
+
+        Assert.Equal(
+            ability.Id,
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Runner, DecisionKind.RunTiming, pass, ability)));
+    }
+
+    [Fact]
+    public async Task UnusedOncePerTurnNonclickAbilityIsPreferredAndExhaustedOneFallsBack()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Corp);
+        LegalAction available = Action(
+            "once-available",
+            ActionKind.UseAbility,
+            AbilityParameters(
+                "once-available",
+                timing: BehaviorAbilityTiming.AnyPaidWindow,
+                activation: BehaviorAbilityActivation.PaidAbility,
+                costs: [new BehaviorCost(BehaviorCostKind.Credits)],
+                usage: new AbilityUsageSnapshot(BehaviorAbilityUsageLimit.OncePerTurn, 0)));
+        LegalAction pass = Action("turn-pass", ActionKind.PassPriority, new NoActionParameters());
+
+        Assert.Equal(
+            available.Id,
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Corp, DecisionKind.TurnTiming, pass, available)));
+
+        LegalAction exhausted = Action(
+            "once-exhausted",
+            ActionKind.UseAbility,
+            AbilityParameters(
+                "once-exhausted",
+                timing: BehaviorAbilityTiming.AnyPaidWindow,
+                activation: BehaviorAbilityActivation.PaidAbility,
+                costs: [new BehaviorCost(BehaviorCostKind.Credits)],
+                usage: new AbilityUsageSnapshot(BehaviorAbilityUsageLimit.OncePerTurn, 1)));
+        Assert.Equal(
+            pass.Id,
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Corp, DecisionKind.TurnTiming, exhausted, pass)));
+    }
+
+    [Fact]
+    public async Task UnlimitedNonclickAbilityIsIgnoredInFavorOfSupportedFallback()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Corp);
+        LegalAction unlimited = Action(
+            "unlimited-nonclick",
+            ActionKind.UseAbility,
+            AbilityParameters(
+                "unlimited-nonclick",
+                timing: BehaviorAbilityTiming.AnyPaidWindow,
+                activation: BehaviorAbilityActivation.PaidAbility,
+                costs: [new BehaviorCost(BehaviorCostKind.Credits)],
+                usage: new AbilityUsageSnapshot(BehaviorAbilityUsageLimit.Unlimited, 0)));
+        LegalAction pass = Action("unlimited-pass", ActionKind.PassPriority, new NoActionParameters());
+
+        Assert.Equal(
+            pass.Id,
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Corp, DecisionKind.TurnTiming, unlimited, pass)));
+    }
+
+    [Fact]
+    public async Task AbilitySelectionIsDeterministicAcrossActionOrderDescriptionsAndJsonRoundtrip()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Corp);
+        LegalAction first = Action(
+            "ability-first",
+            ActionKind.UseAbility,
+            AbilityParameters(
+                "ability-first",
+                timing: BehaviorAbilityTiming.AnyPaidWindow,
+                activation: BehaviorAbilityActivation.PaidAbility,
+                costs: [new BehaviorCost(BehaviorCostKind.Credits)],
+                usage: new AbilityUsageSnapshot(BehaviorAbilityUsageLimit.OncePerTurn, 0)),
+            "description one");
+        LegalAction second = Action(
+            "ability-second",
+            ActionKind.UseAbility,
+            AbilityParameters(
+                "ability-second",
+                timing: BehaviorAbilityTiming.AnyPaidWindow,
+                activation: BehaviorAbilityActivation.PaidAbility,
+                costs: [new BehaviorCost(BehaviorCostKind.Credits, 2)],
+                usage: new AbilityUsageSnapshot(BehaviorAbilityUsageLimit.OncePerTurn, 0)),
+            "description two");
+        LegalAction pass = Action("ability-pass", ActionKind.PassPriority, new NoActionParameters());
+
+        ActionId before = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Corp, DecisionKind.TurnTiming, second, pass, first));
+        ActionId reordered = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Corp, DecisionKind.TurnTiming, first, second, pass));
+        string payload = JsonSerializer.Serialize(new[] { second, pass, first });
+        LegalAction[] restored = JsonSerializer.Deserialize<LegalAction[]>(payload)
+            ?? throw new InvalidOperationException("The serialized ability payload was empty.");
+        ActionId roundTrip = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Corp, DecisionKind.TurnTiming, restored));
+
+        Assert.Equal(first.Id, before);
+        Assert.Equal(before, reordered);
+        Assert.Equal(before, roundTrip);
+    }
+
+    [Fact]
+    public async Task BoundedAbilityCanCoexistWithUnsupportedTypedActionClasses()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Runner);
+        LegalAction ability = Action(
+            "ability-with-install",
+            ActionKind.UseAbility,
+            AbilityParameters(
+                "ability-with-install",
+                timing: BehaviorAbilityTiming.ActionPhase,
+                activation: BehaviorAbilityActivation.ClickAction,
+                costs: [new BehaviorCost(BehaviorCostKind.Clicks)]));
+        LegalAction install = Action(
+            "opaque-install",
+            ActionKind.InstallCard,
+            new CardChoiceParameters(new CardInstanceId("card:install")));
+        LegalAction startRun = Action(
+            "opaque-start-run",
+            ActionKind.StartRun,
+            new NoActionParameters());
+        LegalAction gain = Action("ability-gain", ActionKind.GainCredit, new NoActionParameters());
+
+        Assert.Equal(
+            ability.Id,
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Runner, DecisionKind.TurnAction, install, gain, startRun, ability)));
+    }
+
+    [Fact]
+    public async Task MalformedAbilityPayloadFailsClosedEvenWithFallback()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Runner);
+        // AbilityActionParameters itself is a detached snapshot and permits
+        // construction before its parent decision is known. The agent must
+        // reject this impossible click-action/AnyPaidWindow combination.
+        LegalAction malformed = Action(
+            "malformed-ability",
+            ActionKind.UseAbility,
+            AbilityParameters(
+                "malformed-ability",
+                timing: BehaviorAbilityTiming.AnyPaidWindow,
+                activation: BehaviorAbilityActivation.ClickAction,
+                costs: [new BehaviorCost(BehaviorCostKind.Clicks)]));
+        LegalAction gain = Action("malformed-gain", ActionKind.GainCredit, new NoActionParameters());
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Runner, DecisionKind.TurnAction, malformed, gain)));
+
+        LegalAction unsupportedParameters = Action(
+            "unsupported-ability-parameters",
+            ActionKind.UseAbility,
+            new NoActionParameters());
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Runner, DecisionKind.TurnAction, unsupportedParameters, gain)));
     }
 
     [Fact]
@@ -386,6 +585,17 @@ public sealed class FullGameContractAgentTests
     [Fact]
     public void PolicyRejectsEndTurnAndDuplicateOrUnsupportedPriorityEntries()
     {
+        FullGameContractPolicy defaultPolicy = FullGameContractPolicy.Default(PlayerSide.Corp);
+        Assert.Equal(ActionKind.UseAbility, defaultPolicy.TurnActionOrder[0]);
+        Assert.Equal(ActionKind.UseAbility, defaultPolicy.RunActionOrder[0]);
+
+        FullGameContractPolicy configured = new(
+            PlayerSide.Corp,
+            turnActionOrder: [ActionKind.UseAbility, ActionKind.GainCredit],
+            runActionOrder: [ActionKind.UseAbility, ActionKind.PassPriority]);
+        Assert.Contains(ActionKind.UseAbility, configured.TurnActionOrder);
+        Assert.Contains(ActionKind.UseAbility, configured.RunActionOrder);
+
         Assert.Throws<ArgumentException>(() => new FullGameContractPolicy(
             PlayerSide.Corp,
             runActionOrder: [ActionKind.EndTurn]));
@@ -394,8 +604,37 @@ public sealed class FullGameContractAgentTests
             turnActionOrder: [ActionKind.GainCredit, ActionKind.GainCredit]));
         Assert.Throws<ArgumentException>(() => new FullGameContractPolicy(
             PlayerSide.Corp,
+            turnActionOrder: [ActionKind.UseAbility, ActionKind.UseAbility]));
+        Assert.Throws<ArgumentException>(() => new FullGameContractPolicy(
+            PlayerSide.Corp,
+            runActionOrder: [ActionKind.UseAbility, ActionKind.UseAbility]));
+        Assert.Throws<ArgumentException>(() => new FullGameContractPolicy(
+            PlayerSide.Corp,
             runActionOrder: [ActionKind.UseTrigger]));
     }
+
+    private static AbilityActionParameters AbilityParameters(
+        string id,
+        BehaviorAbilityTiming timing,
+        BehaviorAbilityActivation activation,
+        IReadOnlyList<BehaviorCost> costs,
+        AbilityUsageSnapshot? usage = null,
+        IReadOnlyList<CardInstanceId>? targetCardIds = null,
+        IReadOnlyList<AbilityAdditionalCostSelection>? additionalCostSelections = null) =>
+        new(
+            new CardInstanceId("source:" + id),
+            new CardDefinitionId("definition:" + id),
+            "ability:" + id,
+            timing,
+            activation,
+            costs,
+            targetCardIds ?? [],
+            usage ?? new AbilityUsageSnapshot(BehaviorAbilityUsageLimit.Unlimited, 0),
+            "0000000000000000000000000000000000000000000000000000000000000000",
+            "1111111111111111111111111111111111111111111111111111111111111111",
+            new ZoneId("zone:" + id),
+            ZoneKind.RunnerRig,
+            additionalCostSelections);
 
     private static Observation ObservationFor(
         PlayerSide viewer,

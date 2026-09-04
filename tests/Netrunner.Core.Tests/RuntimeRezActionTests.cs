@@ -198,6 +198,192 @@ public sealed class RuntimeRezActionTests
     }
 
     [Fact]
+    public void CorpUniqueRezTrashesOlderCopiesAcrossServersAfterCardRezzed()
+    {
+        Fixture fixture = CreateFixture(PlayerSide.Corp, corpCredits: 3, uniqueAsset: true);
+        CardDefinitionId definitionId = fixture.State.GetCard(fixture.AssetZeroId).DefinitionId;
+        CardInstanceId firstOldCopyId = new("card:rez-unique-old-a");
+        ServerId[] remotes = fixture.State.Servers
+            .Where(server => server.Kind == ServerKind.Remote)
+            .OrderBy(server => server.Id.Value, StringComparer.Ordinal)
+            .Select(server => server.Id)
+            .ToArray();
+        GameState withCopies = AddCardsToRoots(
+            fixture.State,
+            definitionId,
+            (firstOldCopyId, fixture.State.GetServer(remotes[0]).RootZoneId));
+        withCopies = AddCounters(
+            withCopies,
+            new CardCounterState(firstOldCopyId, "charge", 1));
+        fixture = fixture with { State = withCopies };
+
+        GameState prompt = OpenTurnRezWindow(fixture);
+        LegalAction rez = Assert.Single(
+            prompt.PendingDecision!.LegalActions,
+            action => action.Kind == ActionKind.RezCard
+                && Assert.IsType<RezCardParameters>(action.Parameters).CardId == fixture.AssetZeroId);
+        Assert.False(prompt.GetCard(fixture.AssetZeroId).FaceUp);
+        Assert.False(prompt.GetCard(fixture.AssetZeroId).Rezzed);
+
+        ApplyResult result = Apply(fixture, prompt, rez);
+
+        Assert.True(result.Accepted, result.Rejection?.Message);
+        Assert.Equal(
+            [
+                EngineEventKinds.CardRezzed,
+                EngineEventKinds.CardMoved,
+                EngineEventKinds.TurnTimingWindowOpened,
+            ],
+            result.Events.Select(@event => @event.Kind));
+        Assert.Equal(
+            [firstOldCopyId],
+            result.Events
+                .Where(@event => @event.Kind == EngineEventKinds.CardMoved)
+                .Select(@event => Assert.IsType<CardMovedEventPayload>(@event.Payload).CardId));
+        Assert.Equal(
+            [firstOldCopyId],
+            result.State.GetZone(ZoneKind.CorpDiscard).CardIds);
+        Assert.DoesNotContain(
+            result.State.RulesState?.Counters ?? [],
+            counter => counter.CardId == firstOldCopyId);
+        Assert.True(result.State.GetCard(fixture.AssetZeroId).FaceUp);
+        Assert.True(result.State.GetCard(fixture.AssetZeroId).Rezzed);
+
+        string json = EngineJson.Serialize(result.State);
+        GameState restored = EngineJson.DeserializeState(
+            json,
+            fixture.BehaviorCatalog,
+            fixture.RuntimeCatalog);
+        Assert.Equal(json, EngineJson.Serialize(restored));
+        Assert.Equal(DeterministicHash.ForState(result.State), DeterministicHash.ForState(restored));
+    }
+
+    [Fact]
+    public void RuntimeInvariantRejectsTwoActiveUniqueCopies()
+    {
+        Fixture fixture = CreateFixture(PlayerSide.Corp, corpCredits: 3, uniqueAsset: true);
+        CardDefinitionId definitionId = fixture.State.GetCard(fixture.AssetZeroId).DefinitionId;
+        CardInstanceId firstCopyId = new("card:rez-unique-invariant-a");
+        CardInstanceId secondCopyId = new("card:rez-unique-invariant-b");
+        ServerId[] remotes = fixture.State.Servers
+            .Where(server => server.Kind == ServerKind.Remote)
+            .OrderBy(server => server.Id.Value, StringComparer.Ordinal)
+            .Select(server => server.Id)
+            .ToArray();
+        GameState forged = AddCardsToRoots(
+            fixture.State,
+            definitionId,
+            (firstCopyId, fixture.State.GetServer(remotes[0]).RootZoneId),
+            (secondCopyId, fixture.State.GetServer(remotes[1]).RootZoneId));
+
+        Assert.Contains(
+            StateInvariantValidator.Collect(forged, fixture.BehaviorCatalog, fixture.RuntimeCatalog),
+            violation => violation.Code == "cards.active-duplicate-uniqueness");
+    }
+
+    [Fact]
+    public void RuntimeInvariantRejectsTwoActiveRunnerConsoles()
+    {
+        CardRuntimeSpec firstConsole = new(
+            new CardDefinitionId("test:rez-console-first"),
+            PlayerSide.Runner,
+            RuntimeCardClass.Hardware,
+            installCost: 0,
+            console: true,
+            consoleKey: "console-first",
+            subtypes: ["console"]);
+        CardRuntimeSpec secondConsole = new(
+            new CardDefinitionId("test:rez-console-second"),
+            PlayerSide.Runner,
+            RuntimeCardClass.Hardware,
+            installCost: 0,
+            console: true,
+            consoleKey: "console-second",
+            subtypes: ["console"]);
+        Fixture fixture = CreateFixture(
+            PlayerSide.Runner,
+            corpCredits: 3,
+            additionalSpecs: [firstConsole, secondConsole]);
+        GameState forged = AddCardsToRig(
+            fixture.State,
+            (new CardInstanceId("card:rez-console-first"), firstConsole.DefinitionId, true),
+            (new CardInstanceId("card:rez-console-second"), secondConsole.DefinitionId, true));
+
+        Assert.Contains(
+            StateInvariantValidator.Collect(forged, fixture.BehaviorCatalog, fixture.RuntimeCatalog),
+            violation => violation.Code == "cards.active-duplicate-console");
+    }
+
+    [Fact]
+    public void RuntimeInvariantIgnoresOppositeSideUnknownAndInactiveCards()
+    {
+        CardRuntimeSpec runnerUnique = new(
+            new CardDefinitionId("test:rez-runner-shared-unique"),
+            PlayerSide.Runner,
+            RuntimeCardClass.Hardware,
+            installCost: 0,
+            unique: true,
+            uniquenessKey: "test:rez-asset-zero",
+            subtypes: []);
+        Fixture fixture = CreateFixture(
+            PlayerSide.Corp,
+            corpCredits: 3,
+            uniqueAsset: true,
+            additionalSpecs: [runnerUnique]);
+        CardDefinitionId corpDefinitionId = fixture.State.GetCard(fixture.AssetZeroId).DefinitionId;
+        ServerId[] remotes = fixture.State.Servers
+            .Where(server => server.Kind == ServerKind.Remote)
+            .OrderBy(server => server.Id.Value, StringComparer.Ordinal)
+            .Select(server => server.Id)
+            .ToArray();
+        GameState state = AddCardToZone(
+            fixture.State,
+            new CardInstanceId("card:rez-unique-active-corp"),
+            corpDefinitionId,
+            fixture.State.GetServer(remotes[0]).RootZoneId,
+            PlayerSide.Corp,
+            faceUp: true,
+            rezzed: true);
+        state = AddCardToZone(
+            state,
+            new CardInstanceId("card:rez-unique-active-runner"),
+            runnerUnique.DefinitionId,
+            state.GetZone(ZoneKind.RunnerRig).Id,
+            PlayerSide.Runner,
+            faceUp: true,
+            rezzed: false);
+        state = AddCardToZone(
+            state,
+            new CardInstanceId("card:rez-unique-facedown-corp"),
+            corpDefinitionId,
+            state.GetServer(remotes[1]).RootZoneId,
+            PlayerSide.Corp,
+            faceUp: false,
+            rezzed: false);
+        state = AddCardToZone(
+            state,
+            new CardInstanceId("card:rez-unique-facedown-runner"),
+            runnerUnique.DefinitionId,
+            state.GetZone(ZoneKind.RunnerRig).Id,
+            PlayerSide.Runner,
+            faceUp: false,
+            rezzed: false);
+        state = AddCardToZone(
+            state,
+            new CardInstanceId("card:rez-unique-unknown"),
+            new CardDefinitionId("test:rez-unknown-active"),
+            state.GetServer(remotes[1]).RootZoneId,
+            PlayerSide.Corp,
+            faceUp: true,
+            rezzed: true);
+
+        Assert.DoesNotContain(
+            StateInvariantValidator.Collect(state, fixture.BehaviorCatalog, fixture.RuntimeCatalog),
+            violation => violation.Code is "cards.active-duplicate-uniqueness"
+                or "cards.active-duplicate-console");
+    }
+
+    [Fact]
     public void RuntimeRunOffersApproachedIceBeforeAttackedRootAndNeverLegacyRezIce()
     {
         Fixture fixture = CreateFixture(PlayerSide.Runner, corpCredits: 3);
@@ -271,6 +457,252 @@ public sealed class RuntimeRezActionTests
             result.State.PendingDecision.LegalActions,
             candidate => candidate.Kind == ActionKind.RezCard
                 && Assert.IsType<RezCardParameters>(candidate.Parameters).CardId == fixture.CurrentIceId);
+    }
+
+    [Fact]
+    public void TurnRezDispatchesCardRezzedAfterStateCommitAndRunsSelfTrigger()
+    {
+        Fixture fixture = CreateFixture(PlayerSide.Corp, corpCredits: 3);
+        BehaviorCatalog behaviorCatalog = new BehaviorCatalogBuilder(EngineCompatibility.BehaviorRegistryVersion)
+            .Add(new CardBehaviorDefinition(
+                fixture.State.GetCard(fixture.AssetZeroId).DefinitionId,
+                PlayerSide.Corp,
+                triggers:
+                [
+                    new BehaviorTrigger(
+                        "self-rez",
+                        OccurrenceKind.CardRezzed,
+                        TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Self,
+                        subjectCardFilter: null,
+                        [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, 2)]),
+                ]))
+            .Build();
+        fixture = fixture with { BehaviorCatalog = behaviorCatalog };
+
+        GameState prompt = OpenTurnRezWindow(fixture);
+        LegalAction action = Assert.Single(
+            prompt.PendingDecision!.LegalActions,
+            candidate => candidate.Kind == ActionKind.RezCard
+                && Assert.IsType<RezCardParameters>(candidate.Parameters).CardId == fixture.AssetZeroId);
+
+        ApplyResult result = Apply(fixture, prompt, action);
+
+        Assert.True(result.Accepted, result.Rejection?.Message);
+        Assert.Equal(5, result.State.GetPlayer(fixture.CorpId).Credits);
+        Assert.True(result.State.GetCard(fixture.AssetZeroId).FaceUp);
+        Assert.True(result.State.GetCard(fixture.AssetZeroId).Rezzed);
+        Assert.Equal(
+            [
+                EngineEventKinds.CardRezzed,
+                EngineEventKinds.CreditsAdjusted,
+                EngineEventKinds.TurnTimingWindowOpened,
+            ],
+            result.Events.Select(@event => @event.Kind));
+        Assert.Equal(
+            1,
+            result.Events.Count(@event => @event.Kind == EngineEventKinds.CardRezzed));
+        Assert.Equal(DecisionKind.TurnTiming, result.State.PendingDecision?.Kind);
+        Assert.Empty(StateInvariantValidator.Collect(result.State, behaviorCatalog, fixture.RuntimeCatalog));
+    }
+
+    [Fact]
+    public void RunRezDispatchesCardRezzedAfterApproachPriorityAdvanceAndRunsSelfTrigger()
+    {
+        Fixture fixture = CreateFixture(PlayerSide.Runner, corpCredits: 3);
+        BehaviorCatalog behaviorCatalog = new BehaviorCatalogBuilder(EngineCompatibility.BehaviorRegistryVersion)
+            .Add(new CardBehaviorDefinition(
+                fixture.State.GetCard(fixture.CurrentIceId).DefinitionId,
+                PlayerSide.Corp,
+                triggers:
+                [
+                    new BehaviorTrigger(
+                        "self-rez-run",
+                        OccurrenceKind.CardRezzed,
+                        TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Self,
+                        subjectCardFilter: null,
+                        [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, 1)]),
+                ]))
+            .Build();
+        fixture = fixture with { BehaviorCatalog = behaviorCatalog };
+        GameState initiation = GameEngine.BeginRun(
+            fixture.State,
+            fixture.AttackedServerId,
+            fixture.BehaviorCatalog,
+            fixture.RuntimeCatalog);
+        GameState corpInitiation = ApplyPass(fixture, initiation).State;
+        GameState approachRunner = ApplyPass(fixture, corpInitiation).State;
+        GameState approachCorp = ApplyPass(fixture, approachRunner).State;
+        LegalAction action = Assert.Single(
+            approachCorp.PendingDecision!.LegalActions,
+            candidate => candidate.Kind == ActionKind.RezCard
+                && Assert.IsType<RezCardParameters>(candidate.Parameters).CardId == fixture.CurrentIceId);
+
+        ApplyResult result = Apply(fixture, approachCorp, action);
+
+        Assert.True(result.Accepted, result.Rejection?.Message);
+        Assert.Equal(2, result.State.GetPlayer(fixture.CorpId).Credits);
+        Assert.Equal(
+            [
+                EngineEventKinds.CreditsAdjusted,
+                EngineEventKinds.CardRezzed,
+                EngineEventKinds.CreditsAdjusted,
+                EngineEventKinds.RunTimingWindowOpened,
+            ],
+            result.Events.Select(@event => @event.Kind));
+        Assert.True(result.State.GetCard(fixture.CurrentIceId).FaceUp);
+        Assert.True(result.State.GetCard(fixture.CurrentIceId).Rezzed);
+        Assert.Equal(RunTimingStep.ApproachPaidWindow, result.State.RunState!.Step);
+        Assert.Equal(PlayerSide.Corp, result.State.RunState.Priority!.PriorityHolder);
+        Assert.Equal(0, result.State.RunState.Priority.ConsecutivePasses);
+        Assert.False(result.State.RunState.Priority.CorpMayRezApproachedIce);
+        Assert.True(result.State.RunState.Priority.CorpMayRezNonIce);
+        Assert.IsType<RunTimingFrame>(result.State.ResolutionStack[^1]);
+        Assert.Empty(StateInvariantValidator.Collect(result.State, behaviorCatalog, fixture.RuntimeCatalog));
+    }
+
+    [Fact]
+    public void OptionalTurnRezTriggerRoundTripsWithoutRepeatingPaymentOrRez()
+    {
+        Fixture fixture = CreateFixture(PlayerSide.Corp, corpCredits: 3);
+        BehaviorCatalog behaviorCatalog = new BehaviorCatalogBuilder(EngineCompatibility.BehaviorRegistryVersion)
+            .Add(new CardBehaviorDefinition(
+                fixture.State.GetCard(fixture.UpgradeId).DefinitionId,
+                PlayerSide.Corp,
+                triggers:
+                [
+                    new BehaviorTrigger(
+                        "optional-rez",
+                        OccurrenceKind.CardRezzed,
+                        TriggerMode.Optional,
+                        BehaviorTriggerScope.Self,
+                        subjectCardFilter: null,
+                        [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, 3)]),
+                ]))
+            .Build();
+        fixture = fixture with { BehaviorCatalog = behaviorCatalog };
+        GameState prompt = OpenTurnRezWindow(fixture);
+        LegalAction action = Assert.Single(
+            prompt.PendingDecision!.LegalActions,
+            candidate => candidate.Kind == ActionKind.RezCard
+                && Assert.IsType<RezCardParameters>(candidate.Parameters).CardId == fixture.UpgradeId);
+
+        ApplyResult opened = Apply(fixture, prompt, action);
+
+        Assert.True(opened.Accepted, opened.Rejection?.Message);
+        Assert.Equal(1, opened.State.GetPlayer(fixture.CorpId).Credits);
+        Assert.True(opened.State.GetCard(fixture.UpgradeId).Rezzed);
+        Assert.Equal(1, opened.Events.Count(@event => @event.Kind == EngineEventKinds.CardRezzed));
+        Assert.Equal(1, opened.Events.Count(@event => @event.Kind == EngineEventKinds.CreditsAdjusted));
+        Assert.Equal(DecisionKind.TriggerChoice, opened.State.PendingDecision?.Kind);
+
+        string json = EngineJson.Serialize(opened.State);
+        GameState restored = EngineJson.DeserializeState(json, behaviorCatalog, fixture.RuntimeCatalog);
+        Assert.Equal(json, EngineJson.Serialize(restored));
+        PendingDecision decision = Assert.IsType<PendingDecision>(restored.PendingDecision);
+        LegalAction decline = Assert.Single(
+            decision.LegalActions,
+            candidate => candidate.Kind == ActionKind.DeclineTrigger);
+        ApplyResult completed = GameEngine.Apply(
+            restored,
+            new ActionSubmission(decision.Owner, decision.Id, decision.Revision, decline.Id),
+            behaviorCatalog,
+            fixture.RuntimeCatalog);
+
+        Assert.True(completed.Accepted, completed.Rejection?.Message);
+        Assert.Equal(1, completed.State.GetPlayer(fixture.CorpId).Credits);
+        Assert.True(completed.State.GetCard(fixture.UpgradeId).FaceUp);
+        Assert.True(completed.State.GetCard(fixture.UpgradeId).Rezzed);
+        Assert.DoesNotContain(completed.Events, @event => @event.Kind == EngineEventKinds.CardRezzed);
+        Assert.Empty(StateInvariantValidator.Collect(completed.State, behaviorCatalog, fixture.RuntimeCatalog));
+    }
+
+    [Fact]
+    public void UniqueRezCleansConflictsBeforeCardRezzedTriggerCollection()
+    {
+        CardDefinitionId incomingDefinitionId = new("test:rez-asset-zero");
+        CardDefinitionId oldDefinitionId = new("test:rez-older-unique");
+        CardInstanceId oldCardId = new("card:rez-older-unique");
+        CardRuntimeSpec oldSpec = new(
+            oldDefinitionId,
+            PlayerSide.Corp,
+            RuntimeCardClass.Upgrade,
+            rezCost: 0,
+            unique: true,
+            uniquenessKey: "test:rez-asset-zero");
+        Fixture fixture = CreateFixture(
+            PlayerSide.Corp,
+            corpCredits: 3,
+            uniqueAsset: true,
+            additionalSpecs: [oldSpec]);
+        ServerId oldServer = fixture.State.Servers
+            .Where(server => server.Kind == ServerKind.Remote)
+            .OrderBy(server => server.Id.Value, StringComparer.Ordinal)
+            .First()
+            .Id;
+        GameState withOld = AddCardToZone(
+            fixture.State,
+            oldCardId,
+            oldDefinitionId,
+            fixture.State.GetServer(oldServer).RootZoneId,
+            PlayerSide.Corp,
+            faceUp: true,
+            rezzed: true);
+        BehaviorCatalog behaviorCatalog = new BehaviorCatalogBuilder(EngineCompatibility.BehaviorRegistryVersion)
+            .Add(new CardBehaviorDefinition(
+                incomingDefinitionId,
+                PlayerSide.Corp,
+                triggers:
+                [
+                    new BehaviorTrigger(
+                        "incoming-rez",
+                        OccurrenceKind.CardRezzed,
+                        TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Self,
+                        subjectCardFilter: null,
+                        [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, 2)]),
+                ]))
+            .Add(new CardBehaviorDefinition(
+                oldDefinitionId,
+                PlayerSide.Corp,
+                triggers:
+                [
+                    new BehaviorTrigger(
+                        "old-rez",
+                        OccurrenceKind.CardRezzed,
+                        TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Controller,
+                        subjectCardFilter: null,
+                        [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, 5)]),
+                ]))
+            .Build();
+        fixture = fixture with { State = withOld, BehaviorCatalog = behaviorCatalog };
+
+        GameState prompt = OpenTurnRezWindow(fixture);
+        LegalAction action = Assert.Single(
+            prompt.PendingDecision!.LegalActions,
+            candidate => candidate.Kind == ActionKind.RezCard
+                && Assert.IsType<RezCardParameters>(candidate.Parameters).CardId == fixture.AssetZeroId);
+        ApplyResult result = Apply(fixture, prompt, action);
+
+        Assert.True(result.Accepted, result.Rejection?.Message);
+        Assert.Equal(5, result.State.GetPlayer(fixture.CorpId).Credits);
+        Assert.Equal(ZoneKind.CorpDiscard, result.State.GetZone(result.State.GetCard(oldCardId).ZoneId).Kind);
+        Assert.True(result.State.GetCard(fixture.AssetZeroId).Rezzed);
+        Assert.Equal(
+            [
+                EngineEventKinds.CardRezzed,
+                EngineEventKinds.CardMoved,
+                EngineEventKinds.CreditsAdjusted,
+                EngineEventKinds.TurnTimingWindowOpened,
+            ],
+            result.Events.Select(@event => @event.Kind));
+        Assert.DoesNotContain(
+            result.Events,
+            @event => @event.Kind == EngineEventKinds.CreditsAdjusted
+                && Assert.IsType<CreditsAdjustedEventPayload>(@event.Payload).Delta == 5);
+        Assert.Empty(StateInvariantValidator.Collect(result.State, behaviorCatalog, fixture.RuntimeCatalog));
     }
 
     [Fact]
@@ -657,13 +1089,19 @@ public sealed class RuntimeRezActionTests
         return Apply(fixture, state, pass);
     }
 
-    private static Fixture CreateFixture(PlayerSide activeSide, int corpCredits)
+    private static Fixture CreateFixture(
+        PlayerSide activeSide,
+        int corpCredits,
+        bool uniqueAsset = false,
+        IReadOnlyList<CardRuntimeSpec>? additionalSpecs = null)
     {
         CardRuntimeSpec assetZero = new(
             new CardDefinitionId("test:rez-asset-zero"),
             PlayerSide.Corp,
             RuntimeCardClass.Upgrade,
-            rezCost: 0);
+            rezCost: 0,
+            unique: uniqueAsset,
+            uniquenessKey: uniqueAsset ? "test:rez-asset-zero" : null);
         CardRuntimeSpec upgrade = new(
             new CardDefinitionId("test:rez-upgrade"),
             PlayerSide.Corp,
@@ -706,7 +1144,7 @@ public sealed class RuntimeRezActionTests
             RuntimeCardClass.Ice,
             rezCost: 2);
 
-        RuntimeCardCatalog runtimeCatalog = new RuntimeCardCatalogBuilder("runtime:rez-actions")
+        RuntimeCardCatalogBuilder runtimeCatalogBuilder = new RuntimeCardCatalogBuilder("runtime:rez-actions")
             .Add(assetZero)
             .Add(upgrade)
             .Add(remoteAssetOne)
@@ -715,8 +1153,13 @@ public sealed class RuntimeRezActionTests
             .Add(rezzedAsset)
             .Add(expensiveAsset)
             .Add(outerIce)
-            .Add(currentIce)
-            .Build();
+            .Add(currentIce);
+        foreach (CardRuntimeSpec additionalSpec in additionalSpecs ?? [])
+        {
+            runtimeCatalogBuilder.Add(additionalSpec);
+        }
+
+        RuntimeCardCatalog runtimeCatalog = runtimeCatalogBuilder.Build();
         BehaviorCatalog behaviorCatalog = new BehaviorCatalogBuilder(EngineCompatibility.BehaviorRegistryVersion).Build();
         GameState baseline = GameState.CreateNew(
             seed: 802,
@@ -830,6 +1273,118 @@ public sealed class RuntimeRezActionTests
             .Select(card => card.Id == replacement.Id ? replacement : card)
             .ToArray();
         return Rebuild(source, cards: cards);
+    }
+
+    private static GameState AddCardsToRoots(
+        GameState source,
+        CardDefinitionId definitionId,
+        params (CardInstanceId CardId, ZoneId RootZoneId)[] copies)
+    {
+        ZoneState[] zones = source.Zones
+            .Select(zone =>
+            {
+                CardInstanceId[] additions = copies
+                    .Where(copy => copy.RootZoneId == zone.Id)
+                    .Select(copy => copy.CardId)
+                    .ToArray();
+                return additions.Length == 0
+                    ? zone
+                    : new ZoneState(
+                        zone.Id,
+                        zone.Kind,
+                        zone.OwnerSide,
+                        zone.ServerId,
+                        zone.CardIds.Concat(additions).ToArray());
+            })
+            .ToArray();
+        CardInstanceState[] cards = source.Cards
+            .Concat(copies.Select(copy => new CardInstanceState(
+                copy.CardId,
+                definitionId,
+                copy.RootZoneId,
+                PlayerSide.Corp,
+                faceUp: true,
+                rezzed: true)))
+            .ToArray();
+        return RebuildExact(source, cards, source.ResolutionStack, source.PendingDecision, zones);
+    }
+
+    private static GameState AddCounters(GameState source, params CardCounterState[] additions)
+    {
+        RulesState baseline = source.RulesState ?? RulesState.CreateDefault(source.Players);
+        RulesState rules = new(
+            baseline.Version,
+            baseline.Players,
+            baseline.Programs,
+            baseline.Counters.Concat(additions).ToArray(),
+            baseline.LingeringEffects,
+            baseline.Triggers,
+            baseline.Interrupts);
+        return RebuildExact(
+            source,
+            source.Cards,
+            source.ResolutionStack,
+            source.PendingDecision,
+            rulesState: rules);
+    }
+
+    private static GameState AddCardsToRig(
+        GameState source,
+        params (CardInstanceId CardId, CardDefinitionId DefinitionId, bool FaceUp)[] additions)
+    {
+        ZoneState rig = source.GetZone(ZoneKind.RunnerRig);
+        ZoneState[] zones = source.Zones
+            .Select(zone => zone.Id == rig.Id
+                ? new ZoneState(
+                    zone.Id,
+                    zone.Kind,
+                    zone.OwnerSide,
+                    zone.ServerId,
+                    zone.CardIds.Concat(additions.Select(addition => addition.CardId)).ToArray())
+                : zone)
+            .ToArray();
+        CardInstanceState[] cards = source.Cards
+            .Concat(additions.Select(addition => new CardInstanceState(
+                addition.CardId,
+                addition.DefinitionId,
+                rig.Id,
+                PlayerSide.Runner,
+                addition.FaceUp,
+                rezzed: false)))
+            .ToArray();
+        return RebuildExact(source, cards, source.ResolutionStack, source.PendingDecision, zones);
+    }
+
+    private static GameState AddCardToZone(
+        GameState source,
+        CardInstanceId cardId,
+        CardDefinitionId definitionId,
+        ZoneId destinationId,
+        PlayerSide ownerSide,
+        bool faceUp,
+        bool rezzed)
+    {
+        ZoneState destination = source.GetZone(destinationId);
+        ZoneState[] zones = source.Zones
+            .Select(zone => zone.Id == destination.Id
+                ? new ZoneState(
+                    zone.Id,
+                    zone.Kind,
+                    zone.OwnerSide,
+                    zone.ServerId,
+                    zone.CardIds.Append(cardId).ToArray())
+                : zone)
+            .ToArray();
+        CardInstanceState[] cards = source.Cards
+            .Append(new CardInstanceState(
+                cardId,
+                definitionId,
+                destination.Id,
+                ownerSide,
+                faceUp,
+                rezzed))
+            .ToArray();
+        return RebuildExact(source, cards, source.ResolutionStack, source.PendingDecision, zones);
     }
 
     private static GameState MoveCardToRoot(
@@ -975,7 +1530,8 @@ public sealed class RuntimeRezActionTests
         IReadOnlyList<CardInstanceState> cards,
         IReadOnlyList<ResolutionFrame> resolutionStack,
         PendingDecision? pendingDecision,
-        IReadOnlyList<ZoneState>? zones = null) => new(
+        IReadOnlyList<ZoneState>? zones = null,
+        RulesState? rulesState = null) => new(
             source.SchemaVersion,
             source.GameId,
             source.RulesVersion,
@@ -995,7 +1551,7 @@ public sealed class RuntimeRezActionTests
             source.ActionSequence,
             source.InitialSeed,
             source.RunState,
-            source.RulesState,
+            rulesState ?? source.RulesState,
             source.BehaviorRegistryVersion,
             source.BehaviorCatalogFingerprint,
             source.RuntimeCardCatalogVersion,

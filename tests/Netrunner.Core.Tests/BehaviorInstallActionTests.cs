@@ -11,6 +11,41 @@ namespace Netrunner.Core.Tests;
 public sealed class BehaviorInstallActionTests
 {
     [Fact]
+    public void BehaviorEffectInstallResumesOuterInstructionAfterCardInstalledOccurrence()
+    {
+        Fixture fixture = CreateFixture(postInstallGain: 2);
+        GameState state = OpenRunnerAction(fixture);
+        LegalAction play = Assert.Single(
+            state.PendingDecision!.LegalActions,
+            action => action.Kind == ActionKind.PlayCard);
+        GameState played = Apply(state, fixture, play).State;
+        LegalAction selection = Assert.Single(
+            played.PendingDecision!.LegalActions,
+            action => action.Parameters is BehaviorChoiceParameters choice
+                && choice.CardIds.SequenceEqual([fixture.IncomingProgramId]));
+        GameState disposition = Apply(played, fixture, selection).State;
+        LegalAction install = Assert.Single(
+            disposition.PendingDecision!.LegalActions,
+            action => action.Parameters is BehaviorChoiceParameters choice
+                && choice.OptionKeys.SequenceEqual(["install"]));
+
+        ApplyResult result = Apply(disposition, fixture, install);
+
+        Assert.True(result.Accepted, result.Rejection?.Message);
+        Assert.Equal(7, result.State.GetPlayer(fixture.RunnerId).Credits);
+        Assert.Equal(ZoneKind.RunnerRig, result.State.ZoneOf(fixture.IncomingProgramId).Kind);
+        Assert.Equal(DecisionKind.TurnTiming, result.State.PendingDecision?.Kind);
+        Assert.Equal(1, result.Events.Count(value => value.Kind == EngineEventKinds.CardInstalled));
+        int installedIndex = Array.FindIndex(result.Events.ToArray(), value => value.Kind == EngineEventKinds.CardInstalled);
+        int resumedInstructionIndex = Array.FindIndex(
+            result.Events.ToArray(),
+            value => value.Kind == EngineEventKinds.CreditsAdjusted
+                && Assert.IsType<CreditsAdjustedEventPayload>(value.Payload).Delta == 2);
+        Assert.True(resumedInstructionIndex > installedIndex);
+        Assert.Empty(StateInvariantValidator.Collect(result.State, fixture.BehaviorCatalog, fixture.RuntimeCatalog));
+    }
+
+    [Fact]
     public void BehaviorInstallMovesStackProgramPaysPrintedCostOnceAndReturnsToPriority()
     {
         Fixture fixture = CreateFixture();
@@ -726,7 +761,8 @@ public sealed class BehaviorInstallActionTests
         BehaviorTarget? installTargetOverride = null,
         int? existingStaticModifierDelta = null,
         string? incomingUniquenessKey = null,
-        string? existingUniquenessKey = null)
+        string? existingUniquenessKey = null,
+        int? postInstallGain = null)
     {
         CardDefinitionId eventDefinition = eventDefinitionOverride ?? new("test:behavior-install-event");
         CardDefinitionId incomingDefinition = new("test:behavior-install-program");
@@ -758,23 +794,29 @@ public sealed class BehaviorInstallActionTests
                         sourceZone: BehaviorZone.Stack,
                         destinationZone: BehaviorZone.Grip)]),
             ]);
+        var definitionInstructions = new List<BehaviorInstruction>
+        {
+            new BehaviorInstruction(
+                BehaviorInstructionKind.Search,
+                sourceZone: BehaviorZone.Stack,
+                filter: runnerCards,
+                target: selectionTarget),
+            new BehaviorInstruction(
+                BehaviorInstructionKind.ShuffleIntoDeck,
+                target: new BehaviorTarget(BehaviorTargetKind.ChosenCard),
+                sourceZone: BehaviorZone.Stack,
+                destinationZone: BehaviorZone.Stack),
+            new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: disposition),
+        };
+        if (postInstallGain is { } gain)
+        {
+            definitionInstructions.Add(new BehaviorInstruction(BehaviorInstructionKind.GainCredits, gain));
+        }
+
         CardBehaviorDefinition definition = new(
             eventDefinition,
             PlayerSide.Runner,
-            instructions:
-            [
-                new BehaviorInstruction(
-                    BehaviorInstructionKind.Search,
-                    sourceZone: BehaviorZone.Stack,
-                    filter: runnerCards,
-                    target: selectionTarget),
-                new BehaviorInstruction(
-                    BehaviorInstructionKind.ShuffleIntoDeck,
-                    target: new BehaviorTarget(BehaviorTargetKind.ChosenCard),
-                    sourceZone: BehaviorZone.Stack,
-                    destinationZone: BehaviorZone.Stack),
-                new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: disposition),
-            ]);
+            instructions: definitionInstructions);
         BehaviorCatalogBuilder behaviorBuilder = new BehaviorCatalogBuilder("test:behavior-install-catalog")
             .Add(definition);
 

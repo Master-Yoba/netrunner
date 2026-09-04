@@ -401,6 +401,7 @@ public static partial class GameEngine
         };
         AddRezCardActions(working, actions);
         AddScoreActions(working, frame, actions);
+        AddAbilityActions(working, actions);
         working.DecisionRevision = NextRevision(working.DecisionRevision);
         working.PendingDecision = new PendingDecision(
             decisionId,
@@ -571,6 +572,7 @@ public static partial class GameEngine
             AddRunActions(working, actions);
             AddAdvanceCardActions(working, actions);
             AddTagResourcePurgeActions(working, actions);
+            AddAbilityActions(working, actions);
         }
 
         working.DecisionRevision = NextRevision(working.DecisionRevision);

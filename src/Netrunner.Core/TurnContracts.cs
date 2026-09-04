@@ -47,6 +47,39 @@ public enum TurnFrameStage
 }
 
 /// <summary>
+/// Canonical once-per-turn identity for a behavior-owned ability.  The source
+/// card instance is part of the key: two physical copies of the same printed
+/// definition do not share a usage limit.
+/// </summary>
+public sealed record AbilityUseKey
+{
+    [JsonConstructor]
+    public AbilityUseKey(CardInstanceId sourceCardId, string abilityKey)
+    {
+        if (!StableIdentifier.TryValidate(sourceCardId.Value))
+        {
+            throw new ArgumentException("An ability-use key requires a stable source card ID.", nameof(sourceCardId));
+        }
+
+        if (!StableIdentifier.TryValidate(abilityKey))
+        {
+            throw new ArgumentException("An ability-use key requires a stable ability key.", nameof(abilityKey));
+        }
+
+        SourceCardId = sourceCardId;
+        AbilityKey = abilityKey;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId SourceCardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string AbilityKey { get; private set; }
+}
+
+/// <summary>
 /// Explicit facts for one side's current or immediately preceding turn.  The
 /// fields are intentionally data-only so card behavior can query facts later
 /// without persisting delegates or deriving meaning from event text.
@@ -65,7 +98,15 @@ public sealed record TurnFactsState
         bool actionPhaseEnded,
         bool discardPhaseEnded,
         IReadOnlyList<CardInstanceId>? installedCardIds = null,
-        bool successfulRun = false)
+        bool successfulRun = false,
+        IReadOnlyList<AbilityUseKey>? usedAbilityKeys = null,
+        IReadOnlyList<ServerId>? attemptedRunServerIds = null,
+        IReadOnlyList<ServerId>? successfulRunServerIds = null,
+        IReadOnlyList<CardInstanceId>? accessedCardOccurrenceIds = null,
+        IReadOnlyList<CardInstanceId>? trashedCardOccurrenceIds = null,
+        IReadOnlyList<AgendaTurnChange>? agendaTurnChanges = null,
+        IReadOnlyList<TagTurnChange>? tagTurnChanges = null,
+        IReadOnlyList<FirstXUseKey>? firstXUseKeys = null)
     {
         Version = version;
         Side = side;
@@ -78,6 +119,38 @@ public sealed record TurnFactsState
         DiscardPhaseEnded = discardPhaseEnded;
         InstalledCardIds = new ReadOnlyCollection<CardInstanceId>((installedCardIds ?? []).Distinct().ToArray());
         SuccessfulRun = successfulRun;
+        UsedAbilityKeys = new ReadOnlyCollection<AbilityUseKey>((usedAbilityKeys ?? [])
+            .Select(value =>
+            {
+                ArgumentNullException.ThrowIfNull(value);
+                return new AbilityUseKey(value.SourceCardId, value.AbilityKey);
+            })
+            .ToArray());
+        AttemptedRunServerIds = new ReadOnlyCollection<ServerId>((attemptedRunServerIds ?? []).ToArray());
+        SuccessfulRunServerIds = new ReadOnlyCollection<ServerId>((successfulRunServerIds ?? []).ToArray());
+        AccessedCardOccurrenceIds = new ReadOnlyCollection<CardInstanceId>((accessedCardOccurrenceIds ?? []).ToArray());
+        TrashedCardOccurrenceIds = new ReadOnlyCollection<CardInstanceId>((trashedCardOccurrenceIds ?? []).ToArray());
+        AgendaTurnChanges = new ReadOnlyCollection<AgendaTurnChange>((agendaTurnChanges ?? [])
+            .Select(value =>
+            {
+                ArgumentNullException.ThrowIfNull(value);
+                return new AgendaTurnChange(value.CardId, value.BeneficiarySide, value.Points, value.Kind);
+            })
+            .ToArray());
+        TagTurnChanges = new ReadOnlyCollection<TagTurnChange>((tagTurnChanges ?? [])
+            .Select(value =>
+            {
+                ArgumentNullException.ThrowIfNull(value);
+                return new TagTurnChange(value.AffectedPlayerId, value.Delta);
+            })
+            .ToArray());
+        FirstXUseKeys = new ReadOnlyCollection<FirstXUseKey>((firstXUseKeys ?? [])
+            .Select(value =>
+            {
+                ArgumentNullException.ThrowIfNull(value);
+                return new FirstXUseKey(value.SourceCardId, value.Key, value.Count);
+            })
+            .ToArray());
     }
 
     public TurnFactsState(PlayerSide side, int turnNumber, int clicksAllotted)
@@ -131,6 +204,43 @@ public sealed record TurnFactsState
     [JsonRequired]
     public bool SuccessfulRun { get; private set; }
 
+    /// <summary>
+    /// Physical source/ability pairs used during this side's current turn.
+    /// The list is serialized even when empty so schema-3 states cannot hide
+    /// usage semantics behind an omitted compatibility field.
+    /// </summary>
+    [JsonInclude]
+    [JsonRequired]
+    public IReadOnlyList<AbilityUseKey> UsedAbilityKeys { get; private set; }
+
+    /// <summary>Servers on which this side attempted a run, in first-seen order.</summary>
+    [JsonInclude]
+    public IReadOnlyList<ServerId> AttemptedRunServerIds { get; private set; }
+
+    /// <summary>Servers on which this side completed a successful run, in first-seen order.</summary>
+    [JsonInclude]
+    public IReadOnlyList<ServerId> SuccessfulRunServerIds { get; private set; }
+
+    /// <summary>Cards accessed during this turn; repeated accesses remain ordered occurrences.</summary>
+    [JsonInclude]
+    public IReadOnlyList<CardInstanceId> AccessedCardOccurrenceIds { get; private set; }
+
+    /// <summary>Cards trashed during this turn; repeated trashes remain ordered occurrences.</summary>
+    [JsonInclude]
+    public IReadOnlyList<CardInstanceId> TrashedCardOccurrenceIds { get; private set; }
+
+    /// <summary>Typed agenda score/steal changes observed during this turn.</summary>
+    [JsonInclude]
+    public IReadOnlyList<AgendaTurnChange> AgendaTurnChanges { get; private set; }
+
+    /// <summary>Typed tag deltas observed during this turn.</summary>
+    [JsonInclude]
+    public IReadOnlyList<TagTurnChange> TagTurnChanges { get; private set; }
+
+    /// <summary>Counted first-X usage keys observed during this turn.</summary>
+    [JsonInclude]
+    public IReadOnlyList<FirstXUseKey> FirstXUseKeys { get; private set; }
+
     internal TurnFactsState MarkTurnBegan() => New(
         turnBegan: true,
         mandatoryDrawPerformed: MandatoryDrawPerformed,
@@ -138,7 +248,15 @@ public sealed record TurnFactsState
         discardPhaseEnded: DiscardPhaseEnded,
         clicksLost: ClicksLost,
         installedCardIds: InstalledCardIds,
-        successfulRun: SuccessfulRun);
+        successfulRun: SuccessfulRun,
+        usedAbilityKeys: UsedAbilityKeys,
+        attemptedRunServerIds: AttemptedRunServerIds,
+        successfulRunServerIds: SuccessfulRunServerIds,
+        accessedCardOccurrenceIds: AccessedCardOccurrenceIds,
+        trashedCardOccurrenceIds: TrashedCardOccurrenceIds,
+        agendaTurnChanges: AgendaTurnChanges,
+        tagTurnChanges: TagTurnChanges,
+        firstXUseKeys: FirstXUseKeys);
 
     internal TurnFactsState MarkMandatoryDraw() => New(
         turnBegan: TurnBegan,
@@ -147,7 +265,15 @@ public sealed record TurnFactsState
         discardPhaseEnded: DiscardPhaseEnded,
         clicksLost: ClicksLost,
         installedCardIds: InstalledCardIds,
-        successfulRun: SuccessfulRun);
+        successfulRun: SuccessfulRun,
+        usedAbilityKeys: UsedAbilityKeys,
+        attemptedRunServerIds: AttemptedRunServerIds,
+        successfulRunServerIds: SuccessfulRunServerIds,
+        accessedCardOccurrenceIds: AccessedCardOccurrenceIds,
+        trashedCardOccurrenceIds: TrashedCardOccurrenceIds,
+        agendaTurnChanges: AgendaTurnChanges,
+        tagTurnChanges: TagTurnChanges,
+        firstXUseKeys: FirstXUseKeys);
 
     internal TurnFactsState MarkActionPhaseEnded() => New(
         turnBegan: TurnBegan,
@@ -156,7 +282,15 @@ public sealed record TurnFactsState
         discardPhaseEnded: DiscardPhaseEnded,
         clicksLost: ClicksLost,
         installedCardIds: InstalledCardIds,
-        successfulRun: SuccessfulRun);
+        successfulRun: SuccessfulRun,
+        usedAbilityKeys: UsedAbilityKeys,
+        attemptedRunServerIds: AttemptedRunServerIds,
+        successfulRunServerIds: SuccessfulRunServerIds,
+        accessedCardOccurrenceIds: AccessedCardOccurrenceIds,
+        trashedCardOccurrenceIds: TrashedCardOccurrenceIds,
+        agendaTurnChanges: AgendaTurnChanges,
+        tagTurnChanges: TagTurnChanges,
+        firstXUseKeys: FirstXUseKeys);
 
     internal TurnFactsState MarkDiscardPhaseEnded(int clicksLost) => New(
         turnBegan: TurnBegan,
@@ -165,7 +299,15 @@ public sealed record TurnFactsState
         discardPhaseEnded: true,
         clicksLost: clicksLost,
         installedCardIds: InstalledCardIds,
-        successfulRun: SuccessfulRun);
+        successfulRun: SuccessfulRun,
+        usedAbilityKeys: UsedAbilityKeys,
+        attemptedRunServerIds: AttemptedRunServerIds,
+        successfulRunServerIds: SuccessfulRunServerIds,
+        accessedCardOccurrenceIds: AccessedCardOccurrenceIds,
+        trashedCardOccurrenceIds: TrashedCardOccurrenceIds,
+        agendaTurnChanges: AgendaTurnChanges,
+        tagTurnChanges: TagTurnChanges,
+        firstXUseKeys: FirstXUseKeys);
 
     internal TurnFactsState MarkInstalled(CardInstanceId cardId) => New(
         turnBegan: TurnBegan,
@@ -174,7 +316,129 @@ public sealed record TurnFactsState
         discardPhaseEnded: DiscardPhaseEnded,
         clicksLost: ClicksLost,
         installedCardIds: InstalledCardIds.Append(cardId).ToArray(),
-        successfulRun: SuccessfulRun);
+        successfulRun: SuccessfulRun,
+        usedAbilityKeys: UsedAbilityKeys,
+        attemptedRunServerIds: AttemptedRunServerIds,
+        successfulRunServerIds: SuccessfulRunServerIds,
+        accessedCardOccurrenceIds: AccessedCardOccurrenceIds,
+        trashedCardOccurrenceIds: TrashedCardOccurrenceIds,
+        agendaTurnChanges: AgendaTurnChanges,
+        tagTurnChanges: TagTurnChanges,
+        firstXUseKeys: FirstXUseKeys);
+
+    /// <summary>Records a run attempt once, preserving first-seen server order.</summary>
+    internal TurnFactsState MarkRunAttempted(ServerId serverId)
+    {
+        if (AttemptedRunServerIds.Contains(serverId))
+        {
+            return this;
+        }
+
+        return WithFactCollections(
+            attemptedRunServerIds: AttemptedRunServerIds.Append(serverId).ToArray());
+    }
+
+    /// <summary>
+    /// Records a successful run. A successful server is also necessarily an
+    /// attempted server, and both lists retain first-seen order.
+    /// </summary>
+    internal TurnFactsState MarkSuccessfulRun(ServerId serverId)
+    {
+        IReadOnlyList<ServerId> attempted = AttemptedRunServerIds.Contains(serverId)
+            ? AttemptedRunServerIds
+            : AttemptedRunServerIds.Append(serverId).ToArray();
+        IReadOnlyList<ServerId> successful = SuccessfulRunServerIds.Contains(serverId)
+            ? SuccessfulRunServerIds
+            : SuccessfulRunServerIds.Append(serverId).ToArray();
+
+        return WithFactCollections(
+            successfulRun: true,
+            attemptedRunServerIds: attempted,
+            successfulRunServerIds: successful);
+    }
+
+    /// <summary>Records a card-access occurrence; repeated IDs remain ordered.</summary>
+    internal TurnFactsState RecordAccess(CardInstanceId cardId) => WithFactCollections(
+        accessedCardOccurrenceIds: AccessedCardOccurrenceIds.Append(cardId).ToArray());
+
+    /// <summary>Records a card-trash occurrence; repeated IDs remain ordered.</summary>
+    internal TurnFactsState RecordTrash(CardInstanceId cardId) => WithFactCollections(
+        trashedCardOccurrenceIds: TrashedCardOccurrenceIds.Append(cardId).ToArray());
+
+    internal TurnFactsState RecordAgendaChange(AgendaTurnChange change)
+    {
+        ArgumentNullException.ThrowIfNull(change);
+        return WithFactCollections(
+            agendaTurnChanges: AgendaTurnChanges
+                .Append(new AgendaTurnChange(change.CardId, change.BeneficiarySide, change.Points, change.Kind))
+                .ToArray());
+    }
+
+    internal TurnFactsState RecordAgendaChange(
+        CardInstanceId cardId,
+        PlayerSide beneficiarySide,
+        int points,
+        AgendaTurnChangeKind kind) => RecordAgendaChange(
+            new AgendaTurnChange(cardId, beneficiarySide, points, kind));
+
+    internal TurnFactsState RecordTagChange(TagTurnChange change)
+    {
+        ArgumentNullException.ThrowIfNull(change);
+        return WithFactCollections(
+            tagTurnChanges: TagTurnChanges
+                .Append(new TagTurnChange(change.AffectedPlayerId, change.Delta))
+                .ToArray());
+    }
+
+    internal TurnFactsState RecordTagChange(PlayerId affectedPlayerId, int delta) => RecordTagChange(
+        new TagTurnChange(affectedPlayerId, delta));
+
+    /// <summary>
+    /// Adds a first-X use count for a source/key pair. Counts are checked for
+    /// overflow and an existing pair is updated in place.
+    /// </summary>
+    internal TurnFactsState ConsumeFirstX(
+        CardInstanceId sourceCardId,
+        string key,
+        int amount = 1)
+    {
+        if (amount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(amount), "A first-X consumption amount must be positive.");
+        }
+
+        int existingIndex = -1;
+        for (int index = 0; index < FirstXUseKeys.Count; index++)
+        {
+            FirstXUseKey candidate = FirstXUseKeys[index];
+            if (candidate.SourceCardId == sourceCardId
+                && string.Equals(candidate.Key, key, StringComparison.Ordinal))
+            {
+                existingIndex = index;
+                break;
+            }
+        }
+        if (existingIndex < 0)
+        {
+            return WithFactCollections(
+                firstXUseKeys: FirstXUseKeys
+                    .Append(new FirstXUseKey(sourceCardId, key, amount))
+                    .ToArray());
+        }
+
+        FirstXUseKey existing = FirstXUseKeys[existingIndex];
+        int nextCount = checked(existing.Count + amount);
+        FirstXUseKey[] updated = FirstXUseKeys.ToArray();
+        updated[existingIndex] = new FirstXUseKey(sourceCardId, key, nextCount);
+        return WithFactCollections(firstXUseKeys: updated);
+    }
+
+    /// <summary>Returns the accumulated first-X count for a source/key pair.</summary>
+    internal int GetFirstXCount(CardInstanceId sourceCardId, string key) => FirstXUseKeys
+        .Where(value => value.SourceCardId == sourceCardId
+            && string.Equals(value.Key, key, StringComparison.Ordinal))
+        .Select(value => value.Count)
+        .FirstOrDefault();
 
     internal TurnFactsState MarkSuccessfulRun() => New(
         turnBegan: TurnBegan,
@@ -183,7 +447,69 @@ public sealed record TurnFactsState
         discardPhaseEnded: DiscardPhaseEnded,
         clicksLost: ClicksLost,
         installedCardIds: InstalledCardIds,
-        successfulRun: true);
+        successfulRun: true,
+        usedAbilityKeys: UsedAbilityKeys,
+        attemptedRunServerIds: AttemptedRunServerIds,
+        successfulRunServerIds: SuccessfulRunServerIds,
+        accessedCardOccurrenceIds: AccessedCardOccurrenceIds,
+        trashedCardOccurrenceIds: TrashedCardOccurrenceIds,
+        agendaTurnChanges: AgendaTurnChanges,
+        tagTurnChanges: TagTurnChanges,
+        firstXUseKeys: FirstXUseKeys);
+
+    private TurnFactsState WithFactCollections(
+        bool? successfulRun = null,
+        IReadOnlyList<ServerId>? attemptedRunServerIds = null,
+        IReadOnlyList<ServerId>? successfulRunServerIds = null,
+        IReadOnlyList<CardInstanceId>? accessedCardOccurrenceIds = null,
+        IReadOnlyList<CardInstanceId>? trashedCardOccurrenceIds = null,
+        IReadOnlyList<AgendaTurnChange>? agendaTurnChanges = null,
+        IReadOnlyList<TagTurnChange>? tagTurnChanges = null,
+        IReadOnlyList<FirstXUseKey>? firstXUseKeys = null) => New(
+        turnBegan: TurnBegan,
+        mandatoryDrawPerformed: MandatoryDrawPerformed,
+        actionPhaseEnded: ActionPhaseEnded,
+        discardPhaseEnded: DiscardPhaseEnded,
+        clicksLost: ClicksLost,
+        installedCardIds: InstalledCardIds,
+        successfulRun: successfulRun ?? SuccessfulRun,
+        usedAbilityKeys: UsedAbilityKeys,
+        attemptedRunServerIds: attemptedRunServerIds ?? AttemptedRunServerIds,
+        successfulRunServerIds: successfulRunServerIds ?? SuccessfulRunServerIds,
+        accessedCardOccurrenceIds: accessedCardOccurrenceIds ?? AccessedCardOccurrenceIds,
+        trashedCardOccurrenceIds: trashedCardOccurrenceIds ?? TrashedCardOccurrenceIds,
+        agendaTurnChanges: agendaTurnChanges ?? AgendaTurnChanges,
+        tagTurnChanges: tagTurnChanges ?? TagTurnChanges,
+        firstXUseKeys: firstXUseKeys ?? FirstXUseKeys);
+
+    internal bool HasUsedAbility(CardInstanceId sourceCardId, string abilityKey) =>
+        UsedAbilityKeys.Any(value => value.SourceCardId == sourceCardId
+            && string.Equals(value.AbilityKey, abilityKey, StringComparison.Ordinal));
+
+    internal TurnFactsState MarkAbilityUsed(CardInstanceId sourceCardId, string abilityKey)
+    {
+        if (HasUsedAbility(sourceCardId, abilityKey))
+        {
+            return this;
+        }
+
+        return New(
+            turnBegan: TurnBegan,
+            mandatoryDrawPerformed: MandatoryDrawPerformed,
+            actionPhaseEnded: ActionPhaseEnded,
+            discardPhaseEnded: DiscardPhaseEnded,
+            clicksLost: ClicksLost,
+            installedCardIds: InstalledCardIds,
+            successfulRun: SuccessfulRun,
+            usedAbilityKeys: UsedAbilityKeys.Append(new AbilityUseKey(sourceCardId, abilityKey)).ToArray(),
+            attemptedRunServerIds: AttemptedRunServerIds,
+            successfulRunServerIds: SuccessfulRunServerIds,
+            accessedCardOccurrenceIds: AccessedCardOccurrenceIds,
+            trashedCardOccurrenceIds: TrashedCardOccurrenceIds,
+            agendaTurnChanges: AgendaTurnChanges,
+            tagTurnChanges: TagTurnChanges,
+            firstXUseKeys: FirstXUseKeys);
+    }
 
     internal TurnFactsState Copy() => New(
         turnBegan: TurnBegan,
@@ -192,7 +518,15 @@ public sealed record TurnFactsState
         discardPhaseEnded: DiscardPhaseEnded,
         clicksLost: ClicksLost,
         installedCardIds: InstalledCardIds,
-        successfulRun: SuccessfulRun);
+        successfulRun: SuccessfulRun,
+        usedAbilityKeys: UsedAbilityKeys,
+        attemptedRunServerIds: AttemptedRunServerIds,
+        successfulRunServerIds: SuccessfulRunServerIds,
+        accessedCardOccurrenceIds: AccessedCardOccurrenceIds,
+        trashedCardOccurrenceIds: TrashedCardOccurrenceIds,
+        agendaTurnChanges: AgendaTurnChanges,
+        tagTurnChanges: TagTurnChanges,
+        firstXUseKeys: FirstXUseKeys);
 
     private TurnFactsState New(
         bool turnBegan,
@@ -201,7 +535,15 @@ public sealed record TurnFactsState
         bool discardPhaseEnded,
         int clicksLost,
         IReadOnlyList<CardInstanceId>? installedCardIds = null,
-        bool successfulRun = false) => new(
+        bool successfulRun = false,
+        IReadOnlyList<AbilityUseKey>? usedAbilityKeys = null,
+        IReadOnlyList<ServerId>? attemptedRunServerIds = null,
+        IReadOnlyList<ServerId>? successfulRunServerIds = null,
+        IReadOnlyList<CardInstanceId>? accessedCardOccurrenceIds = null,
+        IReadOnlyList<CardInstanceId>? trashedCardOccurrenceIds = null,
+        IReadOnlyList<AgendaTurnChange>? agendaTurnChanges = null,
+        IReadOnlyList<TagTurnChange>? tagTurnChanges = null,
+        IReadOnlyList<FirstXUseKey>? firstXUseKeys = null) => new(
         Version,
         Side,
         TurnNumber,
@@ -212,7 +554,16 @@ public sealed record TurnFactsState
         actionPhaseEnded,
         discardPhaseEnded,
         installedCardIds,
-        successfulRun);
+        successfulRun,
+        usedAbilityKeys,
+        attemptedRunServerIds,
+        successfulRunServerIds,
+        accessedCardOccurrenceIds,
+        trashedCardOccurrenceIds,
+        agendaTurnChanges,
+        tagTurnChanges,
+        firstXUseKeys);
+
 }
 
 /// <summary>
@@ -304,10 +655,81 @@ public sealed record TurnHistoryState
         return ReplaceCurrent(side, current.MarkInstalled(cardId));
     }
 
+    internal TurnHistoryState MarkRunAttempted(PlayerSide side, ServerId serverId)
+    {
+        TurnFactsState current = RequireCurrent(side);
+        return ReplaceCurrent(side, current.MarkRunAttempted(serverId));
+    }
+
+    internal TurnHistoryState MarkSuccessfulRun(PlayerSide side, ServerId serverId)
+    {
+        TurnFactsState current = RequireCurrent(side);
+        return ReplaceCurrent(side, current.MarkSuccessfulRun(serverId));
+    }
+
     internal TurnHistoryState MarkSuccessfulRun(PlayerSide side)
     {
         TurnFactsState current = RequireCurrent(side);
         return ReplaceCurrent(side, current.MarkSuccessfulRun());
+    }
+
+    internal TurnHistoryState RecordAccess(PlayerSide side, CardInstanceId cardId)
+    {
+        TurnFactsState current = RequireCurrent(side);
+        return ReplaceCurrent(side, current.RecordAccess(cardId));
+    }
+
+    internal TurnHistoryState RecordTrash(PlayerSide side, CardInstanceId cardId)
+    {
+        TurnFactsState current = RequireCurrent(side);
+        return ReplaceCurrent(side, current.RecordTrash(cardId));
+    }
+
+    internal TurnHistoryState RecordAgendaChange(PlayerSide side, AgendaTurnChange change)
+    {
+        TurnFactsState current = RequireCurrent(side);
+        return ReplaceCurrent(side, current.RecordAgendaChange(change));
+    }
+
+    internal TurnHistoryState RecordAgendaChange(
+        PlayerSide side,
+        CardInstanceId cardId,
+        PlayerSide beneficiarySide,
+        int points,
+        AgendaTurnChangeKind kind) => RecordAgendaChange(
+            side,
+            new AgendaTurnChange(cardId, beneficiarySide, points, kind));
+
+    internal TurnHistoryState RecordTagChange(PlayerSide side, TagTurnChange change)
+    {
+        TurnFactsState current = RequireCurrent(side);
+        return ReplaceCurrent(side, current.RecordTagChange(change));
+    }
+
+    internal TurnHistoryState RecordTagChange(PlayerSide side, PlayerId affectedPlayerId, int delta) => RecordTagChange(
+        side,
+        new TagTurnChange(affectedPlayerId, delta));
+
+    internal TurnHistoryState ConsumeFirstX(
+        PlayerSide side,
+        CardInstanceId sourceCardId,
+        string key,
+        int amount = 1)
+    {
+        TurnFactsState current = RequireCurrent(side);
+        return ReplaceCurrent(side, current.ConsumeFirstX(sourceCardId, key, amount));
+    }
+
+    internal int GetFirstXCount(PlayerSide side, CardInstanceId sourceCardId, string key) => RequireCurrent(side)
+        .GetFirstXCount(sourceCardId, key);
+
+    internal TurnHistoryState MarkAbilityUsed(
+        PlayerSide side,
+        CardInstanceId sourceCardId,
+        string abilityKey)
+    {
+        TurnFactsState current = RequireCurrent(side);
+        return ReplaceCurrent(side, current.MarkAbilityUsed(sourceCardId, abilityKey));
     }
 
     internal TurnHistoryState Copy() => new(Version, CorpThisTurn, CorpLastTurn, RunnerThisTurn, RunnerLastTurn);

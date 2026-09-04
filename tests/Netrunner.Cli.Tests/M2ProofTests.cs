@@ -1,4 +1,5 @@
 using Netrunner.AI;
+using Netrunner.Cards;
 using Netrunner.Core;
 using Netrunner.Match;
 using Xunit;
@@ -19,11 +20,12 @@ public sealed class M2ProofTests
     // with the same AgendaStolen event, so the event stream, the terminal
     // state, and the 32-decision count are unchanged (only the checkpoint
     // state hash at the agenda mid-access decision differs). The initial
-    // The M4-4.1 state schema migration adds the explicit behavior pin and
-    // catalog fingerprint, so state hashes are intentionally re-pinned;
-    // event hashes remain stable because event payloads are unchanged.
+    // The Slice 4.3 A2 state-schema migration (schema 2 -> 3) adds the
+    // once-per-turn ability-use ledger to turn facts, so state hashes are
+    // intentionally re-pinned; event hashes remain stable because event
+    // payloads are unchanged.
     private const string ExpectedFinalStateHash =
-        "950d1b0d44da26d5ba9a688b83b7ac8202850d8337a8c0609eaf47269b1387ed";
+        "c882eb43f2057073cf138511ac0d5834c20822a7c4a490d8e73cd6c402c682c5";
     private const string ExpectedEventStreamHash =
         "d20cdef94e97ac928ca088e14952b65d2116fecda00485fff5c3b05e1b6e9e20";
 
@@ -181,12 +183,14 @@ public sealed class M2ProofTests
     public void SaveLoadSucceedsAtEveryYieldedDecision()
     {
         M2ProofResult result = RunContractAgentProof();
+        M2ScenarioDocument scenario = LoadScenario();
+        BehaviorCatalog behaviorCatalog = scenario.CreateBehaviorCatalog(GatewayBehaviorCatalog.Create());
 
         Assert.Equal(result.ReplayActions.Count, result.Checkpoints.Count);
         Assert.Equal(
             result.Checkpoints.Count,
             result.Checkpoints.Select(checkpoint => checkpoint.DecisionId).Distinct().Count());
-        Assert.True(ReplayVerifier.Verify(result.ReplayArtifact).Success);
+        Assert.True(ReplayVerifier.Verify(result.ReplayArtifact, behaviorCatalog).Success);
     }
 
     [Fact]

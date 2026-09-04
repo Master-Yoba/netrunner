@@ -349,6 +349,191 @@ public sealed class BehaviorContractsTests
     }
 
     [Fact]
+    public void HostedCreditInstructionsValidateAmountAndRestrictionMatrix()
+    {
+        BehaviorInstruction load = new(
+            BehaviorInstructionKind.LoadHostedCredits,
+            amount: 3);
+        BehaviorInstruction place = new(
+            BehaviorInstructionKind.PlaceHostedCredits,
+            amount: 2,
+            spendRestriction: HostedCreditSpendRestriction.RunCost);
+        BehaviorInstruction take = new(
+            BehaviorInstructionKind.TakeHostedCredits,
+            amount: 1);
+        BehaviorInstruction takeAll = new(BehaviorInstructionKind.TakeAllHostedCredits);
+
+        Assert.Equal(HostedCreditSpendRestriction.CardEffectOnly, load.SpendRestriction);
+        Assert.Equal(HostedCreditSpendRestriction.RunCost, place.SpendRestriction);
+        Assert.Null(take.SpendRestriction);
+        Assert.Equal(0, takeAll.Amount);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorInstruction(
+            BehaviorInstructionKind.LoadHostedCredits));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorInstruction(
+            BehaviorInstructionKind.PlaceHostedCredits));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorInstruction(
+            BehaviorInstructionKind.TakeHostedCredits));
+        Assert.Throws<ArgumentException>(() => new BehaviorInstruction(
+            BehaviorInstructionKind.TakeAllHostedCredits,
+            amount: 1));
+        Assert.Throws<ArgumentException>(() => new BehaviorInstruction(
+            BehaviorInstructionKind.TakeHostedCredits,
+            amount: 1,
+            spendRestriction: HostedCreditSpendRestriction.AbilityCost));
+        Assert.Throws<ArgumentException>(() => new BehaviorInstruction(
+            BehaviorInstructionKind.TakeAllHostedCredits,
+            spendRestriction: HostedCreditSpendRestriction.RunCost));
+        Assert.Throws<ArgumentException>(() => new BehaviorInstruction(
+            BehaviorInstructionKind.GainCredits,
+            amount: 1,
+            spendRestriction: HostedCreditSpendRestriction.RunCost));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorInstruction(
+            BehaviorInstructionKind.LoadHostedCredits,
+            amount: 1,
+            spendRestriction: (HostedCreditSpendRestriction)99));
+
+        string json = EngineJson.Serialize(place);
+        Assert.Contains("\"kind\":\"placeHostedCredits\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"spendRestriction\":\"runCost\"", json, StringComparison.Ordinal);
+        BehaviorInstruction restored = EngineJson.Deserialize<BehaviorInstruction>(json);
+        Assert.Equal(place, restored);
+        Assert.Equal(json, EngineJson.Serialize(restored));
+    }
+
+    [Fact]
+    public void RemoveSelfFromGameCostHasAClosedSchemaAndFingerprint()
+    {
+        BehaviorCost remove = new(BehaviorCostKind.RemoveSelfFromGame);
+        BehaviorCost restored = EngineJson.Deserialize<BehaviorCost>(EngineJson.Serialize(remove));
+
+        Assert.Equal(BehaviorCostKind.RemoveSelfFromGame, remove.Kind);
+        Assert.Equal(1, remove.Amount);
+        Assert.Equal(remove, restored);
+        Assert.Contains("\"kind\":\"removeSelfFromGame\"", EngineJson.Serialize(remove), StringComparison.Ordinal);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorCost(BehaviorCostKind.RemoveSelfFromGame, 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorCost(BehaviorCostKind.RemoveSelfFromGame, 2));
+        Assert.Throws<ArgumentException>(() => new BehaviorCost(
+            BehaviorCostKind.RemoveSelfFromGame,
+            counterName: "counter"));
+        Assert.Throws<ArgumentException>(() => new BehaviorCost(
+            BehaviorCostKind.RemoveSelfFromGame,
+            additionalKey: "additional"));
+
+        CardBehaviorDefinition removeDefinition = new(
+            SearchCardId,
+            PlayerSide.Runner,
+            costs: [remove]);
+        CardBehaviorDefinition trashDefinition = new(
+            SearchCardId,
+            PlayerSide.Runner,
+            costs: [new BehaviorCost(BehaviorCostKind.TrashSelf)]);
+        Assert.NotEqual(removeDefinition.Costs[0], trashDefinition.Costs[0]);
+        Assert.NotEqual(
+            new BehaviorCatalogBuilder("test:remove-cost").Add(removeDefinition).Build().Fingerprint,
+            new BehaviorCatalogBuilder("test:remove-cost").Add(trashDefinition).Build().Fingerprint);
+        Assert.Throws<ArgumentException>(() => new CardBehaviorDefinition(
+            SearchCardId,
+            PlayerSide.Runner,
+            costs: [remove, new BehaviorCost(BehaviorCostKind.TrashSelf)]));
+    }
+
+    [Fact]
+    public void StructuredTrashCardsAdditionalCostHasAClosedSchemaAndFingerprint()
+    {
+        BehaviorTarget runnerGrip = BehaviorTarget.CardsInZone(
+            BehaviorZone.Grip,
+            new BehaviorCardFilter(ownerSide: PlayerSide.Runner));
+        BehaviorTarget runnerHeap = BehaviorTarget.CardsInZone(
+            BehaviorZone.Heap,
+            new BehaviorCardFilter(ownerSide: PlayerSide.Runner));
+        BehaviorCost trashGrip = new(
+            BehaviorCostKind.Additional,
+            amount: 2,
+            additionalKey: "trash-cards",
+            additionalTarget: runnerGrip,
+            additionalKind: BehaviorAdditionalCostKind.TrashCards);
+
+        string json = EngineJson.Serialize(trashGrip);
+        BehaviorCost restored = EngineJson.Deserialize<BehaviorCost>(json);
+        Assert.Equal(trashGrip, restored);
+        Assert.Equal(json, EngineJson.Serialize(restored));
+        Assert.Contains("\"additionalKind\":\"trashCards\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"zone\":\"grip\"", json, StringComparison.Ordinal);
+        Assert.Equal(BehaviorAdditionalCostKind.TrashCards, restored.AdditionalKind);
+        Assert.Equal(runnerGrip, restored.AdditionalTarget);
+
+        BehaviorCost legacyAdditional = new(
+            BehaviorCostKind.Additional,
+            amount: 2,
+            additionalKey: "trash-cards");
+        BehaviorCost changedTarget = new(
+            BehaviorCostKind.Additional,
+            amount: 2,
+            additionalKey: "trash-cards",
+            additionalTarget: runnerHeap,
+            additionalKind: BehaviorAdditionalCostKind.TrashCards);
+        string fingerprint = new BehaviorCatalogBuilder("test:structured-cost")
+            .Add(new CardBehaviorDefinition(SearchCardId, PlayerSide.Runner, costs: [trashGrip]))
+            .Build()
+            .Fingerprint;
+        string legacyFingerprint = new BehaviorCatalogBuilder("test:structured-cost")
+            .Add(new CardBehaviorDefinition(SearchCardId, PlayerSide.Runner, costs: [legacyAdditional]))
+            .Build()
+            .Fingerprint;
+        string targetFingerprint = new BehaviorCatalogBuilder("test:structured-cost")
+            .Add(new CardBehaviorDefinition(SearchCardId, PlayerSide.Runner, costs: [changedTarget]))
+            .Build()
+            .Fingerprint;
+        Assert.NotEqual(fingerprint, legacyFingerprint);
+        Assert.NotEqual(fingerprint, targetFingerprint);
+        Assert.NotEqual(trashGrip, legacyAdditional);
+        Assert.NotEqual(trashGrip, changedTarget);
+
+        Assert.Throws<ArgumentException>(() => new BehaviorCost(
+            BehaviorCostKind.Additional,
+            amount: 2,
+            additionalKey: "trash-cards",
+            additionalKind: BehaviorAdditionalCostKind.TrashCards));
+        Assert.Throws<ArgumentException>(() => new BehaviorCost(
+            BehaviorCostKind.Additional,
+            amount: 2,
+            additionalKey: "trash-cards",
+            additionalTarget: runnerGrip));
+        Assert.Throws<ArgumentException>(() => new BehaviorCost(
+            BehaviorCostKind.Credits,
+            amount: 2,
+            additionalKind: BehaviorAdditionalCostKind.TrashCards));
+        Assert.Throws<ArgumentException>(() => new BehaviorCost(
+            BehaviorCostKind.Credits,
+            amount: 2,
+            additionalTarget: runnerGrip));
+        Assert.Throws<ArgumentException>(() => new BehaviorCost(
+            BehaviorCostKind.Additional,
+            amount: 2,
+            additionalKey: "trash-cards",
+            additionalTarget: BehaviorTarget.CardsInZone(BehaviorZone.Grip),
+            additionalKind: BehaviorAdditionalCostKind.TrashCards));
+        Assert.Throws<ArgumentException>(() => new BehaviorCost(
+            BehaviorCostKind.Additional,
+            amount: 2,
+            additionalKey: "trash-cards",
+            additionalTarget: BehaviorTarget.CardsInZone(
+                BehaviorZone.Grip,
+                new BehaviorCardFilter(ownerSide: PlayerSide.Runner),
+                reveal: true),
+            additionalKind: BehaviorAdditionalCostKind.TrashCards));
+        Assert.Throws<ArgumentException>(() => new BehaviorCost(
+            BehaviorCostKind.Additional,
+            amount: 2,
+            additionalKey: "trash-cards",
+            additionalTarget: BehaviorTarget.CardInZone(
+                BehaviorZone.Grip,
+                new BehaviorCardFilter(ownerSide: PlayerSide.Runner)),
+            additionalKind: BehaviorAdditionalCostKind.TrashCards));
+    }
+
+    [Fact]
     public void CardDefinitionFreezesInstructionTreeAndStaticModifiers()
     {
         BehaviorChoiceSpec choice = new(
@@ -397,6 +582,44 @@ public sealed class BehaviorContractsTests
         Assert.IsAssignableFrom<IList<BehaviorInstruction>>(definition.Instructions);
         Assert.Throws<NotSupportedException>(() =>
             ((IList<BehaviorInstruction>)definition.Instructions).Clear());
+    }
+
+    [Fact]
+    public void StaticModifierJsonPreservesTypedKindAndAcceptsLegacyStringShape()
+    {
+        BehaviorStaticModifier typed = new(
+            BehaviorStaticModifierKind.MemoryUnits,
+            delta: 1,
+            reasonKey: "pantograph-memory");
+        string typedJson = EngineJson.Serialize(typed);
+        BehaviorStaticModifier typedRestored = EngineJson.Deserialize<BehaviorStaticModifier>(typedJson);
+
+        Assert.Equal(typed, typedRestored);
+        Assert.Equal(BehaviorStaticModifierKind.MemoryUnits, typedRestored.Kind);
+        Assert.Equal(typedJson, EngineJson.Serialize(typedRestored));
+
+        BehaviorStaticModifier legacy = new("legacy-value", delta: 2, reasonKey: "legacy-reason");
+        string legacyJson = EngineJson.Serialize(legacy);
+        BehaviorStaticModifier legacyRestored = EngineJson.Deserialize<BehaviorStaticModifier>(legacyJson);
+
+        Assert.Equal(legacy, legacyRestored);
+        Assert.Null(legacyRestored.Kind);
+        Assert.Equal(legacyJson, EngineJson.Serialize(legacyRestored));
+    }
+
+    [Fact]
+    public void StaticModifierJsonRejectsForgedTypedKindValueKeyMismatch()
+    {
+        string forged =
+            "{\"valueKey\":\"maximum-hand-size\",\"delta\":1,\"reasonKey\":null,\"kind\":\"memoryUnits\"}";
+
+        Assert.Throws<System.Text.Json.JsonException>(() =>
+            EngineJson.Deserialize<BehaviorStaticModifier>(forged));
+        Assert.Throws<ArgumentException>(() =>
+            new BehaviorStaticModifier(
+                "maximum-hand-size",
+                delta: 1,
+                kind: BehaviorStaticModifierKind.MemoryUnits));
     }
 
     [Fact]
@@ -449,6 +672,424 @@ public sealed class BehaviorContractsTests
                 .Add(CreateTaggedDefinition(new BehaviorCondition(BehaviorConditionKind.Tagged)))
                 .Build()
                 .GetDefinitionFingerprint(SearchCardId));
+    }
+
+    [Fact]
+    public void HostedCreditOperandAndCostParticipateInCatalogEqualityAndFingerprint()
+    {
+        CardBehaviorDefinition defaultLoad = new(
+            SearchCardId,
+            PlayerSide.Runner,
+            costs: [new BehaviorCost(BehaviorCostKind.HostedCredits, 1)],
+            instructions: [new BehaviorInstruction(
+                BehaviorInstructionKind.LoadHostedCredits,
+                amount: 2)]);
+        CardBehaviorDefinition explicitLoad = new(
+            SearchCardId,
+            PlayerSide.Runner,
+            costs: [new BehaviorCost(BehaviorCostKind.HostedCredits, 1)],
+            instructions: [new BehaviorInstruction(
+                BehaviorInstructionKind.LoadHostedCredits,
+                amount: 2,
+                spendRestriction: HostedCreditSpendRestriction.CardEffectOnly)]);
+        CardBehaviorDefinition runLoad = new(
+            SearchCardId,
+            PlayerSide.Runner,
+            costs: [new BehaviorCost(BehaviorCostKind.HostedCredits, 2)],
+            instructions: [new BehaviorInstruction(
+                BehaviorInstructionKind.LoadHostedCredits,
+                amount: 2,
+                spendRestriction: HostedCreditSpendRestriction.RunCost)]);
+
+        BehaviorCatalog defaultCatalog = new BehaviorCatalogBuilder("test:hosted-credit")
+            .Add(defaultLoad)
+            .Build();
+        BehaviorCatalog explicitCatalog = new BehaviorCatalogBuilder("test:hosted-credit")
+            .Add(explicitLoad)
+            .Build();
+        BehaviorCatalog changedCatalog = new BehaviorCatalogBuilder("test:hosted-credit")
+            .Add(runLoad)
+            .Build();
+
+        Assert.Equal(defaultLoad.Instructions[0], explicitLoad.Instructions[0]);
+        Assert.Equal(defaultCatalog.Fingerprint, explicitCatalog.Fingerprint);
+        Assert.NotEqual(defaultCatalog.Fingerprint, changedCatalog.Fingerprint);
+        Assert.NotEqual(defaultLoad.Costs[0], runLoad.Costs[0]);
+    }
+
+    [Fact]
+    public void TriggerContractValidatesOccurrenceScopeFilterAndInstructionMatrix()
+    {
+        BehaviorInstruction instruction = new(BehaviorInstructionKind.GainCredits, amount: 1);
+        BehaviorCardFilter filter = new(
+            BehaviorCardType.Asset,
+            definitionId: SearchCardId,
+            ownerSide: PlayerSide.Corp);
+
+        BehaviorTrigger trigger = new(
+            "contract-trigger",
+            OccurrenceKind.CardInstalled,
+            TriggerMode.Mandatory,
+            BehaviorTriggerScope.Self,
+            filter,
+            [instruction]);
+
+        Assert.Equal("contract-trigger", trigger.Key);
+        Assert.Equal(OccurrenceKind.CardInstalled, trigger.Occurrence);
+        Assert.Equal(TriggerMode.Mandatory, trigger.Mode);
+        Assert.Equal(BehaviorTriggerScope.Self, trigger.Scope);
+        Assert.Equal(filter, trigger.SubjectCardFilter);
+        Assert.Single(trigger.Instructions);
+
+        foreach (OccurrenceKind occurrence in new[]
+        {
+            OccurrenceKind.CardInstalled,
+            OccurrenceKind.CardRezzed,
+            OccurrenceKind.RunSuccessful,
+            OccurrenceKind.RunEnded,
+            OccurrenceKind.AgendaScoredOrStolen,
+            OccurrenceKind.CardAccessed,
+            OccurrenceKind.HostedCreditPoolEmptied,
+        })
+        {
+            _ = new BehaviorTrigger(
+                $"self-{occurrence}",
+                occurrence,
+                TriggerMode.Optional,
+                BehaviorTriggerScope.Self,
+                filter,
+                [instruction]);
+        }
+
+        foreach (OccurrenceKind occurrence in Enum.GetValues<OccurrenceKind>())
+        {
+            _ = new BehaviorTrigger(
+                $"controller-{occurrence}",
+                occurrence,
+                TriggerMode.Optional,
+                BehaviorTriggerScope.Controller,
+                null,
+                [instruction]);
+            _ = new BehaviorTrigger(
+                $"any-{occurrence}",
+                occurrence,
+                TriggerMode.Optional,
+                BehaviorTriggerScope.Any,
+                null,
+                [instruction]);
+        }
+
+        foreach (OccurrenceKind occurrence in Enum.GetValues<OccurrenceKind>()
+            .Except(new[]
+            {
+                OccurrenceKind.CardInstalled,
+                OccurrenceKind.CardRezzed,
+                OccurrenceKind.RunSuccessful,
+                OccurrenceKind.RunEnded,
+                OccurrenceKind.AgendaScoredOrStolen,
+                OccurrenceKind.CardAccessed,
+                OccurrenceKind.HostedCreditPoolEmptied,
+            }))
+        {
+            Assert.Throws<ArgumentException>(() => new BehaviorTrigger(
+                $"invalid-self-{occurrence}",
+                occurrence,
+                TriggerMode.Optional,
+                BehaviorTriggerScope.Self,
+                null,
+                [instruction]));
+            Assert.Throws<ArgumentException>(() => new BehaviorTrigger(
+                $"invalid-filter-{occurrence}",
+                occurrence,
+                TriggerMode.Optional,
+                BehaviorTriggerScope.Controller,
+                filter,
+                [instruction]));
+        }
+
+        Assert.Throws<ArgumentException>(() => new BehaviorTrigger(
+            "empty-trigger",
+            OccurrenceKind.TurnBegin,
+            TriggerMode.Optional,
+            BehaviorTriggerScope.Controller,
+            null,
+            []));
+        Assert.Throws<ArgumentException>(() => new BehaviorTrigger(
+            "invalid key",
+            OccurrenceKind.TurnBegin,
+            TriggerMode.Optional,
+            BehaviorTriggerScope.Controller,
+            null,
+            [instruction]));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorTrigger(
+            "invalid-occurrence",
+            (OccurrenceKind)999,
+            TriggerMode.Optional,
+            BehaviorTriggerScope.Controller,
+            null,
+            [instruction]));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorTrigger(
+            "invalid-mode",
+            OccurrenceKind.TurnBegin,
+            (TriggerMode)999,
+            BehaviorTriggerScope.Controller,
+            null,
+            [instruction]));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorTrigger(
+            "invalid-scope",
+            OccurrenceKind.TurnBegin,
+            TriggerMode.Optional,
+            (BehaviorTriggerScope)999,
+            null,
+            [instruction]));
+        Assert.Throws<ArgumentNullException>(() => new BehaviorTrigger(
+            "null-instructions",
+            OccurrenceKind.TurnBegin,
+            TriggerMode.Optional,
+            BehaviorTriggerScope.Controller,
+            null,
+            null!));
+    }
+
+    [Fact]
+    public void TriggerContractFreezesInstructionsRejectsDuplicateKeysAndRoundTrips()
+    {
+        var instructions = new List<BehaviorInstruction>
+        {
+            new(BehaviorInstructionKind.GainCredits, amount: 1),
+        };
+        BehaviorTrigger trigger = new(
+            "immutable-trigger",
+            OccurrenceKind.CardRezzed,
+            TriggerMode.Optional,
+            BehaviorTriggerScope.Self,
+            new BehaviorCardFilter(BehaviorCardType.Ice),
+            instructions);
+
+        instructions.Add(new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 2));
+        Assert.Single(trigger.Instructions);
+        Assert.IsAssignableFrom<IList<BehaviorInstruction>>(trigger.Instructions);
+        Assert.Throws<NotSupportedException>(() =>
+            ((IList<BehaviorInstruction>)trigger.Instructions).Clear());
+
+        Assert.Throws<ArgumentException>(() => new CardBehaviorDefinition(
+            SearchCardId,
+            PlayerSide.Corp,
+            triggers:
+            [
+                trigger,
+                new BehaviorTrigger(
+                    "immutable-trigger",
+                    OccurrenceKind.TurnBegin,
+                    TriggerMode.Optional,
+                    BehaviorTriggerScope.Controller,
+                    null,
+                    [new BehaviorInstruction(BehaviorInstructionKind.Draw, amount: 1)]),
+            ]));
+    }
+
+    [Fact]
+    public void TriggerContractEqualityFingerprintAndJsonIncludeNestedFields()
+    {
+        BehaviorCardFilter filter = new(
+            BehaviorCardType.Asset,
+            definitionId: SearchCardId,
+            ownerSide: PlayerSide.Corp,
+            subtype: "campaign");
+        BehaviorTrigger first = new(
+            "nested-trigger",
+            OccurrenceKind.HostedCreditPoolEmptied,
+            TriggerMode.Mandatory,
+            BehaviorTriggerScope.Self,
+            filter,
+            [
+                new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1),
+                new BehaviorInstruction(BehaviorInstructionKind.Draw, amount: 1),
+            ]);
+        BehaviorTrigger equivalent = new(
+            "nested-trigger",
+            OccurrenceKind.HostedCreditPoolEmptied,
+            TriggerMode.Mandatory,
+            BehaviorTriggerScope.Self,
+            new BehaviorCardFilter(
+                BehaviorCardType.Asset,
+                definitionId: SearchCardId,
+                ownerSide: PlayerSide.Corp,
+                subtype: "campaign"),
+            [
+                new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1),
+                new BehaviorInstruction(BehaviorInstructionKind.Draw, amount: 1),
+            ]);
+        BehaviorTrigger changedInstruction = new(
+            "nested-trigger",
+            OccurrenceKind.HostedCreditPoolEmptied,
+            TriggerMode.Mandatory,
+            BehaviorTriggerScope.Self,
+            filter,
+            [
+                new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 2),
+                new BehaviorInstruction(BehaviorInstructionKind.Draw, amount: 1),
+            ]);
+        BehaviorTrigger changedFilter = new(
+            "nested-trigger",
+            OccurrenceKind.HostedCreditPoolEmptied,
+            TriggerMode.Mandatory,
+            BehaviorTriggerScope.Self,
+            new BehaviorCardFilter(BehaviorCardType.Asset, ownerSide: PlayerSide.Runner),
+            [
+                new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 1),
+                new BehaviorInstruction(BehaviorInstructionKind.Draw, amount: 1),
+            ]);
+
+        Assert.Equal(first, equivalent);
+        Assert.NotEqual(first, changedInstruction);
+        Assert.NotEqual(first, changedFilter);
+
+        string json = EngineJson.Serialize(first);
+        Assert.Contains("\"key\":\"nested-trigger\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"occurrence\":\"hostedCreditPoolEmptied\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"scope\":\"self\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"subjectCardFilter\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"instructions\"", json, StringComparison.Ordinal);
+        BehaviorTrigger restored = EngineJson.Deserialize<BehaviorTrigger>(json);
+        Assert.Equal(first, restored);
+        Assert.Equal(json, EngineJson.Serialize(restored));
+
+        BehaviorCatalog firstCatalog = new BehaviorCatalogBuilder("test:trigger-catalog")
+            .Add(new CardBehaviorDefinition(SearchCardId, PlayerSide.Corp, triggers: [first]))
+            .Build();
+        BehaviorCatalog equivalentCatalog = new BehaviorCatalogBuilder("test:trigger-catalog")
+            .Add(new CardBehaviorDefinition(SearchCardId, PlayerSide.Corp, triggers: [equivalent]))
+            .Build();
+        BehaviorCatalog changedInstructionCatalog = new BehaviorCatalogBuilder("test:trigger-catalog")
+            .Add(new CardBehaviorDefinition(SearchCardId, PlayerSide.Corp, triggers: [changedInstruction]))
+            .Build();
+        BehaviorCatalog changedFilterCatalog = new BehaviorCatalogBuilder("test:trigger-catalog")
+            .Add(new CardBehaviorDefinition(SearchCardId, PlayerSide.Corp, triggers: [changedFilter]))
+            .Build();
+
+        Assert.Equal(firstCatalog.Fingerprint, equivalentCatalog.Fingerprint);
+        Assert.NotEqual(firstCatalog.Fingerprint, changedInstructionCatalog.Fingerprint);
+        Assert.NotEqual(firstCatalog.Fingerprint, changedFilterCatalog.Fingerprint);
+    }
+
+    [Fact]
+    public void DynamicGainAmountIsTypedStructuralAndMutuallyExclusiveWithStaticAmount()
+    {
+        BehaviorAmountOperand operand = new("virus", 2);
+        BehaviorInstruction gain = new(
+            BehaviorInstructionKind.GainCredits,
+            amountOperand: operand);
+        BehaviorInstruction equivalent = EngineJson.Deserialize<BehaviorInstruction>(
+            EngineJson.Serialize(gain));
+
+        Assert.Equal(0, gain.Amount);
+        Assert.Equal(operand, gain.AmountOperand);
+        Assert.Equal(gain, equivalent);
+        string json = EngineJson.Serialize(gain);
+        Assert.Contains("\"amountOperand\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"sourceCounterName\":\"virus\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"multiplier\":2", json, StringComparison.Ordinal);
+        Assert.Equal(json, EngineJson.Serialize(equivalent));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BehaviorAmountOperand("virus", 0));
+        Assert.Throws<ArgumentException>(() => new BehaviorAmountOperand("not stable", 2));
+        Assert.Throws<ArgumentException>(() => new BehaviorInstruction(
+            BehaviorInstructionKind.GainCredits,
+            amount: 1,
+            amountOperand: operand));
+        Assert.Throws<ArgumentException>(() => new BehaviorInstruction(
+            BehaviorInstructionKind.Draw,
+            amount: 1,
+            amountOperand: operand));
+
+        BehaviorCatalog first = new BehaviorCatalogBuilder("test:dynamic-amount")
+            .Add(new CardBehaviorDefinition(
+                SearchCardId,
+                PlayerSide.Runner,
+                instructions: [gain]))
+            .Build();
+        BehaviorCatalog changed = new BehaviorCatalogBuilder("test:dynamic-amount")
+            .Add(new CardBehaviorDefinition(
+                SearchCardId,
+                PlayerSide.Runner,
+                instructions:
+                [new BehaviorInstruction(
+                    BehaviorInstructionKind.GainCredits,
+                    amountOperand: new BehaviorAmountOperand("virus", 3))]))
+            .Build();
+        Assert.NotEqual(first.Fingerprint, changed.Fingerprint);
+    }
+
+    [Fact]
+    public void BehaviorContractStructureIncludesBehaviorRunOperandInInstructionAndDefinitionEquality()
+    {
+        BehaviorRunOperand rnd = new(ServerKind.RAndD);
+        BehaviorRunOperand headquarters = new(ServerKind.Headquarters);
+        BehaviorInstruction rndInstruction = new(
+            BehaviorInstructionKind.StartRun,
+            runOperand: rnd);
+        BehaviorInstruction headquartersInstruction = new(
+            BehaviorInstructionKind.StartRun,
+            runOperand: headquarters);
+
+        Assert.NotEqual(rndInstruction, headquartersInstruction);
+        Assert.False(BehaviorContractStructure.AreEqual(rndInstruction, headquartersInstruction));
+
+        BehaviorPaidAbility rndAbility = new(
+            "run",
+            BehaviorAbilityTiming.ActionPhase,
+            BehaviorAbilityActivation.ClickAction,
+            [new BehaviorCost(BehaviorCostKind.Clicks)],
+            [],
+            [],
+            [rndInstruction],
+            BehaviorAbilityUsageLimit.Unlimited);
+        BehaviorPaidAbility headquartersAbility = new(
+            "run",
+            BehaviorAbilityTiming.ActionPhase,
+            BehaviorAbilityActivation.ClickAction,
+            [new BehaviorCost(BehaviorCostKind.Clicks)],
+            [],
+            [],
+            [headquartersInstruction],
+            BehaviorAbilityUsageLimit.Unlimited);
+        CardBehaviorDefinition rndDefinition = new(
+            SearchCardId,
+            PlayerSide.Runner,
+            paidAbilities: [rndAbility]);
+        CardBehaviorDefinition headquartersDefinition = new(
+            SearchCardId,
+            PlayerSide.Runner,
+            paidAbilities: [headquartersAbility]);
+
+        Assert.False(BehaviorCatalogStructure.AreEqual(rndDefinition, headquartersDefinition));
+    }
+
+    [Fact]
+    public void StableChosenTargetSupportsCounterPlacementAndGripInstallOrigin()
+    {
+        BehaviorInstruction counter = new(
+            BehaviorInstructionKind.AddCounter,
+            amount: 1,
+            argument: "virus",
+            target: new BehaviorTarget(
+                BehaviorTargetKind.ChosenCard,
+                selector: "trigger-subject"));
+        BehaviorInstruction install = new(
+            BehaviorInstructionKind.InstallCard,
+            target: new BehaviorTarget(
+                BehaviorTargetKind.ChosenCard,
+                selector: "pantograph-install"),
+            sourceZone: BehaviorZone.Grip,
+            destinationZone: BehaviorZone.Rig,
+            optional: true);
+
+        Assert.Equal("trigger-subject", counter.Target?.Selector);
+        Assert.Equal(BehaviorZone.Grip, install.SourceZone);
+        Assert.Equal("pantograph-install", install.Target?.Selector);
+        Assert.True(install.Optional);
+        Assert.Equal(install, EngineJson.Deserialize<BehaviorInstruction>(EngineJson.Serialize(install)));
     }
 
     private static CardBehaviorDefinition CreateTaggedDefinition(BehaviorCondition condition) =>

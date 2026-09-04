@@ -198,8 +198,9 @@ public sealed class MatchCoordinatorTests
     [Fact]
     public void EncounterProjectionUsesEffectivePalisadeStrengthWithoutChangingCardMetadata()
     {
+        BehaviorCatalog behaviorCatalog = RepresentativeBehaviorCatalog();
         GameState state = ReachPalisadeEncounter();
-        Observation liveObservation = ObservationBuilder.Build(state, PlayerSide.Runner);
+        Observation liveObservation = ObservationBuilder.Build(state, PlayerSide.Runner, behaviorCatalog);
         MatchViewModel liveView = ObservationViewMapper.Build(liveObservation);
 
         RunFocusViewModel liveRun = Assert.IsType<RunFocusViewModel>(liveView.Run);
@@ -222,6 +223,7 @@ public sealed class MatchCoordinatorTests
     [Fact]
     public void EncounterProjectionUsesInjectedBehaviorCatalogSnapshot()
     {
+        BehaviorCatalog representativeCatalog = RepresentativeBehaviorCatalog();
         GameState state = ReachPalisadeEncounter();
         BehaviorCatalog behaviorCatalog = new BehaviorCatalogBuilder("test-view-catalog")
             .AddIce(new IceBehaviorSpec(
@@ -242,7 +244,7 @@ public sealed class MatchCoordinatorTests
             .Build();
 
         MatchViewModel view = ObservationViewMapper.Build(
-            ObservationBuilder.Build(state, PlayerSide.Runner),
+            ObservationBuilder.Build(state, PlayerSide.Runner, representativeCatalog),
             CardMetadataResolvers.Default,
             behaviorCatalog);
         EncounterViewModel encounter = Assert.IsType<EncounterViewModel>(
@@ -257,6 +259,7 @@ public sealed class MatchCoordinatorTests
     [Fact]
     public void RepresentativePalisadeRequiresCleaverPumpBeforeBreak()
     {
+        BehaviorCatalog behaviorCatalog = RepresentativeBehaviorCatalog();
         GameState encounter = ReachPalisadeEncounter();
         PendingDecision beforePump = Assert.IsType<PendingDecision>(encounter.PendingDecision);
         Assert.DoesNotContain(
@@ -264,7 +267,7 @@ public sealed class MatchCoordinatorTests
             action => action.Kind == ActionKind.BreakSubroutines);
 
         MatchViewModel beforeView = ObservationViewMapper.Build(
-            ObservationBuilder.Build(encounter, PlayerSide.Runner));
+            ObservationBuilder.Build(encounter, PlayerSide.Runner, behaviorCatalog));
         EncounterBreakerViewModel beforeCleaver = Assert.Single(
             Assert.IsType<RunFocusViewModel>(beforeView.Run).Encounter!.Breakers,
             breaker => breaker.CardId == "card:5");
@@ -280,7 +283,8 @@ public sealed class MatchCoordinatorTests
             });
         ApplyResult pumped = GameEngine.Apply(
             encounter,
-            new ActionSubmission(beforePump.Owner, beforePump.Id, beforePump.Revision, pump.Id));
+            new ActionSubmission(beforePump.Owner, beforePump.Id, beforePump.Revision, pump.Id),
+            behaviorCatalog);
         Assert.True(pumped.Accepted, pumped.Rejection?.Message);
 
         PendingDecision afterPump = Assert.IsType<PendingDecision>(pumped.State.PendingDecision);
@@ -288,7 +292,7 @@ public sealed class MatchCoordinatorTests
             action.Kind == ActionKind.BreakSubroutines
             && action.Parameters is RunBreakParameters { BreakerId.Value: "card:5" });
         MatchViewModel afterView = ObservationViewMapper.Build(
-            ObservationBuilder.Build(pumped.State, PlayerSide.Runner));
+            ObservationBuilder.Build(pumped.State, PlayerSide.Runner, behaviorCatalog));
         EncounterBreakerViewModel afterCleaver = Assert.Single(
             Assert.IsType<RunFocusViewModel>(afterView.Run).Encounter!.Breakers,
             breaker => breaker.CardId == "card:5");
@@ -372,33 +376,42 @@ public sealed class MatchCoordinatorTests
     private static GameState ReachPalisadeEncounter()
     {
         M2ScenarioDocument document = M2ScenarioProvider.LoadRepresentative();
+        BehaviorCatalog behaviorCatalog = document.CreateBehaviorCatalog(GatewayBehaviorCatalog.Create());
         M2ScenarioRunSpec run = document.Run
             ?? throw new InvalidOperationException("The representative scenario has no run contract.");
-        GameState state = M2ScenarioSetup.Build(document);
+        GameState state = M2ScenarioSetup.Build(document, behaviorCatalog);
         ServerId server = state.Servers.Single(candidate => candidate.Kind == ServerKind.Remote).Id;
         state = GameEngine.BeginRunWithEvents(
             state,
             server,
+            behaviorCatalog,
             initiatingSource: new CardInstanceId(run.Source)).State;
 
-        state = ApplyKind(state, ActionKind.PassPriority); // initiation, Runner
-        state = ApplyKind(state, ActionKind.PassPriority); // initiation, Corp
-        state = ApplyKind(state, ActionKind.PassPriority); // approach, Runner
-        state = ApplyKind(state, ActionKind.RezIce);       // approach, Corp
-        state = ApplyKind(state, ActionKind.PassPriority); // approach, Corp
-        state = ApplyKind(state, ActionKind.PassPriority); // approach, Runner
+        state = ApplyKind(state, ActionKind.PassPriority, behaviorCatalog); // initiation, Runner
+        state = ApplyKind(state, ActionKind.PassPriority, behaviorCatalog); // initiation, Corp
+        state = ApplyKind(state, ActionKind.PassPriority, behaviorCatalog); // approach, Runner
+        state = ApplyKind(state, ActionKind.RezIce, behaviorCatalog);       // approach, Corp
+        state = ApplyKind(state, ActionKind.PassPriority, behaviorCatalog); // approach, Corp
+        state = ApplyKind(state, ActionKind.PassPriority, behaviorCatalog); // approach, Runner
         return state;
     }
 
-    private static GameState ApplyKind(GameState state, ActionKind kind)
+    private static GameState ApplyKind(GameState state, ActionKind kind, IBehaviorCatalog behaviorCatalog)
     {
         PendingDecision decision = state.PendingDecision
             ?? throw new InvalidOperationException("The test state has no pending decision.");
         LegalAction action = decision.LegalActions.Single(candidate => candidate.Kind == kind);
         ApplyResult result = GameEngine.Apply(
             state,
-            new ActionSubmission(decision.Owner, decision.Id, decision.Revision, action.Id));
+            new ActionSubmission(decision.Owner, decision.Id, decision.Revision, action.Id),
+            behaviorCatalog);
         Assert.True(result.Accepted, result.Rejection?.Message);
         return result.State;
+    }
+
+    private static BehaviorCatalog RepresentativeBehaviorCatalog()
+    {
+        M2ScenarioDocument document = M2ScenarioProvider.LoadRepresentative();
+        return document.CreateBehaviorCatalog(GatewayBehaviorCatalog.Create());
     }
 }

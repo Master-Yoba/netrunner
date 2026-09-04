@@ -76,6 +76,7 @@ public enum EffectResolutionStage
 [JsonDerivedType(typeof(MemoryCleanupFrame), "memory-cleanup")]
 [JsonDerivedType(typeof(EffectCheckpointFrame), "effect-checkpoint")]
 [JsonDerivedType(typeof(BehaviorResolutionFrame), "card-behavior")]
+[JsonDerivedType(typeof(AbilityFrame), "ability")]
 public abstract record ResolutionFrame
 {
     protected ResolutionFrame(int version, string behaviorId)
@@ -357,7 +358,8 @@ public sealed record InstallFrame : ResolutionFrame
         ZoneId? destinationZoneId = null,
         IReadOnlyList<CardDefinitionId>? candidateReplacementDefinitionIds = null,
         InstallInitiationKind initiationKind = InstallInitiationKind.BasicAction,
-        string? parentFrameIdentity = null)
+        string? parentFrameIdentity = null,
+        CostQuote? costQuote = null)
         : base(version, behaviorId)
     {
         if (!Enum.IsDefined(cardClass))
@@ -391,6 +393,12 @@ public sealed record InstallFrame : ResolutionFrame
         }
 
         ArgumentOutOfRangeException.ThrowIfNegative(installCost);
+        if (costQuote is not null && costQuote.EffectiveCost != installCost)
+        {
+            throw new ArgumentException(
+                "The install cost must equal the effective cost in the frozen quote.",
+                nameof(installCost));
+        }
 
         Owner = owner;
         CardId = cardId;
@@ -409,6 +417,7 @@ public sealed record InstallFrame : ResolutionFrame
         CandidateReplacementDefinitionIds = FreezeDefinitions(candidateReplacementDefinitionIds);
         InitiationKind = initiationKind;
         ParentFrameIdentity = parentFrameIdentity;
+        CostQuote = costQuote;
     }
 
     public InstallFrame(
@@ -428,7 +437,8 @@ public sealed record InstallFrame : ResolutionFrame
         ZoneId? destinationZoneId = null,
         IReadOnlyList<CardDefinitionId>? candidateReplacementDefinitionIds = null,
         InstallInitiationKind initiationKind = InstallInitiationKind.BasicAction,
-        string? parentFrameIdentity = null)
+        string? parentFrameIdentity = null,
+        CostQuote? costQuote = null)
         : this(
             1,
             ResolutionBehaviorIds.Install,
@@ -448,7 +458,8 @@ public sealed record InstallFrame : ResolutionFrame
             destinationZoneId,
             candidateReplacementDefinitionIds,
             initiationKind,
-            parentFrameIdentity)
+            parentFrameIdentity,
+            costQuote)
     {
     }
 
@@ -542,7 +553,15 @@ public sealed record InstallFrame : ResolutionFrame
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ParentFrameIdentity { get; private set; }
 
-    internal InstallFrame Select(CardInstanceId cardId, int installCost) => new(
+    /// <summary>
+    /// Optional detached install-cost explanation. It is omitted for
+    /// unmodified installs so legacy frame JSON remains byte-compatible.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CostQuote? CostQuote { get; private set; }
+
+    internal InstallFrame Select(CardInstanceId cardId, int installCost, CostQuote? costQuote = null) => new(
         Version,
         BehaviorId,
         Owner,
@@ -561,9 +580,10 @@ public sealed record InstallFrame : ResolutionFrame
         DestinationZoneId,
         CandidateReplacementDefinitionIds,
         InitiationKind,
-        ParentFrameIdentity);
+        ParentFrameIdentity,
+        costQuote);
 
-    internal InstallFrame WithInstallCost(int installCost) => new(
+    internal InstallFrame WithInstallCost(int installCost, CostQuote? costQuote = null) => new(
         Version,
         BehaviorId,
         Owner,
@@ -582,7 +602,8 @@ public sealed record InstallFrame : ResolutionFrame
         DestinationZoneId,
         CandidateReplacementDefinitionIds,
         InitiationKind,
-        ParentFrameIdentity);
+        ParentFrameIdentity,
+        costQuote);
 
     private static ReadOnlyCollection<CardInstanceId> Freeze(IEnumerable<CardInstanceId>? values) =>
         new((values ?? []).ToArray());
@@ -1463,6 +1484,24 @@ public static class ResolutionFrameValidator
                         "A checkpoint without a child kind must not identify a child invocation."));
                 }
 
+                if (checkpoint.ChildKind == EffectCheckpointChildKind.Trigger
+                    && (!checkpoint.ChildTriggerId.HasValue || checkpoint.ChildInterruptId.HasValue))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-checkpoint-trigger-child",
+                        path,
+                        "A trigger checkpoint child must identify only a trigger invocation."));
+                }
+
+                if (checkpoint.ChildKind == EffectCheckpointChildKind.Replacement
+                    && (!checkpoint.ChildInterruptId.HasValue || checkpoint.ChildTriggerId.HasValue))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-checkpoint-replacement-child",
+                        path,
+                        "A replacement checkpoint child must identify only an interrupt invocation."));
+                }
+
                 foreach (TriggerInvocation invocation in checkpoint.TriggerQueue)
                 {
                     ValidateTriggerInvocation(invocation, $"{path}.triggerQueue", violations);
@@ -1619,6 +1658,69 @@ public static class ResolutionFrameValidator
                         $"'{behavior.Stage}' is not a supported behavior resolution stage."));
                 }
 
+                if (behavior.Stage == BehaviorResolutionStage.AwaitingOccurrence
+                    && behavior.OccurrenceContinuation is null)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.behavior-occurrence-continuation-missing",
+                        path,
+                        "An awaiting behavior occurrence must retain its typed continuation context."));
+                }
+                else if (behavior.OccurrenceContinuation is { } occurrenceContinuation)
+                {
+                    if (occurrenceContinuation.Kind != OccurrenceKind.HostedCreditPoolEmptied)
+                    {
+                        violations.Add(new StateInvariantViolation(
+                            "resolution.behavior-occurrence-kind-invalid",
+                            $"{path}.occurrenceContinuation.kind",
+                            "Behavior occurrence continuations currently support only hosted-credit exhaustion."));
+                    }
+
+                    if (occurrenceContinuation.SourceCardId != behavior.SourceCardId)
+                    {
+                        violations.Add(new StateInvariantViolation(
+                            "resolution.behavior-occurrence-source-mismatch",
+                            $"{path}.occurrenceContinuation.sourceCardId",
+                            "A behavior occurrence continuation must identify its parent source card."));
+                    }
+
+                    if (!BehaviorFrameIdentity.TryValidateIssued(occurrenceContinuation.FrameIdentity, out _)
+                        || !string.Equals(occurrenceContinuation.FrameIdentity, behavior.FrameIdentity, StringComparison.Ordinal))
+                    {
+                        violations.Add(new StateInvariantViolation(
+                            "resolution.behavior-occurrence-frame-mismatch",
+                            $"{path}.occurrenceContinuation.frameIdentity",
+                            "A behavior occurrence continuation must identify its exact parent frame."));
+                    }
+
+                    if (occurrenceContinuation.InstructionCursor < 0)
+                    {
+                        violations.Add(new StateInvariantViolation(
+                            "resolution.behavior-occurrence-cursor-invalid",
+                            $"{path}.occurrenceContinuation.instructionCursor",
+                            "A behavior occurrence continuation cursor must be nonnegative."));
+                    }
+
+                    if (behavior.Stage == BehaviorResolutionStage.AwaitingOccurrence
+                        && (occurrenceContinuation.SourceMovedAfterCompletion
+                            || occurrenceContinuation.InstructionCursor != behavior.InstructionCursor))
+                    {
+                        violations.Add(new StateInvariantViolation(
+                            "resolution.behavior-occurrence-pending-mismatch",
+                            path,
+                            "An awaiting behavior occurrence must retain the post-instruction cursor without completed movement authorization."));
+                    }
+
+                    if (behavior.Stage != BehaviorResolutionStage.AwaitingOccurrence
+                        && !occurrenceContinuation.SourceMovedAfterCompletion)
+                    {
+                        violations.Add(new StateInvariantViolation(
+                            "resolution.behavior-occurrence-completion-mismatch",
+                            path,
+                            "A completed behavior occurrence continuation may only remain as moved-source authorization."));
+                    }
+                }
+
                 if (!BehaviorFrameIdentity.TryValidateIssued(behavior.FrameIdentity, out _))
                 {
                     violations.Add(new StateInvariantViolation(
@@ -1645,6 +1747,32 @@ public static class ResolutionFrameValidator
                         "resolution.invalid-behavior-parent-identity",
                         $"{path}.parentFrameIdentity",
                         "Behavior parent frame identities must be stable identifiers."));
+                }
+
+                if (behavior.AbilityKey is not null
+                    && !StableIdentifier.TryValidate(behavior.AbilityKey))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-behavior-ability-key",
+                        $"{path}.abilityKey",
+                        "An ability behavior child key must be a stable identifier."));
+                }
+
+                if (behavior.TriggerKey is not null
+                    && !StableIdentifier.TryValidate(behavior.TriggerKey))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-behavior-trigger-key",
+                        $"{path}.triggerKey",
+                        "A trigger behavior child key must be a stable identifier."));
+                }
+
+                if (behavior.AbilityKey is not null && behavior.TriggerKey is not null)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.behavior-multiple-declarations",
+                        path,
+                        "A behavior frame cannot carry both an ability key and a trigger key."));
                 }
 
                 ValidateBehaviorInstructions(behavior.RootInstructions, $"{path}.rootInstructions", violations);
@@ -1680,6 +1808,14 @@ public static class ResolutionFrameValidator
                 }
                 if (behavior.Choice is not null)
                 {
+                    if (behavior.Stage == BehaviorResolutionStage.AwaitingOccurrence)
+                    {
+                        violations.Add(new StateInvariantViolation(
+                            "resolution.behavior-occurrence-choice-mismatch",
+                            path,
+                            "A behavior frame awaiting a hosted-credit occurrence cannot retain a pending choice."));
+                    }
+
                     BehaviorChoiceMaterialization choice = behavior.Choice;
                     ValidatePlayer(choice.Owner, $"{path}.choice.owner", violations);
                     if (!Enum.IsDefined(choice.Mode)
@@ -1729,6 +1865,139 @@ public static class ResolutionFrameValidator
                             $"{path}.choice.selectedCardIds",
                             "Mode and ordered choices select option keys, not card candidates."));
                     }
+                }
+
+                break;
+            case AbilityFrame ability:
+                ValidateBehavior(frame, ResolutionBehaviorIds.Ability, path, violations);
+                ValidateCardId(ability.SourceCardId, $"{path}.sourceCardId", violations);
+                ValidatePlayer(ability.Controller, $"{path}.controller", violations);
+                ValidateZoneId(ability.SourceZoneId, $"{path}.sourceZoneId", violations);
+                if (!Enum.IsDefined(ability.SourceZoneKind))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-ability-source-zone-kind",
+                        $"{path}.sourceZoneKind",
+                        "Ability source zone kind is not a supported value."));
+                }
+
+                if (!Enum.IsDefined(ability.Stage))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-ability-stage",
+                        $"{path}.stage",
+                        "Ability lifecycle stage is not a supported value."));
+                }
+
+                if (!StableIdentifier.TryValidate(ability.DefinitionId.Value))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "id.invalid",
+                        $"{path}.definitionId",
+                        "Ability definition ID is empty or invalid."));
+                }
+
+                if (!StableIdentifier.TryValidate(ability.AbilityKey))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "id.invalid",
+                        $"{path}.abilityKey",
+                        "Ability keys must be stable identifiers."));
+                }
+
+                if (!StableIdentifier.TryValidate(ability.CatalogFingerprint)
+                    || !DeterministicHash.IsSha256Hex(ability.CatalogFingerprint))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-catalog-fingerprint",
+                        $"{path}.catalogFingerprint",
+                        "Ability frames must retain a lowercase SHA-256 catalog fingerprint."));
+                }
+
+                if (!StableIdentifier.TryValidate(ability.DefinitionFingerprint)
+                    || !DeterministicHash.IsSha256Hex(ability.DefinitionFingerprint))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-definition-fingerprint",
+                        $"{path}.definitionFingerprint",
+                        "Ability frames must retain a lowercase SHA-256 definition fingerprint."));
+                }
+
+                if (!Enum.IsDefined(ability.Timing))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-ability-timing",
+                        $"{path}.timing",
+                        "Ability timing is not a supported value."));
+                }
+
+                if (!Enum.IsDefined(ability.Activation))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-ability-activation",
+                        $"{path}.activation",
+                        "Ability activation is not a supported value."));
+                }
+
+                if (ability.ParentFrameIdentity is not null
+                    && !StableIdentifier.TryValidate(ability.ParentFrameIdentity))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-ability-parent-identity",
+                        $"{path}.parentFrameIdentity",
+                        "Ability parent frame identities must be stable identifiers."));
+                }
+
+                ValidateAbilityCosts(ability.Costs, $"{path}.costs", violations);
+                ValidateCardIds(ability.TargetCardIds, $"{path}.targetCardIds", violations);
+                if (ability.Usage is null)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.missing-ability-usage",
+                        $"{path}.usage",
+                        "Ability frames must retain an exact usage snapshot."));
+                }
+                else
+                {
+                    if (!Enum.IsDefined(ability.Usage.Limit))
+                    {
+                        violations.Add(new StateInvariantViolation(
+                            "resolution.invalid-ability-usage-limit",
+                            $"{path}.usage.limit",
+                            "Ability usage limit is not a supported value."));
+                    }
+
+                    if (ability.Usage.UsesThisTurn < 0
+                        || (ability.Usage.Limit == BehaviorAbilityUsageLimit.OncePerTurn
+                            && ability.Usage.UsesThisTurn > 1))
+                    {
+                        violations.Add(new StateInvariantViolation(
+                            "resolution.invalid-ability-usage",
+                            $"{path}.usage.usesThisTurn",
+                            "Ability usage count is outside its declared limit."));
+                    }
+                }
+
+                bool hasClickCost = ability.Costs.Any(static cost => cost is not null && cost.Kind == BehaviorCostKind.Clicks);
+                bool hasLoseClickCost = ability.Costs.Any(static cost => cost is not null && cost.Kind == BehaviorCostKind.LoseClick);
+                if (ability.Activation == BehaviorAbilityActivation.ClickAction
+                    && (ability.Timing != BehaviorAbilityTiming.ActionPhase
+                        || !hasClickCost
+                        || hasLoseClickCost
+                        || ability.Costs.Count(cost => cost is not null && cost.Kind == BehaviorCostKind.Clicks) != 1
+                        || ability.Costs.SingleOrDefault(cost => cost is not null && cost.Kind == BehaviorCostKind.Clicks)?.Amount != 1))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-ability-combination",
+                        path,
+                        "A click-action frame requires exactly one Click cost and action-phase timing."));
+                }
+                else if (ability.Activation == BehaviorAbilityActivation.PaidAbility && hasClickCost)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-ability-combination",
+                        path,
+                        "A paid-ability frame may not carry an action Click cost."));
                 }
 
                 break;
@@ -1820,6 +2089,151 @@ public static class ResolutionFrameValidator
             {
                 violations.Add(new StateInvariantViolation("resolution.null-behavior-instruction", $"{path}[{index}]", "Behavior instructions must not be null."));
             }
+        }
+    }
+
+    private static void ValidateAbilityCosts(
+        IReadOnlyList<BehaviorCost> costs,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        for (int index = 0; index < costs.Count; index++)
+        {
+            BehaviorCost? cost = costs[index];
+            string costPath = $"{path}[{index}]";
+            if (cost is null)
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.null-ability-cost",
+                    costPath,
+                    "Ability costs must not contain null entries."));
+                continue;
+            }
+
+            if (!Enum.IsDefined(cost.Kind))
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.invalid-ability-cost-kind",
+                    $"{costPath}.kind",
+                    "Ability cost kind is not a supported value."));
+            }
+
+            bool invalidAmount = cost.Kind switch
+            {
+                BehaviorCostKind.Credits => cost.Amount < 0,
+                BehaviorCostKind.Clicks
+                    or BehaviorCostKind.LoseClick
+                    or BehaviorCostKind.Counter
+                    or BehaviorCostKind.Tags
+                    or BehaviorCostKind.HostedCredits
+                    or BehaviorCostKind.Additional => cost.Amount <= 0,
+                BehaviorCostKind.TrashSelf
+                    or BehaviorCostKind.RemoveSelfFromGame => cost.Amount != 1,
+                _ => false,
+            };
+            if (invalidAmount)
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.invalid-ability-cost-amount",
+                    $"{costPath}.amount",
+                    "Ability cost amount must not be negative."));
+            }
+
+            if (cost.Kind == BehaviorCostKind.Counter
+                && !StableIdentifier.TryValidate(cost.CounterName))
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.invalid-ability-counter-cost",
+                    $"{costPath}.counterName",
+                    "Counter costs must carry a stable counter name."));
+            }
+
+            if (cost.Kind == BehaviorCostKind.Additional
+                && !StableIdentifier.TryValidate(cost.AdditionalKey))
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.invalid-ability-additional-cost",
+                    $"{costPath}.additionalKey",
+                    "Additional costs must carry a stable additional-cost key."));
+            }
+
+            if (cost.AdditionalKind is { } additionalKind
+                && !Enum.IsDefined(additionalKind))
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.invalid-ability-additional-cost",
+                    $"{costPath}.additionalKind",
+                    "Additional-cost operation is not a supported value."));
+            }
+
+            if (cost.Kind == BehaviorCostKind.Additional)
+            {
+                if (cost.AdditionalKind is null && cost.AdditionalTarget is not null)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-ability-additional-cost",
+                        costPath,
+                        "A structured additional-cost target requires a typed operation."));
+                }
+
+                if (cost.AdditionalKind == BehaviorAdditionalCostKind.TrashCards
+                    && (cost.AdditionalTarget is not
+                    {
+                        Kind: BehaviorTargetKind.ZoneCards,
+                        Filter: not null,
+                        Reveal: false,
+                    }
+                    || cost.AdditionalTarget.Filter.OwnerSide is null))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-ability-additional-cost",
+                        costPath,
+                        "TrashCards requires a ZoneCards target with an explicit owner and reveal=false."));
+                }
+            }
+            else
+            {
+                if (cost.AdditionalTarget is not null)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-ability-additional-cost",
+                        $"{costPath}.additionalTarget",
+                        "Only additional costs may carry an additional-cost target."));
+                }
+
+                if (cost.AdditionalKind is not null)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.invalid-ability-additional-cost",
+                        $"{costPath}.additionalKind",
+                        "Only additional costs may carry an additional-cost operation."));
+                }
+            }
+
+            if (cost.Kind != BehaviorCostKind.Counter && cost.CounterName is not null)
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.invalid-ability-counter-cost",
+                    $"{costPath}.counterName",
+                    "Only counter costs may carry a counter name."));
+            }
+
+            if (cost.Kind != BehaviorCostKind.Additional && cost.AdditionalKey is not null)
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.invalid-ability-additional-cost",
+                    $"{costPath}.additionalKey",
+                    "Only additional costs may carry an additional-cost key."));
+            }
+        }
+
+        if (costs.Count(static cost => cost is not null
+                && cost.Kind is BehaviorCostKind.TrashSelf or BehaviorCostKind.RemoveSelfFromGame) > 1)
+        {
+            violations.Add(new StateInvariantViolation(
+                "resolution.duplicate-ability-self-movement",
+                path,
+                "An ability may not declare more than one self-movement cost."));
         }
     }
 
@@ -2093,6 +2507,65 @@ public static class ResolutionFrameValidator
             }
         }
 
+        if (occurrence.Kind is OccurrenceKind.CardInstalled
+            or OccurrenceKind.CardRezzed
+            or OccurrenceKind.RunSuccessful
+            or OccurrenceKind.RunEnded
+            or OccurrenceKind.AgendaScoredOrStolen
+            or OccurrenceKind.CardAccessed
+            or OccurrenceKind.HostedCreditPoolEmptied)
+        {
+            if (occurrence.Effect is not GameplayOccurrenceEffect gameplay)
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.gameplay-occurrence-effect-missing",
+                    $"{path}.effect",
+                    "A gameplay occurrence must carry a typed gameplay occurrence effect."));
+            }
+            else
+            {
+                if (gameplay.Kind != occurrence.Kind)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.gameplay-occurrence-kind-mismatch",
+                        $"{path}.effect.kind",
+                        "Gameplay occurrence effect kind must match its occurrence kind."));
+                }
+
+                if (gameplay.Controller != occurrence.Controller)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.gameplay-occurrence-controller-mismatch",
+                        $"{path}.effect.controller",
+                        "Gameplay occurrence effect controller must match its occurrence controller."));
+                }
+
+                if (gameplay.SubjectCardId != occurrence.SourceCardId)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.gameplay-occurrence-subject-mismatch",
+                        $"{path}.effect.subjectCardId",
+                        "Gameplay occurrence subject must match the occurrence source card."));
+                }
+
+                if (gameplay.Kind == OccurrenceKind.RunEnded && gameplay.Successful is null)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.gameplay-occurrence-outcome-missing",
+                        $"{path}.effect.successful",
+                        "A RunEnded occurrence must carry its success outcome."));
+                }
+                else if (gameplay.Kind != OccurrenceKind.RunEnded && gameplay.Successful is not null)
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "resolution.gameplay-occurrence-outcome-unexpected",
+                        $"{path}.effect.successful",
+                        "Only a RunEnded occurrence may carry a success outcome."));
+                }
+
+            }
+        }
+
         ValidatePlayer(occurrence.Controller, $"{path}.controller", violations);
         if (occurrence.TargetPlayer.HasValue)
         {
@@ -2142,6 +2615,78 @@ public static class ResolutionFrameValidator
         if (!StableIdentifier.TryValidate(invocation.BehaviorId))
         {
             violations.Add(new StateInvariantViolation("resolution.invalid-behavior", $"{path}.behaviorId", "Trigger behavior ID is empty or invalid."));
+        }
+
+        bool catalogFieldPresent = invocation.TriggerKey is not null
+            || invocation.CatalogFingerprint is not null
+            || invocation.DefinitionFingerprint is not null
+            || invocation.SourceOwnerSide is not null
+            || invocation.SourceZoneKind is not null;
+        if (catalogFieldPresent)
+        {
+            if (!StableIdentifier.TryValidate(invocation.TriggerKey))
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.invalid-trigger-key",
+                    $"{path}.triggerKey",
+                    "A catalog trigger invocation must carry a stable trigger key."));
+            }
+
+            if (!StableIdentifier.TryValidate(invocation.CatalogFingerprint)
+                || !DeterministicHash.IsSha256Hex(invocation.CatalogFingerprint))
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.invalid-trigger-catalog-fingerprint",
+                    $"{path}.catalogFingerprint",
+                    "A catalog trigger invocation must carry a lowercase SHA-256 catalog fingerprint."));
+            }
+
+            if (!StableIdentifier.TryValidate(invocation.DefinitionFingerprint)
+                || !DeterministicHash.IsSha256Hex(invocation.DefinitionFingerprint))
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.invalid-trigger-definition-fingerprint",
+                    $"{path}.definitionFingerprint",
+                    "A catalog trigger invocation must carry a lowercase SHA-256 definition fingerprint."));
+            }
+
+            if (invocation.SourceCardId is null
+                || invocation.SourceDefinitionId is null
+                || invocation.SourceZoneId is null
+                || invocation.SourceOwnerSide is null
+                || invocation.SourceZoneKind is null)
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.missing-trigger-source-snapshot",
+                    path,
+                    "A catalog trigger invocation must retain its source card, owner, definition, and zone snapshot."));
+            }
+
+            if (invocation.SourceOwnerSide is { } sourceOwnerSide
+                && !Enum.IsDefined(sourceOwnerSide))
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.invalid-trigger-source-owner",
+                    $"{path}.sourceOwnerSide",
+                    "A catalog trigger source owner side must be Corp or Runner."));
+            }
+
+            if (invocation.SourceZoneKind is { } sourceZoneKind
+                && !Enum.IsDefined(sourceZoneKind))
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.invalid-trigger-source-zone-kind",
+                    $"{path}.sourceZoneKind",
+                    "A catalog trigger source zone kind must be a defined zone kind."));
+            }
+
+            if (invocation.Costs.Instructions.Count != 0 || invocation.Effects.Instructions.Count != 0)
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.catalog-trigger-executable-payload",
+                    path,
+                    "Catalog trigger invocations must not retain executable cost or effect payloads."));
+            }
         }
 
         ValidateOccurrence(invocation.Occurrence, $"{path}.occurrence", violations);
@@ -2255,7 +2800,8 @@ internal static class ResolutionFrameCloner
             install.DestinationZoneId,
             install.CandidateReplacementDefinitionIds,
             install.InitiationKind,
-            install.ParentFrameIdentity),
+            install.ParentFrameIdentity,
+            install.CostQuote),
         CardPlayFrame cardPlay => new CardPlayFrame(
             cardPlay.Version,
             cardPlay.BehaviorId,
@@ -2314,7 +2860,30 @@ internal static class ResolutionFrameCloner
             behavior.FrameIdentity,
             behavior.SourceZoneId,
             behavior.SourceZoneKind,
-            behavior.ParentFrameIdentity),
+            behavior.ParentFrameIdentity,
+            behavior.AbilityKey,
+            behavior.TriggerKey,
+            behavior.CatalogTriggerSourceMovedBeforeStart,
+            behavior.OccurrenceContinuation),
+        AbilityFrame ability => new AbilityFrame(
+            ability.Version,
+            ability.BehaviorId,
+            ability.DefinitionId,
+            ability.SourceCardId,
+            ability.AbilityKey,
+            ability.Controller,
+            ability.Timing,
+            ability.Activation,
+            ability.Costs,
+            ability.TargetCardIds,
+            ability.Usage,
+            ability.CatalogFingerprint,
+            ability.DefinitionFingerprint,
+            ability.SourceZoneId,
+            ability.SourceZoneKind,
+            ability.Stage,
+            ability.ParentFrameIdentity,
+            ability.AdditionalCostSelections),
         _ => throw new InvalidOperationException($"No cloner is registered for frame type '{frame.GetType().Name}'."),
     };
 }

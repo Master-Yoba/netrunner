@@ -133,7 +133,10 @@ public sealed class EncounterResolutionTests
             iceCount: 1,
             rezzed: true,
             iceDefinition: FixtureIceBehaviorSpecs.LoseCreditsOnly);
-        GameState prompt = GameEngine.BeginRun(RunBreakTests.WithRunnerCredits(preRun, 1), RunTimingTests.RemoteId(preRun));
+        GameState prompt = GameEngine.BeginRun(
+            RunBreakTests.WithRunnerCredits(preRun, 1),
+            RunTimingTests.RemoteId(preRun),
+            FixtureBehaviorCatalog.Catalog);
         GameState window = RunTimingTests.PassTwice(RunTimingTests.PassTwice(prompt).State).State;
 
         ApplyResult finished = CloseEncounterWindow(window);
@@ -146,7 +149,7 @@ public sealed class EncounterResolutionTests
     private static GameState ReachEncounterWindow(CardDefinitionId iceDefinition)
     {
         GameState preRun = RunTimingTests.CreateRunState(iceCount: 1, rezzed: true, iceDefinition: iceDefinition);
-        GameState prompt = GameEngine.BeginRun(preRun, RunTimingTests.RemoteId(preRun));
+        GameState prompt = GameEngine.BeginRun(preRun, RunTimingTests.RemoteId(preRun), FixtureBehaviorCatalog.Catalog);
         return RunTimingTests.PassTwice(RunTimingTests.PassTwice(prompt).State).State;
     }
 

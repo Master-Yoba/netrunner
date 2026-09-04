@@ -372,6 +372,71 @@ public static partial class GameEngine
             childKind: EffectCheckpointChildKind.Trigger,
             childTriggerId: triggerId,
             childInterruptId: null);
+
+        if (invocation.IsCatalogTrigger)
+        {
+            if (invocation.TriggerKey is null
+                || invocation.CatalogFingerprint is null
+                || invocation.DefinitionFingerprint is null
+                || invocation.SourceCardId is not { } sourceCardId
+                || invocation.SourceDefinitionId is not { } sourceDefinitionId
+                || invocation.SourceZoneId is not { } sourceZoneId
+                || invocation.SourceOwnerSide is not { } sourceOwnerSide
+                || invocation.SourceZoneKind is not { } sourceZoneKind)
+            {
+                throw new ResolutionFailureException("A catalog trigger invocation is missing its reconstruction provenance.");
+            }
+
+            if (!string.Equals(invocation.CatalogFingerprint, working.BehaviorCatalog.Fingerprint, StringComparison.Ordinal)
+                || !string.Equals(
+                    invocation.DefinitionFingerprint,
+                    working.BehaviorCatalog.GetDefinitionFingerprint(sourceDefinitionId),
+                    StringComparison.Ordinal))
+            {
+                throw new ResolutionFailureException("Catalog trigger invocation provenance does not match the injected catalog.");
+            }
+
+            ZoneState sourceSnapshotZone = working.Zones.SingleOrDefault(zone => zone.Id == sourceZoneId)
+                ?? throw new ResolutionFailureException("Catalog trigger source snapshot zone no longer exists.");
+            if (sourceSnapshotZone.Kind != sourceZoneKind)
+            {
+                throw new ResolutionFailureException("Catalog trigger source snapshot zone kind no longer matches.");
+            }
+
+            CardInstanceState source = GetCard(working, sourceCardId);
+            PlayerState sourceController = GetPlayer(working, sourceOwnerSide);
+            if (source.DefinitionId != sourceDefinitionId
+                || source.OwnerSide != sourceOwnerSide
+                || sourceController.Id != invocation.Controller)
+            {
+                throw new ResolutionFailureException("Catalog trigger source snapshot owner or definition is stale.");
+            }
+
+            CardBehaviorDefinition definition = GetBehaviorDefinition(working, sourceDefinitionId);
+            BehaviorTrigger trigger = GetTriggerDeclaration(definition, invocation.TriggerKey);
+            EffectCheckpointFrame awaiting = (EffectCheckpointFrame)working.ResolutionStack[^1];
+            BehaviorResolutionFrame child = new(
+                definition,
+                new BehaviorInvocationContext(source.Id, invocation.Controller, invocation.Occurrence.Controller),
+                working.BehaviorCatalog.Fingerprint,
+                working.BehaviorCatalog.GetDefinitionFingerprint(sourceDefinitionId),
+                working.Allocator.NextBehaviorFrameId(),
+                sourceZoneId,
+                sourceZoneKind,
+                awaiting.BehaviorId,
+                BehaviorFrameIdentity.Compute(awaiting),
+                triggerKey: trigger.Key,
+                rootInstructions: trigger.Instructions,
+                instructions: trigger.Instructions,
+                catalogTriggerSourceMovedBeforeStart: source.ZoneId != sourceZoneId);
+            var bindings = invocation.Occurrence.SourceCardId is { } subjectCardId
+                ? new[] { new BehaviorBinding("trigger-subject", [subjectCardId]) }
+                : Array.Empty<BehaviorBinding>();
+            child = child.With(stage: BehaviorResolutionStage.Execute, bindings: bindings);
+            working.ResolutionStack.Add(child);
+            return;
+        }
+
         EffectResolutionFrame parent = ParentEffectFrame(working);
         working.ResolutionStack.Add(new EffectResolutionFrame(
             1,
@@ -547,6 +612,18 @@ public static partial class GameEngine
             throw new ResolutionFailureException("A checkpoint can only be replaced at the top of the resolution stack.");
         }
 
+        EffectCheckpointStage nextStage = stage ?? frame.Stage;
+        EffectCheckpointChildKind nextChildKind = childKind
+            ?? (nextStage == EffectCheckpointStage.AwaitingChild
+                ? frame.ChildKind
+                : EffectCheckpointChildKind.None);
+        TriggerId? nextTriggerId = nextStage == EffectCheckpointStage.AwaitingChild
+            ? childTriggerId ?? frame.ChildTriggerId
+            : null;
+        InterruptId? nextInterruptId = nextStage == EffectCheckpointStage.AwaitingChild
+            ? childInterruptId ?? frame.ChildInterruptId
+            : null;
+
         working.ResolutionStack[^1] = new EffectCheckpointFrame(
             frame.Version,
             frame.BehaviorId,
@@ -554,7 +631,7 @@ public static partial class GameEngine
             frame.Occurrence,
             frame.OriginalEffect,
             currentEffect ?? frame.CurrentEffect,
-            stage ?? frame.Stage,
+            nextStage,
             triggerQueue ?? frame.TriggerQueue,
             triggerCursor ?? frame.TriggerCursor,
             interruptQueue ?? frame.InterruptQueue,
@@ -562,9 +639,9 @@ public static partial class GameEngine
             appliedTriggers ?? frame.AppliedTriggers,
             appliedInterrupts ?? frame.AppliedInterrupts,
             replacementDepth ?? frame.ReplacementDepth,
-            childKind ?? frame.ChildKind,
-            childTriggerId,
-            childInterruptId,
+            nextChildKind,
+            nextTriggerId,
+            nextInterruptId,
             resolvedOccurrence ?? frame.ResolvedOccurrence);
     }
 
@@ -594,12 +671,15 @@ public static partial class GameEngine
             sourceZoneId ??= frame.SourceOccurrence.SourceZoneId;
         }
 
+        PlayerId occurrenceController = instruction is GameplayOccurrenceEffect gameplay
+            ? gameplay.Controller
+            : frame.Controller;
         return new OccurrenceSnapshot(
             1,
             working.Allocator.NextOccurrenceId(),
             EffectOccurrenceKind(instruction),
             phase,
-            frame.Controller,
+            occurrenceController,
             TargetPlayer(instruction),
             sourceCardId,
             sourceDefinitionId,
@@ -641,8 +721,9 @@ public static partial class GameEngine
     private static TriggerInvocation[] MaterializeTriggers(
         WorkingState working,
         OccurrenceSnapshot occurrence,
-        EffectCheckpointFrame frame) =>
-        (working.RulesState?.Triggers ?? [])
+        EffectCheckpointFrame frame)
+    {
+        TriggerInvocation[] legacy = (working.RulesState?.Triggers ?? [])
             .Where(trigger => !frame.AppliedTriggers.Contains(trigger.Id)
                 && MatchesCondition(trigger.Condition, occurrence, working))
             // CR 9.2.8b: reaction-window priority begins with the active
@@ -657,6 +738,252 @@ public static partial class GameEngine
                 return new TriggerInvocation(trigger, occurrence, definitionId, zoneId);
             })
             .ToArray();
+
+        TriggerInvocation[] catalog = MaterializeCatalogTriggers(working, occurrence, frame);
+        return legacy
+            .Concat(catalog)
+            .OrderBy(trigger => GetPlayer(working, trigger.Controller).Side == working.Turn.ActiveSide ? 0 : 1)
+            .ThenBy(trigger => trigger.Controller.Value, StringComparer.Ordinal)
+            .ThenBy(trigger => trigger.Id.Value, StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static TriggerInvocation[] MaterializeCatalogTriggers(
+        WorkingState working,
+        OccurrenceSnapshot occurrence,
+        EffectCheckpointFrame frame)
+    {
+        if (occurrence.Kind is not (OccurrenceKind.CardInstalled
+            or OccurrenceKind.CardRezzed
+            or OccurrenceKind.RunSuccessful
+            or OccurrenceKind.RunEnded
+            or OccurrenceKind.AgendaScoredOrStolen
+            or OccurrenceKind.CardAccessed
+            or OccurrenceKind.HostedCreditPoolEmptied
+            or OccurrenceKind.TurnBegin))
+        {
+            return [];
+        }
+
+        PlayerState occurrenceController = GetPlayer(working, occurrence.Controller);
+        var materialized = new List<TriggerInvocation>();
+        foreach (CardInstanceState source in working.Cards.OrderBy(card => card.Id.Value, StringComparer.Ordinal))
+        {
+            if (!RuntimeCardActivity.IsActive(source, working.Zones)
+                || !working.BehaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? definition)
+                || definition.Controller != source.OwnerSide)
+            {
+                continue;
+            }
+
+            foreach (BehaviorTrigger trigger in definition.Triggers)
+            {
+                if (trigger.Occurrence != occurrence.Kind
+                    || occurrence.Kind == OccurrenceKind.TurnBegin
+                        && trigger.Scope == BehaviorTriggerScope.Self
+                    || frame.AppliedTriggers.Contains(CatalogTriggerId(occurrence, source, trigger.Key))
+                    || !CatalogTriggerScopeMatches(trigger.Scope, source, occurrence, occurrenceController)
+                    || !CatalogTriggerOutcomeMatches(trigger, occurrence)
+                    || !CatalogTriggerServerMatches(working, trigger, occurrence))
+                {
+                    continue;
+                }
+
+                if (trigger.SubjectCardFilter is not null
+                    && !CatalogSubjectMatches(working, occurrence.SourceCardId, trigger.SubjectCardFilter))
+                {
+                    continue;
+                }
+
+                PlayerId sourceController = GetPlayer(working, source.OwnerSide).Id;
+                materialized.Add(new TriggerInvocation(
+                    CatalogTriggerId(occurrence, source, trigger.Key),
+                    sourceController,
+                    trigger,
+                    source.Id,
+                    source.DefinitionId,
+                    source.ZoneId,
+                    source.OwnerSide,
+                    working.Zones.Single(zone => zone.Id == source.ZoneId).Kind,
+                    occurrence,
+                    working.BehaviorCatalog.Fingerprint,
+                    working.BehaviorCatalog.GetDefinitionFingerprint(source.DefinitionId)));
+            }
+        }
+
+        return materialized.ToArray();
+    }
+
+    private static bool CatalogTriggerOutcomeMatches(
+        BehaviorTrigger trigger,
+        OccurrenceSnapshot occurrence)
+    {
+        if (trigger.RunOutcomeRequirement is not { } requirement)
+        {
+            return true;
+        }
+
+        if (occurrence.Kind != OccurrenceKind.RunEnded
+            || occurrence.Effect is not GameplayOccurrenceEffect gameplay
+            || gameplay.Successful is not { } successful)
+        {
+            return false;
+        }
+
+        return requirement == (successful
+            ? RunOutcomeRequirement.Successful
+            : RunOutcomeRequirement.Unsuccessful);
+    }
+
+    private static bool CatalogTriggerServerMatches(
+        WorkingState working,
+        BehaviorTrigger trigger,
+        OccurrenceSnapshot occurrence)
+    {
+        if (trigger.ServerKindRequirement is not { } requiredServerKind)
+        {
+            return true;
+        }
+
+        if (occurrence.Kind is not (OccurrenceKind.RunSuccessful or OccurrenceKind.RunEnded)
+            || occurrence.Effect is not GameplayOccurrenceEffect gameplay
+            || gameplay.ServerId is not { } serverId)
+        {
+            return false;
+        }
+
+        ServerState? server = working.Servers.FirstOrDefault(candidate => candidate.Id == serverId);
+        return server?.Kind == requiredServerKind;
+    }
+
+    /// <summary>
+    /// Reports whether the active installed-card projection declares a
+    /// catalog trigger for the supplied occurrence. Lifecycle reducers use
+    /// this cheap gate to avoid opening an otherwise empty occurrence
+    /// checkpoint and changing legacy no-trigger state hashes.
+    /// </summary>
+    private static bool HasActiveCatalogTrigger(
+        WorkingState working,
+        OccurrenceKind occurrenceKind,
+        ServerId? serverId = null)
+    {
+        foreach (CardInstanceState source in working.Cards)
+        {
+            if (!RuntimeCardActivity.IsActive(source, working.Zones)
+                || !working.BehaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? definition)
+                || definition.Controller != source.OwnerSide)
+            {
+                continue;
+            }
+
+            if (definition.Triggers.Any(trigger =>
+                trigger.Occurrence == occurrenceKind
+                && (trigger.ServerKindRequirement is null
+                    || serverId is { } suppliedServerId
+                        && working.Servers.FirstOrDefault(candidate => candidate.Id == suppliedServerId)?.Kind
+                            == trigger.ServerKindRequirement)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool CatalogTriggerScopeMatches(
+        BehaviorTriggerScope scope,
+        CardInstanceState source,
+        OccurrenceSnapshot occurrence,
+        PlayerState occurrenceController) => scope switch
+        {
+            BehaviorTriggerScope.Self => occurrence.SourceCardId == source.Id,
+            BehaviorTriggerScope.Controller => occurrenceController.Side == source.OwnerSide,
+            BehaviorTriggerScope.Any => true,
+            _ => false,
+        };
+
+    private static bool CatalogSubjectMatches(
+        WorkingState working,
+        CardInstanceId? subjectCardId,
+        BehaviorCardFilter filter)
+    {
+        if (!subjectCardId.HasValue)
+        {
+            return false;
+        }
+
+        CardInstanceState? subject = working.Cards.SingleOrDefault(card => card.Id == subjectCardId.Value);
+        if (subject is null
+            || filter.DefinitionId is { } definitionId && subject.DefinitionId != definitionId
+            || filter.OwnerSide is { } ownerSide && subject.OwnerSide != ownerSide)
+        {
+            return false;
+        }
+
+        if (working.RuntimeCardCatalog is not null)
+        {
+            if (!working.RuntimeCardCatalog.TryGet(subject.DefinitionId, out CardRuntimeSpec? runtime))
+            {
+                return false;
+            }
+
+            if (filter.Subtype is not null
+                && !runtime.Subtypes.Contains(filter.Subtype, StringComparer.Ordinal))
+            {
+                return false;
+            }
+
+            return filter.CardType switch
+            {
+                BehaviorCardType.Any => true,
+                BehaviorCardType.Agenda => runtime.CardClass == RuntimeCardClass.Agenda,
+                BehaviorCardType.Asset => runtime.CardClass == RuntimeCardClass.Asset,
+                BehaviorCardType.Event => runtime.CardClass == RuntimeCardClass.Event,
+                BehaviorCardType.Hardware => runtime.CardClass == RuntimeCardClass.Hardware,
+                BehaviorCardType.Ice => runtime.CardClass == RuntimeCardClass.Ice,
+                BehaviorCardType.Icebreaker => runtime.CardClass == RuntimeCardClass.Program
+                    && runtime.Subtypes.Contains("icebreaker", StringComparer.Ordinal),
+                BehaviorCardType.Program => runtime.CardClass == RuntimeCardClass.Program,
+                BehaviorCardType.Identity => runtime.CardClass == RuntimeCardClass.Identity,
+                BehaviorCardType.Operation => runtime.CardClass == RuntimeCardClass.Operation,
+                BehaviorCardType.Resource => runtime.CardClass == RuntimeCardClass.Resource,
+                BehaviorCardType.Upgrade => runtime.CardClass == RuntimeCardClass.Upgrade,
+                _ => false,
+            };
+        }
+
+        if (filter.Subtype is not null)
+        {
+            return false;
+        }
+
+        if (filter.CardType == BehaviorCardType.Any)
+        {
+            return true;
+        }
+
+        return filter.CardType switch
+        {
+            BehaviorCardType.Ice => working.BehaviorCatalog.TryGetIce(subject.DefinitionId, out _),
+            BehaviorCardType.Icebreaker => working.BehaviorCatalog.TryGetIcebreaker(subject.DefinitionId, out _),
+            BehaviorCardType.Asset => working.BehaviorCatalog.TryGetAsset(subject.DefinitionId, out _),
+            BehaviorCardType.Agenda => working.BehaviorCatalog.TryGetAgenda(subject.DefinitionId, out _),
+            BehaviorCardType.Event => working.BehaviorCatalog.TryGetRunEvent(subject.DefinitionId, out _),
+            _ => working.BehaviorCatalog.TryGetCardType(subject.DefinitionId, out BehaviorCardType type)
+                && type == filter.CardType,
+        };
+    }
+
+    private static TriggerId CatalogTriggerId(
+        OccurrenceSnapshot occurrence,
+        CardInstanceState source,
+        string triggerKey)
+    {
+        string material = $"catalog-trigger|{occurrence.Id.Value}|{source.Id.Value}|{source.DefinitionId.Value}|{triggerKey}";
+        byte[] digest = System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(material));
+        return new TriggerId("catalog-trigger:" + Convert.ToHexString(digest).ToLowerInvariant());
+    }
 
     private static bool MatchesCondition(
         TriggerCondition condition,
@@ -704,6 +1031,7 @@ public static partial class GameEngine
         RemoveProgramMemoryEffect value => value.CardId,
         CardCounterAdjustmentEffect value => value.CardId,
         MoveCardEffect value => value.CardId,
+        GameplayOccurrenceEffect value => value.SubjectCardId,
         AddLingeringEffect value => value.Effect.SourceCardId,
         _ => null,
     };
@@ -722,6 +1050,7 @@ public static partial class GameEngine
 
     private static OccurrenceKind EffectOccurrenceKind(EffectInstruction instruction) => instruction switch
     {
+        GameplayOccurrenceEffect value => value.Kind,
         TurnBoundaryEffect value => value.Kind,
         CreditAdjustmentEffect => OccurrenceKind.CreditAdjustment,
         ClickAdjustmentEffect => OccurrenceKind.ClickAdjustment,

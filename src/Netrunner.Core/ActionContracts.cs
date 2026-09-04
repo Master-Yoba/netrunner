@@ -57,6 +57,7 @@ public enum ActionKind
     TrashAccessedCard,
     NoAccessAction,
     ChooseBehavior,
+    UseAbility,
 }
 
 /// <summary>
@@ -87,6 +88,7 @@ public enum ActionKind
 [JsonDerivedType(typeof(LegacyActionParameters), "legacy")]
 [JsonDerivedType(typeof(BreachCandidateParameters), "breach-candidate")]
 [JsonDerivedType(typeof(BehaviorChoiceParameters), "behavior-choice")]
+[JsonDerivedType(typeof(AbilityActionParameters), "ability")]
 public abstract record ActionParameters;
 
 public sealed record NumberChoiceParameters([property: JsonRequired] int Value) : ActionParameters;
@@ -317,7 +319,8 @@ public sealed record InstallCardParameters : ActionParameters
         IReadOnlyList<CardInstanceId>? candidateReplacementCardIds = null,
         IReadOnlyList<CardInstanceId>? requiredReplacementCardIds = null,
         IReadOnlyList<CardInstanceId>? selectedReplacementCardIds = null,
-        bool finalizeSelection = true)
+        bool finalizeSelection = true,
+        CostQuote? costQuote = null)
     {
         if (!Enum.IsDefined(destinationKind))
         {
@@ -327,6 +330,13 @@ public sealed record InstallCardParameters : ActionParameters
         if (creditCost < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(creditCost), "Install credit cost must not be negative.");
+        }
+
+        if (costQuote is not null && costQuote.EffectiveCost != creditCost)
+        {
+            throw new ArgumentException(
+                "The install credit cost must equal the effective cost in the frozen quote.",
+                nameof(creditCost));
         }
 
         bool serverDestination = destinationKind is InstallDestinationKind.ServerRoot or InstallDestinationKind.ServerIce;
@@ -351,6 +361,7 @@ public sealed record InstallCardParameters : ActionParameters
         RequiredReplacementCardIds = Freeze(requiredReplacementCardIds);
         SelectedReplacementCardIds = Freeze(selectedReplacementCardIds);
         FinalizeSelection = finalizeSelection;
+        CostQuote = costQuote;
     }
 
     [JsonInclude]
@@ -395,6 +406,14 @@ public sealed record InstallCardParameters : ActionParameters
     [JsonInclude]
     [JsonRequired]
     public bool FinalizeSelection { get; private set; }
+
+    /// <summary>
+    /// Optional detached cost explanation. It is omitted for unmodified
+    /// installs so legacy action JSON remains byte-compatible.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CostQuote? CostQuote { get; private set; }
 
     private static ReadOnlyCollection<CardInstanceId> Freeze(IEnumerable<CardInstanceId>? values) =>
         new((values ?? []).ToArray());
@@ -446,7 +465,11 @@ public sealed record RunBreakerParameters : ActionParameters
 public sealed record RunBreakParameters : ActionParameters
 {
     [JsonConstructor]
-    public RunBreakParameters(CardInstanceId breakerId, int quantity, int hostedCredits = 0)
+    public RunBreakParameters(
+        CardInstanceId breakerId,
+        int quantity,
+        int hostedCredits = 0,
+        CostQuote? costQuote = null)
     {
         if (quantity < 1)
         {
@@ -458,9 +481,15 @@ public sealed record RunBreakParameters : ActionParameters
             throw new ArgumentOutOfRangeException(nameof(hostedCredits), "Hosted credits spent must not be negative.");
         }
 
+        if (costQuote is not null && costQuote.EffectiveCost < 0)
+        {
+            throw new ArgumentException("A break quote must have a nonnegative effective cost.", nameof(costQuote));
+        }
+
         BreakerId = breakerId;
         Quantity = quantity;
         HostedCredits = hostedCredits;
+        CostQuote = costQuote;
     }
 
     [JsonInclude]
@@ -474,6 +503,14 @@ public sealed record RunBreakParameters : ActionParameters
     [JsonInclude]
     [JsonRequired]
     public int HostedCredits { get; private set; }
+
+    /// <summary>
+    /// Optional detached cost explanation. It is omitted for unmodified
+    /// breaks so legacy action JSON remains byte-compatible.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CostQuote? CostQuote { get; private set; }
 
     [JsonIgnore]
     public int RunCredits => HostedCredits;
@@ -648,6 +685,266 @@ public sealed record BehaviorChoiceParameters : ActionParameters
     [JsonInclude]
     [JsonRequired]
     public bool FinalizeSelection { get; private set; }
+}
+
+/// <summary>
+/// Engine-issued payload for one paid-ability activation.  The payload is a
+/// detached snapshot: callers submit its action ID and cannot replace source,
+/// costs, targets, usage facts, or catalog pins.
+/// </summary>
+public sealed record AbilityActionParameters : ActionParameters
+{
+    [JsonConstructor]
+    public AbilityActionParameters(
+        CardInstanceId sourceCardId,
+        CardDefinitionId definitionId,
+        string abilityKey,
+        BehaviorAbilityTiming timing,
+        BehaviorAbilityActivation activation,
+        IReadOnlyList<BehaviorCost> costs,
+        IReadOnlyList<CardInstanceId> targetCardIds,
+        AbilityUsageSnapshot usage,
+        string catalogFingerprint,
+        string definitionFingerprint,
+        ZoneId sourceZoneId,
+        ZoneKind sourceZoneKind,
+        IReadOnlyList<AbilityAdditionalCostSelection>? additionalCostSelections = null)
+    {
+        if (!StableIdentifier.TryValidate(sourceCardId.Value))
+        {
+            throw new ArgumentException("An ability action requires a stable source card ID.", nameof(sourceCardId));
+        }
+
+        if (!StableIdentifier.TryValidate(definitionId.Value))
+        {
+            throw new ArgumentException("An ability action requires a stable definition ID.", nameof(definitionId));
+        }
+
+        if (!StableIdentifier.TryValidate(sourceZoneId.Value))
+        {
+            throw new ArgumentException("An ability action requires a stable source zone ID.", nameof(sourceZoneId));
+        }
+
+        if (!Enum.IsDefined(sourceZoneKind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(sourceZoneKind));
+        }
+
+        if (!StableIdentifier.TryValidate(abilityKey))
+        {
+            throw new ArgumentException(
+                "An ability action requires a stable ability key.",
+                nameof(abilityKey));
+        }
+
+        if (!Enum.IsDefined(timing))
+        {
+            throw new ArgumentOutOfRangeException(nameof(timing));
+        }
+
+        if (!Enum.IsDefined(activation))
+        {
+            throw new ArgumentOutOfRangeException(nameof(activation));
+        }
+
+        if (!DeterministicHash.IsSha256Hex(catalogFingerprint))
+        {
+            throw new ArgumentException(
+                "An ability action catalog fingerprint must be lowercase SHA-256 hex.",
+                nameof(catalogFingerprint));
+        }
+
+        if (!DeterministicHash.IsSha256Hex(definitionFingerprint))
+        {
+            throw new ArgumentException(
+                "An ability action definition fingerprint must be lowercase SHA-256 hex.",
+                nameof(definitionFingerprint));
+        }
+
+        ArgumentNullException.ThrowIfNull(usage);
+        SourceCardId = sourceCardId;
+        DefinitionId = definitionId;
+        AbilityKey = abilityKey;
+        Timing = timing;
+        Activation = activation;
+        Costs = Freeze(costs, nameof(costs));
+        TargetCardIds = FreezeIds(targetCardIds);
+        Usage = new AbilityUsageSnapshot(usage.Limit, usage.UsesThisTurn);
+        CatalogFingerprint = catalogFingerprint;
+        DefinitionFingerprint = definitionFingerprint;
+        SourceZoneId = sourceZoneId;
+        SourceZoneKind = sourceZoneKind;
+        AdditionalCostSelections = FreezeAdditionalCostSelections(additionalCostSelections);
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId SourceCardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardDefinitionId DefinitionId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ZoneId SourceZoneId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ZoneKind SourceZoneKind { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string AbilityKey { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public BehaviorAbilityTiming Timing { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public BehaviorAbilityActivation Activation { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public IReadOnlyList<BehaviorCost> Costs { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public IReadOnlyList<CardInstanceId> TargetCardIds { get; private set; }
+
+    /// <summary>
+    /// Immutable, separately represented selections used to pay structured
+    /// additional costs. A null value is the legacy/empty representation;
+    /// executable actions with an additional cost carry one entry per cost.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<AbilityAdditionalCostSelection>? AdditionalCostSelections { get; private set; }
+
+    [JsonIgnore]
+    public IReadOnlyList<AbilityAdditionalCostSelection> AdditionalCostSelectionsOrEmpty =>
+        AdditionalCostSelections ?? [];
+
+    [JsonInclude]
+    [JsonRequired]
+    public AbilityUsageSnapshot Usage { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string CatalogFingerprint { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string DefinitionFingerprint { get; private set; }
+
+    private static ReadOnlyCollection<T> Freeze<T>(IReadOnlyList<T> values, string parameterName)
+        where T : class
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        T[] copy = values.ToArray();
+        if (copy.Any(static value => value is null))
+        {
+            throw new ArgumentException(
+                "Ability action collections must not contain null entries.",
+                parameterName);
+        }
+
+        return new ReadOnlyCollection<T>(copy);
+    }
+
+    private static ReadOnlyCollection<CardInstanceId> FreezeIds(IReadOnlyList<CardInstanceId> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        return new ReadOnlyCollection<CardInstanceId>(values.ToArray());
+    }
+
+    private static ReadOnlyCollection<AbilityAdditionalCostSelection>? FreezeAdditionalCostSelections(
+        IReadOnlyList<AbilityAdditionalCostSelection>? values)
+    {
+        if (values is null || values.Count == 0)
+        {
+            return null;
+        }
+
+        AbilityAdditionalCostSelection[] copy = values.ToArray();
+        if (copy.Any(static value => value is null))
+        {
+            throw new ArgumentException(
+                "Ability additional-cost selections must not contain null entries.",
+                nameof(values));
+        }
+
+        if (copy.Select(static value => value.CostIndex).Distinct().Count() != copy.Length)
+        {
+            throw new ArgumentException(
+                "Ability additional-cost selections must have distinct cost indexes.",
+                nameof(values));
+        }
+
+        return new ReadOnlyCollection<AbilityAdditionalCostSelection>(copy);
+    }
+}
+
+/// <summary>
+/// One immutable selection for one structured additional-cost declaration.
+/// Cost indexes and keys bind the selected cards to the exact declaration;
+/// the card list remains independent from the ability effect targets.
+/// </summary>
+public sealed record AbilityAdditionalCostSelection
+{
+    [JsonConstructor]
+    public AbilityAdditionalCostSelection(
+        int costIndex,
+        string costKey,
+        IReadOnlyList<CardInstanceId> cardIds)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(costIndex);
+        if (!StableIdentifier.TryValidate(costKey))
+        {
+            throw new ArgumentException(
+                "An additional-cost selection requires a stable cost key.",
+                nameof(costKey));
+        }
+
+        ArgumentNullException.ThrowIfNull(cardIds);
+        if (cardIds.Count == 0)
+        {
+            throw new ArgumentException(
+                "An additional-cost selection must contain at least one card.",
+                nameof(cardIds));
+        }
+
+        if (cardIds.Distinct().Count() != cardIds.Count)
+        {
+            throw new ArgumentException(
+                "An additional-cost selection must contain distinct cards.",
+                nameof(cardIds));
+        }
+
+        if (cardIds.Any(cardId => !StableIdentifier.TryValidate(cardId.Value)))
+        {
+            throw new ArgumentException(
+                "An additional-cost selection must contain stable card IDs.",
+                nameof(cardIds));
+        }
+
+        CostIndex = costIndex;
+        CostKey = costKey;
+        CardIds = new ReadOnlyCollection<CardInstanceId>(cardIds.ToArray());
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int CostIndex { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string CostKey { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public IReadOnlyList<CardInstanceId> CardIds { get; private set; }
 }
 
 public sealed record LegalAction
@@ -884,11 +1181,16 @@ public sealed class PendingDecision
             install.CandidateReplacementCardIds,
             install.RequiredReplacementCardIds,
             install.SelectedReplacementCardIds,
-            install.FinalizeSelection),
+            install.FinalizeSelection,
+            install.CostQuote),
         RunCardPaymentParameters payment => new RunCardPaymentParameters(payment.CardId, payment.HostedCredits),
         RunIceParameters runIce => new RunIceParameters(runIce.IceId),
         RunBreakerParameters breaker => new RunBreakerParameters(breaker.BreakerId, breaker.HostedCredits),
-        RunBreakParameters runBreak => new RunBreakParameters(runBreak.BreakerId, runBreak.Quantity, runBreak.HostedCredits),
+        RunBreakParameters runBreak => new RunBreakParameters(
+            runBreak.BreakerId,
+            runBreak.Quantity,
+            runBreak.HostedCredits,
+            runBreak.CostQuote),
         NoActionParameters => new NoActionParameters(),
         TriggerChoiceParameters trigger => new TriggerChoiceParameters(trigger.TriggerId),
         TriggerOrderParameters order => new TriggerOrderParameters(order.TriggerId),
@@ -901,6 +1203,20 @@ public sealed class PendingDecision
             behaviorChoice.OptionKeys,
             behaviorChoice.CardIds,
             behaviorChoice.FinalizeSelection),
+        AbilityActionParameters ability => new AbilityActionParameters(
+            ability.SourceCardId,
+            ability.DefinitionId,
+            ability.AbilityKey,
+            ability.Timing,
+            ability.Activation,
+            ability.Costs,
+            ability.TargetCardIds,
+            ability.Usage,
+            ability.CatalogFingerprint,
+            ability.DefinitionFingerprint,
+            ability.SourceZoneId,
+            ability.SourceZoneKind,
+            ability.AdditionalCostSelections),
         _ => throw new InvalidOperationException(
             $"No immutable clone is registered for action parameter type '{parameters.GetType().Name}'."),
     };

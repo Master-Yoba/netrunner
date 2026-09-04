@@ -35,44 +35,51 @@ public sealed class GatewayIcebreakerBehaviorSpecTests
     }
 
     [Fact]
-    public void IcebreakerSpecsBindExactlyTheTwoRepresentativeIcebreakerDefinitions()
+    public void IcebreakerSpecsBindAllRegisteredDefinitionsInCodeOrder()
     {
         Assert.Equal(
-            new[] { GatewayCardCodes.Cleaver, GatewayCardCodes.Buzzsaw },
+            new[]
+            {
+                GatewayCardCodes.Buzzsaw,
+                GatewayCardCodes.Cleaver,
+                GatewayBatch2CardCodes.Carmen,
+                GatewayBatch2CardCodes.Marjanah,
+            },
             GatewayIcebreakerBehaviorSpecs.IcebreakerSpecs
                 .Select(static spec => spec.DefinitionId)
                 .ToArray());
     }
 
     [Fact]
-    public void RegisterAllIsIdempotentAndRetrievalSucceeds()
+    public void ImmutableGatewayCatalogContainsTheCompiledIcebreakerSpecs()
     {
-        GatewayIcebreakerBehaviorSpecs.RegisterAll();
-        GatewayIcebreakerBehaviorSpecs.RegisterAll();
+        BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();
 
         Assert.Equal(
             GatewayIcebreakerBehaviorSpecs.IcebreakerSpecs[0],
-            CardBehaviorSpecCatalog.GetIcebreaker(GatewayCardCodes.Cleaver));
+            catalog.IcebreakerSpecs.Single(spec => spec.DefinitionId == GatewayCardCodes.Buzzsaw));
         Assert.Equal(
             GatewayIcebreakerBehaviorSpecs.IcebreakerSpecs[1],
-            CardBehaviorSpecCatalog.GetIcebreaker(GatewayCardCodes.Buzzsaw));
+            catalog.IcebreakerSpecs.Single(spec => spec.DefinitionId == GatewayCardCodes.Cleaver));
     }
 
     [Fact]
     public void GetIcebreakerFailsClosedForUnregisteredDefinitions()
     {
         CardDefinitionId unregistered = new("30001");
+        BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();
 
-        Assert.False(CardBehaviorSpecCatalog.TryGetIcebreaker(unregistered, out _));
-        Assert.Throws<ArgumentException>(() => CardBehaviorSpecCatalog.GetIcebreaker(unregistered));
+        Assert.False(catalog.TryGetIcebreaker(unregistered, out _));
     }
 
     [Fact]
     public void RegisteringADifferentSpecForTheSameDefinitionThrows()
     {
-        IcebreakerBehaviorSpec canonical = GatewayIcebreakerBehaviorSpecs.IcebreakerSpecs[0];
+        IcebreakerBehaviorSpec canonical = GatewayIcebreakerBehaviorSpecs.IcebreakerSpecs.Single(
+            static candidate => candidate.DefinitionId == GatewayCardCodes.Cleaver);
         Assert.Equal(GatewayCardCodes.Cleaver, canonical.DefinitionId);
-        CardBehaviorSpecCatalog.RegisterIcebreaker(canonical);
+        BehaviorCatalogBuilder builder = new(GatewayBehaviorCatalog.Version);
+        builder.AddIcebreaker(canonical);
 
         IcebreakerBehaviorSpec conflicting = new(
             canonical.DefinitionId,
@@ -84,8 +91,8 @@ public sealed class GatewayIcebreakerBehaviorSpecTests
             pumpStrength: canonical.PumpStrength);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
-            () => CardBehaviorSpecCatalog.RegisterIcebreaker(conflicting));
+            () => builder.AddIcebreaker(conflicting));
         Assert.Contains(canonical.DefinitionId.Value, exception.Message);
-        Assert.Equal(canonical, CardBehaviorSpecCatalog.GetIcebreaker(canonical.DefinitionId));
+        Assert.Equal(canonical, builder.Build().IcebreakerSpecs.Single(spec => spec.DefinitionId == canonical.DefinitionId));
     }
 }

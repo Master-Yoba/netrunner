@@ -1,6 +1,8 @@
 # M4 progress — System Gateway complete
 
-Status: slice 4.1 merged; slice 4.2 implementation in progress on `m4_2`
+Status: Slice 4.3 engine/card/agent/client work is implemented on `m4_3`;
+the standard full-game SIM-401 exit remains open on the pre-existing
+MATCH-401A setup/mulligan dependency
 
 Date started: 31 August 2026
 
@@ -9,10 +11,10 @@ vendored commit `236140cf84491c23995b028bc791281837520b97` (77 designs)
 
 ## Scope
 
-Slice 4.1 of `docs/M4_PLAN.md` is complete and merged. Current implementation
-scope is Slice 4.2: ENG-401 through ENG-406, MATCH-401A/B, DATA-401A, the 12
-Batch 1 designs, AGT-401, SIM-401, UI-403, OBS-401, and their documented exit
-evidence. Later M4 card batches remain out of scope.
+Slices 4.1 and 4.2 of `docs/M4_PLAN.md` are complete and merged. Current
+implementation scope is Slice 4.3: ENG-407 through ENG-413, the 13 new Batch 2
+designs plus Nico Campaign completion, AGT-401 v2, SIM-401, UI-404, OBS-401,
+and their documented exit evidence. Later M4 card batches remain out of scope.
 
 ## Baseline
 
@@ -342,9 +344,11 @@ evidence. Later M4 card batches remain out of scope.
 
 The Slice 4.1 foundation decisions D-401 through D-417 in `docs/M4_PLAN.md`
 are accepted. Production composition now uses immutable injected behavior and
-metadata catalogs; compatibility statics remain only behind documented M2
-adapters. Engine extraction is mechanical, schema/version migration is pinned,
-and Godot consumes Match presentation boundaries rather than Cards records.
+metadata catalogs; rules-only convenience overloads use the immutable empty
+catalog and M2 composition uses an explicit scenario slice, with no
+process-wide behavior registry remaining. Engine extraction is mechanical,
+schema/version migration is pinned, and Godot consumes Match presentation
+boundaries rather than Cards records.
 
 ## Evidence
 
@@ -2548,3 +2552,1202 @@ errors; runtime action expansion and full verification remain pending.
 - The post-CI review-thread audit found the prior three threads still resolved
   and exactly one new thread: the replied-to P1. Root explicitly resolved that
   verified thread. No other new inline feedback was present at that audit.
+
+## Slice 4.3 work log
+
+### 2026-09-03 — Slice 4.3 architecture and execution checkpoints
+
+- Started from clean branch `m4_3` at merged Slice 4.2 commit `ea6da2b`.
+  The baseline contains 489 Core, 98 Cards, 23 AI, 52 CLI, and 43 Match tests;
+  the last authoritative `scripts/verify.sh` run is green and coverage is
+  19 registered / 17 complete / 2 partial / 58 unregistered of 77.
+- Scope is the complete Slice 4.3 contract in `docs/M4_PLAN.md`: ENG-407,
+  ENG-407A, ENG-408–413; cards 30003, 30007, 30009, 30014–16, 30018, 30023,
+  30024, 30027, 30033, 30053, 30071; full-text completion of 30037; AGT-401
+  v2, SIM-401, UI-404, OBS-401, and the standard batch proof/client gates.
+  Slice 4.4 mechanics and cards remain excluded even where Slice 4.3 records
+  facts that later batches consume.
+- Root owns architecture, checkpoint contracts, integration review, the
+  progress ledger, independent verification, and local commits. Luna Max owns
+  implementation within each bounded checkpoint and does not commit.
+- The slice is dependency-ordered into locally committable checkpoints:
+  (A) paid-ability declaration/action/frame/cost foundation plus generalized
+  encountered-ICE subtype legality; (B) card counters, hosted credit pools,
+  removed-from-game movement, typed events, observation, and invariant/schema
+  surfaces; (C) active-source occurrence bindings and per-turn/run facts;
+  (D) click-run source context, breach modifiers, conditional cost modifiers,
+  and their UI calculation projections; (E) Batch 2 declarations and
+  card-level lifecycle/hidden-information tests in small related groups;
+  (F) contract-agent, sim/headless proof, UI-404 client smoke, coverage/rulings
+  regeneration, full verification, and exit evidence.
+- Checkpoint A contract: ability activation is a distinct engine-issued action
+  carrying source card, stable ability key, frozen typed costs, target snapshot,
+  and usage limit. Click-prefixed abilities consume allotted clicks as an
+  action; `lose click` is a paid cost and is not interchangeable. Costs are
+  validated atomically before mutation, then paid in declared order with the
+  existing cost checkpoints. The immutable behavior catalog fingerprints the
+  complete ability declaration. A serialized ability frame is reconstructed
+  only from that catalog declaration and resumes its behavior child through a
+  parent identity, rejecting stale source, zone, target, affordability, or
+  usage state. Existing install-time/play-time generic behavior remains
+  unchanged. Sentry and `any encountered ICE` matching use normalized subtype
+  metadata and the same strength/break-limit legality path as Barrier and Code
+  Gate; no title switch is permitted.
+- Checkpoint B contract: generic named counters remain canonical in
+  `RulesState`; hosted credits are a typed public counter purpose with an
+  explicit spending restriction, never recurring credits or player credits.
+  Load/place/take/spend operations reject underflow and overflow atomically.
+  An empty-pool follow-up runs after the instruction that emptied the pool.
+  Removed-from-game is an explicit public zone and self-removal is paid before
+  the ability effect; all additions participate in deep copy, canonical JSON,
+  replay, invariant validation, and observation filtering.
+- Checkpoint C contract: triggers bind typed occurrence keys to an active
+  physical source and a controller snapshot. Install, rez, turn-begin,
+  successful-run, run-end, score/steal, and access occurrences carry the
+  minimum typed context required by declarations. Eligibility is collected at
+  the checkpoint from active sources; an invocation retains only the source
+  snapshot needed by CR timing after movement. Turn facts are explicit,
+  controller-scoped, reset only at formal boundaries, and include successful
+  server/central runs, accessed/trashed cards, agenda changes, tag changes,
+  and consumed first/once-per-turn keys.
+- Every accepted checkpoint requires focused positive/negative, forged/stale,
+  save/load, invariant, observation (where applicable), catalog-fingerprint,
+  and formatter checks proportional to its schema impact. Root reviews the
+  diff and reruns the focused gate before updating this ledger and creating a
+  local commit. A checkpoint is not accepted merely because it compiles.
+
+### 2026-09-03 — Checkpoint A1 paid-ability schema accepted
+
+- Luna Max implemented the bounded declaration/schema vertical after root
+  rejected an initial alias-heavy API and a single-window model that could not
+  represent generally usable paid abilities. The accepted public surface has
+  exactly one immutable `BehaviorPaidAbility`, one typed timing vocabulary
+  with an explicit any-paid-window value, one activation enum distinguishing
+  click actions from paid abilities, one usage-limit/snapshot contract, one
+  `UseAbility` action payload, and one serializable `AbilityFrame`.
+- Ability declarations freeze costs, conditions, targets, and instructions;
+  require unique stable keys; and participate completely in generic catalog
+  equality and fingerprints. Click actions require exactly one ordinary Click
+  cost and action-phase timing, while paid abilities reject Click and retain
+  the distinct `LoseClick` verb. Credits may cost zero; counter, tag,
+  lose-click, and additional costs are positive; self-trash is exactly one.
+- Issued action/frame shapes retain the source definition/card/zone, ability
+  key, timing/activation, exact cost/target/usage snapshots, catalog and
+  definition fingerprints, and the frame lifecycle/parent identity needed by
+  the next runtime checkpoint. `StateInvariantValidator` accepts only the
+  exact action/payload pairing and checks decision kind, source ownership and
+  zone membership, target existence, state/catalog pins, and the injected
+  declaration shape. No action materialization, cost payment, state mutation,
+  card registration, or ICE change landed in A1.
+- Root independently passed the zero-warning solution build, focused paid
+  ability tests 10/10, complete Core 499/499, Core formatter verification,
+  and `git diff --check`. The focused CLI M2 proof suite passed 3/3; the direct
+  deterministic proof retained initial/final/event hashes
+  `a61f20c7...` / `950d1b0d...` / `d20cdef9...`, 32 checkpoints, and verified
+  replay. Existing definition fingerprints are unchanged when no ability or
+  additional-cost field is present.
+
+### 2026-09-03 — Checkpoint A2a ability materialization and schema 3 accepted
+
+- Luna Max implemented the first runtime vertical: Core now discovers paid
+  abilities only on active installed sources (faceup Runner Rig cards and
+  faceup/rezzed Corp server cards), matches click actions to the real action
+  window and paid abilities to the current turn/run priority holder, evaluates
+  typed conditions and aggregate affordability, and issues exact frozen
+  `UseAbility` payloads in physical zone/card/declaration order. Declarations
+  needing target selection or an unregistered additional-cost reducer remain
+  deliberately fail-closed until their later checkpoint.
+- Root rejected the first pass because it normalized duplicate usage records,
+  checked repeated counter costs independently, made `Encountering` false in
+  the encounter paid window, and did not prove a legal-action bijection. The
+  accepted revision preserves forged duplicates for invariant rejection,
+  aggregates all wallet/click/tag/named-counter costs with checked arithmetic,
+  recognizes an initialized encounter, rejects duplicate self-trash costs,
+  and requires an exact missing/extra/duplicate/payload-checked ability action
+  set for turn actions, turn timing, and run timing.
+- D-416 is applied at this first Slice 4.3 state expansion: engine state schema
+  moved from 2 to 3 and `TurnFactsState` now serializes canonical physical
+  source/ability usage keys. A new side-turn fact aggregate starts empty;
+  mutation is deferred to the execution checkpoint. Replay artifact schema
+  remains 1. The M2 semantic proof is unchanged but state hashes were
+  deliberately re-pinned: initial `faf4e631...`, final `c882eb43...`, events
+  `d20cdef9...`, 32 checkpoints, replay verified.
+- Root independently passed the zero-warning solution build, Core formatting,
+  `git diff --check`, focused ability schema/materialization tests 17/17,
+  complete Core 506/506, and focused CLI/M2 regression tests 32/32. Ability
+  consumption, cost mutation/checkpointing, target choices, and child behavior
+  execution are explicitly not part of A2a and remain required before ENG-407
+  is complete.
+
+### 2026-09-03 — Checkpoint A2b paid-ability execution accepted
+
+- Luna Max implemented the engine-owned execution vertical and root accepted
+  it after two review rounds. `UseAbility` consumption now re-materializes and
+  compares the exact issued payload, binds a serialized `AbilityFrame` to the
+  precise turn/run parent identity, preflights the complete cost bundle before
+  mutation, pays costs in declaration order, and executes only the selected
+  ability's instruction tree through an exact behavior child. Generic
+  install/play behavior continues to start from the definition's ordinary
+  instruction root and retains its prior cost lifecycle.
+- The accepted lifecycle is `PayCosts` → `CostCheckpoint` → `Execute` →
+  `AwaitingChild` → `Complete`. The cost boundary round-trips through canonical
+  JSON and resumes without duplicate payment. Credit, click, lose-click, tag,
+  named-counter, and self-trash costs are supported; target selection and
+  `Additional` costs remain fail-closed for their later checkpoint. A
+  once-per-turn frame retains the exact issued zero-use snapshot while the
+  post-payment use is recorded separately in current turn facts.
+- Completion returns click actions to turn action priority and paid abilities
+  to the same turn/run priority holder with consecutive passes reset. Runtime
+  and invariant checks prove the active source/catalog/declaration, captured
+  source zone (including the narrow paid self-trash exception), parent/child
+  topology, usage ledger, and legal turn/run window. Only the top resolution
+  frame owns a pending decision, so a prompt-shaped turn/run parent may be
+  safely suspended beneath the ability lifecycle.
+- Root independently passed the focused ability contract/materialization/
+  runtime suite 26/26, complete Core 515/515, the zero-warning solution build,
+  Core formatter verification, `git diff --check`, and focused CLI M2 proof
+  tests 7/7. The direct M2 proof remains byte-stable at initial/final/event
+  hashes `faf4e631...` / `c882eb43...` / `d20cdef9...`, with 32 checkpoints,
+  identical scripted/agent results, and verified replay.
+
+### 2026-09-03 — Checkpoint A3 encountered-ICE subtype legality accepted
+
+- Luna Max completed ENG-407A's shared subtype boundary. `IceType` now carries
+  concrete Barrier, Code Gate, and Sentry values plus an explicit `Any`
+  icebreaker interface. Actual `IceBehaviorSpec` declarations reject the
+  wildcard and undefined enum values; `IcebreakerBehaviorSpec` accepts all
+  defined concrete/wildcard interfaces.
+- One pure `IceInterfaceMatcher` is now the subtype authority for break-action
+  materialization, submitted break consumption, and invariant reconstruction.
+  Strength, affordability, hosted run-credit division, and per-activation
+  break limits remain separate existing legality terms; pump actions remain
+  correctly independent of subtype/strength eligibility. No card title switch,
+  Carmen declaration, or Slice 4.4 strength-modifier work landed here.
+- Focused coverage proves exact Sentry use, wildcard use against all three
+  concrete types, concrete mismatch omission and forged-action rejection,
+  wildcard rejection as an actual ICE type, invariant agreement, named JSON
+  serialization, and catalog equality/fingerprint changes. Root independently
+  passed the focused gate 15/15, complete Core 530/530, Core formatting, and
+  `git diff --check`; the delegated whole-solution gate passed 746/746 with a
+  zero-warning build. The direct M2 proof retains the schema-3 hashes and 32
+  replay-verified checkpoints recorded above.
+
+### 2026-09-03 — Checkpoint B1 typed counter/pool state accepted
+
+- Luna Max implemented the state-level half of ENG-408. The canonical
+  `RulesState.Counters` collection now distinguishes Generic, Virus, and
+  HostedCredit purposes. Hosted-credit entries use the reserved `credit` key
+  and carry an explicit CardEffectOnly, AbilityCost, RunCost, or AnyCost
+  restriction; legacy three-argument `virus` construction normalizes to the
+  typed Virus purpose, while forged purpose/name/restriction combinations and
+  nonpositive stored entries fail closed.
+- Root rejected the first permissive draft: new loaded pools now default to
+  CardEffectOnly rather than AnyCost, generic and Virus counters cannot satisfy
+  hosted-credit spending, CardEffectOnly is not a cost permission, and generic
+  counter reducers/paid `Counter` costs cannot consume a HostedCredit pool by
+  merely naming `credit`. The accepted pure transition service distinguishes
+  load/place/take/spend, checks overflow and underflow, and returns zero for
+  callers to omit at the immutable state boundary. Virus purge now selects the
+  typed purpose and leaves hosted credits untouched.
+- Deep copies, canonical JSON, invariant validation, and existing generic
+  adjustment/payment paths retain the complete typed data. Declarative hosted
+  credit instructions, typed pool events, public observation, empty-pool
+  follow-up, and card bindings intentionally remain in B2/C.
+- Root independently passed 25/25 focused counter/effect/ability tests,
+  complete Core 535/535, Core formatting, and `git diff --check`; the delegated
+  Release solution build completed with zero warnings/errors. The direct M2
+  proof remains byte-stable at the schema-3 hashes above with 32 replay-verified
+  checkpoints.
+
+### 2026-09-03 — Checkpoint B2a hosted-credit declaration schema accepted
+
+- Luna Max added the declarative half of ENG-408 on top of the typed B1 state.
+  Behavior programs now distinguish load, place, take-exact, and take-all
+  hosted-credit instructions. Load/place normalize an omitted restriction to
+  CardEffectOnly; take instructions carry no spending permission. Their amount
+  and operand matrices are constructor-validated and preserved by canonical
+  JSON, structural equality, behavior-frame replay, and catalog fingerprints.
+- Paid abilities now have a distinct positive `HostedCredits` cost kind. It
+  cannot carry a generic counter name or additional-cost key and is retained
+  by action/frame validation and cloning. Runtime affordability/payment remains
+  deliberately fail-closed until B2b wires the declaration to the typed pool;
+  generic `Counter` costs continue to reject hosted credits.
+- Root independently passed the focused declaration/action/frame gate 17/17,
+  complete Core 537/537, the zero-warning solution build, Core formatting, and
+  `git diff --check`. The direct M2 proof remains byte-stable at the schema-3
+  hashes above with 32 replay-verified checkpoints. No runtime pool mutation,
+  events, observation, empty follow-up, or card binding is claimed here.
+
+### 2026-09-03 — Checkpoint B2b-1 hosted-credit instruction runtime accepted
+
+- Luna Max implemented the four declared hosted-credit instruction verbs through
+  one engine-owned transition boundary. Load and place create or increment only
+  a typed pool with the declaration's preserved restriction; take-exact and
+  take-all debit that pool, credit the bound controller, reject insufficient or
+  empty pools, and remove the counter entry when its count reaches zero. Generic
+  counter adjustment remains unable to create or mutate the reserved pool.
+- Root verified the mutation ordering and atomicity contract. Arithmetic and
+  restriction failures abandon the working copy without changing the input;
+  transfers emit the pool debit before the wallet credit. A new typed
+  `HostedCreditPoolChanged` event records Load, Place, Take, TakeAll, or Spend,
+  the physical source, signed delta, count after, restriction, transfer
+  recipient where applicable, and the positive-to-zero `Emptied` transition.
+  The payload participates in polymorphic JSON, deep cloning, and event
+  invariant validation. Spend is intentionally declared in this shared event
+  vocabulary but will first be emitted by B2b-2 ability-cost payment.
+- Root independently passed the focused behavior-runtime gate 31/31, complete
+  Core 541/541, the zero-warning solution build, Core formatting, and
+  `git diff --check`. The direct M2 proof remains byte-stable at the schema-3
+  hashes above with 32 replay-verified checkpoints. Hosted-credit ability
+  affordability and payment, public observation, leave-play cleanup,
+  empty-pool follow-up, and card bindings remain separate unclaimed checkpoints.
+
+### 2026-09-03 — Checkpoint B2b-2 hosted-credit ability costs accepted
+
+- Luna Max connected `BehaviorCostKind.HostedCredits` to the paid-ability
+  legality and payment lifecycle. Materialization and the cost checkpoint use
+  the same aggregate affordability projection over the activating physical
+  card's single typed pool. AbilityCost and AnyCost pools are eligible;
+  CardEffectOnly, RunCost, Generic, Virus, missing, stale, and insufficient
+  pools fail closed before any cost mutates state.
+- Successful payment retains declaration order and routes every hosted-credit
+  cost through the B2b-1 transition boundary. Repeated costs therefore emit
+  distinct ordered Spend events with null recipients, the pool's actual
+  restriction, successive counts, and `Emptied` only on the final
+  positive-to-zero transition. The whole bundle is preflighted first, so a
+  rejected or stale action cannot partially debit either counters or wallet.
+- Save/load coverage pins the paid CostCheckpoint after the pool debit and
+  proves that resuming it does not spend twice. Root independently passed
+  focused paid ability runtime/materialization tests 21/21, complete Core
+  545/545, the zero-warning solution build, Core formatting, and
+  `git diff --check`. The direct M2 proof remains byte-stable at the schema-3
+  hashes above with 32 replay-verified checkpoints. Observation, leave-play
+  cleanup, empty-pool follow-up, and card bindings remain unclaimed.
+
+### 2026-09-03 — Checkpoint B2c counter observation and leave-play cleanup accepted
+
+- Luna Max completed the viewer boundary for ENG-408. Every visible card path
+  conditionally projects a deterministic counter list containing the stable
+  name, Generic/Virus/HostedCredit purpose, count, and hosted spend
+  restriction. Faceup/public cards expose the same pool to both viewers; a
+  hidden HQ/grip/deck/stack/ICE/Archives card exposes its counters only in its
+  owner's private card view. Cards without counters omit the property, keeping
+  the pinned pre-4.3 observation JSON byte-identical.
+- The single card-movement boundary now removes every typed counter when an
+  installed card leaves Runner Rig, a server root, or a server ICE position.
+  Cost-driven self-trash temporarily defers this cleanup until the complete
+  declared cost loop finishes, so TrashSelf may precede generic-counter or
+  hosted-credit debits without creating a partial-payment failure. The same
+  lifecycle exception is invariant-checked for both ordinary behavior and
+  paid-ability children; no counter survives the completed move.
+- Root independently passed 75/75 focused observation/effect/behavior/ability
+  tests, complete Core 550/550, the zero-warning solution build, Core
+  formatting, and `git diff --check`. The direct M2 proof retains the schema-3
+  initial/final/event hashes and all 32 replay-verified checkpoints. Triggered
+  empty-pool follow-up and card bindings remain unclaimed.
+
+### 2026-09-03 — Checkpoint B3a-1 removed-from-game schema accepted
+
+- Luna Max added a distinct `RemoveSelfFromGame` cost term; it is not encoded
+  as trash. Generic and paid declarations permit exactly one total
+  self-movement cost, and the new kind participates in construction,
+  structural action/frame validation, JSON, equality, cloning, and catalog
+  fingerprints. Runtime payment deliberately remains fail-closed until B3a-2.
+- Removed cards have separate lazy Corp and Runner zones. Each zone is
+  side-owned, serverless, public, and unique when present; default games do not
+  allocate either zone, preserving the existing topology and canonical hashes.
+  `BehaviorZone.RemovedFromGame` resolves by an explicit target owner, and
+  observation conditionally publishes each present zone to both viewers.
+- Root rejected the first draft because a facedown card could occupy the
+  nominally public zone and disappear from observation. The accepted invariant
+  requires every RFG card to be faceup. Root independently passed 24/24 focused
+  contract/topology tests, complete Core 555/555, the zero-warning solution
+  build, Core formatting, and `git diff --check`; the direct M2 proof remains
+  byte-stable at the schema-3 hashes with 32 replay-verified checkpoints.
+
+### 2026-09-03 — Checkpoint B3a-2 self-removal runtime accepted
+
+- Luna Max wired the distinct self-removal cost through generic behavior and
+  paid-ability payment. The engine lazily creates the source owner's RFG zone,
+  moves the physical source there faceup, emits the ordinary typed CardMoved
+  history entry, and continues the already-authorized instruction child from
+  its frozen source/catalog snapshot. Affordability recognizes the cost as a
+  supported non-resource term but still requires an active source at payment.
+- Runtime and state invariants now distinguish the two legal post-payment
+  exceptions exactly: TrashSelf permits only the owner's discard, while
+  RemoveSelfFromGame permits only the owner's RFG zone. Counter cleanup remains
+  deferred through the full cost loop, so a declared removal before generic or
+  hosted-credit costs pays in order and clears all residual counters only at
+  the bundle boundary. Save/load at CostCheckpoint proves the move is not
+  repeated on resume.
+- Root required an additional forged-state test after the first report lacked
+  the claimed evidence. The accepted test relocates a removal-paid source to
+  heap and proves both the source-location invariant and resolution fail
+  closed. Root independently passed 51/51 focused behavior/ability runtime
+  tests, complete Core 560/560, the zero-warning solution build, Core
+  formatting, and `git diff --check`; the direct M2 proof remains byte-stable
+  at the schema-3 hashes with 32 replay-verified checkpoints.
+
+### 2026-09-03 — Checkpoint B4a Corp unique rez cleanup accepted
+
+- Luna Max added the missing activation checkpoint for Corp unique cards.
+  After a card is successfully rezzed, that serialized action identifies it
+  as the newest active copy; every other known, faceup, rezzed Corp card with
+  the same non-null uniqueness key is moved from any server root or ICE zone
+  to Archives in stable physical-card-ID order. Unknown and non-unique runtime
+  definitions are not inferred from title text and remain unaffected.
+- The checkpoint emits CardRezzed before the deterministic CardMoved cleanup
+  sequence. Cleanup uses the central movement boundary, so all typed counters
+  on the older copies are removed. Corp installation remains legal while the
+  incoming unique card is facedown; uniqueness becomes active at rez. Runner
+  installs retain their existing exact required-replacement contract for all
+  active unique/Console conflicts, making the incoming install the newest.
+- Root independently passed focused runtime rez tests 17/17, complete Core
+  561/561, the zero-warning solution build, Core formatting, and
+  `git diff --check`. The direct M2 proof retains the schema-3 hashes and 32
+  replay-verified checkpoints. Catalog-aware forged active-conflict invariants
+  remain B4b.
+
+### 2026-09-03 — Checkpoint B4b active unique/Console invariant accepted
+
+- Luna Max extracted one pure runtime-card activity projection used by both
+  rez cleanup and catalog-aware state validation. A known Runner card is active
+  only while faceup in the Rig; a known Corp card is active only while faceup
+  and rezzed in a server root or ICE zone. Hidden/inactive cards and unknown
+  definitions are never classified from title text.
+- With the injected runtime catalog, state validation now rejects more than one
+  active card controlled by a side for the same non-null uniqueness key and
+  rejects more than one active Runner Console, regardless of the individual
+  Console keys. Opposite sides do not conflict. Because install and rez frames
+  serialize the single newest activation and cleanup is synchronous, no
+  separate activation ledger or persistable illegal intermediate is needed.
+- Root required the B4a normal-path fixture to begin from one valid older copy;
+  multiple active copies now belong only to forged-state tests. Root
+  independently passed 48/48 focused install/rez tests, complete Core 564/564,
+  the zero-warning solution build, Core formatting, and `git diff --check`.
+  The direct M2 proof retains the schema-3 hashes and 32 replay-verified
+  checkpoints. ENG-407 unique/Console enforcement is complete at this boundary.
+- A delayed delegated test-only correction aligned the pre-existing Runner
+  Console install scenario with the same invariant: its normal path now starts
+  from one active Console and still proves that replacement is mandatory before
+  the incoming newest Console enters the Rig. The focused Runner install suite
+  passed 18/18 before the follow-up local commit; the forged two-Console test
+  remains the sole multi-active fixture.
+
+### 2026-09-03 — Checkpoint C1 typed behavior-trigger declarations accepted
+
+- Luna Max replaced the unused string occurrence placeholder with an immutable
+  trigger declaration: stable trigger key, typed occurrence, mandatory/optional
+  mode, Self/Controller/Any scope, optional typed subject-card filter, and a
+  non-empty frozen behavior-instruction tree. Definitions reject duplicate
+  trigger keys, and structural equality plus catalog fingerprints include the
+  complete nested declaration.
+- The occurrence vocabulary now names card install, card rez, successful run,
+  run end, agenda score-or-steal, card access, and hosted-credit-pool empty.
+  Root corrected the initial card-bearing classification: run occurrences carry
+  their initiating source for Conduit and Red Team, while score-or-steal carries
+  the agenda for Pantograph-era filtering. Consequently every new gameplay
+  occurrence supports Self scope and subject filters; legacy turn/effect
+  occurrences that lack card context reject them.
+- JSON round trips preserve the typed declarations and copied collections stay
+  immutable. Root independently passed the focused behavior-contract gate
+  11/11, complete Core 567/567, the zero-warning solution build, Core
+  formatting, and `git diff --check`. The direct M2 proof retains the schema-3
+  hashes and all 32 replay-verified checkpoints. Runtime occurrence dispatch,
+  trigger scheduling, and source-snapshot execution remain the next checkpoint.
+
+### 2026-09-03 — Checkpoint C2a-1 catalog-trigger runtime seam accepted
+
+- Luna Max added a typed, persistable gameplay-occurrence marker for the seven
+  C1 occurrence kinds. It is a no-op effect that traverses the existing M2
+  imminent/resolved checkpoint pipeline and retains the occurrence controller,
+  optional subject card, and optional server context. A friend-visible test
+  seam opens this exact path; production install/rez/run/score/access hooks are
+  deliberately deferred rather than simulated here.
+- Materialized trigger invocations now discriminate legacy registered effects
+  from catalog behavior triggers. The catalog form stores only its stable key,
+  physical source/controller/zone snapshot, occurrence, and catalog/definition
+  provenance; its instruction tree is reconstructed from the injected catalog
+  by a mutually exclusive `TriggerKey` behavior child. Deterministic IDs derive
+  from occurrence, source, definition, and trigger key, and catalog candidates
+  join the existing active-player/controller/stable-ID ordering pipeline.
+- Eligibility is limited to active installed sources and applies typed
+  Self/Controller/Any scope plus subject-card filters. The checkpoint seeds the
+  reserved `trigger-subject` binding, and runtime/state validation ties it to
+  the exact parent invocation across yielded JSON save/load. Child topology is
+  discriminated: catalog triggers require their matching behavior frame while
+  legacy triggers and replacements retain effect-resolution children. Stale
+  child IDs are cleared when leaving the awaiting-child stage.
+- Root rejected an early test assertion that read final credits before resolving
+  the correctly yielded simultaneous-order decision and required strict yielded
+  child provenance tests. The accepted gate passes focused catalog-trigger
+  tests 6/6, complete Core 573/573, the zero-warning solution build, Core
+  formatting, and `git diff --check`. The direct M2 proof remains byte-stable at
+  the schema-3 hashes with 32 replay-verified checkpoints. Source movement after
+  materialization, trigger-body self movement, fuller simultaneous ordering,
+  and real lifecycle hooks remain explicit C2a-2/C2b work.
+
+### 2026-09-03 — Checkpoint C2a-2 detached trigger timing accepted
+
+- Luna Max completed the CR source-snapshot contract. Catalog invocations now
+  retain source owner side and zone kind as well as card/definition/zone IDs.
+  Once an active source has materialized a trigger, later physical movement no
+  longer erases the pending object: child creation proves the same owned card
+  and definition against the frozen snapshot and executes from that snapshot
+  without retargeting to the card's current zone. Missing, changed-definition,
+  changed-owner, malformed, or provenance-mismatched sources fail closed.
+- A persisted detached-before-start authorization remains valid for the whole
+  trigger child, including cursor progress, yielded choices, and JSON resume.
+  A source that was still in place when its child began receives no blanket
+  movement exception. It may continue after moving only when its reconstructed,
+  reachable instruction prefix has actually passed `TrashSelf`, and then only
+  from its owner's discard. The central movement boundary clears typed counters;
+  forged movement before that cursor or to a wrong destination is rejected.
+- Simultaneous catalog triggers retain the existing timing rules: active-player
+  controller first, explicit same-controller ordering, stable deterministic IDs,
+  and identical order/hash after save/load. Root independently passed the
+  expanded focused catalog-trigger gate 13/13, complete Core 580/580, the
+  zero-warning solution build, Core formatting, and `git diff --check`. The
+  direct M2 proof remains byte-stable at the schema-3 hashes with all 32
+  checkpoints replay verified. Generic trigger execution and movement timing
+  are complete; production lifecycle occurrence hooks remain C2b.
+
+### 2026-09-03 — Checkpoint C2b-1a formal turn-begin triggers accepted
+
+- Luna Max connected catalog declarations to the already-serialized formal
+  `TurnBegin` boundary. The normal active-source scan and detached snapshot
+  machinery now collects Controller-scoped triggers only for the beginning
+  player's sources and Any-scoped triggers across both sides; hidden/inactive
+  cards remain ineligible. Self scope is rejected defensively because a turn
+  boundary has no card subject.
+- Cross-controller ordering still begins with the active player, and a yielded
+  boundary resumes with the same queue after JSON load without collecting or
+  applying a trigger twice. Root split hosted-pool empty integration out after
+  identifying that an inner empty trigger can trash the source of its outer
+  transfer behavior; that parent lifecycle needs an explicit narrow contract,
+  not a general moved-source exception.
+- Root independently passed the expanded catalog-trigger gate 16/16, focused
+  TurnShell/Checkpoint regressions 32/32, complete Core 583/583, the zero-warning
+  solution build, Core formatting, and `git diff --check`. The direct M2 proof
+  remains byte-stable at the schema-3 hashes with 32 replay-verified checkpoints.
+  Hosted-credit empty, install, and rez production hooks remain unclaimed.
+
+### 2026-09-03 — Checkpoint C2b-1b hosted-pool empty triggers accepted
+
+- Luna Max routed behavior-driven Take and TakeAll positive-to-zero transitions
+  through `HostedCreditPoolEmptied`. A non-empty remainder raises no occurrence.
+  The transfer instruction advances first, then a serialized
+  `AwaitingOccurrence` behavior continuation sits below the ordinary effect /
+  checkpoint pipeline, preventing save/load or resume from repeating either the
+  debit or the occurrence.
+- The continuation is tied to the exact behavior frame, post-instruction cursor,
+  source card, controller, and typed empty marker. When the nested occurrence
+  finishes, the outer source must still occupy its captured zone unless a
+  reachable empty-pool trigger explicitly moved it to its owner's discard with
+  no hosted-credit counter remaining. Only that completed result receives a
+  narrow persisted authorization to run later outer instructions; wrong subject,
+  missing continuation, wrong destination, stale owner/definition, or an
+  unrelated movement fails closed.
+- Event evidence fixes the order as hosted-pool debit, wallet credit, then
+  nested trigger movement/effects. Mandatory self-trash completes both inner
+  and outer frames and clears all counters; optional use/decline and an inner
+  post-trash choice round-trip through JSON without duplication. Root passed
+  the catalog/hosted focused gate 22/22, behavior/ability regressions 51/51,
+  complete Core 589/589, the zero-warning solution build, Core formatting, and
+  `git diff --check`. The direct M2 proof retains all schema-3 hashes and 32
+  replay-verified checkpoints. Ability-cost Spend depletion and other lifecycle
+  occurrence hooks remain separate work.
+
+### 2026-09-03 — Checkpoint C2b-2a card-install triggers accepted
+
+- Luna Max connected every production runtime-catalog install completion to
+  the typed `CardInstalled` occurrence: basic Runner installs (including
+  required replacement selection), Corp root/ICE installs, and installs driven
+  by a behavior instruction. The install mutation and `CardInstalled` event
+  commit first, the install frame is removed, and the turn or behavior parent
+  is advanced before the ordinary serialized occurrence/checkpoint effect is
+  pushed. Optional triggers can therefore yield and round-trip without paying,
+  moving, or emitting the install a second time.
+- Eligibility observes the committed board. A newly installed faceup Runner
+  source can trigger itself; a facedown Corp subject remains available to an
+  already-active external Corp source through its typed subject filter. On a
+  required Runner Console replacement, the old source reaches Heap before
+  collection and cannot contribute a controller trigger, while the incoming
+  active Console can contribute its self trigger. A behavior-effect install
+  resumes the already-advanced outer instruction exactly once after nested
+  install triggers finish.
+- Root corrected two delegated fixture/API defects and required the missing
+  replacement-order evidence before acceptance. The final focused install and
+  catalog-trigger gate passes 65/65, complete Core passes 594/594, the solution
+  build completes with zero warnings/errors, Core formatting and
+  `git diff --check` pass, and the direct M2 proof retains initial/final/event
+  hashes `faf4e631...` / `c882eb43...` / `d20cdef9...` with all 32 checkpoints
+  replay verified. Rez, run, agenda, and access lifecycle hooks remain separate
+  C2b work.
+
+### 2026-09-03 — Checkpoint C2b-2b card-rez triggers accepted
+
+- Luna Max connected the production runtime-catalog rez reducer to
+  `CardRezzed`. The reducer captures the installed server, pays the exact issued
+  cost, commits faceup/rezzed state, emits `CardRezzed`, and completes stable
+  Corp unique cleanup before restoring its parent. It then resets the existing
+  Corp turn priority or run priority (including consuming the approached-ICE
+  rez permission) before pushing the ordinary serialized occurrence effect.
+- Trigger collection therefore sees the post-rez board. The incoming card is
+  active and may trigger itself; an older rezzed unique copy has already moved
+  to Archives and cannot contribute its controller trigger. Turn and approach
+  run tests fix event ordering and prove the run parent retains its step,
+  priority holder, zero consecutive passes, non-ICE permission, and consumed
+  approached-ICE permission. An optional turn-rez trigger round-trips through
+  canonical JSON and declines without repeating payment, rez state, or the
+  `CardRezzed` event.
+- The initial delegated run terminated before its final report; a fresh Luna
+  Max pass repaired its one incomplete fixture declaration, after which root
+  independently reviewed and gated the resulting patch. Focused
+  rez/catalog-trigger tests pass 46/46, complete Core
+  passes 598/598, the solution build has zero warnings/errors, Core formatting
+  and `git diff --check` pass, and the direct M2 proof remains byte-stable at
+  `faf4e631...` / `c882eb43...` / `d20cdef9...` with 32 replay-verified
+  checkpoints. Run-success/end, agenda, and access hooks remain separate C2b
+  work.
+
+### 2026-09-03 — Checkpoint C2b-3a successful-run triggers accepted
+
+- Luna Max connected `StepRunSuccess` to the catalog occurrence pipeline. The
+  engine emits `RunSuccessful`, records the turn fact, and advances both live
+  run state and its timing frame to `BreachBoundary` before queuing the marker.
+  The occurrence carries the initiating player, optional physical run source,
+  and attacked server. Trigger effects consequently finish before breach starts,
+  and an optional trigger can yield/save/load without declaring success twice.
+- Run-stack validation permits only the exact matching RunSuccessful occurrence
+  suffix at that boundary and rejects a forged controller/source/server tuple;
+  the generic effect/checkpoint validators continue to own every deeper frame.
+  Focused evidence covers Controller and Any scopes, active/inactive/unknown
+  sources, same-controller ordering, run-event subject filtering, self-scope
+  exclusion for the inactive play-area event, canonical JSON resume, event
+  order, and a clean `RunTimingTrace`.
+- Root rejected the first green semantic patch because even a triggerless M2
+  run allocated no-op occurrence frames and changed the pinned final state hash.
+  The accepted reusable `HasActiveCatalogTrigger` gate skips only an occurrence
+  for which no active installed source declares the kind; full eligibility
+  remains centralized in the checkpoint collector. Focused run/catalog tests
+  pass 36/36, complete Core passes 601/601, the solution build has zero
+  warnings/errors, Core formatting and `git diff --check` pass, and the direct
+  M2 proof is restored to `faf4e631...` / `c882eb43...` / `d20cdef9...` with
+  32 replay-verified checkpoints. Run-end, agenda, and access hooks remain.
+
+### 2026-09-03 — Checkpoint C2b-3b run-end outcome triggers accepted
+
+- Luna Max extended a RunEnded trigger with an optional typed
+  `RunOutcomeRequirement` (`Successful` or `Unsuccessful`). The field is legal
+  only on RunEnded, participates in immutable equality, canonical JSON, and the
+  catalog fingerprint, and is matched centrally against a required persisted
+  success boolean on `GameplayOccurrenceEffect`. Other occurrence kinds reject
+  that context, while a RunEnded marker without it is invalid.
+- `CompleteRun` snapshots the initiating player/source, attacked server, and
+  outcome, then performs the complete existing run-end transaction first:
+  expire run credits, emit `RunEnded`, move the active run event, clear live run
+  state, pop its timing frame, and restore the real-turn action parent. Only
+  then does it conditionally queue the occurrence when an active declaration
+  exists. A successful-only trigger therefore fires after cleanup, while a
+  jack-out selects only an unsuccessful-only trigger. An optional real-turn
+  trigger round-trips with `RunState` already null and the turn parent already
+  at action priority, then declines without repeating cleanup or `RunEnded`.
+- Root isolated and returned an invalid unsuccessful-run fixture that omitted
+  its ICE behavior spec; the accepted Luna Max repair uses bounded timing
+  progression and the registered fixture ICE. The generic state invariant now
+  also proves an occurrence checkpoint retains the exact typed context of its
+  parent effect frame. Focused run/catalog tests pass 40/40, complete Core
+  passes 605/605, the solution build has zero warnings/errors, formatting and
+  `git diff --check` pass, and the M2 proof retains `faf4e631...` /
+  `c882eb43...` / `d20cdef9...` with 32 replay-verified checkpoints. Agenda and
+  access hooks remain C2b work; installed-card run-source self matching remains
+  coupled to ENG-411's click-run source state.
+
+### 2026-09-03 — Checkpoint C2b-4 agenda score/steal triggers accepted
+
+- Luna Max connected the two production agenda paths to the shared
+  `AgendaScoredOrStolen` occurrence without touching the toy reducer. A
+  nonterminal Corp score moves and reveals the agenda, adds points, emits
+  `AgendaScored`, cleans its empty remote, and advances the turn frame to fresh
+  action priority before dispatch. A nonterminal automatic Runner steal moves
+  and reveals the agenda, adds points, emits `AgendaStolen`, and advances the
+  breach cursor before dispatch.
+- The steal path now separates breach-state advancement from immediate decision
+  yielding only when a matching active declaration exists. After its nested
+  trigger finishes, ordinary run advancement yields the next candidate or ends
+  the run; the no-trigger path is unchanged. Typed agenda subject filtering and
+  Controller/Any scope are evaluated from the winner, agenda, and attacked
+  server snapshot. An optional score round-trips after move/points/remote
+  cleanup and declines without duplicating any of them.
+- The seven-point score/steal boundary remains terminal and does not leave a
+  post-score trigger frame beneath `CompleteTurnGame`; later agenda-self source
+  activity is outside this Slice 4.3 external Pantograph vertical. Root passed
+  the focused score/access/catalog gate 25/25, complete Core 608/608, a
+  zero-warning/error solution build, Core formatting, and `git diff --check`.
+  The direct M2 proof remains `faf4e631...` / `c882eb43...` / `d20cdef9...`
+  with 32 replay-verified checkpoints. Card-access dispatch is the remaining
+  C2b lifecycle hook.
+
+### 2026-09-03 — Checkpoint C2b-5 card-access triggers accepted
+
+- Luna Max connected real breach candidate selection to `CardAccessed`. The
+  reducer removes or deterministically selects the candidate, persists the
+  chosen/accessed IDs, emits `BreachCandidateChosen` and `CardAccessed`, and
+  advances the run state/frame to `BreachAccessAbility` before dispatch. With
+  an active declaration, the normal mid-access decision is delayed until the
+  nested trigger finishes; without one, the existing direct yield is unchanged.
+- Mandatory evidence fixes the ordering as candidate chosen → card accessed →
+  trigger effect → access window. An optional typed agenda-filter trigger
+  round-trips with the exact candidate already consumed, then declines into the
+  ordinary `NoAccessAction` decision without rerandomizing, reselecting, or
+  emitting either access event again. Inactive same-definition and active
+  unknown cards do not contribute invocations, and the completed trace through
+  automatic agenda steal and run end remains valid.
+- The first optional test exposed that live-run stack validation recognized
+  only RunSuccessful occurrence suspension. Root required an exact generalized
+  predicate: RunSuccessful at `BreachBoundary`, CardAccessed at the matching
+  latest access, AgendaScoredOrStolen at its post-steal cursor, and CardRezzed
+  for the matching active rezzed Corp card/server during a paid run step.
+  Arbitrary effect frames or mismatched controller/subject/server/step remain
+  invalid. Root passed 58/58 combined lifecycle tests, complete Core 610/610,
+  the zero-warning/error solution build, formatting, and `git diff --check`;
+  M2 stays at `faf4e631...` / `c882eb43...` / `d20cdef9...` with 32 verified
+  checkpoints. All ENG-409 occurrence kinds now have production dispatch;
+  card bindings and ENG-411 installed run-source state remain later work.
+
+### 2026-09-03 — Checkpoint C3a ENG-413 turn-fact contracts accepted
+
+- Luna Max implemented the state/API half of ENG-413. Side-specific turn facts
+  now retain first-seen run-attempt and successful-run server sets, ordered
+  access and trash occurrences (including repeated physical IDs), typed agenda
+  score/steal and tag deltas, and counted first-X consumption keyed by physical
+  source plus stable purpose. Immutable transitions preserve every ledger, use
+  checked accumulation, and expose one canonical first-X count query.
+- Root rejected an ephemeral legacy marker whose meaning changed after a JSON
+  round trip and removed redundant accessor aliases. The stable compatibility
+  rule accepts the existing `SuccessfulRun = true` shape with no server detail,
+  while new server-bearing success facts require the success flag and a matching
+  attempted server. Historical server IDs are deliberately not required to
+  remain on the current board because an accessed/trash-cleared remote can be
+  removed later in the same turn.
+- Constructors and history copies freeze nested collections and records;
+  canonical JSON retains all new facts. Invariants reject malformed IDs,
+  duplicate run/first-X keys, success-without-attempt, unknown card/player
+  references, Corp run facts, mismatched agenda kind/beneficiary/turn side,
+  non-Runner tag targets, and invalid counts. A formal `TurnHistory.Start`
+  moves the complete prior ledger to last-turn facts and creates an empty new
+  current ledger without mutating the prior history.
+- Root independently passed focused turn-fact contracts 7/7, complete Core
+  617/617, the zero-warning/error solution build, Core formatting, and
+  `git diff --check`. The direct M2 proof remains byte-stable at initial/final/
+  event hashes `faf4e631...` / `c882eb43...` / `d20cdef9...`, with all 32
+  checkpoints replay verified. Production fact recording and observation
+  projection remain the next ENG-413 checkpoints.
+
+### 2026-09-03 — Checkpoint C3b ENG-413 observation projection accepted
+
+- Luna Max extended the existing viewer-scoped turn-facts projection with
+  ordered attempted/successful server IDs, total access/trash occurrence
+  counts, visibility-filtered occurrence IDs, public typed agenda/tag changes,
+  and visibility-filtered once-per-turn/first-X source keys. The projection
+  reuses the observation's live breach-visible set, so a currently accessed
+  hidden Corp card is visible without making unrelated HQ/R&D cards public.
+- Root fixed two privacy-fixture expectations during review: each owner may
+  see its own hidden card/source IDs, while the opponent may not, and a
+  detached-array test must use a card actually visible to its viewer. Repeated
+  visible occurrence IDs retain order, but total public counts do not shrink
+  when hidden identities are filtered. Agenda and tag records are projected as
+  value dictionaries rather than leaking engine record objects.
+- The new fields remain conditional on existing formal turn history, preserving
+  the exact M1/M2 observation shape when history is absent. Every projected
+  array/dictionary is detached, repeated builds serialize byte-identically,
+  and hidden source IDs cannot leak their stable ability/first-X keys.
+- Root independently passed focused observation tests 18/18, complete Core
+  619/619, the zero-warning/error solution build, Core formatting, and
+  `git diff --check`. The direct M2 proof remains byte-stable at
+  `faf4e631...` / `c882eb43...` / `d20cdef9...`, with all 32 checkpoints
+  replay verified. Production ENG-413 recording remains the next checkpoint.
+
+### 2026-09-03 — Checkpoint C3c-1 ENG-413 lifecycle recording accepted
+
+- Luna Max added one formal-turn fact mutation boundary and connected it to
+  the shared production run initiation, run success, breach access, real agenda
+  score/steal, and tag-adjustment reducers. Each helper updates only the active
+  side's current formal history while preserving the turn cursor verbatim;
+  legacy/toy states without formal history remain no-ops and allocate no new
+  frames or events.
+- Run initiation records the attacked server once, success records the same
+  server as both attempted and successful, and jack-out retains only the
+  attempt. Access is appended after its chosen/accessed evidence and before
+  trigger dispatch, so an optional trigger JSON resume cannot duplicate it.
+  Nonterminal and terminal Corp scores plus terminal Runner steals retain the
+  typed physical agenda, beneficiary, kind, and printed points after the
+  authoritative move/point event. Central nonzero tag deltas record both gains
+  and removals against the Runner in their actual occurrence order.
+- Root replaced a null-forgiving helper draft with an explicit nullable-history
+  guard and removed a redundant second jack-out fixture change: the dedicated
+  runtime test owns formal unsuccessful-run evidence while the established
+  run-trigger test keeps its original standalone contract. Semantic trash
+  recording remains deliberately separate because ordinary discard/movement
+  must not be misclassified as trash.
+- Root independently passed the reviewed lifecycle-focused gate 41/41,
+  complete Core 622/622, the zero-warning/error solution build, Core
+  formatting, and `git diff --check`. The direct M2 proof remains byte-stable
+  at `faf4e631...` / `c882eb43...` / `d20cdef9...`, with all 32 checkpoints
+  replay verified.
+
+### 2026-09-03 — Checkpoint C3c-2 ENG-413 semantic trash recording accepted
+
+- Luna Max completed the trash half of ENG-413 through one validated
+  `TrashCard` boundary. A semantic trash must move a physical card to its
+  owner's root Archives/Heap and then append exactly one active-turn
+  occurrence. Destination alone never implies trash: ordinary discard,
+  generic move effects, set-aside restoration, shuffle, score/steal,
+  install/play-area entry, draw, and remove-from-game remain plain movement.
+- The audited trash paths are behavior-selected/additional trash and TrashSelf
+  instructions/costs, access trash, damage, memory cleanup, tagged-resource
+  trash, event/operation completion, active run-event completion, Runner
+  Console/unique replacement, and Corp unique cleanup on rez. Existing event
+  order, visibility normalization, counter cleanup deferral, and program-memory
+  cleanup remain unchanged; working-copy failure remains atomic.
+- Production coverage proves ordered physical IDs from damage, one access
+  trash, a self-trash cost retained exactly once across a yielded JSON resume,
+  tagged-resource trash, terminal operation cleanup, and the formal-discard
+  exclusion. Root reviewed every remaining raw `MoveCard` call to confirm it is
+  one of the explicit non-trash movements.
+- Root independently passed a broad affected-subsystem gate 218/218, complete
+  Core 623/623, the zero-warning/error solution build, Core formatting, and
+  `git diff --check`. The direct M2 proof remains byte-stable at
+  `faf4e631...` / `c882eb43...` / `d20cdef9...`, with all 32 checkpoints
+  replay verified. ENG-413's schema, observation, lifecycle, reset, and trash
+  recording contracts are now complete; later cards consume the first-X API.
+
+### 2026-09-03 — Checkpoint C4 ENG-410 Spin Doctor accepted
+
+- Luna Max bound Spin Doctor into both the typed behavior catalog and the
+  established asset lifecycle: rez draws two cards, access trash costs two,
+  and an unlimited any-paid-window ability removes the rezzed source from the
+  game before its Corp-owned Archives choice is exposed. The choice selects up
+  to two Corp cards through an explicit binding, moves exactly those cards to
+  R&D, and produces exactly one deterministic shuffle, including when zero
+  cards are selected.
+- Root's end-to-end review exposed that the generic shuffle continuation only
+  recognized an empty searched zone, not a deliberate empty `UpTo` choice.
+  The continuation proof was extended narrowly: it reconstructs the immutable
+  catalog instruction and requires the exact choice key, source zone,
+  permissive cardinality, card owner, and owner-correct deck destination.
+  Exact-cardinality and forged-destination continuations remain atomic
+  rejections, while the existing empty-search contract remains intact.
+- Production coverage proves 0/1/2-card resolutions, pre-choice self-removal,
+  public removed-from-game visibility for both viewers, Corp-only choice
+  ownership, exact candidate privacy, JSON resume/hash stability, unique zone
+  membership, and the zero-selection shuffle event.
+- Root independently passed the affected Core gate 54/54, the focused Cards
+  gate 17/17, complete Core 626/626, complete Cards 102/102, the zero-warning
+  solution build, solution formatting, and `git diff --check`. The direct M2
+  proof remains byte-stable at `faf4e631...` / `c882eb43...` /
+  `d20cdef9...`, with all 32 checkpoints replay verified.
+
+### 2026-09-03 — Checkpoint D1 ENG-411 run-action architecture opened
+
+- Root fixes the generic contract before card binding: a `StartRun`
+  instruction carries one immutable typed run declaration rather than a card
+  title or free-form argument. The declaration names a fixed existing server
+  kind, an optional not-run-this-turn constraint, and optional source-counter
+  breach-access scaling with a stable public reason key. Red Team can expose
+  one action per eligible central; Conduit names R&D directly, so no new
+  server-choice frame is needed.
+- An installed-card run source is run provenance, not a played run event.
+  Executing the final instruction of a click ability must retire its behavior
+  and ability cursors before nesting the ordinary run timing frame directly
+  under the unchanged `AwaitingAction` Runner turn frame. The source remains
+  active in the Rig, `InitiatingSource` identifies it, and
+  `ActiveRunEventId` remains null; only the latter owns play-area movement,
+  run credits, and run-end trash.
+- Legality is checked both when the action is materialized and when it is
+  consumed. It requires an active faceup Runner source, a unique server of the
+  declared kind, current formal Runner turn facts for history constraints, and
+  a final `StartRun` instruction. The existing basic-run and standalone
+  run-event adapters remain byte-compatible.
+- Any extra central accesses are snapshotted at initiation into immutable
+  run-scoped modifier entries (source, attacked server, positive delta, stable
+  reason). Breach construction adds only modifiers for that exact server;
+  later source-counter mutation cannot change the active run. Empty modifiers
+  use an omitted nullable state field so legacy M2 canonical JSON and proof
+  hashes do not churn. Both observations expose detached ordered modifier
+  reasons without revealing new hidden card identity.
+
+### 2026-09-03 — Checkpoint D2 ENG-412 cost-quote architecture opened
+
+- Root separates conditional cost calculation from static board-value
+  modifiers. A behavior definition may declare an immutable self cost
+  adjustment for Runner install or icebreaker break cost, with one typed turn
+  condition, nonzero delta, and stable reason key. Slice 4.3 evaluates only
+  `SuccessfulRunThisTurn`: Carmen's own definition is evaluated while the card
+  is still in Grip, and Marjanah's own active breaker definition is evaluated
+  during its encounter interface. Other installed cards and card titles are
+  never scanned for an implicit adjustment.
+- One frozen credit quote carries the printed/base value, ordered typed
+  adjustments with their declared reason/source, and the nonnegative effective
+  value. Runner install actions and frames and encounter break actions retain
+  that exact quote across JSON boundaries; affordability, hosted/wallet split,
+  invariant re-materialization, and payment all consume the effective value.
+  Pump cost is deliberately outside this checkpoint.
+- Missing formal current-turn facts make the condition false. Forged or stale
+  base/effective/reason/source data must be rejected without mutation, checked
+  arithmetic rejects overflow, and reductions clamp at zero. Unmodified
+  actions omit the optional quote extension so existing canonical action/frame
+  bytes remain unchanged; modified legal-action observations expose the
+  detached base, effective, and ordered reason data.
+
+### 2026-09-03 — Checkpoint E1 hosted-economy binding opened
+
+- Luna Max is binding the already-expressible hosted-economy group without
+  widening Core: Pennyshaver, Telework Contract, Smartware Distributor,
+  Regolith Mining License, and Nico Campaign's missing full text. Static MU,
+  install/rez loads, successful-run/turn-begin placements or withdrawals,
+  click actions, once-per-turn use, and empty-pool cleanup must remain typed
+  catalog declarations composed in deterministic code order.
+- This checkpoint may not infer hosted credits from ordinary counters or
+  player credits. Both viewers see the public hosted pool, take/place effects
+  preserve exact wallet/pool deltas, and source-triggered empty cleanup occurs
+  after the operation that empties the pool. If Smartware's optional turn-begin
+  withdrawal from an empty pool is not safely expressible, the binding stays
+  blocked and the generic gap is returned to Root rather than handled by a
+  card-name branch.
+
+### 2026-09-04 — Checkpoint E1a hosted-economy expressible subset accepted
+
+- Luna Max bound Pennyshaver, Telework Contract, Regolith Mining License, and
+  Nico Campaign's remaining printed behavior through the existing typed
+  catalog. The declarations cover Pennyshaver's memory and successful-run
+  credit, Telework's install load and once-per-turn cashout, Regolith's rez
+  load and access trash cost, and Nico's rez load, turn-begin income, and
+  ordered empty-pool trash-then-draw cleanup.
+- Root corrected Batch 2 composition to definition-code order and reviewed the
+  production lifecycle tests: public hosted counters, exact pool/wallet
+  transfers, click and once-per-turn accounting, real install/rez/run/turn
+  occurrences, empty-pool cleanup, observation visibility, and JSON stability.
+  The complete Cards suite passes 110/110 and `git diff --check` is clean.
+- Smartware Distributor remains deliberately registered only on the audited
+  blocked surface. Its mandatory turn-begin instruction is “take up to 1,”
+  while Core's existing typed instruction is exact and correctly rejects an
+  empty pool. E1b will add a distinct take-up-to primitive, prove that exact
+  withdrawal is unchanged, and then promote Smartware into the executable
+  catalog.
+
+### 2026-09-04 — Checkpoint D1/D2 ENG-411/ENG-412 infrastructure accepted
+
+- Luna Max added typed final-instruction click-run declarations for fixed
+  central servers, formal-turn attempt constraints, and counter-scaled breach
+  access. Installed sources are validated while the action is issued and
+  consumed, then retained as detached run provenance; they may leave play
+  without breaking real-turn cleanup. Access modifiers snapshot at initiation,
+  round-trip in run state, project detached public reasons, and are rejected
+  when duplicated, forged, attached to a basic/event run, or inconsistent with
+  the source declaration.
+- Root's review found and closed two lifecycle defects: the first draft kept
+  requiring a run source to remain active after initiation, and extended R&D
+  access repeatedly selected the same physical top card. Hidden HQ/R&D
+  selection now excludes already-accessed identities while preserving the
+  deterministic random stream and authoritative deck order.
+- Luna Max also added immutable self cost-modifier declarations and checked,
+  nonnegative cost quotes for Runner installs and icebreaker break costs under
+  the formal `SuccessfulRunThisTurn` fact. Issued actions and pending install
+  frames retain base/effective values and ordered source/reason adjustments;
+  affordability, every hosted/wallet split, and payment use the effective
+  value. Re-materialization rejects stale or forged quotes atomically, while
+  unmodified DTOs omit the extension and retain their prior JSON shape.
+- Root passed the combined focused gate 16/16, complete Core 642/642, a
+  zero-warning/error solution build, formatter checks after three mechanical
+  whitespace corrections, and `git diff --check`. The M2 proof then exposed a
+  pre-existing D-401 integration defect triggered by Nico's E1a completion:
+  its capability slice included the new generic definition in addition to the
+  legacy asset contract. A separate compatibility checkpoint is open to make
+  the M2 slice depend only on the five legacy families it actually consumes.
+
+### 2026-09-04 — Checkpoint D-401 M2 capability slicing repaired
+
+- Root traced the failed replay gate to Nico Campaign's completed generic
+  behavior being included alongside its legacy M2 asset capability. Luna Max
+  moved the policy to the Match-owned M2 document boundary: its immutable
+  scenario catalog now contains only the referenced ICE, icebreaker, asset,
+  agenda, and run-event contracts. Core's general catalog slicing remains
+  unaware of M2 policy.
+- Regression coverage proves that a generic overlay on referenced asset 30037
+  does not change the M2 scenario fingerprint or initial state, while changing
+  Nico's required asset trash-cost contract still fails the pin. Root passed
+  the focused CLI/Match gate 24/24 and the direct proof returned the unchanged
+  `faf4e631...` / `c882eb43...` / `d20cdef9...` hashes with all 32 checkpoints
+  replay verified.
+
+### 2026-09-04 — Checkpoint E1b/D3 hosted withdrawal and run-cost bindings accepted
+
+- Luna Max added a distinct typed `TakeUpToHostedCredits` operation for
+  Smartware Distributor. Exact `take` still rejects underflow; `take up to`
+  transfers the actual minimum, treats an absent/empty pool as a successful
+  event-free no-op, emits the actual nonzero delta, and preserves atomic wallet
+  overflow and ordered empty-pool trigger behavior across JSON resumes.
+- Conduit and Red Team now use the typed click-run substrate. Conduit snapshots
+  its virus-scaled R&D access modifier at initiation and its optional successful
+  R&D run-end trigger is filtered through stable server topology. Red Team
+  exposes one history-constrained action for each central, pays out only for a
+  run initiated by that exact physical source, and trashes itself when its
+  hosted pool empties.
+- Carmen and Marjanah are registered with their Sentry/Killer and
+  Barrier/Fracter interfaces and typed successful-run cost adjustments. Real
+  install and encounter tests prove printed versus reduced quotes, wallet/run
+  credit splits, and immutable quote reasons. Root rejected the first delegated
+  test pass because it lacked these production lifecycles, then corrected three
+  fixture defects before acceptance.
+- Root passed the combined focused Core gate 32/32, focused Cards gate 31/31,
+  complete Core 651/651, complete Cards 123/123, a zero-warning/error solution
+  build, formatter verification, and `git diff --check`. The direct M2 proof
+  retained the pinned `faf4e631...` / `c882eb43...` / `d20cdef9...` hashes and
+  replayed all 32 checkpoints.
+
+### 2026-09-04 — Checkpoint UI-404 paid-ability presentation accepted
+
+- Luna Max mapped detached typed card counters and visible current-turn ability
+  uses into Match view models. `ABILITY READY` is derived only from an issued
+  `UseAbility` action and takes precedence over `USED`; no cue is inferred from
+  card text. The cue is threaded through every visible card projection,
+  including server roots/ICE, rig and score areas, private viewer zones, and
+  run encounter/access/source views.
+- Text cards and inspection show non-color ability cues and typed `HOSTED
+  CREDIT`, `VIRUS`, `POWER`, or `GENERIC` counter chips. Install actions explain
+  cleanup only from frozen required/selected replacement IDs, while malformed
+  counter purpose/restriction enums and stale/duplicate use facts fail closed.
+- Root kept the RFG feed requirement open until Core supplied truthful typed
+  provenance. `CardMovedEventPayload` now optionally carries both endpoint zone
+  kinds only for movement into or out of RFG; ordinary and legacy movements
+  retain their exact JSON shape. Match reports removal only from a typed RFG
+  destination and never guesses from opaque IDs or card titles.
+- The focused presentation gate passes 6/6 and the focused movement/provenance
+  gate passes 23/23; complete Core passes 654/654, and Core, Match, Godot, and
+  the full solution build without warnings or errors. Full Match is 48/49 with
+  only the known SIM-401 checked-in fixture fingerprint pending regeneration.
+  Formatter and diff checks pass, and the direct M2 proof retains all pinned
+  hashes with 32 replayed checkpoints.
+
+### 2026-09-04 — Checkpoint E2 ENG-407/409 trigger-card bindings accepted
+
+- Luna Max bound Fermenter, Cookbook, and Pantograph through generic typed
+  behavior declarations. Fermenter uses a structural source-counter amount
+  operand for its click-and-trash payout; its virus counters survive only the
+  exact paid self-movement child required to calculate that effect and are
+  cleared at ability completion. Cookbook consumes the checkpoint-authenticated
+  installed-card subject and filters it as a Runner virus Program without a
+  title branch.
+- Pantograph contributes its typed +1 MU modifier and responds to either side's
+  agenda score/steal occurrence with the ordered credit gain followed by an
+  optional Grip install. Behavior-effect installs now accept Runner Program,
+  Hardware, or Resource cards from Stack or Grip through the ordinary install
+  planner. The private choice freezes only currently legal candidates after
+  the credit gain, then revalidates printed cost, conditional quote, memory,
+  uniqueness, Console replacement, exact source zone, and stable origin when
+  consumed. Reducer and invariant projections share the same fail-closed
+  legality boundary.
+- Root rejected declaration-only and opt-in/skipped test drafts. The accepted
+  production fixtures exercise real install, turn-begin, score, steal, trigger
+  accept/decline, cost payment, memory replacement, hidden choice, save/load,
+  and forged-source paths. Review also repaired typed static-modifier JSON so
+  its enum survives round-trip while legacy string modifiers remain stable,
+  and closed a pre-existing structural-equality omission for typed run
+  operands.
+- Root passed the combined focused Core gate 49/49, focused Cards gate 25/25,
+  complete Core 659/659, complete Cards 144/144, the zero-warning/error
+  solution build, solution formatter verification, and `git diff --check`.
+  The direct M2 proof remains byte-stable at `faf4e631...` / `c882eb43...` /
+  `d20cdef9...`, with all 32 checkpoints replay verified.
+
+### 2026-09-04 — Checkpoint E3 ENG-407 Carnivore access ability accepted
+
+- Luna Max bound Carnivore's +1 MU and once-per-turn breach-access ability.
+  Additional card-trash costs are now a typed operation with an explicitly
+  owned zone target; engine-issued actions and serialized ability frames keep
+  those cost selections separate from effect targets and bind each selection
+  to its declaration cost index and stable key. Empty legacy payloads retain
+  their prior JSON shape.
+- The access window now materializes the exact accessed card and deterministic
+  Grip-card pairs, keeps those private to the Runner, pays the complete frozen
+  bundle atomically, and returns to the same priority-free access cursor. The
+  accessed card enters Archives faceup with a zero-credit
+  `AccessedCardTrashed` event. An agenda moved there by Carnivore is not then
+  stolen, while an agenda originally accessed from Archives still is.
+- Root review replaced string-key dispatch with a typed additional-cost enum,
+  separated access provenance from remaining trashability, and required hard
+  result/exploration bounds. Focused tests exposed two further defects before
+  acceptance: invariant bijection treated legal pair variants as forged, and
+  a stale destination-zone snapshot orphaned the first of two trashed Grip
+  cards. Both paths now use structural pair comparison and refreshed immutable
+  zone snapshots.
+- Contract tests cover strict operation/target combinations, fingerprint
+  sensitivity, defensive copies, JSON resume, and null/empty compatibility.
+  Production card tests cover deterministic pair enumeration, observation
+  privacy, insufficient and oversized Grips, ordinary and agenda access,
+  once-per-turn use, exact semantic trash order, and stale/forged atomic
+  rejection. The Carnivore gate passes 9/9, focused Core passes 69/69, complete
+  Core passes 661/661, and complete Cards passes 153/153. The solution builds
+  with zero warnings/errors; formatter and diff checks pass. The direct M2
+  proof remains byte-stable at `faf4e631...` / `c882eb43...` /
+  `d20cdef9...`, with all 32 checkpoints replay verified.
+
+### 2026-09-04 — Checkpoint F1 AGT-401 contract agent v2 accepted
+
+- Luna Max implemented the version-2 observation-only policy. Issued
+  `UseAbility` actions now have first priority in action-phase, turn-priority,
+  and run windows when the action is provably bounded by the declared click
+  cost or by an unused once-per-turn snapshot. Unlimited non-click actions and
+  exhausted once-per-turn actions are ignored, so the policy cannot create a
+  zero-cost activation loop; affordability and the authoritative usage ledger
+  remain Core responsibilities.
+- Root amended the first draft for real decision coexistence: valid install,
+  play, run, rez, and score actions outside this policy's current selection
+  subset are treated as opaque and never selected, rather than invalidating an
+  otherwise usable decision. Policy-owned candidates still fail closed on
+  malformed timing/activation pairs, IDs, fingerprints, costs, effect targets,
+  usage snapshots, or typed additional-cost selections. Exact additional-cost
+  cardinality and global physical-card uniqueness are checked before an action
+  is considered.
+- Version strings are now `full-game-contract-agent-v2` and
+  `full-game-contract-policy-v2`, with policy schema 2. Canonical semantic keys
+  retain the complete immutable ability payload and normalize only the order
+  of cost-indexed additional selections; descriptions and observation state
+  dictionaries remain outside policy input. Tests cover click and `lose click`
+  forms, turn/run windows, once-per-turn availability, unbounded fallback,
+  opaque action coexistence, malformed rejection, deterministic ordering, JSON
+  round-trip, and configurable priority validation. Luna and Root independently
+  passed the complete AI suite at 30/30.
+
+### 2026-09-04 — Checkpoint F2 catalog, CARD-401, and M2 compatibility accepted
+
+- The full immutable Gateway composition now has its own
+  `gateway-m4-4.3` version while the M2 document keeps the independent
+  `gateway-m2-3` replay pin. M2 derives only the five typed legacy
+  capabilities referenced by its scenario and deliberately excludes newer
+  generic overlays. Root found and closed an overload-resolution defect that
+  had made parameterless validation compare the full 4.3 catalog rather than
+  the derived M2 slice.
+- The Slice 4.3 registry row and all 14 review rows are complete. Positive
+  lifecycle metadata covers every Batch 2 code, and the regenerated CARD-401
+  reports record 77 total, 32 registered, 32 tested, 31 full-text complete,
+  one explicit partial (Offworld Office), and 45 unregistered, with zero
+  diagnostics. Nico Campaign is now recorded as fully bound with its rez load,
+  turn-begin withdrawal, and ordered empty-pool trash/draw behavior.
+- Luna Max passed 28/28 focused M2/proof tests and 63/63 focused Batch 2 and
+  coverage tests. Root independently passed the 24-test M2 setup/proof filter;
+  the representative proof retains initial/final/event hashes
+  `faf4e631...` / `c882eb43...` / `d20cdef9...` and all 32 replay-verified
+  checkpoints.
+
+### 2026-09-04 — Checkpoint F3 SIM-401 Batch 2 fixtures and ability proof accepted
+
+- Both developer-reduced simulation fixtures now pin `gateway-m4-4.3` and
+  catalog fingerprint `6e55901b...`; their combined Corp and Runner code sets
+  equal all 32 currently registered definitions. Their IDs and review notes
+  explicitly identify the Slice 4.3 Batch 2 boundary and the remaining single
+  partial registration.
+- The bounded headless proof builds a valid installed Telework Contract turn
+  from each fixture's seed and production catalog. A real install occurrence
+  loads nine hosted credits, then `FullGameContractAgent` v2 selects the issued
+  click ability while basic economy and run actions coexist. Core accepts the
+  action, spends one click, transfers three hosted credits, records the
+  once-per-turn use, and omits the ability from the next decision. The prompt
+  and result both round-trip with stable authoritative hashes and viewer
+  observations, under each fixture's action cap.
+- Luna Max and Root each passed the focused fixture/proof gate at 8/8; Root
+  additionally passed the complete Match suite at 51/51. This is intentionally
+  narrow ability-path evidence: the pre-existing MATCH-401A normal
+  setup/mulligan transition is still absent, so the fixtures remain validated
+  inputs and this checkpoint does not claim the standard full-game SIM-401
+  outcome.
+
+### 2026-09-04 — Checkpoint F4 UI-404 client smoke accepted
+
+- Luna Max added a dedicated `--m4-slice43-ui-smoke` path, separate from the
+  existing gallery and M3 lanes. It mounts the production `TextCardControl` in
+  the real scene tree, verifies the non-colour `ABILITY READY` cue and typed
+  hosted-credit/virus/power chips, updates the same control to `USED` without
+  losing its chips, renders an engine-shaped `UseAbility` action through the
+  Match action presenter, and sends typed removed-from-game provenance through
+  the event-feed presenter.
+- `scripts/verify.sh` runs the lane with a 30-second bound, requires the exact
+  stable PASS record, rejects any FAIL record, and preserves the pre-existing
+  gallery, M3 smoke, and responsiveness lanes. Root independently built the
+  Godot project with zero warnings/errors and observed
+  `M4_SLICE43_UI PASS card_in_scene_tree=true ready_cue=true ready_chips=true
+  used_cue=true used_chips=true ability_affordance=true rfg_removed=true` with
+  exit code zero.
+
+### 2026-09-04 — Checkpoint F5 integrated Slice 4.3 verification accepted
+
+- Root ran `./scripts/verify.sh` from the reviewed checkpoint commits. The
+  solution restored and built with zero warnings/errors, formatting had no
+  drift, and all 949 tests passed: Core 661, Cards 153, AI 30, CLI 54, and
+  Match 51. Authenticated card-data validation returned all 77 designs and the
+  coverage drift gate returned 32 registered/tested, 31 complete, one partial,
+  and 45 unregistered.
+- All three deterministic M1 outcome paths passed. The representative M2
+  proof retained exact hashes
+  `faf4e631ab5890b9a26cff3318af6e389f35cb3c10be9cf12c09f1ce2cca03c6`,
+  `c882eb43f2057073cf138511ac0d5834c20822a7c4a490d8e73cd6c402c682c5`,
+  and `d20cdef94e97ac928ca088e14952b65d2116fecda00485fff5c3b05e1b6e9e20`,
+  with 32 actions/checkpoints and replay verification. The official 77-card
+  gallery, Slice 4.3 client smoke, existing M3 full-run smoke, and repository
+  secret scan all passed.
+- Slice 4.3's 13 new designs plus Nico Campaign completion, OBS-401 coverage,
+  AGT-401 v2, UI-404, versioned fixtures, and the bounded ability-driven
+  headless proof are accepted. The M4 plan's stronger standard SIM-401 claim
+  is not made: MATCH-401A still lacks the normal setup/mulligan reducer, so a
+  fixture cannot yet execute from a versioned match request to its declared
+  full-game outcome. That prerequisite remains tracked rather than hidden by
+  a prebuilt-state test.
+
+### 2026-09-04 — PR #7 P2 review checkpoint accepted
+
+- Root assessed all four automated inline findings as valid and split their
+  implementation across two bounded Luna Max lanes. Cards shuffled from
+  faceup Archives into R&D are now normalized facedown before observation;
+  generic additional-cost projection resolves existing source zones without
+  creating lazy play-area or removed-from-game zones or consuming allocator
+  state.
+- Installed-card facts and once-per-turn ability uses now belong to the active
+  formal turn, independent of the installed card or ability controller.
+  Ability condition reads require facts whose side and turn number match the
+  active turn, preventing retained Runner facts from satisfying
+  `InstalledThisTurn` or `SuccessfulRunThisTurn` during the following Corp
+  turn. Opponent-priority paid abilities remain executable and their usage is
+  recorded in that active turn's ledger; click actions remain restricted to
+  the active side.
+- Regressions cover Spin Doctor hidden-deck visibility, Pantograph installing
+  a Runner card during the Corp turn, stale cross-turn condition facts,
+  opponent-turn once-per-turn consumption, and allocation-free lookup of an
+  absent lazy additional-cost zone. Root passed focused Core 24/24 and Cards
+  13/13, then `./scripts/verify.sh`: zero-warning build, formatting and report
+  drift clean, all 952 tests (Core 664, Cards 153, AI 30, CLI 54, Match 51),
+  unchanged M1/M2 deterministic proofs, both M4 client smokes, M3 smoke, and
+  the secret scan.
+
+### 2026-09-04 — Checkpoint D-417 static catalog cleanup accepted
+
+- Migrated `M2ScenarioDocument` and `M2ProofRunner` completely to the
+  injected, immutable scenario behavior slice. The M2 replay contract now
+  uses the explicit `EngineCompatibility.GatewayBehaviorRegistryVersion`
+  literal (`gateway-m2-3`) rather than a process registry, preserving the
+  representative proof's exact state and event hashes.
+- Deleted the process-mutable `CardBehaviorSpecCatalog`,
+  `GatewayBehaviorCatalog.RegisterAll`, and all five typed Gateway
+  `RegisterAll` methods. Core rules-only compatibility overloads use the
+  immutable `BehaviorCatalog.Empty`; behavior-bearing fixtures and tests
+  compose and inject a consolidated catalog explicitly.
+- Retained the useful Gateway printed-text and definition-binding assertions;
+  former static idempotency/conflict checks now exercise immutable catalog
+  construction and fail-closed lookup. The source/test scan reports zero
+  `CardBehaviorSpecCatalog` or `RegisterAll` references.
+- Evidence: the solution build completed with zero warnings/errors; all 952
+  tests passed (Core 664, Cards 153, AI 30, CLI 54, Match 51); solution
+  formatting and `git diff --check` passed; and the direct M2 proof replayed
+  32 checkpoints with `replayVerified: true` and unchanged hashes
+  (`faf4e631…` / `c882eb43…` / `d20cdef9…`).

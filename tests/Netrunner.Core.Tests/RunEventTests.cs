@@ -23,6 +23,7 @@ public sealed class RunEventTests
         GameEngine.RunStartResult start = GameEngine.BeginRunWithEvents(
             preRun,
             RunTimingTests.RemoteId(preRun),
+            FixtureBehaviorCatalog.Catalog,
             initiatingSource: eventId);
         GameState prompt = start.State;
 
@@ -44,7 +45,7 @@ public sealed class RunEventTests
         int initiatedIndex = start.Events.ToList().FindIndex(value => value.Kind == EngineEventKinds.RunInitiated);
         Assert.True(playedIndex >= 0 && initiatedIndex >= 0);
         Assert.True(playedIndex < initiatedIndex);
-        StateInvariantValidator.Validate(prompt);
+        StateInvariantValidator.Validate(prompt, FixtureBehaviorCatalog.Catalog);
     }
 
     [Fact]
@@ -254,7 +255,7 @@ public sealed class RunEventTests
             iceDefinition: FixtureIceBehaviorSpecs.EndRunIfCredits,
             runnerCredits: 7,
             includeEventSource: false);
-        GameState prompt = GameEngine.BeginRun(preRun, RunTimingTests.RemoteId(preRun));
+        GameState prompt = GameEngine.BeginRun(preRun, RunTimingTests.RemoteId(preRun), FixtureBehaviorCatalog.Catalog);
         ApplyResult ended = PassTwice(PassTwice(PassTwice(prompt).State).State);
         Assert.True(ended.Accepted, ended.Rejection?.Message);
         Assert.Null(ended.State.RunState);
@@ -268,7 +269,7 @@ public sealed class RunEventTests
             iceDefinition: FixtureIceBehaviorSpecs.EndRunIfCredits,
             runnerCredits: 10,
             includeEventSource: false);
-        GameState prompt2 = GameEngine.BeginRun(preRun2, RunTimingTests.RemoteId(preRun2));
+        GameState prompt2 = GameEngine.BeginRun(preRun2, RunTimingTests.RemoteId(preRun2), FixtureBehaviorCatalog.Catalog);
         ApplyResult continued = PassTwice(PassTwice(PassTwice(prompt2).State).State);
         Assert.True(continued.Accepted, continued.Rejection?.Message);
         Assert.Equal(RunTimingStep.MovementPaidWindow, continued.State.RunState!.Step);
@@ -363,7 +364,10 @@ public sealed class RunEventTests
         Assert.Equal(eventId.Value, moved.CardId);
         Assert.Equal(playArea.Id, moved.FromZoneId);
         Assert.Equal(heap.Id, moved.ToZoneId);
-        StateInvariantValidator.Validate(finished.State);
+        Assert.Null(moved.FromZoneKind);
+        Assert.Null(moved.ToZoneKind);
+        Assert.DoesNotContain("fromZoneKind", EngineJson.Serialize(finished.Events.Single(value => value.Kind == EngineEventKinds.CardMoved)), StringComparison.Ordinal);
+        StateInvariantValidator.Validate(finished.State, FixtureBehaviorCatalog.Catalog);
     }
 
     [Fact]
@@ -388,6 +392,7 @@ public sealed class RunEventTests
         GameEngine.RunStartResult secondStart = GameEngine.BeginRunWithEvents(
             secondPreRun,
             RunTimingTests.RemoteId(secondPreRun),
+            FixtureBehaviorCatalog.Catalog,
             initiatingSource: secondEventId);
 
         Assert.Single(secondStart.State.Zones, zone => zone.Kind == ZoneKind.RunnerPlayArea);
@@ -402,7 +407,7 @@ public sealed class RunEventTests
         Assert.True(secondFinished.Accepted, secondFinished.Rejection?.Message);
         Assert.Null(secondFinished.State.RunState);
         Assert.Single(secondFinished.State.Zones, zone => zone.Kind == ZoneKind.RunnerPlayArea);
-        StateInvariantValidator.Validate(secondFinished.State);
+        StateInvariantValidator.Validate(secondFinished.State, FixtureBehaviorCatalog.Catalog);
     }
 
     [Fact]
@@ -417,7 +422,7 @@ public sealed class RunEventTests
         string expectedSource = $"\"initiatingSource\":{{\"id\":\"{eventId!.Value}\",\"definitionId\":\"{FixtureRunEventSpecs.Overclock.Value}\"";
         foreach (PlayerSide viewer in new[] { PlayerSide.Runner, PlayerSide.Corp })
         {
-            string json = EngineJson.Serialize(ObservationBuilder.Build(prompt, viewer));
+            string json = EngineJson.Serialize(ObservationBuilder.Build(prompt, viewer, FixtureBehaviorCatalog.Catalog));
             Assert.Contains(expectedSource, json);
         }
 
@@ -428,7 +433,7 @@ public sealed class RunEventTests
         Assert.True(finished.Accepted, finished.Rejection?.Message);
         foreach (PlayerSide viewer in new[] { PlayerSide.Runner, PlayerSide.Corp })
         {
-            string json = EngineJson.Serialize(ObservationBuilder.Build(finished.State, viewer));
+            string json = EngineJson.Serialize(ObservationBuilder.Build(finished.State, viewer, FixtureBehaviorCatalog.Catalog));
             Assert.Contains(activeEvent.Value, json);
             Assert.Contains(FixtureRunEventSpecs.Overclock.Value, json);
         }
@@ -444,7 +449,7 @@ public sealed class RunEventTests
         GameState encounter = ReachEncounterWithSource(preRun, eventId);
 
         string json = EngineJson.Serialize(encounter);
-        GameState restored = EngineJson.DeserializeState(json);
+        GameState restored = EngineJson.DeserializeState(json, FixtureBehaviorCatalog.Catalog);
         Assert.Equal(json, EngineJson.Serialize(restored));
         Assert.Equal(eventId, restored.RunState!.ActiveRunEventId);
 
@@ -466,22 +471,25 @@ public sealed class RunEventTests
     }
 
     [Fact]
-    public void RunEventCatalogIsIdempotentConflictThrowsAndUnregisteredFailsClosed()
+    public void ImmutableRunEventCatalogRejectsConflictsAndFailsClosed()
     {
         RunEventBehaviorSpec canonical = new(FixtureRunEventSpecs.Overclock, cost: 1, hostedCredits: 5);
-        CardBehaviorSpecCatalog.RegisterRunEvent(canonical);
-        CardBehaviorSpecCatalog.RegisterRunEvent(canonical);
-        Assert.Equal(canonical, CardBehaviorSpecCatalog.GetRunEvent(FixtureRunEventSpecs.Overclock));
+        BehaviorCatalogBuilder builder = new BehaviorCatalogBuilder("test:run-event-catalog")
+            .AddRunEvent(canonical)
+            .AddRunEvent(canonical);
+        Assert.True(builder.Build().TryGetRunEvent(FixtureRunEventSpecs.Overclock, out RunEventBehaviorSpec? registered));
+        Assert.Equal(canonical, registered);
 
         RunEventBehaviorSpec conflicting = new(FixtureRunEventSpecs.Overclock, cost: 1, hostedCredits: 4);
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
-            () => CardBehaviorSpecCatalog.RegisterRunEvent(conflicting));
+            () => builder.AddRunEvent(conflicting));
         Assert.Contains(FixtureRunEventSpecs.Overclock.Value, exception.Message);
-        Assert.Equal(canonical, CardBehaviorSpecCatalog.GetRunEvent(FixtureRunEventSpecs.Overclock));
+        Assert.True(builder.Build().TryGetRunEvent(FixtureRunEventSpecs.Overclock, out registered));
+        Assert.Equal(canonical, registered);
 
         CardDefinitionId unregistered = new("fixture:event-unregistered");
-        Assert.False(CardBehaviorSpecCatalog.TryGetRunEvent(unregistered, out _));
-        Assert.Throws<ArgumentException>(() => CardBehaviorSpecCatalog.GetRunEvent(unregistered));
+        BehaviorCatalog catalog = builder.Build();
+        Assert.False(catalog.TryGetRunEvent(unregistered, out _));
     }
 
     [Fact]
@@ -558,7 +566,7 @@ public sealed class RunEventTests
     }
 
     private static GameState BeginRunWithSource(GameState state, CardInstanceId? source) =>
-        GameEngine.BeginRun(state, RunTimingTests.RemoteId(state), initiatingSource: source);
+        GameEngine.BeginRun(state, RunTimingTests.RemoteId(state), FixtureBehaviorCatalog.Catalog, initiatingSource: source);
 
     private static GameState ReachEncounterWithSource(GameState state, CardInstanceId? source) =>
         EncounterBreakerTests.ReachEncounterWindowWithSource(state, source!.Value);

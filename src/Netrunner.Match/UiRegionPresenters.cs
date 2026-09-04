@@ -1,5 +1,6 @@
 using System.Collections.Frozen;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using Netrunner.Core;
 
 namespace Netrunner.Match;
@@ -237,6 +238,59 @@ public sealed record ActionsRegionState(
 /// </summary>
 public static class ActionsRegionPresenter
 {
+    /// <summary>
+    /// Adds only the cleanup explanation carried by the frozen install action.
+    /// Candidate-only installs remain unchanged: Match must not guess whether
+    /// an unselected candidate represents a Console or unique conflict.
+    /// </summary>
+    public static string Describe(
+        ActionKind kind,
+        string description,
+        ActionParameters parameters)
+    {
+        ArgumentNullException.ThrowIfNull(description);
+        ArgumentNullException.ThrowIfNull(parameters);
+        if (kind != ActionKind.InstallCard
+            || parameters is not InstallCardParameters install
+            || (install.RequiredReplacementCardIds.Count == 0
+                && install.SelectedReplacementCardIds.Count == 0))
+        {
+            return description;
+        }
+
+        // Keep the IDs visible so the control can explain exactly which
+        // physical cards the engine's frozen install choice will clean up.
+        // The reason is intentionally not inferred when both lists are empty.
+        if (description.Contains("CONSOLE/UNIQUE CLEANUP", StringComparison.Ordinal))
+        {
+            return description;
+        }
+
+        var details = new List<string>(2);
+        if (install.RequiredReplacementCardIds.Count > 0)
+        {
+            details.Add(
+                $"REQUIRED [{FormatCardIds(install.RequiredReplacementCardIds)}]");
+        }
+
+        if (install.SelectedReplacementCardIds.Count > 0)
+        {
+            details.Add(
+                $"SELECTED [{FormatCardIds(install.SelectedReplacementCardIds)}]");
+        }
+
+        return $"{description} · CONSOLE/UNIQUE CLEANUP · {string.Join(" · ", details)}";
+    }
+
+    public static LegalActionViewModel Describe(LegalActionViewModel action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        string description = Describe(action.Kind, action.Description, action.Parameters);
+        return string.Equals(description, action.Description, StringComparison.Ordinal)
+            ? action
+            : action with { Description = description };
+    }
+
     public static ActionsRegionState Present(MatchSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
@@ -263,7 +317,9 @@ public static class ActionsRegionPresenter
             status = ActionsRegionStatus.AwaitingRunnerDecision;
         }
 
-        LegalActionViewModel[] actions = snapshot.View.LegalActions.ToArray();
+        LegalActionViewModel[] actions = snapshot.View.LegalActions
+            .Select(Describe)
+            .ToArray();
         IReadOnlyList<LegalActionViewModel> visibleActions = GroupActions(decision, actions)
             .SelectMany(group => group.Actions)
             .ToArray();
@@ -382,6 +438,9 @@ public static class ActionsRegionPresenter
         BreachCandidateParameters { CardId: { } cardId } => cardId.Value,
         _ => null,
     };
+
+    private static string FormatCardIds(IReadOnlyList<CardInstanceId> cardIds) =>
+        string.Join(", ", cardIds.Select(static cardId => cardId.Value));
 }
 
 /// <summary>
@@ -437,10 +496,33 @@ public sealed class EventFeedRegionPresenter
             CardAccessedEventPayload payload => $"Accessed {payload.CardId.Value}.",
             AgendaStolenEventPayload payload => $"Agenda stolen · +{payload.AgendaPoints} points.",
             AccessedCardTrashedEventPayload payload => $"Trashed accessed card for {payload.TrashCost} credits.",
+            HostedCreditPoolChangedEventPayload payload when Enum.IsDefined(payload.Operation)
+                && Enum.IsDefined(payload.Restriction)
+                => DescribeHostedCreditPool(payload),
+            CardMovedEventPayload payload when payload.ToZoneKind is ZoneKind.CorpRemovedFromGame
+                or ZoneKind.RunnerRemovedFromGame
+                => $"Removed from game · {payload.CardId.Value} · {payload.FromZoneId.Value} → {payload.ToZoneId.Value}.",
+            CardMovedEventPayload payload =>
+                $"Card moved · {payload.CardId.Value} · {payload.FromZoneId.Value} → {payload.ToZoneId.Value}.",
             RunCreditsAdjustedEventPayload payload => $"Run pool {payload.Delta:+#;-#;0} · now {payload.RunCreditsAfter}.",
             RunEndedEventPayload payload => $"Run ended · {payload.Reason}.",
             _ => @event.Kind,
         };
+    }
+
+    private static string DescribeHostedCreditPool(HostedCreditPoolChangedEventPayload payload)
+    {
+        string operation = payload.Operation.ToString().ToUpperInvariant();
+        string delta = payload.Delta == 0
+            ? "no change"
+            : payload.Delta > 0
+                ? $"+{payload.Delta}"
+                : payload.Delta.ToString(CultureInfo.InvariantCulture);
+        string emptied = payload.Emptied ? " · EMPTY" : string.Empty;
+        string recipient = payload.Recipient is { } player
+            ? $" · recipient {player.Value}"
+            : string.Empty;
+        return $"HOSTED CREDIT {operation} · {payload.CardId.Value} · {delta} · {payload.CountAfter} remaining{emptied}{recipient}.";
     }
 }
 

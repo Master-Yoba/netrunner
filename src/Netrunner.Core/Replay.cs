@@ -12,7 +12,7 @@ public static class EngineArtifactKinds
 public static class EngineCompatibility
 {
     public const int ArtifactSchemaVersion = 1;
-    public const int StateSchemaVersion = 2;
+    public const int StateSchemaVersion = 3;
     public const string RulesVersion = "26.03";
     public const string CardDataVersion = "fixture-1";
     /// <summary>
@@ -21,10 +21,11 @@ public static class EngineCompatibility
     /// behavior-registry version.
     /// </summary>
     public const string GatewayCardDataVersion = "236140cf84491c23995b028bc791281837520b97";
-    // M1/M2 fixture states retain their fixture behavior identity.  Gateway
-    // composition opts into CardBehaviorSpecCatalog.Version explicitly.
+    // M1 fixture states retain their fixture behavior identity. Gateway/M2
+    // composition opts into this explicit legacy behavior pin when reading
+    // the M2 scenario contract; it is not sourced from a process registry.
     public const string BehaviorRegistryVersion = "fixture-1";
-    public const string GatewayBehaviorRegistryVersion = CardBehaviorSpecCatalog.Version;
+    public const string GatewayBehaviorRegistryVersion = "gateway-m2-3";
 }
 
 /// <summary>
@@ -473,7 +474,7 @@ public static class ReplayVerifier
 {
     public static ReplayVerificationResult Verify(ReplayArtifact artifact)
     {
-        return Verify(artifact, CardBehaviorSpecCatalog.Default, enforceCatalogCompatibility: false);
+        return Verify(artifact, BehaviorCatalog.Empty, enforceCatalogCompatibility: false);
     }
 
     /// <summary>
