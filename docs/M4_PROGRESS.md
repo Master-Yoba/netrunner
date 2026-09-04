@@ -3638,3 +3638,25 @@ errors; runtime action expansion and full verification remain pending.
   the representative proof retains initial/final/event hashes
   `faf4e631...` / `c882eb43...` / `d20cdef9...` and all 32 replay-verified
   checkpoints.
+
+### 2026-09-04 — Checkpoint F3 SIM-401 Batch 2 fixtures and ability proof accepted
+
+- Both developer-reduced simulation fixtures now pin `gateway-m4-4.3` and
+  catalog fingerprint `6e55901b...`; their combined Corp and Runner code sets
+  equal all 32 currently registered definitions. Their IDs and review notes
+  explicitly identify the Slice 4.3 Batch 2 boundary and the remaining single
+  partial registration.
+- The bounded headless proof builds a valid installed Telework Contract turn
+  from each fixture's seed and production catalog. A real install occurrence
+  loads nine hosted credits, then `FullGameContractAgent` v2 selects the issued
+  click ability while basic economy and run actions coexist. Core accepts the
+  action, spends one click, transfers three hosted credits, records the
+  once-per-turn use, and omits the ability from the next decision. The prompt
+  and result both round-trip with stable authoritative hashes and viewer
+  observations, under each fixture's action cap.
+- Luna Max and Root each passed the focused fixture/proof gate at 8/8; Root
+  additionally passed the complete Match suite at 51/51. This is intentionally
+  narrow ability-path evidence: the pre-existing MATCH-401A normal
+  setup/mulligan transition is still absent, so the fixtures remain validated
+  inputs and this checkpoint does not claim the standard full-game SIM-401
+  outcome.

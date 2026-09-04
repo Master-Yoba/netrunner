@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "fixtureId": "sim-slice42-batch1-basic",
+  "fixtureId": "sim-slice43-batch2-basic",
   "rulesVersion": "26.03",
   "cardDataVersion": "236140cf84491c23995b028bc791281837520b97",
-  "behaviorRegistryVersion": "gateway-m2-3",
-  "behaviorCatalogFingerprint": "19c8800481f0b65935d4420f0bef019746b5039b5b0159217cc59ae051dc0a66",
+  "behaviorRegistryVersion": "gateway-m4-4.3",
+  "behaviorCatalogFingerprint": "6e55901b550ba189c3ef7d11bb2d5aae4f8036dd8e0f9f2461c627fbe312a7d6",
   "seed": 40102,
   "actionCap": 128,
   "corpDeck": {
@@ -21,7 +21,9 @@
       { "code": "30041", "quantity": 1 },
       { "code": "30048", "quantity": 1 },
       { "code": "30056", "quantity": 1 },
-      { "code": "30040", "quantity": 1 }
+      { "code": "30040", "quantity": 1 },
+      { "code": "30053", "quantity": 1 },
+      { "code": "30071", "quantity": 1 }
     ],
     "validationProfile": "developerReduced"
   },
@@ -38,7 +40,18 @@
       { "code": "30021", "quantity": 1 },
       { "code": "30030", "quantity": 1 },
       { "code": "30011", "quantity": 1 },
-      { "code": "30031", "quantity": 1 }
+      { "code": "30031", "quantity": 1 },
+      { "code": "30003", "quantity": 1 },
+      { "code": "30007", "quantity": 1 },
+      { "code": "30009", "quantity": 1 },
+      { "code": "30014", "quantity": 1 },
+      { "code": "30015", "quantity": 1 },
+      { "code": "30016", "quantity": 1 },
+      { "code": "30018", "quantity": 1 },
+      { "code": "30023", "quantity": 1 },
+      { "code": "30024", "quantity": 1 },
+      { "code": "30027", "quantity": 1 },
+      { "code": "30033", "quantity": 1 }
     ],
     "validationProfile": "developerReduced"
   },
@@ -55,5 +68,5 @@
     "https://nullsignal.games/products/system-gateway/",
     "https://rules.nullsignal.games/"
   ],
-  "crossCheckNote": "Developer-curated code/quantity-only decks use the seven M2 baseline registrations and all twelve executable Slice 4.2 Batch-1 declarations. The catalog fingerprint pins the completed immutable behavior surface. No headless outcome is claimed until MATCH-401A and AGT-401 consume this fixture through normal setup."
+  "crossCheckNote": "Developer-curated code/quantity-only decks include all 32 registered Slice <=4.3 codes (31 complete; Offworld Office remains partial). MATCH-401A normal setup/mulligan execution is not yet present, so these documents remain validation inputs rather than a claimed full-game outcome."
 }
