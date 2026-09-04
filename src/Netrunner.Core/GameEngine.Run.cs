@@ -304,6 +304,12 @@ public static partial class GameEngine
                 server.Id,
                 runOperand!)
             : null;
+        IReadOnlyList<RunRezCostModifier>? rezCostModifiers = runEventSpec is not null
+            ? SnapshotRunRezCostModifiers(
+                runEventSpec,
+                initiatingSource
+                    ?? throw new ResolutionFailureException("A run event requires a source card."))
+            : null;
 
         RunId runId = working.Allocator.NextRunId();
         int currentIceIndex = iceZone.CardIds.Count - 1;
@@ -322,7 +328,8 @@ public static partial class GameEngine
             initiatingSource,
             runEventSpec?.HostedCredits ?? 0,
             runEventSpec is null ? null : initiatingSource,
-            breachModifiers);
+            breachModifiers,
+            rezCostModifiers);
         working.RunState = run;
 
         // CR 26.03 8.6.7: a played event leaves the Runner's grip and enters a
@@ -419,6 +426,67 @@ public static partial class GameEngine
         return delta > 0
             ? [new RunBreachAccessModifier(source.Id, attackedServer, delta, operand.BreachAccessReasonKey!)]
             : null;
+    }
+
+    private static List<RunBreachAccessModifier> SnapshotFirstHqBreachAccessModifiers(
+        WorkingState working,
+        ServerId attackedServer)
+    {
+        ZoneState? rig = working.Zones.FirstOrDefault(zone =>
+            zone.Kind == ZoneKind.RunnerRig
+            && zone.OwnerSide == PlayerSide.Runner
+            && zone.ServerId is null);
+        if (rig is null)
+        {
+            return [];
+        }
+
+        var snapshots = new List<RunBreachAccessModifier>();
+        foreach (CardInstanceState source in rig.CardIds
+            .Select(cardId => working.Cards.FirstOrDefault(card => card.Id == cardId))
+            .Where(card => card is not null)
+            .Cast<CardInstanceState>()
+            .Where(card => card.OwnerSide == PlayerSide.Runner
+                && card.FaceUp
+                && card.ZoneId == rig.Id)
+            .OrderBy(card => card.Id.Value, StringComparer.Ordinal))
+        {
+            if (!working.BehaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? definition)
+                || definition.FirstHqBreachAccessModifiers is not { Count: > 0 } declarations)
+            {
+                continue;
+            }
+
+            foreach (BehaviorFirstHqBreachAccessModifier declaration in declarations)
+            {
+                snapshots.Add(new RunBreachAccessModifier(
+                    source.Id,
+                    attackedServer,
+                    declaration.Delta,
+                    declaration.ReasonKey,
+                    RunBreachAccessModifierSourceKind.FirstHeadquartersBreach));
+            }
+        }
+
+        return snapshots;
+    }
+
+    private static RunRezCostModifier[]? SnapshotRunRezCostModifiers(
+        RunEventBehaviorSpec runEventSpec,
+        CardInstanceId sourceCardId)
+    {
+        if (runEventSpec.RezCostModifiers is not { Count: > 0 } declarations)
+        {
+            return null;
+        }
+
+        return declarations
+            .Select(declaration => new RunRezCostModifier(
+                runEventSpec.DefinitionId,
+                sourceCardId,
+                declaration.Delta,
+                declaration.ReasonKey))
+            .ToArray();
     }
 
     /// <summary>
@@ -913,6 +981,28 @@ public static partial class GameEngine
             ?? throw new ResolutionFailureException($"Run server '{run.AttackedServer}' has no root zone.");
         ZoneState? hiddenZone = GetBreachHiddenZone(working, server);
 
+        // BeginBreach is the authoritative boundary for first-HQ semantics.
+        // Determine firstness before appending the occurrence, then snapshot
+        // active installed sources and consume their FirstX keys while the
+        // same formal-turn facts remain current. The existing
+        // RunBreachAccessModifier arithmetic below remains the sole access
+        // calculation for both legacy and first-HQ terms.
+        if (server.Kind == ServerKind.Headquarters
+            && RecordTurnHqBreach(working, server.Id))
+        {
+            List<RunBreachAccessModifier> firstHqModifiers =
+                SnapshotFirstHqBreachAccessModifiers(working, server.Id);
+            if (firstHqModifiers.Count > 0)
+            {
+                IReadOnlyList<RunBreachAccessModifier> combined =
+                    (run.BreachAccessModifiers ?? [])
+                    .Concat(firstHqModifiers)
+                    .ToArray();
+                run = run.WithBreachAccessModifiers(combined);
+                RecordTurnFirstHqBreachUses(working, firstHqModifiers);
+            }
+        }
+
         // CR 26.03 7.4.1: "The candidates at the beginning of a breach are
         // as follows: a. Each card in the root of the breached server is a
         // candidate. b. If the breached server is HQ, each card in the
@@ -1191,7 +1281,7 @@ public static partial class GameEngine
                 ConsumeRunPass(working, run);
                 break;
             case (ActionKind.RezIce, RunIceParameters rez):
-                ConsumeRunRez(working, run, rez.IceId);
+                ConsumeRunRez(working, run, rez.IceId, rez.CostQuote);
                 break;
             case (ActionKind.BreakSubroutines, RunBreakParameters runBreak):
                 ConsumeRunBreakSubroutines(
@@ -1688,7 +1778,11 @@ public static partial class GameEngine
         }
     }
 
-    private static void ConsumeRunRez(WorkingState working, RunState run, CardInstanceId iceId)
+    private static void ConsumeRunRez(
+        WorkingState working,
+        RunState run,
+        CardInstanceId iceId,
+        CostQuote? suppliedCostQuote)
     {
         if (working.RuntimeCardCatalog is not null)
         {
@@ -1716,14 +1810,22 @@ public static partial class GameEngine
                 + "it cannot be rezzed.");
         }
 
-        PlayerState corp = GetPlayer(working, PlayerSide.Corp);
-        if (corp.Credits < spec.RezCost)
+        CostQuote? expectedCostQuote = CostModifierProjection.IceRez(working, ice, spec.RezCost);
+        if (!CostQuotesEqual(suppliedCostQuote, expectedCostQuote))
         {
             throw new ResolutionFailureException(
-                $"The Corp cannot pay the {spec.RezCost} credit rez cost of approached ICE '{ice.DefinitionId}'.");
+                "The approached ICE rez action does not match the authoritative cost quote.");
         }
 
-        ApplyCreditDelta(working, corp.Id, -spec.RezCost);
+        int effectiveCost = expectedCostQuote?.EffectiveCost ?? spec.RezCost;
+        PlayerState corp = GetPlayer(working, PlayerSide.Corp);
+        if (corp.Credits < effectiveCost)
+        {
+            throw new ResolutionFailureException(
+                $"The Corp cannot pay the {effectiveCost} credit rez cost of approached ICE '{ice.DefinitionId}'.");
+        }
+
+        ApplyCreditDelta(working, corp.Id, -effectiveCost);
         // CR 26.03 8.1.1: a rezzed installed ICE is faceup, so rezzing the
         // approached ICE turns it faceup for both players.
         ReplaceCard(working, new CardInstanceState(
@@ -1827,8 +1929,27 @@ public static partial class GameEngine
 
         // CR 26.03 3.9.5g: the interface ability is usable only at breaker
         // strength greater than or equal to the encountered ice's strength.
-        int breakerStrength = EncounterStrength.Breaker(breakerSpec, run.LingeringEffects, breakerId);
-        int iceStrength = EncounterStrength.Ice(iceSpec, server.Kind);
+        ValueQuote breakerQuote = EncounterStrength.ProjectBreakerQuote(
+                working.BehaviorCatalog,
+                working.Cards,
+                working.Zones,
+                working.RulesState,
+                run,
+                breaker)
+            ?? throw new ResolutionFailureException(
+                $"Breaker '{breakerSpec.DefinitionId}' has no executable strength quote.");
+        ValueQuote iceQuote = EncounterStrength.ProjectIceQuote(
+                working.BehaviorCatalog,
+                working.Cards,
+                working.Zones,
+                working.RulesState,
+                run,
+                ice,
+                server.Kind)
+            ?? throw new ResolutionFailureException(
+                $"Encounter ICE '{iceSpec.DefinitionId}' has no executable strength quote.");
+        int breakerStrength = breakerQuote.EffectiveValue;
+        int iceStrength = iceQuote.EffectiveValue;
         if (breakerStrength < iceStrength)
         {
             throw new ResolutionFailureException(
@@ -1950,6 +2071,35 @@ public static partial class GameEngine
                 + "it cannot be pumped.");
         }
 
+        RunValueAdjustment? dynamicAdjustment = null;
+        if (breakerSpec.DynamicPump is { } dynamicPump)
+        {
+            if (!EncounterStrength.TryResolveDynamicPump(
+                    breakerSpec,
+                    breakerId,
+                    working.Cards,
+                    working.Zones,
+                    working.BehaviorCatalog,
+                    out int dynamicQuantity,
+                    out int dynamicDelta))
+            {
+                throw new ResolutionFailureException(
+                    $"Breaker '{breakerSpec.DefinitionId}' has no active installed cards for its dynamic pump.");
+            }
+
+            dynamicAdjustment = new RunValueAdjustment(
+                BehaviorValueKind.Strength,
+                BehaviorValueSourceKind.Variable,
+                BehaviorValueOperation.Add,
+                breakerId,
+                breakerId,
+                dynamicDelta,
+                dynamicPump.ReasonKey,
+                dynamicPump.VariableKey,
+                quantity: dynamicQuantity,
+                unitDelta: dynamicPump.UnitDelta);
+        }
+
         PlayerState runner = GetPlayer(working, PlayerSide.Runner);
         if (!CanAffordRunCredits(runner, run, breakerSpec.PumpCost))
         {
@@ -1966,7 +2116,8 @@ public static partial class GameEngine
                     effectId,
                     EncounterStrength.IcebreakerPumpBehavior,
                     breakerId,
-                    RunLingeringEffectExpiry.Encounter)).ToArray());
+                    RunLingeringEffectExpiry.Encounter,
+                    dynamicAdjustment)).ToArray());
         Emit(working, EngineEventKinds.BreakerPumped, new BreakerPumpedEventPayload(run.Id, breakerId));
         SetRunTiming(working, pumpedRun.WithTiming(
             RunTimingStep.EncounterPaidWindow,
@@ -2068,13 +2219,18 @@ public static partial class GameEngine
                     + "the approach window cannot be yielded.");
             }
 
-            if (GetPlayer(working, PlayerSide.Corp).Credits >= approachedSpec.RezCost)
+            CostQuote? approachedCostQuote = CostModifierProjection.IceRez(
+                working,
+                approachedIce,
+                approachedSpec.RezCost);
+            int approachedCost = approachedCostQuote?.EffectiveCost ?? approachedSpec.RezCost;
+            if (GetPlayer(working, PlayerSide.Corp).Credits >= approachedCost)
             {
                 actions.Add(new LegalAction(
                     working.Allocator.NextActionId(),
                     ActionKind.RezIce,
                     $"Rez approached ICE {run.CurrentIceId.Value}",
-                    new RunIceParameters(run.CurrentIceId.Value)));
+                    new RunIceParameters(run.CurrentIceId.Value, approachedCostQuote)));
             }
         }
 
@@ -2102,7 +2258,17 @@ public static partial class GameEngine
                     + "the encounter window cannot be yielded.");
             }
 
-            int iceStrength = EncounterStrength.Ice(iceSpec, attackedServer.Kind);
+            ValueQuote iceQuote = EncounterStrength.ProjectIceQuote(
+                    working.BehaviorCatalog,
+                    working.Cards,
+                    working.Zones,
+                    working.RulesState,
+                    run,
+                    encounteredIce,
+                    attackedServer.Kind)
+                ?? throw new ResolutionFailureException(
+                    $"Encounter ICE '{iceSpec.DefinitionId}' has no executable strength quote.");
+            int iceStrength = iceQuote.EffectiveValue;
             int unbrokenCount = run.Encounter.Subroutines.Count(subroutine => !subroutine.Broken);
             PlayerState runner = GetPlayer(working, PlayerSide.Runner);
             long availableCredits = (long)runner.Credits + run.RunCredits;
@@ -2130,8 +2296,18 @@ public static partial class GameEngine
                         breakerSpec.BreakCost);
                     int effectiveBreakCost = breakCostQuote?.EffectiveCost ?? breakerSpec.BreakCost;
 
+                    ValueQuote breakerQuote = EncounterStrength.ProjectBreakerQuote(
+                            working.BehaviorCatalog,
+                            working.Cards,
+                            working.Zones,
+                            working.RulesState,
+                            run,
+                            breaker)
+                        ?? throw new ResolutionFailureException(
+                            $"Breaker '{breakerSpec.DefinitionId}' has no executable strength quote.");
+
                     if (IceInterfaceMatcher.Matches(iceSpec, breakerSpec)
-                        && EncounterStrength.Breaker(breakerSpec, run.LingeringEffects, cardId) >= iceStrength
+                        && breakerQuote.EffectiveValue >= iceStrength
                         && availableCredits >= effectiveBreakCost)
                     {
                         for (int quantity = 1;
@@ -2150,7 +2326,16 @@ public static partial class GameEngine
                         }
                     }
 
-                    if (availableCredits >= breakerSpec.PumpCost)
+                    bool dynamicPumpAvailable = breakerSpec.DynamicPump is null
+                        || EncounterStrength.TryResolveDynamicPump(
+                            breakerSpec,
+                            cardId,
+                            working.Cards,
+                            working.Zones,
+                            working.BehaviorCatalog,
+                            out _,
+                            out _);
+                    if (dynamicPumpAvailable && availableCredits >= breakerSpec.PumpCost)
                     {
                         foreach (int hostedCredits in LegalHostedCreditSplits(runner, run, breakerSpec.PumpCost))
                         {

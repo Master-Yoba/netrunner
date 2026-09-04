@@ -1166,6 +1166,18 @@ public static partial class GameEngine
         BehaviorPaidAbility declaration = GetAbilityDeclaration(definition, frame.AbilityKey);
         CardInstanceState source = GetCard(working, frame.SourceCardId);
 
+        if (declaration.Instructions.Any(static instruction =>
+                instruction.Kind == BehaviorInstructionKind.ModifyEncounteredIceStrength)
+            && !BehaviorEncounterStrengthContracts.TryGetExecutableInstruction(
+                definition,
+                declaration.Key,
+                out _,
+                out _))
+        {
+            throw new ResolutionFailureException(
+                "Encountered-ICE strength instructions must be the exact single instruction of a Runner encounter-paid ability.");
+        }
+
         if (BehaviorRunRules.TryGetFinalStartRun(declaration, out BehaviorRunOperand startRun)
             && !CanStartRunAbility(working, source, definition, startRun, out _))
         {

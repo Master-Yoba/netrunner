@@ -250,36 +250,50 @@ public static class ActionsRegionPresenter
     {
         ArgumentNullException.ThrowIfNull(description);
         ArgumentNullException.ThrowIfNull(parameters);
-        if (kind != ActionKind.InstallCard
-            || parameters is not InstallCardParameters install
-            || (install.RequiredReplacementCardIds.Count == 0
-                && install.SelectedReplacementCardIds.Count == 0))
+        string result = description;
+        if (kind == ActionKind.InstallCard
+            && parameters is InstallCardParameters install
+            && (install.RequiredReplacementCardIds.Count > 0
+                || install.SelectedReplacementCardIds.Count > 0)
+            && !result.Contains("CONSOLE/UNIQUE CLEANUP", StringComparison.Ordinal))
         {
-            return description;
+            // Keep the IDs visible so the control can explain exactly which
+            // physical cards the engine's frozen install choice will clean up.
+            // The reason is intentionally not inferred when both lists are empty.
+            var details = new List<string>(2);
+            if (install.RequiredReplacementCardIds.Count > 0)
+            {
+                details.Add(
+                    $"REQUIRED [{FormatCardIds(install.RequiredReplacementCardIds)}]");
+            }
+
+            if (install.SelectedReplacementCardIds.Count > 0)
+            {
+                details.Add(
+                    $"SELECTED [{FormatCardIds(install.SelectedReplacementCardIds)}]");
+            }
+
+            result = $"{result} · CONSOLE/UNIQUE CLEANUP · {string.Join(" · ", details)}";
         }
 
-        // Keep the IDs visible so the control can explain exactly which
-        // physical cards the engine's frozen install choice will clean up.
-        // The reason is intentionally not inferred when both lists are empty.
-        if (description.Contains("CONSOLE/UNIQUE CLEANUP", StringComparison.Ordinal))
+        CostQuote? quote = parameters switch
         {
-            return description;
+            RezCardParameters rez => rez.CostQuote,
+            RunIceParameters runIce => runIce.CostQuote,
+            InstallCardParameters installParameters => installParameters.CostQuote,
+            RunBreakParameters runBreak => runBreak.CostQuote,
+            _ => null,
+        };
+        if (quote is not null)
+        {
+            string costSummary = CostQuotePresenter.Describe(kind, parameters, quote);
+            if (!result.Contains(costSummary, StringComparison.Ordinal))
+            {
+                result = $"{result} · {costSummary}";
+            }
         }
 
-        var details = new List<string>(2);
-        if (install.RequiredReplacementCardIds.Count > 0)
-        {
-            details.Add(
-                $"REQUIRED [{FormatCardIds(install.RequiredReplacementCardIds)}]");
-        }
-
-        if (install.SelectedReplacementCardIds.Count > 0)
-        {
-            details.Add(
-                $"SELECTED [{FormatCardIds(install.SelectedReplacementCardIds)}]");
-        }
-
-        return $"{description} · CONSOLE/UNIQUE CLEANUP · {string.Join(" · ", details)}";
+        return result;
     }
 
     public static LegalActionViewModel Describe(LegalActionViewModel action)
@@ -358,15 +372,25 @@ public static class ActionsRegionPresenter
             [
                 ActionKind.GainCredit,
                 ActionKind.DrawCard,
+                ActionKind.InstallCard,
                 ActionKind.ChooseBehavior,
             ],
             DecisionKind.TurnDiscard => [ActionKind.ChooseCard],
             DecisionKind.BehaviorChoice => [ActionKind.ChooseBehavior],
+            DecisionKind.InstallChoice => [ActionKind.InstallCard],
+            DecisionKind.InterruptChoice =>
+            [
+                ActionKind.UsePrevention,
+                ActionKind.DeclinePrevention,
+                ActionKind.UseReplacement,
+                ActionKind.DeclineReplacement,
+            ],
             DecisionKind.ChooseCard => [ActionKind.ChooseCard],
             DecisionKind.ChooseNumber => [ActionKind.ChooseNumber],
             DecisionKind.RunTiming =>
             [
                 ActionKind.PassPriority,
+                ActionKind.RezCard,
                 ActionKind.RezIce,
                 ActionKind.BreakSubroutines,
                 ActionKind.PumpBreaker,
@@ -399,6 +423,8 @@ public static class ActionsRegionPresenter
             DecisionKind.TurnAction => "BASIC ACTIONS ISSUED BY CORE",
             DecisionKind.TurnDiscard => "FORCED DISCARD",
             DecisionKind.BehaviorChoice => "BEHAVIOR CHOICE ISSUED BY CORE",
+            DecisionKind.InstallChoice => "INSTALL CHOICE ISSUED BY CORE",
+            DecisionKind.InterruptChoice => "INTERRUPT CHOICE ISSUED BY CORE",
             DecisionKind.RunTiming => "RUN WINDOW ACTIONS ISSUED BY CORE",
             _ => "ISSUED ACTIONS",
         };
@@ -431,6 +457,8 @@ public static class ActionsRegionPresenter
     public static string? GetTargetCardId(ActionParameters parameters) => parameters switch
     {
         CardChoiceParameters value => value.CardId.Value,
+        InstallCardParameters value => value.CardId.Value,
+        RezCardParameters value => value.CardId.Value,
         RunIceParameters value => value.IceId.Value,
         RunBreakerParameters value => value.BreakerId.Value,
         RunBreakParameters value => value.BreakerId.Value,
@@ -643,6 +671,11 @@ public static class CardZoomRegionPresenter
         }
 
         lines.Add($"Status · {(card.Rezzed ? "REZZED" : card.IsKnown ? "KNOWN" : "FACE-DOWN")}");
+        if (card.FirstXUseCue is { } firstXUseCue)
+        {
+            lines.Add(firstXUseCue);
+        }
+
         if (card.Counters.Count > 0)
         {
             lines.Add(string.Join(" · ", card.Counters));

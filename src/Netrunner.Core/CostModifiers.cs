@@ -4,14 +4,167 @@ using System.Text.Json.Serialization;
 namespace Netrunner.Core;
 
 /// <summary>
-/// The two self-cost values that the first conditional-cost slice can
-/// modify.  Keeping the value typed prevents a card from silently changing a
-/// different cost merely because it happens to be in the same timing window.
+/// Typed credit-cost values that a behavior declaration may modify. Keeping
+/// the value typed prevents a card from silently changing a different cost
+/// merely because it happens to be in the same timing window.
 /// </summary>
 public enum BehaviorCostModifierKind
 {
     RunnerInstallCreditCost,
     IcebreakerBreakCreditCost,
+    IceRezCreditCost,
+}
+
+/// <summary>
+/// Typed declaration for an installed source that reduces the first Runner
+/// program install of each formal turn. Deltas are signed and therefore must
+/// be negative; the source identity is supplied by the engine when a quote is
+/// projected.
+/// </summary>
+public sealed record BehaviorFirstProgramInstallCostModifier
+{
+    [JsonConstructor]
+    public BehaviorFirstProgramInstallCostModifier(int delta, string reasonKey)
+    {
+        if (delta >= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(delta),
+                "A first-program install cost modifier must reduce the cost.");
+        }
+
+        if (!StableIdentifier.TryValidate(reasonKey))
+        {
+            throw new ArgumentException(
+                "A first-program install cost modifier reason key must be a stable identifier.",
+                nameof(reasonKey));
+        }
+
+        Delta = delta;
+        ReasonKey = reasonKey;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Delta { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string ReasonKey { get; private set; }
+}
+
+/// <summary>
+/// Typed declaration for an installed Runner source that grants additional
+/// hidden HQ access on the first HQ breach of each formal turn. Deltas are
+/// positive because the declaration contributes access count rather than a
+/// cost adjustment.
+/// </summary>
+public sealed record BehaviorFirstHqBreachAccessModifier
+{
+    [JsonConstructor]
+    public BehaviorFirstHqBreachAccessModifier(int delta, string reasonKey)
+    {
+        if (delta <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(delta),
+                "A first-HQ-breach access modifier must increase access.");
+        }
+
+        if (!StableIdentifier.TryValidate(reasonKey))
+        {
+            throw new ArgumentException(
+                "A first-HQ-breach access modifier reason key must be a stable identifier.",
+                nameof(reasonKey));
+        }
+
+        Delta = delta;
+        ReasonKey = reasonKey;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Delta { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string ReasonKey { get; private set; }
+}
+
+/// <summary>
+/// Typed declaration for an installed source that replaces the first real
+/// basic draw action of each formal turn with a draw of the declared count.
+/// The declaration is data-only; the source card and use ledger are supplied
+/// by the engine when the draw occurrence is materialized.
+/// </summary>
+public sealed record BehaviorFirstBasicDrawReplacement
+{
+    [JsonConstructor]
+    public BehaviorFirstBasicDrawReplacement(int drawCount, string reasonKey)
+    {
+        if (drawCount <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(drawCount),
+                "A first-basic-draw replacement count must be positive.");
+        }
+
+        if (!StableIdentifier.TryValidate(reasonKey))
+        {
+            throw new ArgumentException(
+                "A first-basic-draw replacement reason key must be a stable identifier.",
+                nameof(reasonKey));
+        }
+
+        DrawCount = drawCount;
+        ReasonKey = reasonKey;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int DrawCount { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string ReasonKey { get; private set; }
+}
+
+/// <summary>
+/// A typed run-source declaration for a credit adjustment to ICE rez costs.
+/// The declaration is copied onto the immutable run state when a run event
+/// starts a run; it is never re-read from the physical source while the run
+/// is in progress.
+/// </summary>
+public sealed record BehaviorRunRezCostModifier
+{
+    [JsonConstructor]
+    public BehaviorRunRezCostModifier(int delta, string reasonKey)
+    {
+        if (delta == 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(delta),
+                "A run rez-cost modifier delta must be nonzero.");
+        }
+
+        if (!StableIdentifier.TryValidate(reasonKey))
+        {
+            throw new ArgumentException(
+                "A run rez-cost modifier reason key must be a stable identifier.",
+                nameof(reasonKey));
+        }
+
+        Delta = delta;
+        ReasonKey = reasonKey;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Delta { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string ReasonKey { get; private set; }
 }
 
 /// <summary>
@@ -31,6 +184,13 @@ public sealed record BehaviorCostModifier
         if (!Enum.IsDefined(kind))
         {
             throw new ArgumentOutOfRangeException(nameof(kind));
+        }
+
+        if (kind == BehaviorCostModifierKind.IceRezCreditCost)
+        {
+            throw new ArgumentException(
+                "ICE rez-cost modifiers are run-scoped declarations on RunEventBehaviorSpec.",
+                nameof(kind));
         }
 
         if (delta == 0)
@@ -255,7 +415,8 @@ public static partial class GameEngine
         IBehaviorCatalog behaviorCatalog,
         CardInstanceId sourceCardId,
         BehaviorCostModifierKind kind,
-        int baseCost)
+        int baseCost,
+        IRuntimeCardCatalog? runtimeCardCatalog = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(behaviorCatalog);
@@ -265,11 +426,32 @@ public static partial class GameEngine
             return null;
         }
 
-        return CostModifierProjection.ForSource(
-            WorkingState.From(state, behaviorCatalog),
-            source,
-            kind,
-            baseCost);
+        WorkingState working = WorkingState.From(state, behaviorCatalog, runtimeCardCatalog);
+        return kind == BehaviorCostModifierKind.RunnerInstallCreditCost
+            ? CostModifierProjection.RunnerInstall(working, source, baseCost)
+            : CostModifierProjection.ForSource(working, source, kind, baseCost);
+    }
+
+    /// <summary>
+    /// Projects the authoritative run-scoped ICE rez quote for an installed
+    /// target. Reducers and invariant reconstruction use this boundary so
+    /// they cannot reimplement the run adjustment arithmetic independently.
+    /// </summary>
+    internal static CostQuote? ProjectIceRezQuote(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        CardInstanceId targetCardId,
+        int baseCost)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(behaviorCatalog);
+        CardInstanceState? target = state.Cards.FirstOrDefault(card => card.Id == targetCardId);
+        return target is null
+            ? null
+            : CostModifierProjection.IceRez(
+                WorkingState.From(state, behaviorCatalog),
+                target,
+                baseCost);
     }
 
     private static class CostModifierProjection
@@ -277,10 +459,120 @@ public static partial class GameEngine
         internal static CostQuote? RunnerInstall(
             WorkingState working,
             CardInstanceState source,
-            int baseCost) =>
-            IsInZone(working, source, ZoneKind.RunnerGrip)
-                ? ForSource(working, source, BehaviorCostModifierKind.RunnerInstallCreditCost, baseCost)
-                : null;
+            int baseCost)
+        {
+            ArgumentNullException.ThrowIfNull(working);
+            ArgumentNullException.ThrowIfNull(source);
+            ArgumentOutOfRangeException.ThrowIfNegative(baseCost);
+
+            // The existing self-cost path is deliberately limited to a card
+            // being played from Grip. First-program discounts are a separate
+            // installed-source projection and may apply to a behavior install
+            // whose card is selected from Stack.
+            List<CostAdjustment> adjustments = [];
+            if (IsInZone(working, source, ZoneKind.RunnerGrip)
+                && ForSource(
+                    working,
+                    source,
+                    BehaviorCostModifierKind.RunnerInstallCreditCost,
+                    baseCost) is { } selfQuote)
+            {
+                adjustments.AddRange(selfQuote.Adjustments);
+            }
+
+            adjustments.AddRange(FirstProgramInstallAdjustments(working, source));
+            return adjustments.Count == 0
+                ? null
+                : new CostQuote(baseCost, adjustments);
+        }
+
+        /// <summary>
+        /// Returns every currently active installed source that has not yet
+        /// consumed its first-program-install declaration. The global
+        /// occurrence ledger is checked before any source is considered, so
+        /// multiple sources stack on exactly one program install and cannot
+        /// re-arm merely because a source's own key is absent.
+        /// </summary>
+        internal static List<CostAdjustment> FirstProgramInstallAdjustments(
+            WorkingState working,
+            CardInstanceState target)
+        {
+            if (!IsRunnerProgram(working, target)
+                || !IsFirstProgramInstallWindow(working))
+            {
+                return [];
+            }
+
+            TurnFactsState facts = working.Turn.History!.ThisTurn(working.Turn.ActiveSide)!;
+            var adjustments = new List<CostAdjustment>();
+            foreach (CardInstanceState installedSource in ActiveRunnerInstalledCards(working))
+            {
+                if (!working.BehaviorCatalog.TryGet(
+                        installedSource.DefinitionId,
+                        out CardBehaviorDefinition? definition)
+                    || definition.FirstProgramInstallCostModifiers is not { Count: > 0 } declarations)
+                {
+                    continue;
+                }
+
+                foreach (BehaviorFirstProgramInstallCostModifier declaration in declarations)
+                {
+                    if (facts.GetFirstXCount(installedSource.Id, declaration.ReasonKey) != 0)
+                    {
+                        continue;
+                    }
+
+                    adjustments.Add(new CostAdjustment(
+                        BehaviorCostModifierKind.RunnerInstallCreditCost,
+                        declaration.Delta,
+                        declaration.ReasonKey,
+                        installedSource.DefinitionId,
+                        installedSource.Id));
+                }
+            }
+
+            return adjustments;
+        }
+
+        private static bool IsRunnerProgram(WorkingState working, CardInstanceState card) =>
+            card.OwnerSide == PlayerSide.Runner
+            && working.RuntimeCardCatalog?.TryGet(card.DefinitionId, out CardRuntimeSpec? spec) == true
+            && spec.Side == PlayerSide.Runner
+            && spec.CardClass == RuntimeCardClass.Program;
+
+        private static IEnumerable<CardInstanceState> ActiveRunnerInstalledCards(WorkingState working)
+        {
+            ZoneState? rig = working.Zones.FirstOrDefault(zone =>
+                zone.Kind == ZoneKind.RunnerRig
+                && zone.OwnerSide == PlayerSide.Runner
+                && zone.ServerId is null);
+            if (rig is null)
+            {
+                return [];
+            }
+
+            return rig.CardIds
+                .Select(cardId => working.Cards.FirstOrDefault(card => card.Id == cardId))
+                .Where(card => card is not null
+                    && card.OwnerSide == PlayerSide.Runner
+                    && card.FaceUp)
+                .Cast<CardInstanceState>();
+        }
+
+        private static bool IsFirstProgramInstallWindow(WorkingState working)
+        {
+            if (working.Turn.ActiveSide is not (PlayerSide.Corp or PlayerSide.Runner)
+                || working.Turn.Phase is TurnPhase.Setup or TurnPhase.GameOver
+                || working.Turn.History?.ThisTurn(working.Turn.ActiveSide) is not { } facts
+                || facts.Side != working.Turn.ActiveSide
+                || facts.TurnNumber != working.Turn.TurnNumber
+                || !facts.TurnBegan)
+            {
+                return false;
+            }
+
+            return facts.ProgramInstallOccurrenceIds.Count == 0;
+        }
 
         internal static CostQuote? IcebreakerBreak(
             WorkingState working,
@@ -290,6 +582,48 @@ public static partial class GameEngine
                 && source.FaceUp
                 ? ForSource(working, source, BehaviorCostModifierKind.IcebreakerBreakCreditCost, baseCost)
                 : null;
+
+        /// <summary>
+        /// Projects the immutable run-start ICE rez adjustments against one
+        /// physically installed Corp ICE. The run state is the sole source
+        /// of these adjustments; the initiating card's current zone and
+        /// definition are not consulted after the snapshot was created.
+        /// </summary>
+        internal static CostQuote? IceRez(
+            WorkingState working,
+            CardInstanceState target,
+            int baseCost)
+        {
+            ArgumentNullException.ThrowIfNull(working);
+            ArgumentNullException.ThrowIfNull(target);
+            ArgumentOutOfRangeException.ThrowIfNegative(baseCost);
+
+            if (working.RunState is not { RezCostModifiers: { Count: > 0 } modifiers }
+                || target.OwnerSide != PlayerSide.Corp
+                || target.Rezzed)
+            {
+                return null;
+            }
+
+            ZoneState? zone = working.Zones.FirstOrDefault(candidate => candidate.Id == target.ZoneId);
+            if (zone is null
+                || zone.Kind != ZoneKind.ServerIce
+                || zone.OwnerSide != PlayerSide.Corp
+                || zone.ServerId is null
+                || !zone.CardIds.Contains(target.Id))
+            {
+                return null;
+            }
+
+            CostAdjustment[] adjustments = modifiers
+                .Select(static modifier => modifier.ToCostAdjustment())
+                .OrderBy(static adjustment => adjustment.SourceDefinitionId?.Value, StringComparer.Ordinal)
+                .ThenBy(static adjustment => adjustment.SourceCardId?.Value, StringComparer.Ordinal)
+                .ThenBy(static adjustment => adjustment.ReasonKey, StringComparer.Ordinal)
+                .ThenBy(static adjustment => adjustment.Delta)
+                .ToArray();
+            return new CostQuote(baseCost, adjustments);
+        }
 
         private static bool IsInZone(
             WorkingState working,

@@ -14,11 +14,24 @@ public static partial class GameEngine
     internal static IReadOnlyList<RezCardParameters> MaterializeRezCardParameters(
         GameState state,
         IRuntimeCardCatalog runtimeCardCatalog)
+        => MaterializeRezCardParameters(state, BehaviorCatalog.Empty, runtimeCardCatalog);
+
+    /// <summary>
+    /// Re-materializes runtime rez payloads with both injected catalogs. The
+    /// behavior catalog is required for run-scoped cost snapshots; the
+    /// two-argument overload remains the compatibility path for unmodified
+    /// legacy callers.
+    /// </summary>
+    internal static IReadOnlyList<RezCardParameters> MaterializeRezCardParameters(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog runtimeCardCatalog)
     {
         ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(behaviorCatalog);
         ArgumentNullException.ThrowIfNull(runtimeCardCatalog);
         return MaterializeRezCardParameters(
-            WorkingState.From(state, BehaviorCatalog.Empty, runtimeCardCatalog));
+            WorkingState.From(state, behaviorCatalog, runtimeCardCatalog));
     }
 
     private static List<RezCardParameters> MaterializeRezCardParameters(WorkingState working)
@@ -122,10 +135,15 @@ public static partial class GameEngine
                     && currentIce.ZoneId == attackedIceZone.Id
                     && currentIce.OwnerSide == PlayerSide.Corp
                     && !currentIce.Rezzed
-                    && TryGetRezCost(working, currentIce, RuntimeCardClass.Ice, out int iceCost)
+                    && TryGetRezCostQuote(
+                        working,
+                        currentIce,
+                        RuntimeCardClass.Ice,
+                        out int iceCost,
+                        out CostQuote? iceQuote)
                     && corp.Credits >= iceCost)
                 {
-                    materialized.Add(new RezCardParameters(currentIce.Id, iceCost));
+                    materialized.Add(new RezCardParameters(currentIce.Id, iceCost, iceQuote));
                 }
             }
 
@@ -207,6 +225,27 @@ public static partial class GameEngine
         return true;
     }
 
+    private static bool TryGetRezCostQuote(
+        WorkingState working,
+        CardInstanceState card,
+        RuntimeCardClass expectedClass,
+        out int effectiveCost,
+        out CostQuote? quote)
+    {
+        quote = null;
+        effectiveCost = 0;
+        if (!TryGetRezCost(working, card, expectedClass, out int baseCost))
+        {
+            return false;
+        }
+
+        quote = expectedClass == RuntimeCardClass.Ice
+            ? CostModifierProjection.IceRez(working, card, baseCost)
+            : null;
+        effectiveCost = quote?.EffectiveCost ?? baseCost;
+        return true;
+    }
+
     private static void AddRezCardActions(WorkingState working, List<LegalAction> actions)
     {
         foreach (RezCardParameters parameters in MaterializeRezCardParameters(working))
@@ -224,7 +263,8 @@ public static partial class GameEngine
         IReadOnlyList<RezCardParameters> materialized = MaterializeRezCardParameters(working);
         RezCardParameters? issued = materialized.FirstOrDefault(candidate =>
             candidate.CardId == parameters.CardId
-            && candidate.CreditCost == parameters.CreditCost);
+            && candidate.CreditCost == parameters.CreditCost
+            && CostQuotesEqual(candidate.CostQuote, parameters.CostQuote));
         if (issued is null)
         {
             throw new ResolutionFailureException(
@@ -241,9 +281,10 @@ public static partial class GameEngine
             : null;
         RunState? runParent = isTurnRez ? null : working.RunState;
         PlayerState corp = GetPlayer(working, PlayerSide.Corp);
-        if (parameters.CreditCost > 0)
+        int effectiveCost = issued.CreditCost;
+        if (effectiveCost > 0)
         {
-            ApplyCreditDelta(working, corp.Id, -parameters.CreditCost);
+            ApplyCreditDelta(working, corp.Id, -effectiveCost);
         }
 
         ReplaceCard(working, new CardInstanceState(
@@ -256,7 +297,7 @@ public static partial class GameEngine
             card.AdvancementCounters));
         Emit(working, EngineEventKinds.CardRezzed, new CardRezzedEventPayload(
             parameters.CardId,
-            parameters.CreditCost));
+            effectiveCost));
         TrashCorpUniqueRezConflicts(working, card.Id);
 
         if (turnParent is { } frame)

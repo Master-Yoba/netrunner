@@ -60,6 +60,7 @@ public partial class Main
 			$"RUN STATUS · {run.Phase} · {run.Step} · run pool {run.RunCredits}",
 			15,
 			Warning));
+		AddBreachAccessModifierCues(run);
 		_focusPresentation.AddChild(MakeWrappedLabel(
 			"The current timing step is owned by Core. Legal actions below are the only actions that can mutate the run.",
 			12,
@@ -94,6 +95,7 @@ public partial class Main
 			$"ENCOUNTER FOCUS · {iceTitle} · {encounter.Status.ToString().ToUpperInvariant()}",
 			17,
 			Warning));
+		AddBreachAccessModifierCues(run);
 
 		HBoxContainer encounterRow = new();
 		encounterRow.AddThemeConstantOverride("separation", 10);
@@ -101,13 +103,14 @@ public partial class Main
 		{
 			TextCardControl iceCard = MakeCard(ice);
 			iceCard.CustomMinimumSize = new Vector2(172, 122);
+			iceCard.SetEncounterStrength(encounter.StrengthBreakdown);
 			encounterRow.AddChild(iceCard);
 		}
 
 		VBoxContainer state = new();
 		state.AddThemeConstantOverride("separation", 3);
 		state.AddChild(MakeLabel(
-			$"ICE STRENGTH · {(encounter.EffectiveStrength is { } strength ? strength.ToString(CultureInfo.InvariantCulture) : "UNKNOWN")}",
+			$"ICE STRENGTH · {encounter.StrengthSummary ?? (encounter.EffectiveStrength is { } strength ? strength.ToString(CultureInfo.InvariantCulture) : "UNKNOWN")}",
 			14,
 			Colors.White));
 		state.AddChild(MakeLabel(
@@ -116,11 +119,8 @@ public partial class Main
 			Accent));
 		foreach (EncounterBreakerViewModel breaker in encounter.Breakers)
 		{
-			string pumpCue = breaker.EffectiveStrength == breaker.PrintedStrength
-				? string.Empty
-				: $" · PRINTED {breaker.PrintedStrength} + ENCOUNTER PUMP";
 			state.AddChild(MakeLabel(
-				$"BREAKER · {breaker.Title} · CURRENT STR {breaker.EffectiveStrength}{pumpCue}",
+				$"BREAKER · {breaker.Title} · {breaker.StrengthSummary ?? $"CURRENT STR {breaker.EffectiveStrength}"}",
 				11,
 				encounter.EffectiveStrength is { } iceStrength
 					&& breaker.EffectiveStrength < iceStrength ? Warning : Accent));
@@ -164,6 +164,7 @@ public partial class Main
 			$"ACCESS FOCUS · {run.AttackedServerId} · {access.State.ToString().ToUpperInvariant()}",
 			17,
 			Accent));
+		AddBreachAccessModifierCues(run);
 		_focusPresentation.AddChild(MakeLabel(
 			$"Candidates: {access.Candidates.Count} · chosen: {access.Chosen.Count} · accessed: {access.Accessed.Count}"
 				+ (access.RandomAccessLimit > 0 ? $" · random access limit {access.RandomAccessLimit}" : string.Empty),
@@ -216,6 +217,19 @@ public partial class Main
 				: $"ACCESS ACTIONS · {actionCue}",
 			12,
 			Colors.White));
+	}
+
+	private void AddBreachAccessModifierCues(RunFocusViewModel run)
+	{
+		if (run.BreachAccessNotes.Count == 0)
+		{
+			return;
+		}
+
+		_focusPresentation.AddChild(MakeWrappedLabel(
+			$"BREACH ACCESS · {string.Join(" · ", run.BreachAccessNotes)}",
+			11,
+			Warning));
 	}
 
 	private void AddRunPoolCueRegion(RunFocusViewModel run, string usage)

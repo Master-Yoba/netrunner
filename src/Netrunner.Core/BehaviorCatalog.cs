@@ -659,7 +659,10 @@ public sealed record BehaviorInstruction
             throw new ArgumentOutOfRangeException(nameof(kind));
         }
 
-        ArgumentOutOfRangeException.ThrowIfNegative(amount);
+        if (kind != BehaviorInstructionKind.ModifyEncounteredIceStrength)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(amount);
+        }
 
         Kind = kind;
         Amount = amount;
@@ -755,7 +758,43 @@ public sealed record BehaviorInstruction
                     nameof(Amount));
             }
         }
-        else if (RunOperand is not null)
+
+        if (Kind == BehaviorInstructionKind.ModifyEncounteredIceStrength)
+        {
+            if (Amount == 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(Amount),
+                    "Encountered-ICE strength modifiers require a nonzero amount.");
+            }
+
+            if (!StableIdentifier.TryValidate(Argument))
+            {
+                throw new ArgumentException(
+                    "Encountered-ICE strength modifiers require a stable reason key.",
+                    nameof(Argument));
+            }
+
+            if (Target is not null
+                || SourceZone is not null
+                || DestinationZone is not null
+                || Filter is not null
+                || Condition is not null
+                || Choice is not null
+                || Branch is not null
+                || Optional
+                || SpendRestriction is not null
+                || RunOperand is not null
+                || AmountOperand is not null)
+            {
+                throw new ArgumentException(
+                    "Encountered-ICE strength modifiers carry only a signed amount and reason key.",
+                    nameof(Argument));
+            }
+
+            return;
+        }
+        if (RunOperand is not null && Kind != BehaviorInstructionKind.StartRun)
         {
             throw new ArgumentException(
                 "A typed run operand is valid only for StartRun instructions.",
@@ -1163,6 +1202,7 @@ public enum BehaviorInstructionKind
     TakeHostedCredits,
     TakeUpToHostedCredits,
     TakeAllHostedCredits,
+    ModifyEncounteredIceStrength,
 
     // Short aliases keep the contract pleasant for callers while the longer
     // names remain unambiguous in serialized/fingerprint output.
@@ -1460,7 +1500,11 @@ public sealed class CardBehaviorDefinition
         IReadOnlyList<BehaviorTrigger>? triggers = null,
         string? extensionHandlerId = null,
         IReadOnlyList<BehaviorPaidAbility>? paidAbilities = null,
-        IReadOnlyList<BehaviorCostModifier>? costModifiers = null)
+        IReadOnlyList<BehaviorCostModifier>? costModifiers = null,
+        IReadOnlyList<BehaviorValueModifier>? valueModifiers = null,
+        IReadOnlyList<BehaviorFirstProgramInstallCostModifier>? firstProgramInstallCostModifiers = null,
+        IReadOnlyList<BehaviorFirstHqBreachAccessModifier>? firstHqBreachAccessModifiers = null,
+        IReadOnlyList<BehaviorFirstBasicDrawReplacement>? firstBasicDrawReplacements = null)
     {
         DefinitionId = definitionId;
         if (!Enum.IsDefined(controller))
@@ -1495,6 +1539,10 @@ public sealed class CardBehaviorDefinition
 
         PaidAbilities = FreezePaidAbilities(paidAbilities);
         CostModifiers = FreezeCostModifiers(costModifiers);
+        ValueModifiers = FreezeValueModifiers(valueModifiers);
+        FirstProgramInstallCostModifiers = FreezeFirstProgramInstallCostModifiers(firstProgramInstallCostModifiers);
+        FirstHqBreachAccessModifiers = FreezeFirstHqBreachAccessModifiers(firstHqBreachAccessModifiers);
+        FirstBasicDrawReplacements = FreezeFirstBasicDrawReplacements(firstBasicDrawReplacements);
         if (!string.IsNullOrWhiteSpace(extensionHandlerId))
         {
             ExtensionHandlerId = extensionHandlerId;
@@ -1533,6 +1581,38 @@ public sealed class CardBehaviorDefinition
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<BehaviorCostModifier>? CostModifiers { get; }
+
+    /// <summary>
+    /// Generic calculated-value declarations owned by this physical card's
+    /// behavior definition. Null is preserved for legacy definitions so their
+    /// JSON and compatibility fingerprints remain stable.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<BehaviorValueModifier>? ValueModifiers { get; }
+
+    /// <summary>
+    /// Optional installed-source declarations that reduce the first Runner
+    /// program install in the active formal turn. Null preserves the legacy
+    /// generic-definition JSON shape and fingerprint input.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<BehaviorFirstProgramInstallCostModifier>? FirstProgramInstallCostModifiers { get; }
+
+    /// <summary>
+    /// Optional installed-source declarations that add access on the first HQ
+    /// breach of the active formal turn. Null preserves the legacy generic
+    /// definition JSON shape and fingerprint input.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<BehaviorFirstHqBreachAccessModifier>? FirstHqBreachAccessModifiers { get; }
+
+    /// <summary>
+    /// Optional installed-source declarations that replace the first real
+    /// basic draw action of the formal turn. Null preserves the legacy generic
+    /// definition JSON shape and fingerprint input.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<BehaviorFirstBasicDrawReplacement>? FirstBasicDrawReplacements { get; }
 
     private static ReadOnlyCollection<T> Freeze<T>(IEnumerable<T>? values)
         where T : class
@@ -1593,6 +1673,123 @@ public sealed class CardBehaviorDefinition
         }
 
         return new ReadOnlyCollection<BehaviorCostModifier>(copy);
+    }
+
+    private static ReadOnlyCollection<BehaviorValueModifier>? FreezeValueModifiers(
+        IEnumerable<BehaviorValueModifier>? valueModifiers)
+    {
+        if (valueModifiers is null)
+        {
+            return null;
+        }
+
+        BehaviorValueModifier[] copy = valueModifiers.ToArray();
+        if (copy.Length == 0)
+        {
+            return null;
+        }
+
+        if (copy.Any(static value => value is null))
+        {
+            throw new ArgumentException(
+                "Value modifier declarations must not contain null entries.",
+                nameof(valueModifiers));
+        }
+
+        return new ReadOnlyCollection<BehaviorValueModifier>(copy);
+    }
+
+    private static ReadOnlyCollection<BehaviorFirstProgramInstallCostModifier>? FreezeFirstProgramInstallCostModifiers(
+        IEnumerable<BehaviorFirstProgramInstallCostModifier>? modifiers)
+    {
+        if (modifiers is null)
+        {
+            return null;
+        }
+
+        BehaviorFirstProgramInstallCostModifier[] copy = modifiers.ToArray();
+        if (copy.Length == 0)
+        {
+            return null;
+        }
+
+        if (copy.Any(static value => value is null))
+        {
+            throw new ArgumentException(
+                "First-program install cost modifier declarations must not contain null entries.",
+                nameof(modifiers));
+        }
+
+        if (copy.Select(static modifier => modifier.ReasonKey).Distinct(StringComparer.Ordinal).Count() != copy.Length)
+        {
+            throw new ArgumentException(
+                "First-program install cost modifier declarations must use a unique reason key per source.",
+                nameof(modifiers));
+        }
+
+        return new ReadOnlyCollection<BehaviorFirstProgramInstallCostModifier>(copy);
+    }
+
+    private static ReadOnlyCollection<BehaviorFirstHqBreachAccessModifier>? FreezeFirstHqBreachAccessModifiers(
+        IEnumerable<BehaviorFirstHqBreachAccessModifier>? modifiers)
+    {
+        if (modifiers is null)
+        {
+            return null;
+        }
+
+        BehaviorFirstHqBreachAccessModifier[] copy = modifiers.ToArray();
+        if (copy.Length == 0)
+        {
+            return null;
+        }
+
+        if (copy.Any(static value => value is null))
+        {
+            throw new ArgumentException(
+                "First-HQ-breach access modifier declarations must not contain null entries.",
+                nameof(modifiers));
+        }
+
+        if (copy.Select(static modifier => modifier.ReasonKey).Distinct(StringComparer.Ordinal).Count() != copy.Length)
+        {
+            throw new ArgumentException(
+                "First-HQ-breach access modifier declarations must use a unique reason key per source.",
+                nameof(modifiers));
+        }
+
+        return new ReadOnlyCollection<BehaviorFirstHqBreachAccessModifier>(copy);
+    }
+
+    private static ReadOnlyCollection<BehaviorFirstBasicDrawReplacement>? FreezeFirstBasicDrawReplacements(
+        IEnumerable<BehaviorFirstBasicDrawReplacement>? replacements)
+    {
+        if (replacements is null)
+        {
+            return null;
+        }
+
+        BehaviorFirstBasicDrawReplacement[] copy = replacements.ToArray();
+        if (copy.Length == 0)
+        {
+            return null;
+        }
+
+        if (copy.Any(static value => value is null))
+        {
+            throw new ArgumentException(
+                "First-basic-draw replacement declarations must not contain null entries.",
+                nameof(replacements));
+        }
+
+        if (copy.Select(static replacement => replacement.ReasonKey).Distinct(StringComparer.Ordinal).Count() != copy.Length)
+        {
+            throw new ArgumentException(
+                "First-basic-draw replacement declarations must use a unique reason key per source.",
+                nameof(replacements));
+        }
+
+        return new ReadOnlyCollection<BehaviorFirstBasicDrawReplacement>(copy);
     }
 }
 
@@ -2100,19 +2297,32 @@ internal static class BehaviorCatalogStructure
                 && a.IceType == b.IceType
                 && a.RezCost == b.RezCost
                 && SequenceEquals(a.Subroutines, b.Subroutines)
-                && SequenceEquals(a.StrengthModifiers, b.StrengthModifiers),
+                && SequenceEquals(a.StrengthModifiers, b.StrengthModifiers)
+                && BehaviorContractStructure.SequenceEquals(
+                    a.ValueModifiers ?? [],
+                    b.ValueModifiers ?? [],
+                    BehaviorContractStructure.AreEqual),
             (IcebreakerBehaviorSpec a, IcebreakerBehaviorSpec b) => a.DefinitionId == b.DefinitionId
                 && a.BaseStrength == b.BaseStrength
                 && a.InterfaceType == b.InterfaceType
                 && a.BreakCost == b.BreakCost
                 && a.BreakLimit == b.BreakLimit
                 && a.PumpCost == b.PumpCost
-                && a.PumpStrength == b.PumpStrength,
+                && a.PumpStrength == b.PumpStrength
+                && BehaviorContractStructure.AreEqual(a.DynamicPump, b.DynamicPump)
+                && BehaviorContractStructure.SequenceEquals(
+                    a.ValueModifiers ?? [],
+                    b.ValueModifiers ?? [],
+                    BehaviorContractStructure.AreEqual),
             (AssetBehaviorSpec a, AssetBehaviorSpec b) => a.DefinitionId == b.DefinitionId && a.TrashCost == b.TrashCost,
             (AgendaBehaviorSpec a, AgendaBehaviorSpec b) => a.DefinitionId == b.DefinitionId && a.AgendaPoints == b.AgendaPoints,
             (RunEventBehaviorSpec a, RunEventBehaviorSpec b) => a.DefinitionId == b.DefinitionId
                 && a.Cost == b.Cost
-                && a.HostedCredits == b.HostedCredits,
+                && a.HostedCredits == b.HostedCredits
+                && BehaviorContractStructure.SequenceEquals(
+                    a.RezCostModifiers ?? [],
+                    b.RezCostModifiers ?? [],
+                    static (left, right) => left.Equals(right)),
             (CardBehaviorDefinition a, CardBehaviorDefinition b) => a.DefinitionId == b.DefinitionId
                 && a.Controller == b.Controller
                 && SequenceEquals(a.Costs, b.Costs)
@@ -2140,6 +2350,22 @@ internal static class BehaviorCatalogStructure
                 && BehaviorContractStructure.SequenceEquals(
                     a.CostModifiers ?? [],
                     b.CostModifiers ?? [],
+                    static (left, right) => left.Equals(right))
+                && BehaviorContractStructure.SequenceEquals(
+                    a.ValueModifiers ?? [],
+                    b.ValueModifiers ?? [],
+                    BehaviorContractStructure.AreEqual)
+                && BehaviorContractStructure.SequenceEquals(
+                    a.FirstProgramInstallCostModifiers ?? [],
+                    b.FirstProgramInstallCostModifiers ?? [],
+                    static (left, right) => left.Equals(right))
+                && BehaviorContractStructure.SequenceEquals(
+                    a.FirstHqBreachAccessModifiers ?? [],
+                    b.FirstHqBreachAccessModifiers ?? [],
+                    static (left, right) => left.Equals(right))
+                && BehaviorContractStructure.SequenceEquals(
+                    a.FirstBasicDrawReplacements ?? [],
+                    b.FirstBasicDrawReplacements ?? [],
                     static (left, right) => left.Equals(right))
                 && a.ExtensionHandlerId == b.ExtensionHandlerId,
             _ => false,
@@ -2214,19 +2440,53 @@ internal static class BehaviorCatalogFingerprint
         {
             builder.Append('|').Append(modifier.Delta).Append(':').Append(modifier.Condition);
         }
+
+        if (value.ValueModifiers is { Count: > 0 })
+        {
+            AppendSequence(builder, value.ValueModifiers, AppendValueModifier);
+        }
+
     }
 
-    private static void AppendIcebreaker(StringBuilder builder, IcebreakerBehaviorSpec value) => builder
-        .Append(value.BaseStrength).Append('|').Append(value.InterfaceType).Append('|')
-        .Append(value.BreakCost).Append('|').Append(value.BreakLimit).Append('|')
-        .Append(value.PumpCost).Append('|').Append(value.PumpStrength);
+    private static void AppendIcebreaker(StringBuilder builder, IcebreakerBehaviorSpec value)
+    {
+        builder.Append(value.BaseStrength).Append('|').Append(value.InterfaceType).Append('|')
+            .Append(value.BreakCost).Append('|').Append(value.BreakLimit).Append('|')
+            .Append(value.PumpCost).Append('|').Append(value.PumpStrength);
+        if (value.DynamicPump is { } dynamicPump)
+        {
+            builder.Append("|dynamic-pump=");
+            AppendDynamicPump(builder, dynamicPump);
+        }
+
+        if (value.ValueModifiers is { Count: > 0 })
+        {
+            AppendSequence(builder, value.ValueModifiers, AppendValueModifier);
+        }
+
+    }
 
     private static void AppendAsset(StringBuilder builder, AssetBehaviorSpec value) => builder.Append(value.TrashCost);
 
     private static void AppendAgenda(StringBuilder builder, AgendaBehaviorSpec value) => builder.Append(value.AgendaPoints);
 
-    private static void AppendRunEvent(StringBuilder builder, RunEventBehaviorSpec value) => builder
-        .Append(value.Cost).Append('|').Append(value.HostedCredits);
+    private static void AppendRunEvent(StringBuilder builder, RunEventBehaviorSpec value)
+    {
+        builder.Append(value.Cost).Append('|').Append(value.HostedCredits);
+        if (value.RezCostModifiers is { Count: > 0 } modifiers)
+        {
+            builder.Append("|rezCostModifiers=");
+            AppendSequence(builder, modifiers, AppendRunRezCostModifier);
+        }
+    }
+
+    private static void AppendRunRezCostModifier(
+        StringBuilder builder,
+        BehaviorRunRezCostModifier value)
+    {
+        builder.Append("delta=").Append(value.Delta).Append(",reason=");
+        AppendString(builder, value.ReasonKey);
+    }
 
     private static void AppendCardType(StringBuilder builder, BehaviorCardType value) =>
         builder.Append((int)value);
@@ -2257,6 +2517,29 @@ internal static class BehaviorCatalogFingerprint
         {
             AppendSequence(builder, value.CostModifiers, AppendCostModifier);
         }
+
+        if (value.ValueModifiers is { Count: > 0 })
+        {
+            AppendSequence(builder, value.ValueModifiers, AppendValueModifier);
+        }
+
+        if (value.FirstProgramInstallCostModifiers is { Count: > 0 })
+        {
+            builder.Append("|firstProgramInstallCostModifiers=");
+            AppendSequence(builder, value.FirstProgramInstallCostModifiers, AppendFirstProgramInstallCostModifier);
+        }
+
+        if (value.FirstHqBreachAccessModifiers is { Count: > 0 })
+        {
+            builder.Append("|firstHqBreachAccessModifiers=");
+            AppendSequence(builder, value.FirstHqBreachAccessModifiers, AppendFirstHqBreachAccessModifier);
+        }
+
+        if (value.FirstBasicDrawReplacements is { Count: > 0 })
+        {
+            builder.Append("|firstBasicDrawReplacements=");
+            AppendSequence(builder, value.FirstBasicDrawReplacements, AppendFirstBasicDrawReplacement);
+        }
     }
 
     private static void AppendCostModifier(StringBuilder builder, BehaviorCostModifier value)
@@ -2267,6 +2550,66 @@ internal static class BehaviorCatalogFingerprint
         AppendCondition(builder, value.Condition);
         builder.Append(",reason=");
         AppendString(builder, value.ReasonKey);
+    }
+
+    private static void AppendFirstProgramInstallCostModifier(
+        StringBuilder builder,
+        BehaviorFirstProgramInstallCostModifier value)
+    {
+        builder.Append("delta=").Append(value.Delta).Append(",reason=");
+        AppendString(builder, value.ReasonKey);
+    }
+
+    private static void AppendFirstHqBreachAccessModifier(
+        StringBuilder builder,
+        BehaviorFirstHqBreachAccessModifier value)
+    {
+        builder.Append("delta=").Append(value.Delta).Append(",reason=");
+        AppendString(builder, value.ReasonKey);
+    }
+
+    private static void AppendFirstBasicDrawReplacement(
+        StringBuilder builder,
+        BehaviorFirstBasicDrawReplacement value)
+    {
+        builder.Append("drawCount=").Append(value.DrawCount).Append(",reason=");
+        AppendString(builder, value.ReasonKey);
+    }
+
+    private static void AppendValueModifier(StringBuilder builder, BehaviorValueModifier value)
+    {
+        builder.Append("value=").Append((int)value.ValueKind)
+            .Append(",source=").Append((int)value.Source)
+            .Append(",operation=").Append((int)value.Operation)
+            .Append(",delta=").Append(value.Delta)
+            .Append(",reason=");
+        AppendString(builder, value.ReasonKey);
+        builder.Append(",condition=");
+        AppendCondition(builder, value.Condition);
+        builder.Append(",filter=");
+        AppendFilter(builder, value.InstalledFilter);
+        builder.Append(",variable=");
+        AppendString(builder, value.VariableKey);
+        builder.Append(",counter=");
+        AppendString(builder, value.CounterName);
+        builder.Append(",threshold=");
+        AppendNullableInt(builder, value.Threshold);
+    }
+
+    private static void AppendDynamicPump(
+        StringBuilder builder,
+        BehaviorDynamicPumpDeclaration value)
+    {
+        builder.Append("value=").Append((int)value.ValueKind)
+            .Append(",source=").Append((int)value.Source)
+            .Append(",operation=").Append((int)value.Operation)
+            .Append(",unitDelta=").Append(value.UnitDelta)
+            .Append(",variable=");
+        AppendString(builder, value.VariableKey);
+        builder.Append(",reason=");
+        AppendString(builder, value.ReasonKey);
+        builder.Append(",filter=");
+        AppendFilter(builder, value.InstalledFilter);
     }
 
     private static void AppendPaidAbility(StringBuilder builder, BehaviorPaidAbility value)

@@ -78,6 +78,18 @@ public enum RunAccessState
     Completed,
 }
 
+/// <summary>
+/// Provenance of a run-scoped breach-access adjustment. The default value is
+/// the legacy installed click-run source; first-HQ snapshots carry an explicit
+/// discriminator so validation does not confuse the two declaration
+/// contracts.
+/// </summary>
+public enum RunBreachAccessModifierSourceKind
+{
+    InstalledRunSource,
+    FirstHeadquartersBreach,
+}
+
 public enum RunEncounterStatus
 {
     Initialized,
@@ -88,6 +100,275 @@ public enum RunLingeringEffectExpiry
 {
     Encounter,
     Run,
+}
+
+/// <summary>
+/// A typed value adjustment carried by a run lingering effect. The enclosing
+/// effect supplies the expiry boundary; this payload supplies both physical
+/// provenance and the target so a source may be removed without changing an
+/// already-created encounter adjustment.
+/// </summary>
+public sealed record RunValueAdjustment
+{
+    [JsonConstructor]
+    public RunValueAdjustment(
+        BehaviorValueKind valueKind,
+        BehaviorValueSourceKind source,
+        BehaviorValueOperation operation,
+        CardInstanceId sourceCardId,
+        CardInstanceId targetCardId,
+        int delta,
+        string reasonKey,
+        string? variableKey = null,
+        int? quantity = null,
+        int? unitDelta = null)
+    {
+        if (!Enum.IsDefined(valueKind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(valueKind));
+        }
+
+        if (valueKind != BehaviorValueKind.Strength)
+        {
+            throw new ArgumentOutOfRangeException(nameof(valueKind));
+        }
+
+        if (!Enum.IsDefined(operation))
+        {
+            throw new ArgumentOutOfRangeException(nameof(operation));
+        }
+
+        if (operation != BehaviorValueOperation.Add)
+        {
+            throw new ArgumentException(
+                "Only additive run value adjustments are executable in this checkpoint.",
+                nameof(operation));
+        }
+
+        if (source is not (BehaviorValueSourceKind.Variable or BehaviorValueSourceKind.EncounterScoped))
+        {
+            throw new ArgumentException(
+                "Run value adjustments may only be variable or encounter-scoped realized terms.",
+                nameof(source));
+        }
+
+        if (source == BehaviorValueSourceKind.Variable
+            ? !StableIdentifier.TryValidate(variableKey)
+            : variableKey is not null)
+        {
+            throw new ArgumentException(
+                source == BehaviorValueSourceKind.Variable
+                    ? "Variable run value adjustments require a stable variable key."
+                    : "Encounter-scoped run value adjustments must not carry variable metadata.",
+                nameof(variableKey));
+        }
+
+        if (source == BehaviorValueSourceKind.Variable)
+        {
+            if (quantity is not (> 0) || unitDelta is 0 or null)
+            {
+                throw new ArgumentException(
+                    "Variable run value adjustments require a positive quantity and nonzero unit delta.",
+                    nameof(quantity));
+            }
+
+            int expectedDelta;
+            try
+            {
+                expectedDelta = checked(quantity.Value * unitDelta.Value);
+            }
+            catch (OverflowException exception)
+            {
+                throw new ArgumentException(
+                    "Variable run value adjustment quantity and unit delta overflow.",
+                    nameof(delta),
+                    exception);
+            }
+
+            if (delta != expectedDelta)
+            {
+                throw new ArgumentException(
+                    "Variable run value adjustment delta must equal quantity multiplied by unit delta.",
+                    nameof(delta));
+            }
+        }
+        else if (quantity is not null || unitDelta is not null)
+        {
+            throw new ArgumentException(
+                "Encounter-scoped run value adjustments must not carry quantity or unit metadata.",
+                nameof(quantity));
+        }
+
+        if (!StableIdentifier.TryValidate(sourceCardId.Value))
+        {
+            throw new ArgumentException(
+                "A run value adjustment source card ID must be a stable identifier.",
+                nameof(sourceCardId));
+        }
+
+        if (!StableIdentifier.TryValidate(targetCardId.Value))
+        {
+            throw new ArgumentException(
+                "A run value adjustment target card ID must be a stable identifier.",
+                nameof(targetCardId));
+        }
+
+        if (delta == 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(delta),
+                "A run value adjustment delta must be nonzero.");
+        }
+
+        if (!StableIdentifier.TryValidate(reasonKey))
+        {
+            throw new ArgumentException(
+                "A run value adjustment reason key must be a stable identifier.",
+                nameof(reasonKey));
+        }
+
+        ValueKind = valueKind;
+        Source = source;
+        Operation = operation;
+        SourceCardId = sourceCardId;
+        TargetCardId = targetCardId;
+        Delta = delta;
+        ReasonKey = reasonKey;
+        VariableKey = variableKey;
+        Quantity = quantity;
+        UnitDelta = unitDelta;
+    }
+
+    public RunValueAdjustment(
+        CardInstanceId sourceCardId,
+        CardInstanceId targetCardId,
+        int delta,
+        string reasonKey)
+        : this(
+            BehaviorValueKind.Strength,
+            BehaviorValueSourceKind.EncounterScoped,
+            BehaviorValueOperation.Add,
+            sourceCardId,
+            targetCardId,
+            delta,
+            reasonKey)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public BehaviorValueKind ValueKind { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public BehaviorValueSourceKind Source { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public BehaviorValueOperation Operation { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId SourceCardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId TargetCardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Delta { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string ReasonKey { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? VariableKey { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? Quantity { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? UnitDelta { get; private set; }
+}
+
+/// <summary>
+/// A run-start snapshot of one typed ICE rez-cost declaration. The physical
+/// source identity and definition are retained as provenance, while the
+/// adjustment remains valid if that source card later moves zones.
+/// </summary>
+public sealed record RunRezCostModifier
+{
+    [JsonConstructor]
+    public RunRezCostModifier(
+        CardDefinitionId sourceDefinitionId,
+        CardInstanceId sourceCardId,
+        int delta,
+        string reasonKey)
+    {
+        if (!StableIdentifier.TryValidate(sourceDefinitionId.Value))
+        {
+            throw new ArgumentException(
+                "A run rez-cost modifier source definition must be a stable identifier.",
+                nameof(sourceDefinitionId));
+        }
+
+        if (!StableIdentifier.TryValidate(sourceCardId.Value))
+        {
+            throw new ArgumentException(
+                "A run rez-cost modifier source card must be a stable identifier.",
+                nameof(sourceCardId));
+        }
+
+        if (delta == 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(delta),
+                "A run rez-cost modifier delta must be nonzero.");
+        }
+
+        if (!StableIdentifier.TryValidate(reasonKey))
+        {
+            throw new ArgumentException(
+                "A run rez-cost modifier reason key must be a stable identifier.",
+                nameof(reasonKey));
+        }
+
+        SourceDefinitionId = sourceDefinitionId;
+        SourceCardId = sourceCardId;
+        Delta = delta;
+        ReasonKey = reasonKey;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardDefinitionId SourceDefinitionId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId SourceCardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Delta { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string ReasonKey { get; private set; }
+
+    internal CostAdjustment ToCostAdjustment() => new(
+        BehaviorCostModifierKind.IceRezCreditCost,
+        Delta,
+        ReasonKey,
+        SourceDefinitionId,
+        SourceCardId);
+
+    internal RunRezCostModifier Copy() =>
+        new(SourceDefinitionId, SourceCardId, Delta, ReasonKey);
 }
 
 /// <summary>The hidden Corp pool a random breach candidate is drawn from.</summary>
@@ -276,22 +557,39 @@ public sealed record RunLingeringEffect
         RunEffectId id,
         string behaviorId,
         CardInstanceId? sourceCardId,
-        RunLingeringEffectExpiry expiry)
+        RunLingeringEffectExpiry expiry,
+        RunValueAdjustment? valueAdjustment = null)
     {
         ArgumentNullException.ThrowIfNull(behaviorId);
+        if (valueAdjustment is not null && expiry != RunLingeringEffectExpiry.Encounter)
+        {
+            throw new ArgumentException(
+                "Typed run value adjustments must expire with the encounter.",
+                nameof(expiry));
+        }
+
+        if (valueAdjustment is not null && sourceCardId != valueAdjustment.SourceCardId)
+        {
+            throw new ArgumentException(
+                "A run value adjustment source must match its enclosing lingering effect source.",
+                nameof(sourceCardId));
+        }
+
         Version = version;
         Id = id;
         BehaviorId = behaviorId;
         SourceCardId = sourceCardId;
         Expiry = expiry;
+        ValueAdjustment = valueAdjustment;
     }
 
     public RunLingeringEffect(
         RunEffectId id,
         string behaviorId,
         CardInstanceId? sourceCardId,
-        RunLingeringEffectExpiry expiry)
-        : this(1, id, behaviorId, sourceCardId, expiry)
+        RunLingeringEffectExpiry expiry,
+        RunValueAdjustment? valueAdjustment = null)
+        : this(1, id, behaviorId, sourceCardId, expiry, valueAdjustment)
     {
     }
 
@@ -315,7 +613,15 @@ public sealed record RunLingeringEffect
     [JsonRequired]
     public RunLingeringEffectExpiry Expiry { get; private set; }
 
-    internal RunLingeringEffect Copy() => new(Version, Id, BehaviorId, SourceCardId, Expiry);
+    /// <summary>
+    /// Optional typed value contribution. Null preserves the legacy M2
+    /// lingering-effect JSON shape for pump and other effects.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public RunValueAdjustment? ValueAdjustment { get; private set; }
+
+    internal RunLingeringEffect Copy() => new(Version, Id, BehaviorId, SourceCardId, Expiry, ValueAdjustment);
 }
 
 /// <summary>
@@ -330,7 +636,8 @@ public sealed record RunBreachAccessModifier
         CardInstanceId sourceCardId,
         ServerId attackedServerId,
         int delta,
-        string reasonKey)
+        string reasonKey,
+        RunBreachAccessModifierSourceKind sourceKind = RunBreachAccessModifierSourceKind.InstalledRunSource)
     {
         if (!StableIdentifier.TryValidate(sourceCardId.Value))
         {
@@ -352,10 +659,16 @@ public sealed record RunBreachAccessModifier
             throw new ArgumentException("A breach modifier requires a stable reason key.", nameof(reasonKey));
         }
 
+        if (!Enum.IsDefined(sourceKind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(sourceKind));
+        }
+
         SourceCardId = sourceCardId;
         AttackedServerId = attackedServerId;
         Delta = delta;
         ReasonKey = reasonKey;
+        SourceKind = sourceKind;
     }
 
     [JsonInclude]
@@ -374,7 +687,16 @@ public sealed record RunBreachAccessModifier
     [JsonRequired]
     public string ReasonKey { get; private set; }
 
-    internal RunBreachAccessModifier Copy() => new(SourceCardId, AttackedServerId, Delta, ReasonKey);
+    /// <summary>
+    /// Typed provenance. The default legacy value is omitted from JSON so
+    /// existing installed-run-source state remains byte-compatible.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public RunBreachAccessModifierSourceKind SourceKind { get; private set; }
+
+    internal RunBreachAccessModifier Copy() =>
+        new(SourceCardId, AttackedServerId, Delta, ReasonKey, SourceKind);
 }
 
 /// <summary>
@@ -408,7 +730,8 @@ public sealed record RunState
         int runCredits,
         CardInstanceId? activeRunEventId,
         IReadOnlyList<RunLingeringEffect> lingeringEffects,
-        IReadOnlyList<RunBreachAccessModifier>? breachAccessModifiers = null)
+        IReadOnlyList<RunBreachAccessModifier>? breachAccessModifiers = null,
+        IReadOnlyList<RunRezCostModifier>? rezCostModifiers = null)
     {
         ArgumentNullException.ThrowIfNull(breachCandidates);
         ArgumentNullException.ThrowIfNull(chosenAccessCards);
@@ -448,6 +771,13 @@ public sealed record RunState
                 return value.Copy();
             }).ToArray())
             : null;
+        RezCostModifiers = rezCostModifiers is { Count: > 0 }
+            ? new ReadOnlyCollection<RunRezCostModifier>(rezCostModifiers.Select(static value =>
+            {
+                ArgumentNullException.ThrowIfNull(value);
+                return value.Copy();
+            }).ToArray())
+            : null;
     }
 
     public RunState(
@@ -462,7 +792,8 @@ public sealed record RunState
         CardInstanceId? initiatingSource = null,
         int runCredits = 0,
         CardInstanceId? activeRunEventId = null,
-        IReadOnlyList<RunBreachAccessModifier>? breachAccessModifiers = null)
+        IReadOnlyList<RunBreachAccessModifier>? breachAccessModifiers = null,
+        IReadOnlyList<RunRezCostModifier>? rezCostModifiers = null)
         : this(
             1,
             id,
@@ -487,7 +818,8 @@ public sealed record RunState
             runCredits,
             activeRunEventId,
             [],
-            breachAccessModifiers)
+            breachAccessModifiers,
+            rezCostModifiers)
     {
     }
 
@@ -599,6 +931,15 @@ public sealed record RunState
     public IReadOnlyList<RunBreachAccessModifier>? BreachAccessModifiers { get; private set; }
 
     /// <summary>
+    /// Immutable run-start snapshots that adjust ICE rez costs. The field is
+    /// omitted from runs with no declaration so unaffected legacy state keeps
+    /// its prior JSON shape apart from the deliberate state schema version.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<RunRezCostModifier>? RezCostModifiers { get; private set; }
+
+    /// <summary>
     /// The card currently being accessed: the last chosen access card that is
     /// not yet in the accessed list, or null when access is complete.
     /// Sequential access guarantees at most one such card; the last is used
@@ -644,7 +985,8 @@ public sealed record RunState
         RunCredits,
         ActiveRunEventId,
         LingeringEffects,
-        BreachAccessModifiers);
+        BreachAccessModifiers,
+        RezCostModifiers);
 
     /// <summary>
     /// Creates the next immutable timing cursor while retaining the run's
@@ -684,7 +1026,8 @@ public sealed record RunState
             RunCredits,
             ActiveRunEventId,
             LingeringEffects,
-            BreachAccessModifiers);
+            BreachAccessModifiers,
+            RezCostModifiers);
 
     /// <summary>
     /// Replaces the run's encounter while retaining every other field; the
@@ -718,7 +1061,8 @@ public sealed record RunState
         RunCredits,
         ActiveRunEventId,
         lingeringEffects,
-        BreachAccessModifiers);
+        BreachAccessModifiers,
+        RezCostModifiers);
 
     /// <summary>
     /// Replaces the run's run-scoped hosted credits while retaining every
@@ -748,7 +1092,8 @@ public sealed record RunState
         runCredits,
         ActiveRunEventId,
         LingeringEffects,
-        BreachAccessModifiers);
+        BreachAccessModifiers,
+        RezCostModifiers);
 
     /// <summary>
     /// Replaces the live run priority cursor while retaining the exact run
@@ -779,7 +1124,8 @@ public sealed record RunState
         RunCredits,
         ActiveRunEventId,
         LingeringEffects,
-        BreachAccessModifiers);
+        BreachAccessModifiers,
+        RezCostModifiers);
 
     internal RunState WithEncounter(RunEncounterState encounter) => new(
         Version,
@@ -805,7 +1151,8 @@ public sealed record RunState
         RunCredits,
         ActiveRunEventId,
         LingeringEffects,
-        BreachAccessModifiers);
+        BreachAccessModifiers,
+        RezCostModifiers);
 
     /// <summary>
     /// Replaces the run's breach candidate/access fields while retaining every
@@ -840,7 +1187,40 @@ public sealed record RunState
         RunCredits,
         ActiveRunEventId,
         LingeringEffects,
-        BreachAccessModifiers);
+        BreachAccessModifiers,
+        RezCostModifiers);
+
+    /// <summary>
+    /// Replaces the immutable breach-access snapshot after the authoritative
+    /// BeginBreach boundary has determined first-HQ applicability.
+    /// </summary>
+    internal RunState WithBreachAccessModifiers(
+        IReadOnlyList<RunBreachAccessModifier>? breachAccessModifiers) => new(
+        Version,
+        Id,
+        AttackedServer,
+        InitiatingSide,
+        InitiatingPlayer,
+        InitiatingSource,
+        PhaseFor(Step),
+        Step,
+        CurrentIceIndex,
+        CurrentIceId,
+        Successful,
+        Unsuccessful,
+        EndReason,
+        Priority,
+        Encounter,
+        BreachCandidates,
+        RandomAccessLimit,
+        ChosenAccessCards,
+        AccessedCards,
+        AccessState,
+        RunCredits,
+        ActiveRunEventId,
+        LingeringEffects,
+        breachAccessModifiers,
+        RezCostModifiers);
 
     private static ReadOnlyCollection<CardInstanceId> FreezeIds(IEnumerable<CardInstanceId> values) =>
         new(values.ToArray());

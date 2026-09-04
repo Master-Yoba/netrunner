@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text.Json.Serialization;
 
 namespace Netrunner.Core;
 
@@ -15,7 +16,8 @@ public sealed record IceBehaviorSpec
         IceType iceType,
         int rezCost,
         IReadOnlyList<IceSubroutineSpec> subroutines,
-        IReadOnlyList<IceStrengthModifierSpec> strengthModifiers)
+        IReadOnlyList<IceStrengthModifierSpec> strengthModifiers,
+        IReadOnlyList<BehaviorValueModifier>? valueModifiers = null)
     {
         DefinitionId = definitionId;
         Strength = strength;
@@ -25,6 +27,7 @@ public sealed record IceBehaviorSpec
         ArgumentNullException.ThrowIfNull(strengthModifiers);
         Subroutines = new ReadOnlyCollection<IceSubroutineSpec>(subroutines.ToArray());
         StrengthModifiers = new ReadOnlyCollection<IceStrengthModifierSpec>(strengthModifiers.ToArray());
+        ValueModifiers = FreezeValueModifiers(valueModifiers);
         if (strength < 0)
         {
             throw new ArgumentException(
@@ -60,6 +63,34 @@ public sealed record IceBehaviorSpec
     public IReadOnlyList<IceSubroutineSpec> Subroutines { get; }
 
     public IReadOnlyList<IceStrengthModifierSpec> StrengthModifiers { get; }
+
+    /// <summary>
+    /// Generic value declarations owned by this ICE. The nullable shape keeps
+    /// legacy M2 catalog JSON/fingerprints unchanged when no declaration is
+    /// present; the legacy <see cref="StrengthModifiers"/> list remains an
+    /// adapter consumed by the shared strength projector.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<BehaviorValueModifier>? ValueModifiers { get; }
+
+    private static ReadOnlyCollection<BehaviorValueModifier>? FreezeValueModifiers(
+        IReadOnlyList<BehaviorValueModifier>? valueModifiers)
+    {
+        if (valueModifiers is null or { Count: 0 })
+        {
+            return null;
+        }
+
+        BehaviorValueModifier[] copy = valueModifiers.ToArray();
+        if (copy.Any(static modifier => modifier is null))
+        {
+            throw new ArgumentException(
+                "A value modifier declaration list must not contain null entries.",
+                nameof(valueModifiers));
+        }
+
+        return new ReadOnlyCollection<BehaviorValueModifier>(copy);
+    }
 }
 
 /// <summary>One printed ICE subroutine, in printed order.</summary>
@@ -154,7 +185,9 @@ public sealed record IcebreakerBehaviorSpec
         int breakCost,
         int breakLimit,
         int pumpCost,
-        int pumpStrength)
+        int pumpStrength,
+        IReadOnlyList<BehaviorValueModifier>? valueModifiers = null,
+        BehaviorDynamicPumpDeclaration? dynamicPump = null)
     {
         DefinitionId = definitionId;
         BaseStrength = baseStrength;
@@ -163,6 +196,8 @@ public sealed record IcebreakerBehaviorSpec
         BreakLimit = breakLimit;
         PumpCost = pumpCost;
         PumpStrength = pumpStrength;
+        ValueModifiers = FreezeValueModifiers(valueModifiers);
+        DynamicPump = dynamicPump;
         if (baseStrength < 0)
         {
             throw new ArgumentException(
@@ -187,10 +222,17 @@ public sealed record IcebreakerBehaviorSpec
                 $"Card '{definitionId}' must not have a negative pump cost.", nameof(pumpCost));
         }
 
-        if (pumpStrength <= 0)
+        if (dynamicPump is null && pumpStrength <= 0)
         {
             throw new ArgumentException(
                 $"Card '{definitionId}' must have a positive pump strength.", nameof(pumpStrength));
+        }
+
+        if (dynamicPump is not null && pumpStrength != 0)
+        {
+            throw new ArgumentException(
+                $"Card '{definitionId}' uses a dynamic pump and must not declare a fake printed pump strength.",
+                nameof(pumpStrength));
         }
 
         if (!Enum.IsDefined(interfaceType))
@@ -220,6 +262,37 @@ public sealed record IcebreakerBehaviorSpec
 
     /// <summary>Strength added per pump.</summary>
     public int PumpStrength { get; }
+
+    /// <summary>Generic strength declarations owned by this breaker.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<BehaviorValueModifier>? ValueModifiers { get; }
+
+    /// <summary>
+    /// Optional activation-time dynamic pump. It is intentionally separate
+    /// from passive value declarations: the engine snapshots its quantity
+    /// into an encounter adjustment when the pump ability is paid.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BehaviorDynamicPumpDeclaration? DynamicPump { get; }
+
+    private static ReadOnlyCollection<BehaviorValueModifier>? FreezeValueModifiers(
+        IReadOnlyList<BehaviorValueModifier>? valueModifiers)
+    {
+        if (valueModifiers is null or { Count: 0 })
+        {
+            return null;
+        }
+
+        BehaviorValueModifier[] copy = valueModifiers.ToArray();
+        if (copy.Any(static modifier => modifier is null))
+        {
+            throw new ArgumentException(
+                "A value modifier declaration list must not contain null entries.",
+                nameof(valueModifiers));
+        }
+
+        return new ReadOnlyCollection<BehaviorValueModifier>(copy);
+    }
 }
 
 /// <summary>
@@ -278,7 +351,11 @@ public sealed record AgendaBehaviorSpec
 /// </summary>
 public sealed record RunEventBehaviorSpec
 {
-    public RunEventBehaviorSpec(CardDefinitionId definitionId, int cost, int hostedCredits)
+    public RunEventBehaviorSpec(
+        CardDefinitionId definitionId,
+        int cost,
+        int hostedCredits,
+        IReadOnlyList<BehaviorRunRezCostModifier>? rezCostModifiers = null)
     {
         DefinitionId = definitionId;
         Cost = cost;
@@ -294,6 +371,8 @@ public sealed record RunEventBehaviorSpec
             throw new ArgumentException(
                 $"Card '{definitionId}' must not have a negative hosted credit amount.", nameof(hostedCredits));
         }
+
+        RezCostModifiers = FreezeRezCostModifiers(rezCostModifiers);
     }
 
     public CardDefinitionId DefinitionId { get; }
@@ -303,4 +382,39 @@ public sealed record RunEventBehaviorSpec
 
     /// <summary>Credits placed on the event; spendable only during the run.</summary>
     public int HostedCredits { get; }
+
+    /// <summary>
+    /// Optional run-duration ICE rez-cost declarations. The nullable shape
+    /// preserves legacy event JSON and fingerprints when no modifier exists.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<BehaviorRunRezCostModifier>? RezCostModifiers { get; }
+
+    private static ReadOnlyCollection<BehaviorRunRezCostModifier>? FreezeRezCostModifiers(
+        IReadOnlyList<BehaviorRunRezCostModifier>? modifiers)
+    {
+        if (modifiers is null or { Count: 0 })
+        {
+            return null;
+        }
+
+        BehaviorRunRezCostModifier[] copy = modifiers.ToArray();
+        if (copy.Any(static modifier => modifier is null))
+        {
+            throw new ArgumentException(
+                "Run event rez-cost modifier declarations must not contain null entries.",
+                nameof(modifiers));
+        }
+
+        if (copy
+            .GroupBy(static modifier => (modifier.Delta, modifier.ReasonKey))
+            .Any(static group => group.Count() > 1))
+        {
+            throw new ArgumentException(
+                "Run event rez-cost modifier declarations must not repeat a delta and reason key.",
+                nameof(modifiers));
+        }
+
+        return new ReadOnlyCollection<BehaviorRunRezCostModifier>(copy);
+    }
 }

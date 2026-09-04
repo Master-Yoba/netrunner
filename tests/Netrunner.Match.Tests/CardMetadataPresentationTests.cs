@@ -166,6 +166,35 @@ public sealed class CardMetadataPresentationTests
         Assert.Equal("Unknown card", card.Title);
     }
 
+    [Fact]
+    public void MatchRezActionCarriesRawCostQuoteTermsWithoutFormatting()
+    {
+        CardDefinitionId sourceDefinitionId = new("test:run-rez-source");
+        CardInstanceId sourceCardId = new("card:run-rez-source");
+        CostQuote quote = new(
+            4,
+            [new CostAdjustment(
+                BehaviorCostModifierKind.IceRezCreditCost,
+                -1,
+                "run-rez-discount",
+                sourceDefinitionId,
+                sourceCardId)]);
+        RezCardParameters parameters = new(
+            new CardInstanceId("card:target-ice"),
+            quote.EffectiveCost,
+            quote);
+
+        LegalActionViewModel action = new(
+            new ActionId("action:rez"),
+            ActionKind.RezCard,
+            "Rez card",
+            parameters);
+
+        Assert.Equal(quote, action.CostQuote);
+        Assert.Equal("run-rez-discount", action.CostQuote!.Adjustments.Single().ReasonKey);
+        Assert.Equal(sourceCardId, action.CostQuote.Adjustments.Single().SourceCardId);
+    }
+
     private static Dictionary<string, object?> Player(string id) => new()
     {
         ["id"] = id,

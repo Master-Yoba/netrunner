@@ -212,15 +212,34 @@ public sealed record RunServerParameters : ActionParameters
 public sealed record RezCardParameters : ActionParameters
 {
     [JsonConstructor]
-    public RezCardParameters(CardInstanceId cardId, int creditCost)
+    public RezCardParameters(CardInstanceId cardId, int creditCost, CostQuote? costQuote = null)
     {
         if (creditCost < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(creditCost), "Rez credit cost must not be negative.");
         }
 
+        if (costQuote is not null)
+        {
+            if (costQuote.EffectiveCost != creditCost)
+            {
+                throw new ArgumentException(
+                    "A rez action cost quote must carry the same effective cost as its action payload.",
+                    nameof(costQuote));
+            }
+
+            if (costQuote.Adjustments.Any(adjustment =>
+                adjustment.Kind != BehaviorCostModifierKind.IceRezCreditCost))
+            {
+                throw new ArgumentException(
+                    "A rez action cost quote may contain only ICE rez-cost adjustments.",
+                    nameof(costQuote));
+            }
+        }
+
         CardId = cardId;
         CreditCost = creditCost;
+        CostQuote = costQuote;
     }
 
     [JsonInclude]
@@ -230,6 +249,14 @@ public sealed record RezCardParameters : ActionParameters
     [JsonInclude]
     [JsonRequired]
     public int CreditCost { get; private set; }
+
+    /// <summary>
+    /// Optional checked ICE rez quote. Legacy unchanged actions omit this
+    /// field; a modified action carries raw ordered reasons and provenance.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CostQuote? CostQuote { get; private set; }
 }
 
 /// <summary>
@@ -419,8 +446,37 @@ public sealed record InstallCardParameters : ActionParameters
         new((values ?? []).ToArray());
 }
 
-/// <summary>Typed target for the CR 6.9 approached-ICE rez action.</summary>
-public sealed record RunIceParameters([property: JsonRequired] CardInstanceId IceId) : ActionParameters;
+/// <summary>
+/// Typed target for the CR 6.9 approached-ICE rez action. M2-compatible
+/// actions omit the quote; a run-scoped modifier carries the same detached
+/// raw explanation as the runtime-catalog rez path.
+/// </summary>
+public sealed record RunIceParameters : ActionParameters
+{
+    [JsonConstructor]
+    public RunIceParameters(CardInstanceId iceId, CostQuote? costQuote = null)
+    {
+        if (costQuote is not null
+            && costQuote.Adjustments.Any(adjustment =>
+                adjustment.Kind != BehaviorCostModifierKind.IceRezCreditCost))
+        {
+            throw new ArgumentException(
+                "An ICE rez quote may contain only ICE rez-cost adjustments.",
+                nameof(costQuote));
+        }
+
+        IceId = iceId;
+        CostQuote = costQuote;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId IceId { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CostQuote? CostQuote { get; private set; }
+}
 
 /// <summary>
 /// Typed target for the CR 3.9.5 encounter icebreaker pump action: the rig
@@ -1166,7 +1222,7 @@ public sealed class PendingDecision
         PurgeVirusCountersParameters purgeVirusCounters => new PurgeVirusCountersParameters(purgeVirusCounters.ClickCost),
         PlayCardParameters playCard => new PlayCardParameters(playCard.CardId, playCard.CreditCost),
         RunServerParameters runServer => new RunServerParameters(runServer.ServerId),
-        RezCardParameters rezCard => new RezCardParameters(rezCard.CardId, rezCard.CreditCost),
+        RezCardParameters rezCard => new RezCardParameters(rezCard.CardId, rezCard.CreditCost, rezCard.CostQuote),
         AdvanceCardParameters advanceCard => new AdvanceCardParameters(advanceCard.CardId, advanceCard.CreditCost),
         ScoreAgendaParameters scoreAgenda => new ScoreAgendaParameters(
             scoreAgenda.CardId,
@@ -1184,7 +1240,7 @@ public sealed class PendingDecision
             install.FinalizeSelection,
             install.CostQuote),
         RunCardPaymentParameters payment => new RunCardPaymentParameters(payment.CardId, payment.HostedCredits),
-        RunIceParameters runIce => new RunIceParameters(runIce.IceId),
+        RunIceParameters runIce => new RunIceParameters(runIce.IceId, runIce.CostQuote),
         RunBreakerParameters breaker => new RunBreakerParameters(breaker.BreakerId, breaker.HostedCredits),
         RunBreakParameters runBreak => new RunBreakParameters(
             runBreak.BreakerId,

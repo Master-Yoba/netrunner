@@ -3751,3 +3751,424 @@ errors; runtime action expansion and full verification remain pending.
   formatting and `git diff --check` passed; and the direct M2 proof replayed
   32 checkpoints with `replayVerified: true` and unchanged hashes
   (`faf4e631…` / `c882eb43…` / `d20cdef9…`).
+
+## Slice 4.4 work log
+
+### 2026-09-04 — Slice 4.4 architecture and execution checkpoints
+
+- Started from clean branch `m4_4` at merged Slice 4.3 commit `f2bf590`.
+  The accepted baseline is 952 tests (Core 664, Cards 153, AI 30, CLI 54,
+  Match 51), coverage 32 registered / 31 complete / one partial / 45
+  unregistered, and a green `scripts/verify.sh` gate.
+- Scope is the complete Slice 4.4 contract from `docs/M4_PLAN.md`: ENG-414
+  through ENG-418; Echelon (30025), Unity (30026), Leech (30008), Tread
+  Lightly (30012), DZMZ Optimizer (30022), Docklands Pass (30013), and Verbal
+  Plasticity (30034); AGT-401 v3; SIM-401 extension; UI-405; CARD-401 evidence;
+  and the required combined Tread Lightly/Leech encounter proof. Later M4
+  mechanics and cards remain excluded.
+- Root owns architecture, checkpoint contracts, integration review, the
+  progress ledger, independent verification, and local commits. Luna Max owns
+  implementation inside each bounded checkpoint and does not commit.
+- Checkpoint A (ENG-414) replaces the M2-only strength helpers with one typed,
+  immutable value-calculation contract. A quote retains the printed/base
+  value, effective value, and deterministically ordered terms with stable
+  reason keys and physical/definition provenance. Static, per-installed-X,
+  variable pump, counter-threshold, and encounter-scoped terms compose without
+  title switches. Authoritative break legality, invariant reconstruction,
+  observation, and Match presentation must consume the same calculation.
+- Checkpoint B (ENG-415–418) adds four orthogonal primitives: run-scoped rez
+  cost quotes; first-HQ-breach-this-turn access count; a replacement interrupt
+  on the real basic-draw occurrence; and source-keyed first-program-install
+  consumption in the active formal turn. Issued actions/quotes and any new
+  state must round-trip, validate against the immutable catalog, and remain
+  observation-safe.
+- Checkpoint C binds and proves the seven Batch 3 cards in two groups: the
+  strength cards (Echelon, Unity, Leech), then cost/access/replacement cards
+  (Tread Lightly, DZMZ, Docklands Pass, Verbal Plasticity). Positive lifecycle,
+  expiry/reset, forged/stale, ordering, and hidden-information cases are
+  required; catalog fingerprints must cover every new declaration.
+- Checkpoint D delivers AGT-401 v3, the versioned simulation fixtures and
+  combined Tread Lightly/Leech timing proof, plus UI-405 and a dedicated client
+  smoke. Checkpoint E updates the batch registry, rulings/review evidence and
+  generated coverage to 39 registered / 38 complete / one partial, then runs
+  the full repository gate. Each accepted checkpoint is recorded here and
+  committed locally before the next checkpoint begins.
+
+### 2026-09-04 — Checkpoint A ENG-414 value calculations accepted
+
+- Luna Max implemented the immutable strength-calculation boundary and Root
+  accepted it after three architecture corrections. `ValueQuote` retains one
+  canonical base/effective/ordered-term vocabulary; terms carry typed source
+  and operation, stable reason keys, realized quantity/unit values, and
+  visibility-filtered definition/physical-source provenance. Negative
+  effective strength remains legal, preserving the previous calculation
+  semantics rather than borrowing the credit-cost floor.
+- Static, per-installed-card, counter-threshold, fixed pump, activation-time
+  dynamic pump, and external encounter-scoped adjustments now converge on the
+  same projection. Unity-style pumps declare no fake constant: activation
+  counts active installed Runner icebreakers (including the source), snapshots
+  quantity/unit/total into an encounter-expiring adjustment targeted at the
+  breaker, and repeated pumps compose without later board changes re-deriving
+  X. Leech-style adjustments retain distinct source and exact encountered-ICE
+  target IDs and survive source movement until encounter cleanup.
+- Break action issuance/consumption and invariant reconstruction use the same
+  authoritative quote. Core observations expose only visible raw terms, and
+  Match carries those terms without parsing or independently recreating rules
+  arithmetic. Immutable catalog equality/fingerprints include passive value
+  and dynamic-pump declarations; legacy M2 strength APIs remain adapters over
+  the shared quote and existing definitions keep their old fingerprint bytes
+  when the new optional fields are absent.
+- D-416 applies because run state gained the typed adjustment payload: engine
+  state schema moved from 3 to 4 and checked-in scenarios were re-pinned. The
+  representative M2 hashes changed from `faf4e631…` / `c882eb43…` to
+  `fa7421b4…` / `b658d4e1…`; its event hash remains `d20cdef9…`, with 32
+  checkpoints and replay verification. The evidence scenarios were likewise
+  re-pinned without semantic event changes.
+- Root independently passed the complete 962-test solution gate (Core 674,
+  Cards 153, AI 30, CLI 54, Match 51), the direct M2 proof, touched-project
+  formatter checks, and `git diff --check`. Luna independently passed the
+  zero-warning solution build, the same complete suites, solution formatting,
+  and the focused 10-test value-calculation gate. ENG-415–418 and all Gateway
+  Batch 3 bindings remain outside this checkpoint.
+
+### 2026-09-04 — Checkpoint B1 ENG-415 run-scoped ICE rez costs accepted
+
+- Luna Max implemented a typed `IceRezCreditCost` quote path whose declarations
+  live on `RunEventBehaviorSpec` and are snapshotted, with physical-card and
+  definition provenance, when the event starts its run. The immutable snapshot
+  remains authoritative while the event moves from grip to the play area and
+  then heap, applies to every ICE rezzed during that run, and disappears with
+  the run. Duplicate declarations are rejected at catalog construction.
+- Both rez mechanisms consume the same projection: runtime-catalog `RezCard`
+  actions and the legacy approached-ICE `RezIce` action carry ordered raw terms,
+  check the submitted quote exactly, test affordability against the effective
+  cost, pay that cost, and expose it in the emitted event. Invariant
+  reconstruction, observations, and Match presentation use the same detached
+  quote; Runner observations do not receive Corp-owned rez actions or their
+  explanation terms. Forged quotes fail closed on both action paths.
+- D-416 applies again because `RunState` gained a run-start snapshot: engine
+  state schema moved from 4 to 5 and all checked-in state fixtures were
+  re-pinned. The representative M2 proof now has initial/final hashes
+  `2335d1cd…` / `dfe598b4…`; its event hash remains `d20cdef9…`, with 32
+  checkpoints/actions and replay verification.
+- Root independently passed the focused 6-test ENG-415 suite and the complete
+  969-test solution gate (Core 680, Cards 153, AI 30, CLI 54, Match 52), the
+  direct M2 proof, solution formatting, and `git diff --check`. Tread Lightly
+  remains intentionally unbound until the Batch 3 card-binding checkpoint;
+  ENG-416–418 remain outside this commit.
+
+### 2026-09-04 — Checkpoint B2a ENG-418 first-program install consumption accepted
+
+- Luna Max added a typed, optional installed-source declaration for reducing
+  the first Runner program installed in each formal turn. The existing install
+  `CostQuote` now composes self-cost terms with every active source declaration
+  in deterministic order and retains raw reason plus definition/physical-card
+  provenance. Multiple sources stack on the same first program and the credit
+  floor remains zero.
+- The formal-turn ledger records every completed Runner program install even
+  when no modifier source is active and even during the Corp turn. This global
+  occurrence prevents a later-installed source from re-arming the effect;
+  source-keyed First-X uses are recorded only for terms in the accepted quote,
+  after the install commits. Previews, rejected or stale actions, intermediate
+  replacement choices, and non-program installs do not consume it. Direct,
+  replacement-selection, and behavior-effect off-turn installs share the same
+  projection and completion boundary.
+- Turn-fact invariants require occurrence IDs to identify Runner-owned Program
+  runtime cards. Pending install frames/actions are reconstructed against the
+  same projection, forged quotes and stale sources fail atomically, turn-fact
+  observations expose a visibility-filtered occurrence list/count, and the
+  already-shared Match cost-quote surface carries the raw terms unchanged.
+  Optional declarations participate in immutable catalog equality and
+  fingerprints while absent/empty declarations retain legacy JSON bytes.
+- D-416 applies because `TurnFactsState` gained the occurrence ledger: engine
+  state schema moved from 5 to 6 and checked-in state fixtures were re-pinned.
+  The representative M2 initial/final hashes are now `23777d0f…` /
+  `ab07bacd…`; its event hash remains `d20cdef9…`, with 32 actions/checkpoints
+  and replay verification.
+- Root independently passed the focused 12-test ENG-418 suite, the complete
+  981-test solution gate (Core 692, Cards 153, AI 30, CLI 54, Match 52), the
+  direct M2 proof, solution formatting, and `git diff --check`. DZMZ Optimizer
+  remains unbound until the card-binding checkpoint; ENG-416 and ENG-417 remain
+  outside this commit.
+
+### 2026-09-04 — Checkpoint B2b ENG-416 first-HQ-breach access accepted
+
+- Luna Max generalized the existing run breach-access modifier with one
+  canonical typed source kind. The legacy installed-run-source value is the
+  enum default and remains omitted from serialized state; first-HQ snapshots
+  carry an explicit discriminator. Both paths feed the same checked random
+  access calculation rather than maintaining separate access arithmetic.
+- A typed optional installed-source declaration now grants positive additional
+  HQ access. At the authoritative breach boundary, every actual HQ breach is
+  appended to the active formal-turn occurrence ledger, even when no source is
+  active and regardless of whose turn it is. On only the first occurrence,
+  active faceup Runner sources are snapshotted in deterministic order and their
+  source-keyed First-X uses are consumed. Multiple sources compose, the result
+  is capped by the available hidden HQ pool, non-HQ breaches do not consume,
+  later-installed sources cannot re-arm the effect, and the snapshot survives
+  source movement until breach/run cleanup.
+- Source-kind-specific invariants preserve the old installed-run-source rules
+  while validating first-HQ server identity, declaration/reason/delta,
+  occurrence evidence, exact First-X consumption, duplicates, and reconstructed
+  random-access limits. Duplicate reason keys are rejected for both first-HQ
+  and first-program declarations. Observation filtering retains hidden-hand
+  secrecy while exposing raw modifier terms, and Match maps those terms without
+  formatting or re-derivation.
+- D-416 applies because `TurnFactsState` gained the HQ occurrence ledger:
+  engine state schema moved from 6 to 7 and checked-in state fixtures were
+  re-pinned. The representative M2 initial/final hashes are now `cfec7f9b…` /
+  `9fbef66d…`; its event hash remains `d20cdef9…`, with 32 actions/checkpoints,
+  replay verification, and no trace problems.
+- Root independently passed all 994 solution tests (Core 704, Cards 153, AI 30,
+  CLI 54, Match 53), the direct M2 proof, solution formatting, and
+  `git diff --check`. Docklands Pass remains unbound until the card-binding
+  checkpoint; ENG-417 remains outside this commit.
+
+### 2026-09-04 — Checkpoint B2c ENG-417 basic-draw replacement accepted
+
+- Luna Max routed the real click-for-card action through a typed
+  `BasicDrawEffect` and the existing imminent-effect checkpoint/replacement
+  pipeline. A typed installed-source declaration supplies the replacement draw
+  count and stable reason key; catalog equality and fingerprints include that
+  declaration while absent/empty declarations preserve legacy JSON.
+- Every accepted real basic draw records an ordered occurrence ID in the active
+  formal-turn ledger, even when no replacement source is installed. Only the
+  first occurrence can materialize a replacement, so a late source cannot
+  re-arm it. The mandatory interrupt spends the click exactly once, consumes
+  its source-keyed First-X use only when accepted, deterministically arbitrates
+  multiple active sources without stacking them, and resets with the next
+  formal turn. Corp mandatory draws and generic card-effect draws remain on
+  their original paths and do not touch this ledger.
+- Materialized catalog interrupts retain source, definition, captured zone,
+  catalog/definition fingerprints, reason, count, controller, target, and
+  occurrence provenance. Runtime and load-time invariant reconstruction reject
+  forged declarations, fingerprints, inactive captured zones, controllers,
+  targets, first flags, duplicate/missing ledgers, and pre-consumed First-X
+  uses while still allowing the physical source to move after materialization.
+  Runner replacement draws stop cleanly when fewer than the configured cards
+  remain, avoiding an unresolvable mandatory interrupt; Corp exhaustion keeps
+  the existing deck-out rule.
+- D-416 applies because turn facts and pending effect frames gained persisted
+  fields: engine state schema moved from 7 to 8 and checked-in state fixtures
+  were re-pinned. The representative M2 initial/final hashes are now
+  `f135f1fc…` / `42d38c1c…`; its event hash remains `d20cdef9…`, with 32
+  actions/checkpoints, replay verification, and no trace problems.
+- Root independently passed the focused 13-test ENG-417 suite, all 1,007
+  solution tests (Core 717, Cards 153, AI 30, CLI 54, Match 53), the direct M2
+  proof, solution formatting, and `git diff --check`. Verbal Plasticity remains
+  unbound until the Batch 3 card-binding checkpoint. ENG-414 through ENG-418
+  are now accepted as reusable primitives.
+
+### 2026-09-04 — Checkpoint C1 Echelon, Unity, and Leech bindings accepted
+
+- Luna Max bound the three ENG-414 representative cards without title/code
+  branches in Core. Echelon is a printed-strength-zero Sentry interface whose
+  passive quote adds one point per installed Runner icebreaker, including
+  itself. Unity is a printed-strength-one Code Gate interface whose paid pump
+  snapshots the installed-icebreaker count at activation, stores the realized
+  quantity/unit/total, and composes deterministically across repeated uses.
+- Leech uses three typed successful-run triggers for HQ, R&D, and Archives to
+  add virus counters. Its encounter paid ability spends one virus counter and
+  executes the new generic `ModifyEncounteredIceStrength` instruction, creating
+  a distinct-source, exact-target, encounter-expiring negative strength term.
+  The realized adjustment survives source movement, stacks across activations,
+  affects authoritative break legality, and expires at encounter cleanup.
+- Root's adversarial review removed an initially open legacy-provenance bypass.
+  Every encounter-scoped strength adjustment must now reconstruct through its
+  exact catalog definition and paid-ability key; stripped/forged behavior IDs,
+  source/target mismatches, declaration deltas, reasons, controller context,
+  and invalid resolution parents fail closed. The former hand-authored Core
+  fixture now declares the same generic catalog behavior instead of relying on
+  a magic compatibility identity.
+- Immutable Gateway composition is temporarily versioned
+  `gateway-m4-4.4-c1` and contains 35 definitions. Its fingerprint is
+  `472d22a6b13ea35fa368677435c2d04171c1e23d1bc2353e36dfb6674a0549dc`;
+  the existing Slice 4.3 simulation decks remain unchanged while their catalog
+  pins distinguish those 32 deck definitions from the three newly bound C1
+  definitions.
+- D-416 applies because the new catalog instruction/effect identity may occur
+  in saved resolution/run state: engine state schema moved from 8 to 9 and all
+  checked-in state fixtures were re-pinned. The representative M2 initial/final
+  hashes are now `4460bc23…` / `023bd7ae…`; its event hash remains
+  `d20cdef9…`, with 32 actions/checkpoints, replay verification, and no trace
+  problems.
+- Root independently passed the 13-test C1 card gate and 10-test focused value
+  gate, all 1,020 solution tests (Core 717, Cards 166, AI 30, CLI 54, Match 53),
+  the direct M2 proof, a zero-warning solution build, solution formatting, and
+  `git diff --check`. The other four Batch 3 card bindings, supporting agent,
+  simulation, UI, and registry work remain outside this checkpoint.
+
+### 2026-09-04 — Checkpoint C2 remaining Batch 3 bindings accepted
+
+- Luna Max bound Tread Lightly, DZMZ Optimizer, Docklands Pass, and Verbal
+  Plasticity through the four Checkpoint B primitives, with no new Core
+  branches. Tread Lightly is a cost-one run event with no hosted credits and a
+  run-start snapshot that raises every ICE rez cost by three. DZMZ supplies one
+  static MU and a one-credit reduction for the first completed Runner program
+  install of the formal turn. Docklands supplies one additional access on the
+  first HQ breach of the turn, and Verbal replaces the first real basic draw
+  with a two-card draw.
+- Card-owned production fixtures compile exact test-local metadata through
+  `GatewayRuntimeCardCatalog` and inject the final Gateway behavior catalog.
+  They prove Tread payment, arbitrary server selection, quoted/paid +3 rez
+  cost, physical source provenance, and run cleanup; DZMZ's extra capacity,
+  serialized discounted install, accepted First-X consumption, and second
+  full-cost install; Docklands' two hidden random HQ accesses followed by a
+  normal same-turn breach; and Verbal's two-then-one real basic draws plus safe
+  short-stack completion. The exhaustive late-source, reset, stacking,
+  stale/forged, and isolation matrices remain owned by the accepted generic
+  primitive suites.
+- Gateway composition now has its final Slice 4.4 version
+  `gateway-m4-4.4`, all 39 expected definitions, and fingerprint
+  `1d7a527112152ea16164da4def624ca0dbb83e477d06323ecfc86c2f837a2fc4`.
+  Existing Slice 4.3 reduced simulation decks remain unchanged until the
+  supporting simulation checkpoint, while their catalog version/fingerprint
+  pins now distinguish the 32 deck definitions from all seven Batch 3 catalog
+  additions.
+- No persisted contract changed, so engine state schema remains 9. The direct
+  M2 proof remains byte-stable at initial `4460bc23…`, final `023bd7ae…`, and
+  event `d20cdef9…`, with 32 actions/checkpoints, replay verification, and no
+  trace problems.
+- Root independently passed the 9-test C2 binding gate and all 1,029 solution
+  tests (Core 717, Cards 175, AI 30, CLI 54, Match 53), the direct M2 proof, a
+  zero-warning solution build, solution formatting, and `git diff --check`.
+  All seven Slice 4.4 cards are now behavior-bound; AGT-401 v3, SIM-401,
+  UI-405, and registry/evidence closure remain.
+
+### 2026-09-04 — Checkpoint D1 AGT-401 contract agent v3 accepted
+
+- Luna Max extended the observation-only agent with typed
+  `InstallCardParameters` support and bumped the policy schema plus agent and
+  policy identities to version 3. Existing bounded `UseAbility` precedence,
+  the no-`EndTurn` rule, and deterministic typed selection remain intact.
+- Turn-action selection now has an explicit bounded utility calculation. Within
+  the install category it uses only the current engine-issued effective cost
+  and savings from the detached `CostQuote`; it never reads descriptions,
+  reason strings, the behavior catalog, authoritative state, or observation
+  state dictionaries. Consequently DZMZ's first-program benefit contributes
+  only while Core includes its adjustment in the current observation, and no
+  bonus is cached after the First-X use is consumed.
+- Install payloads fail closed on unstable IDs, invalid destinations,
+  inconsistent replacement selections, non-install adjustment kinds, malformed
+  provenance, or quote arithmetic that does not reconstruct the effective
+  cost. Canonical semantic keys retain the complete typed install payload and
+  use the engine-issued `ActionId` as the final tie-break.
+- Tests prove discounted-install ranking, a fresh unmodified observation after
+  First-X consumption, order/description/JSON neutrality, malformed and forged
+  rejection, and the version-3 contract while retaining the unreadable
+  observation-dictionary boundary. Root independently passed the complete AI
+  suite at 34/34, both AI project formatting gates, and `git diff --check`.
+  SIM-401, UI-405, and registry/evidence closure remain.
+
+### 2026-09-04 — Checkpoint D2 SIM-401 Batch 3 fixtures and timing proof accepted
+
+- Luna Max advanced both checked-in developer-reduced simulation fixtures to
+  Slice 4.4 Batch 3 IDs, added all seven new Runner codes, and updated their
+  bounded review notes. The fixture union now equals the complete 39-definition
+  `gateway-m4-4.4` catalog while retaining its
+  `1d7a527112152ea16164da4def624ca0dbb83e477d06323ecfc86c2f837a2fc4`
+  fingerprint. The earlier Slice 4.3 ability proof follows the new fixture IDs
+  and remains green; these inputs still do not claim the open standard
+  setup/mulligan full-game outcome.
+- A new compact headless production proof begins a real Tread Lightly run
+  against R&D, pays its printed event cost, and retains the run-scoped +3 ICE
+  rez declaration. At the approached Palisade, the Corp receives and pays the
+  checked 3 → 6 quote while the unrezzed definition remains hidden from the
+  Runner observation.
+- The same run and physical ICE then enter the encounter window. The exact
+  engine-issued Leech action spends its real virus counter and creates a
+  catalog-provenanced, encounter-expiring -1 term targeted at that ICE,
+  changing authoritative strength from 2 to 1 while Tread's independent run
+  snapshot remains present. Leech is deliberately selected directly because
+  AGT-401 v3 refuses unlimited non-click abilities; the proof does not replace
+  or synthesize its issued payload.
+- Save/load at the encounter boundary before Leech and again after its payment
+  preserves run, ICE, rez modifier, strength adjustment, quotes, hashes, and
+  invariants. Root independently passed the nine focused fixture/proof tests,
+  the complete Match suite at 54/54, Match formatting, and `git diff --check`.
+  UI-405 and registry/evidence closure remain.
+
+### 2026-09-04 — Checkpoint D3 UI-405 modifier presentation accepted
+
+- Luna Max added a Match-owned presentation layer over Core's raw typed
+  calculations. Ordered strength terms now render readable base/delta/reason
+  lines such as `STR 3 +2 (per installed icebreaker: 2)` for encountered ICE
+  and installed breakers. Cost quotes render base → effective lines for
+  install, rez, and break actions, preserving adjustment order and explicit
+  labels for DZMZ, Tread Lightly, and the existing successful-run discounts.
+  Unknown reason keys remain visible rather than being guessed or discarded.
+- The observation mapper now detaches viewer-filtered current-turn
+  `firstXUseKeys`, rejects malformed/duplicate entries, and attaches a
+  non-colour `USED THIS TURN` cue only to the matching visible physical card.
+  Last-turn facts are not treated as current. Existing paid-ability readiness
+  remains an independent cue.
+- Typed breach-access modifiers render non-authoritative notes, including
+  `+1 first HQ breach this turn`, without exposing hidden candidate identities
+  or requiring source-card provenance. Strength summaries and breach notes are
+  displayed in the real focus region; card controls retain strength reasons and
+  First-X cues; action controls retain modified-cost descriptions.
+- Root found that the first draft formatted quotes but still filtered install
+  and runtime rez actions out of the actual action groups. The accepted version
+  exposes `InstallCard` in turn actions and `RezCard` in run timing, retains
+  their typed target IDs, and proves both grouped-control paths.
+- A dedicated `--m4-slice44-ui-smoke` is wired into `scripts/verify.sh` and
+  reports `M4_SLICE44_UI PASS strength_reason=true modified_cost=true
+  used_first_x_chip=true breach_note=true`. Root independently passed six
+  focused UI-405 tests, the complete Match suite at 60/60, a zero-warning
+  Godot build, Match/Godot/test formatting, and `git diff --check`.
+  Registry/evidence closure and the final repository gate remain.
+
+### 2026-09-04 — Checkpoint E Slice 4.4 registry and exit gate accepted
+
+- Luna Max marked `slice-4.4` complete and completion-required, then closed the
+  seven Batch 3 card records as registered, full-text complete, reviewed by the
+  architect, and backed by their existing CR/ruling citations plus observation,
+  hidden-information, serialization, and positive lifecycle evidence. No new
+  ruling record or synthetic test marker was needed.
+- Fresh CARD-401 reports contain 77 expected cards, 39 registered, all 39 with
+  positive compiled test metadata, 38 full-text complete, the sole explicit
+  Offworld Office partial, and 38 unregistered future cards, with zero
+  diagnostics. The Slice 4.4 total therefore matches the plan's exit contract.
+- Root ran `./scripts/verify.sh` successfully. The solution restored and built
+  with zero warnings/errors; all 1,040 tests passed (Core 717, Cards 175, AI
+  34, CLI 54, Match 60); solution formatting, CLI self-test/doctor, official
+  77-card validation and downstream content-enabled builds, missing/opt-in data
+  negatives, fresh coverage comparison, all three M1 outcomes and replay,
+  Godot editor import, official gallery, Slice 4.3 and Slice 4.4 UI smokes,
+  the full M3 client smoke, and the repository secret scan passed.
+- The representative M2 proof remains stable at initial
+  `4460bc239b386ec53259af1f5110f0a14db000d552a0e1efbe6950771f6d5215`,
+  final `023bd7ae1f9eccb0329f4b6ad0e56c2801b9ab5a56b288469809b2666a494947`,
+  and event
+  `d20cdef94e97ac928ca088e14952b65d2116fecda00485fff5c3b05e1b6e9e20`,
+  with 32 actions/checkpoints, replay verification, and no trace problems.
+  Slice 4.4 is complete; the pre-existing standard full-game setup/mulligan
+  SIM-401 outcome remains explicitly outside this slice's bounded claim.
+
+### 2026-09-04 — PR feedback correction checkpoint accepted
+
+- Both PR #8 P1 findings were valid consumer gaps. AGT-401 v3 could select an
+  initial install with replacement candidates but did not consume the ensuing
+  typed `InstallChoice`; likewise, Verbal Plasticity's mandatory first-draw
+  replacement yielded an `InterruptChoice` that neither the agent nor the
+  action presenter exposed.
+- Luna Max added bounded, observation-only install continuation handling. The
+  agent prefers an engine-issued legal final selection, otherwise advances one
+  canonical engine-issued continuation, including the last remaining
+  candidate, with typed shape validation and stable semantic ordering. It does
+  not synthesize actions or inspect authoritative state.
+- The v3 agent now handles typed replacement interrupts deterministically,
+  preferring `UseReplacement` and falling back to `DeclineReplacement`; it
+  remains deliberately fail-closed for prevention decisions outside this
+  slice's policy claim. The client action presenter exposes all four typed Core
+  interrupt actions under a neutral interrupt group and exposes install-choice
+  actions with their target card retained.
+- Tests cover final-versus-continuation preference, fresh observation and JSON
+  ordering neutrality, the last-candidate continuation, malformed install and
+  replacement payloads, mandatory Verbal replacement, and UI visibility for
+  install, replacement, and prevention actions. Root independently passed the
+  focused AI suite at 38/38 and Match suite at 62/62, then passed the full
+  `./scripts/verify.sh` gate with all 1,046 tests (Core 717, Cards 175, AI 38,
+  CLI 54, Match 62), zero build warnings/errors, formatting, coverage, content,
+  simulation/replay, Godot, UI smoke, and secret-scan checks green. The M2
+  hashes remain unchanged.

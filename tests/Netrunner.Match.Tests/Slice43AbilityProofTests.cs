@@ -12,8 +12,8 @@ namespace Netrunner.Match.Tests;
 /// </summary>
 public sealed class Slice43AbilityProofTests
 {
-    private const string BasicFixtureId = "sim-slice43-batch2-basic";
-    private const string ExpandedFixtureId = "sim-slice43-batch2-expanded";
+    private const string BasicFixtureId = "sim-slice44-batch3-basic";
+    private const string ExpandedFixtureId = "sim-slice44-batch3-expanded";
 
     [Theory]
     [InlineData(BasicFixtureId)]
@@ -69,7 +69,7 @@ public sealed class Slice43AbilityProofTests
         Assert.Contains(observation.LegalActions, action => action.Kind == ActionKind.StartRun);
 
         // Save/load is part of the decision boundary. Rebuild the observation
-        // from the restored state before asking the v2 agent to choose.
+        // from the restored state before asking the v3 agent to choose.
         string promptJson = EngineJson.Serialize(prompt);
         GameState restoredPrompt = EngineJson.DeserializeState(promptJson, behaviorCatalog);
         Assert.Equal(DeterministicHash.ForState(prompt), DeterministicHash.ForState(restoredPrompt));

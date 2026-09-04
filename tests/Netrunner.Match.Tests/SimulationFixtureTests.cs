@@ -6,10 +6,10 @@ namespace Netrunner.Match.Tests;
 
 public sealed class SimulationFixtureTests
 {
-    private const string BasicFixtureId = "sim-slice43-batch2-basic";
-    private const string ExpandedFixtureId = "sim-slice43-batch2-expanded";
-    private const string GatewayBehaviorRegistryVersion = "gateway-m4-4.3";
-    private const string GatewayBehaviorCatalogFingerprint = "6e55901b550ba189c3ef7d11bb2d5aae4f8036dd8e0f9f2461c627fbe312a7d6";
+    private const string BasicFixtureId = "sim-slice44-batch3-basic";
+    private const string ExpandedFixtureId = "sim-slice44-batch3-expanded";
+    private const string GatewayBehaviorRegistryVersion = "gateway-m4-4.4";
+    private const string GatewayBehaviorCatalogFingerprint = "1d7a527112152ea16164da4def624ca0dbb83e477d06323ecfc86c2f837a2fc4";
 
     private static readonly HashSet<string> AllowedCorpCodes = new(StringComparer.Ordinal)
     {
@@ -49,10 +49,17 @@ public sealed class SimulationFixtureTests
         "30024",
         "30027",
         "30033",
+        "30008",
+        "30012",
+        "30013",
+        "30022",
+        "30025",
+        "30026",
+        "30034",
     };
 
     [Fact]
-    public void CheckedInFixturesAcceptReducedSlice43DecksAndRoundTripStably()
+    public void CheckedInFixturesAcceptReducedSlice44DecksAndRoundTripStably()
     {
         SimulationFixtureCatalog catalog = LoadFixtures();
         BehaviorCatalog fullCatalog = GatewayBehaviorCatalog.Create();
@@ -69,12 +76,14 @@ public sealed class SimulationFixtureTests
                 .Select(static card => card.Code)
                 .Distinct(StringComparer.Ordinal)
                 .OrderBy(static code => code));
-        Assert.Equal(32, fullCatalog.AllDefinitionIds.Count);
+        Assert.Equal(39, fullCatalog.AllDefinitionIds.Count);
         Assert.Equal(
             fullCatalog.AllDefinitionIds
                 .Select(static definitionId => definitionId.Value)
                 .OrderBy(static code => code, StringComparer.Ordinal),
-            AllowedCorpCodes.Concat(AllowedRunnerCodes).OrderBy(static code => code, StringComparer.Ordinal));
+            AllowedCorpCodes
+                .Concat(AllowedRunnerCodes)
+                .OrderBy(static code => code, StringComparer.Ordinal));
 
         foreach (SimulationFixtureDocument fixture in catalog.Fixtures)
         {
@@ -244,14 +253,14 @@ public sealed class SimulationFixtureTests
         string json = SimulationFixtureJson.Serialize(fixture);
 
         string unknown = json.Replace(
-            "  \"fixtureId\": \"sim-slice43-batch2-basic\",",
-            "  \"fixtureId\": \"sim-slice43-batch2-basic\",\n  \"unexpected\": true,",
+            "  \"fixtureId\": \"sim-slice44-batch3-basic\",",
+            "  \"fixtureId\": \"sim-slice44-batch3-basic\",\n  \"unexpected\": true,",
             StringComparison.Ordinal);
         AssertParsePath(unknown, "simulation fixture.unexpected");
 
         string duplicate = json.Replace(
-            "  \"fixtureId\": \"sim-slice43-batch2-basic\",",
-            "  \"fixtureId\": \"sim-slice43-batch2-basic\",\n  \"fixtureId\": \"duplicate\",",
+            "  \"fixtureId\": \"sim-slice44-batch3-basic\",",
+            "  \"fixtureId\": \"sim-slice44-batch3-basic\",\n  \"fixtureId\": \"duplicate\",",
             StringComparison.Ordinal);
         AssertParsePath(duplicate, "simulation fixture.fixtureId");
 

@@ -357,6 +357,98 @@ public sealed class UiRegionPresenterTests
     }
 
     [Fact]
+    public void ActionsGroupInstallChoiceAndRetainItsTargetCard()
+    {
+        MatchViewModel view = RepresentativeView();
+        DecisionViewModel decision = new(
+            "decision:install-choice",
+            1,
+            new PlayerId("player:runner"),
+            PlayerSide.Runner,
+            DecisionKind.InstallChoice,
+            "Choose cards to trash before installing");
+        LegalActionViewModel install = new(
+            new ActionId("action:install-choice"),
+            ActionKind.InstallCard,
+            "Select install replacement",
+            new InstallCardParameters(
+                new CardInstanceId("card:incoming"),
+                InstallDestinationKind.RunnerRig,
+                serverId: null,
+                createNewRemote: false,
+                creditCost: 0,
+                candidateReplacementCardIds: [new CardInstanceId("card:replacement")],
+                requiredReplacementCardIds: [],
+                selectedReplacementCardIds: [new CardInstanceId("card:replacement")],
+                finalizeSelection: true));
+
+        ActionsRegionState region = ActionsRegionPresenter.Present(
+            Snapshot(view with { Decision = decision, LegalActions = [install] }));
+
+        Assert.Equal(ActionsRegionStatus.AwaitingRunnerDecision, region.Status);
+        Assert.Single(region.ActionGroups);
+        Assert.Equal("INSTALL CHOICE ISSUED BY CORE", region.ActionGroups[0].Label);
+        LegalActionViewModel visible = Assert.Single(region.DisplayActions);
+        Assert.Equal(install.Id, visible.Id);
+        Assert.Equal("card:incoming", ActionsRegionPresenter.GetTargetCardId(visible.Parameters));
+        Assert.Contains(install.Id, region.TargetedActions);
+    }
+
+    [Fact]
+    public void ActionsGroupMandatoryVerbalUseReplacementAsActionableInterruptChoice()
+    {
+        MatchViewModel view = RepresentativeView();
+        DecisionViewModel decision = new(
+            "decision:replacement",
+            1,
+            new PlayerId("player:runner"),
+            PlayerSide.Runner,
+            DecisionKind.InterruptChoice,
+            "Choose whether to replace the imminent effect");
+        LegalActionViewModel use = new(
+            new ActionId("action:use-replacement"),
+            ActionKind.UseReplacement,
+            "Use replacement",
+            new ReplacementChoiceParameters(new InterruptId("interrupt:verbal")));
+        LegalActionViewModel declineReplacement = new(
+            new ActionId("action:decline-replacement"),
+            ActionKind.DeclineReplacement,
+            "Decline replacement",
+            new ReplacementChoiceParameters(new InterruptId("interrupt:optional")));
+        LegalActionViewModel usePrevention = new(
+            new ActionId("action:use-prevention"),
+            ActionKind.UsePrevention,
+            "Prevent 1",
+            new PreventionChoiceParameters(new InterruptId("interrupt:prevention"), 1));
+        LegalActionViewModel declinePrevention = new(
+            new ActionId("action:decline-prevention"),
+            ActionKind.DeclinePrevention,
+            "Decline prevention",
+            new PreventionChoiceParameters(new InterruptId("interrupt:optional-prevention"), 0));
+
+        ActionsRegionState region = ActionsRegionPresenter.Present(
+            Snapshot(view with
+            {
+                Decision = decision,
+                LegalActions = [use, declineReplacement, usePrevention, declinePrevention],
+            }));
+
+        Assert.Equal(ActionsRegionStatus.AwaitingRunnerDecision, region.Status);
+        Assert.Single(region.ActionGroups);
+        Assert.Equal("INTERRUPT CHOICE ISSUED BY CORE", region.ActionGroups[0].Label);
+        Assert.Equal(
+            [
+                ActionKind.UseReplacement,
+                ActionKind.DeclineReplacement,
+                ActionKind.UsePrevention,
+                ActionKind.DeclinePrevention,
+            ],
+            region.DisplayActions.Select(action => action.Kind));
+        Assert.Contains(use.Id, region.Actions.Select(action => action.Id));
+        Assert.Contains(usePrevention.Id, region.Actions.Select(action => action.Id));
+    }
+
+    [Fact]
     public void UnknownTurnAndDecisionEnumsFailClosedForPresentation()
     {
         MatchViewModel view = RepresentativeView() with

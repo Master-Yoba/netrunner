@@ -147,7 +147,7 @@ public static class StateInvariantValidator
         {
             ValidateRuntimeCardActivity(state, runtimeCardCatalog, violations);
         }
-        ValidateTurnAndOutcome(state, violations);
+        ValidateTurnAndOutcome(state, runtimeCardCatalog, violations);
         ValidateRunState(state, behaviorCatalog, violations);
         ValidateRulesState(state, behaviorCatalog, runtimeCardCatalog, violations);
         ValidateResolutionAndDecision(
@@ -860,7 +860,10 @@ public static class StateInvariantValidator
         }
     }
 
-    private static void ValidateTurnAndOutcome(GameState state, List<StateInvariantViolation> violations)
+    private static void ValidateTurnAndOutcome(
+        GameState state,
+        IRuntimeCardCatalog? runtimeCardCatalog,
+        List<StateInvariantViolation> violations)
     {
         TurnState turn = state.Turn;
         if (turn is null)
@@ -932,28 +935,40 @@ public static class StateInvariantValidator
                     PlayerSide.Corp,
                     "turn.history.corpThisTurn",
                     knownCardIds,
+                    state.Cards,
+                    state.Servers,
                     knownPlayers,
+                    runtimeCardCatalog,
                     violations);
                 ValidateTurnFacts(
                     turn.History.CorpLastTurn,
                     PlayerSide.Corp,
                     "turn.history.corpLastTurn",
                     knownCardIds,
+                    state.Cards,
+                    state.Servers,
                     knownPlayers,
+                    runtimeCardCatalog,
                     violations);
                 ValidateTurnFacts(
                     turn.History.RunnerThisTurn,
                     PlayerSide.Runner,
                     "turn.history.runnerThisTurn",
                     knownCardIds,
+                    state.Cards,
+                    state.Servers,
                     knownPlayers,
+                    runtimeCardCatalog,
                     violations);
                 ValidateTurnFacts(
                     turn.History.RunnerLastTurn,
                     PlayerSide.Runner,
                     "turn.history.runnerLastTurn",
                     knownCardIds,
+                    state.Cards,
+                    state.Servers,
                     knownPlayers,
+                    runtimeCardCatalog,
                     violations);
             }
             else if (turn.Step != TurnStep.None)
@@ -1134,16 +1149,16 @@ public static class StateInvariantValidator
 
         if (run.BreachAccessModifiers is { } breachModifiers)
         {
-            HashSet<(CardInstanceId Source, ServerId Server, string Reason)> seenModifiers = [];
+            HashSet<(CardInstanceId Source, ServerId Server, string Reason, RunBreachAccessModifierSourceKind Kind)> seenModifiers = [];
             ServerState? attackedServer = state.Servers.FirstOrDefault(server => server?.Id == run.AttackedServer);
-            CardInstanceState? initiatingSource = run.InitiatingSource is { } initiatingSourceId
-                ? state.Cards.FirstOrDefault(card => card?.Id == initiatingSourceId)
-                : null;
-            CardBehaviorDefinition? sourceDefinition = null;
-            bool modifiersHaveInstalledSource = installedRunSource
-                && initiatingSource is not null
-                && initiatingSource.OwnerSide == PlayerSide.Runner
-                && behaviorCatalog.TryGet(initiatingSource.DefinitionId, out sourceDefinition);
+            TurnFactsState? activeFacts = state.Turn.History?.ThisTurn(state.Turn.ActiveSide);
+            bool hasCurrentFormalFacts = activeFacts is not null
+                && activeFacts.Side == state.Turn.ActiveSide
+                && activeFacts.TurnNumber == state.Turn.TurnNumber
+                && activeFacts.TurnBegan;
+            bool isFirstHqBreach = hasCurrentFormalFacts
+                && activeFacts!.HqBreachOccurrenceServerIds.Count == 1
+                && activeFacts.HqBreachOccurrenceServerIds[^1] == run.AttackedServer;
 
             for (int index = 0; index < breachModifiers.Count; index++)
             {
@@ -1155,7 +1170,11 @@ public static class StateInvariantValidator
                     continue;
                 }
 
-                if (!seenModifiers.Add((modifier.SourceCardId, modifier.AttackedServerId, modifier.ReasonKey)))
+                if (!seenModifiers.Add((
+                        modifier.SourceCardId,
+                        modifier.AttackedServerId,
+                        modifier.ReasonKey,
+                        modifier.SourceKind)))
                 {
                     Add(
                         violations,
@@ -1164,13 +1183,14 @@ public static class StateInvariantValidator
                         "Breach access modifiers must not repeat a source, attacked server, and reason key.");
                 }
 
+                CardInstanceState? source = null;
                 if (!StableIdentifier.TryValidate(modifier.SourceCardId.Value))
                 {
                     Add(violations, "id.invalid", $"{modifierPath}.sourceCardId", "Breach modifier source card ID is empty or invalid.");
                 }
                 else
                 {
-                    CardInstanceState? source = state.Cards.FirstOrDefault(card => card?.Id == modifier.SourceCardId);
+                    source = state.Cards.FirstOrDefault(card => card?.Id == modifier.SourceCardId);
                     if (source is null)
                     {
                         Add(violations, "run.breach-modifier-unknown-source", $"{modifierPath}.sourceCardId", $"Breach modifier references unknown source card '{modifier.SourceCardId}'.");
@@ -1179,25 +1199,6 @@ public static class StateInvariantValidator
                     {
                         Add(violations, "run.breach-modifier-source-owner", $"{modifierPath}.sourceCardId", "Breach modifier sources must be Runner-owned.");
                     }
-                }
-
-                if (!installedRunSource)
-                {
-                    Add(
-                        violations,
-                        run.ActiveRunEventId.HasValue
-                            ? "run.breach-modifier-run-event"
-                            : "run.breach-modifier-no-source",
-                        modifierPath,
-                        "Breach access modifiers require an installed Runner run source and are not valid on basic or run-event runs.");
-                }
-                else if (run.InitiatingSource is { } sourceId && modifier.SourceCardId != sourceId)
-                {
-                    Add(
-                        violations,
-                        "run.breach-modifier-source-mismatch",
-                        $"{modifierPath}.sourceCardId",
-                        "Every breach access modifier must identify the run's installed initiating source.");
                 }
 
                 if (modifier.AttackedServerId != run.AttackedServer)
@@ -1228,31 +1229,104 @@ public static class StateInvariantValidator
                     Add(violations, "id.invalid", $"{modifierPath}.reasonKey", "Breach modifier reason key is empty or invalid.");
                 }
 
-                if (modifiersHaveInstalledSource
-                    && sourceDefinition is { } definition
-                    && attackedServer is not null
-                    && !BehaviorRunRules.HasBreachAccessModifierDeclaration(
-                        definition,
-                        attackedServer.Kind,
-                        modifier.ReasonKey,
-                        modifier.Delta))
+                switch (modifier.SourceKind)
                 {
-                    Add(
-                        violations,
-                        "run.breach-modifier-undeclared",
-                        modifierPath,
-                        "Breach access modifiers must match the installed source's declared reason and positive counter scale.");
-                }
-                else if (installedRunSource && initiatingSource is not null && !modifiersHaveInstalledSource)
-                {
-                    Add(
-                        violations,
-                        "run.breach-modifier-source-definition",
-                        modifierPath,
-                        "Breach access modifiers require a valid installed source definition.");
+                    case RunBreachAccessModifierSourceKind.InstalledRunSource:
+                        if (!installedRunSource)
+                        {
+                            Add(
+                                violations,
+                                run.ActiveRunEventId.HasValue
+                                    ? "run.breach-modifier-run-event"
+                                    : "run.breach-modifier-no-source",
+                                modifierPath,
+                                "Legacy breach access modifiers require an installed Runner run source and are not valid on basic or run-event runs.");
+                        }
+                        else if (run.InitiatingSource is { } sourceId && modifier.SourceCardId != sourceId)
+                        {
+                            Add(
+                                violations,
+                                "run.breach-modifier-source-mismatch",
+                                $"{modifierPath}.sourceCardId",
+                                "Every legacy breach access modifier must identify the run's installed initiating source.");
+                        }
+
+                        if (source is not null
+                            && attackedServer is not null
+                            && (!behaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? definition)
+                                || !BehaviorRunRules.HasBreachAccessModifierDeclaration(
+                                    definition,
+                                    attackedServer.Kind,
+                                    modifier.ReasonKey,
+                                    modifier.Delta)))
+                        {
+                            Add(
+                                violations,
+                                "run.breach-modifier-undeclared",
+                                modifierPath,
+                                "Legacy breach access modifiers must match the installed source's declared reason and positive counter scale.");
+                        }
+                        break;
+
+                    case RunBreachAccessModifierSourceKind.FirstHeadquartersBreach:
+                        if (attackedServer?.Kind != ServerKind.Headquarters)
+                        {
+                            Add(
+                                violations,
+                                "run.breach-modifier-first-hq-server",
+                                modifierPath,
+                                "First-HQ breach access modifiers require an attacked Headquarters server.");
+                        }
+
+                        if (!isFirstHqBreach)
+                        {
+                            Add(
+                                violations,
+                                "run.breach-modifier-first-hq-occurrence",
+                                modifierPath,
+                                "First-HQ breach access modifiers require exactly the first HQ occurrence in the active formal turn.");
+                        }
+
+                        if (source is not null
+                            && (!behaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? firstHqDefinition)
+                                || !BehaviorRunRules.HasFirstHqBreachAccessModifierDeclaration(
+                                    firstHqDefinition,
+                                    modifier.ReasonKey,
+                                    modifier.Delta)))
+                        {
+                            Add(
+                                violations,
+                                "run.breach-modifier-undeclared",
+                                modifierPath,
+                                "First-HQ breach access modifiers must match the source's exact declared reason and positive delta.");
+                        }
+
+                        if (hasCurrentFormalFacts
+                            && activeFacts!.GetFirstXCount(modifier.SourceCardId, modifier.ReasonKey) != 1)
+                        {
+                            Add(
+                                violations,
+                                "run.breach-modifier-first-hq-unconsumed",
+                                modifierPath,
+                                "Every first-HQ breach access modifier must consume exactly one matching FirstX source key.");
+                        }
+                        break;
+
+                    default:
+                        Add(
+                            violations,
+                            "run.breach-modifier-source-kind",
+                            $"{modifierPath}.sourceKind",
+                            "Breach access modifiers must use a supported provenance source kind.");
+                        break;
                 }
             }
+
         }
+
+        ValidateRunRandomAccessLimit(state, run, path, violations);
+
+        ValidateRunRezCostModifiers(state, behaviorCatalog, run, path, violations);
 
         if (!installedRunSource && run.InitiatingSource != run.ActiveRunEventId)
         {
@@ -1497,6 +1571,88 @@ public static class StateInvariantValidator
             {
                 Add(violations, "run.invalid-effect-expiry", $"{effectPath}.expiry", $"'{effect.Expiry}' is not supported inside RunState.");
             }
+
+            if (effect.ValueAdjustment is { } adjustment)
+            {
+                if (effect.Expiry != RunLingeringEffectExpiry.Encounter)
+                {
+                    Add(
+                        violations,
+                        "run.value-adjustment-expiry",
+                        $"{effectPath}.valueAdjustment",
+                        "Typed value adjustments must expire at encounter end.");
+                }
+
+                if (effect.SourceCardId != adjustment.SourceCardId)
+                {
+                    Add(
+                        violations,
+                        "run.value-adjustment-source",
+                        $"{effectPath}.valueAdjustment.sourceCardId",
+                        "A typed value adjustment source must match its enclosing effect source.");
+                }
+
+                if (!state.Cards.Any(card => card.Id == adjustment.SourceCardId))
+                {
+                    Add(
+                        violations,
+                        "run.value-adjustment-source-missing",
+                        $"{effectPath}.valueAdjustment.sourceCardId",
+                        $"Typed value adjustment source '{adjustment.SourceCardId}' is not present in state.");
+                }
+
+                if (!state.Cards.Any(card => card.Id == adjustment.TargetCardId))
+                {
+                    Add(
+                        violations,
+                        "run.value-adjustment-target-missing",
+                        $"{effectPath}.valueAdjustment.targetCardId",
+                        $"Typed value adjustment target '{adjustment.TargetCardId}' is not present in state.");
+                }
+
+                bool initializedEncounter = (run.Step is
+                    RunTimingStep.Encounter or RunTimingStep.EncounterPaidWindow)
+                    && run.Encounter is { Status: RunEncounterStatus.Initialized };
+                bool targetMatchesEncounter = adjustment.Source switch
+                {
+                    // Encounter-scoped effects (for example a successful-run
+                    // Leech reduction) always target the exact ICE that
+                    // initialized this encounter. Their source may move after
+                    // activation without changing the target.
+                    BehaviorValueSourceKind.EncounterScoped => initializedEncounter
+                        && run.Encounter!.IceId == adjustment.TargetCardId,
+                    // A dynamic pump snapshots onto its activating breaker;
+                    // an active Runner Rig breaker is the only executable
+                    // target for this realized variable adjustment.
+                    BehaviorValueSourceKind.Variable => initializedEncounter
+                        && adjustment.SourceCardId == adjustment.TargetCardId
+                        && state.Cards.FirstOrDefault(card => card.Id == adjustment.TargetCardId) is { } targetCard
+                        && state.Zones.FirstOrDefault(zone => zone.Id == targetCard.ZoneId) is
+                        { Kind: ZoneKind.RunnerRig, OwnerSide: PlayerSide.Runner } targetZone
+                        && targetZone.CardIds.Contains(adjustment.TargetCardId)
+                        && behaviorCatalog.TryGetIcebreaker(targetCard.DefinitionId, out _),
+                    _ => false,
+                };
+                if (!targetMatchesEncounter)
+                {
+                    Add(
+                        violations,
+                        "run.value-adjustment-target",
+                        $"{effectPath}.valueAdjustment.targetCardId",
+                        "A typed run value adjustment must target the current initialized encounter ICE or its active breaker.");
+                }
+
+                if (adjustment.Source == BehaviorValueSourceKind.EncounterScoped)
+                {
+                    ValidateCatalogEncounterStrengthAdjustment(
+                        state,
+                        behaviorCatalog,
+                        effect,
+                        adjustment,
+                        effectPath,
+                        violations);
+                }
+            }
         }
 
         if (run.Priority is null)
@@ -1544,6 +1700,374 @@ public static class StateInvariantValidator
                 {
                     Add(violations, "run.unknown-card", idPath, $"Run references unknown card '{id}'.");
                 }
+            }
+        }
+    }
+
+    private static void ValidateCatalogEncounterStrengthAdjustment(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        RunLingeringEffect effect,
+        RunValueAdjustment adjustment,
+        string effectPath,
+        List<StateInvariantViolation> violations)
+    {
+        if (!BehaviorEncounterStrengthContracts.HasEffectPrefix(effect.BehaviorId))
+        {
+            Add(
+                violations,
+                "run.value-adjustment-provenance-behavior",
+                $"{effectPath}.behaviorId",
+                "An encounter strength adjustment must carry a catalog behavior identity.");
+            return;
+        }
+
+        CardInstanceState? source = state.Cards.FirstOrDefault(card => card?.Id == adjustment.SourceCardId);
+        if (source is null)
+        {
+            Add(
+                violations,
+                "run.value-adjustment-provenance-definition",
+                $"{effectPath}.valueAdjustment.sourceCardId",
+                "A catalog encounter strength adjustment source card must remain present for provenance reconstruction.");
+            return;
+        }
+
+        if (!behaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? definition))
+        {
+            Add(
+                violations,
+                "run.value-adjustment-provenance-definition",
+                $"{effectPath}.behaviorId",
+                "A catalog encounter strength adjustment requires its source definition in the injected catalog.");
+            return;
+        }
+
+        bool hasEncounterStrengthAbility = definition.PaidAbilities.Any(static ability =>
+            ability.Instructions.Any(static instruction =>
+                instruction.Kind == BehaviorInstructionKind.ModifyEncounteredIceStrength));
+        if (!hasEncounterStrengthAbility)
+        {
+            Add(
+                violations,
+                "run.value-adjustment-provenance-behavior",
+                $"{effectPath}.behaviorId",
+                "A catalog encounter strength adjustment must identify a definition with a typed encounter-strength ability.");
+            return;
+        }
+
+        if (source.OwnerSide != PlayerSide.Runner
+            || definition.Controller != source.OwnerSide)
+        {
+            Add(
+                violations,
+                "run.value-adjustment-provenance-controller",
+                $"{effectPath}.valueAdjustment.sourceCardId",
+                "A catalog encounter strength adjustment source must be a Runner card whose definition controller matches its owner.");
+        }
+
+        if (state.RunState?.Encounter?.IceId != adjustment.TargetCardId)
+        {
+            Add(
+                violations,
+                "run.value-adjustment-provenance-target",
+                $"{effectPath}.valueAdjustment.targetCardId",
+                "A catalog encounter strength adjustment must target the current encounter ICE.");
+            return;
+        }
+
+        BehaviorPaidAbility[] matchingAbilities = definition.PaidAbilities
+            .Where(ability => string.Equals(
+                BehaviorEncounterStrengthContracts.EffectBehaviorId(definition.DefinitionId, ability.Key),
+                effect.BehaviorId,
+                StringComparison.Ordinal))
+            .ToArray();
+        if (matchingAbilities.Length != 1)
+        {
+            Add(
+                violations,
+                "run.value-adjustment-provenance-behavior",
+                $"{effectPath}.behaviorId",
+                "A catalog encounter strength adjustment must identify exactly one declared paid ability.");
+            return;
+        }
+
+        BehaviorPaidAbility ability = matchingAbilities[0];
+        if (!BehaviorEncounterStrengthContracts.MatchesEffect(
+                definition,
+                ability.Key,
+                effect.BehaviorId,
+                adjustment,
+                out _,
+                out BehaviorInstruction? instruction)
+            || instruction is null)
+        {
+            Add(
+                violations,
+                "run.value-adjustment-provenance-declaration",
+                $"{effectPath}.valueAdjustment",
+                "A catalog encounter strength adjustment must match its paid-ability timing, instruction, delta, and reason.");
+        }
+    }
+
+    private static void ValidateBehaviorEncounterStrengthInstruction(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        BehaviorResolutionFrame frame,
+        BehaviorPaidAbility? abilityDeclaration,
+        IReadOnlyList<BehaviorInstruction> instructions,
+        int frameIndex,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        BehaviorInstruction[] modifiers = instructions
+            .Where(static instruction =>
+                instruction.Kind == BehaviorInstructionKind.ModifyEncounteredIceStrength)
+            .ToArray();
+        if (modifiers.Length == 0)
+        {
+            return;
+        }
+
+        bool validAbility = false;
+        if (frame.AbilityKey is not null
+            && frame.TriggerKey is null
+            && abilityDeclaration is not null
+            && modifiers.Length == 1
+            && behaviorCatalog.TryGet(frame.DefinitionId, out CardBehaviorDefinition? definition)
+            && BehaviorEncounterStrengthContracts.TryGetExecutableInstruction(
+                definition,
+                frame.AbilityKey,
+                out _,
+                out BehaviorInstruction? declaredInstruction)
+            && declaredInstruction is not null)
+        {
+            validAbility = BehaviorContractStructure.AreEqual(modifiers[0], declaredInstruction);
+        }
+
+        if (!validAbility)
+        {
+            Add(
+                violations,
+                "resolution.behavior-encounter-strength-instruction",
+                path,
+                "Encountered-ICE strength instructions must be the exact single instruction of a Runner encounter-paid ability.");
+            return;
+        }
+
+        RunState? run = state.RunState;
+        bool validRun = run is
+        {
+            Step: RunTimingStep.EncounterPaidWindow,
+            Priority: { PriorityHolder: PlayerSide.Runner },
+            Encounter: { Status: RunEncounterStatus.Initialized },
+        };
+        bool validParent = frameIndex >= 2
+            && state.ResolutionStack[frameIndex - 1] is AbilityFrame abilityParent
+            && state.ResolutionStack[frameIndex - 2] is RunTimingFrame runFrame
+            && abilityParent.Stage == AbilityLifecycleStage.AwaitingChild
+            && abilityParent.SourceCardId == frame.SourceCardId
+            && abilityParent.DefinitionId == frame.DefinitionId
+            && abilityParent.Controller == frame.Controller
+            && run is not null
+            && runFrame.RunId == run.Id
+            && runFrame.Step == run.Step;
+        PlayerState? controller = state.Players.FirstOrDefault(player => player?.Id == frame.Controller);
+        CardInstanceState? source = state.Cards.FirstOrDefault(card => card?.Id == frame.SourceCardId);
+        bool validSource = source is not null
+            && source.DefinitionId == frame.DefinitionId
+            && source.OwnerSide == PlayerSide.Runner
+            && controller is not null
+            && source.OwnerSide == controller.Side;
+        CardInstanceState? target = run?.Encounter is { } encounter
+            ? state.Cards.FirstOrDefault(card => card?.Id == encounter.IceId)
+            : null;
+        bool validTarget = target is not null
+            && behaviorCatalog.TryGetIce(target.DefinitionId, out _);
+        if (!validRun || !validParent || !validSource || !validTarget)
+        {
+            Add(
+                violations,
+                "resolution.behavior-encounter-strength-context",
+                path,
+                "Encountered-ICE strength instructions require the exact initialized encounter paid-window parent, Runner source/controller, and current ICE target.");
+        }
+    }
+
+    private static void ValidateRunRandomAccessLimit(
+        GameState state,
+        RunState run,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        if (run.Step is not (RunTimingStep.BreachCandidateSelection
+            or RunTimingStep.BreachAccessAbility
+            or RunTimingStep.RunEnd))
+        {
+            return;
+        }
+
+        // A legacy hand-authored observation fixture may describe an
+        // already-accessed hidden card without carrying the breach snapshot
+        // that the production boundary persists. There is no modifier
+        // arithmetic to reconstruct in that shape; modifier-bearing runs are
+        // always checked against the authoritative hidden-pool cursor below.
+        if (run.BreachAccessModifiers is null)
+        {
+            return;
+        }
+
+        ServerState? server = state.Servers.FirstOrDefault(candidate => candidate?.Id == run.AttackedServer);
+        ZoneState? hiddenZone = server?.Kind switch
+        {
+            ServerKind.Headquarters => state.Zones.FirstOrDefault(zone =>
+                zone?.Kind == ZoneKind.CorpHand
+                && zone.OwnerSide == PlayerSide.Corp
+                && zone.ServerId is null),
+            ServerKind.RAndD => state.Zones.FirstOrDefault(zone =>
+                zone?.Kind == ZoneKind.CorpDeck
+                && zone.OwnerSide == PlayerSide.Corp
+                && zone.ServerId is null),
+            _ => null,
+        };
+        int hiddenCount = hiddenZone?.CardIds.Count ?? 0;
+        long requested = hiddenCount > 0 ? 1 : 0;
+        if (run.BreachAccessModifiers is { } modifiers)
+        {
+            foreach (RunBreachAccessModifier? modifier in modifiers)
+            {
+                if (modifier is not null && modifier.AttackedServerId == run.AttackedServer)
+                {
+                    requested += modifier.Delta;
+                }
+            }
+        }
+
+        int initial = hiddenCount > 0
+            ? (int)Math.Min(hiddenCount, Math.Max(0L, requested))
+            : 0;
+        int hiddenChosen = hiddenZone is null
+            ? 0
+            : run.ChosenAccessCards.Count(hiddenZone.CardIds.Contains);
+        int expected = Math.Max(0, initial - hiddenChosen);
+        if (run.RandomAccessLimit != expected)
+        {
+            Add(
+                violations,
+                "run.random-access-limit-mismatch",
+                $"{path}.randomAccessLimit",
+                $"Random access limit {run.RandomAccessLimit} does not match the authoritative breach reconstruction {expected}.");
+        }
+    }
+
+    private static void ValidateRunRezCostModifiers(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        RunState run,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        IReadOnlyList<RunRezCostModifier>? modifiers = run.RezCostModifiers;
+        CardInstanceId? expectedSourceId = run.ActiveRunEventId;
+        CardInstanceState? source = expectedSourceId is { } sourceId
+            ? state.Cards.FirstOrDefault(card => card?.Id == sourceId)
+            : null;
+        RunEventBehaviorSpec? sourceSpec = source is not null
+            && behaviorCatalog.TryGetRunEvent(source.DefinitionId, out RunEventBehaviorSpec? registered)
+            ? registered
+            : null;
+        IReadOnlyList<BehaviorRunRezCostModifier> declarations = sourceSpec?.RezCostModifiers ?? [];
+
+        if (modifiers is null)
+        {
+            if (declarations.Count > 0)
+            {
+                Add(
+                    violations,
+                    "run.missing-rez-cost-modifiers",
+                    $"{path}.rezCostModifiers",
+                    "The active run event's declared rez-cost modifiers must be snapshotted into the run state.");
+            }
+
+            return;
+        }
+
+        if (expectedSourceId is null)
+        {
+            Add(
+                violations,
+                "run.rez-cost-modifier-no-event",
+                $"{path}.rezCostModifiers",
+                "Run rez-cost modifiers require the active run event that declared them.");
+        }
+
+        var seen = new HashSet<(CardDefinitionId Definition, CardInstanceId Card, int Delta, string Reason)>();
+        for (int index = 0; index < modifiers.Count; index++)
+        {
+            RunRezCostModifier? modifier = modifiers[index];
+            string modifierPath = $"{path}.rezCostModifiers[{index}]";
+            if (modifier is null)
+            {
+                Add(
+                    violations,
+                    "run.null-rez-cost-modifier",
+                    modifierPath,
+                    "Run rez-cost modifiers must not contain null entries.");
+                continue;
+            }
+
+            if (!seen.Add((modifier.SourceDefinitionId, modifier.SourceCardId, modifier.Delta, modifier.ReasonKey)))
+            {
+                Add(
+                    violations,
+                    "run.duplicate-rez-cost-modifier",
+                    modifierPath,
+                    "Run rez-cost modifiers must not repeat a source, delta, and reason.");
+            }
+
+            if (expectedSourceId is { } activeSourceId && modifier.SourceCardId != activeSourceId)
+            {
+                Add(
+                    violations,
+                    "run.rez-cost-modifier-source-mismatch",
+                    $"{modifierPath}.sourceCardId",
+                    "Every run rez-cost modifier must identify the active run event source.");
+            }
+
+            if (source is not null && modifier.SourceDefinitionId != source.DefinitionId)
+            {
+                Add(
+                    violations,
+                    "run.rez-cost-modifier-definition-mismatch",
+                    $"{modifierPath}.sourceDefinitionId",
+                    "Every run rez-cost modifier must identify the active run event definition.");
+            }
+
+            if (sourceSpec is null
+                || !declarations.Any(declaration => declaration.Delta == modifier.Delta
+                    && string.Equals(declaration.ReasonKey, modifier.ReasonKey, StringComparison.Ordinal)))
+            {
+                Add(
+                    violations,
+                    "run.rez-cost-modifier-undeclared",
+                    modifierPath,
+                    "Run rez-cost modifiers must match a declaration on the active run event source.");
+            }
+        }
+
+        foreach (BehaviorRunRezCostModifier declaration in declarations)
+        {
+            if (!modifiers.Any(modifier => modifier is not null
+                && modifier.SourceDefinitionId == (source?.DefinitionId ?? default)
+                && modifier.SourceCardId == (expectedSourceId ?? default)
+                && modifier.Delta == declaration.Delta
+                && string.Equals(modifier.ReasonKey, declaration.ReasonKey, StringComparison.Ordinal)))
+            {
+                Add(
+                    violations,
+                    "run.missing-rez-cost-modifier",
+                    $"{path}.rezCostModifiers",
+                    $"Run rez-cost modifier declaration '{declaration.ReasonKey}' is missing from the run snapshot.");
             }
         }
     }
@@ -2812,7 +3336,8 @@ public static class StateInvariantValidator
                                     behaviorCatalog,
                                     install.CardId,
                                     BehaviorCostModifierKind.RunnerInstallCreditCost,
-                                    runtimeSpec.InstallCost ?? 0);
+                                    runtimeSpec.InstallCost ?? 0,
+                                    runtimeCardCatalog);
                                 int expectedInstallCost = expectedInstallQuote?.EffectiveCost ?? (runtimeSpec.InstallCost ?? 0);
                                 if (install.InstallCost != expectedInstallCost)
                                 {
@@ -3397,6 +3922,16 @@ public static class StateInvariantValidator
                             Add(violations, "resolution.behavior-cursor-invalid", $"{path}.instructionCursor", "Behavior cursor is outside the catalog-derived continuation.");
                         }
 
+                        ValidateBehaviorEncounterStrengthInstruction(
+                            state,
+                            behaviorCatalog,
+                            behaviorFrame,
+                            abilityDeclaration,
+                            derivedInstructions,
+                            index,
+                            path,
+                            violations);
+
                         ValidateBehaviorContinuationBindings(
                             behaviorFrame,
                             behaviorRoot,
@@ -3492,6 +4027,12 @@ public static class StateInvariantValidator
                         index,
                         path,
                         violations);
+                    ValidateBasicDrawEffectFrameContext(
+                        state,
+                        effectFrame,
+                        index,
+                        path,
+                        violations);
                     if (effectFrame.Stage == EffectResolutionStage.AwaitingMemoryCleanup)
                     {
                         if (index + 1 >= state.ResolutionStack.Count
@@ -3517,6 +4058,35 @@ public static class StateInvariantValidator
                     break;
                 case EffectCheckpointFrame checkpoint:
                     RequirePlayer(playerIds, checkpoint.Controller, $"{path}.controller", violations);
+                    int catalogBasicDrawReplacementCount = 0;
+                    for (int interruptIndex = 0; interruptIndex < checkpoint.InterruptQueue.Count; interruptIndex++)
+                    {
+                        InterruptInvocation interrupt = checkpoint.InterruptQueue[interruptIndex];
+                        if (interrupt.IsCatalogInterrupt)
+                        {
+                            ValidateCatalogBasicDrawReplacementInvocation(
+                                state,
+                                behaviorCatalog,
+                                checkpoint,
+                                interrupt,
+                                $"{path}.interruptQueue[{interruptIndex}]",
+                                violations);
+                            if (interrupt.Occurrence.Kind == OccurrenceKind.BasicDraw)
+                            {
+                                catalogBasicDrawReplacementCount++;
+                            }
+                        }
+                    }
+
+                    if (catalogBasicDrawReplacementCount > 1)
+                    {
+                        Add(
+                            violations,
+                            "resolution.basic-draw-replacement-stack",
+                            $"{path}.interruptQueue",
+                            "A basic-draw occurrence may retain at most one catalog replacement invocation.");
+                    }
+
                     if (index > 0
                         && state.ResolutionStack[index - 1] is EffectResolutionFrame occurrenceParent
                         && occurrenceParent.Effects.Instructions.Count == 1
@@ -3819,6 +4389,159 @@ public static class StateInvariantValidator
                     "resolution.turn-boundary-context-mismatch",
                     $"{path}.effects.instructions",
                     $"Turn boundary '{boundary.Kind}' does not match the parent turn cursor context.");
+            }
+        }
+    }
+
+    private static void ValidateBasicDrawEffectFrameContext(
+        GameState state,
+        EffectResolutionFrame frame,
+        int index,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        BasicDrawEffect[] draws = frame.Effects.Instructions
+            .OfType<BasicDrawEffect>()
+            .ToArray();
+        if (draws.Length == 0)
+        {
+            return;
+        }
+
+        if (draws.Length != 1 || frame.Effects.Instructions.Count != 1)
+        {
+            Add(
+                violations,
+                "resolution.basic-draw-bundle-shape",
+                $"{path}.effects.instructions",
+                "A typed basic draw must be the sole instruction in its effect transaction.");
+            return;
+        }
+
+        BasicDrawEffect draw = draws[0];
+        PlayerState? controller = state.Players.FirstOrDefault(player => player?.Id == frame.Controller);
+        if (controller is null || controller.Side != draw.Side)
+        {
+            Add(
+                violations,
+                "resolution.basic-draw-controller-mismatch",
+                $"{path}.controller",
+                "A typed basic draw controller must be the player who performs the draw.");
+        }
+
+        if (!draw.IsReplacement)
+        {
+            if (draw.OccurrenceId is not { } occurrenceId)
+            {
+                Add(
+                    violations,
+                    "resolution.basic-draw-occurrence-missing",
+                    $"{path}.effects.instructions[0].occurrenceId",
+                    "A real basic draw must retain its materialized occurrence ID.");
+            }
+            else
+            {
+                TurnFactsState? facts = state.Turn.History?.ThisTurn(draw.Side);
+                bool hasCurrentFacts = facts is not null
+                    && facts.Side == draw.Side
+                    && facts.TurnNumber == state.Turn.TurnNumber
+                    && facts.TurnBegan
+                    && facts.BasicDrawOccurrenceIds.Contains(occurrenceId);
+                if (!hasCurrentFacts)
+                {
+                    Add(
+                        violations,
+                        "turn.basic-draw-ledger-mismatch",
+                        $"{path}.effects.instructions[0].occurrenceId",
+                        "A real basic draw must retain its accepted occurrence in the current formal-turn ledger.");
+                }
+                else
+                {
+                    bool isFirst = facts!.BasicDrawOccurrenceIds[0] == occurrenceId;
+                    if (draw.IsFirstBasicDraw != isFirst)
+                    {
+                        Add(
+                            violations,
+                            "turn.basic-draw-first-flag-mismatch",
+                            $"{path}.effects.instructions[0].isFirstBasicDraw",
+                            "The first-basic-draw flag must agree with the first entry in the global formal-turn ledger.");
+                    }
+                }
+            }
+
+            if (frame.SourceOccurrence is not null)
+            {
+                Add(
+                    violations,
+                    "resolution.basic-draw-source-occurrence-unexpected",
+                    $"{path}.sourceOccurrence",
+                    "A real basic draw must not carry a replacement source occurrence.");
+            }
+
+            if (index == 0
+                || state.ResolutionStack[index - 1] is not TurnFrame parent
+                || parent.ActiveSide != draw.Side
+                || parent.TurnNumber != state.Turn.TurnNumber
+                || parent.Stage != TurnFrameStage.ActionPriority)
+            {
+                Add(
+                    violations,
+                    "resolution.basic-draw-parent-context-mismatch",
+                    path,
+                    "A real basic draw must be opened by the active turn action-priority frame.");
+            }
+        }
+        else
+        {
+            if (frame.SourceOccurrence is not { } sourceOccurrence
+                || sourceOccurrence.Kind != OccurrenceKind.BasicDraw
+                || sourceOccurrence.Phase != OccurrencePhase.Imminent
+                || sourceOccurrence.Effect is not BasicDrawEffect sourceDraw
+                || sourceDraw.IsReplacement
+                || !sourceDraw.IsFirstBasicDraw
+                || sourceDraw.OccurrenceId is not { } sourceOccurrenceId
+                || sourceOccurrenceId != sourceOccurrence.Id
+                || sourceOccurrenceId != frame.SourceOccurrence.Id)
+            {
+                Add(
+                    violations,
+                    "resolution.basic-draw-replacement-source-context-mismatch",
+                    $"{path}.sourceOccurrence",
+                    "A replacement basic draw must retain the exact frozen first-draw occurrence context.");
+            }
+
+            if (index == 0
+                || state.ResolutionStack[index - 1] is not EffectCheckpointFrame checkpoint
+                || checkpoint.Stage != EffectCheckpointStage.AwaitingChild
+                || checkpoint.ChildKind != EffectCheckpointChildKind.Replacement
+                || checkpoint.ChildInterruptId is null
+                || checkpoint.Occurrence.Kind != OccurrenceKind.BasicDraw
+                || checkpoint.Occurrence.Phase != OccurrencePhase.Imminent
+                || checkpoint.Occurrence.Id != frame.SourceOccurrence?.Id)
+            {
+                Add(
+                    violations,
+                    "resolution.basic-draw-replacement-parent-context-mismatch",
+                    path,
+                    "A replacement basic draw must be the child of its awaiting replacement checkpoint.");
+            }
+
+            if (draw.IsFirstBasicDraw || draw.OccurrenceId is not null)
+            {
+                Add(
+                    violations,
+                    "resolution.basic-draw-replacement-flags",
+                    $"{path}.effects.instructions[0]",
+                    "A replacement basic draw must not carry first-action or root-occurrence flags.");
+            }
+
+            if (frame.Controller != controller?.Id)
+            {
+                Add(
+                    violations,
+                    "resolution.basic-draw-replacement-controller-mismatch",
+                    $"{path}.controller",
+                    "A replacement basic draw controller must match its source occurrence controller.");
             }
         }
     }
@@ -6581,6 +7304,234 @@ public static class StateInvariantValidator
         }
     }
 
+    private static void ValidateCatalogBasicDrawReplacementInvocation(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        EffectCheckpointFrame checkpoint,
+        InterruptInvocation invocation,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        if (invocation.Kind != InterruptKind.Replacement
+            || !invocation.Mandatory
+            || invocation.BehaviorId != ResolutionBehaviorIds.CardBehavior
+            || !string.Equals(invocation.InterruptKey, invocation.ReplacementReasonKey, StringComparison.Ordinal))
+        {
+            Add(
+                violations,
+                "resolution.basic-draw-replacement-kind",
+                path,
+                "A catalog basic-draw invocation must be a mandatory replacement.");
+        }
+
+        if (!StableIdentifier.TryValidate(invocation.InterruptKey)
+            || !StableIdentifier.TryValidate(invocation.CatalogFingerprint)
+            || !StableIdentifier.TryValidate(invocation.DefinitionFingerprint)
+            || !StableIdentifier.TryValidate(invocation.ReplacementReasonKey))
+        {
+            Add(
+                violations,
+                "resolution.basic-draw-replacement-provenance",
+                path,
+                "A catalog basic-draw invocation must retain stable interrupt, catalog, definition, and reason provenance.");
+        }
+
+        if (invocation.SourceCardId is not { } sourceCardId
+            || invocation.SourceDefinitionId is not { } sourceDefinitionId
+            || invocation.SourceZoneId is not { } sourceZoneId
+            || invocation.SourceOwnerSide is not { } sourceOwnerSide
+            || invocation.SourceZoneKind is not { } sourceZoneKind
+            || invocation.BasicDrawCount is not { } drawCount
+            || invocation.ReplacementReasonKey is not { } reasonKey)
+        {
+            Add(
+                violations,
+                "resolution.basic-draw-replacement-source-missing",
+                path,
+                "A catalog basic-draw invocation must retain a complete source and replacement snapshot.");
+            return;
+        }
+
+        RequirePlayer(
+            new HashSet<PlayerId>(state.Players.Where(player => player is not null).Select(player => player!.Id)),
+            invocation.Controller,
+            $"{path}.controller",
+            violations);
+        if (!Enum.IsDefined(sourceOwnerSide) || !Enum.IsDefined(sourceZoneKind))
+        {
+            Add(violations, "resolution.basic-draw-replacement-source-invalid", path, "A catalog basic-draw source side and zone kind must be defined.");
+        }
+
+        CardInstanceState? source = state.Cards.FirstOrDefault(card => card?.Id == sourceCardId);
+        if (source is null)
+        {
+            Add(violations, "resolution.basic-draw-replacement-source-missing", $"{path}.sourceCardId", "The catalog basic-draw source card does not exist.");
+        }
+        else
+        {
+            if (source.DefinitionId != sourceDefinitionId)
+            {
+                Add(violations, "resolution.basic-draw-replacement-definition-mismatch", path, "The catalog basic-draw source definition must match its physical card.");
+            }
+
+            if (source.OwnerSide != sourceOwnerSide)
+            {
+                Add(violations, "resolution.basic-draw-replacement-owner-mismatch", path, "The catalog basic-draw source owner must match its captured owner side.");
+            }
+        }
+
+        ZoneState? sourceZone = state.Zones.FirstOrDefault(zone => zone?.Id == sourceZoneId);
+        if (sourceZone is null || sourceZone.Kind != sourceZoneKind)
+        {
+            Add(violations, "resolution.basic-draw-replacement-zone-mismatch", $"{path}.sourceZoneId", "The catalog basic-draw source zone snapshot must retain its original zone kind.");
+        }
+        else if (!RuntimeCardActivity.IsActiveInstalledZone(
+                     sourceOwnerSide,
+                     sourceZone,
+                     state.Zones,
+                     state.Servers))
+        {
+            Add(
+                violations,
+                "resolution.basic-draw-replacement-source-zone-inactive",
+                $"{path}.sourceZoneId",
+                "The catalog basic-draw source zone snapshot must be an active installed zone for its captured owner.");
+        }
+
+        if (!string.Equals(invocation.CatalogFingerprint, behaviorCatalog.Fingerprint, StringComparison.Ordinal))
+        {
+            Add(violations, "resolution.basic-draw-replacement-catalog-mismatch", $"{path}.catalogFingerprint", "The catalog basic-draw invocation fingerprint must match the injected catalog.");
+        }
+        else if (behaviorCatalog.TryGet(sourceDefinitionId, out _)
+                 && !string.Equals(
+                     invocation.DefinitionFingerprint,
+                     behaviorCatalog.GetDefinitionFingerprint(sourceDefinitionId),
+                     StringComparison.Ordinal))
+        {
+            Add(violations, "resolution.basic-draw-replacement-definition-fingerprint-mismatch", $"{path}.definitionFingerprint", "The catalog basic-draw source definition fingerprint must match the injected catalog.");
+        }
+
+        if (!Enum.IsDefined(invocation.Occurrence.Kind)
+            || invocation.Occurrence.Kind != OccurrenceKind.BasicDraw
+            || invocation.Occurrence.Phase != OccurrencePhase.Imminent
+            || invocation.Occurrence.Effect is not BasicDrawEffect basicDraw
+            || basicDraw.IsReplacement
+            || !basicDraw.IsFirstBasicDraw
+            || basicDraw.OccurrenceId is not { } occurrenceId
+            || occurrenceId != invocation.Occurrence.Id
+            || invocation.BasicDrawCount != drawCount
+            || invocation.ReplacementEffects.Instructions.Count != 1
+            || invocation.ReplacementEffects.Instructions[0] is not BasicDrawEffect replacement
+            || !replacement.IsReplacement
+            || replacement.IsFirstBasicDraw
+            || replacement.Side != basicDraw.Side
+            || replacement.DrawCount != drawCount)
+        {
+            Add(violations, "resolution.basic-draw-replacement-effect-mismatch", path, "The catalog basic-draw invocation must retain the exact typed imminent and replacement effects.");
+        }
+
+        if (checkpoint.Occurrence.Id != invocation.Occurrence.Id)
+        {
+            Add(violations, "resolution.basic-draw-replacement-occurrence-mismatch", path, "The catalog basic-draw invocation occurrence must match its checkpoint.");
+        }
+
+        PlayerSide basicDrawSide = invocation.Occurrence.Effect is BasicDrawEffect drawEffect
+            ? drawEffect.Side
+            : sourceOwnerSide;
+        if (sourceOwnerSide != basicDrawSide)
+        {
+            Add(
+                violations,
+                "resolution.basic-draw-replacement-side-mismatch",
+                path,
+                "A catalog basic-draw source must belong to the side performing the draw.");
+        }
+
+        PlayerState? sourcePlayer = state.Players.FirstOrDefault(player => player?.Side == sourceOwnerSide);
+        PlayerState? drawPlayer = state.Players.FirstOrDefault(player => player?.Side == basicDrawSide);
+        if (sourcePlayer is null
+            || invocation.Controller != sourcePlayer.Id
+            || checkpoint.Controller != sourcePlayer.Id)
+        {
+            Add(
+                violations,
+                "resolution.basic-draw-replacement-controller-mismatch",
+                path,
+                "A catalog basic-draw invocation controller must match the captured source owner and checkpoint controller.");
+        }
+
+        if (sourcePlayer is null
+            || checkpoint.Occurrence.Controller != sourcePlayer.Id
+            || checkpoint.Occurrence.Controller != checkpoint.Controller
+            || invocation.Occurrence.Controller != checkpoint.Occurrence.Controller)
+        {
+            Add(
+                violations,
+                "resolution.basic-draw-replacement-occurrence-controller-mismatch",
+                path,
+                "A catalog basic-draw invocation occurrence controller must match the source owner and checkpoint occurrence.");
+        }
+
+        if (drawPlayer is null
+            || checkpoint.Occurrence.TargetPlayer != drawPlayer.Id
+            || invocation.Occurrence.TargetPlayer != checkpoint.Occurrence.TargetPlayer)
+        {
+            Add(
+                violations,
+                "resolution.basic-draw-replacement-target-mismatch",
+                path,
+                "A catalog basic-draw invocation target player must match the basic-draw side and checkpoint occurrence.");
+        }
+
+        TurnFactsState? facts = state.Turn.History?.ThisTurn(basicDrawSide);
+        if (facts is null
+            || facts.Side != basicDrawSide
+            || facts.TurnNumber != state.Turn.TurnNumber
+            || !facts.TurnBegan
+            || facts.BasicDrawOccurrenceIds.Count == 0
+            || facts.BasicDrawOccurrenceIds[0] != checkpoint.Occurrence.Id
+            || !facts.BasicDrawOccurrenceIds.Contains(checkpoint.Occurrence.Id))
+        {
+            Add(
+                violations,
+                "turn.basic-draw-first-ledger-mismatch",
+                path,
+                "A first basic-draw replacement must retain the matching occurrence as the first global formal-turn ledger entry.");
+        }
+
+        if (facts is not null && facts.GetFirstXCount(sourceCardId, reasonKey) != 0)
+        {
+            Add(
+                violations,
+                "turn.basic-draw-first-x-already-consumed",
+                path,
+                "A pending basic-draw replacement source must not already be consumed.");
+        }
+
+        if (behaviorCatalog.TryGet(sourceDefinitionId, out CardBehaviorDefinition? definition)
+            && definition.FirstBasicDrawReplacements is { Count: > 0 } declarations)
+        {
+            BehaviorFirstBasicDrawReplacement? declaration = declarations
+                .SingleOrDefault(candidate => string.Equals(candidate.ReasonKey, reasonKey, StringComparison.Ordinal));
+            if (declaration is null || declaration.DrawCount != drawCount)
+            {
+                Add(
+                    violations,
+                    "resolution.basic-draw-replacement-declaration-mismatch",
+                    path,
+                    "The materialized basic-draw replacement must match a declaration in the pinned source definition.");
+            }
+        }
+        else
+        {
+            Add(
+                violations,
+                "resolution.basic-draw-replacement-declaration-missing",
+                path,
+                "The materialized basic-draw replacement source definition must declare its replacement.");
+        }
+    }
+
     private static void ValidateCheckpointActions(
         PendingDecision pending,
         EffectCheckpointFrame frame,
@@ -6720,6 +7671,7 @@ public static class StateInvariantValidator
 
         var expected = new List<(ActionKind Kind, CardInstanceId? Target, int Quantity, int HostedCredits)>();
         IReadOnlyList<RezCardParameters> expectedRuntimeRezes = [];
+        var expectedRunRezes = new List<RunIceParameters>();
         switch (run.Step)
         {
             case RunTimingStep.InitiationPaidWindow:
@@ -6732,7 +7684,10 @@ public static class StateInvariantValidator
                 {
                     try
                     {
-                        expectedRuntimeRezes = GameEngine.MaterializeRezCardParameters(state, runtimeCardCatalog);
+                        expectedRuntimeRezes = GameEngine.MaterializeRezCardParameters(
+                            state,
+                            behaviorCatalog,
+                            runtimeCardCatalog);
                     }
                     catch (Exception exception) when (exception is ResolutionFailureException
                         or InvalidOperationException
@@ -6754,10 +7709,19 @@ public static class StateInvariantValidator
                     CardInstanceState approachedIce = state.GetCard(run.CurrentIceId.Value);
                     if (behaviorCatalog.TryGetIce(approachedIce.DefinitionId, out IceBehaviorSpec? approachedSpec))
                     {
+                        CostQuote? approachedCostQuote = GameEngine.ProjectIceRezQuote(
+                            state,
+                            behaviorCatalog,
+                            run.CurrentIceId.Value,
+                            approachedSpec.RezCost);
+                        int approachedCost = approachedCostQuote?.EffectiveCost ?? approachedSpec.RezCost;
                         PlayerState? corp = state.Players.FirstOrDefault(player => player?.Side == PlayerSide.Corp);
-                        if (corp is not null && corp.Credits >= approachedSpec.RezCost)
+                        if (corp is not null && corp.Credits >= approachedCost)
                         {
                             expected.Add((ActionKind.RezIce, run.CurrentIceId.Value, 0, 0));
+                            expectedRunRezes.Add(new RunIceParameters(
+                                run.CurrentIceId.Value,
+                                approachedCostQuote));
                         }
                     }
                 }
@@ -6779,7 +7743,22 @@ public static class StateInvariantValidator
                             state.GetCard(run.Encounter.IceId).DefinitionId,
                             out IceBehaviorSpec? expectedIceSpec))
                     {
-                        int iceStrength = EncounterStrength.Ice(expectedIceSpec, attackedServer.Kind);
+                        ValueQuote? expectedIceQuote = EncounterStrength.ProjectIceQuote(
+                            state,
+                            behaviorCatalog,
+                            run.Encounter.IceId,
+                            attackedServer.Kind);
+                        if (expectedIceQuote is null)
+                        {
+                            Add(
+                                violations,
+                                "run.strength-quote-missing",
+                                $"{path}.encounter",
+                                "The encountered ICE has no authoritative strength quote.");
+                            break;
+                        }
+
+                        int iceStrength = expectedIceQuote.EffectiveValue;
                         int unbrokenCount = run.Encounter.Subroutines.Count(subroutine => !subroutine.Broken);
                         // Run-scoped hosted credits (Overclock) are spendable
                         // during the run, so they count toward the offer. Each
@@ -6804,9 +7783,14 @@ public static class StateInvariantValidator
                                     continue;
                                 }
 
+                                ValueQuote? expectedBreakerQuote = EncounterStrength.ProjectBreakerQuote(
+                                    state,
+                                    behaviorCatalog,
+                                    cardId);
                                 if (runnerPlayer is not null
+                                    && expectedBreakerQuote is not null
                                     && IceInterfaceMatcher.Matches(expectedIceSpec, expectedBreakerSpec)
-                                    && EncounterStrength.Breaker(expectedBreakerSpec, run.LingeringEffects, cardId) >= iceStrength
+                                    && expectedBreakerQuote.EffectiveValue >= iceStrength
                                     && (long)runnerPlayer.Credits + run.RunCredits >= (GameEngine.ProjectCostQuote(
                                         state,
                                         behaviorCatalog,
@@ -6839,7 +7823,17 @@ public static class StateInvariantValidator
                                     }
                                 }
 
+                                bool dynamicPumpAvailable = expectedBreakerSpec.DynamicPump is null
+                                    || EncounterStrength.TryResolveDynamicPump(
+                                        expectedBreakerSpec,
+                                        cardId,
+                                        state.Cards,
+                                        state.Zones,
+                                        behaviorCatalog,
+                                        out _,
+                                        out _);
                                 if (runnerPlayer is not null
+                                    && dynamicPumpAvailable
                                     && (long)runnerPlayer.Credits + run.RunCredits >= expectedBreakerSpec.PumpCost)
                                 {
                                     foreach (int hostedCredits in LegalHostedCreditSplits(
@@ -6939,6 +7933,7 @@ public static class StateInvariantValidator
 
         var actual = new List<(ActionKind Kind, CardInstanceId? Target, int Quantity, int HostedCredits)>();
         var actualRuntimeRezes = new List<RezCardParameters>();
+        var actualRunRezes = new List<RunIceParameters>();
         var actualAbilities = new List<AbilityActionParameters>();
         foreach (LegalAction? action in pending.LegalActions)
         {
@@ -6966,6 +7961,7 @@ public static class StateInvariantValidator
                     break;
                 case (ActionKind.RezIce, RunIceParameters rez):
                     actual.Add((action.Kind, rez.IceId, 0, 0));
+                    actualRunRezes.Add(rez);
                     break;
                 case (ActionKind.RezCard, RezCardParameters rez):
                     actualRuntimeRezes.Add(rez);
@@ -7068,6 +8064,12 @@ public static class StateInvariantValidator
             costMismatchCode: "run.rez-cost-mismatch",
             windowName: "Run timing");
 
+        ValidateRunIceActionBijection(
+            expectedRunRezes,
+            actualRunRezes,
+            path,
+            violations);
+
         IReadOnlyList<AbilityActionParameters> expectedAbilities = [];
         try
         {
@@ -7145,13 +8147,17 @@ public static class StateInvariantValidator
             }
 
             RezCardParameters? expectedTarget = expected.FirstOrDefault(item => item.CardId == candidate.CardId);
-            if (expectedTarget is not null && expectedTarget.CreditCost != candidate.CreditCost)
+            if (expectedTarget is not null
+                && (expectedTarget.CreditCost != candidate.CreditCost
+                    || (expectedTarget.CostQuote is null
+                        ? candidate.CostQuote is not null
+                        : !expectedTarget.CostQuote.Equals(candidate.CostQuote))))
             {
                 Add(
                     violations,
                     costMismatchCode,
                     $"{path}.legalActions",
-                    $"Runtime rez action for '{candidate.CardId}' carries frozen cost {candidate.CreditCost}, expected {expectedTarget.CreditCost}.");
+                    $"Runtime rez action for '{candidate.CardId}' carries a frozen cost/quote that does not match the authoritative expected cost {expectedTarget.CreditCost}.");
             }
 
             if (!expected.Any(item => RezParametersMatch(item, candidate)))
@@ -7173,6 +8179,40 @@ public static class StateInvariantValidator
                     missingCode,
                     $"{path}.legalActions",
                     $"{windowName} decision is missing the materialized runtime rez action for '{candidate.CardId}'.");
+            }
+        }
+    }
+
+    private static void ValidateRunIceActionBijection(
+        IReadOnlyList<RunIceParameters> expected,
+        IReadOnlyList<RunIceParameters> actual,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        foreach (RunIceParameters candidate in actual)
+        {
+            RunIceParameters? expectedTarget = expected.FirstOrDefault(item => item.IceId == candidate.IceId);
+            if (expectedTarget is not null
+                && !CostQuotesEqual(expectedTarget.CostQuote, candidate.CostQuote))
+            {
+                Add(
+                    violations,
+                    "run.rez-cost-quote-mismatch",
+                    $"{path}.legalActions",
+                    $"Approached ICE rez action for '{candidate.IceId}' carries a cost quote that does not match the authoritative quote.");
+            }
+        }
+
+        foreach (RunIceParameters candidate in expected)
+        {
+            if (!actual.Any(item => item.IceId == candidate.IceId
+                && CostQuotesEqual(item.CostQuote, candidate.CostQuote)))
+            {
+                Add(
+                    violations,
+                    "run.missing-rez-action",
+                    $"{path}.legalActions",
+                    $"Run timing decision is missing the materialized approached ICE rez action for '{candidate.IceId}'.");
             }
         }
     }
@@ -7582,7 +8622,8 @@ public static class StateInvariantValidator
                     behaviorCatalog,
                     install.CardId,
                     BehaviorCostModifierKind.RunnerInstallCreditCost,
-                    spec.InstallCost ?? 0);
+                    spec.InstallCost ?? 0,
+                    runtimeCardCatalog);
                 int expectedInstallCost = expectedInstallQuote?.EffectiveCost ?? (spec.InstallCost ?? 0);
                 if (install.CardClass != spec.CardClass
                     || install.InstallCost != expectedInstallCost)
@@ -9120,7 +10161,10 @@ public static class StateInvariantValidator
         {
             try
             {
-                expectedRezes = GameEngine.MaterializeRezCardParameters(state, runtimeCardCatalog);
+                expectedRezes = GameEngine.MaterializeRezCardParameters(
+                    state,
+                    behaviorCatalog,
+                    runtimeCardCatalog);
             }
             catch (Exception exception) when (exception is ResolutionFailureException
                 or InvalidOperationException
@@ -9316,7 +10360,13 @@ public static class StateInvariantValidator
         RezCardParameters actual,
         RezCardParameters expected) =>
         actual.CardId == expected.CardId
-        && actual.CreditCost == expected.CreditCost;
+        && actual.CreditCost == expected.CreditCost
+        && (actual.CostQuote is null
+            ? expected.CostQuote is null
+            : actual.CostQuote.Equals(expected.CostQuote));
+
+    private static bool CostQuotesEqual(CostQuote? left, CostQuote? right) =>
+        left is null ? right is null : left.Equals(right);
 
     private static bool InstallParametersMatch(
         InstallCardParameters actual,
@@ -10342,7 +11392,8 @@ public static class StateInvariantValidator
                 behaviorCatalog,
                 card.Id,
                 BehaviorCostModifierKind.RunnerInstallCreditCost,
-                incoming.InstallCost ?? 0);
+                incoming.InstallCost ?? 0,
+                runtimeCardCatalog);
             int installCost = installQuote?.EffectiveCost ?? (incoming.InstallCost ?? 0);
             return runner is not null && runner.Credits >= installCost;
         }
@@ -10730,7 +11781,10 @@ public static class StateInvariantValidator
         PlayerSide expectedSide,
         string path,
         HashSet<CardInstanceId> knownCardIds,
+        IReadOnlyList<CardInstanceState> knownCards,
+        IReadOnlyList<ServerState> knownServers,
         Dictionary<PlayerId, PlayerSide> knownPlayers,
+        IRuntimeCardCatalog? runtimeCardCatalog,
         List<StateInvariantViolation> violations)
     {
         if (facts is null)
@@ -10845,12 +11899,86 @@ public static class StateInvariantValidator
                 "Successful-run server IDs require SuccessfulRun to be true.");
         }
 
+        // HQ-breach occurrences are intentionally repeat-preserving. Unlike
+        // attempted/successful run sets, their order and repeated IDs are
+        // meaningful first-breach evidence; only stable, real HQ server IDs
+        // are valid entries.
+        if (facts.HqBreachOccurrenceServerIds.Count > 0 && !facts.TurnBegan)
+        {
+            Add(
+                violations,
+                "turn.hq-breach-before-begin",
+                $"{path}.hqBreachOccurrenceServerIds",
+                "HQ-breach occurrences require a formally begun turn.");
+        }
+
+        for (int index = 0; index < facts.HqBreachOccurrenceServerIds.Count; index++)
+        {
+            ServerId serverId = facts.HqBreachOccurrenceServerIds[index];
+            string itemPath = $"{path}.hqBreachOccurrenceServerIds[{index}]";
+            bool validId = StableIdentifier.TryValidate(serverId.Value);
+            if (!validId)
+            {
+                Add(violations, "id.invalid", itemPath, "HQ-breach server ID must be non-empty and stable.");
+                continue;
+            }
+
+            ServerState? server = knownServers.FirstOrDefault(candidate => candidate?.Id == serverId);
+            if (server is null)
+            {
+                Add(
+                    violations,
+                    "turn.unknown-hq-breach-server",
+                    itemPath,
+                    $"HQ-breach occurrence references unknown server '{serverId}'.");
+            }
+            else if (server.Kind != ServerKind.Headquarters)
+            {
+                Add(
+                    violations,
+                    "turn.hq-breach-server-kind",
+                    itemPath,
+                    $"HQ-breach occurrence '{serverId}' must identify a Headquarters server, not '{server.Kind}'.");
+            }
+        }
+
+        if (facts.BasicDrawOccurrenceIds.Count > 0 && !facts.TurnBegan)
+        {
+            Add(
+                violations,
+                "turn.basic-draw-before-begin",
+                $"{path}.basicDrawOccurrenceIds",
+                "Basic-draw occurrences require a formally begun turn.");
+        }
+
+        var basicDrawOccurrences = new HashSet<OccurrenceId>();
+        for (int index = 0; index < facts.BasicDrawOccurrenceIds.Count; index++)
+        {
+            OccurrenceId occurrenceId = facts.BasicDrawOccurrenceIds[index];
+            string itemPath = $"{path}.basicDrawOccurrenceIds[{index}]";
+            bool validId = StableIdentifier.TryValidate(occurrenceId.Value);
+            if (!validId)
+            {
+                Add(violations, "id.invalid", itemPath, "Basic-draw occurrence ID must be non-empty and stable.");
+            }
+            else if (!basicDrawOccurrences.Add(occurrenceId))
+            {
+                Add(
+                    violations,
+                    "turn.duplicate-basic-draw-occurrence",
+                    itemPath,
+                    $"Basic-draw occurrence '{occurrenceId}' is duplicated.");
+            }
+        }
+
         ValidateTurnFactCardOccurrences(
             facts.AccessedCardOccurrenceIds,
             "accessedCardOccurrenceIds",
             "accessed-card",
             path,
             knownCardIds,
+            null,
+            null,
             violations);
         ValidateTurnFactCardOccurrences(
             facts.TrashedCardOccurrenceIds,
@@ -10858,6 +11986,17 @@ public static class StateInvariantValidator
             "trashed-card",
             path,
             knownCardIds,
+            null,
+            null,
+            violations);
+        ValidateTurnFactCardOccurrences(
+            facts.ProgramInstallOccurrenceIds,
+            "programInstallOccurrenceIds",
+            "program-install",
+            path,
+            knownCardIds,
+            knownCards,
+            runtimeCardCatalog,
             violations);
 
         for (int index = 0; index < facts.AgendaTurnChanges.Count; index++)
@@ -11035,6 +12174,8 @@ public static class StateInvariantValidator
         string occurrenceName,
         string path,
         HashSet<CardInstanceId> knownCardIds,
+        IReadOnlyList<CardInstanceState>? knownCards,
+        IRuntimeCardCatalog? runtimeCardCatalog,
         List<StateInvariantViolation> violations)
     {
         for (int index = 0; index < occurrenceIds.Count; index++)
@@ -11048,6 +12189,45 @@ public static class StateInvariantValidator
             else if (!knownCardIds.Contains(cardId))
             {
                 Add(violations, "turn.unknown-card-occurrence", itemPath, $"{occurrenceName} card '{cardId}' does not exist in the game state.");
+            }
+            else if (fieldName == "programInstallOccurrenceIds")
+            {
+                CardInstanceState? card = knownCards?.FirstOrDefault(candidate => candidate?.Id == cardId);
+                if (card is null)
+                {
+                    continue;
+                }
+
+                if (card.OwnerSide != PlayerSide.Runner)
+                {
+                    Add(
+                        violations,
+                        "turn.program-install-owner-mismatch",
+                        itemPath,
+                        $"A program-install occurrence must reference a Runner-owned card, but '{cardId}' is owned by '{card.OwnerSide}'.");
+                }
+
+                if (runtimeCardCatalog is null)
+                {
+                    continue;
+                }
+
+                if (!runtimeCardCatalog.TryGet(card.DefinitionId, out CardRuntimeSpec? spec))
+                {
+                    Add(
+                        violations,
+                        "turn.program-install-runtime-missing",
+                        itemPath,
+                        $"Runtime metadata for program-install occurrence '{cardId}' ({card.DefinitionId}) is unavailable.");
+                }
+                else if (spec.Side != PlayerSide.Runner || spec.CardClass != RuntimeCardClass.Program)
+                {
+                    Add(
+                        violations,
+                        "turn.program-install-class-invalid",
+                        itemPath,
+                        $"Program-install occurrence '{cardId}' must identify a Runner Program runtime card.");
+                }
             }
         }
     }

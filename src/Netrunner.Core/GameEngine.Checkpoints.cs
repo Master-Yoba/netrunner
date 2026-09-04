@@ -532,6 +532,12 @@ public static partial class GameEngine
             throw new ResolutionFailureException($"Replacement interrupt '{interruptId}' has no replacement effects.");
         }
 
+        if (invocation.IsCatalogInterrupt)
+        {
+            ValidateCatalogBasicDrawReplacement(working, frame, invocation);
+            RecordTurnFirstBasicDrawUse(working, invocation);
+        }
+
         PayCosts(working, invocation.Costs);
         ReplaceCheckpoint(
             working,
@@ -555,6 +561,122 @@ public static partial class GameEngine
             invocation.Occurrence,
             parent.SuppressedTriggers,
             parent.SuppressedInterrupts.Append(interruptId).ToArray()));
+    }
+
+    private static void ValidateCatalogBasicDrawReplacement(
+        WorkingState working,
+        EffectCheckpointFrame frame,
+        InterruptInvocation invocation)
+    {
+        if (invocation.Kind != InterruptKind.Replacement
+            || !invocation.Mandatory
+            || invocation.BehaviorId != ResolutionBehaviorIds.CardBehavior
+            || invocation.InterruptKey is null
+            || invocation.CatalogFingerprint is null
+            || invocation.DefinitionFingerprint is null
+            || invocation.SourceCardId is not { } sourceCardId
+            || invocation.SourceDefinitionId is not { } sourceDefinitionId
+            || invocation.SourceZoneId is not { } sourceZoneId
+            || invocation.SourceOwnerSide is not { } sourceOwnerSide
+            || invocation.SourceZoneKind is not { } sourceZoneKind
+            || invocation.BasicDrawCount is not { } drawCount
+            || invocation.ReplacementReasonKey is null)
+        {
+            throw new ResolutionFailureException("The basic-draw replacement invocation is missing typed provenance.");
+        }
+
+        if (!string.Equals(invocation.InterruptKey, invocation.ReplacementReasonKey, StringComparison.Ordinal))
+        {
+            throw new ResolutionFailureException("The basic-draw replacement invocation reason provenance is inconsistent.");
+        }
+
+        if (frame.Occurrence.Kind != OccurrenceKind.BasicDraw
+            || frame.Occurrence.Phase != OccurrencePhase.Imminent
+            || frame.Occurrence.Effect is not BasicDrawEffect basicDraw
+            || basicDraw.IsReplacement
+            || !basicDraw.IsFirstBasicDraw
+            || basicDraw.OccurrenceId is not { } occurrenceId
+            || occurrenceId != frame.Occurrence.Id
+            || invocation.Occurrence.Id != frame.Occurrence.Id
+            || invocation.Occurrence.Kind != frame.Occurrence.Kind
+            || invocation.Occurrence.Phase != frame.Occurrence.Phase
+            || invocation.BasicDrawCount.Value != drawCount
+            || invocation.ReplacementEffects.Instructions.Count != 1
+            || invocation.ReplacementEffects.Instructions[0] is not BasicDrawEffect replacement
+            || !replacement.IsReplacement
+            || replacement.Side != basicDraw.Side
+            || replacement.DrawCount != drawCount
+            || replacement.IsFirstBasicDraw)
+        {
+            throw new ResolutionFailureException("The basic-draw replacement invocation does not match the frozen imminent effect.");
+        }
+
+        if (!string.Equals(invocation.CatalogFingerprint, working.BehaviorCatalog.Fingerprint, StringComparison.Ordinal)
+            || !string.Equals(
+                invocation.DefinitionFingerprint,
+                working.BehaviorCatalog.GetDefinitionFingerprint(sourceDefinitionId),
+                StringComparison.Ordinal))
+        {
+            throw new ResolutionFailureException("Basic-draw replacement catalog provenance does not match the injected catalog.");
+        }
+
+        ZoneState sourceSnapshotZone = working.Zones.SingleOrDefault(zone => zone.Id == sourceZoneId)
+            ?? throw new ResolutionFailureException("Basic-draw replacement source snapshot zone no longer exists.");
+        if (sourceSnapshotZone.Kind != sourceZoneKind)
+        {
+            throw new ResolutionFailureException("Basic-draw replacement source snapshot zone kind no longer matches.");
+        }
+        if (!RuntimeCardActivity.IsActiveInstalledZone(
+                sourceOwnerSide,
+                sourceSnapshotZone,
+                working.Zones,
+                working.Servers))
+        {
+            throw new ResolutionFailureException("Basic-draw replacement source snapshot zone is not an active installed zone for its owner.");
+        }
+
+        CardInstanceState source = GetCard(working, sourceCardId);
+        if (source.DefinitionId != sourceDefinitionId || source.OwnerSide != sourceOwnerSide)
+        {
+            throw new ResolutionFailureException("Basic-draw replacement source definition or owner is stale.");
+        }
+
+        PlayerState sourceController = GetPlayer(working, sourceOwnerSide);
+        if (sourceController.Id != invocation.Controller
+            || sourceOwnerSide != basicDraw.Side
+            || frame.Controller != sourceController.Id
+            || frame.Occurrence.Controller != sourceController.Id
+            || invocation.Occurrence.Controller != frame.Occurrence.Controller
+            || frame.Occurrence.TargetPlayer != sourceController.Id
+            || invocation.Occurrence.TargetPlayer != frame.Occurrence.TargetPlayer)
+        {
+            throw new ResolutionFailureException("Basic-draw replacement source controller or occurrence context is stale.");
+        }
+
+        TurnFactsState facts = working.Turn.History?.ThisTurn(basicDraw.Side)
+            ?? throw new ResolutionFailureException("Basic-draw replacement requires current formal-turn facts.");
+        if (facts.Side != basicDraw.Side
+            || facts.TurnNumber != working.Turn.TurnNumber
+            || !facts.TurnBegan
+            || facts.BasicDrawOccurrenceIds.Count == 0
+            || facts.BasicDrawOccurrenceIds[0] != frame.Occurrence.Id)
+        {
+            throw new ResolutionFailureException("Basic-draw replacement occurrence ledger is stale or missing.");
+        }
+
+        if (facts.GetFirstXCount(sourceCardId, invocation.ReplacementReasonKey) != 0)
+        {
+            throw new ResolutionFailureException("Basic-draw replacement FirstX usage has already been consumed.");
+        }
+
+        CardBehaviorDefinition definition = GetBehaviorDefinition(working, sourceDefinitionId);
+        BehaviorFirstBasicDrawReplacement declaration = definition.FirstBasicDrawReplacements?
+            .SingleOrDefault(candidate => string.Equals(candidate.ReasonKey, invocation.ReplacementReasonKey, StringComparison.Ordinal))
+            ?? throw new ResolutionFailureException("Basic-draw replacement declaration is no longer present.");
+        if (declaration.DrawCount != drawCount)
+        {
+            throw new ResolutionFailureException("Basic-draw replacement declaration count is stale.");
+        }
     }
 
     private static EffectCheckpointFrame CurrentCheckpoint(
@@ -676,11 +798,13 @@ public static partial class GameEngine
             : frame.Controller;
         return new OccurrenceSnapshot(
             1,
-            working.Allocator.NextOccurrenceId(),
+            instruction is BasicDrawEffect { OccurrenceId: { } materializedOccurrenceId }
+                ? materializedOccurrenceId
+                : working.Allocator.NextOccurrenceId(),
             EffectOccurrenceKind(instruction),
             phase,
             occurrenceController,
-            TargetPlayer(instruction),
+            TargetPlayer(working, instruction),
             sourceCardId,
             sourceDefinitionId,
             sourceZoneId,
@@ -716,7 +840,93 @@ public static partial class GameEngine
                 return new InterruptInvocation(interrupt, occurrence, definitionId, zoneId);
             })
             .Where(invocation => invocation.Kind != InterruptKind.Prevention || CurrentPreventableAmount(invocation.Occurrence.Effect) > 0)
+            .Concat(MaterializeCatalogBasicDrawReplacements(working, frame, occurrence))
+            .Where(invocation => !frame.SuppressedInterrupts.Contains(invocation.Id))
             .ToArray();
+
+    private static InterruptInvocation[] MaterializeCatalogBasicDrawReplacements(
+        WorkingState working,
+        EffectResolutionFrame frame,
+        OccurrenceSnapshot occurrence)
+    {
+        if (occurrence.Kind != OccurrenceKind.BasicDraw
+            || occurrence.Phase != OccurrencePhase.Imminent
+            || occurrence.Effect is not BasicDrawEffect { IsReplacement: false, IsFirstBasicDraw: true } basicDraw)
+        {
+            return [];
+        }
+
+        PlayerState occurrenceController = GetPlayer(working, occurrence.Controller);
+        TurnFactsState? facts = working.Turn.History?.ThisTurn(occurrenceController.Side);
+        if (facts is null
+            || facts.Side != occurrenceController.Side
+            || facts.TurnNumber != working.Turn.TurnNumber
+            || !facts.TurnBegan
+            || facts.BasicDrawOccurrenceIds.Count == 0
+            || facts.BasicDrawOccurrenceIds[0] != occurrence.Id)
+        {
+            return [];
+        }
+
+        foreach (CardInstanceState source in working.Cards.OrderBy(card => card.Id.Value, StringComparer.Ordinal))
+        {
+            if (source.OwnerSide != occurrenceController.Side
+                || !RuntimeCardActivity.IsActive(source, working.Zones)
+                || !working.BehaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? definition)
+                || definition.Controller != source.OwnerSide
+                || definition.FirstBasicDrawReplacements is not { Count: > 0 } declarations)
+            {
+                continue;
+            }
+
+            ZoneState sourceZone = working.Zones.Single(zone => zone.Id == source.ZoneId);
+            foreach (BehaviorFirstBasicDrawReplacement declaration in declarations)
+            {
+                if (facts.GetFirstXCount(source.Id, declaration.ReasonKey) != 0)
+                {
+                    continue;
+                }
+
+                InterruptId interruptId = CatalogBasicDrawReplacementId(occurrence, source, declaration.ReasonKey);
+                if (frame.SuppressedInterrupts.Contains(interruptId))
+                {
+                    continue;
+                }
+
+                return
+                [
+                    new InterruptInvocation(
+                        1,
+                        interruptId,
+                        occurrenceController.Id,
+                        InterruptKind.Replacement,
+                        true,
+                        ResolutionBehaviorIds.CardBehavior,
+                        source.Id,
+                        source.DefinitionId,
+                        source.ZoneId,
+                        occurrence,
+                        new CostBundle(),
+                        0,
+                        new EffectBundle(new BasicDrawEffect(
+                            basicDraw.Side,
+                            declaration.DrawCount,
+                            true,
+                            null,
+                            false)),
+                        declaration.ReasonKey,
+                        working.BehaviorCatalog.Fingerprint,
+                        working.BehaviorCatalog.GetDefinitionFingerprint(source.DefinitionId),
+                        source.OwnerSide,
+                        sourceZone.Kind,
+                        declaration.DrawCount,
+                        declaration.ReasonKey),
+                ];
+            }
+        }
+
+        return [];
+    }
 
     private static TriggerInvocation[] MaterializeTriggers(
         WorkingState working,
@@ -985,6 +1195,17 @@ public static partial class GameEngine
         return new TriggerId("catalog-trigger:" + Convert.ToHexString(digest).ToLowerInvariant());
     }
 
+    private static InterruptId CatalogBasicDrawReplacementId(
+        OccurrenceSnapshot occurrence,
+        CardInstanceState source,
+        string reasonKey)
+    {
+        string material = $"catalog-basic-draw-replacement|{occurrence.Id.Value}|{source.Id.Value}|{source.DefinitionId.Value}|{reasonKey}";
+        byte[] digest = System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(material));
+        return new InterruptId("catalog-basic-draw:" + Convert.ToHexString(digest).ToLowerInvariant());
+    }
+
     private static bool MatchesCondition(
         TriggerCondition condition,
         OccurrenceSnapshot occurrence,
@@ -1036,7 +1257,7 @@ public static partial class GameEngine
         _ => null,
     };
 
-    private static PlayerId? TargetPlayer(EffectInstruction instruction) => instruction switch
+    private static PlayerId? TargetPlayer(WorkingState working, EffectInstruction instruction) => instruction switch
     {
         TurnBoundaryEffect value => value.Target,
         CreditAdjustmentEffect value => value.Target,
@@ -1045,6 +1266,7 @@ public static partial class GameEngine
         TagAdjustmentEffect value => value.Target,
         MemoryAdjustmentEffect value => value.Target,
         RegisterProgramMemoryEffect value => value.Owner,
+        BasicDrawEffect value => GetPlayer(working, value.Side).Id,
         _ => null,
     };
 
@@ -1061,6 +1283,7 @@ public static partial class GameEngine
         AddLingeringEffect => OccurrenceKind.LingeringEffectAdded,
         RemoveLingeringEffect => OccurrenceKind.LingeringEffectRemoved,
         MoveCardEffect => OccurrenceKind.CardMove,
+        BasicDrawEffect { IsReplacement: false } => OccurrenceKind.BasicDraw,
         _ => OccurrenceKind.EffectImminent,
     };
 

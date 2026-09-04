@@ -69,6 +69,8 @@ public static class ObservationBuilder
         {
             InstallCardParameters install => install.CostQuote is not null,
             RunBreakParameters breakParameters => breakParameters.CostQuote is not null,
+            RezCardParameters rez => rez.CostQuote is not null,
+            RunIceParameters runIce => runIce.CostQuote is not null,
             _ => false,
         }) == true;
         IReadOnlyList<LegalAction> legalActions = pending is null
@@ -211,7 +213,7 @@ public static class ObservationBuilder
         RunState? run = state.RunState;
         if (run is not null)
         {
-            publicState["run"] = RunView(state, run, viewer, accessVisible);
+            publicState["run"] = RunView(state, run, viewer, accessVisible, behaviorCatalog);
         }
 
         return publicState;
@@ -247,6 +249,14 @@ public static class ObservationBuilder
             ["installedCardIds"] = facts.InstalledCardIds
                 .Where(cardId => IsFactCardVisible(state, cardId, viewer, accessVisible))
                 .Select(static cardId => cardId.Value)
+                .ToArray(),
+            ["programInstallOccurrenceCount"] = facts.ProgramInstallOccurrenceIds.Count,
+            ["programInstallOccurrenceIds"] = facts.ProgramInstallOccurrenceIds
+                .Where(cardId => IsFactCardVisible(state, cardId, viewer, accessVisible))
+                .Select(static cardId => cardId.Value)
+                .ToArray(),
+            ["hqBreachOccurrenceServerIds"] = facts.HqBreachOccurrenceServerIds
+                .Select(static serverId => serverId.Value)
                 .ToArray(),
             ["successfulRun"] = facts.SuccessfulRun,
             ["attemptedRunServerIds"] = facts.AttemptedRunServerIds
@@ -334,7 +344,12 @@ public static class ObservationBuilder
         };
     }
 
-    private static Dictionary<string, object?> RunView(GameState state, RunState run, PlayerSide viewer, IReadOnlySet<CardInstanceId> accessVisible)
+    private static Dictionary<string, object?> RunView(
+        GameState state,
+        RunState run,
+        PlayerSide viewer,
+        IReadOnlySet<CardInstanceId> accessVisible,
+        IBehaviorCatalog behaviorCatalog)
     {
         ServerState attackedServer = state.GetServer(run.AttackedServer);
         ZoneState? hiddenZone = attackedServer.Kind switch
@@ -393,29 +408,12 @@ public static class ObservationBuilder
                 },
             ["encounter"] = run.Encounter is null
                 ? null
-                : new Dictionary<string, object?>
-                {
-                    ["id"] = run.Encounter.Id.Value,
-                    ["ice"] = run.Encounter.IceId is { } encounterIce ? CandidateView(state, encounterIce, viewer, accessVisible) : null,
-                    ["status"] = run.Encounter.Status,
-                    ["subroutines"] = run.Encounter.Subroutines.Select(subroutine =>
-                        new Dictionary<string, object?>
-                        {
-                            ["ordinal"] = subroutine.Ordinal,
-                            ["broken"] = subroutine.Broken,
-                            ["resolved"] = subroutine.Resolved,
-                        }).ToArray(),
-                },
+                : EncounterView(state, run, run.Encounter, viewer, accessVisible, behaviorCatalog),
             ["breach"] = breach,
             ["runCredits"] = run.RunCredits,
-            ["lingeringEffects"] = run.LingeringEffects.Select(effect =>
-                new Dictionary<string, object?>
-                {
-                    ["id"] = effect.Id.Value,
-                    ["behaviorId"] = effect.BehaviorId,
-                    ["sourceCard"] = effect.SourceCardId is { } sourceCard ? CandidateView(state, sourceCard, viewer, accessVisible) : null,
-                    ["expiry"] = effect.Expiry,
-                }).ToArray(),
+            ["lingeringEffects"] = run.LingeringEffects
+                .Select(effect => LingeringEffectView(state, effect, viewer, accessVisible))
+                .ToArray(),
         };
 
         // Keep the M1/M2 run-view byte shape unchanged when no D1 modifier
@@ -430,6 +428,136 @@ public static class ObservationBuilder
         return view;
     }
 
+    private static Dictionary<string, object?> EncounterView(
+        GameState state,
+        RunState run,
+        RunEncounterState encounter,
+        PlayerSide viewer,
+        IReadOnlySet<CardInstanceId> accessVisible,
+        IBehaviorCatalog behaviorCatalog)
+    {
+        CardInstanceState? ice = state.Cards.FirstOrDefault(card => card.Id == encounter.IceId);
+        ValueQuote? iceQuote = null;
+        if (ice is not null
+            && IsVisibleTo(ice, state.GetZone(ice.ZoneId), viewer, accessVisible)
+            && encounter.Status == RunEncounterStatus.Initialized)
+        {
+            iceQuote = EncounterStrength.ProjectIceQuote(
+                state,
+                behaviorCatalog,
+                encounter.IceId,
+                state.GetServer(run.AttackedServer).Kind);
+        }
+
+        var view = new Dictionary<string, object?>
+        {
+            ["id"] = encounter.Id.Value,
+            ["ice"] = encounter.IceId is { } encounterIce
+                ? CandidateView(state, encounterIce, viewer, accessVisible)
+                : null,
+            ["status"] = encounter.Status,
+            ["subroutines"] = encounter.Subroutines.Select(subroutine =>
+                new Dictionary<string, object?>
+                {
+                    ["ordinal"] = subroutine.Ordinal,
+                    ["broken"] = subroutine.Broken,
+                    ["resolved"] = subroutine.Resolved,
+                }).ToArray(),
+            ["strengthQuote"] = iceQuote is null
+                ? null
+                : ValueQuoteView(state, iceQuote, viewer, accessVisible),
+        };
+
+        // Breaker quotes are emitted only for visible installed breakers. The
+        // rig is public, but keeping the visibility check here makes the
+        // provenance redaction invariant explicit for custom zone layouts.
+        view["breakerStrengths"] = state.Zones
+            .Where(zone => zone.Kind == ZoneKind.RunnerRig && zone.OwnerSide == PlayerSide.Runner)
+            .SelectMany(zone => zone.CardIds)
+            .Select(cardId => state.Cards.FirstOrDefault(card => card.Id == cardId))
+            .Where(card => card is not null
+                && IsVisibleTo(card, state.GetZone(card.ZoneId), viewer, accessVisible))
+            .Select(card =>
+            {
+                ValueQuote? quote = EncounterStrength.ProjectBreakerQuote(state, behaviorCatalog, card!.Id);
+                return quote is null
+                    ? null
+                    : (object?)new Dictionary<string, object?>
+                    {
+                        ["cardId"] = card.Id.Value,
+                        ["strengthQuote"] = ValueQuoteView(state, quote, viewer, accessVisible),
+                    };
+            })
+            .Where(value => value is not null)
+            .ToArray();
+
+        return view;
+    }
+
+    private static Dictionary<string, object?> ValueQuoteView(
+        GameState state,
+        ValueQuote quote,
+        PlayerSide viewer,
+        IReadOnlySet<CardInstanceId> accessVisible)
+    {
+        return new Dictionary<string, object?>
+        {
+            ["valueKind"] = quote.ValueKind,
+            ["baseValue"] = quote.BaseValue,
+            ["effectiveValue"] = quote.EffectiveValue,
+            ["terms"] = quote.Terms.Select(term => (object?)new Dictionary<string, object?>
+            {
+                ["source"] = term.Source,
+                ["operation"] = term.Operation,
+                ["delta"] = term.Delta,
+                ["reasonKey"] = term.ReasonKey,
+                ["sourceDefinitionId"] = IsDefinitionVisible(state, term, viewer, accessVisible)
+                    ? term.SourceDefinitionId?.Value
+                    : null,
+                ["sourceCardId"] = IsSourceCardVisible(state, term, viewer, accessVisible)
+                    ? term.SourceCardId?.Value
+                    : null,
+                ["quantity"] = term.Quantity,
+                ["unitDelta"] = term.UnitDelta,
+                ["variableKey"] = term.VariableKey,
+            }).ToArray(),
+        };
+    }
+
+    private static bool IsDefinitionVisible(
+        GameState state,
+        ValueCalculationTerm term,
+        PlayerSide viewer,
+        IReadOnlySet<CardInstanceId> accessVisible)
+    {
+        if (term.SourceDefinitionId is null)
+        {
+            return true;
+        }
+
+        // A source definition is safe only when the corresponding physical
+        // source is visible. Definitions without a physical source are pure
+        // fixture quotes and carry no hidden card identity.
+        return term.SourceCardId is not { } sourceCardId
+            || IsSourceCardVisible(state, term, viewer, accessVisible);
+    }
+
+    private static bool IsSourceCardVisible(
+        GameState state,
+        ValueCalculationTerm term,
+        PlayerSide viewer,
+        IReadOnlySet<CardInstanceId> accessVisible)
+    {
+        if (term.SourceCardId is not { } sourceCardId)
+        {
+            return true;
+        }
+
+        CardInstanceState? source = state.Cards.FirstOrDefault(card => card.Id == sourceCardId);
+        return source is not null
+            && IsVisibleTo(source, state.GetZone(source.ZoneId), viewer, accessVisible);
+    }
+
     private static Dictionary<string, object?> RunBreachAccessModifierView(
         GameState state,
         RunBreachAccessModifier modifier,
@@ -439,14 +567,70 @@ public static class ObservationBuilder
         CardInstanceState? source = state.Cards.FirstOrDefault(card => card.Id == modifier.SourceCardId);
         bool sourceVisible = source is not null
             && IsVisibleTo(source, state.GetZone(source.ZoneId), viewer, accessVisible);
-        return new Dictionary<string, object?>
+        var view = new Dictionary<string, object?>
         {
             ["sourceCardId"] = sourceVisible ? modifier.SourceCardId.Value : null,
             ["attackedServerId"] = modifier.AttackedServerId.Value,
             ["delta"] = modifier.Delta,
             ["reasonKey"] = modifier.ReasonKey,
         };
+        if (modifier.SourceKind != RunBreachAccessModifierSourceKind.InstalledRunSource)
+        {
+            view["sourceKind"] = modifier.SourceKind;
+        }
+
+        return view;
     }
+
+    private static Dictionary<string, object?> LingeringEffectView(
+        GameState state,
+        RunLingeringEffect effect,
+        PlayerSide viewer,
+        IReadOnlySet<CardInstanceId> accessVisible)
+    {
+        var view = new Dictionary<string, object?>
+        {
+            ["id"] = effect.Id.Value,
+            ["behaviorId"] = effect.BehaviorId,
+            ["sourceCard"] = effect.SourceCardId is { } sourceCard
+                ? CandidateView(state, sourceCard, viewer, accessVisible)
+                : null,
+            ["expiry"] = effect.Expiry,
+        };
+
+        // Keep the legacy effect shape byte-identical when no typed value is
+        // attached. When present, expose it only if both physical endpoints
+        // are visible to this viewer; the encounter quote independently
+        // redacts provenance in the same way.
+        if (effect.ValueAdjustment is { } adjustment
+            && IsCardVisible(state, adjustment.SourceCardId, viewer, accessVisible)
+            && IsCardVisible(state, adjustment.TargetCardId, viewer, accessVisible))
+        {
+            view["valueAdjustment"] = new Dictionary<string, object?>
+            {
+                ["valueKind"] = adjustment.ValueKind,
+                ["source"] = adjustment.Source,
+                ["operation"] = adjustment.Operation,
+                ["sourceCardId"] = adjustment.SourceCardId.Value,
+                ["targetCardId"] = adjustment.TargetCardId.Value,
+                ["delta"] = adjustment.Delta,
+                ["reasonKey"] = adjustment.ReasonKey,
+                ["variableKey"] = adjustment.VariableKey,
+                ["quantity"] = adjustment.Quantity,
+                ["unitDelta"] = adjustment.UnitDelta,
+            };
+        }
+
+        return view;
+    }
+
+    private static bool IsCardVisible(
+        GameState state,
+        CardInstanceId cardId,
+        PlayerSide viewer,
+        IReadOnlySet<CardInstanceId> accessVisible) =>
+        state.Cards.FirstOrDefault(card => card.Id == cardId) is { } card
+        && IsVisibleTo(card, state.GetZone(card.ZoneId), viewer, accessVisible);
 
     private static Dictionary<string, object?> BuildPrivateState(GameState state, PlayerSide viewer)
     {

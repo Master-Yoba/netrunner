@@ -57,4 +57,14 @@ internal static class BehaviorRunRules
             && delta % slope == 0
             && delta / slope > 0);
     }
+
+    internal static bool HasFirstHqBreachAccessModifierDeclaration(
+        CardBehaviorDefinition definition,
+        string reasonKey,
+        int delta)
+    {
+        return definition.FirstHqBreachAccessModifiers?.Any(modifier =>
+            modifier.Delta == delta
+            && string.Equals(modifier.ReasonKey, reasonKey, StringComparison.Ordinal)) == true;
+    }
 }
