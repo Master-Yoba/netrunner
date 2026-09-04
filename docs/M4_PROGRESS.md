@@ -3617,3 +3617,24 @@ errors; runtime action expansion and full verification remain pending.
   opaque action coexistence, malformed rejection, deterministic ordering, JSON
   round-trip, and configurable priority validation. Luna and Root independently
   passed the complete AI suite at 30/30.
+
+### 2026-09-04 — Checkpoint F2 catalog, CARD-401, and M2 compatibility accepted
+
+- The full immutable Gateway composition now has its own
+  `gateway-m4-4.3` version while the M2 compatibility adapter retains the
+  independent `gateway-m2-3` document pin. M2 derives only the five typed
+  legacy capabilities referenced by its scenario and deliberately excludes
+  newer generic overlays. Root found and closed an overload-resolution defect
+  that had made parameterless validation compare the full 4.3 catalog rather
+  than the derived M2 slice.
+- The Slice 4.3 registry row and all 14 review rows are complete. Positive
+  lifecycle metadata covers every Batch 2 code, and the regenerated CARD-401
+  reports record 77 total, 32 registered, 32 tested, 31 full-text complete,
+  one explicit partial (Offworld Office), and 45 unregistered, with zero
+  diagnostics. Nico Campaign is now recorded as fully bound with its rez load,
+  turn-begin withdrawal, and ordered empty-pool trash/draw behavior.
+- Luna Max passed 28/28 focused M2/proof tests and 63/63 focused Batch 2 and
+  coverage tests. Root independently passed the 24-test M2 setup/proof filter;
+  the representative proof retains initial/final/event hashes
+  `faf4e631...` / `c882eb43...` / `d20cdef9...` and all 32 replay-verified
+  checkpoints.

@@ -13,8 +13,7 @@ namespace Netrunner.Cards.Tests;
 public sealed class GatewayBatch2CarnivoreBehaviorTests
 {
     [Fact]
-    [Trait("Category", "GatewayCard")]
-    [Trait("CardCode", "30003")]
+    [Trait("GatewayCard", "30003")]
     public void CarnivoreDeclaresMemoryAndTypedAccessTrashCostWithConsoleMetadata()
     {
         BehaviorCatalog behaviorCatalog = GatewayBehaviorCatalog.Create();
@@ -72,8 +71,7 @@ public sealed class GatewayBatch2CarnivoreBehaviorTests
     }
 
     [Fact]
-    [Trait("Category", "GatewayCard")]
-    [Trait("CardCode", "30003")]
+    [Trait("GatewayCard", "30003")]
     public void NonAgendaAccessOffersDeterministicExactGripPairsOnlyToRunner()
     {
         Fixture fixture = CreateFixture(gripCount: 3);
@@ -114,8 +112,7 @@ public sealed class GatewayBatch2CarnivoreBehaviorTests
     }
 
     [Fact]
-    [Trait("Category", "GatewayCard")]
-    [Trait("CardCode", "30003")]
+    [Trait("GatewayCard", "30003")]
     public void FewerThanTwoGripCardsOffersNoCarnivoreAction()
     {
         Fixture fixture = CreateFixture(gripCount: 1);
@@ -129,8 +126,7 @@ public sealed class GatewayBatch2CarnivoreBehaviorTests
     }
 
     [Fact]
-    [Trait("Category", "GatewayCard")]
-    [Trait("CardCode", "30003")]
+    [Trait("GatewayCard", "30003")]
     public void GripCombinationSearchFailsClosedWhenResultSpaceExceedsBound()
     {
         // C(24, 2) is already larger than the materialization result cap.
@@ -148,8 +144,7 @@ public sealed class GatewayBatch2CarnivoreBehaviorTests
     }
 
     [Fact]
-    [Trait("Category", "GatewayCard")]
-    [Trait("CardCode", "30003")]
+    [Trait("GatewayCard", "30003")]
     public void CarnivorePaymentTrashesPairAndAccessedCardThenReyieldsNoAction()
     {
         Fixture fixture = CreateFixture(gripCount: 2);
@@ -197,8 +192,7 @@ public sealed class GatewayBatch2CarnivoreBehaviorTests
     }
 
     [Fact]
-    [Trait("Category", "GatewayCard")]
-    [Trait("CardCode", "30003")]
+    [Trait("GatewayCard", "30003")]
     public void AgendaAccessOffersCarnivoreAndTrashingPreventsAutomaticSteal()
     {
         Fixture fixture = CreateFixture(gripCount: 2, agenda: true);
@@ -224,8 +218,7 @@ public sealed class GatewayBatch2CarnivoreBehaviorTests
     }
 
     [Fact]
-    [Trait("Category", "GatewayCard")]
-    [Trait("CardCode", "30003")]
+    [Trait("GatewayCard", "30003")]
     public void OncePerTurnBlocksSecondAccessWhileGripCardsRemain()
     {
         Fixture fixture = CreateFixture(gripCount: 4, rootCount: 2);
@@ -256,8 +249,7 @@ public sealed class GatewayBatch2CarnivoreBehaviorTests
     }
 
     [Fact]
-    [Trait("Category", "GatewayCard")]
-    [Trait("CardCode", "30003")]
+    [Trait("GatewayCard", "30003")]
     public void OfferedAbilityRoundTripsWithSelectionsAndResumesAtAccessWindow()
     {
         Fixture fixture = CreateFixture(gripCount: 3);
@@ -281,8 +273,7 @@ public sealed class GatewayBatch2CarnivoreBehaviorTests
     }
 
     [Fact]
-    [Trait("Category", "GatewayCard")]
-    [Trait("CardCode", "30003")]
+    [Trait("GatewayCard", "30003")]
     public void StaleCostCardAndForgedTargetAreRejectedAtomically()
     {
         Fixture fixture = CreateFixture(gripCount: 3);

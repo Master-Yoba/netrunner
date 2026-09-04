@@ -252,7 +252,10 @@ public sealed class M2ScenarioDocument
     /// <summary>Every problem with its exact document path; empty when valid.</summary>
     public IReadOnlyList<string> CollectProblems()
     {
-        return CollectProblems(GatewayBehaviorCatalog.Create());
+        // Keep overload resolution on the injected-catalog path so the
+        // parameterless legacy entry point validates the M2 slice rather
+        // than the complete (newer) Gateway catalog.
+        return CollectProblems((IBehaviorCatalog)GatewayBehaviorCatalog.Create());
     }
 
     /// <summary>
@@ -264,12 +267,10 @@ public sealed class M2ScenarioDocument
     {
         ArgumentNullException.ThrowIfNull(behaviorCatalog);
         BehaviorCatalog scenarioCatalog = CreateBehaviorCatalog(behaviorCatalog);
-        return CollectProblems(behaviorCatalog, scenarioCatalog);
+        return CollectProblems(scenarioCatalog);
     }
 
-    private ReadOnlyCollection<string> CollectProblems(
-        IBehaviorCatalog suppliedCatalog,
-        BehaviorCatalog behaviorCatalog)
+    private ReadOnlyCollection<string> CollectProblems(BehaviorCatalog behaviorCatalog)
     {
         // M2 callers still use the legacy static lookup/ReplayVerifier APIs;
         // keep this idempotent adapter registration until those callers are
@@ -312,13 +313,6 @@ public sealed class M2ScenarioDocument
         {
             problems.Add(
                 $"behaviorRegistryVersion: '{BehaviorRegistryVersion}' is not the Gateway compiled behavior version '{CardBehaviorSpecCatalog.Version}'.");
-        }
-
-        if (!string.IsNullOrWhiteSpace(BehaviorRegistryVersion)
-            && !string.Equals(BehaviorRegistryVersion, suppliedCatalog.Version, StringComparison.Ordinal))
-        {
-            problems.Add(
-                $"behaviorRegistryVersion: '{BehaviorRegistryVersion}' does not match the supplied behavior catalog version '{suppliedCatalog.Version}'.");
         }
 
         string scenarioFingerprint = behaviorCatalog.Fingerprint;
@@ -570,7 +564,7 @@ public sealed class M2ScenarioDocument
     {
         ArgumentNullException.ThrowIfNull(behaviorCatalog);
         BehaviorCatalog scenarioCatalog = CreateBehaviorCatalog(behaviorCatalog);
-        ReadOnlyCollection<string> problems = CollectProblems(behaviorCatalog, scenarioCatalog);
+        ReadOnlyCollection<string> problems = CollectProblems(scenarioCatalog);
         if (problems.Count > 0)
         {
             throw new M2ScenarioException(problems);
@@ -597,7 +591,7 @@ public sealed class M2ScenarioDocument
             }
         }
 
-        return CreateLegacyBehaviorCatalog(behaviorCatalog, definitionIds);
+        return CreateLegacyBehaviorCatalog(behaviorCatalog, definitionIds, BehaviorRegistryVersion);
     }
 
     /// <summary>
@@ -610,12 +604,22 @@ public sealed class M2ScenarioDocument
     /// </summary>
     private static BehaviorCatalog CreateLegacyBehaviorCatalog(
         IBehaviorCatalog source,
-        IEnumerable<CardDefinitionId> definitionIds)
+        IEnumerable<CardDefinitionId> definitionIds,
+        string documentBehaviorRegistryVersion)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(definitionIds);
 
-        var builder = new BehaviorCatalogBuilder(source.Version);
+        // The M2 document owns the compatibility pin. A newer full Gateway
+        // composition may be injected as long as it supplies the required
+        // legacy capabilities; carrying its full-catalog version into the
+        // slice would churn the pinned fingerprint and every derived proof.
+        // Invalid/missing document pins still need to reach CollectProblems so
+        // use the legacy constant only as a construction fallback.
+        string legacyVersion = IsStableIdentifier(documentBehaviorRegistryVersion)
+            ? documentBehaviorRegistryVersion
+            : CardBehaviorSpecCatalog.Version;
+        var builder = new BehaviorCatalogBuilder(legacyVersion);
         foreach (CardDefinitionId definitionId in definitionIds.Distinct())
         {
             if (source.TryGetIce(definitionId, out IceBehaviorSpec? ice))
@@ -645,6 +649,17 @@ public sealed class M2ScenarioDocument
         }
 
         return builder.Build();
+    }
+
+    private static bool IsStableIdentifier(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 128)
+        {
+            return false;
+        }
+
+        return value.All(static character =>
+            !char.IsWhiteSpace(character) && !char.IsControl(character));
     }
 
     public static bool TryParseServerRef(string reference, int remotes, out (ServerKind Kind, int RemoteIndex) server)

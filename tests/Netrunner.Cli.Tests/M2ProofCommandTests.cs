@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Netrunner.Cards;
 using Netrunner.Core;
+using Netrunner.Match;
 using Xunit;
 
 namespace Netrunner.Cli.Tests;
@@ -61,6 +62,7 @@ public sealed class M2ProofCommandTests
     {
         string path = Path.Combine(AppContext.BaseDirectory, "M2Scenarios", "representative-run.json");
         BehaviorCatalog gateway = GatewayBehaviorCatalog.Create();
+        Assert.Equal("gateway-m4-4.3", gateway.Version);
         BehaviorCatalog legacy = BuildLegacyGatewayCatalog(gateway);
         BehaviorCatalog expanded = new BehaviorCatalogBuilder(legacy.Version, legacy)
             .Add(new CardBehaviorDefinition(
@@ -68,6 +70,10 @@ public sealed class M2ProofCommandTests
                 PlayerSide.Corp,
                 instructions: [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]))
             .Build();
+        M2ScenarioDocument scenario = EngineJson.Deserialize<M2ScenarioDocument>(File.ReadAllText(path));
+        BehaviorCatalog scenarioSlice = scenario.CreateBehaviorCatalog(expanded);
+        Assert.Equal(CardBehaviorSpecCatalog.Version, scenarioSlice.Version);
+        Assert.Equal(scenario.BehaviorCatalogFingerprint, scenarioSlice.Fingerprint);
         var output = new StringWriter();
         var error = new StringWriter();
 

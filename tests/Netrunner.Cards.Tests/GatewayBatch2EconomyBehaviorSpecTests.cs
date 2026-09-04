@@ -140,6 +140,7 @@ public sealed class GatewayBatch2EconomyBehaviorSpecTests
     }
 
     [Fact]
+    [Trait("GatewayCard", "30033")]
     public void SmartwareClickPlacementPlacesThreeCreditsThroughRealAction()
     {
         BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();
@@ -319,6 +320,7 @@ public sealed class GatewayBatch2EconomyBehaviorSpecTests
     }
 
     [Fact]
+    [Trait("GatewayCard", "30014")]
     public void PennyshaverSuccessfulRunPlacesPublicCreditAndClickCashoutTransfersIt()
     {
         BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();
@@ -382,6 +384,9 @@ public sealed class GatewayBatch2EconomyBehaviorSpecTests
     }
 
     [Fact]
+    [Trait("GatewayCard", "30037")]
+    [Trait("GatewayCard", "30027")]
+    [Trait("GatewayCard", "30071")]
     public void RealInstallAndRezOccurrencesLoadPoolsAndNicoEmptinessTrashesBeforeDrawing()
     {
         BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();

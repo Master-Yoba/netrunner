@@ -128,6 +128,7 @@ public sealed class GatewayBatch2RunCostBehaviorSpecTests
     }
 
     [Fact]
+    [Trait("GatewayCard", "30024")]
     public void ConduitRealClickRunSnapshotsVirusAndFiltersAdditionalRndAccesses()
     {
         BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();
@@ -370,6 +371,7 @@ public sealed class GatewayBatch2RunCostBehaviorSpecTests
     }
 
     [Fact]
+    [Trait("GatewayCard", "30018")]
     public void RedTeamSuccessfulRunEmptiesPoolAndTrashesItselfThroughRealTriggers()
     {
         BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();
@@ -399,6 +401,7 @@ public sealed class GatewayBatch2RunCostBehaviorSpecTests
     }
 
     [Fact]
+    [Trait("GatewayCard", "30015")]
     public void CarmenRealInstallUsesPrintedCostBeforeAndReducedCostAfterSuccessfulRun()
     {
         BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();
@@ -466,6 +469,7 @@ public sealed class GatewayBatch2RunCostBehaviorSpecTests
     }
 
     [Fact]
+    [Trait("GatewayCard", "30016")]
     public void MarjanahRealEncounterUsesWalletAndHostedSplitsBeforeAndAfterSuccessfulRun()
     {
         BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();

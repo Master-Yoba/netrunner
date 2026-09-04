@@ -11,13 +11,20 @@ namespace Netrunner.Cards;
 public static class GatewayBehaviorCatalog
 {
     /// <summary>
+    /// Version of the current immutable Gateway behavior composition. The
+    /// legacy M2 registration adapter intentionally retains its independent
+    /// <see cref="CardBehaviorSpecCatalog.Version"/> pin.
+    /// </summary>
+    public const string Version = "gateway-m4-4.3";
+
+    /// <summary>
     /// Builds the immutable Gateway behavior catalog used by a production
     /// engine session.  This is the composition path for M4; the legacy
     /// <see cref="RegisterAll"/> method remains available to M2 callers.
     /// </summary>
     public static BehaviorCatalog Create()
     {
-        var builder = new BehaviorCatalogBuilder(CardBehaviorSpecCatalog.Version);
+        var builder = new BehaviorCatalogBuilder(Version);
         return builder
             .AddIce(GatewayIceBehaviorSpecs.IceSpecs)
             .AddIcebreaker(GatewayIcebreakerBehaviorSpecs.IcebreakerSpecs)

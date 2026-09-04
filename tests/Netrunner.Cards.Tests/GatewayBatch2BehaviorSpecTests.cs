@@ -110,6 +110,7 @@ public sealed class GatewayBatch2BehaviorSpecTests
     [InlineData(0)]
     [InlineData(1)]
     [InlineData(2)]
+    [Trait("GatewayCard", "30053")]
     public void SyntheticUseAbilityRemovesSourceRoundTripsChoiceAndShufflesExactArchivesSelection(int count)
     {
         BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();

@@ -126,12 +126,14 @@ public sealed class M2ScenarioSetupTests
     {
         M2ScenarioDocument document = LoadDocument(RepresentativeRunJson);
         BehaviorCatalog gateway = GatewayBehaviorCatalog.Create();
+        Assert.Equal(GatewayBehaviorCatalog.Version, gateway.Version);
         BehaviorCatalog expanded = new BehaviorCatalogBuilder(gateway.Version, gateway)
             .AddAsset(new AssetBehaviorSpec(new CardDefinitionId("test:m2-unrelated"), trashCost: 1))
             .Build();
 
         BehaviorCatalog gatewaySlice = document.CreateBehaviorCatalog(gateway);
         BehaviorCatalog expandedSlice = document.CreateBehaviorCatalog(expanded);
+        Assert.Equal(CardBehaviorSpecCatalog.Version, gatewaySlice.Version);
         Assert.Equal(gatewaySlice.Version, expandedSlice.Version);
         Assert.Equal(gatewaySlice.Fingerprint, expandedSlice.Fingerprint);
         Assert.Equal(
