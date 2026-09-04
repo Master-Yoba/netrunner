@@ -229,6 +229,23 @@ if ! grep -Fq "$slice44_ui_expected" "$slice44_ui_smoke_log" \
   exit 1
 fi
 echo "m4-slice44-ui-smoke=PASS strength_reason=true modified_cost=true used_first_x_chip=true breach_note=true"
+slice45_ui_smoke_log="$coverage_report_dir/slice45-ui-smoke.log"
+slice45_ui_expected="M4_SLICE45_UI PASS prominent_options=true acting_player=true issued_order=true typed_cost=true typed_fallback=true hidden_safe_installed_card=true active_restriction=true legal_bioroid=true armed_mayfly=true"
+if ! run_with_timeout 30 env \
+  XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
+  "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \
+  -- --m4-slice45-ui-smoke >"$slice45_ui_smoke_log" 2>&1; then
+  echo "M4 Slice 4.5 UI smoke failed or timed out; see $slice45_ui_smoke_log." >&2
+  sed -n '1,160p' "$slice45_ui_smoke_log" >&2
+  exit 1
+fi
+if ! grep -Fq "$slice45_ui_expected" "$slice45_ui_smoke_log" \
+  || grep -Fq "M4_SLICE45_UI FAIL" "$slice45_ui_smoke_log"; then
+  echo "M4 Slice 4.5 UI smoke did not prove the typed decision/cue path; see $slice45_ui_smoke_log." >&2
+  sed -n '1,160p' "$slice45_ui_smoke_log" >&2
+  exit 1
+fi
+echo "m4-slice45-ui-smoke=PASS prominent_options=true acting_player=true issued_order=true typed_cost=true typed_fallback=true hidden_safe_installed_card=true active_restriction=true legal_bioroid=true armed_mayfly=true"
 XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
   "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" -- --smoke-test
 "$verify_root/scripts/check-secrets.sh"

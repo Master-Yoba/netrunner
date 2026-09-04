@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "fixtureId": "sim-slice44-batch3-expanded",
+  "fixtureId": "sim-slice45-batch4-expanded",
   "rulesVersion": "26.03",
   "cardDataVersion": "236140cf84491c23995b028bc791281837520b97",
-  "behaviorRegistryVersion": "gateway-m4-4.5-c1",
-  "behaviorCatalogFingerprint": "c170516786fef0130e37153f246faf3a2d74249311ec6e49751727a9429f1a25",
+  "behaviorRegistryVersion": "gateway-m4-4.5",
+  "behaviorCatalogFingerprint": "40cf3ff37c5e014a70d43e321c63cf541dc883af74315e970df0e4e4928dd038",
   "seed": 40103,
   "actionCap": 256,
   "corpDeck": {
@@ -23,7 +23,12 @@
       { "code": "30056", "quantity": 1 },
       { "code": "30040", "quantity": 1 },
       { "code": "30053", "quantity": 1 },
-      { "code": "30071", "quantity": 1 }
+      { "code": "30071", "quantity": 1 },
+      { "code": "30038", "quantity": 1 },
+      { "code": "30039", "quantity": 1 },
+      { "code": "30042", "quantity": 1 },
+      { "code": "30050", "quantity": 1 },
+      { "code": "30054", "quantity": 1 }
     ],
     "validationProfile": "developerReduced"
   },
@@ -58,7 +63,9 @@
       { "code": "30022", "quantity": 1 },
       { "code": "30025", "quantity": 1 },
       { "code": "30026", "quantity": 1 },
-      { "code": "30034", "quantity": 1 }
+      { "code": "30034", "quantity": 1 },
+      { "code": "30028", "quantity": 1 },
+      { "code": "30032", "quantity": 1 }
     ],
     "validationProfile": "developerReduced"
   },
@@ -75,5 +82,5 @@
     "https://nullsignal.games/products/system-gateway/",
     "https://rules.nullsignal.games/"
   ],
-  "crossCheckNote": "Developer-curated code/quantity-only decks include all 39 registered Slice <=4.4 codes (38 complete; Offworld Office remains partial). The seven Slice 4.4 Batch 3 Runner codes are included in the fixture union. MATCH-401A normal setup/mulligan execution is not yet present, so these documents remain validation inputs rather than a claimed full-game outcome."
+  "crossCheckNote": "Developer-curated code/quantity-only decks include all 46 registered Slice <=4.5 codes (45 complete; Offworld Office remains partial), including all seven Slice 4.5 Batch 4 codes. MATCH-401A normal setup/mulligan execution remains outside this input document; the checked-in Slice 4.5 headless proof executes the run reducer through its observation boundary."
 }

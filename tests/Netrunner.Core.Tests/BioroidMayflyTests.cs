@@ -29,6 +29,10 @@ public sealed class BioroidMayflyTests
             Assert.Equal(BehaviorCostKind.LoseClick, parameters.Cost.Kind);
             Assert.Equal(1, parameters.Cost.Amount);
             Assert.Equal(1, parameters.ClickCost);
+            Assert.Equal(
+                encounter.RunState!.Encounter!.Subroutines.Single(subroutine =>
+                    subroutine.Id == parameters.SubroutineId).Ordinal,
+                parameters.SubroutineOrdinal);
             Assert.IsNotType<RunBreakParameters>(action.Parameters);
         });
 
@@ -135,6 +139,27 @@ public sealed class BioroidMayflyTests
         Assert.Contains(
             StateInvariantValidator.Collect(actionTampered, FixtureBehaviorCatalog.Catalog),
             violation => violation.Code == "run.extra-bioroid-action");
+
+        LegalAction issued = pending.LegalActions.First(action => action.Kind == ActionKind.UseBioroidAbility);
+        RunBioroidAbilityParameters issuedParameters =
+            Assert.IsType<RunBioroidAbilityParameters>(issued.Parameters);
+        LegalAction forgedOrdinal = new(
+            issued.Id,
+            issued.Kind,
+            issued.Description,
+            new RunBioroidAbilityParameters(
+                issuedParameters.IceId,
+                issuedParameters.SubroutineId,
+                issuedParameters.AbilityKey,
+                issuedParameters.Cost,
+                issuedParameters.SubroutineOrdinal + 1));
+        GameState ordinalTampered = EncounterBreakerTests.WithPendingDecision(
+            encounter,
+            pending.LegalActions.Select(action => action.Id == issued.Id ? forgedOrdinal : action).ToArray());
+        IReadOnlyList<StateInvariantViolation> ordinalViolations =
+            StateInvariantValidator.Collect(ordinalTampered, FixtureBehaviorCatalog.Catalog);
+        Assert.Contains(ordinalViolations, violation => violation.Code == "run.extra-bioroid-action");
+        Assert.Contains(ordinalViolations, violation => violation.Code == "run.missing-bioroid-action");
 
         RunLingeringEffect genericEffect = new(
             new RunEffectId($"effect:forged:{runId.Value}"),

@@ -379,6 +379,7 @@ public static class ActionsRegionPresenter
             DecisionKind.TurnDiscard => [ActionKind.ChooseCard],
             DecisionKind.BehaviorChoice => [ActionKind.ChooseBehavior],
             DecisionKind.TriggerChoice => [ActionKind.UseTrigger, ActionKind.DeclineTrigger],
+            DecisionKind.IceSubroutineChoice => [ActionKind.ResolveIceSubroutine],
             DecisionKind.InstallChoice => [ActionKind.InstallCard],
             DecisionKind.InterruptChoice =>
             [
@@ -427,6 +428,7 @@ public static class ActionsRegionPresenter
             DecisionKind.TurnDiscard => "FORCED DISCARD",
             DecisionKind.BehaviorChoice => "BEHAVIOR CHOICE ISSUED BY CORE",
             DecisionKind.TriggerChoice => "TRIGGER CHOICE ISSUED BY CORE",
+            DecisionKind.IceSubroutineChoice => "ICE SUBROUTINE CHOICE ISSUED BY CORE",
             DecisionKind.InstallChoice => "INSTALL CHOICE ISSUED BY CORE",
             DecisionKind.InterruptChoice => "INTERRUPT CHOICE ISSUED BY CORE",
             DecisionKind.RunTiming => "RUN WINDOW ACTIONS ISSUED BY CORE",
@@ -459,19 +461,8 @@ public static class ActionsRegionPresenter
             or ActionKind.ChooseBreachCandidate;
     }
 
-    public static string? GetTargetCardId(ActionParameters parameters) => parameters switch
-    {
-        CardChoiceParameters value => value.CardId.Value,
-        InstallCardParameters value => value.CardId.Value,
-        RezCardParameters value => value.CardId.Value,
-        RunBioroidAbilityParameters value => value.IceId.Value,
-        RunIceParameters value => value.IceId.Value,
-        RunBreakerParameters value => value.BreakerId.Value,
-        RunBreakParameters value => value.BreakerId.Value,
-        RunCardPaymentParameters value => value.CardId.Value,
-        BreachCandidateParameters { CardId: { } cardId } => cardId.Value,
-        _ => null,
-    };
+    public static string? GetTargetCardId(ActionParameters parameters) =>
+        Slice45PresentationProjector.GetTargetCardId(parameters);
 
     /// <summary>
     /// Returns a viewer-safe typed server target for a run-event play. The

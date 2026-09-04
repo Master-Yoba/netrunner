@@ -961,6 +961,12 @@ public static partial class GameEngine
                         $"Encounter subroutine at ordinal {subroutine.Ordinal} is not supported by subroutine resolution.");
             }
 
+            currentRun = RecordResolvedUnbrokenSubroutine(
+                currentRun,
+                ice,
+                encounter.Id,
+                subroutine);
+
             resolvedSubroutines.Add(new RunSubroutineState(
                 subroutine.Version,
                 subroutine.Id,
@@ -1020,6 +1026,16 @@ public static partial class GameEngine
         RunSubroutineState subroutine,
         RunRestrictionSubroutineSpec specification)
     {
+        // The restriction and its execution-history entry are advanced from
+        // the same immutable reducer boundary. This gives save/load
+        // validation a structural proof that the restriction was not merely
+        // inserted into a detached RunState snapshot.
+        run = RecordResolvedUnbrokenSubroutine(
+            run,
+            ice,
+            run.Encounter?.Id
+                ?? throw new ResolutionFailureException("The encounter is missing for a run restriction."),
+            subroutine);
         RunRestriction restriction = new(
             specification.Restriction,
             ice.Id,
@@ -1036,6 +1052,34 @@ public static partial class GameEngine
         RunState updated = run.WithRunRestrictions(existing.Append(restriction).ToArray());
         working.RunState = updated;
         return updated;
+    }
+
+    private static RunState RecordResolvedUnbrokenSubroutine(
+        RunState run,
+        CardInstanceState ice,
+        EncounterId encounterId,
+        RunSubroutineState subroutine)
+    {
+        if (subroutine.Broken)
+        {
+            throw new ResolutionFailureException(
+                "A broken ICE subroutine cannot be recorded as resolved execution history.");
+        }
+
+        RunResolvedSubroutineLedgerEntry entry = new(
+            run.Id,
+            encounterId,
+            ice.Id,
+            ice.DefinitionId,
+            subroutine.Id,
+            subroutine.Ordinal);
+        IReadOnlyList<RunResolvedSubroutineLedgerEntry> existing = run.ResolvedSubroutineLedger ?? [];
+        if (existing.Any(candidate => candidate == entry))
+        {
+            return run;
+        }
+
+        return run.WithResolvedSubroutineLedger(existing.Append(entry).ToArray());
     }
 
     private static void YieldIceSubroutineChoice(
@@ -1069,7 +1113,7 @@ public static partial class GameEngine
         // advances to the next printed subroutine.
         if (specification is TrashInstalledRunnerCardSubroutineSpec && choices.Count == 0)
         {
-            ResolveIceSubroutineWithoutChoice(working, run, subroutine);
+            ResolveIceSubroutineWithoutChoice(working, run, ice, subroutine);
             return;
         }
 
@@ -1338,6 +1382,7 @@ public static partial class GameEngine
     private static void ResolveIceSubroutineWithoutChoice(
         WorkingState working,
         RunState run,
+        CardInstanceState ice,
         RunSubroutineState subroutine)
     {
         RunEncounterState encounter = run.Encounter
@@ -1347,7 +1392,12 @@ public static partial class GameEngine
                 ? new RunSubroutineState(candidate.Version, candidate.Id, candidate.Ordinal, candidate.Broken, true)
                 : candidate)
             .ToArray();
-        working.RunState = run.WithEncounter(new RunEncounterState(
+        RunState recorded = RecordResolvedUnbrokenSubroutine(
+            run,
+            ice,
+            encounter.Id,
+            subroutine);
+        working.RunState = recorded.WithEncounter(new RunEncounterState(
             encounter.Version,
             encounter.Id,
             encounter.IceId,
@@ -1545,6 +1595,11 @@ public static partial class GameEngine
                 ? new RunSubroutineState(candidate.Version, candidate.Id, candidate.Ordinal, candidate.Broken, true)
                 : candidate)
             .ToArray();
+        run = RecordResolvedUnbrokenSubroutine(
+            run,
+            ice,
+            encounter.Id,
+            subroutine);
         working.RunState = run.WithEncounter(new RunEncounterState(
             encounter.Version,
             encounter.Id,
@@ -2913,6 +2968,12 @@ public static partial class GameEngine
             .SingleOrDefault(candidate => candidate.Id == parameters.SubroutineId)
             ?? throw new ResolutionFailureException(
                 $"Subroutine '{parameters.SubroutineId}' is not part of the current encounter.");
+
+        if (parameters.SubroutineOrdinal != subroutine.Ordinal)
+        {
+            throw new ResolutionFailureException(
+                "The bioroid ability subroutine ordinal is stale or forged.");
+        }
         if (subroutine.Broken || subroutine.Resolved)
         {
             throw new ResolutionFailureException(
@@ -3247,7 +3308,8 @@ public static partial class GameEngine
                                 encounteredIce.Id,
                                 subroutine.Id,
                                 ability.Key,
-                                ability.Cost)));
+                                ability.Cost,
+                                subroutine.Ordinal)));
                     }
                 }
             }
@@ -3527,10 +3589,14 @@ public static partial class GameEngine
         CardInstanceState? accessedCard = liveCard
             ?? working.Cards.FirstOrDefault(card => card.Id == accessed);
 
-        if (trashableAccess
-            && !HasRunRestriction(run, RunRestrictionKind.CannotStealOrTrashCorpCards))
+        if (currentAccess)
         {
-            AddAbilityActions(working, actions);
+            AddAbilityActions(
+                working,
+                actions,
+                suppressCorpCardTrash: HasRunRestriction(
+                    run,
+                    RunRestrictionKind.CannotStealOrTrashCorpCards));
         }
 
         // CR 26.03 7.2.2/7.1.5: the basic trash is offered only for a

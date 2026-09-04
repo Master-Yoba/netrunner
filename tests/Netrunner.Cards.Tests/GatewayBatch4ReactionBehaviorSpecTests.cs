@@ -17,16 +17,18 @@ public sealed class GatewayBatch4ReactionBehaviorSpecTests
     {
         BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();
 
-        Assert.Equal("gateway-m4-4.5-c1", catalog.Version);
+        Assert.Equal("gateway-m4-4.5", catalog.Version);
         Assert.Equal(
             GatewayBatch4BehaviorSpecs.AssignedDefinitionIds,
             GatewayBatch4BehaviorSpecs.GenericSpecs.Select(static definition => definition.DefinitionId));
         Assert.All(
             GatewayBatch4BehaviorSpecs.AssignedDefinitionIds,
             definitionId => Assert.Contains(definitionId, catalog.AllDefinitionIds));
-        Assert.DoesNotContain(
-            catalog.IceSpecs,
-            spec => GatewayBatch4BehaviorSpecs.AssignedDefinitionIds.Contains(spec.DefinitionId));
+        Assert.Equal(
+            [GatewayBatch4CardCodes.Funhouse],
+            catalog.IceSpecs
+                .Where(spec => GatewayBatch4BehaviorSpecs.AssignedDefinitionIds.Contains(spec.DefinitionId))
+                .Select(static spec => spec.DefinitionId));
     }
 
     [Fact]
@@ -137,7 +139,9 @@ public sealed class GatewayBatch4ReactionBehaviorSpecTests
         Assert.False(trigger.RequireSourceOnAttackedServer);
         Assert.Empty(definition.PaidAbilities);
         Assert.Empty(definition.Instructions);
-        Assert.False(catalog.TryGetIce(GatewayBatch4CardCodes.Funhouse, out _));
+        Assert.True(catalog.TryGetIce(GatewayBatch4CardCodes.Funhouse, out IceBehaviorSpec? ice));
+        Assert.NotNull(ice);
+        Assert.IsType<PayCreditsOrTagSubroutineSpec>(Assert.Single(ice.Subroutines));
 
         BehaviorChoiceSpec choice = Assert.IsType<BehaviorChoiceSpec>(
             Assert.Single(trigger.Instructions).Choice);

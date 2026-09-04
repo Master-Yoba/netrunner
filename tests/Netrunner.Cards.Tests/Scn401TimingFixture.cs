@@ -15,6 +15,23 @@ namespace Netrunner.Cards.Tests;
 /// </summary>
 internal sealed class Scn401TimingFixtureDocument
 {
+    private static readonly string[] ExpectedCaseIds =
+    [
+        "approach-anoetic-void",
+        "approach-manegarm-skunkworks",
+        "encounter-funhouse",
+        "encounter-ansel-bioroid-repeated",
+        "encounter-ansel-installed-card-target",
+        "encounter-ansel-normal-install",
+        "encounter-ansel-restriction-agenda",
+        "encounter-ansel-restriction-asset",
+        "encounter-bran-inward-install",
+        "encounter-mayfly-used-run-end",
+        "encounter-mayfly-unused-run-end",
+        "jailbreak-hq-success-draw-access",
+        "jailbreak-rnd-success-draw-access",
+    ];
+
     [JsonConstructor]
     public Scn401TimingFixtureDocument(
         int schemaVersion,
@@ -135,6 +152,11 @@ internal sealed class Scn401TimingFixtureDocument
             problems.Add("catalog.testOnlyIceDefinitions: at least one focused fixture extension is required.");
         }
 
+        if (Excluded.Count > 0)
+        {
+            problems.Add("excluded: SCN-401 Slice 4.5 scope is fully executable and must not retain exclusions.");
+        }
+
         var caseIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (Scn401TimingCase scenario in Cases)
         {
@@ -154,9 +176,10 @@ internal sealed class Scn401TimingFixtureDocument
             }
 
             if (!IsStableIdentifier(scenario.TargetServer)
-                || !scenario.TargetServer.StartsWith("remote:", StringComparison.Ordinal))
+                || (!scenario.TargetServer.StartsWith("remote:", StringComparison.Ordinal)
+                    && scenario.TargetServer is not ("headquarters" or "hq" or "r&d" or "rnd" or "archives")))
             {
-                problems.Add($"{path}.targetServer: must be a stable remote server reference.");
+                problems.Add($"{path}.targetServer: must be a stable remote or central server reference.");
             }
 
             if (scenario.RunnerCredits < 0 || scenario.RunnerClicks < 0 || scenario.CorpCredits < 0)
@@ -175,9 +198,25 @@ internal sealed class Scn401TimingFixtureDocument
             ValidateExpectedEvents(scenario, path, problems);
         }
 
-        if (Cases.Count != 3)
+        if (Cases.Count != ExpectedCaseIds.Length)
         {
-            problems.Add($"cases: expected the three initial cases, found {Cases.Count}.");
+            problems.Add($"cases: expected {ExpectedCaseIds.Length} Slice 4.5 timing cases, found {Cases.Count}.");
+        }
+
+        foreach (string expectedCaseId in ExpectedCaseIds)
+        {
+            if (!caseIds.Contains(expectedCaseId))
+            {
+                problems.Add($"cases: required Slice 4.5 case '{expectedCaseId}' is missing.");
+            }
+        }
+
+        foreach (string actualCaseId in caseIds)
+        {
+            if (!ExpectedCaseIds.Contains(actualCaseId, StringComparer.Ordinal))
+            {
+                problems.Add($"cases: unexpected case '{actualCaseId}' is outside the Slice 4.5 timing scope.");
+            }
         }
 
         if (!Citations.Any(value => value.Contains("6.9.4g", StringComparison.Ordinal)))
@@ -273,23 +312,35 @@ internal sealed class Scn401TimingFixtureDocument
             return;
         }
 
-        if (source.OwnerSide != PlayerSide.Corp
-            || (scenario.Kind == Scn401TimingCaseKind.ApproachServer
+        bool runEventSource = scenario.Id.StartsWith("jailbreak-", StringComparison.Ordinal);
+        if (source.OwnerSide != (runEventSource ? PlayerSide.Runner : PlayerSide.Corp)
+            || (!runEventSource
+                && scenario.Kind == Scn401TimingCaseKind.ApproachServer
                 && (!source.FaceUp || !source.Rezzed)))
         {
-            problems.Add($"{path}.sourceCardId: reaction sources must be Corp cards; approach sources must already be face-up and rezzed.");
+            problems.Add(
+                $"{path}.sourceCardId: reaction sources must have the owning side required by the case; approach Corp sources must already be face-up and rezzed.");
         }
 
-        if (scenario.Kind == Scn401TimingCaseKind.ApproachServer
+        if (!runEventSource
+            && scenario.Kind == Scn401TimingCaseKind.ApproachServer
             && source.Zone != ZoneKind.ServerRoot)
         {
             problems.Add($"{path}.sourceCardId: approach reactions require a server-root source.");
         }
 
-        if (scenario.Kind == Scn401TimingCaseKind.Encounter
+        if (!runEventSource
+            && scenario.Kind == Scn401TimingCaseKind.Encounter
             && source.Zone != ZoneKind.ServerIce)
         {
             problems.Add($"{path}.sourceCardId: encounter reactions require an ICE source.");
+        }
+
+        if (runEventSource
+            && (source.Zone != ZoneKind.RunnerGrip
+                || source.DefinitionId != GatewayBatch4CardCodes.Jailbreak.Value))
+        {
+            problems.Add($"{path}.sourceCardId: Jailbreak cases require definition 30028 in the Runner grip.");
         }
 
         if (scenario.Id == "approach-anoetic-void")
@@ -300,6 +351,26 @@ internal sealed class Scn401TimingFixtureDocument
             if (hq.Length != 2)
             {
                 problems.Add($"{path}.cards: Anoetic Void requires exactly two hidden HQ cost cards.");
+            }
+        }
+
+        if (runEventSource)
+        {
+            Scn401TimingCaseKind expectedKind = Scn401TimingCaseKind.ApproachServer;
+            if (scenario.Kind != expectedKind)
+            {
+                problems.Add($"{path}.kind: Jailbreak must use the approach-server run-event case kind.");
+            }
+
+            ZoneKind hiddenZone = scenario.TargetServer is "headquarters" or "hq"
+                ? ZoneKind.CorpHand
+                : ZoneKind.CorpDeck;
+            Scn401CardPlacement[] hiddenCards = scenario.Cards
+                .Where(card => card.Zone == hiddenZone && card.OwnerSide == PlayerSide.Corp)
+                .ToArray();
+            if (hiddenCards.Length != 2)
+            {
+                problems.Add($"{path}.cards: Jailbreak cases require exactly two hidden cards in the attacked central zone.");
             }
         }
     }
@@ -324,7 +395,24 @@ internal sealed class Scn401TimingFixtureDocument
             problems.Add($"{path}.reaction: typed occurrence, mode, owner, decision, and run step are required.");
         }
 
-        if (scenario.Kind == Scn401TimingCaseKind.ApproachServer)
+        if (scenario.Id.StartsWith("jailbreak-", StringComparison.Ordinal))
+        {
+            if (scenario.TargetServer is not ("headquarters" or "hq" or "r&d" or "rnd"))
+            {
+                problems.Add($"{path}.targetServer: Jailbreak may target only HQ or R&D.");
+            }
+
+            if (reaction.Occurrence != OccurrenceKind.RunSuccessful
+                || reaction.RunStep != RunTimingStep.BreachCandidateSelection
+                || !reaction.MustNotOpenPaidWindow
+                || reaction.OwnerSide != PlayerSide.Runner
+                || reaction.DecisionKind != DecisionKind.RunTiming)
+            {
+                problems.Add(
+                    $"{path}.reaction: Jailbreak must trigger automatically at RunSuccessful before breach selection without a paid window.");
+            }
+        }
+        else if (scenario.Kind == Scn401TimingCaseKind.ApproachServer)
         {
             if (reaction.Occurrence != OccurrenceKind.ServerApproached
                 || reaction.RunStep != RunTimingStep.Success
@@ -406,6 +494,17 @@ internal sealed class Scn401TimingFixtureDocument
         "server-approached" => true,
         "run-successful" => true,
         "encounter-initialized" => true,
+        "encounter-completed" => true,
+        "run-event-played" => true,
+        "run-initiated" => true,
+        "run-ended" => true,
+        "breach-started" => true,
+        "card-accessed" => true,
+        "subroutines-broken" => true,
+        "bioroid-ability-used" => true,
+        "card-installed" => true,
+        "mayfly-run-end-trash" => true,
+        "run-timing-window-opened:breachCandidateSelection" => true,
         "run-timing-window-opened:afterMovePaidWindow" => true,
         "run-timing-window-opened:encounterPaidWindow" => true,
         _ => false,
@@ -635,14 +734,16 @@ internal sealed record Scn401YieldBoundary
 
 /// <summary>
 /// Builds an authoritative state from a SCN-401 case while keeping server
-/// topology and the test-only Funhouse ICE declaration in the Cards test
-/// assembly.  No production scenario loader is broadened for this evidence.
+/// topology and any fixture-only ICE declarations in the Cards test assembly.
+/// No production scenario loader is broadened for this evidence.
 /// </summary>
 internal static class Scn401TimingFixtureBuilder
 {
     private static readonly CardDefinitionId PlainIce = new("fixture:scn401-plain-ice");
     private static readonly CardDefinitionId HqCostA = new("fixture:scn401-hq-a");
     private static readonly CardDefinitionId HqCostB = new("fixture:scn401-hq-b");
+    private static readonly CardDefinitionId RestrictionAgenda = new("fixture:scn401-agenda");
+    private static readonly CardDefinitionId RestrictionAsset = new("fixture:scn401-asset");
 
     public static BehaviorCatalog CreateBehaviorCatalog(Scn401TimingCase scenario)
     {
@@ -650,29 +751,123 @@ internal static class Scn401TimingFixtureBuilder
         BehaviorCatalogBuilder builder = new(gateway.Version, gateway);
         if (scenario.Kind == Scn401TimingCaseKind.ApproachServer)
         {
-            builder.AddIce(new IceBehaviorSpec(
-                PlainIce,
-                strength: 0,
-                iceType: IceType.Barrier,
-                rezCost: 0,
-                subroutines: [],
-                strengthModifiers: []));
+            AddIceIfMissing(
+                builder,
+                gateway,
+                new IceBehaviorSpec(
+                    PlainIce,
+                    strength: 0,
+                    iceType: IceType.Barrier,
+                    rezCost: 0,
+                    subroutines: [],
+                    strengthModifiers: []));
         }
-        else
+        else if (scenario.Cards.Any(card => card.DefinitionId == GatewayBatch4CardCodes.Ansel.Value)
+            && !gateway.TryGetIce(GatewayBatch4CardCodes.Ansel, out _))
         {
-            // Funhouse's generic encounter reaction is in the production
-            // Gateway catalog; its empty ICE shell is test-owned until the
-            // later ICE/subroutine checkpoint binds printed subroutines.
+            // Keep the D1 fixture executable while the production ICE binding
+            // is being assembled.  Once the Cards-owned Ansel declaration is
+            // present this fallback is not added, so the fixture exercises the
+            // injected production declaration rather than a title branch.
             builder.AddIce(new IceBehaviorSpec(
-                GatewayBatch4CardCodes.Funhouse,
+                GatewayBatch4CardCodes.Ansel,
+                strength: 0,
+                iceType: IceType.Sentry,
+                rezCost: 0,
+                subroutines:
+                [
+                    new LoseCreditsSubroutineSpec(PlayerSide.Runner, 1),
+                    new LoseCreditsSubroutineSpec(PlayerSide.Runner, 1),
+                    new EndRunSubroutineSpec(),
+                ],
+                strengthModifiers: [],
+                encounteredBioroidAbilities: GatewayBatch4BioroidBehaviorSpecs.BioroidAbilities));
+        }
+
+        foreach (Scn401CardPlacement placement in scenario.Cards)
+        {
+            if (placement.Zone != ZoneKind.ServerIce)
+            {
+                continue;
+            }
+
+            CardDefinitionId definitionId = new(placement.DefinitionId);
+            if (gateway.TryGetIce(definitionId, out _)
+                || definitionId == GatewayBatch4CardCodes.Ansel
+                || (scenario.Kind == Scn401TimingCaseKind.ApproachServer
+                    && definitionId == PlainIce))
+            {
+                continue;
+            }
+
+            if (definitionId == GatewayBatch4CardCodes.Funhouse)
+            {
+                // D1's encounter-trigger case predates the printed
+                // subroutine binding.  Preserve its empty shell until the
+                // production Funhouse declaration is available.
+                builder.AddIce(new IceBehaviorSpec(
+                    definitionId,
+                    strength: 0,
+                    iceType: IceType.CodeGate,
+                    rezCost: 0,
+                    subroutines: [],
+                    strengthModifiers: []));
+                continue;
+            }
+
+            // A one-subroutine barrier gives the Mayfly cases a deterministic
+            // encounter to break without introducing a second production card
+            // behavior registration.
+            builder.AddIce(new IceBehaviorSpec(
+                definitionId,
                 strength: 0,
                 iceType: IceType.Barrier,
                 rezCost: 0,
-                subroutines: [],
+                subroutines: [new LoseCreditsSubroutineSpec(PlayerSide.Runner, 1)],
                 strengthModifiers: []));
         }
 
+        if (scenario.Cards.Any(card => card.DefinitionId == RestrictionAgenda.Value)
+            && !gateway.TryGetAgenda(RestrictionAgenda, out _))
+        {
+            builder.AddAgenda(new AgendaBehaviorSpec(RestrictionAgenda, agendaPoints: 1));
+        }
+
+        if (scenario.Cards.Any(card => card.DefinitionId == RestrictionAsset.Value)
+            && !gateway.TryGetAsset(RestrictionAsset, out _))
+        {
+            builder.AddAsset(new AssetBehaviorSpec(RestrictionAsset, trashCost: 0));
+        }
+
         return builder.Build();
+    }
+
+    /// <summary>
+    /// Builds the small authenticated runtime metadata catalog needed by the
+    /// fixture's real-card boundaries.  SCN-401 deliberately uses a detached
+    /// catalog rather than the process-wide Gateway content build: hidden-zone
+    /// cards and the fixture ICE shell are test-owned, while the engine still
+    /// receives the same typed class/cost information it would receive from
+    /// production card data.
+    /// </summary>
+    public static RuntimeCardCatalog CreateRuntimeCatalog(Scn401TimingCase scenario)
+    {
+        ArgumentNullException.ThrowIfNull(scenario);
+        var definitions = new Dictionary<CardDefinitionId, CardRuntimeSpec>();
+        foreach (Scn401CardPlacement placement in scenario.Cards)
+        {
+            CardDefinitionId definitionId = new(placement.DefinitionId);
+            if (!definitions.ContainsKey(definitionId))
+            {
+                definitions.Add(definitionId, RuntimeSpec(definitionId, placement));
+            }
+        }
+
+        return new RuntimeCardCatalog(
+            $"scn401-runtime-{scenario.Id}",
+            definitions.Values
+                .OrderBy(spec => spec.DefinitionId.Value, StringComparer.Ordinal)
+                .ToArray());
     }
 
     public static GameState BuildState(
@@ -749,6 +944,39 @@ internal static class Scn401TimingFixtureBuilder
             TurnStep.RunnerAction,
             new TurnHistoryState(1, null, null, facts, null));
 
+        RuntimeCardCatalog runtime = CreateRuntimeCatalog(scenario);
+        RulesState defaults = RulesState.CreateDefault(players);
+        PlayerId runnerId = runner.Id;
+        ProgramMemoryState[] programs = cards
+            .Where(card => card.OwnerSide == PlayerSide.Runner
+                && zones.Single(zone => zone.Id == card.ZoneId).Kind == ZoneKind.RunnerRig
+                && runtime.TryGet(card.DefinitionId, out CardRuntimeSpec? spec)
+                && spec.CardClass == RuntimeCardClass.Program)
+            .Select(card => new ProgramMemoryState(
+                card.Id,
+                runnerId,
+                runtime.GetSpec(card.DefinitionId).MemoryUnits))
+            .OrderBy(program => program.CardId.Value, StringComparer.Ordinal)
+            .ToArray();
+        PlayerRulesState[] rulePlayers = defaults.Players
+            .Select(player => player.PlayerId == runnerId
+                ? new PlayerRulesState(
+                    player.PlayerId,
+                    player.BaseHandSize,
+                    player.CoreDamage,
+                    player.Tags,
+                    player.BaseMemory,
+                    programs.Sum(program => program.MemoryCost))
+                : player)
+            .ToArray();
+        RulesState rules = new(
+            defaults.Version,
+            rulePlayers,
+            programs,
+            defaults.Counters,
+            defaults.LingeringEffects,
+            defaults.Triggers,
+            defaults.Interrupts);
         GameState state = new(
             baseline.SchemaVersion,
             baseline.GameId,
@@ -769,15 +997,45 @@ internal static class Scn401TimingFixtureBuilder
             baseline.ActionSequence,
             baseline.InitialSeed,
             runState: null,
-            rulesState: RulesState.CreateDefault(players),
+            rulesState: rules,
             behaviorRegistryVersion: catalog.Version,
-            behaviorCatalogFingerprint: catalog.Fingerprint);
-        StateInvariantValidator.Validate(state, catalog);
+            behaviorCatalogFingerprint: catalog.Fingerprint,
+            runtimeCardCatalogVersion: runtime.Version,
+            runtimeCardCatalogFingerprint: runtime.Fingerprint);
+        StateInvariantValidator.Validate(state, catalog, runtime);
         return state;
     }
 
     public static ServerId RemoteId(GameState state) =>
         state.Servers.Single(server => server.Kind == ServerKind.Remote).Id;
+
+    public static ServerId TargetServerId(GameState state, string targetServer)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(targetServer);
+        if (targetServer.StartsWith("remote:", StringComparison.Ordinal))
+        {
+            return RemoteId(state);
+        }
+
+        ServerKind kind = targetServer switch
+        {
+            "hq" or "headquarters" => ServerKind.Headquarters,
+            "rnd" or "r&d" or "r-and-d" => ServerKind.RAndD,
+            "archives" => ServerKind.Archives,
+            _ => throw new InvalidOperationException($"Unknown SCN-401 target server '{targetServer}'."),
+        };
+        return state.Servers.Single(server => server.Kind == kind).Id;
+    }
+
+    public static CardInstanceId? TryInitiatingSource(Scn401TimingCase scenario) =>
+        scenario.Cards
+            .FirstOrDefault(card => card.Zone == ZoneKind.RunnerGrip
+                && card.OwnerSide == PlayerSide.Runner
+                && card.DefinitionId == GatewayBatch4CardCodes.Jailbreak.Value)
+            is { } source
+            ? new CardInstanceId(source.Id)
+            : null;
 
     private static ZoneState ResolveZone(
         IReadOnlyList<ZoneState> zones,
@@ -798,4 +1056,100 @@ internal static class Scn401TimingFixtureBuilder
     }
 
     public static CardDefinitionId HqDefinition(int index) => index % 2 == 0 ? HqCostA : HqCostB;
+
+    private static void AddIceIfMissing(
+        BehaviorCatalogBuilder builder,
+        BehaviorCatalog catalog,
+        IceBehaviorSpec spec)
+    {
+        if (!catalog.TryGetIce(spec.DefinitionId, out _))
+        {
+            builder.AddIce(spec);
+        }
+    }
+
+    private static CardRuntimeSpec RuntimeSpec(
+        CardDefinitionId definitionId,
+        Scn401CardPlacement placement)
+    {
+        if (placement.OwnerSide == PlayerSide.Runner)
+        {
+            if (definitionId.Value == GatewayBatch4CardCodes.Jailbreak.Value)
+            {
+                return new CardRuntimeSpec(
+                    definitionId,
+                    PlayerSide.Runner,
+                    RuntimeCardClass.Event,
+                    playCost: 0);
+            }
+
+            if (definitionId.Value == GatewayBatch4CardCodes.Mayfly.Value)
+            {
+                return new CardRuntimeSpec(
+                    definitionId,
+                    PlayerSide.Runner,
+                    RuntimeCardClass.Program,
+                    installCost: 1,
+                    memoryUnits: 1,
+                    subtypes: ["icebreaker", "ai"]);
+            }
+
+            return new CardRuntimeSpec(
+                definitionId,
+                PlayerSide.Runner,
+                RuntimeCardClass.Resource,
+                installCost: 0);
+        }
+
+        if (definitionId == RestrictionAgenda)
+        {
+            return new CardRuntimeSpec(
+                definitionId,
+                PlayerSide.Corp,
+                RuntimeCardClass.Agenda,
+                agendaPoints: 1,
+                advancementRequirement: 1);
+        }
+
+        if (definitionId == RestrictionAsset)
+        {
+            return new CardRuntimeSpec(
+                definitionId,
+                PlayerSide.Corp,
+                RuntimeCardClass.Asset,
+                rezCost: 0,
+                trashCost: 0);
+        }
+
+        if (placement.Zone == ZoneKind.ServerIce
+            || definitionId.Value is "30038" or "30039" or "30054"
+            || definitionId.Value == PlainIce.Value)
+        {
+            int rezCost = definitionId.Value switch
+            {
+                "30038" or "30039" => 6,
+                "30054" => 5,
+                _ => 0,
+            };
+            return new CardRuntimeSpec(
+                definitionId,
+                PlayerSide.Corp,
+                RuntimeCardClass.Ice,
+                rezCost: rezCost,
+                subtypes: definitionId.Value switch
+                {
+                    "30038" => ["sentry", "bioroid", "destroyer"],
+                    "30039" => ["barrier", "bioroid"],
+                    "30054" => ["code-gate"],
+                    _ => ["barrier"],
+                });
+        }
+
+        return new CardRuntimeSpec(
+            definitionId,
+            PlayerSide.Corp,
+            RuntimeCardClass.Asset,
+            rezCost: 0,
+            trashCost: 0);
+    }
 }

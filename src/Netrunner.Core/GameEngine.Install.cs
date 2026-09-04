@@ -578,6 +578,12 @@ public static partial class GameEngine
                     ? new RunSubroutineState(candidate.Version, candidate.Id, candidate.Ordinal, candidate.Broken, true)
                 : candidate)
                 .ToArray();
+            CardInstanceState encounteredIce = GetCard(working, encounter.IceId);
+            run = RecordResolvedUnbrokenSubroutine(
+                run,
+                encounteredIce,
+                encounter.Id,
+                subroutine);
             if (encounteredIceRemoved)
             {
                 // CR 8.5.10: if the approached/encountered ICE is uninstalled

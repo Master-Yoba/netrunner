@@ -135,13 +135,146 @@ public sealed class Slice45UiPresentationTests
             new RunBioroidAbilityParameters(
                 new CardInstanceId("card:ansel"),
                 new SubroutineId("subroutine:ansel:0"),
-                "bioroid-break"));
+                "bioroid-break",
+                subroutineOrdinal: 0));
 
         Assert.Equal(
-            "USE BIOROID · BREAK subroutine:ansel:0 · LOSE 1 CLICK",
+            "USE BIOROID · BREAK SUBROUTINE 1 · LOSE 1 CLICK",
             Slice45PresentationProjector.Label(action));
         Assert.True(ActionsRegionPresenter.IsTargetedAction(action));
         Assert.Equal("card:ansel", ActionsRegionPresenter.GetTargetCardId(action.Parameters));
+    }
+
+    [Fact]
+    public void ProjectsTypedIceChoicesInIssuedOrderWithHostedSplitFallbackAndTargets()
+    {
+        MatchViewModel runnerView = View(
+            PlayerSide.Runner,
+            DecisionKind.IceSubroutineChoice,
+            [
+                new LegalAction(
+                    new ActionId("action:pay"),
+                    ActionKind.ResolveIceSubroutine,
+                    "description omitted",
+                    new IceSubroutineChoiceParameters(
+                        "frame:slice45-ui",
+                        IceSubroutineChoiceKind.PayCredits,
+                        creditCost: 5,
+                        hostedCredits: 2)),
+                new LegalAction(
+                    new ActionId("action:take-tag"),
+                    ActionKind.ResolveIceSubroutine,
+                    "description omitted",
+                    new IceSubroutineChoiceParameters(
+                        "frame:slice45-ui",
+                        IceSubroutineChoiceKind.TakeTag)),
+            ],
+            EncounterRun());
+        Slice45DecisionViewModel runnerProjected = Slice45PresentationProjector.Present(runnerView);
+
+        Assert.True(runnerProjected.IsProminent);
+        Assert.Equal(PlayerSide.Runner, runnerProjected.ActingPlayer);
+        Assert.Equal(
+            [1, 2],
+            runnerProjected.Options.Select(option => option.OptionOrder));
+        Assert.Equal(
+            [
+                IceSubroutineChoiceKind.PayCredits,
+                IceSubroutineChoiceKind.TakeTag,
+            ],
+            runnerProjected.Options.Select(option => option.IceChoice));
+        Assert.Equal("5 credits (hosted 2 credits + personal 3 credits)", runnerProjected.Options[0].CostSummary);
+        Assert.True(runnerProjected.Options[1].IsFallback);
+        Assert.Contains("FALLBACK", runnerProjected.Options[1].OrderedPresentationLabel, StringComparison.Ordinal);
+        Assert.Equal(ActionKind.ResolveIceSubroutine, ActionsRegionPresenter.GroupActions(
+            runnerView.Decision,
+            runnerView.LegalActions).Single().Actions[0].Kind);
+
+        MatchViewModel corpView = View(
+            PlayerSide.Corp,
+            DecisionKind.IceSubroutineChoice,
+            [
+                new LegalAction(
+                    new ActionId("action:install"),
+                    ActionKind.ResolveIceSubroutine,
+                    "description omitted",
+                    new IceSubroutineChoiceParameters(
+                        "frame:slice45-ui",
+                        IceSubroutineChoiceKind.InstallCard,
+                        cardId: new CardInstanceId("card:install"),
+                        destinationKind: InstallDestinationKind.ServerRoot,
+                        serverId: new ServerId("server:remote"),
+                        creditCost: 2)),
+                new LegalAction(
+                    new ActionId("action:trash"),
+                    ActionKind.ResolveIceSubroutine,
+                    "description omitted",
+                    new IceSubroutineChoiceParameters(
+                        "frame:slice45-ui",
+                        IceSubroutineChoiceKind.TrashInstalledRunnerCard,
+                        cardId: new CardInstanceId("card:runner-program"))),
+            ],
+            EncounterRun());
+        Slice45DecisionViewModel corpProjected = Slice45PresentationProjector.Present(corpView);
+
+        Assert.True(corpProjected.IsProminent);
+        Assert.Equal(PlayerSide.Corp, corpProjected.ActingPlayer);
+        Assert.Equal([1, 2], corpProjected.Options.Select(option => option.OptionOrder));
+        Assert.Contains("TARGET CARD · card:install", corpProjected.Options[0].PresentationLabel, StringComparison.Ordinal);
+        Assert.Contains("TARGET SERVER · server:remote", corpProjected.Options[0].PresentationLabel, StringComparison.Ordinal);
+        Assert.Contains("DESTINATION · SERVERROOT", corpProjected.Options[0].PresentationLabel, StringComparison.Ordinal);
+        Assert.Equal("card:runner-program", corpProjected.Options[1].TargetCardId);
+        Assert.Equal(ActionKind.ResolveIceSubroutine, ActionsRegionPresenter.GroupActions(
+            corpView.Decision,
+            corpView.LegalActions).Single().Actions[0].Kind);
+    }
+
+    [Fact]
+    public void MalformedTypedIceActionFailsClosedWithoutDescriptionFallback()
+    {
+        MatchViewModel malformed = View(
+            PlayerSide.Runner,
+            DecisionKind.IceSubroutineChoice,
+            [
+                new LegalAction(
+                    new ActionId("action:malformed-ice"),
+                    ActionKind.ResolveIceSubroutine,
+                    "description must not become a label",
+                    new NoActionParameters()),
+            ],
+            EncounterRun());
+
+        Slice45DecisionViewModel projected = Slice45PresentationProjector.Present(malformed);
+
+        Assert.False(projected.IsAvailable);
+        Assert.Empty(projected.Options);
+        Assert.DoesNotContain("description must not", projected.Diagnostic, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void IceChoiceOwnedByTheWrongSideFailsClosed()
+    {
+        MatchViewModel malformed = View(
+            PlayerSide.Runner,
+            DecisionKind.IceSubroutineChoice,
+            [
+                new LegalAction(
+                    new ActionId("action:corp-install-issued-to-runner"),
+                    ActionKind.ResolveIceSubroutine,
+                    "description must not repair ownership",
+                    new IceSubroutineChoiceParameters(
+                        "frame:slice45-ui",
+                        IceSubroutineChoiceKind.InstallCard,
+                        cardId: new CardInstanceId("card:hidden-corp-card"),
+                        destinationKind: InstallDestinationKind.ServerRoot,
+                        serverId: new ServerId("server:remote"))),
+            ],
+            EncounterRun());
+
+        Slice45DecisionViewModel projected = Slice45PresentationProjector.Present(malformed);
+
+        Assert.False(projected.IsAvailable);
+        Assert.Empty(projected.Options);
     }
 
     [Fact]
@@ -203,6 +336,33 @@ public sealed class Slice45UiPresentationTests
             GatewayBehaviorCatalog.Create());
 
         Assert.False(malformed.Slice45Cues.HasAnyValue);
+    }
+
+    [Fact]
+    public void ValidFutureCuesAreRetainedOnlyFromObservationFields()
+    {
+        M2ScenarioDocument document = M2ScenarioProvider.LoadRepresentative();
+        Observation baseline = ObservationBuilder.Build(
+            M2ScenarioSetup.Build(document),
+            PlayerSide.Runner);
+        var publicState = new Dictionary<string, object?>(baseline.PublicState)
+        {
+            ["slice45Cues"] = new Dictionary<string, object?>
+            {
+                ["runRestrictionActive"] = true,
+                ["bioroidAbilityReady"] = false,
+                ["mayflyBreakArmed"] = true,
+            },
+        };
+
+        MatchViewModel view = ObservationViewMapper.Build(
+            baseline with { PublicState = publicState },
+            CardMetadataResolvers.Default,
+            GatewayBehaviorCatalog.Create());
+
+        Assert.True(view.Slice45Cues.NoStealOrTrashActive);
+        Assert.False(view.Slice45Cues.BioroidAbilityLegal);
+        Assert.True(view.Slice45Cues.MayflyRunEndArmed);
     }
 
     private static LegalAction BehaviorAction(

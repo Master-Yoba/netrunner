@@ -17,7 +17,7 @@ public sealed class M2ProofCommandTests
     // play and breach provenance (schema 10 -> 11). The explicit 6.9.4g
     // server-approach event also changes the event-stream pin.
     private const string ExpectedFinalStateHash =
-        "e04e0e01c1abe93dc18a7a29d236b2a43f78ade13a60a9f9f4553d805f334581";
+        "4603c78adb067873229363c86d6b1294f92c5564009e1b8a1cbf2aa6e6dc1001";
     private const string ExpectedEventStreamHash =
         "33af2b049fbad324ed5ff0ee130740c3d65c03f2cb1196100afbdc73e9f0e67c";
 
@@ -63,7 +63,7 @@ public sealed class M2ProofCommandTests
     {
         string path = Path.Combine(AppContext.BaseDirectory, "M2Scenarios", "representative-run.json");
         BehaviorCatalog gateway = GatewayBehaviorCatalog.Create();
-        Assert.Equal("gateway-m4-4.5-c1", gateway.Version);
+        Assert.Equal("gateway-m4-4.5", gateway.Version);
         BehaviorCatalog legacy = BuildLegacyGatewayCatalog(gateway);
         BehaviorCatalog expanded = new BehaviorCatalogBuilder(legacy.Version, legacy)
             .Add(new CardBehaviorDefinition(

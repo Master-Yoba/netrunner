@@ -36,6 +36,8 @@ public partial class Main
 			return;
 		}
 
+		RenderSlice45RunCues(snapshot.View.Slice45Cues);
+
 		if (focus.Mode == FocusRegionMode.Encounter && focus.Encounter is { } encounter)
 		{
 			_smokeEncounterFocusObserved |= _smokeTest;
@@ -182,9 +184,36 @@ public partial class Main
 		foreach (Slice45ActionPresentationViewModel option in decision.Options)
 		{
 			_focusPresentation.AddChild(MakeWrappedLabel(
-				option.PresentationLabel,
+				option.OrderedPresentationLabel,
 				11,
 				option.IsFallback ? Warning : Colors.White));
+		}
+	}
+
+	private void RenderSlice45RunCues(Slice45CueViewModel cues)
+	{
+		if (cues.NoStealOrTrashActive == true)
+		{
+			_focusPresentation.AddChild(MakeWrappedLabel(
+				"RUN RESTRICTION ACTIVE · NO STEAL / NO TRASH CORP CARDS · UNTIL RUN ENDS",
+				12,
+				Warning));
+		}
+
+		if (cues.BioroidAbilityLegal == true)
+		{
+			_focusPresentation.AddChild(MakeWrappedLabel(
+				"BIOROID ABILITY · LEGAL",
+				12,
+				Accent));
+		}
+
+		if (cues.MayflyRunEndArmed == true)
+		{
+			_focusPresentation.AddChild(MakeWrappedLabel(
+				"MAYFLY RUN-END EFFECT · ARMED",
+				12,
+				Accent));
 		}
 	}
 

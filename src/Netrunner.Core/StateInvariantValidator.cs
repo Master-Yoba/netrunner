@@ -1398,6 +1398,8 @@ public static class StateInvariantValidator
 
         ValidateRunRezCostModifiers(state, behaviorCatalog, run, path, violations);
 
+        ValidateResolvedSubroutineLedger(state, behaviorCatalog, run, path, violations);
+
         ValidateRunRestrictions(state, behaviorCatalog, run, path, violations);
 
         if (!installedRunSource && run.InitiatingSource != run.ActiveRunEventId)
@@ -2316,6 +2318,21 @@ public static class StateInvariantValidator
                     "A run restriction must identify the deterministic subroutine of its run-bound source encounter and ordinal.");
             }
 
+            RunResolvedSubroutineLedgerEntry? ledgerEntry = run.ResolvedSubroutineLedger?.SingleOrDefault(entry =>
+                entry.RunId == run.Id
+                && entry.IceId == restriction.SourceIceId
+                && entry.IceDefinitionId == restriction.SourceIceDefinitionId
+                && entry.SubroutineId == restriction.SourceSubroutineId
+                && entry.Ordinal == restriction.SourceOrdinal);
+            if (ledgerEntry is null)
+            {
+                Add(
+                    violations,
+                    "run.restriction-ledger-missing",
+                    restrictionPath,
+                    "A run restriction must match an exact persisted ledger entry for an unbroken resolved subroutine.");
+            }
+
             // The immutable identity above is the retained proof once the
             // source ICE has moved or left play. While that source is still
             // the current encounter, also authenticate the live encounter
@@ -2332,6 +2349,85 @@ public static class StateInvariantValidator
                     "run.restriction-subroutine-invalid",
                     restrictionPath,
                     "A restriction sourced by the current encounter must identify its deterministic, resolved printed subroutine.");
+            }
+        }
+    }
+
+    private static void ValidateResolvedSubroutineLedger(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        RunState run,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        if (run.ResolvedSubroutineLedger is null)
+        {
+            return;
+        }
+
+        var seen = new HashSet<(EncounterId Encounter, CardInstanceId Ice, SubroutineId Subroutine)>();
+        for (int index = 0; index < run.ResolvedSubroutineLedger.Count; index++)
+        {
+            RunResolvedSubroutineLedgerEntry? entry = run.ResolvedSubroutineLedger[index];
+            string entryPath = $"{path}.resolvedSubroutineLedger[{index}]";
+            if (entry is null)
+            {
+                Add(violations, "run.null-resolved-subroutine-ledger-entry", entryPath, "Resolved-subroutine ledger entries must not be null.");
+                continue;
+            }
+
+            if (!seen.Add((entry.EncounterId, entry.IceId, entry.SubroutineId)))
+            {
+                Add(violations, "run.duplicate-resolved-subroutine-ledger-entry", entryPath, "Resolved-subroutine ledger entries must be unique per encounter, ICE, and subroutine.");
+            }
+
+            if (entry.Version != 1)
+            {
+                Add(violations, "run.resolved-subroutine-ledger-version", entryPath, "Resolved-subroutine ledger entry version must be 1.");
+            }
+
+            if (entry.RunId != run.Id)
+            {
+                Add(violations, "run.resolved-subroutine-ledger-run-mismatch", entryPath, "Resolved-subroutine ledger entries must belong to the active run.");
+            }
+
+            string expectedEncounterId = $"encounter:{run.Id.Value}:{entry.IceId.Value}";
+            string expectedSubroutineId = $"subroutine:{expectedEncounterId}:{entry.Ordinal}";
+            if (!string.Equals(entry.EncounterId.Value, expectedEncounterId, StringComparison.Ordinal)
+                || !string.Equals(entry.SubroutineId.Value, expectedSubroutineId, StringComparison.Ordinal))
+            {
+                Add(violations, "run.resolved-subroutine-ledger-identity", entryPath, "Resolved-subroutine ledger entries must retain the deterministic encounter and subroutine identity for this run.");
+            }
+
+            CardInstanceState? sourceIce = state.Cards.FirstOrDefault(card => card?.Id == entry.IceId);
+            if (sourceIce is null
+                || sourceIce.OwnerSide != PlayerSide.Corp
+                || sourceIce.DefinitionId != entry.IceDefinitionId)
+            {
+                Add(violations, "run.resolved-subroutine-ledger-source-invalid", entryPath, "Resolved-subroutine ledger entries must retain the original Corp ICE definition for their physical source.");
+                continue;
+            }
+
+            if (!behaviorCatalog.TryGetIce(entry.IceDefinitionId, out IceBehaviorSpec? iceSpec)
+                || entry.Ordinal < 0
+                || entry.Ordinal >= iceSpec.Subroutines.Count)
+            {
+                Add(violations, "run.resolved-subroutine-ledger-declaration-invalid", entryPath, "Resolved-subroutine ledger entries must point at a declared ICE subroutine.");
+                continue;
+            }
+
+            if (run.Encounter is { } encounter
+                && encounter.Id == entry.EncounterId)
+            {
+                RunSubroutineState? live = encounter.Subroutines.SingleOrDefault(subroutine => subroutine.Id == entry.SubroutineId);
+                if (live is null
+                    || live.Ordinal != entry.Ordinal
+                    || live.Broken
+                    || !live.Resolved
+                    || encounter.IceId != entry.IceId)
+                {
+                    Add(violations, "run.resolved-subroutine-ledger-live-mismatch", entryPath, "A ledger entry for the live encounter must match an unbroken resolved encounter subroutine.");
+                }
             }
         }
     }
@@ -8405,7 +8501,8 @@ public static class StateInvariantValidator
                                         run.Encounter.IceId,
                                         subroutine.Id,
                                         ability.Key,
-                                        ability.Cost));
+                                        ability.Cost,
+                                        subroutine.Ordinal));
                                 }
                             }
                         }
@@ -8736,33 +8833,34 @@ public static class StateInvariantValidator
             violations);
 
         IReadOnlyList<AbilityActionParameters> expectedAbilities = [];
-        if (run.RunRestrictions?.Any(restriction =>
-                restriction.Kind == RunRestrictionKind.CannotStealOrTrashCorpCards) == true)
+        try
         {
-            // The reducer intentionally suppresses every access-time ability
-            // while the typed no-steal/no-trash restriction is active. Keep
-            // the invariant projection identical so a forged ability cannot
-            // survive the public decision boundary.
-            expectedAbilities = [];
+            expectedAbilities = GameEngine.MaterializeAbilityActionParameters(state, behaviorCatalog);
+            if (run.RunRestrictions?.Any(restriction =>
+                    restriction.Kind == RunRestrictionKind.CannotStealOrTrashCorpCards) == true)
+            {
+                // Mirror the reducer's declaration-authenticated filter: an
+                // access ability is suppressed only if its typed behavior can
+                // trash a Corp card. Unrelated breach-access abilities remain
+                // part of the exact legal-action bijection.
+                expectedAbilities = expectedAbilities
+                    .Where(parameters => !GameEngine.IsAbilityBlockedByRunRestriction(
+                        behaviorCatalog,
+                        parameters))
+                    .ToArray();
+            }
         }
-        else
+        catch (Exception exception) when (exception is ResolutionFailureException
+            or InvalidOperationException
+            or KeyNotFoundException
+            or ArgumentException
+            or OverflowException)
         {
-            try
-            {
-                expectedAbilities = GameEngine.MaterializeAbilityActionParameters(state, behaviorCatalog);
-            }
-            catch (Exception exception) when (exception is ResolutionFailureException
-                or InvalidOperationException
-                or KeyNotFoundException
-                or ArgumentException
-                or OverflowException)
-            {
-                Add(
-                    violations,
-                    "decision.ability-materialization-failed",
-                    $"{path}.legalActions",
-                    $"Run timing ability actions could not be materialized from the authoritative state: {exception.Message}");
-            }
+            Add(
+                violations,
+                "decision.ability-materialization-failed",
+                $"{path}.legalActions",
+                $"Run timing ability actions could not be materialized from the authoritative state: {exception.Message}");
         }
 
         ValidateAbilityActionBijection(

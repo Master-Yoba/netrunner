@@ -216,6 +216,11 @@ public partial class Main
 				return true;
 			}
 
+			if (child is Button button && button.Text.Contains(text, StringComparison.Ordinal))
+			{
+				return true;
+			}
+
 			if (SceneTreeContainsText(child, text))
 			{
 				return true;

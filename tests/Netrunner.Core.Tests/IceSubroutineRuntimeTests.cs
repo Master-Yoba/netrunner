@@ -14,6 +14,7 @@ public sealed class IceSubroutineRuntimeTests
     private static readonly CardDefinitionId PayIce = new("fixture:ice-choice-pay");
     private static readonly CardDefinitionId NormalInstallIce = new("fixture:ice-choice-normal-install");
     private static readonly CardDefinitionId InwardInstallIce = new("fixture:ice-choice-inward-install");
+    private static readonly CardDefinitionId RestrictionIce = new("fixture:ice-choice-run-restriction");
     private static readonly CardDefinitionId RunnerProgram = new("fixture:ice-choice-runner-program");
     private static readonly CardDefinitionId RunnerHardware = new("fixture:ice-choice-runner-hardware");
     private static readonly CardDefinitionId RunnerResource = new("fixture:ice-choice-runner-resource");
@@ -336,6 +337,51 @@ public sealed class IceSubroutineRuntimeTests
             .ToArray();
         Assert.Single(parameters);
         Assert.Equal(IceSubroutineChoiceKind.TakeTag, parameters[0].Choice);
+    }
+
+    [Fact]
+    public void RunRestrictionRequiresItsExactResolvedSubroutineLedgerEntry()
+    {
+        BehaviorCatalog behavior = Catalog(
+            RestrictionIce,
+            new RunRestrictionSubroutineSpec(RunRestrictionKind.CannotStealOrTrashCorpCards));
+        RuntimeCardCatalog runtime = RuntimeCatalog(
+            new CardRuntimeSpec(RestrictionIce, PlayerSide.Corp, RuntimeCardClass.Ice, rezCost: 0));
+        GameState initial = BuildState(behavior, runtime, RestrictionIce);
+        GameState state = GameEngine.BeginRun(
+            initial,
+            RunTimingTests.RemoteId(initial),
+            behavior,
+            runtime);
+        while (state.RunState?.RunRestrictions is not { Count: > 0 })
+        {
+            PendingDecision decision = Assert.IsType<PendingDecision>(state.PendingDecision);
+            LegalAction pass = Assert.Single(decision.LegalActions, action => action.Kind == ActionKind.PassPriority);
+            ApplyResult result = Apply(state, pass, behavior, runtime);
+            Assert.True(result.Accepted, result.Rejection?.Message);
+            state = result.State;
+        }
+
+        RunRestriction restriction = Assert.Single(state.RunState!.RunRestrictions!);
+        RunResolvedSubroutineLedgerEntry ledger = Assert.Single(state.RunState.ResolvedSubroutineLedger!);
+        Assert.Equal(state.RunState.Id, ledger.RunId);
+        Assert.Equal(restriction.SourceIceId, ledger.IceId);
+        Assert.Equal(restriction.SourceIceDefinitionId, ledger.IceDefinitionId);
+        Assert.Equal(restriction.SourceSubroutineId, ledger.SubroutineId);
+        Assert.Equal(restriction.SourceOrdinal, ledger.Ordinal);
+        Assert.Empty(StateInvariantValidator.Collect(state, behavior, runtime));
+
+        GameState forged = WithRunState(state, state.RunState.WithResolvedSubroutineLedger(null));
+        Assert.Contains(
+            StateInvariantValidator.Collect(forged, behavior, runtime),
+            violation => violation.Code == "run.restriction-ledger-missing");
+        PendingDecision forgedDecision = Assert.IsType<PendingDecision>(forged.PendingDecision);
+        LegalAction forgedPass = Assert.Single(
+            forgedDecision.LegalActions,
+            action => action.Kind == ActionKind.PassPriority);
+        ApplyResult rejected = Apply(forged, forgedPass, behavior, runtime);
+        Assert.Equal(ApplyRejectionCode.InvalidInputState, rejected.Rejection?.Code);
+        Assert.Same(forged, rejected.State);
     }
 
     private static BehaviorCatalog Catalog(CardDefinitionId definitionId, IceSubroutineSpec subroutine)

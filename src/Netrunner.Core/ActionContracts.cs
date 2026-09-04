@@ -604,7 +604,8 @@ public sealed record RunBioroidAbilityParameters : ActionParameters
         CardInstanceId iceId,
         SubroutineId subroutineId,
         string abilityKey,
-        BehaviorCost cost)
+        BehaviorCost cost,
+        int subroutineOrdinal = 0)
     {
         if (!StableIdentifier.TryValidate(iceId.Value))
         {
@@ -621,6 +622,8 @@ public sealed record RunBioroidAbilityParameters : ActionParameters
             throw new ArgumentException("A bioroid ability key must be a stable identifier.", nameof(abilityKey));
         }
 
+        ArgumentOutOfRangeException.ThrowIfNegative(subroutineOrdinal);
+
         ArgumentNullException.ThrowIfNull(cost);
         if (cost.Kind != BehaviorCostKind.LoseClick || cost.Amount != 1)
         {
@@ -633,17 +636,20 @@ public sealed record RunBioroidAbilityParameters : ActionParameters
         SubroutineId = subroutineId;
         AbilityKey = abilityKey;
         Cost = cost;
+        SubroutineOrdinal = subroutineOrdinal;
     }
 
     public RunBioroidAbilityParameters(
         CardInstanceId iceId,
         SubroutineId subroutineId,
-        string abilityKey)
+        string abilityKey,
+        int subroutineOrdinal = 0)
         : this(
             iceId,
             subroutineId,
             abilityKey,
-            new BehaviorCost(BehaviorCostKind.LoseClick, 1))
+            new BehaviorCost(BehaviorCostKind.LoseClick, 1),
+            subroutineOrdinal)
     {
     }
 
@@ -662,6 +668,14 @@ public sealed record RunBioroidAbilityParameters : ActionParameters
     [JsonInclude]
     [JsonRequired]
     public BehaviorCost Cost { get; private set; }
+
+    /// <summary>
+    /// Zero-based printed position of the exact subroutine. This is a typed
+    /// policy input; consumers never need to parse the opaque SubroutineId.
+    /// </summary>
+    [JsonInclude]
+    [JsonRequired]
+    public int SubroutineOrdinal { get; private set; }
 
     [JsonIgnore]
     public int ClickCost => Cost.Amount;
@@ -880,13 +894,44 @@ public sealed record IceSubroutineChoiceParameters : ActionParameters
             throw new ArgumentOutOfRangeException(nameof(choice));
         }
 
+        if (!StableIdentifier.TryValidate(cardId?.Value))
+        {
+            // A nullable physical target is meaningful only for the one
+            // target-bearing branch below.  Do not permit default/empty IDs
+            // to become detached payload metadata.
+            if (cardId is not null)
+            {
+                throw new ArgumentException(
+                    "An ICE subroutine card target must carry a stable physical card ID.",
+                    nameof(cardId));
+            }
+        }
+
+        if (serverId is { } suppliedServerId
+            && !StableIdentifier.TryValidate(suppliedServerId.Value))
+        {
+            throw new ArgumentException(
+                "An ICE subroutine install server must carry a stable server ID.",
+                nameof(serverId));
+        }
+
         ArgumentOutOfRangeException.ThrowIfNegative(creditCost);
+        ArgumentOutOfRangeException.ThrowIfNegative(hostedCredits);
 
         if (choice is IceSubroutineChoiceKind.TrashInstalledRunnerCard
             && cardId is null)
         {
             throw new ArgumentException(
                 "A Runner-card trash choice must identify a physical card.",
+                nameof(cardId));
+        }
+
+        if (choice is not IceSubroutineChoiceKind.TrashInstalledRunnerCard
+            && choice is not IceSubroutineChoiceKind.InstallCard
+            && cardId is not null)
+        {
+            throw new ArgumentException(
+                "Only a trash or install ICE subroutine choice may identify a card.",
                 nameof(cardId));
         }
 
@@ -898,12 +943,35 @@ public sealed record IceSubroutineChoiceParameters : ActionParameters
                 nameof(cardId));
         }
 
+        if (destinationKind is { } suppliedDestination
+            && !Enum.IsDefined(suppliedDestination))
+        {
+            throw new ArgumentOutOfRangeException(nameof(destinationKind));
+        }
+
         if (choice != IceSubroutineChoiceKind.InstallCard
             && (destinationKind is not null || serverId is not null || createNewRemote))
         {
             throw new ArgumentException(
                 "Only an ICE install choice may identify an install destination.",
                 nameof(destinationKind));
+        }
+
+        if (choice == IceSubroutineChoiceKind.InstallCard
+            && destinationKind is InstallDestinationKind.RunnerRig)
+        {
+            throw new ArgumentException(
+                "An ICE subroutine can install only into a Corp server root or server ICE zone.",
+                nameof(destinationKind));
+        }
+
+        if (choice == IceSubroutineChoiceKind.InstallCard
+            && destinationKind is InstallDestinationKind.ServerRoot or InstallDestinationKind.ServerIce
+            && serverId.HasValue == createNewRemote)
+        {
+            throw new ArgumentException(
+                "A Corp ICE subroutine install must identify exactly one existing server or new remote.",
+                nameof(serverId));
         }
 
         if (choice is not (IceSubroutineChoiceKind.PayCredits or IceSubroutineChoiceKind.InstallCard)
@@ -920,8 +988,6 @@ public sealed record IceSubroutineChoiceParameters : ActionParameters
                 nameof(creditCost),
                 "A pay-credits choice must carry a positive amount.");
         }
-
-        ArgumentOutOfRangeException.ThrowIfNegative(hostedCredits);
 
         if (choice != IceSubroutineChoiceKind.PayCredits && hostedCredits != 0)
         {
@@ -1488,7 +1554,8 @@ public sealed class PendingDecision
             bioroid.IceId,
             bioroid.SubroutineId,
             bioroid.AbilityKey,
-            bioroid.Cost),
+            bioroid.Cost,
+            bioroid.SubroutineOrdinal),
         NoActionParameters => new NoActionParameters(),
         TriggerChoiceParameters trigger => new TriggerChoiceParameters(trigger.TriggerId),
         TriggerOrderParameters order => new TriggerOrderParameters(order.TriggerId),

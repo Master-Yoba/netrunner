@@ -159,6 +159,110 @@ public static partial class GameEngine
         return materialized;
     }
 
+    /// <summary>
+    /// Tests the authenticated behavior declaration behind one already
+    /// materialized access ability.  The no-steal/no-trash run restriction
+    /// filters only declarations that can actually trash a Corp card (or pay
+    /// a typed Corp-card trash cost); it does not blanket-suppress unrelated
+    /// Runner abilities such as credit gain.  Unknown declarations fail
+    /// closed because their effect vocabulary cannot be authenticated.
+    /// </summary>
+    internal static bool IsAbilityBlockedByRunRestriction(
+        IBehaviorCatalog behaviorCatalog,
+        AbilityActionParameters parameters)
+    {
+        ArgumentNullException.ThrowIfNull(behaviorCatalog);
+        ArgumentNullException.ThrowIfNull(parameters);
+
+        if (!behaviorCatalog.TryGet(parameters.DefinitionId, out CardBehaviorDefinition? definition))
+        {
+            return true;
+        }
+
+        BehaviorPaidAbility? declaration = definition.PaidAbilities.SingleOrDefault(ability =>
+            string.Equals(ability.Key, parameters.AbilityKey, StringComparison.Ordinal));
+        return declaration is null || IsAbilityBlockedByRunRestriction(declaration);
+    }
+
+    internal static bool IsAbilityBlockedByRunRestriction(BehaviorPaidAbility ability)
+    {
+        ArgumentNullException.ThrowIfNull(ability);
+        if (ability.Costs.Any(static cost =>
+                cost.Kind == BehaviorCostKind.Additional
+                && cost.AdditionalKind == BehaviorAdditionalCostKind.TrashCards
+                && cost.AdditionalTarget?.Filter?.OwnerSide == PlayerSide.Corp))
+        {
+            return true;
+        }
+
+        return InstructionsCanTrashCorpCard(ability.Instructions, ability.Targets);
+    }
+
+    private static bool InstructionsCanTrashCorpCard(
+        IReadOnlyList<BehaviorInstruction> instructions,
+        IReadOnlyList<BehaviorTarget> candidateTargets)
+    {
+        foreach (BehaviorInstruction instruction in instructions)
+        {
+            if (instruction.Kind == BehaviorInstructionKind.TrashCard
+                && TargetCanBeCorpCard(instruction.Target, candidateTargets))
+            {
+                return true;
+            }
+
+            if (instruction.Choice is { } choice)
+            {
+                IReadOnlyList<BehaviorTarget> nestedTargets = choice.Target is { } choiceTarget
+                    ? candidateTargets.Append(choiceTarget).ToArray()
+                    : candidateTargets;
+                foreach (BehaviorChoiceOption option in choice.Options)
+                {
+                    if (InstructionsCanTrashCorpCard(option.Instructions, nestedTargets))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            if (instruction.Branch is { } branch
+                && (InstructionsCanTrashCorpCard(branch.WhenTrue, candidateTargets)
+                    || InstructionsCanTrashCorpCard(branch.WhenFalse, candidateTargets)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TargetCanBeCorpCard(
+        BehaviorTarget? target,
+        IReadOnlyList<BehaviorTarget> candidateTargets)
+    {
+        if (target is null)
+        {
+            return false;
+        }
+
+        if (target.Kind == BehaviorTargetKind.AccessedCard)
+        {
+            return true;
+        }
+
+        if (target.Kind is BehaviorTargetKind.ZoneCard or BehaviorTargetKind.ZoneCards)
+        {
+            return target.Filter?.OwnerSide == PlayerSide.Corp;
+        }
+
+        // A ChosenCard is safe to classify only when its enclosing
+        // declaration has an explicit Corp-owned candidate descriptor. Do
+        // not infer ownership from selector/key strings.
+        return target.Kind == BehaviorTargetKind.ChosenCard
+            && candidateTargets.Any(candidate =>
+                candidate.Kind is BehaviorTargetKind.ZoneCard or BehaviorTargetKind.ZoneCards
+                && candidate.Filter?.OwnerSide == PlayerSide.Corp);
+    }
+
     private static IReadOnlyList<CardInstanceId> MaterializeAbilityTargets(
         WorkingState working,
         BehaviorPaidAbility ability,
@@ -1769,10 +1873,19 @@ public static partial class GameEngine
         && actual.Stage == expected.Stage
         && string.Equals(actual.ParentFrameIdentity, expected.ParentFrameIdentity, StringComparison.Ordinal);
 
-    private static void AddAbilityActions(WorkingState working, List<LegalAction> actions)
+    private static void AddAbilityActions(
+        WorkingState working,
+        List<LegalAction> actions,
+        bool suppressCorpCardTrash = false)
     {
         foreach (AbilityActionParameters parameters in MaterializeAbilityActionParameters(working))
         {
+            if (suppressCorpCardTrash
+                && IsAbilityBlockedByRunRestriction(working.BehaviorCatalog, parameters))
+            {
+                continue;
+            }
+
             string description = $"Use ability {parameters.SourceCardId.Value}/{parameters.AbilityKey}";
             if (parameters.AdditionalCostSelections is { Count: > 0 } selections)
             {

@@ -4,5 +4,5 @@
   "rulesVersion": "26.03",
   "cardDataVersion": "fixture-1",
   "seed": 42,
-  "expectedStateHash": "283b2587210abbf6411128bd2e1ddb1fe939f9570a80140226d7753dbc5d6dea"
+  "expectedStateHash": "e30e410b85041565abf264bacd8b773918e8400128fa23fb8ab56a430216445a"
 }

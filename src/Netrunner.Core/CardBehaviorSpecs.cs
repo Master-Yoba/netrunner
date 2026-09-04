@@ -312,6 +312,21 @@ public sealed record InstallCardSubroutineSpec : IceSubroutineSpec
             throw new ArgumentOutOfRangeException(nameof(costRule));
         }
 
+        // The executable vocabulary deliberately has exactly two supported
+        // contracts.  Keeping destination and cost as independent enum
+        // fields is useful for projection, but accepting the other Cartesian
+        // combinations would describe semantics for which the reducer has no
+        // authenticated implementation.
+        if ((destinationRule, costRule) is not
+            (IceInstallDestinationRule.Normal, IceInstallCostRule.Normal)
+            and not
+            (IceInstallDestinationRule.DirectlyInward, IceInstallCostRule.IgnoreAllCosts))
+        {
+            throw new ArgumentException(
+                "ICE install subroutines support only Normal+Normal or DirectlyInward+IgnoreAllCosts.",
+                nameof(costRule));
+        }
+
         if (destinationRule == IceInstallDestinationRule.DirectlyInward
             && !iceOnly)
         {

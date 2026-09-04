@@ -378,16 +378,7 @@ public sealed class GatewayBatch4ReactionRuntimeTests
 
     private static BehaviorCatalog FunhouseCatalog()
     {
-        BehaviorCatalog gateway = GatewayBehaviorCatalog.Create();
-        return new BehaviorCatalogBuilder(gateway.Version, gateway)
-            .AddIce(new IceBehaviorSpec(
-                GatewayBatch4CardCodes.Funhouse,
-                strength: 0,
-                iceType: IceType.Barrier,
-                rezCost: 0,
-                subroutines: [],
-                strengthModifiers: []))
-            .Build();
+        return GatewayBehaviorCatalog.Create();
     }
 
     private static RuntimeCardCatalog CreateRuntimeCatalog() =>
