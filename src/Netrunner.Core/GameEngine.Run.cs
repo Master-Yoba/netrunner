@@ -304,6 +304,12 @@ public static partial class GameEngine
                 server.Id,
                 runOperand!)
             : null;
+        IReadOnlyList<RunRezCostModifier>? rezCostModifiers = runEventSpec is not null
+            ? SnapshotRunRezCostModifiers(
+                runEventSpec,
+                initiatingSource
+                    ?? throw new ResolutionFailureException("A run event requires a source card."))
+            : null;
 
         RunId runId = working.Allocator.NextRunId();
         int currentIceIndex = iceZone.CardIds.Count - 1;
@@ -322,7 +328,8 @@ public static partial class GameEngine
             initiatingSource,
             runEventSpec?.HostedCredits ?? 0,
             runEventSpec is null ? null : initiatingSource,
-            breachModifiers);
+            breachModifiers,
+            rezCostModifiers);
         working.RunState = run;
 
         // CR 26.03 8.6.7: a played event leaves the Runner's grip and enters a
@@ -419,6 +426,24 @@ public static partial class GameEngine
         return delta > 0
             ? [new RunBreachAccessModifier(source.Id, attackedServer, delta, operand.BreachAccessReasonKey!)]
             : null;
+    }
+
+    private static RunRezCostModifier[]? SnapshotRunRezCostModifiers(
+        RunEventBehaviorSpec runEventSpec,
+        CardInstanceId sourceCardId)
+    {
+        if (runEventSpec.RezCostModifiers is not { Count: > 0 } declarations)
+        {
+            return null;
+        }
+
+        return declarations
+            .Select(declaration => new RunRezCostModifier(
+                runEventSpec.DefinitionId,
+                sourceCardId,
+                declaration.Delta,
+                declaration.ReasonKey))
+            .ToArray();
     }
 
     /// <summary>
@@ -1191,7 +1216,7 @@ public static partial class GameEngine
                 ConsumeRunPass(working, run);
                 break;
             case (ActionKind.RezIce, RunIceParameters rez):
-                ConsumeRunRez(working, run, rez.IceId);
+                ConsumeRunRez(working, run, rez.IceId, rez.CostQuote);
                 break;
             case (ActionKind.BreakSubroutines, RunBreakParameters runBreak):
                 ConsumeRunBreakSubroutines(
@@ -1688,7 +1713,11 @@ public static partial class GameEngine
         }
     }
 
-    private static void ConsumeRunRez(WorkingState working, RunState run, CardInstanceId iceId)
+    private static void ConsumeRunRez(
+        WorkingState working,
+        RunState run,
+        CardInstanceId iceId,
+        CostQuote? suppliedCostQuote)
     {
         if (working.RuntimeCardCatalog is not null)
         {
@@ -1716,14 +1745,22 @@ public static partial class GameEngine
                 + "it cannot be rezzed.");
         }
 
-        PlayerState corp = GetPlayer(working, PlayerSide.Corp);
-        if (corp.Credits < spec.RezCost)
+        CostQuote? expectedCostQuote = CostModifierProjection.IceRez(working, ice, spec.RezCost);
+        if (!CostQuotesEqual(suppliedCostQuote, expectedCostQuote))
         {
             throw new ResolutionFailureException(
-                $"The Corp cannot pay the {spec.RezCost} credit rez cost of approached ICE '{ice.DefinitionId}'.");
+                "The approached ICE rez action does not match the authoritative cost quote.");
         }
 
-        ApplyCreditDelta(working, corp.Id, -spec.RezCost);
+        int effectiveCost = expectedCostQuote?.EffectiveCost ?? spec.RezCost;
+        PlayerState corp = GetPlayer(working, PlayerSide.Corp);
+        if (corp.Credits < effectiveCost)
+        {
+            throw new ResolutionFailureException(
+                $"The Corp cannot pay the {effectiveCost} credit rez cost of approached ICE '{ice.DefinitionId}'.");
+        }
+
+        ApplyCreditDelta(working, corp.Id, -effectiveCost);
         // CR 26.03 8.1.1: a rezzed installed ICE is faceup, so rezzing the
         // approached ICE turns it faceup for both players.
         ReplaceCard(working, new CardInstanceState(
@@ -2117,13 +2154,18 @@ public static partial class GameEngine
                     + "the approach window cannot be yielded.");
             }
 
-            if (GetPlayer(working, PlayerSide.Corp).Credits >= approachedSpec.RezCost)
+            CostQuote? approachedCostQuote = CostModifierProjection.IceRez(
+                working,
+                approachedIce,
+                approachedSpec.RezCost);
+            int approachedCost = approachedCostQuote?.EffectiveCost ?? approachedSpec.RezCost;
+            if (GetPlayer(working, PlayerSide.Corp).Credits >= approachedCost)
             {
                 actions.Add(new LegalAction(
                     working.Allocator.NextActionId(),
                     ActionKind.RezIce,
                     $"Rez approached ICE {run.CurrentIceId.Value}",
-                    new RunIceParameters(run.CurrentIceId.Value)));
+                    new RunIceParameters(run.CurrentIceId.Value, approachedCostQuote)));
             }
         }
 

@@ -2155,7 +2155,11 @@ internal static class BehaviorCatalogStructure
             (AgendaBehaviorSpec a, AgendaBehaviorSpec b) => a.DefinitionId == b.DefinitionId && a.AgendaPoints == b.AgendaPoints,
             (RunEventBehaviorSpec a, RunEventBehaviorSpec b) => a.DefinitionId == b.DefinitionId
                 && a.Cost == b.Cost
-                && a.HostedCredits == b.HostedCredits,
+                && a.HostedCredits == b.HostedCredits
+                && BehaviorContractStructure.SequenceEquals(
+                    a.RezCostModifiers ?? [],
+                    b.RezCostModifiers ?? [],
+                    static (left, right) => left.Equals(right)),
             (CardBehaviorDefinition a, CardBehaviorDefinition b) => a.DefinitionId == b.DefinitionId
                 && a.Controller == b.Controller
                 && SequenceEquals(a.Costs, b.Costs)
@@ -2289,8 +2293,23 @@ internal static class BehaviorCatalogFingerprint
 
     private static void AppendAgenda(StringBuilder builder, AgendaBehaviorSpec value) => builder.Append(value.AgendaPoints);
 
-    private static void AppendRunEvent(StringBuilder builder, RunEventBehaviorSpec value) => builder
-        .Append(value.Cost).Append('|').Append(value.HostedCredits);
+    private static void AppendRunEvent(StringBuilder builder, RunEventBehaviorSpec value)
+    {
+        builder.Append(value.Cost).Append('|').Append(value.HostedCredits);
+        if (value.RezCostModifiers is { Count: > 0 } modifiers)
+        {
+            builder.Append("|rezCostModifiers=");
+            AppendSequence(builder, modifiers, AppendRunRezCostModifier);
+        }
+    }
+
+    private static void AppendRunRezCostModifier(
+        StringBuilder builder,
+        BehaviorRunRezCostModifier value)
+    {
+        builder.Append("delta=").Append(value.Delta).Append(",reason=");
+        AppendString(builder, value.ReasonKey);
+    }
 
     private static void AppendCardType(StringBuilder builder, BehaviorCardType value) =>
         builder.Append((int)value);

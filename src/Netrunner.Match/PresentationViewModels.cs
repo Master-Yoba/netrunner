@@ -306,7 +306,21 @@ public sealed record LegalActionViewModel(
     ActionId Id,
     ActionKind Kind,
     string Description,
-    ActionParameters Parameters);
+    ActionParameters Parameters)
+{
+    /// <summary>
+    /// Optional raw cost quote carried by a typed Core action. Match exposes
+    /// the immutable reasons/provenance without formatting or re-deriving it.
+    /// </summary>
+    public CostQuote? CostQuote => Parameters switch
+    {
+        RezCardParameters rez => rez.CostQuote,
+        RunIceParameters runIce => runIce.CostQuote,
+        InstallCardParameters install => install.CostQuote,
+        RunBreakParameters runBreak => runBreak.CostQuote,
+        _ => null,
+    };
+}
 
 /// <summary>Run focus, current ICE, encounter, and breach/access state.</summary>
 public sealed record RunFocusViewModel(

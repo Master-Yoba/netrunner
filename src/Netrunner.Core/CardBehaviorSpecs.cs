@@ -351,7 +351,11 @@ public sealed record AgendaBehaviorSpec
 /// </summary>
 public sealed record RunEventBehaviorSpec
 {
-    public RunEventBehaviorSpec(CardDefinitionId definitionId, int cost, int hostedCredits)
+    public RunEventBehaviorSpec(
+        CardDefinitionId definitionId,
+        int cost,
+        int hostedCredits,
+        IReadOnlyList<BehaviorRunRezCostModifier>? rezCostModifiers = null)
     {
         DefinitionId = definitionId;
         Cost = cost;
@@ -367,6 +371,8 @@ public sealed record RunEventBehaviorSpec
             throw new ArgumentException(
                 $"Card '{definitionId}' must not have a negative hosted credit amount.", nameof(hostedCredits));
         }
+
+        RezCostModifiers = FreezeRezCostModifiers(rezCostModifiers);
     }
 
     public CardDefinitionId DefinitionId { get; }
@@ -376,4 +382,39 @@ public sealed record RunEventBehaviorSpec
 
     /// <summary>Credits placed on the event; spendable only during the run.</summary>
     public int HostedCredits { get; }
+
+    /// <summary>
+    /// Optional run-duration ICE rez-cost declarations. The nullable shape
+    /// preserves legacy event JSON and fingerprints when no modifier exists.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<BehaviorRunRezCostModifier>? RezCostModifiers { get; }
+
+    private static ReadOnlyCollection<BehaviorRunRezCostModifier>? FreezeRezCostModifiers(
+        IReadOnlyList<BehaviorRunRezCostModifier>? modifiers)
+    {
+        if (modifiers is null or { Count: 0 })
+        {
+            return null;
+        }
+
+        BehaviorRunRezCostModifier[] copy = modifiers.ToArray();
+        if (copy.Any(static modifier => modifier is null))
+        {
+            throw new ArgumentException(
+                "Run event rez-cost modifier declarations must not contain null entries.",
+                nameof(modifiers));
+        }
+
+        if (copy
+            .GroupBy(static modifier => (modifier.Delta, modifier.ReasonKey))
+            .Any(static group => group.Count() > 1))
+        {
+            throw new ArgumentException(
+                "Run event rez-cost modifier declarations must not repeat a delta and reason key.",
+                nameof(modifiers));
+        }
+
+        return new ReadOnlyCollection<BehaviorRunRezCostModifier>(copy);
+    }
 }

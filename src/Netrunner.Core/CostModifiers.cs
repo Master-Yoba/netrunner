@@ -4,14 +4,53 @@ using System.Text.Json.Serialization;
 namespace Netrunner.Core;
 
 /// <summary>
-/// The two self-cost values that the first conditional-cost slice can
-/// modify.  Keeping the value typed prevents a card from silently changing a
-/// different cost merely because it happens to be in the same timing window.
+/// Typed credit-cost values that a behavior declaration may modify. Keeping
+/// the value typed prevents a card from silently changing a different cost
+/// merely because it happens to be in the same timing window.
 /// </summary>
 public enum BehaviorCostModifierKind
 {
     RunnerInstallCreditCost,
     IcebreakerBreakCreditCost,
+    IceRezCreditCost,
+}
+
+/// <summary>
+/// A typed run-source declaration for a credit adjustment to ICE rez costs.
+/// The declaration is copied onto the immutable run state when a run event
+/// starts a run; it is never re-read from the physical source while the run
+/// is in progress.
+/// </summary>
+public sealed record BehaviorRunRezCostModifier
+{
+    [JsonConstructor]
+    public BehaviorRunRezCostModifier(int delta, string reasonKey)
+    {
+        if (delta == 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(delta),
+                "A run rez-cost modifier delta must be nonzero.");
+        }
+
+        if (!StableIdentifier.TryValidate(reasonKey))
+        {
+            throw new ArgumentException(
+                "A run rez-cost modifier reason key must be a stable identifier.",
+                nameof(reasonKey));
+        }
+
+        Delta = delta;
+        ReasonKey = reasonKey;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Delta { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string ReasonKey { get; private set; }
 }
 
 /// <summary>
@@ -31,6 +70,13 @@ public sealed record BehaviorCostModifier
         if (!Enum.IsDefined(kind))
         {
             throw new ArgumentOutOfRangeException(nameof(kind));
+        }
+
+        if (kind == BehaviorCostModifierKind.IceRezCreditCost)
+        {
+            throw new ArgumentException(
+                "ICE rez-cost modifiers are run-scoped declarations on RunEventBehaviorSpec.",
+                nameof(kind));
         }
 
         if (delta == 0)
@@ -272,6 +318,28 @@ public static partial class GameEngine
             baseCost);
     }
 
+    /// <summary>
+    /// Projects the authoritative run-scoped ICE rez quote for an installed
+    /// target. Reducers and invariant reconstruction use this boundary so
+    /// they cannot reimplement the run adjustment arithmetic independently.
+    /// </summary>
+    internal static CostQuote? ProjectIceRezQuote(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        CardInstanceId targetCardId,
+        int baseCost)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(behaviorCatalog);
+        CardInstanceState? target = state.Cards.FirstOrDefault(card => card.Id == targetCardId);
+        return target is null
+            ? null
+            : CostModifierProjection.IceRez(
+                WorkingState.From(state, behaviorCatalog),
+                target,
+                baseCost);
+    }
+
     private static class CostModifierProjection
     {
         internal static CostQuote? RunnerInstall(
@@ -290,6 +358,48 @@ public static partial class GameEngine
                 && source.FaceUp
                 ? ForSource(working, source, BehaviorCostModifierKind.IcebreakerBreakCreditCost, baseCost)
                 : null;
+
+        /// <summary>
+        /// Projects the immutable run-start ICE rez adjustments against one
+        /// physically installed Corp ICE. The run state is the sole source
+        /// of these adjustments; the initiating card's current zone and
+        /// definition are not consulted after the snapshot was created.
+        /// </summary>
+        internal static CostQuote? IceRez(
+            WorkingState working,
+            CardInstanceState target,
+            int baseCost)
+        {
+            ArgumentNullException.ThrowIfNull(working);
+            ArgumentNullException.ThrowIfNull(target);
+            ArgumentOutOfRangeException.ThrowIfNegative(baseCost);
+
+            if (working.RunState is not { RezCostModifiers: { Count: > 0 } modifiers }
+                || target.OwnerSide != PlayerSide.Corp
+                || target.Rezzed)
+            {
+                return null;
+            }
+
+            ZoneState? zone = working.Zones.FirstOrDefault(candidate => candidate.Id == target.ZoneId);
+            if (zone is null
+                || zone.Kind != ZoneKind.ServerIce
+                || zone.OwnerSide != PlayerSide.Corp
+                || zone.ServerId is null
+                || !zone.CardIds.Contains(target.Id))
+            {
+                return null;
+            }
+
+            CostAdjustment[] adjustments = modifiers
+                .Select(static modifier => modifier.ToCostAdjustment())
+                .OrderBy(static adjustment => adjustment.SourceDefinitionId?.Value, StringComparer.Ordinal)
+                .ThenBy(static adjustment => adjustment.SourceCardId?.Value, StringComparer.Ordinal)
+                .ThenBy(static adjustment => adjustment.ReasonKey, StringComparer.Ordinal)
+                .ThenBy(static adjustment => adjustment.Delta)
+                .ToArray();
+            return new CostQuote(baseCost, adjustments);
+        }
 
         private static bool IsInZone(
             WorkingState working,

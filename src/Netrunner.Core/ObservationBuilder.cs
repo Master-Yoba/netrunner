@@ -69,6 +69,8 @@ public static class ObservationBuilder
         {
             InstallCardParameters install => install.CostQuote is not null,
             RunBreakParameters breakParameters => breakParameters.CostQuote is not null,
+            RezCardParameters rez => rez.CostQuote is not null,
+            RunIceParameters runIce => runIce.CostQuote is not null,
             _ => false,
         }) == true;
         IReadOnlyList<LegalAction> legalActions = pending is null

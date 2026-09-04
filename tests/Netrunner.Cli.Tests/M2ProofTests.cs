@@ -21,10 +21,10 @@ public sealed class M2ProofTests
     // state, and the 32-decision count are unchanged (only the checkpoint
     // state hash at the agenda mid-access decision differs). The initial
     // Slice 4.4 Checkpoint A adds the serialized run value-adjustment payload
-    // (schema 3 -> 4), so state hashes are intentionally re-pinned. The
+    // (schema 4 -> 5), so state hashes are intentionally re-pinned. The
     // event stream remains stable because no M2 event payload changed.
     private const string ExpectedFinalStateHash =
-        "b658d4e15dd4c0d68c89bf2dd07dc1e6e33befd48be35b6d891cd2ea595764c2";
+        "dfe598b4d6b32263675a72b1cbb40904a856a0d9439b71e220c9f85ffe1c2f38";
     private const string ExpectedEventStreamHash =
         "d20cdef94e97ac928ca088e14952b65d2116fecda00485fff5c3b05e1b6e9e20";
 

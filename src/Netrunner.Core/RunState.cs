@@ -284,6 +284,81 @@ public sealed record RunValueAdjustment
     public int? UnitDelta { get; private set; }
 }
 
+/// <summary>
+/// A run-start snapshot of one typed ICE rez-cost declaration. The physical
+/// source identity and definition are retained as provenance, while the
+/// adjustment remains valid if that source card later moves zones.
+/// </summary>
+public sealed record RunRezCostModifier
+{
+    [JsonConstructor]
+    public RunRezCostModifier(
+        CardDefinitionId sourceDefinitionId,
+        CardInstanceId sourceCardId,
+        int delta,
+        string reasonKey)
+    {
+        if (!StableIdentifier.TryValidate(sourceDefinitionId.Value))
+        {
+            throw new ArgumentException(
+                "A run rez-cost modifier source definition must be a stable identifier.",
+                nameof(sourceDefinitionId));
+        }
+
+        if (!StableIdentifier.TryValidate(sourceCardId.Value))
+        {
+            throw new ArgumentException(
+                "A run rez-cost modifier source card must be a stable identifier.",
+                nameof(sourceCardId));
+        }
+
+        if (delta == 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(delta),
+                "A run rez-cost modifier delta must be nonzero.");
+        }
+
+        if (!StableIdentifier.TryValidate(reasonKey))
+        {
+            throw new ArgumentException(
+                "A run rez-cost modifier reason key must be a stable identifier.",
+                nameof(reasonKey));
+        }
+
+        SourceDefinitionId = sourceDefinitionId;
+        SourceCardId = sourceCardId;
+        Delta = delta;
+        ReasonKey = reasonKey;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardDefinitionId SourceDefinitionId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId SourceCardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Delta { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string ReasonKey { get; private set; }
+
+    internal CostAdjustment ToCostAdjustment() => new(
+        BehaviorCostModifierKind.IceRezCreditCost,
+        Delta,
+        ReasonKey,
+        SourceDefinitionId,
+        SourceCardId);
+
+    internal RunRezCostModifier Copy() =>
+        new(SourceDefinitionId, SourceCardId, Delta, ReasonKey);
+}
+
 /// <summary>The hidden Corp pool a random breach candidate is drawn from.</summary>
 public enum BreachHiddenCandidateSource
 {
@@ -627,7 +702,8 @@ public sealed record RunState
         int runCredits,
         CardInstanceId? activeRunEventId,
         IReadOnlyList<RunLingeringEffect> lingeringEffects,
-        IReadOnlyList<RunBreachAccessModifier>? breachAccessModifiers = null)
+        IReadOnlyList<RunBreachAccessModifier>? breachAccessModifiers = null,
+        IReadOnlyList<RunRezCostModifier>? rezCostModifiers = null)
     {
         ArgumentNullException.ThrowIfNull(breachCandidates);
         ArgumentNullException.ThrowIfNull(chosenAccessCards);
@@ -667,6 +743,13 @@ public sealed record RunState
                 return value.Copy();
             }).ToArray())
             : null;
+        RezCostModifiers = rezCostModifiers is { Count: > 0 }
+            ? new ReadOnlyCollection<RunRezCostModifier>(rezCostModifiers.Select(static value =>
+            {
+                ArgumentNullException.ThrowIfNull(value);
+                return value.Copy();
+            }).ToArray())
+            : null;
     }
 
     public RunState(
@@ -681,7 +764,8 @@ public sealed record RunState
         CardInstanceId? initiatingSource = null,
         int runCredits = 0,
         CardInstanceId? activeRunEventId = null,
-        IReadOnlyList<RunBreachAccessModifier>? breachAccessModifiers = null)
+        IReadOnlyList<RunBreachAccessModifier>? breachAccessModifiers = null,
+        IReadOnlyList<RunRezCostModifier>? rezCostModifiers = null)
         : this(
             1,
             id,
@@ -706,7 +790,8 @@ public sealed record RunState
             runCredits,
             activeRunEventId,
             [],
-            breachAccessModifiers)
+            breachAccessModifiers,
+            rezCostModifiers)
     {
     }
 
@@ -818,6 +903,15 @@ public sealed record RunState
     public IReadOnlyList<RunBreachAccessModifier>? BreachAccessModifiers { get; private set; }
 
     /// <summary>
+    /// Immutable run-start snapshots that adjust ICE rez costs. The field is
+    /// omitted from runs with no declaration so unaffected legacy state keeps
+    /// its prior JSON shape apart from the deliberate state schema version.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<RunRezCostModifier>? RezCostModifiers { get; private set; }
+
+    /// <summary>
     /// The card currently being accessed: the last chosen access card that is
     /// not yet in the accessed list, or null when access is complete.
     /// Sequential access guarantees at most one such card; the last is used
@@ -863,7 +957,8 @@ public sealed record RunState
         RunCredits,
         ActiveRunEventId,
         LingeringEffects,
-        BreachAccessModifiers);
+        BreachAccessModifiers,
+        RezCostModifiers);
 
     /// <summary>
     /// Creates the next immutable timing cursor while retaining the run's
@@ -903,7 +998,8 @@ public sealed record RunState
             RunCredits,
             ActiveRunEventId,
             LingeringEffects,
-            BreachAccessModifiers);
+            BreachAccessModifiers,
+            RezCostModifiers);
 
     /// <summary>
     /// Replaces the run's encounter while retaining every other field; the
@@ -937,7 +1033,8 @@ public sealed record RunState
         RunCredits,
         ActiveRunEventId,
         lingeringEffects,
-        BreachAccessModifiers);
+        BreachAccessModifiers,
+        RezCostModifiers);
 
     /// <summary>
     /// Replaces the run's run-scoped hosted credits while retaining every
@@ -967,7 +1064,8 @@ public sealed record RunState
         runCredits,
         ActiveRunEventId,
         LingeringEffects,
-        BreachAccessModifiers);
+        BreachAccessModifiers,
+        RezCostModifiers);
 
     /// <summary>
     /// Replaces the live run priority cursor while retaining the exact run
@@ -998,7 +1096,8 @@ public sealed record RunState
         RunCredits,
         ActiveRunEventId,
         LingeringEffects,
-        BreachAccessModifiers);
+        BreachAccessModifiers,
+        RezCostModifiers);
 
     internal RunState WithEncounter(RunEncounterState encounter) => new(
         Version,
@@ -1024,7 +1123,8 @@ public sealed record RunState
         RunCredits,
         ActiveRunEventId,
         LingeringEffects,
-        BreachAccessModifiers);
+        BreachAccessModifiers,
+        RezCostModifiers);
 
     /// <summary>
     /// Replaces the run's breach candidate/access fields while retaining every
@@ -1059,7 +1159,8 @@ public sealed record RunState
         RunCredits,
         ActiveRunEventId,
         LingeringEffects,
-        BreachAccessModifiers);
+        BreachAccessModifiers,
+        RezCostModifiers);
 
     private static ReadOnlyCollection<CardInstanceId> FreezeIds(IEnumerable<CardInstanceId> values) =>
         new(values.ToArray());

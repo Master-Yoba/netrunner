@@ -3830,3 +3830,29 @@ errors; runtime action expansion and full verification remain pending.
   zero-warning solution build, the same complete suites, solution formatting,
   and the focused 10-test value-calculation gate. ENG-415–418 and all Gateway
   Batch 3 bindings remain outside this checkpoint.
+
+### 2026-09-04 — Checkpoint B1 ENG-415 run-scoped ICE rez costs accepted
+
+- Luna Max implemented a typed `IceRezCreditCost` quote path whose declarations
+  live on `RunEventBehaviorSpec` and are snapshotted, with physical-card and
+  definition provenance, when the event starts its run. The immutable snapshot
+  remains authoritative while the event moves from grip to the play area and
+  then heap, applies to every ICE rezzed during that run, and disappears with
+  the run. Duplicate declarations are rejected at catalog construction.
+- Both rez mechanisms consume the same projection: runtime-catalog `RezCard`
+  actions and the legacy approached-ICE `RezIce` action carry ordered raw terms,
+  check the submitted quote exactly, test affordability against the effective
+  cost, pay that cost, and expose it in the emitted event. Invariant
+  reconstruction, observations, and Match presentation use the same detached
+  quote; Runner observations do not receive Corp-owned rez actions or their
+  explanation terms. Forged quotes fail closed on both action paths.
+- D-416 applies again because `RunState` gained a run-start snapshot: engine
+  state schema moved from 4 to 5 and all checked-in state fixtures were
+  re-pinned. The representative M2 proof now has initial/final hashes
+  `2335d1cd…` / `dfe598b4…`; its event hash remains `d20cdef9…`, with 32
+  checkpoints/actions and replay verification.
+- Root independently passed the focused 6-test ENG-415 suite and the complete
+  969-test solution gate (Core 680, Cards 153, AI 30, CLI 54, Match 52), the
+  direct M2 proof, solution formatting, and `git diff --check`. Tread Lightly
+  remains intentionally unbound until the Batch 3 card-binding checkpoint;
+  ENG-416–418 remain outside this commit.

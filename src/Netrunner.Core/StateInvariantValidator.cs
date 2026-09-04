@@ -1254,6 +1254,8 @@ public static class StateInvariantValidator
             }
         }
 
+        ValidateRunRezCostModifiers(state, behaviorCatalog, run, path, violations);
+
         if (!installedRunSource && run.InitiatingSource != run.ActiveRunEventId)
         {
             Add(
@@ -1615,6 +1617,118 @@ public static class StateInvariantValidator
                 {
                     Add(violations, "run.unknown-card", idPath, $"Run references unknown card '{id}'.");
                 }
+            }
+        }
+    }
+
+    private static void ValidateRunRezCostModifiers(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        RunState run,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        IReadOnlyList<RunRezCostModifier>? modifiers = run.RezCostModifiers;
+        CardInstanceId? expectedSourceId = run.ActiveRunEventId;
+        CardInstanceState? source = expectedSourceId is { } sourceId
+            ? state.Cards.FirstOrDefault(card => card?.Id == sourceId)
+            : null;
+        RunEventBehaviorSpec? sourceSpec = source is not null
+            && behaviorCatalog.TryGetRunEvent(source.DefinitionId, out RunEventBehaviorSpec? registered)
+            ? registered
+            : null;
+        IReadOnlyList<BehaviorRunRezCostModifier> declarations = sourceSpec?.RezCostModifiers ?? [];
+
+        if (modifiers is null)
+        {
+            if (declarations.Count > 0)
+            {
+                Add(
+                    violations,
+                    "run.missing-rez-cost-modifiers",
+                    $"{path}.rezCostModifiers",
+                    "The active run event's declared rez-cost modifiers must be snapshotted into the run state.");
+            }
+
+            return;
+        }
+
+        if (expectedSourceId is null)
+        {
+            Add(
+                violations,
+                "run.rez-cost-modifier-no-event",
+                $"{path}.rezCostModifiers",
+                "Run rez-cost modifiers require the active run event that declared them.");
+        }
+
+        var seen = new HashSet<(CardDefinitionId Definition, CardInstanceId Card, int Delta, string Reason)>();
+        for (int index = 0; index < modifiers.Count; index++)
+        {
+            RunRezCostModifier? modifier = modifiers[index];
+            string modifierPath = $"{path}.rezCostModifiers[{index}]";
+            if (modifier is null)
+            {
+                Add(
+                    violations,
+                    "run.null-rez-cost-modifier",
+                    modifierPath,
+                    "Run rez-cost modifiers must not contain null entries.");
+                continue;
+            }
+
+            if (!seen.Add((modifier.SourceDefinitionId, modifier.SourceCardId, modifier.Delta, modifier.ReasonKey)))
+            {
+                Add(
+                    violations,
+                    "run.duplicate-rez-cost-modifier",
+                    modifierPath,
+                    "Run rez-cost modifiers must not repeat a source, delta, and reason.");
+            }
+
+            if (expectedSourceId is { } activeSourceId && modifier.SourceCardId != activeSourceId)
+            {
+                Add(
+                    violations,
+                    "run.rez-cost-modifier-source-mismatch",
+                    $"{modifierPath}.sourceCardId",
+                    "Every run rez-cost modifier must identify the active run event source.");
+            }
+
+            if (source is not null && modifier.SourceDefinitionId != source.DefinitionId)
+            {
+                Add(
+                    violations,
+                    "run.rez-cost-modifier-definition-mismatch",
+                    $"{modifierPath}.sourceDefinitionId",
+                    "Every run rez-cost modifier must identify the active run event definition.");
+            }
+
+            if (sourceSpec is null
+                || !declarations.Any(declaration => declaration.Delta == modifier.Delta
+                    && string.Equals(declaration.ReasonKey, modifier.ReasonKey, StringComparison.Ordinal)))
+            {
+                Add(
+                    violations,
+                    "run.rez-cost-modifier-undeclared",
+                    modifierPath,
+                    "Run rez-cost modifiers must match a declaration on the active run event source.");
+            }
+        }
+
+        foreach (BehaviorRunRezCostModifier declaration in declarations)
+        {
+            if (!modifiers.Any(modifier => modifier is not null
+                && modifier.SourceDefinitionId == (source?.DefinitionId ?? default)
+                && modifier.SourceCardId == (expectedSourceId ?? default)
+                && modifier.Delta == declaration.Delta
+                && string.Equals(modifier.ReasonKey, declaration.ReasonKey, StringComparison.Ordinal)))
+            {
+                Add(
+                    violations,
+                    "run.missing-rez-cost-modifier",
+                    $"{path}.rezCostModifiers",
+                    $"Run rez-cost modifier declaration '{declaration.ReasonKey}' is missing from the run snapshot.");
             }
         }
     }
@@ -6791,6 +6905,7 @@ public static class StateInvariantValidator
 
         var expected = new List<(ActionKind Kind, CardInstanceId? Target, int Quantity, int HostedCredits)>();
         IReadOnlyList<RezCardParameters> expectedRuntimeRezes = [];
+        var expectedRunRezes = new List<RunIceParameters>();
         switch (run.Step)
         {
             case RunTimingStep.InitiationPaidWindow:
@@ -6803,7 +6918,10 @@ public static class StateInvariantValidator
                 {
                     try
                     {
-                        expectedRuntimeRezes = GameEngine.MaterializeRezCardParameters(state, runtimeCardCatalog);
+                        expectedRuntimeRezes = GameEngine.MaterializeRezCardParameters(
+                            state,
+                            behaviorCatalog,
+                            runtimeCardCatalog);
                     }
                     catch (Exception exception) when (exception is ResolutionFailureException
                         or InvalidOperationException
@@ -6825,10 +6943,19 @@ public static class StateInvariantValidator
                     CardInstanceState approachedIce = state.GetCard(run.CurrentIceId.Value);
                     if (behaviorCatalog.TryGetIce(approachedIce.DefinitionId, out IceBehaviorSpec? approachedSpec))
                     {
+                        CostQuote? approachedCostQuote = GameEngine.ProjectIceRezQuote(
+                            state,
+                            behaviorCatalog,
+                            run.CurrentIceId.Value,
+                            approachedSpec.RezCost);
+                        int approachedCost = approachedCostQuote?.EffectiveCost ?? approachedSpec.RezCost;
                         PlayerState? corp = state.Players.FirstOrDefault(player => player?.Side == PlayerSide.Corp);
-                        if (corp is not null && corp.Credits >= approachedSpec.RezCost)
+                        if (corp is not null && corp.Credits >= approachedCost)
                         {
                             expected.Add((ActionKind.RezIce, run.CurrentIceId.Value, 0, 0));
+                            expectedRunRezes.Add(new RunIceParameters(
+                                run.CurrentIceId.Value,
+                                approachedCostQuote));
                         }
                     }
                 }
@@ -7040,6 +7167,7 @@ public static class StateInvariantValidator
 
         var actual = new List<(ActionKind Kind, CardInstanceId? Target, int Quantity, int HostedCredits)>();
         var actualRuntimeRezes = new List<RezCardParameters>();
+        var actualRunRezes = new List<RunIceParameters>();
         var actualAbilities = new List<AbilityActionParameters>();
         foreach (LegalAction? action in pending.LegalActions)
         {
@@ -7067,6 +7195,7 @@ public static class StateInvariantValidator
                     break;
                 case (ActionKind.RezIce, RunIceParameters rez):
                     actual.Add((action.Kind, rez.IceId, 0, 0));
+                    actualRunRezes.Add(rez);
                     break;
                 case (ActionKind.RezCard, RezCardParameters rez):
                     actualRuntimeRezes.Add(rez);
@@ -7169,6 +7298,12 @@ public static class StateInvariantValidator
             costMismatchCode: "run.rez-cost-mismatch",
             windowName: "Run timing");
 
+        ValidateRunIceActionBijection(
+            expectedRunRezes,
+            actualRunRezes,
+            path,
+            violations);
+
         IReadOnlyList<AbilityActionParameters> expectedAbilities = [];
         try
         {
@@ -7246,13 +7381,17 @@ public static class StateInvariantValidator
             }
 
             RezCardParameters? expectedTarget = expected.FirstOrDefault(item => item.CardId == candidate.CardId);
-            if (expectedTarget is not null && expectedTarget.CreditCost != candidate.CreditCost)
+            if (expectedTarget is not null
+                && (expectedTarget.CreditCost != candidate.CreditCost
+                    || (expectedTarget.CostQuote is null
+                        ? candidate.CostQuote is not null
+                        : !expectedTarget.CostQuote.Equals(candidate.CostQuote))))
             {
                 Add(
                     violations,
                     costMismatchCode,
                     $"{path}.legalActions",
-                    $"Runtime rez action for '{candidate.CardId}' carries frozen cost {candidate.CreditCost}, expected {expectedTarget.CreditCost}.");
+                    $"Runtime rez action for '{candidate.CardId}' carries a frozen cost/quote that does not match the authoritative expected cost {expectedTarget.CreditCost}.");
             }
 
             if (!expected.Any(item => RezParametersMatch(item, candidate)))
@@ -7274,6 +7413,40 @@ public static class StateInvariantValidator
                     missingCode,
                     $"{path}.legalActions",
                     $"{windowName} decision is missing the materialized runtime rez action for '{candidate.CardId}'.");
+            }
+        }
+    }
+
+    private static void ValidateRunIceActionBijection(
+        IReadOnlyList<RunIceParameters> expected,
+        IReadOnlyList<RunIceParameters> actual,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        foreach (RunIceParameters candidate in actual)
+        {
+            RunIceParameters? expectedTarget = expected.FirstOrDefault(item => item.IceId == candidate.IceId);
+            if (expectedTarget is not null
+                && !CostQuotesEqual(expectedTarget.CostQuote, candidate.CostQuote))
+            {
+                Add(
+                    violations,
+                    "run.rez-cost-quote-mismatch",
+                    $"{path}.legalActions",
+                    $"Approached ICE rez action for '{candidate.IceId}' carries a cost quote that does not match the authoritative quote.");
+            }
+        }
+
+        foreach (RunIceParameters candidate in expected)
+        {
+            if (!actual.Any(item => item.IceId == candidate.IceId
+                && CostQuotesEqual(item.CostQuote, candidate.CostQuote)))
+            {
+                Add(
+                    violations,
+                    "run.missing-rez-action",
+                    $"{path}.legalActions",
+                    $"Run timing decision is missing the materialized approached ICE rez action for '{candidate.IceId}'.");
             }
         }
     }
@@ -9221,7 +9394,10 @@ public static class StateInvariantValidator
         {
             try
             {
-                expectedRezes = GameEngine.MaterializeRezCardParameters(state, runtimeCardCatalog);
+                expectedRezes = GameEngine.MaterializeRezCardParameters(
+                    state,
+                    behaviorCatalog,
+                    runtimeCardCatalog);
             }
             catch (Exception exception) when (exception is ResolutionFailureException
                 or InvalidOperationException
@@ -9417,7 +9593,13 @@ public static class StateInvariantValidator
         RezCardParameters actual,
         RezCardParameters expected) =>
         actual.CardId == expected.CardId
-        && actual.CreditCost == expected.CreditCost;
+        && actual.CreditCost == expected.CreditCost
+        && (actual.CostQuote is null
+            ? expected.CostQuote is null
+            : actual.CostQuote.Equals(expected.CostQuote));
+
+    private static bool CostQuotesEqual(CostQuote? left, CostQuote? right) =>
+        left is null ? right is null : left.Equals(right);
 
     private static bool InstallParametersMatch(
         InstallCardParameters actual,
