@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "scenarioId": "SCN-400",
   "rulesVersion": "26.03",
-  "engineStateSchemaVersion": 6,
+  "engineStateSchemaVersion": 7,
   "scope": "ENG-401",
   "turnSequence": [
     { "side": "corp", "step": "gainAllottedClicks", "clicks": 3, "window": "paidRezAndScore" },

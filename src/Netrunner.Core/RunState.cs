@@ -78,6 +78,18 @@ public enum RunAccessState
     Completed,
 }
 
+/// <summary>
+/// Provenance of a run-scoped breach-access adjustment. The default value is
+/// the legacy installed click-run source; first-HQ snapshots carry an explicit
+/// discriminator so validation does not confuse the two declaration
+/// contracts.
+/// </summary>
+public enum RunBreachAccessModifierSourceKind
+{
+    InstalledRunSource,
+    FirstHeadquartersBreach,
+}
+
 public enum RunEncounterStatus
 {
     Initialized,
@@ -624,7 +636,8 @@ public sealed record RunBreachAccessModifier
         CardInstanceId sourceCardId,
         ServerId attackedServerId,
         int delta,
-        string reasonKey)
+        string reasonKey,
+        RunBreachAccessModifierSourceKind sourceKind = RunBreachAccessModifierSourceKind.InstalledRunSource)
     {
         if (!StableIdentifier.TryValidate(sourceCardId.Value))
         {
@@ -646,10 +659,16 @@ public sealed record RunBreachAccessModifier
             throw new ArgumentException("A breach modifier requires a stable reason key.", nameof(reasonKey));
         }
 
+        if (!Enum.IsDefined(sourceKind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(sourceKind));
+        }
+
         SourceCardId = sourceCardId;
         AttackedServerId = attackedServerId;
         Delta = delta;
         ReasonKey = reasonKey;
+        SourceKind = sourceKind;
     }
 
     [JsonInclude]
@@ -668,7 +687,16 @@ public sealed record RunBreachAccessModifier
     [JsonRequired]
     public string ReasonKey { get; private set; }
 
-    internal RunBreachAccessModifier Copy() => new(SourceCardId, AttackedServerId, Delta, ReasonKey);
+    /// <summary>
+    /// Typed provenance. The default legacy value is omitted from JSON so
+    /// existing installed-run-source state remains byte-compatible.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public RunBreachAccessModifierSourceKind SourceKind { get; private set; }
+
+    internal RunBreachAccessModifier Copy() =>
+        new(SourceCardId, AttackedServerId, Delta, ReasonKey, SourceKind);
 }
 
 /// <summary>
@@ -1160,6 +1188,38 @@ public sealed record RunState
         ActiveRunEventId,
         LingeringEffects,
         BreachAccessModifiers,
+        RezCostModifiers);
+
+    /// <summary>
+    /// Replaces the immutable breach-access snapshot after the authoritative
+    /// BeginBreach boundary has determined first-HQ applicability.
+    /// </summary>
+    internal RunState WithBreachAccessModifiers(
+        IReadOnlyList<RunBreachAccessModifier>? breachAccessModifiers) => new(
+        Version,
+        Id,
+        AttackedServer,
+        InitiatingSide,
+        InitiatingPlayer,
+        InitiatingSource,
+        PhaseFor(Step),
+        Step,
+        CurrentIceIndex,
+        CurrentIceId,
+        Successful,
+        Unsuccessful,
+        EndReason,
+        Priority,
+        Encounter,
+        BreachCandidates,
+        RandomAccessLimit,
+        ChosenAccessCards,
+        AccessedCards,
+        AccessState,
+        RunCredits,
+        ActiveRunEventId,
+        LingeringEffects,
+        breachAccessModifiers,
         RezCostModifiers);
 
     private static ReadOnlyCollection<CardInstanceId> FreezeIds(IEnumerable<CardInstanceId> values) =>

@@ -428,6 +428,49 @@ public static partial class GameEngine
             : null;
     }
 
+    private static List<RunBreachAccessModifier> SnapshotFirstHqBreachAccessModifiers(
+        WorkingState working,
+        ServerId attackedServer)
+    {
+        ZoneState? rig = working.Zones.FirstOrDefault(zone =>
+            zone.Kind == ZoneKind.RunnerRig
+            && zone.OwnerSide == PlayerSide.Runner
+            && zone.ServerId is null);
+        if (rig is null)
+        {
+            return [];
+        }
+
+        var snapshots = new List<RunBreachAccessModifier>();
+        foreach (CardInstanceState source in rig.CardIds
+            .Select(cardId => working.Cards.FirstOrDefault(card => card.Id == cardId))
+            .Where(card => card is not null)
+            .Cast<CardInstanceState>()
+            .Where(card => card.OwnerSide == PlayerSide.Runner
+                && card.FaceUp
+                && card.ZoneId == rig.Id)
+            .OrderBy(card => card.Id.Value, StringComparer.Ordinal))
+        {
+            if (!working.BehaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? definition)
+                || definition.FirstHqBreachAccessModifiers is not { Count: > 0 } declarations)
+            {
+                continue;
+            }
+
+            foreach (BehaviorFirstHqBreachAccessModifier declaration in declarations)
+            {
+                snapshots.Add(new RunBreachAccessModifier(
+                    source.Id,
+                    attackedServer,
+                    declaration.Delta,
+                    declaration.ReasonKey,
+                    RunBreachAccessModifierSourceKind.FirstHeadquartersBreach));
+            }
+        }
+
+        return snapshots;
+    }
+
     private static RunRezCostModifier[]? SnapshotRunRezCostModifiers(
         RunEventBehaviorSpec runEventSpec,
         CardInstanceId sourceCardId)
@@ -937,6 +980,28 @@ public static partial class GameEngine
         ZoneState rootZone = working.Zones.SingleOrDefault(zone => zone.Id == server.RootZoneId)
             ?? throw new ResolutionFailureException($"Run server '{run.AttackedServer}' has no root zone.");
         ZoneState? hiddenZone = GetBreachHiddenZone(working, server);
+
+        // BeginBreach is the authoritative boundary for first-HQ semantics.
+        // Determine firstness before appending the occurrence, then snapshot
+        // active installed sources and consume their FirstX keys while the
+        // same formal-turn facts remain current. The existing
+        // RunBreachAccessModifier arithmetic below remains the sole access
+        // calculation for both legacy and first-HQ terms.
+        if (server.Kind == ServerKind.Headquarters
+            && RecordTurnHqBreach(working, server.Id))
+        {
+            List<RunBreachAccessModifier> firstHqModifiers =
+                SnapshotFirstHqBreachAccessModifiers(working, server.Id);
+            if (firstHqModifiers.Count > 0)
+            {
+                IReadOnlyList<RunBreachAccessModifier> combined =
+                    (run.BreachAccessModifiers ?? [])
+                    .Concat(firstHqModifiers)
+                    .ToArray();
+                run = run.WithBreachAccessModifiers(combined);
+                RecordTurnFirstHqBreachUses(working, firstHqModifiers);
+            }
+        }
 
         // CR 26.03 7.4.1: "The candidates at the beginning of a breach are
         // as follows: a. Each card in the root of the breached server is a

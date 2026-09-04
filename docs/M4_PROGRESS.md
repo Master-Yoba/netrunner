@@ -3890,3 +3890,36 @@ errors; runtime action expansion and full verification remain pending.
   direct M2 proof, solution formatting, and `git diff --check`. DZMZ Optimizer
   remains unbound until the card-binding checkpoint; ENG-416 and ENG-417 remain
   outside this commit.
+
+### 2026-09-04 — Checkpoint B2b ENG-416 first-HQ-breach access accepted
+
+- Luna Max generalized the existing run breach-access modifier with one
+  canonical typed source kind. The legacy installed-run-source value is the
+  enum default and remains omitted from serialized state; first-HQ snapshots
+  carry an explicit discriminator. Both paths feed the same checked random
+  access calculation rather than maintaining separate access arithmetic.
+- A typed optional installed-source declaration now grants positive additional
+  HQ access. At the authoritative breach boundary, every actual HQ breach is
+  appended to the active formal-turn occurrence ledger, even when no source is
+  active and regardless of whose turn it is. On only the first occurrence,
+  active faceup Runner sources are snapshotted in deterministic order and their
+  source-keyed First-X uses are consumed. Multiple sources compose, the result
+  is capped by the available hidden HQ pool, non-HQ breaches do not consume,
+  later-installed sources cannot re-arm the effect, and the snapshot survives
+  source movement until breach/run cleanup.
+- Source-kind-specific invariants preserve the old installed-run-source rules
+  while validating first-HQ server identity, declaration/reason/delta,
+  occurrence evidence, exact First-X consumption, duplicates, and reconstructed
+  random-access limits. Duplicate reason keys are rejected for both first-HQ
+  and first-program declarations. Observation filtering retains hidden-hand
+  secrecy while exposing raw modifier terms, and Match maps those terms without
+  formatting or re-derivation.
+- D-416 applies because `TurnFactsState` gained the HQ occurrence ledger:
+  engine state schema moved from 6 to 7 and checked-in state fixtures were
+  re-pinned. The representative M2 initial/final hashes are now `cfec7f9b…` /
+  `9fbef66d…`; its event hash remains `d20cdef9…`, with 32 actions/checkpoints,
+  replay verification, and no trace problems.
+- Root independently passed all 994 solution tests (Core 704, Cards 153, AI 30,
+  CLI 54, Match 53), the direct M2 proof, solution formatting, and
+  `git diff --check`. Docklands Pass remains unbound until the card-binding
+  checkpoint; ENG-417 remains outside this commit.

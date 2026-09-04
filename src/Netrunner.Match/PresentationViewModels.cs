@@ -340,12 +340,27 @@ public sealed record RunFocusViewModel(
     int RunCredits,
     CardViewModel? InitiatingSource)
 {
+    /// <summary>
+    /// Raw Core breach-access terms, including their typed source kind and
+    /// viewer-filtered physical provenance. Match retains these values for a
+    /// renderer without formatting or re-deriving access arithmetic.
+    /// </summary>
+    public IReadOnlyList<RunBreachAccessModifierViewModel> BreachAccessModifiers { get; init; } =
+        Array.Empty<RunBreachAccessModifierViewModel>();
+
     public string FocusLabel => Encounter is not null
         ? $"Encounter · {Encounter.Ice?.Title ?? "Unknown ICE"}"
         : Access.State != RunAccessState.NotStarted
             ? $"Access · {Access.State}"
             : $"Run · {Phase}";
 }
+
+public sealed record RunBreachAccessModifierViewModel(
+    string? SourceCardId,
+    string AttackedServerId,
+    int Delta,
+    string ReasonKey,
+    RunBreachAccessModifierSourceKind? SourceKind);
 
 public sealed record RunPriorityViewModel(
     RunPriorityWindowKind Window,
@@ -1009,6 +1024,19 @@ public static class ObservationViewMapper
             hiddenSource = ReadEnumValue<BreachHiddenCandidateSource>(rawSource);
         }
 
+        RunBreachAccessModifierViewModel[] breachModifiers = ReadList(map, "breachAccessModifiers")
+            .Select(value =>
+            {
+                IReadOnlyDictionary<string, object?> modifier = RequiredMap(value, "breachAccessModifier");
+                return new RunBreachAccessModifierViewModel(
+                    ReadNullableString(modifier, "sourceCardId"),
+                    ReadString(modifier, "attackedServerId"),
+                    ReadInt(modifier, "delta"),
+                    ReadString(modifier, "reasonKey"),
+                    ReadNullableEnum<RunBreachAccessModifierSourceKind>(modifier, "sourceKind"));
+            })
+            .ToArray();
+
         return new RunFocusViewModel(
             ReadString(map, "id"),
             attackedServerId,
@@ -1028,9 +1056,12 @@ public static class ObservationViewMapper
                 hiddenSource,
                 ReadNullableCards(breach, "chosen", metadataResolver, abilityCue),
                 ReadNullableCards(breach, "accessed", metadataResolver, abilityCue),
-                ReadEnum<RunAccessState>(breach, "accessState")),
+            ReadEnum<RunAccessState>(breach, "accessState")),
             ReadInt(map, "runCredits"),
-            ReadNullableCard(map, "initiatingSource", metadataResolver, abilityCue));
+            ReadNullableCard(map, "initiatingSource", metadataResolver, abilityCue))
+        {
+            BreachAccessModifiers = new ReadOnlyCollection<RunBreachAccessModifierViewModel>(breachModifiers),
+        };
     }
 
     private static ServerKind? FindServerKind(

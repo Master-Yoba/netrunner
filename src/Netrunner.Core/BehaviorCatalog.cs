@@ -1462,7 +1462,8 @@ public sealed class CardBehaviorDefinition
         IReadOnlyList<BehaviorPaidAbility>? paidAbilities = null,
         IReadOnlyList<BehaviorCostModifier>? costModifiers = null,
         IReadOnlyList<BehaviorValueModifier>? valueModifiers = null,
-        IReadOnlyList<BehaviorFirstProgramInstallCostModifier>? firstProgramInstallCostModifiers = null)
+        IReadOnlyList<BehaviorFirstProgramInstallCostModifier>? firstProgramInstallCostModifiers = null,
+        IReadOnlyList<BehaviorFirstHqBreachAccessModifier>? firstHqBreachAccessModifiers = null)
     {
         DefinitionId = definitionId;
         if (!Enum.IsDefined(controller))
@@ -1499,6 +1500,7 @@ public sealed class CardBehaviorDefinition
         CostModifiers = FreezeCostModifiers(costModifiers);
         ValueModifiers = FreezeValueModifiers(valueModifiers);
         FirstProgramInstallCostModifiers = FreezeFirstProgramInstallCostModifiers(firstProgramInstallCostModifiers);
+        FirstHqBreachAccessModifiers = FreezeFirstHqBreachAccessModifiers(firstHqBreachAccessModifiers);
         if (!string.IsNullOrWhiteSpace(extensionHandlerId))
         {
             ExtensionHandlerId = extensionHandlerId;
@@ -1553,6 +1555,14 @@ public sealed class CardBehaviorDefinition
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<BehaviorFirstProgramInstallCostModifier>? FirstProgramInstallCostModifiers { get; }
+
+    /// <summary>
+    /// Optional installed-source declarations that add access on the first HQ
+    /// breach of the active formal turn. Null preserves the legacy generic
+    /// definition JSON shape and fingerprint input.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<BehaviorFirstHqBreachAccessModifier>? FirstHqBreachAccessModifiers { get; }
 
     private static ReadOnlyCollection<T> Freeze<T>(IEnumerable<T>? values)
         where T : class
@@ -1660,14 +1670,45 @@ public sealed class CardBehaviorDefinition
                 nameof(modifiers));
         }
 
-        if (copy.Distinct().Count() != copy.Length)
+        if (copy.Select(static modifier => modifier.ReasonKey).Distinct(StringComparer.Ordinal).Count() != copy.Length)
         {
             throw new ArgumentException(
-                "First-program install cost modifier declarations must be unique.",
+                "First-program install cost modifier declarations must use a unique reason key per source.",
                 nameof(modifiers));
         }
 
         return new ReadOnlyCollection<BehaviorFirstProgramInstallCostModifier>(copy);
+    }
+
+    private static ReadOnlyCollection<BehaviorFirstHqBreachAccessModifier>? FreezeFirstHqBreachAccessModifiers(
+        IEnumerable<BehaviorFirstHqBreachAccessModifier>? modifiers)
+    {
+        if (modifiers is null)
+        {
+            return null;
+        }
+
+        BehaviorFirstHqBreachAccessModifier[] copy = modifiers.ToArray();
+        if (copy.Length == 0)
+        {
+            return null;
+        }
+
+        if (copy.Any(static value => value is null))
+        {
+            throw new ArgumentException(
+                "First-HQ-breach access modifier declarations must not contain null entries.",
+                nameof(modifiers));
+        }
+
+        if (copy.Select(static modifier => modifier.ReasonKey).Distinct(StringComparer.Ordinal).Count() != copy.Length)
+        {
+            throw new ArgumentException(
+                "First-HQ-breach access modifier declarations must use a unique reason key per source.",
+                nameof(modifiers));
+        }
+
+        return new ReadOnlyCollection<BehaviorFirstHqBreachAccessModifier>(copy);
     }
 }
 
@@ -2237,6 +2278,10 @@ internal static class BehaviorCatalogStructure
                     a.FirstProgramInstallCostModifiers ?? [],
                     b.FirstProgramInstallCostModifiers ?? [],
                     static (left, right) => left.Equals(right))
+                && BehaviorContractStructure.SequenceEquals(
+                    a.FirstHqBreachAccessModifiers ?? [],
+                    b.FirstHqBreachAccessModifiers ?? [],
+                    static (left, right) => left.Equals(right))
                 && a.ExtensionHandlerId == b.ExtensionHandlerId,
             _ => false,
         };
@@ -2398,6 +2443,12 @@ internal static class BehaviorCatalogFingerprint
             builder.Append("|firstProgramInstallCostModifiers=");
             AppendSequence(builder, value.FirstProgramInstallCostModifiers, AppendFirstProgramInstallCostModifier);
         }
+
+        if (value.FirstHqBreachAccessModifiers is { Count: > 0 })
+        {
+            builder.Append("|firstHqBreachAccessModifiers=");
+            AppendSequence(builder, value.FirstHqBreachAccessModifiers, AppendFirstHqBreachAccessModifier);
+        }
     }
 
     private static void AppendCostModifier(StringBuilder builder, BehaviorCostModifier value)
@@ -2413,6 +2464,14 @@ internal static class BehaviorCatalogFingerprint
     private static void AppendFirstProgramInstallCostModifier(
         StringBuilder builder,
         BehaviorFirstProgramInstallCostModifier value)
+    {
+        builder.Append("delta=").Append(value.Delta).Append(",reason=");
+        AppendString(builder, value.ReasonKey);
+    }
+
+    private static void AppendFirstHqBreachAccessModifier(
+        StringBuilder builder,
+        BehaviorFirstHqBreachAccessModifier value)
     {
         builder.Append("delta=").Append(value.Delta).Append(",reason=");
         AppendString(builder, value.ReasonKey);

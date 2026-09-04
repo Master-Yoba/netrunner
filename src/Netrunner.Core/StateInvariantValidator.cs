@@ -936,6 +936,7 @@ public static class StateInvariantValidator
                     "turn.history.corpThisTurn",
                     knownCardIds,
                     state.Cards,
+                    state.Servers,
                     knownPlayers,
                     runtimeCardCatalog,
                     violations);
@@ -945,6 +946,7 @@ public static class StateInvariantValidator
                     "turn.history.corpLastTurn",
                     knownCardIds,
                     state.Cards,
+                    state.Servers,
                     knownPlayers,
                     runtimeCardCatalog,
                     violations);
@@ -954,6 +956,7 @@ public static class StateInvariantValidator
                     "turn.history.runnerThisTurn",
                     knownCardIds,
                     state.Cards,
+                    state.Servers,
                     knownPlayers,
                     runtimeCardCatalog,
                     violations);
@@ -963,6 +966,7 @@ public static class StateInvariantValidator
                     "turn.history.runnerLastTurn",
                     knownCardIds,
                     state.Cards,
+                    state.Servers,
                     knownPlayers,
                     runtimeCardCatalog,
                     violations);
@@ -1145,16 +1149,16 @@ public static class StateInvariantValidator
 
         if (run.BreachAccessModifiers is { } breachModifiers)
         {
-            HashSet<(CardInstanceId Source, ServerId Server, string Reason)> seenModifiers = [];
+            HashSet<(CardInstanceId Source, ServerId Server, string Reason, RunBreachAccessModifierSourceKind Kind)> seenModifiers = [];
             ServerState? attackedServer = state.Servers.FirstOrDefault(server => server?.Id == run.AttackedServer);
-            CardInstanceState? initiatingSource = run.InitiatingSource is { } initiatingSourceId
-                ? state.Cards.FirstOrDefault(card => card?.Id == initiatingSourceId)
-                : null;
-            CardBehaviorDefinition? sourceDefinition = null;
-            bool modifiersHaveInstalledSource = installedRunSource
-                && initiatingSource is not null
-                && initiatingSource.OwnerSide == PlayerSide.Runner
-                && behaviorCatalog.TryGet(initiatingSource.DefinitionId, out sourceDefinition);
+            TurnFactsState? activeFacts = state.Turn.History?.ThisTurn(state.Turn.ActiveSide);
+            bool hasCurrentFormalFacts = activeFacts is not null
+                && activeFacts.Side == state.Turn.ActiveSide
+                && activeFacts.TurnNumber == state.Turn.TurnNumber
+                && activeFacts.TurnBegan;
+            bool isFirstHqBreach = hasCurrentFormalFacts
+                && activeFacts!.HqBreachOccurrenceServerIds.Count == 1
+                && activeFacts.HqBreachOccurrenceServerIds[^1] == run.AttackedServer;
 
             for (int index = 0; index < breachModifiers.Count; index++)
             {
@@ -1166,7 +1170,11 @@ public static class StateInvariantValidator
                     continue;
                 }
 
-                if (!seenModifiers.Add((modifier.SourceCardId, modifier.AttackedServerId, modifier.ReasonKey)))
+                if (!seenModifiers.Add((
+                        modifier.SourceCardId,
+                        modifier.AttackedServerId,
+                        modifier.ReasonKey,
+                        modifier.SourceKind)))
                 {
                     Add(
                         violations,
@@ -1175,13 +1183,14 @@ public static class StateInvariantValidator
                         "Breach access modifiers must not repeat a source, attacked server, and reason key.");
                 }
 
+                CardInstanceState? source = null;
                 if (!StableIdentifier.TryValidate(modifier.SourceCardId.Value))
                 {
                     Add(violations, "id.invalid", $"{modifierPath}.sourceCardId", "Breach modifier source card ID is empty or invalid.");
                 }
                 else
                 {
-                    CardInstanceState? source = state.Cards.FirstOrDefault(card => card?.Id == modifier.SourceCardId);
+                    source = state.Cards.FirstOrDefault(card => card?.Id == modifier.SourceCardId);
                     if (source is null)
                     {
                         Add(violations, "run.breach-modifier-unknown-source", $"{modifierPath}.sourceCardId", $"Breach modifier references unknown source card '{modifier.SourceCardId}'.");
@@ -1190,25 +1199,6 @@ public static class StateInvariantValidator
                     {
                         Add(violations, "run.breach-modifier-source-owner", $"{modifierPath}.sourceCardId", "Breach modifier sources must be Runner-owned.");
                     }
-                }
-
-                if (!installedRunSource)
-                {
-                    Add(
-                        violations,
-                        run.ActiveRunEventId.HasValue
-                            ? "run.breach-modifier-run-event"
-                            : "run.breach-modifier-no-source",
-                        modifierPath,
-                        "Breach access modifiers require an installed Runner run source and are not valid on basic or run-event runs.");
-                }
-                else if (run.InitiatingSource is { } sourceId && modifier.SourceCardId != sourceId)
-                {
-                    Add(
-                        violations,
-                        "run.breach-modifier-source-mismatch",
-                        $"{modifierPath}.sourceCardId",
-                        "Every breach access modifier must identify the run's installed initiating source.");
                 }
 
                 if (modifier.AttackedServerId != run.AttackedServer)
@@ -1239,31 +1229,102 @@ public static class StateInvariantValidator
                     Add(violations, "id.invalid", $"{modifierPath}.reasonKey", "Breach modifier reason key is empty or invalid.");
                 }
 
-                if (modifiersHaveInstalledSource
-                    && sourceDefinition is { } definition
-                    && attackedServer is not null
-                    && !BehaviorRunRules.HasBreachAccessModifierDeclaration(
-                        definition,
-                        attackedServer.Kind,
-                        modifier.ReasonKey,
-                        modifier.Delta))
+                switch (modifier.SourceKind)
                 {
-                    Add(
-                        violations,
-                        "run.breach-modifier-undeclared",
-                        modifierPath,
-                        "Breach access modifiers must match the installed source's declared reason and positive counter scale.");
-                }
-                else if (installedRunSource && initiatingSource is not null && !modifiersHaveInstalledSource)
-                {
-                    Add(
-                        violations,
-                        "run.breach-modifier-source-definition",
-                        modifierPath,
-                        "Breach access modifiers require a valid installed source definition.");
+                    case RunBreachAccessModifierSourceKind.InstalledRunSource:
+                        if (!installedRunSource)
+                        {
+                            Add(
+                                violations,
+                                run.ActiveRunEventId.HasValue
+                                    ? "run.breach-modifier-run-event"
+                                    : "run.breach-modifier-no-source",
+                                modifierPath,
+                                "Legacy breach access modifiers require an installed Runner run source and are not valid on basic or run-event runs.");
+                        }
+                        else if (run.InitiatingSource is { } sourceId && modifier.SourceCardId != sourceId)
+                        {
+                            Add(
+                                violations,
+                                "run.breach-modifier-source-mismatch",
+                                $"{modifierPath}.sourceCardId",
+                                "Every legacy breach access modifier must identify the run's installed initiating source.");
+                        }
+
+                        if (source is not null
+                            && attackedServer is not null
+                            && (!behaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? definition)
+                                || !BehaviorRunRules.HasBreachAccessModifierDeclaration(
+                                    definition,
+                                    attackedServer.Kind,
+                                    modifier.ReasonKey,
+                                    modifier.Delta)))
+                        {
+                            Add(
+                                violations,
+                                "run.breach-modifier-undeclared",
+                                modifierPath,
+                                "Legacy breach access modifiers must match the installed source's declared reason and positive counter scale.");
+                        }
+                        break;
+
+                    case RunBreachAccessModifierSourceKind.FirstHeadquartersBreach:
+                        if (attackedServer?.Kind != ServerKind.Headquarters)
+                        {
+                            Add(
+                                violations,
+                                "run.breach-modifier-first-hq-server",
+                                modifierPath,
+                                "First-HQ breach access modifiers require an attacked Headquarters server.");
+                        }
+
+                        if (!isFirstHqBreach)
+                        {
+                            Add(
+                                violations,
+                                "run.breach-modifier-first-hq-occurrence",
+                                modifierPath,
+                                "First-HQ breach access modifiers require exactly the first HQ occurrence in the active formal turn.");
+                        }
+
+                        if (source is not null
+                            && (!behaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? firstHqDefinition)
+                                || !BehaviorRunRules.HasFirstHqBreachAccessModifierDeclaration(
+                                    firstHqDefinition,
+                                    modifier.ReasonKey,
+                                    modifier.Delta)))
+                        {
+                            Add(
+                                violations,
+                                "run.breach-modifier-undeclared",
+                                modifierPath,
+                                "First-HQ breach access modifiers must match the source's exact declared reason and positive delta.");
+                        }
+
+                        if (hasCurrentFormalFacts
+                            && activeFacts!.GetFirstXCount(modifier.SourceCardId, modifier.ReasonKey) != 1)
+                        {
+                            Add(
+                                violations,
+                                "run.breach-modifier-first-hq-unconsumed",
+                                modifierPath,
+                                "Every first-HQ breach access modifier must consume exactly one matching FirstX source key.");
+                        }
+                        break;
+
+                    default:
+                        Add(
+                            violations,
+                            "run.breach-modifier-source-kind",
+                            $"{modifierPath}.sourceKind",
+                            "Breach access modifiers must use a supported provenance source kind.");
+                        break;
                 }
             }
+
         }
+
+        ValidateRunRandomAccessLimit(state, run, path, violations);
 
         ValidateRunRezCostModifiers(state, behaviorCatalog, run, path, violations);
 
@@ -1629,6 +1690,72 @@ public static class StateInvariantValidator
                     Add(violations, "run.unknown-card", idPath, $"Run references unknown card '{id}'.");
                 }
             }
+        }
+    }
+
+    private static void ValidateRunRandomAccessLimit(
+        GameState state,
+        RunState run,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        if (run.Step is not (RunTimingStep.BreachCandidateSelection
+            or RunTimingStep.BreachAccessAbility
+            or RunTimingStep.RunEnd))
+        {
+            return;
+        }
+
+        // A legacy hand-authored observation fixture may describe an
+        // already-accessed hidden card without carrying the breach snapshot
+        // that the production boundary persists. There is no modifier
+        // arithmetic to reconstruct in that shape; modifier-bearing runs are
+        // always checked against the authoritative hidden-pool cursor below.
+        if (run.BreachAccessModifiers is null)
+        {
+            return;
+        }
+
+        ServerState? server = state.Servers.FirstOrDefault(candidate => candidate?.Id == run.AttackedServer);
+        ZoneState? hiddenZone = server?.Kind switch
+        {
+            ServerKind.Headquarters => state.Zones.FirstOrDefault(zone =>
+                zone?.Kind == ZoneKind.CorpHand
+                && zone.OwnerSide == PlayerSide.Corp
+                && zone.ServerId is null),
+            ServerKind.RAndD => state.Zones.FirstOrDefault(zone =>
+                zone?.Kind == ZoneKind.CorpDeck
+                && zone.OwnerSide == PlayerSide.Corp
+                && zone.ServerId is null),
+            _ => null,
+        };
+        int hiddenCount = hiddenZone?.CardIds.Count ?? 0;
+        long requested = hiddenCount > 0 ? 1 : 0;
+        if (run.BreachAccessModifiers is { } modifiers)
+        {
+            foreach (RunBreachAccessModifier? modifier in modifiers)
+            {
+                if (modifier is not null && modifier.AttackedServerId == run.AttackedServer)
+                {
+                    requested += modifier.Delta;
+                }
+            }
+        }
+
+        int initial = hiddenCount > 0
+            ? (int)Math.Min(hiddenCount, Math.Max(0L, requested))
+            : 0;
+        int hiddenChosen = hiddenZone is null
+            ? 0
+            : run.ChosenAccessCards.Count(hiddenZone.CardIds.Contains);
+        int expected = Math.Max(0, initial - hiddenChosen);
+        if (run.RandomAccessLimit != expected)
+        {
+            Add(
+                violations,
+                "run.random-access-limit-mismatch",
+                $"{path}.randomAccessLimit",
+                $"Random access limit {run.RandomAccessLimit} does not match the authoritative breach reconstruction {expected}.");
         }
     }
 
@@ -11028,6 +11155,7 @@ public static class StateInvariantValidator
         string path,
         HashSet<CardInstanceId> knownCardIds,
         IReadOnlyList<CardInstanceState> knownCards,
+        IReadOnlyList<ServerState> knownServers,
         Dictionary<PlayerId, PlayerSide> knownPlayers,
         IRuntimeCardCatalog? runtimeCardCatalog,
         List<StateInvariantViolation> violations)
@@ -11142,6 +11270,49 @@ public static class StateInvariantValidator
                 "turn.successful-run-flag-mismatch",
                 $"{path}.successfulRun",
                 "Successful-run server IDs require SuccessfulRun to be true.");
+        }
+
+        // HQ-breach occurrences are intentionally repeat-preserving. Unlike
+        // attempted/successful run sets, their order and repeated IDs are
+        // meaningful first-breach evidence; only stable, real HQ server IDs
+        // are valid entries.
+        if (facts.HqBreachOccurrenceServerIds.Count > 0 && !facts.TurnBegan)
+        {
+            Add(
+                violations,
+                "turn.hq-breach-before-begin",
+                $"{path}.hqBreachOccurrenceServerIds",
+                "HQ-breach occurrences require a formally begun turn.");
+        }
+
+        for (int index = 0; index < facts.HqBreachOccurrenceServerIds.Count; index++)
+        {
+            ServerId serverId = facts.HqBreachOccurrenceServerIds[index];
+            string itemPath = $"{path}.hqBreachOccurrenceServerIds[{index}]";
+            bool validId = StableIdentifier.TryValidate(serverId.Value);
+            if (!validId)
+            {
+                Add(violations, "id.invalid", itemPath, "HQ-breach server ID must be non-empty and stable.");
+                continue;
+            }
+
+            ServerState? server = knownServers.FirstOrDefault(candidate => candidate?.Id == serverId);
+            if (server is null)
+            {
+                Add(
+                    violations,
+                    "turn.unknown-hq-breach-server",
+                    itemPath,
+                    $"HQ-breach occurrence references unknown server '{serverId}'.");
+            }
+            else if (server.Kind != ServerKind.Headquarters)
+            {
+                Add(
+                    violations,
+                    "turn.hq-breach-server-kind",
+                    itemPath,
+                    $"HQ-breach occurrence '{serverId}' must identify a Headquarters server, not '{server.Kind}'.");
+            }
         }
 
         ValidateTurnFactCardOccurrences(

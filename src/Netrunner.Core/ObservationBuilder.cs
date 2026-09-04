@@ -255,6 +255,9 @@ public static class ObservationBuilder
                 .Where(cardId => IsFactCardVisible(state, cardId, viewer, accessVisible))
                 .Select(static cardId => cardId.Value)
                 .ToArray(),
+            ["hqBreachOccurrenceServerIds"] = facts.HqBreachOccurrenceServerIds
+                .Select(static serverId => serverId.Value)
+                .ToArray(),
             ["successfulRun"] = facts.SuccessfulRun,
             ["attemptedRunServerIds"] = facts.AttemptedRunServerIds
                 .Select(static serverId => serverId.Value)
@@ -564,13 +567,19 @@ public static class ObservationBuilder
         CardInstanceState? source = state.Cards.FirstOrDefault(card => card.Id == modifier.SourceCardId);
         bool sourceVisible = source is not null
             && IsVisibleTo(source, state.GetZone(source.ZoneId), viewer, accessVisible);
-        return new Dictionary<string, object?>
+        var view = new Dictionary<string, object?>
         {
             ["sourceCardId"] = sourceVisible ? modifier.SourceCardId.Value : null,
             ["attackedServerId"] = modifier.AttackedServerId.Value,
             ["delta"] = modifier.Delta,
             ["reasonKey"] = modifier.ReasonKey,
         };
+        if (modifier.SourceKind != RunBreachAccessModifierSourceKind.InstalledRunSource)
+        {
+            view["sourceKind"] = modifier.SourceKind;
+        }
+
+        return view;
     }
 
     private static Dictionary<string, object?> LingeringEffectView(

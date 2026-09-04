@@ -107,7 +107,8 @@ public sealed record TurnFactsState
         IReadOnlyList<AgendaTurnChange>? agendaTurnChanges = null,
         IReadOnlyList<TagTurnChange>? tagTurnChanges = null,
         IReadOnlyList<FirstXUseKey>? firstXUseKeys = null,
-        IReadOnlyList<CardInstanceId>? programInstallOccurrenceIds = null)
+        IReadOnlyList<CardInstanceId>? programInstallOccurrenceIds = null,
+        IReadOnlyList<ServerId>? hqBreachOccurrenceServerIds = null)
     {
         Version = version;
         Side = side;
@@ -154,6 +155,8 @@ public sealed record TurnFactsState
             .ToArray());
         ProgramInstallOccurrenceIds = new ReadOnlyCollection<CardInstanceId>(
             (programInstallOccurrenceIds ?? []).ToArray());
+        HqBreachOccurrenceServerIds = new ReadOnlyCollection<ServerId>(
+            (hqBreachOccurrenceServerIds ?? []).ToArray());
     }
 
     public TurnFactsState(PlayerSide side, int turnNumber, int clicksAllotted)
@@ -210,6 +213,15 @@ public sealed record TurnFactsState
     [JsonInclude]
     [JsonRequired]
     public IReadOnlyList<CardInstanceId> ProgramInstallOccurrenceIds { get; private set; }
+
+    /// <summary>
+    /// Actual HQ breaches recorded at the authoritative breach boundary for
+    /// this formal turn. This is an occurrence ledger: repeated HQ breaches
+    /// are intentionally retained in event order rather than deduplicated.
+    /// </summary>
+    [JsonInclude]
+    [JsonRequired]
+    public IReadOnlyList<ServerId> HqBreachOccurrenceServerIds { get; private set; }
 
     /// <summary>Whether this side has completed a successful run this turn.</summary>
     [JsonInclude]
@@ -346,6 +358,15 @@ public sealed record TurnFactsState
     internal TurnFactsState RecordProgramInstall(CardInstanceId cardId) =>
         WithFactCollections(
             programInstallOccurrenceIds: ProgramInstallOccurrenceIds.Append(cardId).ToArray());
+
+    /// <summary>
+    /// Records one actual HQ breach at BeginBreach. Repeated server IDs are
+    /// preserved so callers can determine whether the current occurrence was
+    /// the first HQ breach before appending it.
+    /// </summary>
+    internal TurnFactsState RecordHqBreach(ServerId serverId) =>
+        WithFactCollections(
+            hqBreachOccurrenceServerIds: HqBreachOccurrenceServerIds.Append(serverId).ToArray());
 
     /// <summary>Records a run attempt once, preserving first-seen server order.</summary>
     internal TurnFactsState MarkRunAttempted(ServerId serverId)
@@ -487,7 +508,8 @@ public sealed record TurnFactsState
         IReadOnlyList<AgendaTurnChange>? agendaTurnChanges = null,
         IReadOnlyList<TagTurnChange>? tagTurnChanges = null,
         IReadOnlyList<FirstXUseKey>? firstXUseKeys = null,
-        IReadOnlyList<CardInstanceId>? programInstallOccurrenceIds = null) => New(
+        IReadOnlyList<CardInstanceId>? programInstallOccurrenceIds = null,
+        IReadOnlyList<ServerId>? hqBreachOccurrenceServerIds = null) => New(
         turnBegan: TurnBegan,
         mandatoryDrawPerformed: MandatoryDrawPerformed,
         actionPhaseEnded: ActionPhaseEnded,
@@ -503,7 +525,8 @@ public sealed record TurnFactsState
         agendaTurnChanges: agendaTurnChanges ?? AgendaTurnChanges,
         tagTurnChanges: tagTurnChanges ?? TagTurnChanges,
         firstXUseKeys: firstXUseKeys ?? FirstXUseKeys,
-        programInstallOccurrenceIds: programInstallOccurrenceIds ?? ProgramInstallOccurrenceIds);
+        programInstallOccurrenceIds: programInstallOccurrenceIds ?? ProgramInstallOccurrenceIds,
+        hqBreachOccurrenceServerIds: hqBreachOccurrenceServerIds ?? HqBreachOccurrenceServerIds);
 
     internal bool HasUsedAbility(CardInstanceId sourceCardId, string abilityKey) =>
         UsedAbilityKeys.Any(value => value.SourceCardId == sourceCardId
@@ -567,7 +590,8 @@ public sealed record TurnFactsState
         IReadOnlyList<AgendaTurnChange>? agendaTurnChanges = null,
         IReadOnlyList<TagTurnChange>? tagTurnChanges = null,
         IReadOnlyList<FirstXUseKey>? firstXUseKeys = null,
-        IReadOnlyList<CardInstanceId>? programInstallOccurrenceIds = null) => new(
+        IReadOnlyList<CardInstanceId>? programInstallOccurrenceIds = null,
+        IReadOnlyList<ServerId>? hqBreachOccurrenceServerIds = null) => new(
         Version,
         Side,
         TurnNumber,
@@ -587,7 +611,8 @@ public sealed record TurnFactsState
         agendaTurnChanges,
         tagTurnChanges,
         firstXUseKeys,
-        programInstallOccurrenceIds ?? ProgramInstallOccurrenceIds);
+        programInstallOccurrenceIds ?? ProgramInstallOccurrenceIds,
+        hqBreachOccurrenceServerIds ?? HqBreachOccurrenceServerIds);
 
 }
 
@@ -684,6 +709,12 @@ public sealed record TurnHistoryState
     {
         TurnFactsState current = RequireCurrent(side);
         return ReplaceCurrent(side, current.RecordProgramInstall(cardId));
+    }
+
+    internal TurnHistoryState RecordHqBreach(PlayerSide side, ServerId serverId)
+    {
+        TurnFactsState current = RequireCurrent(side);
+        return ReplaceCurrent(side, current.RecordHqBreach(serverId));
     }
 
     internal TurnHistoryState MarkRunAttempted(PlayerSide side, ServerId serverId)

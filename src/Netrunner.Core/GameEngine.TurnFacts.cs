@@ -107,6 +107,85 @@ public static partial class GameEngine
     }
 
     /// <summary>
+    /// Records an actual HQ breach in the current formal turn and returns
+    /// whether this occurrence is the first HQ breach of that turn. The
+    /// occurrence is appended even when the server has already appeared so
+    /// historical repetition remains available to invariant reconstruction.
+    /// </summary>
+    private static bool RecordTurnHqBreach(WorkingState working, ServerId serverId)
+    {
+        TurnState turn = working.Turn;
+        TurnHistoryState? history = turn.History;
+        TurnFactsState? facts = history?.ThisTurn(turn.ActiveSide);
+        if (facts is null
+            || facts.Side != turn.ActiveSide
+            || facts.TurnNumber != turn.TurnNumber
+            || !facts.TurnBegan)
+        {
+            return false;
+        }
+
+        bool first = facts.HqBreachOccurrenceServerIds.Count == 0;
+        ReplaceTurn(
+            working,
+            turn.ActiveSide,
+            turn.Phase,
+            turn.TurnNumber,
+            turn.Step,
+            history!.RecordHqBreach(turn.ActiveSide, serverId));
+        return first;
+    }
+
+    /// <summary>
+    /// Consumes one FirstX source/key for each first-HQ modifier that was
+    /// snapshotted at BeginBreach. The modifier snapshot is authoritative even
+    /// if a source moves before this post-boundary hook runs.
+    /// </summary>
+    private static void RecordTurnFirstHqBreachUses(
+        WorkingState working,
+        List<RunBreachAccessModifier> modifiers)
+    {
+        if (modifiers.Count == 0)
+        {
+            return;
+        }
+
+        TurnState turn = working.Turn;
+        TurnHistoryState? history = turn.History;
+        TurnFactsState? facts = history?.ThisTurn(turn.ActiveSide);
+        if (facts is null
+            || facts.Side != turn.ActiveSide
+            || facts.TurnNumber != turn.TurnNumber
+            || !facts.TurnBegan)
+        {
+            return;
+        }
+
+        TurnHistoryState updated = history!;
+        foreach (RunBreachAccessModifier modifier in modifiers)
+        {
+            if (modifier.SourceKind == RunBreachAccessModifierSourceKind.FirstHeadquartersBreach)
+            {
+                updated = updated.ConsumeFirstX(
+                    turn.ActiveSide,
+                    modifier.SourceCardId,
+                    modifier.ReasonKey);
+            }
+        }
+
+        if (!ReferenceEquals(updated, history))
+        {
+            ReplaceTurn(
+                working,
+                turn.ActiveSide,
+                turn.Phase,
+                turn.TurnNumber,
+                turn.Step,
+                updated);
+        }
+    }
+
+    /// <summary>
     /// Consumes only the source declarations that were present in the
     /// accepted install quote. This runs after payment, movement, and the
     /// program-install occurrence have committed; previews, rejected/stale

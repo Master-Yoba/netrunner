@@ -24,7 +24,7 @@ public sealed class M2ProofTests
     // (schema 5 -> 6), so state hashes are intentionally re-pinned. The
     // event stream remains stable because no M2 event payload changed.
     private const string ExpectedFinalStateHash =
-        "ab07bacd89d82500bf3ac36881bf21af40570ec21eb28139793fc6a01d8feae8";
+        "9fbef66ded3b08b2ece74a61d3329be29fcc3403ecfb15c2420eb1ad2e77e332";
     private const string ExpectedEventStreamHash =
         "d20cdef94e97ac928ca088e14952b65d2116fecda00485fff5c3b05e1b6e9e20";
 

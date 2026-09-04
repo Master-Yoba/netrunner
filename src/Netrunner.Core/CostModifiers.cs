@@ -54,6 +54,44 @@ public sealed record BehaviorFirstProgramInstallCostModifier
 }
 
 /// <summary>
+/// Typed declaration for an installed Runner source that grants additional
+/// hidden HQ access on the first HQ breach of each formal turn. Deltas are
+/// positive because the declaration contributes access count rather than a
+/// cost adjustment.
+/// </summary>
+public sealed record BehaviorFirstHqBreachAccessModifier
+{
+    [JsonConstructor]
+    public BehaviorFirstHqBreachAccessModifier(int delta, string reasonKey)
+    {
+        if (delta <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(delta),
+                "A first-HQ-breach access modifier must increase access.");
+        }
+
+        if (!StableIdentifier.TryValidate(reasonKey))
+        {
+            throw new ArgumentException(
+                "A first-HQ-breach access modifier reason key must be a stable identifier.",
+                nameof(reasonKey));
+        }
+
+        Delta = delta;
+        ReasonKey = reasonKey;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Delta { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string ReasonKey { get; private set; }
+}
+
+/// <summary>
 /// A typed run-source declaration for a credit adjustment to ICE rez costs.
 /// The declaration is copied onto the immutable run state when a run event
 /// starts a run; it is never re-read from the physical source while the run
