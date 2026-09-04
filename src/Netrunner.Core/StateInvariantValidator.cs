@@ -147,7 +147,7 @@ public static class StateInvariantValidator
         {
             ValidateRuntimeCardActivity(state, runtimeCardCatalog, violations);
         }
-        ValidateTurnAndOutcome(state, violations);
+        ValidateTurnAndOutcome(state, runtimeCardCatalog, violations);
         ValidateRunState(state, behaviorCatalog, violations);
         ValidateRulesState(state, behaviorCatalog, runtimeCardCatalog, violations);
         ValidateResolutionAndDecision(
@@ -860,7 +860,10 @@ public static class StateInvariantValidator
         }
     }
 
-    private static void ValidateTurnAndOutcome(GameState state, List<StateInvariantViolation> violations)
+    private static void ValidateTurnAndOutcome(
+        GameState state,
+        IRuntimeCardCatalog? runtimeCardCatalog,
+        List<StateInvariantViolation> violations)
     {
         TurnState turn = state.Turn;
         if (turn is null)
@@ -932,28 +935,36 @@ public static class StateInvariantValidator
                     PlayerSide.Corp,
                     "turn.history.corpThisTurn",
                     knownCardIds,
+                    state.Cards,
                     knownPlayers,
+                    runtimeCardCatalog,
                     violations);
                 ValidateTurnFacts(
                     turn.History.CorpLastTurn,
                     PlayerSide.Corp,
                     "turn.history.corpLastTurn",
                     knownCardIds,
+                    state.Cards,
                     knownPlayers,
+                    runtimeCardCatalog,
                     violations);
                 ValidateTurnFacts(
                     turn.History.RunnerThisTurn,
                     PlayerSide.Runner,
                     "turn.history.runnerThisTurn",
                     knownCardIds,
+                    state.Cards,
                     knownPlayers,
+                    runtimeCardCatalog,
                     violations);
                 ValidateTurnFacts(
                     turn.History.RunnerLastTurn,
                     PlayerSide.Runner,
                     "turn.history.runnerLastTurn",
                     knownCardIds,
+                    state.Cards,
                     knownPlayers,
+                    runtimeCardCatalog,
                     violations);
             }
             else if (turn.Step != TurnStep.None)
@@ -2997,7 +3008,8 @@ public static class StateInvariantValidator
                                     behaviorCatalog,
                                     install.CardId,
                                     BehaviorCostModifierKind.RunnerInstallCreditCost,
-                                    runtimeSpec.InstallCost ?? 0);
+                                    runtimeSpec.InstallCost ?? 0,
+                                    runtimeCardCatalog);
                                 int expectedInstallCost = expectedInstallQuote?.EffectiveCost ?? (runtimeSpec.InstallCost ?? 0);
                                 if (install.InstallCost != expectedInstallCost)
                                 {
@@ -7856,7 +7868,8 @@ public static class StateInvariantValidator
                     behaviorCatalog,
                     install.CardId,
                     BehaviorCostModifierKind.RunnerInstallCreditCost,
-                    spec.InstallCost ?? 0);
+                    spec.InstallCost ?? 0,
+                    runtimeCardCatalog);
                 int expectedInstallCost = expectedInstallQuote?.EffectiveCost ?? (spec.InstallCost ?? 0);
                 if (install.CardClass != spec.CardClass
                     || install.InstallCost != expectedInstallCost)
@@ -10625,7 +10638,8 @@ public static class StateInvariantValidator
                 behaviorCatalog,
                 card.Id,
                 BehaviorCostModifierKind.RunnerInstallCreditCost,
-                incoming.InstallCost ?? 0);
+                incoming.InstallCost ?? 0,
+                runtimeCardCatalog);
             int installCost = installQuote?.EffectiveCost ?? (incoming.InstallCost ?? 0);
             return runner is not null && runner.Credits >= installCost;
         }
@@ -11013,7 +11027,9 @@ public static class StateInvariantValidator
         PlayerSide expectedSide,
         string path,
         HashSet<CardInstanceId> knownCardIds,
+        IReadOnlyList<CardInstanceState> knownCards,
         Dictionary<PlayerId, PlayerSide> knownPlayers,
+        IRuntimeCardCatalog? runtimeCardCatalog,
         List<StateInvariantViolation> violations)
     {
         if (facts is null)
@@ -11134,6 +11150,8 @@ public static class StateInvariantValidator
             "accessed-card",
             path,
             knownCardIds,
+            null,
+            null,
             violations);
         ValidateTurnFactCardOccurrences(
             facts.TrashedCardOccurrenceIds,
@@ -11141,6 +11159,17 @@ public static class StateInvariantValidator
             "trashed-card",
             path,
             knownCardIds,
+            null,
+            null,
+            violations);
+        ValidateTurnFactCardOccurrences(
+            facts.ProgramInstallOccurrenceIds,
+            "programInstallOccurrenceIds",
+            "program-install",
+            path,
+            knownCardIds,
+            knownCards,
+            runtimeCardCatalog,
             violations);
 
         for (int index = 0; index < facts.AgendaTurnChanges.Count; index++)
@@ -11318,6 +11347,8 @@ public static class StateInvariantValidator
         string occurrenceName,
         string path,
         HashSet<CardInstanceId> knownCardIds,
+        IReadOnlyList<CardInstanceState>? knownCards,
+        IRuntimeCardCatalog? runtimeCardCatalog,
         List<StateInvariantViolation> violations)
     {
         for (int index = 0; index < occurrenceIds.Count; index++)
@@ -11331,6 +11362,45 @@ public static class StateInvariantValidator
             else if (!knownCardIds.Contains(cardId))
             {
                 Add(violations, "turn.unknown-card-occurrence", itemPath, $"{occurrenceName} card '{cardId}' does not exist in the game state.");
+            }
+            else if (fieldName == "programInstallOccurrenceIds")
+            {
+                CardInstanceState? card = knownCards?.FirstOrDefault(candidate => candidate?.Id == cardId);
+                if (card is null)
+                {
+                    continue;
+                }
+
+                if (card.OwnerSide != PlayerSide.Runner)
+                {
+                    Add(
+                        violations,
+                        "turn.program-install-owner-mismatch",
+                        itemPath,
+                        $"A program-install occurrence must reference a Runner-owned card, but '{cardId}' is owned by '{card.OwnerSide}'.");
+                }
+
+                if (runtimeCardCatalog is null)
+                {
+                    continue;
+                }
+
+                if (!runtimeCardCatalog.TryGet(card.DefinitionId, out CardRuntimeSpec? spec))
+                {
+                    Add(
+                        violations,
+                        "turn.program-install-runtime-missing",
+                        itemPath,
+                        $"Runtime metadata for program-install occurrence '{cardId}' ({card.DefinitionId}) is unavailable.");
+                }
+                else if (spec.Side != PlayerSide.Runner || spec.CardClass != RuntimeCardClass.Program)
+                {
+                    Add(
+                        violations,
+                        "turn.program-install-class-invalid",
+                        itemPath,
+                        $"Program-install occurrence '{cardId}' must identify a Runner Program runtime card.");
+                }
             }
         }
     }

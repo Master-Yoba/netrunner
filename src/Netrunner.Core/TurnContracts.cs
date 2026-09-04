@@ -106,7 +106,8 @@ public sealed record TurnFactsState
         IReadOnlyList<CardInstanceId>? trashedCardOccurrenceIds = null,
         IReadOnlyList<AgendaTurnChange>? agendaTurnChanges = null,
         IReadOnlyList<TagTurnChange>? tagTurnChanges = null,
-        IReadOnlyList<FirstXUseKey>? firstXUseKeys = null)
+        IReadOnlyList<FirstXUseKey>? firstXUseKeys = null,
+        IReadOnlyList<CardInstanceId>? programInstallOccurrenceIds = null)
     {
         Version = version;
         Side = side;
@@ -151,6 +152,8 @@ public sealed record TurnFactsState
                 return new FirstXUseKey(value.SourceCardId, value.Key, value.Count);
             })
             .ToArray());
+        ProgramInstallOccurrenceIds = new ReadOnlyCollection<CardInstanceId>(
+            (programInstallOccurrenceIds ?? []).ToArray());
     }
 
     public TurnFactsState(PlayerSide side, int turnNumber, int clicksAllotted)
@@ -198,6 +201,15 @@ public sealed record TurnFactsState
     [JsonInclude]
     [JsonRequired]
     public IReadOnlyList<CardInstanceId> InstalledCardIds { get; private set; }
+
+    /// <summary>
+    /// Runner program installs completed during this formal turn, in event
+    /// order. Unlike <see cref="InstalledCardIds"/>, this is an occurrence
+    /// ledger and intentionally preserves repeated physical IDs.
+    /// </summary>
+    [JsonInclude]
+    [JsonRequired]
+    public IReadOnlyList<CardInstanceId> ProgramInstallOccurrenceIds { get; private set; }
 
     /// <summary>Whether this side has completed a successful run this turn.</summary>
     [JsonInclude]
@@ -325,6 +337,15 @@ public sealed record TurnFactsState
         agendaTurnChanges: AgendaTurnChanges,
         tagTurnChanges: TagTurnChanges,
         firstXUseKeys: FirstXUseKeys);
+
+    /// <summary>
+    /// Records one successfully completed Runner program install. The caller
+    /// chooses the active formal-turn facts; this method does not infer an
+    /// ability source or deduplicate repeated occurrences.
+    /// </summary>
+    internal TurnFactsState RecordProgramInstall(CardInstanceId cardId) =>
+        WithFactCollections(
+            programInstallOccurrenceIds: ProgramInstallOccurrenceIds.Append(cardId).ToArray());
 
     /// <summary>Records a run attempt once, preserving first-seen server order.</summary>
     internal TurnFactsState MarkRunAttempted(ServerId serverId)
@@ -465,7 +486,8 @@ public sealed record TurnFactsState
         IReadOnlyList<CardInstanceId>? trashedCardOccurrenceIds = null,
         IReadOnlyList<AgendaTurnChange>? agendaTurnChanges = null,
         IReadOnlyList<TagTurnChange>? tagTurnChanges = null,
-        IReadOnlyList<FirstXUseKey>? firstXUseKeys = null) => New(
+        IReadOnlyList<FirstXUseKey>? firstXUseKeys = null,
+        IReadOnlyList<CardInstanceId>? programInstallOccurrenceIds = null) => New(
         turnBegan: TurnBegan,
         mandatoryDrawPerformed: MandatoryDrawPerformed,
         actionPhaseEnded: ActionPhaseEnded,
@@ -480,7 +502,8 @@ public sealed record TurnFactsState
         trashedCardOccurrenceIds: trashedCardOccurrenceIds ?? TrashedCardOccurrenceIds,
         agendaTurnChanges: agendaTurnChanges ?? AgendaTurnChanges,
         tagTurnChanges: tagTurnChanges ?? TagTurnChanges,
-        firstXUseKeys: firstXUseKeys ?? FirstXUseKeys);
+        firstXUseKeys: firstXUseKeys ?? FirstXUseKeys,
+        programInstallOccurrenceIds: programInstallOccurrenceIds ?? ProgramInstallOccurrenceIds);
 
     internal bool HasUsedAbility(CardInstanceId sourceCardId, string abilityKey) =>
         UsedAbilityKeys.Any(value => value.SourceCardId == sourceCardId
@@ -543,7 +566,8 @@ public sealed record TurnFactsState
         IReadOnlyList<CardInstanceId>? trashedCardOccurrenceIds = null,
         IReadOnlyList<AgendaTurnChange>? agendaTurnChanges = null,
         IReadOnlyList<TagTurnChange>? tagTurnChanges = null,
-        IReadOnlyList<FirstXUseKey>? firstXUseKeys = null) => new(
+        IReadOnlyList<FirstXUseKey>? firstXUseKeys = null,
+        IReadOnlyList<CardInstanceId>? programInstallOccurrenceIds = null) => new(
         Version,
         Side,
         TurnNumber,
@@ -562,7 +586,8 @@ public sealed record TurnFactsState
         trashedCardOccurrenceIds,
         agendaTurnChanges,
         tagTurnChanges,
-        firstXUseKeys);
+        firstXUseKeys,
+        programInstallOccurrenceIds ?? ProgramInstallOccurrenceIds);
 
 }
 
@@ -653,6 +678,12 @@ public sealed record TurnHistoryState
     {
         TurnFactsState current = RequireCurrent(side);
         return ReplaceCurrent(side, current.MarkInstalled(cardId));
+    }
+
+    internal TurnHistoryState RecordProgramInstall(PlayerSide side, CardInstanceId cardId)
+    {
+        TurnFactsState current = RequireCurrent(side);
+        return ReplaceCurrent(side, current.RecordProgramInstall(cardId));
     }
 
     internal TurnHistoryState MarkRunAttempted(PlayerSide side, ServerId serverId)

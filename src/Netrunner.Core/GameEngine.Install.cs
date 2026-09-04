@@ -51,6 +51,11 @@ public static partial class GameEngine
 
         MoveCard(working, card, hand, destination);
         MarkInstalledThisTurn(working, cardId);
+        if (side == PlayerSide.Runner && behavior.Kind == ToyCardKind.RunnerProgram)
+        {
+            RecordTurnProgramInstall(working, cardId);
+        }
+
         ApplyCreditDelta(working, player.Id, -behavior.InstallCost);
         Emit(working, EngineEventKinds.CardInstalled, new CardInstalledEventPayload(
             side,
@@ -450,6 +455,12 @@ public static partial class GameEngine
             false,
             installed.AdvancementCounters));
         MarkInstalledThisTurn(working, frame.CardId);
+        if (frame.CardClass == RuntimeCardClass.Program
+            && player.Side == PlayerSide.Runner)
+        {
+            RecordTurnProgramInstall(working, frame.CardId);
+            RecordTurnFirstProgramInstallUses(working, frame.CardId, frame.CostQuote);
+        }
 
         if (frame.CardClass == RuntimeCardClass.Program)
         {

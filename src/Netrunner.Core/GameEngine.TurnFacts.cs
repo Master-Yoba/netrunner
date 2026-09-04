@@ -79,6 +79,124 @@ public static partial class GameEngine
             history.RecordTrash(turn.ActiveSide, cardId));
     }
 
+    /// <summary>
+    /// Records a completed Runner program install in the current formal turn.
+    /// The active formal side owns the ledger, matching the existing
+    /// installed-card/ability fact boundary; no source-card or controller
+    /// inference is performed here.
+    /// </summary>
+    private static void RecordTurnProgramInstall(WorkingState working, CardInstanceId cardId)
+    {
+        TurnState turn = working.Turn;
+        TurnHistoryState? history = turn.History;
+        TurnFactsState? facts = history?.ThisTurn(turn.ActiveSide);
+        if (facts is null
+            || facts.Side != turn.ActiveSide
+            || facts.TurnNumber != turn.TurnNumber)
+        {
+            return;
+        }
+
+        ReplaceTurn(
+            working,
+            turn.ActiveSide,
+            turn.Phase,
+            turn.TurnNumber,
+            turn.Step,
+            history!.RecordProgramInstall(turn.ActiveSide, cardId));
+    }
+
+    /// <summary>
+    /// Consumes only the source declarations that were present in the
+    /// accepted install quote. This runs after payment, movement, and the
+    /// program-install occurrence have committed; previews, rejected/stale
+    /// actions, and multi-step selections therefore never mark a source used.
+    /// </summary>
+    private static void RecordTurnFirstProgramInstallUses(
+        WorkingState working,
+        CardInstanceId installedCardId,
+        CostQuote? quote)
+    {
+        if (quote is null)
+        {
+            return;
+        }
+
+        TurnState turn = working.Turn;
+        TurnHistoryState? history = turn.History;
+        TurnFactsState? facts = history?.ThisTurn(turn.ActiveSide);
+        if (facts is null
+            || facts.Side != turn.ActiveSide
+            || facts.TurnNumber != turn.TurnNumber
+            || !facts.TurnBegan)
+        {
+            return;
+        }
+
+        TurnHistoryState updated = history!;
+        foreach (CostAdjustment adjustment in quote.Adjustments)
+        {
+            if (adjustment.Kind != BehaviorCostModifierKind.RunnerInstallCreditCost
+                || adjustment.SourceCardId is not { } sourceCardId
+                || adjustment.SourceDefinitionId is not { } sourceDefinitionId)
+            {
+                continue;
+            }
+
+            // The installed card is now in the Rig, but it was not an active
+            // source when this quote was projected. A self-cost declaration on
+            // the new card must never be mistaken for an installed-source use.
+            if (sourceCardId == installedCardId)
+            {
+                continue;
+            }
+
+            CardInstanceState? source = working.Cards.FirstOrDefault(card => card.Id == sourceCardId);
+            // The source may have been selected as a replacement and moved to
+            // Heap before this post-commit hook runs. The accepted quote is
+            // the authenticated proof that it was active when projected; do
+            // not lose its first-X consumption merely because the install
+            // itself removed that source.
+            if (source is null)
+            {
+                continue;
+            }
+
+            if (source.DefinitionId != sourceDefinitionId
+                || !working.BehaviorCatalog.TryGet(sourceDefinitionId, out CardBehaviorDefinition? definition)
+                || definition.FirstProgramInstallCostModifiers is not { Count: > 0 } declarations)
+            {
+                // This is a different typed install term (for example a
+                // self-cost modifier on the card just moved from Grip).
+                continue;
+            }
+
+            if (!declarations.Any(declaration =>
+                    declaration.Delta == adjustment.Delta
+                    && string.Equals(declaration.ReasonKey, adjustment.ReasonKey, StringComparison.Ordinal)))
+            {
+                throw new ResolutionFailureException(
+                    "The accepted first-program install quote references an invalid source declaration.");
+            }
+
+            updated = updated.ConsumeFirstX(
+                turn.ActiveSide,
+                sourceCardId,
+                adjustment.ReasonKey);
+        }
+
+        if (!ReferenceEquals(updated, history))
+        {
+            ReplaceTurn(
+                working,
+                turn.ActiveSide,
+                turn.Phase,
+                turn.TurnNumber,
+                turn.Step,
+                updated);
+        }
+    }
+
     private static void RecordTurnAgendaChange(
         WorkingState working,
         CardInstanceId cardId,

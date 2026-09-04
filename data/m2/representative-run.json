@@ -89,5 +89,5 @@
     "CR 26.03 7.1.5/7.1.6/7.2.2/7.2.3: access decisions; the accessed agenda is mandatorily stolen, and the accessed asset is trashed for its printed cost using the Runner's chosen wallet/hosted-credit division"
   ],
   "crossCheckNote": "Jinteki.net (mtgred/netrunner) compresses the same approach/encounter/movement stops into fewer UI prompts; this scenario keeps every CR 6.9 window explicit, so window counts here exceed jnet's compressed stops by design. The run-scoped Overclock pool is the hosted run-credit source, and its costs may be divided with wallet credits by the Runner; the pool expires at run end in both implementations.",
-  "expectedInitialStateHash": "2335d1cd426cd8cf954e7ab9f6c5c77b3555abf349d8f3757fa5ae9b041dc214"
+  "expectedInitialStateHash": "23777d0facb081f15eeab15ed0d0db2b6de0692b19583d1ea62a97ba9ad1b2e1"
 }

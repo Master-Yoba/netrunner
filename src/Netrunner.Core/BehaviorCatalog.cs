@@ -1461,7 +1461,8 @@ public sealed class CardBehaviorDefinition
         string? extensionHandlerId = null,
         IReadOnlyList<BehaviorPaidAbility>? paidAbilities = null,
         IReadOnlyList<BehaviorCostModifier>? costModifiers = null,
-        IReadOnlyList<BehaviorValueModifier>? valueModifiers = null)
+        IReadOnlyList<BehaviorValueModifier>? valueModifiers = null,
+        IReadOnlyList<BehaviorFirstProgramInstallCostModifier>? firstProgramInstallCostModifiers = null)
     {
         DefinitionId = definitionId;
         if (!Enum.IsDefined(controller))
@@ -1497,6 +1498,7 @@ public sealed class CardBehaviorDefinition
         PaidAbilities = FreezePaidAbilities(paidAbilities);
         CostModifiers = FreezeCostModifiers(costModifiers);
         ValueModifiers = FreezeValueModifiers(valueModifiers);
+        FirstProgramInstallCostModifiers = FreezeFirstProgramInstallCostModifiers(firstProgramInstallCostModifiers);
         if (!string.IsNullOrWhiteSpace(extensionHandlerId))
         {
             ExtensionHandlerId = extensionHandlerId;
@@ -1543,6 +1545,14 @@ public sealed class CardBehaviorDefinition
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<BehaviorValueModifier>? ValueModifiers { get; }
+
+    /// <summary>
+    /// Optional installed-source declarations that reduce the first Runner
+    /// program install in the active formal turn. Null preserves the legacy
+    /// generic-definition JSON shape and fingerprint input.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<BehaviorFirstProgramInstallCostModifier>? FirstProgramInstallCostModifiers { get; }
 
     private static ReadOnlyCollection<T> Freeze<T>(IEnumerable<T>? values)
         where T : class
@@ -1627,6 +1637,37 @@ public sealed class CardBehaviorDefinition
         }
 
         return new ReadOnlyCollection<BehaviorValueModifier>(copy);
+    }
+
+    private static ReadOnlyCollection<BehaviorFirstProgramInstallCostModifier>? FreezeFirstProgramInstallCostModifiers(
+        IEnumerable<BehaviorFirstProgramInstallCostModifier>? modifiers)
+    {
+        if (modifiers is null)
+        {
+            return null;
+        }
+
+        BehaviorFirstProgramInstallCostModifier[] copy = modifiers.ToArray();
+        if (copy.Length == 0)
+        {
+            return null;
+        }
+
+        if (copy.Any(static value => value is null))
+        {
+            throw new ArgumentException(
+                "First-program install cost modifier declarations must not contain null entries.",
+                nameof(modifiers));
+        }
+
+        if (copy.Distinct().Count() != copy.Length)
+        {
+            throw new ArgumentException(
+                "First-program install cost modifier declarations must be unique.",
+                nameof(modifiers));
+        }
+
+        return new ReadOnlyCollection<BehaviorFirstProgramInstallCostModifier>(copy);
     }
 }
 
@@ -2192,6 +2233,10 @@ internal static class BehaviorCatalogStructure
                     a.ValueModifiers ?? [],
                     b.ValueModifiers ?? [],
                     BehaviorContractStructure.AreEqual)
+                && BehaviorContractStructure.SequenceEquals(
+                    a.FirstProgramInstallCostModifiers ?? [],
+                    b.FirstProgramInstallCostModifiers ?? [],
+                    static (left, right) => left.Equals(right))
                 && a.ExtensionHandlerId == b.ExtensionHandlerId,
             _ => false,
         };
@@ -2270,6 +2315,7 @@ internal static class BehaviorCatalogFingerprint
         {
             AppendSequence(builder, value.ValueModifiers, AppendValueModifier);
         }
+
     }
 
     private static void AppendIcebreaker(StringBuilder builder, IcebreakerBehaviorSpec value)
@@ -2287,6 +2333,7 @@ internal static class BehaviorCatalogFingerprint
         {
             AppendSequence(builder, value.ValueModifiers, AppendValueModifier);
         }
+
     }
 
     private static void AppendAsset(StringBuilder builder, AssetBehaviorSpec value) => builder.Append(value.TrashCost);
@@ -2345,6 +2392,12 @@ internal static class BehaviorCatalogFingerprint
         {
             AppendSequence(builder, value.ValueModifiers, AppendValueModifier);
         }
+
+        if (value.FirstProgramInstallCostModifiers is { Count: > 0 })
+        {
+            builder.Append("|firstProgramInstallCostModifiers=");
+            AppendSequence(builder, value.FirstProgramInstallCostModifiers, AppendFirstProgramInstallCostModifier);
+        }
     }
 
     private static void AppendCostModifier(StringBuilder builder, BehaviorCostModifier value)
@@ -2354,6 +2407,14 @@ internal static class BehaviorCatalogFingerprint
             .Append(",condition=");
         AppendCondition(builder, value.Condition);
         builder.Append(",reason=");
+        AppendString(builder, value.ReasonKey);
+    }
+
+    private static void AppendFirstProgramInstallCostModifier(
+        StringBuilder builder,
+        BehaviorFirstProgramInstallCostModifier value)
+    {
+        builder.Append("delta=").Append(value.Delta).Append(",reason=");
         AppendString(builder, value.ReasonKey);
     }
 

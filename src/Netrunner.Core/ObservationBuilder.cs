@@ -250,6 +250,11 @@ public static class ObservationBuilder
                 .Where(cardId => IsFactCardVisible(state, cardId, viewer, accessVisible))
                 .Select(static cardId => cardId.Value)
                 .ToArray(),
+            ["programInstallOccurrenceCount"] = facts.ProgramInstallOccurrenceIds.Count,
+            ["programInstallOccurrenceIds"] = facts.ProgramInstallOccurrenceIds
+                .Where(cardId => IsFactCardVisible(state, cardId, viewer, accessVisible))
+                .Select(static cardId => cardId.Value)
+                .ToArray(),
             ["successfulRun"] = facts.SuccessfulRun,
             ["attemptedRunServerIds"] = facts.AttemptedRunServerIds
                 .Select(static serverId => serverId.Value)

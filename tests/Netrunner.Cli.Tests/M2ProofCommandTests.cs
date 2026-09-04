@@ -13,11 +13,11 @@ public sealed class M2ProofCommandTests
     // (pass only) and the automatic 7.2.3 steal emit the same event stream
     // as the pre-U6 player-steal action, see M2ProofTests); the same
     // constants M2ProofTests pins for both policies. Slice 4.4 Checkpoint A's
-    // serialized run value-adjustment payload (schema 4 -> 5) intentionally
+    // serialized run value-adjustment payload (schema 5 -> 6) intentionally
     // changes state hashes; the event hash remains stable because the new
     // payload is state-only.
     private const string ExpectedFinalStateHash =
-        "dfe598b4d6b32263675a72b1cbb40904a856a0d9439b71e220c9f85ffe1c2f38";
+        "ab07bacd89d82500bf3ac36881bf21af40570ec21eb28139793fc6a01d8feae8";
     private const string ExpectedEventStreamHash =
         "d20cdef94e97ac928ca088e14952b65d2116fecda00485fff5c3b05e1b6e9e20";
 

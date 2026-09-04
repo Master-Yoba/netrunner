@@ -16,6 +16,44 @@ public enum BehaviorCostModifierKind
 }
 
 /// <summary>
+/// Typed declaration for an installed source that reduces the first Runner
+/// program install of each formal turn. Deltas are signed and therefore must
+/// be negative; the source identity is supplied by the engine when a quote is
+/// projected.
+/// </summary>
+public sealed record BehaviorFirstProgramInstallCostModifier
+{
+    [JsonConstructor]
+    public BehaviorFirstProgramInstallCostModifier(int delta, string reasonKey)
+    {
+        if (delta >= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(delta),
+                "A first-program install cost modifier must reduce the cost.");
+        }
+
+        if (!StableIdentifier.TryValidate(reasonKey))
+        {
+            throw new ArgumentException(
+                "A first-program install cost modifier reason key must be a stable identifier.",
+                nameof(reasonKey));
+        }
+
+        Delta = delta;
+        ReasonKey = reasonKey;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Delta { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string ReasonKey { get; private set; }
+}
+
+/// <summary>
 /// A typed run-source declaration for a credit adjustment to ICE rez costs.
 /// The declaration is copied onto the immutable run state when a run event
 /// starts a run; it is never re-read from the physical source while the run
@@ -301,7 +339,8 @@ public static partial class GameEngine
         IBehaviorCatalog behaviorCatalog,
         CardInstanceId sourceCardId,
         BehaviorCostModifierKind kind,
-        int baseCost)
+        int baseCost,
+        IRuntimeCardCatalog? runtimeCardCatalog = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(behaviorCatalog);
@@ -311,11 +350,10 @@ public static partial class GameEngine
             return null;
         }
 
-        return CostModifierProjection.ForSource(
-            WorkingState.From(state, behaviorCatalog),
-            source,
-            kind,
-            baseCost);
+        WorkingState working = WorkingState.From(state, behaviorCatalog, runtimeCardCatalog);
+        return kind == BehaviorCostModifierKind.RunnerInstallCreditCost
+            ? CostModifierProjection.RunnerInstall(working, source, baseCost)
+            : CostModifierProjection.ForSource(working, source, kind, baseCost);
     }
 
     /// <summary>
@@ -345,10 +383,120 @@ public static partial class GameEngine
         internal static CostQuote? RunnerInstall(
             WorkingState working,
             CardInstanceState source,
-            int baseCost) =>
-            IsInZone(working, source, ZoneKind.RunnerGrip)
-                ? ForSource(working, source, BehaviorCostModifierKind.RunnerInstallCreditCost, baseCost)
-                : null;
+            int baseCost)
+        {
+            ArgumentNullException.ThrowIfNull(working);
+            ArgumentNullException.ThrowIfNull(source);
+            ArgumentOutOfRangeException.ThrowIfNegative(baseCost);
+
+            // The existing self-cost path is deliberately limited to a card
+            // being played from Grip. First-program discounts are a separate
+            // installed-source projection and may apply to a behavior install
+            // whose card is selected from Stack.
+            List<CostAdjustment> adjustments = [];
+            if (IsInZone(working, source, ZoneKind.RunnerGrip)
+                && ForSource(
+                    working,
+                    source,
+                    BehaviorCostModifierKind.RunnerInstallCreditCost,
+                    baseCost) is { } selfQuote)
+            {
+                adjustments.AddRange(selfQuote.Adjustments);
+            }
+
+            adjustments.AddRange(FirstProgramInstallAdjustments(working, source));
+            return adjustments.Count == 0
+                ? null
+                : new CostQuote(baseCost, adjustments);
+        }
+
+        /// <summary>
+        /// Returns every currently active installed source that has not yet
+        /// consumed its first-program-install declaration. The global
+        /// occurrence ledger is checked before any source is considered, so
+        /// multiple sources stack on exactly one program install and cannot
+        /// re-arm merely because a source's own key is absent.
+        /// </summary>
+        internal static List<CostAdjustment> FirstProgramInstallAdjustments(
+            WorkingState working,
+            CardInstanceState target)
+        {
+            if (!IsRunnerProgram(working, target)
+                || !IsFirstProgramInstallWindow(working))
+            {
+                return [];
+            }
+
+            TurnFactsState facts = working.Turn.History!.ThisTurn(working.Turn.ActiveSide)!;
+            var adjustments = new List<CostAdjustment>();
+            foreach (CardInstanceState installedSource in ActiveRunnerInstalledCards(working))
+            {
+                if (!working.BehaviorCatalog.TryGet(
+                        installedSource.DefinitionId,
+                        out CardBehaviorDefinition? definition)
+                    || definition.FirstProgramInstallCostModifiers is not { Count: > 0 } declarations)
+                {
+                    continue;
+                }
+
+                foreach (BehaviorFirstProgramInstallCostModifier declaration in declarations)
+                {
+                    if (facts.GetFirstXCount(installedSource.Id, declaration.ReasonKey) != 0)
+                    {
+                        continue;
+                    }
+
+                    adjustments.Add(new CostAdjustment(
+                        BehaviorCostModifierKind.RunnerInstallCreditCost,
+                        declaration.Delta,
+                        declaration.ReasonKey,
+                        installedSource.DefinitionId,
+                        installedSource.Id));
+                }
+            }
+
+            return adjustments;
+        }
+
+        private static bool IsRunnerProgram(WorkingState working, CardInstanceState card) =>
+            card.OwnerSide == PlayerSide.Runner
+            && working.RuntimeCardCatalog?.TryGet(card.DefinitionId, out CardRuntimeSpec? spec) == true
+            && spec.Side == PlayerSide.Runner
+            && spec.CardClass == RuntimeCardClass.Program;
+
+        private static IEnumerable<CardInstanceState> ActiveRunnerInstalledCards(WorkingState working)
+        {
+            ZoneState? rig = working.Zones.FirstOrDefault(zone =>
+                zone.Kind == ZoneKind.RunnerRig
+                && zone.OwnerSide == PlayerSide.Runner
+                && zone.ServerId is null);
+            if (rig is null)
+            {
+                return [];
+            }
+
+            return rig.CardIds
+                .Select(cardId => working.Cards.FirstOrDefault(card => card.Id == cardId))
+                .Where(card => card is not null
+                    && card.OwnerSide == PlayerSide.Runner
+                    && card.FaceUp)
+                .Cast<CardInstanceState>();
+        }
+
+        private static bool IsFirstProgramInstallWindow(WorkingState working)
+        {
+            if (working.Turn.ActiveSide is not (PlayerSide.Corp or PlayerSide.Runner)
+                || working.Turn.Phase is TurnPhase.Setup or TurnPhase.GameOver
+                || working.Turn.History?.ThisTurn(working.Turn.ActiveSide) is not { } facts
+                || facts.Side != working.Turn.ActiveSide
+                || facts.TurnNumber != working.Turn.TurnNumber
+                || !facts.TurnBegan)
+            {
+                return false;
+            }
+
+            return facts.ProgramInstallOccurrenceIds.Count == 0;
+        }
 
         internal static CostQuote? IcebreakerBreak(
             WorkingState working,

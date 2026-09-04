@@ -3856,3 +3856,37 @@ errors; runtime action expansion and full verification remain pending.
   direct M2 proof, solution formatting, and `git diff --check`. Tread Lightly
   remains intentionally unbound until the Batch 3 card-binding checkpoint;
   ENG-416–418 remain outside this commit.
+
+### 2026-09-04 — Checkpoint B2a ENG-418 first-program install consumption accepted
+
+- Luna Max added a typed, optional installed-source declaration for reducing
+  the first Runner program installed in each formal turn. The existing install
+  `CostQuote` now composes self-cost terms with every active source declaration
+  in deterministic order and retains raw reason plus definition/physical-card
+  provenance. Multiple sources stack on the same first program and the credit
+  floor remains zero.
+- The formal-turn ledger records every completed Runner program install even
+  when no modifier source is active and even during the Corp turn. This global
+  occurrence prevents a later-installed source from re-arming the effect;
+  source-keyed First-X uses are recorded only for terms in the accepted quote,
+  after the install commits. Previews, rejected or stale actions, intermediate
+  replacement choices, and non-program installs do not consume it. Direct,
+  replacement-selection, and behavior-effect off-turn installs share the same
+  projection and completion boundary.
+- Turn-fact invariants require occurrence IDs to identify Runner-owned Program
+  runtime cards. Pending install frames/actions are reconstructed against the
+  same projection, forged quotes and stale sources fail atomically, turn-fact
+  observations expose a visibility-filtered occurrence list/count, and the
+  already-shared Match cost-quote surface carries the raw terms unchanged.
+  Optional declarations participate in immutable catalog equality and
+  fingerprints while absent/empty declarations retain legacy JSON bytes.
+- D-416 applies because `TurnFactsState` gained the occurrence ledger: engine
+  state schema moved from 5 to 6 and checked-in state fixtures were re-pinned.
+  The representative M2 initial/final hashes are now `23777d0f…` /
+  `ab07bacd…`; its event hash remains `d20cdef9…`, with 32 actions/checkpoints
+  and replay verification.
+- Root independently passed the focused 12-test ENG-418 suite, the complete
+  981-test solution gate (Core 692, Cards 153, AI 30, CLI 54, Match 52), the
+  direct M2 proof, solution formatting, and `git diff --check`. DZMZ Optimizer
+  remains unbound until the card-binding checkpoint; ENG-416 and ENG-417 remain
+  outside this commit.
