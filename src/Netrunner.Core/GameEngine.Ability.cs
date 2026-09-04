@@ -45,6 +45,12 @@ public static partial class GameEngine
             return [];
         }
 
+        TurnFactsState? activeFacts = CurrentAbilityFacts(working);
+        if (activeFacts is null)
+        {
+            return [];
+        }
+
         var materialized = new List<AbilityActionParameters>();
         foreach ((CardInstanceState source, ZoneState sourceZone) in EnumerateAbilitySources(working))
         {
@@ -121,9 +127,8 @@ public static partial class GameEngine
                     continue;
                 }
 
-                TurnFactsState? facts = CurrentAbilityFacts(working, window.ControllerId);
                 int uses = ability.UsageLimit == BehaviorAbilityUsageLimit.OncePerTurn
-                    && facts?.HasUsedAbility(source.Id, ability.Key) == true
+                    && activeFacts.HasUsedAbility(source.Id, ability.Key)
                     ? 1
                     : 0;
                 if (ability.UsageLimit == BehaviorAbilityUsageLimit.OncePerTurn && uses != 0)
@@ -341,8 +346,9 @@ public static partial class GameEngine
                 return [];
             }
 
-            ZoneState source = GetBehaviorZone(working, sourceZone, ownerSide);
-            if (!BehaviorZoneMatches(sourceZone, source.Kind, ownerSide))
+            if (!TryGetExistingBehaviorZone(working, sourceZone, ownerSide, out ZoneState? source)
+                || source is null
+                || !BehaviorZoneMatches(sourceZone, source.Kind, ownerSide))
             {
                 return [];
             }
@@ -512,7 +518,7 @@ public static partial class GameEngine
 
         if (operand.RequireNotRunThisTurn)
         {
-            TurnFactsState? facts = CurrentAbilityFacts(working, GetPlayer(working, PlayerSide.Runner).Id);
+            TurnFactsState? facts = CurrentAbilityFacts(working);
             if (facts is null || facts.AttemptedRunServerIds.Contains(selectedServer.Id))
             {
                 server = null;
@@ -707,10 +713,71 @@ public static partial class GameEngine
         }
     }
 
-    private static TurnFactsState? CurrentAbilityFacts(WorkingState working, PlayerId controllerId)
+    private static TurnFactsState? CurrentAbilityFacts(WorkingState working)
     {
-        PlayerSide side = GetPlayer(working, controllerId).Side;
-        return working.Turn.History?.ThisTurn(side);
+        PlayerSide activeSide = working.Turn.ActiveSide;
+        TurnFactsState? facts = working.Turn.History?.ThisTurn(activeSide);
+        return facts is not null
+            && facts.Side == activeSide
+            && facts.TurnNumber == working.Turn.TurnNumber
+            ? facts
+            : null;
+    }
+
+    private static bool TryGetExistingBehaviorZone(
+        WorkingState working,
+        BehaviorZone zone,
+        PlayerSide? ownerSide,
+        out ZoneState? existing)
+    {
+        existing = null;
+        PlayerSide side = ownerSide ?? PlayerSide.Corp;
+        ZoneKind? kind = zone switch
+        {
+            BehaviorZone.Deck => side == PlayerSide.Corp ? ZoneKind.CorpDeck : ZoneKind.RunnerStack,
+            BehaviorZone.Headquarters => ZoneKind.CorpHand,
+            BehaviorZone.Archives => ZoneKind.CorpDiscard,
+            BehaviorZone.Grip => ZoneKind.RunnerGrip,
+            BehaviorZone.Stack => ZoneKind.RunnerStack,
+            BehaviorZone.Heap => ZoneKind.RunnerHeap,
+            BehaviorZone.Rig => ZoneKind.RunnerRig,
+            BehaviorZone.PlayArea => ZoneKind.RunnerPlayArea,
+            BehaviorZone.ScoreArea => side == PlayerSide.Corp ? ZoneKind.CorpScore : ZoneKind.RunnerScore,
+            BehaviorZone.RemovedFromGame => side == PlayerSide.Corp
+                ? ZoneKind.CorpRemovedFromGame
+                : ZoneKind.RunnerRemovedFromGame,
+            BehaviorZone.ServerIce or BehaviorZone.ServerRoot => null,
+            _ => null,
+        };
+
+        if (zone == BehaviorZone.ServerRoot)
+        {
+            existing = working.Servers
+                .Where(server => server.Kind == ServerKind.Remote)
+                .OrderBy(server => server.Id.Value, StringComparer.Ordinal)
+                .Select(server => working.Zones.FirstOrDefault(zoneState => zoneState.Id == server.RootZoneId))
+                .FirstOrDefault(zoneState => zoneState is not null);
+            return existing is not null;
+        }
+
+        if (zone == BehaviorZone.ServerIce)
+        {
+            existing = working.Servers
+                .Where(server => server.Kind == ServerKind.Remote)
+                .OrderBy(server => server.Id.Value, StringComparer.Ordinal)
+                .Select(server => working.Zones.FirstOrDefault(zoneState => zoneState.Id == server.IceZoneId))
+                .FirstOrDefault(zoneState => zoneState is not null);
+            return existing is not null;
+        }
+
+        if (kind is not { } expectedKind)
+        {
+            return false;
+        }
+
+        existing = working.Zones.FirstOrDefault(zoneState =>
+            zoneState.Kind == expectedKind && zoneState.ServerId is null);
+        return existing is not null;
     }
 
     private static bool AbilityConditionsMatch(
@@ -751,9 +818,9 @@ public static partial class GameEngine
             BehaviorConditionKind.NotTagged => AbilityTagsForCondition(working, controllerId, condition) <= 0,
             BehaviorConditionKind.ClicksRemainingAtLeast => controller.Clicks >= condition.Value.GetValueOrDefault(),
             BehaviorConditionKind.Installed => IsInstalledCard(working, source.Id),
-            BehaviorConditionKind.InstalledThisTurn => CurrentAbilityFacts(working, controllerId)?.InstalledCardIds.Contains(source.Id) == true,
+            BehaviorConditionKind.InstalledThisTurn => CurrentAbilityFacts(working)?.InstalledCardIds.Contains(source.Id) == true,
             BehaviorConditionKind.SuccessfulRun => working.RunState?.Successful == true,
-            BehaviorConditionKind.SuccessfulRunThisTurn => CurrentAbilityFacts(working, controllerId)?.SuccessfulRun == true,
+            BehaviorConditionKind.SuccessfulRunThisTurn => CurrentAbilityFacts(working)?.SuccessfulRun == true,
             BehaviorConditionKind.SourceController => source.OwnerSide == controller.Side,
             BehaviorConditionKind.Encountering => working.RunState is
             {
@@ -804,6 +871,11 @@ public static partial class GameEngine
         PlayerId controllerId,
         BehaviorPaidAbility ability)
     {
+        if (CurrentAbilityFacts(working) is null)
+        {
+            return false;
+        }
+
         try
         {
             long credits = 0;
@@ -1008,7 +1080,6 @@ public static partial class GameEngine
         {
             case TurnFrame turn:
                 if (working.RunState is not null
-                    || turn.ActiveSide != controller.Side
                     || working.Turn.ActiveSide != turn.ActiveSide
                     || working.Turn.TurnNumber != turn.TurnNumber)
                 {
@@ -1017,7 +1088,8 @@ public static partial class GameEngine
 
                 if (parameters.Activation == BehaviorAbilityActivation.ClickAction)
                 {
-                    if (turn.Stage != TurnFrameStage.AwaitingAction
+                    if (turn.ActiveSide != controller.Side
+                        || turn.Stage != TurnFrameStage.AwaitingAction
                         || turn.PriorityHolder.HasValue
                         || turn.PriorityWindow.HasValue)
                     {
@@ -1195,7 +1267,7 @@ public static partial class GameEngine
             }
         }
 
-        TurnFactsState? facts = CurrentAbilityFacts(working, frame.Controller);
+        TurnFactsState? facts = CurrentAbilityFacts(working);
         if (facts is null)
         {
             throw new ResolutionFailureException("Ability lifecycle requires current turn facts.");
@@ -1506,7 +1578,12 @@ public static partial class GameEngine
             return;
         }
 
-        PlayerSide side = GetPlayer(working, frame.Controller).Side;
+        if (CurrentAbilityFacts(working) is null)
+        {
+            throw new ResolutionFailureException("Ability usage requires current active turn facts.");
+        }
+
+        PlayerSide side = working.Turn.ActiveSide;
         TurnHistoryState history = working.Turn.History
             ?? throw new ResolutionFailureException("Ability usage requires current turn facts.");
         working.Turn = new TurnState(

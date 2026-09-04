@@ -3058,6 +3058,7 @@ public static partial class GameEngine
         CardInstanceState card = GetCard(working, cardId);
         bool faceUp = kind switch
         {
+            BehaviorTransferKind.Shuffle when destination.Kind is ZoneKind.CorpDeck or ZoneKind.RunnerStack => false,
             BehaviorTransferKind.Shuffle => frozenSelection?.OriginalFaceUp ?? card.FaceUp,
             BehaviorTransferKind.AddToHand => false,
             BehaviorTransferKind.Trash => destination.Kind is ZoneKind.CorpDiscard or ZoneKind.RunnerHeap,
@@ -3522,9 +3523,14 @@ public static partial class GameEngine
         return GetZone(working, kind);
     }
 
-    private static void MarkInstalledThisTurn(WorkingState working, PlayerSide side, CardInstanceId cardId)
+    private static void MarkInstalledThisTurn(WorkingState working, CardInstanceId cardId)
     {
-        if (working.Turn.History is null || working.Turn.History.ThisTurn(side) is null)
+        PlayerSide activeSide = working.Turn.ActiveSide;
+        TurnHistoryState? history = working.Turn.History;
+        TurnFactsState? facts = history?.ThisTurn(activeSide);
+        if (facts is null
+            || facts.Side != activeSide
+            || facts.TurnNumber != working.Turn.TurnNumber)
         {
             return;
         }
@@ -3535,7 +3541,7 @@ public static partial class GameEngine
             working.Turn.Phase,
             working.Turn.TurnNumber,
             working.Turn.Step,
-            working.Turn.History.MarkInstalled(side, cardId));
+            history!.MarkInstalled(activeSide, cardId));
     }
 
 }

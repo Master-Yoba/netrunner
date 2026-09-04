@@ -4121,8 +4121,11 @@ public static class StateInvariantValidator
 
         if (controller is not null)
         {
-            TurnFactsState? facts = state.Turn.History?.ThisTurn(controller.Side);
-            if (facts is null)
+            PlayerSide activeSide = state.Turn.ActiveSide;
+            TurnFactsState? facts = state.Turn.History?.ThisTurn(activeSide);
+            if (facts is null
+                || facts.Side != activeSide
+                || facts.TurnNumber != state.Turn.TurnNumber)
             {
                 Add(violations, "resolution.ability-turn-facts-missing", path, "Ability lifecycle requires current turn facts.");
             }
@@ -4150,12 +4153,13 @@ public static class StateInvariantValidator
         {
             bool click = frame.Activation == BehaviorAbilityActivation.ClickAction;
             parentMatches = state.RunState is null
-                && turn.ActiveSide == controller?.Side
+                && turn.ActiveSide == state.Turn.ActiveSide
                 && state.Turn.ActiveSide == turn.ActiveSide
                 && state.Turn.TurnNumber == turn.TurnNumber
                 && (click
-                    ? turn.Stage == TurnFrameStage.AwaitingAction
-                    : turn.Stage is (TurnFrameStage.BeforeTurnPriority
+                    ? turn.ActiveSide == controller?.Side
+                        && turn.Stage == TurnFrameStage.AwaitingAction
+                        : turn.Stage is (TurnFrameStage.BeforeTurnPriority
                         or TurnFrameStage.ActionPriority
                         or TurnFrameStage.DiscardPriority)
                         && turn.AllowsPaidAbilities

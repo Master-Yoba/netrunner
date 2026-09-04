@@ -223,6 +223,185 @@ public sealed class PaidAbilityMaterializationTests
     }
 
     [Fact]
+    public void StaleRunnerTurnFactsDoNotOfferRunnerAbilitiesDuringCorpTurn()
+    {
+        CardDefinitionId definition = new("test:materialize-stale-runner-facts");
+        CardInstanceId sourceId = new("card:materialize-stale-runner-facts");
+        BehaviorPaidAbility successfulRun = Ability(
+            "ability:successful-run",
+            BehaviorAbilityTiming.AnyPaidWindow,
+            BehaviorAbilityActivation.PaidAbility,
+            [new BehaviorCost(BehaviorCostKind.Credits)],
+            conditions: [BehaviorCondition.SuccessfulRunThisTurn()]);
+        BehaviorPaidAbility installed = Ability(
+            "ability:installed",
+            BehaviorAbilityTiming.AnyPaidWindow,
+            BehaviorAbilityActivation.PaidAbility,
+            [new BehaviorCost(BehaviorCostKind.Credits)],
+            conditions: [BehaviorCondition.InstalledThisTurn()]);
+        BehaviorCatalog catalog = new BehaviorCatalogBuilder("test:materialize-stale-runner-facts")
+            .Add(new CardBehaviorDefinition(definition, PlayerSide.Runner, paidAbilities: [successfulRun, installed]))
+            .Build();
+
+        GameState state = BuildState(
+            catalog,
+            PlayerSide.Corp,
+            TurnFrameStage.ActionPriority,
+            [Source(sourceId.Value, definition, PlayerSide.Runner, ZoneKind.RunnerRig)],
+            turnNumber: 2);
+        TurnFactsState corpFacts = state.Turn.History!.CorpThisTurn!;
+        TurnFactsState staleRunnerFacts = new(
+            1,
+            PlayerSide.Runner,
+            1,
+            4,
+            0,
+            turnBegan: true,
+            mandatoryDrawPerformed: false,
+            actionPhaseEnded: false,
+            discardPhaseEnded: false,
+            installedCardIds: [sourceId],
+            successfulRun: true);
+        state = ReplaceTurn(
+            state,
+            new TurnState(
+                PlayerSide.Corp,
+                TurnPhase.Corp,
+                2,
+                TurnStep.CorpAction,
+                new TurnHistoryState(1, corpFacts, null, staleRunnerFacts, null)));
+        state = ReplaceStack(
+            state,
+            [new TurnFrame(
+                1,
+                ResolutionBehaviorIds.Turn,
+                PlayerSide.Corp,
+                2,
+                TurnFrameStage.ActionPriority,
+                TurnPriorityWindowKind.PaidRezAndScore,
+                PlayerSide.Runner)]);
+
+        Assert.Empty(GameEngine.MaterializeAbilityActionParameters(state, catalog));
+    }
+
+    [Fact]
+    public void OpponentTurnOncePerTurnUsageRecordsActiveTurnFacts()
+    {
+        CardDefinitionId definition = new("test:materialize-opponent-usage");
+        CardInstanceId sourceId = new("card:materialize-opponent-usage");
+        BehaviorPaidAbility once = Ability(
+            "ability:opponent-once",
+            BehaviorAbilityTiming.AnyPaidWindow,
+            BehaviorAbilityActivation.PaidAbility,
+            [new BehaviorCost(BehaviorCostKind.Credits)],
+            usageLimit: BehaviorAbilityUsageLimit.OncePerTurn);
+        BehaviorCatalog catalog = new BehaviorCatalogBuilder("test:materialize-opponent-usage")
+            .Add(new CardBehaviorDefinition(definition, PlayerSide.Runner, paidAbilities: [once]))
+            .Build();
+
+        GameState state = BuildState(
+            catalog,
+            PlayerSide.Corp,
+            TurnFrameStage.ActionPriority,
+            [Source(sourceId.Value, definition, PlayerSide.Runner, ZoneKind.RunnerRig)],
+            turnNumber: 2);
+        TurnFactsState corpFacts = state.Turn.History!.CorpThisTurn!;
+        TurnFactsState staleRunnerFacts = new(
+            1,
+            PlayerSide.Runner,
+            1,
+            4,
+            0,
+            turnBegan: true,
+            mandatoryDrawPerformed: false,
+            actionPhaseEnded: false,
+            discardPhaseEnded: false,
+            usedAbilityKeys: [new AbilityUseKey(sourceId, "ability:previous")]);
+        state = ReplaceTurn(
+            state,
+            new TurnState(
+                PlayerSide.Corp,
+                TurnPhase.Corp,
+                2,
+                TurnStep.CorpAction,
+                new TurnHistoryState(1, corpFacts, null, staleRunnerFacts, null)));
+        TurnFrame frame = new(
+            1,
+            ResolutionBehaviorIds.Turn,
+            PlayerSide.Corp,
+            2,
+            TurnFrameStage.ActionPriority,
+            TurnPriorityWindowKind.PaidRezAndScore,
+            PlayerSide.Runner);
+        state = ReplaceStack(state, []);
+
+        GameState prompt = GameEngine.BeginResolution(state, frame, catalog);
+        PendingDecision decision = Assert.IsType<PendingDecision>(prompt.PendingDecision);
+        LegalAction action = Assert.Single(
+            decision.LegalActions,
+            candidate => candidate.Kind == ActionKind.UseAbility);
+        ApplyResult result = GameEngine.Apply(
+            prompt,
+            new ActionSubmission(decision.Owner, decision.Id, decision.Revision, action.Id),
+            catalog);
+
+        Assert.True(result.Accepted, result.Rejection?.Message);
+        Assert.Contains(
+            result.State.Turn.History!.CorpThisTurn!.UsedAbilityKeys,
+            key => key.SourceCardId == sourceId && key.AbilityKey == once.Key);
+        Assert.DoesNotContain(
+            result.State.Turn.History.RunnerThisTurn!.UsedAbilityKeys,
+            key => key.SourceCardId == sourceId && key.AbilityKey == once.Key);
+    }
+
+    [Fact]
+    public void AdditionalCostMaterializationDoesNotCreateAbsentLazyZone()
+    {
+        CardDefinitionId definition = new("test:materialize-absent-lazy-zone");
+        CardInstanceId sourceId = new("card:materialize-absent-lazy-zone");
+        BehaviorTarget target = BehaviorTarget.CardsInZone(
+            BehaviorZone.PlayArea,
+            new BehaviorCardFilter(ownerSide: PlayerSide.Runner));
+        BehaviorPaidAbility ability = Ability(
+            "ability:absent-lazy-zone",
+            BehaviorAbilityTiming.AnyPaidWindow,
+            BehaviorAbilityActivation.PaidAbility,
+            [new BehaviorCost(
+                BehaviorCostKind.Additional,
+                additionalKey: "cost:absent-lazy-zone",
+                additionalTarget: target,
+                additionalKind: BehaviorAdditionalCostKind.TrashCards)]);
+        BehaviorCatalog catalog = new BehaviorCatalogBuilder("test:materialize-absent-lazy-zone")
+            .Add(new CardBehaviorDefinition(definition, PlayerSide.Runner, paidAbilities: [ability]))
+            .Build();
+
+        GameState state = BuildState(
+            catalog,
+            PlayerSide.Runner,
+            TurnFrameStage.ActionPriority,
+            [Source(sourceId.Value, definition, PlayerSide.Runner, ZoneKind.RunnerRig)]);
+        ulong allocatorBefore = state.Allocator.NextSequence;
+        Assert.DoesNotContain(state.Zones, zone => zone.Kind == ZoneKind.RunnerPlayArea);
+        state = ReplaceStack(state, []);
+
+        GameState prompt = GameEngine.BeginResolution(
+            state,
+            new TurnFrame(
+                1,
+                ResolutionBehaviorIds.Turn,
+                PlayerSide.Runner,
+                1,
+                TurnFrameStage.ActionPriority,
+                TurnPriorityWindowKind.PaidAndRez,
+                PlayerSide.Runner),
+            catalog);
+
+        Assert.DoesNotContain(prompt.Zones, zone => zone.Kind == ZoneKind.RunnerPlayArea);
+        Assert.Equal(checked(allocatorBefore + 2), prompt.Allocator.NextSequence);
+        Assert.DoesNotContain(prompt.PendingDecision!.LegalActions, action => action.Kind == ActionKind.UseAbility);
+    }
+
+    [Fact]
     public void DuplicateUsageEntriesSurviveConstructionAndFailInvariantValidation()
     {
         CardInstanceId sourceId = new("card:materialize-duplicate-usage");
@@ -587,6 +766,32 @@ public sealed class PaidAbilityMaterializationTests
         state.DecisionRevision,
         state.EventSequence,
         state.ResolutionStack,
+        state.PendingDecision,
+        state.ActionSequence,
+        state.InitialSeed,
+        state.RunState,
+        state.RulesState,
+        state.BehaviorRegistryVersion,
+        state.BehaviorCatalogFingerprint,
+        state.RuntimeCardCatalogVersion,
+        state.RuntimeCardCatalogFingerprint);
+
+    private static GameState ReplaceStack(GameState state, IReadOnlyList<ResolutionFrame> resolutionStack) => new(
+        state.SchemaVersion,
+        state.GameId,
+        state.RulesVersion,
+        state.CardDataVersion,
+        state.Players,
+        state.Cards,
+        state.Zones,
+        state.Servers,
+        state.Turn,
+        state.Outcome,
+        state.RandomState,
+        state.Allocator,
+        state.DecisionRevision,
+        state.EventSequence,
+        resolutionStack,
         state.PendingDecision,
         state.ActionSequence,
         state.InitialSeed,

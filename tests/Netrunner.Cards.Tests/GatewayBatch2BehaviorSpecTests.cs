@@ -183,6 +183,10 @@ public sealed class GatewayBatch2BehaviorSpecTests
         Assert.All(selected, cardId =>
             Assert.Contains(cardId, completed.State.GetZone(ZoneKind.CorpDeck).CardIds));
         Assert.DoesNotContain(selected, cardId => completed.State.GetZone(ZoneKind.CorpDiscard).CardIds.Contains(cardId));
+        Assert.All(selected, cardId => Assert.False(completed.State.GetCard(cardId).FaceUp));
+        string runnerJson = EngineJson.Serialize(
+            ObservationBuilder.Build(completed.State, PlayerSide.Runner, catalog));
+        Assert.DoesNotContain(selected, cardId => runnerJson.Contains(cardId.Value, StringComparison.Ordinal));
         Assert.Single(
             completed.Events,
             @event => @event.Kind == EngineEventKinds.BehaviorCardsShuffled

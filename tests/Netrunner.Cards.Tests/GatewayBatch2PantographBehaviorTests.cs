@@ -67,6 +67,10 @@ public sealed class GatewayBatch2PantographBehaviorTests
         Assert.Equal(0, completed.State.GetPlayer(fixture.RunnerId).Credits);
         Assert.Equal(4, completed.State.GetPlayer(fixture.RunnerId).Clicks);
         Assert.Equal(ZoneKind.RunnerRig, completed.State.GetZone(completed.State.GetCard(fermenterId).ZoneId).Kind);
+        TurnHistoryState history = Assert.IsType<TurnHistoryState>(completed.State.Turn.History);
+        Assert.Contains(fermenterId, history.CorpThisTurn!.InstalledCardIds);
+        Assert.DoesNotContain(fermenterId, history.RunnerThisTurn?.InstalledCardIds ?? []);
+        Assert.DoesNotContain(fermenterId, history.RunnerLastTurn?.InstalledCardIds ?? []);
         Assert.Equal(5, completed.State.RulesState!.Players
             .Single(player => player.PlayerId == fixture.RunnerId).UsedMemory);
         Assert.Contains(

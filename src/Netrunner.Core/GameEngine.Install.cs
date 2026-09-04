@@ -50,7 +50,7 @@ public static partial class GameEngine
         }
 
         MoveCard(working, card, hand, destination);
-        MarkInstalledThisTurn(working, side, cardId);
+        MarkInstalledThisTurn(working, cardId);
         ApplyCreditDelta(working, player.Id, -behavior.InstallCost);
         Emit(working, EngineEventKinds.CardInstalled, new CardInstalledEventPayload(
             side,
@@ -449,7 +449,7 @@ public static partial class GameEngine
             frame.CardClass is RuntimeCardClass.Program or RuntimeCardClass.Hardware or RuntimeCardClass.Resource,
             false,
             installed.AdvancementCounters));
-        MarkInstalledThisTurn(working, player.Side, frame.CardId);
+        MarkInstalledThisTurn(working, frame.CardId);
 
         if (frame.CardClass == RuntimeCardClass.Program)
         {
@@ -580,7 +580,7 @@ public static partial class GameEngine
             faceUp: false,
             rezzed: false,
             installed.AdvancementCounters));
-        MarkInstalledThisTurn(working, PlayerSide.Corp, plan.Card.Id);
+        MarkInstalledThisTurn(working, plan.Card.Id);
         Emit(working, EngineEventKinds.CardInstalled, new CardInstalledEventPayload(
             PlayerSide.Corp,
             plan.Card.Id,

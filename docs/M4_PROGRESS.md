@@ -3702,3 +3702,28 @@ errors; runtime action expansion and full verification remain pending.
   fixture cannot yet execute from a versioned match request to its declared
   full-game outcome. That prerequisite remains tracked rather than hidden by
   a prebuilt-state test.
+
+### 2026-09-04 — PR #7 P2 review checkpoint accepted
+
+- Root assessed all four automated inline findings as valid and split their
+  implementation across two bounded Luna Max lanes. Cards shuffled from
+  faceup Archives into R&D are now normalized facedown before observation;
+  generic additional-cost projection resolves existing source zones without
+  creating lazy play-area or removed-from-game zones or consuming allocator
+  state.
+- Installed-card facts and once-per-turn ability uses now belong to the active
+  formal turn, independent of the installed card or ability controller.
+  Ability condition reads require facts whose side and turn number match the
+  active turn, preventing retained Runner facts from satisfying
+  `InstalledThisTurn` or `SuccessfulRunThisTurn` during the following Corp
+  turn. Opponent-priority paid abilities remain executable and their usage is
+  recorded in that active turn's ledger; click actions remain restricted to
+  the active side.
+- Regressions cover Spin Doctor hidden-deck visibility, Pantograph installing
+  a Runner card during the Corp turn, stale cross-turn condition facts,
+  opponent-turn once-per-turn consumption, and allocation-free lookup of an
+  absent lazy additional-cost zone. Root passed focused Core 24/24 and Cards
+  13/13, then `./scripts/verify.sh`: zero-warning build, formatting and report
+  drift clean, all 952 tests (Core 664, Cards 153, AI 30, CLI 54, Match 51),
+  unchanged M1/M2 deterministic proofs, both M4 client smokes, M3 smoke, and
+  the secret scan.
