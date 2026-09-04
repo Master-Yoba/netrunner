@@ -307,18 +307,19 @@ public partial class Main : Control
 			{
 				// This mode intentionally uses the real ten-second production delay;
 				// its frame/input assertions run while the worker is actually waiting.
+				// The checked-in M2 smoke is a behavior-only legacy fixture, so it
+				// deliberately exercises the coordinator's compatibility adapter.
 				AgentDelay = TimeSpan.FromSeconds(10),
 				CardMetadataResolver = _metadataResolver,
-				RuntimeCardCatalog = _runtimeCardCatalog,
 			}
 			: _smokeTest
 			? new MatchCoordinatorOptions
 			{
 				// Keep the production-facing ten-second setting visible in
-				// the smoke path while injecting a short deterministic delay.
+				// the smoke path while injecting a short deterministic delay. This
+				// M2 fixture likewise remains on the behavior-only compatibility path.
 				AgentDelay = TimeSpan.FromSeconds(10),
 				CardMetadataResolver = _metadataResolver,
-				RuntimeCardCatalog = _runtimeCardCatalog,
 				Delay = static (_, cancellationToken) =>
 					new ValueTask(Task.Delay(TimeSpan.FromMilliseconds(45), cancellationToken)),
 			}

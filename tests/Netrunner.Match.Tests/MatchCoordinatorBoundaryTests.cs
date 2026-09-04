@@ -17,15 +17,18 @@ public sealed class MatchCoordinatorBoundaryTests
                 Delay = static (_, _) => ValueTask.CompletedTask,
             },
             new FirstLegalAgent());
-        GameState state = M2ScenarioSetup.Build(LoadRepresentativeWithoutStateHash());
+        var rezzedIce = new CardInstanceId("card:1");
+        GameState state = WithRezzedCard(
+            M2ScenarioSetup.Build(LoadRepresentativeWithoutStateHash()),
+            rezzedIce);
         SetPrivateState(coordinator, state);
 
         ZoneId corpHand = state.Zones.Single(zone => zone.Kind == ZoneKind.CorpHand).Id;
         ZoneId remoteRoot = state.Servers
             .Single(server => server.Kind == ServerKind.Remote)
             .RootZoneId;
-        var hiddenAnsel = new CardInstanceId("card:1");
-        var hiddenBran = new CardInstanceId("card:2");
+        var hiddenAnsel = new CardInstanceId("card:3");
+        var hiddenBran = new CardInstanceId("card:4");
         var publicCard = new CardInstanceId("card:5");
         IReadOnlyList<EngineEvent> events =
         [
@@ -46,6 +49,10 @@ public sealed class MatchCoordinatorBoundaryTests
                 3,
                 EngineEventKinds.CardRezzed,
                 new CardRezzedEventPayload(publicCard, creditCost: 0)),
+            new EngineEvent(
+                4,
+                EngineEventKinds.IceApproached,
+                new IceApproachedEventPayload(new RunId("run:public-ice"), rezzedIce)),
         ];
 
         MatchSnapshot snapshot = InvokePublish(coordinator, events, state);
@@ -56,6 +63,10 @@ public sealed class MatchCoordinatorBoundaryTests
             snapshot.Events,
             value => value.Kind == EngineEventKinds.CardRezzed
                 && ((CardRezzedEventPayload)value.Payload).CardId == publicCard);
+        Assert.Contains(
+            snapshot.Events,
+            value => value.Kind == EngineEventKinds.IceApproached
+                && ((IceApproachedEventPayload)value.Payload).IceId == rezzedIce);
         Assert.DoesNotContain(
             EngineJson.Serialize(snapshot.Events),
             hiddenAnsel.Value,
@@ -180,6 +191,41 @@ public sealed class MatchCoordinatorBoundaryTests
         (GameState)typeof(MatchCoordinator)
             .GetField("_state", BindingFlags.Instance | BindingFlags.NonPublic)!
             .GetValue(coordinator)!;
+
+    private static GameState WithRezzedCard(GameState state, CardInstanceId cardId) => new(
+        state.SchemaVersion,
+        state.GameId,
+        state.RulesVersion,
+        state.CardDataVersion,
+        state.Players,
+        state.Cards.Select(card => card.Id == cardId
+            ? new CardInstanceState(
+                card.Id,
+                card.DefinitionId,
+                card.ZoneId,
+                card.OwnerSide,
+                card.FaceUp,
+                rezzed: true,
+                advancementCounters: card.AdvancementCounters)
+            : card).ToArray(),
+        state.Zones,
+        state.Servers,
+        state.Turn,
+        state.Outcome,
+        state.RandomState,
+        state.Allocator,
+        state.DecisionRevision,
+        state.EventSequence,
+        state.ResolutionStack,
+        state.PendingDecision,
+        state.ActionSequence,
+        state.InitialSeed,
+        state.RunState,
+        state.RulesState,
+        state.BehaviorRegistryVersion,
+        state.BehaviorCatalogFingerprint,
+        state.RuntimeCardCatalogVersion,
+        state.RuntimeCardCatalogFingerprint);
 
     private sealed record FutureCardReferenceEventPayload : EngineEventPayload
     {

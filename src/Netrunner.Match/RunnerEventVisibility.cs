@@ -78,6 +78,7 @@ internal static class RunnerEventVisibility
 
         return card.OwnerSide == PlayerSide.Runner
             || card.FaceUp
+            || card.Rezzed
             || state.RunState?.ChosenAccessCards.Contains(cardId) == true;
     }
 
