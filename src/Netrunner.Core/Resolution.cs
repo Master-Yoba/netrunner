@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Serialization;
 
 namespace Netrunner.Core;
@@ -18,6 +20,7 @@ public static partial class ResolutionBehaviorIds
     public const string TurnDiscard = "rules.turn-discard-26.03";
     public const string Install = "rules.install-26.03";
     public const string CardPlay = "rules.card-play-26.03";
+    public const string IceSubroutine = "rules.ice-subroutine-26.03";
 }
 
 public enum ResolutionContinuation
@@ -36,6 +39,10 @@ public enum InstallInitiationKind
 {
     BasicAction = 0,
     BehaviorEffect = 1,
+    /// <summary>Corp card install initiated by a choice ICE subroutine.</summary>
+    IceSubroutineNormal = 2,
+    /// <summary>Corp ICE install directly inward from a choice ICE subroutine.</summary>
+    IceSubroutineInwardIgnoreCosts = 3,
 }
 
 /// <summary>
@@ -77,6 +84,7 @@ public enum EffectResolutionStage
 [JsonDerivedType(typeof(EffectCheckpointFrame), "effect-checkpoint")]
 [JsonDerivedType(typeof(BehaviorResolutionFrame), "card-behavior")]
 [JsonDerivedType(typeof(AbilityFrame), "ability")]
+[JsonDerivedType(typeof(IceSubroutineFrame), "ice-subroutine")]
 public abstract record ResolutionFrame
 {
     protected ResolutionFrame(int version, string behaviorId)
@@ -359,7 +367,8 @@ public sealed record InstallFrame : ResolutionFrame
         IReadOnlyList<CardDefinitionId>? candidateReplacementDefinitionIds = null,
         InstallInitiationKind initiationKind = InstallInitiationKind.BasicAction,
         string? parentFrameIdentity = null,
-        CostQuote? costQuote = null)
+        CostQuote? costQuote = null,
+        CardInstanceId? inwardAnchorIceId = null)
         : base(version, behaviorId)
     {
         if (!Enum.IsDefined(cardClass))
@@ -384,7 +393,9 @@ public sealed record InstallFrame : ResolutionFrame
                 nameof(parentFrameIdentity));
         }
 
-        if (initiationKind == InstallInitiationKind.BehaviorEffect
+        if ((initiationKind is InstallInitiationKind.BehaviorEffect
+                or InstallInitiationKind.IceSubroutineNormal
+                or InstallInitiationKind.IceSubroutineInwardIgnoreCosts)
             && !StableIdentifier.TryValidate(parentFrameIdentity))
         {
             throw new ArgumentException(
@@ -418,6 +429,41 @@ public sealed record InstallFrame : ResolutionFrame
         InitiationKind = initiationKind;
         ParentFrameIdentity = parentFrameIdentity;
         CostQuote = costQuote;
+        InwardAnchorIceId = inwardAnchorIceId;
+
+        if (initiationKind == InstallInitiationKind.IceSubroutineInwardIgnoreCosts
+            && (destinationKind != InstallDestinationKind.ServerIce
+                || serverId is null
+                || createNewRemote
+                || inwardAnchorIceId is null
+                || cardClass != RuntimeCardClass.Ice
+                || installCost != 0
+                || CandidateReplacementCardIds.Count != 0
+                || RequiredReplacementCardIds.Count != 0
+                || SelectedReplacementCardIds.Count != 0))
+        {
+            throw new ArgumentException(
+                "An inward ICE-subroutine install must target an existing server ICE zone, cost zero, and have no replacement selection.",
+                nameof(inwardAnchorIceId));
+        }
+
+        if (initiationKind is InstallInitiationKind.IceSubroutineNormal
+            or InstallInitiationKind.IceSubroutineInwardIgnoreCosts)
+        {
+            if (inwardAnchorIceId is not null
+                && initiationKind != InstallInitiationKind.IceSubroutineInwardIgnoreCosts)
+            {
+                throw new ArgumentException(
+                    "Only an inward ICE-subroutine install may carry an inward anchor.",
+                    nameof(inwardAnchorIceId));
+            }
+        }
+        else if (inwardAnchorIceId is not null)
+        {
+            throw new ArgumentException(
+                "Only an inward ICE-subroutine install may carry an inward anchor.",
+                nameof(inwardAnchorIceId));
+        }
     }
 
     public InstallFrame(
@@ -438,7 +484,8 @@ public sealed record InstallFrame : ResolutionFrame
         IReadOnlyList<CardDefinitionId>? candidateReplacementDefinitionIds = null,
         InstallInitiationKind initiationKind = InstallInitiationKind.BasicAction,
         string? parentFrameIdentity = null,
-        CostQuote? costQuote = null)
+        CostQuote? costQuote = null,
+        CardInstanceId? inwardAnchorIceId = null)
         : this(
             1,
             ResolutionBehaviorIds.Install,
@@ -459,7 +506,8 @@ public sealed record InstallFrame : ResolutionFrame
             candidateReplacementDefinitionIds,
             initiationKind,
             parentFrameIdentity,
-            costQuote)
+            costQuote,
+            inwardAnchorIceId)
     {
     }
 
@@ -561,6 +609,15 @@ public sealed record InstallFrame : ResolutionFrame
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public CostQuote? CostQuote { get; private set; }
 
+    /// <summary>
+    /// Physical ICE retained as the anchor for a directly-inward install.
+    /// The incoming ICE is inserted immediately before this card in the
+    /// inner-to-outer zone ordering.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CardInstanceId? InwardAnchorIceId { get; private set; }
+
     internal InstallFrame Select(CardInstanceId cardId, int installCost, CostQuote? costQuote = null) => new(
         Version,
         BehaviorId,
@@ -581,7 +638,8 @@ public sealed record InstallFrame : ResolutionFrame
         CandidateReplacementDefinitionIds,
         InitiationKind,
         ParentFrameIdentity,
-        costQuote);
+        costQuote,
+        InwardAnchorIceId);
 
     internal InstallFrame WithInstallCost(int installCost, CostQuote? costQuote = null) => new(
         Version,
@@ -603,7 +661,8 @@ public sealed record InstallFrame : ResolutionFrame
         CandidateReplacementDefinitionIds,
         InitiationKind,
         ParentFrameIdentity,
-        costQuote);
+        costQuote,
+        InwardAnchorIceId);
 
     private static ReadOnlyCollection<CardInstanceId> Freeze(IEnumerable<CardInstanceId>? values) =>
         new((values ?? []).ToArray());
@@ -780,6 +839,205 @@ public sealed record RunTimingFrame : ResolutionFrame
     [JsonInclude]
     [JsonRequired]
     public RunTimingStep Step { get; private set; }
+}
+
+/// <summary>Persisted stage of a printed ICE subroutine continuation.</summary>
+public enum IceSubroutineFrameStage
+{
+    AwaitingChoice,
+    AwaitingInstall,
+}
+
+/// <summary>
+/// Serializable, authenticated continuation for one printed ICE
+/// subroutine.  The run timing frame is replaced while this cursor is live;
+/// therefore the cursor itself carries every identity needed to resume the
+/// exact run, encounter, ICE, ordinal, server, and physical ICE-zone
+/// topology after save/load.  Choices are frozen as typed payloads and are
+/// re-materialized/validated by the reducer before any effect is applied.
+/// </summary>
+public sealed record IceSubroutineFrame : ResolutionFrame
+{
+    [JsonConstructor]
+    public IceSubroutineFrame(
+        int version,
+        string behaviorId,
+        string frameIdentity,
+        RunId runId,
+        EncounterId encounterId,
+        CardInstanceId iceId,
+        CardDefinitionId iceDefinitionId,
+        SubroutineId subroutineId,
+        int ordinal,
+        ServerId serverId,
+        ZoneId iceZoneId,
+        IReadOnlyList<CardInstanceId> iceZoneCardIds,
+        string catalogFingerprint,
+        IceSubroutineFrameStage stage,
+        IReadOnlyList<IceSubroutineChoiceParameters> choices)
+        : base(version, behaviorId)
+    {
+        if (!StableIdentifier.TryValidate(frameIdentity))
+        {
+            throw new ArgumentException("An ICE subroutine frame requires a stable frame identity.", nameof(frameIdentity));
+        }
+
+        if (!StableIdentifier.TryValidate(catalogFingerprint)
+            || !DeterministicHash.IsSha256Hex(catalogFingerprint))
+        {
+            throw new ArgumentException("An ICE subroutine frame requires a lowercase SHA-256 catalog fingerprint.", nameof(catalogFingerprint));
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegative(ordinal);
+
+        if (!Enum.IsDefined(stage))
+        {
+            throw new ArgumentOutOfRangeException(nameof(stage));
+        }
+
+        ArgumentNullException.ThrowIfNull(iceZoneCardIds);
+        ArgumentNullException.ThrowIfNull(choices);
+        if (choices.Any(choice => choice is null))
+        {
+            throw new ArgumentException("ICE subroutine frame choices must not contain null entries.", nameof(choices));
+        }
+
+        FrameIdentity = frameIdentity;
+        RunId = runId;
+        EncounterId = encounterId;
+        IceId = iceId;
+        IceDefinitionId = iceDefinitionId;
+        SubroutineId = subroutineId;
+        Ordinal = ordinal;
+        ServerId = serverId;
+        IceZoneId = iceZoneId;
+        IceZoneCardIds = new ReadOnlyCollection<CardInstanceId>(iceZoneCardIds.ToArray());
+        CatalogFingerprint = catalogFingerprint;
+        Stage = stage;
+        Choices = new ReadOnlyCollection<IceSubroutineChoiceParameters>(choices
+            .Select(choice => new IceSubroutineChoiceParameters(
+                choice.FrameIdentity,
+                choice.Choice,
+                choice.CardId,
+                choice.DestinationKind,
+                choice.ServerId,
+                choice.CreateNewRemote,
+                choice.CreditCost,
+                choice.HostedCredits))
+            .ToArray());
+    }
+
+    public IceSubroutineFrame(
+        RunId runId,
+        EncounterId encounterId,
+        CardInstanceId iceId,
+        CardDefinitionId iceDefinitionId,
+        SubroutineId subroutineId,
+        int ordinal,
+        ServerId serverId,
+        ZoneId iceZoneId,
+        IReadOnlyList<CardInstanceId> iceZoneCardIds,
+        string catalogFingerprint,
+        IReadOnlyList<IceSubroutineChoiceParameters> choices)
+        : this(
+            1,
+            ResolutionBehaviorIds.IceSubroutine,
+            ComputeIdentity(runId, encounterId, iceId, subroutineId, ordinal),
+            runId,
+            encounterId,
+            iceId,
+            iceDefinitionId,
+            subroutineId,
+            ordinal,
+            serverId,
+            iceZoneId,
+            iceZoneCardIds,
+            catalogFingerprint,
+            IceSubroutineFrameStage.AwaitingChoice,
+            choices)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string FrameIdentity { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunId RunId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public EncounterId EncounterId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId IceId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardDefinitionId IceDefinitionId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public SubroutineId SubroutineId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Ordinal { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ServerId ServerId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ZoneId IceZoneId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public IReadOnlyList<CardInstanceId> IceZoneCardIds { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string CatalogFingerprint { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public IceSubroutineFrameStage Stage { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public IReadOnlyList<IceSubroutineChoiceParameters> Choices { get; private set; }
+
+    internal static string ComputeIdentity(
+        RunId runId,
+        EncounterId encounterId,
+        CardInstanceId iceId,
+        SubroutineId subroutineId,
+        int ordinal)
+    {
+        string seed = string.Join('|', runId.Value, encounterId.Value, iceId.Value, subroutineId.Value, ordinal);
+        return "ice-subroutine:" + Convert.ToHexString(
+            SHA256.HashData(Encoding.UTF8.GetBytes(seed))).ToLowerInvariant();
+    }
+
+    internal IceSubroutineFrame WithStage(IceSubroutineFrameStage stage) => new(
+        Version,
+        BehaviorId,
+        FrameIdentity,
+        RunId,
+        EncounterId,
+        IceId,
+        IceDefinitionId,
+        SubroutineId,
+        Ordinal,
+        ServerId,
+        IceZoneId,
+        IceZoneCardIds,
+        CatalogFingerprint,
+        stage,
+        Choices);
 }
 
 /// <summary>
@@ -1218,6 +1476,43 @@ public static class ResolutionFrameValidator
                         $"{path}.parentFrameIdentity",
                         "A behavior-effect install frame must retain a stable behavior parent identity."));
                 }
+                else if (install.InitiationKind is InstallInitiationKind.IceSubroutineNormal
+                    or InstallInitiationKind.IceSubroutineInwardIgnoreCosts)
+                {
+                    if (!StableIdentifier.TryValidate(install.ParentFrameIdentity))
+                    {
+                        violations.Add(new StateInvariantViolation(
+                            "resolution.missing-install-parent",
+                            $"{path}.parentFrameIdentity",
+                            "An ICE subroutine install frame must retain a stable ICE subroutine parent identity."));
+                    }
+
+                    bool inward = install.InitiationKind == InstallInitiationKind.IceSubroutineInwardIgnoreCosts;
+                    if (inward
+                        && (install.InwardAnchorIceId is not { } anchor
+                            || !StableIdentifier.TryValidate(anchor.Value)
+                            || install.DestinationKind != InstallDestinationKind.ServerIce
+                            || install.CreateNewRemote
+                            || install.ServerId is null
+                            || install.InstallCost != 0
+                            || install.CandidateReplacementCardIds.Count != 0
+                            || install.RequiredReplacementCardIds.Count != 0
+                            || install.SelectedReplacementCardIds.Count != 0))
+                    {
+                        violations.Add(new StateInvariantViolation(
+                            "resolution.invalid-inward-install",
+                            path,
+                            "A directly-inward ICE subroutine install must target an existing ICE zone, carry its anchor, and have zero cost without replacements."));
+                    }
+
+                    if (!inward && install.InwardAnchorIceId is not null)
+                    {
+                        violations.Add(new StateInvariantViolation(
+                            "resolution.unexpected-install-anchor",
+                            $"{path}.inwardAnchorIceId",
+                            "A normal ICE subroutine install must not carry an inward anchor."));
+                    }
+                }
                 if (!StableIdentifier.TryValidate(install.DefinitionId.Value))
                 {
                     violations.Add(new StateInvariantViolation("id.invalid", $"{path}.definitionId", "Definition ID is empty or invalid."));
@@ -1398,6 +1693,10 @@ public static class ResolutionFrameValidator
                         $"'{runTiming.Step}' is not a supported run timing step."));
                 }
 
+                break;
+            case IceSubroutineFrame iceSubroutine:
+                ValidateBehavior(frame, ResolutionBehaviorIds.IceSubroutine, path, violations);
+                ValidateIceSubroutineFrame(iceSubroutine, path, violations);
                 break;
             case EffectResolutionFrame effectResolution:
                 ValidateBehavior(frame, ResolutionBehaviorIds.EffectResolution, path, violations);
@@ -2024,6 +2323,112 @@ public static class ResolutionFrameValidator
                 "resolution.unknown-behavior",
                 $"{path}.behaviorId",
                 $"Behavior '{frame.BehaviorId}' is not valid for frame type '{frame.GetType().Name}'; expected '{expected}'."));
+        }
+    }
+
+    private static void ValidateIceSubroutineFrame(
+        IceSubroutineFrame frame,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        ValidateStable(frame.FrameIdentity, $"{path}.frameIdentity", "ICE subroutine frame identity", violations);
+        ValidateStable(frame.RunId.Value, $"{path}.runId", "Run ID", violations);
+        ValidateStable(frame.EncounterId.Value, $"{path}.encounterId", "Encounter ID", violations);
+        ValidateCardId(frame.IceId, $"{path}.iceId", violations);
+        ValidateStable(frame.IceDefinitionId.Value, $"{path}.iceDefinitionId", "ICE definition ID", violations);
+        ValidateStable(frame.SubroutineId.Value, $"{path}.subroutineId", "Subroutine ID", violations);
+        ValidateStable(frame.ServerId.Value, $"{path}.serverId", "Server ID", violations);
+        ValidateZoneId(frame.IceZoneId, $"{path}.iceZoneId", violations);
+        if (frame.Ordinal < 0)
+        {
+            violations.Add(new StateInvariantViolation(
+                "resolution.invalid-subroutine-ordinal",
+                $"{path}.ordinal",
+                "An ICE subroutine ordinal must be nonnegative."));
+        }
+
+        if (!Enum.IsDefined(frame.Stage))
+        {
+            violations.Add(new StateInvariantViolation(
+                "resolution.invalid-subroutine-stage",
+                $"{path}.stage",
+                "ICE subroutine frame stage is not supported."));
+        }
+
+        if (!DeterministicHash.IsSha256Hex(frame.CatalogFingerprint))
+        {
+            violations.Add(new StateInvariantViolation(
+                "resolution.invalid-catalog-fingerprint",
+                $"{path}.catalogFingerprint",
+                "ICE subroutine frames must retain a lowercase SHA-256 catalog fingerprint."));
+        }
+
+        string expectedIdentity = IceSubroutineFrame.ComputeIdentity(
+            frame.RunId,
+            frame.EncounterId,
+            frame.IceId,
+            frame.SubroutineId,
+            frame.Ordinal);
+        if (!string.Equals(frame.FrameIdentity, expectedIdentity, StringComparison.Ordinal))
+        {
+            violations.Add(new StateInvariantViolation(
+                "resolution.invalid-subroutine-frame-identity",
+                $"{path}.frameIdentity",
+                "ICE subroutine frame identity does not match its serialized continuation fields."));
+        }
+
+        ValidateCardIds(frame.IceZoneCardIds, $"{path}.iceZoneCardIds", violations);
+        if (!frame.IceZoneCardIds.Contains(frame.IceId))
+        {
+            violations.Add(new StateInvariantViolation(
+                "resolution.subroutine-anchor-missing",
+                $"{path}.iceZoneCardIds",
+                "The active ICE must be retained in the frozen ICE-zone topology."));
+        }
+
+        var choiceSet = new HashSet<IceSubroutineChoiceParameters>();
+        for (int index = 0; index < frame.Choices.Count; index++)
+        {
+            IceSubroutineChoiceParameters? choice = frame.Choices[index];
+            if (choice is null)
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.null-subroutine-choice",
+                    $"{path}.choices[{index}]",
+                    "ICE subroutine choices must not be null."));
+                continue;
+            }
+
+            if (!string.Equals(choice.FrameIdentity, frame.FrameIdentity, StringComparison.Ordinal))
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.subroutine-choice-frame-mismatch",
+                    $"{path}.choices[{index}].frameIdentity",
+                    "Every ICE subroutine choice must bind the exact parent frame identity."));
+            }
+
+            if (!choiceSet.Add(choice))
+            {
+                violations.Add(new StateInvariantViolation(
+                    "resolution.duplicate-subroutine-choice",
+                    $"{path}.choices[{index}]",
+                    "An ICE subroutine frame must not retain duplicate choices."));
+            }
+        }
+    }
+
+    private static void ValidateStable(
+        string? value,
+        string path,
+        string description,
+        List<StateInvariantViolation> violations)
+    {
+        if (!StableIdentifier.TryValidate(value))
+        {
+            violations.Add(new StateInvariantViolation(
+                "id.invalid",
+                path,
+                $"{description} is empty or invalid."));
         }
     }
 
@@ -2842,6 +3247,22 @@ internal static class ResolutionFrameCloner
             runTiming.BehaviorId,
             runTiming.RunId,
             runTiming.Step),
+        IceSubroutineFrame iceSubroutine => new IceSubroutineFrame(
+            iceSubroutine.Version,
+            iceSubroutine.BehaviorId,
+            iceSubroutine.FrameIdentity,
+            iceSubroutine.RunId,
+            iceSubroutine.EncounterId,
+            iceSubroutine.IceId,
+            iceSubroutine.IceDefinitionId,
+            iceSubroutine.SubroutineId,
+            iceSubroutine.Ordinal,
+            iceSubroutine.ServerId,
+            iceSubroutine.IceZoneId,
+            iceSubroutine.IceZoneCardIds,
+            iceSubroutine.CatalogFingerprint,
+            iceSubroutine.Stage,
+            iceSubroutine.Choices),
         EffectResolutionFrame effectResolution => new EffectResolutionFrame(
             effectResolution.Version,
             effectResolution.BehaviorId,

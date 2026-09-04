@@ -190,6 +190,14 @@ public sealed record EncounteredBioroidAbilitySpec
 }
 
 /// <summary>One printed ICE subroutine, in printed order.</summary>
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+[JsonDerivedType(typeof(EndRunSubroutineSpec), "end-run")]
+[JsonDerivedType(typeof(LoseCreditsSubroutineSpec), "lose-credits")]
+[JsonDerivedType(typeof(EndRunIfCreditsAtMostSubroutineSpec), "end-run-if-credits-at-most")]
+[JsonDerivedType(typeof(TrashInstalledRunnerCardSubroutineSpec), "trash-installed-runner-card")]
+[JsonDerivedType(typeof(InstallCardSubroutineSpec), "install-card")]
+[JsonDerivedType(typeof(RunRestrictionSubroutineSpec), "run-restriction")]
+[JsonDerivedType(typeof(PayCreditsOrTagSubroutineSpec), "pay-credits-or-tag")]
 public abstract record IceSubroutineSpec;
 
 /// <summary>"End the run."</summary>
@@ -231,6 +239,155 @@ public sealed record EndRunIfCreditsAtMostSubroutineSpec : IceSubroutineSpec
     public PlayerSide Target { get; }
 
     public int CreditLimit { get; }
+}
+
+/// <summary>
+/// A Corp-selected installed Runner-card trash subroutine.  A null class
+/// filter means any installed Runner card; a concrete class is used by later
+/// printed effects such as program-only trash.  The engine resolves the
+/// physical target through its issued action ID, never through a title/code
+/// branch.
+/// </summary>
+public sealed record TrashInstalledRunnerCardSubroutineSpec : IceSubroutineSpec
+{
+    [JsonConstructor]
+    public TrashInstalledRunnerCardSubroutineSpec(RuntimeCardClass? requiredCardClass = null)
+    {
+        if (requiredCardClass is RuntimeCardClass.Ice
+            or RuntimeCardClass.Asset
+            or RuntimeCardClass.Upgrade
+            or RuntimeCardClass.Agenda
+            or RuntimeCardClass.Operation
+            or RuntimeCardClass.Event
+            or RuntimeCardClass.Identity)
+        {
+            throw new ArgumentException(
+                "An installed Runner-card trash filter may target only Runner program, hardware, or resource cards.",
+                nameof(requiredCardClass));
+        }
+
+        RequiredCardClass = requiredCardClass;
+    }
+
+    /// <summary>Optional Runner runtime class filter; null means any class.</summary>
+    [JsonInclude]
+    [JsonRequired]
+    public RuntimeCardClass? RequiredCardClass { get; private set; }
+}
+
+/// <summary>Destination rule for a card-installing ICE subroutine.</summary>
+public enum IceInstallDestinationRule
+{
+    Normal,
+    DirectlyInward,
+}
+
+/// <summary>Cost rule for a card-installing ICE subroutine.</summary>
+public enum IceInstallCostRule
+{
+    Normal,
+    IgnoreAllCosts,
+}
+
+/// <summary>
+/// A Corp card-install subroutine.  Source-zone and destination legality are
+/// resolved from the authenticated runtime catalog and the live topology;
+/// this declaration only records the printed restrictions.
+/// </summary>
+public sealed record InstallCardSubroutineSpec : IceSubroutineSpec
+{
+    [JsonConstructor]
+    public InstallCardSubroutineSpec(
+        IceInstallDestinationRule destinationRule = IceInstallDestinationRule.Normal,
+        IceInstallCostRule costRule = IceInstallCostRule.Normal,
+        bool iceOnly = false)
+    {
+        if (!Enum.IsDefined(destinationRule))
+        {
+            throw new ArgumentOutOfRangeException(nameof(destinationRule));
+        }
+
+        if (!Enum.IsDefined(costRule))
+        {
+            throw new ArgumentOutOfRangeException(nameof(costRule));
+        }
+
+        if (destinationRule == IceInstallDestinationRule.DirectlyInward
+            && !iceOnly)
+        {
+            throw new ArgumentException(
+                "A directly inward install must be restricted to ICE.",
+                nameof(iceOnly));
+        }
+
+        DestinationRule = destinationRule;
+        CostRule = costRule;
+        IceOnly = iceOnly;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public IceInstallDestinationRule DestinationRule { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public IceInstallCostRule CostRule { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public bool IceOnly { get; private set; }
+}
+
+/// <summary>Typed restriction applied for the remainder of the active run.</summary>
+public enum RunRestrictionKind
+{
+    CannotStealOrTrashCorpCards,
+}
+
+/// <summary>One printed run-scoped restriction subroutine.</summary>
+public sealed record RunRestrictionSubroutineSpec : IceSubroutineSpec
+{
+    [JsonConstructor]
+    public RunRestrictionSubroutineSpec(RunRestrictionKind restriction)
+    {
+        if (!Enum.IsDefined(restriction))
+        {
+            throw new ArgumentOutOfRangeException(nameof(restriction));
+        }
+
+        Restriction = restriction;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunRestrictionKind Restriction { get; private set; }
+}
+
+/// <summary>
+/// A Runner choice subroutine that allows paying a fixed credit amount;
+/// declining applies the typed tag fallback.  It is intentionally distinct
+/// from a generic triggered "unless" choice because this frame resolves in
+/// the printed ICE-subroutine sequence.
+/// </summary>
+public sealed record PayCreditsOrTagSubroutineSpec : IceSubroutineSpec
+{
+    [JsonConstructor]
+    public PayCreditsOrTagSubroutineSpec(int creditAmount, int tagAmount = 1)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(creditAmount);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(tagAmount);
+
+        CreditAmount = creditAmount;
+        TagAmount = tagAmount;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int CreditAmount { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int TagAmount { get; private set; }
 }
 
 /// <summary>The condition under which a strength modifier applies.</summary>

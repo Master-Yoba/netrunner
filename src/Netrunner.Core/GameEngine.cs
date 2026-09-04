@@ -644,6 +644,9 @@ public static partial class GameEngine
             case (ActionKind.ChooseBehavior, BehaviorChoiceParameters behaviorChoice):
                 ConsumeBehaviorChoice(working, behaviorChoice);
                 return;
+            case (ActionKind.ResolveIceSubroutine, IceSubroutineChoiceParameters iceSubroutineChoice):
+                ConsumeIceSubroutineChoice(working, iceSubroutineChoice);
+                return;
             case (ActionKind.UseAbility, AbilityActionParameters ability):
                 ConsumeAbilityAction(working, ability, decisionOwner);
                 return;

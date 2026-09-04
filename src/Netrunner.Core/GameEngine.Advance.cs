@@ -69,6 +69,9 @@ public static partial class GameEngine
                 case RunTimingFrame runTiming:
                     StepRunTiming(working, runTiming);
                     break;
+                case IceSubroutineFrame iceSubroutine:
+                    StepIceSubroutineFrame(working, iceSubroutine);
+                    break;
                 case EffectResolutionFrame effectResolution:
                     StepEffectResolution(working, effectResolution);
                     break;

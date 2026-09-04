@@ -74,6 +74,7 @@ public static class RunTimingCitations
         EngineEventKinds.IceApproached => "CR 26.03 6.9.2a: the run approaches the next outermost remaining ICE",
         EngineEventKinds.ServerApproached => "CR 26.03 6.9.4g: the Runner approaches the attacked server",
         EngineEventKinds.IceRezzed => "CR 26.03 8.1: the Corp rezzes the approached ICE during the approach window",
+        EngineEventKinds.CardRezzed => "CR 26.03 8.1: the Corp rezzes the approached ICE during the approach window (typed card rez)",
         EngineEventKinds.EncounterInitialized => "CR 26.03 6.9.3a: the encounter is initialized",
         EngineEventKinds.BreakerPumped => "CR 26.03 6.5/3.9.5: the Runner pumps an installed icebreaker's strength for the encounter",
         EngineEventKinds.SubroutinesBroken => "CR 26.03 6.5/3.9.5: the Runner breaks subroutines with an installed icebreaker of sufficient strength and matching subtype",
@@ -140,6 +141,7 @@ public static class RunTimingTraceValidator
         EngineEventKinds.IceApproached,
         EngineEventKinds.ServerApproached,
         EngineEventKinds.IceRezzed,
+        EngineEventKinds.CardRezzed,
         EngineEventKinds.EncounterInitialized,
         EngineEventKinds.BreakerPumped,
         EngineEventKinds.SubroutinesBroken,
@@ -216,8 +218,8 @@ public static class RunTimingTraceValidator
             .ToList();
 
         var rezzed = runEvents
-            .Where(entry => entry.Event.Kind == EngineEventKinds.IceRezzed)
-            .Select(entry => (entry.Index, IceId: ((IceRezzedEventPayload)entry.Event.Payload).IceId.Value))
+            .Where(entry => entry.Event.Kind is EngineEventKinds.IceRezzed or EngineEventKinds.CardRezzed)
+            .Select(entry => (entry.Index, IceId: RezCardId(entry.Event.Payload)))
             .ToList();
 
         var encounterInitiated = runEvents
@@ -812,6 +814,7 @@ public static class RunTimingTraceValidator
                     break;
 
                 case EngineEventKinds.IceRezzed:
+                case EngineEventKinds.CardRezzed:
                     if (openStep != RunTimingStep.ApproachPaidWindow || holder != PlayerSide.Corp)
                     {
                         problems.Add("ICE was rezzed outside the Corp's 6.9.2b approach priority window (CR 26.03 8.1/6.9.2b).");
@@ -931,6 +934,13 @@ public static class RunTimingTraceValidator
         ? PlayerSide.Runner
         : PlayerSide.Corp;
 
+    private static string RezCardId(EngineEventPayload payload) => payload switch
+    {
+        IceRezzedEventPayload iceRezzed => iceRezzed.IceId.Value,
+        CardRezzedEventPayload cardRezzed => cardRezzed.CardId.Value,
+        _ => throw new ArgumentException("A rez event must carry a typed rez payload.", nameof(payload)),
+    };
+
 
     private static RunTimingTraceEntry BuildEntry(int index, EngineEvent engineEvent)
     {
@@ -940,6 +950,7 @@ public static class RunTimingTraceValidator
             IceApproachedEventPayload approached => $"approached ICE '{approached.IceId.Value}'",
             ServerApproachedEventPayload serverApproached => $"approached server '{serverApproached.ServerId.Value}'",
             IceRezzedEventPayload rezzed => $"rezzed ICE '{rezzed.IceId.Value}'",
+            CardRezzedEventPayload cardRezzed => $"rezzed card '{cardRezzed.CardId.Value}'",
             EncounterInitializedEventPayload initialized => $"encounter initialized against '{initialized.IceId.Value}'",
             BreakerPumpedEventPayload pumped => $"pumped breaker '{pumped.BreakerId.Value}'",
             SubroutinesBrokenEventPayload broken => $"broke subroutines with '{broken.BreakerId.Value}'",

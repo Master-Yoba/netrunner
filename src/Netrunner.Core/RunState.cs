@@ -738,6 +738,89 @@ public sealed record RunBreachAccessModifier
 }
 
 /// <summary>
+/// Authenticated provenance for a restriction that lasts until this run ends.
+/// The source ICE and exact printed subroutine remain attached so a loaded or
+/// adversarial state cannot manufacture a generic access prohibition.
+/// </summary>
+public sealed record RunRestriction
+{
+    [JsonConstructor]
+    public RunRestriction(
+        RunRestrictionKind kind,
+        CardInstanceId sourceIceId,
+        CardDefinitionId sourceIceDefinitionId,
+        SubroutineId sourceSubroutineId,
+        int sourceOrdinal,
+        string reasonKey)
+    {
+        if (!Enum.IsDefined(kind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(kind));
+        }
+
+        if (!StableIdentifier.TryValidate(sourceIceId.Value))
+        {
+            throw new ArgumentException("A run restriction requires a stable source ICE ID.", nameof(sourceIceId));
+        }
+
+        if (!StableIdentifier.TryValidate(sourceIceDefinitionId.Value))
+        {
+            throw new ArgumentException("A run restriction requires a stable source ICE definition ID.", nameof(sourceIceDefinitionId));
+        }
+
+        if (!StableIdentifier.TryValidate(sourceSubroutineId.Value))
+        {
+            throw new ArgumentException("A run restriction requires a stable source subroutine ID.", nameof(sourceSubroutineId));
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegative(sourceOrdinal);
+        if (!StableIdentifier.TryValidate(reasonKey))
+        {
+            throw new ArgumentException("A run restriction requires a stable provenance reason.", nameof(reasonKey));
+        }
+
+        Kind = kind;
+        SourceIceId = sourceIceId;
+        SourceIceDefinitionId = sourceIceDefinitionId;
+        SourceSubroutineId = sourceSubroutineId;
+        SourceOrdinal = sourceOrdinal;
+        ReasonKey = reasonKey;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunRestrictionKind Kind { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId SourceIceId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardDefinitionId SourceIceDefinitionId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public SubroutineId SourceSubroutineId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int SourceOrdinal { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string ReasonKey { get; private set; }
+
+    internal RunRestriction Copy() => new(
+        Kind,
+        SourceIceId,
+        SourceIceDefinitionId,
+        SourceSubroutineId,
+        SourceOrdinal,
+        ReasonKey);
+}
+
+/// <summary>
 /// Authoritative, optional state for one run.  It is omitted entirely when no
 /// run is active, preserving M1 state bytes and hashes for default games.
 /// </summary>
@@ -769,7 +852,8 @@ public sealed record RunState
         CardInstanceId? activeRunEventId,
         IReadOnlyList<RunLingeringEffect> lingeringEffects,
         IReadOnlyList<RunBreachAccessModifier>? breachAccessModifiers = null,
-        IReadOnlyList<RunRezCostModifier>? rezCostModifiers = null)
+        IReadOnlyList<RunRezCostModifier>? rezCostModifiers = null,
+        IReadOnlyList<RunRestriction>? runRestrictions = null)
     {
         ArgumentNullException.ThrowIfNull(breachCandidates);
         ArgumentNullException.ThrowIfNull(chosenAccessCards);
@@ -816,6 +900,13 @@ public sealed record RunState
                 return value.Copy();
             }).ToArray())
             : null;
+        RunRestrictions = runRestrictions is { Count: > 0 }
+            ? new ReadOnlyCollection<RunRestriction>(runRestrictions.Select(static value =>
+            {
+                ArgumentNullException.ThrowIfNull(value);
+                return value.Copy();
+            }).ToArray())
+            : null;
     }
 
     public RunState(
@@ -831,7 +922,8 @@ public sealed record RunState
         int runCredits = 0,
         CardInstanceId? activeRunEventId = null,
         IReadOnlyList<RunBreachAccessModifier>? breachAccessModifiers = null,
-        IReadOnlyList<RunRezCostModifier>? rezCostModifiers = null)
+        IReadOnlyList<RunRezCostModifier>? rezCostModifiers = null,
+        IReadOnlyList<RunRestriction>? runRestrictions = null)
         : this(
             1,
             id,
@@ -857,7 +949,8 @@ public sealed record RunState
             activeRunEventId,
             [],
             breachAccessModifiers,
-            rezCostModifiers)
+            rezCostModifiers,
+            runRestrictions)
     {
     }
 
@@ -978,6 +1071,14 @@ public sealed record RunState
     public IReadOnlyList<RunRezCostModifier>? RezCostModifiers { get; private set; }
 
     /// <summary>
+    /// Run-scoped typed restrictions, retained with their exact ICE and
+    /// subroutine provenance until the run is cleaned up.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<RunRestriction>? RunRestrictions { get; private set; }
+
+    /// <summary>
     /// The card currently being accessed: the last chosen access card that is
     /// not yet in the accessed list, or null when access is complete.
     /// Sequential access guarantees at most one such card; the last is used
@@ -1024,7 +1125,8 @@ public sealed record RunState
         ActiveRunEventId,
         LingeringEffects,
         BreachAccessModifiers,
-        RezCostModifiers);
+        RezCostModifiers,
+        RunRestrictions);
 
     /// <summary>
     /// Creates the next immutable timing cursor while retaining the run's
@@ -1065,7 +1167,8 @@ public sealed record RunState
             ActiveRunEventId,
             LingeringEffects,
             BreachAccessModifiers,
-            RezCostModifiers);
+            RezCostModifiers,
+            RunRestrictions);
 
     /// <summary>
     /// Replaces the run's encounter while retaining every other field; the
@@ -1100,7 +1203,8 @@ public sealed record RunState
         ActiveRunEventId,
         lingeringEffects,
         BreachAccessModifiers,
-        RezCostModifiers);
+        RezCostModifiers,
+        RunRestrictions);
 
     /// <summary>
     /// Replaces the run's run-scoped hosted credits while retaining every
@@ -1131,7 +1235,8 @@ public sealed record RunState
         ActiveRunEventId,
         LingeringEffects,
         BreachAccessModifiers,
-        RezCostModifiers);
+        RezCostModifiers,
+        RunRestrictions);
 
     /// <summary>
     /// Replaces the live run priority cursor while retaining the exact run
@@ -1163,7 +1268,8 @@ public sealed record RunState
         ActiveRunEventId,
         LingeringEffects,
         BreachAccessModifiers,
-        RezCostModifiers);
+        RezCostModifiers,
+        RunRestrictions);
 
     internal RunState WithEncounter(RunEncounterState encounter) => new(
         Version,
@@ -1190,7 +1296,8 @@ public sealed record RunState
         ActiveRunEventId,
         LingeringEffects,
         BreachAccessModifiers,
-        RezCostModifiers);
+        RezCostModifiers,
+        RunRestrictions);
 
     /// <summary>
     /// Replaces the run's breach candidate/access fields while retaining every
@@ -1226,7 +1333,8 @@ public sealed record RunState
         ActiveRunEventId,
         LingeringEffects,
         BreachAccessModifiers,
-        RezCostModifiers);
+        RezCostModifiers,
+        RunRestrictions);
 
     /// <summary>
     /// Replaces the immutable breach-access snapshot after the authoritative
@@ -1258,7 +1366,37 @@ public sealed record RunState
         ActiveRunEventId,
         LingeringEffects,
         breachAccessModifiers,
-        RezCostModifiers);
+        RezCostModifiers,
+        RunRestrictions);
+
+    /// <summary>Replaces the run-scoped typed restrictions immutably.</summary>
+    internal RunState WithRunRestrictions(IReadOnlyList<RunRestriction>? runRestrictions) => new(
+        Version,
+        Id,
+        AttackedServer,
+        InitiatingSide,
+        InitiatingPlayer,
+        InitiatingSource,
+        PhaseFor(Step),
+        Step,
+        CurrentIceIndex,
+        CurrentIceId,
+        Successful,
+        Unsuccessful,
+        EndReason,
+        Priority,
+        Encounter,
+        BreachCandidates,
+        RandomAccessLimit,
+        ChosenAccessCards,
+        AccessedCards,
+        AccessState,
+        RunCredits,
+        ActiveRunEventId,
+        LingeringEffects,
+        BreachAccessModifiers,
+        RezCostModifiers,
+        runRestrictions);
 
     private static ReadOnlyCollection<CardInstanceId> FreezeIds(IEnumerable<CardInstanceId> values) =>
         new(values.ToArray());

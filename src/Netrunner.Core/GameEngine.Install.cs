@@ -15,7 +15,22 @@ public static partial class GameEngine
         CostQuote? InstallCostQuote,
         IReadOnlyList<CardInstanceId> CandidateReplacementCardIds,
         IReadOnlyList<CardInstanceId> RequiredReplacementCardIds,
-        IReadOnlyList<CardDefinitionId> CandidateReplacementDefinitionIds);
+        IReadOnlyList<CardDefinitionId> CandidateReplacementDefinitionIds,
+        CardInstanceId? InwardAnchorIceId);
+
+    /// <summary>
+    /// The live run cursor before an Ansel-style normal ICE install mutates
+    /// the attacked server's ordered ICE zone.  Replacement selection is
+    /// allowed to include the currently encountered ICE, so cursor repair is
+    /// based on stable physical IDs rather than a pre-trash numeric index.
+    /// </summary>
+    private sealed record RunIceCursorSnapshot(
+        RunId RunId,
+        EncounterId EncounterId,
+        ServerId ServerId,
+        CardInstanceId CurrentIceId,
+        int CurrentIceIndex,
+        IReadOnlyList<CardInstanceId> IceIds);
 
     private static void InstallToyCard(WorkingState working, PlayerSide side, CardInstanceId cardId)
     {
@@ -129,8 +144,8 @@ public static partial class GameEngine
                      .Where(cardId => !frame.SelectedReplacementCardIds.Contains(cardId)))
         {
             IReadOnlyList<CardInstanceId> selected = frame.SelectedReplacementCardIds.Append(candidate).ToArray();
-            int baseCost = CalculateInstallCost(working, plan.Spec, frame.DestinationKind, frame.ServerId, frame.CreateNewRemote, selected);
-            CostQuote? quote = CostModifierProjection.RunnerInstall(working, plan.Card, baseCost);
+            int baseCost = CalculateInstallBaseCost(working, frame, plan, selected);
+            CostQuote? quote = InstallCostQuote(working, plan.Card, baseCost, frame.InitiationKind);
             int effectiveCost = quote?.EffectiveCost ?? baseCost;
             materialized.Add(new InstallCardParameters(
                 frame.CardId,
@@ -146,17 +161,15 @@ public static partial class GameEngine
         }
 
         PlayerState player = GetPlayer(working, frame.Owner);
-        int selectedBaseCost = CalculateInstallCost(
+        int selectedBaseCost = CalculateInstallBaseCost(
             working,
-            plan.Spec,
-            frame.DestinationKind,
-            frame.ServerId,
-            frame.CreateNewRemote,
+            frame,
+            plan,
             frame.SelectedReplacementCardIds);
-        CostQuote? selectedQuote = CostModifierProjection.RunnerInstall(working, plan.Card, selectedBaseCost);
+        CostQuote? selectedQuote = InstallCostQuote(working, plan.Card, selectedBaseCost, frame.InitiationKind);
         int selectedCost = selectedQuote?.EffectiveCost ?? selectedBaseCost;
         if (InstallSelectionSatisfiesRequirements(working, frame, plan, frame.SelectedReplacementCardIds)
-            && (frame.InitiationKind == InstallInitiationKind.BehaviorEffect || player.Clicks >= 1)
+            && (IsClickFreeInstall(frame.InitiationKind) || player.Clicks >= 1)
             && player.Credits >= selectedCost)
         {
             materialized.Add(new InstallCardParameters(
@@ -313,17 +326,16 @@ public static partial class GameEngine
 
         if (parameters.FinalizeSelection)
         {
-            int expectedFinalBaseCost = CalculateInstallCost(
+            int expectedFinalBaseCost = CalculateInstallBaseCost(
                 working,
-                plan.Spec,
-                frame.DestinationKind,
-                frame.ServerId,
-                frame.CreateNewRemote,
+                frame,
+                plan,
                 frame.SelectedReplacementCardIds);
-            CostQuote? expectedFinalQuote = CostModifierProjection.RunnerInstall(
+            CostQuote? expectedFinalQuote = InstallCostQuote(
                 working,
                 plan.Card,
-                expectedFinalBaseCost);
+                expectedFinalBaseCost,
+                frame.InitiationKind);
             int expectedFinalCost = expectedFinalQuote?.EffectiveCost ?? expectedFinalBaseCost;
             if (!parameters.SelectedReplacementCardIds.SequenceEqual(frame.SelectedReplacementCardIds)
                 || parameters.CreditCost != expectedFinalCost
@@ -353,14 +365,12 @@ public static partial class GameEngine
             throw new ResolutionFailureException("The incremental install selection is not a remaining frozen candidate.");
         }
 
-        int expectedBaseCost = CalculateInstallCost(
+        int expectedBaseCost = CalculateInstallBaseCost(
             working,
-            plan.Spec,
-            frame.DestinationKind,
-            frame.ServerId,
-            frame.CreateNewRemote,
+            frame,
+            plan,
             parameters.SelectedReplacementCardIds);
-        CostQuote? expectedQuote = CostModifierProjection.RunnerInstall(working, plan.Card, expectedBaseCost);
+        CostQuote? expectedQuote = InstallCostQuote(working, plan.Card, expectedBaseCost, frame.InitiationKind);
         int expectedCost = expectedQuote?.EffectiveCost ?? expectedBaseCost;
         if (parameters.CreditCost != expectedCost
             || !CostQuotesEqual(parameters.CostQuote, expectedQuote))
@@ -377,19 +387,22 @@ public static partial class GameEngine
         InstallPlan plan)
     {
         ValidateInstallFrame(working, frame, requireFinalLegality: true);
+        RunIceCursorSnapshot? runIceSnapshot = SnapshotNormalRunIceCursor(working, frame);
         PlayerState player = GetPlayer(working, frame.Owner);
         if (frame.InitiationKind == InstallInitiationKind.BasicAction && player.Clicks < 1)
         {
             throw new ResolutionFailureException("Installing a card requires one click.");
         }
 
-        int baseCost = CalculateInstallCost(
-            working,
-            plan.Spec,
-            frame.DestinationKind,
-            frame.ServerId,
-            frame.CreateNewRemote,
-            frame.SelectedReplacementCardIds);
+        int baseCost = frame.InitiationKind == InstallInitiationKind.IceSubroutineInwardIgnoreCosts
+            ? 0
+            : CalculateInstallCost(
+                working,
+                plan.Spec,
+                frame.DestinationKind,
+                frame.ServerId,
+                frame.CreateNewRemote,
+                frame.SelectedReplacementCardIds);
         // ValidateInstallFrame above has already checked that the frozen
         // quote is the current quote for this card and selection.  Use its
         // effective amount for the actual payment so the transaction cannot
@@ -418,10 +431,12 @@ public static partial class GameEngine
         // the pre-trash card list and could reintroduce selected cards when
         // the incoming card is moved from Grip.  Resolve the current zone
         // after all replacements have moved.
-        ZoneState destination = ResolveExistingInstallDestination(
-            working,
-            frame.DestinationKind,
-            frame.ServerId);
+        ZoneState destination = frame.CreateNewRemote
+            ? CreateNewRemoteInstallDestination(working, frame.DestinationKind)
+            : ResolveExistingInstallDestination(
+                working,
+                frame.DestinationKind,
+                frame.ServerId);
 
         if (frame.CardClass == RuntimeCardClass.Program)
         {
@@ -445,6 +460,11 @@ public static partial class GameEngine
         CardInstanceState card = GetCard(working, frame.CardId);
         ZoneState source = ZoneForInstallCard(working, card);
         MoveCard(working, card, source, destination);
+        if (frame.InitiationKind == InstallInitiationKind.IceSubroutineInwardIgnoreCosts)
+        {
+            destination = InsertBeforeInwardAnchor(working, destination, frame.CardId, frame.InwardAnchorIceId);
+            RepairInwardRunCursor(working, frame, destination);
+        }
         CardInstanceState installed = GetCard(working, card.Id);
         ReplaceCard(working, new CardInstanceState(
             installed.Id,
@@ -514,6 +534,107 @@ public static partial class GameEngine
             return;
         }
 
+        if (frame.InitiationKind is InstallInitiationKind.IceSubroutineNormal
+            or InstallInitiationKind.IceSubroutineInwardIgnoreCosts)
+        {
+            if (working.ResolutionStack.Count == 0
+                || working.ResolutionStack[^1] is not IceSubroutineFrame parentFrame
+                || !string.Equals(
+                    frame.ParentFrameIdentity,
+                    parentFrame.FrameIdentity,
+                    StringComparison.Ordinal)
+                || parentFrame.Stage != IceSubroutineFrameStage.AwaitingInstall)
+            {
+                throw new ResolutionFailureException(
+                    "The completed ICE subroutine install has no matching parent frame.");
+            }
+
+            bool encounteredIceRemoved = false;
+            if (runIceSnapshot is not null)
+            {
+                encounteredIceRemoved = !RepairNormalRunIceCursor(
+                    working,
+                    runIceSnapshot,
+                    destination);
+            }
+
+            RunState run = working.RunState
+                ?? throw new ResolutionFailureException("The completed ICE subroutine install requires a live run.");
+            if (run.Id != parentFrame.RunId
+                || run.Encounter is not { } encounter
+                || encounter.Id != parentFrame.EncounterId
+                || encounter.IceId != parentFrame.IceId
+                || encounter.Subroutines.SingleOrDefault(candidate => candidate.Id == parentFrame.SubroutineId) is not { } subroutine
+                || subroutine.Ordinal != parentFrame.Ordinal
+                || subroutine.Broken
+                || subroutine.Resolved)
+            {
+                throw new ResolutionFailureException(
+                    "The completed ICE subroutine install no longer matches its encounter.");
+            }
+
+            RunSubroutineState[] resolved = encounter.Subroutines
+                .Select(candidate => candidate.Id == parentFrame.SubroutineId
+                    ? new RunSubroutineState(candidate.Version, candidate.Id, candidate.Ordinal, candidate.Broken, true)
+                : candidate)
+                .ToArray();
+            if (encounteredIceRemoved)
+            {
+                // CR 8.5.10: if the approached/encountered ICE is uninstalled
+                // during its paid install window, finish the current window
+                // and pass that position. The numeric cursor is retained as a
+                // conceptual boundary: it counts retained ICE inward of the
+                // removed source, and MoveInward decrements it to the next
+                // actual protector. The newly installed ICE was appended
+                // outermost and is therefore never re-encountered.
+                RunEncounterState completedEncounter = new(
+                    encounter.Version,
+                    encounter.Id,
+                    encounter.IceId,
+                    RunEncounterStatus.Complete,
+                    resolved);
+                RunIceCursorSnapshot cursorSnapshot = runIceSnapshot
+                    ?? throw new ResolutionFailureException("The removed encountered ICE has no cursor snapshot.");
+                RunState progressed = run.WithLingeringEffects(
+                        run.LingeringEffects
+                            .Where(effect => effect.Expiry != RunLingeringEffectExpiry.Encounter)
+                            .ToArray())
+                    .WithTiming(
+                        RunTimingStep.MovementPaidWindow,
+                        cursorSnapshot.IceIds
+                            .Take(cursorSnapshot.CurrentIceIndex)
+                            .Count(destination.CardIds.Contains),
+                        null,
+                        run.Successful,
+                        run.Unsuccessful,
+                        run.EndReason,
+                        CreatePriority(RunPriorityWindowKind.MovementPaid),
+                        completedEncounter,
+                        run.AccessState);
+                Emit(working, EngineEventKinds.EncounterCompleted, new EncounterCompletedEventPayload(
+                    run.Id,
+                    encounter.Id));
+                working.RunState = progressed;
+                working.ResolutionStack[^1] = new RunTimingFrame(run.Id, RunTimingStep.MovementPaidWindow);
+            }
+            else
+            {
+                working.RunState = run.WithEncounter(new RunEncounterState(
+                    encounter.Version,
+                    encounter.Id,
+                    encounter.IceId,
+                    encounter.Status,
+                    resolved));
+                working.ResolutionStack[^1] = new RunTimingFrame(run.Id, RunTimingStep.Encounter);
+            }
+            QueueCardInstalledOccurrence(
+                working,
+                player.Id,
+                frame.CardId,
+                destination.ServerId);
+            return;
+        }
+
         if (working.ResolutionStack.Count == 0
             || working.ResolutionStack[^1] is not TurnFrame parent
             || parent.Stage != TurnFrameStage.AwaitingAction)
@@ -535,6 +656,149 @@ public static partial class GameEngine
             player.Id,
             frame.CardId,
             destination.ServerId);
+    }
+
+    private static ZoneState InsertBeforeInwardAnchor(
+        WorkingState working,
+        ZoneState destination,
+        CardInstanceId cardId,
+        CardInstanceId? anchorId)
+    {
+        if (destination.Kind != ZoneKind.ServerIce
+            || destination.ServerId is null
+            || anchorId is not { } anchor)
+        {
+            throw new ResolutionFailureException("An inward install requires an ICE-zone anchor.");
+        }
+
+        List<CardInstanceId> ordered = destination.CardIds.ToList();
+        ordered.Remove(cardId);
+        int anchorIndex = ordered.IndexOf(anchor);
+        if (anchorIndex < 0)
+        {
+            throw new ResolutionFailureException("The inward install anchor is no longer in the destination ICE zone.");
+        }
+
+        ordered.Insert(anchorIndex, cardId);
+        ZoneState reordered = new ZoneState(
+            destination.Id,
+            destination.Kind,
+            destination.OwnerSide,
+            destination.ServerId,
+            ordered);
+        ReplaceZone(working, reordered);
+        return reordered;
+    }
+
+    private static RunIceCursorSnapshot? SnapshotNormalRunIceCursor(
+        WorkingState working,
+        InstallFrame frame)
+    {
+        if (frame.InitiationKind != InstallInitiationKind.IceSubroutineNormal
+            || frame.DestinationKind != InstallDestinationKind.ServerIce
+            || frame.ServerId is not { } serverId
+            || working.RunState is not { } run
+            || run.Step != RunTimingStep.Encounter
+            || run.AttackedServer != serverId
+            || run.CurrentIceId is not { } currentIceId
+            || run.Encounter is not { Status: RunEncounterStatus.Initialized } encounter
+            || encounter.IceId != currentIceId)
+        {
+            return null;
+        }
+
+        ZoneState iceZone = ResolveExistingInstallDestination(
+            working,
+            InstallDestinationKind.ServerIce,
+            serverId);
+        if (run.CurrentIceIndex < 0
+            || run.CurrentIceIndex >= iceZone.CardIds.Count
+            || iceZone.CardIds[run.CurrentIceIndex] != currentIceId)
+        {
+            throw new ResolutionFailureException("The normal ICE install cannot snapshot the live run cursor.");
+        }
+
+        return new RunIceCursorSnapshot(
+            run.Id,
+            encounter.Id,
+            serverId,
+            currentIceId,
+            run.CurrentIceIndex,
+            iceZone.CardIds.ToArray());
+    }
+
+    private static bool RepairNormalRunIceCursor(
+        WorkingState working,
+        RunIceCursorSnapshot snapshot,
+        ZoneState destination)
+    {
+        if (destination.Kind != ZoneKind.ServerIce
+            || destination.ServerId != snapshot.ServerId)
+        {
+            throw new ResolutionFailureException("The normal ICE install changed the attacked server topology.");
+        }
+
+        RunState run = working.RunState
+            ?? throw new ResolutionFailureException("The normal ICE install requires a live run cursor.");
+        if (run.Id != snapshot.RunId
+            || run.AttackedServer != snapshot.ServerId
+            || run.Encounter is not { } encounter
+            || encounter.Id != snapshot.EncounterId)
+        {
+            throw new ResolutionFailureException("The normal ICE install changed the live encounter identity.");
+        }
+
+        if (destination.CardIds.Contains(snapshot.CurrentIceId))
+        {
+            int repairedIndex = destination.CardIds.ToList().IndexOf(snapshot.CurrentIceId);
+            working.RunState = run.WithTiming(
+                run.Step,
+                repairedIndex,
+                snapshot.CurrentIceId,
+                run.Successful,
+                run.Unsuccessful,
+                run.EndReason,
+                run.Priority,
+                run.Encounter,
+                run.AccessState);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static void RepairInwardRunCursor(
+        WorkingState working,
+        InstallFrame frame,
+        ZoneState destination)
+    {
+        RunState run = working.RunState
+            ?? throw new ResolutionFailureException("An inward ICE install requires a live run.");
+        CardInstanceId anchor = frame.InwardAnchorIceId
+            ?? throw new ResolutionFailureException("An inward ICE install requires an anchor.");
+        if (run.AttackedServer != destination.ServerId
+            || run.CurrentIceId != anchor
+            || run.Encounter?.IceId != anchor)
+        {
+            throw new ResolutionFailureException("The inward install anchor does not match the current encounter ICE.");
+        }
+
+        int anchorIndex = destination.CardIds.ToList().IndexOf(anchor);
+        if (anchorIndex < 0 || run.CurrentIceIndex + 1 != anchorIndex)
+        {
+            throw new ResolutionFailureException("The inward install could not repair the live ICE cursor.");
+        }
+
+        working.RunState = run.WithTiming(
+            run.Step,
+            anchorIndex,
+            anchor,
+            run.Successful,
+            run.Unsuccessful,
+            run.EndReason,
+            run.Priority,
+            run.Encounter,
+            run.AccessState);
     }
 
     private static void CommitInstall(
@@ -660,6 +924,37 @@ public static partial class GameEngine
             forcedActionEnd: activeParent.ForcedActionEnd);
     }
 
+    private static bool IsClickFreeInstall(InstallInitiationKind initiationKind) =>
+        initiationKind is InstallInitiationKind.BehaviorEffect
+            or InstallInitiationKind.IceSubroutineNormal
+            or InstallInitiationKind.IceSubroutineInwardIgnoreCosts;
+
+    private static CostQuote? InstallCostQuote(
+        WorkingState working,
+        CardInstanceState card,
+        int baseCost,
+        InstallInitiationKind initiationKind) =>
+        card.OwnerSide == PlayerSide.Runner
+            && initiationKind is not InstallInitiationKind.IceSubroutineNormal
+                and not InstallInitiationKind.IceSubroutineInwardIgnoreCosts
+            ? CostModifierProjection.RunnerInstall(working, card, baseCost)
+            : null;
+
+    private static int CalculateInstallBaseCost(
+        WorkingState working,
+        InstallFrame frame,
+        InstallPlan plan,
+        IReadOnlyList<CardInstanceId> selected) =>
+        frame.InitiationKind == InstallInitiationKind.IceSubroutineInwardIgnoreCosts
+            ? 0
+            : CalculateInstallCost(
+                working,
+                plan.Spec,
+                frame.DestinationKind,
+                frame.ServerId,
+                frame.CreateNewRemote,
+                selected);
+
     private static InstallPlan? BuildInstallPlan(
         WorkingState working,
         PlayerSide side,
@@ -667,7 +962,43 @@ public static partial class GameEngine
         InstallDestinationKind destinationKind,
         ServerId? serverId,
         bool createNewRemote,
-        InstallInitiationKind initiationKind = InstallInitiationKind.BasicAction)
+        InstallInitiationKind initiationKind = InstallInitiationKind.BasicAction,
+        CardInstanceId? inwardAnchorIceId = null)
+    {
+        if (initiationKind is InstallInitiationKind.IceSubroutineNormal
+            or InstallInitiationKind.IceSubroutineInwardIgnoreCosts)
+        {
+            return BuildCorpSubroutineInstallPlan(
+                working,
+                side,
+                cardId,
+                destinationKind,
+                serverId,
+                createNewRemote,
+                initiationKind,
+                inwardAnchorIceId);
+        }
+
+        return BuildInstallPlanCore(
+            working,
+            side,
+            cardId,
+            destinationKind,
+            serverId,
+            createNewRemote,
+            initiationKind,
+            inwardAnchorIceId);
+    }
+
+    private static InstallPlan? BuildInstallPlanCore(
+        WorkingState working,
+        PlayerSide side,
+        CardInstanceId cardId,
+        InstallDestinationKind destinationKind,
+        ServerId? serverId,
+        bool createNewRemote,
+        InstallInitiationKind initiationKind,
+        CardInstanceId? inwardAnchorIceId)
     {
         if (side is not (PlayerSide.Runner or PlayerSide.Corp))
         {
@@ -702,9 +1033,16 @@ public static partial class GameEngine
             return null;
         }
 
-        ZoneKind sourceKind = side == PlayerSide.Corp ? ZoneKind.CorpHand : ZoneKind.RunnerGrip;
+        bool isCorpSubroutineInstall = initiationKind is InstallInitiationKind.IceSubroutineNormal
+            or InstallInitiationKind.IceSubroutineInwardIgnoreCosts;
+        bool inwardInstall = initiationKind == InstallInitiationKind.IceSubroutineInwardIgnoreCosts;
+        ZoneKind[] sourceKinds = side == PlayerSide.Corp
+            ? isCorpSubroutineInstall
+                ? [ZoneKind.CorpHand, ZoneKind.CorpDiscard]
+                : [ZoneKind.CorpHand]
+            : [ZoneKind.RunnerGrip];
         ZoneState? source = working.Zones.FirstOrDefault(
-            zone => zone.Kind == sourceKind && zone.ServerId is null);
+            zone => sourceKinds.Contains(zone.Kind) && zone.ServerId is null && zone.Id == card.ZoneId);
         if (source is null || card.OwnerSide != side || card.ZoneId != source.Id || spec.Side != side)
         {
             return null;
@@ -716,6 +1054,21 @@ public static partial class GameEngine
         }
 
         if (!InstallDestinationExistsAndMatches(working, side, spec.CardClass, destinationKind, serverId, createNewRemote))
+        {
+            return null;
+        }
+
+        if (isCorpSubroutineInstall && side != PlayerSide.Corp)
+        {
+            return null;
+        }
+
+        if (inwardInstall
+            && (spec.CardClass != RuntimeCardClass.Ice
+                || destinationKind != InstallDestinationKind.ServerIce
+                || serverId is null
+                || createNewRemote
+                || inwardAnchorIceId is null))
         {
             return null;
         }
@@ -770,7 +1123,9 @@ public static partial class GameEngine
             return null;
         }
 
-        CardInstanceId[] candidates = InstallCandidates(working, spec, destinationKind, serverId, createNewRemote);
+        CardInstanceId[] candidates = inwardInstall
+            ? []
+            : InstallCandidates(working, spec, destinationKind, serverId, createNewRemote);
         if (side == PlayerSide.Corp
             && destinationKind == InstallDestinationKind.ServerIce
             && candidates.Any(candidateId => RuntimeClass(working, candidateId) != RuntimeCardClass.Ice))
@@ -781,7 +1136,9 @@ public static partial class GameEngine
             return null;
         }
 
-        CardInstanceId[] required = InstallRequiredCandidates(working, spec, candidates, destinationKind, serverId, createNewRemote);
+        CardInstanceId[] required = inwardInstall
+            ? []
+            : InstallRequiredCandidates(working, spec, candidates, destinationKind, serverId, createNewRemote);
         if (required.Any(cardOption => !candidates.Contains(cardOption)))
         {
             return null;
@@ -797,12 +1154,17 @@ public static partial class GameEngine
             return null;
         }
 
-        int baseInstallCost = CalculateInstallCost(working, spec, destinationKind, serverId, createNewRemote, []);
-        CostQuote? installCostQuote = spec.Side == PlayerSide.Runner
-            ? CostModifierProjection.RunnerInstall(working, card, baseInstallCost)
-            : null;
+        int baseInstallCost = inwardInstall
+            ? 0
+            : CalculateInstallCost(working, spec, destinationKind, serverId, createNewRemote, []);
+        CostQuote? installCostQuote = InstallCostQuote(
+            working,
+            card,
+            baseInstallCost,
+            initiationKind);
         int installCost = installCostQuote?.EffectiveCost ?? baseInstallCost;
-        if (side == PlayerSide.Corp
+        if (!isCorpSubroutineInstall
+            && side == PlayerSide.Corp
             && spec.CardClass is not RuntimeCardClass.Ice
             && installCost != 0)
         {
@@ -825,7 +1187,8 @@ public static partial class GameEngine
             ? Math.Max(0, installCost - candidates.Length)
             : installCost;
         PlayerState player = GetPlayer(working, side);
-        if (player.Clicks < 1 || player.Credits < minimumCost)
+        if ((!IsClickFreeInstall(initiationKind) && player.Clicks < 1)
+            || player.Credits < minimumCost)
         {
             return null;
         }
@@ -846,8 +1209,37 @@ public static partial class GameEngine
             installCostQuote,
             candidates,
             required,
-            candidateDefinitions);
+            candidateDefinitions,
+            inwardAnchorIceId);
     }
+
+    /// <summary>
+    /// Shared planner entry point for Corp choices initiated by a printed ICE
+    /// subroutine. The ordinary planner remains the sole source of destination,
+    /// replacement, metadata, and normal cost rules; this mode only changes
+    /// source visibility, click semantics, and (for Brân) the inward anchor and
+    /// ignore-cost rule.
+    /// </summary>
+    private static InstallPlan? BuildCorpSubroutineInstallPlan(
+        WorkingState working,
+        PlayerSide side,
+        CardInstanceId cardId,
+        InstallDestinationKind destinationKind,
+        ServerId? serverId,
+        bool createNewRemote,
+        InstallInitiationKind initiationKind,
+        CardInstanceId? inwardAnchorIceId) =>
+        side == PlayerSide.Corp
+            ? BuildInstallPlanCore(
+                working,
+                side,
+                cardId,
+                destinationKind,
+                serverId,
+                createNewRemote,
+                initiationKind,
+                inwardAnchorIceId)
+            : null;
 
     /// <summary>
     /// Builds the same authoritative Runner install plan used by a basic
@@ -942,7 +1334,8 @@ public static partial class GameEngine
             installCostQuote,
             candidates,
             required,
-            candidateDefinitions);
+            candidateDefinitions,
+            null);
     }
 
     private static void EnsureProgramInstallRulesState(WorkingState working)
@@ -1401,7 +1794,8 @@ public static partial class GameEngine
                 frame.DestinationKind,
                 frame.ServerId,
                 frame.CreateNewRemote,
-                frame.InitiationKind)
+                frame.InitiationKind,
+                frame.InwardAnchorIceId)
             ?? throw new ResolutionFailureException("The frozen install destination or card is stale.");
 
         if (frame.DefinitionId != plan.Card.DefinitionId
@@ -1417,6 +1811,7 @@ public static partial class GameEngine
                 && frame.CandidateReplacementDefinitionIds is null
             || frame.SelectedReplacementCardIds.Any(id => !frame.CandidateReplacementCardIds.Contains(id))
             || frame.SelectedReplacementCardIds.Distinct().Count() != frame.SelectedReplacementCardIds.Count
+            || frame.InwardAnchorIceId != plan.InwardAnchorIceId
             || (frame.InitiationKind == InstallInitiationKind.BasicAction
                 ? frame.ParentFrameIdentity is not null
                 : !StableIdentifier.TryValidate(frame.ParentFrameIdentity))
@@ -1429,19 +1824,32 @@ public static partial class GameEngine
                     || frame.SourceZoneKind is not (ZoneKind.RunnerStack or ZoneKind.RunnerGrip)
                     || frame.DestinationKind != InstallDestinationKind.RunnerRig
                     || frame.ServerId is not null
-                    || frame.CreateNewRemote)))
+                    || frame.CreateNewRemote))
+            || (frame.InitiationKind == InstallInitiationKind.IceSubroutineInwardIgnoreCosts
+                && (frame.DestinationKind != InstallDestinationKind.ServerIce
+                    || frame.ServerId is null
+                    || frame.CreateNewRemote
+                    || frame.InwardAnchorIceId is null
+                    || frame.CardClass != RuntimeCardClass.Ice
+                    || frame.InstallCost != 0
+                    || frame.CandidateReplacementCardIds.Count != 0
+                    || frame.RequiredReplacementCardIds.Count != 0
+                    || frame.SelectedReplacementCardIds.Count != 0))
+        )
         {
             throw new ResolutionFailureException("The frozen install frame no longer matches the current state.");
         }
 
-        int expectedCost = CalculateInstallCost(
-            working,
-            plan.Spec,
-            frame.DestinationKind,
-            frame.ServerId,
-            frame.CreateNewRemote,
-            frame.SelectedReplacementCardIds);
-        CostQuote? expectedQuote = CostModifierProjection.RunnerInstall(working, plan.Card, expectedCost);
+        int expectedCost = frame.InitiationKind == InstallInitiationKind.IceSubroutineInwardIgnoreCosts
+            ? 0
+            : CalculateInstallCost(
+                working,
+                plan.Spec,
+                frame.DestinationKind,
+                frame.ServerId,
+                frame.CreateNewRemote,
+                frame.SelectedReplacementCardIds);
+        CostQuote? expectedQuote = InstallCostQuote(working, plan.Card, expectedCost, frame.InitiationKind);
         int expectedEffectiveCost = expectedQuote?.EffectiveCost ?? expectedCost;
         if (frame.InstallCost != expectedEffectiveCost)
         {
@@ -1493,6 +1901,52 @@ public static partial class GameEngine
             {
                 throw new ResolutionFailureException(
                     "The behavior install frame no longer matches its parent instruction binding.");
+            }
+        }
+        else if (frame.InitiationKind is InstallInitiationKind.IceSubroutineNormal
+            or InstallInitiationKind.IceSubroutineInwardIgnoreCosts)
+        {
+            if (working.ResolutionStack.Count < 2
+                || working.ResolutionStack[^2] is not IceSubroutineFrame subroutineParent
+                || !string.Equals(
+                    frame.ParentFrameIdentity,
+                    subroutineParent.FrameIdentity,
+                    StringComparison.Ordinal)
+                || subroutineParent.Stage != IceSubroutineFrameStage.AwaitingInstall
+                || (frame.InitiationKind == InstallInitiationKind.IceSubroutineInwardIgnoreCosts
+                    && subroutineParent.IceId != frame.InwardAnchorIceId))
+            {
+                throw new ResolutionFailureException(
+                    "The ICE subroutine install parent frame identity or stage is stale or forged.");
+            }
+
+            RunState parentRun = working.RunState
+                ?? throw new ResolutionFailureException("The ICE subroutine install parent requires a live run.");
+            ZoneState parentIceZone = ResolveExistingInstallDestination(
+                working,
+                InstallDestinationKind.ServerIce,
+                subroutineParent.ServerId);
+            if (parentRun.Id != subroutineParent.RunId
+                || parentRun.Step != RunTimingStep.Encounter
+                || parentRun.AttackedServer != subroutineParent.ServerId
+                || parentRun.CurrentIceId != subroutineParent.IceId
+                || parentRun.Encounter is not { Status: RunEncounterStatus.Initialized } parentEncounter
+                || parentEncounter.Id != subroutineParent.EncounterId
+                || parentEncounter.IceId != subroutineParent.IceId
+                || parentIceZone.Id != subroutineParent.IceZoneId
+                || !parentIceZone.CardIds.SequenceEqual(subroutineParent.IceZoneCardIds))
+            {
+                throw new ResolutionFailureException(
+                    "The ICE subroutine install parent no longer matches the live encounter topology.");
+            }
+
+            if (frame.InitiationKind == InstallInitiationKind.IceSubroutineInwardIgnoreCosts
+                && (subroutineParent.RunId != parentRun.Id
+                    || subroutineParent.ServerId != frame.ServerId
+                    || subroutineParent.IceId != frame.InwardAnchorIceId))
+            {
+                throw new ResolutionFailureException(
+                    "The inward ICE-subroutine install anchor is stale or forged.");
             }
         }
 

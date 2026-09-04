@@ -18,6 +18,7 @@ public enum DecisionKind
     TriggerOrdering,
     InterruptChoice,
     BehaviorChoice,
+    IceSubroutineChoice,
 }
 
 public enum ActionKind
@@ -59,6 +60,7 @@ public enum ActionKind
     NoAccessAction,
     ChooseBehavior,
     UseAbility,
+    ResolveIceSubroutine,
 }
 
 /// <summary>
@@ -90,6 +92,7 @@ public enum ActionKind
 [JsonDerivedType(typeof(LegacyActionParameters), "legacy")]
 [JsonDerivedType(typeof(BreachCandidateParameters), "breach-candidate")]
 [JsonDerivedType(typeof(BehaviorChoiceParameters), "behavior-choice")]
+[JsonDerivedType(typeof(IceSubroutineChoiceParameters), "ice-subroutine-choice")]
 [JsonDerivedType(typeof(AbilityActionParameters), "ability")]
 public abstract record ActionParameters;
 
@@ -835,6 +838,148 @@ public sealed record BehaviorChoiceParameters : ActionParameters
     public bool FinalizeSelection { get; private set; }
 }
 
+/// <summary>Typed branch selected while a printed ICE subroutine is resolving.</summary>
+public enum IceSubroutineChoiceKind
+{
+    TrashInstalledRunnerCard,
+    InstallCard,
+    PayCredits,
+    Decline,
+    TakeTag,
+}
+
+/// <summary>
+/// Engine-issued payload for one printed ICE subroutine choice.  The frame
+/// identity binds this detached payload to the exact serialized
+/// run/encounter/ICE/subroutine continuation.  The caller submits only the
+/// issued action ID; all fields are revalidated against that frame and the
+/// current catalog/topology at the reducer boundary.
+/// </summary>
+public sealed record IceSubroutineChoiceParameters : ActionParameters
+{
+    [JsonConstructor]
+    public IceSubroutineChoiceParameters(
+        string frameIdentity,
+        IceSubroutineChoiceKind choice,
+        CardInstanceId? cardId = null,
+        InstallDestinationKind? destinationKind = null,
+        ServerId? serverId = null,
+        bool createNewRemote = false,
+        int creditCost = 0,
+        int hostedCredits = 0)
+    {
+        if (!StableIdentifier.TryValidate(frameIdentity))
+        {
+            throw new ArgumentException(
+                "An ICE subroutine choice requires a stable frame identity.",
+                nameof(frameIdentity));
+        }
+
+        if (!Enum.IsDefined(choice))
+        {
+            throw new ArgumentOutOfRangeException(nameof(choice));
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegative(creditCost);
+
+        if (choice is IceSubroutineChoiceKind.TrashInstalledRunnerCard
+            && cardId is null)
+        {
+            throw new ArgumentException(
+                "A Runner-card trash choice must identify a physical card.",
+                nameof(cardId));
+        }
+
+        if (choice == IceSubroutineChoiceKind.InstallCard
+            && (cardId is null || destinationKind is null))
+        {
+            throw new ArgumentException(
+                "An ICE install choice must identify a card and destination.",
+                nameof(cardId));
+        }
+
+        if (choice != IceSubroutineChoiceKind.InstallCard
+            && (destinationKind is not null || serverId is not null || createNewRemote))
+        {
+            throw new ArgumentException(
+                "Only an ICE install choice may identify an install destination.",
+                nameof(destinationKind));
+        }
+
+        if (choice is not (IceSubroutineChoiceKind.PayCredits or IceSubroutineChoiceKind.InstallCard)
+            && creditCost != 0)
+        {
+            throw new ArgumentException(
+                "Only a pay-credits or install choice may carry a credit amount.",
+                nameof(creditCost));
+        }
+
+        if (choice == IceSubroutineChoiceKind.PayCredits && creditCost <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(creditCost),
+                "A pay-credits choice must carry a positive amount.");
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegative(hostedCredits);
+
+        if (choice != IceSubroutineChoiceKind.PayCredits && hostedCredits != 0)
+        {
+            throw new ArgumentException(
+                "Only a pay-credits choice may carry a hosted-credit split.",
+                nameof(hostedCredits));
+        }
+
+        if (choice == IceSubroutineChoiceKind.PayCredits && hostedCredits > creditCost)
+        {
+            throw new ArgumentException(
+                "Hosted credits cannot exceed the pay-credits amount.",
+                nameof(hostedCredits));
+        }
+
+        FrameIdentity = frameIdentity;
+        Choice = choice;
+        CardId = cardId;
+        DestinationKind = destinationKind;
+        ServerId = serverId;
+        CreateNewRemote = createNewRemote;
+        CreditCost = creditCost;
+        HostedCredits = hostedCredits;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string FrameIdentity { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public IceSubroutineChoiceKind Choice { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CardInstanceId? CardId { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public InstallDestinationKind? DestinationKind { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ServerId? ServerId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public bool CreateNewRemote { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int CreditCost { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int HostedCredits { get; private set; }
+}
+
 /// <summary>
 /// Engine-issued payload for one paid-ability activation.  The payload is a
 /// detached snapshot: callers submit its action ID and cannot replace source,
@@ -1356,6 +1501,15 @@ public sealed class PendingDecision
             behaviorChoice.OptionKeys,
             behaviorChoice.CardIds,
             behaviorChoice.FinalizeSelection),
+        IceSubroutineChoiceParameters iceSubroutineChoice => new IceSubroutineChoiceParameters(
+            iceSubroutineChoice.FrameIdentity,
+            iceSubroutineChoice.Choice,
+            iceSubroutineChoice.CardId,
+            iceSubroutineChoice.DestinationKind,
+            iceSubroutineChoice.ServerId,
+            iceSubroutineChoice.CreateNewRemote,
+            iceSubroutineChoice.CreditCost,
+            iceSubroutineChoice.HostedCredits),
         AbilityActionParameters ability => new AbilityActionParameters(
             ability.SourceCardId,
             ability.DefinitionId,

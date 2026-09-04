@@ -23,6 +23,7 @@ public static class GatewayBehaviorCatalog
         var builder = new BehaviorCatalogBuilder(Version);
         return builder
             .AddIce(GatewayIceBehaviorSpecs.IceSpecs)
+            .AddIce(GatewayBatch4IceBehaviorSpecs.IceSpecs)
             .AddIcebreaker(GatewayIcebreakerBehaviorSpecs.IcebreakerSpecs)
             .AddIcebreaker(GatewayBatch3StrengthBehaviorSpecs.IcebreakerSpecs)
             .AddIcebreaker(GatewayBatch4IcebreakerBehaviorSpecs.IcebreakerSpecs)
