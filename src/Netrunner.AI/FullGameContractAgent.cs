@@ -11,15 +11,15 @@ namespace Netrunner.AI;
 /// </summary>
 public static class FullGameContractAgentVersion
 {
-    public const int SchemaVersion = 2;
+    public const int SchemaVersion = 3;
 
-    public const string AgentVersion = "full-game-contract-agent-v2";
+    public const string AgentVersion = "full-game-contract-agent-v3";
 
-    public const string PolicyVersion = "full-game-contract-policy-v2";
+    public const string PolicyVersion = "full-game-contract-policy-v3";
 }
 
 /// <summary>
-/// Action-class policy for <see cref="FullGameContractAgent"/> v2.
+/// Action-class policy for <see cref="FullGameContractAgent"/> v3.
 ///
 /// The action lists are typed <see cref="ActionKind"/> values, not prompt or
 /// description text. The dispatcher is deliberately organized by
@@ -35,6 +35,7 @@ public sealed class FullGameContractPolicy
     private static readonly ActionKind[] DefaultTurnActionOrder =
     [
         ActionKind.UseAbility,
+        ActionKind.InstallCard,
         ActionKind.GainCredit,
         ActionKind.DrawCard,
     ];
@@ -101,6 +102,7 @@ public sealed class FullGameContractPolicy
         new HashSet<ActionKind>
         {
             ActionKind.UseAbility,
+            ActionKind.InstallCard,
             ActionKind.GainCredit,
             ActionKind.DrawCard,
         };
@@ -141,7 +143,7 @@ public sealed class FullGameContractPolicy
             if (!allowed.Contains(action))
             {
                 throw new ArgumentException(
-                    $"Action kind '{action}' is not supported by this v2 policy.",
+                    $"Action kind '{action}' is not supported by this v3 policy.",
                     parameterName);
             }
 
@@ -158,12 +160,12 @@ public sealed class FullGameContractPolicy
 }
 
 /// <summary>
-/// Deterministic observation-only v2 agent for the Slice 4.2 shell.
+/// Deterministic observation-only v3 agent for the Slice 4.2 shell.
 ///
 /// It currently dispatches typed decision classes for turn timing, turn
-/// actions (bounded abilities/gain/draw), forced discard, generic behavior
-/// choices, and M2 run windows. It returns an existing engine-issued <see
-/// cref="ActionId"/> only;
+/// actions (bounded abilities/install/gain/draw), forced discard, generic
+/// behavior choices, and M2 run windows. It returns an existing engine-issued
+/// <see cref="ActionId"/> only;
 /// it never synthesizes a submission and never chooses <see
 /// cref="ActionKind.EndTurn"/>.
 /// </summary>
@@ -215,10 +217,7 @@ public sealed class FullGameContractAgent : IGameAgent
         LegalAction selected = decisionKind switch
         {
             DecisionKind.TurnTiming => SelectTurnTiming(observation.LegalActions),
-            DecisionKind.TurnAction => SelectByPriority(
-                observation.LegalActions,
-                _policy.TurnActionOrder,
-                FullGameActionClass.TurnAction),
+            DecisionKind.TurnAction => SelectTurnAction(observation.LegalActions),
             DecisionKind.TurnDiscard => SelectTurnDiscard(observation.LegalActions),
             DecisionKind.BehaviorChoice => SelectBehaviorChoice(observation.LegalActions),
             DecisionKind.RunTiming => SelectByPriority(
@@ -257,7 +256,7 @@ public sealed class FullGameContractAgent : IGameAgent
                 && action.Parameters is BehaviorChoiceParameters)
             .ToArray();
 
-        // The v2 teaching policy prefers an economy mode when one is offered
+        // The v3 teaching policy prefers an economy mode when one is offered
         // (for example Predictive Planogram's typed `gain` option), then
         // falls back to the complete typed semantic key. This is deliberately
         // keyed by the option payload, never by the action description.
@@ -276,6 +275,85 @@ public sealed class FullGameContractAgent : IGameAgent
 
     private static string BehaviorOrderKey(LegalAction action) =>
         $"{BehaviorPreference(action)}:{SemanticKey(action)}";
+
+    private LegalAction SelectTurnAction(IReadOnlyList<LegalAction> actions)
+    {
+        EnsureActionShapes(actions, FullGameActionClass.TurnAction);
+
+        LegalAction[] candidates = actions
+            .Where(action =>
+                _policy.TurnActionOrder.Contains(action.Kind)
+                && IsActionAllowed(action, FullGameActionClass.TurnAction)
+                && HasExpectedParameters(action, FullGameActionClass.TurnAction)
+                && IsProactivelySelectable(action))
+            .ToArray();
+        if (candidates.Length == 0)
+        {
+            throw new InvalidOperationException(
+                $"The full-game agent found no supported {FullGameActionClass.TurnAction} action in the issued decision.");
+        }
+
+        // The category is derived from the immutable typed policy order. The
+        // install category then receives a small detached utility adjustment:
+        // a lower current effective cost is better, and a larger current
+        // savings term is better. This consumes only the quote on this fresh
+        // observation; there is deliberately no cross-observation cache from
+        // which a first-X bonus could persist after Core stops issuing it.
+        return candidates
+            .OrderByDescending(action => TurnActionUtilityScore(action, _policy.TurnActionOrder))
+            .ThenBy(SemanticKey, StringComparer.Ordinal)
+            .ThenBy(static action => action.Id.Value, StringComparer.Ordinal)
+            .First();
+    }
+
+    private static int TurnActionUtilityScore(
+        LegalAction action,
+        IReadOnlyList<ActionKind> actionOrder)
+    {
+        int priorityIndex = -1;
+        for (int index = 0; index < actionOrder.Count; index++)
+        {
+            if (actionOrder[index] == action.Kind)
+            {
+                priorityIndex = index;
+                break;
+            }
+        }
+
+        if (priorityIndex < 0)
+        {
+            return int.MinValue;
+        }
+
+        // Keep category ordering explicit and bounded. The maximum configured
+        // list contains only the four supported turn action kinds, so this
+        // leaves ample room for a detached install-cost adjustment without
+        // making normal category ordering depend on card text or state.
+        long score = (actionOrder.Count - priorityIndex) * 100_000L;
+        if (action.Parameters is InstallCardParameters install)
+        {
+            CostProjection projection = InstallCostProjection(install);
+            score -= projection.EffectiveCost;
+            score += projection.Savings;
+        }
+
+        return score switch
+        {
+            > int.MaxValue => int.MaxValue,
+            < int.MinValue => int.MinValue,
+            _ => (int)score,
+        };
+    }
+
+    private static CostProjection InstallCostProjection(InstallCardParameters install)
+    {
+        CostQuote? quote = install.CostQuote;
+        return quote is null
+            ? new CostProjection(install.CreditCost, 0)
+            : new CostProjection(quote.EffectiveCost, quote.BaseCost - quote.EffectiveCost);
+    }
+
+    private readonly record struct CostProjection(int EffectiveCost, int Savings);
 
     private static LegalAction SelectByPriority(
         IReadOnlyList<LegalAction> actions,
@@ -348,6 +426,7 @@ public sealed class FullGameContractAgent : IGameAgent
             FullGameActionClass.TurnTiming => action.Kind is ActionKind.UseAbility or ActionKind.PassPriority,
             FullGameActionClass.TurnAction => action.Kind is
                 ActionKind.UseAbility
+                or ActionKind.InstallCard
                 or ActionKind.GainCredit
                 or ActionKind.DrawCard,
             FullGameActionClass.TurnDiscard => action.Kind == ActionKind.ChooseCard,
@@ -403,8 +482,132 @@ public sealed class FullGameContractAgent : IGameAgent
                 && payment.HostedCredits >= 0,
             (ActionKind.UseAbility, AbilityActionParameters ability) =>
                 IsValidAbilityAction(ability, actionClass),
+            (ActionKind.InstallCard, InstallCardParameters install) =>
+                IsValidInstallAction(install, actionClass),
             _ => false,
         };
+    }
+
+    private static bool IsValidInstallAction(
+        InstallCardParameters? install,
+        FullGameActionClass actionClass)
+    {
+        if (install is null
+            || actionClass != FullGameActionClass.TurnAction
+            || !HasStableId(install.CardId.Value)
+            || !Enum.IsDefined(install.DestinationKind)
+            || install.CreditCost < 0
+            || !HasValidInstallDestination(install)
+            || !HasStableCardIds(install.CandidateReplacementCardIds)
+            || !HasStableCardIds(install.RequiredReplacementCardIds)
+            || !HasStableCardIds(install.SelectedReplacementCardIds)
+            || !IsSubset(
+                install.RequiredReplacementCardIds,
+                install.CandidateReplacementCardIds)
+            || !IsSubset(
+                install.SelectedReplacementCardIds,
+                install.CandidateReplacementCardIds)
+            || !HasValidTurnInstallSelectionShape(install)
+            || !IsValidInstallCostQuote(install.CostQuote, install.CreditCost))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool HasValidInstallDestination(InstallCardParameters install)
+    {
+        if (install.ServerId is { } serverId && !HasStableId(serverId.Value))
+        {
+            return false;
+        }
+
+        return install.DestinationKind switch
+        {
+            InstallDestinationKind.RunnerRig =>
+                install.ServerId is null && !install.CreateNewRemote,
+            InstallDestinationKind.ServerRoot
+                or InstallDestinationKind.ServerIce =>
+                install.ServerId.HasValue != install.CreateNewRemote,
+            _ => false,
+        };
+    }
+
+    private static bool HasStableCardIds(IReadOnlyList<CardInstanceId>? cardIds)
+    {
+        if (cardIds is null)
+        {
+            return false;
+        }
+
+        var seen = new HashSet<CardInstanceId>();
+        foreach (CardInstanceId cardId in cardIds)
+        {
+            if (!HasStableId(cardId.Value) || !seen.Add(cardId))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsSubset(
+        IReadOnlyList<CardInstanceId> subset,
+        IReadOnlyList<CardInstanceId> superset) =>
+        subset.All(superset.Contains);
+
+    private static bool HasValidTurnInstallSelectionShape(InstallCardParameters install) =>
+        install.CandidateReplacementCardIds.Count == 0
+            ? install.FinalizeSelection
+                && install.SelectedReplacementCardIds.Count == 0
+            : !install.FinalizeSelection
+                && install.SelectedReplacementCardIds.Count == 0;
+
+    private static bool IsValidInstallCostQuote(CostQuote? quote, int creditCost)
+    {
+        if (quote is null)
+        {
+            return true;
+        }
+
+        if (quote.BaseCost < 0
+            || quote.EffectiveCost < 0
+            || quote.EffectiveCost != creditCost
+            || quote.Adjustments is null
+            || quote.Adjustments.Count == 0)
+        {
+            return false;
+        }
+
+        long expected = quote.BaseCost;
+        foreach (CostAdjustment? adjustment in quote.Adjustments)
+        {
+            if (adjustment is null
+                || adjustment.Kind != BehaviorCostModifierKind.RunnerInstallCreditCost
+                || adjustment.Delta == 0
+                || !HasStableId(adjustment.ReasonKey)
+                || (adjustment.SourceDefinitionId is { } definitionId
+                    && !HasStableId(definitionId.Value))
+                || (adjustment.SourceCardId is { } sourceCardId
+                    && !HasStableId(sourceCardId.Value)))
+            {
+                return false;
+            }
+
+            try
+            {
+                expected = checked(expected + adjustment.Delta);
+            }
+            catch (OverflowException)
+            {
+                return false;
+            }
+        }
+
+        expected = Math.Max(0, expected);
+        return expected == quote.EffectiveCost;
     }
 
     private static bool IsProactivelySelectable(LegalAction action) =>
@@ -708,6 +911,7 @@ public sealed class FullGameContractAgent : IGameAgent
     {
         NoActionParameters => string.Empty,
         CardChoiceParameters card => $"card:{card.CardId.Value}",
+        InstallCardParameters install => InstallKey(install),
         NumberChoiceParameters number =>
             $"number:{number.Value.ToString(CultureInfo.InvariantCulture)}",
         RunIceParameters ice => $"ice:{ice.IceId.Value}",
@@ -725,6 +929,22 @@ public sealed class FullGameContractAgent : IGameAgent
         _ => throw new InvalidOperationException(
             $"The full-game agent cannot derive a semantic key for '{action.Kind}'."),
     };
+
+    private static string InstallKey(InstallCardParameters install) =>
+        CanonicalJson.Serialize(new
+        {
+            Kind = ActionKind.InstallCard,
+            install.CardId,
+            install.DestinationKind,
+            install.ServerId,
+            install.CreateNewRemote,
+            install.CreditCost,
+            install.CandidateReplacementCardIds,
+            install.RequiredReplacementCardIds,
+            install.SelectedReplacementCardIds,
+            install.FinalizeSelection,
+            install.CostQuote,
+        });
 
     private static string AbilityKey(AbilityActionParameters ability)
     {
@@ -826,7 +1046,7 @@ public sealed class FullGameContractAgent : IGameAgent
     }
 
     private static InvalidOperationException UnsupportedDecision(DecisionKind kind) =>
-        new($"The full-game agent does not support decision kind '{kind}' in v2.");
+        new($"The full-game agent does not support decision kind '{kind}' in v3.");
 
     private enum FullGameActionClass
     {

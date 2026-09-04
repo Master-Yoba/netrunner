@@ -4034,3 +4034,28 @@ errors; runtime action expansion and full verification remain pending.
   zero-warning solution build, solution formatting, and `git diff --check`.
   All seven Slice 4.4 cards are now behavior-bound; AGT-401 v3, SIM-401,
   UI-405, and registry/evidence closure remain.
+
+### 2026-09-04 — Checkpoint D1 AGT-401 contract agent v3 accepted
+
+- Luna Max extended the observation-only agent with typed
+  `InstallCardParameters` support and bumped the policy schema plus agent and
+  policy identities to version 3. Existing bounded `UseAbility` precedence,
+  the no-`EndTurn` rule, and deterministic typed selection remain intact.
+- Turn-action selection now has an explicit bounded utility calculation. Within
+  the install category it uses only the current engine-issued effective cost
+  and savings from the detached `CostQuote`; it never reads descriptions,
+  reason strings, the behavior catalog, authoritative state, or observation
+  state dictionaries. Consequently DZMZ's first-program benefit contributes
+  only while Core includes its adjustment in the current observation, and no
+  bonus is cached after the First-X use is consumed.
+- Install payloads fail closed on unstable IDs, invalid destinations,
+  inconsistent replacement selections, non-install adjustment kinds, malformed
+  provenance, or quote arithmetic that does not reconstruct the effective
+  cost. Canonical semantic keys retain the complete typed install payload and
+  use the engine-issued `ActionId` as the final tie-break.
+- Tests prove discounted-install ranking, a fresh unmodified observation after
+  First-X consumption, order/description/JSON neutrality, malformed and forged
+  rejection, and the version-3 contract while retaining the unreadable
+  observation-dictionary boundary. Root independently passed the complete AI
+  suite at 34/34, both AI project formatting gates, and `git diff --check`.
+  SIM-401, UI-405, and registry/evidence closure remain.

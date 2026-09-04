@@ -18,9 +18,9 @@ public sealed class FullGameContractAgentTests
 
         Assert.Equal(FullGameContractAgentVersion.SchemaVersion, policy.SchemaVersion);
         Assert.Equal(FullGameContractAgentVersion.PolicyVersion, policy.PolicyVersion);
-        Assert.Equal(2, FullGameContractAgentVersion.SchemaVersion);
-        Assert.Equal("full-game-contract-agent-v2", FullGameContractAgentVersion.AgentVersion);
-        Assert.Equal("full-game-contract-policy-v2", FullGameContractAgentVersion.PolicyVersion);
+        Assert.Equal(3, FullGameContractAgentVersion.SchemaVersion);
+        Assert.Equal("full-game-contract-agent-v3", FullGameContractAgentVersion.AgentVersion);
+        Assert.Equal("full-game-contract-policy-v3", FullGameContractAgentVersion.PolicyVersion);
         Assert.Equal(PlayerSide.Runner, policy.ControlledSide);
         Assert.Equal(ActionKind.DrawCard, policy.TurnActionOrder[0]);
         Assert.Equal(ActionKind.JackOut, policy.RunActionOrder[0]);
@@ -203,7 +203,12 @@ public sealed class FullGameContractAgentTests
         LegalAction install = Action(
             "opaque-install",
             ActionKind.InstallCard,
-            new CardChoiceParameters(new CardInstanceId("card:install")));
+            new InstallCardParameters(
+                new CardInstanceId("card:install"),
+                InstallDestinationKind.RunnerRig,
+                serverId: null,
+                createNewRemote: false,
+                creditCost: 0));
         LegalAction startRun = Action(
             "opaque-start-run",
             ActionKind.StartRun,
@@ -361,6 +366,163 @@ public sealed class FullGameContractAgentTests
 
         Assert.Equal(gain.Id, first);
         Assert.Equal(first, replay);
+    }
+
+    [Fact]
+    public async Task InstallUtilityPrefersTheCurrentDiscountedTypedQuote()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Runner);
+        CostQuote discountedQuote = new(
+            5,
+            [new CostAdjustment(
+                BehaviorCostModifierKind.RunnerInstallCreditCost,
+                -2,
+                "dzmz-first-program-install",
+                new CardDefinitionId("definition:dzmz"),
+                new CardInstanceId("source:dzmz"))]);
+        LegalAction unmodified = Action(
+            "a-unmodified",
+            ActionKind.InstallCard,
+            InstallParameters("unmodified", 4),
+            "install the expensive alternative");
+        LegalAction discounted = Action(
+            "z-discounted",
+            ActionKind.InstallCard,
+            InstallParameters("discounted", discountedQuote.EffectiveCost, discountedQuote),
+            "this description is intentionally misleading");
+
+        Assert.Equal(
+            discounted.Id,
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Runner, DecisionKind.TurnAction, unmodified, discounted)));
+    }
+
+    [Fact]
+    public async Task InstallUtilityDoesNotRetainAConsumedFirstXBonus()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Runner);
+        CostQuote firstInstallQuote = new(
+            5,
+            [new CostAdjustment(
+                BehaviorCostModifierKind.RunnerInstallCreditCost,
+                -2,
+                "dzmz-first-program-install",
+                new CardDefinitionId("definition:dzmz"),
+                new CardInstanceId("source:dzmz"))]);
+        LegalAction discounted = Action(
+            "dzmz-discounted",
+            ActionKind.InstallCard,
+            InstallParameters("dzmz", firstInstallQuote.EffectiveCost, firstInstallQuote),
+            "first observation");
+        LegalAction alternative = Action(
+            "alternative",
+            ActionKind.InstallCard,
+            InstallParameters("alternative", 4),
+            "first observation alternative");
+
+        Assert.Equal(
+            discounted.Id,
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Runner, DecisionKind.TurnAction, alternative, discounted)));
+
+        // Core consumes the First-X source at the accepted install boundary.
+        // The next observation therefore carries no quote for the same card;
+        // the stateless agent must rank the newly issued effective costs, not
+        // remember the previous observation's discount.
+        LegalAction unmodifiedDzmz = Action(
+            "dzmz-unmodified",
+            ActionKind.InstallCard,
+            InstallParameters("dzmz", 5),
+            "second observation");
+        LegalAction currentAlternative = Action(
+            "current-alternative",
+            ActionKind.InstallCard,
+            InstallParameters("alternative", 4),
+            "second observation alternative");
+
+        Assert.Equal(
+            currentAlternative.Id,
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Runner, DecisionKind.TurnAction, unmodifiedDzmz, currentAlternative)));
+    }
+
+    [Fact]
+    public async Task InstallSelectionIsNeutralAcrossOrderDescriptionsAndJsonRoundtrip()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Runner);
+        CostQuote discountedQuote = new(
+            3,
+            [new CostAdjustment(
+                BehaviorCostModifierKind.RunnerInstallCreditCost,
+                -1,
+                "typed-discount",
+                new CardDefinitionId("definition:source"),
+                new CardInstanceId("source:source"))]);
+        LegalAction first = Action(
+            "install-first",
+            ActionKind.InstallCard,
+            InstallParameters("first", 2, discountedQuote),
+            "description one");
+        LegalAction second = Action(
+            "install-second",
+            ActionKind.InstallCard,
+            InstallParameters("second", 3),
+            "description two");
+
+        ActionId selected = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.TurnAction, second, first));
+        ActionId reordered = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.TurnAction, first, second));
+        string payload = JsonSerializer.Serialize(new[] { second, first });
+        LegalAction[] restored = JsonSerializer.Deserialize<LegalAction[]>(payload)
+            ?? throw new InvalidOperationException("The serialized install payload was empty.");
+        ActionId roundTrip = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.TurnAction, restored));
+
+        Assert.Equal(first.Id, selected);
+        Assert.Equal(selected, reordered);
+        Assert.Equal(selected, roundTrip);
+        Assert.Contains(restored, action => action.Id == roundTrip);
+    }
+
+    [Fact]
+    public async Task ForgedOrMalformedInstallPayloadFailsClosed()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Runner);
+        CostQuote wrongQuoteKind = new(
+            3,
+            [new CostAdjustment(
+                BehaviorCostModifierKind.IceRezCreditCost,
+                -1,
+                "forged-install-quote",
+                new CardDefinitionId("definition:source"),
+                new CardInstanceId("source:source"))]);
+        LegalAction forgedQuote = Action(
+            "forged-quote",
+            ActionKind.InstallCard,
+            InstallParameters("forged", wrongQuoteKind.EffectiveCost, wrongQuoteKind));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Runner, DecisionKind.TurnAction, forgedQuote)));
+
+        LegalAction invalidSelection = Action(
+            "invalid-selection",
+            ActionKind.InstallCard,
+            new InstallCardParameters(
+                new CardInstanceId("card:invalid-selection"),
+                InstallDestinationKind.RunnerRig,
+                serverId: null,
+                createNewRemote: false,
+                creditCost: 0,
+                candidateReplacementCardIds: [new CardInstanceId("card:candidate")],
+                requiredReplacementCardIds: [new CardInstanceId("card:not-a-candidate")],
+                selectedReplacementCardIds: [],
+                finalizeSelection: false));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Runner, DecisionKind.TurnAction, invalidSelection)));
     }
 
     [Fact]
@@ -679,6 +841,18 @@ public sealed class FullGameContractAgentTests
         ActionParameters parameters,
         string description) =>
         new(new ActionId("issued:" + id), kind, description, parameters);
+
+    private static InstallCardParameters InstallParameters(
+        string id,
+        int creditCost,
+        CostQuote? costQuote = null) =>
+        new(
+            new CardInstanceId("card:" + id),
+            InstallDestinationKind.RunnerRig,
+            serverId: null,
+            createNewRemote: false,
+            creditCost,
+            costQuote: costQuote);
 
     private sealed class ThrowingReadOnlyDictionary : IReadOnlyDictionary<string, object?>
     {
