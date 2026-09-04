@@ -3,8 +3,8 @@
   "fixtureId": "sim-slice43-batch2-expanded",
   "rulesVersion": "26.03",
   "cardDataVersion": "236140cf84491c23995b028bc791281837520b97",
-  "behaviorRegistryVersion": "gateway-m4-4.3",
-  "behaviorCatalogFingerprint": "6e55901b550ba189c3ef7d11bb2d5aae4f8036dd8e0f9f2461c627fbe312a7d6",
+  "behaviorRegistryVersion": "gateway-m4-4.4-c1",
+  "behaviorCatalogFingerprint": "472d22a6b13ea35fa368677435c2d04171c1e23d1bc2353e36dfb6674a0549dc",
   "seed": 40103,
   "actionCap": 256,
   "corpDeck": {

@@ -432,6 +432,9 @@ public static partial class GameEngine
                 }
 
                 return;
+            case BehaviorInstructionKind.ModifyEncounteredIceStrength:
+                ResolveBehaviorModifyEncounteredIceStrength(working, frame, instruction);
+                return;
             case BehaviorInstructionKind.AddCounter:
                 IReadOnlyList<CardInstanceId> counterTargets = instruction.Target is null
                     || instruction.Target.Kind == BehaviorTargetKind.Self
@@ -867,6 +870,26 @@ public static partial class GameEngine
             }
         }
 
+        if (rootInstructions.Any(static instruction =>
+                instruction.Kind == BehaviorInstructionKind.ModifyEncounteredIceStrength)
+            && (frame.AbilityKey is null
+                || !BehaviorEncounterStrengthContracts.TryGetExecutableInstruction(
+                    definition,
+                    frame.AbilityKey,
+                    out _,
+                    out BehaviorInstruction? declaredInstruction)
+                || declaredInstruction is null
+                || rootInstructions.Count(static instruction =>
+                    instruction.Kind == BehaviorInstructionKind.ModifyEncounteredIceStrength) != 1
+                || !BehaviorContractStructure.AreEqual(
+                    rootInstructions.Single(static instruction =>
+                        instruction.Kind == BehaviorInstructionKind.ModifyEncounteredIceStrength),
+                    declaredInstruction)))
+        {
+            throw new ResolutionFailureException(
+                "Encountered-ICE strength instructions must be the exact single instruction of a Runner encounter-paid ability.");
+        }
+
         // `trigger-subject` is an engine-seeded binding, never a general
         // behavior binding. It is valid only on a catalog-trigger child and
         // must remain exactly equal to the subject captured by that child's
@@ -1277,6 +1300,88 @@ public static partial class GameEngine
             // surrounding behavior continues atomically.
             return;
         }
+    }
+
+    private static void ResolveBehaviorModifyEncounteredIceStrength(
+        WorkingState working,
+        BehaviorResolutionFrame frame,
+        BehaviorInstruction instruction)
+    {
+        if (frame.AbilityKey is not { } abilityKey
+            || frame.TriggerKey is not null
+            || working.ResolutionStack.Count < 3
+            || working.ResolutionStack[^2] is not AbilityFrame abilityParent
+            || working.ResolutionStack[^3] is not RunTimingFrame runFrame
+            || abilityParent.Stage != AbilityLifecycleStage.AwaitingChild
+            || abilityParent.Controller != frame.Controller
+            || abilityParent.SourceCardId != frame.SourceCardId
+            || abilityParent.DefinitionId != frame.DefinitionId)
+        {
+            throw new ResolutionFailureException(
+                "Encountered-ICE strength modifiers require an ability-owned run child.");
+        }
+
+        RunState run = working.RunState
+            ?? throw new ResolutionFailureException(
+                "Encountered-ICE strength modifiers require a live run.");
+        if (runFrame.RunId != run.Id
+            || runFrame.Step != run.Step
+            || run.Step != RunTimingStep.EncounterPaidWindow
+            || run.Priority is not { PriorityHolder: PlayerSide.Runner }
+            || run.Encounter is not { Status: RunEncounterStatus.Initialized } encounter)
+        {
+            throw new ResolutionFailureException(
+                "Encountered-ICE strength modifiers are legal only in an initialized encounter paid window.");
+        }
+
+        CardInstanceState source = GetCard(working, frame.SourceCardId);
+        if (source.OwnerSide != PlayerSide.Runner
+            || !working.BehaviorCatalog.TryGet(frame.DefinitionId, out CardBehaviorDefinition? definition)
+            || !BehaviorEncounterStrengthContracts.MatchesEffect(
+                definition,
+                abilityKey,
+                BehaviorEncounterStrengthContracts.EffectBehaviorId(frame.DefinitionId, abilityKey),
+                new RunValueAdjustment(
+                    source.Id,
+                    encounter.IceId,
+                    instruction.Amount,
+                    instruction.Argument!),
+                out _,
+                out BehaviorInstruction? declaredInstruction)
+            || declaredInstruction is null
+            || !BehaviorContractStructure.AreEqual(declaredInstruction, instruction))
+        {
+            throw new ResolutionFailureException(
+                "Encountered-ICE strength modifier provenance does not match its catalog paid ability.");
+        }
+
+        CardInstanceState ice = GetCard(working, encounter.IceId);
+        if (!working.BehaviorCatalog.TryGetIce(ice.DefinitionId, out _))
+        {
+            throw new ResolutionFailureException(
+                $"Encounter target '{ice.DefinitionId}' is not a registered ICE behavior.");
+        }
+
+        RunEffectId effectId = new(
+            $"effect:encounter-strength:{run.Id.Value}:{encounter.Id.Value}:"
+            + $"{source.Id.Value}:{ice.Id.Value}:{run.LingeringEffects.Count}");
+        RunState adjusted = run.WithLingeringEffects(
+            run.LingeringEffects.Append(
+                new RunLingeringEffect(
+                    effectId,
+                    BehaviorEncounterStrengthContracts.EffectBehaviorId(frame.DefinitionId, abilityKey),
+                    source.Id,
+                    RunLingeringEffectExpiry.Encounter,
+                    new RunValueAdjustment(
+                        BehaviorValueKind.Strength,
+                        BehaviorValueSourceKind.EncounterScoped,
+                        BehaviorValueOperation.Add,
+                        source.Id,
+                        ice.Id,
+                        instruction.Amount,
+                        instruction.Argument!))).ToArray());
+        working.RunState = adjusted;
+        AdvanceBehaviorCursor(working, frame);
     }
 
     /// <summary>

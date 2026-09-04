@@ -8,8 +8,8 @@ public sealed class SimulationFixtureTests
 {
     private const string BasicFixtureId = "sim-slice43-batch2-basic";
     private const string ExpandedFixtureId = "sim-slice43-batch2-expanded";
-    private const string GatewayBehaviorRegistryVersion = "gateway-m4-4.3";
-    private const string GatewayBehaviorCatalogFingerprint = "6e55901b550ba189c3ef7d11bb2d5aae4f8036dd8e0f9f2461c627fbe312a7d6";
+    private const string GatewayBehaviorRegistryVersion = "gateway-m4-4.4-c1";
+    private const string GatewayBehaviorCatalogFingerprint = "472d22a6b13ea35fa368677435c2d04171c1e23d1bc2353e36dfb6674a0549dc";
 
     private static readonly HashSet<string> AllowedCorpCodes = new(StringComparer.Ordinal)
     {
@@ -51,6 +51,11 @@ public sealed class SimulationFixtureTests
         "30033",
     };
 
+    // The checked-in reduced fixtures intentionally remain Slice 4.3 decks;
+    // these three C1 definitions are catalogued but are not yet part of the
+    // reduced-deck evidence inputs.
+    private static readonly string[] CatalogOnlyC1Codes = ["30008", "30025", "30026"];
+
     [Fact]
     public void CheckedInFixturesAcceptReducedSlice43DecksAndRoundTripStably()
     {
@@ -69,12 +74,15 @@ public sealed class SimulationFixtureTests
                 .Select(static card => card.Code)
                 .Distinct(StringComparer.Ordinal)
                 .OrderBy(static code => code));
-        Assert.Equal(32, fullCatalog.AllDefinitionIds.Count);
+        Assert.Equal(35, fullCatalog.AllDefinitionIds.Count);
         Assert.Equal(
             fullCatalog.AllDefinitionIds
                 .Select(static definitionId => definitionId.Value)
                 .OrderBy(static code => code, StringComparer.Ordinal),
-            AllowedCorpCodes.Concat(AllowedRunnerCodes).OrderBy(static code => code, StringComparer.Ordinal));
+            AllowedCorpCodes
+                .Concat(AllowedRunnerCodes)
+                .Concat(CatalogOnlyC1Codes)
+                .OrderBy(static code => code, StringComparer.Ordinal));
 
         foreach (SimulationFixtureDocument fixture in catalog.Fixtures)
         {

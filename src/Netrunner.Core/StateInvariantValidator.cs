@@ -1641,6 +1641,17 @@ public static class StateInvariantValidator
                         $"{effectPath}.valueAdjustment.targetCardId",
                         "A typed run value adjustment must target the current initialized encounter ICE or its active breaker.");
                 }
+
+                if (adjustment.Source == BehaviorValueSourceKind.EncounterScoped)
+                {
+                    ValidateCatalogEncounterStrengthAdjustment(
+                        state,
+                        behaviorCatalog,
+                        effect,
+                        adjustment,
+                        effectPath,
+                        violations);
+                }
             }
         }
 
@@ -1690,6 +1701,196 @@ public static class StateInvariantValidator
                     Add(violations, "run.unknown-card", idPath, $"Run references unknown card '{id}'.");
                 }
             }
+        }
+    }
+
+    private static void ValidateCatalogEncounterStrengthAdjustment(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        RunLingeringEffect effect,
+        RunValueAdjustment adjustment,
+        string effectPath,
+        List<StateInvariantViolation> violations)
+    {
+        if (!BehaviorEncounterStrengthContracts.HasEffectPrefix(effect.BehaviorId))
+        {
+            Add(
+                violations,
+                "run.value-adjustment-provenance-behavior",
+                $"{effectPath}.behaviorId",
+                "An encounter strength adjustment must carry a catalog behavior identity.");
+            return;
+        }
+
+        CardInstanceState? source = state.Cards.FirstOrDefault(card => card?.Id == adjustment.SourceCardId);
+        if (source is null)
+        {
+            Add(
+                violations,
+                "run.value-adjustment-provenance-definition",
+                $"{effectPath}.valueAdjustment.sourceCardId",
+                "A catalog encounter strength adjustment source card must remain present for provenance reconstruction.");
+            return;
+        }
+
+        if (!behaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? definition))
+        {
+            Add(
+                violations,
+                "run.value-adjustment-provenance-definition",
+                $"{effectPath}.behaviorId",
+                "A catalog encounter strength adjustment requires its source definition in the injected catalog.");
+            return;
+        }
+
+        bool hasEncounterStrengthAbility = definition.PaidAbilities.Any(static ability =>
+            ability.Instructions.Any(static instruction =>
+                instruction.Kind == BehaviorInstructionKind.ModifyEncounteredIceStrength));
+        if (!hasEncounterStrengthAbility)
+        {
+            Add(
+                violations,
+                "run.value-adjustment-provenance-behavior",
+                $"{effectPath}.behaviorId",
+                "A catalog encounter strength adjustment must identify a definition with a typed encounter-strength ability.");
+            return;
+        }
+
+        if (source.OwnerSide != PlayerSide.Runner
+            || definition.Controller != source.OwnerSide)
+        {
+            Add(
+                violations,
+                "run.value-adjustment-provenance-controller",
+                $"{effectPath}.valueAdjustment.sourceCardId",
+                "A catalog encounter strength adjustment source must be a Runner card whose definition controller matches its owner.");
+        }
+
+        if (state.RunState?.Encounter?.IceId != adjustment.TargetCardId)
+        {
+            Add(
+                violations,
+                "run.value-adjustment-provenance-target",
+                $"{effectPath}.valueAdjustment.targetCardId",
+                "A catalog encounter strength adjustment must target the current encounter ICE.");
+            return;
+        }
+
+        BehaviorPaidAbility[] matchingAbilities = definition.PaidAbilities
+            .Where(ability => string.Equals(
+                BehaviorEncounterStrengthContracts.EffectBehaviorId(definition.DefinitionId, ability.Key),
+                effect.BehaviorId,
+                StringComparison.Ordinal))
+            .ToArray();
+        if (matchingAbilities.Length != 1)
+        {
+            Add(
+                violations,
+                "run.value-adjustment-provenance-behavior",
+                $"{effectPath}.behaviorId",
+                "A catalog encounter strength adjustment must identify exactly one declared paid ability.");
+            return;
+        }
+
+        BehaviorPaidAbility ability = matchingAbilities[0];
+        if (!BehaviorEncounterStrengthContracts.MatchesEffect(
+                definition,
+                ability.Key,
+                effect.BehaviorId,
+                adjustment,
+                out _,
+                out BehaviorInstruction? instruction)
+            || instruction is null)
+        {
+            Add(
+                violations,
+                "run.value-adjustment-provenance-declaration",
+                $"{effectPath}.valueAdjustment",
+                "A catalog encounter strength adjustment must match its paid-ability timing, instruction, delta, and reason.");
+        }
+    }
+
+    private static void ValidateBehaviorEncounterStrengthInstruction(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        BehaviorResolutionFrame frame,
+        BehaviorPaidAbility? abilityDeclaration,
+        IReadOnlyList<BehaviorInstruction> instructions,
+        int frameIndex,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        BehaviorInstruction[] modifiers = instructions
+            .Where(static instruction =>
+                instruction.Kind == BehaviorInstructionKind.ModifyEncounteredIceStrength)
+            .ToArray();
+        if (modifiers.Length == 0)
+        {
+            return;
+        }
+
+        bool validAbility = false;
+        if (frame.AbilityKey is not null
+            && frame.TriggerKey is null
+            && abilityDeclaration is not null
+            && modifiers.Length == 1
+            && behaviorCatalog.TryGet(frame.DefinitionId, out CardBehaviorDefinition? definition)
+            && BehaviorEncounterStrengthContracts.TryGetExecutableInstruction(
+                definition,
+                frame.AbilityKey,
+                out _,
+                out BehaviorInstruction? declaredInstruction)
+            && declaredInstruction is not null)
+        {
+            validAbility = BehaviorContractStructure.AreEqual(modifiers[0], declaredInstruction);
+        }
+
+        if (!validAbility)
+        {
+            Add(
+                violations,
+                "resolution.behavior-encounter-strength-instruction",
+                path,
+                "Encountered-ICE strength instructions must be the exact single instruction of a Runner encounter-paid ability.");
+            return;
+        }
+
+        RunState? run = state.RunState;
+        bool validRun = run is
+        {
+            Step: RunTimingStep.EncounterPaidWindow,
+            Priority: { PriorityHolder: PlayerSide.Runner },
+            Encounter: { Status: RunEncounterStatus.Initialized },
+        };
+        bool validParent = frameIndex >= 2
+            && state.ResolutionStack[frameIndex - 1] is AbilityFrame abilityParent
+            && state.ResolutionStack[frameIndex - 2] is RunTimingFrame runFrame
+            && abilityParent.Stage == AbilityLifecycleStage.AwaitingChild
+            && abilityParent.SourceCardId == frame.SourceCardId
+            && abilityParent.DefinitionId == frame.DefinitionId
+            && abilityParent.Controller == frame.Controller
+            && run is not null
+            && runFrame.RunId == run.Id
+            && runFrame.Step == run.Step;
+        PlayerState? controller = state.Players.FirstOrDefault(player => player?.Id == frame.Controller);
+        CardInstanceState? source = state.Cards.FirstOrDefault(card => card?.Id == frame.SourceCardId);
+        bool validSource = source is not null
+            && source.DefinitionId == frame.DefinitionId
+            && source.OwnerSide == PlayerSide.Runner
+            && controller is not null
+            && source.OwnerSide == controller.Side;
+        CardInstanceState? target = run?.Encounter is { } encounter
+            ? state.Cards.FirstOrDefault(card => card?.Id == encounter.IceId)
+            : null;
+        bool validTarget = target is not null
+            && behaviorCatalog.TryGetIce(target.DefinitionId, out _);
+        if (!validRun || !validParent || !validSource || !validTarget)
+        {
+            Add(
+                violations,
+                "resolution.behavior-encounter-strength-context",
+                path,
+                "Encountered-ICE strength instructions require the exact initialized encounter paid-window parent, Runner source/controller, and current ICE target.");
         }
     }
 
@@ -3720,6 +3921,16 @@ public static class StateInvariantValidator
                         {
                             Add(violations, "resolution.behavior-cursor-invalid", $"{path}.instructionCursor", "Behavior cursor is outside the catalog-derived continuation.");
                         }
+
+                        ValidateBehaviorEncounterStrengthInstruction(
+                            state,
+                            behaviorCatalog,
+                            behaviorFrame,
+                            abilityDeclaration,
+                            derivedInstructions,
+                            index,
+                            path,
+                            violations);
 
                         ValidateBehaviorContinuationBindings(
                             behaviorFrame,

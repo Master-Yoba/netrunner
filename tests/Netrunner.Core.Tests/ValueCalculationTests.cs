@@ -152,6 +152,27 @@ public sealed class ValueCalculationTests
                 FixtureBehaviorCatalog.Catalog.Version,
                 FixtureBehaviorCatalog.Catalog)
             .AddIcebreaker(dynamicSpec)
+            .Add(new CardBehaviorDefinition(
+                dynamicDefinition,
+                PlayerSide.Runner,
+                paidAbilities:
+                [
+                    new BehaviorPaidAbility(
+                        "fixture-encounter-strength",
+                        BehaviorAbilityTiming.EncounterPaidWindow,
+                        BehaviorAbilityActivation.PaidAbility,
+                        costs: [],
+                        conditions: [new BehaviorCondition(BehaviorConditionKind.Encountering)],
+                        targets: [],
+                        instructions:
+                        [
+                            new BehaviorInstruction(
+                                BehaviorInstructionKind.ModifyEncounteredIceStrength,
+                                amount: -2,
+                                argument: "fixture-leech"),
+                        ],
+                        BehaviorAbilityUsageLimit.Unlimited),
+                ]))
             .Build();
         GameState preRun = DynamicPumpState(dynamicDefinition, out CardInstanceId dynamicId, out CardInstanceId fixedId);
         Assert.Equal(dynamicDefinition, preRun.GetCard(dynamicId).DefinitionId);
@@ -414,8 +435,29 @@ public sealed class ValueCalculationTests
                 FixtureBehaviorCatalog.Catalog.Version,
                 FixtureBehaviorCatalog.Catalog)
             .AddIcebreaker(dynamicSpec)
+            .Add(new CardBehaviorDefinition(
+                dynamicDefinition,
+                PlayerSide.Runner,
+                paidAbilities:
+                [
+                    new BehaviorPaidAbility(
+                        "fixture-encounter-strength",
+                        BehaviorAbilityTiming.EncounterPaidWindow,
+                        BehaviorAbilityActivation.PaidAbility,
+                        costs: [],
+                        conditions: [new BehaviorCondition(BehaviorConditionKind.Encountering)],
+                        targets: [],
+                        instructions:
+                        [
+                            new BehaviorInstruction(
+                                BehaviorInstructionKind.ModifyEncounteredIceStrength,
+                                amount: -2,
+                                argument: "fixture-leech"),
+                        ],
+                        BehaviorAbilityUsageLimit.Unlimited),
+                ]))
             .Build();
-        GameState preRun = DynamicPumpState(dynamicDefinition, out _, out CardInstanceId leechSourceId);
+        GameState preRun = DynamicPumpState(dynamicDefinition, out CardInstanceId leechSourceId, out _);
         preRun = AddInnerIce(preRun, out CardInstanceId otherIceId);
         GameState prompt = GameEngine.BeginRun(preRun, RunTimingTests.RemoteId(preRun), catalog);
         prompt = PassTwiceWithCatalog(prompt, catalog);
@@ -428,7 +470,9 @@ public sealed class ValueCalculationTests
             "fixture-leech");
         RunLingeringEffect leechEffect = new(
             new RunEffectId("effect:fixture-leech"),
-            "fixture:leech",
+            BehaviorEncounterStrengthContracts.EffectBehaviorId(
+                dynamicDefinition,
+                "fixture-encounter-strength"),
             leechSourceId,
             RunLingeringEffectExpiry.Encounter,
             leechAdjustment);
@@ -465,7 +509,9 @@ public sealed class ValueCalculationTests
             encounter,
             [new RunLingeringEffect(
                 new RunEffectId("effect:fixture-leech-wrong-target"),
-                "fixture:leech",
+                BehaviorEncounterStrengthContracts.EffectBehaviorId(
+                    dynamicDefinition,
+                    "fixture-encounter-strength"),
                 leechSourceId,
                 RunLingeringEffectExpiry.Encounter,
                 wrongTargetAdjustment)]);

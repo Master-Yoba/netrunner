@@ -12,7 +12,7 @@ public static class GatewayBehaviorCatalog
     /// <summary>
     /// Version of the current immutable Gateway behavior composition.
     /// </summary>
-    public const string Version = "gateway-m4-4.3";
+    public const string Version = "gateway-m4-4.4-c1";
 
     /// <summary>
     /// Builds the immutable Gateway behavior catalog used by a production
@@ -24,11 +24,13 @@ public static class GatewayBehaviorCatalog
         return builder
             .AddIce(GatewayIceBehaviorSpecs.IceSpecs)
             .AddIcebreaker(GatewayIcebreakerBehaviorSpecs.IcebreakerSpecs)
+            .AddIcebreaker(GatewayBatch3StrengthBehaviorSpecs.IcebreakerSpecs)
             .AddRunEvent(GatewayRunEventBehaviorSpecs.RunEventSpecs)
             .AddAgenda(GatewayAgendaBehaviorSpecs.AgendaSpecs)
             .AddAsset(GatewayAssetBehaviorSpecs.AssetSpecs)
             .Add(GatewayBatch1BehaviorSpecs.GenericSpecs)
             .Add(GatewayBatch2BehaviorSpecs.GenericSpecs)
+            .Add(GatewayBatch3BehaviorSpecs.GenericSpecs)
             .Build();
     }
 

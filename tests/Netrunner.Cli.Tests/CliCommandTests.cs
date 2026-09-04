@@ -20,7 +20,7 @@ public sealed class CliCommandTests
         using JsonDocument document = JsonDocument.Parse(output.ToString());
         Assert.Equal("ok", document.RootElement.GetProperty("status").GetString());
         Assert.Equal(
-            "8a99222007f1a185a04237e9291a395b4d9bbdeb94ae130aa2a18a9654f4b679",
+            "0d9d6aafd037389489df987288781e6cfbe95a9cc9022e315639f77fdd446e52",
             document.RootElement.GetProperty("stateHash").GetString());
         Assert.Equal(JsonValueKind.Object, document.RootElement.GetProperty("state").ValueKind);
     }

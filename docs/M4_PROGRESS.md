@@ -3958,3 +3958,42 @@ errors; runtime action expansion and full verification remain pending.
   proof, solution formatting, and `git diff --check`. Verbal Plasticity remains
   unbound until the Batch 3 card-binding checkpoint. ENG-414 through ENG-418
   are now accepted as reusable primitives.
+
+### 2026-09-04 — Checkpoint C1 Echelon, Unity, and Leech bindings accepted
+
+- Luna Max bound the three ENG-414 representative cards without title/code
+  branches in Core. Echelon is a printed-strength-zero Sentry interface whose
+  passive quote adds one point per installed Runner icebreaker, including
+  itself. Unity is a printed-strength-one Code Gate interface whose paid pump
+  snapshots the installed-icebreaker count at activation, stores the realized
+  quantity/unit/total, and composes deterministically across repeated uses.
+- Leech uses three typed successful-run triggers for HQ, R&D, and Archives to
+  add virus counters. Its encounter paid ability spends one virus counter and
+  executes the new generic `ModifyEncounteredIceStrength` instruction, creating
+  a distinct-source, exact-target, encounter-expiring negative strength term.
+  The realized adjustment survives source movement, stacks across activations,
+  affects authoritative break legality, and expires at encounter cleanup.
+- Root's adversarial review removed an initially open legacy-provenance bypass.
+  Every encounter-scoped strength adjustment must now reconstruct through its
+  exact catalog definition and paid-ability key; stripped/forged behavior IDs,
+  source/target mismatches, declaration deltas, reasons, controller context,
+  and invalid resolution parents fail closed. The former hand-authored Core
+  fixture now declares the same generic catalog behavior instead of relying on
+  a magic compatibility identity.
+- Immutable Gateway composition is temporarily versioned
+  `gateway-m4-4.4-c1` and contains 35 definitions. Its fingerprint is
+  `472d22a6b13ea35fa368677435c2d04171c1e23d1bc2353e36dfb6674a0549dc`;
+  the existing Slice 4.3 simulation decks remain unchanged while their catalog
+  pins distinguish those 32 deck definitions from the three newly bound C1
+  definitions.
+- D-416 applies because the new catalog instruction/effect identity may occur
+  in saved resolution/run state: engine state schema moved from 8 to 9 and all
+  checked-in state fixtures were re-pinned. The representative M2 initial/final
+  hashes are now `4460bc23…` / `023bd7ae…`; its event hash remains
+  `d20cdef9…`, with 32 actions/checkpoints, replay verification, and no trace
+  problems.
+- Root independently passed the 13-test C1 card gate and 10-test focused value
+  gate, all 1,020 solution tests (Core 717, Cards 166, AI 30, CLI 54, Match 53),
+  the direct M2 proof, a zero-warning solution build, solution formatting, and
+  `git diff --check`. The other four Batch 3 card bindings, supporting agent,
+  simulation, UI, and registry work remain outside this checkpoint.

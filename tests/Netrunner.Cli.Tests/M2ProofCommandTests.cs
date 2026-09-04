@@ -12,12 +12,12 @@ public sealed class M2ProofCommandTests
     // by M2 rework U5 and kept stable by U6 — the agenda mid-access window
     // (pass only) and the automatic 7.2.3 steal emit the same event stream
     // as the pre-U6 player-steal action, see M2ProofTests); the same
-    // constants M2ProofTests pins for both policies. Slice 4.4 Checkpoint A's
-    // serialized run value-adjustment payload (schema 7 -> 8) intentionally
-    // changes state hashes; the event hash remains stable because the new
+    // constants M2ProofTests pins for both policies. Slice 4.4 Checkpoint C1's
+    // serialized catalog encounter-strength provenance payload (schema 8 -> 9)
+    // intentionally changes state hashes; the event hash remains stable because the new
     // payload is state-only.
     private const string ExpectedFinalStateHash =
-        "42d38c1cb869b4c56ba6ced14348ff56a849a3b253a307b791026bd9b22c3211";
+        "023bd7ae1f9eccb0329f4b6ad0e56c2801b9ab5a56b288469809b2666a494947";
     private const string ExpectedEventStreamHash =
         "d20cdef94e97ac928ca088e14952b65d2116fecda00485fff5c3b05e1b6e9e20";
 
@@ -63,7 +63,7 @@ public sealed class M2ProofCommandTests
     {
         string path = Path.Combine(AppContext.BaseDirectory, "M2Scenarios", "representative-run.json");
         BehaviorCatalog gateway = GatewayBehaviorCatalog.Create();
-        Assert.Equal("gateway-m4-4.3", gateway.Version);
+        Assert.Equal("gateway-m4-4.4-c1", gateway.Version);
         BehaviorCatalog legacy = BuildLegacyGatewayCatalog(gateway);
         BehaviorCatalog expanded = new BehaviorCatalogBuilder(legacy.Version, legacy)
             .Add(new CardBehaviorDefinition(

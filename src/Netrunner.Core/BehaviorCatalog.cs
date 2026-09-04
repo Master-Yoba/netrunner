@@ -659,7 +659,10 @@ public sealed record BehaviorInstruction
             throw new ArgumentOutOfRangeException(nameof(kind));
         }
 
-        ArgumentOutOfRangeException.ThrowIfNegative(amount);
+        if (kind != BehaviorInstructionKind.ModifyEncounteredIceStrength)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(amount);
+        }
 
         Kind = kind;
         Amount = amount;
@@ -755,7 +758,43 @@ public sealed record BehaviorInstruction
                     nameof(Amount));
             }
         }
-        else if (RunOperand is not null)
+
+        if (Kind == BehaviorInstructionKind.ModifyEncounteredIceStrength)
+        {
+            if (Amount == 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(Amount),
+                    "Encountered-ICE strength modifiers require a nonzero amount.");
+            }
+
+            if (!StableIdentifier.TryValidate(Argument))
+            {
+                throw new ArgumentException(
+                    "Encountered-ICE strength modifiers require a stable reason key.",
+                    nameof(Argument));
+            }
+
+            if (Target is not null
+                || SourceZone is not null
+                || DestinationZone is not null
+                || Filter is not null
+                || Condition is not null
+                || Choice is not null
+                || Branch is not null
+                || Optional
+                || SpendRestriction is not null
+                || RunOperand is not null
+                || AmountOperand is not null)
+            {
+                throw new ArgumentException(
+                    "Encountered-ICE strength modifiers carry only a signed amount and reason key.",
+                    nameof(Argument));
+            }
+
+            return;
+        }
+        if (RunOperand is not null && Kind != BehaviorInstructionKind.StartRun)
         {
             throw new ArgumentException(
                 "A typed run operand is valid only for StartRun instructions.",
@@ -1163,6 +1202,7 @@ public enum BehaviorInstructionKind
     TakeHostedCredits,
     TakeUpToHostedCredits,
     TakeAllHostedCredits,
+    ModifyEncounteredIceStrength,
 
     // Short aliases keep the contract pleasant for callers while the longer
     // names remain unambiguous in serialized/fingerprint output.
