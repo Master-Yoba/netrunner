@@ -17,10 +17,10 @@ public sealed class GatewayRunEventBehaviorSpecTests
     }
 
     [Fact]
-    public void RunEventSpecsBindExactlyTheOneRepresentativeRunEventDefinition()
+    public void RunEventSpecsBindTheCompiledRunEventDefinitions()
     {
         Assert.Equal(
-            new[] { GatewayCardCodes.Overclock },
+            new[] { GatewayCardCodes.Overclock, GatewayBatch3CardCodes.TreadLightly },
             GatewayRunEventBehaviorSpecs.RunEventSpecs
                 .Select(static spec => spec.DefinitionId)
                 .ToArray());

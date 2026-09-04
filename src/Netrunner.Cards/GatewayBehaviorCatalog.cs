@@ -12,7 +12,7 @@ public static class GatewayBehaviorCatalog
     /// <summary>
     /// Version of the current immutable Gateway behavior composition.
     /// </summary>
-    public const string Version = "gateway-m4-4.4-c1";
+    public const string Version = "gateway-m4-4.4";
 
     /// <summary>
     /// Builds the immutable Gateway behavior catalog used by a production

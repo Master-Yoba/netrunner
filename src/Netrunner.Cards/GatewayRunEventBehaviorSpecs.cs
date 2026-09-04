@@ -20,8 +20,21 @@ public static class GatewayRunEventBehaviorSpecs
         cost: 1,
         hostedCredits: 5);
 
-    /// <summary>The exactly one compiled run event spec, in card order.</summary>
+    /// <summary>
+    /// Tread Lightly: cost 1 event — run any server. During that run, each
+    /// ICE rez costs 3 more credits.
+    /// </summary>
+    private static readonly RunEventBehaviorSpec TreadLightly = new(
+        GatewayBatch3CardCodes.TreadLightly,
+        cost: 1,
+        hostedCredits: 0,
+        rezCostModifiers:
+        [
+            new BehaviorRunRezCostModifier(3, "tread-lightly-ice-rez-cost"),
+        ]);
+
+    /// <summary>The compiled run event specs, in stable card order.</summary>
     public static IReadOnlyList<RunEventBehaviorSpec> RunEventSpecs { get; } =
-        new ReadOnlyCollection<RunEventBehaviorSpec>(new[] { Overclock });
+        new ReadOnlyCollection<RunEventBehaviorSpec>(new[] { Overclock, TreadLightly });
 
 }

@@ -3997,3 +3997,40 @@ errors; runtime action expansion and full verification remain pending.
   the direct M2 proof, a zero-warning solution build, solution formatting, and
   `git diff --check`. The other four Batch 3 card bindings, supporting agent,
   simulation, UI, and registry work remain outside this checkpoint.
+
+### 2026-09-04 — Checkpoint C2 remaining Batch 3 bindings accepted
+
+- Luna Max bound Tread Lightly, DZMZ Optimizer, Docklands Pass, and Verbal
+  Plasticity through the four Checkpoint B primitives, with no new Core
+  branches. Tread Lightly is a cost-one run event with no hosted credits and a
+  run-start snapshot that raises every ICE rez cost by three. DZMZ supplies one
+  static MU and a one-credit reduction for the first completed Runner program
+  install of the formal turn. Docklands supplies one additional access on the
+  first HQ breach of the turn, and Verbal replaces the first real basic draw
+  with a two-card draw.
+- Card-owned production fixtures compile exact test-local metadata through
+  `GatewayRuntimeCardCatalog` and inject the final Gateway behavior catalog.
+  They prove Tread payment, arbitrary server selection, quoted/paid +3 rez
+  cost, physical source provenance, and run cleanup; DZMZ's extra capacity,
+  serialized discounted install, accepted First-X consumption, and second
+  full-cost install; Docklands' two hidden random HQ accesses followed by a
+  normal same-turn breach; and Verbal's two-then-one real basic draws plus safe
+  short-stack completion. The exhaustive late-source, reset, stacking,
+  stale/forged, and isolation matrices remain owned by the accepted generic
+  primitive suites.
+- Gateway composition now has its final Slice 4.4 version
+  `gateway-m4-4.4`, all 39 expected definitions, and fingerprint
+  `1d7a527112152ea16164da4def624ca0dbb83e477d06323ecfc86c2f837a2fc4`.
+  Existing Slice 4.3 reduced simulation decks remain unchanged until the
+  supporting simulation checkpoint, while their catalog version/fingerprint
+  pins now distinguish the 32 deck definitions from all seven Batch 3 catalog
+  additions.
+- No persisted contract changed, so engine state schema remains 9. The direct
+  M2 proof remains byte-stable at initial `4460bc23…`, final `023bd7ae…`, and
+  event `d20cdef9…`, with 32 actions/checkpoints, replay verification, and no
+  trace problems.
+- Root independently passed the 9-test C2 binding gate and all 1,029 solution
+  tests (Core 717, Cards 175, AI 30, CLI 54, Match 53), the direct M2 proof, a
+  zero-warning solution build, solution formatting, and `git diff --check`.
+  All seven Slice 4.4 cards are now behavior-bound; AGT-401 v3, SIM-401,
+  UI-405, and registry/evidence closure remain.

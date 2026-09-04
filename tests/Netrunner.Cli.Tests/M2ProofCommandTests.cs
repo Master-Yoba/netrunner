@@ -63,7 +63,7 @@ public sealed class M2ProofCommandTests
     {
         string path = Path.Combine(AppContext.BaseDirectory, "M2Scenarios", "representative-run.json");
         BehaviorCatalog gateway = GatewayBehaviorCatalog.Create();
-        Assert.Equal("gateway-m4-4.4-c1", gateway.Version);
+        Assert.Equal("gateway-m4-4.4", gateway.Version);
         BehaviorCatalog legacy = BuildLegacyGatewayCatalog(gateway);
         BehaviorCatalog expanded = new BehaviorCatalogBuilder(legacy.Version, legacy)
             .Add(new CardBehaviorDefinition(
