@@ -4144,3 +4144,31 @@ errors; runtime action expansion and full verification remain pending.
   with 32 actions/checkpoints, replay verification, and no trace problems.
   Slice 4.4 is complete; the pre-existing standard full-game setup/mulligan
   SIM-401 outcome remains explicitly outside this slice's bounded claim.
+
+### 2026-09-04 — PR feedback correction checkpoint accepted
+
+- Both PR #8 P1 findings were valid consumer gaps. AGT-401 v3 could select an
+  initial install with replacement candidates but did not consume the ensuing
+  typed `InstallChoice`; likewise, Verbal Plasticity's mandatory first-draw
+  replacement yielded an `InterruptChoice` that neither the agent nor the
+  action presenter exposed.
+- Luna Max added bounded, observation-only install continuation handling. The
+  agent prefers an engine-issued legal final selection, otherwise advances one
+  canonical engine-issued continuation, including the last remaining
+  candidate, with typed shape validation and stable semantic ordering. It does
+  not synthesize actions or inspect authoritative state.
+- The v3 agent now handles typed replacement interrupts deterministically,
+  preferring `UseReplacement` and falling back to `DeclineReplacement`; it
+  remains deliberately fail-closed for prevention decisions outside this
+  slice's policy claim. The client action presenter exposes all four typed Core
+  interrupt actions under a neutral interrupt group and exposes install-choice
+  actions with their target card retained.
+- Tests cover final-versus-continuation preference, fresh observation and JSON
+  ordering neutrality, the last-candidate continuation, malformed install and
+  replacement payloads, mandatory Verbal replacement, and UI visibility for
+  install, replacement, and prevention actions. Root independently passed the
+  focused AI suite at 38/38 and Match suite at 62/62, then passed the full
+  `./scripts/verify.sh` gate with all 1,046 tests (Core 717, Cards 175, AI 38,
+  CLI 54, Match 62), zero build warnings/errors, formatting, coverage, content,
+  simulation/replay, Godot, UI smoke, and secret-scan checks green. The M2
+  hashes remain unchanged.

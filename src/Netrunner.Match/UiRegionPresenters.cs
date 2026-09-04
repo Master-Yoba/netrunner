@@ -377,6 +377,14 @@ public static class ActionsRegionPresenter
             ],
             DecisionKind.TurnDiscard => [ActionKind.ChooseCard],
             DecisionKind.BehaviorChoice => [ActionKind.ChooseBehavior],
+            DecisionKind.InstallChoice => [ActionKind.InstallCard],
+            DecisionKind.InterruptChoice =>
+            [
+                ActionKind.UsePrevention,
+                ActionKind.DeclinePrevention,
+                ActionKind.UseReplacement,
+                ActionKind.DeclineReplacement,
+            ],
             DecisionKind.ChooseCard => [ActionKind.ChooseCard],
             DecisionKind.ChooseNumber => [ActionKind.ChooseNumber],
             DecisionKind.RunTiming =>
@@ -415,6 +423,8 @@ public static class ActionsRegionPresenter
             DecisionKind.TurnAction => "BASIC ACTIONS ISSUED BY CORE",
             DecisionKind.TurnDiscard => "FORCED DISCARD",
             DecisionKind.BehaviorChoice => "BEHAVIOR CHOICE ISSUED BY CORE",
+            DecisionKind.InstallChoice => "INSTALL CHOICE ISSUED BY CORE",
+            DecisionKind.InterruptChoice => "INTERRUPT CHOICE ISSUED BY CORE",
             DecisionKind.RunTiming => "RUN WINDOW ACTIONS ISSUED BY CORE",
             _ => "ISSUED ACTIONS",
         };

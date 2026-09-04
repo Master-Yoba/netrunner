@@ -220,6 +220,8 @@ public sealed class FullGameContractAgent : IGameAgent
             DecisionKind.TurnAction => SelectTurnAction(observation.LegalActions),
             DecisionKind.TurnDiscard => SelectTurnDiscard(observation.LegalActions),
             DecisionKind.BehaviorChoice => SelectBehaviorChoice(observation.LegalActions),
+            DecisionKind.InstallChoice => SelectInstallChoice(observation.LegalActions),
+            DecisionKind.InterruptChoice => SelectInterruptChoice(observation.LegalActions),
             DecisionKind.RunTiming => SelectByPriority(
                 observation.LegalActions,
                 _policy.RunActionOrder,
@@ -264,6 +266,52 @@ public sealed class FullGameContractAgent : IGameAgent
             choices,
             FullGameActionClass.BehaviorChoice,
             BehaviorOrderKey);
+    }
+
+    private static LegalAction SelectInstallChoice(IReadOnlyList<LegalAction> actions)
+    {
+        EnsureActionShapes(actions, FullGameActionClass.InstallChoice);
+        LegalAction[] choices = actions
+            .Where(static action =>
+                action.Kind == ActionKind.InstallCard
+                && action.Parameters is InstallCardParameters)
+            .ToArray();
+
+        LegalAction[] finalChoices = choices
+            .Where(static action => ((InstallCardParameters)action.Parameters).FinalizeSelection)
+            .ToArray();
+        if (finalChoices.Length > 0)
+        {
+            // Once Core issues a valid final action, completing the frozen
+            // selection is always preferred to taking another continuation.
+            return SelectSemantic(finalChoices, FullGameActionClass.InstallChoice);
+        }
+
+        return SelectSemantic(
+            choices.Where(static action => !((InstallCardParameters)action.Parameters).FinalizeSelection),
+            FullGameActionClass.InstallChoice);
+    }
+
+    private static LegalAction SelectInterruptChoice(IReadOnlyList<LegalAction> actions)
+    {
+        EnsureActionShapes(actions, FullGameActionClass.InterruptChoice);
+        LegalAction[] replacements = actions
+            .Where(static action =>
+                action.Kind is ActionKind.UseReplacement or ActionKind.DeclineReplacement
+                && action.Parameters is ReplacementChoiceParameters)
+            .ToArray();
+
+        LegalAction[] use = replacements
+            .Where(static action => action.Kind == ActionKind.UseReplacement)
+            .ToArray();
+        if (use.Length > 0)
+        {
+            // Replacement use is the deterministic v3 preference. The typed
+            // interrupt ID and then the issued ActionId break any tie.
+            return SelectSemantic(use, FullGameActionClass.InterruptChoice);
+        }
+
+        return SelectSemantic(replacements, FullGameActionClass.InterruptChoice);
     }
 
     private static int BehaviorPreference(LegalAction action) =>
@@ -431,6 +479,10 @@ public sealed class FullGameContractAgent : IGameAgent
                 or ActionKind.DrawCard,
             FullGameActionClass.TurnDiscard => action.Kind == ActionKind.ChooseCard,
             FullGameActionClass.BehaviorChoice => action.Kind == ActionKind.ChooseBehavior,
+            FullGameActionClass.InstallChoice => action.Kind == ActionKind.InstallCard,
+            FullGameActionClass.InterruptChoice => action.Kind is
+                ActionKind.UseReplacement
+                or ActionKind.DeclineReplacement,
             FullGameActionClass.RunWindow => action.Kind is
                 ActionKind.PassPriority
                 or ActionKind.RezIce
@@ -484,6 +536,8 @@ public sealed class FullGameContractAgent : IGameAgent
                 IsValidAbilityAction(ability, actionClass),
             (ActionKind.InstallCard, InstallCardParameters install) =>
                 IsValidInstallAction(install, actionClass),
+            (ActionKind.UseReplacement or ActionKind.DeclineReplacement, ReplacementChoiceParameters replacement) =>
+                HasStableId(replacement.InterruptId.Value),
             _ => false,
         };
     }
@@ -493,7 +547,7 @@ public sealed class FullGameContractAgent : IGameAgent
         FullGameActionClass actionClass)
     {
         if (install is null
-            || actionClass != FullGameActionClass.TurnAction
+            || actionClass is not (FullGameActionClass.TurnAction or FullGameActionClass.InstallChoice)
             || !HasStableId(install.CardId.Value)
             || !Enum.IsDefined(install.DestinationKind)
             || install.CreditCost < 0
@@ -507,7 +561,7 @@ public sealed class FullGameContractAgent : IGameAgent
             || !IsSubset(
                 install.SelectedReplacementCardIds,
                 install.CandidateReplacementCardIds)
-            || !HasValidTurnInstallSelectionShape(install)
+            || !HasValidInstallSelectionShape(install, actionClass)
             || !IsValidInstallCostQuote(install.CostQuote, install.CreditCost))
         {
             return false;
@@ -558,12 +612,38 @@ public sealed class FullGameContractAgent : IGameAgent
         IReadOnlyList<CardInstanceId> superset) =>
         subset.All(superset.Contains);
 
-    private static bool HasValidTurnInstallSelectionShape(InstallCardParameters install) =>
-        install.CandidateReplacementCardIds.Count == 0
-            ? install.FinalizeSelection
-                && install.SelectedReplacementCardIds.Count == 0
-            : !install.FinalizeSelection
-                && install.SelectedReplacementCardIds.Count == 0;
+    private static bool HasValidInstallSelectionShape(
+        InstallCardParameters install,
+        FullGameActionClass actionClass)
+    {
+        if (actionClass == FullGameActionClass.TurnAction)
+        {
+            return install.CandidateReplacementCardIds.Count == 0
+                ? install.FinalizeSelection
+                    && install.SelectedReplacementCardIds.Count == 0
+                : !install.FinalizeSelection
+                    && install.SelectedReplacementCardIds.Count == 0;
+        }
+
+        // InstallChoice is a continuation over the frozen candidate stream.
+        // A non-final action must append at least one remaining candidate. It
+        // may append the last candidate too: Core issues that action before a
+        // fresh observation can expose the corresponding final action. A final action
+        // may select zero cards when no replacement is required, but it must
+        // include every required replacement when one is issued.
+        if (install.CandidateReplacementCardIds.Count == 0)
+        {
+            return false;
+        }
+
+        if (install.FinalizeSelection)
+        {
+            return install.RequiredReplacementCardIds.All(install.SelectedReplacementCardIds.Contains);
+        }
+
+        return install.SelectedReplacementCardIds.Count > 0
+            && install.SelectedReplacementCardIds.Count <= install.CandidateReplacementCardIds.Count;
+    }
 
     private static bool IsValidInstallCostQuote(CostQuote? quote, int creditCost)
     {
@@ -926,6 +1006,8 @@ public sealed class FullGameContractAgent : IGameAgent
         BreachCandidateParameters candidate when candidate.Source is { } source => $"breach-source:{source}",
         BehaviorChoiceParameters behavior => BehaviorKey(behavior),
         AbilityActionParameters ability => AbilityKey(ability),
+        ReplacementChoiceParameters replacement =>
+            $"replacement:{replacement.InterruptId.Value}",
         _ => throw new InvalidOperationException(
             $"The full-game agent cannot derive a semantic key for '{action.Kind}'."),
     };
@@ -1054,6 +1136,8 @@ public sealed class FullGameContractAgent : IGameAgent
         TurnAction,
         TurnDiscard,
         BehaviorChoice,
+        InstallChoice,
+        InterruptChoice,
         RunWindow,
     }
 }

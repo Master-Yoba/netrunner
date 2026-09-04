@@ -526,6 +526,213 @@ public sealed class FullGameContractAgentTests
     }
 
     [Fact]
+    public async Task InstallChoicePrefersFinalAndProgressesFreshNonFinalObservations()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Runner);
+        CardInstanceId firstCandidate = new("card:candidate-a");
+        CardInstanceId secondCandidate = new("card:candidate-b");
+        CardInstanceId[] candidates = [firstCandidate, secondCandidate];
+
+        LegalAction initial = Action(
+            "install-initial",
+            ActionKind.InstallCard,
+            new InstallCardParameters(
+                new CardInstanceId("card:incoming"),
+                InstallDestinationKind.RunnerRig,
+                serverId: null,
+                createNewRemote: false,
+                creditCost: 2,
+                candidateReplacementCardIds: candidates,
+                requiredReplacementCardIds: [firstCandidate],
+                selectedReplacementCardIds: [],
+                finalizeSelection: false));
+        Assert.Equal(
+            initial.Id,
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Runner, DecisionKind.TurnAction, initial)));
+
+        LegalAction chooseFirst = Action(
+            "install-choose-a",
+            ActionKind.InstallCard,
+            new InstallCardParameters(
+                new CardInstanceId("card:incoming"),
+                InstallDestinationKind.RunnerRig,
+                serverId: null,
+                createNewRemote: false,
+                creditCost: 2,
+                candidateReplacementCardIds: candidates,
+                requiredReplacementCardIds: [firstCandidate],
+                selectedReplacementCardIds: [firstCandidate],
+                finalizeSelection: false));
+        LegalAction chooseSecond = Action(
+            "install-choose-b",
+            ActionKind.InstallCard,
+            new InstallCardParameters(
+                new CardInstanceId("card:incoming"),
+                InstallDestinationKind.RunnerRig,
+                serverId: null,
+                createNewRemote: false,
+                creditCost: 2,
+                candidateReplacementCardIds: candidates,
+                requiredReplacementCardIds: [firstCandidate],
+                selectedReplacementCardIds: [secondCandidate],
+                finalizeSelection: false));
+
+        ActionId firstSelection = await agent.ChooseActionAsync(
+            ObservationFor(
+                PlayerSide.Runner,
+                DecisionKind.InstallChoice,
+                chooseSecond,
+                chooseFirst));
+        ActionId reorderedSelection = await agent.ChooseActionAsync(
+            ObservationFor(
+                PlayerSide.Runner,
+                DecisionKind.InstallChoice,
+                chooseFirst,
+                chooseSecond));
+        Assert.Equal(chooseFirst.Id, firstSelection);
+        Assert.Equal(firstSelection, reorderedSelection);
+
+        LegalAction final = Action(
+            "install-final",
+            ActionKind.InstallCard,
+            new InstallCardParameters(
+                new CardInstanceId("card:incoming"),
+                InstallDestinationKind.RunnerRig,
+                serverId: null,
+                createNewRemote: false,
+                creditCost: 2,
+                candidateReplacementCardIds: candidates,
+                requiredReplacementCardIds: [firstCandidate],
+                selectedReplacementCardIds: [firstCandidate],
+                finalizeSelection: true));
+        LegalAction laterContinuation = Action(
+            "install-later",
+            ActionKind.InstallCard,
+            new InstallCardParameters(
+                new CardInstanceId("card:incoming"),
+                InstallDestinationKind.RunnerRig,
+                serverId: null,
+                createNewRemote: false,
+                creditCost: 2,
+                candidateReplacementCardIds: candidates,
+                requiredReplacementCardIds: [firstCandidate],
+                selectedReplacementCardIds: [firstCandidate, secondCandidate],
+                finalizeSelection: false));
+
+        string payload = JsonSerializer.Serialize(new[] { laterContinuation, final });
+        LegalAction[] restored = JsonSerializer.Deserialize<LegalAction[]>(payload)
+            ?? throw new InvalidOperationException("The serialized install-choice payload was empty.");
+        Assert.Equal(
+            final.Id,
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Runner, DecisionKind.InstallChoice, restored)));
+    }
+
+    [Fact]
+    public async Task InstallChoiceRejectsMalformedContinuationPayloads()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Runner);
+        CardInstanceId candidate = new("card:candidate");
+        LegalAction missingSelection = Action(
+            "install-missing-selection",
+            ActionKind.InstallCard,
+            new InstallCardParameters(
+                new CardInstanceId("card:incoming"),
+                InstallDestinationKind.RunnerRig,
+                serverId: null,
+                createNewRemote: false,
+                creditCost: 0,
+                candidateReplacementCardIds: [candidate],
+                requiredReplacementCardIds: [candidate],
+                selectedReplacementCardIds: [],
+                finalizeSelection: false));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Runner, DecisionKind.InstallChoice, missingSelection)));
+
+        LegalAction incompleteFinal = Action(
+            "install-incomplete-final",
+            ActionKind.InstallCard,
+            new InstallCardParameters(
+                new CardInstanceId("card:incoming"),
+                InstallDestinationKind.RunnerRig,
+                serverId: null,
+                createNewRemote: false,
+                creditCost: 0,
+                candidateReplacementCardIds: [candidate],
+                requiredReplacementCardIds: [candidate],
+                selectedReplacementCardIds: [],
+                finalizeSelection: true));
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Runner, DecisionKind.InstallChoice, incompleteFinal)));
+    }
+
+    [Fact]
+    public async Task InterruptChoicePrefersUseReplacementAndUsesStableTypedIds()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Runner);
+        LegalAction decline = Action(
+            "decline-replacement",
+            ActionKind.DeclineReplacement,
+            new ReplacementChoiceParameters(new InterruptId("interrupt:a")));
+        LegalAction useLater = Action(
+            "use-replacement-z",
+            ActionKind.UseReplacement,
+            new ReplacementChoiceParameters(new InterruptId("interrupt:z")));
+        LegalAction useEarlier = Action(
+            "use-replacement-a",
+            ActionKind.UseReplacement,
+            new ReplacementChoiceParameters(new InterruptId("interrupt:a")));
+
+        ActionId selected = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.InterruptChoice, decline, useLater, useEarlier));
+        ActionId reordered = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.InterruptChoice, useEarlier, decline, useLater));
+        string payload = JsonSerializer.Serialize(new[] { useLater, decline, useEarlier });
+        LegalAction[] restored = JsonSerializer.Deserialize<LegalAction[]>(payload)
+            ?? throw new InvalidOperationException("The serialized interrupt-choice payload was empty.");
+        ActionId roundTrip = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.InterruptChoice, restored));
+
+        Assert.Equal(useEarlier.Id, selected);
+        Assert.Equal(selected, reordered);
+        Assert.Equal(selected, roundTrip);
+    }
+
+    [Fact]
+    public async Task MandatoryInterruptChoiceAndMalformedReplacementFailClosed()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Runner);
+        LegalAction mandatoryUse = Action(
+            "mandatory-use",
+            ActionKind.UseReplacement,
+            new ReplacementChoiceParameters(new InterruptId("interrupt:mandatory")));
+        Assert.Equal(
+            mandatoryUse.Id,
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Runner, DecisionKind.InterruptChoice, mandatoryUse)));
+
+        LegalAction malformed = Action(
+            "malformed-use",
+            ActionKind.UseReplacement,
+            new NoActionParameters());
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Runner, DecisionKind.InterruptChoice, malformed)));
+
+        LegalAction prevention = Action(
+            "prevention-only",
+            ActionKind.UsePrevention,
+            new PreventionChoiceParameters(new InterruptId("interrupt:prevention"), 1));
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Runner, DecisionKind.InterruptChoice, prevention)));
+    }
+
+    [Fact]
     public async Task SelectingAnExistingActionIdIsNeutralAcrossTypedSerialization()
     {
         FullGameContractAgent agent = new(PlayerSide.Runner);
