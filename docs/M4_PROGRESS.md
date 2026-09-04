@@ -3590,3 +3590,30 @@ errors; runtime action expansion and full verification remain pending.
   with zero warnings/errors; formatter and diff checks pass. The direct M2
   proof remains byte-stable at `faf4e631...` / `c882eb43...` /
   `d20cdef9...`, with all 32 checkpoints replay verified.
+
+### 2026-09-04 — Checkpoint F1 AGT-401 contract agent v2 accepted
+
+- Luna Max implemented the version-2 observation-only policy. Issued
+  `UseAbility` actions now have first priority in action-phase, turn-priority,
+  and run windows when the action is provably bounded by the declared click
+  cost or by an unused once-per-turn snapshot. Unlimited non-click actions and
+  exhausted once-per-turn actions are ignored, so the policy cannot create a
+  zero-cost activation loop; affordability and the authoritative usage ledger
+  remain Core responsibilities.
+- Root amended the first draft for real decision coexistence: valid install,
+  play, run, rez, and score actions outside this policy's current selection
+  subset are treated as opaque and never selected, rather than invalidating an
+  otherwise usable decision. Policy-owned candidates still fail closed on
+  malformed timing/activation pairs, IDs, fingerprints, costs, effect targets,
+  usage snapshots, or typed additional-cost selections. Exact additional-cost
+  cardinality and global physical-card uniqueness are checked before an action
+  is considered.
+- Version strings are now `full-game-contract-agent-v2` and
+  `full-game-contract-policy-v2`, with policy schema 2. Canonical semantic keys
+  retain the complete immutable ability payload and normalize only the order
+  of cost-indexed additional selections; descriptions and observation state
+  dictionaries remain outside policy input. Tests cover click and `lose click`
+  forms, turn/run windows, once-per-turn availability, unbounded fallback,
+  opaque action coexistence, malformed rejection, deterministic ordering, JSON
+  round-trip, and configurable priority validation. Luna and Root independently
+  passed the complete AI suite at 30/30.
