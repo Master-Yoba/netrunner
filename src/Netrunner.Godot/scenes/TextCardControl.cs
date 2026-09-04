@@ -19,9 +19,10 @@ public partial class TextCardControl : PanelContainer
 	private Label _stats = null!;
 	private Label _status = null!;
 	private Label _abilityCue = null!;
+	private Label _firstXCue = null!;
 	private Label _counters = null!;
 	private CardViewModel? _card;
-	private int? _encounterStrength;
+	private StrengthBreakdownViewModel? _strengthBreakdown;
 	private bool _selected;
 	private bool _targetCandidate;
 	private bool _hovered;
@@ -47,6 +48,12 @@ public partial class TextCardControl : PanelContainer
 
 	/// <summary>Text-only ability affordance retained for smoke/accessibility checks.</summary>
 	public string DisplayedAbilityCue => _abilityCue?.Text ?? string.Empty;
+
+	/// <summary>Text-only current-turn first-X cue retained for smoke/accessibility checks.</summary>
+	public string DisplayedFirstXUseCue => _firstXCue?.Text ?? string.Empty;
+
+	/// <summary>Rendered stats, including a typed encounter strength explanation.</summary>
+	public string DisplayedStats => _stats?.Text ?? string.Empty;
 
 	/// <summary>Text-only typed counter chips retained for smoke/accessibility checks.</summary>
 	public string DisplayedCounterChips => _counters?.Text ?? string.Empty;
@@ -75,6 +82,9 @@ public partial class TextCardControl : PanelContainer
 		_abilityCue = MakeLabel(10, new Color(0.98f, 0.74f, 0.28f));
 		_abilityCue.AutowrapMode = TextServer.AutowrapMode.WordSmart;
 		content.AddChild(_abilityCue);
+		_firstXCue = MakeLabel(10, new Color(0.98f, 0.74f, 0.28f));
+		_firstXCue.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		content.AddChild(_firstXCue);
 		_counters = MakeLabel(10, new Color(0.98f, 0.74f, 0.28f));
 		content.AddChild(_counters);
 
@@ -102,15 +112,17 @@ public partial class TextCardControl : PanelContainer
 			_stats.Text = "Identity concealed";
 			_status.Text = "The card remains face-down.";
 			_abilityCue.Text = string.Empty;
+			_firstXCue.Text = string.Empty;
 			_counters.Text = string.Empty;
 		}
 		else
 		{
 			_title.Text = card.Title;
 			_type.Text = card.Type + (card.Subtypes.Count == 0 ? string.Empty : " · " + string.Join(" · ", card.Subtypes));
-			_stats.Text = FormatStats(card, _encounterStrength);
+			_stats.Text = FormatStats(card, _strengthBreakdown);
 			_status.Text = card.Rezzed ? "REZZED" : card.IsKnown ? "KNOWN" : "FACE-DOWN";
 			_abilityCue.Text = card.AbilityCue ?? string.Empty;
+			_firstXCue.Text = card.FirstXUseCue ?? string.Empty;
 			_counters.Text = string.Join("  ", card.CounterChips);
 		}
 
@@ -124,10 +136,28 @@ public partial class TextCardControl : PanelContainer
 	/// </summary>
 	public void SetEncounterStrength(int? strength)
 	{
-		_encounterStrength = strength;
+		_strengthBreakdown = strength is { } value
+			? new StrengthBreakdownViewModel(
+				_card?.Strength ?? value,
+				value,
+				Array.Empty<ValueCalculationTermPresentationViewModel>())
+			: null;
 		if (_stats is not null && _card is not null)
 		{
-			_stats.Text = FormatStats(_card, _encounterStrength);
+			_stats.Text = FormatStats(_card, _strengthBreakdown);
+		}
+	}
+
+	/// <summary>
+	/// Retains the authoritative Match-side strength breakdown for this card's
+	/// current encounter; printed card stats remain unchanged.
+	/// </summary>
+	public void SetEncounterStrength(StrengthBreakdownViewModel? breakdown)
+	{
+		_strengthBreakdown = breakdown;
+		if (_stats is not null && _card is not null)
+		{
+			_stats.Text = FormatStats(_card, _strengthBreakdown);
 		}
 	}
 
@@ -240,7 +270,7 @@ public partial class TextCardControl : PanelContainer
 		return label;
 	}
 
-	private static string FormatStats(CardViewModel card, int? encounterStrength)
+	private static string FormatStats(CardViewModel card, StrengthBreakdownViewModel? strengthBreakdown)
 	{
 		var values = new List<string>();
 		if (card.Cost is { } cost)
@@ -250,11 +280,9 @@ public partial class TextCardControl : PanelContainer
 
 		if (card.Strength is { } strength)
 		{
-			values.Add($"STR {strength}");
-			if (encounterStrength is { } current && current != strength)
-			{
-				values.Add($"CURRENT STR {current}");
-			}
+			values.Add(strengthBreakdown is { } breakdown
+				? breakdown.Summary
+				: $"STR {strength}");
 		}
 
 		if (card.AgendaPoints is { } points)

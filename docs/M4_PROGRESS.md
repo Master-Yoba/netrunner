@@ -4087,3 +4087,33 @@ errors; runtime action expansion and full verification remain pending.
   invariants. Root independently passed the nine focused fixture/proof tests,
   the complete Match suite at 54/54, Match formatting, and `git diff --check`.
   UI-405 and registry/evidence closure remain.
+
+### 2026-09-04 — Checkpoint D3 UI-405 modifier presentation accepted
+
+- Luna Max added a Match-owned presentation layer over Core's raw typed
+  calculations. Ordered strength terms now render readable base/delta/reason
+  lines such as `STR 3 +2 (per installed icebreaker: 2)` for encountered ICE
+  and installed breakers. Cost quotes render base → effective lines for
+  install, rez, and break actions, preserving adjustment order and explicit
+  labels for DZMZ, Tread Lightly, and the existing successful-run discounts.
+  Unknown reason keys remain visible rather than being guessed or discarded.
+- The observation mapper now detaches viewer-filtered current-turn
+  `firstXUseKeys`, rejects malformed/duplicate entries, and attaches a
+  non-colour `USED THIS TURN` cue only to the matching visible physical card.
+  Last-turn facts are not treated as current. Existing paid-ability readiness
+  remains an independent cue.
+- Typed breach-access modifiers render non-authoritative notes, including
+  `+1 first HQ breach this turn`, without exposing hidden candidate identities
+  or requiring source-card provenance. Strength summaries and breach notes are
+  displayed in the real focus region; card controls retain strength reasons and
+  First-X cues; action controls retain modified-cost descriptions.
+- Root found that the first draft formatted quotes but still filtered install
+  and runtime rez actions out of the actual action groups. The accepted version
+  exposes `InstallCard` in turn actions and `RezCard` in run timing, retains
+  their typed target IDs, and proves both grouped-control paths.
+- A dedicated `--m4-slice44-ui-smoke` is wired into `scripts/verify.sh` and
+  reports `M4_SLICE44_UI PASS strength_reason=true modified_cost=true
+  used_first_x_chip=true breach_note=true`. Root independently passed six
+  focused UI-405 tests, the complete Match suite at 60/60, a zero-warning
+  Godot build, Match/Godot/test formatting, and `git diff --check`.
+  Registry/evidence closure and the final repository gate remain.

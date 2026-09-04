@@ -69,6 +69,23 @@ public sealed record MatchViewModel(
 
     /// <summary>Alias used by clients that prefer an explicit current-turn name.</summary>
     public IReadOnlyList<AbilityUseViewModel> CurrentTurnUsedAbilityKeys => UsedAbilityKeys;
+
+    /// <summary>
+    /// Viewer-filtered first-X uses from the current formal turn. This list is
+    /// detached from Core's turn facts and contains only source identities
+    /// already admitted to the observation.
+    /// </summary>
+    public IReadOnlyList<FirstXUseViewModel> UsedFirstXKeys { get; init; } =
+        Array.Empty<FirstXUseViewModel>();
+
+    /// <summary>Alias used by clients that prefer an explicit current-turn name.</summary>
+    public IReadOnlyList<FirstXUseViewModel> CurrentTurnFirstXUseKeys => UsedFirstXKeys;
+
+    /// <summary>Compatibility alias using the Core field name.</summary>
+    public IReadOnlyList<FirstXUseViewModel> CurrentTurnFirstXUses => UsedFirstXKeys;
+
+    /// <summary>Compatibility alias for the explicit "used" terminology.</summary>
+    public IReadOnlyList<FirstXUseViewModel> UsedFirstXUseKeys => UsedFirstXKeys;
 }
 
 /// <summary>
@@ -244,6 +261,23 @@ public sealed record CardViewModel(
     /// </summary>
     public string? AbilityCue { get; init; }
 
+    /// <summary>
+    /// Current-turn first-X uses for this visible physical card. The mapper
+    /// fills this only from the observation's viewer-filtered facts; no card
+    /// metadata or previous-turn state is consulted.
+    /// </summary>
+    public IReadOnlyList<FirstXUseViewModel> FirstXUses { get; init; } =
+        Array.Empty<FirstXUseViewModel>();
+
+    public bool IsFirstXUsedThisTurn => FirstXUses.Count > 0;
+
+    /// <summary>Compatibility alias using the Core field name.</summary>
+    public IReadOnlyList<FirstXUseViewModel> FirstXUseKeys => FirstXUses;
+
+    public string? FirstXUseCue => IsFirstXUsedThisTurn
+        ? FirstXUseLabels.UsedThisTurn
+        : null;
+
     public bool IsAbilityReady => string.Equals(AbilityCue, AbilityCueLabels.Ready, StringComparison.Ordinal);
 
     public bool IsAbilityUsed => string.Equals(AbilityCue, AbilityCueLabels.Used, StringComparison.Ordinal);
@@ -285,6 +319,15 @@ public sealed record CardCounterViewModel(
 /// <summary>One visible current-turn use of a physical card ability.</summary>
 public sealed record AbilityUseViewModel(string SourceCardId, string AbilityKey);
 
+/// <summary>One viewer-visible use of a physical first-X effect this turn.</summary>
+public sealed record FirstXUseViewModel(string SourceCardId, string Key, int Count);
+
+/// <summary>Stable non-colour cue for consumed first-X effects.</summary>
+public static class FirstXUseLabels
+{
+    public const string UsedThisTurn = "USED THIS TURN";
+}
+
 /// <summary>Stable text values for the derived per-card ability cue.</summary>
 public static class AbilityCueLabels
 {
@@ -320,6 +363,17 @@ public sealed record LegalActionViewModel(
         RunBreakParameters runBreak => runBreak.CostQuote,
         _ => null,
     };
+
+    /// <summary>
+    /// Readable cost line generated from the typed Core quote. It is null when
+    /// the issued action has no cost quote and therefore has no Match-side
+    /// arithmetic to present.
+    /// </summary>
+    public CostQuotePresentationViewModel? CostPresentation => CostQuote is { } quote
+        ? CostQuotePresenter.Present(Kind, Parameters, quote)
+        : null;
+
+    public string? CostSummary => CostPresentation?.Summary;
 }
 
 /// <summary>Run focus, current ICE, encounter, and breach/access state.</summary>
@@ -348,6 +402,11 @@ public sealed record RunFocusViewModel(
     public IReadOnlyList<RunBreachAccessModifierViewModel> BreachAccessModifiers { get; init; } =
         Array.Empty<RunBreachAccessModifierViewModel>();
 
+    /// <summary>Localized, non-authoritative breach-access notes for this run.</summary>
+    public IReadOnlyList<string> BreachAccessNotes => BreachAccessModifiers
+        .Select(static modifier => BreachAccessModifierPresenter.Describe(modifier))
+        .ToArray();
+
     public string FocusLabel => Encounter is not null
         ? $"Encounter · {Encounter.Ice?.Title ?? "Unknown ICE"}"
         : Access.State != RunAccessState.NotStarted
@@ -360,7 +419,10 @@ public sealed record RunBreachAccessModifierViewModel(
     string AttackedServerId,
     int Delta,
     string ReasonKey,
-    RunBreachAccessModifierSourceKind? SourceKind);
+    RunBreachAccessModifierSourceKind? SourceKind)
+{
+    public string Summary => BreachAccessModifierPresenter.Describe(this);
+}
 
 public sealed record RunPriorityViewModel(
     RunPriorityWindowKind Window,
@@ -389,6 +451,11 @@ public sealed record EncounterViewModel(
     /// </summary>
     public ValueQuote? StrengthQuote { get; init; }
 
+    /// <summary>Match-local readable projection of <see cref="StrengthQuote"/>.</summary>
+    public StrengthBreakdownViewModel? StrengthBreakdown { get; init; }
+
+    public string? StrengthSummary => StrengthBreakdown?.Summary;
+
     /// <summary>
     /// Current encounter strength of each visible installed icebreaker. Printed
     /// card strength remains immutable; encounter-scoped pumps are reflected
@@ -408,6 +475,11 @@ public sealed record EncounterBreakerViewModel(
 {
     /// <summary>Authoritative typed breaker-strength calculation from Core.</summary>
     public ValueQuote? StrengthQuote { get; init; }
+
+    /// <summary>Match-local readable projection of <see cref="StrengthQuote"/>.</summary>
+    public StrengthBreakdownViewModel? StrengthBreakdown { get; init; }
+
+    public string? StrengthSummary => StrengthBreakdown?.Summary;
 }
 
 public sealed record SubroutineViewModel(
@@ -454,13 +526,19 @@ public static class ObservationViewMapper
 {
     private sealed record CardAbilityCueContext(
         IReadOnlySet<string> ReadySourceIds,
-        IReadOnlySet<string> UsedSourceIds)
+        IReadOnlySet<string> UsedSourceIds,
+        IReadOnlyDictionary<string, IReadOnlyList<FirstXUseViewModel>> FirstXUsesBySourceId)
     {
         public string? For(string cardId) => ReadySourceIds.Contains(cardId)
             ? AbilityCueLabels.Ready
             : UsedSourceIds.Contains(cardId)
                 ? AbilityCueLabels.Used
                 : null;
+
+        public IReadOnlyList<FirstXUseViewModel> FirstXFor(string cardId) =>
+            FirstXUsesBySourceId.TryGetValue(cardId, out IReadOnlyList<FirstXUseViewModel>? uses)
+                ? uses
+                : Array.Empty<FirstXUseViewModel>();
     }
 
     /// <summary>
@@ -520,16 +598,28 @@ public static class ObservationViewMapper
         PlayerViewModel runner = MapPlayer(runnerPlayer, PlayerSide.Runner);
         IReadOnlyDictionary<string, object?> hidden = RequiredMap(publicState, "hiddenZoneCounts");
         IReadOnlyList<AbilityUseViewModel> usedAbilityKeys = MapVisibleCurrentTurnUsedAbilityKeys(publicState);
+        IReadOnlyList<FirstXUseViewModel> usedFirstXKeys = MapVisibleCurrentTurnFirstXUseKeys(publicState);
         IReadOnlySet<string> usedAbilitySourceIds = usedAbilityKeys
             .Select(static use => use.SourceCardId)
             .ToHashSet(StringComparer.Ordinal);
+        IReadOnlyDictionary<string, IReadOnlyList<FirstXUseViewModel>> firstXUsesBySourceId =
+            usedFirstXKeys
+                .GroupBy(static use => use.SourceCardId, StringComparer.Ordinal)
+                .ToDictionary(
+                    static group => group.Key,
+                    static group => (IReadOnlyList<FirstXUseViewModel>)new ReadOnlyCollection<FirstXUseViewModel>(
+                        group.ToArray()),
+                    StringComparer.Ordinal);
         IReadOnlySet<string> readyAbilitySourceIds = observation.LegalActions
             .Where(static action => action.Kind == ActionKind.UseAbility)
             .Select(static action => action.Parameters as AbilityActionParameters)
             .Where(static parameters => parameters is not null)
             .Select(static parameters => parameters!.SourceCardId.Value)
             .ToHashSet(StringComparer.Ordinal);
-        var abilityCue = new CardAbilityCueContext(readyAbilitySourceIds, usedAbilitySourceIds);
+        var abilityCue = new CardAbilityCueContext(
+            readyAbilitySourceIds,
+            usedAbilitySourceIds,
+            firstXUsesBySourceId);
 
         ZoneViewModel corpHand = MapZone(
             ZoneKind.CorpHand,
@@ -632,6 +722,7 @@ public static class ObservationViewMapper
                 new ReadOnlyCollection<CardViewModel>(runnerScore.ToArray())),
             ForcedDiscard = MapForcedDiscard(decision, corpHandSize, runnerHandSize),
             UsedAbilityKeys = usedAbilityKeys,
+            UsedFirstXKeys = usedFirstXKeys,
         };
     }
 
@@ -730,6 +821,83 @@ public static class ObservationViewMapper
         }
 
         return new ReadOnlyCollection<AbilityUseViewModel>(uses.ToArray());
+    }
+
+    private static IReadOnlyList<FirstXUseViewModel> MapVisibleCurrentTurnFirstXUseKeys(
+        IReadOnlyDictionary<string, object?> publicState)
+    {
+        if (!publicState.TryGetValue("turnFacts", out object? rawFacts)
+            || rawFacts is null
+            || rawFacts is JsonElement { ValueKind: JsonValueKind.Null })
+        {
+            return Array.Empty<FirstXUseViewModel>();
+        }
+
+        IReadOnlyDictionary<string, object?> turnFacts = RequiredMap(rawFacts, "turnFacts");
+        var uses = new List<FirstXUseViewModel>();
+        var keys = new HashSet<(string SourceCardId, string Key)>();
+        foreach (string side in new[] { "corp", "runner" })
+        {
+            if (!turnFacts.TryGetValue(side, out object? rawSideFacts)
+                || rawSideFacts is null
+                || rawSideFacts is JsonElement { ValueKind: JsonValueKind.Null })
+            {
+                continue;
+            }
+
+            IReadOnlyDictionary<string, object?> sideFacts = RequiredMap(rawSideFacts, $"turnFacts.{side}");
+            if (!sideFacts.TryGetValue("thisTurn", out object? rawThisTurn)
+                || rawThisTurn is null
+                || rawThisTurn is JsonElement { ValueKind: JsonValueKind.Null })
+            {
+                continue;
+            }
+
+            IReadOnlyDictionary<string, object?> thisTurn = RequiredMap(rawThisTurn, $"turnFacts.{side}.thisTurn");
+            if (!thisTurn.ContainsKey("firstXUseKeys"))
+            {
+                continue;
+            }
+
+            if (!thisTurn.TryGetValue("firstXUseKeys", out object? rawUses)
+                || rawUses is null
+                || rawUses is JsonElement { ValueKind: JsonValueKind.Null })
+            {
+                throw new FormatException(
+                    $"Observation field 'turnFacts.{side}.thisTurn.firstXUseKeys' must be an array when supplied.");
+            }
+
+            foreach (object? rawUse in ReadList(thisTurn, "firstXUseKeys"))
+            {
+                IReadOnlyDictionary<string, object?> use = RequiredMap(
+                    rawUse,
+                    $"turnFacts.{side}.thisTurn.firstXUseKeys");
+                string sourceCardId = ReadString(use, "sourceCardId");
+                string key = ReadString(use, "key");
+                int count = ReadInt(use, "count");
+                if (!IsStableCounterName(sourceCardId) || !IsStableCounterName(key))
+                {
+                    throw new FormatException(
+                        $"Observation field 'turnFacts.{side}.thisTurn.firstXUseKeys' contains an invalid identifier.");
+                }
+
+                if (count <= 0)
+                {
+                    throw new FormatException(
+                        $"Observation field 'turnFacts.{side}.thisTurn.firstXUseKeys.count' must be positive.");
+                }
+
+                if (!keys.Add((sourceCardId, key)))
+                {
+                    throw new FormatException(
+                        $"Observation field 'turnFacts.{side}.thisTurn.firstXUseKeys' contains duplicate use '{sourceCardId}/{key}'.");
+                }
+
+                uses.Add(new FirstXUseViewModel(sourceCardId, key, count));
+            }
+        }
+
+        return new ReadOnlyCollection<FirstXUseViewModel>(uses.ToArray());
     }
 
     private static TurnViewModel MapTurn(IReadOnlyDictionary<string, object?> publicState)
@@ -994,6 +1162,9 @@ public static class ObservationViewMapper
             {
                 EffectiveStrength = iceQuote?.EffectiveValue,
                 StrengthQuote = iceQuote,
+                StrengthBreakdown = iceQuote is null
+                    ? null
+                    : StrengthBreakdownViewModel.From(iceQuote),
                 Breakers = CalculateBreakerStrengths(
                     publicState,
                     map,
@@ -1201,6 +1372,7 @@ public static class ObservationViewMapper
                 quote.EffectiveValue)
             {
                 StrengthQuote = quote,
+                StrengthBreakdown = StrengthBreakdownViewModel.From(quote),
             });
         }
 
@@ -1349,6 +1521,7 @@ public static class ObservationViewMapper
         {
             TypedCounters = MapCounters(map, id),
             AbilityCue = abilityCue.For(id),
+            FirstXUses = abilityCue.FirstXFor(id),
         };
     }
 

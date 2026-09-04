@@ -264,7 +264,7 @@ public partial class Main
 			TextCardControl control = MakeCard(card);
 			EncounterBreakerViewModel? breaker = board.Run?.Encounter?.Breakers
 				.FirstOrDefault(candidate => candidate.CardId == card.Id);
-			control.SetEncounterStrength(breaker?.EffectiveStrength);
+			control.SetEncounterStrength(breaker?.StrengthBreakdown);
 			_runnerRig.AddChild(control);
 		}
 
