@@ -1,7 +1,6 @@
 # M4 progress — System Gateway complete
 
-Status: Slice 4.5 implementation started on `m4_5`; Slice 4.4 is complete and
-merged into `dev`
+Status: Slice 4.5 complete on `m4_5`; ready for review into `dev`
 
 Date started: 31 August 2026
 
@@ -10,10 +9,10 @@ vendored commit `236140cf84491c23995b028bc791281837520b97` (77 designs)
 
 ## Scope
 
-Slices 4.1 and 4.2 of `docs/M4_PLAN.md` are complete and merged. Current
-implementation scope is Slice 4.3: ENG-407 through ENG-413, the 13 new Batch 2
-designs plus Nico Campaign completion, AGT-401 v2, SIM-401, UI-404, OBS-401,
-and their documented exit evidence. Later M4 card batches remain out of scope.
+Slices 4.1 through 4.4 of `docs/M4_PLAN.md` are complete and merged. Slice 4.5
+is complete on its feature branch: ENG-419 through ENG-425A, SCN-401, the
+seven Batch 4 cards, AGT-401 v4, SIM-401, UI-406, and their exit evidence.
+Later M4 card batches remain out of scope.
 
 ## Baseline
 
@@ -4292,3 +4291,65 @@ errors; runtime action expansion and full verification remain pending.
   hard checkpoint is serialized choice-bearing ICE subroutine resolution,
   hidden-safe Corp installs/topology, Ansel's run restriction and trash target,
   followed by final SCN/simulation/UI/registry closure.
+
+### 2026-09-04 — Checkpoint D2 typed ICE resolution and topology accepted
+
+- Added one serialized, catalog-authenticated ICE-subroutine continuation
+  instead of title branches. It executes Corp installed-card trash choices,
+  Ansel's normal paid HQ/Archives install, Brân's inward cost-ignoring ICE
+  install, Funhouse's pay-or-tag subroutine, and typed run restrictions. The
+  payload constructors reject unsupported install-cost combinations and
+  extraneous card, server, payment, and hosted-credit fields before they can
+  reach a decision boundary.
+- Mid-run topology follows CR 8.5.10 and 8.5.13: a removed encountered ICE
+  leaves a repaired cursor, while an ICE installed immediately inward from
+  Brân becomes the next approached ICE. Normal installs use the existing
+  replacement/unique/install-cost machinery; inward installs have their own
+  exact destination and ignore-cost contract.
+- Ansel's cannot-steal-or-trash effect is run-scoped and filters only steal,
+  basic trash, and declarations whose typed instruction/cost graph can trash
+  a Corp card. Unrelated access-window abilities remain legal. Each
+  restriction now points to an exact schema-14 resolved-unbroken-subroutine
+  ledger entry, and adversarial removal of that entry fails invariants and is
+  rejected atomically.
+- Root review strengthened the shared bioroid payload with its typed printed
+  ordinal, kept repeated click-loss uses legal, and made the contract agent's
+  ordinal preference explicit. The reviewed checkpoint is committed as
+  `9646928` after complete project suites passed Core 756/756, Cards 214/214,
+  AI 51/51, CLI 54/54, and Match 77/77.
+
+### 2026-09-04 — Checkpoint E-F simulation, UI, registry, and exit accepted
+
+- SCN-401 now has 13 executable cases covering every required approach,
+  encounter, bioroid, install, restriction, and Mayfly used/not-used boundary.
+  Every declared yield round-trips and the timing validator proves the new
+  reactions do not invent priority windows.
+- The Slice 4.5 headless proof drives Manegarm, Brân, Ansel, and Funhouse in
+  one full run. Scripted-human and AGT-401 v4 policies select the exact same
+  action/event/state sequence; every yield passes invariants, JSON round-trip,
+  and replay lockstep. Simulation fixtures now contain all 46 registered
+  definitions and pin behavior catalog
+  `40cf3ff37c5e014a70d43e321c63cf541dc883af74315e970df0e4e4928dd038`.
+- Match receives the immutable runtime-card catalog at composition and uses it
+  for setup and every reducer call, so real Ansel/Brân install choices can be
+  materialized. Its Runner publication boundary omits events containing
+  hidden Corp physical IDs and fails closed for future typed card-reference
+  payloads while retaining public reveal, access, score, and rezzed-ICE data.
+- UI-406 renders prominent ordered choices with acting player, typed costs,
+  fallbacks, safe targets, active restriction, legal bioroid use, and armed
+  Mayfly cleanup. The Godot smoke proves all nine cues without reading rules
+  text or exposing a hidden installed card. The legacy M2 UI smoke remains on
+  its explicit behavior-only adapter; normal Godot composition supplies the
+  runtime catalog.
+- Gateway evidence closes at 77 total / 46 registered / 46 tested / 45
+  text-complete / 1 partial / 31 unregistered; Offworld Office remains the
+  only registered partial. Engine schema 14 re-pins the representative M2
+  proof at initial
+  `308cadf42d6f32153299104661b81d1a47ce7ae80a91e966375729149e71d049`,
+  final `4603c78adb067873229363c86d6b1294f92c5564009e1b8a1cbf2aa6e6dc1001`,
+  and unchanged event stream
+  `33af2b049fbad324ed5ff0ee130740c3d65c03f2cb1196100afbdc73e9f0e67c`.
+- The final `./scripts/verify.sh` gate passes all 1,152 tests, warning-free
+  builds and formatting, official card-data/coverage checks, M1/M2 and Slice
+  4.5 deterministic proofs, Godot import/gallery/Slice 4.3/Slice 4.4/Slice 4.5
+  and M3 smokes, and secret scanning.
