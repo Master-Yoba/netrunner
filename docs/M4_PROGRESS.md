@@ -1,7 +1,8 @@
 # M4 progress — System Gateway complete
 
-Status: slices 4.1 and 4.2 merged; slice 4.3 implementation in progress on
-`m4_3`
+Status: Slice 4.3 engine/card/agent/client work is implemented on `m4_3`;
+the standard full-game SIM-401 exit remains open on the pre-existing
+MATCH-401A setup/mulligan dependency
 
 Date started: 31 August 2026
 
@@ -3677,3 +3678,27 @@ errors; runtime action expansion and full verification remain pending.
   `M4_SLICE43_UI PASS card_in_scene_tree=true ready_cue=true ready_chips=true
   used_cue=true used_chips=true ability_affordance=true rfg_removed=true` with
   exit code zero.
+
+### 2026-09-04 — Checkpoint F5 integrated Slice 4.3 verification accepted
+
+- Root ran `./scripts/verify.sh` from the reviewed checkpoint commits. The
+  solution restored and built with zero warnings/errors, formatting had no
+  drift, and all 949 tests passed: Core 661, Cards 153, AI 30, CLI 54, and
+  Match 51. Authenticated card-data validation returned all 77 designs and the
+  coverage drift gate returned 32 registered/tested, 31 complete, one partial,
+  and 45 unregistered.
+- All three deterministic M1 outcome paths passed. The representative M2
+  proof retained exact hashes
+  `faf4e631ab5890b9a26cff3318af6e389f35cb3c10be9cf12c09f1ce2cca03c6`,
+  `c882eb43f2057073cf138511ac0d5834c20822a7c4a490d8e73cd6c402c682c5`,
+  and `d20cdef94e97ac928ca088e14952b65d2116fecda00485fff5c3b05e1b6e9e20`,
+  with 32 actions/checkpoints and replay verification. The official 77-card
+  gallery, Slice 4.3 client smoke, existing M3 full-run smoke, and repository
+  secret scan all passed.
+- Slice 4.3's 13 new designs plus Nico Campaign completion, OBS-401 coverage,
+  AGT-401 v2, UI-404, versioned fixtures, and the bounded ability-driven
+  headless proof are accepted. The M4 plan's stronger standard SIM-401 claim
+  is not made: MATCH-401A still lacks the normal setup/mulligan reducer, so a
+  fixture cannot yet execute from a versioned match request to its declared
+  full-game outcome. That prerequisite remains tracked rather than hidden by
+  a prebuilt-state test.
