@@ -4059,3 +4059,31 @@ errors; runtime action expansion and full verification remain pending.
   observation-dictionary boundary. Root independently passed the complete AI
   suite at 34/34, both AI project formatting gates, and `git diff --check`.
   SIM-401, UI-405, and registry/evidence closure remain.
+
+### 2026-09-04 — Checkpoint D2 SIM-401 Batch 3 fixtures and timing proof accepted
+
+- Luna Max advanced both checked-in developer-reduced simulation fixtures to
+  Slice 4.4 Batch 3 IDs, added all seven new Runner codes, and updated their
+  bounded review notes. The fixture union now equals the complete 39-definition
+  `gateway-m4-4.4` catalog while retaining its
+  `1d7a527112152ea16164da4def624ca0dbb83e477d06323ecfc86c2f837a2fc4`
+  fingerprint. The earlier Slice 4.3 ability proof follows the new fixture IDs
+  and remains green; these inputs still do not claim the open standard
+  setup/mulligan full-game outcome.
+- A new compact headless production proof begins a real Tread Lightly run
+  against R&D, pays its printed event cost, and retains the run-scoped +3 ICE
+  rez declaration. At the approached Palisade, the Corp receives and pays the
+  checked 3 → 6 quote while the unrezzed definition remains hidden from the
+  Runner observation.
+- The same run and physical ICE then enter the encounter window. The exact
+  engine-issued Leech action spends its real virus counter and creates a
+  catalog-provenanced, encounter-expiring -1 term targeted at that ICE,
+  changing authoritative strength from 2 to 1 while Tread's independent run
+  snapshot remains present. Leech is deliberately selected directly because
+  AGT-401 v3 refuses unlimited non-click abilities; the proof does not replace
+  or synthesize its issued payload.
+- Save/load at the encounter boundary before Leech and again after its payment
+  preserves run, ICE, rez modifier, strength adjustment, quotes, hashes, and
+  invariants. Root independently passed the nine focused fixture/proof tests,
+  the complete Match suite at 54/54, Match formatting, and `git diff --check`.
+  UI-405 and registry/evidence closure remain.
