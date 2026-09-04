@@ -344,9 +344,11 @@ and their documented exit evidence. Later M4 card batches remain out of scope.
 
 The Slice 4.1 foundation decisions D-401 through D-417 in `docs/M4_PLAN.md`
 are accepted. Production composition now uses immutable injected behavior and
-metadata catalogs; compatibility statics remain only behind documented M2
-adapters. Engine extraction is mechanical, schema/version migration is pinned,
-and Godot consumes Match presentation boundaries rather than Cards records.
+metadata catalogs; rules-only convenience overloads use the immutable empty
+catalog and M2 composition uses an explicit scenario slice, with no
+process-wide behavior registry remaining. Engine extraction is mechanical,
+schema/version migration is pinned, and Godot consumes Match presentation
+boundaries rather than Cards records.
 
 ## Evidence
 
@@ -3622,12 +3624,12 @@ errors; runtime action expansion and full verification remain pending.
 ### 2026-09-04 — Checkpoint F2 catalog, CARD-401, and M2 compatibility accepted
 
 - The full immutable Gateway composition now has its own
-  `gateway-m4-4.3` version while the M2 compatibility adapter retains the
-  independent `gateway-m2-3` document pin. M2 derives only the five typed
-  legacy capabilities referenced by its scenario and deliberately excludes
-  newer generic overlays. Root found and closed an overload-resolution defect
-  that had made parameterless validation compare the full 4.3 catalog rather
-  than the derived M2 slice.
+  `gateway-m4-4.3` version while the M2 document keeps the independent
+  `gateway-m2-3` replay pin. M2 derives only the five typed legacy
+  capabilities referenced by its scenario and deliberately excludes newer
+  generic overlays. Root found and closed an overload-resolution defect that
+  had made parameterless validation compare the full 4.3 catalog rather than
+  the derived M2 slice.
 - The Slice 4.3 registry row and all 14 review rows are complete. Positive
   lifecycle metadata covers every Batch 2 code, and the regenerated CARD-401
   reports record 77 total, 32 registered, 32 tested, 31 full-text complete,
@@ -3727,3 +3729,25 @@ errors; runtime action expansion and full verification remain pending.
   drift clean, all 952 tests (Core 664, Cards 153, AI 30, CLI 54, Match 51),
   unchanged M1/M2 deterministic proofs, both M4 client smokes, M3 smoke, and
   the secret scan.
+
+### 2026-09-04 — Checkpoint D-417 static catalog cleanup accepted
+
+- Migrated `M2ScenarioDocument` and `M2ProofRunner` completely to the
+  injected, immutable scenario behavior slice. The M2 replay contract now
+  uses the explicit `EngineCompatibility.GatewayBehaviorRegistryVersion`
+  literal (`gateway-m2-3`) rather than a process registry, preserving the
+  representative proof's exact state and event hashes.
+- Deleted the process-mutable `CardBehaviorSpecCatalog`,
+  `GatewayBehaviorCatalog.RegisterAll`, and all five typed Gateway
+  `RegisterAll` methods. Core rules-only compatibility overloads use the
+  immutable `BehaviorCatalog.Empty`; behavior-bearing fixtures and tests
+  compose and inject a consolidated catalog explicitly.
+- Retained the useful Gateway printed-text and definition-binding assertions;
+  former static idempotency/conflict checks now exercise immutable catalog
+  construction and fail-closed lookup. The source/test scan reports zero
+  `CardBehaviorSpecCatalog` or `RegisterAll` references.
+- Evidence: the solution build completed with zero warnings/errors; all 952
+  tests passed (Core 664, Cards 153, AI 30, CLI 54, Match 51); solution
+  formatting and `git diff --check` passed; and the direct M2 proof replayed
+  32 checkpoints with `replayVerified: true` and unchanged hashes
+  (`faf4e631…` / `c882eb43…` / `d20cdef9…`).

@@ -393,10 +393,10 @@ public sealed class CostModifierContractTests
         // Use the fixture's existing typed ICE registration and pin the
         // rebuilt catalog to the state. The modifier is the only changed
         // behavior registration.
-        Assert.True(CardBehaviorSpecCatalog.Default.TryGetIce(
+        Assert.True(FixtureBehaviorCatalog.Catalog.TryGetIce(
             FixtureIceBehaviorSpecs.TwoSubroutines,
             out IceBehaviorSpec? iceSpec));
-        Assert.True(CardBehaviorSpecCatalog.Default.TryGetIcebreaker(
+        Assert.True(FixtureBehaviorCatalog.Catalog.TryGetIcebreaker(
             FixtureIceBehaviorSpecs.BreakerBarrier,
             out IcebreakerBehaviorSpec? breakerSpec));
         IcebreakerBehaviorSpec modifiedBreaker = new(
@@ -469,10 +469,10 @@ public sealed class CostModifierContractTests
             EncounterBreakerTests.CreateRunStateWithBreaker(
                 FixtureIceBehaviorSpecs.BreakerBarrier,
                 iceDefinition: FixtureIceBehaviorSpecs.TwoSubroutines);
-        Assert.True(CardBehaviorSpecCatalog.Default.TryGetIce(
+        Assert.True(FixtureBehaviorCatalog.Catalog.TryGetIce(
             FixtureIceBehaviorSpecs.TwoSubroutines,
             out IceBehaviorSpec? iceSpec));
-        Assert.True(CardBehaviorSpecCatalog.Default.TryGetIcebreaker(
+        Assert.True(FixtureBehaviorCatalog.Catalog.TryGetIcebreaker(
             FixtureIceBehaviorSpecs.BreakerBarrier,
             out IcebreakerBehaviorSpec? breakerSpec));
         CardDefinitionId eventDefinition = new("test:cost-modifier-run-event");
@@ -672,10 +672,10 @@ public sealed class CostModifierContractTests
             EncounterBreakerTests.CreateRunStateWithBreaker(
                 FixtureIceBehaviorSpecs.BreakerBarrier,
                 iceDefinition: FixtureIceBehaviorSpecs.TwoSubroutines);
-        Assert.True(CardBehaviorSpecCatalog.Default.TryGetIce(
+        Assert.True(FixtureBehaviorCatalog.Catalog.TryGetIce(
             FixtureIceBehaviorSpecs.TwoSubroutines,
             out IceBehaviorSpec? iceSpec));
-        Assert.True(CardBehaviorSpecCatalog.Default.TryGetIcebreaker(
+        Assert.True(FixtureBehaviorCatalog.Catalog.TryGetIcebreaker(
             FixtureIceBehaviorSpecs.BreakerBarrier,
             out IcebreakerBehaviorSpec? breakerSpec));
         BehaviorCatalog breakCatalog = new BehaviorCatalogBuilder(

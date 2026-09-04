@@ -19,7 +19,7 @@ public static partial class GameEngine
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(runtimeCardCatalog);
         return MaterializeAdvanceCardParameters(
-            WorkingState.From(state, CardBehaviorSpecCatalog.Default, runtimeCardCatalog));
+            WorkingState.From(state, BehaviorCatalog.Empty, runtimeCardCatalog));
     }
 
     private static List<AdvanceCardParameters> MaterializeAdvanceCardParameters(WorkingState working)
@@ -141,7 +141,7 @@ public static partial class GameEngine
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(runtimeCardCatalog);
         return MaterializeScoreAgendaParameters(
-            WorkingState.From(state, CardBehaviorSpecCatalog.Default, runtimeCardCatalog));
+            WorkingState.From(state, BehaviorCatalog.Empty, runtimeCardCatalog));
     }
 
     private static List<ScoreAgendaParameters> MaterializeScoreAgendaParameters(WorkingState working)

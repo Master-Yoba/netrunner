@@ -742,7 +742,11 @@ public sealed class ObservationTests
 
         static void AssertValid(GameState state)
         {
-            bool valid = StateInvariantValidator.TryValidate(state, out IReadOnlyList<StateInvariantViolation> violations);
+            bool valid = StateInvariantValidator.TryValidate(
+                state,
+                FixtureBehaviorCatalog.Catalog,
+                runtimeCardCatalog: null,
+                out IReadOnlyList<StateInvariantViolation> violations);
             Assert.True(valid, string.Join(" | ", violations.Select(violation => violation.ToString())));
         }
     }

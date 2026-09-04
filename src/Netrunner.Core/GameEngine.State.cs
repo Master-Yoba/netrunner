@@ -330,7 +330,7 @@ public static partial class GameEngine
             GameState source,
             IBehaviorCatalog? behaviorCatalog = null,
             IRuntimeCardCatalog? runtimeCardCatalog = null) =>
-            new(source, behaviorCatalog ?? CardBehaviorSpecCatalog.Default, runtimeCardCatalog);
+            new(source, behaviorCatalog ?? Netrunner.Core.BehaviorCatalog.Empty, runtimeCardCatalog);
 
         public GameState Build(GameState source) => new(
             source.SchemaVersion,

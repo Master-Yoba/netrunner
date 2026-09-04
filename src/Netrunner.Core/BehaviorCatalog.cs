@@ -1603,6 +1603,13 @@ public sealed class CardBehaviorDefinition
 /// </summary>
 public sealed class BehaviorCatalog : IBehaviorCatalog, IBehaviorCardClassificationCatalog
 {
+    /// <summary>
+    /// Immutable empty catalog used by rules-only compatibility overloads.
+    /// Behavior-bearing sessions must compose and inject their catalog.
+    /// </summary>
+    public static BehaviorCatalog Empty { get; } =
+        new BehaviorCatalogBuilder(EngineCompatibility.BehaviorRegistryVersion).Build();
+
     private readonly IReadOnlyDictionary<CardDefinitionId, IceBehaviorSpec> _ice;
     private readonly IReadOnlyDictionary<CardDefinitionId, IcebreakerBehaviorSpec> _icebreakers;
     private readonly IReadOnlyDictionary<CardDefinitionId, AssetBehaviorSpec> _assets;

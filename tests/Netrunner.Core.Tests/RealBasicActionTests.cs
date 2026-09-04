@@ -877,7 +877,7 @@ public sealed class RealBasicActionTests
                 RuntimeCardClass.Resource,
                 installCost: 2))
             .Build();
-        BehaviorCatalog behaviorCatalog = CardBehaviorSpecCatalog.Default;
+        BehaviorCatalog behaviorCatalog = FixtureBehaviorCatalog.Catalog;
         GameState baseline = GameState.CreateNew(
             seed: 612,
             behaviorRegistryVersion: behaviorCatalog.Version,

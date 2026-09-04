@@ -32,7 +32,7 @@ public static partial class GameEngine
             serverId,
             initiatingPlayer,
             initiatingSource,
-            CardBehaviorSpecCatalog.Default,
+            BehaviorCatalog.Empty,
             runtimeCardCatalog: null,
             enforceCatalogCompatibility: false).State;
 
@@ -89,7 +89,7 @@ public static partial class GameEngine
             serverId,
             initiatingPlayer,
             initiatingSource,
-            CardBehaviorSpecCatalog.Default,
+            BehaviorCatalog.Empty,
             runtimeCardCatalog: null,
             enforceCatalogCompatibility: false);
     }

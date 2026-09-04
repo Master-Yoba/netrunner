@@ -14,7 +14,7 @@ public sealed class RunTimingTests
     public void Cr691eInitiationPaidWindowAlternatesRunnerThenCorp()
     {
         GameState initial = CreateRunState(iceCount: 1, rezzed: false);
-        GameState prompt = GameEngine.BeginRun(initial, RemoteId(initial));
+        GameState prompt = GameEngine.BeginRun(initial, RemoteId(initial), FixtureBehaviorCatalog.Catalog);
 
         AssertRunPrompt(prompt, RunTimingStep.InitiationPaidWindow, PlayerSide.Runner, ActionKind.PassPriority);
         ApplyResult runnerPass = ApplyKind(prompt, ActionKind.PassPriority);
@@ -160,14 +160,14 @@ public sealed class RunTimingTests
         {
             yielded++;
             string json = EngineJson.Serialize(original);
-            GameState restored = EngineJson.DeserializeState(json);
+            GameState restored = EngineJson.DeserializeState(json, FixtureBehaviorCatalog.Catalog);
             Assert.Equal(json, EngineJson.Serialize(restored));
 
             PendingDecision decision = original.PendingDecision;
             LegalAction action = decision.LegalActions[0];
             ActionSubmission submission = new(decision.Owner, decision.Id, decision.Revision, action.Id);
-            ApplyResult left = GameEngine.Apply(original, submission);
-            ApplyResult right = GameEngine.Apply(restored, submission);
+            ApplyResult left = GameEngine.Apply(original, submission, FixtureBehaviorCatalog.Catalog);
+            ApplyResult right = GameEngine.Apply(restored, submission, FixtureBehaviorCatalog.Catalog);
             Assert.Equal(left.Status, right.Status);
             Assert.Equal(EngineJson.Serialize(left.State), EngineJson.Serialize(right.State));
             Assert.Equal(DeterministicHash.ForEvents(left.Events), DeterministicHash.ForEvents(right.Events));
@@ -222,7 +222,7 @@ public sealed class RunTimingTests
         LegalAction rez = Assert.Single(decision.LegalActions, action => action.Kind == ActionKind.RezIce);
         ActionSubmission forged = new(decision.Owner, decision.Id, decision.Revision, new ActionId("action:forged"));
         string before = EngineJson.Serialize(corpPrompt);
-        ApplyResult rejected = GameEngine.Apply(corpPrompt, forged);
+        ApplyResult rejected = GameEngine.Apply(corpPrompt, forged, FixtureBehaviorCatalog.Catalog);
 
         Assert.Equal(ApplyRejectionCode.UnknownAction, rejected.Rejection?.Code);
         Assert.Same(corpPrompt, rejected.State);
@@ -236,7 +236,7 @@ public sealed class RunTimingTests
     internal static GameState BeginRunPrompt(int iceCount, bool rezzed)
     {
         GameState state = CreateRunState(iceCount, rezzed);
-        return GameEngine.BeginRun(state, RemoteId(state));
+        return GameEngine.BeginRun(state, RemoteId(state), FixtureBehaviorCatalog.Catalog);
     }
 
     internal static ApplyResult PassTwice(GameState state)
@@ -283,7 +283,8 @@ public sealed class RunTimingTests
         PendingDecision decision = Assert.IsType<PendingDecision>(state.PendingDecision);
         return GameEngine.Apply(
             state,
-            new ActionSubmission(actor ?? decision.Owner, decision.Id, decision.Revision, action.Id));
+            new ActionSubmission(actor ?? decision.Owner, decision.Id, decision.Revision, action.Id),
+            FixtureBehaviorCatalog.Catalog);
     }
 
     internal static void AssertRunPrompt(GameState state, RunTimingStep step, PlayerSide ownerSide, ActionKind actionKind)

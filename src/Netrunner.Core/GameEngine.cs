@@ -32,7 +32,7 @@ public static partial class GameEngine
         return ApplyCore(
             state,
             submission,
-            CardBehaviorSpecCatalog.Default,
+            BehaviorCatalog.Empty,
             runtimeCardCatalog: null,
             enforceCatalogCompatibility: false,
             maxResolutionSteps: DefaultResolutionStepBudget);
@@ -243,7 +243,7 @@ public static partial class GameEngine
         return BeginResolutionCore(
             state,
             frame,
-            CardBehaviorSpecCatalog.Default,
+            BehaviorCatalog.Empty,
             runtimeCardCatalog: null,
             enforceCatalogCompatibility: false,
             maxResolutionSteps: maxResolutionSteps);
@@ -452,7 +452,7 @@ public static partial class GameEngine
         BeginTurnWithEvents(
             state,
             side,
-            CardBehaviorSpecCatalog.Default,
+            BehaviorCatalog.Empty,
             runtimeCardCatalog: null,
             maxResolutionSteps: maxResolutionSteps,
             enforceCatalogCompatibility: false);

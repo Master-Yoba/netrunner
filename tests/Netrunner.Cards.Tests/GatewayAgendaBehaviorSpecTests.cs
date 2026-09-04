@@ -27,25 +27,24 @@ public sealed class GatewayAgendaBehaviorSpecTests
     }
 
     [Fact]
-    public void RegisterAllIsIdempotentAndRetrievalSucceeds()
+    public void ImmutableGatewayCatalogContainsTheCompiledAgendaSpec()
     {
-        GatewayAgendaBehaviorSpecs.RegisterAll();
-        GatewayAgendaBehaviorSpecs.RegisterAll();
+        BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();
 
-        Assert.True(CardBehaviorSpecCatalog.TryGetAgenda(GatewayCardCodes.OffworldOffice, out AgendaBehaviorSpec? spec));
+        Assert.True(catalog.TryGetAgenda(GatewayCardCodes.OffworldOffice, out AgendaBehaviorSpec? spec));
         Assert.Equal(GatewayAgendaBehaviorSpecs.AgendaSpecs[0], spec);
         Assert.Equal(
             GatewayAgendaBehaviorSpecs.AgendaSpecs[0],
-            CardBehaviorSpecCatalog.GetAgenda(GatewayCardCodes.OffworldOffice));
+            catalog.AgendaSpecs.Single(spec => spec.DefinitionId == GatewayCardCodes.OffworldOffice));
     }
 
     [Fact]
     public void GetAgendaFailsClosedForUnregisteredDefinitions()
     {
         CardDefinitionId unregistered = new("30001");
+        BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();
 
-        Assert.False(CardBehaviorSpecCatalog.TryGetAgenda(unregistered, out _));
-        Assert.Throws<ArgumentException>(() => CardBehaviorSpecCatalog.GetAgenda(unregistered));
+        Assert.False(catalog.TryGetAgenda(unregistered, out _));
     }
 
     [Fact]
@@ -53,13 +52,14 @@ public sealed class GatewayAgendaBehaviorSpecTests
     {
         AgendaBehaviorSpec canonical = GatewayAgendaBehaviorSpecs.AgendaSpecs[0];
         Assert.Equal(GatewayCardCodes.OffworldOffice, canonical.DefinitionId);
-        CardBehaviorSpecCatalog.RegisterAgenda(canonical);
+        BehaviorCatalogBuilder builder = new(GatewayBehaviorCatalog.Version);
+        builder.AddAgenda(canonical);
 
         AgendaBehaviorSpec conflicting = new(canonical.DefinitionId, agendaPoints: canonical.AgendaPoints + 1);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
-            () => CardBehaviorSpecCatalog.RegisterAgenda(conflicting));
+            () => builder.AddAgenda(conflicting));
         Assert.Contains(canonical.DefinitionId.Value, exception.Message);
-        Assert.Equal(canonical, CardBehaviorSpecCatalog.GetAgenda(canonical.DefinitionId));
+        Assert.Equal(canonical, builder.Build().AgendaSpecs.Single());
     }
 }

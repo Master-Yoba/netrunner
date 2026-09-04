@@ -272,11 +272,6 @@ public sealed class M2ScenarioDocument
 
     private ReadOnlyCollection<string> CollectProblems(BehaviorCatalog behaviorCatalog)
     {
-        // M2 callers still use the legacy static lookup/ReplayVerifier APIs;
-        // keep this idempotent adapter registration until those callers are
-        // fully migrated. All document capability checks below use the
-        // immutable scenario slice.
-        GatewayBehaviorCatalog.RegisterAll();
         var problems = new List<string>();
 
         if (SchemaVersion != EngineCompatibility.ArtifactSchemaVersion)
@@ -309,10 +304,10 @@ public sealed class M2ScenarioDocument
         {
             problems.Add("behaviorRegistryVersion: must be an explicit compiled behavior catalog version.");
         }
-        else if (BehaviorRegistryVersion != CardBehaviorSpecCatalog.Version)
+        else if (BehaviorRegistryVersion != EngineCompatibility.GatewayBehaviorRegistryVersion)
         {
             problems.Add(
-                $"behaviorRegistryVersion: '{BehaviorRegistryVersion}' is not the Gateway compiled behavior version '{CardBehaviorSpecCatalog.Version}'.");
+                $"behaviorRegistryVersion: '{BehaviorRegistryVersion}' is not the Gateway compiled behavior version '{EngineCompatibility.GatewayBehaviorRegistryVersion}'.");
         }
 
         string scenarioFingerprint = behaviorCatalog.Fingerprint;
@@ -618,7 +613,7 @@ public sealed class M2ScenarioDocument
         // use the legacy constant only as a construction fallback.
         string legacyVersion = IsStableIdentifier(documentBehaviorRegistryVersion)
             ? documentBehaviorRegistryVersion
-            : CardBehaviorSpecCatalog.Version;
+            : EngineCompatibility.GatewayBehaviorRegistryVersion;
         var builder = new BehaviorCatalogBuilder(legacyVersion);
         foreach (CardDefinitionId definitionId in definitionIds.Distinct())
         {
@@ -689,9 +684,6 @@ public sealed class M2ScenarioDocument
                 return false;
         }
     }
-
-    internal static bool IsRegisteredBehavior(CardDefinitionId definitionId) =>
-        IsRegisteredBehavior(definitionId, CardBehaviorSpecCatalog.Default);
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage(
         "Performance",

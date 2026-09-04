@@ -136,7 +136,7 @@ public static class StateInvariantValidator
     {
         ArgumentNullException.ThrowIfNull(state);
         bool enforceCatalogCompatibility = behaviorCatalog is not null;
-        behaviorCatalog ??= CardBehaviorSpecCatalog.Default;
+        behaviorCatalog ??= BehaviorCatalog.Empty;
 
         var violations = new List<StateInvariantViolation>();
         ValidateMetadata(state, behaviorCatalog, enforceCatalogCompatibility, runtimeCardCatalog, violations);

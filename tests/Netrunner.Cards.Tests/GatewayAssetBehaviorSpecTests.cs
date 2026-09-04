@@ -39,21 +39,20 @@ public sealed class GatewayAssetBehaviorSpecTests
     }
 
     [Fact]
-    public void RegisterAllIsIdempotentAndRetrievalSucceeds()
+    public void ImmutableGatewayCatalogContainsTheCompiledAssetSpecs()
     {
-        GatewayAssetBehaviorSpecs.RegisterAll();
-        GatewayAssetBehaviorSpecs.RegisterAll();
+        BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();
 
-        Assert.True(CardBehaviorSpecCatalog.TryGetAsset(GatewayCardCodes.NicoCampaign, out AssetBehaviorSpec? spec));
+        Assert.True(catalog.TryGetAsset(GatewayCardCodes.NicoCampaign, out AssetBehaviorSpec? spec));
         Assert.Equal(GatewayAssetBehaviorSpecs.AssetSpecs[0], spec);
         Assert.Equal(
             GatewayAssetBehaviorSpecs.AssetSpecs[0],
-            CardBehaviorSpecCatalog.GetAsset(GatewayCardCodes.NicoCampaign));
-        Assert.True(CardBehaviorSpecCatalog.TryGetAsset(
+            catalog.AssetSpecs.Single(spec => spec.DefinitionId == GatewayCardCodes.NicoCampaign));
+        Assert.True(catalog.TryGetAsset(
             GatewayBatch2CardCodes.SpinDoctor,
             out AssetBehaviorSpec? spinDoctor));
         Assert.Equal(2, spinDoctor.TrashCost);
-        Assert.True(CardBehaviorSpecCatalog.TryGetAsset(
+        Assert.True(catalog.TryGetAsset(
             GatewayBatch2CardCodes.RegolithMiningLicense,
             out AssetBehaviorSpec? regolith));
         Assert.Equal(3, regolith.TrashCost);
@@ -63,9 +62,9 @@ public sealed class GatewayAssetBehaviorSpecTests
     public void GetAssetFailsClosedForUnregisteredDefinitions()
     {
         CardDefinitionId unregistered = new("30001");
+        BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();
 
-        Assert.False(CardBehaviorSpecCatalog.TryGetAsset(unregistered, out _));
-        Assert.Throws<ArgumentException>(() => CardBehaviorSpecCatalog.GetAsset(unregistered));
+        Assert.False(catalog.TryGetAsset(unregistered, out _));
     }
 
     [Fact]
@@ -73,13 +72,14 @@ public sealed class GatewayAssetBehaviorSpecTests
     {
         AssetBehaviorSpec canonical = GatewayAssetBehaviorSpecs.AssetSpecs[0];
         Assert.Equal(GatewayCardCodes.NicoCampaign, canonical.DefinitionId);
-        CardBehaviorSpecCatalog.RegisterAsset(canonical);
+        BehaviorCatalogBuilder builder = new(GatewayBehaviorCatalog.Version);
+        builder.AddAsset(canonical);
 
         AssetBehaviorSpec conflicting = new(canonical.DefinitionId, trashCost: canonical.TrashCost + 1);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
-            () => CardBehaviorSpecCatalog.RegisterAsset(conflicting));
+            () => builder.AddAsset(conflicting));
         Assert.Contains(canonical.DefinitionId.Value, exception.Message);
-        Assert.Equal(canonical, CardBehaviorSpecCatalog.GetAsset(canonical.DefinitionId));
+        Assert.Equal(canonical, builder.Build().AssetSpecs.Single(spec => spec.DefinitionId == canonical.DefinitionId));
     }
 }

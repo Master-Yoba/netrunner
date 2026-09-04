@@ -1,4 +1,5 @@
 using Netrunner.AI;
+using Netrunner.Cards;
 using Netrunner.Core;
 using Netrunner.Match;
 using Xunit;
@@ -182,12 +183,14 @@ public sealed class M2ProofTests
     public void SaveLoadSucceedsAtEveryYieldedDecision()
     {
         M2ProofResult result = RunContractAgentProof();
+        M2ScenarioDocument scenario = LoadScenario();
+        BehaviorCatalog behaviorCatalog = scenario.CreateBehaviorCatalog(GatewayBehaviorCatalog.Create());
 
         Assert.Equal(result.ReplayActions.Count, result.Checkpoints.Count);
         Assert.Equal(
             result.Checkpoints.Count,
             result.Checkpoints.Select(checkpoint => checkpoint.DecisionId).Distinct().Count());
-        Assert.True(ReplayVerifier.Verify(result.ReplayArtifact).Success);
+        Assert.True(ReplayVerifier.Verify(result.ReplayArtifact, behaviorCatalog).Success);
     }
 
     [Fact]

@@ -51,7 +51,7 @@ public static partial class GameEngine
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(runtimeCardCatalog);
         return MaterializeTrashTaggedResourceParameters(
-            WorkingState.From(state, CardBehaviorSpecCatalog.Default, runtimeCardCatalog));
+            WorkingState.From(state, BehaviorCatalog.Empty, runtimeCardCatalog));
     }
 
     private static List<TrashTaggedResourceParameters> MaterializeTrashTaggedResourceParameters(

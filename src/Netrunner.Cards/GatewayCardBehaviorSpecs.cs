@@ -53,6 +53,4 @@ public static class GatewayIceBehaviorSpecs
     public static IReadOnlyList<IceBehaviorSpec> IceSpecs { get; } =
         new ReadOnlyCollection<IceBehaviorSpec>(new[] { Palisade, Whitespace });
 
-    /// <summary>Registers <see cref="IceSpecs"/> into the shared catalog (idempotent).</summary>
-    public static void RegisterAll() => CardBehaviorSpecCatalog.RegisterIce(IceSpecs);
 }

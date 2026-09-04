@@ -72,7 +72,7 @@ public sealed class M2ProofCommandTests
             .Build();
         M2ScenarioDocument scenario = EngineJson.Deserialize<M2ScenarioDocument>(File.ReadAllText(path));
         BehaviorCatalog scenarioSlice = scenario.CreateBehaviorCatalog(expanded);
-        Assert.Equal(CardBehaviorSpecCatalog.Version, scenarioSlice.Version);
+        Assert.Equal(EngineCompatibility.GatewayBehaviorRegistryVersion, scenarioSlice.Version);
         Assert.Equal(scenario.BehaviorCatalogFingerprint, scenarioSlice.Fingerprint);
         var output = new StringWriter();
         var error = new StringWriter();

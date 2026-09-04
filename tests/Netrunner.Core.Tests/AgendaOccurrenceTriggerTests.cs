@@ -343,7 +343,7 @@ public sealed class AgendaOccurrenceTriggerTests
         CardDefinitionId agendaDefinition,
         params CardBehaviorDefinition[] definitions) => new BehaviorCatalogBuilder(
         "test:agenda-occurrence",
-        CardBehaviorSpecCatalog.Default)
+            FixtureBehaviorCatalog.Catalog)
         .AddAgenda(new AgendaBehaviorSpec(agendaDefinition, agendaPoints: 1))
         .Add(definitions)
         .Build();

@@ -27,23 +27,22 @@ public sealed class GatewayRunEventBehaviorSpecTests
     }
 
     [Fact]
-    public void RegisterAllIsIdempotentAndRetrievalSucceeds()
+    public void ImmutableGatewayCatalogContainsTheCompiledRunEventSpec()
     {
-        GatewayRunEventBehaviorSpecs.RegisterAll();
-        GatewayRunEventBehaviorSpecs.RegisterAll();
+        BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();
 
         Assert.Equal(
             GatewayRunEventBehaviorSpecs.RunEventSpecs[0],
-            CardBehaviorSpecCatalog.GetRunEvent(GatewayCardCodes.Overclock));
+            catalog.RunEventSpecs.Single(spec => spec.DefinitionId == GatewayCardCodes.Overclock));
     }
 
     [Fact]
     public void GetRunEventFailsClosedForUnregisteredDefinitions()
     {
         CardDefinitionId unregistered = new("30001");
+        BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();
 
-        Assert.False(CardBehaviorSpecCatalog.TryGetRunEvent(unregistered, out _));
-        Assert.Throws<ArgumentException>(() => CardBehaviorSpecCatalog.GetRunEvent(unregistered));
+        Assert.False(catalog.TryGetRunEvent(unregistered, out _));
     }
 
     [Fact]
@@ -51,7 +50,8 @@ public sealed class GatewayRunEventBehaviorSpecTests
     {
         RunEventBehaviorSpec canonical = GatewayRunEventBehaviorSpecs.RunEventSpecs[0];
         Assert.Equal(GatewayCardCodes.Overclock, canonical.DefinitionId);
-        CardBehaviorSpecCatalog.RegisterRunEvent(canonical);
+        BehaviorCatalogBuilder builder = new(GatewayBehaviorCatalog.Version);
+        builder.AddRunEvent(canonical);
 
         RunEventBehaviorSpec conflicting = new(
             canonical.DefinitionId,
@@ -59,9 +59,9 @@ public sealed class GatewayRunEventBehaviorSpecTests
             hostedCredits: canonical.HostedCredits + 1);
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(
-            () => CardBehaviorSpecCatalog.RegisterRunEvent(conflicting));
+            () => builder.AddRunEvent(conflicting));
         Assert.Contains(canonical.DefinitionId.Value, exception.Message);
-        Assert.Equal(canonical, CardBehaviorSpecCatalog.GetRunEvent(canonical.DefinitionId));
+        Assert.Equal(canonical, builder.Build().RunEventSpecs.Single());
     }
 
     [Fact]
@@ -69,7 +69,7 @@ public sealed class GatewayRunEventBehaviorSpecTests
     {
         // The run-event registration bumped the catalog version; the proof
         // fixtures in Slice 4 key replay hashes off this exact version.
-        Assert.Equal("gateway-m2-3", CardBehaviorSpecCatalog.Version);
+        Assert.Equal("gateway-m2-3", EngineCompatibility.GatewayBehaviorRegistryVersion);
     }
 
     [Fact]

@@ -63,7 +63,7 @@ public sealed class EncounterSubroutineTests
             iceCount: 1,
             rezzed: true,
             iceDefinition: new CardDefinitionId("fixture:ice-unregistered"));
-        state = GameEngine.BeginRun(state, RunTimingTests.RemoteId(state));
+        state = GameEngine.BeginRun(state, RunTimingTests.RemoteId(state), FixtureBehaviorCatalog.Catalog);
         state = RunTimingTests.PassTwice(state).State;
         ApplyResult firstPass = RunTimingTests.ApplyKind(state, ActionKind.PassPriority);
         Assert.True(firstPass.Accepted, firstPass.Rejection?.Message);
@@ -89,8 +89,8 @@ public sealed class EncounterSubroutineTests
         LegalAction pass = Assert.Single(decision.LegalActions, action => action.Kind == ActionKind.PassPriority);
         ActionSubmission submission = new(decision.Owner, decision.Id, decision.Revision, pass.Id);
 
-        ApplyResult left = GameEngine.Apply(original, submission);
-        ApplyResult right = GameEngine.Apply(restored, submission);
+        ApplyResult left = GameEngine.Apply(original, submission, FixtureBehaviorCatalog.Catalog);
+        ApplyResult right = GameEngine.Apply(restored, submission, FixtureBehaviorCatalog.Catalog);
 
         Assert.True(left.Accepted, left.Rejection?.Message);
         Assert.True(right.Accepted, right.Rejection?.Message);
@@ -106,7 +106,7 @@ public sealed class EncounterSubroutineTests
     private static ApplyResult PassToEncounter(CardDefinitionId iceDefinition)
     {
         GameState state = RunTimingTests.CreateRunState(iceCount: 1, rezzed: true, iceDefinition: iceDefinition);
-        state = GameEngine.BeginRun(state, RunTimingTests.RemoteId(state));
+        state = GameEngine.BeginRun(state, RunTimingTests.RemoteId(state), FixtureBehaviorCatalog.Catalog);
         state = RunTimingTests.PassTwice(state).State;
         return RunTimingTests.PassTwice(state);
     }

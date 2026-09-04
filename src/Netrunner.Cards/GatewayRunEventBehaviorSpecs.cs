@@ -24,6 +24,4 @@ public static class GatewayRunEventBehaviorSpecs
     public static IReadOnlyList<RunEventBehaviorSpec> RunEventSpecs { get; } =
         new ReadOnlyCollection<RunEventBehaviorSpec>(new[] { Overclock });
 
-    /// <summary>Registers <see cref="RunEventSpecs"/> into the shared catalog (idempotent).</summary>
-    public static void RegisterAll() => CardBehaviorSpecCatalog.RegisterRunEvent(RunEventSpecs);
 }

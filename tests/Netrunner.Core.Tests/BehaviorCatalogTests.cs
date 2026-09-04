@@ -112,19 +112,20 @@ public sealed class BehaviorCatalogTests
     }
 
     [Fact]
-    public void LegacyCompatibilityRegistrationRejectsCrossFamilyConflictsBeforeSnapshot()
+    public void BuilderRejectsCrossFamilyConflictsBeforeBuild()
     {
         var id = new CardDefinitionId("test:legacy-cross-family-conflict");
-        CardBehaviorSpecCatalog.RegisterIce(new IceBehaviorSpec(
-            id,
-            strength: 1,
-            iceType: IceType.Barrier,
-            rezCost: 1,
-            subroutines: [new EndRunSubroutineSpec()],
-            strengthModifiers: []));
+        BehaviorCatalogBuilder builder = new BehaviorCatalogBuilder("test:builder-cross-family-conflict")
+            .AddIce(new IceBehaviorSpec(
+                id,
+                strength: 1,
+                iceType: IceType.Barrier,
+                rezCost: 1,
+                subroutines: [new EndRunSubroutineSpec()],
+                strengthModifiers: []));
 
         InvalidOperationException exception = Assert.Throws<InvalidOperationException>(() =>
-            CardBehaviorSpecCatalog.RegisterAgenda(new AgendaBehaviorSpec(id, agendaPoints: 1)));
+            builder.AddAgenda(new AgendaBehaviorSpec(id, agendaPoints: 1)));
 
         Assert.Contains("both ICE and agenda", exception.Message, StringComparison.Ordinal);
     }
@@ -253,15 +254,18 @@ public sealed class BehaviorCatalogTests
     }
 
     [Fact]
-    public void CompatibilityCatalogSnapshotDoesNotChangeWhenLegacyRegistrationIsAdded()
+    public void ImmutableCatalogSnapshotDoesNotChangeWhenAnotherCatalogIsBuilt()
     {
-        BehaviorCatalog before = CardBehaviorSpecCatalog.Default;
+        BehaviorCatalog before = new BehaviorCatalogBuilder("test:snapshot")
+            .Build();
         CardDefinitionId extra = new("test:catalog-snapshot");
 
-        CardBehaviorSpecCatalog.RegisterAsset(new AssetBehaviorSpec(extra, trashCost: 1));
+        BehaviorCatalog after = new BehaviorCatalogBuilder("test:snapshot")
+            .AddAsset(new AssetBehaviorSpec(extra, trashCost: 1))
+            .Build();
 
         Assert.False(before.TryGetAsset(extra, out _));
-        Assert.True(CardBehaviorSpecCatalog.Default.TryGetAsset(extra, out _));
+        Assert.True(after.TryGetAsset(extra, out _));
     }
 
     [Fact]
@@ -303,7 +307,7 @@ public sealed class BehaviorCatalogTests
     }
 
     [Fact]
-    public void AdditiveCompatibilityRegistrationDoesNotChurnAnInjectedSemanticPin()
+    public void BuildingAnotherCatalogDoesNotChurnAnInjectedSemanticPin()
     {
         BehaviorCatalog catalog = new BehaviorCatalogBuilder("test:semantic-pin").Build();
         GameState state = GameState.CreateNew(
@@ -323,9 +327,12 @@ public sealed class BehaviorCatalogTests
             Assert.Single(decision.LegalActions).Id);
 
         ApplyResult before = GameEngine.Apply(prompt, submission, catalog);
-        CardBehaviorSpecCatalog.RegisterAsset(new AssetBehaviorSpec(
-            new CardDefinitionId("test:semantic-pin-additive"),
-            trashCost: 2));
+        BehaviorCatalog expandedCatalog = new BehaviorCatalogBuilder("test:semantic-pin-expanded")
+            .AddAsset(new AssetBehaviorSpec(
+                new CardDefinitionId("test:semantic-pin-additive"),
+                trashCost: 2))
+            .Build();
+        Assert.NotEqual(catalog.Fingerprint, expandedCatalog.Fingerprint);
         ApplyResult after = GameEngine.Apply(prompt, submission, catalog);
 
         Assert.True(before.Accepted, before.Rejection?.Message);

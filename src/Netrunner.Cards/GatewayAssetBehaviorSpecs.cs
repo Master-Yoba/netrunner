@@ -27,6 +27,4 @@ public static class GatewayAssetBehaviorSpecs
     public static IReadOnlyList<AssetBehaviorSpec> AssetSpecs { get; } =
         new ReadOnlyCollection<AssetBehaviorSpec>(new[] { NicoCampaign, SpinDoctor, RegolithMiningLicense });
 
-    /// <summary>Registers <see cref="AssetSpecs"/> into the shared catalog (idempotent).</summary>
-    public static void RegisterAll() => CardBehaviorSpecCatalog.RegisterAsset(AssetSpecs);
 }

@@ -28,7 +28,7 @@ public sealed class BreachAccessTests
         CardInstanceId first = root.CardIds[0];
         CardInstanceId second = root.CardIds[1];
 
-        ApplyResult breach = PassTwice(GameEngine.BeginRun(fixture, remoteId));
+        ApplyResult breach = PassTwice(BeginRun(fixture, remoteId));
         Assert.True(breach.Accepted, breach.Rejection?.Message);
         GameState candidateState = breach.State;
         AssertRunPrompt(candidateState, RunTimingStep.BreachCandidateSelection, PlayerSide.Runner, ActionKind.ChooseBreachCandidate);
@@ -116,7 +116,7 @@ public sealed class BreachAccessTests
             ServerId headquarters = fixture.Servers.Single(server => server.Kind == ServerKind.Headquarters).Id;
             ZoneState hand = fixture.Zones.Single(zone => zone.Kind == ZoneKind.CorpHand && zone.ServerId is null);
 
-            ApplyResult breach = PassTwice(GameEngine.BeginRun(fixture, headquarters));
+            ApplyResult breach = PassTwice(BeginRun(fixture, headquarters));
             Assert.True(breach.Accepted, breach.Rejection?.Message);
             AssertRunPrompt(breach.State, RunTimingStep.BreachCandidateSelection, PlayerSide.Runner, ActionKind.ChooseBreachCandidate);
             BreachStartedEventPayload started = Assert.IsType<BreachStartedEventPayload>(
@@ -181,7 +181,7 @@ public sealed class BreachAccessTests
         CardInstanceId top = deck.CardIds[0];
         ServerId rnd = fixture.Servers.Single(server => server.Kind == ServerKind.RAndD).Id;
 
-        ApplyResult breach = PassTwice(GameEngine.BeginRun(fixture, rnd));
+        ApplyResult breach = PassTwice(BeginRun(fixture, rnd));
         Assert.True(breach.Accepted, breach.Rejection?.Message);
         AssertRunPrompt(breach.State, RunTimingStep.BreachCandidateSelection, PlayerSide.Runner, ActionKind.ChooseBreachCandidate);
 
@@ -216,7 +216,6 @@ public sealed class BreachAccessTests
     [Fact]
     public void HqBreachOffersRootCardsFirstThenHiddenHandAccess()
     {
-        EnsureFixtureAsset();
         GameState fixture = CreateBreachState(
             hand: [false, false],
             hqRoot: [false, false],
@@ -226,7 +225,7 @@ public sealed class BreachAccessTests
         CardInstanceId asset = root.CardIds[0];
         CardInstanceId plain = root.CardIds[1];
 
-        ApplyResult breach = PassTwice(GameEngine.BeginRun(fixture, headquarters));
+        ApplyResult breach = PassTwice(BeginRun(fixture, headquarters));
         Assert.True(breach.Accepted, breach.Rejection?.Message);
         AssertRunPrompt(breach.State, RunTimingStep.BreachCandidateSelection, PlayerSide.Runner, ActionKind.ChooseBreachCandidate);
 
@@ -251,8 +250,8 @@ public sealed class BreachAccessTests
 
         // The unrezzed (facedown) root asset is anonymous to the Runner
         // before selection; the owning Corp sees its own root.
-        string runnerBefore = EngineJson.Serialize(ObservationBuilder.Build(breach.State, PlayerSide.Runner));
-        string corpBefore = EngineJson.Serialize(ObservationBuilder.Build(breach.State, PlayerSide.Corp));
+        string runnerBefore = EngineJson.Serialize(BuildObservation(breach.State, PlayerSide.Runner));
+        string corpBefore = EngineJson.Serialize(BuildObservation(breach.State, PlayerSide.Corp));
         Assert.DoesNotContain(FixtureAsset.Value, runnerBefore);
         Assert.Contains(asset.Value, corpBefore);
         Assert.Contains(FixtureAsset.Value, corpBefore);
@@ -273,8 +272,8 @@ public sealed class BreachAccessTests
         Assert.Equal(RunTimingStep.BreachAccessAbility, mid.Step);
         Assert.Equal(1, mid.RandomAccessLimit);
         Assert.Equal(plain, mid.BreachCandidates.Single());
-        string runnerMid = EngineJson.Serialize(ObservationBuilder.Build(chosen.State, PlayerSide.Runner));
-        string corpMid = EngineJson.Serialize(ObservationBuilder.Build(chosen.State, PlayerSide.Corp));
+        string runnerMid = EngineJson.Serialize(BuildObservation(chosen.State, PlayerSide.Runner));
+        string corpMid = EngineJson.Serialize(BuildObservation(chosen.State, PlayerSide.Corp));
         Assert.Contains(asset.Value, runnerMid);
         Assert.Contains(FixtureAsset.Value, runnerMid);
         Assert.Contains(asset.Value, corpMid);
@@ -328,7 +327,6 @@ public sealed class BreachAccessTests
     [Fact]
     public void HqBreachWithRootCardsPassesRunTimingTraceValidation()
     {
-        EnsureFixtureAsset();
         GameState fixture = CreateBreachState(
             hand: [false, false],
             hqRoot: [false, false],
@@ -336,7 +334,7 @@ public sealed class BreachAccessTests
         ServerId headquarters = fixture.Servers.Single(server => server.Kind == ServerKind.Headquarters).Id;
 
         var events = new List<EngineEvent>();
-        GameEngine.RunStartResult start = GameEngine.BeginRunWithEvents(fixture, headquarters);
+        GameEngine.RunStartResult start = BeginRunWithEvents(fixture, headquarters);
         events.AddRange(start.Events);
         ApplyResult first = ApplyKind(start.State, ActionKind.PassPriority);
         Assert.True(first.Accepted, first.Rejection?.Message);
@@ -375,7 +373,7 @@ public sealed class BreachAccessTests
         ZoneState root = fixture.Zones.Single(zone => zone.Id == fixture.GetServer(rnd).RootZoneId);
         CardInstanceId rootCard = root.CardIds[0];
 
-        ApplyResult breach = PassTwice(GameEngine.BeginRun(fixture, rnd));
+        ApplyResult breach = PassTwice(BeginRun(fixture, rnd));
         Assert.True(breach.Accepted, breach.Rejection?.Message);
         AssertRunPrompt(breach.State, RunTimingStep.BreachCandidateSelection, PlayerSide.Runner, ActionKind.ChooseBreachCandidate);
 
@@ -396,9 +394,9 @@ public sealed class BreachAccessTests
         Assert.Equal(BreachHiddenCandidateSource.CorpDeck, Assert.IsType<BreachCandidateParameters>(offered[1].Parameters).Source);
 
         // The facedown root card is anonymous to the Runner before selection.
-        string runnerBefore = EngineJson.Serialize(ObservationBuilder.Build(breach.State, PlayerSide.Runner));
+        string runnerBefore = EngineJson.Serialize(BuildObservation(breach.State, PlayerSide.Runner));
         Assert.DoesNotContain(FixturePlain.Value, runnerBefore);
-        Assert.Contains(rootCard.Value, EngineJson.Serialize(ObservationBuilder.Build(breach.State, PlayerSide.Corp)));
+        Assert.Contains(rootCard.Value, EngineJson.Serialize(BuildObservation(breach.State, PlayerSide.Corp)));
 
         ApplyResult chosen = ApplyAction(breach.State, breach.State.PendingDecision!.LegalActions[0]);
         Assert.True(chosen.Accepted, chosen.Rejection?.Message);
@@ -414,8 +412,8 @@ public sealed class BreachAccessTests
         Assert.Equal(RunTimingStep.BreachAccessAbility, mid.Step);
         Assert.Equal(1, mid.RandomAccessLimit);
         Assert.Empty(mid.BreachCandidates);
-        string runnerMid = EngineJson.Serialize(ObservationBuilder.Build(chosen.State, PlayerSide.Runner));
-        string corpMid = EngineJson.Serialize(ObservationBuilder.Build(chosen.State, PlayerSide.Corp));
+        string runnerMid = EngineJson.Serialize(BuildObservation(chosen.State, PlayerSide.Runner));
+        string corpMid = EngineJson.Serialize(BuildObservation(chosen.State, PlayerSide.Corp));
         Assert.Contains(rootCard.Value, runnerMid);
         Assert.Contains(FixturePlain.Value, runnerMid);
         Assert.Contains(rootCard.Value, corpMid);
@@ -463,7 +461,7 @@ public sealed class BreachAccessTests
         CardInstanceId third = discard.CardIds[2];
         ServerId archives = fixture.Servers.Single(server => server.Kind == ServerKind.Archives).Id;
 
-        ApplyResult breach = PassTwice(GameEngine.BeginRun(fixture, archives));
+        ApplyResult breach = PassTwice(BeginRun(fixture, archives));
         Assert.True(breach.Accepted, breach.Rejection?.Message);
         AssertRunPrompt(breach.State, RunTimingStep.BreachCandidateSelection, PlayerSide.Runner, ActionKind.ChooseBreachCandidate);
         BreachStartedEventPayload started = Assert.IsType<BreachStartedEventPayload>(
@@ -510,8 +508,8 @@ public sealed class BreachAccessTests
         Assert.True(terminal.GetCard(first).FaceUp);
         Assert.True(terminal.GetCard(second).FaceUp);
         Assert.True(terminal.GetCard(third).FaceUp);
-        string runnerAfter = EngineJson.Serialize(ObservationBuilder.Build(terminal, PlayerSide.Runner));
-        string corpAfter = EngineJson.Serialize(ObservationBuilder.Build(terminal, PlayerSide.Corp));
+        string runnerAfter = EngineJson.Serialize(BuildObservation(terminal, PlayerSide.Runner));
+        string corpAfter = EngineJson.Serialize(BuildObservation(terminal, PlayerSide.Corp));
         Assert.Contains(first.Value, runnerAfter);
         Assert.Contains(second.Value, runnerAfter);
         Assert.Contains(first.Value, corpAfter);
@@ -525,7 +523,6 @@ public sealed class BreachAccessTests
     [Fact]
     public void ArchivesBreachOffersRootCardsFirstThenDiscardAccess()
     {
-        EnsureFixtureAsset();
         GameState fixture = CreateBreachState(
             archivesRoot: [false],
             archivesRootDefinitions: [FixtureAsset],
@@ -537,7 +534,7 @@ public sealed class BreachAccessTests
         ZoneState root = fixture.Zones.Single(zone => zone.Id == fixture.GetServer(archives).RootZoneId);
         CardInstanceId rootCard = root.CardIds[0];
 
-        ApplyResult breach = PassTwice(GameEngine.BeginRun(fixture, archives));
+        ApplyResult breach = PassTwice(BeginRun(fixture, archives));
         Assert.True(breach.Accepted, breach.Rejection?.Message);
         AssertRunPrompt(breach.State, RunTimingStep.BreachCandidateSelection, PlayerSide.Runner, ActionKind.ChooseBreachCandidate);
 
@@ -565,8 +562,8 @@ public sealed class BreachAccessTests
         // The facedown root asset is anonymous to the Runner before
         // selection; the owning Corp sees its own root. Every discard card is
         // now faceup/public from the breach boundary (CR 26.03 7.5.2).
-        string runnerBefore = EngineJson.Serialize(ObservationBuilder.Build(breach.State, PlayerSide.Runner));
-        string corpBefore = EngineJson.Serialize(ObservationBuilder.Build(breach.State, PlayerSide.Corp));
+        string runnerBefore = EngineJson.Serialize(BuildObservation(breach.State, PlayerSide.Runner));
+        string corpBefore = EngineJson.Serialize(BuildObservation(breach.State, PlayerSide.Corp));
         Assert.DoesNotContain(FixtureAsset.Value, runnerBefore);
         Assert.Contains(rootCard.Value, corpBefore);
         Assert.Contains(FixtureAsset.Value, corpBefore);
@@ -590,8 +587,8 @@ public sealed class BreachAccessTests
         Assert.Equal(RunTimingStep.BreachAccessAbility, mid.Step);
         Assert.Equal(0, mid.RandomAccessLimit);
         Assert.Equal(new[] { discardFacedown, discardFaceup }, mid.BreachCandidates.ToArray());
-        string runnerMid = EngineJson.Serialize(ObservationBuilder.Build(chosen.State, PlayerSide.Runner));
-        string corpMid = EngineJson.Serialize(ObservationBuilder.Build(chosen.State, PlayerSide.Corp));
+        string runnerMid = EngineJson.Serialize(BuildObservation(chosen.State, PlayerSide.Runner));
+        string corpMid = EngineJson.Serialize(BuildObservation(chosen.State, PlayerSide.Corp));
         Assert.Contains(rootCard.Value, runnerMid);
         Assert.Contains(FixtureAsset.Value, runnerMid);
         Assert.Contains(rootCard.Value, corpMid);
@@ -633,9 +630,9 @@ public sealed class BreachAccessTests
         Assert.True(terminal.GetCard(discardFaceup).FaceUp);
         ZoneState rootAfter = terminal.Zones.Single(zone => zone.Id == root.Id);
         Assert.Equal(new[] { rootCard }, rootAfter.CardIds.ToArray());
-        string runnerAfter = EngineJson.Serialize(ObservationBuilder.Build(terminal, PlayerSide.Runner));
-        string corpAfter = EngineJson.Serialize(ObservationBuilder.Build(terminal, PlayerSide.Corp));
-        string corpPublicAfter = EngineJson.Serialize(ObservationBuilder.Build(terminal, PlayerSide.Corp).PublicState);
+        string runnerAfter = EngineJson.Serialize(BuildObservation(terminal, PlayerSide.Runner));
+        string corpAfter = EngineJson.Serialize(BuildObservation(terminal, PlayerSide.Corp));
+        string corpPublicAfter = EngineJson.Serialize(BuildObservation(terminal, PlayerSide.Corp).PublicState);
         Assert.Contains(discardFacedown.Value, runnerAfter);
         Assert.Contains(discardFacedown.Value, corpPublicAfter);
         Assert.Contains(discardFacedown.Value, corpAfter);
@@ -646,7 +643,6 @@ public sealed class BreachAccessTests
     [Fact]
     public void ArchivesBreachWithRootCardsPassesRunTimingTraceValidation()
     {
-        EnsureFixtureAsset();
         GameState fixture = CreateBreachState(
             archivesRoot: [false],
             archivesRootDefinitions: [FixtureAsset],
@@ -654,7 +650,7 @@ public sealed class BreachAccessTests
         ServerId archives = fixture.Servers.Single(server => server.Kind == ServerKind.Archives).Id;
 
         var events = new List<EngineEvent>();
-        GameEngine.RunStartResult start = GameEngine.BeginRunWithEvents(fixture, archives);
+        GameEngine.RunStartResult start = BeginRunWithEvents(fixture, archives);
         events.AddRange(start.Events);
         ApplyResult first = ApplyKind(start.State, ActionKind.PassPriority);
         Assert.True(first.Accepted, first.Rejection?.Message);
@@ -686,13 +682,13 @@ public sealed class BreachAccessTests
     {
         GameState fixture = CreateBreachState(hand: [false, false, false]);
         ServerId headquarters = fixture.Servers.Single(server => server.Kind == ServerKind.Headquarters).Id;
-        ApplyResult breach = PassTwice(GameEngine.BeginRun(fixture, headquarters));
+        ApplyResult breach = PassTwice(BeginRun(fixture, headquarters));
         Assert.True(breach.Accepted, breach.Rejection?.Message);
         GameState candidateState = breach.State;
         PendingDecision decision = candidateState.PendingDecision!;
         string before = EngineJson.Serialize(candidateState);
 
-        ApplyResult rejected = GameEngine.Apply(candidateState, new ActionSubmission(
+        ApplyResult rejected = Apply(candidateState, new ActionSubmission(
             decision.Owner,
             decision.Id,
             decision.Revision,
@@ -711,7 +707,7 @@ public sealed class BreachAccessTests
     {
         GameState fixture = CreateBreachState(hand: [false, false, false]);
         ServerId headquarters = fixture.Servers.Single(server => server.Kind == ServerKind.Headquarters).Id;
-        GameState original = PassTwice(GameEngine.BeginRun(fixture, headquarters)).State;
+        GameState original = PassTwice(BeginRun(fixture, headquarters)).State;
         Assert.True(original.RunState!.Step == RunTimingStep.BreachCandidateSelection);
 
         string candidateJson = EngineJson.Serialize(original);
@@ -723,8 +719,8 @@ public sealed class BreachAccessTests
             candidateDecision.Id,
             candidateDecision.Revision,
             candidateDecision.LegalActions[0].Id);
-        ApplyResult left = GameEngine.Apply(original, candidateSubmission);
-        ApplyResult right = GameEngine.Apply(restoredCandidate, candidateSubmission);
+        ApplyResult left = Apply(original, candidateSubmission);
+        ApplyResult right = Apply(restoredCandidate, candidateSubmission);
         Assert.Equal(left.Status, right.Status);
         Assert.True(left.Accepted, left.Rejection?.Message);
         Assert.Equal(EngineJson.Serialize(left.State), EngineJson.Serialize(right.State));
@@ -741,8 +737,8 @@ public sealed class BreachAccessTests
             accessDecision.Id,
             accessDecision.Revision,
             accessDecision.LegalActions[0].Id);
-        ApplyResult leftEnd = GameEngine.Apply(original, accessSubmission);
-        ApplyResult rightEnd = GameEngine.Apply(restoredAccess, accessSubmission);
+        ApplyResult leftEnd = Apply(original, accessSubmission);
+        ApplyResult rightEnd = Apply(restoredAccess, accessSubmission);
         Assert.Equal(leftEnd.Status, rightEnd.Status);
         Assert.True(leftEnd.Accepted, leftEnd.Rejection?.Message);
         Assert.Equal(EngineJson.Serialize(leftEnd.State), EngineJson.Serialize(rightEnd.State));
@@ -752,7 +748,6 @@ public sealed class BreachAccessTests
     [Fact]
     public void SaveLoadAcrossAgendaMidAccessProducesIdenticalContinuation()
     {
-        EnsureFixtureAgenda();
         GameState fixture = CreateBreachState(
             remoteRoot: [false, false],
             remoteRootDefinitions: [FixtureAgenda, FixturePlain]);
@@ -760,7 +755,7 @@ public sealed class BreachAccessTests
         ZoneState root = fixture.Zones.Single(zone => zone.Id == fixture.GetServer(remoteId).RootZoneId);
         CardInstanceId agenda = root.CardIds[0];
 
-        ApplyResult breach = PassTwice(GameEngine.BeginRun(fixture, remoteId));
+        ApplyResult breach = PassTwice(BeginRun(fixture, remoteId));
         Assert.True(breach.Accepted, breach.Rejection?.Message);
 
         PendingDecision selection = breach.State.PendingDecision!;
@@ -786,8 +781,8 @@ public sealed class BreachAccessTests
             decision.Id,
             decision.Revision,
             decision.LegalActions[0].Id);
-        ApplyResult left = GameEngine.Apply(chosen.State, submission);
-        ApplyResult right = GameEngine.Apply(restored, submission);
+        ApplyResult left = Apply(chosen.State, submission);
+        ApplyResult right = Apply(restored, submission);
         Assert.Equal(left.Status, right.Status);
         Assert.True(left.Accepted, left.Rejection?.Message);
         Assert.Equal(EngineJson.Serialize(left.State), EngineJson.Serialize(right.State));
@@ -805,7 +800,6 @@ public sealed class BreachAccessTests
     [Fact]
     public void RemoteBreachOffersTrashForPayableAssetAndTrashesIt()
     {
-        EnsureFixtureAsset();
         GameState fixture = WithFormalRunnerFacts(CreateBreachState(
             remoteRoot: [false, false],
             remoteRootDefinitions: [FixtureAsset, FixturePlain]));
@@ -814,7 +808,7 @@ public sealed class BreachAccessTests
         CardInstanceId asset = root.CardIds[0];
         CardInstanceId plain = root.CardIds[1];
 
-        ApplyResult breach = PassTwice(GameEngine.BeginRun(fixture, remoteId));
+        ApplyResult breach = PassTwice(BeginRun(fixture, remoteId));
         Assert.True(breach.Accepted, breach.Rejection?.Message);
 
         PendingDecision selection = breach.State.PendingDecision!;
@@ -882,7 +876,6 @@ public sealed class BreachAccessTests
     [Fact]
     public void AccessTrashOffersEveryLegalWalletHostedDivision()
     {
-        EnsureFixtureAsset();
         GameState fixture = AddRunEventSource(
             CreateBreachState(
                 remoteRoot: [false],
@@ -894,7 +887,7 @@ public sealed class BreachAccessTests
         CardInstanceId asset = root.CardIds[0];
         CardInstanceId eventId = fixture.GetZone(ZoneKind.RunnerGrip).CardIds.Single();
 
-        GameState started = GameEngine.BeginRunWithEvents(
+        GameState started = BeginRunWithEvents(
             fixture,
             remoteId,
             initiatingSource: eventId).State;
@@ -934,7 +927,6 @@ public sealed class BreachAccessTests
     [Fact]
     public void TrashNotOfferedWhenRunnerCannotAffordIt()
     {
-        EnsureFixtureAsset();
         GameState fixture = CreateBreachState(
             remoteRoot: [false],
             remoteRootDefinitions: [FixtureAsset],
@@ -943,7 +935,7 @@ public sealed class BreachAccessTests
         ZoneState root = fixture.Zones.Single(zone => zone.Id == fixture.GetServer(remoteId).RootZoneId);
         CardInstanceId asset = root.CardIds[0];
 
-        ApplyResult breach = PassTwice(GameEngine.BeginRun(fixture, remoteId));
+        ApplyResult breach = PassTwice(BeginRun(fixture, remoteId));
         Assert.True(breach.Accepted, breach.Rejection?.Message);
 
         ApplyResult chosen = ApplyAction(breach.State, Assert.Single(breach.State.PendingDecision!.LegalActions));
@@ -965,11 +957,10 @@ public sealed class BreachAccessTests
     [Fact]
     public void AssetInArchivesIsAccessedButNotTrashed()
     {
-        EnsureFixtureAsset();
         GameState fixture = CreateBreachState(discard: [false], discardDefinitions: [FixtureAsset]);
         ServerId archivesId = fixture.Servers.Single(server => server.Kind == ServerKind.Archives).Id;
 
-        ApplyResult breach = PassTwice(GameEngine.BeginRun(fixture, archivesId));
+        ApplyResult breach = PassTwice(BeginRun(fixture, archivesId));
         Assert.True(breach.Accepted, breach.Rejection?.Message);
 
         PendingDecision selection = breach.State.PendingDecision!;
@@ -984,8 +975,8 @@ public sealed class BreachAccessTests
         Assert.True(chosen.State.GetCard(asset).FaceUp);
 
         // During the breach both viewers see the chosen card in the run view.
-        string runnerMid = EngineJson.Serialize(ObservationBuilder.Build(chosen.State, PlayerSide.Runner));
-        string corpMid = EngineJson.Serialize(ObservationBuilder.Build(chosen.State, PlayerSide.Corp));
+        string runnerMid = EngineJson.Serialize(BuildObservation(chosen.State, PlayerSide.Runner));
+        string corpMid = EngineJson.Serialize(BuildObservation(chosen.State, PlayerSide.Corp));
         Assert.Contains(asset.Value, runnerMid);
         Assert.Contains(FixtureAsset.Value, runnerMid);
         Assert.Contains(asset.Value, corpMid);
@@ -1006,9 +997,9 @@ public sealed class BreachAccessTests
         // After the run the card remains faceup in the public discard.
         GameState terminal = noAction.State;
         Assert.True(terminal.GetCard(asset).FaceUp);
-        string runnerAfter = EngineJson.Serialize(ObservationBuilder.Build(terminal, PlayerSide.Runner));
-        string corpAfter = EngineJson.Serialize(ObservationBuilder.Build(terminal, PlayerSide.Corp));
-        string corpPublicAfter = EngineJson.Serialize(ObservationBuilder.Build(terminal, PlayerSide.Corp).PublicState);
+        string runnerAfter = EngineJson.Serialize(BuildObservation(terminal, PlayerSide.Runner));
+        string corpAfter = EngineJson.Serialize(BuildObservation(terminal, PlayerSide.Corp));
+        string corpPublicAfter = EngineJson.Serialize(BuildObservation(terminal, PlayerSide.Corp).PublicState);
         Assert.Contains(asset.Value, runnerAfter);
         Assert.Contains(FixtureAsset.Value, runnerAfter);
         Assert.Contains(asset.Value, corpPublicAfter);
@@ -1018,7 +1009,6 @@ public sealed class BreachAccessTests
     [Fact]
     public void RemoteBreachAccessOfAgendaForcesStealAndScoresIt()
     {
-        EnsureFixtureAgenda();
         GameState fixture = CreateBreachState(
             remoteRoot: [false, false],
             remoteRootDefinitions: [FixtureAgenda, FixturePlain]);
@@ -1027,7 +1017,7 @@ public sealed class BreachAccessTests
         CardInstanceId agenda = root.CardIds[0];
         CardInstanceId plain = root.CardIds[1];
 
-        ApplyResult breach = PassTwice(GameEngine.BeginRun(fixture, remoteId));
+        ApplyResult breach = PassTwice(BeginRun(fixture, remoteId));
         Assert.True(breach.Accepted, breach.Rejection?.Message);
 
         PendingDecision selection = breach.State.PendingDecision!;
@@ -1086,7 +1076,6 @@ public sealed class BreachAccessTests
     [Fact]
     public void StealingWinningAgendaEndsTheGame()
     {
-        EnsureFixtureAgenda();
         GameState fixture = CreateBreachState(
             remoteRoot: [false],
             remoteRootDefinitions: [FixtureAgenda],
@@ -1095,7 +1084,7 @@ public sealed class BreachAccessTests
         ZoneState root = fixture.Zones.Single(zone => zone.Id == fixture.GetServer(remoteId).RootZoneId);
         CardInstanceId agenda = root.CardIds[0];
 
-        ApplyResult breach = PassTwice(GameEngine.BeginRun(fixture, remoteId));
+        ApplyResult breach = PassTwice(BeginRun(fixture, remoteId));
         Assert.True(breach.Accepted, breach.Rejection?.Message);
 
         ApplyResult chosen = ApplyAction(breach.State, Assert.Single(breach.State.PendingDecision!.LegalActions));
@@ -1141,7 +1130,6 @@ public sealed class BreachAccessTests
     [Fact]
     public void PassingTheMidAccessWindowCannotSkipTheAgendaSteal()
     {
-        EnsureFixtureAgenda();
         GameState fixture = CreateBreachState(
             remoteRoot: [false],
             remoteRootDefinitions: [FixtureAgenda]);
@@ -1149,7 +1137,7 @@ public sealed class BreachAccessTests
         ZoneState root = fixture.Zones.Single(zone => zone.Id == fixture.GetServer(remoteId).RootZoneId);
         CardInstanceId agenda = root.CardIds[0];
 
-        ApplyResult breach = PassTwice(GameEngine.BeginRun(fixture, remoteId));
+        ApplyResult breach = PassTwice(BeginRun(fixture, remoteId));
         Assert.True(breach.Accepted, breach.Rejection?.Message);
 
         ApplyResult chosen = ApplyAction(breach.State, Assert.Single(breach.State.PendingDecision!.LegalActions));
@@ -1161,7 +1149,7 @@ public sealed class BreachAccessTests
         Assert.Equal(ActionKind.NoAccessAction, pass.Kind);
         string before = EngineJson.Serialize(decisionState);
 
-        ApplyResult rejected = GameEngine.Apply(decisionState, new ActionSubmission(
+        ApplyResult rejected = Apply(decisionState, new ActionSubmission(
             decision.Owner,
             decision.Id,
             decision.Revision,
@@ -1185,11 +1173,10 @@ public sealed class BreachAccessTests
     [Fact]
     public void ArchivesAgendaBreachAccessStillForcesSteal()
     {
-        EnsureFixtureAgenda();
         GameState fixture = CreateBreachState(discard: [false], discardDefinitions: [FixtureAgenda]);
         ServerId archivesId = fixture.Servers.Single(server => server.Kind == ServerKind.Archives).Id;
 
-        ApplyResult breach = PassTwice(GameEngine.BeginRun(fixture, archivesId));
+        ApplyResult breach = PassTwice(BeginRun(fixture, archivesId));
         Assert.True(breach.Accepted, breach.Rejection?.Message);
 
         PendingDecision selection = breach.State.PendingDecision!;
@@ -1236,16 +1223,16 @@ public sealed class BreachAccessTests
         ZoneState root = fixture.Zones.Single(zone => zone.Id == fixture.GetServer(remoteId).RootZoneId);
         CardInstanceId asset = root.CardIds[0];
 
-        ApplyResult breach = PassTwice(GameEngine.BeginRun(fixture, remoteId));
+        ApplyResult breach = PassTwice(BeginRun(fixture, remoteId));
         Assert.True(breach.Accepted, breach.Rejection?.Message);
         Assert.Equal(RunTimingStep.BreachCandidateSelection, breach.State.RunState!.Step);
 
         // Before selection the facedown asset's identity is unknown to the
         // Runner (its server root slot is anonymous) and known to the owning
         // Corp; the candidate offer only names the card id in the action.
-        string runnerBefore = EngineJson.Serialize(ObservationBuilder.Build(breach.State, PlayerSide.Runner));
+        string runnerBefore = EngineJson.Serialize(BuildObservation(breach.State, PlayerSide.Runner));
         Assert.DoesNotContain(FixturePlain.Value, runnerBefore);
-        Assert.Contains(asset.Value, EngineJson.Serialize(ObservationBuilder.Build(breach.State, PlayerSide.Corp)));
+        Assert.Contains(asset.Value, EngineJson.Serialize(BuildObservation(breach.State, PlayerSide.Corp)));
 
         ApplyResult chosen = ApplyAction(breach.State, Assert.Single(breach.State.PendingDecision!.LegalActions));
         Assert.True(chosen.Accepted, chosen.Rejection?.Message);
@@ -1253,8 +1240,8 @@ public sealed class BreachAccessTests
 
         // CR 26.03 7.3.1a: during the breach the chosen card is visible to
         // both viewers in the run view even though it is facedown in state.
-        string runnerMid = EngineJson.Serialize(ObservationBuilder.Build(chosen.State, PlayerSide.Runner));
-        string corpMid = EngineJson.Serialize(ObservationBuilder.Build(chosen.State, PlayerSide.Corp));
+        string runnerMid = EngineJson.Serialize(BuildObservation(chosen.State, PlayerSide.Runner));
+        string corpMid = EngineJson.Serialize(BuildObservation(chosen.State, PlayerSide.Corp));
         Assert.Contains(asset.Value, runnerMid);
         Assert.Contains(FixturePlain.Value, runnerMid);
         Assert.Contains(asset.Value, corpMid);
@@ -1268,8 +1255,8 @@ public sealed class BreachAccessTests
         // After the run the card is facedown again: hidden from the Runner's
         // server view, still visible to the owning Corp.
         Assert.False(terminal.GetCard(asset).FaceUp);
-        string runnerAfter = EngineJson.Serialize(ObservationBuilder.Build(terminal, PlayerSide.Runner));
-        string corpAfter = EngineJson.Serialize(ObservationBuilder.Build(terminal, PlayerSide.Corp));
+        string runnerAfter = EngineJson.Serialize(BuildObservation(terminal, PlayerSide.Runner));
+        string corpAfter = EngineJson.Serialize(BuildObservation(terminal, PlayerSide.Corp));
         Assert.DoesNotContain(asset.Value, runnerAfter);
         Assert.DoesNotContain(FixturePlain.Value, runnerAfter);
         Assert.Contains(asset.Value, corpAfter);
@@ -1283,7 +1270,7 @@ public sealed class BreachAccessTests
         ServerId headquarters = fixture.Servers.Single(server => server.Kind == ServerKind.Headquarters).Id;
         ZoneState hand = fixture.Zones.Single(zone => zone.Kind == ZoneKind.CorpHand && zone.ServerId is null);
 
-        ApplyResult breach = PassTwice(GameEngine.BeginRun(fixture, headquarters));
+        ApplyResult breach = PassTwice(BeginRun(fixture, headquarters));
         Assert.True(breach.Accepted, breach.Rejection?.Message);
         Assert.Equal(RunTimingStep.BreachCandidateSelection, breach.State.RunState!.Step);
 
@@ -1300,8 +1287,8 @@ public sealed class BreachAccessTests
 
         // Both viewers see the drawn card in the run view; the Runner never
         // sees the undrawn hand card.
-        string runnerMid = EngineJson.Serialize(ObservationBuilder.Build(chosen.State, PlayerSide.Runner));
-        string corpMid = EngineJson.Serialize(ObservationBuilder.Build(chosen.State, PlayerSide.Corp));
+        string runnerMid = EngineJson.Serialize(BuildObservation(chosen.State, PlayerSide.Runner));
+        string corpMid = EngineJson.Serialize(BuildObservation(chosen.State, PlayerSide.Corp));
         Assert.Contains(drawn.Value, runnerMid);
         Assert.Contains(FixturePlain.Value, runnerMid);
         Assert.Contains(drawn.Value, corpMid);
@@ -1316,8 +1303,8 @@ public sealed class BreachAccessTests
         // After the run the drawn card is facedown again in the hand:
         // invisible to the Runner, still listed in the Corp's private view.
         Assert.False(terminal.GetCard(drawn).FaceUp);
-        string runnerAfter = EngineJson.Serialize(ObservationBuilder.Build(terminal, PlayerSide.Runner));
-        string corpAfter = EngineJson.Serialize(ObservationBuilder.Build(terminal, PlayerSide.Corp));
+        string runnerAfter = EngineJson.Serialize(BuildObservation(terminal, PlayerSide.Runner));
+        string corpAfter = EngineJson.Serialize(BuildObservation(terminal, PlayerSide.Corp));
         Assert.DoesNotContain(drawn.Value, runnerAfter);
         Assert.DoesNotContain(FixturePlain.Value, runnerAfter);
         Assert.Contains(drawn.Value, corpAfter);
@@ -1333,7 +1320,7 @@ public sealed class BreachAccessTests
         CardInstanceId second = deck.CardIds[1];
         ServerId rnd = fixture.Servers.Single(server => server.Kind == ServerKind.RAndD).Id;
 
-        ApplyResult breach = PassTwice(GameEngine.BeginRun(fixture, rnd));
+        ApplyResult breach = PassTwice(BeginRun(fixture, rnd));
         Assert.True(breach.Accepted, breach.Rejection?.Message);
         Assert.Equal(RunTimingStep.BreachCandidateSelection, breach.State.RunState!.Step);
 
@@ -1349,8 +1336,8 @@ public sealed class BreachAccessTests
 
         // Both viewers see the drawn card in the run view; the Runner never
         // sees the rest of the deck.
-        string runnerMid = EngineJson.Serialize(ObservationBuilder.Build(chosen.State, PlayerSide.Runner));
-        string corpMid = EngineJson.Serialize(ObservationBuilder.Build(chosen.State, PlayerSide.Corp));
+        string runnerMid = EngineJson.Serialize(BuildObservation(chosen.State, PlayerSide.Runner));
+        string corpMid = EngineJson.Serialize(BuildObservation(chosen.State, PlayerSide.Corp));
         Assert.Contains(top.Value, runnerMid);
         Assert.Contains(FixturePlain.Value, runnerMid);
         Assert.Contains(top.Value, corpMid);
@@ -1365,8 +1352,8 @@ public sealed class BreachAccessTests
         // After the run the top card is facedown again in the deck:
         // invisible to the Runner, still listed in the Corp's private view.
         Assert.False(terminal.GetCard(top).FaceUp);
-        string runnerAfter = EngineJson.Serialize(ObservationBuilder.Build(terminal, PlayerSide.Runner));
-        string corpAfter = EngineJson.Serialize(ObservationBuilder.Build(terminal, PlayerSide.Corp));
+        string runnerAfter = EngineJson.Serialize(BuildObservation(terminal, PlayerSide.Runner));
+        string corpAfter = EngineJson.Serialize(BuildObservation(terminal, PlayerSide.Corp));
         Assert.DoesNotContain(top.Value, runnerAfter);
         Assert.DoesNotContain(FixturePlain.Value, runnerAfter);
         Assert.Contains(top.Value, corpAfter);
@@ -1382,15 +1369,15 @@ public sealed class BreachAccessTests
         CardInstanceId faceup = discard.CardIds[1];
         ServerId archives = fixture.Servers.Single(server => server.Kind == ServerKind.Archives).Id;
 
-        ApplyResult breach = PassTwice(GameEngine.BeginRun(fixture, archives));
+        ApplyResult breach = PassTwice(BeginRun(fixture, archives));
         Assert.True(breach.Accepted, breach.Rejection?.Message);
         Assert.Equal(RunTimingStep.BreachCandidateSelection, breach.State.RunState!.Step);
 
         // CR 26.03 7.5.2: the breach turns every CorpDiscard card faceup
         // authoritatively before candidate selection.
         Assert.True(breach.State.GetCard(facedown).FaceUp);
-        string runnerMid = EngineJson.Serialize(ObservationBuilder.Build(breach.State, PlayerSide.Runner));
-        string corpMid = EngineJson.Serialize(ObservationBuilder.Build(breach.State, PlayerSide.Corp));
+        string runnerMid = EngineJson.Serialize(BuildObservation(breach.State, PlayerSide.Runner));
+        string corpMid = EngineJson.Serialize(BuildObservation(breach.State, PlayerSide.Corp));
         Assert.Contains(facedown.Value, runnerMid);
         Assert.Contains(facedown.Value, corpMid);
         Assert.Contains(faceup.Value, runnerMid);
@@ -1421,20 +1408,14 @@ public sealed class BreachAccessTests
         // The authoritative flip persists after the run, so both cards stay
         // public to both viewers.
         Assert.True(terminal.GetCard(facedown).FaceUp);
-        string runnerAfter = EngineJson.Serialize(ObservationBuilder.Build(terminal, PlayerSide.Runner));
-        string corpAfter = EngineJson.Serialize(ObservationBuilder.Build(terminal, PlayerSide.Corp));
-        string corpPublicAfter = EngineJson.Serialize(ObservationBuilder.Build(terminal, PlayerSide.Corp).PublicState);
+        string runnerAfter = EngineJson.Serialize(BuildObservation(terminal, PlayerSide.Runner));
+        string corpAfter = EngineJson.Serialize(BuildObservation(terminal, PlayerSide.Corp));
+        string corpPublicAfter = EngineJson.Serialize(BuildObservation(terminal, PlayerSide.Corp).PublicState);
         Assert.Contains(facedown.Value, runnerAfter);
         Assert.Contains(facedown.Value, corpPublicAfter);
         Assert.Contains(facedown.Value, corpAfter);
         Assert.Contains(faceup.Value, runnerAfter);
         Assert.Contains(faceup.Value, corpAfter);
-    }
-
-    private static void EnsureFixtureAsset()
-    {
-        // Idempotent: re-registering a structurally identical spec is a no-op.
-        CardBehaviorSpecCatalog.RegisterAsset(new AssetBehaviorSpec(FixtureAsset, 2));
     }
 
     private static GameState WithFormalRunnerFacts(GameState state)
@@ -1479,12 +1460,6 @@ public sealed class BreachAccessTests
             state.BehaviorCatalogFingerprint,
             state.RuntimeCardCatalogVersion,
             state.RuntimeCardCatalogFingerprint);
-    }
-
-    private static void EnsureFixtureAgenda()
-    {
-        // Idempotent: re-registering a structurally identical spec is a no-op.
-        CardBehaviorSpecCatalog.RegisterAgenda(new AgendaBehaviorSpec(FixtureAgenda, 2));
     }
 
     private static GameState AddRunEventSource(GameState state, CardDefinitionId definitionId)
@@ -1657,6 +1632,36 @@ public sealed class BreachAccessTests
             zones[zones.IndexOf(zone)] = new ZoneState(zone.Id, zone.Kind, zone.OwnerSide, zone.ServerId, ids);
         }
     }
+
+    private static GameState BeginRun(
+        GameState state,
+        ServerId serverId,
+        PlayerId? initiatingPlayer = null,
+        CardInstanceId? initiatingSource = null) =>
+        GameEngine.BeginRun(
+            state,
+            serverId,
+            FixtureBehaviorCatalog.Catalog,
+            initiatingPlayer,
+            initiatingSource);
+
+    private static GameEngine.RunStartResult BeginRunWithEvents(
+        GameState state,
+        ServerId serverId,
+        PlayerId? initiatingPlayer = null,
+        CardInstanceId? initiatingSource = null) =>
+        GameEngine.BeginRunWithEvents(
+            state,
+            serverId,
+            FixtureBehaviorCatalog.Catalog,
+            initiatingPlayer,
+            initiatingSource);
+
+    private static ApplyResult Apply(GameState state, ActionSubmission submission) =>
+        GameEngine.Apply(state, submission, FixtureBehaviorCatalog.Catalog);
+
+    private static Observation BuildObservation(GameState state, PlayerSide viewer) =>
+        ObservationBuilder.Build(state, viewer, FixtureBehaviorCatalog.Catalog);
 
     private static string[] RelevantKinds(params ApplyResult[] results) => results
         .SelectMany(result => result.Events)

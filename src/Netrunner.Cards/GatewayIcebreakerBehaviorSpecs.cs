@@ -51,6 +51,4 @@ public static class GatewayIcebreakerBehaviorSpecs
     public static IReadOnlyList<IcebreakerBehaviorSpec> IcebreakerSpecs { get; } =
         new ReadOnlyCollection<IcebreakerBehaviorSpec>(new[] { Buzzsaw, Cleaver, Carmen, Marjanah });
 
-    /// <summary>Registers <see cref="IcebreakerSpecs"/> into the shared catalog (idempotent).</summary>
-    public static void RegisterAll() => CardBehaviorSpecCatalog.RegisterIcebreaker(IcebreakerSpecs);
 }

@@ -76,7 +76,7 @@ public sealed class IceInterfaceMatcherTests
 
         Assert.True(result.Accepted, result.Rejection?.Message);
         Assert.Contains(result.State.RunState!.Encounter!.Subroutines, subroutine => subroutine.Broken);
-        StateInvariantValidator.Validate(result.State);
+        StateInvariantValidator.Validate(result.State, FixtureBehaviorCatalog.Catalog);
     }
 
     [Theory]
@@ -106,7 +106,7 @@ public sealed class IceInterfaceMatcherTests
 
         Assert.True(result.Accepted, result.Rejection?.Message);
         Assert.Contains(result.State.RunState!.Encounter!.Subroutines, subroutine => subroutine.Broken);
-        StateInvariantValidator.Validate(result.State);
+        StateInvariantValidator.Validate(result.State, FixtureBehaviorCatalog.Catalog);
     }
 
     [Fact]
@@ -131,7 +131,7 @@ public sealed class IceInterfaceMatcherTests
             encounter,
             [.. pending.LegalActions, forged]);
 
-        IReadOnlyList<StateInvariantViolation> violations = StateInvariantValidator.Collect(tampered);
+        IReadOnlyList<StateInvariantViolation> violations = StateInvariantValidator.Collect(tampered, FixtureBehaviorCatalog.Catalog);
         Assert.Contains(violations, violation => violation.Code == "run.extra-action");
 
         ApplyResult rejected = GameEngine.Apply(
@@ -140,7 +140,8 @@ public sealed class IceInterfaceMatcherTests
                 tampered.PendingDecision!.Owner,
                 tampered.PendingDecision.Id,
                 tampered.PendingDecision.Revision,
-                forged.Id));
+                forged.Id),
+            FixtureBehaviorCatalog.Catalog);
         Assert.False(rejected.Accepted);
         Assert.Equal(ApplyRejectionCode.InvalidInputState, rejected.Rejection?.Code);
         Assert.Same(tampered, rejected.State);

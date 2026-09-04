@@ -177,7 +177,7 @@ public sealed class RunPumpTests
             new RunBreakerParameters(breakerId));
         GameState tampered = EncounterBreakerTests.WithPendingDecision(encounter, [.. pending.LegalActions, forged]);
 
-        IReadOnlyList<StateInvariantViolation> violations = StateInvariantValidator.Collect(tampered);
+        IReadOnlyList<StateInvariantViolation> violations = StateInvariantValidator.Collect(tampered, FixtureBehaviorCatalog.Catalog);
         Assert.Contains(violations, violation => violation.Code == "run.extra-action");
     }
 
@@ -187,7 +187,7 @@ public sealed class RunPumpTests
         (GameState preRun, CardInstanceId breakerId, _) = EncounterBreakerTests.CreateRunStateWithBreaker(
             FixtureIceBehaviorSpecs.BreakerBarrier,
             iceDefinition: FixtureIceBehaviorSpecs.TwoSubroutines);
-        GameState prompt = GameEngine.BeginRun(preRun, RunTimingTests.RemoteId(preRun));
+        GameState prompt = GameEngine.BeginRun(preRun, RunTimingTests.RemoteId(preRun), FixtureBehaviorCatalog.Catalog);
         GameState approach = RunTimingTests.PassTwice(prompt).State;
         Assert.Equal(RunTimingStep.ApproachPaidWindow, approach.RunState!.Step);
 
@@ -206,7 +206,8 @@ public sealed class RunPumpTests
                 tampered.PendingDecision!.Owner,
                 tampered.PendingDecision.Id,
                 tampered.PendingDecision.Revision,
-                forged.Id));
+                forged.Id),
+            FixtureBehaviorCatalog.Catalog);
         Assert.Equal(ApplyRejectionCode.InvalidInputState, rejected.Rejection?.Code);
         Assert.Same(tampered, rejected.State);
         Assert.Equal(before, EngineJson.Serialize(rejected.State));
@@ -223,7 +224,7 @@ public sealed class RunPumpTests
         GameState afterPump = pumped.State;
 
         string json = EngineJson.Serialize(afterPump);
-        GameState restored = EngineJson.DeserializeState(json);
+        GameState restored = EngineJson.DeserializeState(json, FixtureBehaviorCatalog.Catalog);
         Assert.Equal(json, EngineJson.Serialize(restored));
         Assert.Single(restored.RunState!.LingeringEffects);
 
@@ -239,7 +240,7 @@ public sealed class RunPumpTests
         Assert.True(rightBreak.Accepted, rightBreak.Rejection?.Message);
         Assert.Equal(EngineJson.Serialize(leftBreak.State), EngineJson.Serialize(rightBreak.State));
         Assert.Equal(DeterministicHash.ForEvents(leftBreak.Events), DeterministicHash.ForEvents(rightBreak.Events));
-        StateInvariantValidator.Validate(leftBreak.State);
+        StateInvariantValidator.Validate(leftBreak.State, FixtureBehaviorCatalog.Catalog);
     }
 
     private static GameState ReachPumpWindow()

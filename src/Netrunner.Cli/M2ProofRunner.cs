@@ -210,7 +210,7 @@ public static class M2ProofRunner
             checkpoints.Add(new M2DecisionCheckpoint(resumed.Id.Value, liveHash));
 
             PlayerSide viewer = restored.GetPlayer(resumed.Owner).Side;
-            Observation observation = ObservationBuilder.Build(restored, viewer);
+            Observation observation = ObservationBuilder.Build(restored, viewer, scenarioCatalog);
 
             ActionId selected;
             try

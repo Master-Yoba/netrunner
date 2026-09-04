@@ -187,7 +187,7 @@ public sealed class EncounterBreakerTests
             new RunBreakParameters(breakerId, 2));
         GameState tampered = WithPendingDecision(firstBreak.State, [.. pending.LegalActions, forged]);
 
-        IReadOnlyList<StateInvariantViolation> violations = StateInvariantValidator.Collect(tampered);
+        IReadOnlyList<StateInvariantViolation> violations = StateInvariantValidator.Collect(tampered, FixtureBehaviorCatalog.Catalog);
         Assert.Contains(violations, violation => violation.Code == "run.extra-action");
     }
 
@@ -209,7 +209,7 @@ public sealed class EncounterBreakerTests
             new RunBreakParameters(nonBreaker, 1));
         GameState tampered = WithPendingDecision(encounter, [.. pending.LegalActions, forged]);
 
-        IReadOnlyList<StateInvariantViolation> violations = StateInvariantValidator.Collect(tampered);
+        IReadOnlyList<StateInvariantViolation> violations = StateInvariantValidator.Collect(tampered, FixtureBehaviorCatalog.Catalog);
         Assert.Contains(violations, violation => violation.Code == "run.extra-action");
         Assert.DoesNotContain(violations, violation => violation.Code == "decision.unknown-card-action");
     }
@@ -230,7 +230,7 @@ public sealed class EncounterBreakerTests
         Assert.True(firstBreak.Accepted, firstBreak.Rejection?.Message);
         GameState afterBreak = firstBreak.State;
         string json = EngineJson.Serialize(afterBreak);
-        GameState restored = EngineJson.DeserializeState(json);
+        GameState restored = EngineJson.DeserializeState(json, FixtureBehaviorCatalog.Catalog);
         Assert.Equal(json, EngineJson.Serialize(restored));
         Assert.DoesNotContain("breakerUsages", json, StringComparison.Ordinal);
 
@@ -245,12 +245,12 @@ public sealed class EncounterBreakerTests
         Assert.Equal(EngineJson.Serialize(leftBreak.State), EngineJson.Serialize(rightBreak.State));
         Assert.Equal(DeterministicHash.ForEvents(leftBreak.Events), DeterministicHash.ForEvents(rightBreak.Events));
         Assert.Equal(2, leftBreak.State.RunState!.Encounter!.Subroutines.Count(subroutine => subroutine.Broken));
-        StateInvariantValidator.Validate(leftBreak.State);
+        StateInvariantValidator.Validate(leftBreak.State, FixtureBehaviorCatalog.Catalog);
     }
 
     internal static GameState ReachEncounterWindow(GameState preRun)
     {
-        GameState prompt = GameEngine.BeginRun(preRun, RunTimingTests.RemoteId(preRun));
+        GameState prompt = GameEngine.BeginRun(preRun, RunTimingTests.RemoteId(preRun), FixtureBehaviorCatalog.Catalog);
         return RunTimingTests.PassTwice(RunTimingTests.PassTwice(prompt).State).State;
     }
 
@@ -259,6 +259,7 @@ public sealed class EncounterBreakerTests
         GameState prompt = GameEngine.BeginRun(
             preRun,
             RunTimingTests.RemoteId(preRun),
+            FixtureBehaviorCatalog.Catalog,
             initiatingSource: initiatingSource);
         return RunTimingTests.PassTwice(RunTimingTests.PassTwice(prompt).State).State;
     }
@@ -325,7 +326,7 @@ public sealed class EncounterBreakerTests
             actionSequence: baseState.ActionSequence,
             initialSeed: baseState.InitialSeed,
             runState: baseState.RunState);
-        StateInvariantValidator.Validate(state);
+        StateInvariantValidator.Validate(state, FixtureBehaviorCatalog.Catalog);
         return (state, breakerId, extraId);
     }
 
@@ -381,7 +382,7 @@ public sealed class EncounterBreakerTests
             actionSequence: baseState.ActionSequence,
             initialSeed: baseState.InitialSeed,
             runState: baseState.RunState);
-        StateInvariantValidator.Validate(state);
+        StateInvariantValidator.Validate(state, FixtureBehaviorCatalog.Catalog);
         return (state, breakerId, secondBreakerId);
     }
 

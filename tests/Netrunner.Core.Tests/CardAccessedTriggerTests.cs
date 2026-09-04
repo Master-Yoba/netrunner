@@ -204,7 +204,7 @@ public sealed class CardAccessedTriggerTests
             [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 2)]);
         BehaviorCatalog behavior = new BehaviorCatalogBuilder(
             "test:card-accessed-occurrence",
-            CardBehaviorSpecCatalog.Default)
+            FixtureBehaviorCatalog.Catalog)
             .AddAgenda(new AgendaBehaviorSpec(agendaDefinition, agendaPoints: 1))
             .Add(new CardBehaviorDefinition(sourceDefinition, PlayerSide.Runner, triggers: [trigger]))
             .Build();

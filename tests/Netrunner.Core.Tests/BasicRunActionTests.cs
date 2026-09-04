@@ -91,7 +91,7 @@ public sealed class BasicRunActionTests
         Assert.Equal([attackedServer], result.State.Turn.ThisTurnFacts!.AttemptedRunServerIds);
         Assert.Empty(result.State.Turn.ThisTurnFacts.SuccessfulRunServerIds);
         Assert.False(result.State.Turn.ThisTurnFacts.SuccessfulRun);
-        StateInvariantValidator.Validate(result.State);
+        StateInvariantValidator.Validate(result.State, FixtureBehaviorCatalog.Catalog);
     }
 
     [Fact]
@@ -446,7 +446,8 @@ public sealed class BasicRunActionTests
         LegalAction pass = Assert.Single(pending.LegalActions, action => action.Kind == ActionKind.PassPriority);
         return GameEngine.Apply(
             state,
-            new ActionSubmission(pending.Owner, pending.Id, pending.Revision, pass.Id));
+            new ActionSubmission(pending.Owner, pending.Id, pending.Revision, pass.Id),
+            FixtureBehaviorCatalog.Catalog);
     }
 
     private static ApplyResult Apply(GameState state, LegalAction action)
@@ -454,19 +455,21 @@ public sealed class BasicRunActionTests
         PendingDecision pending = Assert.IsType<PendingDecision>(state.PendingDecision);
         return GameEngine.Apply(
             state,
-            new ActionSubmission(pending.Owner, pending.Id, pending.Revision, action.Id));
+            new ActionSubmission(pending.Owner, pending.Id, pending.Revision, action.Id),
+            FixtureBehaviorCatalog.Catalog);
     }
 
     private static GameState OpenTurnAction(GameState state)
     {
-        state = GameEngine.BeginTurn(state, state.Turn.ActiveSide);
+        state = GameEngine.BeginTurn(state, state.Turn.ActiveSide, FixtureBehaviorCatalog.Catalog);
         while (state.PendingDecision?.Kind != DecisionKind.TurnAction)
         {
             PendingDecision pending = Assert.IsType<PendingDecision>(state.PendingDecision);
             LegalAction pass = Assert.Single(pending.LegalActions, action => action.Kind == ActionKind.PassPriority);
             ApplyResult result = GameEngine.Apply(
                 state,
-                new ActionSubmission(pending.Owner, pending.Id, pending.Revision, pass.Id));
+                new ActionSubmission(pending.Owner, pending.Id, pending.Revision, pass.Id),
+                FixtureBehaviorCatalog.Catalog);
             Assert.True(result.Accepted, result.Rejection?.Message);
             state = result.State;
         }

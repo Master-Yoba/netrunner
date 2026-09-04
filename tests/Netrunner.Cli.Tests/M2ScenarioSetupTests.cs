@@ -133,7 +133,7 @@ public sealed class M2ScenarioSetupTests
 
         BehaviorCatalog gatewaySlice = document.CreateBehaviorCatalog(gateway);
         BehaviorCatalog expandedSlice = document.CreateBehaviorCatalog(expanded);
-        Assert.Equal(CardBehaviorSpecCatalog.Version, gatewaySlice.Version);
+        Assert.Equal(EngineCompatibility.GatewayBehaviorRegistryVersion, gatewaySlice.Version);
         Assert.Equal(gatewaySlice.Version, expandedSlice.Version);
         Assert.Equal(gatewaySlice.Fingerprint, expandedSlice.Fingerprint);
         Assert.Equal(

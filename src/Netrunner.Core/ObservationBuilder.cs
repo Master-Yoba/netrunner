@@ -28,7 +28,7 @@ public static class ObservationBuilder
 {
     public static Observation Build(GameState state, PlayerSide viewer)
     {
-        return Build(state, viewer, CardBehaviorSpecCatalog.Default);
+        return Build(state, viewer, BehaviorCatalog.Empty);
     }
 
     /// <summary>
