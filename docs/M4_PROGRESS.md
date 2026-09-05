@@ -4465,3 +4465,19 @@ errors; runtime action expansion and full verification remain pending.
   targets `dev`, with architecture/compatibility notes, verification evidence,
   and the native screenshot. Remote synthetic and official CI checks are the
   remaining merge gate; their live results are attached to the PR.
+
+### 2026-09-05 — PR #11 and late PR #10 review fixes
+
+- Validated all three review findings against the current branch. Damage
+  flatlines preserve formal current/last-turn history before clearing the run;
+  an engine-driven Urtica regression verifies audit facts and terminal save/load.
+- Restored issued run, advance, purge, rez, score, and paid ability actions to
+  ordinary human decision surfaces, including paid abilities during runs.
+  Full-match coordinator regressions exercise and submit actual Runner run and
+  Corp rez action IDs through the presenter.
+- Full-match/simulation output honors `--json` for successful results and
+  failures, including invalid arguments before the flag. Human output and
+  existing exit codes are preserved.
+- Verification passed: all 1,272 tests, formatting, deterministic proofs,
+  generated coverage, official gallery, every Godot smoke, and secret scanning
+  via `make verify`. Coverage remains 58 registered/tested and 57 complete.
