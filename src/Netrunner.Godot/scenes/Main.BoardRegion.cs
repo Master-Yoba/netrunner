@@ -23,6 +23,9 @@ public partial class Main
 		HBoxContainer toolbar = new();
 		toolbar.AddThemeConstantOverride("separation", 12);
 		_board.AddChild(toolbar);
+		Button restart = new() { Text = "Restart / choose side" };
+		restart.Pressed += () => GetTree().ReloadCurrentScene();
+		toolbar.AddChild(restart);
 		_focus = MakeLabel("RUN FOCUS · awaiting engine publication", 16, Warning);
 		_focus.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		toolbar.AddChild(_focus);
@@ -132,14 +135,14 @@ public partial class Main
 		VBoxContainer runnerContent = new();
 		runnerContent.AddThemeConstantOverride("separation", 6);
 		_runnerPanel.AddChild(runnerContent);
-		runnerContent.AddChild(MakeLabel("RUNNER · YOUR RIG", 14, Accent));
+		runnerContent.AddChild(MakeLabel("RUNNER RIG · YOUR HAND", 14, Accent));
 		_runnerSummary = MakeLabel("Credits · Clicks · Score", 13, Muted);
 		runnerContent.AddChild(_runnerSummary);
 		runnerContent.AddChild(MakeLabel("Rig", 12, Warning));
 		_runnerRig = new VBoxContainer();
 		_runnerRig.AddThemeConstantOverride("separation", 4);
 		runnerContent.AddChild(_runnerRig);
-		runnerContent.AddChild(MakeLabel("Grip (cards you own)", 12, Warning));
+		runnerContent.AddChild(MakeLabel("Your hand (HQ / Grip)", 12, Warning));
 		_runnerHand = new VBoxContainer();
 		_runnerHand.AddThemeConstantOverride("separation", 4);
 		runnerContent.AddChild(_runnerHand);
@@ -269,11 +272,13 @@ public partial class Main
 		}
 
 		ClearChildren(_runnerHand);
+		ZoneViewModel hand = board.Viewer == PlayerSide.Corp ? board.CorpHand! : board.RunnerHand;
+		ZoneViewModel deck = board.Viewer == PlayerSide.Corp ? board.CorpDeck! : board.RunnerDeck;
 		_runnerHand.AddChild(MakeLabel(
-			$"{board.RunnerHand.Count} card(s) · deck {board.RunnerDeck.Count}",
+			$"{board.Viewer} · {hand.Count} card(s) · deck {deck.Count}",
 			11,
 			Muted));
-		foreach (CardViewModel card in board.RunnerHand.VisibleCards)
+		foreach (CardViewModel card in hand.VisibleCards)
 		{
 			_runnerHand.AddChild(MakeCard(card));
 		}

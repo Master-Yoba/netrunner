@@ -760,6 +760,12 @@ public static partial class GameEngine
             throw new ResolutionFailureException("The submitted number action does not match the top resolution frame.");
         }
 
+        if (working.ResolutionStack[^1] is SetupFrame setup)
+        {
+            ConsumeSetupChoice(working, setup, value);
+            return;
+        }
+
         if (working.ResolutionStack[^1] is ChooseNumberThenAdjustCreditsFrame outerFrame)
         {
             if (outerFrame.Stage != NestedNumberStage.OuterPrompt)

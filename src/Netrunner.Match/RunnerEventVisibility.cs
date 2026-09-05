@@ -76,6 +76,17 @@ internal static class RunnerEventVisibility
             return false;
         }
 
+        ZoneState? zone = state.Zones.FirstOrDefault(value => value.Id == card.ZoneId);
+        if (zone is null)
+        {
+            return false;
+        }
+
+        if (zone.Kind is ZoneKind.RunnerStack or ZoneKind.CorpDeck)
+        {
+            return state.RunState?.ChosenAccessCards.Contains(cardId) == true;
+        }
+
         return card.OwnerSide == PlayerSide.Runner
             || card.FaceUp
             || card.Rezzed

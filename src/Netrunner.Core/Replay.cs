@@ -14,7 +14,7 @@ public static class EngineCompatibility
     public const int ArtifactSchemaVersion = 1;
     // Slice 4.5 persists targeted PlayCard payloads and explicit run-event
     // breach-modifier provenance in live RunState snapshots.
-    public const int StateSchemaVersion = 14;
+    public const int StateSchemaVersion = 15;
     public const string RulesVersion = "26.03";
     public const string CardDataVersion = "fixture-1";
     /// <summary>
@@ -201,6 +201,11 @@ public sealed class ReplayArtifact
     }
 
     public IReadOnlyList<StateInvariantViolation> CollectViolations(IBehaviorCatalog? behaviorCatalog)
+        => CollectViolations(behaviorCatalog, null);
+
+    public IReadOnlyList<StateInvariantViolation> CollectViolations(
+        IBehaviorCatalog? behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog)
     {
         var violations = new List<StateInvariantViolation>();
         if (SchemaVersion != EngineCompatibility.ArtifactSchemaVersion)
@@ -226,7 +231,8 @@ public sealed class ReplayArtifact
                 $"Rules version '{RulesVersion}' is not supported; expected '{EngineCompatibility.RulesVersion}'.");
         }
 
-        if (!string.Equals(CardDataVersion, EngineCompatibility.CardDataVersion, StringComparison.Ordinal)
+        if ((behaviorCatalog is null || runtimeCardCatalog is null)
+            && !string.Equals(CardDataVersion, EngineCompatibility.CardDataVersion, StringComparison.Ordinal)
             && !string.Equals(CardDataVersion, EngineCompatibility.GatewayCardDataVersion, StringComparison.Ordinal)
             // Read the pre-D-401 M2 artifact while requiring new artifacts to
             // carry the authenticated metadata commit above.
@@ -239,8 +245,10 @@ public sealed class ReplayArtifact
                 $"Card-data version '{CardDataVersion}' is not supported; expected '{EngineCompatibility.CardDataVersion}' or '{EngineCompatibility.GatewayCardDataVersion}'.");
         }
 
-        if (!string.Equals(BehaviorRegistryVersion, EngineCompatibility.BehaviorRegistryVersion, StringComparison.Ordinal)
-            && !string.Equals(BehaviorRegistryVersion, EngineCompatibility.GatewayBehaviorRegistryVersion, StringComparison.Ordinal))
+        if (behaviorCatalog is not null
+            ? !string.Equals(BehaviorRegistryVersion, behaviorCatalog.Version, StringComparison.Ordinal)
+            : !string.Equals(BehaviorRegistryVersion, EngineCompatibility.BehaviorRegistryVersion, StringComparison.Ordinal)
+                && !string.Equals(BehaviorRegistryVersion, EngineCompatibility.GatewayBehaviorRegistryVersion, StringComparison.Ordinal))
         {
             Add(
                 violations,
@@ -281,7 +289,7 @@ public sealed class ReplayArtifact
 
         try
         {
-            StateInvariantValidator.Validate(InitialSnapshot.ToState(), behaviorCatalog);
+            StateInvariantValidator.Validate(InitialSnapshot.ToState(), behaviorCatalog, runtimeCardCatalog);
         }
         catch (StateInvariantException exception)
         {
@@ -387,8 +395,11 @@ public sealed class ReplayArtifact
     }
 
     public void Validate(IBehaviorCatalog? behaviorCatalog)
+        => Validate(behaviorCatalog, null);
+
+    public void Validate(IBehaviorCatalog? behaviorCatalog, IRuntimeCardCatalog? runtimeCardCatalog)
     {
-        IReadOnlyList<StateInvariantViolation> violations = CollectViolations(behaviorCatalog);
+        IReadOnlyList<StateInvariantViolation> violations = CollectViolations(behaviorCatalog, runtimeCardCatalog);
         if (violations.Count > 0)
         {
             throw new StateInvariantException(violations);
@@ -490,15 +501,25 @@ public static class ReplayVerifier
         return Verify(artifact, behaviorCatalog, enforceCatalogCompatibility: true);
     }
 
+    public static ReplayVerificationResult Verify(
+        ReplayArtifact artifact,
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog runtimeCardCatalog)
+    {
+        ArgumentNullException.ThrowIfNull(runtimeCardCatalog);
+        return Verify(artifact, behaviorCatalog, true, runtimeCardCatalog);
+    }
+
     private static ReplayVerificationResult Verify(
         ReplayArtifact artifact,
         IBehaviorCatalog behaviorCatalog,
-        bool enforceCatalogCompatibility)
+        bool enforceCatalogCompatibility,
+        IRuntimeCardCatalog? runtimeCardCatalog = null)
     {
         ArgumentNullException.ThrowIfNull(artifact);
         ArgumentNullException.ThrowIfNull(behaviorCatalog);
         IReadOnlyList<StateInvariantViolation> violations = artifact.CollectViolations(
-            enforceCatalogCompatibility ? behaviorCatalog : null);
+            enforceCatalogCompatibility ? behaviorCatalog : null, runtimeCardCatalog);
         if (violations.Count > 0)
         {
             return ReplayVerificationResult.Invalid(string.Join("; ", violations.Select(static violation => violation.ToString())));
@@ -529,9 +550,11 @@ public static class ReplayVerifier
                     $"Replay action sequence {action.Sequence} does not follow expected sequence {expectedSequence}.");
             }
 
-            ApplyResult result = enforceCatalogCompatibility
-                ? GameEngine.Apply(current, action.Submission, behaviorCatalog)
-                : GameEngine.Apply(current, action.Submission);
+            ApplyResult result = runtimeCardCatalog is not null
+                ? GameEngine.Apply(current, action.Submission, behaviorCatalog, runtimeCardCatalog)
+                : enforceCatalogCompatibility
+                    ? GameEngine.Apply(current, action.Submission, behaviorCatalog)
+                    : GameEngine.Apply(current, action.Submission);
             if (!result.Accepted)
             {
                 return ReplayVerificationResult.Rejected(

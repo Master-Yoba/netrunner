@@ -38,6 +38,8 @@ public enum ZoneKind
     CorpRemovedFromGame,
     /// <summary>Lazy public Runner removed-from-game zone.</summary>
     RunnerRemovedFromGame,
+    CorpIdentity,
+    RunnerIdentity,
 }
 
 /// <summary>The stable topology kind of a Corp server.</summary>
@@ -207,6 +209,13 @@ public sealed record ZoneState
         new ReadOnlyCollection<CardInstanceId>((values ?? []).ToArray());
 }
 
+public enum ServerLifecycle
+{
+    Active,
+    EmptyPendingCheckpoint,
+    Destroyed,
+}
+
 public sealed record ServerState
 {
     [JsonConstructor]
@@ -214,12 +223,14 @@ public sealed record ServerState
         ServerId id,
         ServerKind kind,
         ZoneId iceZoneId,
-        ZoneId rootZoneId)
+        ZoneId rootZoneId,
+        ServerLifecycle lifecycle = ServerLifecycle.Active)
     {
         Id = id;
         Kind = kind;
         IceZoneId = iceZoneId;
         RootZoneId = rootZoneId;
+        Lifecycle = lifecycle;
     }
 
     [JsonInclude]
@@ -237,6 +248,13 @@ public sealed record ServerState
     [JsonInclude]
     [JsonRequired]
     public ZoneId RootZoneId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ServerLifecycle Lifecycle { get; private set; }
+
+    [JsonIgnore]
+    public bool Exists => Lifecycle != ServerLifecycle.Destroyed;
 }
 
 public sealed record TurnState
@@ -1029,6 +1047,6 @@ public sealed class GameSnapshot
     private static ServerState CopyServer(ServerState? server)
     {
         ArgumentNullException.ThrowIfNull(server);
-        return new ServerState(server.Id, server.Kind, server.IceZoneId, server.RootZoneId);
+        return new ServerState(server.Id, server.Kind, server.IceZoneId, server.RootZoneId, server.Lifecycle);
     }
 }

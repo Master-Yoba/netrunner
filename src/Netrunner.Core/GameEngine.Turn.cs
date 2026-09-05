@@ -683,6 +683,11 @@ public static partial class GameEngine
         ZoneKind handKind = frame.ActiveSide == PlayerSide.Corp ? ZoneKind.CorpHand : ZoneKind.RunnerGrip;
         ZoneState hand = GetZone(working, handKind);
         int maximum = MaximumHandSize(working, frame.ActiveSide);
+        if (frame.ActiveSide == PlayerSide.Runner && maximum < 0)
+        {
+            CompleteTurnGame(working, PlayerSide.Corp, GameWinReason.Flatline);
+            return;
+        }
         int required = hand.CardIds.Count - maximum;
         if (required <= 0)
         {

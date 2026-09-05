@@ -231,7 +231,7 @@ public static partial class GameEngine
             throw new ResolutionFailureException("The initiating player must be the Runner.");
         }
 
-        ServerState server = working.Servers.SingleOrDefault(candidate => candidate.Id == serverId)
+        ServerState server = working.Servers.SingleOrDefault(candidate => candidate.Id == serverId && candidate.Exists)
             ?? throw new ResolutionFailureException($"Server '{serverId}' does not exist.");
         ZoneState iceZone = working.Zones.SingleOrDefault(zone => zone.Id == server.IceZoneId)
             ?? throw new ResolutionFailureException($"Server '{serverId}' has no ICE zone.");
@@ -577,6 +577,7 @@ public static partial class GameEngine
         // Deliberately do not sort: this is the persisted server topology
         // order, and each action is a complete immutable server payload.
         return working.Servers
+            .Where(server => server.Exists)
             .Select(server => new RunServerParameters(server.Id))
             .ToList();
     }
@@ -710,6 +711,12 @@ public static partial class GameEngine
         if (run.Id != frame.RunId || run.Step != frame.Step)
         {
             throw new ResolutionFailureException("Run timing frame and authoritative run cursor do not agree.");
+        }
+
+        if (frame.Step != RunTimingStep.RunEnd && !IsPaidWindow(frame.Step) && AttackedServerDestroyed(working, run))
+        {
+            EndRunAtDestroyedServer(working, run);
+            return;
         }
 
         switch (frame.Step)
@@ -2406,8 +2413,8 @@ public static partial class GameEngine
             score.Id,
             card.OwnerSide,
             true,
-            card.Rezzed,
-            card.AdvancementCounters));
+            GetCard(working, card.Id).Rezzed,
+            GetCard(working, card.Id).AdvancementCounters));
         AddAgendaPoints(working, PlayerSide.Runner, spec.AgendaPoints);
         Emit(working, EngineEventKinds.AgendaStolen, new AgendaStolenEventPayload(PlayerSide.Runner, cardId, spec.AgendaPoints));
         RecordTurnAgendaChange(
@@ -2554,6 +2561,12 @@ public static partial class GameEngine
 
     private static void ClosePriorityWindow(WorkingState working, RunState run)
     {
+        if (AttackedServerDestroyed(working, run))
+        {
+            EndRunAtDestroyedServer(working, run);
+            return;
+        }
+
         RunPriorityState priority = run.Priority
             ?? throw new ResolutionFailureException("A run paid window is missing priority state.");
         switch (priority.Window)
@@ -3213,6 +3226,7 @@ public static partial class GameEngine
             AddRezCardActions(working, actions);
         }
         else if (run.Step == RunTimingStep.ApproachPaidWindow
+            && !AttackedServerDestroyed(working, run)
             && priority.PriorityHolder == PlayerSide.Corp
             && priority.CorpMayRezApproachedIce
             && run.CurrentIceId.HasValue)
@@ -3251,6 +3265,7 @@ public static partial class GameEngine
         // is switchable. CR 1.10.3c materializes every legal wallet/hosted
         // credit division as a distinct serialized action.
         if (run.Step == RunTimingStep.EncounterPaidWindow
+            && !AttackedServerDestroyed(working, run)
             && priority.PriorityHolder == PlayerSide.Runner
             && run.Encounter is { Status: RunEncounterStatus.Initialized })
         {

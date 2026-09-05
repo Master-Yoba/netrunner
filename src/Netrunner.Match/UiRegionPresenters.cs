@@ -24,6 +24,9 @@ public sealed record BoardRegionState(
     string CorpSummary,
     string RunnerSummary)
 {
+    public PlayerSide Viewer { get; init; } = PlayerSide.Runner;
+    public ZoneViewModel? CorpHand { get; init; }
+    public ZoneViewModel? CorpDeck { get; init; }
     public HandSizeViewModel CorpHandSize { get; init; } =
         HandSizeViewModel.Unavailable(PlayerSide.Corp, 0);
 
@@ -161,6 +164,9 @@ public static class BoardRegionPresenter
                 view.Run is { RunCredits: > 0 } runWithPool ? runWithPool.RunCredits : null));
         return board with
         {
+            Viewer = view.Viewer,
+            CorpHand = view.CorpHand,
+            CorpDeck = view.CorpDeck,
             CorpHandSize = view.CorpHandSize,
             RunnerHandSize = view.RunnerHandSize,
             CorpScoreArea = view.CorpScoreArea,
@@ -320,9 +326,9 @@ public static class ActionsRegionPresenter
         {
             status = ActionsRegionStatus.Unsupported;
         }
-        else if (decision is null || decision.OwnerSide != PlayerSide.Runner)
+        else if (decision is null || decision.OwnerSide != snapshot.View.Viewer)
         {
-            status = snapshot.RunOutcome is not null && snapshot.View.Run is null
+            status = snapshot.IsTerminal || (snapshot.View.CorpIdentity is null && snapshot.RunOutcome is not null && snapshot.View.Run is null)
                 ? ActionsRegionStatus.Complete
                 : ActionsRegionStatus.WaitingForDecision;
         }
@@ -381,6 +387,8 @@ public static class ActionsRegionPresenter
             DecisionKind.TriggerChoice => [ActionKind.UseTrigger, ActionKind.DeclineTrigger],
             DecisionKind.IceSubroutineChoice => [ActionKind.ResolveIceSubroutine],
             DecisionKind.InstallChoice => [ActionKind.InstallCard],
+            DecisionKind.MemoryCleanup => [ActionKind.TrashProgram],
+            DecisionKind.TriggerOrdering => [ActionKind.OrderTriggers],
             DecisionKind.InterruptChoice =>
             [
                 ActionKind.UsePrevention,
@@ -389,7 +397,7 @@ public static class ActionsRegionPresenter
                 ActionKind.DeclineReplacement,
             ],
             DecisionKind.ChooseCard => [ActionKind.ChooseCard],
-            DecisionKind.ChooseNumber => [ActionKind.ChooseNumber],
+            DecisionKind.ChooseNumber or DecisionKind.Setup => [ActionKind.ChooseNumber],
             DecisionKind.RunTiming =>
             [
                 ActionKind.PassPriority,
@@ -594,7 +602,7 @@ public static class FocusRegionPresenter
             return new FocusRegionState(FocusRegionMode.Empty, null, snapshot.RunOutcome);
         }
 
-        FocusRegionMode mode = snapshot.RunOutcome is not null && run is null
+        FocusRegionMode mode = snapshot.View.CorpIdentity is null && snapshot.RunOutcome is not null && run is null
             ? FocusRegionMode.Outcome
             : run is null
                 ? FocusRegionMode.Empty

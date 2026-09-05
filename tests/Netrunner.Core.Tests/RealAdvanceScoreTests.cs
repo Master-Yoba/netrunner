@@ -197,6 +197,7 @@ public sealed class RealAdvanceScoreTests
         Assert.Equal(result.State.GetZone(ZoneKind.CorpScore).Id, result.State.GetCard(fixture.AgendaIds[0]).ZoneId);
         Assert.True(result.State.GetCard(fixture.AgendaIds[0]).FaceUp);
         Assert.False(result.State.GetCard(fixture.AgendaIds[0]).Rezzed);
+        Assert.Equal(0, result.State.GetCard(fixture.AgendaIds[0]).AdvancementCounters);
     }
 
     [Fact]

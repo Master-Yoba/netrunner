@@ -39,7 +39,7 @@ public sealed class StateInvariantException : InvalidOperationException
 /// Checks all structural guarantees required before a state can enter the
 /// reducer or be exposed as a restorable snapshot.
 /// </summary>
-public static class StateInvariantValidator
+public static partial class StateInvariantValidator
 {
     public static void Validate(GameState state)
     {
@@ -143,6 +143,7 @@ public static class StateInvariantValidator
         ValidatePlayers(state, violations);
         ValidateZonesAndCards(state, behaviorCatalog, violations);
         ValidateServers(state, violations);
+        ValidateSetupAndIdentities(state, runtimeCardCatalog, violations);
         if (runtimeCardCatalog is not null)
         {
             ValidateRuntimeCardActivity(state, runtimeCardCatalog, violations);
@@ -563,8 +564,8 @@ public static class StateInvariantValidator
 
         PlayerSide? expectedOwner = zone.Kind switch
         {
-            ZoneKind.CorpDeck or ZoneKind.CorpHand or ZoneKind.CorpDiscard or ZoneKind.CorpScore or ZoneKind.CorpPlayArea or ZoneKind.CorpRemovedFromGame => PlayerSide.Corp,
-            ZoneKind.RunnerStack or ZoneKind.RunnerGrip or ZoneKind.RunnerPlayArea or ZoneKind.RunnerHeap or ZoneKind.RunnerRig or ZoneKind.RunnerScore or ZoneKind.RunnerRemovedFromGame => PlayerSide.Runner,
+            ZoneKind.CorpIdentity or ZoneKind.CorpDeck or ZoneKind.CorpHand or ZoneKind.CorpDiscard or ZoneKind.CorpScore or ZoneKind.CorpPlayArea or ZoneKind.CorpRemovedFromGame => PlayerSide.Corp,
+            ZoneKind.RunnerIdentity or ZoneKind.RunnerStack or ZoneKind.RunnerGrip or ZoneKind.RunnerPlayArea or ZoneKind.RunnerHeap or ZoneKind.RunnerRig or ZoneKind.RunnerScore or ZoneKind.RunnerRemovedFromGame => PlayerSide.Runner,
             ZoneKind.ServerIce or ZoneKind.ServerRoot => PlayerSide.Corp,
             ZoneKind.BehaviorSetAside => null,
             _ => null,
@@ -704,6 +705,7 @@ public static class StateInvariantValidator
                 }
             }
 
+            ValidateServerLifecycle(state, server, path, violations);
             ValidateServerZone(
                 server,
                 server.IceZoneId,
@@ -1580,7 +1582,15 @@ public static class StateInvariantValidator
         else
         {
             bool removedEncounterCursor = IsRemovedEncounterCursor(state, run, iceZone);
-            if (run.CurrentIceIndex < -1 || run.CurrentIceIndex >= iceZone.CardIds.Count)
+            // A destroyed remote retains the departed ICE cursor only while
+            // its paid window/effect stack unwinds. It is provenance, not a
+            // remaining installed protector or a legal interaction target.
+            bool destroyedCursor = server is { Lifecycle: ServerLifecycle.Destroyed }
+                && run.CurrentIceIndex >= 0
+                && run.CurrentIceId is { } departedIce
+                && state.Cards.Any(card => card.Id == departedIce
+                    && card.OwnerSide == PlayerSide.Corp && card.ZoneId != iceZone.Id);
+            if (!destroyedCursor && (run.CurrentIceIndex < -1 || run.CurrentIceIndex >= iceZone.CardIds.Count))
             {
                 Add(violations, "run.invalid-ice-index", $"{path}.currentIceIndex", "Current ICE index must be -1 or an index in the attacked server's ordered ICE zone.");
             }
@@ -1592,7 +1602,7 @@ public static class StateInvariantValidator
                     Add(violations, "run.unexpected-current-ice", $"{path}.currentIceId", "A run at the server must not have a current ICE ID.");
                 }
             }
-            else if (!removedEncounterCursor
+            else if (!removedEncounterCursor && !destroyedCursor
                 && (!run.CurrentIceId.HasValue || iceZone.CardIds[run.CurrentIceIndex] != run.CurrentIceId.Value))
             {
                 Add(violations, "run.ice-position-mismatch", $"{path}.currentIceId", "Current ICE ID must match the ordered ICE zone position.");
@@ -6604,7 +6614,7 @@ public static class StateInvariantValidator
                     break;
             }
 
-            if ((pending.Kind == DecisionKind.ChooseNumber && action.Kind != ActionKind.ChooseNumber)
+            if ((pending.Kind is DecisionKind.ChooseNumber or DecisionKind.Setup && action.Kind != ActionKind.ChooseNumber)
                 || (pending.Kind == DecisionKind.ChooseCard && action.Kind != ActionKind.ChooseCard)
                 || (pending.Kind == DecisionKind.ToyTurn
                     && action.Kind is not (ActionKind.GainCredit
@@ -8417,6 +8427,7 @@ public static class StateInvariantValidator
                     }
                 }
                 else if (run.Step == RunTimingStep.ApproachPaidWindow
+                    && state.Servers.Any(server => server.Id == run.AttackedServer && server.Exists)
                     && run.Priority is { PriorityHolder: PlayerSide.Corp, CorpMayRezApproachedIce: true }
                     && run.CurrentIceId.HasValue)
                 {
@@ -8441,6 +8452,7 @@ public static class StateInvariantValidator
                 }
 
                 if (run.Step == RunTimingStep.EncounterPaidWindow
+                    && state.Servers.Any(server => server.Id == run.AttackedServer && server.Exists)
                     && run.Priority is { PriorityHolder: PlayerSide.Runner }
                     && run.Encounter is { Status: RunEncounterStatus.Initialized })
                 {
@@ -11568,7 +11580,7 @@ public static class StateInvariantValidator
     }
 
     private static bool IsPromptFrame(ResolutionFrame? frame) =>
-        frame is ChooseNumberFrame
+        frame is SetupFrame or ChooseNumberFrame
         || frame is ChooseNumberThenAdjustCreditsFrame { Stage: NestedNumberStage.OuterPrompt }
         || frame is ChooseCardFrame
         || frame is ToyTurnFrame { Stage: ToyTurnStage.AwaitingAction }
@@ -11596,6 +11608,10 @@ public static class StateInvariantValidator
     {
         switch (frame)
         {
+            case SetupFrame setup:
+                minimum = 0;
+                maximum = setup.Redrawn ? 0 : 1;
+                return true;
             case ChooseNumberFrame chooseNumber:
                 minimum = chooseNumber.Minimum;
                 maximum = chooseNumber.Maximum;
@@ -12216,12 +12232,12 @@ public static class StateInvariantValidator
                 _ => null,
             },
             BehaviorZone.ServerRoot => state.Servers
-                .Where(server => server.Kind == ServerKind.Remote)
+                .Where(server => server.Kind == ServerKind.Remote && server.Exists)
                 .OrderBy(server => server.Id.Value, StringComparer.Ordinal)
                 .Select(server => state.Zones.FirstOrDefault(zoneState => zoneState.Id == server.RootZoneId))
                 .FirstOrDefault(value => value is not null),
             BehaviorZone.ServerIce => state.Servers
-                .Where(server => server.Kind == ServerKind.Remote)
+                .Where(server => server.Kind == ServerKind.Remote && server.Exists)
                 .OrderBy(server => server.Id.Value, StringComparer.Ordinal)
                 .Select(server => state.Zones.FirstOrDefault(zoneState => zoneState.Id == server.IceZoneId))
                 .FirstOrDefault(value => value is not null),

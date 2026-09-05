@@ -69,8 +69,13 @@ fi
 
 source "$bootstrap_root/scripts/env.sh"
 
+if [[ -z "${GODOT4:-}" || ! -f "$GODOT4" || ! -x "$GODOT4" ]]; then
+  echo "Bootstrap failed: no Godot .NET executable was discovered in $bootstrap_godot." >&2
+  exit 1
+fi
+bootstrap_godot_detected_version="$("$GODOT4" --version)"
 echo ".NET SDK: $(dotnet --version)"
-echo "Godot: $($GODOT4 --version)"
+echo "Godot: $bootstrap_godot_detected_version"
 echo "ripgrep: $("$bootstrap_rg/rg" --version | head -n 1)"
 
 if [[ ! -f "$bootstrap_root/Netrunner.sln" ]]; then

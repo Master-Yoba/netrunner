@@ -3,6 +3,7 @@ set -euo pipefail
 
 verify_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$verify_root/scripts/env.sh"
+bash "$verify_root/scripts/test-env.sh"
 
 if ! command -v dotnet >/dev/null 2>&1; then
   echo "dotnet is unavailable. Run ./scripts/bootstrap.sh first."
@@ -46,6 +47,7 @@ MSBUILDDISABLENODEREUSE=1 dotnet test "$verify_root/Netrunner.sln" --no-build -m
 dotnet format "$verify_root/Netrunner.sln" --no-restore --verify-no-changes
 dotnet run --project "$verify_root/src/Netrunner.Cli" --no-build --no-restore -- self-test --seed 42
 dotnet run --project "$verify_root/src/Netrunner.Cli" --no-build --no-restore -- doctor --json
+dotnet run --project "$verify_root/src/Netrunner.Cli" --no-build --no-restore -- full-match --seed 42 --json
 card_data_dir="$verify_root/data/vendor/system-gateway"
 card_data_cards="$card_data_dir/cards.json"
 card_data_manifest="$card_data_dir/manifest.json"
@@ -246,7 +248,35 @@ if ! grep -Fq "$slice45_ui_expected" "$slice45_ui_smoke_log" \
   exit 1
 fi
 echo "m4-slice45-ui-smoke=PASS prominent_options=true acting_player=true issued_order=true typed_cost=true typed_fallback=true hidden_safe_installed_card=true active_restriction=true legal_bioroid=true armed_mayfly=true"
-XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
+latency_smoke_log="$coverage_report_dir/latency-smoke.log"
+if ! run_with_timeout 45 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
+  "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \
+  -- --m3-responsiveness-smoke >"$latency_smoke_log" 2>&1; then
+  sed -n '1,160p' "$latency_smoke_log" >&2
+  exit 1
+fi
+if ! grep -Fq "M3_LATENCY_SMOKE PASS" "$latency_smoke_log" \
+  || grep -Fq "M3_LATENCY_SMOKE FAIL" "$latency_smoke_log"; then
+  sed -n '1,160p' "$latency_smoke_log" >&2
+  exit 1
+fi
+echo "m3-responsiveness-smoke=PASS"
+for full_match_side in corp runner; do
+  full_match_log="$coverage_report_dir/full-match-$full_match_side.log"
+  if ! run_with_timeout 45 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
+    "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \
+    -- "--full-match-smoke-$full_match_side" >"$full_match_log" 2>&1; then
+    sed -n '1,160p' "$full_match_log" >&2
+    exit 1
+  fi
+  if ! grep -Fq "FULL_MATCH_SMOKE PASS" "$full_match_log" \
+    || grep -Fq "FULL_MATCH_SMOKE FAIL" "$full_match_log"; then
+    sed -n '1,160p' "$full_match_log" >&2
+    exit 1
+  fi
+  echo "full-match-$full_match_side=PASS setup=true mulligan=true turn_pair=true identities=true terminal=true"
+done
+run_with_timeout 30 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
   "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" -- --smoke-test
 "$verify_root/scripts/check-secrets.sh"
 

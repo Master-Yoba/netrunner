@@ -25,6 +25,12 @@ public static partial class GameEngine
             throw new ResolutionFailureException("A card move requires distinct source and destination zones.");
         }
 
+        if (destination.ServerId is { } destinationServer
+            && working.Servers.Any(server => server.Id == destinationServer && !server.Exists))
+        {
+            throw new ResolutionFailureException("Cards cannot enter a destroyed server.");
+        }
+
         ReplaceZone(working, new ZoneState(
             source.Id,
             source.Kind,
@@ -44,17 +50,19 @@ public static partial class GameEngine
         bool entersPublicFaceUpZone = (destination.Kind == ZoneKind.RunnerHeap
                 && destination.OwnerSide == PlayerSide.Runner)
             || destination.Kind is ZoneKind.CorpRemovedFromGame or ZoneKind.RunnerRemovedFromGame;
+        bool leavesInstalledZone = IsInstalledZone(source.Kind) && !IsInstalledZone(destination.Kind);
+        bool entersHiddenZone = destination.Kind is ZoneKind.CorpDeck or ZoneKind.CorpHand
+            or ZoneKind.RunnerStack or ZoneKind.RunnerGrip;
         ReplaceCard(working, new CardInstanceState(
             card.Id,
             card.DefinitionId,
             destination.Id,
             card.OwnerSide,
-            entersPublicFaceUpZone || card.FaceUp,
-            card.Rezzed,
+            !entersHiddenZone && (entersPublicFaceUpZone || card.FaceUp),
+            !leavesInstalledZone && card.Rezzed,
             card.AdvancementCounters));
         if (cleanupCounters
-            && IsInstalledZone(source.Kind)
-            && !IsInstalledZone(destination.Kind))
+            && leavesInstalledZone)
         {
             ClearCardCounters(working, card.Id);
         }
@@ -72,6 +80,9 @@ public static partial class GameEngine
                 EngineEventKinds.CardMoved,
                 movement);
         }
+
+        RefreshRemoteLifecycle(working, source.ServerId);
+        RefreshRemoteLifecycle(working, destination.ServerId);
     }
 
     /// <summary>
@@ -115,6 +126,13 @@ public static partial class GameEngine
     /// </summary>
     private static void ClearCardCounters(WorkingState working, CardInstanceId cardId)
     {
+        CardInstanceState card = GetCard(working, cardId);
+        if (card.AdvancementCounters != 0)
+        {
+            ReplaceCard(working, new CardInstanceState(card.Id, card.DefinitionId, card.ZoneId,
+                card.OwnerSide, card.FaceUp, card.Rezzed, advancementCounters: 0));
+        }
+
         RulesState? rules = working.RulesState;
         if (rules is null)
         {
@@ -177,7 +195,7 @@ public static partial class GameEngine
 
     private static ZoneState GetRemoteRoot(WorkingState working) =>
         working.Servers
-            .Where(server => server.Kind == ServerKind.Remote)
+            .Where(server => server.Kind == ServerKind.Remote && server.Exists)
             .OrderBy(server => server.Id.Value, StringComparer.Ordinal)
             .Select(server => working.Zones.SingleOrDefault(zone => zone.Id == server.RootZoneId))
             .FirstOrDefault(zone => zone is not null)

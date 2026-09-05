@@ -9,6 +9,8 @@
   <ItemGroup>
     <EmbeddedResource Include="../../data/m4/presets.json"
                       LogicalName="Netrunner.Cards.Data.m4.presets.json" />
+    <EmbeddedResource Include="../../data/m4/developer/decks.json"
+                      LogicalName="Netrunner.Cards.Data.m4.developer.decks.json" />
   </ItemGroup>
 
   <!--

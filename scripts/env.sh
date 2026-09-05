@@ -23,6 +23,7 @@ if [[ -x "$netrunner_rg/rg" ]]; then
 fi
 
 if [[ ( -z "${GODOT4:-}" || ! -x "$GODOT4" ) && -d "$netrunner_godot_root" ]]; then
+	GODOT4=""
 	# A macOS download is an app bundle, so its executable is several levels
 	# below .tools/godot. Keep the direct candidates readable, then fall back
 	# to a bounded search for Linux-style and future bundle layouts.
@@ -35,7 +36,7 @@ if [[ ( -z "${GODOT4:-}" || ! -x "$GODOT4" ) && -d "$netrunner_godot_root" ]]; t
 		fi
 	done
 	if [[ -z "${GODOT4:-}" ]]; then
-		GODOT4="$(find "$netrunner_godot_root" -maxdepth 6 -type f -name 'Godot' -perm -u+x -print -quit)"
+		GODOT4="$(find "$netrunner_godot_root" -maxdepth 6 -type f \( -name 'Godot' -o -name 'Godot_v*_mono_linux.*' \) -perm -u+x -print -quit)"
 	fi
 	export GODOT4
 fi

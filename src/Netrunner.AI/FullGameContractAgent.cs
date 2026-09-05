@@ -240,6 +240,11 @@ public sealed class FullGameContractAgent : IGameAgent
         DecisionKind decisionKind = observation.Decision!.Kind;
         LegalAction selected = decisionKind switch
         {
+            DecisionKind.Setup => observation.LegalActions.First(action => action.Parameters is NumberChoiceParameters { Value: 0 }),
+            DecisionKind.MemoryCleanup => observation.LegalActions.First(action => action.Kind == ActionKind.TrashProgram
+                && action.Parameters is CardChoiceParameters),
+            DecisionKind.TriggerOrdering => observation.LegalActions.First(action => action.Kind == ActionKind.OrderTriggers
+                && action.Parameters is TriggerOrderParameters),
             DecisionKind.TurnTiming => SelectTurnTiming(observation.LegalActions),
             DecisionKind.TurnAction => SelectTurnAction(observation.LegalActions),
             DecisionKind.TurnDiscard => SelectTurnDiscard(observation.LegalActions),

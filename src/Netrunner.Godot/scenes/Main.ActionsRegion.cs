@@ -35,8 +35,8 @@ public partial class Main
 		{
 			_actions.AddChild(MakeLabel(
 				region.Status == ActionsRegionStatus.Complete
-					? "REPRESENTATIVE RUN COMPLETE · no further actions"
-					: "Waiting for the next issued Runner decision.",
+					? "COMPLETE · no further actions"
+					: "Waiting for the next issued decision.",
 				12,
 				Muted));
 			return;
@@ -46,7 +46,7 @@ public partial class Main
 		{
 			// The presenter only emits AwaitingRunnerDecision with a decision;
 			// keep the renderer fail-closed if a future projection changes.
-			_actions.AddChild(MakeLabel("Waiting for the next issued Runner decision.", 12, Muted));
+			_actions.AddChild(MakeLabel("Waiting for the next issued decision.", 12, Muted));
 			return;
 		}
 

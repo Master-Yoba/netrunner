@@ -202,7 +202,7 @@ public static class EngineJson
                     EngineEventValidator.Validate(@event);
                     break;
                 case ReplayArtifact replay:
-                    replay.Validate(behaviorCatalog);
+                    replay.Validate(behaviorCatalog, runtimeCardCatalog);
                     break;
                 case ScenarioArtifact scenario:
                     scenario.Validate();

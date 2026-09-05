@@ -1312,7 +1312,7 @@ public sealed class BreachAccessTests
     }
 
     [Fact]
-    public void RndBreachFacedownTopCardVisibleToBothViewersOnlyDuringTheBreach()
+    public void RndBreachRevealsTopCardOnlyToRunnerAndOnlyDuringTheBreach()
     {
         GameState fixture = CreateBreachState(deck: [false, false]);
         ZoneState deck = fixture.Zones.Single(zone => zone.Kind == ZoneKind.CorpDeck && zone.ServerId is null);
@@ -1334,14 +1334,14 @@ public sealed class BreachAccessTests
         // CR 26.03 7.3.1a: the top deck card stays facedown in state.
         Assert.False(chosen.State.GetCard(top).FaceUp);
 
-        // Both viewers see the drawn card in the run view; the Runner never
-        // sees the rest of the deck.
+        // CR 7.1.2: R&D access does not grant the Corp permission to look.
         string runnerMid = EngineJson.Serialize(BuildObservation(chosen.State, PlayerSide.Runner));
         string corpMid = EngineJson.Serialize(BuildObservation(chosen.State, PlayerSide.Corp));
         Assert.Contains(top.Value, runnerMid);
         Assert.Contains(FixturePlain.Value, runnerMid);
-        Assert.Contains(top.Value, corpMid);
-        Assert.Contains(FixturePlain.Value, corpMid);
+        Assert.DoesNotContain(top.Value, corpMid);
+        Assert.DoesNotContain(FixturePlain.Value, corpMid);
+        Assert.DoesNotContain(second.Value, corpMid);
         Assert.DoesNotContain(second.Value, runnerMid);
 
         ApplyResult noAction = ApplyKind(chosen.State, ActionKind.NoAccessAction);
@@ -1350,14 +1350,14 @@ public sealed class BreachAccessTests
         Assert.Null(terminal.RunState);
 
         // After the run the top card is facedown again in the deck:
-        // invisible to the Runner, still listed in the Corp's private view.
+        // invisible to either player.
         Assert.False(terminal.GetCard(top).FaceUp);
         string runnerAfter = EngineJson.Serialize(BuildObservation(terminal, PlayerSide.Runner));
         string corpAfter = EngineJson.Serialize(BuildObservation(terminal, PlayerSide.Corp));
         Assert.DoesNotContain(top.Value, runnerAfter);
         Assert.DoesNotContain(FixturePlain.Value, runnerAfter);
-        Assert.Contains(top.Value, corpAfter);
-        Assert.Contains(second.Value, corpAfter);
+        Assert.DoesNotContain(top.Value, corpAfter);
+        Assert.DoesNotContain(second.Value, corpAfter);
     }
 
     [Fact]

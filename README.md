@@ -11,21 +11,25 @@ dependency-ordered engineering roadmap is in
 
 ## Current state
 
-M1 is complete, and the M2 run/encounter/breach/access contract—including its
-second-pass M3-readiness hardening—has passed the repository verification gate.
-The project is ready for the scoped M3 work; it is not yet the complete
-Netrunner ruleset:
+M1–M3 and M4 Slices 4.1–4.5 are merged. Gateway behavior coverage is tracked in
+[the generated report](docs/generated/gateway-coverage.md). The desktop client
+starts a developer-only setup-to-outcome match as either side, including mulligan
+and identity display. Reduced decks use synthetic no-ability identities;
+official presets remain locked behind their behavior-coverage gate.
+See [the correctness slice](docs/CORRECTNESS_SLICE.md) for audit repairs and
+verification status. This is not yet the complete Netrunner ruleset:
 
 - `Netrunner.Core`: typed state, deterministic RNG, atomic legal actions,
   serializable resolution, canonical hashes, scenarios, and replay.
 - `Netrunner.Cards`: static metadata, fixture behavior, and strict local-only
   System Gateway normalization/validation.
-- `Netrunner.AI`: offline-agent boundary and deterministic toy-goal agent.
+- `Netrunner.AI`: offline-agent boundary, toy/run agents, and full-turn contract policy.
 - `Netrunner.LLM`: provider-neutral LLM transport contracts.
-- `Netrunner.Cli`: working `scenario`, `play`, `replay`, `m2-proof`, and
+- `Netrunner.Cli`: working `full-match`, `simulate`, `scenario`, `play`, `replay`, `m2-proof`, and
   `card-data` commands.
-- `Netrunner.Godot`: a minimal Godot 4.7.2 .NET desktop shell.
-- headless Core, Cards, AI, and CLI test projects.
+- `Netrunner.Match`: asynchronous authoritative-state ownership and filtered presentation.
+- `Netrunner.Godot`: Godot 4.7.2 .NET client with card and decision presentation.
+- headless Core, Cards, AI, CLI, and Match test projects.
 
 The verified M2 proof covers deterministic save/load and replay, public run
 event lifecycle, Archives disclosure, per-activation breaker limits,

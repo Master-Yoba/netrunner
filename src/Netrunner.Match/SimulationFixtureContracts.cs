@@ -287,14 +287,6 @@ public sealed class SimulationFixtureDocument
         {
             Add(diagnostics, "metadata-pin", "cardDataVersion", "cardDataVersion must be a lowercase 40-hex metadata commit pin.");
         }
-        else if (!string.Equals(CardDataVersion, EngineCompatibility.GatewayCardDataVersion, StringComparison.Ordinal))
-        {
-            Add(
-                diagnostics,
-                "metadata-pin",
-                "cardDataVersion",
-                $"'{CardDataVersion}' is not the authenticated Gateway metadata pin '{EngineCompatibility.GatewayCardDataVersion}'.");
-        }
 
         if (!IsStableIdentifier(BehaviorRegistryVersion))
         {
