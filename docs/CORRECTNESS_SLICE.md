@@ -14,7 +14,7 @@ not a declaration that every audit finding is closed or Slice 4.6 is ready.
 - [x] Bounded responsiveness smoke is part of the verification script.
 - [x] Reconcile README and milestone status with actual delivered paths.
 - [x] Full local verification.
-- [ ] PR into dev.
+- [x] [Draft PR #10 into dev](https://github.com/Master-Yoba/netrunner/pull/10).
 
 Existing M4 card batches remain the supported content boundary. This slice
 does not implement the cards assigned to 4.6 or 4.7.
