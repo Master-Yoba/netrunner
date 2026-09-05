@@ -125,7 +125,7 @@ public static partial class CliCommands
         error.WriteLine(
             "Usage: Netrunner.Cli doctor [--json] | self-test --seed <unsigned-integer> | "
             + "scenario <file> [--json] | replay <file> [--json] | "
-            + "full-match [--seed <unsigned-integer>] [--json] [--replay-out <file>] | "
+            + "full-match [--preset basic|expanded] [--seed <unsigned-integer>] [--json] [--replay-out <file>] | "
             + "simulate <fixture-file> [--json] [--replay-out <file>] | "
             + "card-data normalize --upstream <file> --copyright <file> --commit <40-hex-sha> "
             + "--retrieval-date YYYY-MM-DD --output-dir <directory> [--json] | "
