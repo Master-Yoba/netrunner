@@ -41,13 +41,14 @@ mobile layouts, 3D tables and release packaging are outside this pass.
 ## 2. Reference review and current findings
 
 Reference revision inspected: `c863f5af74ceb4fa821a4c84d3f643efffacb7ba`
-on Chiriboga's `dev` branch. These are source observations; screenshots from the
-user can refine the visual direction during the first slice.
+on Chiriboga's `dev` branch. Source review is supplemented by the user-provided ongoing-game screenshot
+[chiriboga.png](evidence/m4-9/reference/chiriboga.png). The screenshot is a visual
+reference; its exact build/revision is not established.
 
 | Reference source | Observed pattern | Application here |
 |---|---|---|
 | [Card renderer](https://github.com/drbo6/chiriboga/blob/c863f5af74ceb4fa821a4c84d3f643efffacb7ba/cardrenderer/cardrenderer.js) | Individual card sprites, inspection/zoom, selection cues and sideways installed ICE | Card-shaped controls with stable positions, readable inspection and oriented ICE |
-| [Styles](https://github.com/drbo6/chiriboga/blob/c863f5af74ceb4fa821a4c84d3f643efffacb7ba/style.css) | Right-edge scrolling history, compact side-specific entries and expanded tooltips | A readable right-side history panel, with optional compact mode rather than hover-only detail |
+| [Styles](https://github.com/drbo6/chiriboga/blob/c863f5af74ceb4fa821a4c84d3f643efffacb7ba/style.css) | Right-edge scrolling history, compact side-specific entries and expanded tooltips | A compact right-side history rail with a readable expandable panel and keyboard/click access |
 | [Game shell](https://github.com/drbo6/chiriboga/blob/c863f5af74ceb4fa821a4c84d3f643efffacb7ba/engine.php) and [logging](https://github.com/drbo6/chiriboga/blob/c863f5af74ceb4fa821a4c84d3f643efffacb7ba/utility.js) | Separate board controls/history, entries containing action text, downloadable diagnostics | Separate board, decisions and history; export a filtered playtest report |
 
 The implementation will use our own scenes, visual assets and presentation
@@ -72,6 +73,41 @@ Current repository findings:
   A new public summary must describe an observable face-down install without
   recovering or exposing the suppressed card identity.
 
+### Screenshot review — concrete visual direction
+
+![User-provided Chiriboga game reference](evidence/m4-9/reference/chiriboga.png)
+
+The supplied 2048×1080 frame shows the Runner's action phase with several Corp
+server positions, face-up and face-down ICE, a hosted Runner card, installed
+Runner cards and a fanned hand. Adopt these visible composition principles:
+
+- The table is the dominant surface. Individual cards sit directly on it with
+  generous space between groups; large enclosing information panels are absent.
+- Corp cards occupy the upper field and Runner cards the lower field. Each
+  server's root and sideways ICE share a lane, making protection spatially clear.
+- Deck/discard piles are recognizable card stacks with count badges. Hands
+  overlap at the table edges; the local hand is visible at the bottom.
+- Hosted cards visibly overlap their host. Counters sit on cards rather than in
+  detached paragraphs; local highlights mark cards that can be acted on.
+- Player resources occupy compact edge strips. The current phase has one clear
+  heading, and the action area uses very little vertical space.
+- History is a narrow rail of side-coded action markers on the far right. The
+  screenshot establishes its collapsed appearance, not how expanded history
+  behaves; readable expansion remains our explicit interaction requirement.
+
+Keep our own restrained palette, clear typography and upright inspection text.
+The green scanlines, intense glow, upside-down Corp faces, tightly clipped hands
+and tiny history labels are reference styling choices, not acceptance targets.
+Give our rail text/tooltips and keyboard access, and keep every local hand card
+reachable. Card artwork contributes strongly to the reference's appearance;
+UI-490 must demonstrate a few legally provisioned image faces if available and
+an equally structured metadata fallback. Plain rectangular text panels are not
+a satisfactory fallback design.
+
+This screenshot changes the initial layout proposal: use the compact history
+rail by default, with an expandable/pinnable readable panel. Do not permanently
+reserve 280–320 pixels for history at 1280×720.
+
 ### Reproduction that anchors the redesign
 
 Basic decks, seed `47042`, both opening hands kept, human Runner passing Corp
@@ -94,34 +130,38 @@ the opponent's hand is a counted back stack. All readable labels face the user.
 This preserves server/ICE orientation while avoiding a second mirrored layout.
 Revisit table rotation only if the Corp-seat playtest identifies a real problem.
 
-Proposed desktop wireframe (not a screenshot of Chiriboga):
+Proposed desktop wireframe, revised from the supplied screenshot. The narrow
+right column is the collapsed history rail; expanded history is a separate state.
 
 ```text
-┌───────────────────────────────────────────────┬─────────────────────┐
-│ Turn · active player · priority    Menu        │ MATCH HISTORY       │
-├───────────────────────────────────────────────┤ Corp turn 1         │
-│ Corp identity / credits / clicks / score       │ Install …           │
-│ HQ hand area         R&D / Archives / score    │ Rez …               │
-│                                               │ Replace …           │
-│   HQ lane    R&D lane    Archives    Remotes →  │                     │
-│   root       root       root         root     │ Scrollable entries  │
-│   ICE        ICE        ICE          ICE      │ Card inspection     │
-│   ICE         ← run marker follows lane →     │ from known names    │
-│                                               │                     │
-│ Runner rig: programs / hardware / resources    │ New entries badge   │
-│ Runner identity / credits / clicks / MU / tags │ when reading back   │
-│ Grip hand area        Stack / Heap / score     │                     │
-├───────────────────────────────────────────────┤                     │
-│ Decision: plain-language prompt                │ Expand / copy log   │
-│ Context actions / targets / Back / Pass        │                     │
-└───────────────────────────────────────────────┴─────────────────────┘
+┌──────────────────────────────────────────────────────────────┬───┐
+│ Menu        Corp hand backs              Turn / priority      │ H │
+│ Corp resources                                               │ I │
+│                                                              │ S │
+│ Archives      R&D       HQ / identity     Remote 1   Remote 2  │ T │
+│ root/pile     pile      root             root       root      │ O │
+│               ━ ICE ━   ━ ICE + host ━    ━ ICE ━             │ R │
+│                         ━ ICE ━                              │ Y │
+│                  Run marker follows the server lane          │   │
+│                                                              │ • │
+│       Runner programs / hardware / resources                 │ • │
+│                                            Stack / Heap      │ • │
+│ Runner resources              Local hand fan     Identity    │ • │
+├──────────────────────────────────────────────────────────────┤   │
+│ Prompt · contextual actions · targets · Back / Pass            │ ⇤ │
+└──────────────────────────────────────────────────────────────┴───┘
 ```
 
 Layout rules:
 
-- Reserve a persistent history column, initially 280–320 logical pixels at
-  1280×720. The board receives the remaining width. Validate these dimensions
-  with native mockups before freezing them.
+- Reserve only a 56–72 logical-pixel history rail by default. Each marker has
+  an action icon, a side cue and accessible text; click or keyboard activation
+  opens its entry in the readable history panel.
+- Expand history to an initially 300–360 logical-pixel panel. At 1280×720 use
+  a dismissible overlay that leaves the decision dock accessible; at larger
+  sizes allow pinning it beside the board with a deliberate layout adjustment.
+  Preserve the selected entry and scroll position across collapse/expansion.
+  Validate these dimensions in native mockups, not from screenshot ratios alone.
 - Keep identities and compact resource counters close to their own table edge.
   Make credits, remaining clicks, agenda points, MU and tags immediately legible.
 - Give HQ, R&D and Archives permanent labeled lanes. Give remote servers stable
@@ -200,7 +240,8 @@ sequence plus event ordering can deduplicate publications; opponent-thinking
 publications do not create actions. Rejected submissions get separate feedback
 and must not read as successful actions.
 
-Default view: chronological turns, newest entries at the bottom. Auto-follow
+The rail and expanded panel share one history model. The rail summarizes actions;
+the expanded panel provides chronological turns, newest entries at the bottom. Auto-follow
 only while the user is at the bottom; otherwise retain their reading position
 and show a new-entry count. Provide turn separators, collapse/expand, card-name
 inspection where permitted, and copy/export of the filtered history with seed,
@@ -315,7 +356,7 @@ revise after the first native prototype and visibility spike.
 
 | Slice | Deliverable | Dependencies | Acceptance / review |
 |---|---|---|---|
-| UI-490 — Visual baseline (1–2 days) | Native static board prototype at both sizes and both seats; card face/back, zones, log and choice dock; reference/contact sheet | None | Review table geography, card readability and density before wiring behavior. Optional user screenshots refine this checkpoint. |
+| UI-490 — Visual baseline (1–2 days) | Native static board prototype at both sizes and both seats; card face/back, zones, compact/expanded history and choice dock; supplied screenshot comparison | None | Review table geography, card readability and density before wiring behavior. Compare directly with the supplied screenshot; review collapsed and expanded history states. |
 | UI-491 — History and safe transitions (3–5 days) | Typed viewer-safe summaries, retained history, deduplication, filtered report export; Nico regression | UI-490 for panel shape; projection work can start independently | Root reviews visibility and event ordering. Skip/fast mode cannot drop history; no hidden names/IDs leak. |
 | UI-492 — Live table and cards (4–6 days) | Persistent card nodes, player zones, servers/ICE, hands/piles/hosts, inspection and overflow | UI-490; consume UI-491 contracts | Both seats usable at 720p; installed cards remain spatially stable; metadata fallback and optional art path reviewed. |
 | UI-493 — Decisions and runs (3–5 days) | Contextual actions, target staging, priority prompts, run path, nested/discard/access choices | UI-492 | Complete named interactions mouse-first and keyboard-only; every legal action remains reachable; stale actions safely rejected. |
@@ -396,7 +437,7 @@ green.
 
 Build UI-490 as a native, noninteractive table using real Gateway metadata and
 the Nico opening as a visual storyboard. Show normal board, replacement,
-encounter and nested-choice states. Two or three user screenshots of the desired
-Chiriboga board/history would sharpen the reference, but are not required to
-start this prototype. Review those concrete frames before expanding the live
+encounter and nested-choice states. Use the supplied [ongoing-game screenshot](evidence/m4-9/reference/chiriboga.png)
+as the board-density and composition reference. An expanded-history screenshot
+would further inform that interaction, but does not block the prototype. Review those concrete frames before expanding the live
 implementation.
