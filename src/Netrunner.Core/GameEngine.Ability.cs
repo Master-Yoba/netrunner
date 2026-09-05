@@ -924,6 +924,7 @@ public static partial class GameEngine
             BehaviorConditionKind.Installed => IsInstalledCard(working, source.Id),
             BehaviorConditionKind.InstalledThisTurn => CurrentAbilityFacts(working)?.InstalledCardIds.Contains(source.Id) == true,
             BehaviorConditionKind.SuccessfulRun => working.RunState?.Successful == true,
+            BehaviorConditionKind.SuccessfulRunDuringRunnerLastTurn => working.Turn.History?.RunnerThisTurn?.SuccessfulRun == true,
             BehaviorConditionKind.SuccessfulRunThisTurn => CurrentAbilityFacts(working)?.SuccessfulRun == true,
             BehaviorConditionKind.SourceController => source.OwnerSide == controller.Side,
             BehaviorConditionKind.Encountering => working.RunState is

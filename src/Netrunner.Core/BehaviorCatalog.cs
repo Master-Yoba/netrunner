@@ -321,7 +321,8 @@ public sealed record BehaviorCondition
 
         if ((kind is BehaviorConditionKind.InstalledThisTurn
                 or BehaviorConditionKind.SuccessfulRunThisTurn
-                or BehaviorConditionKind.FoundCard)
+                or BehaviorConditionKind.FoundCard
+                or BehaviorConditionKind.SuccessfulRunDuringRunnerLastTurn)
             && (fact is not null || value is not null))
         {
             throw new ArgumentException(
@@ -387,6 +388,7 @@ public enum BehaviorConditionKind
     InstalledThisTurn,
     SuccessfulRunThisTurn,
     FoundCard,
+    SuccessfulRunDuringRunnerLastTurn,
 }
 
 /// <summary>A typed target selector; IDs are resolved by Core at runtime.</summary>
@@ -434,19 +436,14 @@ public sealed record BehaviorTarget
                     nameof(zone));
             }
 
-            // Installed selectors are intentionally narrow. The target
-            // itself supplies the installed/location predicate; the only
-            // additional selector permitted in this slice is the owning
-            // side. Definition, subtype, and card-class filters remain
-            // hidden-zone vocabulary and must not silently widen this
-            // selector's trust boundary.
+            // Installed selectors use owner and printed card class. Hidden
+            // definition and subtype selectors remain zone-search vocabulary.
             if (filter is not null
-                && (filter.CardType != BehaviorCardType.Any
-                    || filter.DefinitionId is not null
+                && (filter.DefinitionId is not null
                     || filter.Subtype is not null))
             {
                 throw new ArgumentException(
-                    "Installed-card targets may carry only an owner-side filter.",
+                    "Installed-card targets may carry only owner-side and card-class filters.",
                     nameof(filter));
             }
         }
@@ -653,7 +650,9 @@ public sealed record BehaviorInstruction
         HostedCreditSpendRestriction? spendRestriction = null,
         BehaviorRunOperand? runOperand = null,
         BehaviorAmountOperand? amountOperand = null,
-        BehaviorPlayerSelector? recipient = null)
+        BehaviorPlayerSelector? recipient = null,
+        DamageKind? damageKind = null,
+        BehaviorDamageAmountOperand? damageAmountOperand = null)
     {
         if (!Enum.IsDefined(kind))
         {
@@ -679,6 +678,8 @@ public sealed record BehaviorInstruction
         SpendRestriction = NormalizeSpendRestriction(kind, spendRestriction);
         RunOperand = runOperand;
         AmountOperand = amountOperand;
+        DamageKind = damageKind;
+        DamageAmountOperand = damageAmountOperand;
         Recipient = recipient == BehaviorPlayerSelector.Controller
             ? null
             : recipient;
@@ -747,8 +748,35 @@ public sealed record BehaviorInstruction
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public BehaviorPlayerSelector? Recipient { get; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public DamageKind? DamageKind { get; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BehaviorDamageAmountOperand? DamageAmountOperand { get; }
+
     private void ValidateOperands()
     {
+        if (DamageKind is { } damageKind && !Enum.IsDefined(damageKind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(DamageKind));
+        }
+
+        if (Kind == BehaviorInstructionKind.DealDamage)
+        {
+            if (DamageKind is null)
+            {
+                throw new ArgumentException("Damage instructions require a typed damage kind.", nameof(DamageKind));
+            }
+            if (DamageAmountOperand is not null && Amount != 0)
+            {
+                throw new ArgumentException("Damage uses either a static or dynamic amount.", nameof(Amount));
+            }
+        }
+        else if (DamageKind is not null || DamageAmountOperand is not null)
+        {
+            throw new ArgumentException("Damage operands require a damage instruction.", nameof(DamageKind));
+        }
+
         if (Recipient is { } recipient && !Enum.IsDefined(recipient))
         {
             throw new ArgumentOutOfRangeException(nameof(Recipient));
@@ -1351,7 +1379,11 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         IReadOnlyList<BehaviorInstruction> instructions,
         RunOutcomeRequirement? runOutcomeRequirement = null,
         ServerKind? serverKindRequirement = null,
-        bool requireSourceOnAttackedServer = false)
+        bool requireSourceOnAttackedServer = false,
+        bool requireSourceInstalled = false,
+        bool activeWhileUnrezzed = false,
+        bool persistent = false,
+        bool requireAgendaStolenDuringRun = false)
     {
         if (!StableIdentifier.TryValidate(key))
         {
@@ -1415,10 +1447,10 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         }
 
         if (requireSourceOnAttackedServer
-            && occurrence is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered))
+            && occurrence is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded))
         {
             throw new ArgumentException(
-                "Requiring the source to occupy the attacked server is valid only for ServerApproached or IceEncountered triggers.",
+                "Requiring the source to occupy the attacked server is valid only for ServerApproached, IceEncountered, or CardRezzed triggers.",
                 nameof(requireSourceOnAttackedServer));
         }
 
@@ -1440,6 +1472,16 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         RunOutcomeRequirement = runOutcomeRequirement;
         ServerKindRequirement = serverKindRequirement;
         RequireSourceOnAttackedServer = requireSourceOnAttackedServer;
+        RequireSourceInstalled = requireSourceInstalled;
+        ActiveWhileUnrezzed = activeWhileUnrezzed;
+        if ((persistent || requireAgendaStolenDuringRun) && occurrence != OccurrenceKind.RunEnded)
+            throw new ArgumentException("Persistent run-end conditions require RunEnded.");
+        Persistent = persistent;
+        RequireAgendaStolenDuringRun = requireAgendaStolenDuringRun;
+        if (activeWhileUnrezzed && (!requireSourceInstalled || occurrence != OccurrenceKind.CardAccessed || scope != BehaviorTriggerScope.Self))
+        {
+            throw new ArgumentException("Unrezzed triggers require an installed self-access declaration.", nameof(activeWhileUnrezzed));
+        }
     }
 
     public string Key { get; }
@@ -1471,6 +1513,18 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool RequireSourceOnAttackedServer { get; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool RequireSourceInstalled { get; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool ActiveWhileUnrezzed { get; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Persistent { get; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool RequireAgendaStolenDuringRun { get; }
+
     public IReadOnlyList<BehaviorInstruction> Instructions { get; }
 
     public bool Equals(BehaviorTrigger? other) =>
@@ -1483,6 +1537,10 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         && RunOutcomeRequirement == other.RunOutcomeRequirement
         && ServerKindRequirement == other.ServerKindRequirement
         && RequireSourceOnAttackedServer == other.RequireSourceOnAttackedServer
+        && RequireSourceInstalled == other.RequireSourceInstalled
+        && ActiveWhileUnrezzed == other.ActiveWhileUnrezzed
+        && Persistent == other.Persistent
+        && RequireAgendaStolenDuringRun == other.RequireAgendaStolenDuringRun
         && BehaviorContractStructure.SequenceEquals(
             Instructions,
             other.Instructions,
@@ -1501,7 +1559,9 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
                 RunOutcomeRequirement,
                 ServerKindRequirement,
                 RequireSourceOnAttackedServer),
-            Instructions.Count);
+            Instructions.Count,
+            RequireSourceInstalled,
+            ActiveWhileUnrezzed, Persistent, RequireAgendaStolenDuringRun);
 
     private static bool IsCardBearing(OccurrenceKind occurrence) => occurrence is
         OccurrenceKind.CardInstalled
@@ -1561,7 +1621,8 @@ public sealed class CardBehaviorDefinition
         IReadOnlyList<BehaviorValueModifier>? valueModifiers = null,
         IReadOnlyList<BehaviorFirstProgramInstallCostModifier>? firstProgramInstallCostModifiers = null,
         IReadOnlyList<BehaviorFirstHqBreachAccessModifier>? firstHqBreachAccessModifiers = null,
-        IReadOnlyList<BehaviorFirstBasicDrawReplacement>? firstBasicDrawReplacements = null)
+        IReadOnlyList<BehaviorFirstBasicDrawReplacement>? firstBasicDrawReplacements = null,
+        bool canBeAdvanced = false)
     {
         DefinitionId = definitionId;
         if (!Enum.IsDefined(controller))
@@ -1570,6 +1631,11 @@ public sealed class CardBehaviorDefinition
         }
 
         Controller = controller;
+        CanBeAdvanced = canBeAdvanced;
+        if (canBeAdvanced && controller != PlayerSide.Corp)
+        {
+            throw new ArgumentException("Only Corp cards can permit advancement.", nameof(canBeAdvanced));
+        }
         Costs = Freeze(costs);
         if (Costs.Count(static cost => cost.Kind is BehaviorCostKind.TrashSelf or BehaviorCostKind.RemoveSelfFromGame) > 1)
         {
@@ -1609,6 +1675,9 @@ public sealed class CardBehaviorDefinition
     public CardDefinitionId DefinitionId { get; }
 
     public PlayerSide Controller { get; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool CanBeAdvanced { get; }
 
     public IReadOnlyList<BehaviorCost> Costs { get; }
 
@@ -2388,6 +2457,7 @@ internal static class BehaviorCatalogStructure
                 && a.BreachAccessModifier == b.BreachAccessModifier,
             (CardBehaviorDefinition a, CardBehaviorDefinition b) => a.DefinitionId == b.DefinitionId
                 && a.Controller == b.Controller
+                && a.CanBeAdvanced == b.CanBeAdvanced
                 && SequenceEquals(a.Costs, b.Costs)
                 && SequenceEquals(a.Conditions, b.Conditions)
                 && BehaviorContractStructure.SequenceEquals(
@@ -2589,6 +2659,10 @@ internal static class BehaviorCatalogFingerprint
         AppendString(builder, value.ExtensionHandlerId);
         AppendSequence(builder, value.Costs, AppendCost);
         AppendSequence(builder, value.Conditions, AppendCondition);
+        if (value.CanBeAdvanced)
+        {
+            builder.Append(",canBeAdvanced=1");
+        }
         AppendSequence(builder, value.Targets, AppendTarget);
         AppendSequence(builder, value.Instructions, AppendInstruction);
         AppendSequence(builder, value.StaticModifiers, AppendStaticModifier);
@@ -2854,6 +2928,17 @@ internal static class BehaviorCatalogFingerprint
             builder.Append(",multiplier=").Append(amountOperand.Multiplier);
         }
 
+        if (value.DamageKind is { } damageKind)
+        {
+            builder.Append(",damageKind=").Append((int)damageKind);
+        }
+        if (value.DamageAmountOperand is { } damageAmount)
+        {
+            builder.Append(",damageAmount=").Append((int)damageAmount.Kind)
+                .Append(",base=").Append(damageAmount.BaseAmount)
+                .Append(",trashSourceAsCost=").Append(damageAmount.TrashSourceAsCost ? '1' : '0');
+        }
+
         // Preserve historical fingerprints for instructions that retain the
         // legacy controller recipient. Encode only an explicit selector.
         if (value.Recipient is { } recipient)
@@ -2899,6 +2984,16 @@ internal static class BehaviorCatalogFingerprint
             builder.Append(",requireSourceOnAttackedServer=1");
         }
 
+        if (value.RequireSourceInstalled)
+        {
+            builder.Append(",requireSourceInstalled=1");
+        }
+        if (value.Persistent) builder.Append(",persistent=1");
+        if (value.RequireAgendaStolenDuringRun) builder.Append(",requireAgendaStolenDuringRun=1");
+        if (value.ActiveWhileUnrezzed)
+        {
+            builder.Append(",activeWhileUnrezzed=1");
+        }
         builder.Append(",instructions=");
         AppendSequence(builder, value.Instructions, AppendInstruction);
     }

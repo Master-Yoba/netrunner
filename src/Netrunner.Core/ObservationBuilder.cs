@@ -24,7 +24,7 @@ namespace Netrunner.Core;
 /// always serialize to byte-identical JSON; the negative tests pin that
 /// shape exactly.
 /// </summary>
-public static class ObservationBuilder
+public static partial class ObservationBuilder
 {
     public static Observation Build(GameState state, PlayerSide viewer)
     {
@@ -225,6 +225,7 @@ public static class ObservationBuilder
             publicState["run"] = RunView(state, run, viewer, accessVisible, behaviorCatalog);
         }
 
+        AddDamagePresentation(state, viewer, accessVisible, behaviorCatalog, publicState);
         return publicState;
     }
 
@@ -805,6 +806,7 @@ public static class ObservationBuilder
                 BehaviorStaticModifierKind.MaximumHandSize);
             view["maximumHandSize"] = checked(rules.MaximumHandSize + modifier);
             view["tags"] = Math.Max(0, rules.Tags);
+            if (rules.CoreDamage != 0) view["coreDamage"] = rules.CoreDamage;
         }
 
         return view;

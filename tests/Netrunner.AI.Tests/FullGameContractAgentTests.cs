@@ -18,9 +18,9 @@ public sealed class FullGameContractAgentTests
 
         Assert.Equal(FullGameContractAgentVersion.SchemaVersion, policy.SchemaVersion);
         Assert.Equal(FullGameContractAgentVersion.PolicyVersion, policy.PolicyVersion);
-        Assert.Equal(4, FullGameContractAgentVersion.SchemaVersion);
-        Assert.Equal("full-game-contract-agent-v4", FullGameContractAgentVersion.AgentVersion);
-        Assert.Equal("full-game-contract-policy-v4", FullGameContractAgentVersion.PolicyVersion);
+        Assert.Equal(5, FullGameContractAgentVersion.SchemaVersion);
+        Assert.Equal("full-game-contract-agent-v5", FullGameContractAgentVersion.AgentVersion);
+        Assert.Equal("full-game-contract-policy-v5", FullGameContractAgentVersion.PolicyVersion);
         Assert.Equal(PlayerSide.Runner, policy.ControlledSide);
         Assert.Equal(ActionKind.DrawCard, policy.TurnActionOrder[0]);
         Assert.Equal(ActionKind.JackOut, policy.RunActionOrder[0]);
@@ -194,6 +194,24 @@ public sealed class FullGameContractAgentTests
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await agent.ChooseActionAsync(
                 ObservationFor(PlayerSide.Runner, DecisionKind.TurnAction, valid)));
+    }
+
+    [Theory]
+    [InlineData(PlayerSide.Runner, IceSubroutineChoiceKind.JackOut, IceSubroutineChoiceKind.ContinueRun)]
+    [InlineData(PlayerSide.Corp, IceSubroutineChoiceKind.TrashInstalledRunnerCard, IceSubroutineChoiceKind.EndRun)]
+    public async Task Batch5IceChoicesUseTypedStablePreferences(
+        PlayerSide side, IceSubroutineChoiceKind preferred, IceSubroutineChoiceKind fallback)
+    {
+        FullGameContractAgent agent = new(side);
+        LegalAction first = Action("preferred", ActionKind.ResolveIceSubroutine,
+            new IceSubroutineChoiceParameters("frame:batch5", preferred,
+                cardId: preferred == IceSubroutineChoiceKind.TrashInstalledRunnerCard
+                    ? new CardInstanceId("card:program") : null), "opaque label");
+        LegalAction second = Action("fallback", ActionKind.ResolveIceSubroutine,
+            new IceSubroutineChoiceParameters("frame:batch5", fallback), "opaque label");
+        Assert.Equal(first.Id, await agent.ChooseActionAsync(ObservationFor(side, DecisionKind.IceSubroutineChoice, second, first)));
+        Assert.Equal(first.Id, await agent.ChooseActionAsync(ObservationFor(side, DecisionKind.IceSubroutineChoice, first, second)));
+        Assert.Equal(second.Id, await agent.ChooseActionAsync(ObservationFor(side, DecisionKind.IceSubroutineChoice, second)));
     }
 
     [Fact]

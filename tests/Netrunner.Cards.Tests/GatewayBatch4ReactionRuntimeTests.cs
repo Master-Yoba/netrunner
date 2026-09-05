@@ -11,7 +11,7 @@ namespace Netrunner.Cards.Tests;
 /// the encounter fixture is deliberately test-local: this checkpoint binds
 /// only its generic encounter trigger.
 /// </summary>
-public sealed class GatewayBatch4ReactionRuntimeTests
+public sealed partial class GatewayBatch4ReactionRuntimeTests
 {
     private static readonly CardDefinitionId HqCostCardA = new("fixture:batch4-hq-a");
     private static readonly CardDefinitionId HqCostCardB = new("fixture:batch4-hq-b");
@@ -420,7 +420,9 @@ public sealed class GatewayBatch4ReactionRuntimeTests
         int runnerCredits = 10,
         int runnerClicks = 4,
         int corpCredits = 5,
-        int hqCards = 0)
+        int hqCards = 0,
+        bool sourceRezzed = true,
+        int advancementCounters = 0)
     {
         GameState baseline = GameState.CreateNew(
             seed: 45042,
@@ -465,8 +467,9 @@ public sealed class GatewayBatch4ReactionRuntimeTests
             sourceDefinition,
             sourceZone.Id,
             PlayerSide.Corp,
-            faceUp: true,
-            rezzed: true);
+            faceUp: sourceRezzed,
+            rezzed: sourceRezzed,
+            advancementCounters: advancementCounters);
         CardInstanceState[] hq = hqIds
             .Select((id, index) => new CardInstanceState(
                 id,

@@ -11,6 +11,8 @@ namespace Netrunner.Core;
 public enum BehaviorValueKind
 {
     Strength,
+    Damage,
+    PrintedCost,
 }
 
 /// <summary>Typed operation used by a value calculation declaration.</summary>

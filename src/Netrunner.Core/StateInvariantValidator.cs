@@ -150,6 +150,7 @@ public static partial class StateInvariantValidator
         }
         ValidateTurnAndOutcome(state, runtimeCardCatalog, violations);
         ValidateRunState(state, behaviorCatalog, violations);
+        ValidatePersistentRuns(state, behaviorCatalog, violations);
         ValidateRulesState(state, behaviorCatalog, runtimeCardCatalog, violations);
         ValidateResolutionAndDecision(
             state,
@@ -2508,9 +2509,20 @@ public static partial class StateInvariantValidator
                 && IsExpectedRunGameplayOccurrenceFrame(state, occurrenceFrame, run);
             bool expectedIceInstall = state.ResolutionStack[runFrameIndex] is IceSubroutineFrame
                 && suffixRoot is InstallFrame;
+            bool expectedIceDamage = state.ResolutionStack[runFrameIndex] is IceSubroutineFrame
+            { Stage: IceSubroutineFrameStage.AwaitingDamage } damageParent
+                && suffixRoot is EffectResolutionFrame damageChild
+                && damageChild.Effects.Instructions.Count == 1
+                && damageChild.Effects.Instructions[0] is DamageEffect damage
+                && behaviorCatalog.TryGetIce(damageParent.IceDefinitionId, out IceBehaviorSpec? damageIce)
+                && damageParent.Ordinal < damageIce.Subroutines.Count
+                && damageIce.Subroutines[damageParent.Ordinal] is DamageSubroutineSpec printedDamage
+                && damage.Kind == printedDamage.Kind && damage.Amount == printedDamage.Amount
+                && state.Players.Any(player => player.Side == PlayerSide.Runner && player.Id == damage.Target);
             if (suffixRoot is not AbilityFrame
                 && !expectedGameplayOccurrence
-                && !expectedIceInstall)
+                && !expectedIceInstall
+                && !expectedIceDamage)
             {
                 Add(
                     violations,
@@ -2520,7 +2532,7 @@ public static partial class StateInvariantValidator
                 return;
             }
 
-            if (!expectedGameplayOccurrence && !expectedIceInstall)
+            if (!expectedGameplayOccurrence && !expectedIceInstall && !expectedIceDamage)
             {
                 for (int index = runFrameIndex + 2; index < state.ResolutionStack.Count; index++)
                 {
@@ -3901,6 +3913,29 @@ public static partial class StateInvariantValidator
                             "An ICE subroutine choice frame must remain top while its decision is pending.");
                     }
 
+                    if (iceFrame.Stage == IceSubroutineFrameStage.AwaitingDamage)
+                    {
+                        if (iceFrame.Choices.Count != 0
+                            || iceFrame.CatalogFingerprint != behaviorCatalog.Fingerprint
+                            || index + 1 >= state.ResolutionStack.Count
+                            || state.ResolutionStack[index + 1] is not EffectResolutionFrame)
+                        {
+                            Add(violations, "resolution.subroutine-damage-child-mismatch", path,
+                                "A damage continuation requires its authenticated effect child and no pending choices.");
+                        }
+                    }
+
+                    if (iceFrame.DamageTrashedCardId is { } damageVictim
+                        && (!cardsById.TryGetValue(damageVictim, out CardInstanceState? victimCard)
+                            || victimCard.OwnerSide != PlayerSide.Runner
+                            || !behaviorCatalog.TryGetIce(iceFrame.IceDefinitionId, out IceBehaviorSpec? victimIce)
+                            || iceFrame.Ordinal >= victimIce.Subroutines.Count
+                            || victimIce.Subroutines[iceFrame.Ordinal] is not DamageSubroutineSpec))
+                    {
+                        Add(violations, "resolution.subroutine-damage-victim-mismatch", path,
+                            "Only a damage subroutine may retain an existing Runner card as its actual damage victim.");
+                    }
+
                     if (iceFrame.Stage == IceSubroutineFrameStage.AwaitingInstall
                         && (index == state.ResolutionStack.Count - 1
                             || state.ResolutionStack[index + 1] is not InstallFrame installChild
@@ -4077,6 +4112,13 @@ public static partial class StateInvariantValidator
                                         behaviorFrame.Continuation,
                                         behaviorFrame.InstructionCursor,
                                         BehaviorInstructionKind.TrashSelf);
+                                catalogTriggerSelfTrashReached |= trigger is not null
+                                    && BehaviorInstructionPath.HasReached(
+                                        trigger.Instructions,
+                                        behaviorFrame.Continuation,
+                                        behaviorFrame.InstructionCursor,
+                                        instruction => instruction.Kind == BehaviorInstructionKind.DealDamage
+                                            && instruction.DamageAmountOperand?.TrashSourceAsCost == true);
                             }
 
                             bool catalogTriggerDetachedSource = behaviorFrame.TriggerKey is not null
@@ -4509,6 +4551,7 @@ public static partial class StateInvariantValidator
 
                     break;
                 case EffectCheckpointFrame checkpoint:
+                    ValidateInstalledCatalogTriggerSources(checkpoint, behaviorCatalog, path, violations);
                     RequirePlayer(playerIds, checkpoint.Controller, $"{path}.controller", violations);
                     int catalogBasicDrawReplacementCount = 0;
                     for (int interruptIndex = 0; interruptIndex < checkpoint.InterruptQueue.Count; interruptIndex++)
@@ -4548,7 +4591,8 @@ public static partial class StateInvariantValidator
                             || parentOccurrence.Controller != checkpointOccurrence.Controller
                             || parentOccurrence.SubjectCardId != checkpointOccurrence.SubjectCardId
                             || parentOccurrence.ServerId != checkpointOccurrence.ServerId
-                            || parentOccurrence.Successful != checkpointOccurrence.Successful))
+                            || parentOccurrence.Successful != checkpointOccurrence.Successful
+                            || !RunPersistentContext.Matches(parentOccurrence.RunContext, checkpointOccurrence.RunContext)))
                     {
                         Add(
                             violations,
@@ -6779,6 +6823,8 @@ public static partial class StateInvariantValidator
         {
             PlayerSide choiceSide = choice.Choice is IceSubroutineChoiceKind.PayCredits
                 or IceSubroutineChoiceKind.TakeTag
+                or IceSubroutineChoiceKind.JackOut
+                or IceSubroutineChoiceKind.ContinueRun
                 ? PlayerSide.Runner
                 : PlayerSide.Corp;
             PlayerId? choiceOwner = state.Players.FirstOrDefault(player => player?.Side == choiceSide)?.Id;
@@ -8252,6 +8298,33 @@ public static partial class StateInvariantValidator
                 "resolution.basic-draw-replacement-declaration-missing",
                 path,
                 "The materialized basic-draw replacement source definition must declare its replacement.");
+        }
+    }
+
+    private static void ValidateInstalledCatalogTriggerSources(
+        EffectCheckpointFrame frame,
+        IBehaviorCatalog? behaviorCatalog,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        if (behaviorCatalog is null)
+        {
+            return;
+        }
+        foreach (TriggerInvocation invocation in frame.TriggerQueue)
+        {
+            if (!invocation.IsCatalogTrigger || invocation.SourceDefinitionId is not { } sourceDefinition
+                || !behaviorCatalog.TryGet(sourceDefinition, out CardBehaviorDefinition? definition))
+            {
+                continue;
+            }
+            BehaviorTrigger? declaration = definition.Triggers.SingleOrDefault(trigger => trigger.Key == invocation.TriggerKey);
+            if (declaration?.RequireSourceInstalled == true
+                && invocation.SourceZoneKind is not (ZoneKind.ServerRoot or ZoneKind.ServerIce or ZoneKind.RunnerRig))
+            {
+                Add(violations, "resolution.trigger-source-not-installed", path,
+                    "An installed-only trigger must retain an installed source zone snapshot.");
+            }
         }
     }
 
@@ -10659,7 +10732,8 @@ public static partial class StateInvariantValidator
             {
                 expectedAdvances = GameEngine.MaterializeAdvanceCardParameters(
                     state,
-                    runtimeCardCatalog);
+                    runtimeCardCatalog,
+                    behaviorCatalog);
             }
             catch (Exception exception) when (exception is ResolutionFailureException or InvalidOperationException or KeyNotFoundException or ArgumentException or OverflowException)
             {
@@ -12305,6 +12379,7 @@ public static partial class StateInvariantValidator
                 BehaviorCardType.Icebreaker => runtimeSpec.CardClass == RuntimeCardClass.Program
                     && runtimeSpec.Subtypes.Contains("icebreaker", StringComparer.Ordinal),
                 BehaviorCardType.Program => runtimeSpec.CardClass == RuntimeCardClass.Program,
+                BehaviorCardType.ProgramOrHardware => runtimeSpec.CardClass is RuntimeCardClass.Program or RuntimeCardClass.Hardware,
                 BehaviorCardType.Identity => runtimeSpec.CardClass == RuntimeCardClass.Identity,
                 BehaviorCardType.Operation => runtimeSpec.CardClass == RuntimeCardClass.Operation,
                 BehaviorCardType.Resource => runtimeSpec.CardClass == RuntimeCardClass.Resource,
@@ -12320,6 +12395,8 @@ public static partial class StateInvariantValidator
 
         return filter.CardType switch
         {
+            BehaviorCardType.ProgramOrHardware => behaviorCatalog.TryGetCardType(card.DefinitionId, out BehaviorCardType installedClass)
+                && installedClass is BehaviorCardType.Program or BehaviorCardType.Icebreaker or BehaviorCardType.Hardware,
             BehaviorCardType.Ice => behaviorCatalog.TryGetIce(card.DefinitionId, out _),
             BehaviorCardType.Icebreaker => behaviorCatalog.TryGetIcebreaker(card.DefinitionId, out _),
             BehaviorCardType.Asset => behaviorCatalog.TryGetAsset(card.DefinitionId, out _),

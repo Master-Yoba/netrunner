@@ -10,6 +10,54 @@ namespace Netrunner.Core.Tests;
 public sealed class BehaviorRuntimeTests
 {
     [Fact]
+    public void InstalledProgramOrHardwareChoiceExcludesResourcesAndTrashesSelectedHardware()
+    {
+        CardDefinitionId operation = new("test:typed-installed-trash");
+        CardDefinitionId program = new("test:typed-program");
+        CardDefinitionId hardware = new("test:typed-hardware");
+        CardDefinitionId resource = new("test:typed-resource");
+        CardInstanceId sourceId = new("card:typed-trash-source");
+        CardInstanceId programId = new("card:typed-program");
+        CardInstanceId hardwareId = new("card:typed-hardware");
+        CardInstanceId resourceId = new("card:typed-resource");
+        BehaviorTarget target = new(BehaviorTargetKind.InstalledCard,
+            filter: new BehaviorCardFilter(BehaviorCardType.ProgramOrHardware, ownerSide: PlayerSide.Runner));
+        BehaviorCatalog catalog = new BehaviorCatalogBuilder("test:typed-installed-trash")
+            .Add(new CardBehaviorDefinition(program, PlayerSide.Runner))
+            .Add(new CardBehaviorDefinition(hardware, PlayerSide.Runner))
+            .Add(new CardBehaviorDefinition(resource, PlayerSide.Runner))
+            .AddCardType(program, BehaviorCardType.Program)
+            .AddCardType(hardware, BehaviorCardType.Hardware)
+            .AddCardType(resource, BehaviorCardType.Resource)
+            .Add(new CardBehaviorDefinition(operation, PlayerSide.Corp, instructions:
+            [
+                new BehaviorInstruction(BehaviorInstructionKind.Choose,
+                    choice: new BehaviorChoiceSpec("trash-target", BehaviorChooser.Corp,
+                        BehaviorChoiceMode.Mandatory, BehaviorChoiceCardinality.Exactly(1), target: target)),
+                new BehaviorInstruction(BehaviorInstructionKind.TrashCard, target: new BehaviorTarget(BehaviorTargetKind.ChosenCard)),
+            ])).Build();
+        GameState state = CreateState(catalog,
+            (sourceId, operation, ZoneKind.CorpHand, PlayerSide.Corp),
+            (programId, program, ZoneKind.RunnerRig, PlayerSide.Runner),
+            (hardwareId, hardware, ZoneKind.RunnerRig, PlayerSide.Runner),
+            (resourceId, resource, ZoneKind.RunnerRig, PlayerSide.Runner));
+        PlayerId corp = state.Players.Single(player => player.Side == PlayerSide.Corp).Id;
+        GameState prompt = GameEngine.BeginBehaviorForTesting(state, new BehaviorInvocationContext(sourceId, corp), catalog);
+        prompt = EngineJson.DeserializeState(EngineJson.Serialize(prompt), catalog);
+        PendingDecision decision = Assert.IsType<PendingDecision>(prompt.PendingDecision);
+        Assert.Equal(new[] { hardwareId, programId }, decision.LegalActions
+            .SelectMany(action => Assert.IsType<BehaviorChoiceParameters>(action.Parameters).CardIds)
+            .OrderBy(id => id.Value, StringComparer.Ordinal));
+        LegalAction trash = Assert.Single(decision.LegalActions,
+            action => Assert.IsType<BehaviorChoiceParameters>(action.Parameters).CardIds.Contains(hardwareId));
+        ApplyResult result = GameEngine.Apply(prompt,
+            new ActionSubmission(corp, decision.Id, decision.Revision, trash.Id), catalog);
+        Assert.True(result.Accepted, result.Rejection?.Message);
+        Assert.Contains(hardwareId, result.State.GetZone(ZoneKind.RunnerHeap).CardIds);
+        Assert.Contains(resourceId, result.State.GetZone(ZoneKind.RunnerRig).CardIds);
+    }
+
+    [Fact]
     public void ChoiceOptionPaysTypedCostsAndTrashesTheAuthenticatedPrivateCard()
     {
         CardDefinitionId definitionId = new("test:runtime-choice-cost");

@@ -1,6 +1,6 @@
 # M4 progress — System Gateway complete
 
-Status: Slice 4.5 merged into `dev`; correctness follow-up is Slice 4.6-ready on `corrective` (PR #10)
+Status: Slice 4.6 implementation and integration in progress on `4_6`; correctness prerequisites merged via PR #10
 
 Date started: 31 August 2026
 
@@ -4372,3 +4372,37 @@ errors; runtime action expansion and full verification remain pending.
   order, and JSON round-trip. The complete AI suite passes 53/53 and the full
   1,154-test repository gate, all deterministic proofs, Godot smokes,
   formatting, coverage/content checks, and secret scan remain green.
+
+
+## Slice 4.6 work log
+
+### 2026-09-05 — Architecture and implementation checkpoint
+
+- Started from clean `4_6` at `7b853df`, the merged correctness prerequisite.
+  Root owns architecture, persistence, integration, and review; bounded ICE and
+  generic damage tasks use Astra Low, and client presentation uses Luna Max.
+- ENG-426–432: damage goes through existing effect checkpoints; ICE stores the
+  exact damage victim so Diviner never infers it from later grip changes.
+  Karunā resumes only after damage and carries a typed printed jack-out event.
+  Flatline clears the live run as well as the resolution stack.
+- Clearinghouse computes its advancement amount before paying its self-trash
+  cost; the damage child persists the amount while live counters clear normally.
+  Urtica uses an explicit installed/unrezzed access trigger declaration.
+- Advanceability is explicit catalog data. Ping tests its actual run/server at
+  rez; Pharos uses the shared counter-threshold strength projection. Public Trail
+  uses the previous Runner turn, and Retribution filters program/hardware targets.
+- CR 9.12.5 persistence retains only abilities of a rezzed source trashed while
+  accessed. The original server/zone, trigger declaration, and this-run stolen
+  agendas survive through the run-end checkpoint; unrelated moved abilities do
+  not become active. Both agenda-before-trash and trash-before-agenda are tested.
+- UI-407 receives Core-calculated damage risk, source, conditional values, and
+  Diviner parity result. Match and Godot do not recompute these rules.
+- Rules baseline remains local CR 26.03 and card-data commit
+  `236140cf84491c23995b028bc791281837520b97`. Cross-checks use the
+  [jnet ICE](https://github.com/mtgred/netrunner/blob/master/src/clj/game/cards/ice.clj),
+  [assets](https://github.com/mtgred/netrunner/blob/master/src/clj/game/cards/assets.clj),
+  [operations](https://github.com/mtgred/netrunner/blob/master/src/clj/game/cards/operations.clj),
+  and persistent-ability semantics in the pinned CR 9.12.5.
+- Focused delegated and integration tests pass so far. Full schema migration,
+  SCN-402, generated coverage, client evidence, and `make verify` remain pending;
+  this checkpoint is not the slice exit gate.

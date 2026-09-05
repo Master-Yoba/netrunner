@@ -356,13 +356,18 @@ public sealed record TurnBoundaryEffect : EffectInstruction
 /// </summary>
 public sealed record GameplayOccurrenceEffect : EffectInstruction
 {
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public RunPersistentContext? RunContext { get; private set; }
+
     [JsonConstructor]
     public GameplayOccurrenceEffect(
         OccurrenceKind kind,
         PlayerId controller,
         CardInstanceId? subjectCardId = null,
         ServerId? serverId = null,
-        bool? successful = null)
+        bool? successful = null,
+        RunPersistentContext? runContext = null)
     {
         if (!Enum.IsDefined(kind)
             || kind is not (OccurrenceKind.CardInstalled
@@ -413,6 +418,9 @@ public sealed record GameplayOccurrenceEffect : EffectInstruction
         SubjectCardId = subjectCardId;
         ServerId = serverId;
         Successful = successful;
+        if (runContext is not null && kind != OccurrenceKind.RunEnded)
+            throw new ArgumentException("Run context belongs only to a run-end occurrence.", nameof(runContext));
+        RunContext = runContext?.Copy();
     }
 
     [JsonInclude]
@@ -519,7 +527,7 @@ public sealed record EffectBundle
             RemoveLingeringEffect value => new RemoveLingeringEffect(value.EffectId),
             MoveCardEffect value => new MoveCardEffect(value.CardId, value.DestinationZoneId),
             TurnBoundaryEffect value => new TurnBoundaryEffect(value.Kind, value.Target, value.TurnNumber),
-            GameplayOccurrenceEffect value => new GameplayOccurrenceEffect(value.Kind, value.Controller, value.SubjectCardId, value.ServerId, value.Successful),
+            GameplayOccurrenceEffect value => new GameplayOccurrenceEffect(value.Kind, value.Controller, value.SubjectCardId, value.ServerId, value.Successful, value.RunContext),
             BasicDrawEffect value => new BasicDrawEffect(value.Side, value.DrawCount, value.IsReplacement, value.OccurrenceId, value.IsFirstBasicDraw),
             _ => throw new ArgumentException($"Unknown effect instruction type '{instruction.GetType().Name}'.", nameof(instruction)),
         };

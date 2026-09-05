@@ -11,11 +11,11 @@ namespace Netrunner.AI;
 /// </summary>
 public static class FullGameContractAgentVersion
 {
-    public const int SchemaVersion = 4;
+    public const int SchemaVersion = 5;
 
-    public const string AgentVersion = "full-game-contract-agent-v4";
+    public const string AgentVersion = "full-game-contract-agent-v5";
 
-    public const string PolicyVersion = "full-game-contract-policy-v4";
+    public const string PolicyVersion = "full-game-contract-policy-v5";
 }
 
 /// <summary>
@@ -55,6 +55,7 @@ public sealed class FullGameContractPolicy
     [
         ActionKind.UseAbility,
         ActionKind.UseBioroidAbility,
+        ActionKind.RezCard,
         ActionKind.RezIce,
         ActionKind.BreakSubroutines,
         ActionKind.PumpBreaker,
@@ -135,7 +136,8 @@ public sealed class FullGameContractPolicy
             ActionKind.UseAbility,
             ActionKind.UseBioroidAbility,
             ActionKind.PassPriority,
-            ActionKind.RezIce,
+            ActionKind.RezCard,
+        ActionKind.RezIce,
             ActionKind.BreakSubroutines,
             ActionKind.PumpBreaker,
             ActionKind.JackOut,
@@ -183,7 +185,7 @@ public sealed class FullGameContractPolicy
 }
 
 /// <summary>
-/// Deterministic observation-only v4 agent for the Slice 4.5 shell.
+/// Deterministic observation-only v5 agent for the Slice 4.6 shell.
 ///
 /// It currently dispatches typed decision classes for turn timing, turn
 /// actions (bounded abilities/install/gain/draw), forced discard, generic
@@ -409,11 +411,13 @@ public sealed class FullGameContractAgent : IGameAgent
         IceSubroutineChoiceParameters choice,
         PlayerSide side) => choice.Choice switch
         {
-            IceSubroutineChoiceKind.PayCredits or IceSubroutineChoiceKind.TakeTag =>
+            IceSubroutineChoiceKind.PayCredits or IceSubroutineChoiceKind.TakeTag
+                or IceSubroutineChoiceKind.JackOut or IceSubroutineChoiceKind.ContinueRun =>
                 side == PlayerSide.Runner,
             IceSubroutineChoiceKind.TrashInstalledRunnerCard
                 or IceSubroutineChoiceKind.InstallCard
-                or IceSubroutineChoiceKind.Decline =>
+                or IceSubroutineChoiceKind.Decline
+                or IceSubroutineChoiceKind.EndRun =>
                 side == PlayerSide.Corp,
             _ => false,
         };
@@ -468,6 +472,9 @@ public sealed class FullGameContractAgent : IGameAgent
             IceSubroutineChoiceKind.PayCredits => 2,
             IceSubroutineChoiceKind.Decline => 3,
             IceSubroutineChoiceKind.TakeTag => 4,
+            IceSubroutineChoiceKind.JackOut => 0,
+            IceSubroutineChoiceKind.ContinueRun => 1,
+            IceSubroutineChoiceKind.EndRun => 1,
             _ => throw new InvalidOperationException(
                 "The full-game agent cannot order an unsupported ICE subroutine choice."),
         };
@@ -677,6 +684,7 @@ public sealed class FullGameContractAgent : IGameAgent
             FullGameActionClass.IceSubroutineChoice => action.Kind == ActionKind.ResolveIceSubroutine,
             FullGameActionClass.RunWindow => action.Kind is
                 ActionKind.PassPriority
+                or ActionKind.RezCard
                 or ActionKind.RezIce
                 or ActionKind.BreakSubroutines
                 or ActionKind.PumpBreaker
@@ -705,6 +713,8 @@ public sealed class FullGameContractAgent : IGameAgent
             (ActionKind.ChooseCard, CardChoiceParameters card) => HasStableId(card.CardId.Value),
             (ActionKind.ChooseBehavior, BehaviorChoiceParameters behavior) =>
                 HasValidBehaviorChoiceParameters(behavior),
+            (ActionKind.RezCard, RezCardParameters rez) => HasStableId(rez.CardId.Value) && rez.CreditCost >= 0
+                && (rez.CostQuote is null || rez.CostQuote.EffectiveCost == rez.CreditCost),
             (ActionKind.RezIce, RunIceParameters ice) => HasStableId(ice.IceId.Value),
             (ActionKind.BreakSubroutines, RunBreakParameters runBreak) =>
                 HasStableId(runBreak.BreakerId.Value)
@@ -1075,6 +1085,9 @@ public sealed class FullGameContractAgent : IGameAgent
                     && choice.HostedCredits <= choice.CreditCost;
 
             case IceSubroutineChoiceKind.Decline:
+            case IceSubroutineChoiceKind.EndRun:
+            case IceSubroutineChoiceKind.JackOut:
+            case IceSubroutineChoiceKind.ContinueRun:
             case IceSubroutineChoiceKind.TakeTag:
                 return choice.CardId is null
                     && !hasInstallDestination
@@ -1316,6 +1329,7 @@ public sealed class FullGameContractAgent : IGameAgent
         InstallCardParameters install => InstallKey(install),
         NumberChoiceParameters number =>
             $"number:{number.Value.ToString(CultureInfo.InvariantCulture)}",
+        RezCardParameters rez => $"rez:{rez.CardId.Value}:{rez.CreditCost.ToString(CultureInfo.InvariantCulture)}",
         RunIceParameters ice => $"ice:{ice.IceId.Value}",
         RunBreakerParameters breaker =>
             $"breaker:{breaker.BreakerId.Value}:hosted:{breaker.HostedCredits.ToString(CultureInfo.InvariantCulture)}",

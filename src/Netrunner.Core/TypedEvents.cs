@@ -49,6 +49,7 @@ public static class EngineEventKinds
     public const string ServerApproached = "server-approached";
     public const string IceRezzed = "ice-rezzed";
     public const string SubroutinesBroken = "subroutines-broken";
+    public const string IceSubroutineJackOut = "ice-subroutine-jack-out";
     public const string BioroidAbilityUsed = "bioroid-ability-used";
     public const string BreakerPumped = "breaker-pumped";
     public const string EncounterInitialized = "encounter-initialized";
@@ -122,6 +123,7 @@ public enum HostedCreditPoolOperation
 [JsonDerivedType(typeof(ServerApproachedEventPayload), "server-approached")]
 [JsonDerivedType(typeof(IceRezzedEventPayload), "ice-rezzed")]
 [JsonDerivedType(typeof(SubroutinesBrokenEventPayload), "subroutines-broken")]
+[JsonDerivedType(typeof(IceSubroutineJackOutEventPayload), "ice-subroutine-jack-out")]
 [JsonDerivedType(typeof(BioroidAbilityUsedEventPayload), "bioroid-ability-used")]
 [JsonDerivedType(typeof(BreakerPumpedEventPayload), "breaker-pumped")]
 [JsonDerivedType(typeof(EncounterInitializedEventPayload), "encounter-initialized")]
@@ -210,7 +212,11 @@ public sealed record DamageDealtEventPayload : EngineEventPayload
         int amount,
         int cardsTrashed,
         int coreDamageAfter,
-        bool flatlined)
+        bool flatlined,
+        CardInstanceId? sourceCardId = null,
+        bool? flatlineRisk = null,
+        int? trashedCardPrintedCost = null,
+        bool? conditionalEndRun = null)
         : base(version)
     {
         Target = target;
@@ -219,6 +225,10 @@ public sealed record DamageDealtEventPayload : EngineEventPayload
         CardsTrashed = cardsTrashed;
         CoreDamageAfter = coreDamageAfter;
         Flatlined = flatlined;
+        SourceCardId = sourceCardId;
+        FlatlineRisk = flatlineRisk;
+        TrashedCardPrintedCost = trashedCardPrintedCost;
+        ConditionalEndRun = conditionalEndRun;
     }
 
     public DamageDealtEventPayload(
@@ -227,10 +237,30 @@ public sealed record DamageDealtEventPayload : EngineEventPayload
         int amount,
         int cardsTrashed,
         int coreDamageAfter,
-        bool flatlined)
-        : this(1, target, kind, amount, cardsTrashed, coreDamageAfter, flatlined)
+        bool flatlined,
+        CardInstanceId? sourceCardId = null,
+        bool? flatlineRisk = null,
+        int? trashedCardPrintedCost = null,
+        bool? conditionalEndRun = null)
+        : this(1, target, kind, amount, cardsTrashed, coreDamageAfter, flatlined, sourceCardId, flatlineRisk, trashedCardPrintedCost, conditionalEndRun)
     {
     }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CardInstanceId? SourceCardId { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? FlatlineRisk { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? TrashedCardPrintedCost { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? ConditionalEndRun { get; private set; }
 
     [JsonInclude]
     [JsonRequired]
@@ -1775,6 +1805,50 @@ public sealed record SubroutinesBrokenEventPayload : EngineEventPayload
 /// broke the named subroutine. The exact target is public encounter state,
 /// so this diagnostic payload carries no hidden card information.
 /// </summary>
+public sealed record IceSubroutineJackOutEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public IceSubroutineJackOutEventPayload(
+        int version,
+        RunId runId,
+        EncounterId encounterId,
+        CardInstanceId iceId,
+        SubroutineId subroutineId)
+        : base(version)
+    {
+        RunId = runId;
+        EncounterId = encounterId;
+        IceId = iceId;
+        SubroutineId = subroutineId;
+    }
+
+    public IceSubroutineJackOutEventPayload(
+        RunId runId,
+        EncounterId encounterId,
+        CardInstanceId iceId,
+        SubroutineId subroutineId)
+        : this(1, runId, encounterId, iceId, subroutineId)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunId RunId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public EncounterId EncounterId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId IceId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public SubroutineId SubroutineId { get; private set; }
+
+}
+
 public sealed record BioroidAbilityUsedEventPayload : EngineEventPayload
 {
     [JsonConstructor]
@@ -2208,7 +2282,7 @@ public sealed record EngineEvent
     {
         CreditsAdjustedEventPayload value => new EngineEvent(Version, Sequence, Kind, new CreditsAdjustedEventPayload(value.Version, value.Target, value.Delta, value.CreditsAfter)),
         ClicksAdjustedEventPayload value => new EngineEvent(Version, Sequence, Kind, new ClicksAdjustedEventPayload(value.Version, value.Target, value.Delta, value.ClicksAfter)),
-        DamageDealtEventPayload value => new EngineEvent(Version, Sequence, Kind, new DamageDealtEventPayload(value.Version, value.Target, value.Kind, value.Amount, value.CardsTrashed, value.CoreDamageAfter, value.Flatlined)),
+        DamageDealtEventPayload value => new EngineEvent(Version, Sequence, Kind, new DamageDealtEventPayload(value.Version, value.Target, value.Kind, value.Amount, value.CardsTrashed, value.CoreDamageAfter, value.Flatlined, value.SourceCardId, value.FlatlineRisk, value.TrashedCardPrintedCost, value.ConditionalEndRun)),
         TagsAdjustedEventPayload value => new EngineEvent(Version, Sequence, Kind, new TagsAdjustedEventPayload(value.Version, value.Target, value.Delta, value.TagsAfter)),
         MemoryAdjustedEventPayload value => new EngineEvent(Version, Sequence, Kind, new MemoryAdjustedEventPayload(value.Version, value.Target, value.BaseMemory, value.UsedMemory)),
         ProgramTrashedForMemoryEventPayload value => new EngineEvent(Version, Sequence, Kind, new ProgramTrashedForMemoryEventPayload(value.Version, value.CardId, value.Owner, value.MemoryCost)),
@@ -2250,6 +2324,7 @@ public sealed record EngineEvent
         ServerApproachedEventPayload value => new EngineEvent(Version, Sequence, Kind, new ServerApproachedEventPayload(value.Version, value.RunId, value.ServerId)),
         IceRezzedEventPayload value => new EngineEvent(Version, Sequence, Kind, new IceRezzedEventPayload(value.Version, value.RunId, value.IceId)),
         SubroutinesBrokenEventPayload value => new EngineEvent(Version, Sequence, Kind, new SubroutinesBrokenEventPayload(value.Version, value.RunId, value.EncounterId, value.BreakerId, value.BrokenCount)),
+        IceSubroutineJackOutEventPayload value => new EngineEvent(Version, Sequence, Kind, new IceSubroutineJackOutEventPayload(value.Version, value.RunId, value.EncounterId, value.IceId, value.SubroutineId)),
         BioroidAbilityUsedEventPayload value => new EngineEvent(Version, Sequence, Kind, new BioroidAbilityUsedEventPayload(value.Version, value.RunId, value.EncounterId, value.IceId, value.SubroutineId, value.AbilityKey, value.ClickCost)),
         BreakerPumpedEventPayload value => new EngineEvent(Version, Sequence, Kind, new BreakerPumpedEventPayload(value.Version, value.RunId, value.BreakerId)),
         EncounterInitializedEventPayload value => new EngineEvent(Version, Sequence, Kind, new EncounterInitializedEventPayload(value.Version, value.RunId, value.EncounterId, value.IceId, value.SubroutineCount)),
@@ -2764,6 +2839,13 @@ public static class EngineEventValidator
                 RequireId(value.EncounterId.Value, $"{path}.payload.encounterId", "encounter", violations);
                 RequireId(value.BreakerId.Value, $"{path}.payload.breakerId", "card", violations);
                 RequireNumber(value.BrokenCount, $"{path}.payload.brokenCount", "Broken subroutine count", violations, strictlyPositive: true);
+                break;
+            case IceSubroutineJackOutEventPayload value:
+                RequireKind(@event, EngineEventKinds.IceSubroutineJackOut, path, violations);
+                RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
+                RequireId(value.EncounterId.Value, $"{path}.payload.encounterId", "encounter", violations);
+                RequireId(value.IceId.Value, $"{path}.payload.iceId", "card", violations);
+                RequireId(value.SubroutineId.Value, $"{path}.payload.subroutineId", "subroutine", violations);
                 break;
             case BioroidAbilityUsedEventPayload value:
                 RequireKind(@event, EngineEventKinds.BioroidAbilityUsed, path, violations);
