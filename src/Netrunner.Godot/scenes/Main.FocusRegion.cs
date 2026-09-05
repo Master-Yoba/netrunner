@@ -95,7 +95,7 @@ public partial class Main
 		MatchViewModel view = snapshot.View;
 		if (view.PendingDamage.Count > 0)
 		{
-			_focusPresentation.AddChild(MakeLabel("SLICE 4.6 DAMAGE", 14, Warning));
+			_focusPresentation.AddChild(MakeLabel("DAMAGE STATUS", 14, Warning));
 			foreach (DamagePresentationViewModel damage in view.PendingDamage)
 			{
 				_focusPresentation.AddChild(MakeWrappedLabel(damage.Summary, 11, damage.IsFlatlineRisk ? Warning : Colors.White));
@@ -250,7 +250,7 @@ public partial class Main
 		}
 
 		_focusPresentation.AddChild(MakeLabel(
-			$"SLICE 4.5 {decision.Surface.ToString().ToUpperInvariant()} DECISION · "
+			$"CHOICE {decision.Surface.ToString().ToUpperInvariant()} · "
 			+ $"ACTING PLAYER {decision.ActingPlayer!.Value.ToString().ToUpperInvariant()}",
 			14,
 			Accent));
@@ -317,7 +317,7 @@ public partial class Main
 		}
 
 		_focusPresentation.AddChild(MakeLabel(
-			$"SLICE 4.7 DECISION · ACTING PLAYER {decision.ActingPlayer!.Value.ToString().ToUpperInvariant()}",
+			$"CHOICE DETAILS · ACTING PLAYER {decision.ActingPlayer!.Value.ToString().ToUpperInvariant()}",
 			14,
 			Accent));
 		if (decision.Prompt is { } prompt && !string.IsNullOrWhiteSpace(prompt))

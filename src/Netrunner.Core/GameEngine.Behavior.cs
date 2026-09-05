@@ -4212,12 +4212,6 @@ public static partial class GameEngine
         // cost. Keep the card's counters available until the complete payment
         // loop has run; the caller clears them at that boundary.
         TrashCard(working, card, source, destination, cleanupCounters: false);
-        if (card.OwnerSide == PlayerSide.Runner
-            && source.Kind == ZoneKind.RunnerRig
-            && working.RulesState?.Programs.Any(program => program.CardId == card.Id) == true)
-        {
-            RemoveProgramRegistration(working, card.Id);
-        }
     }
 
     private static void MoveBehaviorCardToRemovedFromGame(WorkingState working, CardInstanceState card)
@@ -4237,12 +4231,6 @@ public static partial class GameEngine
         // cost. Keep the card's counters available until the complete payment
         // loop has run; the caller clears them at that boundary.
         MoveCard(working, card, source, destination, cleanupCounters: false);
-        if (card.OwnerSide == PlayerSide.Runner
-            && source.Kind == ZoneKind.RunnerRig
-            && working.RulesState?.Programs.Any(program => program.CardId == card.Id) == true)
-        {
-            RemoveProgramRegistration(working, card.Id);
-        }
     }
 
     private static ZoneState ZoneForCard(WorkingState working, CardInstanceId cardId) =>

@@ -13,7 +13,8 @@ public static partial class GameEngine
         ZoneState source,
         ZoneState destination,
         bool emit = true,
-        bool cleanupCounters = true)
+        bool cleanupCounters = true,
+        bool emitMemoryAdjustment = true)
     {
         if (card.ZoneId != source.Id || !source.CardIds.Contains(card.Id))
         {
@@ -85,6 +86,15 @@ public static partial class GameEngine
                 movement);
         }
 
+        // Installed program memory follows the physical card across every
+        // uninstall path, including ICE subroutines and generic transfers.
+        if (source.Kind == ZoneKind.RunnerRig
+            && destination.Kind != ZoneKind.RunnerRig
+            && working.RulesState?.Programs.Any(program => program.CardId == card.Id) == true)
+        {
+            RemoveProgramRegistration(working, card.Id, emitMemoryAdjustment);
+        }
+
         RefreshRemoteLifecycle(working, source.ServerId);
         RefreshRemoteLifecycle(working, destination.ServerId);
     }
@@ -101,7 +111,8 @@ public static partial class GameEngine
         ZoneState source,
         ZoneState destination,
         bool emit = true,
-        bool cleanupCounters = true)
+        bool cleanupCounters = true,
+        bool emitMemoryAdjustment = true)
     {
         ZoneKind expectedKind = card.OwnerSide == PlayerSide.Corp
             ? ZoneKind.CorpDiscard
@@ -114,7 +125,7 @@ public static partial class GameEngine
                 $"Card '{card.Id}' must be trashed to its owner's {expectedKind} zone.");
         }
 
-        MoveCard(working, card, source, destination, emit, cleanupCounters);
+        MoveCard(working, card, source, destination, emit, cleanupCounters, emitMemoryAdjustment);
         RecordTurnTrash(working, card.Id);
     }
 

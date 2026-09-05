@@ -61,6 +61,8 @@ public partial class TextCardControl : PanelContainer
 	public override void _Ready()
 	{
 		MouseFilter = MouseFilterEnum.Stop;
+		FocusMode = FocusModeEnum.All;
+		TooltipText = "Inspect card details; press Enter or Space to select.";
 		CustomMinimumSize = new Vector2(116, 92);
 
 		var content = new VBoxContainer
@@ -90,6 +92,8 @@ public partial class TextCardControl : PanelContainer
 
 		MouseEntered += HandleMouseEntered;
 		MouseExited += HandleMouseExited;
+		FocusEntered += HandleFocusChanged;
+		FocusExited += HandleFocusChanged;
 		// Card data may be assigned before the control enters the scene tree;
 		// redraw the retained value now that the labels exist.
 		SetCard(_card);
@@ -191,12 +195,21 @@ public partial class TextCardControl : PanelContainer
 
 	public override void _GuiInput(InputEvent @event)
 	{
-		if (@event is InputEventMouseButton mouse
+		bool activate = @event is InputEventMouseButton mouse
 			&& mouse.Pressed
-			&& mouse.ButtonIndex == MouseButton.Left
-			&& _card is not null)
+			&& mouse.ButtonIndex == MouseButton.Left;
+		if (@event is InputEventKey key
+			&& key.Pressed
+			&& !key.Echo
+			&& key.Keycode is Key.Enter or Key.KpEnter or Key.Space)
+		{
+			activate = true;
+		}
+
+		if (activate && _card is not null)
 		{
 			_selected = !_selected;
+			UpdateStatusCue();
 			UpdateBorder();
 			EmitSignal(SignalName.CardClicked, _card.Id);
 			EmitSignal(SignalName.CardInspected, _card.Id);
@@ -213,6 +226,11 @@ public partial class TextCardControl : PanelContainer
 	private void HandleMouseExited()
 	{
 		_hovered = false;
+		UpdateBorder();
+	}
+
+	private void HandleFocusChanged()
+	{
 		UpdateBorder();
 	}
 
@@ -238,7 +256,7 @@ public partial class TextCardControl : PanelContainer
 				? SelectedBorder
 				: _targetCandidate
 					? new Color(0.35f, 0.72f, 0.98f)
-					: _hovered ? HoverBorder : NormalBorder,
+					: _hovered || HasFocus() ? HoverBorder : NormalBorder,
 			ContentMarginLeft = 8,
 			ContentMarginTop = 7,
 			ContentMarginRight = 8,

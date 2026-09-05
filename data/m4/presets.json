@@ -4,8 +4,8 @@
   "metadataSourceUrl": "https://github.com/Null-Signal-Games/netrunner-cards-json",
   "publishedSourceUrl": "https://nullsignal.games/products/system-gateway/",
   "rulesSourceUrl": "https://rules.nullsignal.games/",
-  "retrievedDate": "2026-09-01",
-  "provenanceNote": "Official System Gateway – Remastered Edition starter lists and 10-card advanced booster lists; codes are resolved against the authenticated metadata snapshot.",
+  "retrievedDate": "2026-09-05",
+  "provenanceNote": "Revalidated 2026-09-05 against the published System Gateway – Remastered Edition starter and 10-card advanced booster lists; every code/quantity entry is pinned by data/m4/preset-revalidation.json and resolved against the authenticated metadata snapshot.",
   "presets": [
     {
       "presetId": "system-gateway-basic-runner",

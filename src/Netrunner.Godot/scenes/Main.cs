@@ -15,6 +15,8 @@ namespace Netrunner.GodotClient;
 /// </summary>
 public partial class Main : Control
 {
+	private static bool _m4FullSmokeReloadPending;
+
 	private static readonly Color Background = new(0.025f, 0.04f, 0.055f);
 	private static readonly Color PanelBackground = new(0.055f, 0.08f, 0.105f);
 	private static readonly Color PanelBorder = new(0.17f, 0.28f, 0.34f);
@@ -30,6 +32,8 @@ public partial class Main : Control
 	private readonly IRuntimeCardCatalog? _runtimeCardCatalog = CreateRuntimeCardCatalog();
 	private readonly EventFeedRegionPresenter _eventFeedRegion = new();
 	private readonly ConcurrentQueue<MatchSnapshot> _pendingSnapshots = new();
+	private readonly ConcurrentQueue<PlayerSide> _fullMatchSetupOrder = new();
+	private readonly object _fullMatchSetupGate = new();
 	private readonly Dictionary<string, List<TextCardControl>> _cardControls = new(StringComparer.Ordinal);
 	private readonly Dictionary<string, CardViewModel> _cardModels = new(StringComparer.Ordinal);
 	private MatchCoordinator? _coordinator;
@@ -58,6 +62,7 @@ public partial class Main : Control
 	private Label _runnerIdentityDetails = null!;
 	private OptionButton _corpPreset = null!;
 	private OptionButton _runnerPreset = null!;
+	private LineEdit _seedInput = null!;
 	private readonly Dictionary<int, string> _corpPresetIds = new();
 	private readonly Dictionary<int, string> _runnerPresetIds = new();
 	private VBoxContainer _servers = null!;
@@ -87,7 +92,13 @@ public partial class Main : Control
 	private bool _slice45UiSmoke;
 	private bool _slice46UiSmoke;
 	private bool _slice47UiSmoke;
+	private bool _slice48UxSmoke;
 	private bool _fullMatchSmoke;
+	private bool _m4FullMatchSmoke;
+	private PlayerSide _fullMatchSmokeSide = PlayerSide.Runner;
+	private string _fullMatchSmokePreset = "basic";
+	private ulong _fullMatchSmokeSeed = 47042;
+	private PlayerSide? _lastFullMatchSetupOwner;
 	private bool _gallerySmokePassed;
 	private bool _animationRunning;
 	private bool _skipAnimation;
@@ -148,24 +159,58 @@ public partial class Main : Control
 	public override void _Ready()
 	{
 		IReadOnlyList<string> arguments = OS.GetCmdlineUserArgs();
+		bool fullSmokeReload = _m4FullSmokeReloadPending;
+		_m4FullSmokeReloadPending = false;
 		_gallerySmoke = arguments.Contains("--m4-card-gallery-smoke", StringComparer.Ordinal);
 		_slice43UiSmoke = arguments.Contains("--m4-slice43-ui-smoke", StringComparer.Ordinal);
 		_slice44UiSmoke = arguments.Contains("--m4-slice44-ui-smoke", StringComparer.Ordinal);
 		_slice45UiSmoke = arguments.Contains("--m4-slice45-ui-smoke", StringComparer.Ordinal);
 		_slice46UiSmoke = arguments.Contains("--m4-slice46-ui-smoke", StringComparer.Ordinal);
 		_slice47UiSmoke = arguments.Contains("--m4-slice47-ui-smoke", StringComparer.Ordinal);
+		_slice48UxSmoke = arguments.Contains("--m4-slice48-ux-smoke", StringComparer.Ordinal);
 		_fullMatchSmoke = arguments.Contains("--full-match-smoke-corp", StringComparer.Ordinal)
 			|| arguments.Contains("--full-match-smoke-runner", StringComparer.Ordinal);
+		_m4FullMatchSmoke = arguments.Contains("--m4-full-smoke-corp", StringComparer.Ordinal)
+			|| arguments.Contains("--m4-full-smoke-runner", StringComparer.Ordinal);
+		if (_fullMatchSmoke || _m4FullMatchSmoke)
+		{
+			_fullMatchSmokeSide = arguments.Contains("--m4-full-smoke-corp", StringComparer.Ordinal)
+				|| arguments.Contains("--full-match-smoke-corp", StringComparer.Ordinal)
+				? PlayerSide.Corp
+				: PlayerSide.Runner;
+			if (_m4FullMatchSmoke
+				&& !TryReadFullMatchSmokeOptions(arguments, out _fullMatchSmokePreset, out _fullMatchSmokeSeed, out string? smokeError))
+			{
+				GD.PrintErr($"M4_FULL_SMOKE FAIL {smokeError}");
+				GetTree().Quit(1);
+				return;
+			}
+		}
 		_smokeTest = arguments.Contains("--smoke-test", StringComparer.Ordinal)
 			|| arguments.Contains("--m3-responsiveness-smoke", StringComparer.Ordinal);
 		_responsivenessSmoke = arguments.Contains("--m3-responsiveness-smoke", StringComparer.Ordinal);
 		BuildShell();
-		if (_fullMatchSmoke)
+		if (_fullMatchSmoke || _m4FullMatchSmoke)
 		{
-			PlayerSide side = arguments.Contains("--full-match-smoke-corp", StringComparer.Ordinal) ? PlayerSide.Corp : PlayerSide.Runner;
-			_humanSide.Select(side == PlayerSide.Runner ? 0 : 1);
-			BeginMatch();
-			_ = RunFullMatchSmokeAsync(side);
+			_seedInput.Text = _fullMatchSmokeSeed.ToString(CultureInfo.InvariantCulture);
+			_humanSide.Select(_fullMatchSmokeSide == PlayerSide.Runner ? 0 : 1);
+			if (!ConfigureFullMatchSmokePresets())
+			{
+				return;
+			}
+			if (_m4FullMatchSmoke && fullSmokeReload)
+			{
+				_ = RunFullMatchReloadSmokeAsync();
+			}
+			else
+			{
+				BeginMatch();
+				_ = RunFullMatchSmokeAsync(_fullMatchSmokeSide);
+			}
+		}
+		else if (_slice48UxSmoke)
+		{
+			_ = RunSlice48UxSmokeAsync();
 		}
 		else if (_slice47UiSmoke)
 		{
@@ -215,6 +260,7 @@ public partial class Main : Control
 		}
 
 		_coordinator.SnapshotPublished -= QueueSnapshot;
+		_coordinator.SnapshotPublished -= CaptureFullMatchSetupSnapshot;
 		_coordinator.Dispose();
 	}
 
@@ -249,6 +295,11 @@ public partial class Main : Control
 		BuildBoard();
 		BuildFooter();
 		BuildCardZoomOverlay();
+		// Keep the initial setup surface keyboard navigable before any match
+		// publication exists. Dynamic action controls refresh this same order
+		// after each snapshot.
+		ApplyAccessibilityFocusOrder(_startPanel);
+		ApplyAccessibilityFocusOrder(_board);
 	}
 
 	public override void _UnhandledInput(InputEvent @event)
@@ -283,7 +334,7 @@ public partial class Main : Control
 		title.AddThemeColorOverride("font_color", Accent);
 		header.AddChild(title);
 
-		_status = MakeLabel("M3 playable shell · waiting for setup", 15, Muted);
+		_status = MakeLabel("Match setup · waiting for a preset", 15, Muted);
 		_status.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		_status.VerticalAlignment = VerticalAlignment.Center;
 		header.AddChild(_status);
@@ -304,24 +355,35 @@ public partial class Main : Control
 		_layout.AddChild(panel);
 
 		_startPanel.AddChild(MakeLabel("MATCH SETUP · SETUP TO OUTCOME", 18, Accent));
-		_startPanel.AddChild(MakeLabel(
-			"Choose a side and an official basic or expanded preset. Shuffle, mulligan, full turns, identity behavior, and outcomes are owned by Core.\n"
-			+ "The deterministic developer fixture remains available when official content is not provisioned.",
+		_startPanel.AddChild(MakeWrappedLabel(
+			"Choose your side and decks to play against the contract agent. Basic decks introduce the game; expanded decks add the booster cards.",
 			14,
 			Muted));
 		BuildOfficialPresetSelectors();
+		bool officialContentAvailable = HasAuthenticatedOfficialContent();
 		_startButton = new Button
 		{
-			Text = _officialPresetCatalog is not null && _embeddedCardData is not null
+			Text = officialContentAvailable
 				? "Start selected official match"
-				: "Start developer match",
+				: "Official match unavailable",
 			CustomMinimumSize = new Vector2(240, 42),
+			Disabled = !officialContentAvailable,
 		};
 		_startButton.AddThemeFontSizeOverride("font_size", 16);
 		_humanSide = new OptionButton();
 		_humanSide.AddItem("Play Runner", (int)PlayerSide.Runner);
 		_humanSide.AddItem("Play Corp", (int)PlayerSide.Corp);
 		_startPanel.AddChild(_humanSide);
+		_startPanel.AddChild(MakeLabel("Game seed", 11, Muted));
+		_seedInput = new LineEdit
+		{
+			Text = "42",
+			PlaceholderText = "42",
+			CustomMinimumSize = new Vector2(240, 34),
+			TooltipText = "Use the same seed and choices to reproduce a game.",
+		};
+		_seedInput.AddThemeFontSizeOverride("font_size", 14);
+		_startPanel.AddChild(_seedInput);
 		_startButton.Pressed += BeginMatch;
 		_startPanel.AddChild(_startButton);
 
@@ -363,14 +425,15 @@ public partial class Main : Control
 		PlayerSide side,
 		Dictionary<int, string> ids)
 	{
-		if (_officialPresetCatalog is null || _embeddedCardData is null)
+		if (!HasAuthenticatedOfficialContent())
 		{
-			button.AddItem("Official presets unavailable · developer fixture only");
+			button.AddItem("Official presets unavailable · authenticated content required");
 			button.Disabled = true;
+			button.TooltipText = "Provision the authenticated 77-card System Gateway snapshot before starting an official match.";
 			return;
 		}
 
-		IReadOnlyList<OfficialPreset> presets = _officialPresetCatalog.For(side);
+		IReadOnlyList<OfficialPreset> presets = _officialPresetCatalog!.For(side);
 		int firstPlayable = -1;
 		for (int index = 0; index < presets.Count; index++)
 		{
@@ -429,7 +492,7 @@ public partial class Main : Control
 	private void BuildFooter()
 	{
 		Label footer = MakeLabel(
-			"Developer match · engine-issued actions · deterministic replay · 1280×720 → 2560×1440 stretch",
+			"Engine-issued actions · deterministic setup · 1280×720 ↔ 2560×1440",
 			11,
 			new Color(0.42f, 0.5f, 0.56f));
 		_layout.AddChild(footer);
@@ -969,10 +1032,10 @@ public partial class Main : Control
 		_status.Text = view.CorpIdentity is null && snapshot.RunOutcome is { } completedRun && snapshot.View.Run is null
 			? $"Representative slice complete · {completedRun.Summary}"
 			: snapshot.IsOpponentThinking
-			? "Opponent policy is thinking asynchronously · inspect cards and menus remain responsive"
+			? "Opponent is thinking · card inspection remains available"
 			: view.Outcome.IsTerminal
 				? $"Match complete · {view.Outcome.Winner} · {view.Outcome.Reason}"
-			: $"Core state published · human {snapshot.View.Viewer} input is available";
+			: $"Your turn · {snapshot.View.Viewer} can choose an issued action";
 		_phase.Text = turnRegion.IsAvailable
 			? $"{turnRegion.Turn.PhaseLabel} · {turnRegion.Turn.TimingLabel}"
 			: view.CorpIdentity is null && snapshot.RunOutcome is not null && view.Run is null ? "SLICE COMPLETE"

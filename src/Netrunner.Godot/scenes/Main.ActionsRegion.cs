@@ -18,6 +18,7 @@ public partial class Main
 		if (region.Status == ActionsRegionStatus.OpponentThinking)
 		{
 			_actions.AddChild(MakeLabel("Opponent thinking…", 13, Warning));
+			ApplyAccessibilityFocusOrder(_board);
 			return;
 		}
 
@@ -27,6 +28,7 @@ public partial class Main
 				region.Diagnostic ?? "No controls rendered for the unsupported issued decision.",
 				12,
 				Warning));
+			ApplyAccessibilityFocusOrder(_board);
 			return;
 		}
 
@@ -39,6 +41,7 @@ public partial class Main
 					: "Waiting for the next issued decision.",
 				12,
 				Muted));
+			ApplyAccessibilityFocusOrder(_board);
 			return;
 		}
 
@@ -47,6 +50,7 @@ public partial class Main
 			// The presenter only emits AwaitingRunnerDecision with a decision;
 			// keep the renderer fail-closed if a future projection changes.
 			_actions.AddChild(MakeLabel("Waiting for the next issued decision.", 12, Muted));
+			ApplyAccessibilityFocusOrder(_board);
 			return;
 		}
 
@@ -65,6 +69,7 @@ public partial class Main
 				"No supported action controls are currently issued for this decision.",
 				12,
 				Muted));
+			ApplyAccessibilityFocusOrder(_board);
 			return;
 		}
 
@@ -73,7 +78,7 @@ public partial class Main
 		if (slice45.IsProminent)
 		{
 			_actions.AddChild(MakeLabel(
-				$"SLICE 4.5 OPTIONS · {slice45.Surface.ToString().ToUpperInvariant()} · "
+				$"CHOICE OPTIONS · {slice45.Surface.ToString().ToUpperInvariant()} · "
 				+ $"ACTING PLAYER {slice45.ActingPlayer!.Value.ToString().ToUpperInvariant()}",
 				11,
 				Warning));
@@ -85,7 +90,7 @@ public partial class Main
 		if (slice46.HasUnlessChoice)
 		{
 			_actions.AddChild(MakeLabel(
-				"SLICE 4.6 OPTIONS · UNLESS PAYMENT / FALLBACK",
+				"PAYMENT OPTIONS · UNLESS PAYMENT / FALLBACK",
 				11,
 				Warning));
 		}
@@ -157,6 +162,7 @@ public partial class Main
 				_actions.AddChild(button);
 			}
 		}
+		ApplyAccessibilityFocusOrder(_board);
 	}
 
 	private static Slice45ActionPresentationViewModel? FindSlice45Option(

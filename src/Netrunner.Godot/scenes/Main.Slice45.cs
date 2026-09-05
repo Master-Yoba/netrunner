@@ -94,7 +94,7 @@ public partial class Main
 			RenderActions(runnerSnapshot);
 			await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 
-			prominentOptions = SceneTreeContainsText(_actions, "SLICE 4.5 OPTIONS");
+			prominentOptions = SceneTreeContainsText(_actions, "CHOICE OPTIONS");
 			actingPlayer = SceneTreeContainsText(_actions, "ACTING PLAYER RUNNER")
 				&& SceneTreeContainsText(_focusPresentation, "ACTING PLAYER RUNNER");
 			issuedOrder = SceneTreeContainsText(_actions, "OPTION 1")

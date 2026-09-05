@@ -415,24 +415,24 @@ completed batch with any required field empty fails CARD-401.
 
 ## 7. M4 gate checklist
 
-- [ ] Coverage report: 77/77 bound, tested, checklist complete; no drift.
-- [ ] CARD-401 validator green in CI and `verify.sh`.
-- [ ] Full headless regression green: all suites, M1 win-path proofs, M2 proof
+- [x] Coverage report: 77/77 bound, tested, checklist complete; no drift.
+- [x] CARD-401 validator green in CI and `verify.sh`.
+- [x] Full headless regression green: all suites, M1 win-path proofs, M2 proof
       (final pins), M3 smoke, card-data validation.
-- [ ] DATA-400: authenticated gitignored metadata is transformed into the
+- [x] DATA-400: authenticated gitignored metadata is transformed into the
       content-enabled client build; missing/corrupt inputs have tested diagnostics.
-- [ ] M4_FULL_SMOKE: human vs contract agent finishes a teaching-preset game
+- [x] M4_FULL_SMOKE: human vs contract agent finishes a teaching-preset game
       through the client, with the agent on each side in separate runs.
-- [ ] MATCH-401: setup/mulligan headless tests (Corp then Runner, zero or one
+- [x] MATCH-401: setup/mulligan headless tests (Corp then Runner, zero or one
       mulligan each, mandatory keep of the second hand, deck validation rejects
       each invalid class, 5-credit/5-card start, Corp first turn).
-- [ ] RULE-401: all three win paths reachable in real games and tested.
-- [ ] DATA-401: official basic 30-Runner/34-Corp and expanded 40-Runner/44-Corp
+- [x] RULE-401: all three win paths reachable in real games and tested.
+- [x] DATA-401: official basic 30-Runner/34-Corp and expanded 40-Runner/44-Corp
       teaching presets have recorded provenance and load, validate, and play.
-- [ ] UI-408: setup screen, identity panel, outcome screen, all choice
+- [x] UI-408: setup screen, identity panel, outcome screen, all choice
       windows click-first; accessibility re-check at 1280×720 and 2560×1440
       with full-game content.
-- [ ] `docs/M4_PROGRESS.md` complete with evidence and any deviations.
+- [x] `docs/M4_PROGRESS.md` complete with evidence and any deviations.
 
 ## 8. UI/UX work index
 

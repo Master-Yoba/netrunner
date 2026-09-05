@@ -25,7 +25,7 @@ public static class FullMatchRunner
         while (state.Outcome.Kind == GameOutcomeKind.Ongoing && actions.Count < actionCap)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            PendingDecision pending = state.PendingDecision ?? throw new InvalidOperationException("Full match stalled without a decision.");
+            PendingDecision pending = state.PendingDecision ?? throw Stall("Full match stalled without a decision.");
             PlayerSide side = state.GetPlayer(pending.Owner).Side;
             Observation observation = ObservationBuilder.Build(state, side, definition.Behavior);
             ActionId action = await (side == PlayerSide.Corp ? corpAgent : runnerAgent).ChooseActionAsync(observation, cancellationToken).ConfigureAwait(false);
@@ -42,7 +42,7 @@ public static class FullMatchRunner
         }
         if (state.Outcome.Kind != GameOutcomeKind.Won)
         {
-            throw new InvalidOperationException($"Full match exceeded the {actionCap}-action cap.");
+            throw Stall($"Full match exceeded the {actionCap}-action cap.");
         }
         string finalHash = DeterministicHash.ForState(state);
         ReplayArtifact replay = new(initial, state.InitialSeed, actions, expectedFinalStateHash: finalHash);
@@ -53,6 +53,11 @@ public static class FullMatchRunner
             throw new InvalidOperationException($"Full match replay failed: {verified.Message}");
         }
         return new FullMatchResult(state.Outcome, actions.Count, finalHash, replay);
+
+        FullMatchStallException Stall(string reason) => new(reason, actionCap,
+            state.CreateSnapshot(definition.Behavior, definition.Runtime),
+            new ReplayArtifact(initial, state.InitialSeed, actions.ToArray(),
+                expectedFinalStateHash: DeterministicHash.ForState(state)));
     }
 
     public static async Task<FullMatchResult> RunSimulationAsync(SimulationFixtureDocument fixture, CardDataSet data,

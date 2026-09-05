@@ -75,6 +75,45 @@ public sealed partial class IceSubroutineRuntimeTests
     }
 
     [Fact]
+    public void TrashChoiceUnregistersProgramMemoryAndRoundTripsTheUpdatedState()
+    {
+        BehaviorCatalog behavior = Catalog(TrashIce, new TrashInstalledRunnerCardSubroutineSpec());
+        RuntimeCardCatalog runtime = RuntimeCatalog(
+            new CardRuntimeSpec(TrashIce, PlayerSide.Corp, RuntimeCardClass.Ice, rezCost: 0),
+            new CardRuntimeSpec(RunnerProgram, PlayerSide.Runner, RuntimeCardClass.Program, installCost: 0, memoryUnits: 1));
+        GameState initial = BuildState(
+            behavior,
+            runtime,
+            TrashIce,
+            includeRulesState: true,
+            placements: [(RunnerProgram, PlayerSide.Runner, ZoneKind.RunnerRig)]);
+        CardInstanceId programId = FindCard(initial, RunnerProgram).Id;
+        GameState registered = WithRegisteredProgram(initial, programId, memoryCost: 1);
+        Assert.Empty(StateInvariantValidator.Collect(registered, behavior, runtime));
+
+        GameState choice = ReachIceChoice(registered, behavior, runtime);
+        LegalAction trash = Assert.Single(
+            choice.PendingDecision!.LegalActions,
+            action => action.Parameters is IceSubroutineChoiceParameters parameters
+                && parameters.Choice == IceSubroutineChoiceKind.TrashInstalledRunnerCard
+                && parameters.CardId == programId);
+        ApplyResult result = Apply(choice, trash, behavior, runtime);
+
+        Assert.True(result.Accepted, result.Rejection?.Message);
+        Assert.Contains(programId, result.State.GetZone(ZoneKind.RunnerHeap).CardIds);
+        Assert.Empty(result.State.RulesState!.Programs);
+        PlayerId runner = result.State.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+        Assert.Equal(0, result.State.RulesState.Players.Single(player => player.PlayerId == runner).UsedMemory);
+        Assert.Contains(result.Events, value => value.Kind == EngineEventKinds.MemoryAdjusted);
+        Assert.Empty(StateInvariantValidator.Collect(result.State, behavior, runtime));
+
+        string json = EngineJson.Serialize(result.State);
+        GameState restored = EngineJson.DeserializeState(json, behavior, runtime);
+        Assert.Equal(json, EngineJson.Serialize(restored));
+        Assert.Empty(StateInvariantValidator.Collect(restored, behavior, runtime));
+    }
+
+    [Fact]
     public void FunhouseChoiceEnumeratesEveryLegalHostedSplitAndTagFallback()
     {
         BehaviorCatalog behavior = Catalog(PayIce, new PayCreditsOrTagSubroutineSpec(4, 1));
@@ -584,6 +623,64 @@ public sealed partial class IceSubroutineRuntimeTests
             state.InitialSeed,
             run,
             state.RulesState,
+            state.BehaviorRegistryVersion,
+            state.BehaviorCatalogFingerprint,
+            state.RuntimeCardCatalogVersion,
+            state.RuntimeCardCatalogFingerprint);
+    }
+
+    private static GameState WithRegisteredProgram(GameState state, CardInstanceId cardId, int memoryCost)
+    {
+        RulesState defaults = state.RulesState ?? RulesState.CreateDefault(state.Players);
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+        ProgramMemoryState registration = new(cardId, runner, memoryCost);
+        ProgramMemoryState[] programs = defaults.Programs.Append(registration).ToArray();
+        PlayerRulesState[] players = defaults.Players
+            .Select(player => player.PlayerId == runner
+                ? new PlayerRulesState(
+                    player.PlayerId,
+                    player.BaseHandSize,
+                    player.CoreDamage,
+                    player.Tags,
+                    player.BaseMemory,
+                    programs.Where(program => program.Owner == runner).Sum(program => program.MemoryCost))
+                : new PlayerRulesState(
+                    player.PlayerId,
+                    player.BaseHandSize,
+                    player.CoreDamage,
+                    player.Tags,
+                    player.BaseMemory,
+                    player.UsedMemory))
+            .ToArray();
+        RulesState rules = new(
+            defaults.Version,
+            players,
+            programs,
+            defaults.Counters,
+            defaults.LingeringEffects,
+            defaults.Triggers,
+            defaults.Interrupts);
+        return new GameState(
+            state.SchemaVersion,
+            state.GameId,
+            state.RulesVersion,
+            state.CardDataVersion,
+            state.Players,
+            state.Cards,
+            state.Zones,
+            state.Servers,
+            state.Turn,
+            state.Outcome,
+            state.RandomState,
+            state.Allocator,
+            state.DecisionRevision,
+            state.EventSequence,
+            state.ResolutionStack,
+            state.PendingDecision,
+            state.ActionSequence,
+            state.InitialSeed,
+            state.RunState,
+            rules,
             state.BehaviorRegistryVersion,
             state.BehaviorCatalogFingerprint,
             state.RuntimeCardCatalogVersion,

@@ -132,7 +132,7 @@ public static class TurnRegionPresenter
             $"TURN {turnNumber} · ACTIVE {activeSide.ToString().ToUpperInvariant()} · PHASE {phase.ToString().ToUpperInvariant()}"
             + (view.Turn.Step is { } timingStep
                 ? $" · TIMING {timingStep.ToString().ToUpperInvariant()}"
-                : " · TIMING STEP UNAVAILABLE");
+                : phase == TurnPhase.Setup ? " · MULLIGAN" : " · TIMING STEP UNAVAILABLE");
         if (priority is { } currentPriority)
         {
             summary +=

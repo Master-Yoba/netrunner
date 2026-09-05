@@ -442,7 +442,9 @@ public static partial class GameEngine
             ZoneState discard = GetZone(
                 working,
                 player.Side == PlayerSide.Corp ? ZoneKind.CorpDiscard : ZoneKind.RunnerHeap);
-            TrashCard(working, replacement, replacementSource, discard);
+            // The atomic install publishes one final memory adjustment after
+            // registering the incoming program; uninstall still cleans state.
+            TrashCard(working, replacement, replacementSource, discard, emitMemoryAdjustment: false);
         }
 
         // MoveCard replaces both source and destination zone records.  The

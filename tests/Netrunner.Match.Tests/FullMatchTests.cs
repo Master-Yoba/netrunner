@@ -67,7 +67,18 @@ public sealed class FullMatchTests
     public async Task SimulationCapIsEnforcedAndDeveloperDecksCannotEnterStandardSetup()
     {
         FullMatchDefinition definition = FullMatchDefinition.Developer();
-        await Assert.ThrowsAsync<InvalidOperationException>(() => FullMatchRunner.RunAsync(definition, actionCap: 1));
+        FullMatchStallException failure = await Assert.ThrowsAsync<FullMatchStallException>(
+            () => FullMatchRunner.RunAsync(definition, actionCap: 1));
+        Assert.Equal(1, failure.ActionCap);
+        Assert.Single(failure.Replay.Actions);
+        ReplayArtifact replay = EngineJson.Deserialize<ReplayArtifact>(EngineJson.Serialize(failure.Replay),
+            definition.Behavior, definition.Runtime);
+        Assert.True(ReplayVerifier.Verify(replay, definition.Behavior, definition.Runtime).Success);
+        GameState stalled = failure.Snapshot.ToState();
+        Assert.Equal(replay.ExpectedFinalStateHash, DeterministicHash.ForState(stalled));
+        Assert.Equal(GameOutcomeKind.Ongoing, stalled.Outcome.Kind);
+        Assert.NotNull(stalled.PendingDecision);
+        Assert.Contains(replay.ExpectedFinalStateHash!, failure.Message, StringComparison.Ordinal);
         DeveloperMatchCards cards = DeveloperMatchCards.Create();
         Assert.Throws<MatchRequestValidationException>(() => FullMatchDefinition.FromRequest(definition.Request, cards.Data, cards.Behavior));
     }

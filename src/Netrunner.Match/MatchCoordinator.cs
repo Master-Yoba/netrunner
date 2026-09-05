@@ -37,6 +37,16 @@ public sealed record MatchSnapshot(
     bool IsOpponentThinking,
     RunOutcomeViewModel? RunOutcome = null)
 {
+    /// <summary>
+    /// The side that owns a Core setup decision, when one is pending. This is
+    /// public setup telemetry only: the viewer still receives no opponent
+    /// decision ID, revision, prompt, or legal actions.
+    /// </summary>
+    public PlayerSide? SetupDecisionOwnerSide { get; init; }
+
+    /// <summary>Accepted engine actions, excluding UI and opponent-thinking publications.</summary>
+    public long ActionCount { get; init; }
+
     public bool IsTerminal => View.Outcome.IsTerminal;
 
     public bool AwaitingHumanDecision => !IsOpponentThinking
@@ -563,7 +573,13 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
             frozenEvents,
             feedback,
             thinking,
-            _runOutcome);
+            _runOutcome)
+        {
+            ActionCount = state.ActionSequence,
+            SetupDecisionOwnerSide = state.PendingDecision is { Kind: DecisionKind.Setup } pending
+                ? state.GetPlayer(pending.Owner).Side
+                : null,
+        };
         lock (_snapshotGate)
         {
             _currentSnapshot = snapshot;

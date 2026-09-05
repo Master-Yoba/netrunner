@@ -58,6 +58,69 @@ public sealed class BehaviorRuntimeTests
     }
 
     [Fact]
+    public void GenericTrashTransferUnregistersProgramMemoryAndRoundTripsTheUpdatedState()
+    {
+        CardDefinitionId operation = new("test:registered-program-trash");
+        CardDefinitionId program = new("test:registered-program");
+        CardInstanceId sourceId = new("card:registered-program-trash-source");
+        CardInstanceId programId = new("card:registered-program");
+        BehaviorTarget target = new(
+            BehaviorTargetKind.InstalledCard,
+            filter: new BehaviorCardFilter(BehaviorCardType.Program, ownerSide: PlayerSide.Runner));
+        BehaviorCatalog catalog = new BehaviorCatalogBuilder("test:registered-program-trash")
+            .Add(new CardBehaviorDefinition(program, PlayerSide.Runner))
+            .AddCardType(program, BehaviorCardType.Program)
+            .Add(new CardBehaviorDefinition(operation, PlayerSide.Corp, instructions:
+            [
+                new BehaviorInstruction(
+                    BehaviorInstructionKind.Choose,
+                    choice: new BehaviorChoiceSpec(
+                        "trash-target",
+                        BehaviorChooser.Corp,
+                        BehaviorChoiceMode.Mandatory,
+                        BehaviorChoiceCardinality.Exactly(1),
+                        target: target)),
+                new BehaviorInstruction(
+                    BehaviorInstructionKind.TrashCard,
+                    target: new BehaviorTarget(BehaviorTargetKind.ChosenCard)),
+            ])).Build();
+        GameState initial = CreateState(
+            catalog,
+            (sourceId, operation, ZoneKind.CorpHand, PlayerSide.Corp),
+            (programId, program, ZoneKind.RunnerRig, PlayerSide.Runner));
+        GameState state = WithRegisteredProgram(initial, programId, memoryCost: 2);
+        Assert.Empty(StateInvariantValidator.Collect(state, catalog));
+        PlayerId corp = state.Players.Single(player => player.Side == PlayerSide.Corp).Id;
+
+        GameState prompt = GameEngine.BeginBehaviorForTesting(
+            state,
+            new BehaviorInvocationContext(sourceId, corp),
+            catalog);
+        prompt = EngineJson.DeserializeState(EngineJson.Serialize(prompt), catalog);
+        LegalAction trash = Assert.Single(
+            prompt.PendingDecision!.LegalActions,
+            action => action.Parameters is BehaviorChoiceParameters parameters
+                && parameters.CardIds.SequenceEqual([programId]));
+        ApplyResult result = GameEngine.Apply(
+            prompt,
+            new ActionSubmission(corp, prompt.PendingDecision.Id, prompt.PendingDecision.Revision, trash.Id),
+            catalog);
+
+        Assert.True(result.Accepted, result.Rejection?.Message);
+        Assert.Contains(programId, result.State.GetZone(ZoneKind.RunnerHeap).CardIds);
+        Assert.Empty(result.State.RulesState!.Programs);
+        PlayerId runner = result.State.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+        Assert.Equal(0, result.State.RulesState.Players.Single(player => player.PlayerId == runner).UsedMemory);
+        Assert.Contains(result.Events, value => value.Kind == EngineEventKinds.MemoryAdjusted);
+        Assert.Empty(StateInvariantValidator.Collect(result.State, catalog));
+
+        string json = EngineJson.Serialize(result.State);
+        GameState restored = EngineJson.DeserializeState(json, catalog);
+        Assert.Equal(json, EngineJson.Serialize(restored));
+        Assert.Empty(StateInvariantValidator.Collect(restored, catalog));
+    }
+
+    [Fact]
     public void ChoiceOptionPaysTypedCostsAndTrashesTheAuthenticatedPrivateCard()
     {
         CardDefinitionId definitionId = new("test:runtime-choice-cost");
@@ -1977,6 +2040,64 @@ public sealed class BehaviorRuntimeTests
 
     private static BehaviorCatalog Catalog(CardBehaviorDefinition definition) =>
         new BehaviorCatalogBuilder("test:behavior-runtime").Add(definition).Build();
+
+    private static GameState WithRegisteredProgram(GameState state, CardInstanceId cardId, int memoryCost)
+    {
+        RulesState defaults = state.RulesState ?? RulesState.CreateDefault(state.Players);
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+        ProgramMemoryState registration = new(cardId, runner, memoryCost);
+        ProgramMemoryState[] programs = defaults.Programs.Append(registration).ToArray();
+        PlayerRulesState[] players = defaults.Players
+            .Select(player => player.PlayerId == runner
+                ? new PlayerRulesState(
+                    player.PlayerId,
+                    player.BaseHandSize,
+                    player.CoreDamage,
+                    player.Tags,
+                    player.BaseMemory,
+                    programs.Where(program => program.Owner == runner).Sum(program => program.MemoryCost))
+                : new PlayerRulesState(
+                    player.PlayerId,
+                    player.BaseHandSize,
+                    player.CoreDamage,
+                    player.Tags,
+                    player.BaseMemory,
+                    player.UsedMemory))
+            .ToArray();
+        RulesState rules = new(
+            defaults.Version,
+            players,
+            programs,
+            defaults.Counters,
+            defaults.LingeringEffects,
+            defaults.Triggers,
+            defaults.Interrupts);
+        return new GameState(
+            gameId: state.GameId,
+            rulesVersion: state.RulesVersion,
+            cardDataVersion: state.CardDataVersion,
+            players: state.Players,
+            cards: state.Cards,
+            zones: state.Zones,
+            servers: state.Servers,
+            turn: state.Turn,
+            outcome: state.Outcome,
+            randomState: state.RandomState,
+            allocator: state.Allocator,
+            schemaVersion: state.SchemaVersion,
+            decisionRevision: state.DecisionRevision,
+            eventSequence: state.EventSequence,
+            resolutionStack: state.ResolutionStack,
+            pendingDecision: state.PendingDecision,
+            actionSequence: state.ActionSequence,
+            initialSeed: state.InitialSeed,
+            runState: state.RunState,
+            rulesState: rules,
+            behaviorRegistryVersion: state.BehaviorRegistryVersion,
+            behaviorCatalogFingerprint: state.BehaviorCatalogFingerprint,
+            runtimeCardCatalogVersion: state.RuntimeCardCatalogVersion,
+            runtimeCardCatalogFingerprint: state.RuntimeCardCatalogFingerprint);
+    }
 
     private static GameState WithCounters(GameState state, params CardCounterState[] counters)
     {

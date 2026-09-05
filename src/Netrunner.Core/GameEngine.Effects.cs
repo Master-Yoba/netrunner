@@ -400,7 +400,6 @@ public static partial class GameEngine
         }
 
         TrashCard(working, card, source, GetZone(working, ZoneKind.RunnerHeap));
-        RemoveProgramRegistration(working, cardId);
         Emit(working, EngineEventKinds.ProgramTrashedForMemory, new ProgramTrashedForMemoryEventPayload(
             cardId,
             frame.Owner,
@@ -678,7 +677,7 @@ public static partial class GameEngine
             owner.UsedMemory));
     }
 
-    private static void RemoveProgramRegistration(WorkingState working, CardInstanceId cardId)
+    private static void RemoveProgramRegistration(WorkingState working, CardInstanceId cardId, bool emit = true)
     {
         RulesState rules = RequireRulesState(working);
         if (!rules.Programs.Any(program => program.CardId == cardId))
@@ -689,6 +688,10 @@ public static partial class GameEngine
         ProgramMemoryState registration = rules.Programs.Single(program => program.CardId == cardId);
         SetRulesState(working, programs: rules.Programs.Where(program => program.CardId != cardId).ToArray());
         RecalculateUsedMemory(working);
+        if (!emit)
+        {
+            return;
+        }
         PlayerRulesState owner = GetPlayerRules(RequireRulesState(working), registration.Owner);
         Emit(working, EngineEventKinds.MemoryAdjusted, new MemoryAdjustedEventPayload(
             registration.Owner,
@@ -1067,11 +1070,6 @@ public static partial class GameEngine
         ZoneState destination = working.Zones.SingleOrDefault(zone => zone.Id == destinationZoneId)
             ?? throw new ResolutionFailureException($"Destination zone '{destinationZoneId}' does not exist.");
         MoveCard(working, card, source, destination);
-        if (working.RulesState?.Programs.Any(program => program.CardId == cardId) == true
-            && destination.Kind != ZoneKind.RunnerRig)
-        {
-            RemoveProgramRegistration(working, cardId);
-        }
     }
 
     private static void ApplyClickDelta(WorkingState working, PlayerId target, int delta)
