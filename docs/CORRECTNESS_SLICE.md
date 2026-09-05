@@ -2,7 +2,7 @@
 
 Baseline: `2e9257b`; branch: `corrective`; [PR #10 into dev](https://github.com/Master-Yoba/netrunner/pull/10).
 
-Readiness candidate: implementation and local gate complete; final remote gates pending.
+Slice 4.6-ready: implementation, full local verification, and both remote CI lanes passed.
 This closes prerequisites for starting Slice 4.6, not the cards or rules assigned
 to Slices 4.6 and 4.7. Official presets remain coverage-gated.
 
@@ -76,5 +76,7 @@ Bootstrap-fix CI: [33958195017](https://github.com/Master-Yoba/netrunner/actions
 passed both synthetic and official lanes. Local `make verify` passed on 2026-09-05:
 1,184 tests (Core 774, Cards 214, AI 53, CLI 59, Match 84), formatting, deterministic
 proofs, generated coverage checks, official 77-card gallery, all client smokes,
-and secret scanning. Remote verification of the final implementation is pending;
-the earlier green run does not certify the later rules/client changes.
+and secret scanning. The complete implementation at `aaf66b3` passed both
+synthetic and official CI lanes in
+[run 33960326001](https://github.com/Master-Yoba/netrunner/actions/runs/33960326001).
+Subsequent documentation-only checkpoints remain subject to the same PR checks.

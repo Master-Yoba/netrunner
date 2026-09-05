@@ -1,6 +1,6 @@
 # M4 progress — System Gateway complete
 
-Status: Slice 4.5 merged into `dev`; correctness follow-up on `corrective`
+Status: Slice 4.5 merged into `dev`; correctness follow-up is Slice 4.6-ready on `corrective` (PR #10)
 
 Date started: 31 August 2026
 
