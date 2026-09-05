@@ -53,9 +53,9 @@ public sealed class OfficialPreset
     public string Kind { get; }
 
     /// <summary>
-    /// False until the coverage gate proves every card in this preset is
-    /// complete. DATA-401A intentionally checks in all four presets as
-    /// parsed-but-disabled data.
+    /// Indicates whether the final behavior gate has enabled this preset for
+    /// user-facing composition. The parser still accepts a false value so a
+    /// staged DATA-401A catalog can be validated before its cards are ready.
     /// </summary>
     public bool Playable { get; }
 

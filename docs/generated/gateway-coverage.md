@@ -7,7 +7,7 @@
 - Registered: `77`
 - Registered with positive test metadata: `77`
 - Full-text complete: `77`
-- Partial registrations: `0` (Offworld Office remains explicitly incomplete)
+- Partial registrations: `0`
 - Unregistered: `0`
 
 A partial registration is not full coverage. A completed batch requires full behavior registration, a positive test marker, review, citations, and an observation note.
