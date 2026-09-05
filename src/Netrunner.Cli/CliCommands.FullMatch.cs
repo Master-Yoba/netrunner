@@ -8,6 +8,7 @@ public static partial class CliCommands
 {
     private static int RunFullMatch(string[] args, TextWriter output, TextWriter error)
     {
+        bool json = args.Skip(1).Any(static argument => argument == "--json");
         try
         {
             ulong seed = 42;
@@ -47,24 +48,57 @@ public static partial class CliCommands
             {
                 File.WriteAllText(replayPath, EngineJson.Serialize(result.Replay));
             }
-            output.WriteLine(EngineJson.Serialize(new
+
+            if (json)
             {
-                status = "ok",
-                fixtureId = fixture.FixtureId,
-                seed = fixture.Seed,
-                developerOnly = isDeveloper,
-                winner = result.Outcome.Winner,
-                reason = result.Outcome.Reason,
-                actionCount = result.ActionCount,
-                finalStateHash = result.FinalStateHash,
-                replayVerified = true,
-                replayPath,
-            }));
+                output.WriteLine(EngineJson.Serialize(new
+                {
+                    status = "ok",
+                    fixtureId = fixture.FixtureId,
+                    seed = fixture.Seed,
+                    developerOnly = isDeveloper,
+                    winner = result.Outcome.Winner,
+                    reason = result.Outcome.Reason,
+                    actionCount = result.ActionCount,
+                    finalStateHash = result.FinalStateHash,
+                    replayVerified = true,
+                    replayPath,
+                }));
+            }
+            else
+            {
+                output.WriteLine("full-match=ok");
+                output.WriteLine($"fixture-id={fixture.FixtureId}");
+                output.WriteLine($"seed={fixture.Seed}");
+                output.WriteLine($"developer-only={isDeveloper.ToString().ToLowerInvariant()}");
+                output.WriteLine($"winner={result.Outcome.Winner?.ToString() ?? "unknown"}");
+                output.WriteLine($"reason={result.Outcome.Reason?.ToString() ?? "unknown"}");
+                output.WriteLine($"action-count={result.ActionCount}");
+                output.WriteLine($"final-state-hash={result.FinalStateHash}");
+                output.WriteLine("replay-verified=true");
+                if (replayPath is not null)
+                {
+                    output.WriteLine($"replay-path={replayPath}");
+                }
+            }
+
             return 0;
         }
         catch (Exception exception) when (IsCommandFailure(exception))
         {
-            error.WriteLine($"full-match failed: {exception.Message}");
+            if (json)
+            {
+                output.WriteLine(EngineJson.Serialize(new
+                {
+                    status = "failed",
+                    message = exception.Message,
+                }));
+            }
+            else
+            {
+                error.WriteLine($"full-match failed: {exception.Message}");
+            }
+
             return 1;
         }
     }

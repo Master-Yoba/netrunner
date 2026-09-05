@@ -1,21 +1,23 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
+using System.Text.Json;
 using Netrunner.Core;
 
 namespace Netrunner.AI;
 
 /// <summary>
 /// Stable version for the bounded full-game contract-agent policy. The policy
-/// consumes only the typed legal-action surface; it never receives a
-/// <see cref="GameState"/>, card catalog, RNG, or hidden-zone data.
+/// consumes issued actions and public installed-card observations, optionally
+/// joined to provider-neutral printed metadata. It never receives a
+/// <see cref="GameState"/>, RNG, or hidden-zone data.
 /// </summary>
 public static class FullGameContractAgentVersion
 {
-    public const int SchemaVersion = 4;
+    public const int SchemaVersion = 5;
 
-    public const string AgentVersion = "full-game-contract-agent-v4";
+    public const string AgentVersion = "full-game-contract-agent-v5";
 
-    public const string PolicyVersion = "full-game-contract-policy-v4";
+    public const string PolicyVersion = "full-game-contract-policy-v5";
 }
 
 /// <summary>
@@ -30,7 +32,7 @@ public enum BioroidSubroutinePreference
 }
 
 /// <summary>
-/// Action-class policy for <see cref="FullGameContractAgent"/> v4.
+/// Action-class policy for <see cref="FullGameContractAgent"/> v5.
 ///
 /// The action lists are typed <see cref="ActionKind"/> values, not prompt or
 /// description text. The dispatcher is deliberately organized by
@@ -55,6 +57,7 @@ public sealed class FullGameContractPolicy
     [
         ActionKind.UseAbility,
         ActionKind.UseBioroidAbility,
+        ActionKind.RezCard,
         ActionKind.RezIce,
         ActionKind.BreakSubroutines,
         ActionKind.PumpBreaker,
@@ -135,7 +138,8 @@ public sealed class FullGameContractPolicy
             ActionKind.UseAbility,
             ActionKind.UseBioroidAbility,
             ActionKind.PassPriority,
-            ActionKind.RezIce,
+            ActionKind.RezCard,
+        ActionKind.RezIce,
             ActionKind.BreakSubroutines,
             ActionKind.PumpBreaker,
             ActionKind.JackOut,
@@ -183,7 +187,7 @@ public sealed class FullGameContractPolicy
 }
 
 /// <summary>
-/// Deterministic observation-only v4 agent for the Slice 4.5 shell.
+/// Deterministic observation-only v5 agent for the Slice 4.6 shell.
 ///
 /// It currently dispatches typed decision classes for turn timing, turn
 /// actions (bounded abilities/install/gain/draw), forced discard, generic
@@ -200,13 +204,14 @@ public sealed class FullGameContractAgent : IGameAgent
     public const string Version = FullGameContractAgentVersion.AgentVersion;
 
     private readonly FullGameContractPolicy _policy;
+    private readonly IRuntimeCardCatalog? _runtimeCardCatalog;
 
-    public FullGameContractAgent(PlayerSide controlledSide)
-        : this(FullGameContractPolicy.Default(controlledSide))
+    public FullGameContractAgent(PlayerSide controlledSide, IRuntimeCardCatalog? runtimeCardCatalog = null)
+        : this(FullGameContractPolicy.Default(controlledSide), runtimeCardCatalog)
     {
     }
 
-    public FullGameContractAgent(FullGameContractPolicy policy)
+    public FullGameContractAgent(FullGameContractPolicy policy, IRuntimeCardCatalog? runtimeCardCatalog = null)
     {
         ArgumentNullException.ThrowIfNull(policy);
         if (policy.SchemaVersion != CurrentSchemaVersion)
@@ -217,6 +222,7 @@ public sealed class FullGameContractAgent : IGameAgent
         }
 
         _policy = policy;
+        _runtimeCardCatalog = runtimeCardCatalog;
         AgentVersion = Version;
     }
 
@@ -248,11 +254,11 @@ public sealed class FullGameContractAgent : IGameAgent
             DecisionKind.TurnTiming => SelectTurnTiming(observation.LegalActions),
             DecisionKind.TurnAction => SelectTurnAction(observation.LegalActions),
             DecisionKind.TurnDiscard => SelectTurnDiscard(observation.LegalActions),
-            DecisionKind.BehaviorChoice => SelectBehaviorChoice(observation.LegalActions),
+            DecisionKind.BehaviorChoice => SelectBehaviorChoice(observation),
             DecisionKind.InstallChoice => SelectInstallChoice(observation.LegalActions),
             DecisionKind.InterruptChoice => SelectInterruptChoice(observation.LegalActions),
             DecisionKind.TriggerChoice => SelectTriggerChoice(observation.LegalActions),
-            DecisionKind.IceSubroutineChoice => SelectIceSubroutineChoice(observation.LegalActions),
+            DecisionKind.IceSubroutineChoice => SelectIceSubroutineChoice(observation),
             DecisionKind.RunTiming => SelectByPriority(
                 observation.LegalActions,
                 _policy.RunActionOrder,
@@ -281,8 +287,9 @@ public sealed class FullGameContractAgent : IGameAgent
             FullGameActionClass.TurnDiscard);
     }
 
-    private static LegalAction SelectBehaviorChoice(IReadOnlyList<LegalAction> actions)
+    private LegalAction SelectBehaviorChoice(Observation observation)
     {
+        IReadOnlyList<LegalAction> actions = observation.LegalActions;
         EnsureActionShapes(actions, FullGameActionClass.BehaviorChoice);
         LegalAction[] choices = actions
             .Where(static action =>
@@ -290,13 +297,23 @@ public sealed class FullGameContractAgent : IGameAgent
                 && action.Parameters is BehaviorChoiceParameters)
             .ToArray();
 
-        // The v4 teaching policy prefers an economy mode when one is offered
+        // Corp installed-target choices (including Retribution) rank only
+        // public Runner rig objects; private searches retain semantic order.
+        if (_policy.ControlledSide == PlayerSide.Corp
+            && choices.All(action => action.Parameters is BehaviorChoiceParameters { OptionKeys.Count: 0 }))
+        {
+            LegalAction? scored = HighestPublicInstalledTarget(observation, choices, action =>
+                ((BehaviorChoiceParameters)action.Parameters).CardIds, BehaviorOrderKey);
+            if (scored is not null) return scored;
+        }
+
+        // The v5 teaching policy prefers an economy mode when one is offered
         // (for example Predictive Planogram's typed `gain` option). Structured
         // option/card payloads then outrank an optional skip, and the issued
         // action ID preserves Core's declaration/materialization order for
         // alternatives such as Manegarm and Funhouse. Target selections use
-        // the complete typed semantic key. None of these choices inspect an
-        // action description or observation state.
+        // the complete typed semantic key when no public installed target
+        // score applies. Action descriptions and private state are never read.
         return SelectSemantic(
             choices,
             FullGameActionClass.BehaviorChoice,
@@ -376,8 +393,9 @@ public sealed class FullGameContractAgent : IGameAgent
             TriggerKey);
     }
 
-    private LegalAction SelectIceSubroutineChoice(IReadOnlyList<LegalAction> actions)
+    private LegalAction SelectIceSubroutineChoice(Observation observation)
     {
+        IReadOnlyList<LegalAction> actions = observation.LegalActions;
         EnsureActionShapes(actions, FullGameActionClass.IceSubroutineChoice);
         LegalAction[] choices = actions
             .Where(static action =>
@@ -392,6 +410,13 @@ public sealed class FullGameContractAgent : IGameAgent
                 "The full-game agent received an ICE subroutine branch for the wrong acting side.");
         }
 
+        LegalAction? scoredTrash = HighestPublicInstalledTarget(observation,
+            choices.Where(action => action.Parameters is IceSubroutineChoiceParameters
+            { Choice: IceSubroutineChoiceKind.TrashInstalledRunnerCard }),
+            action => [((IceSubroutineChoiceParameters)action.Parameters).CardId!.Value],
+            IceSubroutineChoiceOrderKey);
+        if (scoredTrash is not null) return scoredTrash;
+
         // Prefer normal effect branches in their typed policy order:
         // installed Runner-card trash, Corp install, then pay. Explicit
         // tag/decline branches are typed fallbacks. The branch rank is an
@@ -405,15 +430,54 @@ public sealed class FullGameContractAgent : IGameAgent
             IceSubroutineChoiceOrderKey);
     }
 
+    private LegalAction? HighestPublicInstalledTarget(
+        Observation observation, IEnumerable<LegalAction> candidates,
+        Func<LegalAction, IReadOnlyList<CardInstanceId>> targetIds,
+        Func<LegalAction, string> semanticOrder)
+    {
+        LegalAction[] actions = candidates.ToArray();
+        if (_runtimeCardCatalog is null || _policy.ControlledSide != PlayerSide.Corp || actions.Length == 0)
+            return null;
+        if (!observation.PublicState.TryGetValue("runnerRig", out object? publicRig) || publicRig is null)
+            return null;
+        JsonElement rig = JsonSerializer.SerializeToElement(publicRig);
+        if (rig.ValueKind != JsonValueKind.Array) return null;
+        var scores = new Dictionary<CardInstanceId, long>();
+        foreach (JsonElement card in rig.EnumerateArray())
+        {
+            if (card.ValueKind != JsonValueKind.Object
+                || !card.TryGetProperty("id", out JsonElement id) || id.ValueKind != JsonValueKind.String
+                || !card.TryGetProperty("definitionId", out JsonElement definition) || definition.ValueKind != JsonValueKind.String
+                || !HasStableId(id.GetString()) || !HasStableId(definition.GetString()))
+                continue;
+            if (_runtimeCardCatalog.TryGet(new CardDefinitionId(definition.GetString()!), out CardRuntimeSpec? metadata)
+                && metadata.Side == PlayerSide.Runner
+                && metadata.CardClass is RuntimeCardClass.Program or RuntimeCardClass.Hardware or RuntimeCardClass.Resource)
+            {
+                // Printed install investment dominates memory. Both operands
+                // come from provider-neutral public metadata, never card text.
+                scores[new CardInstanceId(id.GetString()!)] = ((long)(metadata.InstallCost ?? 0) * 100) + metadata.MemoryUnits;
+            }
+        }
+        var ranked = actions.Select(action => (Action: action,
+            Score: targetIds(action).Sum(id => scores.GetValueOrDefault(id))))
+            .OrderByDescending(value => value.Score)
+            .ThenBy(value => semanticOrder(value.Action), StringComparer.Ordinal)
+            .ThenBy(value => value.Action.Id.Value, StringComparer.Ordinal).ToArray();
+        return ranked.Length > 0 && ranked[0].Score > 0 ? ranked[0].Action : null;
+    }
+
     private static bool IceSubroutineChoiceBelongsToSide(
         IceSubroutineChoiceParameters choice,
         PlayerSide side) => choice.Choice switch
         {
-            IceSubroutineChoiceKind.PayCredits or IceSubroutineChoiceKind.TakeTag =>
+            IceSubroutineChoiceKind.PayCredits or IceSubroutineChoiceKind.TakeTag
+                or IceSubroutineChoiceKind.JackOut or IceSubroutineChoiceKind.ContinueRun =>
                 side == PlayerSide.Runner,
             IceSubroutineChoiceKind.TrashInstalledRunnerCard
                 or IceSubroutineChoiceKind.InstallCard
-                or IceSubroutineChoiceKind.Decline =>
+                or IceSubroutineChoiceKind.Decline
+                or IceSubroutineChoiceKind.EndRun =>
                 side == PlayerSide.Corp,
             _ => false,
         };
@@ -468,6 +532,9 @@ public sealed class FullGameContractAgent : IGameAgent
             IceSubroutineChoiceKind.PayCredits => 2,
             IceSubroutineChoiceKind.Decline => 3,
             IceSubroutineChoiceKind.TakeTag => 4,
+            IceSubroutineChoiceKind.JackOut => 0,
+            IceSubroutineChoiceKind.ContinueRun => 1,
+            IceSubroutineChoiceKind.EndRun => 1,
             _ => throw new InvalidOperationException(
                 "The full-game agent cannot order an unsupported ICE subroutine choice."),
         };
@@ -677,6 +744,7 @@ public sealed class FullGameContractAgent : IGameAgent
             FullGameActionClass.IceSubroutineChoice => action.Kind == ActionKind.ResolveIceSubroutine,
             FullGameActionClass.RunWindow => action.Kind is
                 ActionKind.PassPriority
+                or ActionKind.RezCard
                 or ActionKind.RezIce
                 or ActionKind.BreakSubroutines
                 or ActionKind.PumpBreaker
@@ -705,6 +773,8 @@ public sealed class FullGameContractAgent : IGameAgent
             (ActionKind.ChooseCard, CardChoiceParameters card) => HasStableId(card.CardId.Value),
             (ActionKind.ChooseBehavior, BehaviorChoiceParameters behavior) =>
                 HasValidBehaviorChoiceParameters(behavior),
+            (ActionKind.RezCard, RezCardParameters rez) => HasStableId(rez.CardId.Value) && rez.CreditCost >= 0
+                && (rez.CostQuote is null || rez.CostQuote.EffectiveCost == rez.CreditCost),
             (ActionKind.RezIce, RunIceParameters ice) => HasStableId(ice.IceId.Value),
             (ActionKind.BreakSubroutines, RunBreakParameters runBreak) =>
                 HasStableId(runBreak.BreakerId.Value)
@@ -1075,6 +1145,9 @@ public sealed class FullGameContractAgent : IGameAgent
                     && choice.HostedCredits <= choice.CreditCost;
 
             case IceSubroutineChoiceKind.Decline:
+            case IceSubroutineChoiceKind.EndRun:
+            case IceSubroutineChoiceKind.JackOut:
+            case IceSubroutineChoiceKind.ContinueRun:
             case IceSubroutineChoiceKind.TakeTag:
                 return choice.CardId is null
                     && !hasInstallDestination
@@ -1316,6 +1389,7 @@ public sealed class FullGameContractAgent : IGameAgent
         InstallCardParameters install => InstallKey(install),
         NumberChoiceParameters number =>
             $"number:{number.Value.ToString(CultureInfo.InvariantCulture)}",
+        RezCardParameters rez => $"rez:{rez.CardId.Value}:{rez.CreditCost.ToString(CultureInfo.InvariantCulture)}",
         RunIceParameters ice => $"ice:{ice.IceId.Value}",
         RunBreakerParameters breaker =>
             $"breaker:{breaker.BreakerId.Value}:hosted:{breaker.HostedCredits.ToString(CultureInfo.InvariantCulture)}",

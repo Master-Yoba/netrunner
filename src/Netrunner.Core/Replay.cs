@@ -12,9 +12,9 @@ public static class EngineArtifactKinds
 public static class EngineCompatibility
 {
     public const int ArtifactSchemaVersion = 1;
-    // Slice 4.5 persists targeted PlayCard payloads and explicit run-event
-    // breach-modifier provenance in live RunState snapshots.
-    public const int StateSchemaVersion = 15;
+    // Slice 4.6 persists damage subroutine continuations and run-scoped
+    // effects that survive source movement through the run-end checkpoint.
+    public const int StateSchemaVersion = 16;
     public const string RulesVersion = "26.03";
     public const string CardDataVersion = "fixture-1";
     /// <summary>

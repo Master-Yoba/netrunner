@@ -41,6 +41,16 @@ public sealed record BoardRegionState(
 
     public IReadOnlyList<InstalledAdvancementViewModel> InstalledAdvancementCounters { get; init; } =
         Array.Empty<InstalledAdvancementViewModel>();
+
+    public TagStateViewModel CorpTagState { get; init; } = new(PlayerSide.Corp, null);
+
+    public TagStateViewModel RunnerTagState { get; init; } = new(PlayerSide.Runner, null);
+
+    public IReadOnlyList<DamagePresentationViewModel> PendingDamage { get; init; } =
+        Array.Empty<DamagePresentationViewModel>();
+
+    public IReadOnlyList<ConditionalValueViewModel> ConditionalValues { get; init; } =
+        Array.Empty<ConditionalValueViewModel>();
 }
 
 /// <summary>
@@ -173,8 +183,14 @@ public static class BoardRegionPresenter
             RunnerScoreArea = view.RunnerScoreArea,
             InstalledAdvancementCounters = new ReadOnlyCollection<InstalledAdvancementViewModel>(
                 view.InstalledAdvancementCounters.ToArray()),
-            CorpSummary = board.CorpSummary + $"\n{view.CorpHandSize.Summary}",
-            RunnerSummary = board.RunnerSummary + $"\n{view.RunnerHandSize.Summary}",
+            CorpSummary = board.CorpSummary + $"\n{view.CorpHandSize.Summary}\n{view.Corp.TagSummary}",
+            RunnerSummary = board.RunnerSummary + $"\n{view.RunnerHandSize.Summary}\n{view.Runner.TagSummary}",
+            CorpTagState = view.Corp.TagState,
+            RunnerTagState = view.Runner.TagState,
+            PendingDamage = new ReadOnlyCollection<DamagePresentationViewModel>(
+                view.PendingDamage.ToArray()),
+            ConditionalValues = new ReadOnlyCollection<ConditionalValueViewModel>(
+                view.ConditionalValues.ToArray()),
         };
     }
 
@@ -373,14 +389,26 @@ public static class ActionsRegionPresenter
 
         ActionKind[] allowed = decision.Kind switch
         {
-            DecisionKind.TurnTiming => [ActionKind.PassPriority],
+            DecisionKind.TurnTiming =>
+            [
+                ActionKind.PassPriority,
+                ActionKind.RezCard,
+                ActionKind.ScoreAgenda,
+                ActionKind.UseAbility,
+            ],
             DecisionKind.TurnAction =>
             [
                 ActionKind.GainCredit,
                 ActionKind.DrawCard,
                 ActionKind.PlayCard,
                 ActionKind.InstallCard,
+                ActionKind.StartRun,
+                ActionKind.AdvanceCard,
                 ActionKind.ChooseBehavior,
+                ActionKind.RemoveTag,
+                ActionKind.TrashTaggedResource,
+                ActionKind.PurgeVirusCounters,
+                ActionKind.UseAbility,
             ],
             DecisionKind.TurnDiscard => [ActionKind.ChooseCard],
             DecisionKind.BehaviorChoice => [ActionKind.ChooseBehavior],
@@ -406,6 +434,7 @@ public static class ActionsRegionPresenter
                 ActionKind.BreakSubroutines,
                 ActionKind.PumpBreaker,
                 ActionKind.UseBioroidAbility,
+                ActionKind.UseAbility,
                 ActionKind.JackOut,
                 ActionKind.ContinueRun,
                 ActionKind.ChooseBreachCandidate,
@@ -469,8 +498,13 @@ public static class ActionsRegionPresenter
             or ActionKind.ChooseBreachCandidate;
     }
 
-    public static string? GetTargetCardId(ActionParameters parameters) =>
-        Slice45PresentationProjector.GetTargetCardId(parameters);
+    public static string? GetTargetCardId(ActionParameters parameters)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        return parameters is TrashTaggedResourceParameters tagged
+            ? tagged.CardId.Value
+            : Slice45PresentationProjector.GetTargetCardId(parameters);
+    }
 
     /// <summary>
     /// Returns a viewer-safe typed server target for a run-event play. The
@@ -526,6 +560,8 @@ public sealed class EventFeedRegionPresenter
         {
             RunInitiatedEventPayload payload => $"Run initiated against {payload.ServerId.Value}.",
             RunEventPlayedEventPayload payload => $"Played {payload.DefinitionId.Value}; hosted {payload.HostedCredits} run credits.",
+            DamageDealtEventPayload payload => Slice46PresentationProjector.DescribeDamage(payload),
+            TagsAdjustedEventPayload payload => Slice46PresentationProjector.DescribeTags(payload),
             IceApproachedEventPayload payload => $"Approached ICE {payload.IceId.Value}.",
             IceRezzedEventPayload payload => $"Corp rezzed ICE {payload.IceId.Value}.",
             EncounterInitializedEventPayload payload => $"Encountered {payload.IceId.Value} ({payload.SubroutineCount} subroutine(s)).",

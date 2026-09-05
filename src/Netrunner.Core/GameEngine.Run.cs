@@ -894,7 +894,8 @@ public static partial class GameEngine
             IceSubroutineSpec subroutineSpec = iceSpec.Subroutines[subroutine.Ordinal];
             if (subroutineSpec is TrashInstalledRunnerCardSubroutineSpec
                 or InstallCardSubroutineSpec
-                or PayCreditsOrTagSubroutineSpec)
+                or PayCreditsOrTagSubroutineSpec
+                or DamageSubroutineSpec)
             {
                 // Persist all preceding progress before yielding. The
                 // serialized ICE cursor replaces the run timing frame and
@@ -913,6 +914,12 @@ public static partial class GameEngine
                     resolvedSubroutines);
                 RunState partialRun = currentRun.WithEncounter(partialEncounter);
                 working.RunState = partialRun;
+                if (subroutineSpec is DamageSubroutineSpec damage)
+                {
+                    YieldIceSubroutineDamage(working, partialRun, ice, subroutine, damage);
+                    return;
+                }
+
                 YieldIceSubroutineChoice(
                     working,
                     partialRun,
@@ -924,6 +931,12 @@ public static partial class GameEngine
 
             switch (subroutineSpec)
             {
+                case GainCreditsSubroutineSpec gain:
+                    ApplyCreditDelta(working, GetPlayer(working, gain.Target).Id, gain.Amount);
+                    break;
+                case GiveTagsSubroutineSpec tags:
+                    ApplyTags(working, GetPlayer(working, PlayerSide.Runner).Id, tags.Amount);
+                    break;
                 case LoseCreditsSubroutineSpec loseCredits:
                     PlayerState debtor = GetPlayer(working, loseCredits.Target);
                     // CR 26.03 1.10.3b (LOSE path): losing credits moves them
@@ -1173,7 +1186,13 @@ public static partial class GameEngine
         {
             case TrashInstalledRunnerCardSubroutineSpec trashSpec:
                 owner = GetPlayer(working, PlayerSide.Corp).Id;
-                prompt = "Resolve the ICE subroutine: choose an installed Runner card to trash.";
+                prompt = trashSpec.EndRunAlternative
+                    ? "Trash 1 installed program or end the run."
+                    : "Resolve the ICE subroutine: choose an installed Runner card to trash.";
+                if (trashSpec.EndRunAlternative)
+                {
+                    choices.Add(new IceSubroutineChoiceParameters(frameIdentity, IceSubroutineChoiceKind.EndRun));
+                }
                 ZoneState? rig = working.Zones.FirstOrDefault(zone =>
                     zone.Kind == ZoneKind.RunnerRig
                     && zone.OwnerSide == PlayerSide.Runner
@@ -1205,6 +1224,12 @@ public static partial class GameEngine
                     }
                 }
 
+                break;
+            case DamageSubroutineSpec { FollowUp: DamageSubroutineFollowUp.OfferJackOut }:
+                owner = GetPlayer(working, PlayerSide.Runner).Id;
+                prompt = "Damage resolved. The Runner may jack out.";
+                choices.Add(new IceSubroutineChoiceParameters(frameIdentity, IceSubroutineChoiceKind.JackOut));
+                choices.Add(new IceSubroutineChoiceParameters(frameIdentity, IceSubroutineChoiceKind.ContinueRun));
                 break;
             case PayCreditsOrTagSubroutineSpec paySpec:
                 owner = GetPlayer(working, PlayerSide.Runner).Id;
@@ -1352,6 +1377,12 @@ public static partial class GameEngine
                 "An ICE subroutine frame cannot advance while another decision is pending.");
         }
 
+        if (frame.Stage == IceSubroutineFrameStage.AwaitingDamage)
+        {
+            ResumeIceSubroutineDamage(working, frame);
+            return;
+        }
+
         if (frame.Stage != IceSubroutineFrameStage.AwaitingChoice
             || frame.Choices.Count == 0)
         {
@@ -1365,6 +1396,8 @@ public static partial class GameEngine
             working.DecisionRevision,
             GetPlayer(working, frame.Choices[0].Choice is IceSubroutineChoiceKind.PayCredits
                 or IceSubroutineChoiceKind.TakeTag
+                or IceSubroutineChoiceKind.JackOut
+                or IceSubroutineChoiceKind.ContinueRun
                 ? PlayerSide.Runner
                 : PlayerSide.Corp).Id,
             DecisionKind.IceSubroutineChoice,
@@ -1381,6 +1414,9 @@ public static partial class GameEngine
         IceSubroutineChoiceKind.TrashInstalledRunnerCard => $"Trash installed Runner card {choice.CardId!.Value.Value}",
         IceSubroutineChoiceKind.PayCredits => $"Pay {choice.CreditCost} credits",
         IceSubroutineChoiceKind.TakeTag => "Take the tag fallback",
+        IceSubroutineChoiceKind.EndRun => "End the run",
+        IceSubroutineChoiceKind.JackOut => "Jack out",
+        IceSubroutineChoiceKind.ContinueRun => "Continue the run",
         IceSubroutineChoiceKind.Decline => "Decline",
         IceSubroutineChoiceKind.InstallCard => $"Install Corp card {choice.CardId!.Value.Value}",
         _ => "Resolve ICE subroutine",
@@ -1477,6 +1513,21 @@ public static partial class GameEngine
         IceSubroutineSpec specification = iceSpec.Subroutines[frame.Ordinal];
         switch (parameters.Choice)
         {
+            case IceSubroutineChoiceKind.EndRun:
+                if (specification is not TrashInstalledRunnerCardSubroutineSpec { EndRunAlternative: true })
+                    throw new ResolutionFailureException("End the run is not a printed alternative.");
+                FinishIceSubroutineRun(working, run, ice, subroutine, RunEndReason.EndedByRule);
+                return;
+            case IceSubroutineChoiceKind.JackOut:
+            case IceSubroutineChoiceKind.ContinueRun:
+                if (specification is not DamageSubroutineSpec { FollowUp: DamageSubroutineFollowUp.OfferJackOut })
+                    throw new ResolutionFailureException("This subroutine does not offer a jack-out instruction.");
+                if (parameters.Choice == IceSubroutineChoiceKind.JackOut)
+                {
+                    FinishIceSubroutineRun(working, run, ice, subroutine, RunEndReason.JackedOut);
+                    return;
+                }
+                break;
             case IceSubroutineChoiceKind.TrashInstalledRunnerCard:
                 if (specification is not TrashInstalledRunnerCardSubroutineSpec trashSpec
                     || parameters.CardId is not { } targetId)
@@ -1960,14 +2011,16 @@ public static partial class GameEngine
                 forcedActionEnd: parent.ForcedActionEnd);
         }
 
-        if (HasActiveCatalogTrigger(working, OccurrenceKind.RunEnded, attackedServer))
+        if (HasActiveCatalogTrigger(working, OccurrenceKind.RunEnded, attackedServer)
+            || run.PersistentContext?.Abilities.Count > 0)
         {
             QueueRunEndedOccurrence(
                 working,
                 initiatingPlayer,
                 initiatingSource,
                 attackedServer,
-                successful);
+                successful,
+                run.PersistentContext);
         }
     }
 
@@ -2020,7 +2073,8 @@ public static partial class GameEngine
         PlayerId controller,
         CardInstanceId? sourceCardId,
         ServerId serverId,
-        bool successful)
+        bool successful,
+        RunPersistentContext? runContext = null)
     {
         working.ResolutionStack.Add(new EffectResolutionFrame(
             controller,
@@ -2030,7 +2084,8 @@ public static partial class GameEngine
                 controller,
                 sourceCardId,
                 serverId,
-                successful))));
+                successful,
+                runContext))));
     }
 
     private static void QueueCardAccessedOccurrence(
@@ -2343,6 +2398,8 @@ public static partial class GameEngine
         }
 
         run = PayRunnerRunCredits(working, run, spec.TrashCost, hostedCredits);
+        run = RetainAccessTrashedAbilities(working, run, card);
+        working.RunState = run;
         TrashCard(working, card, working.Zones.Single(zone => zone.Id == card.ZoneId), discardZone);
         // A card trashed through access is revealed: it enters the Corp
         // discard faceup and unrezzed so both viewers can see what left the
@@ -2356,7 +2413,7 @@ public static partial class GameEngine
                 card.OwnerSide,
                 true,
                 false,
-                card.AdvancementCounters));
+                GetCard(working, card.Id).AdvancementCounters));
         }
         Emit(working, EngineEventKinds.AccessedCardTrashed, new AccessedCardTrashedEventPayload(run.Id, accessed, spec.TrashCost));
         AdvanceBreachAfterAccess(working, run);
@@ -2415,6 +2472,11 @@ public static partial class GameEngine
             true,
             GetCard(working, card.Id).Rezzed,
             GetCard(working, card.Id).AdvancementCounters));
+        RunPersistentContext context = run.PersistentContext
+            ?? new RunPersistentContext(run.Id, run.AttackedServer, [], []);
+        run = run.WithPersistentContext(new RunPersistentContext(run.Id, run.AttackedServer,
+            context.StolenAgendas.Append(card.Id).ToArray(), context.Abilities));
+        working.RunState = run;
         AddAgendaPoints(working, PlayerSide.Runner, spec.AgendaPoints);
         Emit(working, EngineEventKinds.AgendaStolen, new AgendaStolenEventPayload(PlayerSide.Runner, cardId, spec.AgendaPoints));
         RecordTurnAgendaChange(

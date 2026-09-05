@@ -8,7 +8,7 @@ namespace Netrunner.Core.Tests;
 /// each test can isolate one declaration while retaining the production
 /// planner, run cursor, and serialized frame machinery.
 /// </summary>
-public sealed class IceSubroutineRuntimeTests
+public sealed partial class IceSubroutineRuntimeTests
 {
     private static readonly CardDefinitionId TrashIce = new("fixture:ice-choice-trash");
     private static readonly CardDefinitionId PayIce = new("fixture:ice-choice-pay");
@@ -424,6 +424,7 @@ public sealed class IceSubroutineRuntimeTests
             iceDefinition,
             corpCredits);
         StableIdAllocator allocator = new(baseline.Allocator);
+        ZoneState runnerGrip = baseline.Zones.Single(zone => zone.Kind == ZoneKind.RunnerGrip);
         ZoneState runnerRig = baseline.Zones.Single(zone => zone.Kind == ZoneKind.RunnerRig && zone.ServerId is null);
         ZoneState corpHand = baseline.Zones.Single(zone => zone.Kind == ZoneKind.CorpHand && zone.ServerId is null);
         ZoneState corpDiscard = baseline.Zones.Single(zone => zone.Kind == ZoneKind.CorpDiscard && zone.ServerId is null);
@@ -431,6 +432,7 @@ public sealed class IceSubroutineRuntimeTests
         var addedByZone = new Dictionary<ZoneId, List<CardInstanceId>>
         {
             [runnerRig.Id] = [],
+            [runnerGrip.Id] = [],
             [corpHand.Id] = [],
             [corpDiscard.Id] = [],
         };
@@ -439,6 +441,7 @@ public sealed class IceSubroutineRuntimeTests
             ZoneState destination = zoneKind switch
             {
                 ZoneKind.RunnerRig => runnerRig,
+                ZoneKind.RunnerGrip => runnerGrip,
                 ZoneKind.CorpHand => corpHand,
                 ZoneKind.CorpDiscard => corpDiscard,
                 _ => throw new ArgumentOutOfRangeException(nameof(placements), zoneKind, "Unsupported ICE-choice fixture zone."),

@@ -48,6 +48,7 @@ public partial class Main : Control
 	private VBoxContainer _focusPresentation = null!;
 	private Label _eventTitle = null!;
 	private RichTextLabel _eventFeed = null!;
+	private Label _damageStatus = null!;
 	private Label _details = null!;
 	private Label _corpSummary = null!;
 	private Label _runnerSummary = null!;
@@ -76,6 +77,7 @@ public partial class Main : Control
 	private bool _slice43UiSmoke;
 	private bool _slice44UiSmoke;
 	private bool _slice45UiSmoke;
+	private bool _slice46UiSmoke;
 	private bool _gallerySmokePassed;
 	private bool _animationRunning;
 	private bool _skipAnimation;
@@ -121,6 +123,7 @@ public partial class Main : Control
 		_slice43UiSmoke = arguments.Contains("--m4-slice43-ui-smoke", StringComparer.Ordinal);
 		_slice44UiSmoke = arguments.Contains("--m4-slice44-ui-smoke", StringComparer.Ordinal);
 		_slice45UiSmoke = arguments.Contains("--m4-slice45-ui-smoke", StringComparer.Ordinal);
+		_slice46UiSmoke = arguments.Contains("--m4-slice46-ui-smoke", StringComparer.Ordinal);
 		_smokeTest = arguments.Contains("--smoke-test", StringComparer.Ordinal)
 			|| arguments.Contains("--m3-responsiveness-smoke", StringComparer.Ordinal);
 		_responsivenessSmoke = arguments.Contains("--m3-responsiveness-smoke", StringComparer.Ordinal);
@@ -132,6 +135,10 @@ public partial class Main : Control
 			_humanSide.Select(side == PlayerSide.Runner ? 0 : 1);
 			BeginMatch();
 			_ = RunFullMatchSmokeAsync(side);
+		}
+		else if (_slice46UiSmoke)
+		{
+			_ = RunSlice46UiSmokeAsync();
 		}
 		else if (_slice45UiSmoke)
 		{
@@ -877,6 +884,7 @@ public partial class Main : Control
 		BoardRegionState board = BoardRegionPresenter.Present(view);
 		_corpSummary.Text = board.CorpSummary + (view.CorpIdentity is { } corpIdentity ? $"\nIDENTITY · {corpIdentity.Title}" : "");
 		_runnerSummary.Text = board.RunnerSummary + (view.RunnerIdentity is { } runnerIdentity ? $"\nIDENTITY · {runnerIdentity.Title}" : "");
+		RenderSlice46DamageStatus(snapshot);
 		_cardControls.Clear();
 		_cardModels.Clear();
 		RenderFocusPresentationRegion(snapshot);

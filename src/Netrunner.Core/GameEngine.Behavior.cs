@@ -480,11 +480,60 @@ public static partial class GameEngine
                 ResolveBehaviorEndRun(working, frame);
                 return;
             case BehaviorInstructionKind.DealDamage:
-                throw new ResolutionFailureException(
-                    $"Behavior instruction '{instruction.Kind}' belongs to a later runtime slice.");
+                ResolveBehaviorDamage(working, frame, instruction);
+                return;
             default:
                 throw new ResolutionFailureException($"Behavior instruction '{instruction.Kind}' is not executable.");
         }
+    }
+
+    private static void ResolveBehaviorDamage(
+        WorkingState working,
+        BehaviorResolutionFrame frame,
+        BehaviorInstruction instruction)
+    {
+        int amount = instruction.Amount;
+        if (instruction.DamageAmountOperand is { } operand)
+        {
+            int variable = operand.Kind switch
+            {
+                BehaviorDamageAmountKind.SourceAdvancementCounters => GetCard(working, frame.SourceCardId).AdvancementCounters,
+                BehaviorDamageAmountKind.ScoredAgendaPrintedPointsThisTurn =>
+                    working.Turn.History?.ThisTurn(working.Turn.ActiveSide)?.AgendaTurnChanges
+                        .Where(change => change.Kind == AgendaTurnChangeKind.Score
+                            && change.BeneficiarySide == PlayerSide.Corp)
+                        .Sum(change => working.RuntimeCardCatalog is { } catalog
+                            && catalog.TryGet(GetCard(working, change.CardId).DefinitionId, out CardRuntimeSpec? spec)
+                                ? spec.AgendaPoints
+                                : change.Points) ?? 0,
+                _ => throw new ResolutionFailureException("Unknown damage amount operand."),
+            };
+            amount = checked(operand.BaseAmount + variable);
+            if (operand.TrashSourceAsCost)
+            {
+                if (!IsInstalledCard(working, frame.SourceCardId))
+                {
+                    throw new ResolutionFailureException("The damage source is no longer installed to pay its trash cost.");
+                }
+                MoveBehaviorCardToTrash(working, GetCard(working, frame.SourceCardId));
+                ClearCardCounters(working, frame.SourceCardId);
+            }
+        }
+
+        // Persist the computed amount in the effect child before any damage
+        // prevention or reaction can run. Self-trash clears live counters.
+        AdvanceBehaviorCursor(working, frame);
+        if (amount == 0)
+        {
+            return;
+        }
+        working.ResolutionStack.Add(new EffectResolutionFrame(
+            frame.Controller,
+            new CostBundle(),
+            new EffectBundle(new DamageEffect(
+                GetPlayer(working, PlayerSide.Runner).Id,
+                instruction.DamageKind ?? throw new ResolutionFailureException("Damage requires a typed kind."),
+                amount))));
     }
 
     private static void ResolveBehaviorStartRun(
@@ -1187,7 +1236,12 @@ public static partial class GameEngine
                     frame.Continuation,
                     frame.InstructionCursor,
                     BehaviorInstructionKind.TrashSelf);
-            bool catalogTriggerLifecycleZone = catalogTriggerSelfTrashReached
+            bool damageSelfTrashReached = frame.TriggerKey is not null
+                && frame.InstructionCursor > 0
+                && GetBehaviorInstructions(working, frame).Take(frame.InstructionCursor)
+                    .Any(instruction => instruction.Kind == BehaviorInstructionKind.DealDamage
+                        && instruction.DamageAmountOperand?.TrashSourceAsCost == true);
+            bool catalogTriggerLifecycleZone = (catalogTriggerSelfTrashReached || damageSelfTrashReached)
                 && IsAbilityTrashZone(currentSourceZone, source);
             bool catalogTriggerDetachedSource = frame.TriggerKey is not null
                 && frame.CatalogTriggerSourceMovedBeforeStart;
@@ -1590,6 +1644,7 @@ public static partial class GameEngine
             BehaviorConditionKind.Installed => IsInstalledCard(working, frame.SourceCardId),
             BehaviorConditionKind.InstalledThisTurn => CurrentFacts(working, frame.Controller)?.InstalledCardIds.Contains(frame.SourceCardId) == true,
             BehaviorConditionKind.SuccessfulRun => working.RunState?.Successful == true,
+            BehaviorConditionKind.SuccessfulRunDuringRunnerLastTurn => working.Turn.History?.RunnerThisTurn?.SuccessfulRun == true,
             BehaviorConditionKind.SuccessfulRunThisTurn => CurrentFacts(working, frame.Controller)?.SuccessfulRun == true,
             BehaviorConditionKind.SourceController => GetCard(working, frame.SourceCardId).OwnerSide == controller.Side,
             BehaviorConditionKind.Encountering => working.RunState?.Step == RunTimingStep.Encounter,
@@ -2982,6 +3037,7 @@ public static partial class GameEngine
                 BehaviorCardType.Icebreaker => runtimeSpec.CardClass == RuntimeCardClass.Program
                     && runtimeSpec.Subtypes.Contains("icebreaker", StringComparer.Ordinal),
                 BehaviorCardType.Program => runtimeSpec.CardClass == RuntimeCardClass.Program,
+                BehaviorCardType.ProgramOrHardware => runtimeSpec.CardClass is RuntimeCardClass.Program or RuntimeCardClass.Hardware,
                 BehaviorCardType.Identity => runtimeSpec.CardClass == RuntimeCardClass.Identity,
                 BehaviorCardType.Operation => runtimeSpec.CardClass == RuntimeCardClass.Operation,
                 BehaviorCardType.Resource => runtimeSpec.CardClass == RuntimeCardClass.Resource,
@@ -2997,6 +3053,8 @@ public static partial class GameEngine
 
         return filter.CardType switch
         {
+            BehaviorCardType.ProgramOrHardware => working.BehaviorCatalog.TryGetCardType(card.DefinitionId, out BehaviorCardType installedClass)
+                && installedClass is BehaviorCardType.Program or BehaviorCardType.Icebreaker or BehaviorCardType.Hardware,
             BehaviorCardType.Ice => working.BehaviorCatalog.TryGetIce(card.DefinitionId, out _),
             BehaviorCardType.Icebreaker => working.BehaviorCatalog.TryGetIcebreaker(card.DefinitionId, out _),
             BehaviorCardType.Asset => working.BehaviorCatalog.TryGetAsset(card.DefinitionId, out _),

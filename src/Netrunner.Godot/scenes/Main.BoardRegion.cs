@@ -128,6 +128,8 @@ public partial class Main
 		_eventFeed.AddThemeFontSizeOverride("normal_font_size", 11);
 		_eventFeed.AddThemeColorOverride("default_color", Muted);
 		center.AddChild(_eventFeed);
+		_damageStatus = MakeWrappedLabel("DAMAGE · none observed", 11, Muted);
+		center.AddChild(_damageStatus);
 		body.AddChild(_centerPanel);
 
 		_runnerPanel = MakePanel();

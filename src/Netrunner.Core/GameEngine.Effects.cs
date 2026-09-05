@@ -561,6 +561,7 @@ public static partial class GameEngine
             ZoneState currentGrip = GetZone(working, ZoneKind.RunnerGrip);
             CardInstanceState card = GetCard(working, currentGrip.CardIds[random.NextInt(currentGrip.CardIds.Count)]);
             TrashCard(working, card, currentGrip, GetZone(working, ZoneKind.RunnerHeap));
+            RecordIceDamageVictim(working, card.Id);
         }
 
         working.RandomState = random.State;
@@ -579,16 +580,29 @@ public static partial class GameEngine
         }
 
         bool flatlined = effect.Amount > available;
+        int? conditionalPrintedCost = DivinerPrintedCost(working);
         Emit(working, EngineEventKinds.DamageDealt, new DamageDealtEventPayload(
             effect.Target,
             effect.Kind,
             effect.Amount,
             suffered,
             coreDamageAfter,
-            flatlined));
+            flatlined,
+            DamagePresentationProjection.Source(working.ResolutionStack),
+            DamagePresentationProjection.Source(working.ResolutionStack) is not null ? flatlined : null,
+            conditionalPrintedCost,
+            conditionalPrintedCost is { } printedCost ? printedCost % 2 == 1 : null));
         if (flatlined)
         {
-            CompleteToyGame(working, PlayerSide.Corp, GameWinReason.Flatline);
+            if (working.Turn.History is not null)
+            {
+                CompleteTurnGame(working, PlayerSide.Corp, GameWinReason.Flatline);
+            }
+            else
+            {
+                CompleteToyGame(working, PlayerSide.Corp, GameWinReason.Flatline);
+            }
+            working.RunState = null;
         }
     }
 

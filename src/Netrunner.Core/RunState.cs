@@ -933,6 +933,10 @@ public sealed record RunResolvedSubroutineLedgerEntry
 /// </summary>
 public sealed record RunState
 {
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public RunPersistentContext? PersistentContext { get; private set; }
+
     [JsonConstructor]
     public RunState(
         int version,
@@ -961,12 +965,14 @@ public sealed record RunState
         IReadOnlyList<RunBreachAccessModifier>? breachAccessModifiers = null,
         IReadOnlyList<RunRezCostModifier>? rezCostModifiers = null,
         IReadOnlyList<RunRestriction>? runRestrictions = null,
-        IReadOnlyList<RunResolvedSubroutineLedgerEntry>? resolvedSubroutineLedger = null)
+        IReadOnlyList<RunResolvedSubroutineLedgerEntry>? resolvedSubroutineLedger = null,
+        RunPersistentContext? persistentContext = null)
     {
         ArgumentNullException.ThrowIfNull(breachCandidates);
         ArgumentNullException.ThrowIfNull(chosenAccessCards);
         ArgumentNullException.ThrowIfNull(accessedCards);
         ArgumentNullException.ThrowIfNull(lingeringEffects);
+        PersistentContext = persistentContext?.Copy();
         Version = version;
         Id = id;
         AttackedServer = attackedServer;
@@ -1039,7 +1045,8 @@ public sealed record RunState
         IReadOnlyList<RunBreachAccessModifier>? breachAccessModifiers = null,
         IReadOnlyList<RunRezCostModifier>? rezCostModifiers = null,
         IReadOnlyList<RunRestriction>? runRestrictions = null,
-        IReadOnlyList<RunResolvedSubroutineLedgerEntry>? resolvedSubroutineLedger = null)
+        IReadOnlyList<RunResolvedSubroutineLedgerEntry>? resolvedSubroutineLedger = null,
+        RunPersistentContext? persistentContext = null)
         : this(
             1,
             id,
@@ -1067,7 +1074,8 @@ public sealed record RunState
             breachAccessModifiers,
             rezCostModifiers,
             runRestrictions,
-            resolvedSubroutineLedger)
+            resolvedSubroutineLedger,
+            persistentContext)
     {
     }
 
@@ -1253,7 +1261,8 @@ public sealed record RunState
         BreachAccessModifiers,
         RezCostModifiers,
         RunRestrictions,
-        ResolvedSubroutineLedger);
+        ResolvedSubroutineLedger,
+        PersistentContext);
 
     /// <summary>
     /// Creates the next immutable timing cursor while retaining the run's
@@ -1296,7 +1305,8 @@ public sealed record RunState
             BreachAccessModifiers,
             RezCostModifiers,
             RunRestrictions,
-            ResolvedSubroutineLedger);
+            ResolvedSubroutineLedger,
+        PersistentContext);
 
     /// <summary>
     /// Replaces the run's encounter while retaining every other field; the
@@ -1306,6 +1316,9 @@ public sealed record RunState
     /// Replaces the run's lingering effects while retaining every other field;
     /// the timing step and its phase are preserved unchanged.
     /// </summary>
+    internal RunState WithPersistentContext(RunPersistentContext context) =>
+        this with { PersistentContext = context.Copy() };
+
     internal RunState WithLingeringEffects(IReadOnlyList<RunLingeringEffect> lingeringEffects) => new(
         Version,
         Id,
@@ -1333,7 +1346,8 @@ public sealed record RunState
         BreachAccessModifiers,
         RezCostModifiers,
         RunRestrictions,
-        ResolvedSubroutineLedger);
+        ResolvedSubroutineLedger,
+        PersistentContext);
 
     /// <summary>
     /// Replaces the run's run-scoped hosted credits while retaining every
@@ -1366,7 +1380,8 @@ public sealed record RunState
         BreachAccessModifiers,
         RezCostModifiers,
         RunRestrictions,
-        ResolvedSubroutineLedger);
+        ResolvedSubroutineLedger,
+        PersistentContext);
 
     /// <summary>
     /// Replaces the live run priority cursor while retaining the exact run
@@ -1400,7 +1415,8 @@ public sealed record RunState
         BreachAccessModifiers,
         RezCostModifiers,
         RunRestrictions,
-        ResolvedSubroutineLedger);
+        ResolvedSubroutineLedger,
+        PersistentContext);
 
     internal RunState WithEncounter(RunEncounterState encounter) => new(
         Version,
@@ -1429,7 +1445,8 @@ public sealed record RunState
         BreachAccessModifiers,
         RezCostModifiers,
         RunRestrictions,
-        ResolvedSubroutineLedger);
+        ResolvedSubroutineLedger,
+        PersistentContext);
 
     /// <summary>
     /// Replaces the run's breach candidate/access fields while retaining every
@@ -1467,7 +1484,8 @@ public sealed record RunState
         BreachAccessModifiers,
         RezCostModifiers,
         RunRestrictions,
-        ResolvedSubroutineLedger);
+        ResolvedSubroutineLedger,
+        PersistentContext);
 
     /// <summary>
     /// Replaces the immutable breach-access snapshot after the authoritative
@@ -1501,7 +1519,8 @@ public sealed record RunState
         breachAccessModifiers,
         RezCostModifiers,
         RunRestrictions,
-        ResolvedSubroutineLedger);
+        ResolvedSubroutineLedger,
+        PersistentContext);
 
     /// <summary>Replaces the run-scoped typed restrictions immutably.</summary>
     internal RunState WithRunRestrictions(IReadOnlyList<RunRestriction>? runRestrictions) => new(
@@ -1531,7 +1550,8 @@ public sealed record RunState
         BreachAccessModifiers,
         RezCostModifiers,
         runRestrictions,
-        ResolvedSubroutineLedger);
+        ResolvedSubroutineLedger,
+        PersistentContext);
 
     /// <summary>Replaces the structural history of resolved unbroken subroutines.</summary>
     internal RunState WithResolvedSubroutineLedger(
@@ -1562,7 +1582,8 @@ public sealed record RunState
         BreachAccessModifiers,
         RezCostModifiers,
         RunRestrictions,
-        resolvedSubroutineLedger);
+        resolvedSubroutineLedger,
+        PersistentContext);
 
     private static ReadOnlyCollection<CardInstanceId> FreezeIds(IEnumerable<CardInstanceId> values) =>
         new(values.ToArray());

@@ -861,6 +861,9 @@ public enum IceSubroutineChoiceKind
     PayCredits,
     Decline,
     TakeTag,
+    EndRun,
+    JackOut,
+    ContinueRun,
 }
 
 /// <summary>

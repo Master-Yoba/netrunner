@@ -78,6 +78,7 @@ public static class RunTimingCitations
         EngineEventKinds.EncounterInitialized => "CR 26.03 6.9.3a: the encounter is initialized",
         EngineEventKinds.BreakerPumped => "CR 26.03 6.5/3.9.5: the Runner pumps an installed icebreaker's strength for the encounter",
         EngineEventKinds.SubroutinesBroken => "CR 26.03 6.5/3.9.5: the Runner breaks subroutines with an installed icebreaker of sufficient strength and matching subtype",
+        EngineEventKinds.IceSubroutineJackOut => "CR 26.03 9.8.7/1.2.1: the Runner resolves a printed subroutine jack-out instruction",
         EngineEventKinds.BioroidAbilityUsed => "CR 26.03 6.5/3.9.5: the Runner loses one click to break one named subroutine with the encountered bioroid ability",
         EngineEventKinds.EncounterCompleted => "CR 26.03 6.5/6.9.3: encounter processing completes",
         EngineEventKinds.RunMoved => "CR 26.03 6.9.4d: the run moves inward to the next position",
@@ -145,6 +146,7 @@ public static class RunTimingTraceValidator
         EngineEventKinds.EncounterInitialized,
         EngineEventKinds.BreakerPumped,
         EngineEventKinds.SubroutinesBroken,
+        EngineEventKinds.IceSubroutineJackOut,
         EngineEventKinds.BioroidAbilityUsed,
         EngineEventKinds.EncounterCompleted,
         EngineEventKinds.RunMoved,
@@ -392,7 +394,12 @@ public static class RunTimingTraceValidator
                 // The run ended during this ICE's stop (end-the-run subroutine
                 // or the jack-out decision); no later windows are required.
                 if (endReason == RunEndReason.JackedOut
-                    && NextWindow(windows, after: approachWindow, before: endIndex, RunTimingStep.JackOutDecision) < 0)
+                    && NextWindow(windows, after: approachWindow, before: endIndex, RunTimingStep.JackOutDecision) < 0
+                    && !runEvents.Any(entry => initialized >= 0 && entry.Index > initialized && entry.Index < endIndex
+                        && entry.Event.Payload is IceSubroutineJackOutEventPayload jackOut
+                        && jackOut.IceId.Value == iceId
+                        && events[initialized].Payload is EncounterInitializedEventPayload encounter
+                        && jackOut.EncounterId == encounter.EncounterId))
                 {
                     problems.Add($"the run jacked out without the 6.9.4c jack-out decision for ICE '{iceId}'.");
                 }
@@ -885,6 +892,9 @@ public static class RunTimingTraceValidator
             case SubroutinesBrokenEventPayload broken:
                 runId = broken.RunId;
                 return true;
+            case IceSubroutineJackOutEventPayload jackOut:
+                runId = jackOut.RunId;
+                return true;
             case BioroidAbilityUsedEventPayload bioroid:
                 runId = bioroid.RunId;
                 return true;
@@ -964,6 +974,7 @@ public static class RunTimingTraceValidator
             RunEndedEventPayload ended => $"the run ended ({ended.Reason}, successful: {ended.Successful.ToString().ToLowerInvariant()})",
             RunInitiatedEventPayload initiated => $"run initiated on server '{initiated.ServerId.Value}'",
             RunEventPlayedEventPayload played => $"played run event '{played.EventCardId.Value}' ({played.DefinitionId.Value}, cost {played.Cost}, hosted {played.HostedCredits} run credits)",
+            IceSubroutineJackOutEventPayload jackOut => $"printed subroutine '{jackOut.SubroutineId.Value}' allowed jack out during encounter '{jackOut.EncounterId.Value}'",
             EncounterCompletedEventPayload completed => $"encounter '{completed.EncounterId.Value}' completed",
             RunMovedEventPayload moved => $"run moved from ice {moved.FromIceIndex} to ice {moved.ToIceIndex}",
             AgendaStolenEventPayload stolen => $"stole agenda '{stolen.AgendaId.Value}' for {stolen.AgendaPoints} agenda point(s)",

@@ -225,7 +225,14 @@ internal static class BehaviorInstructionPath
         IReadOnlyList<BehaviorInstruction> root,
         IReadOnlyList<BehaviorContinuationStep> continuation,
         int instructionCursor,
-        BehaviorInstructionKind kind)
+        BehaviorInstructionKind kind) =>
+        HasReached(root, continuation, instructionCursor, instruction => instruction.Kind == kind);
+
+    public static bool HasReached(
+        IReadOnlyList<BehaviorInstruction> root,
+        IReadOnlyList<BehaviorContinuationStep> continuation,
+        int instructionCursor,
+        Func<BehaviorInstruction, bool> predicate)
     {
         if (instructionCursor <= 0)
         {
@@ -244,7 +251,7 @@ internal static class BehaviorInstructionPath
         int count = Math.Min(instructionCursor, instructions.Count);
         return instructions
             .Take(count)
-            .Any(instruction => instruction.Kind == kind);
+            .Any(predicate);
     }
 }
 

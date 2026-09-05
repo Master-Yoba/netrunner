@@ -847,6 +847,7 @@ public enum IceSubroutineFrameStage
 {
     AwaitingChoice,
     AwaitingInstall,
+    AwaitingDamage,
 }
 
 /// <summary>
@@ -875,7 +876,8 @@ public sealed record IceSubroutineFrame : ResolutionFrame
         IReadOnlyList<CardInstanceId> iceZoneCardIds,
         string catalogFingerprint,
         IceSubroutineFrameStage stage,
-        IReadOnlyList<IceSubroutineChoiceParameters> choices)
+        IReadOnlyList<IceSubroutineChoiceParameters> choices,
+        CardInstanceId? damageTrashedCardId = null)
         : base(version, behaviorId)
     {
         if (!StableIdentifier.TryValidate(frameIdentity))
@@ -915,6 +917,7 @@ public sealed record IceSubroutineFrame : ResolutionFrame
         IceZoneCardIds = new ReadOnlyCollection<CardInstanceId>(iceZoneCardIds.ToArray());
         CatalogFingerprint = catalogFingerprint;
         Stage = stage;
+        DamageTrashedCardId = damageTrashedCardId;
         Choices = new ReadOnlyCollection<IceSubroutineChoiceParameters>(choices
             .Select(choice => new IceSubroutineChoiceParameters(
                 choice.FrameIdentity,
@@ -1011,6 +1014,10 @@ public sealed record IceSubroutineFrame : ResolutionFrame
     [JsonRequired]
     public IReadOnlyList<IceSubroutineChoiceParameters> Choices { get; private set; }
 
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId? DamageTrashedCardId { get; private set; }
+
     internal static string ComputeIdentity(
         RunId runId,
         EncounterId encounterId,
@@ -1038,7 +1045,16 @@ public sealed record IceSubroutineFrame : ResolutionFrame
         IceZoneCardIds,
         CatalogFingerprint,
         stage,
-        Choices);
+        Choices,
+        DamageTrashedCardId);
+    internal IceSubroutineFrame WithDamageResult(CardInstanceId cardId) => this with { DamageTrashedCardId = cardId };
+
+    internal IceSubroutineFrame WithChoices(IReadOnlyList<IceSubroutineChoiceParameters> choices) => this with
+    {
+        Stage = IceSubroutineFrameStage.AwaitingChoice,
+        Choices = new ReadOnlyCollection<IceSubroutineChoiceParameters>(choices.ToArray()),
+    };
+
 }
 
 /// <summary>
@@ -3271,7 +3287,8 @@ internal static class ResolutionFrameCloner
             iceSubroutine.IceZoneCardIds,
             iceSubroutine.CatalogFingerprint,
             iceSubroutine.Stage,
-            iceSubroutine.Choices),
+            iceSubroutine.Choices,
+            iceSubroutine.DamageTrashedCardId),
         EffectResolutionFrame effectResolution => new EffectResolutionFrame(
             effectResolution.Version,
             effectResolution.BehaviorId,

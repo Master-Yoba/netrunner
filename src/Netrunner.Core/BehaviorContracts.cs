@@ -173,6 +173,7 @@ public enum BehaviorCardType
     /// title-specific catalog branch.
     /// </summary>
     Program,
+    ProgramOrHardware,
 }
 
 /// <summary>
@@ -672,7 +673,10 @@ internal static class BehaviorContractStructure
                 && left.Optional == right.Optional
                 && left.SpendRestriction == right.SpendRestriction
                 && Equals(left.RunOperand, right.RunOperand)
-                && Equals(left.AmountOperand, right.AmountOperand);
+                && Equals(left.AmountOperand, right.AmountOperand)
+                && left.Recipient == right.Recipient
+                && left.DamageKind == right.DamageKind
+                && Equals(left.DamageAmountOperand, right.DamageAmountOperand);
 
     public static bool AreEqual(BehaviorChoiceOption? left, BehaviorChoiceOption? right) =>
         left is null ? right is null : right is not null && left.Equals(right);
@@ -706,4 +710,39 @@ internal static class BehaviorContractStructure
                 && string.Equals(left.VariableKey, right.VariableKey, StringComparison.Ordinal)
                 && string.Equals(left.CounterName, right.CounterName, StringComparison.Ordinal)
                 && left.Threshold == right.Threshold;
+}
+
+/// <summary>Authoritative facts used to determine a damage amount.</summary>
+public enum BehaviorDamageAmountKind
+{
+    SourceAdvancementCounters,
+    ScoredAgendaPrintedPointsThisTurn,
+}
+
+/// <summary>Typed damage calculation, evaluated once before costs and interrupts.</summary>
+public sealed record BehaviorDamageAmountOperand
+{
+    [JsonConstructor]
+    public BehaviorDamageAmountOperand(
+        BehaviorDamageAmountKind kind,
+        int baseAmount = 0,
+        bool trashSourceAsCost = false)
+    {
+        if (!Enum.IsDefined(kind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(kind));
+        }
+        ArgumentOutOfRangeException.ThrowIfNegative(baseAmount);
+        if (trashSourceAsCost && kind != BehaviorDamageAmountKind.SourceAdvancementCounters)
+        {
+            throw new ArgumentException("A self-trash damage cost requires an advancement snapshot.", nameof(trashSourceAsCost));
+        }
+        Kind = kind;
+        BaseAmount = baseAmount;
+        TrashSourceAsCost = trashSourceAsCost;
+    }
+
+    public BehaviorDamageAmountKind Kind { get; }
+    public int BaseAmount { get; }
+    public bool TrashSourceAsCost { get; }
 }

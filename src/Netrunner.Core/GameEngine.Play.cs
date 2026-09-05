@@ -181,6 +181,11 @@ public static partial class GameEngine
             return false;
         }
 
+        if (!AbilityConditionsMatch(working, card, GetPlayer(working, side).Id, definition.Conditions))
+        {
+            return false;
+        }
+
         if (validateBehaviorTargets
             && !AreBehaviorPlayTargetsAvailable(working, definition))
         {

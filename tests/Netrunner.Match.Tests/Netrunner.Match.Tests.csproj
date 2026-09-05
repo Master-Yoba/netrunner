@@ -12,4 +12,7 @@
     </PackageReference>
     <ProjectReference Include="../../src/Netrunner.Match/Netrunner.Match.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="../../data/m4/scenarios/scn-402-*.json" Link="Scenarios/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

@@ -198,6 +198,9 @@ public sealed record EncounteredBioroidAbilitySpec
 [JsonDerivedType(typeof(InstallCardSubroutineSpec), "install-card")]
 [JsonDerivedType(typeof(RunRestrictionSubroutineSpec), "run-restriction")]
 [JsonDerivedType(typeof(PayCreditsOrTagSubroutineSpec), "pay-credits-or-tag")]
+[JsonDerivedType(typeof(DamageSubroutineSpec), "damage")]
+[JsonDerivedType(typeof(GainCreditsSubroutineSpec), "gain-credits")]
+[JsonDerivedType(typeof(GiveTagsSubroutineSpec), "give-tags")]
 public abstract record IceSubroutineSpec;
 
 /// <summary>"End the run."</summary>
@@ -251,7 +254,7 @@ public sealed record EndRunIfCreditsAtMostSubroutineSpec : IceSubroutineSpec
 public sealed record TrashInstalledRunnerCardSubroutineSpec : IceSubroutineSpec
 {
     [JsonConstructor]
-    public TrashInstalledRunnerCardSubroutineSpec(RuntimeCardClass? requiredCardClass = null)
+    public TrashInstalledRunnerCardSubroutineSpec(RuntimeCardClass? requiredCardClass = null, bool endRunAlternative = false)
     {
         if (requiredCardClass is RuntimeCardClass.Ice
             or RuntimeCardClass.Asset
@@ -267,12 +270,15 @@ public sealed record TrashInstalledRunnerCardSubroutineSpec : IceSubroutineSpec
         }
 
         RequiredCardClass = requiredCardClass;
+        EndRunAlternative = endRunAlternative;
     }
 
     /// <summary>Optional Runner runtime class filter; null means any class.</summary>
     [JsonInclude]
     [JsonRequired]
     public RuntimeCardClass? RequiredCardClass { get; private set; }
+
+    public bool EndRunAlternative { get; }
 }
 
 /// <summary>Destination rule for a card-installing ICE subroutine.</summary>
@@ -774,4 +780,53 @@ public sealed record RunEventBehaviorSpec
 
         return new ReadOnlyCollection<ServerKind>(copy);
     }
+}
+
+/// <summary>The printed continuation after damage finishes its checkpoint.</summary>
+public enum DamageSubroutineFollowUp
+{
+    None,
+    EndRunIfTrashedCostOdd,
+    OfferJackOut,
+}
+
+public sealed record DamageSubroutineSpec : IceSubroutineSpec
+{
+    public DamageSubroutineSpec(DamageKind kind, int amount, DamageSubroutineFollowUp followUp = DamageSubroutineFollowUp.None)
+    {
+        if (!Enum.IsDefined(kind) || !Enum.IsDefined(followUp)) throw new ArgumentOutOfRangeException(nameof(kind));
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(amount);
+        Kind = kind;
+        Amount = amount;
+        FollowUp = followUp;
+    }
+
+    public DamageKind Kind { get; }
+    public int Amount { get; }
+    public DamageSubroutineFollowUp FollowUp { get; }
+}
+
+public sealed record GainCreditsSubroutineSpec : IceSubroutineSpec
+{
+    public GainCreditsSubroutineSpec(PlayerSide target, int amount)
+    {
+        if (!Enum.IsDefined(target)) throw new ArgumentOutOfRangeException(nameof(target));
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(amount);
+        Target = target;
+        Amount = amount;
+    }
+
+    public PlayerSide Target { get; }
+    public int Amount { get; }
+}
+
+public sealed record GiveTagsSubroutineSpec : IceSubroutineSpec
+{
+    public GiveTagsSubroutineSpec(int amount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(amount);
+        Amount = amount;
+    }
+
+    public int Amount { get; }
 }

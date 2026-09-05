@@ -23,9 +23,41 @@ internal static class RunnerEventVisibility
             return Array.Empty<EngineEvent>();
         }
 
-        return events
-            .Where(@event => IsVisible(@event.Payload, state))
-            .ToArray();
+        var visible = new List<EngineEvent>(events.Count);
+        var accessedThisBatch = new HashSet<CardInstanceId>();
+        foreach (EngineEvent @event in events)
+        {
+            if (@event.Payload is DamageDealtEventPayload damage)
+            {
+                // Damage and its result are public even when flatline clears
+                // the run's temporary access visibility before publication.
+                // Preserve only a source known now or revealed earlier in this
+                // exact batch; never turn optional provenance into suppression
+                // of the public damage event.
+                CardInstanceId? source = damage.SourceCardId;
+                if (source is { } sourceId
+                    && !IsCardVisible(state, sourceId)
+                    && !accessedThisBatch.Contains(sourceId))
+                {
+                    source = null;
+                }
+                visible.Add(source == damage.SourceCardId ? @event : new EngineEvent(
+                    @event.Version, @event.Sequence, @event.Kind,
+                    new DamageDealtEventPayload(damage.Version, damage.Target, damage.Kind,
+                        damage.Amount, damage.CardsTrashed, damage.CoreDamageAfter, damage.Flatlined,
+                        source, damage.FlatlineRisk, damage.TrashedCardPrintedCost, damage.ConditionalEndRun)));
+                continue;
+            }
+            if (IsVisible(@event.Payload, state))
+            {
+                visible.Add(@event);
+                if (@event.Payload is CardAccessedEventPayload accessed && HasCard(state, accessed.CardId))
+                {
+                    accessedThisBatch.Add(accessed.CardId);
+                }
+            }
+        }
+        return visible.ToArray();
     }
 
     private static bool IsVisible(EngineEventPayload payload, GameState state) =>

@@ -214,6 +214,27 @@ public static partial class GameEngine
         }
 
         TriggerInvocation invocation = frame.TriggerQueue[frame.TriggerCursor];
+        if (invocation.Mode == TriggerMode.Optional
+            && invocation.IsCatalogTrigger
+            && invocation.SourceCardId is { } sourceId
+            && working.BehaviorCatalog.TryGet(GetCard(working, sourceId).DefinitionId, out CardBehaviorDefinition? definition)
+            && !CatalogTriggerDamageCostIsPayable(working, GetCard(working, sourceId),
+                GetTriggerDeclaration(definition, invocation.TriggerKey!)))
+        {
+            // An optional queued ability with an unpayable self-trash cost
+            // cannot be initiated. Consume it before issuing an action ID.
+            if (frame.TriggerCursor + 1 == frame.TriggerQueue.Count)
+            {
+                working.ResolutionStack.RemoveAt(working.ResolutionStack.Count - 1);
+            }
+            else
+            {
+                ReplaceCheckpoint(working, frame, RemainingTriggerStageAfterAdvance(frame),
+                    triggerCursor: frame.TriggerCursor + 1,
+                    appliedTriggers: frame.AppliedTriggers.Append(invocation.Id).ToArray());
+            }
+            return;
+        }
         if (invocation.Mode == TriggerMode.Mandatory)
         {
             StartTriggerChild(working, frame, invocation);
@@ -414,6 +435,11 @@ public static partial class GameEngine
 
             CardBehaviorDefinition definition = GetBehaviorDefinition(working, sourceDefinitionId);
             BehaviorTrigger trigger = GetTriggerDeclaration(definition, invocation.TriggerKey);
+            if (trigger.RequireSourceInstalled
+                && sourceZoneKind is not (ZoneKind.ServerRoot or ZoneKind.ServerIce or ZoneKind.RunnerRig))
+            {
+                throw new ResolutionFailureException("This catalog trigger requires an installed source snapshot.");
+            }
             EffectCheckpointFrame awaiting = (EffectCheckpointFrame)working.ResolutionStack[^1];
             BehaviorResolutionFrame child = new(
                 definition,
@@ -983,8 +1009,7 @@ public static partial class GameEngine
         {
             bool activeRunEventSource = occurrence.Kind == OccurrenceKind.RunSuccessful
                 && IsActiveRunEventSource(working, source);
-            if ((!activeRunEventSource && !RuntimeCardActivity.IsActive(source, working.Zones))
-                || !working.BehaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? definition)
+            if (!working.BehaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? definition)
                 || definition.Controller != source.OwnerSide)
             {
                 continue;
@@ -992,12 +1017,14 @@ public static partial class GameEngine
 
             foreach (BehaviorTrigger trigger in definition.Triggers)
             {
-                if (trigger.Occurrence != occurrence.Kind
+                if (!CatalogTriggerSourceIsActive(working, source, trigger, activeRunEventSource)
+                    || trigger.Occurrence != occurrence.Kind
                     || occurrence.Kind == OccurrenceKind.TurnBegin
                         && trigger.Scope == BehaviorTriggerScope.Self
                     || frame.AppliedTriggers.Contains(CatalogTriggerId(occurrence, source, trigger.Key))
                     || !CatalogTriggerScopeMatches(trigger.Scope, source, occurrence, occurrenceController)
                     || !CatalogTriggerOutcomeMatches(trigger, occurrence)
+                    || !CatalogRunAgendaConditionMatches(trigger, occurrence)
                     || !CatalogTriggerServerMatches(working, trigger, occurrence)
                     || !CatalogTriggerSourceLocationMatches(working, trigger, source, occurrence)
                     || !CatalogTriggerCanStart(working, source, trigger))
@@ -1027,7 +1054,8 @@ public static partial class GameEngine
             }
         }
 
-        return materialized.ToArray();
+        materialized.AddRange(MaterializePersistentRunTriggers(working, occurrence, frame));
+        return materialized.DistinctBy(value => value.Id).ToArray();
     }
 
     private static bool IsActiveRunEventSource(WorkingState working, CardInstanceState source)
@@ -1105,7 +1133,7 @@ public static partial class GameEngine
             return true;
         }
 
-        if (occurrence.Kind is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered)
+        if (occurrence.Kind is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded)
             || occurrence.Effect is not GameplayOccurrenceEffect gameplay
             || gameplay.ServerId is not { } attackedServer)
         {
@@ -1113,7 +1141,9 @@ public static partial class GameEngine
         }
 
         ZoneState? sourceZone = working.Zones.FirstOrDefault(zone => zone.Id == source.ZoneId);
-        return sourceZone?.ServerId == attackedServer;
+        return sourceZone?.ServerId == attackedServer
+            && (occurrence.Kind != OccurrenceKind.CardRezzed
+                || working.RunState?.AttackedServer == attackedServer);
     }
 
     /// <summary>
@@ -1132,8 +1162,7 @@ public static partial class GameEngine
         {
             bool activeRunEventSource = occurrenceKind == OccurrenceKind.RunSuccessful
                 && IsActiveRunEventSource(working, source);
-            if ((!activeRunEventSource && !RuntimeCardActivity.IsActive(source, working.Zones))
-                || !working.BehaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? definition)
+            if (!working.BehaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? definition)
                 || definition.Controller != source.OwnerSide)
             {
                 continue;
@@ -1141,12 +1170,14 @@ public static partial class GameEngine
 
             if (definition.Triggers.Any(trigger =>
                 trigger.Occurrence == occurrenceKind
+                && CatalogTriggerSourceIsActive(working, source, trigger, activeRunEventSource)
                 && (trigger.ServerKindRequirement is null
                     || serverId is { } suppliedServerId
                         && working.Servers.FirstOrDefault(candidate => candidate.Id == suppliedServerId)?.Kind
                             == trigger.ServerKindRequirement)
                 && (!trigger.RequireSourceOnAttackedServer
-                    || occurrenceKind is OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered
+                    || occurrenceKind is OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded
+                        && (occurrenceKind != OccurrenceKind.CardRezzed || working.RunState?.AttackedServer == serverId)
                         && serverId is { } suppliedServer
                         && working.Zones.FirstOrDefault(zone => zone.Id == source.ZoneId)?.ServerId == suppliedServer)
                 && (occurrenceKind is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered)
@@ -1173,11 +1204,35 @@ public static partial class GameEngine
         return false;
     }
 
+    private static bool CatalogTriggerSourceIsActive(
+        WorkingState working,
+        CardInstanceState source,
+        BehaviorTrigger trigger,
+        bool activeRunEventSource)
+    {
+        bool installed = IsInstalledCard(working, source.Id);
+        return (!trigger.RequireSourceInstalled || installed)
+            && (activeRunEventSource
+                || RuntimeCardActivity.IsActive(source, working.Zones)
+                || trigger.ActiveWhileUnrezzed && installed && source.OwnerSide == PlayerSide.Corp);
+    }
+
+    private static bool CatalogTriggerDamageCostIsPayable(
+        WorkingState working,
+        CardInstanceState source,
+        BehaviorTrigger trigger) =>
+        !trigger.Instructions.Any(instruction => instruction.DamageAmountOperand?.TrashSourceAsCost == true)
+            || IsInstalledCard(working, source.Id);
+
     private static bool CatalogTriggerCanStart(
         WorkingState working,
         CardInstanceState source,
         BehaviorTrigger trigger)
     {
+        if (!CatalogTriggerDamageCostIsPayable(working, source, trigger))
+        {
+            return false;
+        }
         BehaviorChoiceSpec? openingChoice = trigger.Instructions.Count > 0
             && trigger.Instructions[0] is
             {

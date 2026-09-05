@@ -9,17 +9,18 @@ public static partial class GameEngine
 {
     /// <summary>
     /// Re-materializes real Corp advance payloads without allocating action or
-    /// decision IDs. Runtime metadata is the only source of printed agenda
-    /// class and advancement requirement in this projection.
+    /// decision IDs. Runtime metadata supplies agenda requirements; compiled
+    /// declarations grant advancement permission to other installed cards.
     /// </summary>
     internal static IReadOnlyList<AdvanceCardParameters> MaterializeAdvanceCardParameters(
         GameState state,
-        IRuntimeCardCatalog runtimeCardCatalog)
+        IRuntimeCardCatalog runtimeCardCatalog,
+        IBehaviorCatalog? behaviorCatalog = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(runtimeCardCatalog);
         return MaterializeAdvanceCardParameters(
-            WorkingState.From(state, BehaviorCatalog.Empty, runtimeCardCatalog));
+            WorkingState.From(state, behaviorCatalog ?? BehaviorCatalog.Empty, runtimeCardCatalog));
     }
 
     private static List<AdvanceCardParameters> MaterializeAdvanceCardParameters(WorkingState working)
@@ -42,7 +43,7 @@ public static partial class GameEngine
         }
 
         var materialized = new List<AdvanceCardParameters>();
-        foreach ((ServerState server, ZoneState root) in PhysicalRemoteRoots(working))
+        foreach ((ServerState server, ZoneState root) in PhysicalAdvanceZones(working))
         {
             // Keep the physical order of every root. Do not order by card ID:
             // root ordering is part of the action issuance contract.
@@ -52,12 +53,14 @@ public static partial class GameEngine
                 if (card is null
                     || card.OwnerSide != PlayerSide.Corp
                     || card.ZoneId != root.Id
-                    || card.FaceUp
-                    || card.Rezzed
                     || !working.RuntimeCardCatalog.TryGet(card.DefinitionId, out CardRuntimeSpec? spec)
                     || spec.Side != PlayerSide.Corp
-                    || spec.CardClass != RuntimeCardClass.Agenda
-                    || spec.AdvancementRequirement <= 0)
+                    || !(spec.CardClass == RuntimeCardClass.Agenda
+                            && server.Kind == ServerKind.Remote && root.Kind == ZoneKind.ServerRoot
+                            && !card.FaceUp && !card.Rezzed && spec.AdvancementRequirement > 0
+                        || spec.CardClass is RuntimeCardClass.Asset or RuntimeCardClass.Ice or RuntimeCardClass.Upgrade
+                            && working.BehaviorCatalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? definition)
+                            && definition.CanBeAdvanced))
                 {
                     continue;
                 }
@@ -100,7 +103,7 @@ public static partial class GameEngine
         if (issued is null)
         {
             throw new ResolutionFailureException(
-                "The advance action does not match the materialized Corp agenda set.");
+                "The advance action does not match the materialized advanceable Corp cards.");
         }
 
         CardInstanceState card = GetCard(working, parameters.CardId);
@@ -121,10 +124,16 @@ public static partial class GameEngine
             card.FaceUp,
             card.Rezzed,
             counters));
-        Emit(working, EngineEventKinds.AgendaAdvanced, new AgendaAdvancedEventPayload(
-            card.Id,
-            counters,
-            spec.AdvancementRequirement));
+        if (spec.CardClass == RuntimeCardClass.Agenda)
+        {
+            Emit(working, EngineEventKinds.AgendaAdvanced, new AgendaAdvancedEventPayload(
+                card.Id, counters, spec.AdvancementRequirement));
+        }
+        else
+        {
+            Emit(working, EngineEventKinds.BehaviorCardAdvanced, new BehaviorCardAdvancedEventPayload(
+                card.Id, 1, counters));
+        }
 
         StartNextTurnActionWindow(working, (TurnFrame)working.ResolutionStack[^1]);
     }
@@ -332,6 +341,26 @@ public static partial class GameEngine
             PriorityHolder: PlayerSide.Corp,
         } turn
         && turn.TurnNumber == working.Turn.TurnNumber;
+
+    private static IEnumerable<(ServerState Server, ZoneState Root)> PhysicalAdvanceZones(WorkingState working)
+    {
+        // Retain historical agenda/root ordering, then append additional
+        // installed locations using physical server and card order.
+        foreach (var entry in PhysicalRemoteRoots(working))
+        {
+            yield return entry;
+        }
+        foreach (ServerState server in working.Servers)
+        {
+            foreach (ZoneState zone in working.Zones.Where(zone =>
+                zone.ServerId == server.Id && zone.OwnerSide == PlayerSide.Corp
+                && (zone.Id == server.IceZoneId && zone.Kind == ZoneKind.ServerIce
+                    || server.Kind != ServerKind.Remote && zone.Id == server.RootZoneId && zone.Kind == ZoneKind.ServerRoot)))
+            {
+                yield return (server, zone);
+            }
+        }
+    }
 
     private static IEnumerable<(ServerState Server, ZoneState Root)> PhysicalRemoteRoots(WorkingState working)
     {

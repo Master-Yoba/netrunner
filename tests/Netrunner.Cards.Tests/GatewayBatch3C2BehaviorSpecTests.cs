@@ -16,8 +16,8 @@ public sealed class GatewayBatch3C2BehaviorSpecTests
     {
         BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();
 
-        Assert.Equal("gateway-m4-4.5", catalog.Version);
-        Assert.Equal(46, catalog.AllDefinitionIds.Count);
+        Assert.Equal("gateway-m4-4.6", catalog.Version);
+        Assert.Equal(58, catalog.AllDefinitionIds.Count);
         Assert.Equal(
             new[]
             {

@@ -1,3 +1,4 @@
+using Netrunner.AI;
 using Netrunner.Cards;
 using Netrunner.Core;
 using Xunit;
@@ -354,6 +355,94 @@ public sealed class UiRegionPresenterTests
             }));
         Assert.True(discard.IsForcedDiscard);
         Assert.Equal([ActionKind.ChooseCard], discard.DisplayActions.Select(action => action.Kind));
+    }
+
+    [Fact]
+    public void OrdinaryDecisionSurfacesRetainAllSupportedActionsAndTheirIssuedIds()
+    {
+        (DecisionKind Decision, ActionKind[] Actions)[] contracts =
+        [
+            (DecisionKind.TurnAction,
+            [
+                ActionKind.GainCredit, ActionKind.DrawCard, ActionKind.PlayCard,
+                ActionKind.InstallCard, ActionKind.StartRun, ActionKind.AdvanceCard,
+                ActionKind.ChooseBehavior, ActionKind.RemoveTag, ActionKind.TrashTaggedResource,
+                ActionKind.PurgeVirusCounters, ActionKind.UseAbility,
+            ]),
+            (DecisionKind.TurnTiming,
+            [
+                ActionKind.PassPriority, ActionKind.RezCard, ActionKind.ScoreAgenda, ActionKind.UseAbility,
+            ]),
+            (DecisionKind.RunTiming,
+            [
+                ActionKind.PassPriority, ActionKind.RezCard, ActionKind.RezIce,
+                ActionKind.BreakSubroutines, ActionKind.PumpBreaker, ActionKind.UseBioroidAbility,
+                ActionKind.UseAbility, ActionKind.JackOut, ActionKind.ContinueRun,
+                ActionKind.ChooseBreachCandidate, ActionKind.TrashAccessedCard, ActionKind.NoAccessAction,
+            ]),
+        ];
+        MatchViewModel view = RepresentativeView();
+        LegalActionViewModel[] actions = Enum.GetValues<ActionKind>()
+            .Append((ActionKind)int.MaxValue)
+            .Select(kind => new LegalActionViewModel(
+                new ActionId($"action:{kind}"), kind, kind.ToString(), new NoActionParameters()))
+            .ToArray();
+
+        foreach ((DecisionKind kind, ActionKind[] supported) in contracts)
+        {
+            DecisionViewModel decision = new(
+                $"decision:{kind}", 1, new PlayerId("player:runner"), PlayerSide.Runner, kind, "Choose an action.");
+            ActionsRegionState region = ActionsRegionPresenter.Present(
+                Snapshot(view with { Decision = decision, LegalActions = actions }));
+
+            Assert.Equal(
+                actions.Where(action => supported.Contains(action.Kind)).Select(action => action.Id),
+                region.DisplayActions.Select(action => action.Id));
+            Assert.Single(region.ActionGroups);
+        }
+    }
+
+    [Theory]
+    [InlineData(PlayerSide.Runner, DecisionKind.TurnAction, ActionKind.StartRun)]
+    [InlineData(PlayerSide.Corp, DecisionKind.TurnTiming, ActionKind.RezCard)]
+    public async Task FullMatchIssuedRunAndRezActionsReachTheHumanActionSurface(
+        PlayerSide human, DecisionKind decisionKind, ActionKind actionKind)
+    {
+        FullMatchDefinition definition = FullMatchDefinition.Developer();
+        PlayerSide opponent = human == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp;
+        FullGameContractAgent policy = new(human);
+        await using MatchCoordinator coordinator = new(
+            definition, new FullGameContractAgent(opponent), new MatchCoordinatorOptions { HumanSide = human });
+        await coordinator.StartAsync().WaitAsync(TimeSpan.FromSeconds(5));
+
+        for (int i = 0; i < 500; i++)
+        {
+            Observation observation = await coordinator.GetObservationAsync(human).WaitAsync(TimeSpan.FromSeconds(5));
+            MatchSnapshot snapshot = coordinator.CurrentSnapshot!;
+            Assert.False(snapshot.IsTerminal, "The full match ended before issuing the expected action.");
+            Assert.True(snapshot.AwaitingHumanDecision);
+            LegalAction[] expected = observation.Decision!.Kind == decisionKind
+                ? observation.LegalActions.Where(action => action.Kind == actionKind).ToArray()
+                : [];
+            if (expected.Length > 0)
+            {
+                ActionsRegionState region = ActionsRegionPresenter.Present(snapshot);
+                Assert.Equal(
+                    expected.Select(action => action.Id),
+                    region.DisplayActions.Where(action => action.Kind == actionKind).Select(action => action.Id));
+                MatchSubmissionResult applied = await coordinator.SubmitHumanActionAsync(expected[0].Id)
+                    .WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.True(applied.Accepted, applied.Feedback);
+                return;
+            }
+
+            ActionId selected = await policy.ChooseActionAsync(observation);
+            MatchSubmissionResult submitted = await coordinator.SubmitHumanActionAsync(selected)
+                .WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.True(submitted.Accepted, submitted.Feedback);
+        }
+
+        Assert.Fail("The full match exceeded the action cap before issuing the expected action.");
     }
 
     [Fact]

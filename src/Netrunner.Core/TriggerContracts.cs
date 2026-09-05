@@ -183,7 +183,7 @@ public sealed record OccurrenceSnapshot
         RemoveLingeringEffect value => new RemoveLingeringEffect(value.EffectId),
         MoveCardEffect value => new MoveCardEffect(value.CardId, value.DestinationZoneId),
         TurnBoundaryEffect value => new TurnBoundaryEffect(value.Kind, value.Target, value.TurnNumber),
-        GameplayOccurrenceEffect value => new GameplayOccurrenceEffect(value.Kind, value.Controller, value.SubjectCardId, value.ServerId, value.Successful),
+        GameplayOccurrenceEffect value => new GameplayOccurrenceEffect(value.Kind, value.Controller, value.SubjectCardId, value.ServerId, value.Successful, value.RunContext),
         BasicDrawEffect value => new BasicDrawEffect(value.Side, value.DrawCount, value.IsReplacement, value.OccurrenceId, value.IsFirstBasicDraw),
         _ => throw new ArgumentException($"Unknown effect instruction type '{effect.GetType().Name}'.", nameof(effect)),
     };

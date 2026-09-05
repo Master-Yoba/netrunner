@@ -11,6 +11,30 @@ namespace Netrunner.Core.Tests;
 public sealed class OrdinaryCardPlayTests
 {
     [Theory]
+    [InlineData(BehaviorConditionKind.Tagged, false)]
+    [InlineData(BehaviorConditionKind.NotTagged, true)]
+    [InlineData(BehaviorConditionKind.SuccessfulRunDuringRunnerLastTurn, false)]
+    public void OperationPlayRequiresItsDeclaredFacts(BehaviorConditionKind conditionKind, bool expected)
+    {
+        CardDefinitionId definitionId = new("test:operation-facts");
+        CardInstanceId cardId = new("card:operation-facts");
+        BehaviorCondition condition = conditionKind == BehaviorConditionKind.SuccessfulRunDuringRunnerLastTurn
+            ? new BehaviorCondition(conditionKind)
+            : new BehaviorCondition(conditionKind, subjectSide: PlayerSide.Runner);
+        BehaviorCatalog catalog = new BehaviorCatalogBuilder("test:operation-facts")
+            .Add(new CardBehaviorDefinition(definitionId, PlayerSide.Corp,
+                costs: [new BehaviorCost(BehaviorCostKind.Credits, 1)],
+                conditions: [condition],
+                instructions: [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]))
+            .Build();
+        RuntimeCardCatalog runtime = new RuntimeCardCatalogBuilder("runtime:operation-facts")
+            .Add(Runtime(definitionId, PlayerSide.Corp, 1)).Build();
+        Fixture fixture = CreateFixture(PlayerSide.Corp, [new FixtureCard(cardId, definitionId)], catalog, runtime, credits: 5);
+        GameState state = OpenTurnAction(fixture);
+        Assert.Equal(expected, state.PendingDecision!.LegalActions.Any(action => action.Parameters is PlayCardParameters play && play.CardId == cardId));
+    }
+
+    [Theory]
     [InlineData(PlayerSide.Runner, 2, 4)]
     [InlineData(PlayerSide.Corp, 1, 3)]
     public void TurnActionExposesOrdinaryPlayActionsInPhysicalHandOrder(

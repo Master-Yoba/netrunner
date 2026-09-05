@@ -204,6 +204,9 @@ public sealed record Slice45ActionPresentationViewModel(
                 IceSubroutineChoiceKind.InstallCard => "OPTION · INSTALL CARD",
                 IceSubroutineChoiceKind.PayCredits => "OPTION · PAY CREDITS",
                 IceSubroutineChoiceKind.TakeTag => "OPTION · TAKE TAG",
+                IceSubroutineChoiceKind.JackOut => "OPTION · JACK OUT",
+                IceSubroutineChoiceKind.ContinueRun => "OPTION · CONTINUE RUN",
+                IceSubroutineChoiceKind.EndRun => "OPTION · END RUN",
                 IceSubroutineChoiceKind.Decline => "OPTION · DECLINE",
                 _ => ActionKind switch
                 {
@@ -828,6 +831,9 @@ public static class Slice45PresentationProjector
                 break;
             case IceSubroutineChoiceKind.TakeTag:
             case IceSubroutineChoiceKind.Decline:
+            case IceSubroutineChoiceKind.JackOut:
+            case IceSubroutineChoiceKind.ContinueRun:
+            case IceSubroutineChoiceKind.EndRun:
                 if (choice.CardId is not null
                     || choice.DestinationKind is not null
                     || targetServerId is not null
@@ -908,9 +914,13 @@ public static class Slice45PresentationProjector
 
     private static PlayerSide IceChoiceOwner(IceSubroutineChoiceKind choice) => choice switch
     {
-        IceSubroutineChoiceKind.PayCredits or IceSubroutineChoiceKind.TakeTag => PlayerSide.Runner,
+        IceSubroutineChoiceKind.PayCredits
+            or IceSubroutineChoiceKind.TakeTag
+            or IceSubroutineChoiceKind.JackOut
+            or IceSubroutineChoiceKind.ContinueRun => PlayerSide.Runner,
         IceSubroutineChoiceKind.TrashInstalledRunnerCard
             or IceSubroutineChoiceKind.InstallCard
+            or IceSubroutineChoiceKind.EndRun
             or IceSubroutineChoiceKind.Decline => PlayerSide.Corp,
         _ => throw new ArgumentOutOfRangeException(nameof(choice)),
     };
