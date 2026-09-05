@@ -136,6 +136,8 @@ public static partial class GameEngine
         }
 
         StartNextTurnActionWindow(working, (TurnFrame)working.ResolutionStack[^1]);
+        if (card.AdvancementCounters == 0)
+            QueueIdentityOccurrence(working, OccurrenceKind.CardAdvancedFromZero, PlayerSide.Corp, card.Id);
     }
 
     /// <summary>
@@ -156,6 +158,7 @@ public static partial class GameEngine
     private static List<ScoreAgendaParameters> MaterializeScoreAgendaParameters(WorkingState working)
     {
         if (!IsCorpScoreWindow(working)
+            || IsScoringProhibited(working)
             || working.RuntimeCardCatalog is null
             || working.RunState is not null)
         {

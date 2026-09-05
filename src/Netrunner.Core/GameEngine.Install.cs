@@ -87,7 +87,7 @@ public static partial class GameEngine
     private static void StepInstall(WorkingState working, InstallFrame frame)
     {
         InstallPlan plan = ValidateInstallFrame(working, frame, requireFinalLegality: false);
-        if (frame.CandidateReplacementCardIds.Count == 0)
+        if (frame.CandidateReplacementCardIds.Count == 0 && !NeedsInstallHostChoice(working, frame))
         {
             CommitInstall(working, frame, plan);
             return;
@@ -139,6 +139,13 @@ public static partial class GameEngine
         InstallFrame frame,
         InstallPlan plan)
     {
+        if (NeedsInstallHostChoice(working, frame))
+        {
+            return InstallHosts(working, plan.Card).Select(hostId => new InstallCardParameters(
+                frame.CardId, frame.DestinationKind, frame.ServerId, frame.CreateNewRemote, frame.InstallCost,
+                frame.CandidateReplacementCardIds, frame.RequiredReplacementCardIds, frame.SelectedReplacementCardIds,
+                finalizeSelection: false, costQuote: frame.CostQuote, hostCardId: hostId)).ToList();
+        }
         var materialized = new List<InstallCardParameters>(frame.CandidateReplacementCardIds.Count + 1);
         foreach (CardInstanceId candidate in frame.CandidateReplacementCardIds
                      .Where(cardId => !frame.SelectedReplacementCardIds.Contains(cardId)))
@@ -157,7 +164,7 @@ public static partial class GameEngine
                 frame.RequiredReplacementCardIds,
                 selected,
                 finalizeSelection: false,
-                costQuote: quote));
+                costQuote: quote, hostCardId: frame.HostCardId));
         }
 
         PlayerState player = GetPlayer(working, frame.Owner);
@@ -182,7 +189,7 @@ public static partial class GameEngine
                 frame.RequiredReplacementCardIds,
                 frame.SelectedReplacementCardIds,
                 finalizeSelection: true,
-                costQuote: selectedQuote));
+                costQuote: selectedQuote, hostCardId: frame.HostCardId));
         }
 
         return materialized;
@@ -217,7 +224,8 @@ public static partial class GameEngine
             parameters.CardId,
             parameters.DestinationKind,
             parameters.ServerId,
-            parameters.CreateNewRemote)
+            parameters.CreateNewRemote,
+            hostCardId: parameters.HostCardId)
             ?? throw new ResolutionFailureException("The requested install is not currently legal.");
 
         if (!parameters.CandidateReplacementCardIds.SequenceEqual(plan.CandidateReplacementCardIds)
@@ -261,7 +269,7 @@ public static partial class GameEngine
                     [],
                     plan.DestinationZoneId,
                     plan.CandidateReplacementDefinitionIds,
-                    costQuote: plan.InstallCostQuote);
+                    costQuote: plan.InstallCostQuote, hostCardId: parameters.HostCardId);
                 working.ResolutionStack.Add(corpFrame);
                 return;
             }
@@ -292,7 +300,7 @@ public static partial class GameEngine
             [],
             plan.DestinationZoneId,
             plan.CandidateReplacementDefinitionIds,
-            costQuote: plan.InstallCostQuote);
+            costQuote: plan.InstallCostQuote, hostCardId: parameters.HostCardId);
 
         if (plan.CandidateReplacementCardIds.Count == 0)
         {
@@ -314,7 +322,18 @@ public static partial class GameEngine
         }
 
         InstallPlan plan = ValidateInstallFrame(working, frame, requireFinalLegality: false);
-        if (parameters.CardId != frame.CardId
+        if (NeedsInstallHostChoice(working, frame))
+        {
+            if (!MaterializeInstallChoiceParameters(working, frame, plan).Any(candidate =>
+                EngineJson.Serialize(candidate) == EngineJson.Serialize(parameters)))
+            {
+                throw new ResolutionFailureException("The selected install host does not match an issued host choice.");
+            }
+            working.ResolutionStack[^1] = frame.WithHost(parameters.HostCardId!.Value);
+            return;
+        }
+        if (parameters.HostCardId != frame.HostCardId
+            || parameters.CardId != frame.CardId
             || parameters.DestinationKind != frame.DestinationKind
             || parameters.ServerId != frame.ServerId
             || parameters.CreateNewRemote != frame.CreateNewRemote
@@ -473,7 +492,7 @@ public static partial class GameEngine
             installed.OwnerSide,
             frame.CardClass is RuntimeCardClass.Program or RuntimeCardClass.Hardware or RuntimeCardClass.Resource,
             false,
-            installed.AdvancementCounters));
+            installed.AdvancementCounters, frame.HostCardId));
         MarkInstalledThisTurn(working, frame.CardId);
         if (frame.CardClass == RuntimeCardClass.Program
             && player.Side == PlayerSide.Runner)
@@ -969,8 +988,17 @@ public static partial class GameEngine
         ServerId? serverId,
         bool createNewRemote,
         InstallInitiationKind initiationKind = InstallInitiationKind.BasicAction,
-        CardInstanceId? inwardAnchorIceId = null)
+        CardInstanceId? inwardAnchorIceId = null,
+        CardInstanceId? hostCardId = null)
     {
+        bool deferredHost = initiationKind == InstallInitiationKind.BehaviorEffect && hostCardId is null
+            && HostingSpec(working, GetCard(working, cardId)) is not null
+            && InstallHosts(working, GetCard(working, cardId)).Any();
+        if (!deferredHost && !IsLegalInstallHost(working, cardId, hostCardId))
+        {
+            return null;
+        }
+
         if (initiationKind is InstallInitiationKind.IceSubroutineNormal
             or InstallInitiationKind.IceSubroutineInwardIgnoreCosts)
         {
@@ -1792,6 +1820,10 @@ public static partial class GameEngine
         {
             throw new ResolutionFailureException("Install enumeration requires an injected runtime card catalog.");
         }
+        if (requireFinalLegality && !IsLegalInstallHost(working, frame.CardId, frame.HostCardId))
+        {
+            throw new ResolutionFailureException("The final install must identify a legal host.");
+        }
 
         InstallPlan plan = BuildInstallPlan(
                 working,
@@ -1801,7 +1833,7 @@ public static partial class GameEngine
                 frame.ServerId,
                 frame.CreateNewRemote,
                 frame.InitiationKind,
-                frame.InwardAnchorIceId)
+                frame.InwardAnchorIceId, frame.HostCardId)
             ?? throw new ResolutionFailureException("The frozen install destination or card is stale.");
 
         if (frame.DefinitionId != plan.Card.DefinitionId
@@ -2086,27 +2118,30 @@ public static partial class GameEngine
 
             foreach ((InstallDestinationKind destinationKind, ServerId? serverId, bool createNewRemote) in InstallDestinations(working, side, spec))
             {
-                InstallPlan? plan = BuildInstallPlan(working, side, cardId, destinationKind, serverId, createNewRemote);
-                if (plan is null)
+                foreach (CardInstanceId? hostCardId in InstallHosts(working, card))
                 {
-                    continue;
-                }
+                    InstallPlan? plan = BuildInstallPlan(working, side, cardId, destinationKind, serverId, createNewRemote, hostCardId: hostCardId);
+                    if (plan is null)
+                    {
+                        continue;
+                    }
 
-                actions.Add(new LegalAction(
-                    working.Allocator.NextActionId(),
-                    ActionKind.InstallCard,
-                    "Install card",
-                    new InstallCardParameters(
-                        cardId,
-                        destinationKind,
-                        serverId,
-                        createNewRemote,
-                        plan.InstallCost,
-                        plan.CandidateReplacementCardIds,
-                        plan.RequiredReplacementCardIds,
-                        [],
-                        finalizeSelection: plan.CandidateReplacementCardIds.Count == 0,
-                        costQuote: plan.InstallCostQuote)));
+                    actions.Add(new LegalAction(
+                        working.Allocator.NextActionId(),
+                        ActionKind.InstallCard,
+                        "Install card",
+                        new InstallCardParameters(
+                            cardId,
+                            destinationKind,
+                            serverId,
+                            createNewRemote,
+                            plan.InstallCost,
+                            plan.CandidateReplacementCardIds,
+                            plan.RequiredReplacementCardIds,
+                            [],
+                            finalizeSelection: plan.CandidateReplacementCardIds.Count == 0,
+                            costQuote: plan.InstallCostQuote, hostCardId: hostCardId)));
+                }
             }
         }
     }

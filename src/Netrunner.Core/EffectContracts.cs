@@ -378,7 +378,10 @@ public sealed record GameplayOccurrenceEffect : EffectInstruction
                 or OccurrenceKind.RunEnded
                 or OccurrenceKind.AgendaScoredOrStolen
                 or OccurrenceKind.CardAccessed
-                or OccurrenceKind.HostedCreditPoolEmptied))
+                or OccurrenceKind.HostedCreditPoolEmptied
+                or OccurrenceKind.CardAdvancedFromZero
+                or OccurrenceKind.AccessedCardTrashed
+                or OccurrenceKind.DiscardPhaseEnded))
         {
             throw new ArgumentOutOfRangeException(nameof(kind));
         }
@@ -681,7 +684,10 @@ public static class EffectInstructionValidator
                                 or OccurrenceKind.RunEnded
                                 or OccurrenceKind.AgendaScoredOrStolen
                                 or OccurrenceKind.CardAccessed
-                                or OccurrenceKind.HostedCreditPoolEmptied))
+                                or OccurrenceKind.HostedCreditPoolEmptied
+                or OccurrenceKind.CardAdvancedFromZero
+                or OccurrenceKind.AccessedCardTrashed
+                or OccurrenceKind.DiscardPhaseEnded))
                         {
                             Add(violations, "effects.invalid-gameplay-occurrence-kind", $"{instructionPath}.kind", $"'{occurrence.Kind}' is not a supported gameplay occurrence.");
                         }

@@ -741,6 +741,10 @@ public static partial class GameEngine
             counterName,
             delta,
             (int)next));
+        if (delta > 0 && counterName == "virus")
+        {
+            CheckHostedVirusThreshold(working, cardId, (int)next);
+        }
     }
 
     /// <summary>

@@ -60,7 +60,11 @@ public static partial class GameEngine
             card.OwnerSide,
             !entersHiddenZone && (entersPublicFaceUpZone || card.FaceUp),
             !leavesInstalledZone && card.Rezzed,
-            card.AdvancementCounters));
+            card.AdvancementCounters, leavesInstalledZone ? null : card.HostCardId));
+        if (leavesInstalledZone)
+        {
+            TrashHostedDescendants(working, card.Id);
+        }
         if (cleanupCounters
             && leavesInstalledZone)
         {
@@ -130,7 +134,7 @@ public static partial class GameEngine
         if (card.AdvancementCounters != 0)
         {
             ReplaceCard(working, new CardInstanceState(card.Id, card.DefinitionId, card.ZoneId,
-                card.OwnerSide, card.FaceUp, card.Rezzed, advancementCounters: 0));
+                card.OwnerSide, card.FaceUp, card.Rezzed, advancementCounters: 0, hostCardId: card.HostCardId));
         }
 
         RulesState? rules = working.RulesState;

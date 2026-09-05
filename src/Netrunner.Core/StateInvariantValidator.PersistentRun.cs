@@ -7,7 +7,8 @@ public static partial class StateInvariantValidator
         if (state.RunState?.PersistentContext is { } live)
         {
             ValidatePersistentContext(state, live, catalog, violations);
-            if (live.RunId != state.RunState.Id || live.ServerId != state.RunState.AttackedServer
+            if (live.AccessOccurrenceCount < state.RunState.AccessedCards.Count
+                || live.RunId != state.RunState.Id || live.ServerId != state.RunState.AttackedServer
                 || live.StolenAgendas.Any(id => !state.RunState.AccessedCards.Contains(id))
                 || live.Abilities.Any(value => !state.RunState.AccessedCards.Contains(value.SourceCardId)))
                 Add(violations, "run.persistent-context", "runState.persistentContext", "Persistent facts must belong to this run.");

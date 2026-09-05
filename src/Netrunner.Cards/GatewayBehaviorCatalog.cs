@@ -12,7 +12,7 @@ public static class GatewayBehaviorCatalog
     /// <summary>
     /// Version of the current immutable Gateway behavior composition.
     /// </summary>
-    public const string Version = "gateway-m4-4.6";
+    public const string Version = "gateway-m4-4.7";
 
     /// <summary>
     /// Builds the immutable Gateway behavior catalog used by a production
@@ -30,6 +30,10 @@ public static class GatewayBehaviorCatalog
             .AddIcebreaker(GatewayBatch4IcebreakerBehaviorSpecs.IcebreakerSpecs)
             .AddRunEvent(GatewayRunEventBehaviorSpecs.RunEventSpecs)
             .AddAgenda(GatewayAgendaBehaviorSpecs.AgendaSpecs)
+            .AddAgenda(GatewayBatch6IdentityAgendaBehaviorSpecs.AgendaSpecs)
+            .Add(GatewayBatch6IdentityAgendaBehaviorSpecs.GenericSpecs)
+            .Add(GatewayBatch6TrojanBehaviorSpecs.GenericSpecs)
+            .AddAsset(new AssetBehaviorSpec(new CardDefinitionId("30066"), trashCost: 4))
             .AddAsset(GatewayAssetBehaviorSpecs.AssetSpecs)
             .Add(GatewayBatch1BehaviorSpecs.GenericSpecs)
             .Add(GatewayBatch2BehaviorSpecs.GenericSpecs)

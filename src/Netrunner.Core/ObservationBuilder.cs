@@ -225,6 +225,7 @@ public static partial class ObservationBuilder
             publicState["run"] = RunView(state, run, viewer, accessVisible, behaviorCatalog);
         }
 
+        AddRunEndAccessPresentation(state, publicState);
         AddDamagePresentation(state, viewer, accessVisible, behaviorCatalog, publicState);
         return publicState;
     }
@@ -456,6 +457,8 @@ public static partial class ObservationBuilder
                 .ToArray();
         }
 
+        if (run.PersistentContext is { } context)
+            view["accessOccurrenceCount"] = context.AccessOccurrenceCount;
         return view;
     }
 
@@ -821,6 +824,10 @@ public static partial class ObservationBuilder
             ["rezzed"] = card.Rezzed,
             ["advancementCounters"] = card.AdvancementCounters,
         };
+        if (card.HostCardId is { } hostId)
+        {
+            view["hostCardId"] = hostId.Value;
+        }
         AddCounters(view, state, card.Id);
         return view;
     }

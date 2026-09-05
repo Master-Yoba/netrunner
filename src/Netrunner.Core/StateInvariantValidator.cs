@@ -142,6 +142,7 @@ public static partial class StateInvariantValidator
         ValidateMetadata(state, behaviorCatalog, enforceCatalogCompatibility, runtimeCardCatalog, violations);
         ValidatePlayers(state, violations);
         ValidateZonesAndCards(state, behaviorCatalog, violations);
+        ValidateHosting(state, behaviorCatalog, runtimeCardCatalog, violations);
         ValidateServers(state, violations);
         ValidateSetupAndIdentities(state, runtimeCardCatalog, violations);
         if (runtimeCardCatalog is not null)
@@ -2507,6 +2508,8 @@ public static partial class StateInvariantValidator
             ResolutionFrame suffixRoot = state.ResolutionStack[runFrameIndex + 1];
             bool expectedGameplayOccurrence = suffixRoot is EffectResolutionFrame occurrenceFrame
                 && IsExpectedRunGameplayOccurrenceFrame(state, occurrenceFrame, run);
+            bool expectedIceTag = suffixRoot is EffectResolutionFrame tagFrame
+                && IsExpectedRunTagEffectFrame(state, tagFrame, run, behaviorCatalog);
             bool expectedIceInstall = state.ResolutionStack[runFrameIndex] is IceSubroutineFrame
                 && suffixRoot is InstallFrame;
             bool expectedIceDamage = state.ResolutionStack[runFrameIndex] is IceSubroutineFrame
@@ -2522,7 +2525,8 @@ public static partial class StateInvariantValidator
             if (suffixRoot is not AbilityFrame
                 && !expectedGameplayOccurrence
                 && !expectedIceInstall
-                && !expectedIceDamage)
+                && !expectedIceDamage
+                && !expectedIceTag)
             {
                 Add(
                     violations,
@@ -2532,7 +2536,7 @@ public static partial class StateInvariantValidator
                 return;
             }
 
-            if (!expectedGameplayOccurrence && !expectedIceInstall && !expectedIceDamage)
+            if (!expectedGameplayOccurrence && !expectedIceInstall && !expectedIceDamage && !expectedIceTag)
             {
                 for (int index = runFrameIndex + 2; index < state.ResolutionStack.Count; index++)
                 {
@@ -2680,6 +2684,14 @@ public static partial class StateInvariantValidator
                 && run.ChosenAccessCards[^1] == accessed
                 && run.AccessedCards.Contains(accessed)
                 && occurrence.ServerId == run.AttackedServer,
+            OccurrenceKind.AccessedCardTrashed => run.InitiatingSide == PlayerSide.Runner
+                && run.Step is RunTimingStep.BreachCandidateSelection or RunTimingStep.RunEnd
+                && frame.Controller == run.InitiatingPlayer
+                && occurrence.SubjectCardId is { } trashed
+                && run.ChosenAccessCards.Contains(trashed)
+                && run.AccessedCards.Contains(trashed)
+                && occurrence.ServerId is null
+                && state.Zones.Any(zone => zone.Kind == ZoneKind.CorpDiscard && zone.CardIds.Contains(trashed)),
             OccurrenceKind.AgendaScoredOrStolen => run.InitiatingSide == PlayerSide.Runner
                 && run.Successful
                 && run.Step is RunTimingStep.BreachCandidateSelection or RunTimingStep.RunEnd
@@ -8469,6 +8481,8 @@ public static partial class StateInvariantValidator
         IReadOnlyList<RezCardParameters> expectedRuntimeRezes = [];
         var expectedRunRezes = new List<RunIceParameters>();
         var expectedBioroidAbilities = new List<RunBioroidAbilityParameters>();
+        var expectedHostedBreaks = new HashSet<(CardInstanceId, SubroutineId)>();
+        var actualHostedBreaks = new HashSet<(CardInstanceId, SubroutineId)>();
         switch (run.Step)
         {
             case RunTimingStep.InitiationPaidWindow:
@@ -8588,6 +8602,17 @@ public static partial class StateInvariantValidator
                                         ability.Key,
                                         ability.Cost,
                                         subroutine.Ordinal));
+                                }
+                            }
+                        }
+
+                        foreach (CardInstanceState hosted in state.Cards)
+                        {
+                            if (GameEngine.CanBreakHostedCounter(state, behaviorCatalog, hosted, run))
+                            {
+                                foreach (RunSubroutineState subroutine in run.Encounter.Subroutines.Where(value => !value.Broken && !value.Resolved))
+                                {
+                                    expectedHostedBreaks.Add((hosted.Id, subroutine.Id));
                                 }
                             }
                         }
@@ -8810,6 +8835,21 @@ public static partial class StateInvariantValidator
                 case (ActionKind.BreakSubroutines, RunBreakParameters breakSubroutinesAction):
                     CardInstanceState? breakSource = state.Cards.FirstOrDefault(
                         candidate => candidate?.Id == breakSubroutinesAction.BreakerId);
+                    if (breakSource is not null && behaviorCatalog.TryGet(breakSource.DefinitionId, out CardBehaviorDefinition? breakDefinition)
+                        && breakDefinition.Hosting?.BreakHostSubroutine == true)
+                    {
+                        if (breakSubroutinesAction.SubroutineId is not { } target || breakSubroutinesAction.Quantity != 1
+                            || breakSubroutinesAction.HostedCredits != 0 || breakSubroutinesAction.CostQuote is not null
+                            || !actualHostedBreaks.Add((breakSource.Id, target)))
+                        {
+                            Add(violations, "run.invalid-hosted-break", path, "Hosted breaks require one distinct target and one counter payment.");
+                        }
+                        break;
+                    }
+                    if (breakSubroutinesAction.SubroutineId is not null)
+                    {
+                        Add(violations, "run.invalid-break-target", path, "Ordinary count-based breakers cannot contain a hosted target.");
+                    }
                     CostQuote? expectedBreakQuote = null;
                     if (breakSource is not null
                         && behaviorCatalog.TryGetIcebreaker(
@@ -8892,6 +8932,12 @@ public static partial class StateInvariantValidator
                     $"Run timing decision contains {count} copies of '{spec.Kind}' for target '{spec.Target?.ToString() ?? "none"}', "
                     + $"quantity {spec.Quantity}, hosted credits {spec.HostedCredits}, expected {expectedCount}.");
             }
+        }
+
+        if (!expectedHostedBreaks.SetEquals(actualHostedBreaks))
+        {
+            Add(violations, "run.hosted-break-target-mismatch", path,
+                "Hosted counter break actions must name exactly every currently unbroken host subroutine.");
         }
 
         ValidateRezActionBijection(
@@ -10397,7 +10443,8 @@ public static partial class StateInvariantValidator
                     Add(violations, "decision.install-selection-mismatch", $"{path}.parameters.selectedReplacementCardIds", "A final install action must submit the frame's exact selected set.");
                 }
             }
-            else
+            else if (!(frame.HostCardId is null && action.HostCardId is not null
+                && action.SelectedReplacementCardIds.SequenceEqual(frame.SelectedReplacementCardIds)))
             {
                 IReadOnlyList<CardInstanceId> selected = frame.SelectedReplacementCardIds;
                 if (action.SelectedReplacementCardIds.Count != selected.Count + 1
@@ -11496,6 +11543,7 @@ public static partial class StateInvariantValidator
         InstallCardParameters actual,
         InstallCardParameters expected) =>
         actual.CardId == expected.CardId
+        && actual.HostCardId == expected.HostCardId
         && actual.DestinationKind == expected.DestinationKind
         && actual.ServerId == expected.ServerId
         && actual.CreateNewRemote == expected.CreateNewRemote
@@ -12349,6 +12397,7 @@ public static partial class StateInvariantValidator
 
         CardInstanceState? card = state.Cards.FirstOrDefault(value => value?.Id == cardId);
         if (card is null
+            || (filter.Rezzed is { } rezzed && card.Rezzed != rezzed)
             || (filter.DefinitionId.HasValue && card.DefinitionId != filter.DefinitionId.Value)
             || (filter.OwnerSide.HasValue && card.OwnerSide != filter.OwnerSide.Value))
         {
@@ -12371,6 +12420,7 @@ public static partial class StateInvariantValidator
             return filter.CardType switch
             {
                 BehaviorCardType.Any => true,
+                BehaviorCardType.NonAgenda => runtimeSpec.CardClass != RuntimeCardClass.Agenda,
                 BehaviorCardType.Agenda => runtimeSpec.CardClass == RuntimeCardClass.Agenda,
                 BehaviorCardType.Asset => runtimeSpec.CardClass == RuntimeCardClass.Asset,
                 BehaviorCardType.Event => runtimeSpec.CardClass == RuntimeCardClass.Event,

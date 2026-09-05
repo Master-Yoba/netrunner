@@ -288,6 +288,14 @@ public static partial class GameEngine
             case BehaviorInstructionKind.Branch:
                 ResolveBehaviorBranch(working, frame, instruction);
                 return;
+            case BehaviorInstructionKind.GainCreditsPerAccess:
+                ResolveRunAccessCredits(working, frame);
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.SwapInstalledIce:
+                ResolveSwapInstalledIce(working, frame, instruction);
+                AdvanceBehaviorCursor(working, frame);
+                return;
             case BehaviorInstructionKind.GainCredits:
                 int creditGain = instruction.AmountOperand is null
                     ? instruction.Amount
@@ -460,8 +468,9 @@ public static partial class GameEngine
                     BehaviorPlayerSelector.Runner => GetPlayer(working, PlayerSide.Runner).Id,
                     _ => throw new ResolutionFailureException("The AddTags recipient is invalid."),
                 };
-                ApplyTags(working, tagRecipient, instruction.Amount);
                 AdvanceBehaviorCursor(working, frame);
+                working.ResolutionStack.Add(new EffectResolutionFrame(frame.Controller, new CostBundle(),
+                    new EffectBundle(new TagAdjustmentEffect(tagRecipient, instruction.Amount))));
                 return;
             case BehaviorInstructionKind.TrashSelf:
                 ResolveBehaviorTransfer(
@@ -470,6 +479,13 @@ public static partial class GameEngine
                     new BehaviorInstruction(BehaviorInstructionKind.TrashCard, target: new BehaviorTarget(BehaviorTargetKind.Self)),
                     BehaviorTransferKind.Trash);
                 return;
+            case BehaviorInstructionKind.ProhibitScoringThisTurn:
+                MarkScoreProhibition(working, frame.SourceCardId);
+                AdvanceBehaviorCursor(working, frame);
+                break;
+            case BehaviorInstructionKind.RezIgnoringCosts:
+                ResolveBehaviorRezIgnoringCosts(working, frame, instruction);
+                break;
             case BehaviorInstructionKind.NoOp:
                 AdvanceBehaviorCursor(working, frame);
                 return;
@@ -2998,6 +3014,7 @@ public static partial class GameEngine
         }
 
         CardInstanceState card = GetCard(working, cardId);
+        if (filter.Rezzed is { } requiredRezzed && card.Rezzed != requiredRezzed) return false;
         if (filter.DefinitionId.HasValue && card.DefinitionId != filter.DefinitionId.Value)
         {
             return false;
@@ -3029,6 +3046,7 @@ public static partial class GameEngine
             return filter.CardType switch
             {
                 BehaviorCardType.Any => true,
+                BehaviorCardType.NonAgenda => runtimeSpec.CardClass != RuntimeCardClass.Agenda,
                 BehaviorCardType.Agenda => runtimeSpec.CardClass == RuntimeCardClass.Agenda,
                 BehaviorCardType.Asset => runtimeSpec.CardClass == RuntimeCardClass.Asset,
                 BehaviorCardType.Event => runtimeSpec.CardClass == RuntimeCardClass.Event,
@@ -3533,6 +3551,7 @@ public static partial class GameEngine
                 EngineEventKinds.AccessedCardTrashed,
                 new AccessedCardTrashedEventPayload(run.Id, accessed.Id, trashCost: 0));
             AdvanceBehaviorCursor(working, frame);
+            QueueIdentityOccurrence(working, OccurrenceKind.AccessedCardTrashed, PlayerSide.Runner, accessed.Id);
             return;
         }
 
@@ -3847,7 +3866,8 @@ public static partial class GameEngine
             BehaviorTransferKind.Shuffle when destination.Kind is ZoneKind.CorpDeck or ZoneKind.RunnerStack => false,
             BehaviorTransferKind.Shuffle => frozenSelection?.OriginalFaceUp ?? card.FaceUp,
             BehaviorTransferKind.AddToHand => false,
-            BehaviorTransferKind.Trash => destination.Kind is ZoneKind.CorpDiscard or ZoneKind.RunnerHeap,
+            BehaviorTransferKind.Trash => destination.Kind == ZoneKind.RunnerHeap
+                || (frozenSelection?.OriginalFaceUp ?? card.FaceUp),
             _ => card.FaceUp,
         };
         ReplaceCard(working, new CardInstanceState(

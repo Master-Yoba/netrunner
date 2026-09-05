@@ -367,7 +367,8 @@ public sealed record InstallCardParameters : ActionParameters
         IReadOnlyList<CardInstanceId>? requiredReplacementCardIds = null,
         IReadOnlyList<CardInstanceId>? selectedReplacementCardIds = null,
         bool finalizeSelection = true,
-        CostQuote? costQuote = null)
+        CostQuote? costQuote = null,
+        CardInstanceId? hostCardId = null)
     {
         if (!Enum.IsDefined(destinationKind))
         {
@@ -409,7 +410,12 @@ public sealed record InstallCardParameters : ActionParameters
         SelectedReplacementCardIds = Freeze(selectedReplacementCardIds);
         FinalizeSelection = finalizeSelection;
         CostQuote = costQuote;
+        HostCardId = hostCardId;
     }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CardInstanceId? HostCardId { get; private set; }
 
     [JsonInclude]
     [JsonRequired]
@@ -545,7 +551,8 @@ public sealed record RunBreakParameters : ActionParameters
         CardInstanceId breakerId,
         int quantity,
         int hostedCredits = 0,
-        CostQuote? costQuote = null)
+        CostQuote? costQuote = null,
+        SubroutineId? subroutineId = null)
     {
         if (quantity < 1)
         {
@@ -566,6 +573,7 @@ public sealed record RunBreakParameters : ActionParameters
         Quantity = quantity;
         HostedCredits = hostedCredits;
         CostQuote = costQuote;
+        SubroutineId = subroutineId;
     }
 
     [JsonInclude]
@@ -587,6 +595,10 @@ public sealed record RunBreakParameters : ActionParameters
     [JsonInclude]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public CostQuote? CostQuote { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public SubroutineId? SubroutineId { get; private set; }
 
     [JsonIgnore]
     public int RunCredits => HostedCredits;
@@ -1545,7 +1557,7 @@ public sealed class PendingDecision
             install.RequiredReplacementCardIds,
             install.SelectedReplacementCardIds,
             install.FinalizeSelection,
-            install.CostQuote),
+            install.CostQuote, install.HostCardId),
         RunCardPaymentParameters payment => new RunCardPaymentParameters(payment.CardId, payment.HostedCredits),
         RunIceParameters runIce => new RunIceParameters(runIce.IceId, runIce.CostQuote),
         RunBreakerParameters breaker => new RunBreakerParameters(breaker.BreakerId, breaker.HostedCredits),
@@ -1553,7 +1565,7 @@ public sealed class PendingDecision
             runBreak.BreakerId,
             runBreak.Quantity,
             runBreak.HostedCredits,
-            runBreak.CostQuote),
+            runBreak.CostQuote, runBreak.SubroutineId),
         RunBioroidAbilityParameters bioroid => new RunBioroidAbilityParameters(
             bioroid.IceId,
             bioroid.SubroutineId,

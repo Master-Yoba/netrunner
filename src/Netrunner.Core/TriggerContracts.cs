@@ -33,6 +33,9 @@ public enum OccurrenceKind
     BasicDraw,
     ServerApproached,
     IceEncountered,
+    CardAdvancedFromZero,
+    AccessedCardTrashed,
+    DiscardPhaseEnded,
 }
 
 public enum OccurrencePhase

@@ -832,6 +832,7 @@ public static partial class GameEngine
             frame.ActiveSide,
             frame.TurnNumber,
             TurnFrameStage.FormalTurnEnd);
+        QueueIdentityOccurrence(working, OccurrenceKind.DiscardPhaseEnded, frame.ActiveSide);
     }
 
     private static void EndFormalTurn(WorkingState working, TurnFrame frame)

@@ -46,6 +46,11 @@ internal static class RuntimeCardActivity
             return false;
         }
 
+        if (card.FaceUp && zone.ServerId is null
+            && (zone.Kind == ZoneKind.CorpIdentity && card.OwnerSide == PlayerSide.Corp
+                || zone.Kind == ZoneKind.RunnerIdentity && card.OwnerSide == PlayerSide.Runner
+                || zone.Kind == ZoneKind.CorpScore && card.OwnerSide == PlayerSide.Corp)) return true;
+
         return card.OwnerSide switch
         {
             PlayerSide.Runner => card.FaceUp
