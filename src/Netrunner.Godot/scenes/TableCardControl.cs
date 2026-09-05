@@ -210,7 +210,7 @@ public partial class TableCardControl : Control
 
 		float headerHeight = _isIce
 			? Mathf.Min(22, cardSize.Y * 0.34f)
-			: Mathf.Min(29, cardSize.Y * 0.30f);
+			: IsCompactPortrait ? 43 : Mathf.Min(29, cardSize.Y * 0.30f);
 		DrawRect(new Rect2(2, 2, cardSize.X - 4, headerHeight), accent.Darkened(0.42f));
 		DrawRect(
 			new Rect2(2, 2 + headerHeight - 2, cardSize.X - 4, 2),
@@ -225,9 +225,9 @@ public partial class TableCardControl : Control
 			: IsCompactPortrait
 				? new Rect2(
 					6,
-					cardSize.Y * 0.31f,
+					cardSize.Y * 0.47f,
 					Mathf.Max(1, cardSize.X - 12),
-					Mathf.Max(1, cardSize.Y * 0.27f))
+					Mathf.Max(1, cardSize.Y * 0.13f))
 				: new Rect2(8, 39, Mathf.Max(1, cardSize.X - 16), 55);
 		if (_artwork is not null)
 		{
@@ -289,9 +289,9 @@ public partial class TableCardControl : Control
 			float width = Mathf.Max(1, _displaySize.X - 8);
 			float statusY = Mathf.Max(0, _displaySize.Y - 14);
 			float statsY = Mathf.Max(0, _displaySize.Y - 34);
-			SetLabelRect(_title, new Rect2(4, 3, width, 14), 10, Colors.White);
-			SetLabelRect(_type, new Rect2(4, 17, width, 11), 7, new Color(0.80f, 0.88f, 0.92f));
-			SetLabelRect(_stats, new Rect2(4, statsY, width, 10), 8, new Color(0.91f, 0.94f, 0.98f));
+			SetLabelRect(_title, new Rect2(4, 2, width, 31), 10, Colors.White);
+			SetLabelRect(_type, new Rect2(4, 33, width, 10), 8, new Color(0.80f, 0.88f, 0.92f));
+			SetLabelRect(_stats, new Rect2(4, statsY, width, 11), 9, new Color(0.91f, 0.94f, 0.98f));
 			SetLabelRect(_rulesCue, new Rect2(4, 0, width, 1), 7, new Color(0.66f, 0.73f, 0.79f));
 			SetLabelRect(_status, new Rect2(4, statusY, width, 10), 7, new Color(0.74f, 0.81f, 0.86f));
 			SetLabelRect(_counters, new Rect2(4, Mathf.Max(0, _displaySize.Y - 24), width, 10), 7, new Color(1.0f, 0.83f, 0.39f));
@@ -319,7 +319,11 @@ public partial class TableCardControl : Control
 
 		bool known = _card?.IsKnown == true;
 		bool compact = IsCompactPortrait;
-		_title.Text = known ? _card!.Title : "FACE-DOWN";
+		_title.Text = known ? compact ? CompactTitle(_card!.Title) : _card!.Title : "FACE-DOWN";
+		_title.AutowrapMode = TextServer.AutowrapMode.Off;
+		_title.VerticalAlignment = VerticalAlignment.Top;
+		_title.MaxLinesVisible = compact ? 2 : 1;
+		_title.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
 		_type.Text = known ? FormatType(_card!, compact || _isIce) : "UNKNOWN";
 		_stats.Text = known ? FormatStats(_card!, compact) : "HIDDEN";
 		_rulesCue.Text = known
@@ -328,7 +332,7 @@ public partial class TableCardControl : Control
 		_status.Text = known ? FormatStatus(_card!, compact) : "FACE-DOWN";
 		_counters.Text = known ? FormatCounters(_card!, compact) : string.Empty;
 		_counters.Visible = _counters.Text.Length > 0;
-		_rulesCue.Visible = known && (_isIce || !compact);
+		_rulesCue.Visible = known && !_isIce && !compact;
 
 		var statusStyle = new StyleBoxFlat
 		{
@@ -365,6 +369,14 @@ public partial class TableCardControl : Control
 		TooltipText = known
 			? BuildTooltip(_card!)
 			: "Face-down card; identity is concealed.";
+	}
+
+	private static string CompactTitle(string title)
+	{
+		string name = title.Split(':')[0];
+		if (name.Length <= 11) return name;
+		int split = name.LastIndexOf(' ', Math.Min(11, name.Length - 1));
+		return split > 0 ? name[..split] + "\n" + name[(split + 1)..] : name;
 	}
 
 	private void RefreshArtwork()
@@ -404,6 +416,7 @@ public partial class TableCardControl : Control
 	private void HandleMouseEntered()
 	{
 		_hovered = true;
+		ZIndex = 10;
 		QueueRedraw();
 		EmitInspection();
 	}
@@ -411,26 +424,26 @@ public partial class TableCardControl : Control
 	private void HandleMouseExited()
 	{
 		_hovered = false;
+		ZIndex = HasFocus() ? 10 : 0;
 		QueueRedraw();
 	}
 
 	private void HandleFocusEntered()
 	{
+		ZIndex = 10;
 		QueueRedraw();
 		EmitInspection();
 	}
 
 	private void HandleFocusExited()
 	{
+		ZIndex = _hovered ? 10 : 0;
 		QueueRedraw();
 	}
 
 	private void EmitInspection()
 	{
-		if (_card is not null && !string.IsNullOrWhiteSpace(_card.Id))
-		{
-			CardInspected?.Invoke(_card.Id);
-		}
+		CardInspected?.Invoke(_card is { IsKnown: true } ? _card.Id : string.Empty);
 	}
 
 	private Color ResolveAccent()

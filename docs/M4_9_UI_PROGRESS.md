@@ -2,13 +2,14 @@
 
 Date: 5 September 2026
 
-Status: implementation and automated verification in progress. The card table
-is the default match UI. **The required player usability review is pending;
+Status: UI-490 through UI-494 implemented; local M4 regression gate passed.
+The card table is the default match UI. UI-495 awaits player acceptance. **The required player usability review is pending;
 M5 is not cleared by automated games or these screenshots.**
 
 Plan: [M4.9 UI plan](M4_9_UI_PLAN.md).
 Implementation branch: `feat/m4-9-card-table`.
-First implementation checkpoint: `9f946b7`.
+Implementation checkpoints: `9f946b7`, `7e527de`.
+Draft PR: [#15](https://github.com/Master-Yoba/netrunner/pull/15).
 
 ## Implemented behavior
 
@@ -33,6 +34,7 @@ First implementation checkpoint: `9f946b7`.
   Public card faces open inspection; concealed piles remain count-only.
 - A compact right-edge history rail expands to readable chronological history,
   with turn separators, details, frozen known-card inspection and copy/export.
+  Pinning reserves a separate column on large windows; 720p keeps an overlay.
   Older-page reading survives new entries and shows an unread count. All
   in-session entries are retained; only 80 groups are rendered per page.
 - Accepted publications are presented in order. Movement, reduced-motion
@@ -61,7 +63,8 @@ composition, publication playback and routing of engine-issued IDs.
 Architect review corrected compact-card sizing, hidden-card inspection reset,
 server selection, run-fingerprint refresh, stale targets, publication settlement,
 movement cancellation, transient-zone history handling, automatic rez attribution,
-and private-movement identity retirement. The full-game identity assertion was
+private-movement identity retirement, complete source/server action mapping,
+and the ungrouped issued-action fallback. The full-game identity assertion was
 adapted to the rendered table cards instead of obsolete diagnostic labels.
 
 The Nico opening is unchanged: seed `47042`, basic decks, both hands kept,
@@ -70,6 +73,12 @@ Nico, then replaces it with a concealed installation. History explains both
 outgoing Nico cards going to Archives without naming the final hidden card.
 Opponent policy remains M5 work.
 
+The only Core change is additive public Runner `usedMemory`/`memoryLimit`
+observation fields when RulesState exists, using the engine's existing static
+modifier projection. Match maps them as nullable values and Godot displays them.
+Legacy M1 observation shape, serialized state and gameplay remain unchanged.
+Focused tests cover legacy omission, initial 0/4, and an active modifier.
+
 ## Verification record
 
 - Focused Match history tests cover 2,000-entry retention and deduplication,
@@ -77,7 +86,8 @@ Opponent policy remains M5 work.
   and discards, reveal/private movement, same-action knowledge retirement,
   automatic Corp rez attribution, missing transient zones, public shuffle and
   discard/trash details, and scrubbed historical handles.
-- `--m4-9-ui-smoke` uses real mouse input for the official Nico opening. Dense
+- `--m4-9-ui-smoke` uses real mouse input for the official Nico opening and
+  starts an actual run through server selection and its contextual Run button. Dense
   fixtures cover six remotes, five ICE, ten hand cards, twelve Runner cards,
   hosted cards, long history, both seats and both target resolutions. It checks
   card/dock bounds, stable nodes, keyboard overflow, inspection, history paging,
@@ -85,14 +95,25 @@ Opponent policy remains M5 work.
 - Native OpenGL review was performed on Apple M5, Godot 4.7.2 .NET, at
   1280×720 and 2560×1440. Earlier rejected screenshots exposed clipped hand
   content; the strengthened smoke now asserts actual hand and rig visibility.
-- A 120-frame native dense-board/history sample measured median 2.79 ms and
-  p95 2.89 ms on Apple M5. This is an idle presentation sample, not a claim
+- A 120-frame native dense-board/history sample measured median 8.25 ms and
+  p95 11.13 ms on Apple M5. This is an idle presentation sample, not a claim
   about every animation or a completed manual gameplay performance session.
-- The complete M4 gate and synthetic CI results will be recorded below after
-  the final implementation revision passes.
+- Final local `make m4-gate` passed on implementation checkpoint `7e527de`:
+  1,362 solution tests (798 Core, 314 Cards, 59 AI, 68 CLI, 123 Match), official
+  supplemental checks, formatting, proofs, native/headless UI checks, secret
+  scanning and 77/77 coverage. Subsequent concealed-focus, compact-title and complete contextual-routing
+  corrections are covered by the refreshed native smoke and PR CI.
+- The four official games all completed through table controls, restarted, and
+  returned to fresh setup: Corp/basic 928 actions, Runner/basic 1,715,
+  Corp/expanded 1,094, Runner/expanded 964; all use seed `47042`.
+- [PR checks](https://github.com/Master-Yoba/netrunner/pull/15/checks) run the
+  complete synthetic `make verify` and official `make m4-gate` lanes on Linux.
+  Both lanes passed checkpoint `7e527de`; the live checks are the authoritative
+  result for the PR's current revision.
 
 ## Visual evidence
 
+- [Native check output](evidence/m4-9/native-ui-smoke.txt)
 - [User reference](evidence/m4-9/reference/chiriboga.png)
 - [Nico opening table](evidence/m4-9/nico-table.png)
 - [Nico history](evidence/m4-9/nico-history.png)
@@ -102,6 +123,7 @@ Opponent policy remains M5 work.
 - [Dense Corp table, 1440p](evidence/m4-9/dense-corp-2560.png)
 - [Encounter presentation](evidence/m4-9/active-run-runner-1280.png)
 - [Expanded history](evidence/m4-9/history-runner-1280.png)
+- [Archives browser](evidence/m4-9/archives-browser-1280.png)
 - [Outcome presentation](evidence/m4-9/outcome-runner-1280.png)
 
 These are native screenshots of scripted real-game/fixture sessions. They are

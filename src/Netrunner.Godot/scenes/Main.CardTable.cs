@@ -186,7 +186,7 @@ public partial class Main
 			_tablePrompt.Text = $"Run on {_gameTable.GetServerDisplayName(run.AttackedServerId)} · {run.Step} · " + _tablePrompt.Text;
 		_gameTable.SetTargets(new HashSet<string>(StringComparer.Ordinal));
 		if (decision is null || snapshot.IsOpponentThinking || snapshot.IsTerminal) return;
-		IReadOnlyList<LegalActionViewModel> all = ActionsRegionPresenter.Present(snapshot).DisplayActions;
+		IReadOnlyList<LegalActionViewModel> all = ActionsRegionPresenter.Present(snapshot).Actions;
 		_gameTable.SetTargets(all.Select(a => TableActionCardId(a.Parameters))
 			.OfType<string>().ToHashSet(StringComparer.Ordinal));
 		if (_stagedAction is { } staged && _stagedDecision is { } stagedDecision)
@@ -203,7 +203,7 @@ public partial class Main
 			displayed = all.Where(a => _tableSelectedCard is not null
 				? TableActionCardId(a.Parameters) == _tableSelectedCard
 				: _tableSelectedServer is not null
-					? ActionsRegionPresenter.GetTargetServerId(a.Parameters) == _tableSelectedServer
+					? TableActionServerId(a.Parameters) == _tableSelectedServer
 					: a.Kind is ActionKind.GainCredit or ActionKind.DrawCard or ActionKind.PassPriority
 						or ActionKind.EndTurn or ActionKind.RemoveTag or ActionKind.PurgeVirusCounters);
 			AddButton(_tableSelectedCard is null && _tableSelectedServer is null ? "Choose a card / server" : "Clear selection", () =>
@@ -236,6 +236,14 @@ public partial class Main
 			return button;
 		}
 	}
+
+	private static string? TableActionServerId(ActionParameters parameters) => parameters switch
+	{
+		RunServerParameters run => run.ServerId.Value,
+		InstallCardParameters install => install.ServerId?.Value,
+		PlayCardParameters play => play.TargetServerId?.Value,
+		_ => ActionsRegionPresenter.GetTargetServerId(parameters),
+	};
 
 	private static string? TableActionCardId(ActionParameters parameters) => parameters switch
 	{

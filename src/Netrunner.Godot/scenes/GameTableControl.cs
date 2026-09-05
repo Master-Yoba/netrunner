@@ -1301,20 +1301,7 @@ public partial class GameTableControl : Control
 		CardSelected?.Invoke(cardId);
 	}
 
-	private void HandleCardInspected(string cardId)
-	{
-		// A concealed projection may still carry an internal presentation handle;
-		// never pass that handle to a zoom/history consumer as if it were a
-		// visible identity. Empty means “clear the prior public inspection”.
-		if (!_visibleCards.TryGetValue(cardId, out TableCardControl? control)
-			|| control.Card is not { IsKnown: true })
-		{
-			CardInspected?.Invoke(string.Empty);
-			return;
-		}
-
-		CardInspected?.Invoke(cardId);
-	}
+	private void HandleCardInspected(string cardId) => CardInspected?.Invoke(cardId);
 
 	private static void ClearNonCardChildren(Node parent)
 	{

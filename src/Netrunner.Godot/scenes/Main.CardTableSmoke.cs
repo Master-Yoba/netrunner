@@ -56,7 +56,17 @@ public partial class Main
 				LegalActionViewModel eventPlay = _currentSnapshot!.View.LegalActions.First(action => action.Parameters is PlayCardParameters);
 				SelectTableCard(((PlayCardParameters)eventPlay.Parameters).CardId.Value);
 				if (!_tableActionButtons.ContainsKey(eventPlay.Id)) throw new InvalidOperationException("Selecting a hand event did not offer its issued play action.");
-				GD.Print("M49_CONTEXT PASS event_from_hand=true");
+				LegalActionViewModel basicRun = _currentSnapshot.View.LegalActions.First(action => action.Parameters is RunServerParameters);
+				string laneName = _gameTable.GetServerDisplayName(((RunServerParameters)basicRun.Parameters).ServerId.Value);
+				Button laneButton = FindDescendants<Button>(_gameTable).First(button => button.Text == laneName);
+				await ClickTableButton(laneButton);
+				if (!_tableActionButtons.TryGetValue(basicRun.Id, out Button? runButton))
+					throw new InvalidOperationException("Selecting a server did not offer its issued run action.");
+				await ClickTableButton(runButton);
+				await _coordinator.GetObservationAsync(PlayerSide.Runner);
+				await TableFrames(3);
+				if (_currentSnapshot.View.Run is null) throw new InvalidOperationException("Contextual run action did not start its run.");
+				GD.Print("M49_CONTEXT PASS event_from_hand=true run_from_server=true");
 				_coordinator!.SnapshotPublished -= QueueSnapshot;
 				_coordinator.Dispose();
 				_coordinator = null;
@@ -79,6 +89,10 @@ public partial class Main
 				"Choose server", new BehaviorChoiceParameters("table-choice", "server"));
 			MatchViewModel fixture = CreateSlice48View(hand, servers, rig, decision, [option], null,
 				new OutcomeViewModel(GameOutcomeKind.Ongoing, null, null));
+			DecisionViewModel toyDecision = decision with { Kind = DecisionKind.ToyTurn };
+			LegalActionViewModel toyAction = new(new ActionId("table-toy-action"), ActionKind.GainCredit, "Gain credit", new NoActionParameters());
+			RenderSnapshot(CreateSlice48Snapshot(fixture with { Decision = toyDecision, LegalActions = [toyAction] }, toyDecision));
+			if (!_tableActionButtons.ContainsKey(toyAction.Id)) throw new InvalidOperationException("Ungrouped issued action was omitted from the table dock.");
 			var history = Enumerable.Range(1, 2000).Select(i => new MatchHistoryEntry($"stress-{i}", i, i / 10,
 				i % 2 == 0 ? PlayerSide.Corp : PlayerSide.Runner, $"Player action {i}", ["Retained detail."])).ToArray();
 			_matchHistory.ClearHistory();
@@ -162,6 +176,11 @@ public partial class Main
 						throw new InvalidOperationException($"Dense overflow fixture lost cards: hand={handControls.Length}, rig={rigControls.Length}.");
 					await AssertOverflowFocus(handControls, "local hand");
 					await AssertOverflowFocus(rigControls, "runner rig");
+					TableCardControl hidden = _gameTable.VisibleCards.Values.First(control => control.Card is null);
+					hidden.GrabFocus();
+					await TableFrames(2);
+					if (_inspectedCard is not null || !_tableInspect.Disabled)
+						throw new InvalidOperationException("Concealed focus retained a previous known-card inspector.");
 					_inspectedCard = card.Card;
 					ShowInspectedCardZoom();
 					await TableFrames(1);
