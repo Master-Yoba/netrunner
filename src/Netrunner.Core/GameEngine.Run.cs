@@ -2069,10 +2069,6 @@ public static partial class GameEngine
 
             ZoneState sourceZone = working.Zones.Single(zone => zone.Id == source.ZoneId);
             TrashCard(working, source, sourceZone, GetZone(working, ZoneKind.RunnerHeap));
-            if (working.RulesState?.Programs.Any(program => program.CardId == sourceCardId) == true)
-            {
-                RemoveProgramRegistration(working, sourceCardId);
-            }
         }
     }
 

@@ -51,10 +51,6 @@ public static partial class GameEngine
             ZoneState discard = GetZone(working,
                 child.OwnerSide == PlayerSide.Runner ? ZoneKind.RunnerHeap : ZoneKind.CorpDiscard);
             TrashCard(working, child, source, discard);
-            if (working.RulesState?.Programs.Any(program => program.CardId == childId) == true)
-            {
-                RemoveProgramRegistration(working, childId);
-            }
         }
     }
 
