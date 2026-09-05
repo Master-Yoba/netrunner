@@ -44,17 +44,19 @@ public static partial class GameEngine
         bool entersPublicFaceUpZone = (destination.Kind == ZoneKind.RunnerHeap
                 && destination.OwnerSide == PlayerSide.Runner)
             || destination.Kind is ZoneKind.CorpRemovedFromGame or ZoneKind.RunnerRemovedFromGame;
+        bool leavesInstalledZone = IsInstalledZone(source.Kind) && !IsInstalledZone(destination.Kind);
+        bool entersHiddenZone = destination.Kind is ZoneKind.CorpDeck or ZoneKind.CorpHand
+            or ZoneKind.RunnerStack or ZoneKind.RunnerGrip;
         ReplaceCard(working, new CardInstanceState(
             card.Id,
             card.DefinitionId,
             destination.Id,
             card.OwnerSide,
-            entersPublicFaceUpZone || card.FaceUp,
-            card.Rezzed,
+            !entersHiddenZone && (entersPublicFaceUpZone || card.FaceUp),
+            !leavesInstalledZone && card.Rezzed,
             card.AdvancementCounters));
         if (cleanupCounters
-            && IsInstalledZone(source.Kind)
-            && !IsInstalledZone(destination.Kind))
+            && leavesInstalledZone)
         {
             ClearCardCounters(working, card.Id);
         }
@@ -115,6 +117,13 @@ public static partial class GameEngine
     /// </summary>
     private static void ClearCardCounters(WorkingState working, CardInstanceId cardId)
     {
+        CardInstanceState card = GetCard(working, cardId);
+        if (card.AdvancementCounters != 0)
+        {
+            ReplaceCard(working, new CardInstanceState(card.Id, card.DefinitionId, card.ZoneId,
+                card.OwnerSide, card.FaceUp, card.Rezzed, advancementCounters: 0));
+        }
+
         RulesState? rules = working.RulesState;
         if (rules is null)
         {

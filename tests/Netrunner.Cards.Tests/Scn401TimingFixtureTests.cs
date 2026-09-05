@@ -213,7 +213,16 @@ public sealed class Scn401TimingFixtureTests
         Assert.All(hiddenIds, cardId =>
             Assert.DoesNotContain(cardId.Value, runnerObservation, StringComparison.Ordinal));
         Assert.All(hiddenIds, cardId =>
-            Assert.Contains(cardId.Value, corpObservation, StringComparison.Ordinal));
+        {
+            if (hiddenZone == ZoneKind.CorpHand)
+            {
+                Assert.Contains(cardId.Value, corpObservation, StringComparison.Ordinal);
+            }
+            else
+            {
+                Assert.DoesNotContain(cardId.Value, corpObservation, StringComparison.Ordinal);
+            }
+        });
 
         foreach (LegalAction action in candidateState.PendingDecision!.LegalActions)
         {

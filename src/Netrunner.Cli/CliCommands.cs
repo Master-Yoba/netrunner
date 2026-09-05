@@ -654,8 +654,23 @@ public static class CliCommands
     {
         try
         {
-            ReplayArtifact artifact = EngineJson.Deserialize<ReplayArtifact>(File.ReadAllText(path));
-            ReplayVerificationResult result = ReplayVerifier.Verify(artifact);
+            string contents = File.ReadAllText(path);
+            using JsonDocument header = JsonDocument.Parse(contents);
+            bool currentGateway = header.RootElement.TryGetProperty("behaviorRegistryVersion", out JsonElement version)
+                && version.GetString() == GatewayBehaviorCatalog.Version;
+            ReplayVerificationResult result;
+            if (currentGateway)
+            {
+                BehaviorCatalog behavior = GatewayBehaviorCatalog.Create();
+                RuntimeCardCatalog runtime = GatewayRuntimeCardCatalog.CreateEmbedded();
+                ReplayArtifact artifact = EngineJson.Deserialize<ReplayArtifact>(contents, behavior, runtime);
+                result = ReplayVerifier.Verify(artifact, behavior, runtime);
+            }
+            else
+            {
+                ReplayArtifact artifact = EngineJson.Deserialize<ReplayArtifact>(contents);
+                result = ReplayVerifier.Verify(artifact);
+            }
             if (json)
             {
                 output.WriteLine(EngineJson.Serialize(new ReplayCommandOutput(

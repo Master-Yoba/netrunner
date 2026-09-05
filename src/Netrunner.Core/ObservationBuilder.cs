@@ -5,11 +5,11 @@ namespace Netrunner.Core;
 /// agent/client <see cref="Observation"/> DTO (M2 "Observation boundary").
 ///
 /// The builder projects an explicit, viewer-scoped view: the viewer's own
-/// private zones, every card the viewer may know (own cards or faceup cards
-/// in public zones), public board/run/encounter data, and the pending
+/// hand and permitted private cards (never draw-deck identities/order), faceup
+/// cards in public zones, public board/run/encounter data, and the pending
 /// decision's legal actions only when the viewer owns that decision. During a
 /// live breach, the cards the Runner chose to access are additionally visible
-/// to both viewers for the remainder of that breach only (CR 26.03 7.3.1a).
+/// to the Runner for the remainder of that breach only (CR 26.03 7.3.1a).
 /// Archives discard cards are flipped faceup authoritatively at breach start
 /// (CR 26.03 7.5.2), so that visibility persists after the run. It never
 /// serializes the state and never exposes the opponent's grip/stack/hand/deck,
@@ -50,7 +50,7 @@ public static class ObservationBuilder
 
         // CR 26.03 7.3.1a: breach access visibility is carried by the run
         // state, not by the cards' faceup flags. Every card the Runner chose
-        // to access stays visible to both viewers for the remainder of that
+        // to access stays visible to the Runner for the remainder of that
         // breach. Archives discard cards are flipped faceup by the breach
         // reducer, so they do not need temporary visibility here.
         HashSet<CardInstanceId> accessVisible = BuildAccessVisibleSet(state);
@@ -736,7 +736,7 @@ public static class ObservationBuilder
             return new Dictionary<string, object?>
             {
                 ["hand"] = PrivateZoneCards(state, ZoneKind.CorpHand).Select(card => PrivateCardView(state, card)).ToArray(),
-                ["deck"] = PrivateZoneCards(state, ZoneKind.CorpDeck).Select(card => PrivateCardView(state, card)).ToArray(),
+                ["deck"] = Array.Empty<object>(),
                 ["faceDownIce"] = faceDownIce,
                 ["faceDownArchives"] = faceDownArchives,
             };
@@ -745,7 +745,7 @@ public static class ObservationBuilder
         return new Dictionary<string, object?>
         {
             ["grip"] = PrivateZoneCards(state, ZoneKind.RunnerGrip).Select(card => PrivateCardView(state, card)).ToArray(),
-            ["stack"] = PrivateZoneCards(state, ZoneKind.RunnerStack).Select(card => PrivateCardView(state, card)).ToArray(),
+            ["stack"] = Array.Empty<object>(),
         };
     }
 
@@ -755,12 +755,18 @@ public static class ObservationBuilder
     /// to both players: installed cards, rezzed ICE, flipped trash, scored
     /// agendas, the active run event in the Runner play area), or a card the active run's
     /// breach has revealed for the remainder of that breach (CR 26.03 7.3.1a).
-    /// Hidden pools (hands, decks, grips, stacks) hold face-down cards, so
-    /// they are known only through the owner's private view.
+    /// Draw decks are hidden from both players. Ownership does not grant
+    /// visibility; only the Runner's active access permission reveals R&D.
     /// </summary>
     private static bool IsVisibleTo(CardInstanceState card, ZoneState zone, PlayerSide viewer, IReadOnlySet<CardInstanceId> accessVisible)
     {
-        return card.OwnerSide == viewer || card.FaceUp || accessVisible.Contains(card.Id);
+        if (zone.Kind is ZoneKind.CorpDeck or ZoneKind.RunnerStack)
+        {
+            return viewer == PlayerSide.Runner && accessVisible.Contains(card.Id);
+        }
+
+        return card.OwnerSide == viewer || card.FaceUp
+            || viewer == PlayerSide.Runner && accessVisible.Contains(card.Id);
     }
 
     private static Dictionary<string, object?> PlayerView(
@@ -788,7 +794,7 @@ public static class ObservationBuilder
                 state.Zones,
                 player.Side,
                 BehaviorStaticModifierKind.MaximumHandSize);
-            view["maximumHandSize"] = Math.Max(0, checked(rules.MaximumHandSize + modifier));
+            view["maximumHandSize"] = checked(rules.MaximumHandSize + modifier);
             view["tags"] = Math.Max(0, rules.Tags);
         }
 

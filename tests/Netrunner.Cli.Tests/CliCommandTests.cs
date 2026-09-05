@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Netrunner.Cards;
 using Netrunner.Core;
 using Xunit;
 
@@ -6,6 +7,38 @@ namespace Netrunner.Cli.Tests;
 
 public sealed class CliCommandTests
 {
+    [Fact]
+    public void ReplayCommandComposesCurrentGatewayAndRuntimeCatalogs()
+    {
+        BehaviorCatalog behavior = GatewayBehaviorCatalog.Create();
+        RuntimeCardCatalog runtime = GatewayRuntimeCardCatalog.CreateEmbedded();
+        GameState state = GameState.CreateNew(42,
+            behaviorRegistryVersion: behavior.Version, behaviorCatalogFingerprint: behavior.Fingerprint,
+            runtimeCardCatalogVersion: runtime.Version, runtimeCardCatalogFingerprint: runtime.Fingerprint);
+        state = GameEngine.BeginTurn(state, PlayerSide.Runner, behavior, runtime);
+        PendingDecision pending = state.PendingDecision!;
+        ApplyResult applied = GameEngine.Apply(state,
+            new ActionSubmission(pending.Owner, pending.Id, pending.Revision,
+                pending.LegalActions.First(action => action.Kind == ActionKind.PassPriority).Id), behavior, runtime);
+        Assert.True(applied.Accepted, applied.Rejection?.Message);
+        ReplayArtifact artifact = new(state.CreateSnapshot(behavior, runtime), state.InitialSeed,
+            [ReplayAction.From(applied.AcceptedAction!)], expectedFinalStateHash: DeterministicHash.ForState(applied.State));
+        string path = WriteTemp(EngineJson.Serialize(artifact));
+        try
+        {
+            using var output = new StringWriter();
+            using var error = new StringWriter();
+            Assert.Equal(0, CliCommands.Run(["replay", path, "--json"], output, error));
+            using JsonDocument result = JsonDocument.Parse(output.ToString());
+            Assert.Equal("ok", result.RootElement.GetProperty("status").GetString());
+            Assert.Empty(error.ToString());
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Fact]
     public void ScenarioCommandReportsCanonicalStateAndSupportsJsonOutput()
     {

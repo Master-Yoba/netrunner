@@ -1366,7 +1366,7 @@ public static partial class GameEngine
             working.Zones,
             side,
             BehaviorStaticModifierKind.MaximumHandSize);
-        return Math.Max(0, checked(rules.BaseHandSize + modifier - rules.CoreDamage));
+        return checked(rules.BaseHandSize + modifier - rules.CoreDamage);
     }
 
     private static void ResolveBehaviorDraw(WorkingState working, BehaviorResolutionFrame frame, int amount)

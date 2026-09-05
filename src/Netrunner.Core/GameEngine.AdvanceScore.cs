@@ -245,7 +245,7 @@ public static partial class GameEngine
             PlayerSide.Corp,
             faceUp: true,
             rezzed: false,
-            card.AdvancementCounters));
+            GetCard(working, card.Id).AdvancementCounters));
         AddAgendaPoints(working, PlayerSide.Corp, spec.AgendaPoints);
         Emit(working, EngineEventKinds.AgendaScored, new AgendaScoredEventPayload(
             PlayerSide.Corp,

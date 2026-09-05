@@ -284,10 +284,12 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
 
     private async Task RunWorkerAsync()
     {
+        CoordinatorCommand? activeCommand = null;
         try
         {
             await foreach (CoordinatorCommand command in _commands.Reader.ReadAllAsync(_cancellation.Token).ConfigureAwait(false))
             {
+                activeCommand = command;
                 switch (command)
                 {
                     case StartCommand start:
@@ -303,6 +305,7 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
                         throw new InvalidOperationException(
                             $"Unsupported match coordinator command '{command.GetType().Name}'.");
                 }
+                activeCommand = null;
             }
         }
         catch (OperationCanceledException) when (_cancellation.IsCancellationRequested)
@@ -311,6 +314,8 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
         }
         catch (Exception exception)
         {
+            activeCommand?.Fail(exception);
+            _commands.Writer.TryComplete(exception);
             while (_commands.Reader.TryRead(out CoordinatorCommand? command))
             {
                 command.Fail(exception);
@@ -318,6 +323,8 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
         }
         finally
         {
+            activeCommand?.Fail(new OperationCanceledException("The match coordinator stopped."));
+            _commands.Writer.TryComplete();
             while (_commands.Reader.TryRead(out CoordinatorCommand? command))
             {
                 command.Fail(new OperationCanceledException("The match coordinator stopped."));

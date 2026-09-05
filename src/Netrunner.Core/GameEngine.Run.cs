@@ -2406,8 +2406,8 @@ public static partial class GameEngine
             score.Id,
             card.OwnerSide,
             true,
-            card.Rezzed,
-            card.AdvancementCounters));
+            GetCard(working, card.Id).Rezzed,
+            GetCard(working, card.Id).AdvancementCounters));
         AddAgendaPoints(working, PlayerSide.Runner, spec.AgendaPoints);
         Emit(working, EngineEventKinds.AgendaStolen, new AgendaStolenEventPayload(PlayerSide.Runner, cardId, spec.AgendaPoints));
         RecordTurnAgendaChange(
