@@ -864,6 +864,66 @@ public sealed class FullGameContractAgentTests
     }
 
     [Fact]
+    public async Task StructuredBehaviorOptionsUseNumericIssuedActionOrder()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Runner);
+        LegalAction actionNine = new(
+            new ActionId("action:9"),
+            ActionKind.ChooseBehavior,
+            "action nine",
+            new BehaviorChoiceParameters("structured-choice", "option-nine"));
+        LegalAction actionTen = new(
+            new ActionId("action:10"),
+            ActionKind.ChooseBehavior,
+            "action ten",
+            new BehaviorChoiceParameters("structured-choice", "option-ten"));
+
+        ActionId selected = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.BehaviorChoice, actionTen, actionNine));
+        ActionId reordered = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.BehaviorChoice, actionNine, actionTen));
+        LegalAction[] restored = JsonSerializer.Deserialize<LegalAction[]>(
+                JsonSerializer.Serialize(new[] { actionTen, actionNine }))
+            ?? throw new InvalidOperationException("The serialized behavior payload was empty.");
+        ActionId roundTrip = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.BehaviorChoice, restored));
+
+        Assert.Equal(actionNine.Id, selected);
+        Assert.Equal(selected, reordered);
+        Assert.Equal(selected, roundTrip);
+    }
+
+    [Fact]
+    public async Task RunContractStructuredBehaviorOptionsUseNumericIssuedActionOrder()
+    {
+        RunContractAgent agent = new(new RunPlayContract("server:remote", "source:test", "breaker:test"));
+        LegalAction actionNine = new(
+            new ActionId("action:9"),
+            ActionKind.ChooseBehavior,
+            "action nine",
+            new BehaviorChoiceParameters("structured-choice", "option-nine"));
+        LegalAction actionTen = new(
+            new ActionId("action:10"),
+            ActionKind.ChooseBehavior,
+            "action ten",
+            new BehaviorChoiceParameters("structured-choice", "option-ten"));
+
+        ActionId selected = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.BehaviorChoice, actionTen, actionNine));
+        ActionId reordered = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.BehaviorChoice, actionNine, actionTen));
+        LegalAction[] restored = JsonSerializer.Deserialize<LegalAction[]>(
+                JsonSerializer.Serialize(new[] { actionTen, actionNine }))
+            ?? throw new InvalidOperationException("The serialized behavior payload was empty.");
+        ActionId roundTrip = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.BehaviorChoice, restored));
+
+        Assert.Equal(actionNine.Id, selected);
+        Assert.Equal(selected, reordered);
+        Assert.Equal(selected, roundTrip);
+    }
+
+    [Fact]
     public async Task TriggerAndBehaviorDuplicateOrMalformedPayloadsFailClosed()
     {
         FullGameContractAgent agent = new(PlayerSide.Corp);

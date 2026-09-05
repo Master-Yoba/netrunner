@@ -296,7 +296,7 @@ public sealed class RunContractAgent : IGameAgent
             : 1;
         return $"{rank}:{gainPreference}:"
             + (behavior.OptionKeys.Count > 0
-                ? $"action:{action.Id.Value}"
+                ? AgentActionOrdering.IssuedOrderKey(action.Id)
                 : $"semantic:{SemanticKey(action)}");
     }
 

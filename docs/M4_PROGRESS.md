@@ -4349,7 +4349,19 @@ errors; runtime action expansion and full verification remain pending.
   final `4603c78adb067873229363c86d6b1294f92c5564009e1b8a1cbf2aa6e6dc1001`,
   and unchanged event stream
   `33af2b049fbad324ed5ff0ee130740c3d65c03f2cb1196100afbdc73e9f0e67c`.
-- The final `./scripts/verify.sh` gate passes all 1,152 tests, warning-free
+- The final `./scripts/verify.sh` gate passes all 1,154 tests, warning-free
   builds and formatting, official card-data/coverage checks, M1/M2 and Slice
   4.5 deterministic proofs, Godot import/gallery/Slice 4.3/Slice 4.4/Slice 4.5
   and M3 smokes, and secret scanning.
+
+### 2026-09-05 — PR review action-order boundary accepted
+
+- PR #9 review correctly identified that ordinal sorting of unpadded issued
+  IDs places `action:10` before `action:9`. Both contract agents now share one
+  observation-safe ordering helper: canonical positive `action:<ulong>` IDs
+  compare by invariant numeric sequence, while synthetic stable IDs retain an
+  ordinal fallback.
+- Regressions cover both agents across the 9/10 boundary, reversed observation
+  order, and JSON round-trip. The complete AI suite passes 53/53 and the full
+  1,154-test repository gate, all deterministic proofs, Godot smokes,
+  formatting, coverage/content checks, and secret scan remain green.

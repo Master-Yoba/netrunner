@@ -428,7 +428,7 @@ public sealed class FullGameContractAgent : IGameAgent
                     // order. The issued ID is the only observation-safe
                     // representation of that order; labels and descriptions
                     // are intentionally not consulted.
-                    ? $"action:{action.Id.Value}"
+                    ? AgentActionOrdering.IssuedOrderKey(action.Id)
                     : $"semantic:{SemanticKey(action)}")
             : throw new InvalidOperationException(
                 "The full-game agent cannot order a malformed behavior choice.");
