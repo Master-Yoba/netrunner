@@ -161,7 +161,7 @@ public partial class Main
 				?? throw new InvalidOperationException("Choose a playable official Runner preset before starting.");
 
 			if (_useCardTable)
-				_matchHistory.ReportHeader = $"Netrunner · seed {seed} · {humanSide} · {corpPresetId} / {runnerPresetId} · {typeof(Main).Assembly.GetName().Version}";
+				_matchHistory.ReportHeader = $"Netrunner · seed {seed} · {humanSide} · {corpPresetId} / {runnerPresetId} · {System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(Main).Assembly)?.InformationalVersion ?? "unknown build"}";
 			_coordinator = FullMatchFactory.CreateOfficial(
 				corpPresetId,
 				runnerPresetId,
@@ -333,8 +333,11 @@ public partial class Main
 						$"Full-match smoke reached its {actionCap}-action cap before terminal outcome at action_count={snapshot.ActionCount}.");
 				}
 				identities |= snapshot.View.CorpIdentity is not null && snapshot.View.RunnerIdentity is not null
-					&& _corpIdentityDetails.Text.Contains(snapshot.View.CorpIdentity.Title, StringComparison.Ordinal)
-					&& _runnerIdentityDetails.Text.Contains(snapshot.View.RunnerIdentity.Title, StringComparison.Ordinal);
+					&& (_useCardTable
+						? _gameTable.VisibleCards.Values.Any(card => card.IsVisibleInTree() && card.Card?.Id == snapshot.View.CorpIdentity.Id)
+							&& _gameTable.VisibleCards.Values.Any(card => card.IsVisibleInTree() && card.Card?.Id == snapshot.View.RunnerIdentity.Id)
+						: _corpIdentityDetails.Text.Contains(snapshot.View.CorpIdentity.Title, StringComparison.Ordinal)
+							&& _runnerIdentityDetails.Text.Contains(snapshot.View.RunnerIdentity.Title, StringComparison.Ordinal));
 				turnPair |= snapshot.View.Turn.TurnNumber > 1;
 				if (snapshot.IsTerminal)
 				{

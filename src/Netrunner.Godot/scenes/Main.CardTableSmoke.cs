@@ -43,6 +43,20 @@ public partial class Main
 				_matchHistory.SetExpanded(true);
 				await TableFrames(3);
 				if (screenshots) await SaveTableEvidence("nico-history");
+				for (int priority = 0; priority < 8 && _currentSnapshot!.View.Decision?.Kind != DecisionKind.TurnAction; priority++)
+				{
+					Observation current = await _coordinator!.GetObservationAsync(PlayerSide.Runner);
+					await TableFrames(3);
+					LegalAction? pass = current.LegalActions.FirstOrDefault(action => action.Kind == ActionKind.PassPriority);
+					if (pass is null) break;
+					await ClickTableButton(_tableActionButtons[pass.Id]);
+				}
+				await _coordinator!.GetObservationAsync(PlayerSide.Runner);
+				await TableFrames(3);
+				LegalActionViewModel eventPlay = _currentSnapshot!.View.LegalActions.First(action => action.Parameters is PlayCardParameters);
+				SelectTableCard(((PlayCardParameters)eventPlay.Parameters).CardId.Value);
+				if (!_tableActionButtons.ContainsKey(eventPlay.Id)) throw new InvalidOperationException("Selecting a hand event did not offer its issued play action.");
+				GD.Print("M49_CONTEXT PASS event_from_hand=true");
 				_coordinator!.SnapshotPublished -= QueueSnapshot;
 				_coordinator.Dispose();
 				_coordinator = null;
@@ -169,7 +183,10 @@ public partial class Main
 						GD.Print("M49_MOTION PASS replacement=true skip=true");
 					}
 					_matchHistory.SetExpanded(true);
+					_matchHistory.SetPinned(size.X >= 1800);
 					await TableFrames(2);
+					if (size.X >= 1800 && _gameTable.GetGlobalRect().End.X > _matchHistory.GetGlobalRect().Position.X)
+						throw new InvalidOperationException("Pinned history overlaps the large table.");
 					if (!viewport.Encloses(_matchHistory.GetGlobalRect()))
 						throw new InvalidOperationException("Expanded history escaped the viewport.");
 					if (screenshots) await SaveTableEvidence($"history-{side.ToString().ToLowerInvariant()}-{size.X}");

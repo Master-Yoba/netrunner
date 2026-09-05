@@ -1,6 +1,6 @@
 # M4.9 — Card-table UI and understandable match history
 
-Status: proposed implementation plan; no UI changes implemented by this document.
+Status: accepted for implementation. See [M4.9 progress](M4_9_UI_PROGRESS.md) for implementation, verification, and the remaining manual acceptance gate.
 
 Date: 5 September 2026
 

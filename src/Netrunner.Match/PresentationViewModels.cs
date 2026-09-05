@@ -253,6 +253,18 @@ public sealed record PlayerViewModel(
     /// </summary>
     public int? CoreDamage { get; init; }
 
+    /// <summary>
+    /// Public Runner memory currently occupied by installed programs. Null
+    /// means the observation predates the optional RulesState projection.
+    /// </summary>
+    public int? UsedMemory { get; init; }
+
+    /// <summary>
+    /// Authoritative effective Runner memory limit, including active static
+    /// modifiers. Null means the observation did not supply memory state.
+    /// </summary>
+    public int? MemoryLimit { get; init; }
+
     public bool IsTagStateKnown => Tags.HasValue;
 
     public bool IsTagged => Tags is > 0;
@@ -1218,6 +1230,12 @@ public static class ObservationViewMapper
         int? coreDamage = TryReadOptionalInt(map, "coreDamage", out int observedCoreDamage)
             ? observedCoreDamage
             : null;
+        int? usedMemory = TryReadOptionalInt(map, "usedMemory", out int observedUsedMemory)
+            ? observedUsedMemory
+            : null;
+        int? memoryLimit = TryReadOptionalInt(map, "memoryLimit", out int observedMemoryLimit)
+            ? observedMemoryLimit
+            : null;
         return new PlayerViewModel(
             ReadString(map, "id"),
             side,
@@ -1227,6 +1245,8 @@ public static class ObservationViewMapper
         {
             Tags = tags,
             CoreDamage = coreDamage,
+            UsedMemory = usedMemory,
+            MemoryLimit = memoryLimit,
         };
     }
 

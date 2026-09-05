@@ -64,6 +64,7 @@ public partial class GameTableControl : Control
 	private IReadOnlySet<string> _targets = new HashSet<string>(StringComparer.Ordinal);
 	private int _nextRemoteDisplayNumber = 1;
 	private bool _shellBuilt;
+	private string? _lastRunFocus;
 
 	/// <summary>Raised with an engine-visible card handle when a card is selected.</summary>
 	public event Action<string>? CardSelected;
@@ -458,6 +459,8 @@ public partial class GameTableControl : Control
 		_corpResources.Text = FormatResources(view.Corp);
 		_runnerResources.Text = $"Credits {view.Runner.Credits} · Clicks {view.Runner.Clicks}\nScore {view.Runner.AgendaPoints} · Tags {view.Runner.Tags?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—"}";
 		_corpScoreLabel.Text = $"Score {view.Corp.AgendaPoints}";
+		if (view.Runner.UsedMemory is { } used && view.Runner.MemoryLimit is { } limit)
+			_runnerResources.Text += $"\nMU {used}/{limit}";
 		_runnerScoreLabel.Text = $"Score pile · {view.RunnerScore.Count} · {view.Runner.AgendaPoints} agenda point(s)";
 		string boardFingerprint = BuildBoardFingerprint(view);
 		if (string.Equals(_lastBoardFingerprint, boardFingerprint, StringComparison.Ordinal))
@@ -498,6 +501,24 @@ public partial class GameTableControl : Control
 		}
 		ApplySelectionAndTargets();
 		PresentMotion(previousCards, view);
+		EnsureRunVisible(view.Run);
+	}
+
+	private void EnsureRunVisible(RunFocusViewModel? run)
+	{
+		string? focusKey = run is null ? null : $"{run.Id}:{run.Step}:{run.CurrentIceIndex}";
+		if (_lastRunFocus == focusKey) return;
+		_lastRunFocus = focusKey;
+		if (run is null || !_serverLanes.TryGetValue(run.AttackedServerId, out ServerLaneParts? lane)) return;
+		Callable.From(() =>
+		{
+			if (!IsInsideTree() || _lastRunFocus != focusKey) return;
+			_serverScroll.EnsureControlVisible(lane.Panel);
+			string? id = run.CurrentIce?.Id;
+			if (id is null || !_visibleCards.TryGetValue(id, out TableCardControl? ice)) return;
+			for (Node? parent = ice.GetParent(); parent is not null && parent != this; parent = parent.GetParent())
+				if (parent is ScrollContainer scroll) scroll.EnsureControlVisible(ice);
+		}).CallDeferred();
 	}
 
 	private void RenderTopZones(
@@ -646,7 +667,8 @@ public partial class GameTableControl : Control
 		{
 			CardViewModel? card = server.OrderedIce[displayIndex];
 			string slot = $"server:{server.Id}:ice:{displayIndex}";
-			CardViewModel[] hosted = _pendingView?.RunnerRig.Where(child => card is not null && child.HostCardId == card.Id).ToArray() ?? [];
+			string? hostId = card?.Id ?? server.IcePositions.FirstOrDefault(position => position.Index == displayIndex)?.CardId;
+			CardViewModel[] hosted = _pendingView?.RunnerRig.Where(child => hostId is not null && child.HostCardId == hostId).ToArray() ?? [];
 			if (hosted.Length == 0)
 				EnsureCard(slot, iceCards, card, isIce: true, nextVisibleCards);
 			else
@@ -659,7 +681,7 @@ public partial class GameTableControl : Control
 					TableCardControl attachment = EnsureCard($"hosted:{hosted[index].Id}", stack, hosted[index], false, nextVisibleCards);
 					attachment.SetDisplaySize(new Vector2(60, 84));
 					attachment.Position = new Vector2(22 + 14 * index, 20);
-					attachment.TooltipText = $"Hosted on {card!.Title}\n" + attachment.TooltipText;
+					attachment.TooltipText = $"Hosted on {card?.Title ?? "face-down ICE"}\n" + attachment.TooltipText;
 				}
 			}
 		}
@@ -684,7 +706,8 @@ public partial class GameTableControl : Control
 			RenderHostedSlot(slot, card, hosted.GetValueOrDefault(card.Id) ?? Array.Empty<CardViewModel>(), nextVisibleCards);
 		}
 		foreach (CardViewModel card in cards.Where(card => !string.IsNullOrEmpty(card.HostCardId) && !cards.Any(host => host.Id == card.HostCardId)
-			&& !view.Servers.SelectMany(server => server.OrderedIce).Any(host => host?.Id == card.HostCardId)))
+			&& !view.Servers.SelectMany(server => server.OrderedIce).Any(host => host?.Id == card.HostCardId)
+			&& !view.Servers.SelectMany(server => server.IcePositions).Any(host => host.CardId == card.HostCardId)))
 		{
 			_activeRigSlots.Add($"orphan:{card.Id}");
 			Control slot = EnsureRigSlot($"orphan:{card.Id}");

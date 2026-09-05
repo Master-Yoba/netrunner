@@ -36,6 +36,7 @@ public partial class MatchHistoryPanel : PanelContainer
 	private string _reportHeader = "MATCH HISTORY";
 	private bool _ready;
 	private bool _expanded;
+	private bool _pinned;
 	private bool _followNewestOnRefresh;
 	private bool _pagePositionIntentional;
 	private int _pageStart;
@@ -50,6 +51,7 @@ public partial class MatchHistoryPanel : PanelContainer
 	private Label _railCount = null!;
 	private VBoxContainer _expandedRoot = null!;
 	private Label _headerLabel = null!;
+	private Button _pinButton = null!;
 	private Button _collapseButton = null!;
 	private Button _copyButton = null!;
 	private Button _newEntriesButton = null!;
@@ -65,8 +67,14 @@ public partial class MatchHistoryPanel : PanelContainer
 	/// <summary>Raised when the panel changes between the rail and full history.</summary>
 	public event Action<bool>? ExpandedChanged;
 
+	/// <summary>Raised when the reader asks the parent layout to reserve the panel.</summary>
+	public event Action<bool>? PinnedChanged;
+
 	/// <summary>Whether the readable history panel is expanded beside the rail.</summary>
 	public bool Expanded => _expanded;
+
+	/// <summary>Whether the expanded history panel should remain reserved beside the table.</summary>
+	public bool Pinned => _pinned;
 
 	/// <summary>Metadata header included in exports and available from the panel title tooltip.</summary>
 	public string ReportHeader
@@ -112,8 +120,29 @@ public partial class MatchHistoryPanel : PanelContainer
 		_ready = false;
 		InspectCard = null;
 		ExpandedChanged = null;
+		PinnedChanged = null;
 		FreeDetachedBranch(_railRoot);
 		FreeDetachedBranch(_expandedRoot);
+	}
+
+	/// <summary>Changes the layout preference without changing history or page state.</summary>
+	public void SetPinned(bool pinned)
+	{
+		if (_pinned == pinned)
+		{
+			return;
+		}
+
+		_pinned = pinned;
+		if (_pinButton is not null)
+		{
+			_pinButton.SetPressedNoSignal(pinned);
+			_pinButton.TooltipText = pinned
+				? "Keep expanded history reserved beside the table"
+				: "Allow expanded history to overlay the table";
+		}
+
+		PinnedChanged?.Invoke(pinned);
 	}
 
 	/// <summary>Shows the oldest retained page and preserves that browsing position.</summary>
@@ -351,6 +380,18 @@ public partial class MatchHistoryPanel : PanelContainer
 		_headerLabel.AutowrapMode = TextServer.AutowrapMode.Off;
 		_headerLabel.TooltipText = ReportHeader;
 		heading.AddChild(_headerLabel);
+		_pinButton = new Button
+		{
+			Text = "Pin",
+			ToggleMode = true,
+			CustomMinimumSize = new Vector2(56, 30),
+			FocusMode = FocusModeEnum.All,
+			TooltipText = "Allow expanded history to overlay the table",
+		};
+		_pinButton.AddThemeFontSizeOverride("font_size", 11);
+		_pinButton.SetPressedNoSignal(_pinned);
+		_pinButton.Toggled += SetPinned;
+		heading.AddChild(_pinButton);
 		_copyButton = MakeButton("Copy", 11);
 		_copyButton.CustomMinimumSize = new Vector2(58, 30);
 		_copyButton.TooltipText = "Copy the complete public history report";

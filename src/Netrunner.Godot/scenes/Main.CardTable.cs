@@ -98,9 +98,11 @@ public partial class Main
 		_matchHistory.InspectCard += card => { _inspectedCard = card; ShowInspectedCardZoom(); };
 		tableViewport.Resized += PositionHistory;
 		_matchHistory.ExpandedChanged += _ => PositionHistory();
+		_matchHistory.PinnedChanged += _ => PositionHistory();
 		void PositionHistory()
 		{
 			float width = _matchHistory.Expanded ? 320 : 60;
+			_gameTable.OffsetRight = _matchHistory.Expanded && _matchHistory.Pinned && tableViewport.Size.X >= 1800 ? -326 : -66;
 			_matchHistory.Position = new Vector2(Math.Max(0, tableViewport.Size.X - width), 0);
 			_matchHistory.Size = new Vector2(width, tableViewport.Size.Y);
 		}
@@ -185,7 +187,7 @@ public partial class Main
 		_gameTable.SetTargets(new HashSet<string>(StringComparer.Ordinal));
 		if (decision is null || snapshot.IsOpponentThinking || snapshot.IsTerminal) return;
 		IReadOnlyList<LegalActionViewModel> all = ActionsRegionPresenter.Present(snapshot).DisplayActions;
-		_gameTable.SetTargets(all.Select(a => ActionsRegionPresenter.GetTargetCardId(a.Parameters))
+		_gameTable.SetTargets(all.Select(a => TableActionCardId(a.Parameters))
 			.OfType<string>().ToHashSet(StringComparer.Ordinal));
 		if (_stagedAction is { } staged && _stagedDecision is { } stagedDecision)
 		{
@@ -199,7 +201,7 @@ public partial class Main
 		if (ordinary && !_tableAllActions)
 		{
 			displayed = all.Where(a => _tableSelectedCard is not null
-				? ActionsRegionPresenter.GetTargetCardId(a.Parameters) == _tableSelectedCard
+				? TableActionCardId(a.Parameters) == _tableSelectedCard
 				: _tableSelectedServer is not null
 					? ActionsRegionPresenter.GetTargetServerId(a.Parameters) == _tableSelectedServer
 					: a.Kind is ActionKind.GainCredit or ActionKind.DrawCard or ActionKind.PassPriority
@@ -235,6 +237,15 @@ public partial class Main
 		}
 	}
 
+	private static string? TableActionCardId(ActionParameters parameters) => parameters switch
+	{
+		PlayCardParameters play => play.CardId.Value,
+		AbilityActionParameters ability => ability.SourceCardId.Value,
+		AdvanceCardParameters advance => advance.CardId.Value,
+		ScoreAgendaParameters score => score.CardId.Value,
+		_ => ActionsRegionPresenter.GetTargetCardId(parameters),
+	};
+
 	private string TablePrompt(DecisionViewModel decision) => decision.Kind switch
 	{
 		DecisionKind.TurnTiming => decision.OwnerSide == PlayerSide.Corp
@@ -242,6 +253,8 @@ public partial class Main
 			: "Use a paid ability — or pass priority.",
 		DecisionKind.TurnAction => "Choose a card, a server or a basic action.",
 		DecisionKind.Setup => "Keep this hand or take one mulligan.",
+		DecisionKind.TurnDiscard when _currentSnapshot?.View.ForcedDiscard is { Hand.MaximumHandSize: { } maximum } discard =>
+			$"Discard {Math.Max(0, discard.Hand.Count - maximum)} more · hand {discard.Hand.Count}/{maximum}.",
 		DecisionKind.TurnDiscard => "Choose cards to discard down to your hand limit.",
 		DecisionKind.MemoryCleanup => "Choose programs to trash to free memory.",
 		_ => FriendlyText(decision.Prompt),

@@ -30,11 +30,19 @@ public partial class GameTableControl
 
 	private void PresentMotion(Dictionary<string, (CardViewModel? Card, Rect2 Rect)> previous, MatchViewModel view)
 	{
-		if (!MotionEnabled || previous.Count == 0) return;
+		if (previous.Count == 0) return;
 		int revision = _motionRevision;
 		Callable.From(() =>
 		{
-			if (!IsInsideTree() || revision != _motionRevision || !MotionEnabled) return;
+			if (!IsInsideTree() || revision != _motionRevision) return;
+			if (!MotionEnabled)
+			{
+				foreach ((string id, TableCardControl current) in _visibleCards)
+					if (GetGlobalRect().Encloses(current.GetGlobalRect())
+						&& (!previous.TryGetValue(id, out var old) || !CardsMatch(old.Card, current.Card)))
+						PulseCard(current.GetGlobalRect());
+				return;
+			}
 			foreach ((string id, var old) in previous)
 			{
 				if (_visibleCards.ContainsKey(id) || old.Card is not { IsKnown: true }) continue;
@@ -62,6 +70,26 @@ public partial class GameTableControl
 				AnimateCard(current.Card, new Rect2(source, rect.Size), rect.Position - GlobalPosition, current.IsIce);
 			}
 		}).CallDeferred();
+	}
+
+	private void PulseCard(Rect2 rect)
+	{
+		Panel ghost = new() { MouseFilter = MouseFilterEnum.Ignore, Position = rect.Position - GlobalPosition, Size = rect.Size, ZIndex = 20 };
+		ghost.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+		{
+			BgColor = Colors.Transparent,
+			BorderColor = WarningColor,
+			BorderWidthLeft = 3,
+			BorderWidthRight = 3,
+			BorderWidthTop = 3,
+			BorderWidthBottom = 3,
+		});
+		AddChild(ghost);
+		_motionCards.Add(ghost);
+		Tween tween = CreateTween();
+		_motionTweens.Add(tween);
+		tween.TweenProperty(ghost, "modulate:a", 0.0, 0.3);
+		tween.TweenCallback(Callable.From(() => { _motionTweens.Remove(tween); _motionCards.Remove(ghost); ghost.QueueFree(); }));
 	}
 
 	private void AnimateCard(CardViewModel? model, Rect2 source, Vector2 destination, bool ice)
