@@ -46,8 +46,10 @@ public static class EngineEventKinds
     public const string RunPriorityPassed = "run-priority-passed";
     public const string RunTimingWindowOpened = "run-timing-window-opened";
     public const string IceApproached = "ice-approached";
+    public const string ServerApproached = "server-approached";
     public const string IceRezzed = "ice-rezzed";
     public const string SubroutinesBroken = "subroutines-broken";
+    public const string BioroidAbilityUsed = "bioroid-ability-used";
     public const string BreakerPumped = "breaker-pumped";
     public const string EncounterInitialized = "encounter-initialized";
     public const string EncounterCompleted = "encounter-completed";
@@ -117,8 +119,10 @@ public enum HostedCreditPoolOperation
 [JsonDerivedType(typeof(RunPriorityPassedEventPayload), "run-priority-passed")]
 [JsonDerivedType(typeof(RunTimingWindowOpenedEventPayload), "run-timing-window-opened")]
 [JsonDerivedType(typeof(IceApproachedEventPayload), "ice-approached")]
+[JsonDerivedType(typeof(ServerApproachedEventPayload), "server-approached")]
 [JsonDerivedType(typeof(IceRezzedEventPayload), "ice-rezzed")]
 [JsonDerivedType(typeof(SubroutinesBrokenEventPayload), "subroutines-broken")]
+[JsonDerivedType(typeof(BioroidAbilityUsedEventPayload), "bioroid-ability-used")]
 [JsonDerivedType(typeof(BreakerPumpedEventPayload), "breaker-pumped")]
 [JsonDerivedType(typeof(EncounterInitializedEventPayload), "encounter-initialized")]
 [JsonDerivedType(typeof(EncounterCompletedEventPayload), "encounter-completed")]
@@ -1679,6 +1683,30 @@ public sealed record IceApproachedEventPayload : EngineEventPayload
     public CardInstanceId IceId { get; private set; }
 }
 
+public sealed record ServerApproachedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public ServerApproachedEventPayload(int version, RunId runId, ServerId serverId)
+        : base(version)
+    {
+        RunId = runId;
+        ServerId = serverId;
+    }
+
+    public ServerApproachedEventPayload(RunId runId, ServerId serverId)
+        : this(1, runId, serverId)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunId RunId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ServerId ServerId { get; private set; }
+}
+
 public sealed record IceRezzedEventPayload : EngineEventPayload
 {
     [JsonConstructor]
@@ -1740,6 +1768,69 @@ public sealed record SubroutinesBrokenEventPayload : EngineEventPayload
     [JsonInclude]
     [JsonRequired]
     public int BrokenCount { get; private set; }
+}
+
+/// <summary>
+/// The Runner paid an encountered ICE's typed bioroid interface ability and
+/// broke the named subroutine. The exact target is public encounter state,
+/// so this diagnostic payload carries no hidden card information.
+/// </summary>
+public sealed record BioroidAbilityUsedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public BioroidAbilityUsedEventPayload(
+        int version,
+        RunId runId,
+        EncounterId encounterId,
+        CardInstanceId iceId,
+        SubroutineId subroutineId,
+        string abilityKey,
+        int clickCost)
+        : base(version)
+    {
+        ArgumentNullException.ThrowIfNull(abilityKey);
+        RunId = runId;
+        EncounterId = encounterId;
+        IceId = iceId;
+        SubroutineId = subroutineId;
+        AbilityKey = abilityKey;
+        ClickCost = clickCost;
+    }
+
+    public BioroidAbilityUsedEventPayload(
+        RunId runId,
+        EncounterId encounterId,
+        CardInstanceId iceId,
+        SubroutineId subroutineId,
+        string abilityKey,
+        int clickCost)
+        : this(1, runId, encounterId, iceId, subroutineId, abilityKey, clickCost)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunId RunId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public EncounterId EncounterId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId IceId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public SubroutineId SubroutineId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string AbilityKey { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int ClickCost { get; private set; }
 }
 
 public sealed record BreakerPumpedEventPayload : EngineEventPayload
@@ -2156,8 +2247,10 @@ public sealed record EngineEvent
         RunPriorityPassedEventPayload value => new EngineEvent(Version, Sequence, Kind, new RunPriorityPassedEventPayload(value.Version, value.RunId, value.Window, value.PassedBy, value.NextPriorityHolder, value.ConsecutivePasses)),
         RunTimingWindowOpenedEventPayload value => new EngineEvent(Version, Sequence, Kind, new RunTimingWindowOpenedEventPayload(value.Version, value.RunId, value.Phase, value.Step, value.PriorityWindow, value.PriorityHolder)),
         IceApproachedEventPayload value => new EngineEvent(Version, Sequence, Kind, new IceApproachedEventPayload(value.Version, value.RunId, value.IceId)),
+        ServerApproachedEventPayload value => new EngineEvent(Version, Sequence, Kind, new ServerApproachedEventPayload(value.Version, value.RunId, value.ServerId)),
         IceRezzedEventPayload value => new EngineEvent(Version, Sequence, Kind, new IceRezzedEventPayload(value.Version, value.RunId, value.IceId)),
         SubroutinesBrokenEventPayload value => new EngineEvent(Version, Sequence, Kind, new SubroutinesBrokenEventPayload(value.Version, value.RunId, value.EncounterId, value.BreakerId, value.BrokenCount)),
+        BioroidAbilityUsedEventPayload value => new EngineEvent(Version, Sequence, Kind, new BioroidAbilityUsedEventPayload(value.Version, value.RunId, value.EncounterId, value.IceId, value.SubroutineId, value.AbilityKey, value.ClickCost)),
         BreakerPumpedEventPayload value => new EngineEvent(Version, Sequence, Kind, new BreakerPumpedEventPayload(value.Version, value.RunId, value.BreakerId)),
         EncounterInitializedEventPayload value => new EngineEvent(Version, Sequence, Kind, new EncounterInitializedEventPayload(value.Version, value.RunId, value.EncounterId, value.IceId, value.SubroutineCount)),
         EncounterCompletedEventPayload value => new EngineEvent(Version, Sequence, Kind, new EncounterCompletedEventPayload(value.Version, value.RunId, value.EncounterId)),
@@ -2655,6 +2748,11 @@ public static class EngineEventValidator
                 RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
                 RequireId(value.IceId.Value, $"{path}.payload.iceId", "card", violations);
                 break;
+            case ServerApproachedEventPayload value:
+                RequireKind(@event, EngineEventKinds.ServerApproached, path, violations);
+                RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
+                RequireId(value.ServerId.Value, $"{path}.payload.serverId", "server", violations);
+                break;
             case IceRezzedEventPayload value:
                 RequireKind(@event, EngineEventKinds.IceRezzed, path, violations);
                 RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
@@ -2666,6 +2764,20 @@ public static class EngineEventValidator
                 RequireId(value.EncounterId.Value, $"{path}.payload.encounterId", "encounter", violations);
                 RequireId(value.BreakerId.Value, $"{path}.payload.breakerId", "card", violations);
                 RequireNumber(value.BrokenCount, $"{path}.payload.brokenCount", "Broken subroutine count", violations, strictlyPositive: true);
+                break;
+            case BioroidAbilityUsedEventPayload value:
+                RequireKind(@event, EngineEventKinds.BioroidAbilityUsed, path, violations);
+                RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
+                RequireId(value.EncounterId.Value, $"{path}.payload.encounterId", "encounter", violations);
+                RequireId(value.IceId.Value, $"{path}.payload.iceId", "card", violations);
+                RequireId(value.SubroutineId.Value, $"{path}.payload.subroutineId", "subroutine", violations);
+                RequireId(value.AbilityKey, $"{path}.payload.abilityKey", "ability", violations);
+                RequireNumber(value.ClickCost, $"{path}.payload.clickCost", "Bioroid ability click cost", violations, strictlyPositive: true);
+                if (value.ClickCost != 1)
+                {
+                    Add(violations, "event.invalid-bioroid-click-cost", $"{path}.payload.clickCost", "A bioroid ability event must carry exactly one lost click.");
+                }
+
                 break;
             case BreakerPumpedEventPayload value:
                 RequireKind(@event, EngineEventKinds.BreakerPumped, path, violations);

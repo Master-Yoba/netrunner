@@ -8,6 +8,43 @@ public sealed class BehaviorContractsTests
     private static readonly CardDefinitionId SearchCardId = new("test:contract-search-card");
 
     [Fact]
+    public void StructuredChoiceMetadataAndPlayerRecipientRoundTripWithoutLegacyFields()
+    {
+        BehaviorTarget privateCards = BehaviorTarget.CardsInZone(
+            BehaviorZone.Headquarters,
+            new BehaviorCardFilter(ownerSide: PlayerSide.Corp));
+        BehaviorChoiceOption option = new(
+            "fallback",
+            [new BehaviorInstruction(
+                BehaviorInstructionKind.AddTags,
+                amount: 1,
+                recipient: BehaviorPlayerSelector.ActingPlayer)],
+            costs:
+            [
+                new BehaviorCost(BehaviorCostKind.Credits, 2),
+                new BehaviorCost(
+                    BehaviorCostKind.Additional,
+                    additionalKey: "trash-card",
+                    additionalTarget: privateCards,
+                    additionalKind: BehaviorAdditionalCostKind.TrashCards),
+            ],
+            semantic: BehaviorChoiceOptionSemantic.Fallback);
+
+        string json = System.Text.Json.JsonSerializer.Serialize(option, EngineJson.Options);
+        BehaviorChoiceOption restored = System.Text.Json.JsonSerializer.Deserialize<BehaviorChoiceOption>(
+            json,
+            EngineJson.Options)!;
+
+        Assert.Equal(option, restored);
+        Assert.Equal(BehaviorChoiceOptionSemantic.Fallback, restored.Semantic);
+        Assert.Equal(BehaviorPlayerSelector.ActingPlayer, restored.Instructions[0].Recipient);
+        Assert.DoesNotContain("costs", System.Text.Json.JsonSerializer.Serialize(
+            new BehaviorChoiceOption("legacy"),
+            EngineJson.Options),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CardinalityAndChooserContractsValidateBoundsAndFreezeOptions()
     {
         Assert.Equal(
@@ -745,6 +782,7 @@ public sealed class BehaviorContractsTests
         {
             OccurrenceKind.CardInstalled,
             OccurrenceKind.CardRezzed,
+            OccurrenceKind.IceEncountered,
             OccurrenceKind.RunSuccessful,
             OccurrenceKind.RunEnded,
             OccurrenceKind.AgendaScoredOrStolen,
@@ -784,6 +822,7 @@ public sealed class BehaviorContractsTests
             {
                 OccurrenceKind.CardInstalled,
                 OccurrenceKind.CardRezzed,
+                OccurrenceKind.IceEncountered,
                 OccurrenceKind.RunSuccessful,
                 OccurrenceKind.RunEnded,
                 OccurrenceKind.AgendaScoredOrStolen,

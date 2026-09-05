@@ -761,6 +761,21 @@ public static class M2ScenarioSetup
     /// </summary>
     public static GameState Build(M2ScenarioDocument document, IBehaviorCatalog behaviorCatalog)
     {
+        return Build(document, behaviorCatalog, runtimeCardCatalog: null);
+    }
+
+    /// <summary>
+    /// Builds an M2 state using the immutable behavior and printed runtime
+    /// catalogs supplied by composition. The runtime catalog is optional for
+    /// compatibility with legacy behavior-only fixtures, but when present its
+    /// version and fingerprint are persisted into the authoritative state so
+    /// every later reducer call can enforce the same snapshot.
+    /// </summary>
+    public static GameState Build(
+        M2ScenarioDocument document,
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog)
+    {
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(behaviorCatalog);
         // The injected composition catalog may contain behavior unrelated to
@@ -773,7 +788,9 @@ public static class M2ScenarioSetup
             document.RulesVersion,
             document.CardDataVersion,
             behaviorRegistryVersion: scenarioCatalog.Version,
-            behaviorCatalogFingerprint: scenarioCatalog.Fingerprint);
+            behaviorCatalogFingerprint: scenarioCatalog.Fingerprint,
+            runtimeCardCatalogVersion: runtimeCardCatalog?.Version,
+            runtimeCardCatalogFingerprint: runtimeCardCatalog?.Fingerprint);
         var allocator = new StableIdAllocator(baseState.Allocator);
 
         var servers = baseState.Servers.ToList();
@@ -841,7 +858,7 @@ public static class M2ScenarioSetup
             behaviorRegistryVersion: scenarioCatalog.Version,
             behaviorCatalogFingerprint: scenarioCatalog.Fingerprint);
 
-        StateInvariantValidator.Validate(state, scenarioCatalog);
+        StateInvariantValidator.Validate(state, scenarioCatalog, runtimeCardCatalog);
         if (document.ExpectedInitialStateHash is not null)
         {
             string actualHash = DeterministicHash.ForState(state);

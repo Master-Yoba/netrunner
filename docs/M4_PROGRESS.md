@@ -1,8 +1,6 @@
 # M4 progress — System Gateway complete
 
-Status: Slice 4.3 engine/card/agent/client work is implemented on `m4_3`;
-the standard full-game SIM-401 exit remains open on the pre-existing
-MATCH-401A setup/mulligan dependency
+Status: Slice 4.5 complete on `m4_5`; ready for review into `dev`
 
 Date started: 31 August 2026
 
@@ -11,10 +9,10 @@ vendored commit `236140cf84491c23995b028bc791281837520b97` (77 designs)
 
 ## Scope
 
-Slices 4.1 and 4.2 of `docs/M4_PLAN.md` are complete and merged. Current
-implementation scope is Slice 4.3: ENG-407 through ENG-413, the 13 new Batch 2
-designs plus Nico Campaign completion, AGT-401 v2, SIM-401, UI-404, OBS-401,
-and their documented exit evidence. Later M4 card batches remain out of scope.
+Slices 4.1 through 4.4 of `docs/M4_PLAN.md` are complete and merged. Slice 4.5
+is complete on its feature branch: ENG-419 through ENG-425A, SCN-401, the
+seven Batch 4 cards, AGT-401 v4, SIM-401, UI-406, and their exit evidence.
+Later M4 card batches remain out of scope.
 
 ## Baseline
 
@@ -4172,3 +4170,198 @@ errors; runtime action expansion and full verification remain pending.
   CLI 54, Match 62), zero build warnings/errors, formatting, coverage, content,
   simulation/replay, Godot, UI smoke, and secret-scan checks green. The M2
   hashes remain unchanged.
+
+## Slice 4.5 work log
+
+### 2026-09-04 — architecture and execution started
+
+- Started Slice 4.5 on its dedicated `m4_5` branch from merged Slice 4.4
+  commit `2737ae4`. The complete slice contract remains ENG-419 through
+  ENG-425A, SCN-401, the seven Batch 4 cards, AGT-401 v4, SIM-401, UI-406,
+  registry/coverage closure, and the full repository gate.
+- CR 26.03 fixes the new reaction boundaries precisely. Manegarm Skunkworks
+  and Anoetic Void meet their conditions when the Runner approaches the
+  attacked server at 6.9.4g, after the final after-movement paid/rez window
+  and before success at 6.9.5a. Funhouse meets its condition when encounter
+  initialization begins at 6.9.3a, before the encounter paid window at
+  6.9.3b. These reactions will use the existing serialized occurrence and
+  checkpoint machinery; they are not paid-window actions.
+- The engine will add an explicit serialized approach-server timing step and
+  typed approach/encounter occurrences. Installed-card reaction declarations
+  must match the attacked server through stable zone/server topology, while an
+  encounter-self declaration must match the exact encountered ICE. The run
+  timing frame remains below any reaction child so save/load resumes at the
+  already-committed next boundary without re-emitting the occurrence.
+- ENG-420 will extend declarative choices with structured alternatives whose
+  acting player, typed cost, effect, and fallback meaning are explicit.
+  Paying credits, spending clicks, taking a tag, and accepting an end-run
+  effect remain distinct operations. Illegal costs are omitted when actions
+  are materialized and revalidated atomically when submitted; hidden
+  additional-cost card IDs are present only in the chooser's observation.
+- Execution checkpoints are: (A) timing occurrences and source-server scope;
+  (B) structured alternatives and compound trigger costs; (C) approach and
+  encounter card bindings; (D) bioroid, topology, restriction, delayed
+  cleanup, and Jailbreak primitives/bindings; (E) agent/simulation/UI; and
+  (F) registry, coverage, full verification, push, and PR into `dev`.
+  Luna Max agents own bounded implementation checkpoints. The primary agent
+  owns architecture, adversarial review, integration, schema/pin decisions,
+  verification, and acceptance commits.
+
+### 2026-09-04 — Checkpoint A-C timing, alternatives, Jailbreak, and AGT v4 accepted
+
+- Added the explicit CR 6.9.4g `ApproachServer` cursor plus typed
+  `ServerApproached` and `IceEncountered` occurrences. The run cursor advances
+  before a reaction checkpoint is queued, so save/load cannot emit either
+  occurrence twice. Catalog triggers can require their active source to be on
+  the attacked server, while encounter-self triggers bind the exact ICE.
+- Structured mode options now carry typed credit, click, and exact additional
+  card costs plus normal/fallback semantics. Materialization filters
+  unaffordable options, enumerates bounded private card combinations, and
+  revalidates and pays the selected payload atomically. `EndRun` is accepted
+  only from an authenticated reaction child and unwinds the live run once.
+  Review corrected optional-trigger preflight so Anoetic Void is not offered
+  unless its non-fallback 2-credit plus 2-HQ-card alternative is payable.
+- Bound Manegarm Skunkworks, Anoetic Void, and Funhouse to the new generic
+  reactions. Manegarm gives the Runner its click/credit/end-run alternatives;
+  Anoetic uses the Corp-owned optional reaction and keeps HQ selections
+  chooser-private; Funhouse's encounter ability offers the Runner tag or
+  end-run without yet claiming its ICE subroutine binding.
+- Jailbreak is a real 1-click Runner event action with distinct HQ and R&D
+  targets. Its source remains in the play area for the run, its successful-run
+  draw enters the shared CR 9.2.8 trigger checkpoint, and its +1 breach access
+  is snapshotted with typed run-event provenance. Runtime metadata, source,
+  target, click, cost, catalog fingerprint, and stale action payloads are all
+  revalidated.
+- AGT-401 v4 handles typed trigger choices and structured behavior alternatives
+  from observation-issued payloads only, including chooser-private card-cost
+  IDs. Root review removed trigger actions from the ordinary run-window policy,
+  retained their dedicated `TriggerChoice` dispatch, and fixed stable semantic
+  ordering without reading descriptions or authoritative state.
+- Persisted approach state first moved schema 9 to 10; targeted play payloads
+  and run-event breach provenance then moved it to 11. The representative M2
+  proof is re-pinned at initial
+  `b964e5c037e7f470c9d64cbceba371c39aad806e0f46f3518be1a2818012b423`,
+  final `7da1beb7aa61527ffa4e0cb9095397cc7809d481f34d1966826991ac5d411486`,
+  and event
+  `33af2b049fbad324ed5ff0ee130740c3d65c03f2cb1196100afbdc73e9f0e67c`.
+  The event pin changes because `server-approached` is now explicit.
+- Root verification passed all 1,081 solution tests (Core 734, Cards 189, AI
+  42, CLI 54, Match 62), focused reaction/Jailbreak tests, a warning-free
+  build of every touched project, solution formatting, and `git diff --check`.
+  Encountered-bioroid abilities, Mayfly cleanup, ICE subroutine effects and
+  topology, run restrictions, SCN-401, simulation/UI, and registry closure
+  remain for later checkpoints.
+
+### 2026-09-04 — Checkpoint D1 bioroid, Mayfly, SCN-401, and UI foundation accepted
+
+- Added a dedicated encountered-bioroid action whose authenticated payload
+  names the physical ICE, exact unbroken subroutine, shared ability key, and
+  typed `LoseClick` cost. Ansel 1.0 and Brân 1.0 share one immutable card-layer
+  declaration; repeated uses remain legal while the Runner has clicks and
+  unbroken subroutines, without passing through an icebreaker or basic-action
+  path.
+- Mayfly now carries its printed AI interface and a typed run-end cleanup
+  declaration. A successful Mayfly break arms one catalog-provenanced,
+  run-expiring effect; pumping or merely installing it does not. Multiple
+  breaks deduplicate, a moved/inactive source is left alone, and an
+  authenticated active source is trashed through the ordinary typed card-move
+  boundary at run end. Review required an explicit cleanup-kind discriminator
+  so a forged generic lingering effect cannot move a physical card.
+- Checked in the first SCN-401 executable fixture cases for optional Anoetic,
+  mandatory Manegarm, and Funhouse encounter reactions. They validate the
+  timing trace, round-trip every yielded boundary, and prove Corp-only HQ cost
+  IDs remain absent from the Runner observation. The fixture remains explicit
+  about the later bioroid, install, restriction, and Mayfly cases still to add.
+- UI-406 now has a Match-owned typed projector for prominent approach and
+  encounter decisions. It preserves engine option order and acting-player
+  ownership, renders typed costs/fallbacks/card and server targets, exposes
+  the bioroid action, fails closed on malformed payloads, and keeps Godot as a
+  renderer rather than a rules interpreter. Restriction and Mayfly cues remain
+  nullable until Core publishes their final typed observation fields.
+- New serialized bioroid action and cleanup state moved the engine schema from
+  11 to 12. Canonical scenarios were re-pinned; the representative M2 proof is
+  now initial `1537ca1cef72e962329e2f1340e77a25b0c22e907c6f402972506aae1dccbf41`,
+  final `e04e0e01c1abe93dc18a7a29d236b2a43f78ade13a60a9f9f4553d805f334581`,
+  and event `33af2b049fbad324ed5ff0ee130740c3d65c03f2cb1196100afbdc73e9f0e67c`.
+  The event hash is unchanged because the representative run does not use the
+  new actions.
+- Root independently passed all 1,104 solution tests (Core 742, Cards 197, AI
+  42, CLI 54, Match 69), the focused bioroid/Mayfly, reaction/SCN-401, UI, and
+  M2 proof suites, solution formatting, and `git diff --check`. The remaining
+  hard checkpoint is serialized choice-bearing ICE subroutine resolution,
+  hidden-safe Corp installs/topology, Ansel's run restriction and trash target,
+  followed by final SCN/simulation/UI/registry closure.
+
+### 2026-09-04 — Checkpoint D2 typed ICE resolution and topology accepted
+
+- Added one serialized, catalog-authenticated ICE-subroutine continuation
+  instead of title branches. It executes Corp installed-card trash choices,
+  Ansel's normal paid HQ/Archives install, Brân's inward cost-ignoring ICE
+  install, Funhouse's pay-or-tag subroutine, and typed run restrictions. The
+  payload constructors reject unsupported install-cost combinations and
+  extraneous card, server, payment, and hosted-credit fields before they can
+  reach a decision boundary.
+- Mid-run topology follows CR 8.5.10 and 8.5.13: a removed encountered ICE
+  leaves a repaired cursor, while an ICE installed immediately inward from
+  Brân becomes the next approached ICE. Normal installs use the existing
+  replacement/unique/install-cost machinery; inward installs have their own
+  exact destination and ignore-cost contract.
+- Ansel's cannot-steal-or-trash effect is run-scoped and filters only steal,
+  basic trash, and declarations whose typed instruction/cost graph can trash
+  a Corp card. Unrelated access-window abilities remain legal. Each
+  restriction now points to an exact schema-14 resolved-unbroken-subroutine
+  ledger entry, and adversarial removal of that entry fails invariants and is
+  rejected atomically.
+- Root review strengthened the shared bioroid payload with its typed printed
+  ordinal, kept repeated click-loss uses legal, and made the contract agent's
+  ordinal preference explicit. The reviewed checkpoint is committed as
+  `9646928` after complete project suites passed Core 756/756, Cards 214/214,
+  AI 51/51, CLI 54/54, and Match 77/77.
+
+### 2026-09-04 — Checkpoint E-F simulation, UI, registry, and exit accepted
+
+- SCN-401 now has 13 executable cases covering every required approach,
+  encounter, bioroid, install, restriction, and Mayfly used/not-used boundary.
+  Every declared yield round-trips and the timing validator proves the new
+  reactions do not invent priority windows.
+- The Slice 4.5 headless proof drives Manegarm, Brân, Ansel, and Funhouse in
+  one full run. Scripted-human and AGT-401 v4 policies select the exact same
+  action/event/state sequence; every yield passes invariants, JSON round-trip,
+  and replay lockstep. Simulation fixtures now contain all 46 registered
+  definitions and pin behavior catalog
+  `40cf3ff37c5e014a70d43e321c63cf541dc883af74315e970df0e4e4928dd038`.
+- Match receives the immutable runtime-card catalog at composition and uses it
+  for setup and every reducer call, so real Ansel/Brân install choices can be
+  materialized. Its Runner publication boundary omits events containing
+  hidden Corp physical IDs and fails closed for future typed card-reference
+  payloads while retaining public reveal, access, score, and rezzed-ICE data.
+- UI-406 renders prominent ordered choices with acting player, typed costs,
+  fallbacks, safe targets, active restriction, legal bioroid use, and armed
+  Mayfly cleanup. The Godot smoke proves all nine cues without reading rules
+  text or exposing a hidden installed card. The legacy M2 UI smoke remains on
+  its explicit behavior-only adapter; normal Godot composition supplies the
+  runtime catalog.
+- Gateway evidence closes at 77 total / 46 registered / 46 tested / 45
+  text-complete / 1 partial / 31 unregistered; Offworld Office remains the
+  only registered partial. Engine schema 14 re-pins the representative M2
+  proof at initial
+  `308cadf42d6f32153299104661b81d1a47ce7ae80a91e966375729149e71d049`,
+  final `4603c78adb067873229363c86d6b1294f92c5564009e1b8a1cbf2aa6e6dc1001`,
+  and unchanged event stream
+  `33af2b049fbad324ed5ff0ee130740c3d65c03f2cb1196100afbdc73e9f0e67c`.
+- The final `./scripts/verify.sh` gate passes all 1,154 tests, warning-free
+  builds and formatting, official card-data/coverage checks, M1/M2 and Slice
+  4.5 deterministic proofs, Godot import/gallery/Slice 4.3/Slice 4.4/Slice 4.5
+  and M3 smokes, and secret scanning.
+
+### 2026-09-05 — PR review action-order boundary accepted
+
+- PR #9 review correctly identified that ordinal sorting of unpadded issued
+  IDs places `action:10` before `action:9`. Both contract agents now share one
+  observation-safe ordering helper: canonical positive `action:<ulong>` IDs
+  compare by invariant numeric sequence, while synthetic stable IDs retain an
+  ordinal fallback.
+- Regressions cover both agents across the 9/10 boundary, reversed observation
+  order, and JSON round-trip. The complete AI suite passes 53/53 and the full
+  1,154-test repository gate, all deterministic proofs, Godot smokes,
+  formatting, coverage/content checks, and secret scan remain green.

@@ -644,6 +644,9 @@ public static partial class GameEngine
             case (ActionKind.ChooseBehavior, BehaviorChoiceParameters behaviorChoice):
                 ConsumeBehaviorChoice(working, behaviorChoice);
                 return;
+            case (ActionKind.ResolveIceSubroutine, IceSubroutineChoiceParameters iceSubroutineChoice):
+                ConsumeIceSubroutineChoice(working, iceSubroutineChoice);
+                return;
             case (ActionKind.UseAbility, AbilityActionParameters ability):
                 ConsumeAbilityAction(working, ability, decisionOwner);
                 return;
@@ -713,6 +716,7 @@ public static partial class GameEngine
             case (ActionKind.RezIce, RunIceParameters runIce):
             case (ActionKind.BreakSubroutines, RunBreakParameters):
             case (ActionKind.PumpBreaker, RunBreakerParameters):
+            case (ActionKind.UseBioroidAbility, RunBioroidAbilityParameters):
             case (ActionKind.JackOut, NoActionParameters):
             case (ActionKind.ContinueRun, NoActionParameters):
             case (ActionKind.ChooseBreachCandidate, BreachCandidateParameters):

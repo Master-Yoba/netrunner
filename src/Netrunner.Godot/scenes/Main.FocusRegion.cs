@@ -36,10 +36,13 @@ public partial class Main
 			return;
 		}
 
+		RenderSlice45RunCues(snapshot.View.Slice45Cues);
+
 		if (focus.Mode == FocusRegionMode.Encounter && focus.Encounter is { } encounter)
 		{
 			_smokeEncounterFocusObserved |= _smokeTest;
 			RenderEncounterFocusRegion(snapshot, run, encounter);
+			RenderSlice45DecisionFocus(snapshot.View);
 			return;
 		}
 
@@ -61,6 +64,7 @@ public partial class Main
 			15,
 			Warning));
 		AddBreachAccessModifierCues(run);
+		RenderSlice45DecisionFocus(snapshot.View);
 		_focusPresentation.AddChild(MakeWrappedLabel(
 			"The current timing step is owned by Core. Legal actions below are the only actions that can mutate the run.",
 			12,
@@ -143,8 +147,10 @@ public partial class Main
 		string breakerCue = string.Join(
 			" · ",
 			snapshot.View.LegalActions
-				.Where(action => action.Kind is ActionKind.PumpBreaker or ActionKind.BreakSubroutines)
-				.Select(action => $"{action.Kind}: {action.Description}"));
+				.Where(action => action.Kind is ActionKind.PumpBreaker
+					or ActionKind.BreakSubroutines
+					or ActionKind.UseBioroidAbility)
+				.Select(Slice45PresentationProjector.Label));
 		_focusPresentation.AddChild(MakeWrappedLabel(
 			string.IsNullOrWhiteSpace(breakerCue)
 				? "BREAKER OPTIONS · no breaker action is currently issued"
@@ -154,6 +160,60 @@ public partial class Main
 		if (run.Priority is { } priority)
 		{
 			AddPriorityCueRegion(priority);
+		}
+	}
+
+	private void RenderSlice45DecisionFocus(MatchViewModel view)
+	{
+		Slice45DecisionViewModel decision = Slice45PresentationProjector.Present(view);
+		if (!decision.IsProminent)
+		{
+			return;
+		}
+
+		_focusPresentation.AddChild(MakeLabel(
+			$"SLICE 4.5 {decision.Surface.ToString().ToUpperInvariant()} DECISION · "
+			+ $"ACTING PLAYER {decision.ActingPlayer!.Value.ToString().ToUpperInvariant()}",
+			14,
+			Accent));
+		if (decision.Prompt is { } prompt && !string.IsNullOrWhiteSpace(prompt))
+		{
+			_focusPresentation.AddChild(MakeWrappedLabel(prompt, 12, Colors.White));
+		}
+
+		foreach (Slice45ActionPresentationViewModel option in decision.Options)
+		{
+			_focusPresentation.AddChild(MakeWrappedLabel(
+				option.OrderedPresentationLabel,
+				11,
+				option.IsFallback ? Warning : Colors.White));
+		}
+	}
+
+	private void RenderSlice45RunCues(Slice45CueViewModel cues)
+	{
+		if (cues.NoStealOrTrashActive == true)
+		{
+			_focusPresentation.AddChild(MakeWrappedLabel(
+				"RUN RESTRICTION ACTIVE · NO STEAL / NO TRASH CORP CARDS · UNTIL RUN ENDS",
+				12,
+				Warning));
+		}
+
+		if (cues.BioroidAbilityLegal == true)
+		{
+			_focusPresentation.AddChild(MakeWrappedLabel(
+				"BIOROID ABILITY · LEGAL",
+				12,
+				Accent));
+		}
+
+		if (cues.MayflyRunEndArmed == true)
+		{
+			_focusPresentation.AddChild(MakeWrappedLabel(
+				"MAYFLY RUN-END EFFECT · ARMED",
+				12,
+				Accent));
 		}
 	}
 

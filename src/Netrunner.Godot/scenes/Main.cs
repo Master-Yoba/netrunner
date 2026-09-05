@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using Godot;
+using Netrunner.Cards;
 using Netrunner.Core;
 using Netrunner.Match;
 
@@ -24,6 +25,7 @@ public partial class Main : Control
 	private readonly Queue<IReadOnlyList<EngineEvent>> _animationBatches = new();
 	private readonly CardMetadataSnapshot _metadataSnapshot = CardMetadataResolvers.Embedded;
 	private readonly ICardMetadataResolver _metadataResolver = CardMetadataResolvers.Default;
+	private readonly IRuntimeCardCatalog? _runtimeCardCatalog = CreateRuntimeCardCatalog();
 	private readonly EventFeedRegionPresenter _eventFeedRegion = new();
 	private readonly ConcurrentQueue<MatchSnapshot> _pendingSnapshots = new();
 	private readonly Dictionary<string, List<TextCardControl>> _cardControls = new(StringComparer.Ordinal);
@@ -73,6 +75,7 @@ public partial class Main : Control
 	private bool _gallerySmoke;
 	private bool _slice43UiSmoke;
 	private bool _slice44UiSmoke;
+	private bool _slice45UiSmoke;
 	private bool _gallerySmokePassed;
 	private bool _animationRunning;
 	private bool _skipAnimation;
@@ -90,17 +93,43 @@ public partial class Main : Control
 	private bool _smokeBodyColumnsInViewport = true;
 	private bool _smokeLabelsLegible = true;
 
+	private static RuntimeCardCatalog? CreateRuntimeCardCatalog()
+	{
+		if (!CardDataResource.TryLoadEmbedded(out CardDataSet? data, out _)
+			|| data is null)
+		{
+			return null;
+		}
+
+		try
+		{
+			return GatewayRuntimeCardCatalog.Create(data);
+		}
+		catch (Exception exception) when (exception is CardDataValidationException or InvalidOperationException)
+		{
+			// The metadata shell remains usable in a clean/synthetic checkout;
+			// runtime card actions retain their behavior-only compatibility path
+			// until an authenticated generated payload is available.
+			return null;
+		}
+	}
+
 	public override void _Ready()
 	{
 		IReadOnlyList<string> arguments = OS.GetCmdlineUserArgs();
 		_gallerySmoke = arguments.Contains("--m4-card-gallery-smoke", StringComparer.Ordinal);
 		_slice43UiSmoke = arguments.Contains("--m4-slice43-ui-smoke", StringComparer.Ordinal);
 		_slice44UiSmoke = arguments.Contains("--m4-slice44-ui-smoke", StringComparer.Ordinal);
+		_slice45UiSmoke = arguments.Contains("--m4-slice45-ui-smoke", StringComparer.Ordinal);
 		_smokeTest = arguments.Contains("--smoke-test", StringComparer.Ordinal)
 			|| arguments.Contains("--m3-responsiveness-smoke", StringComparer.Ordinal);
 		_responsivenessSmoke = arguments.Contains("--m3-responsiveness-smoke", StringComparer.Ordinal);
 		BuildShell();
-		if (_slice44UiSmoke)
+		if (_slice45UiSmoke)
+		{
+			_ = RunSlice45UiSmokeAsync();
+		}
+		else if (_slice44UiSmoke)
 		{
 			_ = RunSlice44UiSmokeAsync();
 		}
@@ -278,6 +307,8 @@ public partial class Main : Control
 			{
 				// This mode intentionally uses the real ten-second production delay;
 				// its frame/input assertions run while the worker is actually waiting.
+				// The checked-in M2 smoke is a behavior-only legacy fixture, so it
+				// deliberately exercises the coordinator's compatibility adapter.
 				AgentDelay = TimeSpan.FromSeconds(10),
 				CardMetadataResolver = _metadataResolver,
 			}
@@ -285,7 +316,8 @@ public partial class Main : Control
 			? new MatchCoordinatorOptions
 			{
 				// Keep the production-facing ten-second setting visible in
-				// the smoke path while injecting a short deterministic delay.
+				// the smoke path while injecting a short deterministic delay. This
+				// M2 fixture likewise remains on the behavior-only compatibility path.
 				AgentDelay = TimeSpan.FromSeconds(10),
 				CardMetadataResolver = _metadataResolver,
 				Delay = static (_, cancellationToken) =>
@@ -294,6 +326,7 @@ public partial class Main : Control
 			: new MatchCoordinatorOptions
 			{
 				CardMetadataResolver = _metadataResolver,
+				RuntimeCardCatalog = _runtimeCardCatalog,
 			};
 		_coordinator = M2MatchFactory.CreateRepresentative(options);
 		_runnerPlaybackPolicy = _smokeTest

@@ -10,6 +10,79 @@ namespace Netrunner.Core.Tests;
 public sealed class BehaviorRuntimeTests
 {
     [Fact]
+    public void ChoiceOptionPaysTypedCostsAndTrashesTheAuthenticatedPrivateCard()
+    {
+        CardDefinitionId definitionId = new("test:runtime-choice-cost");
+        CardDefinitionId discardDefinitionId = new("test:runtime-choice-cost-card");
+        CardInstanceId sourceId = new("card:runtime-choice-cost-source");
+        CardInstanceId discardId = new("card:runtime-choice-cost-discard");
+        BehaviorTarget additionalTarget = BehaviorTarget.CardsInZone(
+            BehaviorZone.Headquarters,
+            new BehaviorCardFilter(
+                definitionId: discardDefinitionId,
+                ownerSide: PlayerSide.Corp));
+        BehaviorCost[] costs =
+        [
+            new BehaviorCost(BehaviorCostKind.Credits, 2),
+            new BehaviorCost(
+                BehaviorCostKind.Additional,
+                additionalKey: "trash-card",
+                additionalTarget: additionalTarget,
+                additionalKind: BehaviorAdditionalCostKind.TrashCards),
+        ];
+        BehaviorChoiceSpec choice = new(
+            "runtime-choice-cost-choice",
+            BehaviorChooser.Controller,
+            BehaviorChoiceMode.Mode,
+            BehaviorChoiceCardinality.Exactly(1),
+            [
+                new BehaviorChoiceOption(
+                    "pay",
+                    [new BehaviorInstruction(BehaviorInstructionKind.GainCredits, amount: 3)],
+                    costs: costs,
+                    semantic: BehaviorChoiceOptionSemantic.Normal),
+                new BehaviorChoiceOption(
+                    "fallback",
+                    [new BehaviorInstruction(BehaviorInstructionKind.NoOp)],
+                    semantic: BehaviorChoiceOptionSemantic.Fallback),
+            ]);
+        BehaviorCatalog catalog = Catalog(new CardBehaviorDefinition(
+            definitionId,
+            PlayerSide.Corp,
+            instructions: [new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: choice)]));
+        GameState state = CreateState(
+            catalog,
+            (sourceId, definitionId, ZoneKind.CorpHand, PlayerSide.Corp),
+            (discardId, discardDefinitionId, ZoneKind.CorpHand, PlayerSide.Corp));
+        PlayerId corp = state.Players.Single(player => player.Side == PlayerSide.Corp).Id;
+
+        GameState prompt = GameEngine.BeginBehaviorForTesting(
+            state,
+            new BehaviorInvocationContext(sourceId, corp),
+            catalog);
+        string promptJson = EngineJson.Serialize(prompt);
+        prompt = EngineJson.DeserializeState(promptJson, catalog);
+        Assert.Equal(promptJson, EngineJson.Serialize(prompt));
+        LegalAction pay = Assert.Single(
+            prompt.PendingDecision!.LegalActions,
+            action => action.Parameters is BehaviorChoiceParameters parameters
+                && parameters.OptionKeys.SequenceEqual(["pay"]));
+        BehaviorChoiceParameters payload = Assert.IsType<BehaviorChoiceParameters>(pay.Parameters);
+        Assert.Equal([discardId], payload.CardIds);
+        Assert.Contains("Normal", pay.Description, StringComparison.Ordinal);
+
+        ApplyResult applied = GameEngine.Apply(
+            prompt,
+            new ActionSubmission(corp, prompt.PendingDecision.Id, prompt.PendingDecision.Revision, pay.Id),
+            catalog);
+
+        Assert.True(applied.Accepted, applied.Rejection?.Message);
+        Assert.Equal(6, applied.State.GetPlayer(corp).Credits);
+        Assert.Equal(ZoneKind.CorpDiscard, applied.State.GetZone(applied.State.GetCard(discardId).ZoneId).Kind);
+        Assert.Empty(applied.State.ResolutionStack);
+    }
+
+    [Fact]
     public void InvocationUsesInjectedDefinitionAndRejectsWrongProvenance()
     {
         CardDefinitionId definitionId = new("test:runtime-gain");

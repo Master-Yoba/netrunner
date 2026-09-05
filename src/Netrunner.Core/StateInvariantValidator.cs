@@ -1047,7 +1047,8 @@ public static class StateInvariantValidator
         List<StateInvariantViolation> violations)
     {
         RunState? run = state.RunState;
-        bool hasRunFrame = state.ResolutionStack.Any(static frame => frame is RunTimingFrame);
+        bool hasRunFrame = state.ResolutionStack.Any(static frame =>
+            frame is RunTimingFrame or IceSubroutineFrame);
         ValidateTransientPlayAreas(state, violations);
         if (run is null)
         {
@@ -1312,6 +1313,53 @@ public static class StateInvariantValidator
                         }
                         break;
 
+                    case RunBreachAccessModifierSourceKind.RunEvent:
+                        if (run.ActiveRunEventId is not { } activeRunEventId)
+                        {
+                            Add(
+                                violations,
+                                "run.breach-modifier-run-event",
+                                modifierPath,
+                                "Run-event breach access modifiers require an active run event source.");
+                        }
+                        else if (modifier.SourceCardId != activeRunEventId)
+                        {
+                            Add(
+                                violations,
+                                "run.breach-modifier-source-mismatch",
+                                $"{modifierPath}.sourceCardId",
+                                "Every run-event breach access modifier must identify the active run event source.");
+                        }
+
+                        if (source is not null
+                            && (!behaviorCatalog.TryGetRunEvent(
+                                    source.DefinitionId,
+                                    out RunEventBehaviorSpec? runEventSpec)
+                                || runEventSpec.BreachAccessModifier is not { } declared
+                                || declared.Delta != modifier.Delta
+                                || !string.Equals(
+                                    declared.ReasonKey,
+                                    modifier.ReasonKey,
+                                    StringComparison.Ordinal)))
+                        {
+                            Add(
+                                violations,
+                                "run.breach-modifier-undeclared",
+                                modifierPath,
+                                "Run-event breach access modifiers must match the active event's exact declaration.");
+                        }
+
+                        if (source is not null
+                            && !source.FaceUp)
+                        {
+                            Add(
+                                violations,
+                                "run.breach-modifier-source-facedown",
+                                modifierPath,
+                                "A run-event breach access modifier source must remain faceup while the run is active.");
+                        }
+                        break;
+
                     default:
                         Add(
                             violations,
@@ -1324,9 +1372,35 @@ public static class StateInvariantValidator
 
         }
 
+        if (run.ActiveRunEventId is { } activeEventForModifier
+            && state.Cards.FirstOrDefault(card => card?.Id == activeEventForModifier) is { } eventSourceForModifier
+            && behaviorCatalog.TryGetRunEvent(eventSourceForModifier.DefinitionId, out RunEventBehaviorSpec? eventSpecForModifier)
+            && eventSpecForModifier.BreachAccessModifier is { } declaredEventModifier
+            && (run.BreachAccessModifiers is null
+                || !run.BreachAccessModifiers.Any(modifier => modifier is not null
+                    && modifier.SourceKind == RunBreachAccessModifierSourceKind.RunEvent
+                    && modifier.SourceCardId == activeEventForModifier
+                    && modifier.AttackedServerId == run.AttackedServer
+                    && modifier.Delta == declaredEventModifier.Delta
+                    && string.Equals(
+                        modifier.ReasonKey,
+                        declaredEventModifier.ReasonKey,
+                        StringComparison.Ordinal))))
+        {
+            Add(
+                violations,
+                "run.missing-breach-access-modifier",
+                $"{path}.breachAccessModifiers",
+                "The active run event's declared breach access modifier must be snapshotted into the run state.");
+        }
+
         ValidateRunRandomAccessLimit(state, run, path, violations);
 
         ValidateRunRezCostModifiers(state, behaviorCatalog, run, path, violations);
+
+        ValidateResolvedSubroutineLedger(state, behaviorCatalog, run, path, violations);
+
+        ValidateRunRestrictions(state, behaviorCatalog, run, path, violations);
 
         if (!installedRunSource && run.InitiatingSource != run.ActiveRunEventId)
         {
@@ -1393,13 +1467,40 @@ public static class StateInvariantValidator
                         "The active run event must be Runner-owned.");
                 }
 
-                if (!behaviorCatalog.TryGetRunEvent(activeEvent.DefinitionId, out _))
+                RunEventBehaviorSpec? activeRunEventSpec = null;
+                if (!behaviorCatalog.TryGetRunEvent(activeEvent.DefinitionId, out activeRunEventSpec))
                 {
                     Add(
                         violations,
                         "run.active-event-unregistered",
                         $"{path}.activeRunEventId",
                         $"Active run event definition '{activeEvent.DefinitionId}' is not registered as a run event.");
+                }
+                else
+                {
+                    ServerKind? attackedKind = state.Servers
+                        .FirstOrDefault(candidate => candidate?.Id == run.AttackedServer)
+                        ?.Kind;
+                    if (activeRunEventSpec.AllowedTargetServers is { } allowed
+                        && (attackedKind is null || !allowed.Contains(attackedKind.Value)))
+                    {
+                        Add(
+                            violations,
+                            "run.active-event-target-invalid",
+                            $"{path}.attackedServer",
+                            "The active run event does not allow the run's attacked server.");
+                    }
+
+                    if (activeRunEventSpec.SuccessDraw is { } successDraw
+                        && (!behaviorCatalog.TryGet(activeEvent.DefinitionId, out CardBehaviorDefinition? successDefinition)
+                            || !BehaviorRunRules.IsRunEventSuccessDrawDefinition(successDefinition, successDraw)))
+                    {
+                        Add(
+                            violations,
+                            "run.active-event-success-draw-undeclared",
+                            $"{path}.activeRunEventId",
+                            "A run event success draw requires an exact authenticated generic draw binding.");
+                    }
                 }
 
                 ZoneState? activeZone = state.Zones.FirstOrDefault(zone => zone?.Id == activeEvent.ZoneId);
@@ -1478,6 +1579,7 @@ public static class StateInvariantValidator
         }
         else
         {
+            bool removedEncounterCursor = IsRemovedEncounterCursor(state, run, iceZone);
             if (run.CurrentIceIndex < -1 || run.CurrentIceIndex >= iceZone.CardIds.Count)
             {
                 Add(violations, "run.invalid-ice-index", $"{path}.currentIceIndex", "Current ICE index must be -1 or an index in the attacked server's ordered ICE zone.");
@@ -1490,7 +1592,8 @@ public static class StateInvariantValidator
                     Add(violations, "run.unexpected-current-ice", $"{path}.currentIceId", "A run at the server must not have a current ICE ID.");
                 }
             }
-            else if (!run.CurrentIceId.HasValue || iceZone.CardIds[run.CurrentIceIndex] != run.CurrentIceId.Value)
+            else if (!removedEncounterCursor
+                && (!run.CurrentIceId.HasValue || iceZone.CardIds[run.CurrentIceIndex] != run.CurrentIceId.Value))
             {
                 Add(violations, "run.ice-position-mismatch", $"{path}.currentIceId", "Current ICE ID must match the ordered ICE zone position.");
             }
@@ -1570,6 +1673,45 @@ public static class StateInvariantValidator
             if (!Enum.IsDefined(effect.Expiry))
             {
                 Add(violations, "run.invalid-effect-expiry", $"{effectPath}.expiry", $"'{effect.Expiry}' is not supported inside RunState.");
+            }
+
+            // A run-expiring effect with a physical source is the
+            // icebreaker run-end-cleanup contract. Keep the source identity
+            // authoritative and cross-check the behavior ID against the
+            // injected catalog; a caller cannot forge a cleanup by merely
+            // placing a source card and arbitrary string in RunState.
+            if (effect.Expiry == RunLingeringEffectExpiry.Run
+                && effect.SourceCardId is { } cleanupSourceId)
+            {
+                if (effect.Kind != RunLingeringEffectKind.IcebreakerRunEndCleanup)
+                {
+                    Add(
+                        violations,
+                        "run.cleanup-kind-missing",
+                        $"{effectPath}.kind",
+                        "A run-end cleanup with a physical source must carry the typed icebreaker cleanup kind.");
+                }
+
+                CardInstanceState? cleanupSource = state.Cards.FirstOrDefault(card => card?.Id == cleanupSourceId);
+                if (cleanupSource is null)
+                {
+                    Add(
+                        violations,
+                        "run.cleanup-source-missing",
+                        $"{effectPath}.sourceCardId",
+                        $"Run-end cleanup source '{cleanupSourceId}' is not present in state.");
+                }
+                else if (cleanupSource.OwnerSide != PlayerSide.Runner
+                    || !behaviorCatalog.TryGetIcebreaker(cleanupSource.DefinitionId, out IcebreakerBehaviorSpec? cleanupBreaker)
+                    || cleanupBreaker.RunEndCleanup is not { } cleanupDeclaration
+                    || cleanupDeclaration.BehaviorId != effect.BehaviorId)
+                {
+                    Add(
+                        violations,
+                        "run.cleanup-provenance",
+                        $"{effectPath}.behaviorId",
+                        "A run-end cleanup must match the exact run-end declaration of its Runner icebreaker source.");
+                }
             }
 
             if (effect.ValueAdjustment is { } adjustment)
@@ -1672,7 +1814,12 @@ public static class StateInvariantValidator
             ValidateRunEncounter(state, run, path, violations);
         }
 
-        int runFrameCount = state.ResolutionStack.Count(frame => frame is RunTimingFrame timing && timing.RunId == run.Id);
+        int runFrameCount = state.ResolutionStack.Count(frame => frame switch
+        {
+            RunTimingFrame timing => timing.RunId == run.Id,
+            IceSubroutineFrame subroutine => subroutine.RunId == run.Id,
+            _ => false,
+        });
         if (runFrameCount != 1)
         {
             Add(violations, "run.frame-count", "resolutionStack", $"Live run '{run.Id}' requires exactly one matching RunTimingFrame; found {runFrameCount}.");
@@ -2072,6 +2219,219 @@ public static class StateInvariantValidator
         }
     }
 
+    /// <summary>
+    /// CR 8.5.10 permits a normal ICE install to trash the ICE currently being
+    /// encountered. The run then retains a conceptual numeric boundary while
+    /// the completed encounter's physical source is absent from the attacked
+    /// ICE zone. Movement decrements this boundary to approach the next
+    /// retained inward ICE; the newly installed ICE is outermost and is not
+    /// revisited.
+    /// </summary>
+    private static bool IsRemovedEncounterCursor(
+        GameState state,
+        RunState run,
+        ZoneState iceZone)
+    {
+        return run.CurrentIceId is null
+            && run.CurrentIceIndex >= 0
+            && run.Step is RunTimingStep.MovementPaidWindow
+                or RunTimingStep.JackOutDecision
+                or RunTimingStep.MoveInward
+            && run.Encounter is { Status: RunEncounterStatus.Complete } encounter
+            && !iceZone.CardIds.Contains(encounter.IceId)
+            && state.Cards.Any(card => card.Id == encounter.IceId
+                && card.OwnerSide == PlayerSide.Corp
+                && card.ZoneId != iceZone.Id);
+    }
+
+    private static void ValidateRunRestrictions(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        RunState run,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        if (run.RunRestrictions is null)
+        {
+            return;
+        }
+
+        const string cannotStealOrTrashReason = "ice-subroutine:cannot-steal-or-trash-corp-cards";
+        var seen = new HashSet<(RunRestrictionKind Kind, CardInstanceId Ice, SubroutineId Subroutine, int Ordinal)>();
+        foreach (RunRestriction? restriction in run.RunRestrictions)
+        {
+            string restrictionPath = $"{path}.runRestrictions";
+            if (restriction is null)
+            {
+                Add(violations, "run.null-restriction", restrictionPath, "Run restrictions must not contain null entries.");
+                continue;
+            }
+
+            if (!seen.Add((restriction.Kind, restriction.SourceIceId, restriction.SourceSubroutineId, restriction.SourceOrdinal)))
+            {
+                Add(violations, "run.duplicate-restriction", restrictionPath, "Run restrictions must not repeat the same source subroutine.");
+            }
+
+            CardInstanceState? sourceIce = state.Cards.FirstOrDefault(card => card?.Id == restriction.SourceIceId);
+            if (sourceIce is null
+                || sourceIce.OwnerSide != PlayerSide.Corp
+                || sourceIce.DefinitionId != restriction.SourceIceDefinitionId)
+            {
+                Add(
+                    violations,
+                    "run.restriction-source-invalid",
+                    restrictionPath,
+                    "A run restriction must retain an existing Corp physical source card with the authenticated ICE definition. The source may leave play after resolution.");
+            }
+
+            IceBehaviorSpec? sourceSpec = null;
+            if (!behaviorCatalog.TryGetIce(restriction.SourceIceDefinitionId, out sourceSpec)
+                || restriction.SourceOrdinal < 0
+                || restriction.SourceOrdinal >= sourceSpec.Subroutines.Count
+                || sourceSpec.Subroutines[restriction.SourceOrdinal] is not RunRestrictionSubroutineSpec declared
+                || declared.Restriction != restriction.Kind)
+            {
+                Add(
+                    violations,
+                    "run.restriction-undeclared",
+                    restrictionPath,
+                    "A run restriction must match the exact typed subroutine declaration on its source ICE.");
+            }
+
+            string expectedEncounterId = $"encounter:{run.Id.Value}:{restriction.SourceIceId.Value}";
+            string expectedSubroutineId = $"subroutine:{expectedEncounterId}:{restriction.SourceOrdinal}";
+            if (!string.Equals(restriction.ReasonKey, cannotStealOrTrashReason, StringComparison.Ordinal))
+            {
+                Add(
+                    violations,
+                    "run.restriction-reason-invalid",
+                    restrictionPath,
+                    "A run restriction must retain the registered provenance reason for its typed declaration.");
+            }
+
+            if (!string.Equals(restriction.SourceSubroutineId.Value, expectedSubroutineId, StringComparison.Ordinal))
+            {
+                Add(
+                    violations,
+                    "run.restriction-subroutine-identity",
+                    restrictionPath,
+                    "A run restriction must identify the deterministic subroutine of its run-bound source encounter and ordinal.");
+            }
+
+            RunResolvedSubroutineLedgerEntry? ledgerEntry = run.ResolvedSubroutineLedger?.SingleOrDefault(entry =>
+                entry.RunId == run.Id
+                && entry.IceId == restriction.SourceIceId
+                && entry.IceDefinitionId == restriction.SourceIceDefinitionId
+                && entry.SubroutineId == restriction.SourceSubroutineId
+                && entry.Ordinal == restriction.SourceOrdinal);
+            if (ledgerEntry is null)
+            {
+                Add(
+                    violations,
+                    "run.restriction-ledger-missing",
+                    restrictionPath,
+                    "A run restriction must match an exact persisted ledger entry for an unbroken resolved subroutine.");
+            }
+
+            // The immutable identity above is the retained proof once the
+            // source ICE has moved or left play. While that source is still
+            // the current encounter, also authenticate the live encounter
+            // and require the printed subroutine to have resolved.
+            if (run.Encounter is { } encounter
+                && encounter.IceId == restriction.SourceIceId
+                && (encounter.Id.Value != expectedEncounterId
+                    || encounter.Subroutines.SingleOrDefault(subroutine => subroutine.Id == restriction.SourceSubroutineId) is not { } liveSubroutine
+                    || liveSubroutine.Ordinal != restriction.SourceOrdinal
+                    || !liveSubroutine.Resolved))
+            {
+                Add(
+                    violations,
+                    "run.restriction-subroutine-invalid",
+                    restrictionPath,
+                    "A restriction sourced by the current encounter must identify its deterministic, resolved printed subroutine.");
+            }
+        }
+    }
+
+    private static void ValidateResolvedSubroutineLedger(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        RunState run,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        if (run.ResolvedSubroutineLedger is null)
+        {
+            return;
+        }
+
+        var seen = new HashSet<(EncounterId Encounter, CardInstanceId Ice, SubroutineId Subroutine)>();
+        for (int index = 0; index < run.ResolvedSubroutineLedger.Count; index++)
+        {
+            RunResolvedSubroutineLedgerEntry? entry = run.ResolvedSubroutineLedger[index];
+            string entryPath = $"{path}.resolvedSubroutineLedger[{index}]";
+            if (entry is null)
+            {
+                Add(violations, "run.null-resolved-subroutine-ledger-entry", entryPath, "Resolved-subroutine ledger entries must not be null.");
+                continue;
+            }
+
+            if (!seen.Add((entry.EncounterId, entry.IceId, entry.SubroutineId)))
+            {
+                Add(violations, "run.duplicate-resolved-subroutine-ledger-entry", entryPath, "Resolved-subroutine ledger entries must be unique per encounter, ICE, and subroutine.");
+            }
+
+            if (entry.Version != 1)
+            {
+                Add(violations, "run.resolved-subroutine-ledger-version", entryPath, "Resolved-subroutine ledger entry version must be 1.");
+            }
+
+            if (entry.RunId != run.Id)
+            {
+                Add(violations, "run.resolved-subroutine-ledger-run-mismatch", entryPath, "Resolved-subroutine ledger entries must belong to the active run.");
+            }
+
+            string expectedEncounterId = $"encounter:{run.Id.Value}:{entry.IceId.Value}";
+            string expectedSubroutineId = $"subroutine:{expectedEncounterId}:{entry.Ordinal}";
+            if (!string.Equals(entry.EncounterId.Value, expectedEncounterId, StringComparison.Ordinal)
+                || !string.Equals(entry.SubroutineId.Value, expectedSubroutineId, StringComparison.Ordinal))
+            {
+                Add(violations, "run.resolved-subroutine-ledger-identity", entryPath, "Resolved-subroutine ledger entries must retain the deterministic encounter and subroutine identity for this run.");
+            }
+
+            CardInstanceState? sourceIce = state.Cards.FirstOrDefault(card => card?.Id == entry.IceId);
+            if (sourceIce is null
+                || sourceIce.OwnerSide != PlayerSide.Corp
+                || sourceIce.DefinitionId != entry.IceDefinitionId)
+            {
+                Add(violations, "run.resolved-subroutine-ledger-source-invalid", entryPath, "Resolved-subroutine ledger entries must retain the original Corp ICE definition for their physical source.");
+                continue;
+            }
+
+            if (!behaviorCatalog.TryGetIce(entry.IceDefinitionId, out IceBehaviorSpec? iceSpec)
+                || entry.Ordinal < 0
+                || entry.Ordinal >= iceSpec.Subroutines.Count)
+            {
+                Add(violations, "run.resolved-subroutine-ledger-declaration-invalid", entryPath, "Resolved-subroutine ledger entries must point at a declared ICE subroutine.");
+                continue;
+            }
+
+            if (run.Encounter is { } encounter
+                && encounter.Id == entry.EncounterId)
+            {
+                RunSubroutineState? live = encounter.Subroutines.SingleOrDefault(subroutine => subroutine.Id == entry.SubroutineId);
+                if (live is null
+                    || live.Ordinal != entry.Ordinal
+                    || live.Broken
+                    || !live.Resolved
+                    || encounter.IceId != entry.IceId)
+                {
+                    Add(violations, "run.resolved-subroutine-ledger-live-mismatch", entryPath, "A ledger entry for the live encounter must match an unbroken resolved encounter subroutine.");
+                }
+            }
+        }
+    }
+
     private static void ValidateRunStackTopology(
         GameState state,
         RunState run,
@@ -2080,26 +2440,29 @@ public static class StateInvariantValidator
     {
         int[] matchingRunFrameIndexes = state.ResolutionStack
             .Select((frame, index) => (frame, index))
-            .Where(value => value.frame is RunTimingFrame timing
-                && timing.RunId == run.Id
-                && timing.Step == run.Step)
+            .Where(value => value.frame switch
+            {
+                RunTimingFrame timing => timing.RunId == run.Id && timing.Step == run.Step,
+                IceSubroutineFrame subroutine => subroutine.RunId == run.Id && run.Step == RunTimingStep.Encounter,
+                _ => false,
+            })
             .Select(value => value.index)
             .ToArray();
         int runFrameIndex = matchingRunFrameIndexes.Length == 1
             ? matchingRunFrameIndexes[0]
             : -1;
         bool standalone = runFrameIndex == 0
-            && state.ResolutionStack[0] is RunTimingFrame;
+            && state.ResolutionStack[0] is RunTimingFrame or IceSubroutineFrame;
         bool nested = runFrameIndex == 1
             && state.ResolutionStack[0] is TurnFrame turnFrame
-            && state.ResolutionStack[1] is RunTimingFrame;
+            && state.ResolutionStack[1] is RunTimingFrame or IceSubroutineFrame;
         if (!standalone && !nested)
         {
             Add(
                 violations,
                 "run.stack-topology",
                 "resolutionStack",
-                "A live run must begin with one standalone RunTimingFrame or an exact Runner TurnFrame/RunTimingFrame nesting.");
+                "A live run must begin with one standalone timing/ICE frame or an exact Runner TurnFrame/timing-frame nesting.");
             return;
         }
 
@@ -2125,25 +2488,29 @@ public static class StateInvariantValidator
         else
         {
             // A2b may suspend an ability directly beneath the live run timing
-            // frame. Production occurrence hooks may also suspend their exact
-            // typed marker after advancing the run cursor. The
-            // effect/checkpoint validators prove the nested suffix; this
-            // check only ensures no unrelated frame can be smuggled into a
-            // run stack prefix.
+            // frame. Production occurrence hooks may also suspend the exact
+            // typed gameplay occurrence checkpoint after advancing the run
+            // cursor. The effect/checkpoint validators prove the nested
+            // suffix; this check only ensures no unrelated frame can be
+            // smuggled into a run stack prefix.
             ResolutionFrame suffixRoot = state.ResolutionStack[runFrameIndex + 1];
             bool expectedGameplayOccurrence = suffixRoot is EffectResolutionFrame occurrenceFrame
                 && IsExpectedRunGameplayOccurrenceFrame(state, occurrenceFrame, run);
-            if (suffixRoot is not AbilityFrame && !expectedGameplayOccurrence)
+            bool expectedIceInstall = state.ResolutionStack[runFrameIndex] is IceSubroutineFrame
+                && suffixRoot is InstallFrame;
+            if (suffixRoot is not AbilityFrame
+                && !expectedGameplayOccurrence
+                && !expectedIceInstall)
             {
                 Add(
                     violations,
                     "run.stack-topology",
                     "resolutionStack",
-                    "Only an ability lifecycle or an exact production gameplay occurrence pipeline may follow the live run timing frame.");
+                    "Only an ability lifecycle or exact production gameplay occurrence pipeline may follow the live run timing frame.");
                 return;
             }
 
-            if (!expectedGameplayOccurrence)
+            if (!expectedGameplayOccurrence && !expectedIceInstall)
             {
                 for (int index = runFrameIndex + 2; index < state.ResolutionStack.Count; index++)
                 {
@@ -2208,13 +2575,16 @@ public static class StateInvariantValidator
                 "A nested basic run parent turn number must match the active turn.");
         }
 
-        if (run.ActiveRunEventId is not null)
+        if (run.ActiveRunEventId is { } activeEventId)
         {
-            Add(
-                violations,
-                "run.nested-source",
-                "runState.initiatingSource",
-                "A run event cannot be nested under a real Runner turn.");
+            if (run.InitiatingSource != activeEventId)
+            {
+                Add(
+                    violations,
+                    "run.nested-source",
+                    "runState.initiatingSource",
+                    "A real-turn run event must use the same source identity for InitiatingSource and ActiveRunEventId.");
+            }
         }
         else if (run.InitiatingSource is { } installedSource)
         {
@@ -2265,6 +2635,20 @@ public static class StateInvariantValidator
                 && run.Step == RunTimingStep.BreachBoundary
                 && occurrence.Controller == run.InitiatingPlayer
                 && occurrence.SubjectCardId == run.InitiatingSource
+                && occurrence.ServerId == run.AttackedServer,
+            OccurrenceKind.ServerApproached => run.Step == RunTimingStep.Success
+                && !run.Successful
+                && frame.Controller == run.InitiatingPlayer
+                && occurrence.Controller == run.InitiatingPlayer
+                && occurrence.SubjectCardId is null
+                && occurrence.ServerId == run.AttackedServer,
+            OccurrenceKind.IceEncountered => run.Step == RunTimingStep.EncounterPaidWindow
+                && frame.Controller == run.InitiatingPlayer
+                && occurrence.Controller == run.InitiatingPlayer
+                && occurrence.SubjectCardId is { } encounteredIce
+                && run.CurrentIceId == encounteredIce
+                && run.Encounter is { Status: RunEncounterStatus.Initialized, IceId: var encounterIce }
+                && encounterIce == encounteredIce
                 && occurrence.ServerId == run.AttackedServer,
             OccurrenceKind.CardAccessed => run.Step == RunTimingStep.BreachAccessAbility
                 && frame.Controller == run.InitiatingPlayer
@@ -2475,7 +2859,13 @@ public static class StateInvariantValidator
             Add(violations, "run.encounter-invalid-status", $"{path}.encounter.status", $"'{encounter.Status}' is not supported.");
         }
 
-        if (run.CurrentIceId != encounter.IceId)
+        ZoneState? encounterIceZone = state.Servers
+            .FirstOrDefault(server => server?.Id == run.AttackedServer) is { } attackedServer
+            ? state.Zones.FirstOrDefault(zone => zone?.Id == attackedServer.IceZoneId)
+            : null;
+        bool removedEncounterCursor = encounterIceZone is not null
+            && IsRemovedEncounterCursor(state, run, encounterIceZone);
+        if (!removedEncounterCursor && run.CurrentIceId != encounter.IceId)
         {
             Add(violations, "run.encounter-ice-mismatch", $"{path}.encounter.iceId", "Encounter ICE must be the current approached ICE.");
         }
@@ -2555,7 +2945,7 @@ public static class StateInvariantValidator
         RunTimingStep.InitiationPaidWindow => RunCrPhase.Initiation,
         RunTimingStep.Approach or RunTimingStep.ApproachPaidWindow => RunCrPhase.Approach,
         RunTimingStep.EncounterInitialization or RunTimingStep.EncounterPaidWindow or RunTimingStep.Encounter => RunCrPhase.Encounter,
-        RunTimingStep.MovementPaidWindow or RunTimingStep.JackOutDecision or RunTimingStep.MoveInward or RunTimingStep.AfterMovePaidWindow => RunCrPhase.Movement,
+        RunTimingStep.MovementPaidWindow or RunTimingStep.JackOutDecision or RunTimingStep.MoveInward or RunTimingStep.AfterMovePaidWindow or RunTimingStep.ApproachServer => RunCrPhase.Movement,
         RunTimingStep.Success
             or RunTimingStep.BreachBoundary
             or RunTimingStep.BreachCandidateSelection
@@ -3172,6 +3562,20 @@ public static class StateInvariantValidator
                         break;
                     }
 
+                    if (install.InitiationKind is InstallInitiationKind.IceSubroutineNormal
+                        or InstallInitiationKind.IceSubroutineInwardIgnoreCosts)
+                    {
+                        ValidateIceSubroutineInstallFrame(
+                            state,
+                            install,
+                            index,
+                            path,
+                            installOwner,
+                            runtimeCardCatalog,
+                            violations);
+                        break;
+                    }
+
                     if (installOwner?.Side == PlayerSide.Corp)
                     {
                         ValidateCorpInstallFrame(
@@ -3459,6 +3863,44 @@ public static class StateInvariantValidator
                         {
                             Add(violations, "run.frame-step-mismatch", $"{path}.step", "Run timing frame step must match live run state.");
                         }
+                    }
+
+                    break;
+                case IceSubroutineFrame iceFrame:
+                    if (state.RunState is null
+                        || iceFrame.RunId != state.RunState.Id
+                        || state.RunState.Step != RunTimingStep.Encounter
+                        || state.RunState.Encounter is not { } activeEncounter
+                        || activeEncounter.Id != iceFrame.EncounterId
+                        || activeEncounter.IceId != iceFrame.IceId)
+                    {
+                        Add(
+                            violations,
+                            "resolution.subroutine-run-mismatch",
+                            path,
+                            "An ICE subroutine frame must match the live encounter run cursor.");
+                    }
+
+                    if (iceFrame.Stage == IceSubroutineFrameStage.AwaitingChoice
+                        && index != state.ResolutionStack.Count - 1)
+                    {
+                        Add(
+                            violations,
+                            "resolution.subroutine-choice-not-top",
+                            path,
+                            "An ICE subroutine choice frame must remain top while its decision is pending.");
+                    }
+
+                    if (iceFrame.Stage == IceSubroutineFrameStage.AwaitingInstall
+                        && (index == state.ResolutionStack.Count - 1
+                            || state.ResolutionStack[index + 1] is not InstallFrame installChild
+                            || installChild.ParentFrameIdentity != iceFrame.FrameIdentity))
+                    {
+                        Add(
+                            violations,
+                            "resolution.subroutine-install-child-missing",
+                            path,
+                            "An ICE subroutine awaiting install must be immediately followed by its authenticated InstallFrame child.");
                     }
 
                     break;
@@ -5180,6 +5622,7 @@ public static class StateInvariantValidator
         List<StateInvariantViolation> violations)
     {
         const string path = "pendingDecision";
+        ArgumentNullException.ThrowIfNull(pending);
         if (!StableIdentifier.TryValidate(pending.Id.Value))
         {
             Add(violations, "id.invalid", $"{path}.id", "Decision ID is empty or invalid.");
@@ -5222,7 +5665,7 @@ public static class StateInvariantValidator
         }
 
         var actionIds = new HashSet<ActionId>();
-        if (pending.LegalActions.Count == 0)
+        if (pending.LegalActions!.Count == 0)
         {
             Add(violations, "decision.empty-actions", $"{path}.legalActions", "A pending decision must contain at least one legal action.");
         }
@@ -5387,6 +5830,28 @@ public static class StateInvariantValidator
                     }
 
                     break;
+                case IceSubroutineFrame iceFrame:
+                    if (iceFrame.Stage != IceSubroutineFrameStage.AwaitingChoice)
+                    {
+                        Add(
+                            violations,
+                            "resolution.pending-stage-mismatch",
+                            $"{path}.stage",
+                            "An ICE subroutine install parent must remain beneath its install child and cannot own a pending choice.");
+                        break;
+                    }
+
+                    if (pending is not null)
+                    {
+                        ValidateIceSubroutineChoiceOwner(
+                            state,
+                            iceFrame,
+                            pending,
+                            $"{path}.choices",
+                            violations);
+                    }
+
+                    break;
                 case BehaviorResolutionFrame behaviorFrame when behaviorFrame.Choice is null:
                     Add(violations, "resolution.pending-kind-mismatch", $"{path}.kind", "A behavior frame requires a materialized choice while a decision is pending.");
                     break;
@@ -5404,11 +5869,12 @@ public static class StateInvariantValidator
             }
         }
 
+        PendingDecision validatedPending = pending ?? throw new ArgumentNullException(nameof(pending));
         var numberChoices = new HashSet<int>();
         var cardChoices = new HashSet<CardInstanceId>();
-        for (int index = 0; index < pending.LegalActions.Count; index++)
+        for (int index = 0; index < validatedPending.LegalActions!.Count; index++)
         {
-            LegalAction? action = pending.LegalActions[index];
+            LegalAction? action = validatedPending.LegalActions[index];
             string actionPath = $"{path}.legalActions[{index}]";
             if (action is null)
             {
@@ -5492,8 +5958,7 @@ public static class StateInvariantValidator
                             Add(violations, "decision.behavior-choice-key-mismatch", $"{actionPath}.parameters.choiceKey", "Behavior action key does not match the materialized choice.");
                         }
 
-                        if (behaviorChoice.OptionKeys.Count > 1
-                            || (behaviorChoice.CardIds.Count > 0 && behaviorChoice.OptionKeys.Count > 0))
+                        if (behaviorChoice.OptionKeys.Count > 1)
                         {
                             Add(violations, "decision.behavior-choice-payload", $"{actionPath}.parameters", "Behavior action must select one option or a card set, never both.");
                         }
@@ -5528,10 +5993,45 @@ public static class StateInvariantValidator
                             Add(violations, "decision.behavior-option-not-offered", $"{actionPath}.parameters.optionKeys", "Behavior option is not one of the frozen materialized options.");
                         }
 
-                        if (behaviorChoice.CardIds.Any(id => !materialized.CandidateCardIds.Contains(id)))
+                        if (behaviorChoice.OptionKeys.Count == 0
+                            && behaviorChoice.CardIds.Any(id => !materialized.CandidateCardIds.Contains(id)))
                         {
                             Add(violations, "decision.behavior-card-not-offered", $"{actionPath}.parameters.cardIds", "Behavior card is not one of the frozen materialized candidates.");
                         }
+
+                        if (!GameEngine.IsBehaviorChoiceActionLegal(
+                                state,
+                                behaviorCatalog,
+                                runtimeCardCatalog,
+                                behaviorChoice))
+                        {
+                            Add(
+                                violations,
+                                "decision.behavior-choice-payload-invalid",
+                                $"{actionPath}.parameters",
+                                "Behavior choice parameters do not satisfy the current catalog declaration and authenticated candidate/cost rules.");
+                        }
+                    }
+
+                    break;
+                case (ActionKind.ResolveIceSubroutine, IceSubroutineChoiceParameters iceChoice):
+                    if (pending.Kind != DecisionKind.IceSubroutineChoice)
+                    {
+                        Add(
+                            violations,
+                            "decision.action-kind-mismatch",
+                            $"{actionPath}.kind",
+                            "ICE subroutine actions require an IceSubroutineChoice decision.");
+                    }
+                    else if (topFrame is not IceSubroutineFrame iceFrame
+                        || iceFrame.Stage != IceSubroutineFrameStage.AwaitingChoice
+                        || !iceFrame.Choices.Contains(iceChoice))
+                    {
+                        Add(
+                            violations,
+                            "decision.ice-subroutine-action-not-offered",
+                            $"{actionPath}.parameters",
+                            "ICE subroutine action parameters must be one of the exact serialized frame choices.");
                     }
 
                     break;
@@ -5574,6 +6074,16 @@ public static class StateInvariantValidator
                             "decision.invalid-play-cost",
                             $"{actionPath}.parameters.creditCost",
                             "Play action credit cost must not be negative.");
+                    }
+
+                    if (playCard.TargetServerId is { } targetServerId
+                        && !state.Servers.Any(server => server?.Id == targetServerId))
+                    {
+                        Add(
+                            violations,
+                            "decision.unknown-play-target-server",
+                            $"{actionPath}.parameters.targetServerId",
+                            $"Run-event play action references unknown server '{targetServerId}'.");
                     }
 
                     break;
@@ -5914,6 +6424,34 @@ public static class StateInvariantValidator
                     }
 
                     break;
+                case (ActionKind.UseBioroidAbility, RunBioroidAbilityParameters bioroidAbility):
+                    if (pending.Kind != DecisionKind.RunTiming)
+                    {
+                        Add(violations, "decision.action-kind-mismatch", $"{actionPath}.kind", "Run timing actions require a RunTiming decision.");
+                    }
+
+                    if (!cardIds.Contains(bioroidAbility.IceId))
+                    {
+                        Add(violations, "decision.unknown-card-action", $"{actionPath}.parameters.iceId", $"Run action references unknown encountered ICE '{bioroidAbility.IceId}'.");
+                    }
+
+                    if (!StableIdentifier.TryValidate(bioroidAbility.SubroutineId.Value))
+                    {
+                        Add(violations, "decision.invalid-subroutine-action", $"{actionPath}.parameters.subroutineId", "A bioroid ability must identify a stable subroutine.");
+                    }
+
+                    if (!StableIdentifier.TryValidate(bioroidAbility.AbilityKey))
+                    {
+                        Add(violations, "decision.invalid-ability-action", $"{actionPath}.parameters.abilityKey", "A bioroid ability must identify a stable ability key.");
+                    }
+
+                    if (bioroidAbility.Cost.Kind != BehaviorCostKind.LoseClick
+                        || bioroidAbility.Cost.Amount != 1)
+                    {
+                        Add(violations, "decision.invalid-bioroid-cost", $"{actionPath}.parameters.cost", "A bioroid ability action must carry exactly one typed lost click.");
+                    }
+
+                    break;
                 case (ActionKind.PumpBreaker, RunBreakerParameters pumpBreaker):
                     if (pending.Kind != DecisionKind.RunTiming)
                     {
@@ -6052,8 +6590,14 @@ public static class StateInvariantValidator
                 case (ActionKind.ChooseBehavior, _):
                     Add(violations, "decision.action-parameters-mismatch", $"{actionPath}.parameters", "ChooseBehavior requires BehaviorChoiceParameters.");
                     break;
+                case (ActionKind.ResolveIceSubroutine, _):
+                    Add(violations, "decision.action-parameters-mismatch", $"{actionPath}.parameters", "ResolveIceSubroutine requires IceSubroutineChoiceParameters.");
+                    break;
                 case (ActionKind.UseAbility, _):
                     Add(violations, "decision.action-parameters-mismatch", $"{actionPath}.parameters", "UseAbility requires AbilityActionParameters.");
+                    break;
+                case (ActionKind.UseBioroidAbility, _):
+                    Add(violations, "decision.action-parameters-mismatch", $"{actionPath}.parameters", "UseBioroidAbility requires RunBioroidAbilityParameters.");
                     break;
                 default:
                     Add(violations, "decision.invalid-action-kind", $"{actionPath}.kind", $"Action kind '{action.Kind}' is not supported.");
@@ -6101,7 +6645,8 @@ public static class StateInvariantValidator
                         or ActionKind.ChooseBreachCandidate
                         or ActionKind.TrashAccessedCard
                         or ActionKind.NoAccessAction
-                        or ActionKind.UseAbility))
+                        or ActionKind.UseAbility
+                        or ActionKind.UseBioroidAbility))
                 || (pending.Kind == DecisionKind.MemoryCleanup
                     && action.Kind != ActionKind.TrashProgram)
                 || (pending.Kind == DecisionKind.TriggerChoice
@@ -6114,7 +6659,9 @@ public static class StateInvariantValidator
                         or ActionKind.UseReplacement
                         or ActionKind.DeclineReplacement))
                 || (pending.Kind == DecisionKind.BehaviorChoice
-                    && action.Kind != ActionKind.ChooseBehavior))
+                    && action.Kind != ActionKind.ChooseBehavior)
+                || (pending.Kind == DecisionKind.IceSubroutineChoice
+                    && action.Kind != ActionKind.ResolveIceSubroutine))
             {
                 Add(violations, "decision.action-kind-mismatch", $"{actionPath}.kind", $"Action kind '{action.Kind}' does not match decision kind '{pending.Kind}'.");
             }
@@ -6185,6 +6732,19 @@ public static class StateInvariantValidator
             ValidateRunActions(state, pending, state.RunState, runTiming, behaviorCatalog, runtimeCardCatalog, path, violations);
         }
 
+        if (pending.Kind == DecisionKind.IceSubroutineChoice
+            && topFrame is IceSubroutineFrame iceSubroutine)
+        {
+            ValidateIceSubroutineChoiceActions(
+                state,
+                behaviorCatalog,
+                runtimeCardCatalog,
+                pending,
+                iceSubroutine,
+                path,
+                violations);
+        }
+
         if (pending.Kind == DecisionKind.MemoryCleanup
             && topFrame is MemoryCleanupFrame memoryCleanup)
         {
@@ -6195,6 +6755,159 @@ public static class StateInvariantValidator
         {
             ValidateCheckpointActions(pending, checkpoint, path, violations);
         }
+    }
+
+    private static void ValidateIceSubroutineChoiceOwner(
+        GameState state,
+        IceSubroutineFrame frame,
+        PendingDecision pending,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        PlayerId? expectedOwner = null;
+        foreach (IceSubroutineChoiceParameters choice in frame.Choices)
+        {
+            PlayerSide choiceSide = choice.Choice is IceSubroutineChoiceKind.PayCredits
+                or IceSubroutineChoiceKind.TakeTag
+                ? PlayerSide.Runner
+                : PlayerSide.Corp;
+            PlayerId? choiceOwner = state.Players.FirstOrDefault(player => player?.Side == choiceSide)?.Id;
+            if (choiceOwner is null)
+            {
+                Add(violations, "resolution.unknown-player", path, $"ICE subroutine choice owner side '{choiceSide}' has no player.");
+                continue;
+            }
+
+            if (expectedOwner is null)
+            {
+                expectedOwner = choiceOwner.Value;
+            }
+            else if (expectedOwner.Value != choiceOwner.Value)
+            {
+                Add(
+                    violations,
+                    "resolution.mixed-subroutine-choice-owner",
+                    path,
+                    "An ICE subroutine frame must contain choices for exactly one decision owner.");
+            }
+        }
+
+        if (expectedOwner is not null && pending.Owner != expectedOwner.Value)
+        {
+            Add(
+                violations,
+                "resolution.pending-owner-mismatch",
+                "pendingDecision.owner",
+                "ICE subroutine decision owner must match every materialized choice owner.");
+        }
+    }
+
+    private static void ValidateIceSubroutineChoiceActions(
+        GameState state,
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog,
+        PendingDecision pending,
+        IceSubroutineFrame frame,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        if (!string.Equals(frame.CatalogFingerprint, behaviorCatalog.Fingerprint, StringComparison.Ordinal))
+        {
+            Add(
+                violations,
+                "resolution.subroutine-catalog-mismatch",
+                $"resolutionStack[{state.ResolutionStack.Count - 1}].catalogFingerprint",
+                "An ICE subroutine frame catalog fingerprint must match the active behavior catalog.");
+        }
+
+        if (state.RunState is not { } run
+            || run.Id != frame.RunId
+            || run.Step != RunTimingStep.Encounter
+            || run.AttackedServer != frame.ServerId
+            || run.Encounter is not { } encounter
+            || encounter.Id != frame.EncounterId
+            || encounter.IceId != frame.IceId
+            || state.Servers.FirstOrDefault(server => server?.Id == run.AttackedServer) is not { } server
+            || state.Zones.FirstOrDefault(zone => zone?.Id == server.IceZoneId) is not { } iceZone
+            || iceZone.Id != frame.IceZoneId
+            || !iceZone.CardIds.SequenceEqual(frame.IceZoneCardIds))
+        {
+            Add(
+                violations,
+                "resolution.subroutine-topology-mismatch",
+                path,
+                "An ICE subroutine frame must retain the exact active run encounter and ICE-zone topology.");
+            return;
+        }
+
+        IReadOnlyList<IceSubroutineChoiceParameters> expected;
+        try
+        {
+            expected = GameEngine.MaterializeIceSubroutineChoiceParameters(
+                state,
+                frame,
+                behaviorCatalog,
+                runtimeCardCatalog);
+        }
+        catch (Exception exception) when (exception is ResolutionFailureException
+            or InvalidOperationException
+            or KeyNotFoundException
+            or ArgumentException
+            or OverflowException)
+        {
+            Add(
+                violations,
+                "resolution.subroutine-materialization-failed",
+                $"{path}.legalActions",
+                $"ICE subroutine choices could not be re-materialized from the authoritative state: {exception.Message}");
+            return;
+        }
+
+        if (expected.Count == 0)
+        {
+            Add(
+                violations,
+                "resolution.empty-subroutine-choice-set",
+                $"{path}.choices",
+                "A yielded ICE subroutine frame must retain at least one authoritative choice.");
+        }
+
+        if (!frame.Choices.SequenceEqual(expected))
+        {
+            Add(
+                violations,
+                "resolution.subroutine-choice-set-mismatch",
+                $"{path}.choices",
+                "An ICE subroutine frame choice set does not match the authoritative catalog/state projection.");
+        }
+
+        IceSubroutineChoiceParameters[] actual = pending.LegalActions
+            .Where(action => action is not null
+                && action.Kind == ActionKind.ResolveIceSubroutine
+                && action.Parameters is IceSubroutineChoiceParameters)
+            .Select(action => (IceSubroutineChoiceParameters)action!.Parameters)
+            .ToArray();
+        if (actual.Length != frame.Choices.Count)
+        {
+            Add(
+                violations,
+                actual.Length < frame.Choices.Count
+                    ? "resolution.missing-subroutine-action"
+                    : "resolution.extra-subroutine-action",
+                $"{path}.legalActions",
+                $"ICE subroutine decision contains {actual.Length} typed action(s), expected exactly {frame.Choices.Count}.");
+        }
+
+        if (!actual.SequenceEqual(frame.Choices))
+        {
+            Add(
+                violations,
+                "resolution.subroutine-action-bijection",
+                $"{path}.legalActions",
+                "ICE subroutine legal actions must be an exact ordered bijection of the serialized frame choices.");
+        }
+
+        ValidateIceSubroutineChoiceOwner(state, frame, pending, $"{path}.choices", violations);
     }
 
     private static void ValidateAbilityAction(
@@ -7672,6 +8385,7 @@ public static class StateInvariantValidator
         var expected = new List<(ActionKind Kind, CardInstanceId? Target, int Quantity, int HostedCredits)>();
         IReadOnlyList<RezCardParameters> expectedRuntimeRezes = [];
         var expectedRunRezes = new List<RunIceParameters>();
+        var expectedBioroidAbilities = new List<RunBioroidAbilityParameters>();
         switch (run.Step)
         {
             case RunTimingStep.InitiationPaidWindow:
@@ -7764,6 +8478,34 @@ public static class StateInvariantValidator
                         // during the run, so they count toward the offer. Each
                         // legal wallet/hosted division is a distinct action.
                         PlayerState? runnerPlayer = state.Players.FirstOrDefault(player => player?.Side == PlayerSide.Runner);
+
+                        if (runnerPlayer is not null
+                            && expectedIceSpec.EncounteredBioroidAbilities is { Count: > 0 } bioroidAbilities
+                            && runnerPlayer.Clicks > 0)
+                        {
+                            foreach (EncounteredBioroidAbilitySpec ability in bioroidAbilities)
+                            {
+                                if (runnerPlayer.Clicks < ability.Cost.Amount)
+                                {
+                                    continue;
+                                }
+
+                                foreach (RunSubroutineState subroutine in run.Encounter.Subroutines)
+                                {
+                                    if (subroutine.Broken || subroutine.Resolved)
+                                    {
+                                        continue;
+                                    }
+
+                                    expectedBioroidAbilities.Add(new RunBioroidAbilityParameters(
+                                        run.Encounter.IceId,
+                                        subroutine.Id,
+                                        ability.Key,
+                                        ability.Cost,
+                                        subroutine.Ordinal));
+                                }
+                            }
+                        }
 
                         foreach (ZoneState? rigZone in state.Zones)
                         {
@@ -7901,7 +8643,10 @@ public static class StateInvariantValidator
                     // agendas and non-agendas.
                     bool accessedAgenda = currentAccess
                         && behaviorCatalog.TryGetAgenda(accessedCard!.DefinitionId, out _);
-                    if (trashableAccess && !accessedAgenda)
+                    if (trashableAccess
+                        && !accessedAgenda
+                        && run.RunRestrictions?.Any(restriction =>
+                            restriction.Kind == RunRestrictionKind.CannotStealOrTrashCorpCards) != true)
                     {
                         if (behaviorCatalog.TryGetAsset(accessedCard!.DefinitionId, out AssetBehaviorSpec? assetSpec))
                         {
@@ -7934,6 +8679,7 @@ public static class StateInvariantValidator
         var actual = new List<(ActionKind Kind, CardInstanceId? Target, int Quantity, int HostedCredits)>();
         var actualRuntimeRezes = new List<RezCardParameters>();
         var actualRunRezes = new List<RunIceParameters>();
+        var actualBioroidAbilities = new List<RunBioroidAbilityParameters>();
         var actualAbilities = new List<AbilityActionParameters>();
         foreach (LegalAction? action in pending.LegalActions)
         {
@@ -7947,6 +8693,16 @@ public static class StateInvariantValidator
                 if (action.Parameters is AbilityActionParameters ability)
                 {
                     actualAbilities.Add(ability);
+                }
+
+                continue;
+            }
+
+            if (action.Kind == ActionKind.UseBioroidAbility)
+            {
+                if (action.Parameters is RunBioroidAbilityParameters bioroidAbility)
+                {
+                    actualBioroidAbilities.Add(bioroidAbility);
                 }
 
                 continue;
@@ -8070,10 +8826,29 @@ public static class StateInvariantValidator
             path,
             violations);
 
+        ValidateBioroidAbilityActionBijection(
+            expectedBioroidAbilities,
+            actualBioroidAbilities,
+            path,
+            violations);
+
         IReadOnlyList<AbilityActionParameters> expectedAbilities = [];
         try
         {
             expectedAbilities = GameEngine.MaterializeAbilityActionParameters(state, behaviorCatalog);
+            if (run.RunRestrictions?.Any(restriction =>
+                    restriction.Kind == RunRestrictionKind.CannotStealOrTrashCorpCards) == true)
+            {
+                // Mirror the reducer's declaration-authenticated filter: an
+                // access ability is suppressed only if its typed behavior can
+                // trash a Corp card. Unrelated breach-access abilities remain
+                // part of the exact legal-action bijection.
+                expectedAbilities = expectedAbilities
+                    .Where(parameters => !GameEngine.IsAbilityBlockedByRunRestriction(
+                        behaviorCatalog,
+                        parameters))
+                    .ToArray();
+            }
         }
         catch (Exception exception) when (exception is ResolutionFailureException
             or InvalidOperationException
@@ -8213,6 +8988,47 @@ public static class StateInvariantValidator
                     "run.missing-rez-action",
                     $"{path}.legalActions",
                     $"Run timing decision is missing the materialized approached ICE rez action for '{candidate.IceId}'.");
+            }
+        }
+    }
+
+    private static void ValidateBioroidAbilityActionBijection(
+        IReadOnlyList<RunBioroidAbilityParameters> expected,
+        List<RunBioroidAbilityParameters> actual,
+        string path,
+        List<StateInvariantViolation> violations)
+    {
+        for (int index = 0; index < actual.Count; index++)
+        {
+            RunBioroidAbilityParameters candidate = actual[index];
+            if (actual.Take(index).Any(item => item == candidate))
+            {
+                Add(
+                    violations,
+                    "run.duplicate-bioroid-action",
+                    $"{path}.legalActions",
+                    $"Bioroid ability action for ICE '{candidate.IceId}', subroutine '{candidate.SubroutineId}', and ability '{candidate.AbilityKey}' is duplicated.");
+            }
+
+            if (!expected.Any(item => item == candidate))
+            {
+                Add(
+                    violations,
+                    "run.extra-bioroid-action",
+                    $"{path}.legalActions",
+                    $"Run timing decision contains an unmaterialized bioroid ability action for ICE '{candidate.IceId}', subroutine '{candidate.SubroutineId}', and ability '{candidate.AbilityKey}'.");
+            }
+        }
+
+        foreach (RunBioroidAbilityParameters candidate in expected)
+        {
+            if (!actual.Any(item => item == candidate))
+            {
+                Add(
+                    violations,
+                    "run.missing-bioroid-action",
+                    $"{path}.legalActions",
+                    $"Run timing decision is missing the materialized bioroid ability action for ICE '{candidate.IceId}', subroutine '{candidate.SubroutineId}', and ability '{candidate.AbilityKey}'.");
             }
         }
     }
@@ -8364,6 +9180,227 @@ public static class StateInvariantValidator
             or RuntimeCardClass.Asset
             or RuntimeCardClass.Upgrade
             or RuntimeCardClass.Ice;
+
+    private static void ValidateIceSubroutineInstallFrame(
+        GameState state,
+        InstallFrame install,
+        int index,
+        string path,
+        PlayerState? installOwner,
+        IRuntimeCardCatalog? runtimeCardCatalog,
+        List<StateInvariantViolation> violations)
+    {
+        bool inward = install.InitiationKind == InstallInitiationKind.IceSubroutineInwardIgnoreCosts;
+        if (installOwner is null || installOwner.Side != PlayerSide.Corp)
+        {
+            Add(
+                violations,
+                "resolution.install-owner-side",
+                $"{path}.owner",
+                "ICE subroutine install frames must be owned by the Corp.");
+        }
+
+        IceSubroutineFrame? parent = index > 0
+            ? state.ResolutionStack[index - 1] as IceSubroutineFrame
+            : null;
+        if (parent is null)
+        {
+            Add(
+                violations,
+                "resolution.install-parent-missing",
+                path,
+                "An ICE subroutine install frame requires an immediately preceding ICE subroutine parent frame.");
+            return;
+        }
+
+        if (parent.Stage != IceSubroutineFrameStage.AwaitingInstall)
+        {
+            Add(
+                violations,
+                "resolution.install-parent-stage",
+                $"{path}.parentFrameIdentity",
+                "An ICE subroutine install frame requires an AwaitingInstall parent stage.");
+        }
+
+        if (!string.Equals(install.ParentFrameIdentity, parent.FrameIdentity, StringComparison.Ordinal))
+        {
+            Add(
+                violations,
+                "resolution.install-parent-identity-mismatch",
+                $"{path}.parentFrameIdentity",
+                "ICE subroutine install parent identity must match the exact serialized ICE frame.");
+        }
+
+        RunState? run = state.RunState;
+        bool runMatches = run is not null
+            && run.Id == parent.RunId
+            && run.Step == RunTimingStep.Encounter
+            && run.AttackedServer == parent.ServerId
+            && run.CurrentIceId == parent.IceId
+            && run.Encounter is { Status: RunEncounterStatus.Initialized } encounter
+            && encounter.Id == parent.EncounterId
+            && encounter.IceId == parent.IceId
+            && encounter.Subroutines.Any(subroutine => subroutine.Id == parent.SubroutineId
+                && subroutine.Ordinal == parent.Ordinal
+                && !subroutine.Broken
+                && !subroutine.Resolved);
+        if (!runMatches)
+        {
+            Add(
+                violations,
+                "resolution.subroutine-run-mismatch",
+                path,
+                "An ICE subroutine install frame must match the live unresolved encounter subroutine.");
+        }
+
+        ZoneState? parentIceZone = state.Zones.FirstOrDefault(zone => zone?.Id == parent.IceZoneId);
+        if (parentIceZone is null
+            || parentIceZone.Kind != ZoneKind.ServerIce
+            || parentIceZone.OwnerSide != PlayerSide.Corp
+            || parentIceZone.ServerId != parent.ServerId
+            || !parentIceZone.CardIds.SequenceEqual(parent.IceZoneCardIds)
+            || !parentIceZone.CardIds.Contains(parent.IceId))
+        {
+            Add(
+                violations,
+                "resolution.subroutine-topology-mismatch",
+                $"{path}.parentFrameIdentity",
+                "An ICE subroutine install child must retain the exact live attacked ICE-zone topology captured by its parent.");
+        }
+
+        ZoneState? source = state.Zones.FirstOrDefault(zone => zone?.Id == install.SourceZoneId);
+        if (source is null
+            || install.SourceZoneKind is not (ZoneKind.CorpHand or ZoneKind.CorpDiscard)
+            || source.Kind != install.SourceZoneKind
+            || source.OwnerSide != PlayerSide.Corp
+            || source.ServerId is not null
+            || !source.CardIds.Contains(install.CardId))
+        {
+            Add(
+                violations,
+                "resolution.install-source-mismatch",
+                $"{path}.sourceZoneId",
+                "ICE subroutine installs must source a Corp card from the captured HQ or Archives zone.");
+        }
+
+        CardInstanceState? card = state.Cards.FirstOrDefault(candidate => candidate?.Id == install.CardId);
+        if (card is null)
+        {
+            Add(violations, "resolution.unknown-install-card", $"{path}.cardId", $"Install card '{install.CardId}' does not exist.");
+        }
+        else if (card.ZoneId != install.SourceZoneId
+            || card.OwnerSide != PlayerSide.Corp
+            || card.DefinitionId != install.DefinitionId)
+        {
+            Add(
+                violations,
+                "resolution.install-card-mismatch",
+                path,
+                "ICE subroutine install card must remain the authenticated Corp physical card in its captured source zone.");
+        }
+
+        if (runtimeCardCatalog is not null
+            && card is not null
+            && runtimeCardCatalog.TryGet(card.DefinitionId, out CardRuntimeSpec? runtime))
+        {
+            if (runtime.Side != PlayerSide.Corp
+                || !IsCorpInstallableRuntimeClass(runtime.CardClass)
+                || install.CardClass != runtime.CardClass
+                || (inward && runtime.CardClass != RuntimeCardClass.Ice)
+                || (!inward
+                    && install.DestinationKind == InstallDestinationKind.ServerIce
+                    && runtime.CardClass != RuntimeCardClass.Ice)
+                || (!inward
+                    && install.DestinationKind == InstallDestinationKind.ServerRoot
+                    && runtime.CardClass == RuntimeCardClass.Ice))
+            {
+                Add(
+                    violations,
+                    "resolution.install-runtime-mismatch",
+                    path,
+                    "ICE subroutine install class and destination must match authoritative Corp runtime metadata.");
+            }
+        }
+
+        if (install.CostQuote is not null)
+        {
+            Add(
+                violations,
+                "resolution.install-cost-quote-invalid",
+                $"{path}.costQuote",
+                "Corp ICE subroutine installs must not carry a Runner self-cost quote.");
+        }
+
+        if (inward)
+        {
+            if (install.DestinationKind != InstallDestinationKind.ServerIce
+                || install.ServerId != parent.ServerId
+                || install.CreateNewRemote
+                || install.DestinationZoneId != parent.IceZoneId
+                || install.InwardAnchorIceId != parent.IceId
+                || install.InstallCost != 0
+                || install.CandidateReplacementCardIds.Count != 0
+                || install.RequiredReplacementCardIds.Count != 0
+                || install.SelectedReplacementCardIds.Count != 0)
+            {
+                Add(
+                    violations,
+                    "resolution.subroutine-inward-install-invalid",
+                    path,
+                    "A directly-inward Brân install must target the current attacked ICE zone, anchor Brân, and carry zero cost without replacements.");
+            }
+        }
+        else
+        {
+            if (install.InwardAnchorIceId is not null
+                || install.DestinationKind is not (InstallDestinationKind.ServerRoot or InstallDestinationKind.ServerIce))
+            {
+                Add(
+                    violations,
+                    "resolution.subroutine-normal-install-invalid",
+                    path,
+                    "A normal ICE subroutine install may target only a Corp server root or ICE zone and must not retain an inward anchor.");
+            }
+
+            if (install.CreateNewRemote)
+            {
+                if (install.ServerId is not null || install.DestinationZoneId is not null)
+                {
+                    Add(
+                        violations,
+                        "resolution.install-destination-remote",
+                        path,
+                        "A normal ICE subroutine new-remote install must omit server and physical destination identities until commit.");
+                }
+            }
+            else
+            {
+                ServerState? server = install.ServerId is { } serverId
+                    ? state.Servers.FirstOrDefault(candidate => candidate?.Id == serverId)
+                    : null;
+                ZoneState? destination = server is null
+                    ? null
+                    : state.Zones.FirstOrDefault(zone => zone?.Id == (install.DestinationKind == InstallDestinationKind.ServerIce
+                        ? server.IceZoneId
+                        : server.RootZoneId));
+                if (server is null
+                    || destination is null
+                    || install.DestinationZoneId != destination.Id
+                    || destination.OwnerSide != PlayerSide.Corp
+                    || destination.Kind != (install.DestinationKind == InstallDestinationKind.ServerIce
+                        ? ZoneKind.ServerIce
+                        : ZoneKind.ServerRoot)
+                    || destination.ServerId != server.Id)
+                {
+                    Add(
+                        violations,
+                        "resolution.install-destination-mismatch",
+                        $"{path}.destinationZoneId",
+                        "A normal ICE subroutine install must retain the exact physical existing-server destination.");
+                }
+            }
+        }
+    }
 
     private static void ValidateBehaviorEffectInstallFrame(
         GameState state,
@@ -10285,7 +11322,8 @@ public static class StateInvariantValidator
         PlayCardParameters actual,
         PlayCardParameters expected) =>
         actual.CardId == expected.CardId
-        && actual.CreditCost == expected.CreditCost;
+        && actual.CreditCost == expected.CreditCost
+        && actual.TargetServerId == expected.TargetServerId;
 
     private static bool AdvanceParametersMatch(
         AdvanceCardParameters actual,
@@ -10551,6 +11589,7 @@ public static class StateInvariantValidator
                     or EffectCheckpointStage.TriggerChoice
                     or EffectCheckpointStage.TriggerOrdering,
         }
+        || frame is IceSubroutineFrame { Stage: IceSubroutineFrameStage.AwaitingChoice }
         || frame is RunTimingFrame runTiming && IsRunPromptStep(runTiming.Step);
 
     private static bool TryGetNumberRange(ResolutionFrame? frame, out int minimum, out int maximum)
@@ -10981,6 +12020,12 @@ public static class StateInvariantValidator
                         runtimeCardCatalog,
                         frame,
                         option))
+                .Where(option => GameEngine.IsBehaviorChoiceOptionAffordable(
+                    state,
+                    behaviorCatalog,
+                    runtimeCardCatalog,
+                    choice.Owner,
+                    option))
                 .Select(option => option.Key)
                 .ToArray();
             if (!choice.OptionKeys.SequenceEqual(expectedOptions, StringComparer.Ordinal))

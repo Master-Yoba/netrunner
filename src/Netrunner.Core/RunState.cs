@@ -40,6 +40,8 @@ public enum RunTimingStep
     MoveInward,
     // 6.9.4e: paid/non-ICE-rez window after movement (P + non-ICE R).
     AfterMovePaidWindow,
+    // 6.9.4g: the Runner approaches the attacked server.
+    ApproachServer,
     // 6.9.5a: success is declared without a paid window.
     Success,
     // 6.9.5b: the nested breach boundary that starts candidate selection.
@@ -88,6 +90,8 @@ public enum RunBreachAccessModifierSourceKind
 {
     InstalledRunSource,
     FirstHeadquartersBreach,
+    /// <summary>Additional access declared by the run event that started this run.</summary>
+    RunEvent,
 }
 
 public enum RunEncounterStatus
@@ -100,6 +104,16 @@ public enum RunLingeringEffectExpiry
 {
     Encounter,
     Run,
+}
+
+/// <summary>
+/// Optional provenance discriminator for a run-local lingering effect. The
+/// legacy null shape remains valid for existing effects; an effect that may
+/// move a physical source at run end must carry the explicit cleanup kind.
+/// </summary>
+public enum RunLingeringEffectKind
+{
+    IcebreakerRunEndCleanup,
 }
 
 /// <summary>
@@ -558,9 +572,23 @@ public sealed record RunLingeringEffect
         string behaviorId,
         CardInstanceId? sourceCardId,
         RunLingeringEffectExpiry expiry,
-        RunValueAdjustment? valueAdjustment = null)
+        RunValueAdjustment? valueAdjustment = null,
+        RunLingeringEffectKind? kind = null)
     {
         ArgumentNullException.ThrowIfNull(behaviorId);
+        if (kind is { } declaredKind && !Enum.IsDefined(declaredKind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(kind));
+        }
+
+        if (kind == RunLingeringEffectKind.IcebreakerRunEndCleanup
+            && (expiry != RunLingeringEffectExpiry.Run || sourceCardId is null || valueAdjustment is not null))
+        {
+            throw new ArgumentException(
+                "An icebreaker run-end cleanup must expire at run end, identify a physical source, and carry no value adjustment.",
+                nameof(kind));
+        }
+
         if (valueAdjustment is not null && expiry != RunLingeringEffectExpiry.Encounter)
         {
             throw new ArgumentException(
@@ -581,6 +609,7 @@ public sealed record RunLingeringEffect
         SourceCardId = sourceCardId;
         Expiry = expiry;
         ValueAdjustment = valueAdjustment;
+        Kind = kind;
     }
 
     public RunLingeringEffect(
@@ -588,8 +617,9 @@ public sealed record RunLingeringEffect
         string behaviorId,
         CardInstanceId? sourceCardId,
         RunLingeringEffectExpiry expiry,
-        RunValueAdjustment? valueAdjustment = null)
-        : this(1, id, behaviorId, sourceCardId, expiry, valueAdjustment)
+        RunValueAdjustment? valueAdjustment = null,
+        RunLingeringEffectKind? kind = null)
+        : this(1, id, behaviorId, sourceCardId, expiry, valueAdjustment, kind)
     {
     }
 
@@ -621,7 +651,15 @@ public sealed record RunLingeringEffect
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public RunValueAdjustment? ValueAdjustment { get; private set; }
 
-    internal RunLingeringEffect Copy() => new(Version, Id, BehaviorId, SourceCardId, Expiry, ValueAdjustment);
+    /// <summary>
+    /// Explicit effect provenance. Null is retained for legacy encounter and
+    /// generic run effects; run-end physical cleanup uses the typed kind.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public RunLingeringEffectKind? Kind { get; private set; }
+
+    internal RunLingeringEffect Copy() => new(Version, Id, BehaviorId, SourceCardId, Expiry, ValueAdjustment, Kind);
 }
 
 /// <summary>
@@ -700,6 +738,196 @@ public sealed record RunBreachAccessModifier
 }
 
 /// <summary>
+/// Authenticated provenance for a restriction that lasts until this run ends.
+/// The source ICE and exact printed subroutine remain attached so a loaded or
+/// adversarial state cannot manufacture a generic access prohibition.
+/// </summary>
+public sealed record RunRestriction
+{
+    [JsonConstructor]
+    public RunRestriction(
+        RunRestrictionKind kind,
+        CardInstanceId sourceIceId,
+        CardDefinitionId sourceIceDefinitionId,
+        SubroutineId sourceSubroutineId,
+        int sourceOrdinal,
+        string reasonKey)
+    {
+        if (!Enum.IsDefined(kind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(kind));
+        }
+
+        if (!StableIdentifier.TryValidate(sourceIceId.Value))
+        {
+            throw new ArgumentException("A run restriction requires a stable source ICE ID.", nameof(sourceIceId));
+        }
+
+        if (!StableIdentifier.TryValidate(sourceIceDefinitionId.Value))
+        {
+            throw new ArgumentException("A run restriction requires a stable source ICE definition ID.", nameof(sourceIceDefinitionId));
+        }
+
+        if (!StableIdentifier.TryValidate(sourceSubroutineId.Value))
+        {
+            throw new ArgumentException("A run restriction requires a stable source subroutine ID.", nameof(sourceSubroutineId));
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegative(sourceOrdinal);
+        if (!StableIdentifier.TryValidate(reasonKey))
+        {
+            throw new ArgumentException("A run restriction requires a stable provenance reason.", nameof(reasonKey));
+        }
+
+        Kind = kind;
+        SourceIceId = sourceIceId;
+        SourceIceDefinitionId = sourceIceDefinitionId;
+        SourceSubroutineId = sourceSubroutineId;
+        SourceOrdinal = sourceOrdinal;
+        ReasonKey = reasonKey;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunRestrictionKind Kind { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId SourceIceId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardDefinitionId SourceIceDefinitionId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public SubroutineId SourceSubroutineId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int SourceOrdinal { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string ReasonKey { get; private set; }
+
+    internal RunRestriction Copy() => new(
+        Kind,
+        SourceIceId,
+        SourceIceDefinitionId,
+        SourceSubroutineId,
+        SourceOrdinal,
+        ReasonKey);
+}
+
+/// <summary>
+/// Structural execution history for one unbroken printed subroutine that
+/// actually resolved during this run.  The entry is intentionally a plain
+/// persisted identity tuple: it is not a signature and does not pretend to
+/// provide cryptographic integrity.  Reducers append entries at the same
+/// immutable boundary at which they mark the corresponding encounter
+/// subroutine resolved; invariant validation then requires run restrictions
+/// to point at one of these authenticated execution records.
+/// </summary>
+public sealed record RunResolvedSubroutineLedgerEntry
+{
+    [JsonConstructor]
+    public RunResolvedSubroutineLedgerEntry(
+        int version,
+        RunId runId,
+        EncounterId encounterId,
+        CardInstanceId iceId,
+        CardDefinitionId iceDefinitionId,
+        SubroutineId subroutineId,
+        int ordinal)
+    {
+        if (!StableIdentifier.TryValidate(runId.Value))
+        {
+            throw new ArgumentException("A resolved-subroutine ledger entry requires a stable run ID.", nameof(runId));
+        }
+
+        if (!StableIdentifier.TryValidate(encounterId.Value))
+        {
+            throw new ArgumentException("A resolved-subroutine ledger entry requires a stable encounter ID.", nameof(encounterId));
+        }
+
+        if (!StableIdentifier.TryValidate(iceId.Value))
+        {
+            throw new ArgumentException("A resolved-subroutine ledger entry requires a stable ICE ID.", nameof(iceId));
+        }
+
+        if (!StableIdentifier.TryValidate(iceDefinitionId.Value))
+        {
+            throw new ArgumentException("A resolved-subroutine ledger entry requires a stable ICE definition ID.", nameof(iceDefinitionId));
+        }
+
+        if (!StableIdentifier.TryValidate(subroutineId.Value))
+        {
+            throw new ArgumentException("A resolved-subroutine ledger entry requires a stable subroutine ID.", nameof(subroutineId));
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegative(version);
+        ArgumentOutOfRangeException.ThrowIfNegative(ordinal);
+
+        Version = version;
+        RunId = runId;
+        EncounterId = encounterId;
+        IceId = iceId;
+        IceDefinitionId = iceDefinitionId;
+        SubroutineId = subroutineId;
+        Ordinal = ordinal;
+    }
+
+    public RunResolvedSubroutineLedgerEntry(
+        RunId runId,
+        EncounterId encounterId,
+        CardInstanceId iceId,
+        CardDefinitionId iceDefinitionId,
+        SubroutineId subroutineId,
+        int ordinal)
+        : this(1, runId, encounterId, iceId, iceDefinitionId, subroutineId, ordinal)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Version { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunId RunId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public EncounterId EncounterId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId IceId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardDefinitionId IceDefinitionId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public SubroutineId SubroutineId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Ordinal { get; private set; }
+
+    internal RunResolvedSubroutineLedgerEntry Copy() => new(
+        Version,
+        RunId,
+        EncounterId,
+        IceId,
+        IceDefinitionId,
+        SubroutineId,
+        Ordinal);
+}
+
+/// <summary>
 /// Authoritative, optional state for one run.  It is omitted entirely when no
 /// run is active, preserving M1 state bytes and hashes for default games.
 /// </summary>
@@ -731,7 +959,9 @@ public sealed record RunState
         CardInstanceId? activeRunEventId,
         IReadOnlyList<RunLingeringEffect> lingeringEffects,
         IReadOnlyList<RunBreachAccessModifier>? breachAccessModifiers = null,
-        IReadOnlyList<RunRezCostModifier>? rezCostModifiers = null)
+        IReadOnlyList<RunRezCostModifier>? rezCostModifiers = null,
+        IReadOnlyList<RunRestriction>? runRestrictions = null,
+        IReadOnlyList<RunResolvedSubroutineLedgerEntry>? resolvedSubroutineLedger = null)
     {
         ArgumentNullException.ThrowIfNull(breachCandidates);
         ArgumentNullException.ThrowIfNull(chosenAccessCards);
@@ -778,6 +1008,20 @@ public sealed record RunState
                 return value.Copy();
             }).ToArray())
             : null;
+        RunRestrictions = runRestrictions is { Count: > 0 }
+            ? new ReadOnlyCollection<RunRestriction>(runRestrictions.Select(static value =>
+            {
+                ArgumentNullException.ThrowIfNull(value);
+                return value.Copy();
+            }).ToArray())
+            : null;
+        ResolvedSubroutineLedger = resolvedSubroutineLedger is { Count: > 0 }
+            ? new ReadOnlyCollection<RunResolvedSubroutineLedgerEntry>(resolvedSubroutineLedger.Select(static value =>
+            {
+                ArgumentNullException.ThrowIfNull(value);
+                return value.Copy();
+            }).ToArray())
+            : null;
     }
 
     public RunState(
@@ -793,7 +1037,9 @@ public sealed record RunState
         int runCredits = 0,
         CardInstanceId? activeRunEventId = null,
         IReadOnlyList<RunBreachAccessModifier>? breachAccessModifiers = null,
-        IReadOnlyList<RunRezCostModifier>? rezCostModifiers = null)
+        IReadOnlyList<RunRezCostModifier>? rezCostModifiers = null,
+        IReadOnlyList<RunRestriction>? runRestrictions = null,
+        IReadOnlyList<RunResolvedSubroutineLedgerEntry>? resolvedSubroutineLedger = null)
         : this(
             1,
             id,
@@ -819,7 +1065,9 @@ public sealed record RunState
             activeRunEventId,
             [],
             breachAccessModifiers,
-            rezCostModifiers)
+            rezCostModifiers,
+            runRestrictions,
+            resolvedSubroutineLedger)
     {
     }
 
@@ -940,6 +1188,23 @@ public sealed record RunState
     public IReadOnlyList<RunRezCostModifier>? RezCostModifiers { get; private set; }
 
     /// <summary>
+    /// Run-scoped typed restrictions, retained with their exact ICE and
+    /// subroutine provenance until the run is cleaned up.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<RunRestriction>? RunRestrictions { get; private set; }
+
+    /// <summary>
+    /// Persisted structural history of unbroken printed subroutines that have
+    /// resolved in this run. It is omitted for runs that have not resolved an
+    /// unbroken subroutine, preserving the compact legacy shape.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<RunResolvedSubroutineLedgerEntry>? ResolvedSubroutineLedger { get; private set; }
+
+    /// <summary>
     /// The card currently being accessed: the last chosen access card that is
     /// not yet in the accessed list, or null when access is complete.
     /// Sequential access guarantees at most one such card; the last is used
@@ -986,7 +1251,9 @@ public sealed record RunState
         ActiveRunEventId,
         LingeringEffects,
         BreachAccessModifiers,
-        RezCostModifiers);
+        RezCostModifiers,
+        RunRestrictions,
+        ResolvedSubroutineLedger);
 
     /// <summary>
     /// Creates the next immutable timing cursor while retaining the run's
@@ -1027,7 +1294,9 @@ public sealed record RunState
             ActiveRunEventId,
             LingeringEffects,
             BreachAccessModifiers,
-            RezCostModifiers);
+            RezCostModifiers,
+            RunRestrictions,
+            ResolvedSubroutineLedger);
 
     /// <summary>
     /// Replaces the run's encounter while retaining every other field; the
@@ -1062,7 +1331,9 @@ public sealed record RunState
         ActiveRunEventId,
         lingeringEffects,
         BreachAccessModifiers,
-        RezCostModifiers);
+        RezCostModifiers,
+        RunRestrictions,
+        ResolvedSubroutineLedger);
 
     /// <summary>
     /// Replaces the run's run-scoped hosted credits while retaining every
@@ -1093,7 +1364,9 @@ public sealed record RunState
         ActiveRunEventId,
         LingeringEffects,
         BreachAccessModifiers,
-        RezCostModifiers);
+        RezCostModifiers,
+        RunRestrictions,
+        ResolvedSubroutineLedger);
 
     /// <summary>
     /// Replaces the live run priority cursor while retaining the exact run
@@ -1125,7 +1398,9 @@ public sealed record RunState
         ActiveRunEventId,
         LingeringEffects,
         BreachAccessModifiers,
-        RezCostModifiers);
+        RezCostModifiers,
+        RunRestrictions,
+        ResolvedSubroutineLedger);
 
     internal RunState WithEncounter(RunEncounterState encounter) => new(
         Version,
@@ -1152,7 +1427,9 @@ public sealed record RunState
         ActiveRunEventId,
         LingeringEffects,
         BreachAccessModifiers,
-        RezCostModifiers);
+        RezCostModifiers,
+        RunRestrictions,
+        ResolvedSubroutineLedger);
 
     /// <summary>
     /// Replaces the run's breach candidate/access fields while retaining every
@@ -1188,7 +1465,9 @@ public sealed record RunState
         ActiveRunEventId,
         LingeringEffects,
         BreachAccessModifiers,
-        RezCostModifiers);
+        RezCostModifiers,
+        RunRestrictions,
+        ResolvedSubroutineLedger);
 
     /// <summary>
     /// Replaces the immutable breach-access snapshot after the authoritative
@@ -1220,7 +1499,70 @@ public sealed record RunState
         ActiveRunEventId,
         LingeringEffects,
         breachAccessModifiers,
-        RezCostModifiers);
+        RezCostModifiers,
+        RunRestrictions,
+        ResolvedSubroutineLedger);
+
+    /// <summary>Replaces the run-scoped typed restrictions immutably.</summary>
+    internal RunState WithRunRestrictions(IReadOnlyList<RunRestriction>? runRestrictions) => new(
+        Version,
+        Id,
+        AttackedServer,
+        InitiatingSide,
+        InitiatingPlayer,
+        InitiatingSource,
+        PhaseFor(Step),
+        Step,
+        CurrentIceIndex,
+        CurrentIceId,
+        Successful,
+        Unsuccessful,
+        EndReason,
+        Priority,
+        Encounter,
+        BreachCandidates,
+        RandomAccessLimit,
+        ChosenAccessCards,
+        AccessedCards,
+        AccessState,
+        RunCredits,
+        ActiveRunEventId,
+        LingeringEffects,
+        BreachAccessModifiers,
+        RezCostModifiers,
+        runRestrictions,
+        ResolvedSubroutineLedger);
+
+    /// <summary>Replaces the structural history of resolved unbroken subroutines.</summary>
+    internal RunState WithResolvedSubroutineLedger(
+        IReadOnlyList<RunResolvedSubroutineLedgerEntry>? resolvedSubroutineLedger) => new(
+        Version,
+        Id,
+        AttackedServer,
+        InitiatingSide,
+        InitiatingPlayer,
+        InitiatingSource,
+        PhaseFor(Step),
+        Step,
+        CurrentIceIndex,
+        CurrentIceId,
+        Successful,
+        Unsuccessful,
+        EndReason,
+        Priority,
+        Encounter,
+        BreachCandidates,
+        RandomAccessLimit,
+        ChosenAccessCards,
+        AccessedCards,
+        AccessState,
+        RunCredits,
+        ActiveRunEventId,
+        LingeringEffects,
+        BreachAccessModifiers,
+        RezCostModifiers,
+        RunRestrictions,
+        resolvedSubroutineLedger);
 
     private static ReadOnlyCollection<CardInstanceId> FreezeIds(IEnumerable<CardInstanceId> values) =>
         new(values.ToArray());
@@ -1263,7 +1605,7 @@ public sealed record RunState
         RunTimingStep.InitiationPaidWindow => RunCrPhase.Initiation,
         RunTimingStep.Approach or RunTimingStep.ApproachPaidWindow => RunCrPhase.Approach,
         RunTimingStep.EncounterInitialization or RunTimingStep.EncounterPaidWindow or RunTimingStep.Encounter => RunCrPhase.Encounter,
-        RunTimingStep.MovementPaidWindow or RunTimingStep.JackOutDecision or RunTimingStep.MoveInward or RunTimingStep.AfterMovePaidWindow => RunCrPhase.Movement,
+        RunTimingStep.MovementPaidWindow or RunTimingStep.JackOutDecision or RunTimingStep.MoveInward or RunTimingStep.AfterMovePaidWindow or RunTimingStep.ApproachServer => RunCrPhase.Movement,
         RunTimingStep.Success
             or RunTimingStep.BreachBoundary
             or RunTimingStep.BreachCandidateSelection

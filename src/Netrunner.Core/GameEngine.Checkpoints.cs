@@ -965,6 +965,8 @@ public static partial class GameEngine
     {
         if (occurrence.Kind is not (OccurrenceKind.CardInstalled
             or OccurrenceKind.CardRezzed
+            or OccurrenceKind.ServerApproached
+            or OccurrenceKind.IceEncountered
             or OccurrenceKind.RunSuccessful
             or OccurrenceKind.RunEnded
             or OccurrenceKind.AgendaScoredOrStolen
@@ -979,7 +981,9 @@ public static partial class GameEngine
         var materialized = new List<TriggerInvocation>();
         foreach (CardInstanceState source in working.Cards.OrderBy(card => card.Id.Value, StringComparer.Ordinal))
         {
-            if (!RuntimeCardActivity.IsActive(source, working.Zones)
+            bool activeRunEventSource = occurrence.Kind == OccurrenceKind.RunSuccessful
+                && IsActiveRunEventSource(working, source);
+            if ((!activeRunEventSource && !RuntimeCardActivity.IsActive(source, working.Zones))
                 || !working.BehaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? definition)
                 || definition.Controller != source.OwnerSide)
             {
@@ -994,7 +998,9 @@ public static partial class GameEngine
                     || frame.AppliedTriggers.Contains(CatalogTriggerId(occurrence, source, trigger.Key))
                     || !CatalogTriggerScopeMatches(trigger.Scope, source, occurrence, occurrenceController)
                     || !CatalogTriggerOutcomeMatches(trigger, occurrence)
-                    || !CatalogTriggerServerMatches(working, trigger, occurrence))
+                    || !CatalogTriggerServerMatches(working, trigger, occurrence)
+                    || !CatalogTriggerSourceLocationMatches(working, trigger, source, occurrence)
+                    || !CatalogTriggerCanStart(working, source, trigger))
                 {
                     continue;
                 }
@@ -1022,6 +1028,25 @@ public static partial class GameEngine
         }
 
         return materialized.ToArray();
+    }
+
+    private static bool IsActiveRunEventSource(WorkingState working, CardInstanceState source)
+    {
+        if (working.RunState?.ActiveRunEventId != source.Id
+            || source.OwnerSide != PlayerSide.Runner
+            || !source.FaceUp)
+        {
+            return false;
+        }
+
+        ZoneState? sourceZone = working.Zones.FirstOrDefault(zone => zone.Id == source.ZoneId);
+        return sourceZone is not null
+            && sourceZone.Kind == ZoneKind.RunnerPlayArea
+            && sourceZone.OwnerSide == PlayerSide.Runner
+            && sourceZone.ServerId is null
+            && sourceZone.CardIds.Count == 1
+            && sourceZone.CardIds[0] == source.Id
+            && working.BehaviorCatalog.TryGetRunEvent(source.DefinitionId, out _);
     }
 
     private static bool CatalogTriggerOutcomeMatches(
@@ -1055,7 +1080,10 @@ public static partial class GameEngine
             return true;
         }
 
-        if (occurrence.Kind is not (OccurrenceKind.RunSuccessful or OccurrenceKind.RunEnded)
+        if (occurrence.Kind is not (OccurrenceKind.ServerApproached
+            or OccurrenceKind.IceEncountered
+            or OccurrenceKind.RunSuccessful
+            or OccurrenceKind.RunEnded)
             || occurrence.Effect is not GameplayOccurrenceEffect gameplay
             || gameplay.ServerId is not { } serverId)
         {
@@ -1064,6 +1092,28 @@ public static partial class GameEngine
 
         ServerState? server = working.Servers.FirstOrDefault(candidate => candidate.Id == serverId);
         return server?.Kind == requiredServerKind;
+    }
+
+    private static bool CatalogTriggerSourceLocationMatches(
+        WorkingState working,
+        BehaviorTrigger trigger,
+        CardInstanceState source,
+        OccurrenceSnapshot occurrence)
+    {
+        if (!trigger.RequireSourceOnAttackedServer)
+        {
+            return true;
+        }
+
+        if (occurrence.Kind is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered)
+            || occurrence.Effect is not GameplayOccurrenceEffect gameplay
+            || gameplay.ServerId is not { } attackedServer)
+        {
+            return false;
+        }
+
+        ZoneState? sourceZone = working.Zones.FirstOrDefault(zone => zone.Id == source.ZoneId);
+        return sourceZone?.ServerId == attackedServer;
     }
 
     /// <summary>
@@ -1075,11 +1125,14 @@ public static partial class GameEngine
     private static bool HasActiveCatalogTrigger(
         WorkingState working,
         OccurrenceKind occurrenceKind,
-        ServerId? serverId = null)
+        ServerId? serverId = null,
+        CardInstanceId? subjectCardId = null)
     {
         foreach (CardInstanceState source in working.Cards)
         {
-            if (!RuntimeCardActivity.IsActive(source, working.Zones)
+            bool activeRunEventSource = occurrenceKind == OccurrenceKind.RunSuccessful
+                && IsActiveRunEventSource(working, source);
+            if ((!activeRunEventSource && !RuntimeCardActivity.IsActive(source, working.Zones))
                 || !working.BehaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? definition)
                 || definition.Controller != source.OwnerSide)
             {
@@ -1091,13 +1144,59 @@ public static partial class GameEngine
                 && (trigger.ServerKindRequirement is null
                     || serverId is { } suppliedServerId
                         && working.Servers.FirstOrDefault(candidate => candidate.Id == suppliedServerId)?.Kind
-                            == trigger.ServerKindRequirement)))
+                            == trigger.ServerKindRequirement)
+                && (!trigger.RequireSourceOnAttackedServer
+                    || occurrenceKind is OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered
+                        && serverId is { } suppliedServer
+                        && working.Zones.FirstOrDefault(zone => zone.Id == source.ZoneId)?.ServerId == suppliedServer)
+                && (occurrenceKind is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered)
+                    || trigger.Scope != BehaviorTriggerScope.Controller
+                    || source.OwnerSide == PlayerSide.Runner)
+                && (occurrenceKind != OccurrenceKind.RunSuccessful
+                    || trigger.Scope != BehaviorTriggerScope.Self
+                    || subjectCardId is { } successfulSource
+                        && source.Id == successfulSource)
+                && (occurrenceKind != OccurrenceKind.IceEncountered
+                    || trigger.Scope != BehaviorTriggerScope.Self
+                        || subjectCardId is { } encounteredIce
+                        && source.Id == encounteredIce)
+                && (occurrenceKind != OccurrenceKind.IceEncountered
+                    || trigger.SubjectCardFilter is null
+                    || subjectCardId is { } subject
+                        && CatalogSubjectMatches(working, subject, trigger.SubjectCardFilter))
+                && CatalogTriggerCanStart(working, source, trigger)))
             {
                 return true;
             }
         }
 
         return false;
+    }
+
+    private static bool CatalogTriggerCanStart(
+        WorkingState working,
+        CardInstanceState source,
+        BehaviorTrigger trigger)
+    {
+        BehaviorChoiceSpec? openingChoice = trigger.Instructions.Count > 0
+            && trigger.Instructions[0] is
+            {
+                Kind: BehaviorInstructionKind.Choose,
+                Choice: { } choice,
+            }
+                ? choice
+                : null;
+        if (openingChoice is null)
+        {
+            return true;
+        }
+
+        PlayerId controller = GetPlayer(working, source.OwnerSide).Id;
+        return openingChoice.Options.Any(option =>
+            (trigger.Mode != TriggerMode.Optional
+                || option.Semantic != BehaviorChoiceOptionSemantic.Fallback)
+            &&
+            IsBehaviorChoiceOptionAffordable(working, controller, option));
     }
 
     private static bool CatalogTriggerScopeMatches(

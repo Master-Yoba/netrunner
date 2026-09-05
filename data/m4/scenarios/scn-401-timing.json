@@ -1,0 +1,911 @@
+{
+  "schemaVersion": 1,
+  "scenarioId": "SCN-401",
+  "seed": 45041,
+  "rulesVersion": "26.03",
+  "engineStateSchemaVersion": 14,
+  "behaviorRegistryVersion": "gateway-m4-4.5",
+  "catalog": {
+    "version": "gateway-m4-4.5",
+    "testOnlyIceDefinitions": [
+      "fixture:scn401-plain-ice",
+      "fixture:scn401-mayfly-ice"
+    ]
+  },
+  "cases": [
+    {
+      "id": "approach-anoetic-void",
+      "kind": "approachServer",
+      "targetServer": "remote:0",
+      "sourceCardId": "card:scn401-anoetic",
+      "runnerCredits": 10,
+      "runnerClicks": 4,
+      "corpCredits": 5,
+      "cards": [
+        {
+        "id": "card:scn401-anoetic",
+          "definitionId": "30050",
+          "zone": "serverRoot",
+          "ownerSide": "corp",
+          "server": "remote:0",
+        "faceUp": true,
+        "rezzed": true
+        },
+        {
+          "id": "card:scn401-anoetic-hq-a",
+          "definitionId": "fixture:scn401-hq-a",
+          "zone": "corpHand",
+          "ownerSide": "corp"
+        },
+        {
+          "id": "card:scn401-anoetic-hq-b",
+          "definitionId": "fixture:scn401-hq-b",
+          "zone": "corpHand",
+          "ownerSide": "corp"
+        },
+        {
+          "id": "card:scn401-approach-ice",
+          "definitionId": "fixture:scn401-plain-ice",
+          "zone": "serverIce",
+          "ownerSide": "corp",
+          "server": "remote:0",
+          "faceUp": false,
+          "rezzed": false
+        }
+      ],
+      "reaction": {
+        "occurrence": "serverApproached",
+        "triggerId": "anoetic-void-server-approached",
+        "mode": "optional",
+        "ownerSide": "corp",
+        "decisionKind": "triggerChoice",
+        "runStep": "success",
+        "acceptedAction": "useTrigger",
+        "continuation": "run-successful",
+        "mustNotOpenPaidWindow": true
+      },
+      "yieldedBoundaries": [
+        {
+          "name": "after-movement-paid-window",
+          "decisionKind": "runTiming",
+          "runStep": "afterMovePaidWindow",
+          "ownerSide": "runner",
+          "saveLoad": true
+        },
+        {
+          "name": "optional-anoetic-trigger",
+          "decisionKind": "triggerChoice",
+          "runStep": "success",
+          "ownerSide": "corp",
+          "saveLoad": true
+        },
+        {
+          "name": "anoetic-hidden-cost-choice",
+          "decisionKind": "behaviorChoice",
+          "runStep": "success",
+          "ownerSide": "corp",
+          "saveLoad": true
+        }
+      ],
+      "expectedEventOrder": [
+        "run-timing-window-opened:afterMovePaidWindow",
+        "server-approached",
+        "run-successful"
+      ]
+    },
+    {
+      "id": "approach-manegarm-skunkworks",
+      "kind": "approachServer",
+      "targetServer": "remote:0",
+      "sourceCardId": "card:scn401-manegarm",
+      "runnerCredits": 10,
+      "runnerClicks": 4,
+      "corpCredits": 5,
+      "cards": [
+        {
+          "id": "card:scn401-manegarm",
+          "definitionId": "30042",
+          "zone": "serverRoot",
+          "ownerSide": "corp",
+          "server": "remote:0",
+          "faceUp": true,
+          "rezzed": true
+        },
+        {
+          "id": "card:scn401-manegarm-ice",
+          "definitionId": "fixture:scn401-plain-ice",
+          "zone": "serverIce",
+          "ownerSide": "corp",
+          "server": "remote:0",
+          "faceUp": false,
+          "rezzed": false
+        }
+      ],
+      "reaction": {
+        "occurrence": "serverApproached",
+        "triggerId": "manegarm-server-approached",
+        "mode": "mandatory",
+        "ownerSide": "runner",
+        "decisionKind": "behaviorChoice",
+        "runStep": "success",
+        "acceptedAction": "chooseBehavior:spend-clicks",
+        "continuation": "run-successful",
+        "mustNotOpenPaidWindow": true
+      },
+      "yieldedBoundaries": [
+        {
+          "name": "after-movement-paid-window",
+          "decisionKind": "runTiming",
+          "runStep": "afterMovePaidWindow",
+          "ownerSide": "runner",
+          "saveLoad": true
+        },
+        {
+          "name": "mandatory-manegarm-choice",
+          "decisionKind": "behaviorChoice",
+          "runStep": "success",
+          "ownerSide": "runner",
+          "saveLoad": true
+        }
+      ],
+      "expectedEventOrder": [
+        "run-timing-window-opened:afterMovePaidWindow",
+        "server-approached",
+        "run-successful"
+      ]
+    },
+    {
+      "id": "encounter-funhouse",
+      "kind": "encounter",
+      "targetServer": "remote:0",
+      "sourceCardId": "card:scn401-funhouse",
+      "runnerCredits": 10,
+      "runnerClicks": 4,
+      "corpCredits": 5,
+      "cards": [
+        {
+        "id": "card:scn401-funhouse",
+          "definitionId": "30054",
+          "zone": "serverIce",
+          "ownerSide": "corp",
+          "server": "remote:0",
+        "faceUp": false,
+        "rezzed": false
+        }
+      ],
+      "reaction": {
+        "occurrence": "iceEncountered",
+        "triggerId": "funhouse-ice-encountered",
+        "mode": "mandatory",
+        "ownerSide": "runner",
+        "decisionKind": "behaviorChoice",
+        "runStep": "encounterPaidWindow",
+        "acceptedAction": "chooseBehavior:take-tag",
+        "continuation": "run-timing-window-opened:encounterPaidWindow",
+        "mustNotOpenPaidWindow": false
+      },
+      "yieldedBoundaries": [
+        {
+          "name": "encounter-reaction",
+          "decisionKind": "behaviorChoice",
+          "runStep": "encounterPaidWindow",
+          "ownerSide": "runner",
+          "saveLoad": true
+        },
+        {
+          "name": "encounter-paid-window",
+          "decisionKind": "runTiming",
+          "runStep": "encounterPaidWindow",
+          "ownerSide": "runner",
+          "saveLoad": true
+        },
+        {
+          "name": "funhouse-subroutine-choice",
+          "decisionKind": "iceSubroutineChoice",
+          "runStep": "encounter",
+          "ownerSide": "runner",
+          "saveLoad": true
+        }
+      ],
+      "expectedEventOrder": [
+        "encounter-initialized",
+        "run-timing-window-opened:encounterPaidWindow",
+        "encounter-completed"
+      ]
+    },
+    {
+      "id": "encounter-ansel-bioroid-repeated",
+      "kind": "encounter",
+      "targetServer": "remote:0",
+      "sourceCardId": "card:scn401-ansel",
+      "runnerCredits": 10,
+      "runnerClicks": 4,
+      "corpCredits": 6,
+      "cards": [
+        {
+          "id": "card:scn401-ansel",
+          "definitionId": "30038",
+          "zone": "serverIce",
+          "ownerSide": "corp",
+          "server": "remote:0",
+          "faceUp": false,
+          "rezzed": false
+        }
+      ],
+      "reaction": {
+        "occurrence": "iceEncountered",
+        "triggerId": "ansel-bioroid-interface",
+        "mode": "mandatory",
+        "ownerSide": "runner",
+        "decisionKind": "runTiming",
+        "runStep": "encounterPaidWindow",
+        "acceptedAction": "useBioroidAbility",
+        "continuation": "run-timing-window-opened:encounterPaidWindow",
+        "mustNotOpenPaidWindow": false
+      },
+      "yieldedBoundaries": [
+        {
+          "name": "ansel-bioroid-first-use",
+          "decisionKind": "runTiming",
+          "runStep": "encounterPaidWindow",
+          "ownerSide": "runner",
+          "saveLoad": true
+        },
+        {
+          "name": "ansel-bioroid-second-use",
+          "decisionKind": "runTiming",
+          "runStep": "encounterPaidWindow",
+          "ownerSide": "runner",
+          "saveLoad": true
+        },
+        {
+          "name": "ansel-bioroid-third-use",
+          "decisionKind": "runTiming",
+          "runStep": "encounterPaidWindow",
+          "ownerSide": "runner",
+          "saveLoad": true
+        }
+      ],
+      "expectedEventOrder": [
+        "encounter-initialized",
+        "run-timing-window-opened:encounterPaidWindow",
+        "bioroid-ability-used",
+        "encounter-completed",
+        "run-successful"
+      ]
+    },
+    {
+      "id": "encounter-ansel-installed-card-target",
+      "kind": "encounter",
+      "targetServer": "remote:0",
+      "sourceCardId": "card:scn401-ansel-target",
+      "runnerCredits": 10,
+      "runnerClicks": 4,
+      "corpCredits": 6,
+      "cards": [
+        {
+          "id": "card:scn401-ansel-target",
+          "definitionId": "30038",
+          "zone": "serverIce",
+          "ownerSide": "corp",
+          "server": "remote:0",
+          "faceUp": false,
+          "rezzed": false
+        },
+        {
+          "id": "card:scn401-ansel-runner-target",
+          "definitionId": "fixture:scn401-runner-target",
+          "zone": "runnerRig",
+          "ownerSide": "runner",
+          "faceUp": true
+        }
+      ],
+      "reaction": {
+        "occurrence": "iceEncountered",
+        "triggerId": "ansel-installed-card-target",
+        "mode": "mandatory",
+        "ownerSide": "runner",
+        "decisionKind": "runTiming",
+        "runStep": "encounterPaidWindow",
+        "acceptedAction": "passPriority",
+        "continuation": "run-timing-window-opened:encounterPaidWindow",
+        "mustNotOpenPaidWindow": false
+      },
+      "yieldedBoundaries": [
+        {
+          "name": "ansel-target-encounter-window",
+          "decisionKind": "runTiming",
+          "runStep": "encounterPaidWindow",
+          "ownerSide": "runner",
+          "saveLoad": true
+        },
+        {
+          "name": "ansel-installed-card-choice",
+          "decisionKind": "iceSubroutineChoice",
+          "runStep": "encounter",
+          "ownerSide": "corp",
+          "saveLoad": true
+        },
+        {
+          "name": "ansel-installed-card-install-decline",
+          "decisionKind": "iceSubroutineChoice",
+          "runStep": "encounter",
+          "ownerSide": "corp",
+          "saveLoad": true
+        }
+      ],
+      "expectedEventOrder": [
+        "encounter-initialized",
+        "run-timing-window-opened:encounterPaidWindow",
+        "encounter-completed",
+        "run-successful"
+      ]
+    },
+    {
+      "id": "encounter-ansel-normal-install",
+      "kind": "encounter",
+      "targetServer": "remote:0",
+      "sourceCardId": "card:scn401-ansel-normal",
+      "runnerCredits": 10,
+      "runnerClicks": 4,
+      "corpCredits": 8,
+      "cards": [
+        {
+          "id": "card:scn401-ansel-normal",
+          "definitionId": "30038",
+          "zone": "serverIce",
+          "ownerSide": "corp",
+          "server": "remote:0",
+          "faceUp": false,
+          "rezzed": false
+        },
+        {
+          "id": "card:scn401-ansel-normal-install",
+          "definitionId": "30054",
+          "zone": "corpHand",
+          "ownerSide": "corp"
+        }
+      ],
+      "reaction": {
+        "occurrence": "iceEncountered",
+        "triggerId": "ansel-normal-install",
+        "mode": "mandatory",
+        "ownerSide": "runner",
+        "decisionKind": "runTiming",
+        "runStep": "encounterPaidWindow",
+        "acceptedAction": "passPriority",
+        "continuation": "run-timing-window-opened:encounterPaidWindow",
+        "mustNotOpenPaidWindow": false
+      },
+      "yieldedBoundaries": [
+        {
+          "name": "ansel-normal-install-encounter-window",
+          "decisionKind": "runTiming",
+          "runStep": "encounterPaidWindow",
+          "ownerSide": "runner",
+          "saveLoad": true
+        },
+        {
+          "name": "ansel-normal-install-choice",
+          "decisionKind": "iceSubroutineChoice",
+          "runStep": "encounter",
+          "ownerSide": "corp",
+          "saveLoad": true
+        },
+        {
+          "name": "ansel-normal-install-selection",
+          "decisionKind": "installChoice",
+          "runStep": "encounter",
+          "ownerSide": "corp",
+          "saveLoad": true
+        }
+      ],
+      "expectedEventOrder": [
+        "encounter-initialized",
+        "run-timing-window-opened:encounterPaidWindow",
+        "card-installed",
+        "encounter-completed",
+        "run-successful"
+      ]
+    },
+    {
+      "id": "encounter-ansel-restriction-agenda",
+      "kind": "encounter",
+      "targetServer": "remote:0",
+      "sourceCardId": "card:scn401-ansel-restriction-agenda",
+      "runnerCredits": 10,
+      "runnerClicks": 4,
+      "corpCredits": 6,
+      "cards": [
+        {
+          "id": "card:scn401-ansel-restriction-agenda-target",
+          "definitionId": "fixture:scn401-agenda",
+          "zone": "serverRoot",
+          "ownerSide": "corp",
+          "server": "remote:0"
+        },
+        {
+          "id": "card:scn401-ansel-restriction-agenda",
+          "definitionId": "30038",
+          "zone": "serverIce",
+          "ownerSide": "corp",
+          "server": "remote:0",
+          "faceUp": false,
+          "rezzed": false
+        }
+      ],
+      "reaction": {
+        "occurrence": "iceEncountered",
+        "triggerId": "ansel-restriction-agenda",
+        "mode": "mandatory",
+        "ownerSide": "runner",
+        "decisionKind": "runTiming",
+        "runStep": "encounterPaidWindow",
+        "acceptedAction": "useBioroidAbility",
+        "continuation": "run-timing-window-opened:encounterPaidWindow",
+        "mustNotOpenPaidWindow": false
+      },
+      "yieldedBoundaries": [
+        {
+          "name": "ansel-restriction-agenda-first-bioroid",
+          "decisionKind": "runTiming",
+          "runStep": "encounterPaidWindow",
+          "ownerSide": "runner",
+          "saveLoad": true
+        },
+        {
+          "name": "ansel-restriction-agenda-second-bioroid",
+          "decisionKind": "runTiming",
+          "runStep": "encounterPaidWindow",
+          "ownerSide": "runner",
+          "saveLoad": true
+        },
+        {
+          "name": "ansel-restriction-agenda-pass",
+          "decisionKind": "runTiming",
+          "runStep": "encounterPaidWindow",
+          "ownerSide": "runner",
+          "saveLoad": true
+        },
+        {
+          "name": "ansel-restriction-agenda-access",
+          "decisionKind": "runTiming",
+          "runStep": "breachAccessAbility",
+          "ownerSide": "runner",
+          "saveLoad": true
+        }
+      ],
+      "expectedEventOrder": [
+        "encounter-initialized",
+        "run-timing-window-opened:encounterPaidWindow",
+        "bioroid-ability-used",
+        "encounter-completed",
+        "run-successful",
+        "breach-started",
+        "card-accessed",
+        "run-ended"
+      ]
+    },
+    {
+      "id": "encounter-ansel-restriction-asset",
+      "kind": "encounter",
+      "targetServer": "remote:0",
+      "sourceCardId": "card:scn401-ansel-restriction-asset",
+      "runnerCredits": 10,
+      "runnerClicks": 4,
+      "corpCredits": 6,
+      "cards": [
+        {
+          "id": "card:scn401-ansel-restriction-asset-target",
+          "definitionId": "fixture:scn401-asset",
+          "zone": "serverRoot",
+          "ownerSide": "corp",
+          "server": "remote:0",
+          "faceUp": false,
+          "rezzed": false
+        },
+        {
+          "id": "card:scn401-ansel-restriction-asset",
+          "definitionId": "30038",
+          "zone": "serverIce",
+          "ownerSide": "corp",
+          "server": "remote:0",
+          "faceUp": false,
+          "rezzed": false
+        }
+      ],
+      "reaction": {
+        "occurrence": "iceEncountered",
+        "triggerId": "ansel-restriction-asset",
+        "mode": "mandatory",
+        "ownerSide": "runner",
+        "decisionKind": "runTiming",
+        "runStep": "encounterPaidWindow",
+        "acceptedAction": "useBioroidAbility",
+        "continuation": "run-timing-window-opened:encounterPaidWindow",
+        "mustNotOpenPaidWindow": false
+      },
+      "yieldedBoundaries": [
+        {
+          "name": "ansel-restriction-asset-first-bioroid",
+          "decisionKind": "runTiming",
+          "runStep": "encounterPaidWindow",
+          "ownerSide": "runner",
+          "saveLoad": true
+        },
+        {
+          "name": "ansel-restriction-asset-second-bioroid",
+          "decisionKind": "runTiming",
+          "runStep": "encounterPaidWindow",
+          "ownerSide": "runner",
+          "saveLoad": true
+        },
+        {
+          "name": "ansel-restriction-asset-pass",
+          "decisionKind": "runTiming",
+          "runStep": "encounterPaidWindow",
+          "ownerSide": "runner",
+          "saveLoad": true
+        },
+        {
+          "name": "ansel-restriction-asset-access",
+          "decisionKind": "runTiming",
+          "runStep": "breachAccessAbility",
+          "ownerSide": "runner",
+          "saveLoad": true
+        }
+      ],
+      "expectedEventOrder": [
+        "encounter-initialized",
+        "run-timing-window-opened:encounterPaidWindow",
+        "bioroid-ability-used",
+        "encounter-completed",
+        "run-successful",
+        "breach-started",
+        "card-accessed",
+        "run-ended"
+      ]
+    },
+    {
+      "id": "encounter-bran-inward-install",
+      "kind": "encounter",
+      "targetServer": "remote:0",
+      "sourceCardId": "card:scn401-bran",
+      "runnerCredits": 10,
+      "runnerClicks": 4,
+      "corpCredits": 6,
+      "cards": [
+        {
+          "id": "card:scn401-bran-inner",
+          "definitionId": "fixture:scn401-plain-ice",
+          "zone": "serverIce",
+          "ownerSide": "corp",
+          "server": "remote:0",
+          "faceUp": false,
+          "rezzed": false
+        },
+        {
+          "id": "card:scn401-bran",
+          "definitionId": "30039",
+          "zone": "serverIce",
+          "ownerSide": "corp",
+          "server": "remote:0",
+          "faceUp": false,
+          "rezzed": false
+        },
+        {
+          "id": "card:scn401-bran-inward-target",
+          "definitionId": "30054",
+          "zone": "corpHand",
+          "ownerSide": "corp"
+        }
+      ],
+      "reaction": {
+        "occurrence": "iceEncountered",
+        "triggerId": "bran-inward-install",
+        "mode": "mandatory",
+        "ownerSide": "runner",
+        "decisionKind": "runTiming",
+        "runStep": "encounterPaidWindow",
+        "acceptedAction": "passPriority",
+        "continuation": "run-timing-window-opened:encounterPaidWindow",
+        "mustNotOpenPaidWindow": false
+      },
+      "yieldedBoundaries": [
+        {
+          "name": "bran-inward-encounter-window",
+          "decisionKind": "runTiming",
+          "runStep": "encounterPaidWindow",
+          "ownerSide": "runner",
+          "saveLoad": true
+        },
+        {
+          "name": "bran-inward-install-choice",
+          "decisionKind": "iceSubroutineChoice",
+          "runStep": "encounter",
+          "ownerSide": "corp",
+          "saveLoad": true
+        }
+      ],
+      "expectedEventOrder": [
+        "encounter-initialized",
+        "run-timing-window-opened:encounterPaidWindow",
+        "card-installed",
+        "encounter-completed",
+        "run-ended"
+      ]
+    },
+    {
+      "id": "encounter-mayfly-used-run-end",
+      "kind": "encounter",
+      "targetServer": "remote:0",
+      "sourceCardId": "card:scn401-mayfly-ice",
+      "runnerCredits": 10,
+      "runnerClicks": 4,
+      "corpCredits": 5,
+      "cards": [
+        {
+          "id": "card:scn401-mayfly-ice",
+          "definitionId": "fixture:scn401-mayfly-ice",
+          "zone": "serverIce",
+          "ownerSide": "corp",
+          "server": "remote:0",
+          "faceUp": false,
+          "rezzed": false
+        },
+        {
+          "id": "card:scn401-mayfly-used",
+          "definitionId": "30032",
+          "zone": "runnerRig",
+          "ownerSide": "runner",
+          "faceUp": true
+        }
+      ],
+      "reaction": {
+        "occurrence": "iceEncountered",
+        "triggerId": "mayfly-interface-window",
+        "mode": "mandatory",
+        "ownerSide": "runner",
+        "decisionKind": "runTiming",
+        "runStep": "encounterPaidWindow",
+        "acceptedAction": "breakSubroutines",
+        "continuation": "run-timing-window-opened:encounterPaidWindow",
+        "mustNotOpenPaidWindow": false
+      },
+      "yieldedBoundaries": [
+        {
+          "name": "mayfly-used-break",
+          "decisionKind": "runTiming",
+          "runStep": "encounterPaidWindow",
+          "ownerSide": "runner",
+          "saveLoad": true
+        },
+        {
+          "name": "mayfly-used-movement",
+          "decisionKind": "runTiming",
+          "runStep": "movementPaidWindow",
+          "ownerSide": "runner",
+          "saveLoad": true
+        }
+      ],
+      "expectedEventOrder": [
+        "encounter-initialized",
+        "run-timing-window-opened:encounterPaidWindow",
+        "subroutines-broken",
+        "encounter-completed",
+        "run-successful",
+        "run-ended",
+        "mayfly-run-end-trash"
+      ]
+    },
+    {
+      "id": "encounter-mayfly-unused-run-end",
+      "kind": "encounter",
+      "targetServer": "remote:0",
+      "sourceCardId": "card:scn401-mayfly-unused-ice",
+      "runnerCredits": 10,
+      "runnerClicks": 4,
+      "corpCredits": 5,
+      "cards": [
+        {
+          "id": "card:scn401-mayfly-unused-ice",
+          "definitionId": "fixture:scn401-mayfly-ice",
+          "zone": "serverIce",
+          "ownerSide": "corp",
+          "server": "remote:0",
+          "faceUp": false,
+          "rezzed": false
+        },
+        {
+          "id": "card:scn401-mayfly-unused",
+          "definitionId": "30032",
+          "zone": "runnerRig",
+          "ownerSide": "runner",
+          "faceUp": true
+        }
+      ],
+      "reaction": {
+        "occurrence": "iceEncountered",
+        "triggerId": "mayfly-interface-window",
+        "mode": "mandatory",
+        "ownerSide": "runner",
+        "decisionKind": "runTiming",
+        "runStep": "encounterPaidWindow",
+        "acceptedAction": "passPriority",
+        "continuation": "run-timing-window-opened:encounterPaidWindow",
+        "mustNotOpenPaidWindow": false
+      },
+      "yieldedBoundaries": [
+        {
+          "name": "mayfly-unused-encounter",
+          "decisionKind": "runTiming",
+          "runStep": "encounterPaidWindow",
+          "ownerSide": "runner",
+          "saveLoad": true
+        },
+        {
+          "name": "mayfly-unused-movement",
+          "decisionKind": "runTiming",
+          "runStep": "movementPaidWindow",
+          "ownerSide": "runner",
+          "saveLoad": true
+        }
+      ],
+      "expectedEventOrder": [
+        "encounter-initialized",
+        "run-timing-window-opened:encounterPaidWindow",
+        "encounter-completed",
+        "run-successful",
+        "run-ended"
+      ]
+    },
+    {
+      "id": "jailbreak-hq-success-draw-access",
+      "kind": "approachServer",
+      "targetServer": "headquarters",
+      "sourceCardId": "card:scn401-jailbreak-hq",
+      "runnerCredits": 10,
+      "runnerClicks": 4,
+      "corpCredits": 5,
+      "cards": [
+        {
+          "id": "card:scn401-jailbreak-hq",
+          "definitionId": "30028",
+          "zone": "runnerGrip",
+          "ownerSide": "runner",
+          "faceUp": true
+        },
+        {
+          "id": "card:scn401-jailbreak-hq-draw",
+          "definitionId": "fixture:scn401-draw-card",
+          "zone": "runnerStack",
+          "ownerSide": "runner"
+        },
+        {
+          "id": "card:scn401-jailbreak-hq-a",
+          "definitionId": "fixture:scn401-hq-a",
+          "zone": "corpHand",
+          "ownerSide": "corp"
+        },
+        {
+          "id": "card:scn401-jailbreak-hq-b",
+          "definitionId": "fixture:scn401-hq-b",
+          "zone": "corpHand",
+          "ownerSide": "corp"
+        }
+      ],
+      "reaction": {
+        "occurrence": "runSuccessful",
+        "triggerId": "jailbreak-success-draw",
+        "mode": "mandatory",
+        "ownerSide": "runner",
+        "decisionKind": "runTiming",
+        "runStep": "breachCandidateSelection",
+        "acceptedAction": "chooseBreachCandidate",
+        "continuation": "run-timing-window-opened:breachCandidateSelection",
+        "mustNotOpenPaidWindow": true
+      },
+      "yieldedBoundaries": [
+        {
+          "name": "jailbreak-hq-breach-candidates",
+          "decisionKind": "runTiming",
+          "runStep": "breachCandidateSelection",
+          "ownerSide": "runner",
+          "saveLoad": true
+        }
+      ],
+      "expectedEventOrder": [
+        "run-event-played",
+        "run-initiated",
+        "server-approached",
+        "run-successful",
+        "breach-started",
+        "run-timing-window-opened:breachCandidateSelection",
+        "card-accessed",
+        "run-ended"
+      ]
+    },
+    {
+      "id": "jailbreak-rnd-success-draw-access",
+      "kind": "approachServer",
+      "targetServer": "r&d",
+      "sourceCardId": "card:scn401-jailbreak-rnd",
+      "runnerCredits": 10,
+      "runnerClicks": 4,
+      "corpCredits": 5,
+      "cards": [
+        {
+          "id": "card:scn401-jailbreak-rnd",
+          "definitionId": "30028",
+          "zone": "runnerGrip",
+          "ownerSide": "runner",
+          "faceUp": true
+        },
+        {
+          "id": "card:scn401-jailbreak-rnd-draw",
+          "definitionId": "fixture:scn401-draw-card",
+          "zone": "runnerStack",
+          "ownerSide": "runner"
+        },
+        {
+          "id": "card:scn401-jailbreak-rnd-a",
+          "definitionId": "fixture:scn401-rnd-a",
+          "zone": "corpDeck",
+          "ownerSide": "corp"
+        },
+        {
+          "id": "card:scn401-jailbreak-rnd-b",
+          "definitionId": "fixture:scn401-rnd-b",
+          "zone": "corpDeck",
+          "ownerSide": "corp"
+        }
+      ],
+      "reaction": {
+        "occurrence": "runSuccessful",
+        "triggerId": "jailbreak-success-draw",
+        "mode": "mandatory",
+        "ownerSide": "runner",
+        "decisionKind": "runTiming",
+        "runStep": "breachCandidateSelection",
+        "acceptedAction": "chooseBreachCandidate",
+        "continuation": "run-timing-window-opened:breachCandidateSelection",
+        "mustNotOpenPaidWindow": true
+      },
+      "yieldedBoundaries": [
+        {
+          "name": "jailbreak-rnd-breach-candidates",
+          "decisionKind": "runTiming",
+          "runStep": "breachCandidateSelection",
+          "ownerSide": "runner",
+          "saveLoad": true
+        }
+      ],
+      "expectedEventOrder": [
+        "run-event-played",
+        "run-initiated",
+        "server-approached",
+        "run-successful",
+        "breach-started",
+        "run-timing-window-opened:breachCandidateSelection",
+        "card-accessed",
+        "run-ended"
+      ]
+    }
+  ],
+  "citations": [
+    "CR 26.03 6.9.3a: encounter initialization creates the encounter before the encounter paid window",
+    "CR 26.03 6.9.3b: the existing encounter paid window follows encounter initialization",
+    "CR 26.03 6.9.4e: the final after-movement paid window completes before the Runner approaches the server",
+    "CR 26.03 6.9.4g: the Runner approaches the attacked server after the final after-movement window",
+    "CR 26.03 6.9.5a: success is declared after the approach-server reaction boundary without a new paid window",
+    "CR 26.03 9.1.1-9.1.8: mandatory and optional triggered abilities are ordered at the occurrence checkpoint",
+    "CR 26.03 9.2.8: checkpoint effects resolve before the next timing decision",
+    "CR 26.03 4.3: hidden HQ card identities are visible only to the Corp chooser",
+    "CR 26.03 6.5/9.8: encountered ICE subroutines resolve in printed order unless broken",
+    "CR 26.03 8.5.13: a Corp ICE install uses the legal destination and pays the normal install cost",
+    "CR 26.03 8.5.13/8.5.14: an effect-created install verifies its source and destination without exposing hidden identities to the Runner",
+    "CR 26.03 7.2.2-7.2.3: the mid-access window offers only legal steal/trash actions and advances the accessed card when no action is taken"
+  ],
+  "crossCheckNote": "Jinteki.net was used as a behavioral cross-check for the compressed approach/encounter prompts; CR 26.03 is authoritative. The fixture keeps the engine's existing paid windows explicit and records reactions as checkpoint boundaries, not invented paid windows. HQ cost-card IDs are present only in the Corp-owned chooser observation.",
+  "excluded": []
+}

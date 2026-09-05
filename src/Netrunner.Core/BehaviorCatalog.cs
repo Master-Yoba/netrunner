@@ -652,7 +652,8 @@ public sealed record BehaviorInstruction
         bool optional = false,
         HostedCreditSpendRestriction? spendRestriction = null,
         BehaviorRunOperand? runOperand = null,
-        BehaviorAmountOperand? amountOperand = null)
+        BehaviorAmountOperand? amountOperand = null,
+        BehaviorPlayerSelector? recipient = null)
     {
         if (!Enum.IsDefined(kind))
         {
@@ -678,6 +679,9 @@ public sealed record BehaviorInstruction
         SpendRestriction = NormalizeSpendRestriction(kind, spendRestriction);
         RunOperand = runOperand;
         AmountOperand = amountOperand;
+        Recipient = recipient == BehaviorPlayerSelector.Controller
+            ? null
+            : recipient;
         ValidateOperands();
     }
 
@@ -735,8 +739,28 @@ public sealed record BehaviorInstruction
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public BehaviorAmountOperand? AmountOperand { get; }
 
+    /// <summary>
+    /// Optional player recipient for AddTags. Omitted retains the historical
+    /// controller recipient; explicit ActingPlayer/Runner/Corp values make
+    /// the subject choice structural and save/load stable.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BehaviorPlayerSelector? Recipient { get; }
+
     private void ValidateOperands()
     {
+        if (Recipient is { } recipient && !Enum.IsDefined(recipient))
+        {
+            throw new ArgumentOutOfRangeException(nameof(Recipient));
+        }
+
+        if (Recipient is not null && Kind != BehaviorInstructionKind.AddTags)
+        {
+            throw new ArgumentException(
+                "A player recipient is valid only for AddTags instructions.",
+                nameof(Recipient));
+        }
+
         if (SpendRestriction is { } spendRestriction && !Enum.IsDefined(spendRestriction))
         {
             throw new ArgumentOutOfRangeException(nameof(SpendRestriction));
@@ -1212,6 +1236,15 @@ public enum BehaviorInstructionKind
     Advance = AdvanceCard,
 }
 
+/// <summary>Structural player recipient for player-targeted behavior effects.</summary>
+public enum BehaviorPlayerSelector
+{
+    Controller,
+    ActingPlayer,
+    Corp,
+    Runner,
+}
+
 /// <summary>A static value modifier with a typed condition and reason key.</summary>
 public sealed record BehaviorStaticModifier
 {
@@ -1317,7 +1350,8 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         BehaviorCardFilter? subjectCardFilter,
         IReadOnlyList<BehaviorInstruction> instructions,
         RunOutcomeRequirement? runOutcomeRequirement = null,
-        ServerKind? serverKindRequirement = null)
+        ServerKind? serverKindRequirement = null,
+        bool requireSourceOnAttackedServer = false)
     {
         if (!StableIdentifier.TryValidate(key))
         {
@@ -1370,11 +1404,22 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
 
         if (serverKindRequirement is { } requiredServerKind
             && (!Enum.IsDefined(requiredServerKind)
-                || occurrence is not (OccurrenceKind.RunSuccessful or OccurrenceKind.RunEnded)))
+                || occurrence is not (OccurrenceKind.RunSuccessful
+                    or OccurrenceKind.RunEnded
+                    or OccurrenceKind.ServerApproached
+                    or OccurrenceKind.IceEncountered)))
         {
             throw new ArgumentException(
-                "A server-kind requirement is valid only for RunSuccessful or RunEnded triggers and must name a defined server kind.",
+                "A server-kind requirement is valid only for run server occurrences and must name a defined server kind.",
                 nameof(serverKindRequirement));
+        }
+
+        if (requireSourceOnAttackedServer
+            && occurrence is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered))
+        {
+            throw new ArgumentException(
+                "Requiring the source to occupy the attacked server is valid only for ServerApproached or IceEncountered triggers.",
+                nameof(requireSourceOnAttackedServer));
         }
 
         ArgumentNullException.ThrowIfNull(instructions);
@@ -1394,6 +1439,7 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         BehaviorRunOperandValidation.RequireNoStartRun(Instructions, nameof(instructions));
         RunOutcomeRequirement = runOutcomeRequirement;
         ServerKindRequirement = serverKindRequirement;
+        RequireSourceOnAttackedServer = requireSourceOnAttackedServer;
     }
 
     public string Key { get; }
@@ -1418,6 +1464,13 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public ServerKind? ServerKindRequirement { get; }
 
+    /// <summary>
+    /// When true, catalog materialization requires the active source's
+    /// installed zone to carry the occurrence's attacked server ID.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool RequireSourceOnAttackedServer { get; }
+
     public IReadOnlyList<BehaviorInstruction> Instructions { get; }
 
     public bool Equals(BehaviorTrigger? other) =>
@@ -1429,6 +1482,7 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         && BehaviorContractStructure.AreEqual(SubjectCardFilter, other.SubjectCardFilter)
         && RunOutcomeRequirement == other.RunOutcomeRequirement
         && ServerKindRequirement == other.ServerKindRequirement
+        && RequireSourceOnAttackedServer == other.RequireSourceOnAttackedServer
         && BehaviorContractStructure.SequenceEquals(
             Instructions,
             other.Instructions,
@@ -1438,18 +1492,21 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
 
     public override int GetHashCode() =>
         HashCode.Combine(
-            Key,
-            Occurrence,
-            Mode,
-            Scope,
-            SubjectCardFilter,
-            RunOutcomeRequirement,
-            ServerKindRequirement,
+            HashCode.Combine(
+                Key,
+                Occurrence,
+                Mode,
+                Scope,
+                SubjectCardFilter,
+                RunOutcomeRequirement,
+                ServerKindRequirement,
+                RequireSourceOnAttackedServer),
             Instructions.Count);
 
     private static bool IsCardBearing(OccurrenceKind occurrence) => occurrence is
         OccurrenceKind.CardInstalled
         or OccurrenceKind.CardRezzed
+        or OccurrenceKind.IceEncountered
         or OccurrenceKind.RunSuccessful
         or OccurrenceKind.RunEnded
         or OccurrenceKind.AgendaScoredOrStolen
@@ -2322,7 +2379,13 @@ internal static class BehaviorCatalogStructure
                 && BehaviorContractStructure.SequenceEquals(
                     a.RezCostModifiers ?? [],
                     b.RezCostModifiers ?? [],
-                    static (left, right) => left.Equals(right)),
+                    static (left, right) => left.Equals(right))
+                && BehaviorContractStructure.SequenceEquals(
+                    a.AllowedTargetServers ?? [],
+                    b.AllowedTargetServers ?? [],
+                    static (left, right) => left == right)
+                && a.SuccessDraw == b.SuccessDraw
+                && a.BreachAccessModifier == b.BreachAccessModifier,
             (CardBehaviorDefinition a, CardBehaviorDefinition b) => a.DefinitionId == b.DefinitionId
                 && a.Controller == b.Controller
                 && SequenceEquals(a.Costs, b.Costs)
@@ -2477,6 +2540,34 @@ internal static class BehaviorCatalogFingerprint
         {
             builder.Append("|rezCostModifiers=");
             AppendSequence(builder, modifiers, AppendRunRezCostModifier);
+        }
+
+        // Keep the legacy byte projection for run events that do not use the
+        // Slice 4.5 declarations. New segments are emitted only when the
+        // corresponding optional contract is present.
+        if (value.AllowedTargetServers is { Count: > 0 } servers)
+        {
+            builder.Append("|allowedTargetServers=");
+            foreach (ServerKind server in servers)
+            {
+                builder.Append((int)server).Append(',');
+            }
+        }
+
+        if (value.SuccessDraw is { } successDraw)
+        {
+            builder.Append("|successDraw=draw=")
+                .Append(successDraw.DrawCount)
+                .Append(",reason=");
+            AppendString(builder, successDraw.ReasonKey);
+        }
+
+        if (value.BreachAccessModifier is { } breachAccessModifier)
+        {
+            builder.Append("|breachAccessModifier=delta=")
+                .Append(breachAccessModifier.Delta)
+                .Append(",reason=");
+            AppendString(builder, breachAccessModifier.ReasonKey);
         }
     }
 
@@ -2762,6 +2853,13 @@ internal static class BehaviorCatalogFingerprint
             AppendString(builder, amountOperand.SourceCounterName);
             builder.Append(",multiplier=").Append(amountOperand.Multiplier);
         }
+
+        // Preserve historical fingerprints for instructions that retain the
+        // legacy controller recipient. Encode only an explicit selector.
+        if (value.Recipient is { } recipient)
+        {
+            builder.Append(",recipient=").Append((int)recipient);
+        }
     }
 
     private static void AppendStaticModifier(StringBuilder builder, BehaviorStaticModifier value)
@@ -2792,6 +2890,13 @@ internal static class BehaviorCatalogFingerprint
         if (value.ServerKindRequirement is { } serverKindRequirement)
         {
             builder.Append(",serverKind=").Append((int)serverKindRequirement);
+        }
+
+        // Preserve historical fingerprints for trigger declarations that do
+        // not use the optional source-topology predicate.
+        if (value.RequireSourceOnAttackedServer)
+        {
+            builder.Append(",requireSourceOnAttackedServer=1");
         }
 
         builder.Append(",instructions=");
@@ -2826,6 +2931,18 @@ internal static class BehaviorCatalogFingerprint
         AppendSequence(builder, value.Instructions, AppendInstruction);
         builder.Append(",target=");
         AppendTarget(builder, value.Target);
+        // Keep legacy option fingerprints byte-compatible when the optional
+        // structured-alternative fields are absent.
+        if (value.Costs is { Count: > 0 })
+        {
+            builder.Append(",costs=");
+            AppendSequence(builder, value.Costs, AppendCost);
+        }
+
+        if (value.Semantic is { } semantic)
+        {
+            builder.Append(",semantic=").Append((int)semantic);
+        }
     }
 
     private static void AppendBranch(StringBuilder builder, BehaviorBranchSpec? value)

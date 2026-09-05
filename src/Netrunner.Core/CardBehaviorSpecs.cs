@@ -17,7 +17,8 @@ public sealed record IceBehaviorSpec
         int rezCost,
         IReadOnlyList<IceSubroutineSpec> subroutines,
         IReadOnlyList<IceStrengthModifierSpec> strengthModifiers,
-        IReadOnlyList<BehaviorValueModifier>? valueModifiers = null)
+        IReadOnlyList<BehaviorValueModifier>? valueModifiers = null,
+        IReadOnlyList<EncounteredBioroidAbilitySpec>? encounteredBioroidAbilities = null)
     {
         DefinitionId = definitionId;
         Strength = strength;
@@ -28,6 +29,7 @@ public sealed record IceBehaviorSpec
         Subroutines = new ReadOnlyCollection<IceSubroutineSpec>(subroutines.ToArray());
         StrengthModifiers = new ReadOnlyCollection<IceStrengthModifierSpec>(strengthModifiers.ToArray());
         ValueModifiers = FreezeValueModifiers(valueModifiers);
+        EncounteredBioroidAbilities = FreezeEncounteredBioroidAbilities(encounteredBioroidAbilities);
         if (strength < 0)
         {
             throw new ArgumentException(
@@ -73,6 +75,15 @@ public sealed record IceBehaviorSpec
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<BehaviorValueModifier>? ValueModifiers { get; }
 
+    /// <summary>
+    /// Optional Runner interface abilities printed on an encountered bioroid
+    /// ICE. The engine materializes these as dedicated encounter actions;
+    /// they are deliberately not generic installed-card abilities or
+    /// icebreaker declarations.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<EncounteredBioroidAbilitySpec>? EncounteredBioroidAbilities { get; }
+
     private static ReadOnlyCollection<BehaviorValueModifier>? FreezeValueModifiers(
         IReadOnlyList<BehaviorValueModifier>? valueModifiers)
     {
@@ -91,9 +102,102 @@ public sealed record IceBehaviorSpec
 
         return new ReadOnlyCollection<BehaviorValueModifier>(copy);
     }
+
+    private static ReadOnlyCollection<EncounteredBioroidAbilitySpec>? FreezeEncounteredBioroidAbilities(
+        IReadOnlyList<EncounteredBioroidAbilitySpec>? abilities)
+    {
+        if (abilities is null or { Count: 0 })
+        {
+            return null;
+        }
+
+        EncounteredBioroidAbilitySpec[] copy = abilities.ToArray();
+        if (copy.Any(static ability => ability is null))
+        {
+            throw new ArgumentException(
+                "Encountered-bioroid ability declarations must not contain null entries.",
+                nameof(abilities));
+        }
+
+        if (copy.Select(static ability => ability.Key).Distinct(StringComparer.Ordinal).Count() != copy.Length)
+        {
+            throw new ArgumentException(
+                "Encountered-bioroid ability declarations must not repeat an ability key.",
+                nameof(abilities));
+        }
+
+        return new ReadOnlyCollection<EncounteredBioroidAbilitySpec>(copy);
+    }
+}
+
+/// <summary>
+/// A typed ability that a Runner may use while an ICE carrying the
+/// declaration is encountered. This contract is intentionally narrower than
+/// a generic paid ability: the ability pays a typed lose-click cost and names
+/// one exact unbroken encounter subroutine to break.
+/// </summary>
+public sealed record EncounteredBioroidAbilitySpec
+{
+    [JsonConstructor]
+    public EncounteredBioroidAbilitySpec(
+        string key,
+        BehaviorCost cost,
+        int breakCount = 1)
+    {
+        if (!StableIdentifier.TryValidate(key))
+        {
+            throw new ArgumentException(
+                "An encountered-bioroid ability key must be a stable identifier.",
+                nameof(key));
+        }
+
+        ArgumentNullException.ThrowIfNull(cost);
+        if (cost.Kind != BehaviorCostKind.LoseClick || cost.Amount != 1)
+        {
+            throw new ArgumentException(
+                "An encountered-bioroid ability must cost exactly one typed lost click.",
+                nameof(cost));
+        }
+
+        if (breakCount != 1)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(breakCount),
+                "An encountered-bioroid ability must break exactly one subroutine.");
+        }
+
+        Key = key;
+        Cost = cost;
+        BreakCount = breakCount;
+    }
+
+    public EncounteredBioroidAbilitySpec(string key)
+        : this(key, new BehaviorCost(BehaviorCostKind.LoseClick, 1))
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string Key { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public BehaviorCost Cost { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int BreakCount { get; private set; }
 }
 
 /// <summary>One printed ICE subroutine, in printed order.</summary>
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+[JsonDerivedType(typeof(EndRunSubroutineSpec), "end-run")]
+[JsonDerivedType(typeof(LoseCreditsSubroutineSpec), "lose-credits")]
+[JsonDerivedType(typeof(EndRunIfCreditsAtMostSubroutineSpec), "end-run-if-credits-at-most")]
+[JsonDerivedType(typeof(TrashInstalledRunnerCardSubroutineSpec), "trash-installed-runner-card")]
+[JsonDerivedType(typeof(InstallCardSubroutineSpec), "install-card")]
+[JsonDerivedType(typeof(RunRestrictionSubroutineSpec), "run-restriction")]
+[JsonDerivedType(typeof(PayCreditsOrTagSubroutineSpec), "pay-credits-or-tag")]
 public abstract record IceSubroutineSpec;
 
 /// <summary>"End the run."</summary>
@@ -135,6 +239,170 @@ public sealed record EndRunIfCreditsAtMostSubroutineSpec : IceSubroutineSpec
     public PlayerSide Target { get; }
 
     public int CreditLimit { get; }
+}
+
+/// <summary>
+/// A Corp-selected installed Runner-card trash subroutine.  A null class
+/// filter means any installed Runner card; a concrete class is used by later
+/// printed effects such as program-only trash.  The engine resolves the
+/// physical target through its issued action ID, never through a title/code
+/// branch.
+/// </summary>
+public sealed record TrashInstalledRunnerCardSubroutineSpec : IceSubroutineSpec
+{
+    [JsonConstructor]
+    public TrashInstalledRunnerCardSubroutineSpec(RuntimeCardClass? requiredCardClass = null)
+    {
+        if (requiredCardClass is RuntimeCardClass.Ice
+            or RuntimeCardClass.Asset
+            or RuntimeCardClass.Upgrade
+            or RuntimeCardClass.Agenda
+            or RuntimeCardClass.Operation
+            or RuntimeCardClass.Event
+            or RuntimeCardClass.Identity)
+        {
+            throw new ArgumentException(
+                "An installed Runner-card trash filter may target only Runner program, hardware, or resource cards.",
+                nameof(requiredCardClass));
+        }
+
+        RequiredCardClass = requiredCardClass;
+    }
+
+    /// <summary>Optional Runner runtime class filter; null means any class.</summary>
+    [JsonInclude]
+    [JsonRequired]
+    public RuntimeCardClass? RequiredCardClass { get; private set; }
+}
+
+/// <summary>Destination rule for a card-installing ICE subroutine.</summary>
+public enum IceInstallDestinationRule
+{
+    Normal,
+    DirectlyInward,
+}
+
+/// <summary>Cost rule for a card-installing ICE subroutine.</summary>
+public enum IceInstallCostRule
+{
+    Normal,
+    IgnoreAllCosts,
+}
+
+/// <summary>
+/// A Corp card-install subroutine.  Source-zone and destination legality are
+/// resolved from the authenticated runtime catalog and the live topology;
+/// this declaration only records the printed restrictions.
+/// </summary>
+public sealed record InstallCardSubroutineSpec : IceSubroutineSpec
+{
+    [JsonConstructor]
+    public InstallCardSubroutineSpec(
+        IceInstallDestinationRule destinationRule = IceInstallDestinationRule.Normal,
+        IceInstallCostRule costRule = IceInstallCostRule.Normal,
+        bool iceOnly = false)
+    {
+        if (!Enum.IsDefined(destinationRule))
+        {
+            throw new ArgumentOutOfRangeException(nameof(destinationRule));
+        }
+
+        if (!Enum.IsDefined(costRule))
+        {
+            throw new ArgumentOutOfRangeException(nameof(costRule));
+        }
+
+        // The executable vocabulary deliberately has exactly two supported
+        // contracts.  Keeping destination and cost as independent enum
+        // fields is useful for projection, but accepting the other Cartesian
+        // combinations would describe semantics for which the reducer has no
+        // authenticated implementation.
+        if ((destinationRule, costRule) is not
+            (IceInstallDestinationRule.Normal, IceInstallCostRule.Normal)
+            and not
+            (IceInstallDestinationRule.DirectlyInward, IceInstallCostRule.IgnoreAllCosts))
+        {
+            throw new ArgumentException(
+                "ICE install subroutines support only Normal+Normal or DirectlyInward+IgnoreAllCosts.",
+                nameof(costRule));
+        }
+
+        if (destinationRule == IceInstallDestinationRule.DirectlyInward
+            && !iceOnly)
+        {
+            throw new ArgumentException(
+                "A directly inward install must be restricted to ICE.",
+                nameof(iceOnly));
+        }
+
+        DestinationRule = destinationRule;
+        CostRule = costRule;
+        IceOnly = iceOnly;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public IceInstallDestinationRule DestinationRule { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public IceInstallCostRule CostRule { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public bool IceOnly { get; private set; }
+}
+
+/// <summary>Typed restriction applied for the remainder of the active run.</summary>
+public enum RunRestrictionKind
+{
+    CannotStealOrTrashCorpCards,
+}
+
+/// <summary>One printed run-scoped restriction subroutine.</summary>
+public sealed record RunRestrictionSubroutineSpec : IceSubroutineSpec
+{
+    [JsonConstructor]
+    public RunRestrictionSubroutineSpec(RunRestrictionKind restriction)
+    {
+        if (!Enum.IsDefined(restriction))
+        {
+            throw new ArgumentOutOfRangeException(nameof(restriction));
+        }
+
+        Restriction = restriction;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public RunRestrictionKind Restriction { get; private set; }
+}
+
+/// <summary>
+/// A Runner choice subroutine that allows paying a fixed credit amount;
+/// declining applies the typed tag fallback.  It is intentionally distinct
+/// from a generic triggered "unless" choice because this frame resolves in
+/// the printed ICE-subroutine sequence.
+/// </summary>
+public sealed record PayCreditsOrTagSubroutineSpec : IceSubroutineSpec
+{
+    [JsonConstructor]
+    public PayCreditsOrTagSubroutineSpec(int creditAmount, int tagAmount = 1)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(creditAmount);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(tagAmount);
+
+        CreditAmount = creditAmount;
+        TagAmount = tagAmount;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int CreditAmount { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int TagAmount { get; private set; }
 }
 
 /// <summary>The condition under which a strength modifier applies.</summary>
@@ -187,7 +455,8 @@ public sealed record IcebreakerBehaviorSpec
         int pumpCost,
         int pumpStrength,
         IReadOnlyList<BehaviorValueModifier>? valueModifiers = null,
-        BehaviorDynamicPumpDeclaration? dynamicPump = null)
+        BehaviorDynamicPumpDeclaration? dynamicPump = null,
+        IcebreakerRunEndCleanupSpec? runEndCleanup = null)
     {
         DefinitionId = definitionId;
         BaseStrength = baseStrength;
@@ -198,6 +467,7 @@ public sealed record IcebreakerBehaviorSpec
         PumpStrength = pumpStrength;
         ValueModifiers = FreezeValueModifiers(valueModifiers);
         DynamicPump = dynamicPump;
+        RunEndCleanup = runEndCleanup;
         if (baseStrength < 0)
         {
             throw new ArgumentException(
@@ -275,6 +545,14 @@ public sealed record IcebreakerBehaviorSpec
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public BehaviorDynamicPumpDeclaration? DynamicPump { get; }
 
+    /// <summary>
+    /// Optional typed run-end cleanup declaration. It identifies the
+    /// behavior declaration that may arm a run-scoped cleanup effect; it does
+    /// not arm or execute anything by itself.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IcebreakerRunEndCleanupSpec? RunEndCleanup { get; }
+
     private static ReadOnlyCollection<BehaviorValueModifier>? FreezeValueModifiers(
         IReadOnlyList<BehaviorValueModifier>? valueModifiers)
     {
@@ -293,6 +571,31 @@ public sealed record IcebreakerBehaviorSpec
 
         return new ReadOnlyCollection<BehaviorValueModifier>(copy);
     }
+}
+
+/// <summary>
+/// Authenticated declaration for a run-end cleanup created by an
+/// icebreaker ability. The source card and declaration are retained in the
+/// run effect so cleanup can fail closed if the source later moves zones.
+/// </summary>
+public sealed record IcebreakerRunEndCleanupSpec
+{
+    [JsonConstructor]
+    public IcebreakerRunEndCleanupSpec(string behaviorId)
+    {
+        if (!StableIdentifier.TryValidate(behaviorId))
+        {
+            throw new ArgumentException(
+                "An icebreaker run-end cleanup behavior ID must be a stable identifier.",
+                nameof(behaviorId));
+        }
+
+        BehaviorId = behaviorId;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string BehaviorId { get; private set; }
 }
 
 /// <summary>
@@ -355,7 +658,10 @@ public sealed record RunEventBehaviorSpec
         CardDefinitionId definitionId,
         int cost,
         int hostedCredits,
-        IReadOnlyList<BehaviorRunRezCostModifier>? rezCostModifiers = null)
+        IReadOnlyList<BehaviorRunRezCostModifier>? rezCostModifiers = null,
+        IReadOnlyList<ServerKind>? allowedTargetServers = null,
+        BehaviorRunSuccessDraw? successDraw = null,
+        BehaviorRunBreachAccessModifier? breachAccessModifier = null)
     {
         DefinitionId = definitionId;
         Cost = cost;
@@ -373,6 +679,9 @@ public sealed record RunEventBehaviorSpec
         }
 
         RezCostModifiers = FreezeRezCostModifiers(rezCostModifiers);
+        AllowedTargetServers = FreezeAllowedTargetServers(allowedTargetServers);
+        SuccessDraw = successDraw;
+        BreachAccessModifier = breachAccessModifier;
     }
 
     public CardDefinitionId DefinitionId { get; }
@@ -389,6 +698,28 @@ public sealed record RunEventBehaviorSpec
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<BehaviorRunRezCostModifier>? RezCostModifiers { get; }
+
+    /// <summary>
+    /// Optional central servers that this event may attack. A populated list
+    /// is an allow-list, not a hint; only Headquarters and R&amp;D are valid
+    /// targets for this run-event contract. Null means that the event keeps
+    /// the legacy unrestricted-server behavior.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<ServerKind>? AllowedTargetServers { get; }
+
+    /// <summary>
+    /// Optional draw performed after this event's run is declared successful.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BehaviorRunSuccessDraw? SuccessDraw { get; }
+
+    /// <summary>
+    /// Optional additional access applied when this event's attacked server
+    /// is breached.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BehaviorRunBreachAccessModifier? BreachAccessModifier { get; }
 
     private static ReadOnlyCollection<BehaviorRunRezCostModifier>? FreezeRezCostModifiers(
         IReadOnlyList<BehaviorRunRezCostModifier>? modifiers)
@@ -416,5 +747,31 @@ public sealed record RunEventBehaviorSpec
         }
 
         return new ReadOnlyCollection<BehaviorRunRezCostModifier>(copy);
+    }
+
+    private static ReadOnlyCollection<ServerKind>? FreezeAllowedTargetServers(
+        IReadOnlyList<ServerKind>? servers)
+    {
+        if (servers is null or { Count: 0 })
+        {
+            return null;
+        }
+
+        ServerKind[] copy = servers.ToArray();
+        if (copy.Any(static server => server is not (ServerKind.Headquarters or ServerKind.RAndD)))
+        {
+            throw new ArgumentException(
+                "Run event target declarations may name only Headquarters or R&D.",
+                nameof(servers));
+        }
+
+        if (copy.Distinct().Count() != copy.Length)
+        {
+            throw new ArgumentException(
+                "Run event target declarations must not repeat a server.",
+                nameof(servers));
+        }
+
+        return new ReadOnlyCollection<ServerKind>(copy);
     }
 }

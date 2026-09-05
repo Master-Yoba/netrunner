@@ -72,10 +72,13 @@ public static class RunTimingCitations
         EngineEventKinds.RunInitiated => "CR 26.03 6.9.1: the run is initiated",
         EngineEventKinds.RunEventPlayed => "CR 26.03 6.9.1: the run is initiated by playing a run event",
         EngineEventKinds.IceApproached => "CR 26.03 6.9.2a: the run approaches the next outermost remaining ICE",
+        EngineEventKinds.ServerApproached => "CR 26.03 6.9.4g: the Runner approaches the attacked server",
         EngineEventKinds.IceRezzed => "CR 26.03 8.1: the Corp rezzes the approached ICE during the approach window",
+        EngineEventKinds.CardRezzed => "CR 26.03 8.1: the Corp rezzes the approached ICE during the approach window (typed card rez)",
         EngineEventKinds.EncounterInitialized => "CR 26.03 6.9.3a: the encounter is initialized",
         EngineEventKinds.BreakerPumped => "CR 26.03 6.5/3.9.5: the Runner pumps an installed icebreaker's strength for the encounter",
         EngineEventKinds.SubroutinesBroken => "CR 26.03 6.5/3.9.5: the Runner breaks subroutines with an installed icebreaker of sufficient strength and matching subtype",
+        EngineEventKinds.BioroidAbilityUsed => "CR 26.03 6.5/3.9.5: the Runner loses one click to break one named subroutine with the encountered bioroid ability",
         EngineEventKinds.EncounterCompleted => "CR 26.03 6.5/6.9.3: encounter processing completes",
         EngineEventKinds.RunMoved => "CR 26.03 6.9.4d: the run moves inward to the next position",
         EngineEventKinds.RunSuccessful => "CR 26.03 6.9.5a: the run is successful",
@@ -102,6 +105,7 @@ public static class RunTimingCitations
         RunTimingStep.JackOutDecision => "CR 26.03 6.9.4c: the Runner decides to jack out or continue",
         RunTimingStep.MoveInward => "CR 26.03 6.9.4d: the run moves inward automatically",
         RunTimingStep.AfterMovePaidWindow => "CR 26.03 6.9.4e: after-movement paid window (P)(R)",
+        RunTimingStep.ApproachServer => "CR 26.03 6.9.4g: the Runner approaches the attacked server",
         RunTimingStep.Success => "CR 26.03 6.9.5a: the run is declared successful without a paid window",
         RunTimingStep.BreachBoundary => "CR 26.03 6.9.5b: the nested breach boundary starts candidate selection",
         RunTimingStep.BreachCandidateSelection => "CR 26.03 7.5.4: the Runner selects a breach candidate to access",
@@ -135,10 +139,13 @@ public static class RunTimingTraceValidator
         EngineEventKinds.RunEventPlayed,
         EngineEventKinds.RunTimingWindowOpened,
         EngineEventKinds.IceApproached,
+        EngineEventKinds.ServerApproached,
         EngineEventKinds.IceRezzed,
+        EngineEventKinds.CardRezzed,
         EngineEventKinds.EncounterInitialized,
         EngineEventKinds.BreakerPumped,
         EngineEventKinds.SubroutinesBroken,
+        EngineEventKinds.BioroidAbilityUsed,
         EngineEventKinds.EncounterCompleted,
         EngineEventKinds.RunMoved,
         EngineEventKinds.RunSuccessful,
@@ -211,8 +218,8 @@ public static class RunTimingTraceValidator
             .ToList();
 
         var rezzed = runEvents
-            .Where(entry => entry.Event.Kind == EngineEventKinds.IceRezzed)
-            .Select(entry => (entry.Index, IceId: ((IceRezzedEventPayload)entry.Event.Payload).IceId.Value))
+            .Where(entry => entry.Event.Kind is EngineEventKinds.IceRezzed or EngineEventKinds.CardRezzed)
+            .Select(entry => (entry.Index, IceId: RezCardId(entry.Event.Payload)))
             .ToList();
 
         var encounterInitiated = runEvents
@@ -228,6 +235,11 @@ public static class RunTimingTraceValidator
         var runSuccessful = runEvents
             .Where(entry => entry.Event.Kind == EngineEventKinds.RunSuccessful)
             .Select(entry => entry.Index)
+            .ToList();
+
+        var serverApproached = runEvents
+            .Where(entry => entry.Event.Kind == EngineEventKinds.ServerApproached)
+            .Select(entry => (entry.Index, Payload: (ServerApproachedEventPayload)entry.Event.Payload))
             .ToList();
 
         var breachStarted = runEvents
@@ -438,6 +450,29 @@ public static class RunTimingTraceValidator
         if (breachStarted.Count == 1 && runSuccessful.Count == 1 && breachStarted[0].Index < runSuccessful[0])
         {
             problems.Add("the breach started before the run was successful (CR 26.03 6.9.5b).");
+        }
+
+        if (serverApproached.Count > 1)
+        {
+            problems.Add($"the attacked server was approached {serverApproached.Count} times; expected at most once (CR 26.03 6.9.4g).");
+        }
+
+        if (serverApproached.Count == 1 && runSuccessful.Count == 1
+            && serverApproached[0].Index > runSuccessful[0])
+        {
+            problems.Add("the attacked server was approached after the run was successful (CR 26.03 6.9.4g/6.9.5a).");
+        }
+
+        int finalAfterMoveWindow = windows
+            .Where(window => window.Payload.Step == RunTimingStep.AfterMovePaidWindow)
+            .Select(window => window.Index)
+            .DefaultIfEmpty(-1)
+            .Max();
+        if (serverApproached.Count == 1
+            && finalAfterMoveWindow >= 0
+            && serverApproached[0].Index <= finalAfterMoveWindow)
+        {
+            problems.Add("the attacked server was approached before the final 6.9.4e after-movement paid window completed (CR 26.03 6.9.4e/6.9.4g).");
         }
 
         // 4. Breach access: every chosen candidate has its own 7.5.4 selection
@@ -779,6 +814,7 @@ public static class RunTimingTraceValidator
                     break;
 
                 case EngineEventKinds.IceRezzed:
+                case EngineEventKinds.CardRezzed:
                     if (openStep != RunTimingStep.ApproachPaidWindow || holder != PlayerSide.Corp)
                     {
                         problems.Add("ICE was rezzed outside the Corp's 6.9.2b approach priority window (CR 26.03 8.1/6.9.2b).");
@@ -840,11 +876,17 @@ public static class RunTimingTraceValidator
             case IceApproachedEventPayload approached:
                 runId = approached.RunId;
                 return true;
+            case ServerApproachedEventPayload serverApproached:
+                runId = serverApproached.RunId;
+                return true;
             case IceRezzedEventPayload iceRezzed:
                 runId = iceRezzed.RunId;
                 return true;
             case SubroutinesBrokenEventPayload broken:
                 runId = broken.RunId;
+                return true;
+            case BioroidAbilityUsedEventPayload bioroid:
+                runId = bioroid.RunId;
                 return true;
             case BreakerPumpedEventPayload pumped:
                 runId = pumped.RunId;
@@ -892,6 +934,13 @@ public static class RunTimingTraceValidator
         ? PlayerSide.Runner
         : PlayerSide.Corp;
 
+    private static string RezCardId(EngineEventPayload payload) => payload switch
+    {
+        IceRezzedEventPayload iceRezzed => iceRezzed.IceId.Value,
+        CardRezzedEventPayload cardRezzed => cardRezzed.CardId.Value,
+        _ => throw new ArgumentException("A rez event must carry a typed rez payload.", nameof(payload)),
+    };
+
 
     private static RunTimingTraceEntry BuildEntry(int index, EngineEvent engineEvent)
     {
@@ -899,10 +948,13 @@ public static class RunTimingTraceValidator
         {
             RunTimingWindowOpenedEventPayload window => $"{window.Step} (priority window: {window.PriorityWindow?.ToString().ToLowerInvariant() ?? "none"}, holder: {window.PriorityHolder?.ToString().ToLowerInvariant() ?? "none"})",
             IceApproachedEventPayload approached => $"approached ICE '{approached.IceId.Value}'",
+            ServerApproachedEventPayload serverApproached => $"approached server '{serverApproached.ServerId.Value}'",
             IceRezzedEventPayload rezzed => $"rezzed ICE '{rezzed.IceId.Value}'",
+            CardRezzedEventPayload cardRezzed => $"rezzed card '{cardRezzed.CardId.Value}'",
             EncounterInitializedEventPayload initialized => $"encounter initialized against '{initialized.IceId.Value}'",
             BreakerPumpedEventPayload pumped => $"pumped breaker '{pumped.BreakerId.Value}'",
             SubroutinesBrokenEventPayload broken => $"broke subroutines with '{broken.BreakerId.Value}'",
+            BioroidAbilityUsedEventPayload bioroid => $"used bioroid ability '{bioroid.AbilityKey}' on subroutine '{bioroid.SubroutineId.Value}'",
             RunSuccessfulEventPayload successful => $"the run reached server '{successful.ServerId.Value}'",
             BreachStartedEventPayload breach => $"the breach has {breach.CandidateCount} candidate(s)",
             BreachCandidateChosenEventPayload chosen => $"chose candidate '{chosen.CardId.Value}'",

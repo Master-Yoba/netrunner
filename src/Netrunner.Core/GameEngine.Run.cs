@@ -289,6 +289,8 @@ public static partial class GameEngine
             }
 
             runEventSpec = ValidateRunEventSource(working, initiatingSource.Value, source);
+            ValidateRunEventTarget(working, runEventSpec, server);
+            ValidateRunEventSuccessDraw(working, source, runEventSpec);
             if (runner.Credits < runEventSpec.Cost)
             {
                 throw new ResolutionFailureException(
@@ -303,7 +305,14 @@ public static partial class GameEngine
                 installedSource!,
                 server.Id,
                 runOperand!)
-            : null;
+            : runEventSpec is not null
+                ? SnapshotRunEventBreachAccessModifiers(
+                    working,
+                    initiatingSource
+                        ?? throw new ResolutionFailureException("A run event requires a source card."),
+                    runEventSpec,
+                    server)
+                : null;
         IReadOnlyList<RunRezCostModifier>? rezCostModifiers = runEventSpec is not null
             ? SnapshotRunRezCostModifiers(
                 runEventSpec,
@@ -426,6 +435,44 @@ public static partial class GameEngine
         return delta > 0
             ? [new RunBreachAccessModifier(source.Id, attackedServer, delta, operand.BreachAccessReasonKey!)]
             : null;
+    }
+
+    private static IReadOnlyList<RunBreachAccessModifier>? SnapshotRunEventBreachAccessModifiers(
+        WorkingState working,
+        CardInstanceId sourceCardId,
+        RunEventBehaviorSpec runEventSpec,
+        ServerState attackedServer)
+    {
+        if (runEventSpec.BreachAccessModifier is not { } declaration)
+        {
+            return null;
+        }
+
+        return [new RunBreachAccessModifier(
+            sourceCardId,
+            attackedServer.Id,
+            declaration.Delta,
+            declaration.ReasonKey,
+            RunBreachAccessModifierSourceKind.RunEvent)];
+
+    }
+
+    private static void ValidateRunEventSuccessDraw(
+        WorkingState working,
+        CardInstanceState source,
+        RunEventBehaviorSpec runEventSpec)
+    {
+        if (runEventSpec.SuccessDraw is not { } declaration)
+        {
+            return;
+        }
+
+        if (!working.BehaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? definition)
+            || !BehaviorRunRules.IsRunEventSuccessDrawDefinition(definition, declaration))
+        {
+            throw new ResolutionFailureException(
+                $"Run event '{runEventSpec.DefinitionId}' has no authenticated RunSuccessful draw trigger binding.");
+        }
     }
 
     private static List<RunBreachAccessModifier> SnapshotFirstHqBreachAccessModifiers(
@@ -633,6 +680,29 @@ public static partial class GameEngine
         return spec;
     }
 
+    private static void ValidateRunEventTarget(
+        WorkingState working,
+        RunEventBehaviorSpec spec,
+        ServerState target)
+    {
+        if (spec.AllowedTargetServers is { } allowed
+            && !allowed.Contains(target.Kind))
+        {
+            throw new ResolutionFailureException(
+                $"Run event '{spec.DefinitionId.Value}' cannot attack server '{target.Id.Value}'.");
+        }
+
+        if (working.RuntimeCardCatalog is not null
+            && (!working.RuntimeCardCatalog.TryGet(spec.DefinitionId, out CardRuntimeSpec? runtime)
+                || runtime.Side != PlayerSide.Runner
+                || runtime.CardClass != RuntimeCardClass.Event
+                || runtime.PlayCost != spec.Cost))
+        {
+            throw new ResolutionFailureException(
+                $"Run event '{spec.DefinitionId.Value}' does not match authenticated runtime card metadata.");
+        }
+    }
+
     private static void StepRunTiming(WorkingState working, RunTimingFrame frame)
     {
         RunState run = working.RunState
@@ -674,6 +744,9 @@ public static partial class GameEngine
             case RunTimingStep.AfterMovePaidWindow:
                 YieldRunPriorityDecision(working, run, "CR 6.9.4e: after-movement paid/rez window.");
                 break;
+            case RunTimingStep.ApproachServer:
+                StepRunApproachServer(working, run);
+                break;
             case RunTimingStep.Success:
                 StepRunSuccess(working, run);
                 break;
@@ -700,7 +773,7 @@ public static partial class GameEngine
         if (run.CurrentIceIndex < 0)
         {
             SetRunTiming(working, run.WithTiming(
-                RunTimingStep.Success,
+                RunTimingStep.ApproachServer,
                 -1,
                 null,
                 run.Successful,
@@ -773,6 +846,10 @@ public static partial class GameEngine
             CreatePriority(RunPriorityWindowKind.EncounterPaid),
             encounter,
             run.AccessState));
+        if (HasActiveCatalogTrigger(working, OccurrenceKind.IceEncountered, run.AttackedServer, ice.Id))
+        {
+            QueueIceEncounteredOccurrence(working, run, ice.Id);
+        }
     }
 
     private static void StepEncounter(WorkingState working, RunState run)
@@ -801,13 +878,44 @@ public static partial class GameEngine
         for (int index = 0; index < encounter.Subroutines.Count && !endTheRun; index++)
         {
             RunSubroutineState subroutine = encounter.Subroutines[index];
-            if (subroutine.Broken)
+            if (subroutine.Broken || subroutine.Resolved)
             {
                 resolvedSubroutines.Add(subroutine);
                 continue;
             }
 
-            switch (iceSpec.Subroutines[subroutine.Ordinal])
+            IceSubroutineSpec subroutineSpec = iceSpec.Subroutines[subroutine.Ordinal];
+            if (subroutineSpec is TrashInstalledRunnerCardSubroutineSpec
+                or InstallCardSubroutineSpec
+                or PayCreditsOrTagSubroutineSpec)
+            {
+                // Persist all preceding progress before yielding. The
+                // serialized ICE cursor replaces the run timing frame and
+                // resumes this exact ordinal, so already-resolved effects
+                // are never replayed after a save/load boundary.
+                for (int remaining = resolvedSubroutines.Count; remaining < encounter.Subroutines.Count; remaining++)
+                {
+                    resolvedSubroutines.Add(encounter.Subroutines[remaining]);
+                }
+
+                var partialEncounter = new RunEncounterState(
+                    encounter.Version,
+                    encounter.Id,
+                    encounter.IceId,
+                    RunEncounterStatus.Initialized,
+                    resolvedSubroutines);
+                RunState partialRun = currentRun.WithEncounter(partialEncounter);
+                working.RunState = partialRun;
+                YieldIceSubroutineChoice(
+                    working,
+                    partialRun,
+                    ice,
+                    subroutine,
+                    subroutineSpec);
+                return;
+            }
+
+            switch (subroutineSpec)
             {
                 case LoseCreditsSubroutineSpec loseCredits:
                     PlayerState debtor = GetPlayer(working, loseCredits.Target);
@@ -840,10 +948,24 @@ public static partial class GameEngine
                 case EndRunSubroutineSpec:
                     endTheRun = true;
                     break;
+                case RunRestrictionSubroutineSpec restriction:
+                    currentRun = ApplyRunRestriction(
+                        working,
+                        currentRun,
+                        ice,
+                        subroutine,
+                        restriction);
+                    break;
                 default:
                     throw new ResolutionFailureException(
                         $"Encounter subroutine at ordinal {subroutine.Ordinal} is not supported by subroutine resolution.");
             }
+
+            currentRun = RecordResolvedUnbrokenSubroutine(
+                currentRun,
+                ice,
+                encounter.Id,
+                subroutine);
 
             resolvedSubroutines.Add(new RunSubroutineState(
                 subroutine.Version,
@@ -897,6 +1019,597 @@ public static partial class GameEngine
             progressed.AccessState));
     }
 
+    private static RunState ApplyRunRestriction(
+        WorkingState working,
+        RunState run,
+        CardInstanceState ice,
+        RunSubroutineState subroutine,
+        RunRestrictionSubroutineSpec specification)
+    {
+        // The restriction and its execution-history entry are advanced from
+        // the same immutable reducer boundary. This gives save/load
+        // validation a structural proof that the restriction was not merely
+        // inserted into a detached RunState snapshot.
+        run = RecordResolvedUnbrokenSubroutine(
+            run,
+            ice,
+            run.Encounter?.Id
+                ?? throw new ResolutionFailureException("The encounter is missing for a run restriction."),
+            subroutine);
+        RunRestriction restriction = new(
+            specification.Restriction,
+            ice.Id,
+            ice.DefinitionId,
+            subroutine.Id,
+            subroutine.Ordinal,
+            "ice-subroutine:cannot-steal-or-trash-corp-cards");
+        IReadOnlyList<RunRestriction> existing = run.RunRestrictions ?? [];
+        if (existing.Any(candidate => candidate == restriction))
+        {
+            return run;
+        }
+
+        RunState updated = run.WithRunRestrictions(existing.Append(restriction).ToArray());
+        working.RunState = updated;
+        return updated;
+    }
+
+    private static RunState RecordResolvedUnbrokenSubroutine(
+        RunState run,
+        CardInstanceState ice,
+        EncounterId encounterId,
+        RunSubroutineState subroutine)
+    {
+        if (subroutine.Broken)
+        {
+            throw new ResolutionFailureException(
+                "A broken ICE subroutine cannot be recorded as resolved execution history.");
+        }
+
+        RunResolvedSubroutineLedgerEntry entry = new(
+            run.Id,
+            encounterId,
+            ice.Id,
+            ice.DefinitionId,
+            subroutine.Id,
+            subroutine.Ordinal);
+        IReadOnlyList<RunResolvedSubroutineLedgerEntry> existing = run.ResolvedSubroutineLedger ?? [];
+        if (existing.Any(candidate => candidate == entry))
+        {
+            return run;
+        }
+
+        return run.WithResolvedSubroutineLedger(existing.Append(entry).ToArray());
+    }
+
+    private static void YieldIceSubroutineChoice(
+        WorkingState working,
+        RunState run,
+        CardInstanceState ice,
+        RunSubroutineState subroutine,
+        IceSubroutineSpec specification)
+    {
+        if (working.ResolutionStack.Count == 0
+            || working.ResolutionStack[^1] is not RunTimingFrame timing
+            || timing.RunId != run.Id
+            || timing.Step != RunTimingStep.Encounter)
+        {
+            throw new ResolutionFailureException(
+                "An ICE subroutine choice requires the exact encounter timing frame.");
+        }
+
+        ZoneState iceZone = GetRunIceZone(working, run);
+        string frameIdentity = IceSubroutineFrame.ComputeIdentity(
+            run.Id,
+            run.Encounter?.Id ?? throw new ResolutionFailureException("The encounter is missing."),
+            ice.Id,
+            subroutine.Id,
+            subroutine.Ordinal);
+        (PlayerId owner, string prompt, IReadOnlyList<IceSubroutineChoiceParameters> materialized) =
+            MaterializeIceSubroutineChoices(working, run, ice, subroutine, specification, frameIdentity);
+        var choices = materialized.ToList();
+
+        // A mandatory trash instruction with no legal target has no effect and
+        // advances to the next printed subroutine.
+        if (specification is TrashInstalledRunnerCardSubroutineSpec && choices.Count == 0)
+        {
+            ResolveIceSubroutineWithoutChoice(working, run, ice, subroutine);
+            return;
+        }
+
+        working.ResolutionStack[^1] = new IceSubroutineFrame(
+            run.Id,
+            run.Encounter?.Id ?? throw new ResolutionFailureException("The encounter is missing."),
+            ice.Id,
+            ice.DefinitionId,
+            subroutine.Id,
+            subroutine.Ordinal,
+            run.AttackedServer,
+            iceZone.Id,
+            iceZone.CardIds,
+            working.BehaviorCatalog.Fingerprint,
+            choices);
+        working.DecisionRevision = NextRevision(working.DecisionRevision);
+        working.PendingDecision = new PendingDecision(
+            working.Allocator.NextDecisionId(),
+            working.DecisionRevision,
+            owner,
+            DecisionKind.IceSubroutineChoice,
+            prompt,
+            choices.Select(choice => new LegalAction(
+                working.Allocator.NextActionId(),
+                ActionKind.ResolveIceSubroutine,
+                DescribeIceSubroutineChoice(choice),
+                choice)).ToArray());
+    }
+
+    /// <summary>
+    /// Materializes the exact typed choice set for a printed ICE
+    /// subroutine. This method is shared by the reducer and state-invariant
+    /// projection so a loaded frame cannot retain a forged or stale action
+    /// set while still passing validation.
+    /// </summary>
+    private static (PlayerId Owner, string Prompt, IReadOnlyList<IceSubroutineChoiceParameters> Choices)
+        MaterializeIceSubroutineChoices(
+            WorkingState working,
+            RunState run,
+            CardInstanceState ice,
+            RunSubroutineState subroutine,
+            IceSubroutineSpec specification,
+            string frameIdentity)
+    {
+        var choices = new List<IceSubroutineChoiceParameters>();
+        PlayerId owner;
+        string prompt;
+
+        switch (specification)
+        {
+            case TrashInstalledRunnerCardSubroutineSpec trashSpec:
+                owner = GetPlayer(working, PlayerSide.Corp).Id;
+                prompt = "Resolve the ICE subroutine: choose an installed Runner card to trash.";
+                ZoneState? rig = working.Zones.FirstOrDefault(zone =>
+                    zone.Kind == ZoneKind.RunnerRig
+                    && zone.OwnerSide == PlayerSide.Runner
+                    && zone.ServerId is null);
+                if (rig is not null)
+                {
+                    foreach (CardInstanceId cardId in rig.CardIds)
+                    {
+                        CardInstanceState candidate = GetCard(working, cardId);
+                        if (candidate.OwnerSide != PlayerSide.Runner
+                            || candidate.ZoneId != rig.Id
+                            || !candidate.FaceUp)
+                        {
+                            continue;
+                        }
+
+                        if (trashSpec.RequiredCardClass is { } requiredClass
+                            && (working.RuntimeCardCatalog is null
+                                || !working.RuntimeCardCatalog.TryGet(candidate.DefinitionId, out CardRuntimeSpec? runtime)
+                                || runtime.CardClass != requiredClass))
+                        {
+                            continue;
+                        }
+
+                        choices.Add(new IceSubroutineChoiceParameters(
+                            frameIdentity,
+                            IceSubroutineChoiceKind.TrashInstalledRunnerCard,
+                            cardId: candidate.Id));
+                    }
+                }
+
+                break;
+            case PayCreditsOrTagSubroutineSpec paySpec:
+                owner = GetPlayer(working, PlayerSide.Runner).Id;
+                prompt = $"Resolve the ICE subroutine: pay {paySpec.CreditAmount} credits or take {paySpec.TagAmount} tag(s).";
+                PlayerState runner = GetPlayer(working, PlayerSide.Runner);
+                if (CanAffordRunCredits(runner, run, paySpec.CreditAmount))
+                {
+                    foreach (int hostedCredits in LegalHostedCreditSplits(runner, run, paySpec.CreditAmount))
+                    {
+                        choices.Add(new IceSubroutineChoiceParameters(
+                            frameIdentity,
+                            IceSubroutineChoiceKind.PayCredits,
+                            creditCost: paySpec.CreditAmount,
+                            hostedCredits: hostedCredits));
+                    }
+                }
+
+                choices.Add(new IceSubroutineChoiceParameters(
+                    frameIdentity,
+                    IceSubroutineChoiceKind.TakeTag));
+                break;
+            case InstallCardSubroutineSpec installSpec:
+                owner = GetPlayer(working, PlayerSide.Corp).Id;
+                prompt = installSpec.DestinationRule == IceInstallDestinationRule.DirectlyInward
+                    ? "Resolve the ICE subroutine: choose an ICE from HQ or Archives to install directly inward."
+                    : "Resolve the ICE subroutine: choose a Corp card from HQ or Archives to install.";
+                InstallInitiationKind initiationKind = installSpec.DestinationRule == IceInstallDestinationRule.DirectlyInward
+                    ? InstallInitiationKind.IceSubroutineInwardIgnoreCosts
+                    : InstallInitiationKind.IceSubroutineNormal;
+                foreach (ZoneState sourceZone in working.Zones
+                             .Where(zone => zone.Kind is ZoneKind.CorpHand or ZoneKind.CorpDiscard
+                                 && zone.OwnerSide == PlayerSide.Corp
+                                 && zone.ServerId is null)
+                             .OrderBy(zone => zone.Kind == ZoneKind.CorpHand ? 0 : 1))
+                {
+                    foreach (CardInstanceId cardId in sourceZone.CardIds.OrderBy(id => id.Value, StringComparer.Ordinal))
+                    {
+                        CardInstanceState candidate = GetCard(working, cardId);
+                        if (candidate.OwnerSide != PlayerSide.Corp
+                            || candidate.ZoneId != sourceZone.Id
+                            || working.RuntimeCardCatalog is null
+                            || !working.RuntimeCardCatalog.TryGet(candidate.DefinitionId, out CardRuntimeSpec? runtime)
+                            || !IsBasicInstallClass(PlayerSide.Corp, runtime.CardClass)
+                            || (installSpec.IceOnly && runtime.CardClass != RuntimeCardClass.Ice))
+                        {
+                            continue;
+                        }
+
+                        IEnumerable<(InstallDestinationKind DestinationKind, ServerId? ServerId, bool CreateNewRemote)> destinations =
+                            installSpec.DestinationRule == IceInstallDestinationRule.DirectlyInward
+                                ? [(InstallDestinationKind.ServerIce, run.AttackedServer, false)]
+                                : InstallDestinations(working, PlayerSide.Corp, runtime);
+                        foreach ((InstallDestinationKind destinationKind, ServerId? serverId, bool createNewRemote) in destinations)
+                        {
+                            InstallPlan? plan = BuildInstallPlan(
+                                working,
+                                PlayerSide.Corp,
+                                cardId,
+                                destinationKind,
+                                serverId,
+                                createNewRemote,
+                                initiationKind,
+                                installSpec.DestinationRule == IceInstallDestinationRule.DirectlyInward
+                                    ? ice.Id
+                                    : null);
+                            if (plan is null)
+                            {
+                                continue;
+                            }
+
+                            choices.Add(new IceSubroutineChoiceParameters(
+                                frameIdentity,
+                                IceSubroutineChoiceKind.InstallCard,
+                                cardId: cardId,
+                                destinationKind: destinationKind,
+                                serverId: serverId,
+                                createNewRemote: createNewRemote,
+                                creditCost: plan.InstallCost));
+                        }
+                    }
+                }
+
+                choices.Add(new IceSubroutineChoiceParameters(
+                    frameIdentity,
+                    IceSubroutineChoiceKind.Decline));
+                break;
+            default:
+                throw new ResolutionFailureException(
+                    $"ICE subroutine type '{specification.GetType().Name}' cannot yield a choice.");
+        }
+
+        return (owner, prompt, choices);
+    }
+
+    /// <summary>
+    /// Detached projection used by invariant validation. It materializes only
+    /// the semantic payloads, never action IDs or allocator state.
+    /// </summary>
+    internal static IReadOnlyList<IceSubroutineChoiceParameters> MaterializeIceSubroutineChoiceParameters(
+        GameState state,
+        IceSubroutineFrame frame,
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(frame);
+        ArgumentNullException.ThrowIfNull(behaviorCatalog);
+        WorkingState working = WorkingState.From(state, behaviorCatalog, runtimeCardCatalog);
+        RunState run = working.RunState
+            ?? throw new ResolutionFailureException("An ICE subroutine choice requires a live run.");
+        if (run.Id != frame.RunId
+            || run.Step != RunTimingStep.Encounter
+            || run.Encounter is not { } encounter
+            || encounter.Id != frame.EncounterId
+            || encounter.IceId != frame.IceId)
+        {
+            throw new ResolutionFailureException("The ICE subroutine frame is stale for the current encounter.");
+        }
+
+        CardInstanceState ice = GetCard(working, frame.IceId);
+        if (ice.DefinitionId != frame.IceDefinitionId
+            || !behaviorCatalog.TryGetIce(ice.DefinitionId, out IceBehaviorSpec? iceSpec)
+            || frame.Ordinal < 0
+            || frame.Ordinal >= iceSpec.Subroutines.Count
+            || encounter.Subroutines.SingleOrDefault(candidate => candidate.Id == frame.SubroutineId) is not { } subroutine
+            || subroutine.Ordinal != frame.Ordinal)
+        {
+            throw new ResolutionFailureException("The ICE subroutine frame does not identify the current catalog subroutine.");
+        }
+
+        return MaterializeIceSubroutineChoices(
+            working,
+            run,
+            ice,
+            subroutine,
+            iceSpec.Subroutines[frame.Ordinal],
+            frame.FrameIdentity).Choices;
+    }
+
+    private static void StepIceSubroutineFrame(WorkingState working, IceSubroutineFrame frame)
+    {
+        if (working.PendingDecision is not null)
+        {
+            throw new ResolutionFailureException(
+                "An ICE subroutine frame cannot advance while another decision is pending.");
+        }
+
+        if (frame.Stage != IceSubroutineFrameStage.AwaitingChoice
+            || frame.Choices.Count == 0)
+        {
+            throw new ResolutionFailureException(
+                "An ICE subroutine frame has no legal serialized continuation.");
+        }
+
+        working.DecisionRevision = NextRevision(working.DecisionRevision);
+        working.PendingDecision = new PendingDecision(
+            working.Allocator.NextDecisionId(),
+            working.DecisionRevision,
+            GetPlayer(working, frame.Choices[0].Choice is IceSubroutineChoiceKind.PayCredits
+                or IceSubroutineChoiceKind.TakeTag
+                ? PlayerSide.Runner
+                : PlayerSide.Corp).Id,
+            DecisionKind.IceSubroutineChoice,
+            "Resolve the printed ICE subroutine.",
+            frame.Choices.Select(choice => new LegalAction(
+                working.Allocator.NextActionId(),
+                ActionKind.ResolveIceSubroutine,
+                DescribeIceSubroutineChoice(choice),
+                choice)).ToArray());
+    }
+
+    private static string DescribeIceSubroutineChoice(IceSubroutineChoiceParameters choice) => choice.Choice switch
+    {
+        IceSubroutineChoiceKind.TrashInstalledRunnerCard => $"Trash installed Runner card {choice.CardId!.Value.Value}",
+        IceSubroutineChoiceKind.PayCredits => $"Pay {choice.CreditCost} credits",
+        IceSubroutineChoiceKind.TakeTag => "Take the tag fallback",
+        IceSubroutineChoiceKind.Decline => "Decline",
+        IceSubroutineChoiceKind.InstallCard => $"Install Corp card {choice.CardId!.Value.Value}",
+        _ => "Resolve ICE subroutine",
+    };
+
+    private static void ResolveIceSubroutineWithoutChoice(
+        WorkingState working,
+        RunState run,
+        CardInstanceState ice,
+        RunSubroutineState subroutine)
+    {
+        RunEncounterState encounter = run.Encounter
+            ?? throw new ResolutionFailureException("The encounter is missing.");
+        RunSubroutineState[] resolved = encounter.Subroutines
+            .Select(candidate => candidate.Id == subroutine.Id
+                ? new RunSubroutineState(candidate.Version, candidate.Id, candidate.Ordinal, candidate.Broken, true)
+                : candidate)
+            .ToArray();
+        RunState recorded = RecordResolvedUnbrokenSubroutine(
+            run,
+            ice,
+            encounter.Id,
+            subroutine);
+        working.RunState = recorded.WithEncounter(new RunEncounterState(
+            encounter.Version,
+            encounter.Id,
+            encounter.IceId,
+            encounter.Status,
+            resolved));
+    }
+
+    private static void ConsumeIceSubroutineChoice(
+        WorkingState working,
+        IceSubroutineChoiceParameters parameters)
+    {
+        if (working.ResolutionStack.Count == 0
+            || working.ResolutionStack[^1] is not IceSubroutineFrame frame)
+        {
+            throw new ResolutionFailureException(
+                "The submitted ICE subroutine choice does not match the active frame.");
+        }
+
+        if (frame.Stage != IceSubroutineFrameStage.AwaitingChoice
+            || !frame.Choices.Contains(parameters))
+        {
+            throw new ResolutionFailureException(
+                "The submitted ICE subroutine choice is not part of the frozen action bijection.");
+        }
+
+        RunState run = working.RunState
+            ?? throw new ResolutionFailureException("An ICE subroutine choice requires a live run.");
+        if (run.Id != frame.RunId
+            || run.Step != RunTimingStep.Encounter
+            || run.AttackedServer != frame.ServerId
+            || run.Encounter is null
+            || run.Encounter.Id != frame.EncounterId
+            || run.Encounter.IceId != frame.IceId
+            || run.Encounter.Subroutines.SingleOrDefault(candidate => candidate.Id == frame.SubroutineId) is not { } subroutine
+            || subroutine.Ordinal != frame.Ordinal
+            || subroutine.Resolved
+            || subroutine.Broken)
+        {
+            throw new ResolutionFailureException(
+                "The ICE subroutine choice is stale for the authoritative run encounter.");
+        }
+
+        if (!string.Equals(frame.CatalogFingerprint, working.BehaviorCatalog.Fingerprint, StringComparison.Ordinal))
+        {
+            throw new ResolutionFailureException(
+                "The ICE subroutine choice catalog fingerprint does not match the active behavior catalog.");
+        }
+
+        RunEncounterState encounter = run.Encounter
+            ?? throw new ResolutionFailureException("The encounter is missing.");
+
+        ZoneState iceZone = GetRunIceZone(working, run);
+        if (iceZone.Id != frame.IceZoneId
+            || !iceZone.CardIds.SequenceEqual(frame.IceZoneCardIds)
+            || !iceZone.CardIds.Contains(frame.IceId))
+        {
+            throw new ResolutionFailureException(
+                "The ICE subroutine choice is stale for the authoritative ICE topology.");
+        }
+
+        CardInstanceState ice = GetCard(working, frame.IceId);
+        if (ice.DefinitionId != frame.IceDefinitionId
+            || !working.BehaviorCatalog.TryGetIce(ice.DefinitionId, out IceBehaviorSpec? iceSpec)
+            || frame.Ordinal >= iceSpec.Subroutines.Count)
+        {
+            throw new ResolutionFailureException(
+                "The ICE subroutine choice is stale for the authenticated ICE catalog entry.");
+        }
+
+        IceSubroutineSpec specification = iceSpec.Subroutines[frame.Ordinal];
+        switch (parameters.Choice)
+        {
+            case IceSubroutineChoiceKind.TrashInstalledRunnerCard:
+                if (specification is not TrashInstalledRunnerCardSubroutineSpec trashSpec
+                    || parameters.CardId is not { } targetId)
+                {
+                    throw new ResolutionFailureException("The choice is not valid for this ICE subroutine.");
+                }
+
+                CardInstanceState target = GetCard(working, targetId);
+                ZoneState rig = working.Zones.SingleOrDefault(zone =>
+                    zone.Kind == ZoneKind.RunnerRig
+                    && zone.OwnerSide == PlayerSide.Runner
+                    && zone.ServerId is null)
+                    ?? throw new ResolutionFailureException("The Runner Rig does not exist.");
+                if (target.OwnerSide != PlayerSide.Runner
+                    || target.ZoneId != rig.Id
+                    || !rig.CardIds.Contains(target.Id)
+                    || !target.FaceUp)
+                {
+                    throw new ResolutionFailureException("The selected card is no longer an installed Runner card.");
+                }
+
+                if (trashSpec.RequiredCardClass is { } requiredClass
+                    && (working.RuntimeCardCatalog is null
+                        || !working.RuntimeCardCatalog.TryGet(target.DefinitionId, out CardRuntimeSpec? runtime)
+                        || runtime.CardClass != requiredClass))
+                {
+                    throw new ResolutionFailureException("The selected Runner card no longer satisfies the typed class filter.");
+                }
+
+                TrashCard(working, target, rig, GetZone(working, ZoneKind.RunnerHeap));
+                break;
+            case IceSubroutineChoiceKind.PayCredits:
+                if (specification is not PayCreditsOrTagSubroutineSpec paySpec
+                    || parameters.CreditCost != paySpec.CreditAmount
+                    || parameters.HostedCredits < 0)
+                {
+                    throw new ResolutionFailureException("The payment choice is not valid for this ICE subroutine.");
+                }
+
+                run = PayRunnerRunCredits(
+                    working,
+                    run,
+                    paySpec.CreditAmount,
+                    parameters.HostedCredits);
+                break;
+            case IceSubroutineChoiceKind.TakeTag:
+                if (specification is not PayCreditsOrTagSubroutineSpec tagSpec)
+                {
+                    throw new ResolutionFailureException("The tag fallback is not valid for this ICE subroutine.");
+                }
+
+                ApplyTags(working, GetPlayer(working, PlayerSide.Runner).Id, tagSpec.TagAmount);
+                break;
+            case IceSubroutineChoiceKind.Decline:
+                if (specification is not InstallCardSubroutineSpec)
+                {
+                    throw new ResolutionFailureException("Decline is not valid for this ICE subroutine.");
+                }
+
+                break;
+            case IceSubroutineChoiceKind.InstallCard:
+                if (specification is not InstallCardSubroutineSpec installSpec
+                    || parameters.CardId is not { } installCardId
+                    || parameters.DestinationKind is not { } installDestination)
+                {
+                    throw new ResolutionFailureException("The install choice is not valid for this ICE subroutine.");
+                }
+
+                InstallInitiationKind initiationKind = installSpec.DestinationRule == IceInstallDestinationRule.DirectlyInward
+                    ? InstallInitiationKind.IceSubroutineInwardIgnoreCosts
+                    : InstallInitiationKind.IceSubroutineNormal;
+                CardInstanceState installCard = GetCard(working, installCardId);
+                InstallPlan plan = BuildInstallPlan(
+                    working,
+                    PlayerSide.Corp,
+                    installCardId,
+                    installDestination,
+                    parameters.ServerId,
+                    parameters.CreateNewRemote,
+                    initiationKind,
+                    installSpec.DestinationRule == IceInstallDestinationRule.DirectlyInward
+                        ? frame.IceId
+                        : null)
+                    ?? throw new ResolutionFailureException("The selected Corp install is no longer legal.");
+                if (parameters.CreditCost != plan.InstallCost
+                    || parameters.HostedCredits != 0
+                    || plan.Card.Id != installCard.Id)
+                {
+                    throw new ResolutionFailureException("The selected Corp install cost or source is stale.");
+                }
+
+                working.ResolutionStack[^1] = frame.WithStage(IceSubroutineFrameStage.AwaitingInstall);
+                working.ResolutionStack.Add(new InstallFrame(
+                    GetPlayer(working, PlayerSide.Corp).Id,
+                    plan.Card.Id,
+                    plan.Card.DefinitionId,
+                    plan.Spec.CardClass,
+                    plan.Source.Id,
+                    plan.Source.Kind,
+                    plan.DestinationKind,
+                    plan.ServerId,
+                    plan.CreateNewRemote,
+                    plan.InstallCost,
+                    plan.CandidateReplacementCardIds,
+                    plan.RequiredReplacementCardIds,
+                    [],
+                    plan.DestinationZoneId,
+                    plan.CandidateReplacementDefinitionIds,
+                    initiationKind,
+                    frame.FrameIdentity,
+                    plan.InstallCostQuote,
+                    plan.InwardAnchorIceId));
+                return;
+            default:
+                throw new ResolutionFailureException(
+                    $"ICE subroutine choice '{parameters.Choice}' is not yet executable.");
+        }
+
+        encounter = run.Encounter
+            ?? throw new ResolutionFailureException("The encounter is missing after ICE subroutine resolution.");
+        var resolvedSubroutines = encounter.Subroutines
+            .Select(candidate => candidate.Id == subroutine.Id
+                ? new RunSubroutineState(candidate.Version, candidate.Id, candidate.Ordinal, candidate.Broken, true)
+                : candidate)
+            .ToArray();
+        run = RecordResolvedUnbrokenSubroutine(
+            run,
+            ice,
+            encounter.Id,
+            subroutine);
+        working.RunState = run.WithEncounter(new RunEncounterState(
+            encounter.Version,
+            encounter.Id,
+            encounter.IceId,
+            encounter.Status,
+            resolvedSubroutines));
+        working.ResolutionStack.RemoveAt(working.ResolutionStack.Count - 1);
+        working.ResolutionStack.Add(new RunTimingFrame(run.Id, RunTimingStep.Encounter));
+    }
+
     private static void StepMoveInward(WorkingState working, RunState run)
     {
         if (run.CurrentIceIndex < 0)
@@ -926,6 +1639,32 @@ public static partial class GameEngine
             run.AccessState));
     }
 
+    private static void StepRunApproachServer(WorkingState working, RunState run)
+    {
+        if (run.CurrentIceIndex >= 0 || run.CurrentIceId is not null)
+        {
+            throw new ResolutionFailureException("A run can approach the server only after passing all ICE.");
+        }
+
+        Emit(working, EngineEventKinds.ServerApproached, new ServerApproachedEventPayload(
+            run.Id,
+            run.AttackedServer));
+        SetRunTiming(working, run.WithTiming(
+            RunTimingStep.Success,
+            -1,
+            null,
+            run.Successful,
+            run.Unsuccessful,
+            run.EndReason,
+            null,
+            null,
+            run.AccessState));
+        if (HasActiveCatalogTrigger(working, OccurrenceKind.ServerApproached, run.AttackedServer))
+        {
+            QueueServerApproachedOccurrence(working, run);
+        }
+    }
+
     private static void StepRunSuccess(WorkingState working, RunState run)
     {
         if (run.CurrentIceIndex >= 0)
@@ -945,7 +1684,11 @@ public static partial class GameEngine
             null,
             null,
             RunAccessState.NotStarted));
-        if (HasActiveCatalogTrigger(working, OccurrenceKind.RunSuccessful, run.AttackedServer))
+        if (HasActiveCatalogTrigger(
+                working,
+                OccurrenceKind.RunSuccessful,
+                run.AttackedServer,
+                run.InitiatingSource))
         {
             QueueRunSuccessfulOccurrence(working, run);
         }
@@ -967,6 +1710,32 @@ public static partial class GameEngine
                 run.InitiatingPlayer,
                 run.InitiatingSource,
                 run.AttackedServer))));
+    }
+
+    private static void QueueServerApproachedOccurrence(WorkingState working, RunState run)
+    {
+        working.ResolutionStack.Add(new EffectResolutionFrame(
+            run.InitiatingPlayer,
+            new CostBundle(),
+            new EffectBundle(new GameplayOccurrenceEffect(
+                OccurrenceKind.ServerApproached,
+                run.InitiatingPlayer,
+                serverId: run.AttackedServer))));
+    }
+
+    private static void QueueIceEncounteredOccurrence(
+        WorkingState working,
+        RunState run,
+        CardInstanceId iceId)
+    {
+        working.ResolutionStack.Add(new EffectResolutionFrame(
+            run.InitiatingPlayer,
+            new CostBundle(),
+            new EffectBundle(new GameplayOccurrenceEffect(
+                OccurrenceKind.IceEncountered,
+                run.InitiatingPlayer,
+                subjectCardId: iceId,
+                serverId: run.AttackedServer))));
     }
 
     private static void StepBreachBoundary(WorkingState working, RunState run)
@@ -1136,6 +1905,7 @@ public static partial class GameEngine
             initiatingSide,
             endReason,
             successful));
+        ExpireRunLingeringEffects(working, run);
         // CR 26.03 6.9.6/8.6.7: the played run event is trashed to the
         // Runner's heap faceup/public when the run ends; its hosted credits
         // expired with the pool above.
@@ -1194,6 +1964,50 @@ public static partial class GameEngine
         }
     }
 
+    /// <summary>
+    /// Expires every run-local effect at the single run-end boundary. An
+    /// authenticated icebreaker cleanup may move its still-active physical
+    /// source to the Runner heap; a source that moved or became inactive is
+    /// intentionally left untouched. Matching the catalog declaration keeps
+    /// this generic for future breakers without definition-ID branches.
+    /// </summary>
+    private static void ExpireRunLingeringEffects(WorkingState working, RunState run)
+    {
+        foreach (RunLingeringEffect effect in run.LingeringEffects)
+        {
+            Emit(working, EngineEventKinds.LingeringEffectExpired, new LingeringEffectExpiredEventPayload(
+                effect.Id,
+                effect.Expiry == RunLingeringEffectExpiry.Run
+                    ? LingeringEffectExpiry.Run
+                    : LingeringEffectExpiry.Encounter));
+
+            if (effect.Expiry != RunLingeringEffectExpiry.Run
+                || effect.Kind != RunLingeringEffectKind.IcebreakerRunEndCleanup
+                || effect.SourceCardId is not { } sourceCardId)
+            {
+                continue;
+            }
+
+            CardInstanceState? source = working.Cards.FirstOrDefault(card => card.Id == sourceCardId);
+            if (source is null
+                || source.OwnerSide != PlayerSide.Runner
+                || !RuntimeCardActivity.IsActive(source, working.Zones)
+                || !working.BehaviorCatalog.TryGetIcebreaker(source.DefinitionId, out IcebreakerBehaviorSpec? sourceSpec)
+                || sourceSpec.RunEndCleanup is not { } cleanup
+                || cleanup.BehaviorId != effect.BehaviorId)
+            {
+                continue;
+            }
+
+            ZoneState sourceZone = working.Zones.Single(zone => zone.Id == source.ZoneId);
+            TrashCard(working, source, sourceZone, GetZone(working, ZoneKind.RunnerHeap));
+            if (working.RulesState?.Programs.Any(program => program.CardId == sourceCardId) == true)
+            {
+                RemoveProgramRegistration(working, sourceCardId);
+            }
+        }
+    }
+
     private static void QueueRunEndedOccurrence(
         WorkingState working,
         PlayerId controller,
@@ -1230,7 +2044,6 @@ public static partial class GameEngine
 
     private static bool IsRealTurnRun(WorkingState working, RunState run) =>
         run.InitiatingSide == PlayerSide.Runner
-        && run.ActiveRunEventId is null
         && working.ResolutionStack.Count == 2
         && working.ResolutionStack[^1] is RunTimingFrame timing
         && timing.RunId == run.Id
@@ -1239,7 +2052,36 @@ public static partial class GameEngine
         && parent.ActiveSide == PlayerSide.Runner
         && parent.TurnNumber == working.Turn.TurnNumber
         && working.Turn.ActiveSide == PlayerSide.Runner
-        && (run.InitiatingSource is null || IsValidInstalledRunSource(working, run));
+        && (run.ActiveRunEventId is { } activeEventId
+            ? run.InitiatingSource == activeEventId
+                && IsValidActiveRunEvent(working, run, activeEventId)
+            : run.InitiatingSource is null || IsValidInstalledRunSource(working, run));
+
+    private static bool IsValidActiveRunEvent(WorkingState working, RunState run, CardInstanceId activeEventId)
+    {
+        CardInstanceState? source = working.Cards.FirstOrDefault(card => card.Id == activeEventId);
+        ZoneState? sourceZone = source is null
+            ? null
+            : working.Zones.FirstOrDefault(zone => zone.Id == source.ZoneId);
+        if (source is null
+            || source.OwnerSide != PlayerSide.Runner
+            || !source.FaceUp
+            || sourceZone is null
+            || sourceZone.Kind != ZoneKind.RunnerPlayArea
+            || sourceZone.OwnerSide != PlayerSide.Runner
+            || sourceZone.ServerId is not null
+            || sourceZone.CardIds.Count != 1
+            || sourceZone.CardIds[0] != activeEventId
+            || !working.BehaviorCatalog.TryGetRunEvent(source.DefinitionId, out RunEventBehaviorSpec? spec))
+        {
+            return false;
+        }
+
+        ServerState? attackedServer = working.Servers.FirstOrDefault(server => server.Id == run.AttackedServer);
+        return attackedServer is not null
+            && (spec.AllowedTargetServers is null
+                || spec.AllowedTargetServers.Contains(attackedServer.Kind));
+    }
 
     private static bool IsValidInstalledRunSource(WorkingState working, RunState run)
     {
@@ -1294,6 +2136,9 @@ public static partial class GameEngine
                 break;
             case (ActionKind.PumpBreaker, RunBreakerParameters pump):
                 ConsumeRunPumpBreaker(working, run, pump.BreakerId, pump.HostedCredits);
+                break;
+            case (ActionKind.UseBioroidAbility, RunBioroidAbilityParameters bioroid):
+                ConsumeRunBioroidAbility(working, run, bioroid);
                 break;
             case (ActionKind.JackOut, NoActionParameters):
                 ConsumeRunJackOut(working, run);
@@ -1424,7 +2269,8 @@ public static partial class GameEngine
         // The source-zone guard is essential here: an agenda moved out of the
         // attacked server is no longer an accessed agenda and must not be
         // auto-stolen.
-        if (run.ChosenAccessCards.Count > 0
+        if (!HasRunRestriction(run, RunRestrictionKind.CannotStealOrTrashCorpCards)
+            && run.ChosenAccessCards.Count > 0
             && TryGetCurrentAccessCard(working, run, out CardInstanceState? card, requireTrashableSource: false)
             && working.BehaviorCatalog.TryGetAgenda(card!.DefinitionId, out _))
         {
@@ -1449,6 +2295,12 @@ public static partial class GameEngine
         if (run.ChosenAccessCards.Count == 0)
         {
             throw new ResolutionFailureException("The access ability step requires a chosen access card.");
+        }
+
+        if (HasRunRestriction(run, RunRestrictionKind.CannotStealOrTrashCorpCards))
+        {
+            throw new ResolutionFailureException(
+                "The active run restriction forbids trashing Corp cards during access.");
         }
 
         CardInstanceId accessed = run.ChosenAccessCards[^1];
@@ -1520,6 +2372,12 @@ public static partial class GameEngine
         if (run.ChosenAccessCards.Count == 0)
         {
             throw new ResolutionFailureException("The access ability step requires a chosen access card.");
+        }
+
+        if (HasRunRestriction(run, RunRestrictionKind.CannotStealOrTrashCorpCards))
+        {
+            throw new ResolutionFailureException(
+                "The active run restriction forbids stealing or trashing Corp cards during access.");
         }
 
         CardInstanceId accessed = run.ChosenAccessCards[^1];
@@ -1648,6 +2506,10 @@ public static partial class GameEngine
             RunAccessState.Completed));
     }
 
+    private static bool HasRunRestriction(RunState run, RunRestrictionKind kind) =>
+        run.RunRestrictions is { Count: > 0 }
+        && run.RunRestrictions.Any(restriction => restriction.Kind == kind);
+
     private static void ConsumeRunPass(WorkingState working, RunState run)
     {
         RunPriorityState priority = run.Priority
@@ -1763,7 +2625,7 @@ public static partial class GameEngine
                 break;
             case RunPriorityWindowKind.AfterMovePaid:
                 SetRunTiming(working, run.WithTiming(
-                    run.CurrentIceIndex >= 0 ? RunTimingStep.Approach : RunTimingStep.Success,
+                    run.CurrentIceIndex >= 0 ? RunTimingStep.Approach : RunTimingStep.ApproachServer,
                     run.CurrentIceIndex,
                     run.CurrentIceId,
                     run.Successful,
@@ -2013,11 +2875,155 @@ public static partial class GameEngine
             iceId,
             encounter.Status,
             nextSubroutines));
+        if (breakerSpec.RunEndCleanup is { } runEndCleanup
+            && !brokenRun.LingeringEffects.Any(effect =>
+                effect.Expiry == RunLingeringEffectExpiry.Run
+                && effect.Kind == RunLingeringEffectKind.IcebreakerRunEndCleanup
+                && effect.SourceCardId == breakerId
+                && effect.BehaviorId == runEndCleanup.BehaviorId))
+        {
+            RunEffectId effectId = new($"effect:run-end:{run.Id.Value}:{breakerId.Value}:{runEndCleanup.BehaviorId}");
+            brokenRun = brokenRun.WithLingeringEffects(
+                brokenRun.LingeringEffects.Append(
+                    new RunLingeringEffect(
+                        effectId,
+                        runEndCleanup.BehaviorId,
+                        breakerId,
+                        RunLingeringEffectExpiry.Run,
+                        valueAdjustment: null,
+                        kind: RunLingeringEffectKind.IcebreakerRunEndCleanup)).ToArray());
+            Emit(working, EngineEventKinds.LingeringEffectAdded, new LingeringEffectAddedEventPayload(
+                effectId,
+                runEndCleanup.BehaviorId,
+                LingeringEffectExpiry.Run));
+        }
+
         Emit(working, EngineEventKinds.SubroutinesBroken, new SubroutinesBrokenEventPayload(
             run.Id,
             encounter.Id,
             breakerId,
             quantity));
+        SetRunTiming(working, brokenRun.WithTiming(
+            RunTimingStep.EncounterPaidWindow,
+            brokenRun.CurrentIceIndex,
+            brokenRun.CurrentIceId,
+            brokenRun.Successful,
+            brokenRun.Unsuccessful,
+            brokenRun.EndReason,
+            new RunPriorityState(
+                priority.Version,
+                RunPriorityWindowKind.EncounterPaid,
+                PlayerSide.Runner,
+                0,
+                priority.CorpMayRezApproachedIce,
+                priority.CorpMayRezNonIce),
+            brokenRun.Encounter,
+            brokenRun.AccessState));
+    }
+
+    private static void ConsumeRunBioroidAbility(
+        WorkingState working,
+        RunState run,
+        RunBioroidAbilityParameters parameters)
+    {
+        RunPriorityState priority = run.Priority
+            ?? throw new ResolutionFailureException("A bioroid ability requires encounter priority state.");
+        RunEncounterState encounter = run.Encounter
+            ?? throw new ResolutionFailureException("A bioroid ability requires an initialized encounter.");
+        if (run.Step != RunTimingStep.EncounterPaidWindow
+            || priority.PriorityHolder != PlayerSide.Runner
+            || encounter.Status != RunEncounterStatus.Initialized)
+        {
+            throw new ResolutionFailureException(
+                "A bioroid ability is legal only while the Runner has priority in an initialized encounter paid window.");
+        }
+
+        if (encounter.IceId != parameters.IceId)
+        {
+            throw new ResolutionFailureException(
+                $"Bioroid ability target ICE '{parameters.IceId}' is not the current encountered ICE '{encounter.IceId}'.");
+        }
+
+        CardInstanceState ice = GetCard(working, encounter.IceId);
+        if (!working.BehaviorCatalog.TryGetIce(ice.DefinitionId, out IceBehaviorSpec? iceSpec))
+        {
+            throw new ResolutionFailureException(
+                $"Encounter ICE '{ice.DefinitionId}' is not registered in the ICE behavior spec catalog.");
+        }
+
+        EncounteredBioroidAbilitySpec? declaration = iceSpec.EncounteredBioroidAbilities?
+            .SingleOrDefault(ability => ability.Key == parameters.AbilityKey);
+        if (declaration is null)
+        {
+            throw new ResolutionFailureException(
+                $"ICE '{ice.DefinitionId}' does not declare encountered-bioroid ability '{parameters.AbilityKey}'.");
+        }
+
+        if (parameters.Cost != declaration.Cost)
+        {
+            throw new ResolutionFailureException("The frozen bioroid ability cost is stale or forged.");
+        }
+
+        RunSubroutineState subroutine = encounter.Subroutines
+            .SingleOrDefault(candidate => candidate.Id == parameters.SubroutineId)
+            ?? throw new ResolutionFailureException(
+                $"Subroutine '{parameters.SubroutineId}' is not part of the current encounter.");
+
+        if (parameters.SubroutineOrdinal != subroutine.Ordinal)
+        {
+            throw new ResolutionFailureException(
+                "The bioroid ability subroutine ordinal is stale or forged.");
+        }
+        if (subroutine.Broken || subroutine.Resolved)
+        {
+            throw new ResolutionFailureException(
+                $"Subroutine '{parameters.SubroutineId}' is no longer an unbroken encounter subroutine.");
+        }
+
+        if (subroutine.Ordinal < 0 || subroutine.Ordinal >= iceSpec.Subroutines.Count)
+        {
+            throw new ResolutionFailureException(
+                $"Subroutine '{parameters.SubroutineId}' has an ordinal outside the encountered ICE declaration.");
+        }
+
+        PlayerState runner = GetPlayer(working, PlayerSide.Runner);
+        if (runner.Clicks < declaration.Cost.Amount)
+        {
+            throw new ResolutionFailureException(
+                $"The Runner cannot pay the {declaration.Cost.Amount} click cost of bioroid ability '{declaration.Key}'.");
+        }
+
+        // LoseClick is intentionally paid through the typed behavior-cost
+        // path, not SpendClick: this preserves the semantic distinction from
+        // a structured option that spends a click as an action cost.
+        ApplyClickDelta(working, runner.Id, -declaration.Cost.Amount);
+
+        var nextSubroutines = new List<RunSubroutineState>(encounter.Subroutines.Count);
+        foreach (RunSubroutineState candidate in encounter.Subroutines)
+        {
+            nextSubroutines.Add(candidate.Id == subroutine.Id
+                ? new RunSubroutineState(
+                    candidate.Version,
+                    candidate.Id,
+                    candidate.Ordinal,
+                    true,
+                    candidate.Resolved)
+                : candidate);
+        }
+
+        RunState brokenRun = run.WithEncounter(new RunEncounterState(
+            encounter.Version,
+            encounter.Id,
+            encounter.IceId,
+            encounter.Status,
+            nextSubroutines));
+        Emit(working, EngineEventKinds.BioroidAbilityUsed, new BioroidAbilityUsedEventPayload(
+            run.Id,
+            encounter.Id,
+            encounter.IceId,
+            subroutine.Id,
+            declaration.Key,
+            declaration.Cost.Amount));
         SetRunTiming(working, brokenRun.WithTiming(
             RunTimingStep.EncounterPaidWindow,
             brokenRun.CurrentIceIndex,
@@ -2272,6 +3278,41 @@ public static partial class GameEngine
             int unbrokenCount = run.Encounter.Subroutines.Count(subroutine => !subroutine.Broken);
             PlayerState runner = GetPlayer(working, PlayerSide.Runner);
             long availableCredits = (long)runner.Credits + run.RunCredits;
+
+            // Encountered bioroid interface abilities are separate from the
+            // installed icebreaker loop below. They do not inspect breaker
+            // subtype or strength, and each action names one exact currently
+            // unbroken subroutine so repeated uses remain independently
+            // materialized until clicks or targets are exhausted.
+            if (iceSpec.EncounteredBioroidAbilities is { Count: > 0 } bioroidAbilities)
+            {
+                foreach (EncounteredBioroidAbilitySpec ability in bioroidAbilities)
+                {
+                    if (runner.Clicks < ability.Cost.Amount)
+                    {
+                        continue;
+                    }
+
+                    foreach (RunSubroutineState subroutine in run.Encounter.Subroutines)
+                    {
+                        if (subroutine.Broken || subroutine.Resolved)
+                        {
+                            continue;
+                        }
+
+                        actions.Add(new LegalAction(
+                            working.Allocator.NextActionId(),
+                            ActionKind.UseBioroidAbility,
+                            $"Use {ability.Key} to break subroutine {subroutine.Ordinal + 1} on {encounteredIce.Id.Value} (lose {ability.Cost.Amount} click)",
+                            new RunBioroidAbilityParameters(
+                                encounteredIce.Id,
+                                subroutine.Id,
+                                ability.Key,
+                                ability.Cost,
+                                subroutine.Ordinal)));
+                    }
+                }
+            }
 
             foreach (ZoneState rigZone in working.Zones)
             {
@@ -2548,15 +3589,21 @@ public static partial class GameEngine
         CardInstanceState? accessedCard = liveCard
             ?? working.Cards.FirstOrDefault(card => card.Id == accessed);
 
-        if (trashableAccess)
+        if (currentAccess)
         {
-            AddAbilityActions(working, actions);
+            AddAbilityActions(
+                working,
+                actions,
+                suppressCorpCardTrash: HasRunRestriction(
+                    run,
+                    RunRestrictionKind.CannotStealOrTrashCorpCards));
         }
 
         // CR 26.03 7.2.2/7.1.5: the basic trash is offered only for a
         // registered asset with a trash cost the Runner can pay. Agendas
         // instead resolve an automatic steal after NoAction.
         if (trashableAccess
+            && !HasRunRestriction(run, RunRestrictionKind.CannotStealOrTrashCorpCards)
             && accessedCard is not null
             && !working.BehaviorCatalog.TryGetAgenda(accessedCard.DefinitionId, out _)
             && working.BehaviorCatalog.TryGetAsset(accessedCard.DefinitionId, out AssetBehaviorSpec? assetSpec)

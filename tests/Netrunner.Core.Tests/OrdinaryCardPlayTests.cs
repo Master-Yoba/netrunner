@@ -64,7 +64,6 @@ public sealed class OrdinaryCardPlayTests
     [InlineData(OrdinaryPlayExclusion.MissingGenericBehavior)]
     [InlineData(OrdinaryPlayExclusion.RuntimeBehaviorCostMismatch)]
     [InlineData(OrdinaryPlayExclusion.NonCreditsUpfrontCost)]
-    [InlineData(OrdinaryPlayExclusion.LegacyRunEventOnly)]
     public void TurnActionExcludesCardsWithoutEveryOrdinaryPlayFact(OrdinaryPlayExclusion exclusion)
     {
         const PlayerSide side = PlayerSide.Runner;
@@ -78,11 +77,7 @@ public sealed class OrdinaryCardPlayTests
                 installCost: 0)
             : Runtime(definitionId, side, exclusion == OrdinaryPlayExclusion.RuntimeBehaviorCostMismatch ? 2 : 1);
         BehaviorCatalogBuilder behaviorBuilder = new("test:ordinary-play-exclusions");
-        if (exclusion == OrdinaryPlayExclusion.LegacyRunEventOnly)
-        {
-            behaviorBuilder.AddRunEvent(new RunEventBehaviorSpec(definitionId, cost: 1, hostedCredits: 0));
-        }
-        else if (exclusion != OrdinaryPlayExclusion.MissingGenericBehavior)
+        if (exclusion != OrdinaryPlayExclusion.MissingGenericBehavior)
         {
             IReadOnlyList<BehaviorCost> costs = exclusion == OrdinaryPlayExclusion.NonCreditsUpfrontCost
                 ? [new BehaviorCost(BehaviorCostKind.Clicks, 1)]
@@ -1636,6 +1631,5 @@ public sealed class OrdinaryCardPlayTests
         MissingGenericBehavior,
         RuntimeBehaviorCostMismatch,
         NonCreditsUpfrontCost,
-        LegacyRunEventOnly,
     }
 }

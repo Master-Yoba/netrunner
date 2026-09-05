@@ -14,5 +14,8 @@
   </ItemGroup>
   <ItemGroup>
     <None Update="Fixtures/**/*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../data/m4/scenarios/scn-401-*.json"
+          Link="Scenarios/%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

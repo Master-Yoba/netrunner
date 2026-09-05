@@ -18,6 +18,7 @@ public enum DecisionKind
     TriggerOrdering,
     InterruptChoice,
     BehaviorChoice,
+    IceSubroutineChoice,
 }
 
 public enum ActionKind
@@ -42,6 +43,7 @@ public enum ActionKind
     RezIce,
     BreakSubroutines,
     PumpBreaker,
+    UseBioroidAbility,
     JackOut,
     ContinueRun,
     TrashProgram,
@@ -58,6 +60,7 @@ public enum ActionKind
     NoAccessAction,
     ChooseBehavior,
     UseAbility,
+    ResolveIceSubroutine,
 }
 
 /// <summary>
@@ -80,6 +83,7 @@ public enum ActionKind
 [JsonDerivedType(typeof(RunIceParameters), "run-ice")]
 [JsonDerivedType(typeof(RunBreakerParameters), "run-breaker")]
 [JsonDerivedType(typeof(RunBreakParameters), "run-break")]
+[JsonDerivedType(typeof(RunBioroidAbilityParameters), "run-bioroid-ability")]
 [JsonDerivedType(typeof(NoActionParameters), "none")]
 [JsonDerivedType(typeof(TriggerChoiceParameters), "trigger")]
 [JsonDerivedType(typeof(TriggerOrderParameters), "trigger-order")]
@@ -88,6 +92,7 @@ public enum ActionKind
 [JsonDerivedType(typeof(LegacyActionParameters), "legacy")]
 [JsonDerivedType(typeof(BreachCandidateParameters), "breach-candidate")]
 [JsonDerivedType(typeof(BehaviorChoiceParameters), "behavior-choice")]
+[JsonDerivedType(typeof(IceSubroutineChoiceParameters), "ice-subroutine-choice")]
 [JsonDerivedType(typeof(AbilityActionParameters), "ability")]
 public abstract record ActionParameters;
 
@@ -169,7 +174,7 @@ public sealed record PurgeVirusCountersParameters : ActionParameters
 public sealed record PlayCardParameters : ActionParameters
 {
     [JsonConstructor]
-    public PlayCardParameters(CardInstanceId cardId, int creditCost)
+    public PlayCardParameters(CardInstanceId cardId, int creditCost, ServerId? targetServerId = null)
     {
         if (creditCost < 0)
         {
@@ -178,6 +183,7 @@ public sealed record PlayCardParameters : ActionParameters
 
         CardId = cardId;
         CreditCost = creditCost;
+        TargetServerId = targetServerId;
     }
 
     [JsonInclude]
@@ -187,6 +193,19 @@ public sealed record PlayCardParameters : ActionParameters
     [JsonInclude]
     [JsonRequired]
     public int CreditCost { get; private set; }
+
+    /// <summary>
+    /// Optional attacked-server payload for a Runner run-event play. Ordinary
+    /// Operation/Event actions retain a null target and their legacy JSON
+    /// shape; a run event is materialized once per legal target server.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ServerId? TargetServerId { get; private set; }
+
+    /// <summary>Compatibility alias for callers that name the target server simply ServerId.</summary>
+    [JsonIgnore]
+    public ServerId? ServerId => TargetServerId;
 }
 
 /// <summary>
@@ -573,6 +592,96 @@ public sealed record RunBreakParameters : ActionParameters
 }
 
 /// <summary>
+/// Typed target for the Runner's dedicated encountered-bioroid interface
+/// ability. The action names the physical ICE, the exact subroutine to break,
+/// and the frozen typed lose-click cost. It never carries an installed
+/// icebreaker identity or a structured option click cost.
+/// </summary>
+public sealed record RunBioroidAbilityParameters : ActionParameters
+{
+    [JsonConstructor]
+    public RunBioroidAbilityParameters(
+        CardInstanceId iceId,
+        SubroutineId subroutineId,
+        string abilityKey,
+        BehaviorCost cost,
+        int subroutineOrdinal = 0)
+    {
+        if (!StableIdentifier.TryValidate(iceId.Value))
+        {
+            throw new ArgumentException("A bioroid ability must identify a stable ICE card.", nameof(iceId));
+        }
+
+        if (!StableIdentifier.TryValidate(subroutineId.Value))
+        {
+            throw new ArgumentException("A bioroid ability must identify a stable subroutine.", nameof(subroutineId));
+        }
+
+        if (!StableIdentifier.TryValidate(abilityKey))
+        {
+            throw new ArgumentException("A bioroid ability key must be a stable identifier.", nameof(abilityKey));
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegative(subroutineOrdinal);
+
+        ArgumentNullException.ThrowIfNull(cost);
+        if (cost.Kind != BehaviorCostKind.LoseClick || cost.Amount != 1)
+        {
+            throw new ArgumentException(
+                "A bioroid ability action must carry exactly one typed lost click.",
+                nameof(cost));
+        }
+
+        IceId = iceId;
+        SubroutineId = subroutineId;
+        AbilityKey = abilityKey;
+        Cost = cost;
+        SubroutineOrdinal = subroutineOrdinal;
+    }
+
+    public RunBioroidAbilityParameters(
+        CardInstanceId iceId,
+        SubroutineId subroutineId,
+        string abilityKey,
+        int subroutineOrdinal = 0)
+        : this(
+            iceId,
+            subroutineId,
+            abilityKey,
+            new BehaviorCost(BehaviorCostKind.LoseClick, 1),
+            subroutineOrdinal)
+    {
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId IceId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public SubroutineId SubroutineId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string AbilityKey { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public BehaviorCost Cost { get; private set; }
+
+    /// <summary>
+    /// Zero-based printed position of the exact subroutine. This is a typed
+    /// policy input; consumers never need to parse the opaque SubroutineId.
+    /// </summary>
+    [JsonInclude]
+    [JsonRequired]
+    public int SubroutineOrdinal { get; private set; }
+
+    [JsonIgnore]
+    public int ClickCost => Cost.Amount;
+}
+
+/// <summary>
 /// Typed accessed-card basic-trash action. Core materializes one action for
 /// each legal division between the Runner wallet and hosted run credits.
 /// </summary>
@@ -741,6 +850,200 @@ public sealed record BehaviorChoiceParameters : ActionParameters
     [JsonInclude]
     [JsonRequired]
     public bool FinalizeSelection { get; private set; }
+}
+
+/// <summary>Typed branch selected while a printed ICE subroutine is resolving.</summary>
+public enum IceSubroutineChoiceKind
+{
+    TrashInstalledRunnerCard,
+    InstallCard,
+    PayCredits,
+    Decline,
+    TakeTag,
+}
+
+/// <summary>
+/// Engine-issued payload for one printed ICE subroutine choice.  The frame
+/// identity binds this detached payload to the exact serialized
+/// run/encounter/ICE/subroutine continuation.  The caller submits only the
+/// issued action ID; all fields are revalidated against that frame and the
+/// current catalog/topology at the reducer boundary.
+/// </summary>
+public sealed record IceSubroutineChoiceParameters : ActionParameters
+{
+    [JsonConstructor]
+    public IceSubroutineChoiceParameters(
+        string frameIdentity,
+        IceSubroutineChoiceKind choice,
+        CardInstanceId? cardId = null,
+        InstallDestinationKind? destinationKind = null,
+        ServerId? serverId = null,
+        bool createNewRemote = false,
+        int creditCost = 0,
+        int hostedCredits = 0)
+    {
+        if (!StableIdentifier.TryValidate(frameIdentity))
+        {
+            throw new ArgumentException(
+                "An ICE subroutine choice requires a stable frame identity.",
+                nameof(frameIdentity));
+        }
+
+        if (!Enum.IsDefined(choice))
+        {
+            throw new ArgumentOutOfRangeException(nameof(choice));
+        }
+
+        if (!StableIdentifier.TryValidate(cardId?.Value))
+        {
+            // A nullable physical target is meaningful only for the one
+            // target-bearing branch below.  Do not permit default/empty IDs
+            // to become detached payload metadata.
+            if (cardId is not null)
+            {
+                throw new ArgumentException(
+                    "An ICE subroutine card target must carry a stable physical card ID.",
+                    nameof(cardId));
+            }
+        }
+
+        if (serverId is { } suppliedServerId
+            && !StableIdentifier.TryValidate(suppliedServerId.Value))
+        {
+            throw new ArgumentException(
+                "An ICE subroutine install server must carry a stable server ID.",
+                nameof(serverId));
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegative(creditCost);
+        ArgumentOutOfRangeException.ThrowIfNegative(hostedCredits);
+
+        if (choice is IceSubroutineChoiceKind.TrashInstalledRunnerCard
+            && cardId is null)
+        {
+            throw new ArgumentException(
+                "A Runner-card trash choice must identify a physical card.",
+                nameof(cardId));
+        }
+
+        if (choice is not IceSubroutineChoiceKind.TrashInstalledRunnerCard
+            && choice is not IceSubroutineChoiceKind.InstallCard
+            && cardId is not null)
+        {
+            throw new ArgumentException(
+                "Only a trash or install ICE subroutine choice may identify a card.",
+                nameof(cardId));
+        }
+
+        if (choice == IceSubroutineChoiceKind.InstallCard
+            && (cardId is null || destinationKind is null))
+        {
+            throw new ArgumentException(
+                "An ICE install choice must identify a card and destination.",
+                nameof(cardId));
+        }
+
+        if (destinationKind is { } suppliedDestination
+            && !Enum.IsDefined(suppliedDestination))
+        {
+            throw new ArgumentOutOfRangeException(nameof(destinationKind));
+        }
+
+        if (choice != IceSubroutineChoiceKind.InstallCard
+            && (destinationKind is not null || serverId is not null || createNewRemote))
+        {
+            throw new ArgumentException(
+                "Only an ICE install choice may identify an install destination.",
+                nameof(destinationKind));
+        }
+
+        if (choice == IceSubroutineChoiceKind.InstallCard
+            && destinationKind is InstallDestinationKind.RunnerRig)
+        {
+            throw new ArgumentException(
+                "An ICE subroutine can install only into a Corp server root or server ICE zone.",
+                nameof(destinationKind));
+        }
+
+        if (choice == IceSubroutineChoiceKind.InstallCard
+            && destinationKind is InstallDestinationKind.ServerRoot or InstallDestinationKind.ServerIce
+            && serverId.HasValue == createNewRemote)
+        {
+            throw new ArgumentException(
+                "A Corp ICE subroutine install must identify exactly one existing server or new remote.",
+                nameof(serverId));
+        }
+
+        if (choice is not (IceSubroutineChoiceKind.PayCredits or IceSubroutineChoiceKind.InstallCard)
+            && creditCost != 0)
+        {
+            throw new ArgumentException(
+                "Only a pay-credits or install choice may carry a credit amount.",
+                nameof(creditCost));
+        }
+
+        if (choice == IceSubroutineChoiceKind.PayCredits && creditCost <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(creditCost),
+                "A pay-credits choice must carry a positive amount.");
+        }
+
+        if (choice != IceSubroutineChoiceKind.PayCredits && hostedCredits != 0)
+        {
+            throw new ArgumentException(
+                "Only a pay-credits choice may carry a hosted-credit split.",
+                nameof(hostedCredits));
+        }
+
+        if (choice == IceSubroutineChoiceKind.PayCredits && hostedCredits > creditCost)
+        {
+            throw new ArgumentException(
+                "Hosted credits cannot exceed the pay-credits amount.",
+                nameof(hostedCredits));
+        }
+
+        FrameIdentity = frameIdentity;
+        Choice = choice;
+        CardId = cardId;
+        DestinationKind = destinationKind;
+        ServerId = serverId;
+        CreateNewRemote = createNewRemote;
+        CreditCost = creditCost;
+        HostedCredits = hostedCredits;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public string FrameIdentity { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public IceSubroutineChoiceKind Choice { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CardInstanceId? CardId { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public InstallDestinationKind? DestinationKind { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ServerId? ServerId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public bool CreateNewRemote { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int CreditCost { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int HostedCredits { get; private set; }
 }
 
 /// <summary>
@@ -1220,7 +1523,7 @@ public sealed class PendingDecision
             trashTaggedResource.ClickCost,
             trashTaggedResource.CreditCost),
         PurgeVirusCountersParameters purgeVirusCounters => new PurgeVirusCountersParameters(purgeVirusCounters.ClickCost),
-        PlayCardParameters playCard => new PlayCardParameters(playCard.CardId, playCard.CreditCost),
+        PlayCardParameters playCard => new PlayCardParameters(playCard.CardId, playCard.CreditCost, playCard.TargetServerId),
         RunServerParameters runServer => new RunServerParameters(runServer.ServerId),
         RezCardParameters rezCard => new RezCardParameters(rezCard.CardId, rezCard.CreditCost, rezCard.CostQuote),
         AdvanceCardParameters advanceCard => new AdvanceCardParameters(advanceCard.CardId, advanceCard.CreditCost),
@@ -1247,6 +1550,12 @@ public sealed class PendingDecision
             runBreak.Quantity,
             runBreak.HostedCredits,
             runBreak.CostQuote),
+        RunBioroidAbilityParameters bioroid => new RunBioroidAbilityParameters(
+            bioroid.IceId,
+            bioroid.SubroutineId,
+            bioroid.AbilityKey,
+            bioroid.Cost,
+            bioroid.SubroutineOrdinal),
         NoActionParameters => new NoActionParameters(),
         TriggerChoiceParameters trigger => new TriggerChoiceParameters(trigger.TriggerId),
         TriggerOrderParameters order => new TriggerOrderParameters(order.TriggerId),
@@ -1259,6 +1568,15 @@ public sealed class PendingDecision
             behaviorChoice.OptionKeys,
             behaviorChoice.CardIds,
             behaviorChoice.FinalizeSelection),
+        IceSubroutineChoiceParameters iceSubroutineChoice => new IceSubroutineChoiceParameters(
+            iceSubroutineChoice.FrameIdentity,
+            iceSubroutineChoice.Choice,
+            iceSubroutineChoice.CardId,
+            iceSubroutineChoice.DestinationKind,
+            iceSubroutineChoice.ServerId,
+            iceSubroutineChoice.CreateNewRemote,
+            iceSubroutineChoice.CreditCost,
+            iceSubroutineChoice.HostedCredits),
         AbilityActionParameters ability => new AbilityActionParameters(
             ability.SourceCardId,
             ability.DefinitionId,

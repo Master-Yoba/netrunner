@@ -367,6 +367,8 @@ public sealed record GameplayOccurrenceEffect : EffectInstruction
         if (!Enum.IsDefined(kind)
             || kind is not (OccurrenceKind.CardInstalled
                 or OccurrenceKind.CardRezzed
+                or OccurrenceKind.ServerApproached
+                or OccurrenceKind.IceEncountered
                 or OccurrenceKind.RunSuccessful
                 or OccurrenceKind.RunEnded
                 or OccurrenceKind.AgendaScoredOrStolen
@@ -388,6 +390,22 @@ public sealed record GameplayOccurrenceEffect : EffectInstruction
             throw new ArgumentException(
                 "Only a RunEnded occurrence may carry a success outcome.",
                 nameof(successful));
+        }
+
+        if (kind == OccurrenceKind.ServerApproached
+            && (serverId is null || subjectCardId is not null))
+        {
+            throw new ArgumentException(
+                "A ServerApproached occurrence must identify its server and must not identify a subject card.",
+                nameof(serverId));
+        }
+
+        if (kind == OccurrenceKind.IceEncountered
+            && (serverId is null || subjectCardId is null))
+        {
+            throw new ArgumentException(
+                "An IceEncountered occurrence must identify both its encountered ICE subject and server.",
+                nameof(subjectCardId));
         }
 
         Kind = kind;
@@ -649,6 +667,8 @@ public static class EffectInstructionValidator
                         if (!Enum.IsDefined(occurrence.Kind)
                             || occurrence.Kind is not (OccurrenceKind.CardInstalled
                                 or OccurrenceKind.CardRezzed
+                                or OccurrenceKind.ServerApproached
+                                or OccurrenceKind.IceEncountered
                                 or OccurrenceKind.RunSuccessful
                                 or OccurrenceKind.RunEnded
                                 or OccurrenceKind.AgendaScoredOrStolen
@@ -667,6 +687,26 @@ public static class EffectInstructionValidator
                         if (occurrence.ServerId is { } serverId)
                         {
                             RequireId(serverId.Value, $"{instructionPath}.serverId", "server", violations);
+                        }
+
+                        if (occurrence.Kind == OccurrenceKind.ServerApproached
+                            && (occurrence.ServerId is null || occurrence.SubjectCardId is not null))
+                        {
+                            Add(
+                                violations,
+                                "effects.server-approached-context",
+                                instructionPath,
+                                "A ServerApproached occurrence must identify its server and must not identify a subject card.");
+                        }
+
+                        if (occurrence.Kind == OccurrenceKind.IceEncountered
+                            && (occurrence.ServerId is null || occurrence.SubjectCardId is null))
+                        {
+                            Add(
+                                violations,
+                                "effects.ice-encountered-context",
+                                instructionPath,
+                                "An IceEncountered occurrence must identify both its encountered ICE subject and server.");
                         }
 
                         if (occurrence.Kind == OccurrenceKind.RunEnded && occurrence.Successful is null)

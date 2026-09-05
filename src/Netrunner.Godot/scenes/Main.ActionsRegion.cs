@@ -68,6 +68,20 @@ public partial class Main
 			return;
 		}
 
+		Slice45DecisionViewModel slice45 = Slice45PresentationProjector.Present(snapshot.View);
+		if (slice45.IsProminent)
+		{
+			_actions.AddChild(MakeLabel(
+				$"SLICE 4.5 OPTIONS · {slice45.Surface.ToString().ToUpperInvariant()} · "
+				+ $"ACTING PLAYER {slice45.ActingPlayer!.Value.ToString().ToUpperInvariant()}",
+				11,
+				Warning));
+			if (slice45.Prompt is { } prompt && !string.IsNullOrWhiteSpace(prompt))
+			{
+				_actions.AddChild(MakeWrappedLabel(prompt, 12, Colors.White));
+			}
+		}
+
 		if (_stagedAction is { } staged && _stagedDecision is { } stagedDecision)
 		{
 			_smokeTargetControlsObserved |= _smokeTest;
@@ -77,7 +91,8 @@ public partial class Main
 			selected.AddChild(selectedContent);
 			selectedContent.AddChild(MakeLabel("TARGET SELECTED · confirm or cancel", 12, Warning));
 			selectedContent.AddChild(MakeLabel(
-				$"{staged.Kind.ToString().ToUpperInvariant()} · {staged.Description}\n"
+				$"{FindSlice45Option(slice45, staged)?.OrderedPresentationLabel
+					?? Slice45PresentationProjector.Label(staged)}\n"
 				+ "No engine action has been submitted yet.",
 				11,
 				Colors.White));
@@ -105,13 +120,16 @@ public partial class Main
 			_actions.AddChild(MakeLabel(group.Label, 11, Accent));
 			foreach (LegalActionViewModel action in group.Actions)
 			{
-				bool targeted = ActionsRegionPresenter.GetTargetCardId(action.Parameters) is not null
-					|| action.Parameters is BreachCandidateParameters;
+				bool targeted = ActionsRegionPresenter.IsTargetedAction(action);
+				Slice45ActionPresentationViewModel? slice45Option =
+					FindSlice45Option(slice45, action);
+				string actionLabel = slice45Option?.OrderedPresentationLabel
+					?? Slice45PresentationProjector.Label(action);
 				Button button = new()
 				{
 					Text = targeted
-						? $"SELECT TARGET · {action.Kind}: {action.Description}"
-						: $"{action.Kind}: {action.Description}",
+						? $"SELECT TARGET · {actionLabel}"
+						: actionLabel,
 					Alignment = HorizontalAlignment.Left,
 					Disabled = Volatile.Read(ref _submissionInFlight) != 0,
 				};
@@ -128,6 +146,13 @@ public partial class Main
 			}
 		}
 	}
+
+	private static Slice45ActionPresentationViewModel? FindSlice45Option(
+		Slice45DecisionViewModel decision,
+		LegalActionViewModel action) =>
+		decision.IsProminent
+			? decision.Options.FirstOrDefault(option => option.ActionId == action.Id)
+			: null;
 
 	private void StageTargetAction(DecisionViewModel decision, LegalActionViewModel action)
 	{

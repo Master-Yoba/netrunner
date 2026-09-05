@@ -86,6 +86,13 @@ public sealed record MatchViewModel(
 
     /// <summary>Compatibility alias for the explicit "used" terminology.</summary>
     public IReadOnlyList<FirstXUseViewModel> UsedFirstXUseKeys => UsedFirstXKeys;
+
+    /// <summary>
+    /// Optional typed cues reserved for Slice 4.5 run interactions. Core does
+    /// not currently project these values, so the mapper leaves them
+    /// unavailable instead of deriving them from card text or action labels.
+    /// </summary>
+    public Slice45CueViewModel Slice45Cues { get; init; } = Slice45CueViewModel.Unavailable;
 }
 
 /// <summary>
@@ -374,6 +381,13 @@ public sealed record LegalActionViewModel(
         : null;
 
     public string? CostSummary => CostPresentation?.Summary;
+
+    /// <summary>
+    /// Typed behavior-choice metadata resolved from the immutable composition
+    /// catalog. It is null for legacy or unresolvable choices; clients must
+    /// never infer option semantics from <see cref="Description"/>.
+    /// </summary>
+    public Slice45BehaviorChoiceOptionViewModel? Slice45BehaviorChoice { get; init; }
 }
 
 /// <summary>Run focus, current ICE, encounter, and breach/access state.</summary>
@@ -672,11 +686,20 @@ public static class ObservationViewMapper
             abilityCue);
         OutcomeViewModel outcome = MapOutcome(RequiredMap(publicState, "outcome"));
         IReadOnlyList<LegalActionViewModel> actions = observation.LegalActions
-            .Select(action => new LegalActionViewModel(
-                action.Id,
-                action.Kind,
-                ActionsRegionPresenter.Describe(action.Kind, action.Description, action.Parameters),
-                action.Parameters))
+            .Select(action =>
+            {
+                var viewAction = new LegalActionViewModel(
+                    action.Id,
+                    action.Kind,
+                    ActionsRegionPresenter.Describe(action.Kind, action.Description, action.Parameters),
+                    action.Parameters);
+                return viewAction with
+                {
+                    Slice45BehaviorChoice = Slice45PresentationProjector.ResolveChoiceMetadata(
+                        action.Parameters,
+                        behaviorCatalog),
+                };
+            })
             .ToArray();
 
         MatchViewModel view = new(
@@ -723,6 +746,7 @@ public static class ObservationViewMapper
             ForcedDiscard = MapForcedDiscard(decision, corpHandSize, runnerHandSize),
             UsedAbilityKeys = usedAbilityKeys,
             UsedFirstXKeys = usedFirstXKeys,
+            Slice45Cues = Slice45PresentationProjector.ReadCues(publicState),
         };
     }
 

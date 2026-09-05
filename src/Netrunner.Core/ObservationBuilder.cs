@@ -416,6 +416,27 @@ public static class ObservationBuilder
                 .ToArray(),
         };
 
+        // Slice 4.5 exposes only public, typed status cues.  The cue envelope
+        // intentionally omits source ICE/breaker identities, so an observer
+        // learns that a restriction/ability/effect is active without gaining
+        // hidden provenance.  Keep the additive envelope absent when no cue is
+        // active to preserve unaffected legacy observation shapes.
+        bool runRestrictionActive = run.RunRestrictions?.Any(restriction =>
+            restriction.Kind == RunRestrictionKind.CannotStealOrTrashCorpCards) == true;
+        bool bioroidAbilityReady = IsBioroidAbilityReady(state, run, behaviorCatalog);
+        bool mayflyBreakArmed = run.LingeringEffects.Any(effect =>
+            effect.Kind == RunLingeringEffectKind.IcebreakerRunEndCleanup
+            && effect.Expiry == RunLingeringEffectExpiry.Run);
+        if (runRestrictionActive || bioroidAbilityReady || mayflyBreakArmed)
+        {
+            view["slice45Cues"] = new Dictionary<string, object?>
+            {
+                ["runRestrictionActive"] = runRestrictionActive,
+                ["bioroidAbilityReady"] = bioroidAbilityReady,
+                ["mayflyBreakArmed"] = mayflyBreakArmed,
+            };
+        }
+
         // Keep the M1/M2 run-view byte shape unchanged when no D1 modifier
         // was snapshotted. The list itself is detached for every observer.
         if (run.BreachAccessModifiers is { } modifiers)
@@ -426,6 +447,42 @@ public static class ObservationBuilder
         }
 
         return view;
+    }
+
+    private static bool IsBioroidAbilityReady(
+        GameState state,
+        RunState run,
+        IBehaviorCatalog behaviorCatalog)
+    {
+        if (run.Step != RunTimingStep.EncounterPaidWindow
+            || run.Priority is not { PriorityHolder: PlayerSide.Runner }
+            || run.Encounter is not { Status: RunEncounterStatus.Initialized } encounter)
+        {
+            return false;
+        }
+
+        // The pending RunTiming decision is the authenticated source of
+        // truth for legal bioroid actions.  Re-deriving click/target legality
+        // from the encounter here can advertise a cue beneath a nested
+        // checkpoint where no such action is actually issuable.
+        PendingDecision? pending = state.PendingDecision;
+        PlayerId? runnerId = state.Players.FirstOrDefault(player => player.Side == PlayerSide.Runner)?.Id;
+        if (pending is null
+            || pending.Kind != DecisionKind.RunTiming
+            || runnerId is null
+            || pending.Owner != runnerId.Value)
+        {
+            return false;
+        }
+
+        return pending.LegalActions.Any(action =>
+            action.Kind == ActionKind.UseBioroidAbility
+            && action.Parameters is RunBioroidAbilityParameters parameters
+            && parameters.IceId == encounter.IceId
+            && StableIdentifier.TryValidate(parameters.SubroutineId.Value)
+            && StableIdentifier.TryValidate(parameters.AbilityKey)
+            && parameters.Cost.Kind == BehaviorCostKind.LoseClick
+            && parameters.Cost.Amount > 0);
     }
 
     private static Dictionary<string, object?> EncounterView(
@@ -597,6 +654,14 @@ public static class ObservationBuilder
                 : null,
             ["expiry"] = effect.Expiry,
         };
+
+        // Typed run-end cleanup provenance is public once its Runner-rig
+        // source is public. Keep the nullable field additive so legacy run
+        // effects retain their historical observation shape.
+        if (effect.Kind is { } kind)
+        {
+            view["kind"] = kind;
+        }
 
         // Keep the legacy effect shape byte-identical when no typed value is
         // attached. When present, expose it only if both physical endpoints

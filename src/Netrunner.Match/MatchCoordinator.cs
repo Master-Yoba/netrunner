@@ -83,6 +83,13 @@ public sealed class MatchCoordinatorOptions
     /// no process-wide mutable registry is used by the worker.
     /// </summary>
     public IBehaviorCatalog? BehaviorCatalog { get; init; }
+
+    /// <summary>
+    /// Immutable printed-card runtime metadata supplied at match composition.
+    /// When present, every setup, run, and action reduction uses this same
+    /// snapshot. Omitting it preserves the legacy behavior-only adapter.
+    /// </summary>
+    public IRuntimeCardCatalog? RuntimeCardCatalog { get; init; }
 }
 
 /// <summary>
@@ -100,6 +107,7 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
     private readonly MatchCoordinatorOptions _options;
     private readonly ICardMetadataResolver _metadataResolver;
     private readonly IBehaviorCatalog _suppliedBehaviorCatalog;
+    private readonly IRuntimeCardCatalog? _runtimeCardCatalog;
     private IBehaviorCatalog _behaviorCatalog;
     private readonly CancellationTokenSource _cancellation = new();
     private readonly Channel<CoordinatorCommand> _commands =
@@ -130,6 +138,7 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
             ?? CardMetadataResolvers.Default;
         _suppliedBehaviorCatalog = _options.BehaviorCatalog
             ?? GatewayBehaviorCatalog.Create();
+        _runtimeCardCatalog = _options.RuntimeCardCatalog;
         // Keep the field initialized until StartAsync validates the document;
         // the worker replaces it with the immutable scenario slice before any
         // engine or presentation operation runs.
@@ -331,13 +340,23 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
             _behaviorCatalog = scenarioCatalog;
             M2ScenarioRunSpec run = _document.Run
                 ?? throw new M2ScenarioException(["run: the scenario has no run contract."]);
-            GameState initial = M2ScenarioSetup.Build(_document, scenarioCatalog);
+            GameState initial = M2ScenarioSetup.Build(
+                _document,
+                scenarioCatalog,
+                _runtimeCardCatalog);
             ServerId server = ResolveServer(initial, run.Server);
-            GameEngine.RunStartResult started = GameEngine.BeginRunWithEvents(
-                initial,
-                server,
-                _behaviorCatalog,
-                initiatingSource: new CardInstanceId(run.Source));
+            GameEngine.RunStartResult started = _runtimeCardCatalog is null
+                ? GameEngine.BeginRunWithEvents(
+                    initial,
+                    server,
+                    _behaviorCatalog,
+                    initiatingSource: new CardInstanceId(run.Source))
+                : GameEngine.BeginRunWithEvents(
+                    initial,
+                    server,
+                    _behaviorCatalog,
+                    _runtimeCardCatalog,
+                    initiatingSource: new CardInstanceId(run.Source));
             _state = started.State;
             MatchSnapshot snapshot = Publish(started.Events, feedback: null, thinking: false);
             command.Complete(snapshot);
@@ -358,7 +377,7 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
             return;
         }
 
-        ApplyResult applied = GameEngine.Apply(_state, command.Submission, _behaviorCatalog);
+        ApplyResult applied = ApplyEngineAction(_state, command.Submission);
         if (!applied.Accepted)
         {
             MatchFeedback feedback = new(
@@ -411,10 +430,9 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
                 ActionId actionId = await _corpAgent
                     .ChooseActionAsync(observation, _cancellation.Token)
                     .ConfigureAwait(false);
-                ApplyResult applied = GameEngine.Apply(
+                ApplyResult applied = ApplyEngineAction(
                     state,
-                    new ActionSubmission(pending.Owner, pending.Id, pending.Revision, actionId),
-                    _behaviorCatalog);
+                    new ActionSubmission(pending.Owner, pending.Id, pending.Revision, actionId));
                 if (!applied.Accepted)
                 {
                     MatchFeedback feedback = new(
@@ -487,7 +505,12 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
             observation,
             _metadataResolver,
             _behaviorCatalog);
-        IReadOnlyList<EngineEvent> frozenEvents = new ReadOnlyCollection<EngineEvent>(events.ToArray());
+        // Engine events are authoritative diagnostics, but this publication is
+        // the Runner-facing boundary. Never forward a physical Corp card ID
+        // while that card is still hidden; omission is intentional for typed
+        // payloads whose required ID cannot be safely redacted.
+        IReadOnlyList<EngineEvent> visibleEvents = RunnerEventVisibility.Filter(events, state);
+        IReadOnlyList<EngineEvent> frozenEvents = new ReadOnlyCollection<EngineEvent>(visibleEvents.ToArray());
         MatchSnapshot snapshot = new(
             Interlocked.Increment(ref _publicationSequence),
             observation,
@@ -524,6 +547,11 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
 
         return snapshot;
     }
+
+    private ApplyResult ApplyEngineAction(GameState state, ActionSubmission submission) =>
+        _runtimeCardCatalog is null
+            ? GameEngine.Apply(state, submission, _behaviorCatalog)
+            : GameEngine.Apply(state, submission, _behaviorCatalog, _runtimeCardCatalog);
 
     private static ServerId ResolveServer(GameState state, string reference)
     {

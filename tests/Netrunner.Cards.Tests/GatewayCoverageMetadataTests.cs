@@ -42,6 +42,13 @@ public sealed class GatewayCoverageMetadataTests
     }
 
     [Fact]
+    [Trait("GatewayCard", "30028")]
+    public void JailbreakHasARegisteredBehavior()
+    {
+        Assert.True(GatewayBehaviorCatalog.Create().TryGetRunEvent(GatewayBatch4CardCodes.Jailbreak, out _));
+    }
+
+    [Fact]
     [Trait("GatewayCard", "30029")]
     public void OverclockHasARegisteredBehavior()
     {

@@ -18,9 +18,9 @@ public sealed class FullGameContractAgentTests
 
         Assert.Equal(FullGameContractAgentVersion.SchemaVersion, policy.SchemaVersion);
         Assert.Equal(FullGameContractAgentVersion.PolicyVersion, policy.PolicyVersion);
-        Assert.Equal(3, FullGameContractAgentVersion.SchemaVersion);
-        Assert.Equal("full-game-contract-agent-v3", FullGameContractAgentVersion.AgentVersion);
-        Assert.Equal("full-game-contract-policy-v3", FullGameContractAgentVersion.PolicyVersion);
+        Assert.Equal(4, FullGameContractAgentVersion.SchemaVersion);
+        Assert.Equal("full-game-contract-agent-v4", FullGameContractAgentVersion.AgentVersion);
+        Assert.Equal("full-game-contract-policy-v4", FullGameContractAgentVersion.PolicyVersion);
         Assert.Equal(PlayerSide.Runner, policy.ControlledSide);
         Assert.Equal(ActionKind.DrawCard, policy.TurnActionOrder[0]);
         Assert.Equal(ActionKind.JackOut, policy.RunActionOrder[0]);
@@ -89,6 +89,427 @@ public sealed class FullGameContractAgentTests
             ability.Id,
             await agent.ChooseActionAsync(
                 ObservationFor(PlayerSide.Runner, DecisionKind.RunTiming, pass, ability)));
+    }
+
+    [Fact]
+    public async Task BioroidAbilitySelectionUsesTypedSubroutineOrderAndIsJsonNeutral()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Runner);
+        LegalAction laterSubroutine = Action(
+            "bioroid-later",
+            ActionKind.UseBioroidAbility,
+            new RunBioroidAbilityParameters(
+                new CardInstanceId("ice:encountered"),
+                new SubroutineId("subroutine:encounter:1"),
+                "bioroid-break",
+                subroutineOrdinal: 1),
+            "break the first subroutine now");
+        LegalAction earlierSubroutine = Action(
+            "bioroid-earlier",
+            ActionKind.UseBioroidAbility,
+            new RunBioroidAbilityParameters(
+                new CardInstanceId("ice:encountered"),
+                new SubroutineId("subroutine:encounter:0"),
+                "bioroid-break",
+                subroutineOrdinal: 0),
+            "end the run instead");
+        LegalAction pass = Action(
+            "bioroid-pass",
+            ActionKind.PassPriority,
+            new NoActionParameters(),
+            "pass and do something unrelated");
+
+        ActionId selected = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.RunTiming, laterSubroutine, pass, earlierSubroutine));
+        ActionId reordered = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.RunTiming, earlierSubroutine, pass, laterSubroutine));
+        LegalAction[] restored = JsonSerializer.Deserialize<LegalAction[]>(
+                JsonSerializer.Serialize(new[] { pass, laterSubroutine, earlierSubroutine }))
+            ?? throw new InvalidOperationException("The serialized bioroid payload was empty.");
+        ActionId roundTrip = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.RunTiming, restored));
+
+        Assert.Equal(earlierSubroutine.Id, selected);
+        Assert.Equal(selected, reordered);
+        Assert.Equal(selected, roundTrip);
+        Assert.Contains(ActionKind.UseBioroidAbility, agent.Policy.RunActionOrder);
+    }
+
+    [Fact]
+    public async Task BioroidAbilitySelectionCanPreferHighestTypedOrdinal()
+    {
+        FullGameContractAgent agent = new(new FullGameContractPolicy(
+            PlayerSide.Runner,
+            bioroidSubroutinePreference: BioroidSubroutinePreference.HighestOrdinalFirst));
+        LegalAction lower = Action(
+            "bioroid-low",
+            ActionKind.UseBioroidAbility,
+            new RunBioroidAbilityParameters(
+                new CardInstanceId("ice:encountered"),
+                new SubroutineId("opaque:target:z"),
+                "bioroid-break",
+                subroutineOrdinal: 0));
+        LegalAction higher = Action(
+            "bioroid-high",
+            ActionKind.UseBioroidAbility,
+            new RunBioroidAbilityParameters(
+                new CardInstanceId("ice:encountered"),
+                new SubroutineId("opaque:target:a"),
+                "bioroid-break",
+                subroutineOrdinal: 2));
+
+        ActionId selected = await agent.ChooseActionAsync(ObservationFor(
+            PlayerSide.Runner,
+            DecisionKind.RunTiming,
+            lower,
+            higher));
+
+        Assert.Equal(higher.Id, selected);
+        Assert.Equal(
+            BioroidSubroutinePreference.HighestOrdinalFirst,
+            agent.Policy.BioroidSubroutinePreference);
+    }
+
+    [Fact]
+    public async Task BioroidAbilityPayloadMustBeTypedAndIssuedOnlyInRunWindow()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Runner);
+        LegalAction malformed = Action(
+            "malformed-bioroid",
+            ActionKind.UseBioroidAbility,
+            new NoActionParameters(),
+            "this description must not repair the payload");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Runner, DecisionKind.RunTiming, malformed)));
+
+        LegalAction valid = Action(
+            "bioroid-wrong-window",
+            ActionKind.UseBioroidAbility,
+            new RunBioroidAbilityParameters(
+                new CardInstanceId("ice:encountered"),
+                new SubroutineId("subroutine:encounter:0"),
+                "bioroid-break"));
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Runner, DecisionKind.TurnAction, valid)));
+    }
+
+    [Fact]
+    public async Task IceSubroutineChoicePrefersTypedBranchesForEachActingSide()
+    {
+        FullGameContractAgent runnerAgent = new(PlayerSide.Runner);
+        LegalAction tagFallback = Action(
+            "subroutine-tag",
+            ActionKind.ResolveIceSubroutine,
+            new IceSubroutineChoiceParameters(
+                "frame:subroutine",
+                IceSubroutineChoiceKind.TakeTag),
+            "take a tag");
+        LegalAction pay = Action(
+            "subroutine-pay",
+            ActionKind.ResolveIceSubroutine,
+            new IceSubroutineChoiceParameters(
+                "frame:subroutine",
+                IceSubroutineChoiceKind.PayCredits,
+                creditCost: 4,
+                hostedCredits: 2),
+            "pay four credits");
+        ActionId runnerSelected = await runnerAgent.ChooseActionAsync(
+            ObservationFor(
+                PlayerSide.Runner,
+                DecisionKind.IceSubroutineChoice,
+                tagFallback,
+                pay));
+        ActionId runnerReordered = await runnerAgent.ChooseActionAsync(
+            ObservationFor(
+                PlayerSide.Runner,
+                DecisionKind.IceSubroutineChoice,
+                pay,
+                tagFallback));
+
+        Assert.Equal(pay.Id, runnerSelected);
+        Assert.Equal(runnerSelected, runnerReordered);
+
+        FullGameContractAgent corpAgent = new(PlayerSide.Corp);
+        LegalAction install = Action(
+            "subroutine-install",
+            ActionKind.ResolveIceSubroutine,
+            new IceSubroutineChoiceParameters(
+                "frame:subroutine",
+                IceSubroutineChoiceKind.InstallCard,
+                cardId: new CardInstanceId("card:ice"),
+                destinationKind: InstallDestinationKind.ServerIce,
+                serverId: new ServerId("server:remote"),
+                creditCost: 0),
+            "install an ICE");
+        LegalAction trash = Action(
+            "subroutine-trash",
+            ActionKind.ResolveIceSubroutine,
+            new IceSubroutineChoiceParameters(
+                "frame:subroutine",
+                IceSubroutineChoiceKind.TrashInstalledRunnerCard,
+                cardId: new CardInstanceId("card:runner-program")),
+            "trash an installed Runner card");
+        LegalAction decline = Action(
+            "subroutine-decline",
+            ActionKind.ResolveIceSubroutine,
+            new IceSubroutineChoiceParameters(
+                "frame:subroutine",
+                IceSubroutineChoiceKind.Decline),
+            "decline the install");
+
+        ActionId selected = await corpAgent.ChooseActionAsync(
+            ObservationFor(
+                PlayerSide.Corp,
+                DecisionKind.IceSubroutineChoice,
+                decline,
+                install,
+                trash));
+        ActionId reordered = await corpAgent.ChooseActionAsync(
+            ObservationFor(
+                PlayerSide.Corp,
+                DecisionKind.IceSubroutineChoice,
+                trash,
+                install,
+                decline));
+        LegalAction[] restored = JsonSerializer.Deserialize<LegalAction[]>(
+                JsonSerializer.Serialize(new[] { decline, trash, install }))
+            ?? throw new InvalidOperationException("The serialized ICE subroutine payload was empty.");
+        ActionId roundTrip = await corpAgent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Corp, DecisionKind.IceSubroutineChoice, restored));
+
+        Assert.Equal(trash.Id, selected);
+        Assert.Equal(selected, reordered);
+        Assert.Equal(selected, roundTrip);
+    }
+
+    [Fact]
+    public async Task IceSubroutineChoiceRejectsBranchesOwnedByTheOtherSide()
+    {
+        FullGameContractAgent corpAgent = new(PlayerSide.Corp);
+        LegalAction runnerPayment = Action(
+            "subroutine-wrong-owner",
+            ActionKind.ResolveIceSubroutine,
+            new IceSubroutineChoiceParameters(
+                "frame:wrong-owner",
+                IceSubroutineChoiceKind.PayCredits,
+                creditCost: 4));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await corpAgent.ChooseActionAsync(
+                ObservationFor(
+                    PlayerSide.Corp,
+                    DecisionKind.IceSubroutineChoice,
+                    runnerPayment)));
+    }
+
+    [Fact]
+    public async Task IceSubroutineChoiceOrderingUsesCardAndDestinationFieldsWithinNormalBranches()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Corp);
+        LegalAction laterCard = Action(
+            "subroutine-install-z",
+            ActionKind.ResolveIceSubroutine,
+            new IceSubroutineChoiceParameters(
+                "frame:install",
+                IceSubroutineChoiceKind.InstallCard,
+                cardId: new CardInstanceId("card:z"),
+                destinationKind: InstallDestinationKind.ServerIce,
+                serverId: new ServerId("server:remote"),
+                creditCost: 0));
+        LegalAction earlierCard = Action(
+            "subroutine-install-a",
+            ActionKind.ResolveIceSubroutine,
+            new IceSubroutineChoiceParameters(
+                "frame:install",
+                IceSubroutineChoiceKind.InstallCard,
+                cardId: new CardInstanceId("card:a"),
+                destinationKind: InstallDestinationKind.ServerIce,
+                serverId: new ServerId("server:remote"),
+                creditCost: 0));
+
+        ActionId selected = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Corp, DecisionKind.IceSubroutineChoice, laterCard, earlierCard));
+        ActionId reordered = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Corp, DecisionKind.IceSubroutineChoice, earlierCard, laterCard));
+
+        Assert.Equal(earlierCard.Id, selected);
+        Assert.Equal(selected, reordered);
+    }
+
+    [Fact]
+    public async Task IceSubroutineChoicePrefersExistingServersThenMinimizesWalletCost()
+    {
+        FullGameContractAgent corpAgent = new(PlayerSide.Corp);
+        LegalAction expensive = Action(
+            "subroutine-install-expensive",
+            ActionKind.ResolveIceSubroutine,
+            new IceSubroutineChoiceParameters(
+                "frame:install-cost",
+                IceSubroutineChoiceKind.InstallCard,
+                cardId: new CardInstanceId("card:corp-install"),
+                destinationKind: InstallDestinationKind.ServerIce,
+                serverId: new ServerId("server:a"),
+                creditCost: 4));
+        LegalAction cheap = Action(
+            "subroutine-install-cheap",
+            ActionKind.ResolveIceSubroutine,
+            new IceSubroutineChoiceParameters(
+                "frame:install-cost",
+                IceSubroutineChoiceKind.InstallCard,
+                cardId: new CardInstanceId("card:corp-install"),
+                destinationKind: InstallDestinationKind.ServerIce,
+                serverId: new ServerId("server:z"),
+                creditCost: 1));
+
+        Assert.Equal(
+            cheap.Id,
+            await corpAgent.ChooseActionAsync(ObservationFor(
+                PlayerSide.Corp,
+                DecisionKind.IceSubroutineChoice,
+                expensive,
+                cheap)));
+
+        LegalAction freeNewRemote = Action(
+            "subroutine-install-new-remote",
+            ActionKind.ResolveIceSubroutine,
+            new IceSubroutineChoiceParameters(
+                "frame:install-cost",
+                IceSubroutineChoiceKind.InstallCard,
+                cardId: new CardInstanceId("card:corp-install"),
+                destinationKind: InstallDestinationKind.ServerIce,
+                createNewRemote: true,
+                creditCost: 0));
+        Assert.Equal(
+            cheap.Id,
+            await corpAgent.ChooseActionAsync(ObservationFor(
+                PlayerSide.Corp,
+                DecisionKind.IceSubroutineChoice,
+                freeNewRemote,
+                cheap)));
+
+        FullGameContractAgent runnerAgent = new(PlayerSide.Runner);
+        LegalAction walletOnly = Action(
+            "subroutine-wallet-only",
+            ActionKind.ResolveIceSubroutine,
+            new IceSubroutineChoiceParameters(
+                "frame:pay-split",
+                IceSubroutineChoiceKind.PayCredits,
+                creditCost: 4));
+        LegalAction hostedSplit = Action(
+            "subroutine-hosted-split",
+            ActionKind.ResolveIceSubroutine,
+            new IceSubroutineChoiceParameters(
+                "frame:pay-split",
+                IceSubroutineChoiceKind.PayCredits,
+                creditCost: 4,
+                hostedCredits: 3));
+
+        Assert.Equal(
+            hostedSplit.Id,
+            await runnerAgent.ChooseActionAsync(ObservationFor(
+                PlayerSide.Runner,
+                DecisionKind.IceSubroutineChoice,
+                walletOnly,
+                hostedSplit)));
+    }
+
+    [Fact]
+    public async Task IceSubroutineChoiceRejectsMalformedTypedPayloads()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Corp);
+        LegalAction wrongPayload = Action(
+            "subroutine-wrong-payload",
+            ActionKind.ResolveIceSubroutine,
+            new NoActionParameters());
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Corp, DecisionKind.IceSubroutineChoice, wrongPayload)));
+
+        // Impossible destination shapes now fail before they can reach an
+        // observation or policy boundary.
+        Assert.Throws<ArgumentException>(() => new IceSubroutineChoiceParameters(
+                "frame:invalid",
+                IceSubroutineChoiceKind.InstallCard,
+                cardId: new CardInstanceId("card:ice"),
+                destinationKind: InstallDestinationKind.RunnerRig,
+                createNewRemote: true));
+
+        LegalAction invalidHostedFallback = Action(
+            "subroutine-invalid-hosted",
+            ActionKind.ResolveIceSubroutine,
+            new IceSubroutineChoiceParameters(
+                "frame:invalid-hosted",
+                IceSubroutineChoiceKind.TakeTag),
+            "fallback");
+        // The valid constructor defaults hosted credits to zero. The typed
+        // field is nevertheless covered by the JSON round-trip/selection
+        // test above; this action checks malformed action IDs independently.
+        LegalAction duplicateId = new(
+            invalidHostedFallback.Id,
+            ActionKind.ResolveIceSubroutine,
+            "duplicate id",
+            new IceSubroutineChoiceParameters(
+                "frame:invalid-hosted-2",
+                IceSubroutineChoiceKind.TakeTag));
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await agent.ChooseActionAsync(
+                ObservationFor(
+                    PlayerSide.Corp,
+                    DecisionKind.IceSubroutineChoice,
+                    invalidHostedFallback,
+                    duplicateId)));
+    }
+
+    [Fact]
+    public async Task CorpInstallChoiceUsesTypedDestinationAndIsOrderNeutral()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Corp);
+        CardInstanceId requiredReplacement = new("card:corp-required");
+        LegalAction laterCard = Action(
+            "corp-install-z",
+            ActionKind.InstallCard,
+            new InstallCardParameters(
+                new CardInstanceId("card:corp-z"),
+                InstallDestinationKind.ServerIce,
+                new ServerId("server:remote"),
+                createNewRemote: false,
+                creditCost: 0,
+                candidateReplacementCardIds: [requiredReplacement],
+                requiredReplacementCardIds: [requiredReplacement],
+                selectedReplacementCardIds: [requiredReplacement],
+                finalizeSelection: true),
+            "install this other Corp card");
+        LegalAction earlierCard = Action(
+            "corp-install-a",
+            ActionKind.InstallCard,
+            new InstallCardParameters(
+                new CardInstanceId("card:corp-a"),
+                InstallDestinationKind.ServerRoot,
+                new ServerId("server:remote"),
+                createNewRemote: false,
+                creditCost: 0,
+                candidateReplacementCardIds: [requiredReplacement],
+                requiredReplacementCardIds: [requiredReplacement],
+                selectedReplacementCardIds: [requiredReplacement],
+                finalizeSelection: true),
+            "install the preferred Corp card");
+
+        ActionId selected = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Corp, DecisionKind.InstallChoice, laterCard, earlierCard));
+        ActionId reordered = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Corp, DecisionKind.InstallChoice, earlierCard, laterCard));
+        LegalAction[] restored = JsonSerializer.Deserialize<LegalAction[]>(
+                JsonSerializer.Serialize(new[] { laterCard, earlierCard }))
+            ?? throw new InvalidOperationException("The serialized Corp install payload was empty.");
+        ActionId roundTrip = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Corp, DecisionKind.InstallChoice, restored));
+
+        Assert.Equal(earlierCard.Id, selected);
+        Assert.Equal(selected, reordered);
+        Assert.Equal(selected, roundTrip);
     }
 
     [Fact]
@@ -331,6 +752,215 @@ public sealed class FullGameContractAgentTests
             targetLow.Id,
             await agent.ChooseActionAsync(
                 ObservationFor(PlayerSide.Corp, DecisionKind.BehaviorChoice, targetHigh, targetLow)));
+    }
+
+    [Fact]
+    public async Task TriggerChoicePrefersUseAndIsNeutralToActionOrderAndJson()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Corp);
+        LegalAction decline = Action(
+            "trigger-decline-z",
+            ActionKind.DeclineTrigger,
+            new TriggerChoiceParameters(new TriggerId("trigger:z")),
+            "decline the trigger");
+        LegalAction useLater = Action(
+            "trigger-use-z",
+            ActionKind.UseTrigger,
+            new TriggerChoiceParameters(new TriggerId("trigger:z")),
+            "use the trigger");
+        LegalAction useEarlier = Action(
+            "trigger-use-a",
+            ActionKind.UseTrigger,
+            new TriggerChoiceParameters(new TriggerId("trigger:a")),
+            "use the other trigger");
+
+        ActionId selected = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Corp, DecisionKind.TriggerChoice, decline, useLater, useEarlier));
+        ActionId reordered = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Corp, DecisionKind.TriggerChoice, useEarlier, decline, useLater));
+        LegalAction[] restored = JsonSerializer.Deserialize<LegalAction[]>(
+                JsonSerializer.Serialize(new[] { useLater, decline, useEarlier }))
+            ?? throw new InvalidOperationException("The serialized trigger payload was empty.");
+        ActionId roundTrip = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Corp, DecisionKind.TriggerChoice, restored));
+
+        Assert.Equal(useEarlier.Id, selected);
+        Assert.Equal(selected, reordered);
+        Assert.Equal(selected, roundTrip);
+    }
+
+    [Fact]
+    public async Task BehaviorChoicePrefersStructuredPrivateCardCostAndPreservesIssuedPayload()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Corp);
+        CardInstanceId first = new("card:hq-a");
+        CardInstanceId second = new("card:hq-b");
+        LegalAction fallback = Action(
+            "alternative-fallback",
+            ActionKind.ChooseBehavior,
+            new BehaviorChoiceParameters("anoetic-choice", "decline"),
+            "decline and continue");
+        LegalAction pay = Action(
+            "alternative-pay",
+            ActionKind.ChooseBehavior,
+            new BehaviorChoiceParameters(
+                "anoetic-choice",
+                ["pay-and-trash-hq"],
+                [first, second]),
+            "pay and trash two hidden cards");
+
+        ActionId selected = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Corp, DecisionKind.BehaviorChoice, fallback, pay));
+        LegalAction selectedAction = Assert.Single(
+            new[] { fallback, pay },
+            action => action.Id == selected);
+        BehaviorChoiceParameters payload = Assert.IsType<BehaviorChoiceParameters>(selectedAction.Parameters);
+
+        Assert.Equal(pay.Id, selected);
+        Assert.Equal(["pay-and-trash-hq"], payload.OptionKeys);
+        Assert.Equal([first, second], payload.CardIds);
+        Assert.True(payload.FinalizeSelection);
+
+        LegalAction[] restored = JsonSerializer.Deserialize<LegalAction[]>(
+                JsonSerializer.Serialize(new[] { fallback, pay }))
+            ?? throw new InvalidOperationException("The serialized behavior payload was empty.");
+        Assert.Equal(selected, await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Corp, DecisionKind.BehaviorChoice, restored)));
+    }
+
+    [Fact]
+    public async Task StructuredBehaviorAlternativesUseFirstMaterializedDeclaration()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Runner);
+        LegalAction first = Action(
+            "action:100",
+            ActionKind.ChooseBehavior,
+            new BehaviorChoiceParameters("manegarm-choice", "spend-clicks"),
+            "spend two clicks");
+        LegalAction fallback = Action(
+            "action:101",
+            ActionKind.ChooseBehavior,
+            new BehaviorChoiceParameters("manegarm-choice", "end-run"),
+            "end the run");
+        Assert.Equal(
+            first.Id,
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Runner, DecisionKind.BehaviorChoice, fallback, first)));
+
+        LegalAction takeTag = Action(
+            "action:200",
+            ActionKind.ChooseBehavior,
+            new BehaviorChoiceParameters("funhouse-choice", "take-tag"),
+            "take a tag");
+        LegalAction endRun = Action(
+            "action:201",
+            ActionKind.ChooseBehavior,
+            new BehaviorChoiceParameters("funhouse-choice", "end-run"),
+            "end the run");
+        Assert.Equal(
+            takeTag.Id,
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Runner, DecisionKind.BehaviorChoice, endRun, takeTag)));
+    }
+
+    [Fact]
+    public async Task StructuredBehaviorOptionsUseNumericIssuedActionOrder()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Runner);
+        LegalAction actionNine = new(
+            new ActionId("action:9"),
+            ActionKind.ChooseBehavior,
+            "action nine",
+            new BehaviorChoiceParameters("structured-choice", "option-nine"));
+        LegalAction actionTen = new(
+            new ActionId("action:10"),
+            ActionKind.ChooseBehavior,
+            "action ten",
+            new BehaviorChoiceParameters("structured-choice", "option-ten"));
+
+        ActionId selected = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.BehaviorChoice, actionTen, actionNine));
+        ActionId reordered = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.BehaviorChoice, actionNine, actionTen));
+        LegalAction[] restored = JsonSerializer.Deserialize<LegalAction[]>(
+                JsonSerializer.Serialize(new[] { actionTen, actionNine }))
+            ?? throw new InvalidOperationException("The serialized behavior payload was empty.");
+        ActionId roundTrip = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.BehaviorChoice, restored));
+
+        Assert.Equal(actionNine.Id, selected);
+        Assert.Equal(selected, reordered);
+        Assert.Equal(selected, roundTrip);
+    }
+
+    [Fact]
+    public async Task RunContractStructuredBehaviorOptionsUseNumericIssuedActionOrder()
+    {
+        RunContractAgent agent = new(new RunPlayContract("server:remote", "source:test", "breaker:test"));
+        LegalAction actionNine = new(
+            new ActionId("action:9"),
+            ActionKind.ChooseBehavior,
+            "action nine",
+            new BehaviorChoiceParameters("structured-choice", "option-nine"));
+        LegalAction actionTen = new(
+            new ActionId("action:10"),
+            ActionKind.ChooseBehavior,
+            "action ten",
+            new BehaviorChoiceParameters("structured-choice", "option-ten"));
+
+        ActionId selected = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.BehaviorChoice, actionTen, actionNine));
+        ActionId reordered = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.BehaviorChoice, actionNine, actionTen));
+        LegalAction[] restored = JsonSerializer.Deserialize<LegalAction[]>(
+                JsonSerializer.Serialize(new[] { actionTen, actionNine }))
+            ?? throw new InvalidOperationException("The serialized behavior payload was empty.");
+        ActionId roundTrip = await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.BehaviorChoice, restored));
+
+        Assert.Equal(actionNine.Id, selected);
+        Assert.Equal(selected, reordered);
+        Assert.Equal(selected, roundTrip);
+    }
+
+    [Fact]
+    public async Task TriggerAndBehaviorDuplicateOrMalformedPayloadsFailClosed()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Corp);
+        LegalAction duplicateActionId = Action(
+            "duplicate",
+            ActionKind.UseTrigger,
+            new TriggerChoiceParameters(new TriggerId("trigger:1")));
+        LegalAction sameActionId = new(
+            duplicateActionId.Id,
+            ActionKind.DeclineTrigger,
+            "different action",
+            new TriggerChoiceParameters(new TriggerId("trigger:1")));
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Corp, DecisionKind.TriggerChoice, duplicateActionId, sameActionId)));
+
+        LegalAction duplicateOption = Action(
+            "duplicate-option",
+            ActionKind.ChooseBehavior,
+            new BehaviorChoiceParameters(
+                "malformed-choice",
+                ["same", "same"],
+                [new CardInstanceId("card:a")]));
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Corp, DecisionKind.BehaviorChoice, duplicateOption)));
+
+        LegalAction duplicateCard = Action(
+            "duplicate-card",
+            ActionKind.ChooseBehavior,
+            new BehaviorChoiceParameters(
+                "malformed-choice",
+                ["pay"],
+                [new CardInstanceId("card:a"), new CardInstanceId("card:a")]));
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await agent.ChooseActionAsync(
+                ObservationFor(PlayerSide.Corp, DecisionKind.BehaviorChoice, duplicateCard)));
     }
 
     [Fact]
@@ -898,12 +1528,22 @@ public sealed class FullGameContractAgentTests
                     PlayerSide.Corp,
                     DecisionKind.TurnAction,
                     Action("legacy", ActionKind.Legacy, new LegacyActionParameters("draw")))));
-        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+        LegalAction useTrigger = Action(
+            "trigger-use",
+            ActionKind.UseTrigger,
+            new TriggerChoiceParameters(new TriggerId("trigger:1")));
+        LegalAction declineTrigger = Action(
+            "trigger-decline",
+            ActionKind.DeclineTrigger,
+            new TriggerChoiceParameters(new TriggerId("trigger:1")));
+        Assert.Equal(
+            useTrigger.Id,
             await agent.ChooseActionAsync(
                 ObservationFor(
                     PlayerSide.Corp,
                     DecisionKind.TriggerChoice,
-                    Action("trigger", ActionKind.UseTrigger, new TriggerChoiceParameters(new TriggerId("trigger:1"))))));
+                    declineTrigger,
+                    useTrigger)));
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
             await agent.ChooseActionAsync(
                 ObservationFor(

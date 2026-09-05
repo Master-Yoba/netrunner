@@ -16,6 +16,16 @@ public static partial class GameEngine
         ZoneState Discard,
         int CreditCost);
 
+    private sealed record RunEventPlayPlan(
+        CardInstanceState Card,
+        CardRuntimeSpec Spec,
+        RunEventBehaviorSpec RunEvent,
+        ZoneState Source,
+        ZoneState? PlayArea,
+        ZoneState Discard,
+        ServerState TargetServer,
+        int CreditCost);
+
     /// <summary>
     /// Re-materializes ordinary play payloads without consuming allocator
     /// state.  The projection is intentionally payload-only so validation can
@@ -83,6 +93,20 @@ public static partial class GameEngine
                 continue;
             }
 
+            if (side == PlayerSide.Runner
+                && TryGetRunEventTargets(working, card, source, discard, playArea, out IReadOnlyList<RunEventPlayPlan>? runEventPlans))
+            {
+                foreach (RunEventPlayPlan runEventPlan in runEventPlans!)
+                {
+                    materialized.Add(new PlayCardParameters(
+                        runEventPlan.Card.Id,
+                        runEventPlan.CreditCost,
+                        runEventPlan.TargetServer.Id));
+                }
+
+                continue;
+            }
+
             if (!TryBuildPlayCardPlan(working, side, card, source, discard, playArea, out PlayCardPlan? plan)
                 || plan is null)
             {
@@ -107,6 +131,14 @@ public static partial class GameEngine
     {
         plan = null;
         IRuntimeCardCatalog? runtimeCardCatalog = working.RuntimeCardCatalog;
+        // Run events use the run-event contract and are intentionally not
+        // ordinary generic card plays. This remains true even when a run
+        // event also carries a generic definition for a later success effect.
+        if (working.BehaviorCatalog.TryGetRunEvent(card.DefinitionId, out _))
+        {
+            return false;
+        }
+
         if (runtimeCardCatalog is null
             || card.OwnerSide != side
             || card.ZoneId != source.Id
@@ -156,6 +188,66 @@ public static partial class GameEngine
         }
 
         plan = new PlayCardPlan(card, spec, definition, source, playArea, discard, cost);
+        return true;
+    }
+
+    private static bool TryGetRunEventTargets(
+        WorkingState working,
+        CardInstanceState card,
+        ZoneState source,
+        ZoneState discard,
+        ZoneState? playArea,
+        out IReadOnlyList<RunEventPlayPlan>? plans)
+    {
+        plans = null;
+        if (working.RuntimeCardCatalog is null
+            || working.Turn.ActiveSide != PlayerSide.Runner
+            || working.RunState is not null
+            || GetPlayer(working, PlayerSide.Runner).Clicks < 1
+            || working.ResolutionStack.Count == 0
+            || working.ResolutionStack[^1] is not TurnFrame
+            || !working.BehaviorCatalog.TryGetRunEvent(card.DefinitionId, out RunEventBehaviorSpec? runEvent)
+            || !working.RuntimeCardCatalog.TryGet(card.DefinitionId, out CardRuntimeSpec? spec)
+            || card.OwnerSide != PlayerSide.Runner
+            || card.ZoneId != source.Id
+            || !source.CardIds.Contains(card.Id)
+            || spec.DefinitionId != card.DefinitionId
+            || spec.Side != PlayerSide.Runner
+            || spec.CardClass != RuntimeCardClass.Event
+            || spec.PlayCost is not int printedCost
+            || printedCost < 0
+            || runEvent.Cost != printedCost
+            || GetPlayer(working, PlayerSide.Runner).Credits < runEvent.Cost
+            || (playArea is not null && playArea.CardIds.Count != 0))
+        {
+            return false;
+        }
+
+        TurnFrame turn = (TurnFrame)working.ResolutionStack[^1];
+        if (turn.Stage != TurnFrameStage.AwaitingAction
+            || turn.ActiveSide != PlayerSide.Runner
+            || turn.TurnNumber != working.Turn.TurnNumber)
+        {
+            return false;
+        }
+
+        IEnumerable<ServerState> targetServers = working.Servers;
+        if (runEvent.AllowedTargetServers is { } allowed)
+        {
+            targetServers = targetServers.Where(server => allowed.Contains(server.Kind));
+        }
+
+        plans = targetServers
+            .Select(server => new RunEventPlayPlan(
+                card,
+                spec,
+                runEvent,
+                source,
+                playArea,
+                discard,
+                server,
+                runEvent.Cost))
+            .ToArray();
         return true;
     }
 
@@ -230,6 +322,12 @@ public static partial class GameEngine
         if (!materialized.Any(candidate => PlayParametersMatch(candidate, parameters)))
         {
             throw new ResolutionFailureException("The play action does not match the materialized play plan.");
+        }
+
+        if (parameters.TargetServerId is { } targetServerId)
+        {
+            ConsumeTurnRunEventAction(working, turnFrame, parameters, targetServerId);
+            return;
         }
 
         ZoneKind sourceKind = side == PlayerSide.Corp ? ZoneKind.CorpHand : ZoneKind.RunnerGrip;
@@ -314,6 +412,55 @@ public static partial class GameEngine
             new BehaviorInvocationContext(plan.Card.Id, player.Id, player.Id),
             plan.Definition,
             playArea);
+    }
+
+    private static void ConsumeTurnRunEventAction(
+        WorkingState working,
+        TurnFrame turnFrame,
+        PlayCardParameters parameters,
+        ServerId targetServerId)
+    {
+        if (turnFrame.ActiveSide != PlayerSide.Runner
+            || working.Turn.ActiveSide != PlayerSide.Runner
+            || working.RunState is not null)
+        {
+            throw new ResolutionFailureException("A run event requires the active Runner turn and no live run.");
+        }
+
+        ZoneKind sourceKind = ZoneKind.RunnerGrip;
+        ZoneKind discardKind = ZoneKind.RunnerHeap;
+        if (!TryGetCanonicalZone(working, sourceKind, PlayerSide.Runner, out ZoneState? source)
+            || !TryGetCanonicalZone(working, discardKind, PlayerSide.Runner, out ZoneState? discard)
+            || !TryGetCanonicalPlayArea(working, ZoneKind.RunnerPlayArea, PlayerSide.Runner, out ZoneState? playArea)
+            || source is null
+            || discard is null)
+        {
+            throw new ResolutionFailureException("The canonical Runner run-event zones are unavailable.");
+        }
+
+        CardInstanceState card = working.Cards.SingleOrDefault(candidate => candidate.Id == parameters.CardId)
+            ?? throw new ResolutionFailureException($"Card '{parameters.CardId}' does not exist.");
+        if (!TryGetRunEventTargets(working, card, source, discard, playArea, out IReadOnlyList<RunEventPlayPlan>? plans)
+            || plans is null)
+        {
+            throw new ResolutionFailureException("The run-event action is stale or unsupported.");
+        }
+
+        RunEventPlayPlan plan = plans.SingleOrDefault(candidate => candidate.TargetServer.Id == targetServerId)
+            ?? throw new ResolutionFailureException(
+                $"Run event '{parameters.CardId}' cannot attack server '{targetServerId}'.");
+        if (plan.CreditCost != parameters.CreditCost)
+        {
+            throw new ResolutionFailureException("The run-event action cost is stale.");
+        }
+
+        PlayerState runner = GetPlayer(working, PlayerSide.Runner);
+        SpendClick(working, runner.Id);
+        StartRunInWorkingState(
+            working,
+            targetServerId,
+            runner.Id,
+            parameters.CardId);
     }
 
     private static void StepCardPlay(WorkingState working, CardPlayFrame frame)
@@ -469,5 +616,6 @@ public static partial class GameEngine
 
     private static bool PlayParametersMatch(PlayCardParameters actual, PlayCardParameters expected) =>
         actual.CardId == expected.CardId
-        && actual.CreditCost == expected.CreditCost;
+        && actual.CreditCost == expected.CreditCost
+        && actual.TargetServerId == expected.TargetServerId;
 }
