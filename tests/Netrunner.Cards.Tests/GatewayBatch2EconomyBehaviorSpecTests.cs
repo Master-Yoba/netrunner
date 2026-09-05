@@ -519,6 +519,30 @@ public sealed class GatewayBatch2EconomyBehaviorSpecTests
                 && Assert.IsType<AbilityActionParameters>(action.Parameters).SourceCardId == sourceId);
     }
 
+    [Fact]
+    public void TeleworkFinalTakeCompletesAfterItsMandatoryEmptyPoolTrash()
+    {
+        BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();
+        CardInstanceId sourceId = new("card:economy-telework-final");
+        GameState state = BuildInstalledState(catalog, sourceId, GatewayBatch2CardCodes.TeleworkContract,
+            PlayerSide.Runner, ZoneKind.RunnerRig, rezzed: false, hostedCredits: 3);
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+        GameState prompt = GameEngine.BeginResolution(state,
+            new TurnFrame(1, ResolutionBehaviorIds.Turn, PlayerSide.Runner, state.Turn.TurnNumber, TurnFrameStage.AwaitingAction), catalog);
+        PendingDecision pending = prompt.PendingDecision!;
+        LegalAction ability = Assert.Single(pending.LegalActions, action => action.Kind == ActionKind.UseAbility);
+        ApplyResult result = GameEngine.Apply(prompt,
+            new ActionSubmission(pending.Owner, pending.Id, pending.Revision, ability.Id), catalog);
+        Assert.True(result.Accepted, result.Rejection?.Message);
+        Assert.Contains(sourceId, result.State.GetZone(ZoneKind.RunnerHeap).CardIds);
+        Assert.Equal(0, HostedCount(result.State, sourceId));
+        Assert.Equal(8, result.State.GetPlayer(runner).Credits);
+        Assert.Equal(3, result.State.GetPlayer(runner).Clicks);
+        Assert.Empty(result.State.ResolutionStack.OfType<AbilityFrame>());
+        string json = EngineJson.Serialize(result.State);
+        Assert.Equal(json, EngineJson.Serialize(EngineJson.DeserializeState(json, catalog)));
+    }
+
     private static CardBehaviorDefinition Definition(CardDefinitionId id) =>
         GatewayBehaviorCatalog.Create().GenericSpecs.Single(definition => definition.DefinitionId == id);
 

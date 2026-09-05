@@ -1377,7 +1377,9 @@ public static partial class GameEngine
             ZoneState currentSourceZone = working.Zones.SingleOrDefault(zone => zone.Id == source.ZoneId)
                 ?? throw new ResolutionFailureException("Ability source card current zone no longer exists.");
             bool validLifecycleZone = (selfTrash && IsAbilityTrashZone(currentSourceZone, source))
-                || (selfRemove && IsAbilityRemoveZone(currentSourceZone, source));
+                || (selfRemove && IsAbilityRemoveZone(currentSourceZone, source))
+                || AbilityLifecycleRules.IsEmptyPoolSelfTrash(definition, declaration, frame,
+                    source, currentSourceZone, working.RulesState, working.Turn);
             if (!paid || !validLifecycleZone || (selfTrash && selfRemove))
             {
                 throw new ResolutionFailureException("Ability source card moved outside its permitted lifecycle.");

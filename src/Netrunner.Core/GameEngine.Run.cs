@@ -935,8 +935,14 @@ public static partial class GameEngine
                     ApplyCreditDelta(working, GetPlayer(working, gain.Target).Id, gain.Amount);
                     break;
                 case GiveTagsSubroutineSpec tags:
-                    ApplyTags(working, GetPlayer(working, PlayerSide.Runner).Id, tags.Amount);
-                    break;
+                    resolvedSubroutines.Add(new RunSubroutineState(subroutine.Version, subroutine.Id,
+                        subroutine.Ordinal, subroutine.Broken, true));
+                    resolvedSubroutines.AddRange(encounter.Subroutines.Skip(index + 1));
+                    currentRun = RecordResolvedUnbrokenSubroutine(currentRun, ice, encounter.Id, subroutine);
+                    working.RunState = currentRun.WithEncounter(new RunEncounterState(encounter.Version,
+                        encounter.Id, encounter.IceId, encounter.Status, resolvedSubroutines));
+                    QueueRunTagEffect(working, tags.Amount);
+                    return;
                 case LoseCreditsSubroutineSpec loseCredits:
                     PlayerState debtor = GetPlayer(working, loseCredits.Target);
                     // CR 26.03 1.10.3b (LOSE path): losing credits moves them
@@ -1511,6 +1517,7 @@ public static partial class GameEngine
         }
 
         IceSubroutineSpec specification = iceSpec.Subroutines[frame.Ordinal];
+        int pendingTags = 0;
         switch (parameters.Choice)
         {
             case IceSubroutineChoiceKind.EndRun:
@@ -1579,7 +1586,7 @@ public static partial class GameEngine
                     throw new ResolutionFailureException("The tag fallback is not valid for this ICE subroutine.");
                 }
 
-                ApplyTags(working, GetPlayer(working, PlayerSide.Runner).Id, tagSpec.TagAmount);
+                pendingTags = tagSpec.TagAmount;
                 break;
             case IceSubroutineChoiceKind.Decline:
                 if (specification is not InstallCardSubroutineSpec)
@@ -1666,6 +1673,7 @@ public static partial class GameEngine
             resolvedSubroutines));
         working.ResolutionStack.RemoveAt(working.ResolutionStack.Count - 1);
         working.ResolutionStack.Add(new RunTimingFrame(run.Id, RunTimingStep.Encounter));
+        if (pendingTags > 0) QueueRunTagEffect(working, pendingTags);
     }
 
     private static void StepMoveInward(WorkingState working, RunState run)
@@ -2020,7 +2028,7 @@ public static partial class GameEngine
                 initiatingSource,
                 attackedServer,
                 successful,
-                run.PersistentContext);
+                run.PersistentContext ?? new RunPersistentContext(run.Id, run.AttackedServer, [], []));
         }
     }
 
@@ -2194,7 +2202,7 @@ public static partial class GameEngine
                     runBreak.BreakerId,
                     runBreak.Quantity,
                     runBreak.HostedCredits,
-                    runBreak.CostQuote);
+                    runBreak.CostQuote, runBreak.SubroutineId);
                 break;
             case (ActionKind.PumpBreaker, RunBreakerParameters pump):
                 ConsumeRunPumpBreaker(working, run, pump.BreakerId, pump.HostedCredits);
@@ -2292,6 +2300,10 @@ public static partial class GameEngine
             server.Id,
             cardId,
             chosenSource));
+        RunPersistentContext accessContext = run.PersistentContext
+            ?? new RunPersistentContext(run.Id, run.AttackedServer, [], []);
+        run = run.WithPersistentContext(new RunPersistentContext(run.Id, run.AttackedServer,
+            accessContext.StolenAgendas, accessContext.Abilities, checked(accessContext.AccessOccurrenceCount + 1)));
         Emit(working, EngineEventKinds.CardAccessed, new CardAccessedEventPayload(run.Id, server.Id, cardId));
         run = run.WithTiming(
             RunTimingStep.BreachAccessAbility,
@@ -2417,6 +2429,7 @@ public static partial class GameEngine
         }
         Emit(working, EngineEventKinds.AccessedCardTrashed, new AccessedCardTrashedEventPayload(run.Id, accessed, spec.TrashCost));
         AdvanceBreachAfterAccess(working, run);
+        QueueIdentityOccurrence(working, OccurrenceKind.AccessedCardTrashed, PlayerSide.Runner, accessed);
     }
 
     /// <summary>
@@ -2475,7 +2488,7 @@ public static partial class GameEngine
         RunPersistentContext context = run.PersistentContext
             ?? new RunPersistentContext(run.Id, run.AttackedServer, [], []);
         run = run.WithPersistentContext(new RunPersistentContext(run.Id, run.AttackedServer,
-            context.StolenAgendas.Append(card.Id).ToArray(), context.Abilities));
+            context.StolenAgendas.Append(card.Id).ToArray(), context.Abilities, context.AccessOccurrenceCount));
         working.RunState = run;
         AddAgendaPoints(working, PlayerSide.Runner, spec.AgendaPoints);
         Emit(working, EngineEventKinds.AgendaStolen, new AgendaStolenEventPayload(PlayerSide.Runner, cardId, spec.AgendaPoints));
@@ -2798,7 +2811,7 @@ public static partial class GameEngine
         CardInstanceId breakerId,
         int quantity,
         int hostedCredits,
-        CostQuote? suppliedCostQuote)
+        CostQuote? suppliedCostQuote, SubroutineId? subroutineId)
     {
         RunPriorityState? priority = run.Priority;
         RunEncounterState? encounter = run.Encounter;
@@ -2828,11 +2841,22 @@ public static partial class GameEngine
             throw new ResolutionFailureException("The breaking breaker must be installed in the Runner rig.");
         }
 
+        if (HostingSpec(working, breaker)?.BreakHostSubroutine == true)
+        {
+            ConsumeHostedCounterBreak(working, run, breaker, quantity, hostedCredits, suppliedCostQuote, subroutineId);
+            return;
+        }
+
         if (!working.BehaviorCatalog.TryGetIcebreaker(breaker.DefinitionId, out IcebreakerBehaviorSpec breakerSpec))
         {
             throw new ResolutionFailureException(
                 $"Breaker '{breaker.DefinitionId}' is not registered in the icebreaker behavior spec catalog; "
                 + "it cannot break subroutines.");
+        }
+
+        if (subroutineId is not null)
+        {
+            throw new ResolutionFailureException("A count-based icebreaker action cannot contain a hosted-subroutine target.");
         }
 
         ServerState server = working.Servers.SingleOrDefault(candidate => candidate.Id == run.AttackedServer)
@@ -3387,6 +3411,19 @@ public static partial class GameEngine
                                 ability.Key,
                                 ability.Cost,
                                 subroutine.Ordinal)));
+                    }
+                }
+            }
+
+            foreach (CardInstanceState hosted in working.Cards)
+            {
+                if (CanBreakHostSubroutine(working, hosted, run))
+                {
+                    foreach (RunSubroutineState subroutine in run.Encounter.Subroutines.Where(value => !value.Broken && !value.Resolved))
+                    {
+                        actions.Add(new LegalAction(working.Allocator.NextActionId(), ActionKind.BreakSubroutines,
+                            $"Spend hosted virus counter to break host subroutine {subroutine.Ordinal + 1}",
+                            new RunBreakParameters(hosted.Id, 1, subroutineId: subroutine.Id)));
                     }
                 }
             }

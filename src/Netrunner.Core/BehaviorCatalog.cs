@@ -1030,7 +1030,8 @@ public sealed record BehaviorInstruction
             or BehaviorInstructionKind.AddToHand
             or BehaviorInstructionKind.TrashCard
             or BehaviorInstructionKind.InstallCard
-            or BehaviorInstructionKind.AdvanceCard)
+            or BehaviorInstructionKind.AdvanceCard
+            or BehaviorInstructionKind.SwapInstalledIce)
         {
             if (Target is null)
             {
@@ -1166,12 +1167,18 @@ public sealed record BehaviorInstruction
             && Kind != BehaviorInstructionKind.ShuffleIntoDeck
             && Kind != BehaviorInstructionKind.AddToHand
             && Kind != BehaviorInstructionKind.InstallCard
+            && Kind != BehaviorInstructionKind.ShuffleSearchedDeck
             && (SourceZone is not null || DestinationZone is not null))
         {
             throw new ArgumentException(
                 "Source and destination zones are not valid for this instruction kind.",
                 nameof(SourceZone));
         }
+
+        if (Kind == BehaviorInstructionKind.ShuffleSearchedDeck
+            && (SourceZone is not (BehaviorZone.Deck or BehaviorZone.Stack)
+                || DestinationZone is not null || Target is not null || Amount != 0))
+            throw new ArgumentException("A search shuffle requires only its searched Deck or Stack source zone.");
 
         if (Kind is not (BehaviorInstructionKind.Reveal
             or BehaviorInstructionKind.Search
@@ -1182,6 +1189,8 @@ public sealed record BehaviorInstruction
             or BehaviorInstructionKind.InstallCard
             or BehaviorInstructionKind.AdvanceCard
             or BehaviorInstructionKind.MoveCard
+            or BehaviorInstructionKind.SwapInstalledIce
+            or BehaviorInstructionKind.RezIgnoringCosts
             or BehaviorInstructionKind.Choose)
             && Target is not null)
         {
@@ -1255,6 +1264,11 @@ public enum BehaviorInstructionKind
     TakeUpToHostedCredits,
     TakeAllHostedCredits,
     ModifyEncounteredIceStrength,
+    GainCreditsPerAccess,
+    SwapInstalledIce,
+    ProhibitScoringThisTurn,
+    RezIgnoringCosts,
+    ShuffleSearchedDeck,
 
     // Short aliases keep the contract pleasant for callers while the longer
     // names remain unambiguous in serialized/fingerprint output.
@@ -1383,7 +1397,10 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         bool requireSourceInstalled = false,
         bool activeWhileUnrezzed = false,
         bool persistent = false,
-        bool requireAgendaStolenDuringRun = false)
+        bool requireAgendaStolenDuringRun = false,
+        PlayerSide? occurrenceControllerSide = null,
+        bool oncePerTurn = false,
+        BehaviorTriggerCondition? condition = null)
     {
         if (!StableIdentifier.TryValidate(key))
         {
@@ -1447,7 +1464,7 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         }
 
         if (requireSourceOnAttackedServer
-            && occurrence is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded))
+            && occurrence is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded or OccurrenceKind.AgendaScoredOrStolen))
         {
             throw new ArgumentException(
                 "Requiring the source to occupy the attacked server is valid only for ServerApproached, IceEncountered, or CardRezzed triggers.",
@@ -1462,6 +1479,11 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
                 nameof(instructions));
         }
 
+        if (occurrenceControllerSide is { } side && !Enum.IsDefined(side)) throw new ArgumentOutOfRangeException(nameof(occurrenceControllerSide));
+        if (condition is { } predicate && !Enum.IsDefined(predicate)) throw new ArgumentOutOfRangeException(nameof(condition));
+        OccurrenceControllerSide = occurrenceControllerSide;
+        OncePerTurn = oncePerTurn;
+        Condition = condition;
         Key = key;
         Occurrence = occurrence;
         Mode = mode;
@@ -1487,6 +1509,12 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
     public string Key { get; }
 
     public OccurrenceKind Occurrence { get; }
+
+    public PlayerSide? OccurrenceControllerSide { get; }
+
+    public bool OncePerTurn { get; }
+
+    public BehaviorTriggerCondition? Condition { get; }
 
     public TriggerMode Mode { get; }
 
@@ -1531,6 +1559,9 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         other is not null
         && string.Equals(Key, other.Key, StringComparison.Ordinal)
         && Occurrence == other.Occurrence
+        && OccurrenceControllerSide == other.OccurrenceControllerSide
+        && OncePerTurn == other.OncePerTurn
+        && Condition == other.Condition
         && Mode == other.Mode
         && Scope == other.Scope
         && BehaviorContractStructure.AreEqual(SubjectCardFilter, other.SubjectCardFilter)
@@ -1571,7 +1602,9 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         or OccurrenceKind.RunEnded
         or OccurrenceKind.AgendaScoredOrStolen
         or OccurrenceKind.CardAccessed
-        or OccurrenceKind.HostedCreditPoolEmptied;
+        or OccurrenceKind.HostedCreditPoolEmptied
+        or OccurrenceKind.CardAdvancedFromZero
+        or OccurrenceKind.AccessedCardTrashed;
 
     private static ReadOnlyCollection<BehaviorInstruction> Freeze(
         IEnumerable<BehaviorInstruction> values)
@@ -1622,7 +1655,8 @@ public sealed class CardBehaviorDefinition
         IReadOnlyList<BehaviorFirstProgramInstallCostModifier>? firstProgramInstallCostModifiers = null,
         IReadOnlyList<BehaviorFirstHqBreachAccessModifier>? firstHqBreachAccessModifiers = null,
         IReadOnlyList<BehaviorFirstBasicDrawReplacement>? firstBasicDrawReplacements = null,
-        bool canBeAdvanced = false)
+        bool canBeAdvanced = false,
+        HostingBehaviorSpec? hosting = null)
     {
         DefinitionId = definitionId;
         if (!Enum.IsDefined(controller))
@@ -1632,6 +1666,7 @@ public sealed class CardBehaviorDefinition
 
         Controller = controller;
         CanBeAdvanced = canBeAdvanced;
+        Hosting = hosting;
         if (canBeAdvanced && controller != PlayerSide.Corp)
         {
             throw new ArgumentException("Only Corp cards can permit advancement.", nameof(canBeAdvanced));
@@ -1678,6 +1713,9 @@ public sealed class CardBehaviorDefinition
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool CanBeAdvanced { get; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public HostingBehaviorSpec? Hosting { get; }
 
     public IReadOnlyList<BehaviorCost> Costs { get; }
 
@@ -2458,6 +2496,7 @@ internal static class BehaviorCatalogStructure
             (CardBehaviorDefinition a, CardBehaviorDefinition b) => a.DefinitionId == b.DefinitionId
                 && a.Controller == b.Controller
                 && a.CanBeAdvanced == b.CanBeAdvanced
+                && a.Hosting == b.Hosting
                 && SequenceEquals(a.Costs, b.Costs)
                 && SequenceEquals(a.Conditions, b.Conditions)
                 && BehaviorContractStructure.SequenceEquals(
@@ -2662,6 +2701,11 @@ internal static class BehaviorCatalogFingerprint
         if (value.CanBeAdvanced)
         {
             builder.Append(",canBeAdvanced=1");
+        }
+        if (value.Hosting is { } hosting)
+        {
+            builder.Append("|hosting=").Append(hosting.BreakHostSubroutine ? 1 : 0)
+                .Append(':').Append(hosting.DerezAtVirusCounters);
         }
         AppendSequence(builder, value.Targets, AppendTarget);
         AppendSequence(builder, value.Instructions, AppendInstruction);
@@ -2988,6 +3032,9 @@ internal static class BehaviorCatalogFingerprint
         {
             builder.Append(",requireSourceInstalled=1");
         }
+        if (value.OccurrenceControllerSide is { } occurrenceSide) builder.Append(",occurrenceSide=").Append((int)occurrenceSide);
+        if (value.OncePerTurn) builder.Append(",oncePerTurn=1");
+        if (value.Condition is { } condition) builder.Append(",condition=").Append((int)condition);
         if (value.Persistent) builder.Append(",persistent=1");
         if (value.RequireAgendaStolenDuringRun) builder.Append(",requireAgendaStolenDuringRun=1");
         if (value.ActiveWhileUnrezzed)
@@ -3085,6 +3132,7 @@ internal static class BehaviorCatalogFingerprint
         AppendNullableEnum(builder, value.OwnerSide);
         builder.Append(",subtype=");
         AppendString(builder, value.Subtype);
+        if (value.Rezzed is { } rezzed) builder.Append(",rezzed=").Append(rezzed ? 1 : 0);
     }
 
     private static void AppendCardDefinitionId(StringBuilder builder, CardDefinitionId? value) =>

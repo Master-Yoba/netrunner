@@ -435,6 +435,7 @@ public static partial class GameEngine
 
             CardBehaviorDefinition definition = GetBehaviorDefinition(working, sourceDefinitionId);
             BehaviorTrigger trigger = GetTriggerDeclaration(definition, invocation.TriggerKey);
+            MarkCatalogTriggerUsed(working, source, trigger);
             if (trigger.RequireSourceInstalled
                 && sourceZoneKind is not (ZoneKind.ServerRoot or ZoneKind.ServerIce or ZoneKind.RunnerRig))
             {
@@ -998,7 +999,11 @@ public static partial class GameEngine
             or OccurrenceKind.AgendaScoredOrStolen
             or OccurrenceKind.CardAccessed
             or OccurrenceKind.HostedCreditPoolEmptied
-            or OccurrenceKind.TurnBegin))
+            or OccurrenceKind.TurnBegin
+            or OccurrenceKind.Tags
+            or OccurrenceKind.CardAdvancedFromZero
+            or OccurrenceKind.AccessedCardTrashed
+            or OccurrenceKind.DiscardPhaseEnded))
         {
             return [];
         }
@@ -1023,6 +1028,7 @@ public static partial class GameEngine
                         && trigger.Scope == BehaviorTriggerScope.Self
                     || frame.AppliedTriggers.Contains(CatalogTriggerId(occurrence, source, trigger.Key))
                     || !CatalogTriggerScopeMatches(trigger.Scope, source, occurrence, occurrenceController)
+                    || !CatalogIdentityTriggerMatches(working, source, trigger, occurrence)
                     || !CatalogTriggerOutcomeMatches(trigger, occurrence)
                     || !CatalogRunAgendaConditionMatches(trigger, occurrence)
                     || !CatalogTriggerServerMatches(working, trigger, occurrence)
@@ -1133,7 +1139,7 @@ public static partial class GameEngine
             return true;
         }
 
-        if (occurrence.Kind is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded)
+        if (occurrence.Kind is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded or OccurrenceKind.AgendaScoredOrStolen)
             || occurrence.Effect is not GameplayOccurrenceEffect gameplay
             || gameplay.ServerId is not { } attackedServer)
         {
@@ -1176,7 +1182,7 @@ public static partial class GameEngine
                         && working.Servers.FirstOrDefault(candidate => candidate.Id == suppliedServerId)?.Kind
                             == trigger.ServerKindRequirement)
                 && (!trigger.RequireSourceOnAttackedServer
-                    || occurrenceKind is OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded
+                    || occurrenceKind is OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded or OccurrenceKind.AgendaScoredOrStolen
                         && (occurrenceKind != OccurrenceKind.CardRezzed || working.RunState?.AttackedServer == serverId)
                         && serverId is { } suppliedServer
                         && working.Zones.FirstOrDefault(zone => zone.Id == source.ZoneId)?.ServerId == suppliedServer)
@@ -1214,6 +1220,9 @@ public static partial class GameEngine
         return (!trigger.RequireSourceInstalled || installed)
             && (activeRunEventSource
                 || RuntimeCardActivity.IsActive(source, working.Zones)
+                || trigger.Occurrence == OccurrenceKind.AgendaScoredOrStolen
+                    && trigger.Scope == BehaviorTriggerScope.Self
+                    && working.Zones.Any(zone => zone.Id == source.ZoneId && zone.Kind == ZoneKind.RunnerScore)
                 || trigger.ActiveWhileUnrezzed && installed && source.OwnerSide == PlayerSide.Corp);
     }
 
@@ -1244,6 +1253,14 @@ public static partial class GameEngine
         if (openingChoice is null)
         {
             return true;
+        }
+
+        if (openingChoice.Target is { } target)
+        {
+            int candidates = MaterializeBehaviorCandidates(working, target).Length;
+            return (trigger.Mode != TriggerMode.Optional || candidates > 0)
+                && (openingChoice.Cardinality.Kind != BehaviorChoiceCardinalityKind.Exactly
+                    || candidates >= openingChoice.Cardinality.Count);
         }
 
         PlayerId controller = GetPlayer(working, source.OwnerSide).Id;
@@ -1278,6 +1295,7 @@ public static partial class GameEngine
 
         CardInstanceState? subject = working.Cards.SingleOrDefault(card => card.Id == subjectCardId.Value);
         if (subject is null
+            || filter.Rezzed is { } requiredRezzed && subject.Rezzed != requiredRezzed
             || filter.DefinitionId is { } definitionId && subject.DefinitionId != definitionId
             || filter.OwnerSide is { } ownerSide && subject.OwnerSide != ownerSide)
         {
@@ -1300,6 +1318,7 @@ public static partial class GameEngine
             return filter.CardType switch
             {
                 BehaviorCardType.Any => true,
+                BehaviorCardType.NonAgenda => runtime.CardClass != RuntimeCardClass.Agenda,
                 BehaviorCardType.Agenda => runtime.CardClass == RuntimeCardClass.Agenda,
                 BehaviorCardType.Asset => runtime.CardClass == RuntimeCardClass.Asset,
                 BehaviorCardType.Event => runtime.CardClass == RuntimeCardClass.Event,

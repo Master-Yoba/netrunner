@@ -824,7 +824,10 @@ public sealed class ObservationTests
             RunAccessState.InProgress,
             0,
             null,
-            []);
+            [],
+            persistentContext: accessed is { Length: > 0 }
+                ? new RunPersistentContext(new RunId("run:obs-breach"), ids.Headquarters, [], [], accessed.Length)
+                : null);
     }
 
     private static PendingDecision BuildRunnerDecision(

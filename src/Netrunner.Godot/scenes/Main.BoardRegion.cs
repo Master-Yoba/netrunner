@@ -82,6 +82,9 @@ public partial class Main
 		corpContent.AddChild(MakeLabel("CORP · REMOTE NETWORK", 14, new Color(0.93f, 0.48f, 0.48f)));
 		_corpSummary = MakeLabel("Credits · Clicks · Score", 13, Muted);
 		corpContent.AddChild(_corpSummary);
+		corpContent.AddChild(MakeLabel("IDENTITY PANEL", 11, Warning));
+		_corpIdentityDetails = MakeWrappedLabel("Corp identity · unavailable", 11, Colors.White);
+		corpContent.AddChild(_corpIdentityDetails);
 		corpContent.AddChild(MakeLabel("HQ / R&D / Archives", 12, Muted));
 		body.AddChild(_corpPanel);
 
@@ -140,6 +143,9 @@ public partial class Main
 		runnerContent.AddChild(MakeLabel("RUNNER RIG · YOUR HAND", 14, Accent));
 		_runnerSummary = MakeLabel("Credits · Clicks · Score", 13, Muted);
 		runnerContent.AddChild(_runnerSummary);
+		runnerContent.AddChild(MakeLabel("IDENTITY PANEL", 11, Warning));
+		_runnerIdentityDetails = MakeWrappedLabel("Runner identity · unavailable", 11, Colors.White);
+		runnerContent.AddChild(_runnerIdentityDetails);
 		runnerContent.AddChild(MakeLabel("Rig", 12, Warning));
 		_runnerRig = new VBoxContainer();
 		_runnerRig.AddThemeConstantOverride("separation", 4);
@@ -227,9 +233,34 @@ public partial class Main
 		lower.AddChild(detailsPanel);
 	}
 
-	private void RenderServers(IReadOnlyList<ServerViewModel> servers)
+	private void RenderIdentityPanels(MatchViewModel view)
+	{
+		IdentityPanelState panels = view.IdentityPanel;
+		_corpIdentityDetails.Text = FormatIdentityPanel(panels.Corp);
+		_runnerIdentityDetails.Text = FormatIdentityPanel(panels.Runner);
+	}
+
+	private static string FormatIdentityPanel(IdentityPanelViewModel panel)
+	{
+		if (!panel.IsAvailable)
+		{
+			return $"{panel.Side} identity · unavailable";
+		}
+
+		string faction = panel.Faction.Length == 0 ? string.Empty : $" · {panel.Faction}";
+		string agenda = panel.AgendaPoints is { } points ? $" · {points} AP" : string.Empty;
+		string rules = string.IsNullOrWhiteSpace(panel.RulesText)
+			? string.Empty
+			: $"\n{CardMarkupFormatter.Format(panel.RulesText)}";
+		return $"{panel.Title}{faction}{agenda}\n{panel.Type}{rules}";
+	}
+
+	private void RenderServers(
+		IReadOnlyList<ServerViewModel> servers,
+		IReadOnlyList<CardViewModel>? runnerRig = null)
 	{
 		ClearChildren(_servers);
+		IReadOnlyList<CardViewModel> hostedCards = runnerRig ?? Array.Empty<CardViewModel>();
 		foreach (ServerViewModel server in servers)
 		{
 			PanelContainer panel = MakePanel();
@@ -242,10 +273,42 @@ public partial class Main
 				server.Kind == ServerKind.Remote ? Warning : Muted));
 			HBoxContainer ice = new();
 			ice.AddChild(MakeLabel("ICE (outer → inner)", 10, Muted));
-			foreach (CardViewModel? card in server.OrderedIce)
+			for (int displayIndex = 0; displayIndex < server.OrderedIce.Count; displayIndex++)
 			{
-				TextCardControl control = MakeCard(card);
-				ice.AddChild(control);
+				CardViewModel? card = server.OrderedIce[displayIndex];
+				IcePositionViewModel? position = FindDisplayedIcePosition(server, displayIndex);
+				string? hostId = card?.Id ?? position?.CardId;
+				VBoxContainer iceSlot = new();
+				iceSlot.AddThemeConstantOverride("separation", 2);
+				if (card is null && position is { } hidden)
+				{
+					iceSlot.AddChild(MakeHiddenIce(hidden));
+				}
+				else
+				{
+					iceSlot.AddChild(MakeCard(card));
+				}
+				if (hostId is { Length: > 0 })
+				{
+					CardViewModel[] children = hostedCards
+						.Where(child => string.Equals(child.HostCardId, hostId, StringComparison.Ordinal))
+						.ToArray();
+					if (children.Length > 0)
+					{
+						iceSlot.AddChild(MakeLabel(
+							$"HOSTED TROJANS · {children.Length} · UNDER {hostId}",
+							10,
+							Accent));
+						foreach (CardViewModel child in children)
+						{
+							TextCardControl childControl = MakeCard(child);
+							childControl.CustomMinimumSize = new Vector2(104, 78);
+							iceSlot.AddChild(childControl);
+						}
+					}
+				}
+
+				ice.AddChild(iceSlot);
 			}
 
 			content.AddChild(ice);
@@ -261,11 +324,56 @@ public partial class Main
 		}
 	}
 
+	private static IcePositionViewModel? FindDisplayedIcePosition(
+		ServerViewModel server,
+		int displayIndex)
+	{
+		if (server.IcePositions.Count == 0)
+		{
+			return null;
+		}
+
+		// Core's physical ICE list is inner-to-outer while the board renders
+		// outer-to-inner. The topology envelope uses Core's physical indexes.
+		int physicalIndex = server.OrderedIce.Count - displayIndex - 1;
+		return server.IcePositions.FirstOrDefault(position => position.Index == physicalIndex);
+	}
+
+	private static VBoxContainer MakeHiddenIce(IcePositionViewModel position)
+	{
+		VBoxContainer hidden = new();
+		hidden.AddThemeConstantOverride("separation", 2);
+		hidden.AddChild(new Label
+		{
+			Text = "HIDDEN ICE",
+			TooltipText = "Core supplied this physical ICE position without revealing its definition.",
+		});
+		hidden.AddChild(new Label
+		{
+			Text = position.CardId,
+			TooltipText = position.Summary,
+		});
+		return hidden;
+	}
+
 	private void RenderRunnerCards(BoardRegionState board)
 	{
 		ClearChildren(_runnerRig);
+		HashSet<string> visibleHostIds = board.Servers
+			.SelectMany(server => server.OrderedIce
+				.Where(static card => card is not null)
+				.Select(static card => card!.Id)
+				.Concat(server.IcePositions.Select(static position => position.CardId)))
+			.ToHashSet(StringComparer.Ordinal);
 		foreach (CardViewModel card in board.RunnerRig)
 		{
+			if (card.HostCardId is { } hostId && visibleHostIds.Contains(hostId))
+			{
+				// The server renderer owns hosted children so their spatial
+				// relationship to the host ICE remains visible and inspectable.
+				continue;
+			}
+
 			TextCardControl control = MakeCard(card);
 			EncounterBreakerViewModel? breaker = board.Run?.Encounter?.Breakers
 				.FirstOrDefault(candidate => candidate.CardId == card.Id);

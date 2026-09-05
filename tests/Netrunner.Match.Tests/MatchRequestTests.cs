@@ -97,7 +97,7 @@ public sealed class MatchRequestTests
     }
 
     [Fact]
-    public void OfficialPresetsAreValidatedButNotYetUserPlayable()
+    public void OfficialPresetsStillRequireAnExplicitBehaviorCatalog()
     {
         MatchRequestValidationException exception = Assert.Throws<MatchRequestValidationException>(() =>
             MatchRequestComposer.ComposeOfficial(
@@ -105,8 +105,7 @@ public sealed class MatchRequestTests
                 "system-gateway-basic-runner",
                 CardDataResource.LoadEmbedded()));
 
-        Assert.Contains("not user-playable", exception.Message, StringComparison.Ordinal);
-        Assert.Contains("presets", exception.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("not user-playable", exception.Message, StringComparison.Ordinal);
         Assert.Contains("behaviorCatalog", exception.Message, StringComparison.Ordinal);
     }
 

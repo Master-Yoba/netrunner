@@ -51,6 +51,12 @@ public sealed record BoardRegionState(
 
     public IReadOnlyList<ConditionalValueViewModel> ConditionalValues { get; init; } =
         Array.Empty<ConditionalValueViewModel>();
+
+    public IdentityPanelState IdentityPanel { get; init; } = new(
+        new IdentityPanelViewModel(PlayerSide.Corp, null),
+        new IdentityPanelViewModel(PlayerSide.Runner, null));
+
+    public ZahyaAccessCountViewModel ZahyaAccess { get; init; } = ZahyaAccessCountViewModel.Unknown;
 }
 
 /// <summary>
@@ -191,6 +197,8 @@ public static class BoardRegionPresenter
                 view.PendingDamage.ToArray()),
             ConditionalValues = new ReadOnlyCollection<ConditionalValueViewModel>(
                 view.ConditionalValues.ToArray()),
+            IdentityPanel = view.IdentityPanel,
+            ZahyaAccess = Slice47PresentationProjector.PresentZahyaAccess(view),
         };
     }
 
@@ -583,6 +591,8 @@ public sealed class EventFeedRegionPresenter
                 $"Card moved · {payload.CardId.Value} · {payload.FromZoneId.Value} → {payload.ToZoneId.Value}.",
             RunCreditsAdjustedEventPayload payload => $"Run pool {payload.Delta:+#;-#;0} · now {payload.RunCreditsAfter}.",
             RunEndedEventPayload payload => $"Run ended · {payload.Reason}.",
+            IceSwappedEventPayload payload => Slice47PresentationProjector.DescribeIceSwap(payload),
+            CardDerezzedEventPayload payload => Slice47PresentationProjector.DescribeDerez(payload),
             _ => @event.Kind,
         };
     }
@@ -619,6 +629,8 @@ public sealed record FocusRegionState(
     RunFocusViewModel? Run,
     RunOutcomeViewModel? Outcome)
 {
+    public OutcomeViewModel? GameOutcome { get; init; }
+
     public EncounterViewModel? Encounter => Run?.Encounter;
 
     public AccessViewModel? Access => Run?.Access;
@@ -638,7 +650,11 @@ public static class FocusRegionPresenter
             return new FocusRegionState(FocusRegionMode.Empty, null, snapshot.RunOutcome);
         }
 
-        FocusRegionMode mode = snapshot.View.CorpIdentity is null && snapshot.RunOutcome is not null && run is null
+        bool representativeRunOutcome = snapshot.RunOutcome is not null
+            && snapshot.View.CorpIdentity is null
+            && !snapshot.View.Outcome.IsTerminal;
+        FocusRegionMode mode = run is null
+            && (representativeRunOutcome || snapshot.View.Outcome.IsTerminal)
             ? FocusRegionMode.Outcome
             : run is null
                 ? FocusRegionMode.Empty
@@ -649,7 +665,10 @@ public static class FocusRegionPresenter
                         : run.Priority is not null
                             ? FocusRegionMode.PaidWindow
                             : FocusRegionMode.Run;
-        return new FocusRegionState(mode, run, snapshot.RunOutcome);
+        return new FocusRegionState(mode, run, snapshot.RunOutcome)
+        {
+            GameOutcome = snapshot.View.Outcome.IsTerminal ? snapshot.View.Outcome : null,
+        };
     }
 
     private static bool HasKnownEnums(RunFocusViewModel run)
@@ -719,7 +738,11 @@ public static class CardZoomRegionPresenter
             lines.Add($"Advancement · {advancementRequirement}");
         }
 
-        lines.Add($"Status · {(card.Rezzed ? "REZZED" : card.IsKnown ? "KNOWN" : "FACE-DOWN")}");
+        lines.Add($"Status · {card.StatusLabel}");
+        if (card.HostLabel is { } host)
+        {
+            lines.Add(host);
+        }
         if (card.FirstXUseCue is { } firstXUseCue)
         {
             lines.Add(firstXUseCue);

@@ -17,7 +17,7 @@ public sealed class GatewayBatch4ReactionBehaviorSpecTests
     {
         BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();
 
-        Assert.Equal("gateway-m4-4.6", catalog.Version);
+        Assert.Equal("gateway-m4-4.7", catalog.Version);
         Assert.Equal(
             GatewayBatch4BehaviorSpecs.AssignedDefinitionIds,
             GatewayBatch4BehaviorSpecs.GenericSpecs.Select(static definition => definition.DefinitionId));

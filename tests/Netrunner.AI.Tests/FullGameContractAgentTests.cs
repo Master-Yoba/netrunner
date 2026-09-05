@@ -7,6 +7,60 @@ namespace Netrunner.AI.Tests;
 public sealed class FullGameContractAgentTests
 {
     [Fact]
+    public async Task Slice47ActionClassesSelectIssuedIdsAcrossSerialization()
+    {
+        CardInstanceId card = new("card:action-source");
+        (PlayerSide Side, DecisionKind Decision, ActionKind Kind, ActionParameters Parameters)[] cases =
+        [
+            (PlayerSide.Runner, DecisionKind.TurnAction, ActionKind.PlayCard, new PlayCardParameters(card, 2)),
+            (PlayerSide.Runner, DecisionKind.TurnAction, ActionKind.StartRun, new RunServerParameters(new ServerId("server:hq"))),
+            (PlayerSide.Corp, DecisionKind.TurnAction, ActionKind.AdvanceCard, new AdvanceCardParameters(card, 1)),
+            (PlayerSide.Corp, DecisionKind.TurnTiming, ActionKind.ScoreAgenda, new ScoreAgendaParameters(card, 2, 4)),
+            (PlayerSide.Runner, DecisionKind.TurnAction, ActionKind.RemoveTag, new RemoveTagParameters(1, 2)),
+            (PlayerSide.Corp, DecisionKind.TurnAction, ActionKind.TrashTaggedResource, new TrashTaggedResourceParameters(card, 1, 2)),
+            (PlayerSide.Corp, DecisionKind.TurnAction, ActionKind.PurgeVirusCounters, new PurgeVirusCountersParameters(3)),
+            (PlayerSide.Runner, DecisionKind.ChooseNumber, ActionKind.ChooseNumber, new NumberChoiceParameters(2)),
+            (PlayerSide.Runner, DecisionKind.ChooseCard, ActionKind.ChooseCard, new CardChoiceParameters(card)),
+        ];
+        foreach (var value in cases)
+        {
+            FullGameContractAgent agent = new(value.Side);
+            LegalAction issued = Action("action-class", value.Kind, value.Parameters);
+            LegalAction restored = EngineJson.Deserialize<LegalAction>(EngineJson.Serialize(issued));
+            Assert.Equal(issued.Id, await agent.ChooseActionAsync(ObservationFor(value.Side, value.Decision, restored)));
+        }
+        FullGameContractAgent preventionAgent = new(PlayerSide.Runner);
+        LegalAction one = Action("prevent-one", ActionKind.UsePrevention,
+            new PreventionChoiceParameters(new InterruptId("interrupt:damage"), 1));
+        LegalAction three = Action("prevent-three", ActionKind.UsePrevention,
+            new PreventionChoiceParameters(new InterruptId("interrupt:damage"), 3));
+        Assert.Equal(three.Id, await preventionAgent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.InterruptChoice, one, three)));
+    }
+
+    [Fact]
+    public async Task HostedInstallChoiceAndExactSubroutineBreakRemainDeterministic()
+    {
+        FullGameContractAgent agent = new(PlayerSide.Runner);
+        LegalAction highHost = Action("host-high", ActionKind.InstallCard,
+            new InstallCardParameters(new CardInstanceId("card:trojan"), InstallDestinationKind.RunnerRig,
+                null, false, 2, finalizeSelection: false, hostCardId: new CardInstanceId("card:host-b")));
+        LegalAction lowHost = Action("host-low", ActionKind.InstallCard,
+            new InstallCardParameters(new CardInstanceId("card:trojan"), InstallDestinationKind.RunnerRig,
+                null, false, 2, finalizeSelection: false, hostCardId: new CardInstanceId("card:host-a")));
+        Assert.Equal(lowHost.Id, await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.InstallChoice, highHost, lowHost)));
+        LegalAction highSubroutine = Action("break-a", ActionKind.BreakSubroutines,
+            new RunBreakParameters(new CardInstanceId("card:trojan"), 1, subroutineId: new SubroutineId("subroutine:b")));
+        LegalAction lowSubroutine = Action("break-z", ActionKind.BreakSubroutines,
+            new RunBreakParameters(new CardInstanceId("card:trojan"), 1, subroutineId: new SubroutineId("subroutine:a")));
+        Assert.Equal(lowSubroutine.Id, await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.RunTiming, highSubroutine, lowSubroutine)));
+        Assert.Equal(lowSubroutine.Id, await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.RunTiming, lowSubroutine, highSubroutine)));
+    }
+
+    [Fact]
     public void PolicyIsVersionedTypedAndDefensivelyCopied()
     {
         ActionKind[] turnOrder = [ActionKind.DrawCard, ActionKind.GainCredit];
@@ -19,8 +73,8 @@ public sealed class FullGameContractAgentTests
         Assert.Equal(FullGameContractAgentVersion.SchemaVersion, policy.SchemaVersion);
         Assert.Equal(FullGameContractAgentVersion.PolicyVersion, policy.PolicyVersion);
         Assert.Equal(5, FullGameContractAgentVersion.SchemaVersion);
-        Assert.Equal("full-game-contract-agent-v5", FullGameContractAgentVersion.AgentVersion);
-        Assert.Equal("full-game-contract-policy-v5", FullGameContractAgentVersion.PolicyVersion);
+        Assert.Equal("full-game-contract-agent-v6", FullGameContractAgentVersion.AgentVersion);
+        Assert.Equal("full-game-contract-policy-v6", FullGameContractAgentVersion.PolicyVersion);
         Assert.Equal(PlayerSide.Runner, policy.ControlledSide);
         Assert.Equal(ActionKind.DrawCard, policy.TurnActionOrder[0]);
         Assert.Equal(ActionKind.JackOut, policy.RunActionOrder[0]);
@@ -670,7 +724,7 @@ public sealed class FullGameContractAgentTests
     }
 
     [Fact]
-    public async Task BoundedAbilityCanCoexistWithUnsupportedTypedActionClasses()
+    public async Task BoundedAbilityCanCoexistWithOtherSupportedTypedActionClasses()
     {
         FullGameContractAgent agent = new(PlayerSide.Runner);
         LegalAction ability = Action(
@@ -693,7 +747,7 @@ public sealed class FullGameContractAgentTests
         LegalAction startRun = Action(
             "opaque-start-run",
             ActionKind.StartRun,
-            new NoActionParameters());
+            new RunServerParameters(new ServerId("server:hq")));
         LegalAction gain = Action("ability-gain", ActionKind.GainCredit, new NoActionParameters());
 
         Assert.Equal(
@@ -1417,9 +1471,8 @@ public sealed class FullGameContractAgentTests
             "prevention-only",
             ActionKind.UsePrevention,
             new PreventionChoiceParameters(new InterruptId("interrupt:prevention"), 1));
-        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-            await agent.ChooseActionAsync(
-                ObservationFor(PlayerSide.Runner, DecisionKind.InterruptChoice, prevention)));
+        Assert.Equal(prevention.Id, await agent.ChooseActionAsync(
+            ObservationFor(PlayerSide.Runner, DecisionKind.InterruptChoice, prevention)));
     }
 
     [Fact]

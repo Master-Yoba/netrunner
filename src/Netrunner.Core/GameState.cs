@@ -120,7 +120,8 @@ public sealed record CardInstanceState
         PlayerSide ownerSide,
         bool faceUp = false,
         bool rezzed = false,
-        int advancementCounters = 0)
+        int advancementCounters = 0,
+        CardInstanceId? hostCardId = null)
     {
         if (!Enum.IsDefined(ownerSide))
         {
@@ -134,6 +135,7 @@ public sealed record CardInstanceState
         FaceUp = faceUp;
         Rezzed = rezzed;
         AdvancementCounters = advancementCounters;
+        HostCardId = hostCardId;
     }
 
     [JsonInclude]
@@ -163,6 +165,10 @@ public sealed record CardInstanceState
     [JsonInclude]
     [JsonRequired]
     public int AdvancementCounters { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CardInstanceId? HostCardId { get; private set; }
 }
 
 public sealed record ZoneState
@@ -1035,7 +1041,7 @@ public sealed class GameSnapshot
             card.OwnerSide,
             card.FaceUp,
             card.Rezzed,
-            card.AdvancementCounters);
+            card.AdvancementCounters, card.HostCardId);
     }
 
     private static ZoneState CopyZone(ZoneState? zone)

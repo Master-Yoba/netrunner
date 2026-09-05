@@ -18,7 +18,8 @@ public sealed record RunPersistentContext
         RunId runId,
         ServerId serverId,
         IReadOnlyList<CardInstanceId> stolenAgendas,
-        IReadOnlyList<PersistentRunAbility> abilities)
+        IReadOnlyList<PersistentRunAbility> abilities,
+        int accessOccurrenceCount = 0)
     {
         ArgumentNullException.ThrowIfNull(stolenAgendas);
         ArgumentNullException.ThrowIfNull(abilities);
@@ -32,22 +33,29 @@ public sealed record RunPersistentContext
                 || !StableIdentifier.TryValidate(value.TriggerKey))
             || abilities.DistinctBy(value => (value.SourceCardId, value.TriggerKey)).Count() != abilities.Count)
             throw new ArgumentException("Persistent run context requires distinct, valid source identities.");
+        ArgumentOutOfRangeException.ThrowIfNegative(accessOccurrenceCount);
+        AccessOccurrenceCount = accessOccurrenceCount;
         RunId = runId;
         ServerId = serverId;
         StolenAgendas = new ReadOnlyCollection<CardInstanceId>(stolenAgendas.ToArray());
         Abilities = new ReadOnlyCollection<PersistentRunAbility>(abilities.ToArray());
     }
 
+    [JsonInclude]
+    [JsonRequired]
+    public int AccessOccurrenceCount { get; private set; }
+
     public RunId RunId { get; }
     public ServerId ServerId { get; }
     public IReadOnlyList<CardInstanceId> StolenAgendas { get; }
     public IReadOnlyList<PersistentRunAbility> Abilities { get; }
 
-    internal RunPersistentContext Copy() => new(RunId, ServerId, StolenAgendas, Abilities);
+    internal RunPersistentContext Copy() => new(RunId, ServerId, StolenAgendas, Abilities, AccessOccurrenceCount);
 
     internal static bool Matches(RunPersistentContext? left, RunPersistentContext? right) =>
         left is null ? right is null : right is not null
             && left.RunId == right.RunId && left.ServerId == right.ServerId
+            && left.AccessOccurrenceCount == right.AccessOccurrenceCount
             && left.StolenAgendas.SequenceEqual(right.StolenAgendas)
             && left.Abilities.SequenceEqual(right.Abilities);
 }

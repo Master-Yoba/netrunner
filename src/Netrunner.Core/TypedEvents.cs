@@ -27,6 +27,8 @@ public static class EngineEventKinds
     public const string TurnClicksLost = "turn-clicks-lost";
     public const string TurnCardDiscarded = "turn-card-discarded";
     public const string ClickSpent = "click-spent";
+    public const string IceSwapped = "ice-swapped";
+    public const string CardDerezzed = "card-derezzed";
     public const string CardMoved = "card-moved";
     public const string CardDrawn = "card-drawn";
     public const string CardInstalled = "card-installed";
@@ -101,6 +103,8 @@ public enum HostedCreditPoolOperation
 [JsonDerivedType(typeof(TurnClicksLostEventPayload), "turn-clicks-lost")]
 [JsonDerivedType(typeof(TurnCardDiscardedEventPayload), "turn-card-discarded")]
 [JsonDerivedType(typeof(ClickSpentEventPayload), "click-spent")]
+[JsonDerivedType(typeof(IceSwappedEventPayload), "ice-swapped")]
+[JsonDerivedType(typeof(CardDerezzedEventPayload), "card-derezzed")]
 [JsonDerivedType(typeof(CardMovedEventPayload), "card-moved")]
 [JsonDerivedType(typeof(CardDrawnEventPayload), "card-drawn")]
 [JsonDerivedType(typeof(CardInstalledEventPayload), "card-installed")]
@@ -2302,6 +2306,8 @@ public sealed record EngineEvent
         TurnClicksLostEventPayload value => new EngineEvent(Version, Sequence, Kind, new TurnClicksLostEventPayload(value.Version, value.Side, value.TurnNumber, value.ClicksLost)),
         TurnCardDiscardedEventPayload value => new EngineEvent(Version, Sequence, Kind, new TurnCardDiscardedEventPayload(value.Version, value.Side, value.TurnNumber, value.CardId, value.RemainingHandSize, value.MaximumHandSize)),
         ClickSpentEventPayload value => new EngineEvent(Version, Sequence, Kind, new ClickSpentEventPayload(value.Version, value.Side, value.ClicksRemaining)),
+        IceSwappedEventPayload value => new EngineEvent(Version, Sequence, Kind, new IceSwappedEventPayload(value.Version, value.FirstCardId, value.FirstZoneId, value.FirstIndex, value.SecondCardId, value.SecondZoneId, value.SecondIndex)),
+        CardDerezzedEventPayload value => new EngineEvent(Version, Sequence, Kind, new CardDerezzedEventPayload(value.Version, value.CardId)),
         CardMovedEventPayload value => new EngineEvent(Version, Sequence, Kind, new CardMovedEventPayload(value.Version, value.CardId, value.FromZoneId, value.ToZoneId, value.FromZoneKind, value.ToZoneKind)),
         CardDrawnEventPayload value => new EngineEvent(Version, Sequence, Kind, new CardDrawnEventPayload(value.Version, value.Side, value.CardId, value.FromZoneId, value.ToZoneId)),
         CardInstalledEventPayload value => new EngineEvent(Version, Sequence, Kind, new CardInstalledEventPayload(value.Version, value.Side, value.CardId, value.FromZoneId, value.ToZoneId, value.Cost)),
@@ -2629,6 +2635,21 @@ public static class EngineEventValidator
                 RequireKind(@event, EngineEventKinds.ClickSpent, path, violations);
                 RequireSide(value.Side, $"{path}.payload.side", violations);
                 RequireNumber(value.ClicksRemaining, $"{path}.payload.clicksRemaining", "Remaining clicks", violations);
+                break;
+            case IceSwappedEventPayload value:
+                RequireKind(@event, EngineEventKinds.IceSwapped, path, violations);
+                RequireId(value.FirstCardId.Value, $"{path}.payload.firstCardId", "identifier", violations);
+                RequireId(value.FirstZoneId.Value, $"{path}.payload.firstZoneId", "identifier", violations);
+                RequireNumber(value.FirstIndex, $"{path}.payload.firstIndex", "ICE index", violations);
+                RequireId(value.SecondCardId.Value, $"{path}.payload.secondCardId", "identifier", violations);
+                RequireId(value.SecondZoneId.Value, $"{path}.payload.secondZoneId", "identifier", violations);
+                RequireNumber(value.SecondIndex, $"{path}.payload.secondIndex", "ICE index", violations);
+                if (value.FirstCardId == value.SecondCardId)
+                    Add(violations, "event.same-card-swap", $"{path}.payload", "An ICE swap requires distinct cards.");
+                break;
+            case CardDerezzedEventPayload value:
+                RequireKind(@event, EngineEventKinds.CardDerezzed, path, violations);
+                RequireId(value.CardId.Value, $"{path}.payload.cardId", "identifier", violations);
                 break;
             case CardMovedEventPayload value:
                 RequireKind(@event, EngineEventKinds.CardMoved, path, violations);
@@ -3029,4 +3050,60 @@ public static class EngineEventValidator
 
     private static void Add(List<StateInvariantViolation> violations, string code, string path, string message) =>
         violations.Add(new StateInvariantViolation(code, path, message));
+}
+
+
+public sealed record IceSwappedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public IceSwappedEventPayload(int version, CardInstanceId firstCardId, ZoneId firstZoneId, int firstIndex, CardInstanceId secondCardId, ZoneId secondZoneId, int secondIndex) : base(version)
+    {
+        FirstCardId = firstCardId;
+        FirstZoneId = firstZoneId;
+        FirstIndex = firstIndex;
+        SecondCardId = secondCardId;
+        SecondZoneId = secondZoneId;
+        SecondIndex = secondIndex;
+    }
+
+    public IceSwappedEventPayload(CardInstanceId firstCardId, ZoneId firstZoneId, int firstIndex, CardInstanceId secondCardId, ZoneId secondZoneId, int secondIndex) : this(1, firstCardId, firstZoneId, firstIndex, secondCardId, secondZoneId, secondIndex) { }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId FirstCardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ZoneId FirstZoneId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int FirstIndex { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId SecondCardId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public ZoneId SecondZoneId { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int SecondIndex { get; private set; }
+}
+
+public sealed record CardDerezzedEventPayload : EngineEventPayload
+{
+    [JsonConstructor]
+    public CardDerezzedEventPayload(int version, CardInstanceId cardId) : base(version)
+    {
+        CardId = cardId;
+    }
+
+    public CardDerezzedEventPayload(CardInstanceId cardId) : this(1, cardId) { }
+
+    [JsonInclude]
+    [JsonRequired]
+    public CardInstanceId CardId { get; private set; }
 }

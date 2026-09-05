@@ -17,6 +17,18 @@ public partial class Main
 		ClearChildren(_focusPresentation);
 		FocusRegionState focus = FocusRegionPresenter.Present(snapshot);
 		RenderSlice46PresentationCues(snapshot);
+		if (focus.Mode == FocusRegionMode.Outcome && focus.GameOutcome is { IsTerminal: true } outcome)
+		{
+			_focusPresentation.AddChild(MakeLabel("MATCH OUTCOME", 17, Accent));
+			_focusPresentation.AddChild(MakeWrappedLabel(
+				$"Winner · {outcome.Winner}\nReason · {outcome.Reason}\nThe complete outcome was supplied by Core.",
+				13,
+				Colors.White));
+			_smokeOutcomePresentationObserved |= _fullMatchSmoke && _focusPresentation.GetChildCount() > 0;
+			AddNewMatchButton();
+			return;
+		}
+
 		if (focus.Mode == FocusRegionMode.Outcome && focus.Outcome is { } completed)
 		{
 			_focusPresentation.AddChild(MakeLabel("REPRESENTATIVE SLICE COMPLETE", 17, Accent));
@@ -25,11 +37,13 @@ public partial class Main
 				13,
 				Colors.White));
 			_smokeOutcomePresentationObserved |= _smokeTest && _focusPresentation.GetChildCount() > 0;
+			AddNewMatchButton();
 			return;
 		}
 
 		if (focus.Mode == FocusRegionMode.Empty || focus.Run is not { } run)
 		{
+			RenderSlice47DecisionFocus(snapshot);
 			_focusPresentation.AddChild(MakeLabel(
 				"RUN FOCUS · select a legal action to continue",
 				13,
@@ -44,6 +58,7 @@ public partial class Main
 			_smokeEncounterFocusObserved |= _smokeTest;
 			RenderEncounterFocusRegion(snapshot, run, encounter);
 			RenderSlice45DecisionFocus(snapshot.View);
+			RenderSlice47DecisionFocus(snapshot);
 			return;
 		}
 
@@ -51,12 +66,14 @@ public partial class Main
 		{
 			_smokeAccessFocusObserved |= _smokeTest;
 			RenderAccessFocusRegion(snapshot, run);
+			RenderSlice47DecisionFocus(snapshot);
 			return;
 		}
 
 		if (focus.Mode == FocusRegionMode.PaidWindow && focus.Priority is { } priority)
 		{
 			RenderPaidWindowFocusRegion(priority);
+			RenderSlice47DecisionFocus(snapshot);
 			return;
 		}
 
@@ -66,6 +83,7 @@ public partial class Main
 			Warning));
 		AddBreachAccessModifierCues(run);
 		RenderSlice45DecisionFocus(snapshot.View);
+		RenderSlice47DecisionFocus(snapshot);
 		_focusPresentation.AddChild(MakeWrappedLabel(
 			"The current timing step is owned by Core. Legal actions below are the only actions that can mutate the run.",
 			12,
@@ -118,6 +136,17 @@ public partial class Main
 				13,
 				Accent));
 		}
+	}
+
+	private void AddNewMatchButton()
+	{
+		var button = new Button
+		{
+			Text = "New match",
+			CustomMinimumSize = new Vector2(180, 32),
+		};
+		button.Pressed += () => GetTree().ReloadCurrentScene();
+		_focusPresentation.AddChild(button);
 	}
 
 	private void RenderPaidWindowFocusRegion(RunPriorityViewModel priority)
@@ -266,6 +295,45 @@ public partial class Main
 		}
 	}
 
+	private void RenderSlice47DecisionFocus(MatchSnapshot snapshot)
+	{
+		Slice47DecisionViewModel decision = Slice47PresentationProjector.Present(snapshot);
+		if (decision.ZahyaAccess.IsKnown)
+		{
+			_focusPresentation.AddChild(MakeWrappedLabel(
+				decision.ZahyaAccess.Summary + " · supplied by Core",
+				12,
+				Accent));
+		}
+
+		foreach (IceSwapPreviewViewModel preview in decision.SwapPreviews)
+		{
+			_focusPresentation.AddChild(MakeWrappedLabel(preview.Summary, 11, Warning));
+		}
+
+		if (!decision.IsProminent)
+		{
+			return;
+		}
+
+		_focusPresentation.AddChild(MakeLabel(
+			$"SLICE 4.7 DECISION · ACTING PLAYER {decision.ActingPlayer!.Value.ToString().ToUpperInvariant()}",
+			14,
+			Accent));
+		if (decision.Prompt is { } prompt && !string.IsNullOrWhiteSpace(prompt))
+		{
+			_focusPresentation.AddChild(MakeWrappedLabel(prompt, 11, Colors.White));
+		}
+
+		foreach (Slice47ActionPresentationViewModel option in decision.Options)
+		{
+			string label = option.SemanticLabel is { } semantic
+				? $"{semantic} · {option.PresentationLabel}"
+				: option.PresentationLabel;
+			_focusPresentation.AddChild(MakeWrappedLabel(label, 11, option.IsControllerChoice ? Warning : Colors.White));
+		}
+	}
+
 	private void RenderAccessFocusRegion(MatchSnapshot snapshot, RunFocusViewModel run)
 	{
 		AccessViewModel access = run.Access;
@@ -279,6 +347,7 @@ public partial class Main
 				+ (access.RandomAccessLimit > 0 ? $" · random access limit {access.RandomAccessLimit}" : string.Empty),
 			12,
 			Colors.White));
+		_focusPresentation.AddChild(MakeWrappedLabel(access.AccessOccurrenceSummary, 12, Accent));
 
 		if (access.Candidates.Count > 0)
 		{

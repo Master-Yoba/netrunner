@@ -369,7 +369,8 @@ public sealed record InstallFrame : ResolutionFrame
         InstallInitiationKind initiationKind = InstallInitiationKind.BasicAction,
         string? parentFrameIdentity = null,
         CostQuote? costQuote = null,
-        CardInstanceId? inwardAnchorIceId = null)
+        CardInstanceId? inwardAnchorIceId = null,
+        CardInstanceId? hostCardId = null)
         : base(version, behaviorId)
     {
         if (!Enum.IsDefined(cardClass))
@@ -431,6 +432,7 @@ public sealed record InstallFrame : ResolutionFrame
         ParentFrameIdentity = parentFrameIdentity;
         CostQuote = costQuote;
         InwardAnchorIceId = inwardAnchorIceId;
+        HostCardId = hostCardId;
 
         if (initiationKind == InstallInitiationKind.IceSubroutineInwardIgnoreCosts
             && (destinationKind != InstallDestinationKind.ServerIce
@@ -486,7 +488,8 @@ public sealed record InstallFrame : ResolutionFrame
         InstallInitiationKind initiationKind = InstallInitiationKind.BasicAction,
         string? parentFrameIdentity = null,
         CostQuote? costQuote = null,
-        CardInstanceId? inwardAnchorIceId = null)
+        CardInstanceId? inwardAnchorIceId = null,
+        CardInstanceId? hostCardId = null)
         : this(
             1,
             ResolutionBehaviorIds.Install,
@@ -508,7 +511,7 @@ public sealed record InstallFrame : ResolutionFrame
             initiationKind,
             parentFrameIdentity,
             costQuote,
-            inwardAnchorIceId)
+            inwardAnchorIceId, hostCardId)
     {
     }
 
@@ -619,6 +622,17 @@ public sealed record InstallFrame : ResolutionFrame
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public CardInstanceId? InwardAnchorIceId { get; private set; }
 
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CardInstanceId? HostCardId { get; private set; }
+
+    internal InstallFrame WithHost(CardInstanceId hostCardId) => new(
+        Version, BehaviorId, Owner, CardId, DefinitionId, CardClass, SourceZoneId, SourceZoneKind,
+        DestinationKind, ServerId, CreateNewRemote, InstallCost, CandidateReplacementCardIds,
+        RequiredReplacementCardIds, SelectedReplacementCardIds, DestinationZoneId,
+        CandidateReplacementDefinitionIds, InitiationKind, ParentFrameIdentity, CostQuote,
+        InwardAnchorIceId, hostCardId);
+
     internal InstallFrame Select(CardInstanceId cardId, int installCost, CostQuote? costQuote = null) => new(
         Version,
         BehaviorId,
@@ -640,7 +654,7 @@ public sealed record InstallFrame : ResolutionFrame
         InitiationKind,
         ParentFrameIdentity,
         costQuote,
-        InwardAnchorIceId);
+        InwardAnchorIceId, HostCardId);
 
     internal InstallFrame WithInstallCost(int installCost, CostQuote? costQuote = null) => new(
         Version,
@@ -663,7 +677,7 @@ public sealed record InstallFrame : ResolutionFrame
         InitiationKind,
         ParentFrameIdentity,
         costQuote,
-        InwardAnchorIceId);
+        InwardAnchorIceId, HostCardId);
 
     private static ReadOnlyCollection<CardInstanceId> Freeze(IEnumerable<CardInstanceId>? values) =>
         new((values ?? []).ToArray());
@@ -3251,7 +3265,7 @@ internal static class ResolutionFrameCloner
             install.CandidateReplacementDefinitionIds,
             install.InitiationKind,
             install.ParentFrameIdentity,
-            install.CostQuote),
+            install.CostQuote, install.InwardAnchorIceId, install.HostCardId),
         CardPlayFrame cardPlay => new CardPlayFrame(
             cardPlay.Version,
             cardPlay.BehaviorId,

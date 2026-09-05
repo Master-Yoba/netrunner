@@ -6,7 +6,7 @@ namespace Netrunner.Cards.Tests;
 public sealed class DeckValidationTests
 {
     [Fact]
-    public void OfficialPresetsHavePublishedCountsAndRemainDisabled()
+    public void OfficialPresetsHavePublishedCountsAndCompleteBehavior()
     {
         OfficialPresetCatalog catalog = OfficialPresetCatalog.Embedded();
 
@@ -17,7 +17,14 @@ public sealed class DeckValidationTests
         Assert.Equal(40, catalog.Get("system-gateway-expanded-runner").CardCount);
         Assert.Equal(34, catalog.Get("system-gateway-basic-corp").CardCount);
         Assert.Equal(44, catalog.Get("system-gateway-expanded-corp").CardCount);
-        Assert.All(catalog.Presets, preset => Assert.False(preset.Playable));
+        Assert.All(catalog.Presets, preset => Assert.True(preset.Playable));
+        BehaviorCatalog behavior = GatewayBehaviorCatalog.Create();
+        foreach (OfficialPreset preset in catalog.Presets)
+        {
+            DeckValidationResult result = DeckValidator.ValidateWithBehaviorCatalog(
+                preset.ToDeckRequest(cardDataVersion: "fixture"), TestMetadata(), behavior, catalog);
+            Assert.True(result.IsValid, string.Join("\n", result.Diagnostics));
+        }
     }
 
     [Fact]

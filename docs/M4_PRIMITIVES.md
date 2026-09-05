@@ -173,3 +173,33 @@ The five already-complete M2 designs are Palisade (30072), Whitespace
 (30074), Cleaver (30006), Buzzsaw (30005), and Overclock (30029).  Their
 metadata/behavior/test/review rows remain pinned in the generated coverage
 report; additive registrations must not churn their M2 semantic trace.
+
+## Slice 4.7 closure review (2026-09-05)
+
+The inventory above is the historical start-of-M4 gap list. All primitives now
+have completed owners: 4.1 owns catalog/observation/replay foundations; 4.2 owns
+setup, turns, basic actions, install/play, memory and scoring; 4.3 owns paid
+abilities and hosted credits; 4.4 owns modifiers and run/access facts; 4.5 owns
+encounter reactions and inward ICE installs; 4.6 owns damage/tags/persistent run
+abilities; 4.7 closes identity/agenda triggers, hosting and ICE swaps. There are
+zero unowned Gateway-reachable gaps. Broader set mechanics remain outside this
+77-card audit. Slice 4.8 retains its full-client integration/accessibility gate.
+
+| Closing rule | Concrete regression evidence |
+|---|---|
+| Identity activity and scored/stolen agenda modifiers | `GatewayBatch6IdentityAgendaRuntimeTests.HandSizeOnlyIncludesActiveOwnedIdentityOrScoredAgenda` |
+| Formal discard end and advance-from-zero snapshot | `RealDiscardBoundaryChecksArchivesBeforeNextTurn`; `RealAdvanceActionRewardsOnlyItsZeroCounterSnapshot` in the same class |
+| Scoring restriction and optional score/steal choices | `ActualLuminalScoreRemovesOtherFullyAdvancedAgendaFromScoreWindow`; `SendMessageRezzesInstalledIceWithoutCreditCost` |
+| Private HQ/Archives and search custody | `LongevityTrashesSelectedHqSubsetFacedownWithoutRevealingIt`; `MalapertSearchRevealsShufflesAndAddsNonAgendaToHq` |
+| Exact run-end access count; tags during ICE resolution | `GatewayBatch4ReactionRuntimeTests.ZahyaCountsAccessOccurrencesAndCarriesThemAcrossRunCleanup`; `NbnReactsToIceTagInstructionsThroughSerializableCheckpoints` |
+| Stable ICE position exchange with hosted children | `GatewayBatch4ReactionRuntimeTests.TaoSwapsStableIcePositionsDuringStealWithoutReinstalling` |
+| Host-only install, uninstall cleanup, precise Botulus break and derez/re-rez | `GatewayBatch6TrojanRuntimeTests` |
+| Real-game seven-point victory | `BasicRunActionTests.AutomaticStealDuringBasicRunUsesSevenPointThreshold` |
+| Required-draw deck-out and setup/mulligan replay | `SetupTests.SetupRoundTripsAtEveryChoiceAndReplaysToDeckOut`; `Slice47FullGameProofTests` on the authenticated content lane |
+| Negative maximum-hand flatline at discard | `CorrectnessBoundaryTests.NegativeHandSizeFlatlinesAtDiscardBeforeNextTurn` |
+| Uniqueness and console cleanup | `RuntimeRezActionTests.CorpUniqueRezTrashesOlderCopiesAcrossServersAfterCardRezzed`; `RunnerInstallActionTests.RunnerReplacementTrashesOldConsoleBeforeCardInstalledTriggerCollection` |
+
+ENG-437's original search/reveal/shuffle wording is corrected: CR 26.03 8.7.3
+requires shuffling the remaining deck while results are set aside, before
+resuming reveal/transfer effects. The jnet comparison is recorded as a
+conflicting implementation, not as authority overriding the CR.

@@ -98,7 +98,8 @@ public sealed class BehaviorCardFilter : IEquatable<BehaviorCardFilter>
         BehaviorCardType cardType = BehaviorCardType.Any,
         CardDefinitionId? definitionId = null,
         PlayerSide? ownerSide = null,
-        string? subtype = null)
+        string? subtype = null,
+        bool? rezzed = null)
     {
         if (!Enum.IsDefined(cardType))
         {
@@ -124,6 +125,7 @@ public sealed class BehaviorCardFilter : IEquatable<BehaviorCardFilter>
             throw new ArgumentOutOfRangeException(nameof(ownerSide));
         }
 
+        Rezzed = rezzed;
         CardType = cardType;
         DefinitionId = definitionId;
         OwnerSide = ownerSide;
@@ -131,6 +133,8 @@ public sealed class BehaviorCardFilter : IEquatable<BehaviorCardFilter>
     }
 
     public BehaviorCardType CardType { get; }
+
+    public bool? Rezzed { get; }
 
     public CardDefinitionId? DefinitionId { get; }
 
@@ -142,6 +146,7 @@ public sealed class BehaviorCardFilter : IEquatable<BehaviorCardFilter>
 
     public bool Equals(BehaviorCardFilter? other) =>
         other is not null
+        && Rezzed == other.Rezzed
         && CardType == other.CardType
         && DefinitionId == other.DefinitionId
         && OwnerSide == other.OwnerSide
@@ -174,6 +179,7 @@ public enum BehaviorCardType
     /// </summary>
     Program,
     ProgramOrHardware,
+    NonAgenda,
 }
 
 /// <summary>

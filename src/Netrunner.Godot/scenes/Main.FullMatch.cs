@@ -12,10 +12,29 @@ public partial class Main
 	{
 		try
 		{
-			_coordinator = FullMatchFactory.CreateDeveloper((PlayerSide)_humanSide.GetSelectedId(), agentDelay: TimeSpan.FromMilliseconds(45));
+			PlayerSide humanSide = (PlayerSide)_humanSide.GetSelectedId();
+			string? corpPresetId = SelectedPreset(_corpPreset, _corpPresetIds);
+			string? runnerPresetId = SelectedPreset(_runnerPreset, _runnerPresetIds);
+			bool useOfficial = !_fullMatchSmoke
+				&& _embeddedCardData is not null
+				&& _officialPresetCatalog is not null
+				&& corpPresetId is not null
+				&& runnerPresetId is not null;
+			_coordinator = useOfficial
+				? FullMatchFactory.CreateOfficial(
+					corpPresetId!,
+					runnerPresetId!,
+					_embeddedCardData!,
+					humanSide,
+					seed: 42,
+					agentDelay: TimeSpan.FromMilliseconds(45),
+					officialPresets: _officialPresetCatalog)
+				: FullMatchFactory.CreateDeveloper(humanSide, agentDelay: TimeSpan.FromMilliseconds(45));
 			_coordinator.SnapshotPublished += QueueSnapshot;
 			_startButton.Disabled = true;
-			_status.Text = "Starting a developer match through Core setup…";
+			_status.Text = useOfficial
+				? "Starting the selected official match through Core setup…"
+				: "Starting a developer match through Core setup…";
 			_ = AwaitStartAsync();
 		}
 		catch (Exception exception)
@@ -48,7 +67,8 @@ public partial class Main
 					throw new InvalidOperationException(snapshot.Feedback.Message);
 				}
 				identities |= snapshot.View.CorpIdentity is not null && snapshot.View.RunnerIdentity is not null
-					&& _corpSummary.Text.Contains("IDENTITY", StringComparison.Ordinal) && _runnerSummary.Text.Contains("IDENTITY", StringComparison.Ordinal);
+					&& _corpIdentityDetails.Text.Contains(snapshot.View.CorpIdentity.Title, StringComparison.Ordinal)
+					&& _runnerIdentityDetails.Text.Contains(snapshot.View.RunnerIdentity.Title, StringComparison.Ordinal);
 				turnPair |= snapshot.View.Turn.TurnNumber > 1;
 				if (snapshot.IsTerminal)
 				{

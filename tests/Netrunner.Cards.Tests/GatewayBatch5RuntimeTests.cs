@@ -112,6 +112,27 @@ public sealed class GatewayBatch5RuntimeTests
         RoundTrip(fixture, result.State);
     }
 
+    [Fact]
+    [Trait("GatewayCard", "30049")]
+    public void FatalOperationDamageCleansCorpPlayAreaAtTerminalCheckpoint()
+    {
+        Fixture fixture = Create(PlayerSide.Corp,
+            [new Placement(GatewayBatch5CardCodes.Neurospike, ZoneKind.CorpHand),
+             new Placement(Agenda, ZoneKind.ServerRoot, Advancement: 4)], gripCards: 0);
+        GameState state = GameEngine.BeginTurn(fixture.State, PlayerSide.Corp, fixture.Behavior, fixture.Runtime);
+        state = PassUntil(fixture, state, value => value.PendingDecision!.LegalActions.Any(action => action.Kind == ActionKind.ScoreAgenda));
+        state = Apply(fixture, state, Assert.Single(state.PendingDecision!.LegalActions, action => action.Kind == ActionKind.ScoreAgenda)).State;
+        state = PassUntil(fixture, state, value => value.PendingDecision?.Kind == DecisionKind.TurnAction);
+        CardInstanceId operation = Card(state, GatewayBatch5CardCodes.Neurospike);
+        state = Play(fixture, state, GatewayBatch5CardCodes.Neurospike).State;
+        Assert.Equal(GameWinReason.Flatline, state.Outcome.Reason);
+        Assert.Equal(PlayerSide.Corp, state.Outcome.Winner);
+        Assert.Contains(operation, state.GetZone(ZoneKind.CorpDiscard).CardIds);
+        Assert.All(state.Zones.Where(zone => zone.Kind == ZoneKind.CorpPlayArea), zone => Assert.Empty(zone.CardIds));
+        Assert.Empty(StateInvariantValidator.Collect(state, fixture.Behavior, fixture.Runtime));
+        RoundTrip(fixture, state);
+    }
+
     [Theory]
     [InlineData(false, 0)]
     [InlineData(true, 2)]
@@ -265,7 +286,7 @@ public sealed class GatewayBatch5RuntimeTests
         .Add(new CardRuntimeSpec(CorpFiller, PlayerSide.Corp, RuntimeCardClass.Operation, playCost: 0))
         .Build();
 
-    private static Fixture Create(PlayerSide side, Placement[] placements, int tags = 0)
+    private static Fixture Create(PlayerSide side, Placement[] placements, int tags = 0, int gripCards = 8)
     {
         BehaviorCatalog behavior = GatewayBehaviorCatalog.Create();
         RuntimeCardCatalog runtime = Runtime();
@@ -280,7 +301,7 @@ public sealed class GatewayBatch5RuntimeTests
         ZoneState[] zones = [.. baseline.Zones, new ZoneState(ice, ZoneKind.ServerIce, PlayerSide.Corp, remote),
             new ZoneState(root, ZoneKind.ServerRoot, PlayerSide.Corp, remote)];
         List<CardInstanceState> cards = [];
-        foreach (Placement placement in placements.Concat(Enumerable.Repeat(new Placement(Filler, ZoneKind.RunnerGrip), 8))
+        foreach (Placement placement in placements.Concat(Enumerable.Repeat(new Placement(Filler, ZoneKind.RunnerGrip), gripCards))
             .Concat(Enumerable.Repeat(new Placement(CorpFiller, ZoneKind.CorpDeck), 2)))
         {
             ZoneState zone = placement.Zone is ZoneKind.ServerRoot or ZoneKind.ServerIce

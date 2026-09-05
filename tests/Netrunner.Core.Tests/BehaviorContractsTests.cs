@@ -788,6 +788,8 @@ public sealed class BehaviorContractsTests
             OccurrenceKind.AgendaScoredOrStolen,
             OccurrenceKind.CardAccessed,
             OccurrenceKind.HostedCreditPoolEmptied,
+            OccurrenceKind.CardAdvancedFromZero,
+            OccurrenceKind.AccessedCardTrashed,
         })
         {
             _ = new BehaviorTrigger(
@@ -828,6 +830,8 @@ public sealed class BehaviorContractsTests
                 OccurrenceKind.AgendaScoredOrStolen,
                 OccurrenceKind.CardAccessed,
                 OccurrenceKind.HostedCreditPoolEmptied,
+                OccurrenceKind.CardAdvancedFromZero,
+                OccurrenceKind.AccessedCardTrashed,
             }))
         {
             Assert.Throws<ArgumentException>(() => new BehaviorTrigger(

@@ -234,6 +234,7 @@ public static partial class GameEngine
 
     private static void CompleteToyGame(WorkingState working, PlayerSide winner, GameWinReason reason)
     {
+        CleanupTerminalPlayAreas(working);
         working.PendingDecision = null;
         working.ResolutionStack.Clear();
         foreach (PlayerState player in working.Players.ToArray())
@@ -832,6 +833,7 @@ public static partial class GameEngine
             frame.ActiveSide,
             frame.TurnNumber,
             TurnFrameStage.FormalTurnEnd);
+        QueueIdentityOccurrence(working, OccurrenceKind.DiscardPhaseEnded, frame.ActiveSide);
     }
 
     private static void EndFormalTurn(WorkingState working, TurnFrame frame)
@@ -878,6 +880,7 @@ public static partial class GameEngine
 
     private static void CompleteTurnGame(WorkingState working, PlayerSide winner, GameWinReason reason)
     {
+        CleanupTerminalPlayAreas(working);
         working.PendingDecision = null;
         working.ResolutionStack.Clear();
         foreach (PlayerState player in working.Players.ToArray())

@@ -28,7 +28,7 @@ internal static class BehaviorStaticModifierProjection
         {
             if (card.OwnerSide != side
                 || !zonesById.TryGetValue(card.ZoneId, out ZoneState? zone)
-                || !IsActiveInstalled(card, zone, side)
+                || !(IsActiveInstalled(card, zone, side) || RuntimeCardActivity.IsActive(card, zones))
                 || !catalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? definition))
             {
                 continue;
