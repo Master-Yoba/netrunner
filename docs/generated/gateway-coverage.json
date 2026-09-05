@@ -1049,6 +1049,7 @@
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch5BehaviorSpecTests.UrticaAccessIsInstalledOnlyAndWorksUnrezzed",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch5RuntimeTests.InstalledUrticaDealsOneNetDamageInstanceEvenUnrezzed",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch5RuntimeTests.PrintedAdvanceabilityIssuesRealActionForAssetsAndIce",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch5RuntimeTests.UrticaFlatlinePreservesFormalTurnAuditHistoryAndTerminalRoundTrip",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch5RuntimeTests.UrticaInHeadquartersDoesNotDealAccessDamage"
       ],
       "fullTextComplete": true,

@@ -594,7 +594,14 @@ public static partial class GameEngine
             conditionalPrintedCost is { } printedCost ? printedCost % 2 == 1 : null));
         if (flatlined)
         {
-            CompleteToyGame(working, PlayerSide.Corp, GameWinReason.Flatline);
+            if (working.Turn.History is not null)
+            {
+                CompleteTurnGame(working, PlayerSide.Corp, GameWinReason.Flatline);
+            }
+            else
+            {
+                CompleteToyGame(working, PlayerSide.Corp, GameWinReason.Flatline);
+            }
             working.RunState = null;
         }
     }

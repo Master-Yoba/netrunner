@@ -37,6 +37,41 @@ public sealed class GatewayBatch5RuntimeTests
 
     [Fact]
     [Trait("GatewayCard", "30045")]
+    public void UrticaFlatlinePreservesFormalTurnAuditHistoryAndTerminalRoundTrip()
+    {
+        Fixture fixture = Create(PlayerSide.Runner,
+            [new Placement(GatewayBatch5CardCodes.UrticaCipher, ZoneKind.ServerRoot, Advancement: 7)]);
+        GameState state = GameEngine.BeginTurn(fixture.State, PlayerSide.Runner, fixture.Behavior, fixture.Runtime);
+        state = PassUntil(fixture, state, value => value.PendingDecision?.Kind == DecisionKind.TurnAction);
+        state = Apply(fixture, state, Assert.Single(state.PendingDecision!.LegalActions,
+            action => action.Parameters is RunServerParameters run && run.ServerId == fixture.RemoteId)).State;
+        state = PassUntil(fixture, state, value => value.RunState?.Step == RunTimingStep.BreachCandidateSelection);
+        Assert.Contains(state.ResolutionStack, frame => frame is TurnFrame);
+        TurnHistoryState before = Assert.IsType<TurnHistoryState>(state.Turn.History);
+        Assert.Contains(fixture.RemoteId, before.RunnerThisTurn!.AttemptedRunServerIds);
+        ApplyResult result = Apply(fixture, state, Assert.Single(state.PendingDecision!.LegalActions,
+            action => action.Kind == ActionKind.ChooseBreachCandidate));
+
+        Assert.Equal(GameWinReason.Flatline, result.State.Outcome.Reason);
+        Assert.Equal(PlayerSide.Corp, result.State.Outcome.Winner);
+        Assert.Null(result.State.RunState);
+        Assert.Null(result.State.PendingDecision);
+        Assert.Empty(result.State.ResolutionStack);
+        TurnHistoryState after = Assert.IsType<TurnHistoryState>(result.State.Turn.History);
+        Assert.Equal(before.RunnerThisTurn.AttemptedRunServerIds, after.RunnerThisTurn!.AttemptedRunServerIds);
+        Assert.Equal(before.RunnerThisTurn.SuccessfulRunServerIds, after.RunnerThisTurn.SuccessfulRunServerIds);
+        Assert.NotNull(before.RunnerLastTurn);
+        Assert.Equal(
+            System.Text.Json.JsonSerializer.Serialize(before.RunnerLastTurn, EngineJson.Options),
+            System.Text.Json.JsonSerializer.Serialize(after.RunnerLastTurn, EngineJson.Options));
+        Assert.Contains(Card(state, GatewayBatch5CardCodes.UrticaCipher), after.RunnerThisTurn.AccessedCardOccurrenceIds);
+        Assert.Equal(8, after.RunnerThisTurn.TrashedCardOccurrenceIds.Count);
+        Assert.Single(result.Events, entry => entry.Kind == EngineEventKinds.GameWon);
+        RoundTrip(fixture, result.State);
+    }
+
+    [Fact]
+    [Trait("GatewayCard", "30045")]
     public void UrticaInHeadquartersDoesNotDealAccessDamage()
     {
         Fixture fixture = Create(PlayerSide.Runner,
