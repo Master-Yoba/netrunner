@@ -389,16 +389,26 @@ public static class ActionsRegionPresenter
 
         ActionKind[] allowed = decision.Kind switch
         {
-            DecisionKind.TurnTiming => [ActionKind.PassPriority],
+            DecisionKind.TurnTiming =>
+            [
+                ActionKind.PassPriority,
+                ActionKind.RezCard,
+                ActionKind.ScoreAgenda,
+                ActionKind.UseAbility,
+            ],
             DecisionKind.TurnAction =>
             [
                 ActionKind.GainCredit,
                 ActionKind.DrawCard,
                 ActionKind.PlayCard,
                 ActionKind.InstallCard,
+                ActionKind.StartRun,
+                ActionKind.AdvanceCard,
                 ActionKind.ChooseBehavior,
                 ActionKind.RemoveTag,
                 ActionKind.TrashTaggedResource,
+                ActionKind.PurgeVirusCounters,
+                ActionKind.UseAbility,
             ],
             DecisionKind.TurnDiscard => [ActionKind.ChooseCard],
             DecisionKind.BehaviorChoice => [ActionKind.ChooseBehavior],
@@ -424,6 +434,7 @@ public static class ActionsRegionPresenter
                 ActionKind.BreakSubroutines,
                 ActionKind.PumpBreaker,
                 ActionKind.UseBioroidAbility,
+                ActionKind.UseAbility,
                 ActionKind.JackOut,
                 ActionKind.ContinueRun,
                 ActionKind.ChooseBreachCandidate,
