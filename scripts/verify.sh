@@ -248,6 +248,19 @@ if ! grep -Fq "$slice45_ui_expected" "$slice45_ui_smoke_log" \
   exit 1
 fi
 echo "m4-slice45-ui-smoke=PASS prominent_options=true acting_player=true issued_order=true typed_cost=true typed_fallback=true hidden_safe_installed_card=true active_restriction=true legal_bioroid=true armed_mayfly=true"
+slice46_ui_smoke_log="$coverage_report_dir/slice46-ui-smoke.log"
+if ! run_with_timeout 30 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
+  "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \
+  -- --m4-slice46-ui-smoke >"$slice46_ui_smoke_log" 2>&1; then
+  sed -n '1,160p' "$slice46_ui_smoke_log" >&2
+  exit 1
+fi
+if ! grep -Fq "M4_SLICE46_UI PASS damage=true tag_chip=true tag_feed=true unless=true conditional_value=true no_early_jack_out=true jack_out_after_damage=true" "$slice46_ui_smoke_log" \
+  || grep -Fq "M4_SLICE46_UI FAIL" "$slice46_ui_smoke_log"; then
+  sed -n '1,160p' "$slice46_ui_smoke_log" >&2
+  exit 1
+fi
+echo "m4-slice46-ui-smoke=PASS"
 latency_smoke_log="$coverage_report_dir/latency-smoke.log"
 if ! run_with_timeout 45 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
   "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \

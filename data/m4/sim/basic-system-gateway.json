@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "fixtureId": "sim-slice45-batch4-basic",
+  "fixtureId": "sim-slice46-batch5-basic",
   "rulesVersion": "26.03",
   "cardDataVersion": "236140cf84491c23995b028bc791281837520b97",
-  "behaviorRegistryVersion": "gateway-m4-4.5",
-  "behaviorCatalogFingerprint": "40cf3ff37c5e014a70d43e321c63cf541dc883af74315e970df0e4e4928dd038",
+  "behaviorRegistryVersion": "gateway-m4-4.6",
+  "behaviorCatalogFingerprint": "4cb1ffce96ebf89ecdb8769115a844e6cc7d85b48da1e321ed84ea66d5d45e1d",
   "seed": 40102,
   "actionCap": 128,
   "corpDeck": {
@@ -28,7 +28,19 @@
       { "code": "30039", "quantity": 1 },
       { "code": "30042", "quantity": 1 },
       { "code": "30050", "quantity": 1 },
-      { "code": "30054", "quantity": 1 }
+      { "code": "30054", "quantity": 1 },
+      { "code": "30045", "quantity": 1 },
+      { "code": "30046", "quantity": 1 },
+      { "code": "30047", "quantity": 1 },
+      { "code": "30049", "quantity": 1 },
+      { "code": "30055", "quantity": 1 },
+      { "code": "30057", "quantity": 1 },
+      { "code": "30058", "quantity": 1 },
+      { "code": "30061", "quantity": 1 },
+      { "code": "30062", "quantity": 1 },
+      { "code": "30063", "quantity": 1 },
+      { "code": "30065", "quantity": 1 },
+      { "code": "30073", "quantity": 1 }
     ],
     "validationProfile": "developerReduced"
   },
@@ -82,5 +94,5 @@
     "https://nullsignal.games/products/system-gateway/",
     "https://rules.nullsignal.games/"
   ],
-  "crossCheckNote": "Developer-curated code/quantity-only decks include all 46 registered Slice <=4.5 codes (45 complete; Offworld Office remains partial), including all seven Slice 4.5 Batch 4 codes. MATCH-401A normal setup/mulligan execution remains outside this input document; the checked-in Slice 4.5 headless proof executes the run reducer through its observation boundary."
+  "crossCheckNote": "Developer-curated code/quantity-only decks include all 58 registered Slice <=4.6 codes, including all twelve Slice 4.6 Batch 5 codes. MATCH-401A normal setup/mulligan execution remains outside this input document; SCN-402 and the Slice 4.6 headless proof execute damage, tags, conditional ICE and installed access through engine-issued observation actions with both policies and replay at every yield."
 }

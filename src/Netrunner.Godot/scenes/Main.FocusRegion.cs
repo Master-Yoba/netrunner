@@ -16,6 +16,7 @@ public partial class Main
 	{
 		ClearChildren(_focusPresentation);
 		FocusRegionState focus = FocusRegionPresenter.Present(snapshot);
+		RenderSlice46PresentationCues(snapshot);
 		if (focus.Mode == FocusRegionMode.Outcome && focus.Outcome is { } completed)
 		{
 			_focusPresentation.AddChild(MakeLabel("REPRESENTATIVE SLICE COMPLETE", 17, Accent));
@@ -69,6 +70,54 @@ public partial class Main
 			"The current timing step is owned by Core. Legal actions below are the only actions that can mutate the run.",
 			12,
 			Muted));
+	}
+
+	private void RenderSlice46PresentationCues(MatchSnapshot snapshot)
+	{
+		MatchViewModel view = snapshot.View;
+		if (view.PendingDamage.Count > 0)
+		{
+			_focusPresentation.AddChild(MakeLabel("SLICE 4.6 DAMAGE", 14, Warning));
+			foreach (DamagePresentationViewModel damage in view.PendingDamage)
+			{
+				_focusPresentation.AddChild(MakeWrappedLabel(damage.Summary, 11, damage.IsFlatlineRisk ? Warning : Colors.White));
+			}
+		}
+
+		if (view.ConditionalValues.Count > 0)
+		{
+			_focusPresentation.AddChild(MakeLabel("CONDITIONAL VALUE · CORE QUOTE", 13, Accent));
+			foreach (ConditionalValueViewModel value in view.ConditionalValues)
+			{
+				_focusPresentation.AddChild(MakeWrappedLabel(value.Summary, 11, Colors.White));
+			}
+		}
+
+		Slice46DecisionViewModel decision = Slice46PresentationProjector.Present(snapshot);
+		if (decision.HasUnlessChoice)
+		{
+			_focusPresentation.AddChild(MakeLabel("UNLESS CHOICE · CORE ISSUED ALTERNATIVES", 13, Accent));
+			if (decision.Prompt is { } prompt && !string.IsNullOrWhiteSpace(prompt))
+			{
+				_focusPresentation.AddChild(MakeWrappedLabel(prompt, 11, Colors.White));
+			}
+
+			foreach (Slice46ActionPresentationViewModel option in decision.Options)
+			{
+				_focusPresentation.AddChild(MakeWrappedLabel(
+					option.OrderedPresentationLabel,
+					11,
+					option.IsFallback ? Warning : Colors.White));
+			}
+		}
+
+		if (decision.JackOutAfterDamage)
+		{
+			_focusPresentation.AddChild(MakeWrappedLabel(
+				"KARUNĀ DAMAGE RESOLVED · JACK-OUT CHOICE ISSUED",
+				13,
+				Accent));
+		}
 	}
 
 	private void RenderPaidWindowFocusRegion(RunPriorityViewModel priority)

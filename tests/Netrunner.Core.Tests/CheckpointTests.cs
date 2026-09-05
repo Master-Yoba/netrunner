@@ -7,7 +7,7 @@ namespace Netrunner.Core.Tests;
 /// These cases intentionally use synthetic registrations; card-specific
 /// triggers and prevention remain outside this slice.
 /// </summary>
-public sealed class CheckpointTests
+public sealed partial class CheckpointTests
 {
     [Fact]
     public void NoRegistrationsResolveTheOriginalEffectAndLeaveNoCheckpoint()

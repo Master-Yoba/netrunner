@@ -117,7 +117,7 @@ public sealed class M2ScenarioSetupTests
         Assert.Null(state.PendingDecision);
 
         Assert.Equal(
-            "452467004c6692c8eb8fbd72e4736de7421793ae836b067da593074cb676d246",
+            "9155084805027b7790c15c977f41173bfbf2ae94537845db8686d2b7c53a54ff",
             DeterministicHash.ForState(state));
     }
 

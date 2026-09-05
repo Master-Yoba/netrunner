@@ -25,7 +25,7 @@ public sealed class M2ProofTests
     // (schema 10 -> 11), so state hashes are intentionally re-pinned. The
     // explicit 6.9.4g server-approach event is now part of the run stream.
     private const string ExpectedFinalStateHash =
-        "ef71cd24f83e50a17f201af377c80dceb8edc8ccb233c7c7e344833ce9d4585a";
+        "0f2d525c3bd95a42e3c5ed5b3ad4aef54b39768950db3484f2c641495fb23ae3";
     private const string ExpectedEventStreamHash =
         "33af2b049fbad324ed5ff0ee130740c3d65c03f2cb1196100afbdc73e9f0e67c";
 

@@ -124,6 +124,13 @@ public static class CalculationReasonLabels
             ["leech-encounter-ice-strength"] = "Leech encounter strength",
             ["ice-strength-protecting-remote"] = "protecting remote",
             ["icebreaker-pump"] = "encounter pump",
+            ["neurospike-scored-agenda-points"] = "scored agenda points this turn",
+            ["scored-agenda-points-this-turn"] = "scored agenda points this turn",
+            ["diviner-trashed-card-cost"] = "trashed card printed cost",
+            ["urtica-advancement-counters"] = "hosted advancement counters",
+            ["clearinghouse-hosted-counters"] = "hosted counters",
+            ["hosted-advancement-counters"] = "hosted advancement counters",
+            ["printed-agenda-points-scored-this-turn"] = "scored agenda points this turn",
         };
 
     private static readonly Dictionary<string, string> CostLabels =

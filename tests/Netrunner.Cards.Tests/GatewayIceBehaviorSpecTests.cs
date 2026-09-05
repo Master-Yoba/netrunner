@@ -58,7 +58,7 @@ public sealed class GatewayIceBehaviorSpecTests
         BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();
 
         IReadOnlyCollection<CardDefinitionId> definitionIds = catalog.DefinitionIds;
-        Assert.Equal(5, definitionIds.Count);
+        Assert.Equal(11, definitionIds.Count);
         Assert.Contains(GatewayCardCodes.Palisade, definitionIds);
         Assert.Contains(GatewayCardCodes.Whitespace, definitionIds);
 

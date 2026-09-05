@@ -24,7 +24,7 @@ public sealed class RunApproachOccurrenceTests
         Assert.Equal(trigger, EngineJson.Deserialize<BehaviorTrigger>(triggerJson));
         Assert.Throws<ArgumentException>(() => new BehaviorTrigger(
             "invalid-server-scope",
-            OccurrenceKind.RunEnded,
+            OccurrenceKind.TurnBegin,
             TriggerMode.Optional,
             BehaviorTriggerScope.Any,
             subjectCardFilter: null,

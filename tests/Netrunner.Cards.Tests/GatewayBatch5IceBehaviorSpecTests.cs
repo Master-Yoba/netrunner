@@ -7,6 +7,12 @@ namespace Netrunner.Cards.Tests;
 public sealed class GatewayBatch5IceBehaviorSpecTests
 {
     [Theory]
+    [Trait("GatewayCard", "30046")]
+    [Trait("GatewayCard", "30047")]
+    [Trait("GatewayCard", "30055")]
+    [Trait("GatewayCard", "30062")]
+    [Trait("GatewayCard", "30063")]
+    [Trait("GatewayCard", "30073")]
     [InlineData("30046", 3, 2, IceType.CodeGate, 1)]
     [InlineData("30047", 3, 4, IceType.Sentry, 2)]
     [InlineData("30055", 1, 2, IceType.Barrier, 1)]

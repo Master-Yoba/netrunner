@@ -6,7 +6,7 @@ public static partial class ObservationBuilder
         IReadOnlySet<CardInstanceId> accessVisible, IBehaviorCatalog catalog, Dictionary<string, object?> publicState)
     {
         DamageEffect? pending = state.ResolutionStack.OfType<EffectCheckpointFrame>().LastOrDefault() is
-            { CurrentEffect: DamageEffect effect, Occurrence.Phase: OccurrencePhase.Imminent } ? effect : null;
+        { CurrentEffect: DamageEffect effect, Stage: EffectCheckpointStage.InterruptChoice or EffectCheckpointStage.Resolve } ? effect : null;
         CardInstanceId? damageSource = DamagePresentationProjection.Source(state.ResolutionStack);
         if (pending is not null)
         {

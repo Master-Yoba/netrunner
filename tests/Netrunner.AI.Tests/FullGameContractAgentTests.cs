@@ -197,6 +197,48 @@ public sealed class FullGameContractAgentTests
     }
 
     [Theory]
+    [InlineData(DecisionKind.IceSubroutineChoice)]
+    [InlineData(DecisionKind.BehaviorChoice)]
+    public async Task CorpScoresOnlyPublicInstalledTargetsBeforeSemanticIds(DecisionKind kind)
+    {
+        CardInstanceId cheapId = new("card:a-cheap");
+        CardInstanceId expensiveId = new("card:z-expensive");
+        var cheapDefinition = new CardDefinitionId("fixture:cheap-program");
+        var expensiveDefinition = new CardDefinitionId("fixture:expensive-program");
+        IRuntimeCardCatalog runtime = new RuntimeCardCatalog("fixture:target-scores",
+            new CardRuntimeSpec(cheapDefinition, PlayerSide.Runner, RuntimeCardClass.Program, installCost: 1, memoryUnits: 1),
+            new CardRuntimeSpec(expensiveDefinition, PlayerSide.Runner, RuntimeCardClass.Program, installCost: 8, memoryUnits: 2));
+        LegalAction Target(CardInstanceId id) => kind == DecisionKind.IceSubroutineChoice
+            ? Action(id.Value, ActionKind.ResolveIceSubroutine,
+                new IceSubroutineChoiceParameters("frame:score", IceSubroutineChoiceKind.TrashInstalledRunnerCard, cardId: id))
+            : Action(id.Value, ActionKind.ChooseBehavior, new BehaviorChoiceParameters("retribution-target", [id]));
+        LegalAction cheap = Target(cheapId);
+        LegalAction expensive = Target(expensiveId);
+        var publicState = new Dictionary<string, object?>
+        {
+            ["runnerRig"] = new[]
+            {
+                new Dictionary<string, object?> { ["id"] = cheapId.Value, ["definitionId"] = cheapDefinition.Value },
+                new Dictionary<string, object?> { ["id"] = expensiveId.Value, ["definitionId"] = expensiveDefinition.Value },
+            },
+        };
+        FullGameContractAgent agent = new(PlayerSide.Corp, runtime);
+        Observation observation = ObservationFor(PlayerSide.Corp, kind, cheap, expensive) with { PublicState = publicState };
+        Assert.Equal(expensive.Id, await agent.ChooseActionAsync(observation));
+        Assert.Equal(expensive.Id, await agent.ChooseActionAsync(observation with { LegalActions = [expensive, cheap] }));
+        // The wire representation can contain JsonElement instead of CLR dictionaries.
+        var wire = new Dictionary<string, object?> { ["runnerRig"] = JsonSerializer.SerializeToElement(publicState["runnerRig"]) };
+        Assert.Equal(expensive.Id, await agent.ChooseActionAsync(observation with { PublicState = wire }));
+        // Omitted/redacted definitions cannot be recovered from a private field.
+        var redacted = new Dictionary<string, object?>
+        {
+            ["runnerRig"] = new[]
+            { new Dictionary<string, object?> { ["id"] = expensiveId.Value } }
+        };
+        Assert.Equal(cheap.Id, await agent.ChooseActionAsync(observation with { PublicState = redacted }));
+    }
+
+    [Theory]
     [InlineData(PlayerSide.Runner, IceSubroutineChoiceKind.JackOut, IceSubroutineChoiceKind.ContinueRun)]
     [InlineData(PlayerSide.Corp, IceSubroutineChoiceKind.TrashInstalledRunnerCard, IceSubroutineChoiceKind.EndRun)]
     public async Task Batch5IceChoicesUseTypedStablePreferences(

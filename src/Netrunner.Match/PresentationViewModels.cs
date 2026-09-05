@@ -95,6 +95,21 @@ public sealed record MatchViewModel(
     /// unavailable instead of deriving them from card text or action labels.
     /// </summary>
     public Slice45CueViewModel Slice45Cues { get; init; } = Slice45CueViewModel.Unavailable;
+
+    /// <summary>
+    /// Viewer-safe damage instructions projected by Core. An empty list means
+    /// that no damage instruction was supplied by the observation; it does not
+    /// mean that a renderer may infer one from card text or a pending action.
+    /// </summary>
+    public IReadOnlyList<DamagePresentationViewModel> PendingDamage { get; init; } =
+        Array.Empty<DamagePresentationViewModel>();
+
+    /// <summary>
+    /// Conditional/variable values supplied by Core as typed calculation
+    /// quotes. Match localizes their terms; Godot never recomputes them.
+    /// </summary>
+    public IReadOnlyList<ConditionalValueViewModel> ConditionalValues { get; init; } =
+        Array.Empty<ConditionalValueViewModel>();
 }
 
 /// <summary>
@@ -208,7 +223,28 @@ public sealed record PlayerViewModel(
     PlayerSide Side,
     int Credits,
     int Clicks,
-    int AgendaPoints);
+    int AgendaPoints)
+{
+    /// <summary>
+    /// Public standard-tag count when the observation carries the optional
+    /// rules projection. Null means the observation did not supply tag state.
+    /// </summary>
+    public int? Tags { get; init; }
+
+    /// <summary>
+    /// Public accumulated core damage when the observation carries it. Null
+    /// keeps older observations explicitly unavailable to the renderer.
+    /// </summary>
+    public int? CoreDamage { get; init; }
+
+    public bool IsTagStateKnown => Tags.HasValue;
+
+    public bool IsTagged => Tags is > 0;
+
+    public TagStateViewModel TagState => new(Side, Tags);
+
+    public string TagSummary => TagState.Summary;
+}
 
 /// <summary>A hand/deck projection: count is public, cards are owner-visible only.</summary>
 public sealed record ZoneViewModel(
@@ -751,6 +787,8 @@ public static class ObservationViewMapper
             UsedAbilityKeys = usedAbilityKeys,
             UsedFirstXKeys = usedFirstXKeys,
             Slice45Cues = Slice45PresentationProjector.ReadCues(publicState),
+            PendingDamage = Slice46ObservationProjector.ReadDamageInstructions(publicState),
+            ConditionalValues = Slice46ObservationProjector.ReadConditionalValues(publicState),
         };
     }
 
@@ -1114,13 +1152,25 @@ public static class ObservationViewMapper
                 decision.Prompt);
     }
 
-    private static PlayerViewModel MapPlayer(IReadOnlyDictionary<string, object?> map, PlayerSide side) =>
-        new(
+    private static PlayerViewModel MapPlayer(IReadOnlyDictionary<string, object?> map, PlayerSide side)
+    {
+        int? tags = TryReadOptionalInt(map, "tags", out int observedTags)
+            ? observedTags
+            : null;
+        int? coreDamage = TryReadOptionalInt(map, "coreDamage", out int observedCoreDamage)
+            ? observedCoreDamage
+            : null;
+        return new PlayerViewModel(
             ReadString(map, "id"),
             side,
             ReadInt(map, "credits"),
             ReadInt(map, "clicks"),
-            ReadInt(map, "agendaPoints"));
+            ReadInt(map, "agendaPoints"))
+        {
+            Tags = tags,
+            CoreDamage = coreDamage,
+        };
+    }
 
     private static ZoneViewModel MapZone(ZoneKind kind, int count, IReadOnlyList<CardViewModel> visibleCards) =>
         new(kind, count, new ReadOnlyCollection<CardViewModel>(visibleCards.ToArray()));

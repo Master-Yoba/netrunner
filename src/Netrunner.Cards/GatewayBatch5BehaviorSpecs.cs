@@ -96,7 +96,8 @@ public static class GatewayBatch5BehaviorSpecs
                             [new BehaviorInstruction(
                                 BehaviorInstructionKind.AddTags,
                                 amount: 1,
-                                recipient: BehaviorPlayerSelector.Runner)]),
+                                recipient: BehaviorPlayerSelector.Runner)],
+                            semantic: BehaviorChoiceOptionSemantic.Fallback),
                     ])),
         ]);
 

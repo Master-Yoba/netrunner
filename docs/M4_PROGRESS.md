@@ -1,6 +1,6 @@
 # M4 progress — System Gateway complete
 
-Status: Slice 4.6 implementation and integration in progress on `4_6`; correctness prerequisites merged via PR #10
+Status: Slice 4.6 implemented and locally verified on `4_6`; PR/remote CI handoff follows below
 
 Date started: 31 August 2026
 
@@ -9,17 +9,14 @@ vendored commit `236140cf84491c23995b028bc791281837520b97` (77 designs)
 
 ## Scope
 
-Slices 4.1 through 4.5 of `docs/M4_PLAN.md` are merged. Slice 4.5 includes
-ENG-419 through ENG-425A, SCN-401, the
-seven Batch 4 cards, AGT-401 v4, SIM-401, UI-406, and their exit evidence.
-Later M4 card batches remain out of scope.
+Slices 4.1 through 4.5 of `docs/M4_PLAN.md` and the correctness prerequisite
+are merged. Slice 4.6 implements ENG-426–432, the twelve Batch 5 cards,
+SCN-402, AGT-401 v5, SIM-401, and UI-407. Slice 4.7 remains out of scope.
 
-The correctness follow-up adds setup/mulligan and end-to-end client/simulation
-execution missing from those completion records. Match, CLI, and both client
-seats share Core setup and terminal execution with explicit developer-only decks;
-this does not unlock official preset identities. See
-[the correctness follow-up](CORRECTNESS_SLICE.md) for compatibility and
-verification evidence before proceeding to Slice 4.6.
+Match, CLI, and both client seats share Core setup and terminal execution with
+explicit developer-only decks; completing this batch does not unlock official
+preset identities. See [the correctness follow-up](CORRECTNESS_SLICE.md) for
+the preceding setup and server-lifecycle compatibility evidence.
 
 ## Baseline
 
@@ -4406,3 +4403,56 @@ errors; runtime action expansion and full verification remain pending.
 - Focused delegated and integration tests pass so far. Full schema migration,
   SCN-402, generated coverage, client evidence, and `make verify` remain pending;
   this checkpoint is not the slice exit gate.
+
+### 2026-09-05 — Integration and schema evidence
+
+- Checkpoint `fb0520a` records the reviewed engine and card implementation.
+- Gateway composition is `gateway-m4-4.6`; generated CARD-401 coverage reaches
+  58 registered, 58 tested, 57 complete, one partial (Offworld Office), and
+  19 unregistered. Official presets remain gated until their remaining cards
+  are completed in Slice 4.7.
+- State schema is 16. Existing artifact/replay envelope schema remains 1.
+  New saved state contains ICE damage continuation/victim provenance and
+  run-local persistent-ability context. Earlier state versions are rejected.
+- Canonical schema-16 hashes:
+  - base: `785395aea588f53b1df634cc237762b925dc12b907573c3f90d9c6d545936191`
+  - nested-inner: `dc4c762aeb621f30dae5e36d56117f467c935c14b8a823c09a61b97f09ac6110`
+  - nested-outer: `3e93062fdf8a44b09f6d3e8bcef22a86cfb3a51c28e9f996d08875b6003403ff`
+  - M2 initial: `9155084805027b7790c15c977f41173bfbf2ae94537845db8686d2b7c53a54ff`
+  - M2 final: `0f2d525c3bd95a42e3c5ed5b3ad4aef54b39768950db3484f2c641495fb23ae3`
+- Reversing only the schema number reproduces the three prior baseline fixture
+  hashes. M2 retains its 32 actions/checkpoints, equal policy outcomes, verified
+  replay, and event hash
+  `33af2b049fbad324ed5ff0ee130740c3d65c03f2cb1196100afbdc73e9f0e67c`.
+- SCN-402 is `data/m4/scenarios/scn-402-damage.json`: Karunā, Urtica,
+  Diviner, Tithe, Pharos, Ballista, and Ping execute under scripted and contract
+  policies with serialization at every yield and replay of each action/event.
+  Removing Karunā's typed jack-out evidence fails trace validation.
+- Review fixed already-resolved damage being displayed as pending during an
+  optional follow-up reaction. Damage presentation now consults the active
+  checkpoint stage and its remaining effect, including prevention changes.
+- Final global verification and native client evidence are recorded below.
+
+
+### 2026-09-05 — Slice 4.6 exit gate
+
+- `make verify` passed: 1,264 tests (Core 794, Cards 258, AI 57, CLI 59,
+  Match 96), solution formatting, deterministic M1/M2 proofs, SCN-402 under
+  both policies, generated coverage equality, official 77-card gallery, Godot
+  import, Slice 4.3–4.6 client smokes, responsiveness, both full-match seats,
+  M3 smoke, and secret scanning.
+- Native UI-407 smoke passed all seven checks; root visually reviewed the
+  [client screenshot](evidence/slice46/slice46-ui-smoke.png). Capture is explicit
+  and runs with a native renderer; headless CI does not rewrite evidence.
+- Final behavior fingerprint:
+  `4cb1ffce96ebf89ecdb8769115a844e6cc7d85b48da1e321ed84ea66d5d45e1d`.
+  Public Trail's tag branch carries explicit fallback presentation metadata;
+  simulation pins match this final catalog.
+- Independent review added post-damage presentation and two-source AMAZE
+  destruction/serialization regressions. Match retains public damage after
+  flatline while redacting a hidden source unless this batch already revealed
+  it through access. Corp trash choices score only public installed definitions
+  against injected printed metadata, with deterministic semantic ties.
+- All twelve Batch 5 cards are bound, tested, reviewed, and registered. The
+  required 58 registered / 57 complete exit target is met. No Slice 4.7 card
+  work or official-preset coverage override is included.

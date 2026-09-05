@@ -72,6 +72,39 @@ public sealed class BehaviorDamageRuntimeTests
         Assert.Empty(StateInvariantValidator.Collect(final, catalog));
     }
 
+    [Fact]
+    public void QueuedOptionalDamageCannotActivateAfterItsSelfTrashCostBecomesUnpayable()
+    {
+        var catalog = new BehaviorCatalogBuilder("test:damage-unpayable")
+            .Add(new CardBehaviorDefinition(DefinitionId, PlayerSide.Runner, triggers:
+            [
+                new BehaviorTrigger("trash-first", OccurrenceKind.CardInstalled, TriggerMode.Mandatory,
+                    BehaviorTriggerScope.Self, null, [new BehaviorInstruction(BehaviorInstructionKind.TrashSelf)]),
+                new BehaviorTrigger("damage-after", OccurrenceKind.CardInstalled, TriggerMode.Optional,
+                    BehaviorTriggerScope.Self, null,
+                    [new BehaviorInstruction(BehaviorInstructionKind.DealDamage, damageKind: DamageKind.Meat,
+                        damageAmountOperand: new BehaviorDamageAmountOperand(
+                            BehaviorDamageAmountKind.SourceAdvancementCounters, trashSourceAsCost: true))]),
+            ])).Build();
+        GameState state = CreateState(catalog, advancement: 3);
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+        GameState prompt = GameEngine.BeginGameplayOccurrenceForTesting(state,
+            new GameplayOccurrenceEffect(OccurrenceKind.CardInstalled, runner, SourceId), catalog);
+        PendingDecision decision = Assert.IsType<PendingDecision>(prompt.PendingDecision);
+        EffectCheckpointFrame checkpoint = Assert.IsType<EffectCheckpointFrame>(prompt.ResolutionStack[^1]);
+        TriggerId first = Assert.Single(checkpoint.TriggerQueue, invocation => invocation.TriggerKey == "trash-first").Id;
+        LegalAction action = Assert.Single(decision.LegalActions,
+            action => action.Parameters is TriggerOrderParameters order && order.TriggerId == first);
+        ApplyResult result = GameEngine.Apply(prompt,
+            new ActionSubmission(decision.Owner, decision.Id, decision.Revision, action.Id), catalog);
+        Assert.True(result.Accepted, result.Rejection?.Message);
+        Assert.Null(result.State.PendingDecision);
+        Assert.Empty(result.State.ResolutionStack);
+        Assert.Equal(4, result.State.GetZone(ZoneKind.RunnerGrip).CardIds.Count);
+        Assert.Contains(SourceId, result.State.GetZone(ZoneKind.RunnerHeap).CardIds);
+        Assert.DoesNotContain(result.Events, entry => entry.Kind == EngineEventKinds.DamageDealt);
+    }
+
     private static ApplyResult Choose(GameState state, BehaviorCatalog catalog, ActionKind kind)
     {
         PendingDecision decision = Assert.IsType<PendingDecision>(state.PendingDecision);

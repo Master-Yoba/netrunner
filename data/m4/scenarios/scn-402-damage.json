@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "scenarioId": "SCN-402",
+  "seed": 460402,
+  "rulesVersion": "26.03",
+  "engineStateSchemaVersion": 16,
+  "behaviorRegistryVersion": "gateway-m4-4.6",
+  "policies": ["scripted-issued-actions", "full-game-contract-agent-v5"],
+  "saveLoadEveryYield": true,
+  "replayEveryAction": true,
+  "citations": [
+    "CR 26.03 1.2.1: card instructions take precedence over general rules",
+    "CR 26.03 9.8.7: unbroken subroutines resolve in printed order",
+    "CR 26.03 10.4.2a: net damage trashes randomly chosen grip cards",
+    "CR 26.03 10.4.3: cards lost to one damage instruction are randomly trashed simultaneously",
+    "CR 26.03 7.2: access abilities resolve before the basic trash opportunity"
+  ],
+  "cases": [
+    {"id": "karuna-damage-then-jack-out", "code": "30047", "ice": true, "advancementCounters": 0, "gripCount": 6, "expectedDamage": 2, "expectedTags": 0, "jackOut": true},
+    {"id": "urtica-installed-access", "code": "30045", "ice": false, "advancementCounters": 2, "gripCount": 6, "expectedDamage": 4, "expectedTags": 0, "jackOut": false},
+    {"id": "tithe-damage-before-credit", "code": "30073", "ice": true, "advancementCounters": 0, "gripCount": 6, "expectedDamage": 1, "expectedTags": 0, "jackOut": false},
+    {"id": "pharos-tag-before-end-run", "code": "30063", "ice": true, "advancementCounters": 3, "gripCount": 6, "expectedDamage": 0, "expectedTags": 1, "jackOut": false},
+    {"id": "diviner-even-cost-continues", "code": "30046", "ice": true, "advancementCounters": 0, "gripCount": 6, "expectedDamage": 1, "expectedTags": 0, "jackOut": false},
+    {"id": "ballista-no-program-end-run", "code": "30062", "ice": true, "advancementCounters": 0, "gripCount": 6, "expectedDamage": 0, "expectedTags": 0, "jackOut": false},
+    {"id": "ping-rez-during-run", "code": "30055", "ice": true, "advancementCounters": 0, "gripCount": 6, "expectedDamage": 0, "expectedTags": 1, "jackOut": false}
+  ]
+}

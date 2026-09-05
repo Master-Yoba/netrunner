@@ -17,8 +17,8 @@ public static class FullMatchRunner
         {
             throw new ArgumentOutOfRangeException(nameof(actionCap));
         }
-        corpAgent ??= new FullGameContractAgent(new FullGameContractPolicy(PlayerSide.Corp));
-        runnerAgent ??= new FullGameContractAgent(new FullGameContractPolicy(PlayerSide.Runner));
+        corpAgent ??= new FullGameContractAgent(new FullGameContractPolicy(PlayerSide.Corp), definition.Runtime);
+        runnerAgent ??= new FullGameContractAgent(new FullGameContractPolicy(PlayerSide.Runner), definition.Runtime);
         GameState state = definition.Start().State;
         GameSnapshot initial = state.CreateSnapshot(definition.Behavior, definition.Runtime);
         var actions = new List<ReplayAction>();

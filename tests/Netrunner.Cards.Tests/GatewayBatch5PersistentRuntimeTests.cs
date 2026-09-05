@@ -5,6 +5,61 @@ namespace Netrunner.Cards.Tests;
 
 public sealed partial class GatewayBatch4ReactionRuntimeTests
 {
+    [Fact]
+    [Trait("GatewayCard", "30058")]
+    public void TwoAccessTrashedAmazeSourcesRoundTripAfterRemoteDestructionAndRejectForgedProvenance()
+    {
+        BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();
+        RuntimeCardCatalog runtime = new("fixture:amaze-ordering-runtime",
+            new CardRuntimeSpec(GatewayBatch5CardCodes.AmazeAmusements, PlayerSide.Corp, RuntimeCardClass.Upgrade, rezCost: 1),
+            new CardRuntimeSpec(GatewayCardCodes.OffworldOffice, PlayerSide.Corp, RuntimeCardClass.Agenda,
+                agendaPoints: 2, advancementRequirement: 4));
+        GameState initial = BuildState(catalog, runtime, GatewayBatch5CardCodes.AmazeAmusements, runnerCredits: 15);
+        CardInstanceState first = Assert.Single(initial.Cards);
+        ZoneState root = initial.GetZone(first.ZoneId);
+        var allocator = new StableIdAllocator(initial.Allocator);
+        var second = new CardInstanceState(allocator.NextCardInstanceId(), first.DefinitionId, root.Id,
+            PlayerSide.Corp, faceUp: true, rezzed: true);
+        var agenda = new CardInstanceState(allocator.NextCardInstanceId(), GatewayCardCodes.OffworldOffice, root.Id, PlayerSide.Corp);
+        initial = new GameState(initial.SchemaVersion, initial.GameId, initial.RulesVersion, initial.CardDataVersion,
+            initial.Players, [first, second, agenda], initial.Zones.Select(zone => zone.Id == root.Id
+                ? new ZoneState(root.Id, root.Kind, root.OwnerSide, root.ServerId, [agenda.Id, first.Id, second.Id]) : zone).ToArray(),
+            initial.Servers, initial.Turn, initial.Outcome, initial.RandomState, allocator.State,
+            initialSeed: initial.InitialSeed, rulesState: initial.RulesState,
+            behaviorRegistryVersion: catalog.Version, behaviorCatalogFingerprint: catalog.Fingerprint,
+            runtimeCardCatalogVersion: runtime.Version, runtimeCardCatalogFingerprint: runtime.Fingerprint);
+        GameState state = BeginRun(initial, catalog, runtime, ServerKind.Remote);
+        bool orderingObserved = false;
+        for (int step = 0; step < 100 && state.PendingDecision is { } decision; step++)
+        {
+            string json = EngineJson.Serialize(state);
+            state = EngineJson.DeserializeState(json, catalog, runtime);
+            Assert.Equal(json, EngineJson.Serialize(state));
+            if (decision.Kind == DecisionKind.TriggerOrdering)
+            {
+                orderingObserved = true;
+                Assert.Null(state.RunState);
+                Assert.Equal(ServerLifecycle.Destroyed, state.Servers.Single(server => server.Id == root.ServerId).Lifecycle);
+                var forged = System.Text.Json.Nodes.JsonNode.Parse(json)!;
+                var retained = forged["resolutionStack"]![0]!["effects"]!["instructions"]![0]!["runContext"]!["abilities"]![0]!;
+                retained["triggerKey"] = "not-a-declared-persistent-trigger";
+                Assert.ThrowsAny<Exception>(() => EngineJson.DeserializeState(forged.ToJsonString(), catalog, runtime));
+            }
+            LegalAction action = decision.LegalActions.FirstOrDefault(value => value.Kind == ActionKind.TrashAccessedCard)
+                ?? decision.LegalActions.FirstOrDefault(value => value.Kind == ActionKind.PassPriority)
+                ?? decision.LegalActions.FirstOrDefault(value => value.Kind == ActionKind.ContinueRun)
+                ?? decision.LegalActions.FirstOrDefault(value => value.Kind == ActionKind.NoAccessAction)
+                ?? decision.LegalActions[0];
+            ApplyResult result = Apply(state, action, catalog, runtime);
+            Assert.True(result.Accepted, result.Rejection?.Message);
+            state = result.State;
+        }
+        Assert.True(orderingObserved);
+        Assert.Equal(4, Tags(state, PlayerSide.Runner));
+        Assert.DoesNotContain(state.Servers, server => server.Id == root.ServerId);
+        Assert.DoesNotContain(state.Zones, zone => zone.Id == root.Id);
+    }
+
     [Theory]
     [InlineData(true, true, true, 2, false)]
     [InlineData(true, true, true, 2, true)]

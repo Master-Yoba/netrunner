@@ -9,8 +9,8 @@ public static partial class GameEngine
 {
     /// <summary>
     /// Re-materializes real Corp advance payloads without allocating action or
-    /// decision IDs. Runtime metadata is the only source of printed agenda
-    /// class and advancement requirement in this projection.
+    /// decision IDs. Runtime metadata supplies agenda requirements; compiled
+    /// declarations grant advancement permission to other installed cards.
     /// </summary>
     internal static IReadOnlyList<AdvanceCardParameters> MaterializeAdvanceCardParameters(
         GameState state,
