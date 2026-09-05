@@ -285,7 +285,7 @@ public static partial class GameEngine
         // the following Advance pass yields a fresh timing decision with
         // Corp as holder and zero passes.
         StartNextTurnActionWindow(working, (TurnFrame)working.ResolutionStack[^1]);
-        if (HasActiveCatalogTrigger(working, OccurrenceKind.AgendaScoredOrStolen))
+        if (HasActiveCatalogTrigger(working, OccurrenceKind.AgendaScoredOrStolen, server.Id, card.Id))
         {
             QueueAgendaScoredOrStolenOccurrence(
                 working,

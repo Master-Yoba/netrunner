@@ -206,6 +206,24 @@
       "cr": "10.7",
       "summary": "Link is an identity/card characteristic and does not alter the basic run cost in Gateway.",
       "jnetCrossCheck": "jnet retains link metadata but charges one click for a basic run for all Gateway identities."
+    },
+    {
+      "id": "CR-8.7-search-custody",
+      "cr": "4.8.4; 8.7.2–8.7.4",
+      "summary": "Search results remain set aside while the remaining deck shuffles; remaining reveal and transfer instructions follow that shuffle, including a failed search.",
+      "jnetCrossCheck": "Cross-check found a discrepancy: current game/cards/upgrades.clj Malapert reveals, shuffles with target still in the deck, then moves it. This implementation follows CR 26.03 4.8.4 and 8.7.3 instead; M4_PROGRESS documents the correction."
+    },
+    {
+      "id": "CR-7.3-access-occurrences",
+      "cr": "7.3.6; 6.8",
+      "summary": "Access-based amounts count actual access occurrences during the entire run; candidate selection and distinct card counts do not replace that total.",
+      "jnetCrossCheck": "Zahya uses the completed run context total, requires an HQ/R&D run and a positive total, and spends its per-turn use only on acceptance."
+    },
+    {
+      "id": "CR-4.4-private-trash",
+      "cr": "4.4.6; 8.1; 8.2",
+      "summary": "Corp cards trashed from a private hand remain hidden in Archives; a private selection must not make their definitions public.",
+      "jnetCrossCheck": "Longevity routes selected HQ cards to Archives preserving their visibility before optional deck recovery."
     }
   ]
 }

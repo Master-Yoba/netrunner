@@ -12,7 +12,7 @@
       "side": "runner",
       "identityCode": "30076",
       "kind": "starter",
-      "playable": false,
+      "playable": true,
       "cards": [
         { "code": "30012", "quantity": 2 },
         { "code": "30020", "quantity": 2 },
@@ -37,7 +37,7 @@
       "side": "runner",
       "identityCode": "30076",
       "kind": "expanded",
-      "playable": false,
+      "playable": true,
       "cards": [
         { "code": "30012", "quantity": 2 },
         { "code": "30020", "quantity": 2 },
@@ -67,7 +67,7 @@
       "side": "corp",
       "identityCode": "30077",
       "kind": "starter",
-      "playable": false,
+      "playable": true,
       "cards": [
         { "code": "30067", "quantity": 3 },
         { "code": "30069", "quantity": 2 },
@@ -92,7 +92,7 @@
       "side": "corp",
       "identityCode": "30077",
       "kind": "expanded",
-      "playable": false,
+      "playable": true,
       "cards": [
         { "code": "30067", "quantity": 3 },
         { "code": "30069", "quantity": 2 },

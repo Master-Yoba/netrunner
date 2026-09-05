@@ -173,10 +173,8 @@ public static class GatewayBatch1BehaviorSpecs
                 sourceZone: BehaviorZone.Stack,
                 filter: MutualFavorIcebreakerFilter),
             new BehaviorInstruction(
-                BehaviorInstructionKind.ShuffleIntoDeck,
-                target: ChosenCard,
-                sourceZone: BehaviorZone.Stack,
-                destinationZone: BehaviorZone.Stack),
+                BehaviorInstructionKind.ShuffleSearchedDeck,
+                sourceZone: BehaviorZone.Stack),
             new BehaviorInstruction(
                 BehaviorInstructionKind.Branch,
                 branch: new BehaviorBranchSpec(

@@ -12,8 +12,8 @@ namespace Netrunner.Match.Tests;
 /// </summary>
 public sealed class Slice43AbilityProofTests
 {
-    private const string BasicFixtureId = "sim-slice46-batch5-basic";
-    private const string ExpandedFixtureId = "sim-slice46-batch5-expanded";
+    private const string BasicFixtureId = "sim-slice47-batch6-basic";
+    private const string ExpandedFixtureId = "sim-slice47-batch6-expanded";
 
     [Theory]
     [InlineData(BasicFixtureId)]

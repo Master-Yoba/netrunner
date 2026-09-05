@@ -1258,8 +1258,9 @@ public static partial class GameEngine
         if (openingChoice.Target is { } target)
         {
             int candidates = MaterializeBehaviorCandidates(working, target).Length;
-            return openingChoice.Cardinality.Kind != BehaviorChoiceCardinalityKind.Exactly
-                || candidates >= openingChoice.Cardinality.Count;
+            return (trigger.Mode != TriggerMode.Optional || candidates > 0)
+                && (openingChoice.Cardinality.Kind != BehaviorChoiceCardinalityKind.Exactly
+                    || candidates >= openingChoice.Cardinality.Count);
         }
 
         PlayerId controller = GetPlayer(working, source.OwnerSide).Id;

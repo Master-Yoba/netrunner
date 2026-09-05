@@ -13,7 +13,7 @@ public static partial class GameEngine
             || working.ResolutionStack.Count < 2
             || working.ResolutionStack[^2] is not EffectCheckpointFrame checkpoint
             || checkpoint.Occurrence.Effect is not GameplayOccurrenceEffect
-                { Kind: OccurrenceKind.RunEnded, RunContext: { } context })
+            { Kind: OccurrenceKind.RunEnded, RunContext: { } context })
         {
             throw new ResolutionFailureException("Per-access credits require a serialized run-end trigger context.");
         }

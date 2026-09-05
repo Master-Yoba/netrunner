@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "fixtureId": "sim-slice46-batch5-basic",
+  "fixtureId": "sim-slice47-batch6-basic",
   "rulesVersion": "26.03",
   "cardDataVersion": "236140cf84491c23995b028bc791281837520b97",
-  "behaviorRegistryVersion": "gateway-m4-4.6",
-  "behaviorCatalogFingerprint": "4cb1ffce96ebf89ecdb8769115a844e6cc7d85b48da1e321ed84ea66d5d45e1d",
+  "behaviorRegistryVersion": "gateway-m4-4.7",
+  "behaviorCatalogFingerprint": "dcbfdac91abe3d308c6f690495abc1b0dd4703a8bb86a82e9b188db26f83b22b",
   "seed": 40102,
   "actionCap": 128,
   "corpDeck": {
@@ -40,7 +40,15 @@
       { "code": "30062", "quantity": 1 },
       { "code": "30063", "quantity": 1 },
       { "code": "30065", "quantity": 1 },
-      { "code": "30073", "quantity": 1 }
+      { "code": "30073", "quantity": 1 },
+      { "code": "30036", "quantity": 1 },
+      { "code": "30044", "quantity": 1 },
+      { "code": "30052", "quantity": 1 },
+      { "code": "30060", "quantity": 1 },
+      { "code": "30066", "quantity": 1 },
+      { "code": "30068", "quantity": 1 },
+      { "code": "30069", "quantity": 1 },
+      { "code": "30070", "quantity": 1 }
     ],
     "validationProfile": "developerReduced"
   },
@@ -75,6 +83,8 @@
       { "code": "30022", "quantity": 1 },
       { "code": "30025", "quantity": 1 },
       { "code": "30026", "quantity": 1 },
+      { "code": "30004", "quantity": 1 },
+      { "code": "30017", "quantity": 1 },
       { "code": "30034", "quantity": 1 },
       { "code": "30028", "quantity": 1 },
       { "code": "30032", "quantity": 1 }
@@ -94,5 +104,5 @@
     "https://nullsignal.games/products/system-gateway/",
     "https://rules.nullsignal.games/"
   ],
-  "crossCheckNote": "Developer-curated code/quantity-only decks include all 58 registered Slice <=4.6 codes, including all twelve Slice 4.6 Batch 5 codes. MATCH-401A normal setup/mulligan execution remains outside this input document; SCN-402 and the Slice 4.6 headless proof execute damage, tags, conditional ICE and installed access through engine-issued observation actions with both policies and replay at every yield."
+  "crossCheckNote": "Developer-curated code/quantity inputs now include every Gateway non-identity card through Slice 4.7. Official identity/preset legality and normal setup-to-outcome execution are independently proved by Slice47FullGameProofTests with the authenticated content lane. The two tutorial IDs in this historical reduced input remain structural identifiers; these are not official user-facing decks."
 }

@@ -5314,6 +5314,9 @@ public static partial class StateInvariantValidator
                         && (source.OwnerSide == PlayerSide.Runner
                             ? currentZone.Kind == ZoneKind.RunnerRemovedFromGame
                             : currentZone.Kind == ZoneKind.CorpRemovedFromGame)));
+            behaviorCatalog.TryGet(frame.DefinitionId, out CardBehaviorDefinition? lifecycleDefinition);
+            validLifecycleZone |= AbilityLifecycleRules.IsEmptyPoolSelfTrash(lifecycleDefinition, declaration, frame,
+                source, currentZone, state.RulesState, state.Turn);
             if (!validLifecycleZone || (selfTrash && selfRemove))
             {
                 Add(
@@ -11843,6 +11846,8 @@ public static partial class StateInvariantValidator
     {
         var selectionsByKey = new Dictionary<string, IReadOnlyList<CardInstanceId>>(StringComparer.Ordinal);
         IReadOnlyList<CardInstanceId>? lastNonEmptySelection = null;
+        int lastSelectionCursor = -1;
+        string? lastSelectionKey = null;
         var replay = rootInstructions.ToList();
         for (int index = 0; index < frame.Continuation.Count; index++)
         {
@@ -11886,11 +11891,13 @@ public static partial class StateInvariantValidator
                 }
 
                 selectionsByKey[step.Key] = selected;
+                lastSelectionCursor = step.InstructionCursor;
+                lastSelectionKey = step.Key;
                 if (selected.Length > 0)
                 {
                     lastNonEmptySelection = selected;
                 }
-                else if (instruction.Kind == BehaviorInstructionKind.Search)
+                else
                 {
                     // An authenticated fail-to-find supersedes any earlier
                     // search result. The engine clears the corresponding
@@ -11969,7 +11976,13 @@ public static partial class StateInvariantValidator
             }
         }
 
+        bool consumed = lastSelectionCursor >= 0
+            && replay.Skip(lastSelectionCursor).Take(Math.Max(0, frame.InstructionCursor - lastSelectionCursor))
+                .Any(instruction => instruction.Kind is BehaviorInstructionKind.TrashCard or BehaviorInstructionKind.AddToHand or BehaviorInstructionKind.MoveCard or BehaviorInstructionKind.InstallCard
+                    && instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } target
+                    && (target.Selector is null || target.Selector == lastSelectionKey));
         if (lastNonEmptySelection is not null
+            && !consumed
             && !frame.Bindings.Any(binding => string.Equals(binding.Key, "chosen", StringComparison.Ordinal)))
         {
             Add(

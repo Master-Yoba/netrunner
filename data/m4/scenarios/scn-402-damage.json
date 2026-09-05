@@ -5,7 +5,7 @@
   "rulesVersion": "26.03",
   "engineStateSchemaVersion": 17,
   "behaviorRegistryVersion": "gateway-m4-4.7",
-  "policies": ["scripted-issued-actions", "full-game-contract-agent-v5"],
+  "policies": ["scripted-issued-actions", "full-game-contract-agent-v6"],
   "saveLoadEveryYield": true,
   "replayEveryAction": true,
   "citations": [

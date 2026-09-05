@@ -120,7 +120,11 @@ public partial class TextCardControl : PanelContainer
 			_title.Text = card.Title;
 			_type.Text = card.Type + (card.Subtypes.Count == 0 ? string.Empty : " · " + string.Join(" · ", card.Subtypes));
 			_stats.Text = FormatStats(card, _strengthBreakdown);
-			_status.Text = card.Rezzed ? "REZZED" : card.IsKnown ? "KNOWN" : "FACE-DOWN";
+			_status.Text = card.StatusLabel;
+			if (card.HostLabel is { } host)
+			{
+				_status.Text += $" · {host}";
+			}
 			_abilityCue.Text = card.AbilityCue ?? string.Empty;
 			_firstXCue.Text = card.FirstXUseCue ?? string.Empty;
 			_counters.Text = string.Join("  ", card.CounterChips);
@@ -250,7 +254,7 @@ public partial class TextCardControl : PanelContainer
 			return;
 		}
 
-		string visibility = _card.Rezzed ? "REZZED" : _card.IsKnown ? "KNOWN" : "FACE-DOWN";
+		string visibility = _card.StatusLabel;
 		_status.Text = _selected
 			? $"TARGET SELECTED · {visibility}"
 			: _targetCandidate

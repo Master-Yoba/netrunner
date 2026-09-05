@@ -1167,12 +1167,18 @@ public sealed record BehaviorInstruction
             && Kind != BehaviorInstructionKind.ShuffleIntoDeck
             && Kind != BehaviorInstructionKind.AddToHand
             && Kind != BehaviorInstructionKind.InstallCard
+            && Kind != BehaviorInstructionKind.ShuffleSearchedDeck
             && (SourceZone is not null || DestinationZone is not null))
         {
             throw new ArgumentException(
                 "Source and destination zones are not valid for this instruction kind.",
                 nameof(SourceZone));
         }
+
+        if (Kind == BehaviorInstructionKind.ShuffleSearchedDeck
+            && (SourceZone is not (BehaviorZone.Deck or BehaviorZone.Stack)
+                || DestinationZone is not null || Target is not null || Amount != 0))
+            throw new ArgumentException("A search shuffle requires only its searched Deck or Stack source zone.");
 
         if (Kind is not (BehaviorInstructionKind.Reveal
             or BehaviorInstructionKind.Search
@@ -1262,6 +1268,7 @@ public enum BehaviorInstructionKind
     SwapInstalledIce,
     ProhibitScoringThisTurn,
     RezIgnoringCosts,
+    ShuffleSearchedDeck,
 
     // Short aliases keep the contract pleasant for callers while the longer
     // names remain unambiguous in serialized/fingerprint output.

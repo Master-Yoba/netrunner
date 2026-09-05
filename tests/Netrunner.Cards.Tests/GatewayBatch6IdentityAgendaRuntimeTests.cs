@@ -163,13 +163,18 @@ public sealed class GatewayBatch6IdentityAgendaRuntimeTests
             && choice.CardIds.Any(id => state.GetCard(id).DefinitionId.Value == "30067"));
         string runnerView = EngineJson.Serialize(ObservationBuilder.Build(state, PlayerSide.Runner, Catalog));
         Assert.DoesNotContain(Filler.Value, runnerView, StringComparison.Ordinal);
+        List<CardInstanceId> expectedDeck = state.GetZone(ZoneKind.CorpDeck).CardIds.Where(id => id != selected).ToList();
+        DeterministicRandom expectedRandom = DeterministicRandom.Restore(state.RandomState);
+        expectedRandom.Shuffle(expectedDeck);
         PendingDecision decision = state.PendingDecision;
         LegalAction action = Assert.Single(decision.LegalActions, action => action.Parameters is BehaviorChoiceParameters choice && choice.CardIds.Contains(selected));
         ApplyResult result = GameEngine.Apply(state, new ActionSubmission(decision.Owner, decision.Id, decision.Revision, action.Id), Catalog, Runtime);
         Assert.True(result.Accepted, result.Rejection?.Message);
         List<string> events = result.Events.Select(value => value.Kind).ToList();
-        Assert.True(events.IndexOf(EngineEventKinds.BehaviorCardRevealed) < events.IndexOf(EngineEventKinds.BehaviorCardsShuffled));
+        Assert.True(events.IndexOf(EngineEventKinds.BehaviorCardsShuffled) < events.IndexOf(EngineEventKinds.BehaviorCardRevealed));
         state = result.State;
+        Assert.Equal(expectedDeck, state.GetZone(ZoneKind.CorpDeck).CardIds);
+        Assert.Equal(expectedRandom.State, state.RandomState);
         Assert.Contains(selected, state.GetZone(ZoneKind.CorpHand).CardIds);
         Assert.False(state.GetCard(selected).FaceUp);
         AssertValid(state);
@@ -339,6 +344,50 @@ public sealed class GatewayBatch6IdentityAgendaRuntimeTests
         AssertValid(state);
     }
 
+    [Fact]
+    [Trait("GatewayCard", "30066")]
+    public void RealScoreUsesMalapertServerSnapshotAfterAgendaLeavesRoot()
+    {
+        GameState fixture = WithInstalledAgenda(Fixture("30066", ZoneKind.ServerRoot));
+        CardInstanceState source = fixture.Cards[0];
+        CardInstanceState agenda = fixture.Cards.Single(card => card.DefinitionId.Value == "30067");
+        CardInstanceState[] cards = fixture.Cards.Select(card => card.Id == source.Id
+            ? new CardInstanceState(card.Id, card.DefinitionId, agenda.ZoneId, card.OwnerSide, faceUp: true, rezzed: true)
+            : card.Id == agenda.Id ? new CardInstanceState(card.Id, card.DefinitionId, card.ZoneId, card.OwnerSide, advancementCounters: 3) : card).ToArray();
+        ZoneState[] zones = fixture.Zones.Select(zone => new ZoneState(zone.Id, zone.Kind, zone.OwnerSide, zone.ServerId,
+            cards.Where(card => card.ZoneId == zone.Id).Select(card => card.Id).ToArray())).ToArray();
+        GameState state = new(fixture.SchemaVersion, fixture.GameId, fixture.RulesVersion, fixture.CardDataVersion,
+            fixture.Players, cards, zones, fixture.Servers, fixture.Turn, fixture.Outcome, fixture.RandomState, fixture.Allocator,
+            initialSeed: fixture.InitialSeed, rulesState: fixture.RulesState, behaviorRegistryVersion: Catalog.Version,
+            behaviorCatalogFingerprint: Catalog.Fingerprint, runtimeCardCatalogVersion: Runtime.Version, runtimeCardCatalogFingerprint: Runtime.Fingerprint);
+        state = GameEngine.BeginTurn(state, PlayerSide.Corp, Catalog, Runtime);
+        state = Pick(state, action => action.Kind == ActionKind.PassPriority);
+        state = Pick(state, action => action.Kind == ActionKind.PassPriority);
+        state = Pick(state, action => action.Parameters is ScoreAgendaParameters parameters && parameters.CardId == agenda.Id);
+        if (state.PendingDecision!.Kind == DecisionKind.TriggerOrdering)
+            state = Pick(state, action => action.Id == state.PendingDecision.LegalActions[0].Id);
+        Assert.Equal(DecisionKind.TriggerChoice, state.PendingDecision!.Kind);
+        Assert.Equal(state.GetZone(ZoneKind.CorpScore).Id, state.GetCard(agenda.Id).ZoneId);
+        state = Pick(state, action => action.Kind == ActionKind.UseTrigger);
+        Assert.Equal(DecisionKind.BehaviorChoice, state.PendingDecision!.Kind);
+        Assert.All(state.PendingDecision.LegalActions.Where(action => action.Parameters is BehaviorChoiceParameters), action =>
+            Assert.DoesNotContain(agenda.Id, Assert.IsType<BehaviorChoiceParameters>(action.Parameters).CardIds));
+        AssertValid(state);
+    }
+
+    [Fact]
+    [Trait("GatewayCard", "30051")]
+    public void NbnDrawOptionDecksOutAndPreservesFormalTurnHistory()
+    {
+        GameState state = Tags(Fixture("30051", ZoneKind.CorpIdentity, corpDeckCards: 1), 1);
+        state = Pick(state, action => action.Parameters is BehaviorChoiceParameters choice && choice.OptionKeys.Contains("draw-two"));
+        Assert.Equal(PlayerSide.Runner, state.Outcome.Winner);
+        Assert.Equal(GameWinReason.DeckOut, state.Outcome.Reason);
+        Assert.NotNull(state.Turn.History);
+        Assert.Null(state.RunState);
+        AssertValid(state);
+    }
+
     private static GameState Tags(GameState state, int delta) => GameEngine.BeginResolution(state,
         new EffectResolutionFrame(state.GetPlayerBySide(PlayerSide.Corp).Id, new CostBundle(),
             new EffectBundle(new TagAdjustmentEffect(state.GetPlayerBySide(PlayerSide.Runner).Id, delta))), Catalog, Runtime);
@@ -381,7 +430,7 @@ public sealed class GatewayBatch6IdentityAgendaRuntimeTests
         return builder.Build();
     }
 
-    private static GameState Fixture(string code, ZoneKind sourceKind, bool facedownArchive = false, bool installedTargets = false, bool deckAgenda = false, int hqCards = 0)
+    private static GameState Fixture(string code, ZoneKind sourceKind, bool facedownArchive = false, bool installedTargets = false, bool deckAgenda = false, int hqCards = 0, int corpDeckCards = 5)
     {
         GameState baseline = GameState.CreateNew(47042, behaviorRegistryVersion: Catalog.Version,
             behaviorCatalogFingerprint: Catalog.Fingerprint, runtimeCardCatalogVersion: Runtime.Version,
@@ -398,7 +447,7 @@ public sealed class GatewayBatch6IdentityAgendaRuntimeTests
         List<CardInstanceState> cards = [new(allocator.NextCardInstanceId(), new(code), sourceZone.Id, owner, faceUp: true, rezzed: sourceKind == ZoneKind.ServerRoot)];
         for (int i = 0; i < 5; i++)
         {
-            cards.Add(new(allocator.NextCardInstanceId(), Filler, zones.Single(zone => zone.Kind == ZoneKind.CorpDeck).Id, PlayerSide.Corp));
+            if (i < corpDeckCards) cards.Add(new(allocator.NextCardInstanceId(), Filler, zones.Single(zone => zone.Kind == ZoneKind.CorpDeck).Id, PlayerSide.Corp));
             cards.Add(new(allocator.NextCardInstanceId(), new("fixture:runner-filler"), zones.Single(zone => zone.Kind == ZoneKind.RunnerStack).Id, PlayerSide.Runner));
         }
         for (int i = 0; i < hqCards; i++) cards.Add(new(allocator.NextCardInstanceId(), Filler, zones.Single(zone => zone.Kind == ZoneKind.CorpHand).Id, PlayerSide.Corp));

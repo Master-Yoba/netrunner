@@ -15,9 +15,9 @@ public static class FullGameContractAgentVersion
 {
     public const int SchemaVersion = 5;
 
-    public const string AgentVersion = "full-game-contract-agent-v5";
+    public const string AgentVersion = "full-game-contract-agent-v6";
 
-    public const string PolicyVersion = "full-game-contract-policy-v5";
+    public const string PolicyVersion = "full-game-contract-policy-v6";
 }
 
 /// <summary>
@@ -32,7 +32,7 @@ public enum BioroidSubroutinePreference
 }
 
 /// <summary>
-/// Action-class policy for <see cref="FullGameContractAgent"/> v5.
+/// Action-class policy for <see cref="FullGameContractAgent"/> v6.
 ///
 /// The action lists are typed <see cref="ActionKind"/> values, not prompt or
 /// description text. The dispatcher is deliberately organized by
@@ -49,6 +49,12 @@ public sealed class FullGameContractPolicy
     [
         ActionKind.UseAbility,
         ActionKind.InstallCard,
+        ActionKind.PlayCard,
+        ActionKind.StartRun,
+        ActionKind.AdvanceCard,
+        ActionKind.RemoveTag,
+        ActionKind.TrashTaggedResource,
+        ActionKind.PurgeVirusCounters,
         ActionKind.GainCredit,
         ActionKind.DrawCard,
     ];
@@ -128,6 +134,12 @@ public sealed class FullGameContractPolicy
         {
             ActionKind.UseAbility,
             ActionKind.InstallCard,
+            ActionKind.PlayCard,
+            ActionKind.StartRun,
+            ActionKind.AdvanceCard,
+            ActionKind.RemoveTag,
+            ActionKind.TrashTaggedResource,
+            ActionKind.PurgeVirusCounters,
             ActionKind.GainCredit,
             ActionKind.DrawCard,
         };
@@ -139,7 +151,7 @@ public sealed class FullGameContractPolicy
             ActionKind.UseBioroidAbility,
             ActionKind.PassPriority,
             ActionKind.RezCard,
-        ActionKind.RezIce,
+            ActionKind.RezIce,
             ActionKind.BreakSubroutines,
             ActionKind.PumpBreaker,
             ActionKind.JackOut,
@@ -187,7 +199,7 @@ public sealed class FullGameContractPolicy
 }
 
 /// <summary>
-/// Deterministic observation-only v5 agent for the Slice 4.6 shell.
+/// Deterministic observation-only v6 agent for the Slice 4.7 shell.
 ///
 /// It currently dispatches typed decision classes for turn timing, turn
 /// actions (bounded abilities/install/gain/draw), forced discard, generic
@@ -247,6 +259,8 @@ public sealed class FullGameContractAgent : IGameAgent
         LegalAction selected = decisionKind switch
         {
             DecisionKind.Setup => observation.LegalActions.First(action => action.Parameters is NumberChoiceParameters { Value: 0 }),
+            DecisionKind.ChooseNumber => SelectNumberChoice(observation.LegalActions),
+            DecisionKind.ChooseCard => SelectCardChoice(observation.LegalActions),
             DecisionKind.MemoryCleanup => observation.LegalActions.First(action => action.Kind == ActionKind.TrashProgram
                 && action.Parameters is CardChoiceParameters),
             DecisionKind.TriggerOrdering => observation.LegalActions.First(action => action.Kind == ActionKind.OrderTriggers
@@ -274,8 +288,36 @@ public sealed class FullGameContractAgent : IGameAgent
     private static LegalAction SelectTurnTiming(IReadOnlyList<LegalAction> actions) =>
         SelectByPriority(
             actions,
-            [ActionKind.UseAbility, ActionKind.PassPriority],
+            [ActionKind.ScoreAgenda, ActionKind.RezCard, ActionKind.UseAbility, ActionKind.PassPriority],
             FullGameActionClass.TurnTiming);
+
+    private static LegalAction SelectNumberChoice(IReadOnlyList<LegalAction> actions)
+    {
+        EnsureActionShapes(actions, FullGameActionClass.ResolutionChoice);
+        LegalAction[] choices = actions.Where(static action =>
+                action.Kind == ActionKind.ChooseNumber
+                && action.Parameters is NumberChoiceParameters).ToArray();
+        if (choices.Length == 0)
+        {
+            throw new InvalidOperationException(
+                $"The full-game agent found no supported action in the {FullGameActionClass.ResolutionChoice} decision.");
+        }
+
+        return choices
+            .OrderBy(static action => ((NumberChoiceParameters)action.Parameters).Value)
+            .ThenBy(static action => action.Id.Value, StringComparer.Ordinal)
+            .First();
+    }
+
+    private static LegalAction SelectCardChoice(IReadOnlyList<LegalAction> actions)
+    {
+        EnsureActionShapes(actions, FullGameActionClass.ResolutionChoice);
+        return SelectSemantic(
+            actions.Where(static action =>
+                action.Kind == ActionKind.ChooseCard
+                && action.Parameters is CardChoiceParameters),
+            FullGameActionClass.ResolutionChoice);
+    }
 
     private static LegalAction SelectTurnDiscard(IReadOnlyList<LegalAction> actions)
     {
@@ -307,7 +349,7 @@ public sealed class FullGameContractAgent : IGameAgent
             if (scored is not null) return scored;
         }
 
-        // The v5 teaching policy prefers an economy mode when one is offered
+        // The v6 teaching policy prefers an economy mode when one is offered
         // (for example Predictive Planogram's typed `gain` option). Structured
         // option/card payloads then outrank an optional skip, and the issued
         // action ID preserves Core's declaration/materialization order for
@@ -347,6 +389,32 @@ public sealed class FullGameContractAgent : IGameAgent
     private static LegalAction SelectInterruptChoice(IReadOnlyList<LegalAction> actions)
     {
         EnsureActionShapes(actions, FullGameActionClass.InterruptChoice);
+        LegalAction[] prevention = actions
+            .Where(static action =>
+                action.Kind is ActionKind.UsePrevention or ActionKind.DeclinePrevention
+                && action.Parameters is PreventionChoiceParameters)
+            .ToArray();
+        if (prevention.Length > 0)
+        {
+            LegalAction[] usePrevention = prevention
+                .Where(static action => action.Kind == ActionKind.UsePrevention)
+                .ToArray();
+            if (usePrevention.Length > 0)
+            {
+                // Prevent the greatest currently materialized amount. The
+                // amount is Core's frozen choice payload; the agent never
+                // recomputes damage or derives a payment.
+                return usePrevention
+                    .OrderByDescending(static action =>
+                        ((PreventionChoiceParameters)action.Parameters).Amount)
+                    .ThenBy(SemanticKey, StringComparer.Ordinal)
+                    .ThenBy(static action => action.Id.Value, StringComparer.Ordinal)
+                    .First();
+            }
+
+            return SelectSemantic(prevention, FullGameActionClass.InterruptChoice);
+        }
+
         LegalAction[] replacements = actions
             .Where(static action =>
                 action.Kind is ActionKind.UseReplacement or ActionKind.DeclineReplacement
@@ -726,16 +794,32 @@ public sealed class FullGameContractAgent : IGameAgent
     private static bool IsActionAllowed(LegalAction action, FullGameActionClass actionClass) =>
         actionClass switch
         {
-            FullGameActionClass.TurnTiming => action.Kind is ActionKind.UseAbility or ActionKind.PassPriority,
+            FullGameActionClass.TurnTiming => action.Kind is
+                ActionKind.ScoreAgenda
+                or ActionKind.RezCard
+                or ActionKind.UseAbility
+                or ActionKind.PassPriority,
             FullGameActionClass.TurnAction => action.Kind is
                 ActionKind.UseAbility
                 or ActionKind.InstallCard
+                or ActionKind.PlayCard
+                or ActionKind.StartRun
+                or ActionKind.AdvanceCard
+                or ActionKind.RemoveTag
+                or ActionKind.TrashTaggedResource
+                or ActionKind.PurgeVirusCounters
                 or ActionKind.GainCredit
                 or ActionKind.DrawCard,
+            FullGameActionClass.ResolutionChoice => action.Kind is
+                ActionKind.ChooseNumber
+                or ActionKind.ChooseCard,
             FullGameActionClass.TurnDiscard => action.Kind == ActionKind.ChooseCard,
             FullGameActionClass.BehaviorChoice => action.Kind == ActionKind.ChooseBehavior,
             FullGameActionClass.InstallChoice => action.Kind == ActionKind.InstallCard,
             FullGameActionClass.InterruptChoice => action.Kind is
+                ActionKind.UsePrevention
+                or ActionKind.DeclinePrevention
+                or
                 ActionKind.UseReplacement
                 or ActionKind.DeclineReplacement,
             FullGameActionClass.TriggerChoice => action.Kind is
@@ -770,7 +854,37 @@ public sealed class FullGameContractAgent : IGameAgent
                 or (ActionKind.JackOut, NoActionParameters)
                 or (ActionKind.ContinueRun, NoActionParameters)
                 or (ActionKind.NoAccessAction, NoActionParameters) => true,
+            (ActionKind.ChooseNumber, NumberChoiceParameters) => actionClass == FullGameActionClass.ResolutionChoice,
             (ActionKind.ChooseCard, CardChoiceParameters card) => HasStableId(card.CardId.Value),
+            (ActionKind.PlayCard, PlayCardParameters play) =>
+                actionClass == FullGameActionClass.TurnAction
+                && HasStableId(play.CardId.Value)
+                && play.CreditCost >= 0
+                && (play.TargetServerId is null || HasStableId(play.TargetServerId.Value.Value)),
+            (ActionKind.StartRun, RunServerParameters run) =>
+                actionClass == FullGameActionClass.TurnAction
+                && HasStableId(run.ServerId.Value),
+            (ActionKind.AdvanceCard, AdvanceCardParameters advance) =>
+                actionClass == FullGameActionClass.TurnAction
+                && HasStableId(advance.CardId.Value)
+                && advance.CreditCost >= 0,
+            (ActionKind.ScoreAgenda, ScoreAgendaParameters score) =>
+                actionClass == FullGameActionClass.TurnTiming
+                && HasStableId(score.CardId.Value)
+                && score.AgendaPoints >= 0
+                && score.AdvancementRequirement >= 0,
+            (ActionKind.RemoveTag, RemoveTagParameters removeTag) =>
+                actionClass == FullGameActionClass.TurnAction
+                && removeTag.ClickCost >= 0
+                && removeTag.CreditCost >= 0,
+            (ActionKind.TrashTaggedResource, TrashTaggedResourceParameters trash) =>
+                actionClass == FullGameActionClass.TurnAction
+                && HasStableId(trash.CardId.Value)
+                && trash.ClickCost >= 0
+                && trash.CreditCost >= 0,
+            (ActionKind.PurgeVirusCounters, PurgeVirusCountersParameters purge) =>
+                actionClass == FullGameActionClass.TurnAction
+                && purge.ClickCost >= 0,
             (ActionKind.ChooseBehavior, BehaviorChoiceParameters behavior) =>
                 HasValidBehaviorChoiceParameters(behavior),
             (ActionKind.RezCard, RezCardParameters rez) => HasStableId(rez.CardId.Value) && rez.CreditCost >= 0
@@ -779,7 +893,9 @@ public sealed class FullGameContractAgent : IGameAgent
             (ActionKind.BreakSubroutines, RunBreakParameters runBreak) =>
                 HasStableId(runBreak.BreakerId.Value)
                 && runBreak.Quantity > 0
-                && runBreak.HostedCredits >= 0,
+                && runBreak.HostedCredits >= 0
+                && (runBreak.SubroutineId is null || (HasStableId(runBreak.SubroutineId.Value.Value)
+                    && runBreak.Quantity == 1 && runBreak.HostedCredits == 0 && runBreak.CostQuote is null)),
             (ActionKind.PumpBreaker, RunBreakerParameters breaker) =>
                 HasStableId(breaker.BreakerId.Value)
                 && breaker.HostedCredits >= 0,
@@ -799,6 +915,8 @@ public sealed class FullGameContractAgent : IGameAgent
                 IsValidInstallAction(install, actionClass),
             (ActionKind.UseReplacement or ActionKind.DeclineReplacement, ReplacementChoiceParameters replacement) =>
                 HasStableId(replacement.InterruptId.Value),
+            (ActionKind.UsePrevention or ActionKind.DeclinePrevention, PreventionChoiceParameters prevention) =>
+                HasStableId(prevention.InterruptId.Value) && prevention.Amount >= 0,
             (ActionKind.UseTrigger or ActionKind.DeclineTrigger, TriggerChoiceParameters trigger) =>
                 HasStableId(trigger.TriggerId.Value),
             (ActionKind.ResolveIceSubroutine, IceSubroutineChoiceParameters choice) =>
@@ -848,6 +966,8 @@ public sealed class FullGameContractAgent : IGameAgent
         if (install is null
             || actionClass is not (FullGameActionClass.TurnAction or FullGameActionClass.InstallChoice)
             || !HasStableId(install.CardId.Value)
+            || install.HostCardId is { } host && (!HasStableId(host.Value) || host == install.CardId
+                || install.DestinationKind != InstallDestinationKind.RunnerRig)
             || !Enum.IsDefined(install.DestinationKind)
             || install.CreditCost < 0
             || !HasValidInstallDestination(install)
@@ -922,6 +1042,14 @@ public sealed class FullGameContractAgent : IGameAgent
                     && install.SelectedReplacementCardIds.Count == 0
                 : !install.FinalizeSelection
                     && install.SelectedReplacementCardIds.Count == 0;
+        }
+
+        // A behavior install first chooses its ICE host without advancing
+        // the replacement selection; Core freezes that host on the next frame.
+        if (!install.FinalizeSelection && install.HostCardId is not null
+            && install.SelectedReplacementCardIds.Count == 0)
+        {
+            return true;
         }
 
         // InstallChoice is a continuation over the frozen candidate stream.
@@ -1389,13 +1517,32 @@ public sealed class FullGameContractAgent : IGameAgent
         InstallCardParameters install => InstallKey(install),
         NumberChoiceParameters number =>
             $"number:{number.Value.ToString(CultureInfo.InvariantCulture)}",
+        PlayCardParameters play =>
+            $"play:{play.CardId.Value}:target:{play.TargetServerId?.Value ?? string.Empty}"
+            + $":cost:{play.CreditCost.ToString(CultureInfo.InvariantCulture)}",
+        RunServerParameters run => $"run:{run.ServerId.Value}",
+        AdvanceCardParameters advance =>
+            $"advance:{advance.CardId.Value}:{advance.CreditCost.ToString(CultureInfo.InvariantCulture)}",
+        ScoreAgendaParameters score =>
+            $"score:{score.CardId.Value}:{score.AgendaPoints.ToString(CultureInfo.InvariantCulture)}"
+            + $":requirement:{score.AdvancementRequirement.ToString(CultureInfo.InvariantCulture)}",
+        RemoveTagParameters removeTag =>
+            $"remove-tag:clicks:{removeTag.ClickCost.ToString(CultureInfo.InvariantCulture)}"
+            + $":credits:{removeTag.CreditCost.ToString(CultureInfo.InvariantCulture)}",
+        TrashTaggedResourceParameters trash =>
+            $"trash-tagged-resource:{trash.CardId.Value}"
+            + $":clicks:{trash.ClickCost.ToString(CultureInfo.InvariantCulture)}"
+            + $":credits:{trash.CreditCost.ToString(CultureInfo.InvariantCulture)}",
+        PurgeVirusCountersParameters purge =>
+            $"purge-virus-counters:{purge.ClickCost.ToString(CultureInfo.InvariantCulture)}",
         RezCardParameters rez => $"rez:{rez.CardId.Value}:{rez.CreditCost.ToString(CultureInfo.InvariantCulture)}",
         RunIceParameters ice => $"ice:{ice.IceId.Value}",
         RunBreakerParameters breaker =>
             $"breaker:{breaker.BreakerId.Value}:hosted:{breaker.HostedCredits.ToString(CultureInfo.InvariantCulture)}",
         RunBreakParameters runBreak =>
             $"break:{runBreak.BreakerId.Value}:quantity:{runBreak.Quantity.ToString(CultureInfo.InvariantCulture)}"
-            + $":hosted:{runBreak.HostedCredits.ToString(CultureInfo.InvariantCulture)}",
+            + $":hosted:{runBreak.HostedCredits.ToString(CultureInfo.InvariantCulture)}"
+            + $":subroutine:{runBreak.SubroutineId?.Value ?? string.Empty}",
         RunBioroidAbilityParameters bioroid =>
             $"bioroid:ice:{bioroid.IceId.Value}:ordinal:{bioroid.SubroutineOrdinal.ToString(CultureInfo.InvariantCulture)}"
             + $":subroutine:{bioroid.SubroutineId.Value}"
@@ -1410,6 +1557,8 @@ public sealed class FullGameContractAgent : IGameAgent
         AbilityActionParameters ability => AbilityKey(ability),
         ReplacementChoiceParameters replacement =>
             $"replacement:{replacement.InterruptId.Value}",
+        PreventionChoiceParameters prevention =>
+            $"prevention:{prevention.InterruptId.Value}:{prevention.Amount.ToString(CultureInfo.InvariantCulture)}",
         TriggerChoiceParameters trigger =>
             $"trigger:{trigger.TriggerId.Value}",
         _ => throw new InvalidOperationException(
@@ -1429,6 +1578,7 @@ public sealed class FullGameContractAgent : IGameAgent
             install.RequiredReplacementCardIds,
             install.SelectedReplacementCardIds,
             install.FinalizeSelection,
+            install.HostCardId,
             install.CostQuote,
         });
 
@@ -1549,6 +1699,7 @@ public sealed class FullGameContractAgent : IGameAgent
 
     private enum FullGameActionClass
     {
+        ResolutionChoice,
         TurnTiming,
         TurnAction,
         TurnDiscard,

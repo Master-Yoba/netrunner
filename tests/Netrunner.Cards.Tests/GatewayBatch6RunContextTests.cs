@@ -1,3 +1,6 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
+
 using Netrunner.Core;
 using Xunit;
 
@@ -25,17 +28,34 @@ public sealed partial class GatewayBatch4ReactionRuntimeTests
         GameState state = BeginRun(initial, catalog, runtime, serverKind);
         int accessEvents = 0;
         bool sawRunEndContext = false;
+        bool checkedLiveTamper = false;
+        bool checkedRunEndTamper = false;
         for (int step = 0; step < 100 && state.PendingDecision is { } decision; step++)
         {
             state = EngineJson.DeserializeState(EngineJson.Serialize(state), catalog, runtime);
             if (state.RunState is { } run)
+            {
                 Assert.Equal(accessEvents, run.PersistentContext?.AccessOccurrenceCount ?? 0);
+                // The run's AccessedCards is an occurrence list: the reducer
+                // appends each access without Distinct(), including repeats.
+                Assert.Equal(accessEvents, run.AccessedCards.Count);
+                if (accessEvents > 0 && !checkedLiveTamper)
+                {
+                    AssertForgedAccessCountRejected(state, catalog, runtime);
+                    checkedLiveTamper = true;
+                }
+            }
             else if (ObservationBuilder.Build(state, PlayerSide.Runner, catalog).PublicState
                 .TryGetValue("runEnd", out object? projection))
             {
                 var fields = Assert.IsType<Dictionary<string, object?>>(projection);
                 Assert.Equal(accessEvents, fields["accessOccurrenceCount"]);
                 sawRunEndContext = true;
+                if (!checkedRunEndTamper)
+                {
+                    AssertForgedAccessCountRejected(state, catalog, runtime);
+                    checkedRunEndTamper = true;
+                }
             }
             LegalAction action = RunContextPolicy(decision);
             ApplyResult applied = Apply(state, action, catalog, runtime);
@@ -45,7 +65,30 @@ public sealed partial class GatewayBatch4ReactionRuntimeTests
         }
         Assert.Null(state.PendingDecision);
         Assert.Equal(10 + credits, state.GetPlayerBySide(PlayerSide.Runner).Credits);
+        Assert.True(checkedLiveTamper);
         Assert.Equal(credits > 0, sawRunEndContext);
+        Assert.Equal(credits > 0, checkedRunEndTamper);
+    }
+
+    private static void AssertForgedAccessCountRejected(GameState state, BehaviorCatalog catalog, RuntimeCardCatalog runtime)
+    {
+        JsonNode json = JsonNode.Parse(EngineJson.Serialize(state))!;
+        Assert.True(IncrementFirstAccessCount(json));
+        Assert.Throws<JsonException>(() => EngineJson.DeserializeState(json.ToJsonString(), catalog, runtime));
+    }
+
+    private static bool IncrementFirstAccessCount(JsonNode node)
+    {
+        if (node is JsonObject value)
+        {
+            if (value["accessOccurrenceCount"] is { } count)
+            {
+                value["accessOccurrenceCount"] = count.GetValue<int>() + 1;
+                return true;
+            }
+            return value.Any(property => property.Value is { } child && IncrementFirstAccessCount(child));
+        }
+        return node is JsonArray array && array.Any(child => child is not null && IncrementFirstAccessCount(child));
     }
 
     [Theory]
@@ -88,7 +131,7 @@ public sealed partial class GatewayBatch4ReactionRuntimeTests
         {
             state = EngineJson.DeserializeState(EngineJson.Serialize(state), catalog, runtime);
             LegalAction action = decision.LegalActions.FirstOrDefault(value => value.Parameters is BehaviorChoiceParameters
-                { CardIds.Count: 2 }) ?? RunContextPolicy(decision);
+            { CardIds.Count: 2 }) ?? RunContextPolicy(decision);
             selectedPair |= action.Parameters is BehaviorChoiceParameters { CardIds.Count: 2 };
             ApplyResult applied = Apply(state, action, catalog, runtime);
             Assert.True(applied.Accepted, applied.Rejection?.Message);

@@ -4,10 +4,14 @@ public static partial class StateInvariantValidator
 {
     private static void ValidatePersistentRuns(GameState state, IBehaviorCatalog? catalog, List<StateInvariantViolation> violations)
     {
+        if (state.RunState is { AccessedCards.Count: > 0, PersistentContext: null })
+            Add(violations, "run.missing-access-context", "runState.persistentContext", "Accessed runs must retain their frozen access count.");
         if (state.RunState?.PersistentContext is { } live)
         {
             ValidatePersistentContext(state, live, catalog, violations);
-            if (live.AccessOccurrenceCount < state.RunState.AccessedCards.Count
+            // AccessedCards appends each occurrence and preserves repeats; it
+            // is an ordered access ledger, not a distinct-card projection.
+            if (live.AccessOccurrenceCount != state.RunState.AccessedCards.Count
                 || live.RunId != state.RunState.Id || live.ServerId != state.RunState.AttackedServer
                 || live.StolenAgendas.Any(id => !state.RunState.AccessedCards.Contains(id))
                 || live.Abilities.Any(value => !state.RunState.AccessedCards.Contains(value.SourceCardId)))

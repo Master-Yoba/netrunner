@@ -1,6 +1,6 @@
 # M4 progress — System Gateway complete
 
-Status: Slice 4.6 implemented and locally verified; [PR #11 into dev](https://github.com/Master-Yoba/netrunner/pull/11) is open
+Status: Slice 4.7 implemented and verified on `m4_7`; ready for review into `dev`.
 
 Date started: 31 August 2026
 
@@ -9,13 +9,13 @@ vendored commit `236140cf84491c23995b028bc791281837520b97` (77 designs)
 
 ## Scope
 
-Slices 4.1 through 4.5 of `docs/M4_PLAN.md` and the correctness prerequisite
-are merged. Slice 4.6 implements ENG-426–432, the twelve Batch 5 cards,
-SCN-402, AGT-401 v5, SIM-401, and UI-407. Slice 4.7 remains out of scope.
+Slices 4.1 through 4.6 of `docs/M4_PLAN.md` and the correctness prerequisite
+are merged. Slice 4.7 implements ENG-433–437, RULE-401, AGT-402, UI-408,
+and the final Gateway batch, bringing behavior coverage to 77/77.
 
 Match, CLI, and both client seats share Core setup and terminal execution with
-explicit developer-only decks; completing this batch does not unlock official
-preset identities. See [the correctness follow-up](CORRECTNESS_SLICE.md) for
+official basic/expanded presets as well as developer decks. See
+[the correctness follow-up](CORRECTNESS_SLICE.md) for
 the preceding setup and server-lifecycle compatibility evidence.
 
 ## Baseline
@@ -4481,3 +4481,86 @@ errors; runtime action expansion and full verification remain pending.
 - Verification passed: all 1,272 tests, formatting, deterministic proofs,
   generated coverage, official gallery, every Godot smoke, and secret scanning
   via `make verify`. Coverage remains 58 registered/tested and 57 complete.
+
+
+### 2026-09-05 — Slice 4.7 implementation and architecture review
+
+- Dedicated feature branch `m4_7`; checkpoint `ade5111` records identities,
+  agendas, access context, ICE swaps, and Trojan hosting. Astra Low implemented
+  the two engine areas; Luna Max owns presentation and contract-agent updates;
+  root reviewed contracts and implemented cross-domain run timing.
+- Generic registrations complete the nine identities, seven new agendas,
+  Malapert and both Trojans; Offworld's seven-credit score trigger is separate
+  from its unchanged M2 agenda-point capability adapter.
+- Physical hosted programs retain a stable host card ID while occupying the
+  Runner rig. Installs from both basic actions and card effects require an
+  engine-issued ICE host choice. Host uninstall trashes children, clears their
+  counters and memory, while swaps preserve these relationships. Botulus
+  actions target an exact subroutine; neither ICE strength nor subtype restricts
+  its virus-counter payment. Tranquilizer derez preserves installation and
+  allows another rez.
+- Run access occurrences are counted at the actual access boundary, checked
+  against the live access ledger, and copied into serialized run-end context. Zahya uses that
+  context after live run cleanup. ICE score/steal swaps exchange positions
+  atomically without reinstalling or following stale list indexes; hosted
+  programs and counters survive. Tagging ICE resolves through the checkpoint
+  pipeline so NBN can react before subsequent subroutines.
+- Rules correction to ENG-437: the prose plan's reveal-before-shuffle sequence
+  conflicts with [CR 26.03 8.7.2–8.7.4](https://rules.nullsignal.games/#8.7.3).
+  A found card stays set aside while the remaining deck is shuffled; only then
+  do reveal/add effects continue. The inspected jnet Malapert declaration also
+  uses reveal/shuffle/move order; the explicit CR rule takes precedence over
+  that cross-check and the original plan. Review also found the shared Corp trash
+  transfer exposing private HQ cards; Longevity requires preserving their
+  hidden Archives status. These are correctness fixes, not deferred exceptions.
+- Schema 16 → 17 deliberately accounts for host IDs, exact access occurrence
+  context and new serializable trigger/choice contracts. The three baseline
+  scenario hashes change solely from the schema version:
+  - base: `a2e7c0f3130df9af00eba75c72c728875186f1205f6a019664a9497e109ef696`
+  - nested-inner: `3aac6ebaa02eebedeb5deccd7da62c8e1bfb76927d20d7f6262cf2a1f8e91a60`
+  - nested-outer: `9e6dc5a13db8a91c26b2ea553f1728aabf2fbf47fcb7925beb40e272725f6a28`
+- Rule comparisons used the authenticated local Gateway snapshot,
+  [CR 26.03](https://rules.nullsignal.games/), and jnet's
+  [identity](https://github.com/mtgred/netrunner/blob/master/src/clj/game/cards/identities.clj),
+  [agenda](https://github.com/mtgred/netrunner/blob/master/src/clj/game/cards/agendas.clj),
+  and [program](https://github.com/mtgred/netrunner/blob/master/src/clj/game/cards/programs.clj)
+  declarations. No external implementation code was copied.
+
+- M2 proof retains its 32 actions/checkpoints, equal scripted/contract policies,
+  verified replay, and unchanged event hash
+  `33af2b049fbad324ed5ff0ee130740c3d65c03f2cb1196100afbdc73e9f0e67c`.
+  Schema-17 state pins are initial
+  `9742dca2b8778a05375b0563ef3539a8d2c5248a21d989b13f9d33214de94341`
+  and final
+  `3242c530703869a08b82457d0399cc1a2e214d8ad07922a698cb06f53e6de969`.
+  Offworld's added generic score trigger does not change the M2 capability
+  fingerprint or its semantic trace.
+
+### 2026-09-05 — Slice 4.7 final review
+
+- Coverage is 77 registered, tested and complete out of 77, with zero partial
+  cards or diagnostics. Official basic and expanded presets are enabled;
+  missing authenticated metadata remains an explicit unavailable client state.
+- AGT-402 advances the agent and policy to v6 (policy schema stays 5). Review
+  added hosted-install continuation handling and exact Botulus subroutine
+  semantics, with deterministic selection across reordered issued actions.
+- [SCN-403](../data/m4/scenarios/scn-403-official-presets.json) drives actual
+  official preset setup, keep/mulligan decisions, complete games, save/load at
+  every yield and replay verification. Seed 47042 ends basic after 922 actions
+  with Runner deck-out victory, and expanded after 111 actions with Corp
+  flatline victory. These require the authenticated content lane; the synthetic
+  lane checks catalog completeness and reports the missing proof prerequisite.
+- UI-408 consumes exact Core choice keys, access counts and public ICE topology.
+  It preserves hidden definitions while nesting hosted Trojans beneath their
+  physical ICE, shows both swap positions and derez events, and keeps run-end
+  choices visible without confusing a completed run with a completed match.
+- Terminal review found active run events and fatal operations could remain in
+  transient play areas after deck-out/flatline. Shared terminal cleanup now
+  moves those cards to discard and clears live run state without run-end rewards;
+  actual Overclock/NBN, Overclock/Diviner and Neurospike regressions cover it.
+- Final `make verify` passed: 1,329 tests, formatting, deterministic proofs,
+  authenticated content/gallery, generated 77/77 coverage, all Godot smokes,
+  responsiveness and secret scanning. Both client seats prove setup, mulligan,
+  full turns, identities and terminal presentation. The eight-check UI-408
+  smoke also passed natively; its [screenshot](evidence/slice47/slice47-ui-smoke.png)
+  is a detached presentation fixture, separate from the official game proofs.

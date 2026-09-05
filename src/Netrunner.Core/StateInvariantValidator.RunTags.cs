@@ -8,6 +8,7 @@ public static partial class StateInvariantValidator
         if (run.Step != RunTimingStep.Encounter
             || run.Encounter is not { Status: RunEncounterStatus.Initialized } encounter
             || frame.Controller != state.Players.Single(player => player.Side == PlayerSide.Corp).Id
+            || frame.Costs.Instructions.Count != 0
             || frame.Effects.Instructions.Count != 1
             || frame.Effects.Instructions[0] is not TagAdjustmentEffect tag
             || tag.Target != state.Players.Single(player => player.Side == PlayerSide.Runner).Id

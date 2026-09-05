@@ -25,6 +25,8 @@ public partial class Main : Control
 	private readonly Queue<IReadOnlyList<EngineEvent>> _animationBatches = new();
 	private readonly CardMetadataSnapshot _metadataSnapshot = CardMetadataResolvers.Embedded;
 	private readonly ICardMetadataResolver _metadataResolver = CardMetadataResolvers.Default;
+	private readonly CardDataSet? _embeddedCardData = TryLoadEmbeddedCardData();
+	private readonly OfficialPresetCatalog? _officialPresetCatalog = TryLoadOfficialPresetCatalog();
 	private readonly IRuntimeCardCatalog? _runtimeCardCatalog = CreateRuntimeCardCatalog();
 	private readonly EventFeedRegionPresenter _eventFeedRegion = new();
 	private readonly ConcurrentQueue<MatchSnapshot> _pendingSnapshots = new();
@@ -52,6 +54,12 @@ public partial class Main : Control
 	private Label _details = null!;
 	private Label _corpSummary = null!;
 	private Label _runnerSummary = null!;
+	private Label _corpIdentityDetails = null!;
+	private Label _runnerIdentityDetails = null!;
+	private OptionButton _corpPreset = null!;
+	private OptionButton _runnerPreset = null!;
+	private readonly Dictionary<int, string> _corpPresetIds = new();
+	private readonly Dictionary<int, string> _runnerPresetIds = new();
 	private VBoxContainer _servers = null!;
 	private VBoxContainer _runnerRig = null!;
 	private VBoxContainer _runnerHand = null!;
@@ -78,6 +86,8 @@ public partial class Main : Control
 	private bool _slice44UiSmoke;
 	private bool _slice45UiSmoke;
 	private bool _slice46UiSmoke;
+	private bool _slice47UiSmoke;
+	private bool _fullMatchSmoke;
 	private bool _gallerySmokePassed;
 	private bool _animationRunning;
 	private bool _skipAnimation;
@@ -116,6 +126,25 @@ public partial class Main : Control
 		}
 	}
 
+	private static CardDataSet? TryLoadEmbeddedCardData()
+	{
+		return CardDataResource.TryLoadEmbedded(out CardDataSet? data, out _)
+			? data
+			: null;
+	}
+
+	private static OfficialPresetCatalog? TryLoadOfficialPresetCatalog()
+	{
+		try
+		{
+			return OfficialPresetCatalog.Embedded();
+		}
+		catch (Exception exception) when (exception is PresetDataValidationException or InvalidOperationException)
+		{
+			return null;
+		}
+	}
+
 	public override void _Ready()
 	{
 		IReadOnlyList<string> arguments = OS.GetCmdlineUserArgs();
@@ -124,17 +153,23 @@ public partial class Main : Control
 		_slice44UiSmoke = arguments.Contains("--m4-slice44-ui-smoke", StringComparer.Ordinal);
 		_slice45UiSmoke = arguments.Contains("--m4-slice45-ui-smoke", StringComparer.Ordinal);
 		_slice46UiSmoke = arguments.Contains("--m4-slice46-ui-smoke", StringComparer.Ordinal);
+		_slice47UiSmoke = arguments.Contains("--m4-slice47-ui-smoke", StringComparer.Ordinal);
+		_fullMatchSmoke = arguments.Contains("--full-match-smoke-corp", StringComparer.Ordinal)
+			|| arguments.Contains("--full-match-smoke-runner", StringComparer.Ordinal);
 		_smokeTest = arguments.Contains("--smoke-test", StringComparer.Ordinal)
 			|| arguments.Contains("--m3-responsiveness-smoke", StringComparer.Ordinal);
 		_responsivenessSmoke = arguments.Contains("--m3-responsiveness-smoke", StringComparer.Ordinal);
 		BuildShell();
-		if (arguments.Contains("--full-match-smoke-corp", StringComparer.Ordinal)
-			|| arguments.Contains("--full-match-smoke-runner", StringComparer.Ordinal))
+		if (_fullMatchSmoke)
 		{
 			PlayerSide side = arguments.Contains("--full-match-smoke-corp", StringComparer.Ordinal) ? PlayerSide.Corp : PlayerSide.Runner;
 			_humanSide.Select(side == PlayerSide.Runner ? 0 : 1);
 			BeginMatch();
 			_ = RunFullMatchSmokeAsync(side);
+		}
+		else if (_slice47UiSmoke)
+		{
+			_ = RunSlice47UiSmokeAsync();
 		}
 		else if (_slice46UiSmoke)
 		{
@@ -268,15 +303,18 @@ public partial class Main : Control
 		panel.AddChild(_startPanel);
 		_layout.AddChild(panel);
 
-		_startPanel.AddChild(MakeLabel("DEVELOPER MATCH · SETUP TO OUTCOME", 18, Accent));
+		_startPanel.AddChild(MakeLabel("MATCH SETUP · SETUP TO OUTCOME", 18, Accent));
 		_startPanel.AddChild(MakeLabel(
-			"Reduced developer decks · synthetic no-ability identities · complete Gateway subset\n"
-			+ "Choose either side. Shuffle, mulligan, full turns and outcomes are owned by Core. Official presets remain locked until their cards are complete.",
+			"Choose a side and an official basic or expanded preset. Shuffle, mulligan, full turns, identity behavior, and outcomes are owned by Core.\n"
+			+ "The deterministic developer fixture remains available when official content is not provisioned.",
 			14,
 			Muted));
+		BuildOfficialPresetSelectors();
 		_startButton = new Button
 		{
-			Text = "Start developer match",
+			Text = _officialPresetCatalog is not null && _embeddedCardData is not null
+				? "Start selected official match"
+				: "Start developer match",
 			CustomMinimumSize = new Vector2(240, 42),
 		};
 		_startButton.AddThemeFontSizeOverride("font_size", 16);
@@ -303,6 +341,89 @@ public partial class Main : Control
 			}
 		}
 		_startPanel.AddChild(_galleryButton);
+	}
+
+	private void BuildOfficialPresetSelectors()
+	{
+		_startPanel.AddChild(MakeLabel("OFFICIAL PRESETS", 12, Warning));
+		_corpPreset = new OptionButton();
+		_runnerPreset = new OptionButton();
+		_corpPreset.TooltipText = "Choose the Corp basic or expanded official preset.";
+		_runnerPreset.TooltipText = "Choose the Runner basic or expanded official preset.";
+		PopulatePresetButton(_corpPreset, PlayerSide.Corp, _corpPresetIds);
+		PopulatePresetButton(_runnerPreset, PlayerSide.Runner, _runnerPresetIds);
+		_startPanel.AddChild(MakeLabel("Corp deck", 11, Muted));
+		_startPanel.AddChild(_corpPreset);
+		_startPanel.AddChild(MakeLabel("Runner deck", 11, Muted));
+		_startPanel.AddChild(_runnerPreset);
+	}
+
+	private void PopulatePresetButton(
+		OptionButton button,
+		PlayerSide side,
+		Dictionary<int, string> ids)
+	{
+		if (_officialPresetCatalog is null || _embeddedCardData is null)
+		{
+			button.AddItem("Official presets unavailable · developer fixture only");
+			button.Disabled = true;
+			return;
+		}
+
+		IReadOnlyList<OfficialPreset> presets = _officialPresetCatalog.For(side);
+		int firstPlayable = -1;
+		for (int index = 0; index < presets.Count; index++)
+		{
+			OfficialPreset preset = presets[index];
+			bool enabled = preset.Playable;
+			string state = enabled ? "READY" : "LOCKED · coverage pending";
+			string kindLabel = preset.Kind == "starter" ? "BASIC (STARTER)" : preset.Kind.ToUpperInvariant();
+			button.AddItem(
+				$"{kindLabel} · {preset.PresetId} · {preset.CardCount} cards · {state}",
+				index);
+			ids[index] = preset.PresetId;
+			button.SetItemDisabled(index, !enabled);
+			if (enabled && firstPlayable < 0)
+			{
+				firstPlayable = index;
+			}
+		}
+
+		if (firstPlayable >= 0)
+		{
+			button.Select(firstPlayable);
+		}
+		else
+		{
+			if (presets.Count == 0)
+			{
+				button.AddItem("No official preset for this side");
+			}
+			else
+			{
+				button.AddItem("Official presets locked · coverage pending");
+			}
+			button.Disabled = true;
+		}
+	}
+
+	private string? SelectedPreset(OptionButton button, Dictionary<int, string> ids)
+	{
+		if (button.Disabled)
+		{
+			return null;
+		}
+
+		int selected = button.GetSelectedId();
+		if (!ids.TryGetValue(selected, out string? presetId)
+			|| _officialPresetCatalog is null
+			|| !_officialPresetCatalog.TryGet(presetId, out OfficialPreset preset)
+			|| !preset.Playable)
+		{
+			return null;
+		}
+
+		return presetId;
 	}
 
 	private void BuildFooter()
@@ -870,25 +991,30 @@ public partial class Main : Control
 			turnRegion.IsAvailable ? Colors.White : Warning);
 		_focus.Text = view.Run is { } run
 			? $"{run.FocusLabel} · attacked {run.AttackedServerId} · {run.Step}"
-			: view.CorpIdentity is null && snapshot.RunOutcome is { } ended
+			: snapshot.IsTerminal
+				? $"MATCH OUTCOME · {view.Outcome.Winner} · {view.Outcome.Reason}"
+			: snapshot.RunOutcome is { } ended
 				? $"REPRESENTATIVE SLICE · COMPLETE · {ended.Reason}"
 			: "RUN FOCUS · no active run";
 		_decision.Text = snapshot.IsOpponentThinking
 			? "OPPONENT THINKING · asynchronous agent delay\nThe render loop is free to process input and card inspection."
 			: view.Decision is { } prompt
 				? $"{prompt.OwnerSide} decision · {prompt.Prompt}\nRevision {prompt.Revision} · {ActionsRegionPresenter.Present(snapshot).DisplayActions.Count} displayed action(s)"
-			: view.CorpIdentity is null && snapshot.RunOutcome is { } finished && view.Run is null
+			: view.Outcome.IsTerminal
+				? "Outcome reached."
+			: snapshot.RunOutcome is { } finished && view.Run is null
 				? $"REPRESENTATIVE RUN COMPLETE\n{finished.Summary}\nNo further Core action is pending."
-			: view.Outcome.IsTerminal ? "Outcome reached." : "No pending decision.";
+			: "No pending decision.";
 
 		BoardRegionState board = BoardRegionPresenter.Present(view);
-		_corpSummary.Text = board.CorpSummary + (view.CorpIdentity is { } corpIdentity ? $"\nIDENTITY · {corpIdentity.Title}" : "");
-		_runnerSummary.Text = board.RunnerSummary + (view.RunnerIdentity is { } runnerIdentity ? $"\nIDENTITY · {runnerIdentity.Title}" : "");
+		_corpSummary.Text = board.CorpSummary;
+		_runnerSummary.Text = board.RunnerSummary;
+		RenderIdentityPanels(view);
 		RenderSlice46DamageStatus(snapshot);
 		_cardControls.Clear();
 		_cardModels.Clear();
 		RenderFocusPresentationRegion(snapshot);
-		RenderServers(board.Servers);
+		RenderServers(board.Servers, board.RunnerRig);
 		RenderRunnerCards(board);
 		RenderActions(snapshot);
 		if (snapshot.Feedback is { } feedback)

@@ -348,6 +348,9 @@ public static partial class GameEngine
 
                 AdvanceBehaviorCursor(working, frame);
                 return;
+            case BehaviorInstructionKind.ShuffleSearchedDeck:
+                ResolveSearchedDeckShuffle(working, frame, instruction);
+                return;
             case BehaviorInstructionKind.ShuffleIntoDeck:
                 ResolveBehaviorTransfer(working, frame, instruction, BehaviorTransferKind.Shuffle);
                 return;
@@ -1457,7 +1460,11 @@ public static partial class GameEngine
                     // legacy terminal outcome.  Ordinary card plays take a
                     // bounded lifecycle path below so the played Operation
                     // is completed before the real-turn terminal cleanup.
-                    CompleteToyGame(working, PlayerSide.Runner, GameWinReason.DeckOut);
+                    if (working.Turn.History is not null)
+                        CompleteTurnGame(working, PlayerSide.Runner, GameWinReason.DeckOut);
+                    else
+                        CompleteToyGame(working, PlayerSide.Runner, GameWinReason.DeckOut);
+                    working.RunState = null;
                 }
 
                 return;

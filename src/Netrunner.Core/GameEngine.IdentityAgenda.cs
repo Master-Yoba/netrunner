@@ -76,4 +76,30 @@ public static partial class GameEngine
         TrashCorpUniqueRezConflicts(working, card.Id);
         QueueCardRezzedOccurrence(working, GetPlayer(working, PlayerSide.Corp).Id, card.Id, zone.ServerId);
     }
+    private static void ResolveSearchedDeckShuffle(WorkingState working, BehaviorResolutionFrame frame,
+        BehaviorInstruction instruction)
+    {
+        CardBehaviorDefinition definition = GetBehaviorDefinition(working, frame);
+        IReadOnlyList<BehaviorInstruction> root = frame.TriggerKey is { } trigger
+            ? GetTriggerDeclaration(definition, trigger).Instructions
+            : frame.AbilityKey is { } ability ? GetAbilityDeclaration(definition, ability).Instructions : definition.Instructions;
+        List<BehaviorInstruction> replay = root.ToList();
+        BehaviorInstruction? search = null;
+        foreach (BehaviorContinuationStep step in frame.Continuation)
+        {
+            if (step.InstructionCursor < 0 || step.InstructionCursor >= replay.Count)
+                throw new ResolutionFailureException("Search shuffle has an unreachable continuation.");
+            if (step.Kind == BehaviorContinuationKind.ChoiceSelection)
+                search = replay[step.InstructionCursor].Kind == BehaviorInstructionKind.Search ? replay[step.InstructionCursor] : null;
+            if (!BehaviorContinuation.TryApply(replay, step, out _))
+                throw new ResolutionFailureException("Search shuffle has an unreachable continuation.");
+        }
+        if (search?.SourceZone != instruction.SourceZone || search?.Target is null)
+            throw new ResolutionFailureException("Search shuffle must follow a search of its named deck.");
+        PlayerSide owner = search.Target.Filter?.OwnerSide ?? GetPlayer(working, frame.Controller).Side;
+        // The found card remains in BehaviorSetAside. Shuffle only the remaining
+        // deck, preserving its binding through reveal and the final transfer.
+        ShuffleProvenEmptyZone(working, frame, instruction.SourceZone!.Value, owner);
+    }
+
 }

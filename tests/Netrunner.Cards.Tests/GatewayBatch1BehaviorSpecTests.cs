@@ -127,7 +127,7 @@ public sealed class GatewayBatch1BehaviorSpecTests
         Assert.Equal(
             [
                 BehaviorInstructionKind.Search,
-                BehaviorInstructionKind.ShuffleIntoDeck,
+                BehaviorInstructionKind.ShuffleSearchedDeck,
                 BehaviorInstructionKind.Branch,
             ],
             mutual.Instructions.Select(static instruction => instruction.Kind));
@@ -144,9 +144,9 @@ public sealed class GatewayBatch1BehaviorSpecTests
         Assert.Null(search.Filter?.Subtype);
 
         BehaviorInstruction shuffle = mutual.Instructions[1];
-        Assert.Equal(BehaviorTargetKind.ChosenCard, shuffle.Target?.Kind);
+        Assert.Null(shuffle.Target);
         Assert.Equal(BehaviorZone.Stack, shuffle.SourceZone);
-        Assert.Equal(BehaviorZone.Stack, shuffle.DestinationZone);
+        Assert.Null(shuffle.DestinationZone);
 
         BehaviorBranchSpec foundBranch = mutual.Instructions[2].Branch!;
         Assert.Equal("mutual-favor-found-card", foundBranch.Key);

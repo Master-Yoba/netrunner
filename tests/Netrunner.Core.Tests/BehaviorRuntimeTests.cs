@@ -654,9 +654,10 @@ public sealed class BehaviorRuntimeTests
         Assert.Equal(
             [first, second],
             result.State.GetZone(ZoneKind.CorpDiscard).CardIds);
+        // CR 4.5: HQ cards unknown to the Runner enter Archives facedown.
         Assert.All(
             new[] { first, second },
-            cardId => Assert.True(result.State.GetCard(cardId).FaceUp));
+            cardId => Assert.False(result.State.GetCard(cardId).FaceUp));
         Assert.Contains(sourceId, result.State.GetZone(ZoneKind.CorpHand).CardIds);
         CardInstanceId[] setAsideCards = result.State.Zones
             .Where(zone => zone.Kind == ZoneKind.BehaviorSetAside)

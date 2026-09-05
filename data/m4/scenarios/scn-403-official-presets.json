@@ -1,0 +1,12 @@
+{
+  "scenarioId": "scn-403-official-presets",
+  "engineStateSchemaVersion": 17,
+  "behaviorCatalogVersion": "gateway-m4-4.7",
+  "policyVersion": "full-game-contract-agent-v6",
+  "seed": 47042,
+  "actionCap": 4000,
+  "cases": [
+    { "preset": "basic", "winner": "Runner", "reason": "DeckOut", "actionCount": 922 },
+    { "preset": "expanded", "winner": "Corp", "reason": "Flatline", "actionCount": 111 }
+  ]
+}

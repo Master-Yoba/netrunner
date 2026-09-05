@@ -110,6 +110,19 @@ public sealed record MatchViewModel(
     /// </summary>
     public IReadOnlyList<ConditionalValueViewModel> ConditionalValues { get; init; } =
         Array.Empty<ConditionalValueViewModel>();
+
+    /// <summary>
+    /// Run-end access data remains available for the terminal checkpoint in
+    /// which Core has already removed the live run. A null value means that the
+    /// observation did not carry a run-end envelope.
+    /// </summary>
+    public RunEndAccessViewModel? RunEnd { get; init; }
+
+    /// <summary>Convenience alias for clients that call the run-end envelope a checkpoint.</summary>
+    public RunEndAccessViewModel? RunEndAccess => RunEnd;
+
+    /// <summary>Presentation-ready identity pair used by the board header.</summary>
+    public IdentityPanelState IdentityPanel => IdentityPanelPresenter.Present(this);
 }
 
 /// <summary>
@@ -262,6 +275,12 @@ public sealed record ServerViewModel(
     public IReadOnlyList<CardViewModel?> OrderedIce => Ice;
 
     public IReadOnlyList<CardViewModel?> OrderedRoot => Root;
+
+    /// <summary>Viewer-safe positions for hidden or hosted ICE.</summary>
+    public IReadOnlyList<IcePositionViewModel> IcePositions { get; init; } =
+        Array.Empty<IcePositionViewModel>();
+
+    public IReadOnlyList<IcePositionViewModel> PublicIcePositions => IcePositions;
 }
 
 /// <summary>One known card in a player-filtered observation.</summary>
@@ -283,6 +302,23 @@ public sealed record CardViewModel(
     int? MemoryCost = null,
     int? AdvancementRequirement = null)
 {
+    /// <summary>
+    /// Physical host card, when Core exposed one. Host relationships are
+    /// carried by instance IDs so a client can nest a child under its host
+    /// without looking up hidden definitions.
+    /// </summary>
+    public string? HostCardId { get; init; }
+
+    public string StatusLabel => Rezzed
+            ? "REZZED"
+            : IsKnown
+                ? "KNOWN"
+                : "FACE-DOWN";
+
+    public string? HostLabel => HostCardId is { Length: > 0 }
+        ? $"HOSTED UNDER {HostCardId}"
+        : null;
+
     /// <summary>
     /// Typed rules counters projected by Core. This is intentionally separate
     /// from the legacy advancement-counter presentation so a UI cannot mistake
@@ -545,7 +581,20 @@ public sealed record AccessViewModel(
     BreachHiddenCandidateSource? HiddenCandidateSource,
     IReadOnlyList<CardViewModel?> Chosen,
     IReadOnlyList<CardViewModel?> Accessed,
-    RunAccessState State);
+    RunAccessState State)
+{
+    /// <summary>
+    /// Exact access occurrence count supplied by Core for the current run.
+    /// Match does not calculate this from candidate or accessed-card counts.
+    /// </summary>
+    public int? AccessOccurrenceCount { get; init; }
+
+    public bool IsAccessOccurrenceCountKnown => AccessOccurrenceCount.HasValue;
+
+    public string AccessOccurrenceSummary => AccessOccurrenceCount is { } count
+        ? $"ACCESS OCCURRENCES · {count}"
+        : "ACCESS OCCURRENCES · unavailable";
+}
 
 public sealed record OutcomeViewModel(
     GameOutcomeKind Kind,
@@ -698,8 +747,9 @@ public static class ObservationViewMapper
                 ? ReadCards(privateState, "stack", metadataResolver, abilityCue)
                 : Array.Empty<CardViewModel>());
 
+        IReadOnlyList<IcePositionViewModel> icePositions = MapIcePositions(publicState);
         IReadOnlyList<ServerViewModel> servers = ReadList(publicState, "servers")
-            .Select(value => MapServer(value, metadataResolver, abilityCue))
+            .Select(value => MapServer(value, metadataResolver, abilityCue, icePositions))
             .ToArray();
         IReadOnlyList<CardViewModel> runnerRig = ReadCards(
             publicState,
@@ -787,6 +837,7 @@ public static class ObservationViewMapper
             UsedAbilityKeys = usedAbilityKeys,
             UsedFirstXKeys = usedFirstXKeys,
             Slice45Cues = Slice45PresentationProjector.ReadCues(publicState),
+            RunEnd = Slice47ObservationProjector.ReadRunEnd(publicState),
             PendingDamage = Slice46ObservationProjector.ReadDamageInstructions(publicState),
             ConditionalValues = Slice46ObservationProjector.ReadConditionalValues(publicState),
         };
@@ -1178,7 +1229,8 @@ public static class ObservationViewMapper
     private static ServerViewModel MapServer(
         object? value,
         ICardMetadataResolver metadataResolver,
-        CardAbilityCueContext abilityCue)
+        CardAbilityCueContext abilityCue,
+        IReadOnlyList<IcePositionViewModel> icePositions)
     {
         IReadOnlyDictionary<string, object?> map = RequiredMap(value, "server");
         // Core stores server ICE from innermost to outermost (the active
@@ -1187,11 +1239,38 @@ public static class ObservationViewMapper
         IReadOnlyList<CardViewModel?> orderedIce = ReadNullableCards(map, "ice", metadataResolver, abilityCue)
             .Reverse()
             .ToArray();
+        string id = ReadString(map, "id");
         return new ServerViewModel(
-            ReadString(map, "id"),
+            id,
             ReadEnum<ServerKind>(map, "kind"),
             orderedIce,
-            ReadNullableCards(map, "root", metadataResolver, abilityCue));
+            ReadNullableCards(map, "root", metadataResolver, abilityCue))
+        {
+            IcePositions = new ReadOnlyCollection<IcePositionViewModel>(icePositions
+                .Where(position => string.Equals(position.ServerId, id, StringComparison.Ordinal))
+                .OrderBy(position => position.Index)
+                .ToArray()),
+        };
+    }
+
+    private static IcePositionViewModel[] MapIcePositions(
+        IReadOnlyDictionary<string, object?> publicState)
+    {
+        if (!publicState.ContainsKey("icePositions"))
+        {
+            return Array.Empty<IcePositionViewModel>();
+        }
+
+        return ReadList(publicState, "icePositions")
+            .Select(value =>
+            {
+                IReadOnlyDictionary<string, object?> position = RequiredMap(value, "ice position");
+                return new IcePositionViewModel(
+                    ReadString(position, "cardId"),
+                    ReadString(position, "serverId"),
+                    ReadInt(position, "index"));
+            })
+            .ToArray();
     }
 
     private static RunFocusViewModel? MapRun(
@@ -1305,7 +1384,10 @@ public static class ObservationViewMapper
                 hiddenSource,
                 ReadNullableCards(breach, "chosen", metadataResolver, abilityCue),
                 ReadNullableCards(breach, "accessed", metadataResolver, abilityCue),
-            ReadEnum<RunAccessState>(breach, "accessState")),
+            ReadEnum<RunAccessState>(breach, "accessState"))
+            {
+                AccessOccurrenceCount = ReadNullableInt(map, "accessOccurrenceCount"),
+            },
             ReadInt(map, "runCredits"),
             ReadNullableCard(map, "initiatingSource", metadataResolver, abilityCue))
         {
@@ -1597,6 +1679,7 @@ public static class ObservationViewMapper
             metadata.AdvancementRequirement);
         return mapped with
         {
+            HostCardId = ReadNullableString(map, "hostCardId"),
             TypedCounters = MapCounters(map, id),
             AbilityCue = abilityCue.For(id),
             FirstXUses = abilityCue.FirstXFor(id),
