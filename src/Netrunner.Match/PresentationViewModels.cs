@@ -29,6 +29,9 @@ public sealed record MatchViewModel(
     OutcomeViewModel Outcome,
     IReadOnlyList<LegalActionViewModel> LegalActions)
 {
+    public IReadOnlyList<CardViewModel> CorpDiscard { get; init; } = Array.Empty<CardViewModel>();
+    public IReadOnlyList<CardViewModel> RunnerHeap { get; init; } = Array.Empty<CardViewModel>();
+
     public CardViewModel? CorpIdentity { get; init; }
     public CardViewModel? RunnerIdentity { get; init; }
     /// <summary>
@@ -819,6 +822,10 @@ public static class ObservationViewMapper
             handSizeProjection);
         return view with
         {
+            CorpDiscard = ReadCards(publicState, "corpDiscard", metadataResolver, abilityCue)
+                .Concat(ReadCards(privateState, "faceDownArchives", metadataResolver, abilityCue))
+                .GroupBy(card => card.Id).Select(group => group.Last()).ToArray(),
+            RunnerHeap = ReadCards(publicState, "runnerHeap", metadataResolver, abilityCue),
             CorpIdentity = ReadCards(publicState, "corpIdentity", metadataResolver, abilityCue).SingleOrDefault(),
             RunnerIdentity = ReadCards(publicState, "runnerIdentity", metadataResolver, abilityCue).SingleOrDefault(),
             Turn = MapTurn(publicState),

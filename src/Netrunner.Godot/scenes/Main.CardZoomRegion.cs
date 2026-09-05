@@ -108,6 +108,10 @@ public partial class Main
 		{
 			_zoomPreviousFocus.GrabFocus();
 		}
+		else if (_useCardTable && _tableInspect.IsVisibleInTree())
+		{
+			_tableInspect.GrabFocus();
+		}
 		else if (_zoomButton.IsVisibleInTree() && !_zoomButton.Disabled)
 		{
 			_zoomButton.GrabFocus();

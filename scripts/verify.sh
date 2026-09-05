@@ -335,6 +335,31 @@ if ! grep -Fq "M4_SLICE48_UX PASS" "$slice48_ux_smoke_log" \
   exit 1
 fi
 cat "$slice48_ux_smoke_log"
+m49_ui_smoke_log="$coverage_report_dir/m49-ui-smoke.log"
+m49_ui_content_args=("${slice48_content_args[@]}")
+m49_ui_content_env=()
+if ((card_data_content_enabled == 1)); then
+  m49_ui_content_env=(
+    NetrunnerContentEnabled=true
+    NetrunnerCardDataMode=official
+    NetrunnerCardDataInputRoot="$card_data_dir"
+  )
+fi
+if ! run_with_timeout 120 env "${m49_ui_content_env[@]}" XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
+  "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \
+  -- --m4-9-ui-smoke "${m49_ui_content_args[@]}" >"$m49_ui_smoke_log" 2>&1; then
+  echo "M4.9 UI smoke failed or timed out; see $m49_ui_smoke_log." >&2
+  cat "$m49_ui_smoke_log" >&2
+  exit 1
+fi
+if ! grep -Eq "M49_UI PASS .*dense=true history=true" "$m49_ui_smoke_log" \
+  || grep -Eq "M49_UI FAIL|SCRIPT ERROR|ERROR:" "$m49_ui_smoke_log"; then
+  echo "M4.9 UI smoke did not prove the dense table/history path; see $m49_ui_smoke_log." >&2
+  cat "$m49_ui_smoke_log" >&2
+  exit 1
+fi
+cat "$m49_ui_smoke_log"
+echo "m4-9-ui-smoke=PASS"
 latency_smoke_log="$coverage_report_dir/latency-smoke.log"
 if ! run_with_timeout 45 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
   "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \

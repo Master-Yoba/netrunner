@@ -189,8 +189,15 @@ public partial class Main : Control
 		_smokeTest = arguments.Contains("--smoke-test", StringComparer.Ordinal)
 			|| arguments.Contains("--m3-responsiveness-smoke", StringComparer.Ordinal);
 		_responsivenessSmoke = arguments.Contains("--m3-responsiveness-smoke", StringComparer.Ordinal);
+		_useCardTable = !_smokeTest && !_gallerySmoke && !_slice43UiSmoke && !_slice44UiSmoke
+			&& !_slice45UiSmoke && !_slice46UiSmoke && !_slice47UiSmoke && !_slice48UxSmoke && !_fullMatchSmoke
+			&& !arguments.Contains("--diagnostic-ui", StringComparer.Ordinal);
 		BuildShell();
-		if (_fullMatchSmoke || _m4FullMatchSmoke)
+		if (arguments.Contains("--m4-9-ui-smoke", StringComparer.Ordinal))
+		{
+			_ = RunCardTableSmokeAsync();
+		}
+		else if (_fullMatchSmoke || _m4FullMatchSmoke)
 		{
 			_seedInput.Text = _fullMatchSmokeSeed.ToString(CultureInfo.InvariantCulture);
 			_humanSide.Select(_fullMatchSmokeSide == PlayerSide.Runner ? 0 : 1);
@@ -245,7 +252,8 @@ public partial class Main : Control
 	public override void _Process(double delta)
 	{
 		_processFrameCount++;
-		PollCoordinator();
+		if (_useCardTable) PollCardTable(delta);
+		else PollCoordinator();
 		if (_animationRunning)
 		{
 			_framesWhileAnimating++;
@@ -276,10 +284,10 @@ public partial class Main : Control
 		AddChild(backdrop);
 
 		MarginContainer margin = new();
-		margin.AddThemeConstantOverride("margin_left", 28);
-		margin.AddThemeConstantOverride("margin_top", 22);
-		margin.AddThemeConstantOverride("margin_right", 28);
-		margin.AddThemeConstantOverride("margin_bottom", 22);
+		margin.AddThemeConstantOverride("margin_left", _useCardTable ? 10 : 28);
+		margin.AddThemeConstantOverride("margin_top", _useCardTable ? 8 : 22);
+		margin.AddThemeConstantOverride("margin_right", _useCardTable ? 10 : 28);
+		margin.AddThemeConstantOverride("margin_bottom", _useCardTable ? 8 : 22);
 		SetFullRect(margin);
 		AddChild(margin);
 
@@ -293,7 +301,8 @@ public partial class Main : Control
 		BuildHeader();
 		BuildStartPanel();
 		BuildBoard();
-		BuildFooter();
+		if (_useCardTable) BuildCardTable();
+		else BuildFooter();
 		BuildCardZoomOverlay();
 		// Keep the initial setup surface keyboard navigable before any match
 		// publication exists. Dynamic action controls refresh this same order
@@ -304,6 +313,12 @@ public partial class Main : Control
 
 	public override void _UnhandledInput(InputEvent @event)
 	{
+		if (_useCardTable && !_zoomOverlay.Visible && @event is InputEventKey { Pressed: true, Keycode: Key.Escape })
+		{
+			CancelStagedAction();
+			_matchHistory.SetExpanded(false);
+			return;
+		}
 		if (!_zoomOverlay.Visible
 			|| @event is not InputEventKey key
 			|| !key.Pressed
@@ -320,7 +335,7 @@ public partial class Main : Control
 	{
 		var header = new HBoxContainer
 		{
-			CustomMinimumSize = new Vector2(0, 62),
+			CustomMinimumSize = new Vector2(0, _useCardTable ? 36 : 62),
 		};
 		header.AddThemeConstantOverride("separation", 18);
 		_layout.AddChild(header);
@@ -330,7 +345,7 @@ public partial class Main : Control
 			Text = "NETRUNNER SOLO",
 			VerticalAlignment = VerticalAlignment.Center,
 		};
-		title.AddThemeFontSizeOverride("font_size", 30);
+		title.AddThemeFontSizeOverride("font_size", _useCardTable ? 22 : 30);
 		title.AddThemeColorOverride("font_color", Accent);
 		header.AddChild(title);
 
@@ -1025,6 +1040,11 @@ public partial class Main : Control
 		if (_startPanel.GetParent() is CanvasItem startPanel)
 		{
 			startPanel.Visible = false;
+		}
+		if (_useCardTable)
+		{
+			RenderCardTable(snapshot, decisionChanged);
+			return;
 		}
 		_board.Visible = true;
 		MatchViewModel view = snapshot.View;

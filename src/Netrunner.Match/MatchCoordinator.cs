@@ -47,6 +47,8 @@ public sealed record MatchSnapshot(
     /// <summary>Accepted engine actions, excluding UI and opponent-thinking publications.</summary>
     public long ActionCount { get; init; }
 
+    public IReadOnlyList<MatchHistoryEntry> History { get; init; } = Array.Empty<MatchHistoryEntry>();
+
     public bool IsTerminal => View.Outcome.IsTerminal;
 
     public bool AwaitingHumanDecision => !IsOpponentThinking
@@ -134,6 +136,8 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
     private MatchSnapshot? _currentSnapshot;
     private RunOutcomeViewModel? _runOutcome;
     private long _publicationSequence;
+    private readonly MatchHistoryProjector _historyProjector = new();
+    private (MatchViewModel Before, PlayerSide Actor, LegalAction Action)? _historyContext;
     private bool _disposed;
 
     public MatchCoordinator(
@@ -566,6 +570,12 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
         IReadOnlyList<EngineEvent> visibleEvents = _options.HumanSide == PlayerSide.Runner
             ? RunnerEventVisibility.Filter(events, state) : CorpEventVisibility.Filter(events, state);
         IReadOnlyList<EngineEvent> frozenEvents = new ReadOnlyCollection<EngineEvent>(visibleEvents.ToArray());
+        IReadOnlyList<MatchHistoryEntry> history = Array.Empty<MatchHistoryEntry>();
+        if (_historyContext is { } context)
+        {
+            history = _historyProjector.Project(context.Before, view, state, events, context.Actor, context.Action);
+            _historyContext = null;
+        }
         MatchSnapshot snapshot = new(
             Interlocked.Increment(ref _publicationSequence),
             observation,
@@ -576,6 +586,7 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
             _runOutcome)
         {
             ActionCount = state.ActionSequence,
+            History = history,
             SetupDecisionOwnerSide = state.PendingDecision is { Kind: DecisionKind.Setup } pending
                 ? state.GetPlayer(pending.Owner).Side
                 : null,
@@ -609,10 +620,19 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
         return snapshot;
     }
 
-    private ApplyResult ApplyEngineAction(GameState state, ActionSubmission submission) =>
-        _runtimeCardCatalog is null
+    private ApplyResult ApplyEngineAction(GameState state, ActionSubmission submission)
+    {
+        Observation actorView = ObservationBuilder.Build(state, state.GetPlayer(submission.Actor).Side, _behaviorCatalog);
+        LegalAction? action = actorView.LegalActions.FirstOrDefault(candidate => candidate.Id == submission.ActionId);
+        MatchViewModel before = ObservationViewMapper.Build(
+            ObservationBuilder.Build(state, _options.HumanSide, _behaviorCatalog), _metadataResolver, _behaviorCatalog);
+        ApplyResult applied = _runtimeCardCatalog is null
             ? GameEngine.Apply(state, submission, _behaviorCatalog)
             : GameEngine.Apply(state, submission, _behaviorCatalog, _runtimeCardCatalog);
+        if (applied.Accepted && action is not null)
+            _historyContext = (before, actorView.Viewer, action);
+        return applied;
+    }
 
     private static ServerId ResolveServer(GameState state, string reference)
     {

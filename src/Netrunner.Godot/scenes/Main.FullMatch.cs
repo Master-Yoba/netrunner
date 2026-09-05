@@ -160,6 +160,8 @@ public partial class Main
 			string runnerPresetId = SelectedPreset(_runnerPreset, _runnerPresetIds)
 				?? throw new InvalidOperationException("Choose a playable official Runner preset before starting.");
 
+			if (_useCardTable)
+				_matchHistory.ReportHeader = $"Netrunner · seed {seed} · {humanSide} · {corpPresetId} / {runnerPresetId} · {typeof(Main).Assembly.GetName().Version}";
 			_coordinator = FullMatchFactory.CreateOfficial(
 				corpPresetId,
 				runnerPresetId,
@@ -383,7 +385,20 @@ public partial class Main
 				}
 				mulligan |= redraw is not null;
 				// Use the same submission handler as the rendered action buttons.
-				SubmitAction(snapshot.View.Decision!, action);
+				if (_useCardTable)
+				{
+					_tableAllActions = true;
+					RenderCardTableActions(snapshot);
+					if (!_tableActionButtons.TryGetValue(action.Id, out Button? actionButton))
+						throw new InvalidOperationException("Issued action is unreachable in the table controls.");
+					actionButton.EmitSignal(BaseButton.SignalName.Pressed);
+					if (_stagedAction is not null)
+					{
+						Button confirm = FindDescendants<Button>(_tableActions).Single(button => button.Text == "Confirm");
+						confirm.EmitSignal(BaseButton.SignalName.Pressed);
+					}
+				}
+				else SubmitAction(snapshot.View.Decision!, action);
 				await WaitForPublishedSnapshotAsync(snapshot.Sequence, 240);
 			}
 		}

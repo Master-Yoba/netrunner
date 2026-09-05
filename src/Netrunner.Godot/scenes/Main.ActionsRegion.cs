@@ -12,6 +12,7 @@ public partial class Main
 {
 	private void RenderActions(MatchSnapshot snapshot)
 	{
+		if (_useCardTable) { RenderCardTableActions(snapshot); return; }
 		ActionsRegionState region = ActionsRegionPresenter.Present(snapshot);
 		ClearChildren(_actions);
 		UpdateTargetHighlights(region.DisplayActions);
@@ -257,6 +258,15 @@ public partial class Main
 
 	private void SubmitAction(DecisionViewModel decision, LegalActionViewModel action)
 	{
+		if (_useCardTable && _coordinator?.CurrentSnapshot is { } latest
+			&& (!SameDecision(decision, latest.View.Decision)
+				|| !latest.View.LegalActions.Any(candidate => candidate.Id == action.Id)))
+		{
+			_tableLastAction.Text = "The decision changed. Choose from the current actions.";
+			_stagedAction = null;
+			_stagedDecision = null;
+			return;
+		}
 		if (_coordinator is null || Interlocked.Exchange(ref _submissionInFlight, 1) != 0)
 		{
 			return;
