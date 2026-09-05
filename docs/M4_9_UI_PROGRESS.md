@@ -103,6 +103,10 @@ Focused tests cover legacy omission, initial 0/4, and an active modifier.
   supplemental checks, formatting, proofs, native/headless UI checks, secret
   scanning and 77/77 coverage. Subsequent concealed-focus, compact-title and complete contextual-routing
   corrections are covered by the refreshed native smoke and PR CI.
+- A Linux synthetic run caught a shutdown resource-binding failure after its
+  functional assertions passed. Temporary card drawing/theme wrappers now have
+  explicit disposal. Three repeated synthetic startup/shutdown checks and the
+  official-content UI check exit cleanly locally; PR CI verifies Linux cleanup.
 - The four official games all completed through table controls, restarted, and
   returned to fresh setup: Corp/basic 928 actions, Runner/basic 1,715,
   Corp/expanded 1,094, Runner/expanded 964; all use seed `47042`.

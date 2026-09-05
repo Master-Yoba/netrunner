@@ -185,7 +185,7 @@ public partial class TableCardControl : Control
 			? new Color(0.055f, 0.075f, 0.11f)
 			: HiddenSurface;
 
-		var frame = new StyleBoxFlat
+		using var frame = new StyleBoxFlat
 		{
 			BgColor = surface,
 			BorderColor = border,
@@ -334,7 +334,7 @@ public partial class TableCardControl : Control
 		_counters.Visible = _counters.Text.Length > 0;
 		_rulesCue.Visible = known && !_isIce && !compact;
 
-		var statusStyle = new StyleBoxFlat
+		using var statusStyle = new StyleBoxFlat
 		{
 			BgColor = known ? new Color(0.08f, 0.12f, 0.17f, 0.88f) : new Color(0.07f, 0.09f, 0.13f, 0.92f),
 			CornerRadiusTopLeft = 3,
@@ -348,7 +348,7 @@ public partial class TableCardControl : Control
 		};
 		_status.AddThemeStyleboxOverride("normal", statusStyle);
 
-		var counterStyle = new StyleBoxFlat
+		using var counterStyle = new StyleBoxFlat
 		{
 			BgColor = new Color(0.20f, 0.14f, 0.08f, 0.94f),
 			BorderColor = new Color(0.80f, 0.57f, 0.20f, 0.75f),
