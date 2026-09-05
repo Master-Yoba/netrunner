@@ -22,6 +22,8 @@ jobs:
       NUGET_XMLDOC_MODE: skip
     steps:
       - uses: actions/checkout@v4
+      - name: Check cross-platform executable discovery
+        run: bash scripts/test-env.sh
       - name: Provision SDK, Godot .NET, and secret scanner
         run: ./scripts/bootstrap.sh
       - name: Provision pinned official card data

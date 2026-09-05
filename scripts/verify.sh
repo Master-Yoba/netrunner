@@ -3,6 +3,7 @@ set -euo pipefail
 
 verify_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$verify_root/scripts/env.sh"
+bash "$verify_root/scripts/test-env.sh"
 
 if ! command -v dotnet >/dev/null 2>&1; then
   echo "dotnet is unavailable. Run ./scripts/bootstrap.sh first."
