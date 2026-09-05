@@ -29,6 +29,8 @@ public sealed record MatchViewModel(
     OutcomeViewModel Outcome,
     IReadOnlyList<LegalActionViewModel> LegalActions)
 {
+    public CardViewModel? CorpIdentity { get; init; }
+    public CardViewModel? RunnerIdentity { get; init; }
     /// <summary>
     /// The public turn projection. Older M2 observations do not carry the
     /// optional fine-grained step; such observations remain usable while the
@@ -731,6 +733,8 @@ public static class ObservationViewMapper
             handSizeProjection);
         return view with
         {
+            CorpIdentity = ReadCards(publicState, "corpIdentity", metadataResolver, abilityCue).SingleOrDefault(),
+            RunnerIdentity = ReadCards(publicState, "runnerIdentity", metadataResolver, abilityCue).SingleOrDefault(),
             Turn = MapTurn(publicState),
             CorpHandSize = corpHandSize,
             RunnerHandSize = runnerHandSize,

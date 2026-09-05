@@ -1,58 +1,80 @@
 # Correctness slice
 
-Baseline: `2e9257b`; branch: `corrective`.
+Baseline: `2e9257b`; branch: `corrective`; [PR #10 into dev](https://github.com/Master-Yoba/netrunner/pull/10).
 
-This slice repairs existing execution paths from the repository audit. It is
-not a declaration that every audit finding is closed or Slice 4.6 is ready.
+Readiness candidate: implementation and local gate complete; final remote gates pending.
+This closes prerequisites for starting Slice 4.6, not the cards or rules assigned
+to Slices 4.6 and 4.7. Official presets remain coverage-gated.
 
-- [x] Zone- and viewer-aware deck/access visibility, including regressions.
-- [x] Dual-catalog production replay validation and execution.
-- [x] Coordinator command completion after worker failure.
-- [x] Installed-card rez/advancement/typed-counter cleanup; hidden-zone face normalization.
-- [x] Negative maximum-hand-size flatline before discard.
-- [x] CI uses the full verification script in synthetic and official-content lanes.
-- [x] Bounded responsiveness smoke is part of the verification script.
-- [x] Reconcile README and milestone status with actual delivered paths.
-- [x] Full local verification.
-- [x] [Draft PR #10 into dev](https://github.com/Master-Yoba/netrunner/pull/10).
+## Repairs
 
-Existing M4 card batches remain the supported content boundary. This slice
-does not implement the cards assigned to 4.6 or 4.7.
+- Zone/viewer-aware deck and access visibility; only the Runner sees R&D access.
+- Dual-catalog production replay validation and execution.
+- Coordinator command completion after worker failure and configured-human ownership.
+- Installed-card rez/advancement/typed-counter cleanup and hidden-zone face normalization.
+- Negative maximum-hand-size flatline before discard.
+- Empty-remote lifecycle at checkpoints, installation protection, and run termination
+  after the current paid window closes. Tombstones retain source-zone/ICE provenance
+  while effects unwind, but cannot be targeted by new installs or runs. Final cleanup
+  removes the server and its zones. Legacy scenario placeholders remain supported;
+  setup-created matches reject active empty remotes outside installation.
+- Serialized Core setup: deterministic shuffle/deal, public identity placement,
+  Corp-then-Runner keep/mulligan, one redraw each, and entry into the formal turn shell.
+- Shared validated Match composition for CLI, simulations, and either human client seat.
+  All agent choices use observations and engine-issued IDs. Simulations enforce action
+  caps, declared outcomes, save/load at every yield, and final replay verification.
+- Developer deck code/quantity data in `data/m4/developer/decks.json`; Gateway metadata
+  comes from the selected generated payload. The two no-ability identities are explicitly
+  synthetic. Standard deck validation cannot accept these reduced decks.
+- CLI `full-match [--seed N] [--json] [--replay-out file]` and
+  `simulate <versioned-fixture-file> [--json] [--replay-out file]`.
+- Godot side selection, own-hand display, identity display, setup controls, and restart.
+- Full synthetic/official CI gates; Linux Godot discovery and fail-fast bootstrap;
+  environment-discovery regressions; both-seat full-match client smokes.
 
-## Remaining readiness blockers
+## Architecture and compatibility
 
-- Empty-remote deletion is still limited to scoring. A complete repair must
-  cover every checkpoint, protect a server during installation (CR 8.5.9),
-  and end an affected run after its open paid window closes (CR 4.6.1e).
-  Removing servers directly in `MoveCard` would invalidate active run and
-  install-frame references; that shortcut is intentionally not included.
-- Setup/mulligan, identity placement, and shared setup-to-win execution
-  through Match, CLI, Godot, and simulations remain undelivered. This needs
-  a serialized setup contract and explicit developer decks while official
-  preset identities still lack complete behavior coverage. The M2 client
-  factory and simulation document validation must not be called full matches.
+Core remains authoritative. Cards composes metadata/behavior and validates decks;
+Match owns full-match composition, asynchronous coordination, and presentation filtering;
+Godot consumes Match projections. Setup and server lifecycle reducers/validators are
+separate partial files rather than further enlarging the main domain files.
+Large legacy reducer/validator files remain a maintenance concern, not a reason to
+rewrite unrelated domains before the next slice.
 
-These are still required follow-up work before declaring the audit closed.
-Large reducer/validator files remain an architectural maintenance concern;
-extract bounded domains alongside those changes rather than rewriting them
-as part of unrelated bug fixes.
+Engine state schema is **15** (previously 14): setup frame/decision, identity zones,
+and required server lifecycle state are explicit serialized contracts. Old snapshots
+are rejected rather than silently upgraded. Both catalog fingerprints remain enforced.
+Developer metadata is content-addressed and requires matching supplied catalogs.
 
-## Compatibility and verification
+Canonical fixture migration (full SHA-256 values remain pinned in fixtures/tests):
 
-No serialized fields or discriminators change. Private `deck`/`stack` keys
-remain as empty arrays for presentation compatibility; public counts remain.
-Affected production replay hashes can change because corrected state no
-longer retains advancement counters after scoring/stealing. Replay verifies
-both catalog fingerprints and expected final hashes; it never silently
-accepts mismatched history. The legacy toy scoring adapter is unchanged.
+| Fixture | Schema 14 state hash prefix | Schema 15 state hash prefix |
+| --- | --- | --- |
+| base | `e30e410b8504` | `efb43b283440` |
+| nested-inner | `81d2026a8e17` | `1cfe53d67a01` |
+| nested-outer | `8a694ebac314` | `e4fb4744e1e2` |
+| M2 initial | `308cadf42d6f` | `452467004c66` |
+| M2 final | `4603c78adb06` | `ef71cd24f83e` |
 
-Regression coverage includes hidden deck order, Runner-only R&D access,
-runtime-catalog mismatch, replay JSON round-trip, worker failure, negative
-hand size, and uninstall-to-discard/hand/deck state normalization.
-No visible Godot scene changes are included, so screenshots are not applicable.
+M2's 32 accepted actions/checkpoints and event-stream hash are unchanged:
+`33af2b049fbad324ed5ff0ee130740c3d65c03f2cb1196100afbdc73e9f0e67c`.
+Both representative policies still produce identical final states and event streams.
 
-Local `make verify` passed on 2026-09-05: 1,162 tests (Core 762, Cards 214,
-AI 53, CLI 55, Match 78), formatting, M1/M2 deterministic proofs, generated
-coverage diffs, data failure contracts, official 77-card gallery, Godot
-import and Slice 4.3–4.5 smokes, M3 responsiveness and full-run smokes, and
-secret scanning. The new Ubuntu CI matrix still requires a remote run.
+## Evidence
+
+Focused tests cover all keep/mulligan combinations, seeded setup determinism,
+save/load at every yield, replay to deck-out, both human seats, simulation caps,
+developer/standard separation, CLI replay, last-card bounce/discard, and self-trash
+in initiation/approach/encounter/movement paid windows. Existing install replacement
+tests retain the destination when its last previous contents are trashed.
+
+Native client captures: [Corp setup](evidence/correctness/corp-setup.png) and
+[Runner setup](evidence/correctness/runner-setup.png). Both native and headless smoke
+paths prove setup, mulligan, identity display, a turn pair, and terminal outcome.
+
+Bootstrap-fix CI: [33958195017](https://github.com/Master-Yoba/netrunner/actions/runs/33958195017)
+passed both synthetic and official lanes. Local `make verify` passed on 2026-09-05:
+1,184 tests (Core 774, Cards 214, AI 53, CLI 59, Match 84), formatting, deterministic
+proofs, generated coverage checks, official 77-card gallery, all client smokes,
+and secret scanning. Remote verification of the final implementation is pending;
+the earlier green run does not certify the later rules/client changes.

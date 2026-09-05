@@ -125,7 +125,15 @@ public partial class Main : Control
 			|| arguments.Contains("--m3-responsiveness-smoke", StringComparer.Ordinal);
 		_responsivenessSmoke = arguments.Contains("--m3-responsiveness-smoke", StringComparer.Ordinal);
 		BuildShell();
-		if (_slice45UiSmoke)
+		if (arguments.Contains("--full-match-smoke-corp", StringComparer.Ordinal)
+			|| arguments.Contains("--full-match-smoke-runner", StringComparer.Ordinal))
+		{
+			PlayerSide side = arguments.Contains("--full-match-smoke-corp", StringComparer.Ordinal) ? PlayerSide.Corp : PlayerSide.Runner;
+			_humanSide.Select(side == PlayerSide.Runner ? 0 : 1);
+			BeginMatch();
+			_ = RunFullMatchSmokeAsync(side);
+		}
+		else if (_slice45UiSmoke)
 		{
 			_ = RunSlice45UiSmokeAsync();
 		}
@@ -253,18 +261,22 @@ public partial class Main : Control
 		panel.AddChild(_startPanel);
 		_layout.AddChild(panel);
 
-		_startPanel.AddChild(MakeLabel("M3 MICRO-DECKS · REPRESENTATIVE RUN", 18, Accent));
+		_startPanel.AddChild(MakeLabel("DEVELOPER MATCH · SETUP TO OUTCOME", 18, Accent));
 		_startPanel.AddChild(MakeLabel(
-			"Human Runner · asynchronous Corp policy · text cards · Core-owned timing\n"
-			+ "The checked-in Overclock run opens on the remote. Select legal choices below; animations never advance rules.",
+			"Reduced developer decks · synthetic no-ability identities · complete Gateway subset\n"
+			+ "Choose either side. Shuffle, mulligan, full turns and outcomes are owned by Core. Official presets remain locked until their cards are complete.",
 			14,
 			Muted));
 		_startButton = new Button
 		{
-			Text = "Start representative run",
+			Text = "Start developer match",
 			CustomMinimumSize = new Vector2(240, 42),
 		};
 		_startButton.AddThemeFontSizeOverride("font_size", 16);
+		_humanSide = new OptionButton();
+		_humanSide.AddItem("Play Runner", (int)PlayerSide.Runner);
+		_humanSide.AddItem("Play Corp", (int)PlayerSide.Corp);
+		_startPanel.AddChild(_humanSide);
 		_startButton.Pressed += BeginMatch;
 		_startPanel.AddChild(_startButton);
 
@@ -289,7 +301,7 @@ public partial class Main : Control
 	private void BuildFooter()
 	{
 		Label footer = MakeLabel(
-			"M3 vertical slice · observation boundary · event animation queue · 1280×720 → 2560×1440 stretch",
+			"Developer match · engine-issued actions · deterministic replay · 1280×720 → 2560×1440 stretch",
 			11,
 			new Color(0.42f, 0.5f, 0.56f));
 		_layout.AddChild(footer);
@@ -299,6 +311,11 @@ public partial class Main : Control
 	{
 		if (_coordinator is not null)
 		{
+			return;
+		}
+		if (!_smokeTest)
+		{
+			BeginFullMatch();
 			return;
 		}
 
@@ -821,16 +838,16 @@ public partial class Main : Control
 		_board.Visible = true;
 		MatchViewModel view = snapshot.View;
 		TurnRegionState turnRegion = TurnRegionPresenter.Present(snapshot);
-		_status.Text = snapshot.RunOutcome is { } completedRun && snapshot.View.Run is null
+		_status.Text = view.CorpIdentity is null && snapshot.RunOutcome is { } completedRun && snapshot.View.Run is null
 			? $"Representative slice complete · {completedRun.Summary}"
 			: snapshot.IsOpponentThinking
-			? "Corp policy is thinking asynchronously · inspect cards and menus remain responsive"
+			? "Opponent policy is thinking asynchronously · inspect cards and menus remain responsive"
 			: view.Outcome.IsTerminal
 				? $"Match complete · {view.Outcome.Winner} · {view.Outcome.Reason}"
-			: "Core state published · human Runner input is available";
+			: $"Core state published · human {snapshot.View.Viewer} input is available";
 		_phase.Text = turnRegion.IsAvailable
 			? $"{turnRegion.Turn.PhaseLabel} · {turnRegion.Turn.TimingLabel}"
-			: snapshot.RunOutcome is not null && view.Run is null ? "SLICE COMPLETE"
+			: view.CorpIdentity is null && snapshot.RunOutcome is not null && view.Run is null ? "SLICE COMPLETE"
 			: view.Outcome.IsTerminal ? "GAME OVER" : "TIMING UNAVAILABLE";
 		string installedCounters = view.InstalledAdvancementCounters.Count == 0
 			? "INSTALLED ADVANCEMENT · none visible"
@@ -846,20 +863,20 @@ public partial class Main : Control
 			turnRegion.IsAvailable ? Colors.White : Warning);
 		_focus.Text = view.Run is { } run
 			? $"{run.FocusLabel} · attacked {run.AttackedServerId} · {run.Step}"
-			: snapshot.RunOutcome is { } ended
+			: view.CorpIdentity is null && snapshot.RunOutcome is { } ended
 				? $"REPRESENTATIVE SLICE · COMPLETE · {ended.Reason}"
 			: "RUN FOCUS · no active run";
 		_decision.Text = snapshot.IsOpponentThinking
-			? "CORP THINKING · asynchronous agent delay\nThe render loop is free to process input and card inspection."
+			? "OPPONENT THINKING · asynchronous agent delay\nThe render loop is free to process input and card inspection."
 			: view.Decision is { } prompt
 				? $"{prompt.OwnerSide} decision · {prompt.Prompt}\nRevision {prompt.Revision} · {ActionsRegionPresenter.Present(snapshot).DisplayActions.Count} displayed action(s)"
-			: snapshot.RunOutcome is { } finished && view.Run is null
+			: view.CorpIdentity is null && snapshot.RunOutcome is { } finished && view.Run is null
 				? $"REPRESENTATIVE RUN COMPLETE\n{finished.Summary}\nNo further Core action is pending."
 			: view.Outcome.IsTerminal ? "Outcome reached." : "No pending decision.";
 
 		BoardRegionState board = BoardRegionPresenter.Present(view);
-		_corpSummary.Text = board.CorpSummary;
-		_runnerSummary.Text = board.RunnerSummary;
+		_corpSummary.Text = board.CorpSummary + (view.CorpIdentity is { } corpIdentity ? $"\nIDENTITY · {corpIdentity.Title}" : "");
+		_runnerSummary.Text = board.RunnerSummary + (view.RunnerIdentity is { } runnerIdentity ? $"\nIDENTITY · {runnerIdentity.Title}" : "");
 		_cardControls.Clear();
 		_cardModels.Clear();
 		RenderFocusPresentationRegion(snapshot);

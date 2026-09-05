@@ -9,7 +9,7 @@ using Netrunner.Match;
 
 namespace Netrunner.Cli;
 
-public static class CliCommands
+public static partial class CliCommands
 {
     private static readonly JsonSerializerOptions DoctorJsonOptions = new() { WriteIndented = true };
 
@@ -41,6 +41,11 @@ public static class CliCommands
         ArgumentNullException.ThrowIfNull(args);
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(error);
+
+        if (args.Length > 0 && args[0] is "full-match" or "simulate")
+        {
+            return RunFullMatch(args, output, error);
+        }
 
         if (args is ["doctor"] or ["doctor", "--json"])
         {
@@ -120,6 +125,8 @@ public static class CliCommands
         error.WriteLine(
             "Usage: Netrunner.Cli doctor [--json] | self-test --seed <unsigned-integer> | "
             + "scenario <file> [--json] | replay <file> [--json] | "
+            + "full-match [--seed <unsigned-integer>] [--json] [--replay-out <file>] | "
+            + "simulate <fixture-file> [--json] [--replay-out <file>] | "
             + "card-data normalize --upstream <file> --copyright <file> --commit <40-hex-sha> "
             + "--retrieval-date YYYY-MM-DD --output-dir <directory> [--json] | "
             + "card-data validate [--root <directory>] [--json] | "
@@ -665,6 +672,12 @@ public static class CliCommands
                 RuntimeCardCatalog runtime = GatewayRuntimeCardCatalog.CreateEmbedded();
                 ReplayArtifact artifact = EngineJson.Deserialize<ReplayArtifact>(contents, behavior, runtime);
                 result = ReplayVerifier.Verify(artifact, behavior, runtime);
+            }
+            else if (version.ValueKind == JsonValueKind.String && version.GetString() == DeveloperMatchCards.BehaviorVersion)
+            {
+                DeveloperMatchCards cards = DeveloperMatchCards.Create();
+                ReplayArtifact artifact = EngineJson.Deserialize<ReplayArtifact>(contents, cards.Behavior, cards.Runtime);
+                result = ReplayVerifier.Verify(artifact, cards.Behavior, cards.Runtime);
             }
             else
             {

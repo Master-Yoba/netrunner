@@ -40,7 +40,7 @@ public sealed record MatchSnapshot(
     public bool IsTerminal => View.Outcome.IsTerminal;
 
     public bool AwaitingHumanDecision => !IsOpponentThinking
-        && View.Decision is { OwnerSide: PlayerSide.Runner };
+        && View.Decision?.OwnerSide == View.Viewer;
 }
 
 /// <summary>Result of a human action submission, including rejection feedback.</summary>
@@ -102,7 +102,8 @@ public sealed class MatchCoordinatorOptions
 /// </summary>
 public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
 {
-    private readonly M2ScenarioDocument _document;
+    private readonly M2ScenarioDocument? _document;
+    private readonly FullMatchDefinition? _fullMatch;
     private readonly IGameAgent _corpAgent;
     private readonly MatchCoordinatorOptions _options;
     private readonly ICardMetadataResolver _metadataResolver;
@@ -129,21 +130,33 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
         M2ScenarioDocument document,
         IGameAgent corpAgent,
         MatchCoordinatorOptions? options = null)
+        : this(document ?? throw new ArgumentNullException(nameof(document)), null, corpAgent, options)
     {
-        _document = document ?? throw new ArgumentNullException(nameof(document));
+    }
+
+    public MatchCoordinator(FullMatchDefinition definition, IGameAgent opponentAgent, MatchCoordinatorOptions? options = null)
+        : this(null, definition ?? throw new ArgumentNullException(nameof(definition)), opponentAgent, options)
+    {
+    }
+
+    private MatchCoordinator(M2ScenarioDocument? document, FullMatchDefinition? definition, IGameAgent corpAgent,
+        MatchCoordinatorOptions? options)
+    {
+        _document = document;
+        _fullMatch = definition;
         _corpAgent = corpAgent ?? throw new ArgumentNullException(nameof(corpAgent));
         _options = options ?? new MatchCoordinatorOptions();
-        _metadataResolver = _options.CardMetadataResolver
+        _metadataResolver = definition?.Metadata ?? _options.CardMetadataResolver
             ?? _options.MetadataResolver
             ?? CardMetadataResolvers.Default;
-        _suppliedBehaviorCatalog = _options.BehaviorCatalog
+        _suppliedBehaviorCatalog = definition?.Behavior ?? _options.BehaviorCatalog
             ?? GatewayBehaviorCatalog.Create();
-        _runtimeCardCatalog = _options.RuntimeCardCatalog;
+        _runtimeCardCatalog = definition?.Runtime ?? _options.RuntimeCardCatalog;
         // Keep the field initialized until StartAsync validates the document;
         // the worker replaces it with the immutable scenario slice before any
         // engine or presentation operation runs.
         _behaviorCatalog = _suppliedBehaviorCatalog;
-        if (_options.HumanSide != PlayerSide.Runner)
+        if (!Enum.IsDefined(_options.HumanSide) || definition is null && _options.HumanSide != PlayerSide.Runner)
         {
             throw new ArgumentException(
                 "The M3 vertical slice supports a human Runner only.",
@@ -226,12 +239,16 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
     public Task<MatchSubmissionResult> SubmitRunnerActionAsync(
         ActionId actionId,
         CancellationToken cancellationToken = default)
+        => SubmitHumanActionAsync(actionId, cancellationToken);
+
+    /// <summary>Submit an issued choice for the configured human side.</summary>
+    public Task<MatchSubmissionResult> SubmitHumanActionAsync(ActionId actionId, CancellationToken cancellationToken = default)
     {
         MatchSnapshot? snapshot = CurrentSnapshot;
         ObservationDecision? decision = snapshot?.Observation.Decision;
         if (snapshot is null || decision is null)
         {
-            throw new InvalidOperationException("The match is not currently awaiting a Runner decision.");
+            throw new InvalidOperationException("The match is not currently awaiting a human decision.");
         }
 
         return SubmitActionAsync(
@@ -343,7 +360,16 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
 
         try
         {
-            BehaviorCatalog scenarioCatalog = _document.Validate(_suppliedBehaviorCatalog);
+            if (_fullMatch is not null)
+            {
+                GameEngine.TurnStartResult setup = _fullMatch.Start();
+                _state = setup.State;
+                command.Complete(Publish(setup.Events, feedback: null, thinking: false));
+                await DriveAgentsAsync().ConfigureAwait(false);
+                return;
+            }
+
+            BehaviorCatalog scenarioCatalog = _document!.Validate(_suppliedBehaviorCatalog);
             _behaviorCatalog = scenarioCatalog;
             M2ScenarioRunSpec run = _document.Run
                 ?? throw new M2ScenarioException(["run: the scenario has no run contract."]);
@@ -381,6 +407,16 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
         if (_state is null)
         {
             command.Fail(new InvalidOperationException("The match has not been started."));
+            return;
+        }
+
+        if (_fullMatch is not null
+            && command.Submission.Actor != _state.Players.Single(player => player.Side == _options.HumanSide).Id)
+        {
+            ApplyRejection rejection = new(ApplyRejectionCode.WrongOwner, "Only the configured human side may submit client actions.");
+            MatchSnapshot rejected = Publish(Array.Empty<EngineEvent>(),
+                new MatchFeedback(MatchFeedbackKind.Rejected, rejection.Message, rejection.Code), thinking: false);
+            command.Complete(new MatchSubmissionResult(false, rejected, rejection));
             return;
         }
 
@@ -424,13 +460,14 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
     {
         while (_state is { } state
             && state.PendingDecision is { } pending
-            && pending.Owner == state.Players.Single(player => player.Side == PlayerSide.Corp).Id)
+            && pending.Owner == state.Players.Single(player => player.Side != _options.HumanSide).Id)
         {
             Publish(Array.Empty<EngineEvent>(), feedback: null, thinking: true);
             // The published snapshot is intentionally Runner-filtered. Corp
             // policy receives its own filtered observation, never the
             // presentation snapshot and never GameState.
-            Observation observation = ObservationBuilder.Build(state, PlayerSide.Corp, _behaviorCatalog);
+            Observation observation = ObservationBuilder.Build(state,
+                _options.HumanSide == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp, _behaviorCatalog);
             try
             {
                 await DelayAsync(_options.AgentDelay, _cancellation.Token).ConfigureAwait(false);
@@ -507,7 +544,7 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
             }
         }
 
-        Observation observation = ObservationBuilder.Build(state, PlayerSide.Runner, _behaviorCatalog);
+        Observation observation = ObservationBuilder.Build(state, _options.HumanSide, _behaviorCatalog);
         MatchViewModel view = ObservationViewMapper.Build(
             observation,
             _metadataResolver,
@@ -516,7 +553,8 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
         // the Runner-facing boundary. Never forward a physical Corp card ID
         // while that card is still hidden; omission is intentional for typed
         // payloads whose required ID cannot be safely redacted.
-        IReadOnlyList<EngineEvent> visibleEvents = RunnerEventVisibility.Filter(events, state);
+        IReadOnlyList<EngineEvent> visibleEvents = _options.HumanSide == PlayerSide.Runner
+            ? RunnerEventVisibility.Filter(events, state) : CorpEventVisibility.Filter(events, state);
         IReadOnlyList<EngineEvent> frozenEvents = new ReadOnlyCollection<EngineEvent>(visibleEvents.ToArray());
         MatchSnapshot snapshot = new(
             Interlocked.Increment(ref _publicationSequence),

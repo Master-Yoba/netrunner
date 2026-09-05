@@ -14,11 +14,12 @@ ENG-419 through ENG-425A, SCN-401, the
 seven Batch 4 cards, AGT-401 v4, SIM-401, UI-406, and their exit evidence.
 Later M4 card batches remain out of scope.
 
-The audit found that setup/mulligan and end-to-end client/simulation match
-execution are not delivered by these completion records. Full-turn engine
-proofs and validated simulation fixture documents do not establish that path.
-See [the correctness follow-up](CORRECTNESS_SLICE.md) for repairs and open
-blockers before proceeding to further slices.
+The correctness follow-up adds setup/mulligan and end-to-end client/simulation
+execution missing from those completion records. Match, CLI, and both client
+seats share Core setup and terminal execution with explicit developer-only decks;
+this does not unlock official preset identities. See
+[the correctness follow-up](CORRECTNESS_SLICE.md) for compatibility and
+verification evidence before proceeding to Slice 4.6.
 
 ## Baseline
 

@@ -134,7 +134,7 @@ public sealed class SimulationFixtureTests
             "rules-version",
             "rulesVersion");
         AssertDiagnostic(
-            Rebuild(fixture, cardDataVersion: new string('0', 40)),
+            Rebuild(fixture, cardDataVersion: "not-a-snapshot-pin"),
             "metadata-pin",
             "cardDataVersion");
         AssertDiagnostic(

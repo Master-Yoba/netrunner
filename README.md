@@ -13,9 +13,11 @@ dependency-ordered engineering roadmap is in
 
 M1–M3 and M4 Slices 4.1–4.5 are merged. Gateway behavior coverage is tracked in
 [the generated report](docs/generated/gateway-coverage.md). The desktop client
-still starts the representative M2 run, not a complete setup-to-win match.
+starts a developer-only setup-to-outcome match as either side, including mulligan
+and identity display. Reduced decks use synthetic no-ability identities;
+official presets remain locked behind their behavior-coverage gate.
 See [the correctness slice](docs/CORRECTNESS_SLICE.md) for audit repairs and
-remaining readiness blockers. This is not yet the complete Netrunner ruleset:
+verification status. This is not yet the complete Netrunner ruleset:
 
 - `Netrunner.Core`: typed state, deterministic RNG, atomic legal actions,
   serializable resolution, canonical hashes, scenarios, and replay.
@@ -23,7 +25,7 @@ remaining readiness blockers. This is not yet the complete Netrunner ruleset:
   System Gateway normalization/validation.
 - `Netrunner.AI`: offline-agent boundary, toy/run agents, and full-turn contract policy.
 - `Netrunner.LLM`: provider-neutral LLM transport contracts.
-- `Netrunner.Cli`: working `scenario`, `play`, `replay`, `m2-proof`, and
+- `Netrunner.Cli`: working `full-match`, `simulate`, `scenario`, `play`, `replay`, `m2-proof`, and
   `card-data` commands.
 - `Netrunner.Match`: asynchronous authoritative-state ownership and filtered presentation.
 - `Netrunner.Godot`: Godot 4.7.2 .NET client with card and decision presentation.
