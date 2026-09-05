@@ -1,6 +1,6 @@
 # M4 progress — System Gateway complete
 
-Status: Slice 4.6 implemented and locally verified on `4_6`; PR/remote CI handoff follows below
+Status: Slice 4.6 implemented and locally verified; [PR #11 into dev](https://github.com/Master-Yoba/netrunner/pull/11) is open
 
 Date started: 31 August 2026
 
@@ -4456,3 +4456,12 @@ errors; runtime action expansion and full verification remain pending.
 - All twelve Batch 5 cards are bound, tested, reviewed, and registered. The
   required 58 registered / 57 complete exit target is met. No Slice 4.7 card
   work or official-preset coverage override is included.
+
+
+### 2026-09-05 — PR handoff
+
+- Completion commit `94c54fb` follows checkpoint `fb0520a` on dedicated branch
+  `4_6`. The branch is pushed and [PR #11](https://github.com/Master-Yoba/netrunner/pull/11)
+  targets `dev`, with architecture/compatibility notes, verification evidence,
+  and the native screenshot. Remote synthetic and official CI checks are the
+  remaining merge gate; their live results are attached to the PR.
