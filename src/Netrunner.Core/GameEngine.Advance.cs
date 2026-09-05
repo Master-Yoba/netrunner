@@ -5,6 +5,7 @@ public static partial class GameEngine
 {
     private static void Advance(WorkingState working, int maxResolutionSteps)
     {
+        ProcessRemoteCheckpoint(working);
         int steps = 0;
         while (working.PendingDecision is null && working.ResolutionStack.Count > 0)
         {
@@ -38,6 +39,9 @@ public static partial class GameEngine
 
             switch (frame)
             {
+                case SetupFrame setup:
+                    StepSetup(working, setup);
+                    break;
                 case ChooseNumberThenAdjustCreditsFrame chooseThenAdjust:
                     StepChooseNumberThenAdjustCredits(working, chooseThenAdjust);
                     break;
@@ -91,7 +95,11 @@ public static partial class GameEngine
                     throw new ResolutionFailureException(
                         $"No resolution behavior is registered for frame type '{frame.GetType().Name}'.");
             }
+
+            ProcessRemoteCheckpoint(working);
         }
+
+        ProcessRemoteCheckpoint(working);
     }
 
     private static void AdvanceToyAgenda(WorkingState working, CardInstanceId cardId)

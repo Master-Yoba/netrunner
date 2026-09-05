@@ -857,7 +857,7 @@ public static partial class GameEngine
         if (zone == BehaviorZone.ServerRoot)
         {
             existing = working.Servers
-                .Where(server => server.Kind == ServerKind.Remote)
+                .Where(server => server.Kind == ServerKind.Remote && server.Exists)
                 .OrderBy(server => server.Id.Value, StringComparer.Ordinal)
                 .Select(server => working.Zones.FirstOrDefault(zoneState => zoneState.Id == server.RootZoneId))
                 .FirstOrDefault(zoneState => zoneState is not null);
@@ -867,7 +867,7 @@ public static partial class GameEngine
         if (zone == BehaviorZone.ServerIce)
         {
             existing = working.Servers
-                .Where(server => server.Kind == ServerKind.Remote)
+                .Where(server => server.Kind == ServerKind.Remote && server.Exists)
                 .OrderBy(server => server.Id.Value, StringComparer.Ordinal)
                 .Select(server => working.Zones.FirstOrDefault(zoneState => zoneState.Id == server.IceZoneId))
                 .FirstOrDefault(zoneState => zoneState is not null);

@@ -231,7 +231,7 @@ public static partial class GameEngine
             return false;
         }
 
-        IEnumerable<ServerState> targetServers = working.Servers;
+        IEnumerable<ServerState> targetServers = working.Servers.Where(server => server.Exists);
         if (runEvent.AllowedTargetServers is { } allowed)
         {
             targetServers = targetServers.Where(server => allowed.Contains(server.Kind));

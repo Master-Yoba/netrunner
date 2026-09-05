@@ -2016,7 +2016,7 @@ public static partial class GameEngine
         }
 
         ServerState? server = working.Servers.SingleOrDefault(candidate => candidate.Id == serverId.Value);
-        if (server is null)
+        if (server is null || !server.Exists)
         {
             return null;
         }
@@ -2198,6 +2198,7 @@ public static partial class GameEngine
         }
 
         IEnumerable<ServerState> servers = working.Servers
+            .Where(server => server.Exists)
             .OrderBy(server => (int)server.Kind)
             .ThenBy(server => server.Id.Value, StringComparer.Ordinal);
         foreach (ServerState server in servers)

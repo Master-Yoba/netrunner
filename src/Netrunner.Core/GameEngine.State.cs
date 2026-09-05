@@ -25,6 +25,12 @@ public static partial class GameEngine
             throw new ResolutionFailureException("A card move requires distinct source and destination zones.");
         }
 
+        if (destination.ServerId is { } destinationServer
+            && working.Servers.Any(server => server.Id == destinationServer && !server.Exists))
+        {
+            throw new ResolutionFailureException("Cards cannot enter a destroyed server.");
+        }
+
         ReplaceZone(working, new ZoneState(
             source.Id,
             source.Kind,
@@ -74,6 +80,9 @@ public static partial class GameEngine
                 EngineEventKinds.CardMoved,
                 movement);
         }
+
+        RefreshRemoteLifecycle(working, source.ServerId);
+        RefreshRemoteLifecycle(working, destination.ServerId);
     }
 
     /// <summary>
@@ -186,7 +195,7 @@ public static partial class GameEngine
 
     private static ZoneState GetRemoteRoot(WorkingState working) =>
         working.Servers
-            .Where(server => server.Kind == ServerKind.Remote)
+            .Where(server => server.Kind == ServerKind.Remote && server.Exists)
             .OrderBy(server => server.Id.Value, StringComparer.Ordinal)
             .Select(server => working.Zones.SingleOrDefault(zone => zone.Id == server.RootZoneId))
             .FirstOrDefault(zone => zone is not null)

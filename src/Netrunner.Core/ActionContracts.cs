@@ -19,6 +19,7 @@ public enum DecisionKind
     InterruptChoice,
     BehaviorChoice,
     IceSubroutineChoice,
+    Setup,
 }
 
 public enum ActionKind

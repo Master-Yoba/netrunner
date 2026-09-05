@@ -14,7 +14,7 @@ public static class EngineCompatibility
     public const int ArtifactSchemaVersion = 1;
     // Slice 4.5 persists targeted PlayCard payloads and explicit run-event
     // breach-modifier provenance in live RunState snapshots.
-    public const int StateSchemaVersion = 14;
+    public const int StateSchemaVersion = 15;
     public const string RulesVersion = "26.03";
     public const string CardDataVersion = "fixture-1";
     /// <summary>
@@ -231,7 +231,8 @@ public sealed class ReplayArtifact
                 $"Rules version '{RulesVersion}' is not supported; expected '{EngineCompatibility.RulesVersion}'.");
         }
 
-        if (!string.Equals(CardDataVersion, EngineCompatibility.CardDataVersion, StringComparison.Ordinal)
+        if ((behaviorCatalog is null || runtimeCardCatalog is null)
+            && !string.Equals(CardDataVersion, EngineCompatibility.CardDataVersion, StringComparison.Ordinal)
             && !string.Equals(CardDataVersion, EngineCompatibility.GatewayCardDataVersion, StringComparison.Ordinal)
             // Read the pre-D-401 M2 artifact while requiring new artifacts to
             // carry the authenticated metadata commit above.

@@ -140,7 +140,7 @@ public static class ObservationBuilder
                 ["winner"] = state.Outcome.Winner,
                 ["reason"] = state.Outcome.Reason,
             },
-            ["servers"] = state.Servers.Select(server => ServerView(state, server, viewer, accessVisible)).ToArray(),
+            ["servers"] = state.Servers.Where(server => server.Exists).Select(server => ServerView(state, server, viewer, accessVisible)).ToArray(),
             ["hiddenZoneCounts"] = new Dictionary<string, object?>
             {
                 ["corpHand"] = ZoneCount(state, ZoneKind.CorpHand),
@@ -154,6 +154,15 @@ public static class ObservationBuilder
             ["corpScore"] = ZoneCards(state, ZoneKind.CorpScore).Select(card => CardView(state, card)).ToArray(),
             ["runnerScore"] = ZoneCards(state, ZoneKind.RunnerScore).Select(card => CardView(state, card)).ToArray(),
         };
+
+        foreach (ZoneKind identity in new[] { ZoneKind.CorpIdentity, ZoneKind.RunnerIdentity })
+        {
+            if (state.Zones.Any(zone => zone.Kind == identity))
+            {
+                publicState[identity == ZoneKind.CorpIdentity ? "corpIdentity" : "runnerIdentity"] =
+                    ZoneCards(state, identity).Select(card => CardView(state, card)).ToArray();
+            }
+        }
 
         // Real CR turns carry an explicit step/facts projection. Keep these
         // additive and conditional so M1/M2 observation goldens retain their

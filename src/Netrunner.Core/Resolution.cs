@@ -71,6 +71,7 @@ public enum EffectResolutionStage
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 [JsonDerivedType(typeof(ChooseNumberThenAdjustCreditsFrame), "choose-number-then-adjust-credits")]
 [JsonDerivedType(typeof(ChooseNumberFrame), "choose-number")]
+[JsonDerivedType(typeof(SetupFrame), "setup")]
 [JsonDerivedType(typeof(ChooseCardFrame), "choose-card")]
 [JsonDerivedType(typeof(AdjustCreditsFrame), "adjust-credits")]
 [JsonDerivedType(typeof(ToyTurnFrame), "toy-turn")]
@@ -1191,6 +1192,13 @@ public static class ResolutionFrameValidator
 
         switch (frame)
         {
+            case SetupFrame setup:
+                ValidateBehavior(frame, SetupFrame.Behavior, path, violations);
+                if (!Enum.IsDefined(setup.Side))
+                {
+                    violations.Add(new StateInvariantViolation("setup.invalid-side", path, "Setup must name a valid side."));
+                }
+                break;
             case ChooseNumberThenAdjustCreditsFrame chooseThenAdjust:
                 ValidateBehavior(frame, ResolutionBehaviorIds.ChooseNumberThenAdjustCredits, path, violations);
                 ValidatePlayer(chooseThenAdjust.Owner, $"{path}.owner", violations);
@@ -3155,6 +3163,7 @@ internal static class ResolutionFrameCloner
 {
     public static ResolutionFrame Copy(ResolutionFrame frame) => frame switch
     {
+        SetupFrame setup => new SetupFrame(setup.Version, setup.BehaviorId, setup.Side, setup.Redrawn),
         ChooseNumberThenAdjustCreditsFrame chooseThenAdjust => new ChooseNumberThenAdjustCreditsFrame(
             chooseThenAdjust.Version,
             chooseThenAdjust.BehaviorId,

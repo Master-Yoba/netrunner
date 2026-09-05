@@ -258,7 +258,7 @@ public static partial class GameEngine
             spec.AgendaPoints,
             AgendaTurnChangeKind.Score);
 
-        CleanupEmptyRemote(working, server);
+        RefreshRemoteLifecycle(working, server.Id);
 
         if (GetPlayer(working, PlayerSide.Corp).AgendaPoints >= RealGameRules.AgendaPointsToWin)
         {
@@ -354,20 +354,4 @@ public static partial class GameEngine
         }
     }
 
-    private static void CleanupEmptyRemote(WorkingState working, ServerState server)
-    {
-        ZoneState? root = working.Zones.FirstOrDefault(zone => zone.Id == server.RootZoneId);
-        ZoneState? ice = working.Zones.FirstOrDefault(zone => zone.Id == server.IceZoneId);
-        if (server.Kind != ServerKind.Remote
-            || root is null
-            || ice is null
-            || root.CardIds.Count != 0
-            || ice.CardIds.Count != 0)
-        {
-            return;
-        }
-
-        working.Zones.RemoveAll(zone => zone.Id == server.RootZoneId || zone.Id == server.IceZoneId);
-        working.Servers.RemoveAll(candidate => candidate.Id == server.Id);
-    }
 }

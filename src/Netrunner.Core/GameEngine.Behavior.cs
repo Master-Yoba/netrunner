@@ -4241,7 +4241,7 @@ public static partial class GameEngine
         if (kind == ZoneKind.ServerIce)
         {
             return working.Servers
-                .Where(server => server.Kind == ServerKind.Remote)
+                .Where(server => server.Kind == ServerKind.Remote && server.Exists)
                 .OrderBy(server => server.Id.Value, StringComparer.Ordinal)
                 .Select(server => working.Zones.Single(zoneState => zoneState.Id == server.IceZoneId))
                 .FirstOrDefault()
