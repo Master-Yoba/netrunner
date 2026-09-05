@@ -5,6 +5,23 @@ verify_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$verify_root/scripts/env.sh"
 bash "$verify_root/scripts/test-env.sh"
 
+m4_gate=0
+if [[ "${1:-}" == "--m4" && $# == 1 ]]; then
+  m4_gate=1
+elif (($# != 0)); then
+  echo "Usage: ./scripts/verify.sh [--m4]" >&2
+  exit 1
+fi
+if ((m4_gate == 1)); then
+  for required_content in cards.json manifest.json SOURCE_COPYRIGHT.md; do
+    if [[ ! -f "$verify_root/data/vendor/system-gateway/$required_content" ]]; then
+      echo "M4 gate requires authenticated official content; missing $required_content." >&2
+      echo "Run ./scripts/update-card-data.sh --commit 236140cf84491c23995b028bc791281837520b97 --retrieval-date 2026-08-28" >&2
+      exit 1
+    fi
+  done
+fi
+
 if ! command -v dotnet >/dev/null 2>&1; then
   echo "dotnet is unavailable. Run ./scripts/bootstrap.sh first."
   exit 1
@@ -83,6 +100,16 @@ elif ((card_data_present == 3)) && [[ -f "$card_data_cards" && -f "$card_data_ma
   dotnet build "$verify_root/src/Netrunner.Godot/Netrunner.Godot.csproj" \
     --no-restore --nologo -m:1 \
     "${official_content_properties[@]}"
+  # The initial solution test run uses synthetic embedded data. Execute the
+  # CLI's official-content tests against an explicitly provisioned test output.
+  dotnet test "$verify_root/tests/Netrunner.Cli.Tests/Netrunner.Cli.Tests.csproj" \
+    --no-restore --nologo -m:1 \
+    --filter FullyQualifiedName~FullMatchCommand \
+    "${official_content_properties[@]}"
+  dotnet test "$verify_root/tests/Netrunner.Cards.Tests/Netrunner.Cards.Tests.csproj" \
+    --no-restore --nologo -m:1 \
+    --filter FullyQualifiedName~OfficialPresetRevalidationTests \
+    "${official_content_properties[@]}"
   card_data_content_enabled=1
 else
   echo "card-data validation failed: local System Gateway snapshot is partial." >&2
@@ -151,6 +178,18 @@ if ! diff -u "$verify_root/docs/generated/gateway-coverage.json" \
   echo "Gateway JSON coverage report is stale. Regenerate it with Netrunner.CardCoverage." >&2
   exit 1
 fi
+python3 - "$coverage_report_dir/gateway-coverage.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as report_file:
+    report = json.load(report_file)
+expected = {"total": 77, "registered": 77, "tested": 77,
+            "fullTextComplete": 77, "partial": 0, "unregistered": 0}
+if report["counts"] != expected or report["diagnostics"]:
+    raise SystemExit("M4 coverage requires 77 complete, reviewed, tested designs with no diagnostics.")
+print("m4-coverage=PASS registered=77 tested=77 complete=77 diagnostics=0")
+PY
 m1_replay_dir="$(mktemp -d "$verify_temp_root/netrunner-m1.XXXXXX")"
 if [[ -z "$m1_replay_dir" || ! -d "$m1_replay_dir" ]]; then
   echo "Unable to create the M1 replay verification directory." >&2
@@ -167,6 +206,11 @@ dotnet run --project "$verify_root/src/Netrunner.Cli" --no-build --no-restore --
 dotnet run --project "$verify_root/src/Netrunner.Cli" --no-build --no-restore -- \
   m2-proof "$verify_root/data/m2/representative-run.json" --json
 if ((card_data_content_enabled == 1)); then
+  # Godot may trigger a managed rebuild during import/startup. Keep its child
+  # builds on the same content lane as the explicitly built assemblies.
+  export NetrunnerContentEnabled=true
+  export NetrunnerCardDataMode=official
+  export NetrunnerCardDataInputRoot="$card_data_dir"
   NetrunnerContentEnabled=true NetrunnerCardDataMode=official \
     NetrunnerCardDataInputRoot="$card_data_dir" \
     XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
@@ -274,6 +318,23 @@ if ! grep -Fq "M4_SLICE47_UI PASS setup_choices=true identities=true nbn_choices
   exit 1
 fi
 echo "m4-slice47-ui-smoke=PASS"
+slice48_ux_smoke_log="$coverage_report_dir/slice48-ux-smoke.log"
+slice48_content_args=()
+if ((card_data_content_enabled == 1)); then
+  slice48_content_args=(--require-official-content)
+fi
+if ! run_with_timeout 90 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
+  "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \
+  -- --m4-slice48-ux-smoke "${slice48_content_args[@]}" >"$slice48_ux_smoke_log" 2>&1; then
+  cat "$slice48_ux_smoke_log" >&2
+  exit 1
+fi
+if ! grep -Fq "M4_SLICE48_UX PASS" "$slice48_ux_smoke_log" \
+  || grep -Fq "M4_SLICE48_UX FAIL" "$slice48_ux_smoke_log"; then
+  cat "$slice48_ux_smoke_log" >&2
+  exit 1
+fi
+cat "$slice48_ux_smoke_log"
 latency_smoke_log="$coverage_report_dir/latency-smoke.log"
 if ! run_with_timeout 45 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
   "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \
@@ -302,8 +363,35 @@ for full_match_side in corp runner; do
   fi
   echo "full-match-$full_match_side=PASS setup=true mulligan=true turn_pair=true identities=true terminal=true"
 done
+if ((card_data_content_enabled == 1)); then
+  for m4_preset in basic expanded; do
+    for m4_human_side in corp runner; do
+      m4_full_smoke_log="$coverage_report_dir/m4-full-$m4_preset-$m4_human_side.log"
+      if ! run_with_timeout 210 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
+        "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \
+        -- "--m4-full-smoke-$m4_human_side" --preset "$m4_preset" --seed 47042 \
+        >"$m4_full_smoke_log" 2>&1; then
+        cat "$m4_full_smoke_log" >&2
+        exit 1
+      fi
+      if ! grep -Fq "M4_FULL_SMOKE PASS" "$m4_full_smoke_log" \
+        || ! grep -Fq "preset=$m4_preset seed=47042" "$m4_full_smoke_log" \
+        || ! grep -Fq "reload=true fresh_setup=true" "$m4_full_smoke_log" \
+        || grep -Fq "M4_FULL_SMOKE FAIL" "$m4_full_smoke_log"; then
+        cat "$m4_full_smoke_log" >&2
+        exit 1
+      fi
+      cat "$m4_full_smoke_log"
+    done
+  done
+fi
 run_with_timeout 30 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
   "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" -- --smoke-test
 "$verify_root/scripts/check-secrets.sh"
 
+if ((m4_gate == 1)); then
+  echo "M4_GATE PASS content=official coverage=77/77"
+elif ((card_data_content_enabled == 0)); then
+  echo "M4_GATE NOT_RUN official content absent; synthetic regression only."
+fi
 echo "Development environment verified."

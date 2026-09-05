@@ -172,7 +172,7 @@ public sealed record TurnViewModel(
 
     public string TimingLabel => Step is { } step
         ? step.ToString().ToUpperInvariant()
-        : "TIMING STEP UNAVAILABLE";
+        : Phase == TurnPhase.Setup ? "MULLIGAN" : "TIMING STEP UNAVAILABLE";
 }
 
 /// <summary>Public hand count paired with an optional observed or fallback maximum.</summary>

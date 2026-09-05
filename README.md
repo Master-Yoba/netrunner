@@ -11,13 +11,14 @@ dependency-ordered engineering roadmap is in
 
 ## Current state
 
-M1–M3 and M4 Slices 4.1–4.5 are merged. Gateway behavior coverage is tracked in
-[the generated report](docs/generated/gateway-coverage.md). The desktop client
-starts a developer-only setup-to-outcome match as either side, including mulligan
-and identity display. Reduced decks use synthetic no-ability identities;
-official presets remain locked behind their behavior-coverage gate.
-See [the correctness slice](docs/CORRECTNESS_SLICE.md) for audit repairs and
-verification status. This is not yet the complete Netrunner ruleset:
+All 77 System Gateway designs have complete behavior and registered tests in
+[the generated report](docs/generated/gateway-coverage.md). With authenticated
+content provisioned, the desktop client plays official basic and expanded
+teaching presets as either side against the deterministic contract agent,
+including setup, mulligan, seed selection and a new-match flow. See
+[the M4 progress record](docs/M4_PROGRESS.md) for the final gate evidence and
+[preset revalidation](docs/M4_PRESET_REVALIDATION.md) for exact deck provenance.
+Support is scoped to System Gateway:
 
 - `Netrunner.Core`: typed state, deterministic RNG, atomic legal actions,
   serializable resolution, canonical hashes, scenarios, and replay.
@@ -62,9 +63,16 @@ make watch-cards
 make cli
 make godot-import
 make verify
+make m4-gate
 make doctor
 make event-smoke
 ```
+
+`make m4-gate` requires the authenticated official snapshot and runs the full
+repository gate plus official games through the client in both seats and the
+two-resolution accessibility checks. `make verify` also supports synthetic CI
+without that snapshot and explicitly reports that the official M4 gate was not
+run.
 
 The toy agents can prove each M1 win path directly:
 
@@ -86,6 +94,16 @@ Generate the pinned 77-card snapshot explicitly with:
 `scripts/verify.sh` validates the snapshot when all three generated files are
 present, skips it without network access in a clean clone, and rejects a partial
 snapshot. No official card artwork is downloaded.
+
+After `make m4-gate` has built the official content, run a preset directly:
+
+```bash
+dotnet run --project src/Netrunner.Cli --no-build -- full-match --preset basic --seed 47042 --json
+dotnet run --project src/Netrunner.Cli --no-build -- full-match --preset expanded --seed 47042 --json
+```
+
+These runs validate setup, save/load at every decision, and the resulting
+replay. Omitting `--preset` retains the synthetic developer match.
 
 To open the editor:
 

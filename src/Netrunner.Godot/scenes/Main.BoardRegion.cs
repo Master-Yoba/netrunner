@@ -62,6 +62,7 @@ public partial class Main
 		{
 			HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
 			VerticalScrollMode = ScrollContainer.ScrollMode.Auto,
+			FollowFocus = true,
 		};
 		SetFullRect(_bodyScroll);
 		bodyViewport.AddChild(_bodyScroll);
@@ -187,6 +188,7 @@ public partial class Main
 		{
 			HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
 			VerticalScrollMode = ScrollContainer.ScrollMode.Auto,
+			FollowFocus = true,
 		};
 		SetFullRect(actionScroll);
 		_actions = new VBoxContainer();
@@ -214,6 +216,7 @@ public partial class Main
 		{
 			HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
 			VerticalScrollMode = ScrollContainer.ScrollMode.Auto,
+			FollowFocus = true,
 		};
 		SetFullRect(detailsScroll);
 		_details = MakeLabel("Hover or click a text card for details.\nImportant cues use labels and borders as well as colour.", 12, Muted);

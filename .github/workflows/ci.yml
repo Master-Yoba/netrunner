@@ -30,4 +30,9 @@ jobs:
         if: matrix.content == 'official'
         run: ./scripts/update-card-data.sh --commit 236140cf84491c23995b028bc791281837520b97 --retrieval-date 2026-08-28
       - name: Complete repository gate
-        run: make verify
+        run: |
+          if [[ "${{ matrix.content }}" == "official" ]]; then
+            make m4-gate
+          else
+            make verify
+          fi

@@ -1,6 +1,6 @@
 # M4 progress — System Gateway complete
 
-Status: Slice 4.7 implemented and verified on `m4_7`; ready for review into `dev`.
+Status: M4 complete and locally verified on `m4_8`; PR targets `dev`.
 
 Date started: 31 August 2026
 
@@ -9,9 +9,9 @@ vendored commit `236140cf84491c23995b028bc791281837520b97` (77 designs)
 
 ## Scope
 
-Slices 4.1 through 4.6 of `docs/M4_PLAN.md` and the correctness prerequisite
-are merged. Slice 4.7 implements ENG-433–437, RULE-401, AGT-402, UI-408,
-and the final Gateway batch, bringing behavior coverage to 77/77.
+Slices 4.1 through 4.7 of `docs/M4_PLAN.md` and the correctness prerequisite
+are merged. All 77 Gateway designs are complete; Slice 4.8 closes official
+preset revalidation, client integration, accessibility, and the final M4 gate.
 
 Match, CLI, and both client seats share Core setup and terminal execution with
 official basic/expanded presets as well as developer decks. See
@@ -4578,3 +4578,96 @@ errors; runtime action expansion and full verification remain pending.
   legacy instruction's counter-placement semantics are documented in Core.
 - Verification: `make verify` passes with 1,332 tests, 77/77 coverage,
   deterministic proofs, all Godot smokes, formatting and secret scanning.
+
+## Slice 4.8 — final integration
+
+### 2026-09-05 — architecture and gate review
+
+- Root owns architecture, integration review and final verification; bounded
+  Luna Max workstreams own exact preset revalidation, official client/CLI
+  execution, and accessibility/layout checks.
+- The existing `FULL_MATCH_SMOKE` deliberately selects developer decks. It
+  remains a compatibility check; official basic and expanded games in each
+  human seat require separate `M4_FULL_SMOKE` evidence.
+- The final gate must fail when authenticated content is missing. `make
+  m4-gate` adds this requirement to the repository gate, and the provisioned
+  CI lane uses it. Synthetic CI remains explicit about its content limit.
+- Checkpoint `2471fcd` preserves a resumable snapshot and replay when a headless
+  full match reaches its cap or stalls without a decision. The focused Match
+  suite passes 6/6, including replay verification of a capped ongoing game.
+- Existing Core schema 17 and Gateway behavior/policy versions remain the
+  integration baseline; no engine rule or serialized-state change is planned.
+
+### 2026-09-05 — reviewed integration checkpoints
+
+- Checkpoint `f271c4d` records DATA-401B: exact published name/code/quantity
+  evidence for all four presets, authenticated runtime resolution, and corrected
+  coverage-report wording. Root independently passed the official two-test
+  preset gate; Luna also passed its synthetic lane and audited the non-UI M4
+  checklist without finding an outstanding prerequisite.
+- Checkpoint `c11cb40` adds direct CLI official preset/seed selection and
+  reproducible cap diagnostics. Synthetic and official focused CLI gates pass
+  13/13. Review covers non-default simulation seeds, no synthetic fallback for
+  official presets, both preset outcomes, saved replay verification, and
+  preserving the original failure if diagnostic output cannot be written.
+- Match publications expose only accepted-action count and public setup-owner
+  telemetry for the client proof. The action-count regression passes and
+  distinguishes both players' accepted actions from thinking publications.
+  Engine schema, card behavior and policy versions are unchanged.
+
+### 2026-09-05 — integration-discovered program cleanup repair
+
+- The official expanded/Corp client proof failed after action 211 with
+  `rules.program-not-installed`. ICE/generic trash could move an installed
+  program to Heap while leaving its memory registration behind. Root moved
+  unregistration to the shared physical movement boundary and removed the
+  redundant domain-specific cleanup calls. Atomic installs retain their one
+  final memory-adjustment event rather than publishing intermediate replacement
+  adjustments.
+- Checkpoint `a6d76da` includes Luna's focused ICE/generic-transfer regressions
+  and four official forced-human-mulligan full-game proofs. Root's complete
+  Core gate passes 796/796. The formerly failing expanded/Corp client game
+  reaches its outcome after 1,094 accepted actions and activates New match to
+  return to fresh setup, both headlessly and in the native macOS renderer.
+- The repair changes no engine schema or serialized fields. Existing install
+  event ordering is preserved; final M2 pin verification remains part of the
+  full gate below.
+
+
+### 2026-09-05 — Slice 4.8 and final M4 gate accepted
+
+- Root reviewed Luna Max's implementation and completed the client integration,
+  official-content gate, keyboard/zoom behavior and engine memory-cleanup repair.
+  `make m4-gate` passes with authenticated embedded System Gateway metadata.
+- All 1,346 solution tests pass: Core 796, Cards 314, AI 59, CLI 68 and
+  Match 109. The provisioned lane additionally passes 13 official CLI tests
+  and two official preset-revalidation tests. Builds have zero warnings/errors;
+  solution formatting, M1/M2 proofs, M3 smoke/responsiveness, earlier M4 smokes,
+  card-data diagnostics and secret scanning pass. Existing M2 pins are unchanged.
+- Generated coverage is 77 registered, tested and complete out of 77; partial,
+  unregistered and diagnostic counts are zero. Official deck quantities and
+  provenance are recorded in [preset revalidation](M4_PRESET_REVALIDATION.md).
+- All four official client games pass at seed 47042, including Corp-then-Runner
+  setup, human mulligan, identities, a turn pair, terminal presentation, actual
+  New match activation and fresh selectable setup:
+
+  | Preset | Human seat | Accepted actions |
+  |---|---|---:|
+  | Basic | Corp | 928 |
+  | Basic | Runner | 1715 |
+  | Expanded | Corp | 1094 |
+  | Expanded | Runner | 964 |
+
+- The strict UX smoke passes setup, five-card hand, dense servers/rig, nested
+  choices, forced discard, run and outcome surfaces using real metadata for all
+  77 cards. Both 1280×720 and 2560×1440 pass forward/reverse keyboard traversal,
+  scroll reachability and layout containment, with zoom focus restoration,
+  reduced motion, text escaping and non-color state cues also verified.
+- Native Godot evidence is recorded in [setup at 1280×720](evidence/slice48/setup-1280x720.png),
+  [board at 1280×720](evidence/slice48/board-1280x720.png),
+  [setup at 2560×1440](evidence/slice48/setup-2560x1440.png) and
+  [board at 2560×1440](evidence/slice48/board-2560x1440.png).
+  UX board screenshots use presentation fixtures with official metadata; the
+  separate full-game smoke matrix exercises real engine actions and reloads.
+- No M4 scope remains deferred. M5 difficulty tuning, user save/resume, LLM
+  play and release packaging remain outside M4. See [the reproducible gate](M4_GATE.md).
