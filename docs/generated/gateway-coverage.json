@@ -951,7 +951,8 @@
       "tests": [
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch1LifecycleTests.SeamlessLaunchIsAbsentWhenNoEligibleCorpInstalledCardExists",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch1LifecycleTests.SeamlessLaunchPlaysThroughRealTurnChoiceAndAdvancesOnlyEligibleCorpInstall",
-        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch1LifecycleTests.SeamlessLaunchRejectsMovedOrCurrentTurnFrozenTargetAtomically"
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch1LifecycleTests.SeamlessLaunchRejectsMovedOrCurrentTurnFrozenTargetAtomically",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch6IdentityAgendaRuntimeTests.SeamlessLaunchPlacesCountersWithoutTriggeringBuiltToLast"
       ],
       "fullTextComplete": true,
       "partial": false,
@@ -1415,6 +1416,7 @@
       "registered": true,
       "tests": [
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch6IdentityAgendaRuntimeTests.RealAdvanceActionRewardsOnlyItsZeroCounterSnapshot",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch6IdentityAgendaRuntimeTests.SeamlessLaunchPlacesCountersWithoutTriggeringBuiltToLast",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch6IdentityAgendaRuntimeTests.WeylandGainsTwoAtAdvanceFromZeroOccurrence"
       ],
       "fullTextComplete": true,

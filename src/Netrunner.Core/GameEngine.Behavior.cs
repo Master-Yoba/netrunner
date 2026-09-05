@@ -3892,6 +3892,10 @@ public static partial class GameEngine
         BehaviorResolutionFrame frame,
         BehaviorInstruction instruction)
     {
+        // This legacy instruction name represents placing advancement counters
+        // (for example Seamless Launch), not taking an advance action. CR 1.18.2
+        // explicitly distinguishes the two: do not emit an advance occurrence
+        // or trigger advance-from-zero abilities for this counter placement.
         IReadOnlyList<CardInstanceId> cardIds = ResolveBehaviorCards(working, frame, instruction.Target);
         if (instruction.Target is { Kind: BehaviorTargetKind.ChosenCard })
         {

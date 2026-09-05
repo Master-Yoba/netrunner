@@ -58,6 +58,26 @@ public sealed class GatewayBatch6TrojanRuntimeTests
         Assert.Empty(moved.RulesState.Programs);
     }
 
+    [Theory]
+    [InlineData("test:ordinary-program")]
+    [InlineData("test:unregistered-program")]
+    public void SavedHostRelationshipRequiresHostingDefinition(string code)
+    {
+        Fixture fixture = Create(code);
+        GameState installed = Install(fixture);
+        Assert.Null(installed.GetCard(ProgramId).HostCardId);
+        string json = EngineJson.Serialize(installed);
+        Assert.Equal(json, EngineJson.Serialize(EngineJson.DeserializeState(json, fixture.Catalog, fixture.Runtime)));
+
+        JsonObject forged = JsonNode.Parse(json)!.AsObject();
+        JsonNode program = forged["cards"]!.AsArray().Single(card => card!["id"]!.GetValue<string>() == ProgramId.Value)!;
+        program["hostCardId"] = IceId.Value;
+        JsonException error = Assert.Throws<JsonException>(() =>
+            EngineJson.DeserializeState(forged.ToJsonString(), fixture.Catalog, fixture.Runtime));
+        StateInvariantException invariant = Assert.IsType<StateInvariantException>(error.GetBaseException());
+        Assert.Contains(invariant.Violations, violation => violation.Code == "hosting.invalid-host");
+    }
+
     [Fact]
     public void TranquilizerChecksEachPlacementAndDerezRetainsInstallation()
     {
@@ -188,6 +208,7 @@ public sealed class GatewayBatch6TrojanRuntimeTests
     {
         BehaviorCatalog catalog = new BehaviorCatalogBuilder(EngineCompatibility.BehaviorRegistryVersion)
             .Add(GatewayBatch6TrojanBehaviorSpecs.GenericSpecs)
+            .Add(new CardBehaviorDefinition(new CardDefinitionId("test:ordinary-program"), PlayerSide.Runner))
             .Add(new CardBehaviorDefinition(new CardDefinitionId("test:trojan-installer"), PlayerSide.Runner,
                 instructions:
                 [

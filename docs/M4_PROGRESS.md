@@ -4564,3 +4564,17 @@ errors; runtime action expansion and full verification remain pending.
   full turns, identities and terminal presentation. The eight-check UI-408
   smoke also passed natively; its [screenshot](evidence/slice47/slice47-ui-smoke.png)
   is a detached presentation fixture, separate from the official game proofs.
+
+### 2026-09-05 — PR #12 feedback
+
+- Accepted the forged-host finding: state validation now requires a card's
+  behavior definition to declare hosting before accepting any host ID. Save
+  tampering regressions cover ordinary and unregistered Runner programs;
+  valid Trojan relationships continue to round-trip.
+- Rejected the proposed Seamless Launch/Built to Last trigger change.
+  Seamless Launch places counters; [CR 1.18.2](https://rules.nullsignal.games/#1.18.2)
+  distinguishes placement from advancing. An actual-play regression verifies
+  two counters are placed without Weyland's two-credit advance reward, and the
+  legacy instruction's counter-placement semantics are documented in Core.
+- Verification: `make verify` passes with 1,332 tests, 77/77 coverage,
+  deterministic proofs, all Godot smokes, formatting and secret scanning.

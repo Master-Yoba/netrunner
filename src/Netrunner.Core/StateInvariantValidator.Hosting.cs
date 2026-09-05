@@ -20,13 +20,13 @@ public static partial class StateInvariantValidator
             }
             CardInstanceState? host = state.Cards.FirstOrDefault(value => value.Id == hostId);
             ZoneState? hostZone = state.Zones.FirstOrDefault(value => value.Id == host?.ZoneId);
-            if (hostId == card.Id || host is null || host.OwnerSide != PlayerSide.Corp
+            if (!requiresHost || hostId == card.Id || host is null || host.OwnerSide != PlayerSide.Corp
                 || hostZone?.Kind != ZoneKind.ServerIce || card.OwnerSide != PlayerSide.Runner
                 || zone?.Kind != ZoneKind.RunnerRig
                 || runtimeCatalog is not null && (!runtimeCatalog.TryGet(host.DefinitionId, out CardRuntimeSpec? spec)
                     || spec.CardClass != RuntimeCardClass.Ice))
             {
-                Add(violations, "hosting.invalid-host", "cards", "Hosted programs require a distinct installed Corp ICE host.");
+                Add(violations, "hosting.invalid-host", "cards", "Hosted programs require a hosting definition and a distinct installed Corp ICE host.");
             }
         }
     }

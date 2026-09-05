@@ -9,6 +9,7 @@ public sealed class GatewayBatch6IdentityAgendaRuntimeTests
     private static readonly CardDefinitionId Filler = new("fixture:filler");
     private static readonly BehaviorCatalog Catalog = new BehaviorCatalogBuilder("fixture:batch6-identities")
         .Add(GatewayBatch6IdentityAgendaBehaviorSpecs.GenericSpecs)
+        .Add(GatewayBatch1BehaviorSpecs.GenericSpecs.Single(definition => definition.DefinitionId == GatewayBatch1CardCodes.SeamlessLaunch))
         .AddAgenda(GatewayBatch6IdentityAgendaBehaviorSpecs.AgendaSpecs)
         .AddAgenda(GatewayAgendaBehaviorSpecs.AgendaSpecs).Build();
     private static readonly RuntimeCardCatalog Runtime = BuildRuntime();
@@ -310,6 +311,29 @@ public sealed class GatewayBatch6IdentityAgendaRuntimeTests
         AssertValid(state);
     }
 
+    [Fact]
+    [Trait("GatewayCard", "30059")]
+    [Trait("GatewayCard", "30040")]
+    public void SeamlessLaunchPlacesCountersWithoutTriggeringBuiltToLast()
+    {
+        GameState state = WithInstalledAgenda(Fixture("30059", ZoneKind.CorpIdentity, seamlessLaunch: true));
+        CardInstanceId agenda = state.Cards.Single(card => card.DefinitionId.Value == "30067").Id;
+        CardInstanceId operation = state.Cards.Single(card => card.DefinitionId == GatewayBatch1CardCodes.SeamlessLaunch).Id;
+        Assert.Equal(0, state.GetCard(agenda).AdvancementCounters);
+        state = GameEngine.BeginTurn(state, PlayerSide.Corp, Catalog, Runtime);
+        for (int step = 0; state.PendingDecision!.Kind != DecisionKind.TurnAction && step < 10; step++)
+            state = Pick(state, action => action.Kind == ActionKind.PassPriority);
+        state = Pick(state, action => action.Parameters is PlayCardParameters play && play.CardId == operation);
+        state = Pick(state, action => action.Parameters is BehaviorChoiceParameters choice && choice.CardIds.Contains(agenda));
+        Assert.Equal(2, state.GetCard(agenda).AdvancementCounters);
+        // Pay the operation's printed 1 credit; placing counters grants no
+        // Built to Last income even though the target started at zero.
+        Assert.Equal(4, state.GetPlayerBySide(PlayerSide.Corp).Credits);
+        Assert.Equal(2, state.GetPlayerBySide(PlayerSide.Corp).Clicks);
+        Assert.Contains(operation, state.GetZone(ZoneKind.CorpDiscard).CardIds);
+        AssertValid(state);
+    }
+
     private static GameState WithInstalledAgenda(GameState state)
     {
         StableIdAllocator allocator = new(state.Allocator);
@@ -418,6 +442,11 @@ public sealed class GatewayBatch6IdentityAgendaRuntimeTests
         foreach (CardBehaviorDefinition definition in Catalog.GenericSpecs)
         {
             bool agenda = Catalog.TryGetAgenda(definition.DefinitionId, out AgendaBehaviorSpec spec);
+            if (definition.DefinitionId == GatewayBatch1CardCodes.SeamlessLaunch)
+            {
+                builder.Add(new CardRuntimeSpec(definition.DefinitionId, PlayerSide.Corp, RuntimeCardClass.Operation, playCost: 1));
+                continue;
+            }
             builder.Add(new CardRuntimeSpec(definition.DefinitionId, definition.Controller,
                 agenda ? RuntimeCardClass.Agenda : definition.DefinitionId.Value == "30066" ? RuntimeCardClass.Upgrade : RuntimeCardClass.Identity,
                 rezCost: definition.DefinitionId.Value == "30066" ? 2 : null,
@@ -430,7 +459,7 @@ public sealed class GatewayBatch6IdentityAgendaRuntimeTests
         return builder.Build();
     }
 
-    private static GameState Fixture(string code, ZoneKind sourceKind, bool facedownArchive = false, bool installedTargets = false, bool deckAgenda = false, int hqCards = 0, int corpDeckCards = 5)
+    private static GameState Fixture(string code, ZoneKind sourceKind, bool facedownArchive = false, bool installedTargets = false, bool deckAgenda = false, int hqCards = 0, int corpDeckCards = 5, bool seamlessLaunch = false)
     {
         GameState baseline = GameState.CreateNew(47042, behaviorRegistryVersion: Catalog.Version,
             behaviorCatalogFingerprint: Catalog.Fingerprint, runtimeCardCatalogVersion: Runtime.Version,
@@ -451,6 +480,8 @@ public sealed class GatewayBatch6IdentityAgendaRuntimeTests
             cards.Add(new(allocator.NextCardInstanceId(), new("fixture:runner-filler"), zones.Single(zone => zone.Kind == ZoneKind.RunnerStack).Id, PlayerSide.Runner));
         }
         for (int i = 0; i < hqCards; i++) cards.Add(new(allocator.NextCardInstanceId(), Filler, zones.Single(zone => zone.Kind == ZoneKind.CorpHand).Id, PlayerSide.Corp));
+        if (seamlessLaunch) cards.Add(new(allocator.NextCardInstanceId(), GatewayBatch1CardCodes.SeamlessLaunch,
+            zones.Single(zone => zone.Kind == ZoneKind.CorpHand).Id, PlayerSide.Corp));
         if (deckAgenda) cards.Add(new(allocator.NextCardInstanceId(), new("30067"), zones.Single(zone => zone.Kind == ZoneKind.CorpDeck).Id, PlayerSide.Corp));
         if (installedTargets)
         {
