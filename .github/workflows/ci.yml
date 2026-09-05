@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   pull_request:
 
 permissions:
@@ -11,33 +11,21 @@ permissions:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        content: [synthetic, official]
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: 1
       DOTNET_NOLOGO: 1
       NUGET_XMLDOC_MODE: skip
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: |
-            8.0.x
-            10.0.x
-          cache: true
-          cache-dependency-path: |
-            Directory.Packages.props
-            **/*.csproj
-      - name: Restore
-        run: dotnet restore Netrunner.sln
-      - name: Build
-        run: dotnet build Netrunner.sln --no-restore --configuration Release
-      - name: Test
-        run: dotnet test Netrunner.sln --no-build --configuration Release
-      - name: Check formatting
-        run: dotnet format Netrunner.sln --no-restore --verify-no-changes
-      - name: Install secret scan dependency
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes ripgrep
-      - name: Check committed secrets
-        run: ./scripts/check-secrets.sh
+      - name: Provision SDK, Godot .NET, and secret scanner
+        run: ./scripts/bootstrap.sh
+      - name: Provision pinned official card data
+        if: matrix.content == 'official'
+        run: ./scripts/update-card-data.sh --commit 236140cf84491c23995b028bc791281837520b97 --retrieval-date 2026-08-28
+      - name: Complete repository gate
+        run: make verify

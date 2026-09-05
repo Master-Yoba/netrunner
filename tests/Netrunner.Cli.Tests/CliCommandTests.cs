@@ -15,7 +15,7 @@ public sealed class CliCommandTests
         GameState state = GameState.CreateNew(42,
             behaviorRegistryVersion: behavior.Version, behaviorCatalogFingerprint: behavior.Fingerprint,
             runtimeCardCatalogVersion: runtime.Version, runtimeCardCatalogFingerprint: runtime.Fingerprint);
-        state = GameEngine.BeginTurn(state, PlayerSide.Runner, behavior, runtime);
+        state = GameEngine.BeginTurn(state, PlayerSide.Corp, behavior, runtime);
         PendingDecision pending = state.PendingDecision!;
         ApplyResult applied = GameEngine.Apply(state,
             new ActionSubmission(pending.Owner, pending.Id, pending.Revision,

@@ -1,6 +1,6 @@
 # M4 progress — System Gateway complete
 
-Status: Slice 4.5 complete on `m4_5`; ready for review into `dev`
+Status: Slice 4.5 merged into `dev`; correctness follow-up on `corrective`
 
 Date started: 31 August 2026
 
@@ -9,10 +9,16 @@ vendored commit `236140cf84491c23995b028bc791281837520b97` (77 designs)
 
 ## Scope
 
-Slices 4.1 through 4.4 of `docs/M4_PLAN.md` are complete and merged. Slice 4.5
-is complete on its feature branch: ENG-419 through ENG-425A, SCN-401, the
+Slices 4.1 through 4.5 of `docs/M4_PLAN.md` are merged. Slice 4.5 includes
+ENG-419 through ENG-425A, SCN-401, the
 seven Batch 4 cards, AGT-401 v4, SIM-401, UI-406, and their exit evidence.
 Later M4 card batches remain out of scope.
+
+The audit found that setup/mulligan and end-to-end client/simulation match
+execution are not delivered by these completion records. Full-turn engine
+proofs and validated simulation fixture documents do not establish that path.
+See [the correctness follow-up](CORRECTNESS_SLICE.md) for repairs and open
+blockers before proceeding to further slices.
 
 ## Baseline
 

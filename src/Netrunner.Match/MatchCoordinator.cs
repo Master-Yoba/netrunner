@@ -314,8 +314,8 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
         }
         catch (Exception exception)
         {
-            activeCommand?.Fail(exception);
             _commands.Writer.TryComplete(exception);
+            activeCommand?.Fail(exception);
             while (_commands.Reader.TryRead(out CoordinatorCommand? command))
             {
                 command.Fail(exception);
@@ -323,8 +323,8 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
         }
         finally
         {
-            activeCommand?.Fail(new OperationCanceledException("The match coordinator stopped."));
             _commands.Writer.TryComplete();
+            activeCommand?.Fail(new OperationCanceledException("The match coordinator stopped."));
             while (_commands.Reader.TryRead(out CoordinatorCommand? command))
             {
                 command.Fail(new OperationCanceledException("The match coordinator stopped."));
