@@ -38,6 +38,55 @@ public sealed class FullMatchCommandTests
         }
     }
 
+    [Fact]
+    public void FullMatchUsesHumanOutputUnlessJsonIsRequested()
+    {
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = CliCommands.Run(["full-match", "--seed", "42"], output, error);
+
+        Assert.Equal(0, exitCode);
+        Assert.Empty(error.ToString());
+        Assert.Contains("full-match=ok", output.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("\"status\"", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("--seed", "invalid", "--json")]
+    [InlineData("--json", "--seed", "invalid")]
+    public void InvalidFullMatchArgumentsReturnStructuredJsonFailureRegardlessOfFlagOrder(params string[] options)
+    {
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = CliCommands.Run(["full-match", .. options], output, error);
+
+        Assert.Equal(1, exitCode);
+        Assert.Empty(error.ToString());
+        using JsonDocument document = JsonDocument.Parse(output.ToString());
+        Assert.Equal("failed", document.RootElement.GetProperty("status").GetString());
+        Assert.Contains("--seed", document.RootElement.GetProperty("message").GetString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FullMatchRuntimeFailureUsesStructuredJsonWhenRequested()
+    {
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        int exitCode = CliCommands.Run(
+            ["simulate", Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}.json"), "--json"],
+            output,
+            error);
+
+        Assert.Equal(1, exitCode);
+        Assert.Empty(error.ToString());
+        using JsonDocument document = JsonDocument.Parse(output.ToString());
+        Assert.Equal("failed", document.RootElement.GetProperty("status").GetString());
+        Assert.False(string.IsNullOrWhiteSpace(document.RootElement.GetProperty("message").GetString()));
+    }
+
     [Theory]
     [InlineData("--seed", "invalid")]
     [InlineData("--unexpected", "42")]
