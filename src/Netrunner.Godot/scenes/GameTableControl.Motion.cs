@@ -60,14 +60,14 @@ public partial class GameTableControl
 				if (previous.TryGetValue(id, out var old))
 				{
 					if (old.Rect.Position.DistanceTo(rect.Position) > 8)
-						AnimateCard(current.Card, old.Rect, rect.Position - GlobalPosition, false);
+						AnimateCard(current.Card, old.Rect, rect.Position - GlobalPosition, current.IsIce, current.BackSide);
 					continue;
 				}
 				// A new face-down slot receives a neutral back, never a card
 				// recovered from an authoritative action or hidden instance ID.
 				Vector2 source = view.RunnerRig.Any(card => card.Id == id)
 					? _localHandScroll.GlobalPosition : _corpHandCaption.GlobalPosition;
-				AnimateCard(current.Card, new Rect2(source, rect.Size), rect.Position - GlobalPosition, current.IsIce);
+				AnimateCard(current.Card, new Rect2(source, rect.Size), rect.Position - GlobalPosition, current.IsIce, current.BackSide);
 			}
 		}).CallDeferred();
 	}
@@ -92,13 +92,14 @@ public partial class GameTableControl
 		tween.TweenCallback(Callable.From(() => { _motionTweens.Remove(tween); _motionCards.Remove(ghost); ghost.QueueFree(); }));
 	}
 
-	private void AnimateCard(CardViewModel? model, Rect2 source, Vector2 destination, bool ice)
+	private void AnimateCard(CardViewModel? model, Rect2 source, Vector2 destination, bool ice, Netrunner.Core.PlayerSide side = Netrunner.Core.PlayerSide.Corp)
 	{
 		TableCardControl ghost = new() { MouseFilter = MouseFilterEnum.Ignore, FocusMode = FocusModeEnum.None, ZIndex = 20 };
 		AddChild(ghost);
 		ghost.MouseFilter = MouseFilterEnum.Ignore;
 		ghost.FocusMode = FocusModeEnum.None;
 		ghost.SetCard(model);
+		ghost.SetBackSide(side);
 		ghost.SetIce(ice);
 		ghost.SetDisplaySize(source.Size);
 		ghost.Position = source.Position - GlobalPosition;

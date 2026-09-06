@@ -129,6 +129,12 @@ public partial class Main
 		try
 		{
 			ResetFullMatchSetupTrace();
+			if (_fullMatchResumeSessionDirectory is not null)
+			{
+				BeginResumedFullMatch();
+				return;
+			}
+
 			PlayerSide humanSide = (PlayerSide)_humanSide.GetSelectedId();
 			if (_fullMatchSmoke && !_m4FullMatchSmoke)
 			{
@@ -162,14 +168,13 @@ public partial class Main
 
 			if (_useCardTable)
 				_matchHistory.ReportHeader = $"Netrunner · seed {seed} · {humanSide} · {corpPresetId} / {runnerPresetId} · {System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(Main).Assembly)?.InformationalVersion ?? "unknown build"}";
-			_coordinator = FullMatchFactory.CreateOfficial(
+			_coordinator = CreateOfficialFullMatchCoordinator(
 				corpPresetId,
 				runnerPresetId,
 				_embeddedCardData!,
 				humanSide,
 				seed: seed,
-				agentDelay: TimeSpan.FromMilliseconds(45),
-				officialPresets: _officialPresetCatalog);
+				officialPresets: _officialPresetCatalog!);
 			_coordinator.SnapshotPublished += QueueSnapshot;
 			_coordinator.SnapshotPublished += CaptureFullMatchSetupSnapshot;
 			_startButton.Disabled = true;
@@ -178,6 +183,7 @@ public partial class Main
 		}
 		catch (Exception exception)
 		{
+			RecordFullMatchException(exception, "begin");
 			_status.Text = $"Match setup failed: {exception.Message}";
 			GD.PushError(exception.ToString());
 			if (_m4FullMatchSmoke)
@@ -248,6 +254,7 @@ public partial class Main
 		}
 		catch (Exception exception)
 		{
+			RecordFullMatchException(exception, "full-match-smoke");
 			GD.PushError(exception.ToString());
 			GD.Print($"M4_FULL_SMOKE FAIL side={_fullMatchSmokeSide} preset={_fullMatchSmokePreset} seed={_fullMatchSmokeSeed} reload=true error={exception.Message}");
 			GetTree().Quit(1);
@@ -423,6 +430,7 @@ public partial class Main
 					diagnosticSnapshot.Feedback,
 				}));
 			}
+			RecordFullMatchException(exception, "full-match-smoke");
 			GD.PushError(exception.ToString());
 			string marker = _m4FullMatchSmoke ? "M4_FULL_SMOKE" : "FULL_MATCH_SMOKE";
 			string details = _m4FullMatchSmoke

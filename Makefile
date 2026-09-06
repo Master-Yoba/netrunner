@@ -55,4 +55,4 @@ m4-gate:
 	./scripts/verify.sh --m4
 
 play:
-	./scripts/play.sh
+	./scripts/play.sh $(PLAY_ARGS)

@@ -12,6 +12,19 @@ public partial class Main
 		{
 			bool screenshots = OS.GetCmdlineUserArgs().Contains("--m4-9-screenshots", StringComparer.Ordinal);
 			bool requireOfficial = OS.GetCmdlineUserArgs().Contains("--require-official-content", StringComparer.Ordinal);
+			// An action prompt can request a name before the first board render.
+			_gameTable.GetServerDisplayName("server:4");
+			if (requireOfficial)
+			{
+				foreach (PlayerSide side in new[] { PlayerSide.Corp, PlayerSide.Runner })
+				{
+					using var back = new TableCardControl();
+					back.SetBackSide(side);
+					if (!back.HasCardBackTexture || back.BackSide != side)
+						throw new InvalidOperationException($"Missing local {side} card back.");
+					back.Free();
+				}
+			}
 			if (requireOfficial && (!_metadataSnapshot.IsOfficial || _metadataSnapshot.CardCount != 77))
 				throw new InvalidOperationException("The M4.9 provisioned gate requires 77 official card designs.");
 			GetWindow().Size = new Vector2I(1280, 720);
@@ -40,6 +53,7 @@ public partial class Main
 				if (_tableHistory.Entries.Count(e => e.Summary.Contains("replaces a card", StringComparison.Ordinal)) != 2)
 					throw new InvalidOperationException("Nico replacement history is incomplete.");
 				if (screenshots) await SaveTableEvidence("nico-table");
+				AssertCentralServerPresentation(_currentSnapshot!.View);
 				_matchHistory.SetExpanded(true);
 				await TableFrames(3);
 				if (screenshots) await SaveTableEvidence("nico-history");
@@ -56,7 +70,8 @@ public partial class Main
 				LegalActionViewModel eventPlay = _currentSnapshot!.View.LegalActions.First(action => action.Parameters is PlayCardParameters);
 				SelectTableCard(((PlayCardParameters)eventPlay.Parameters).CardId.Value);
 				if (!_tableActionButtons.ContainsKey(eventPlay.Id)) throw new InvalidOperationException("Selecting a hand event did not offer its issued play action.");
-				LegalActionViewModel basicRun = _currentSnapshot.View.LegalActions.First(action => action.Parameters is RunServerParameters);
+				string rdId = _currentSnapshot.View.Servers.Single(server => server.Kind == ServerKind.RAndD).Id;
+				LegalActionViewModel basicRun = _currentSnapshot.View.LegalActions.First(action => action.Parameters is RunServerParameters target && target.ServerId.Value == rdId);
 				string laneName = _gameTable.GetServerDisplayName(((RunServerParameters)basicRun.Parameters).ServerId.Value);
 				Button laneButton = FindDescendants<Button>(_gameTable).First(button => button.Text == laneName);
 				await ClickTableButton(laneButton);
@@ -66,10 +81,45 @@ public partial class Main
 				await _coordinator.GetObservationAsync(PlayerSide.Runner);
 				await TableFrames(3);
 				if (_currentSnapshot.View.Run is null) throw new InvalidOperationException("Contextual run action did not start its run.");
+				bool sawAccess = false;
+				for (int step = 0; step < 120 && _currentSnapshot.View.Run is not null; step++)
+				{
+					await _coordinator.GetObservationAsync(PlayerSide.Runner);
+					await TableFrames(3);
+					if (_currentSnapshot.View.Run is null) break;
+					if (_currentSnapshot.IsOpponentThinking || Volatile.Read(ref _submissionInFlight) != 0) continue;
+					if (_stagedAction is not null)
+					{
+						await ClickTableButton(FindDescendants<Button>(_tableActions).Single(button => button.Text == "Confirm"));
+						continue;
+					}
+					LegalActionViewModel next = _currentSnapshot.View.LegalActions.First(action => action.Kind is
+						ActionKind.ContinueRun or ActionKind.PassPriority or ActionKind.ChooseBreachCandidate or ActionKind.NoAccessAction);
+					if (next.Kind == ActionKind.NoAccessAction)
+					{
+						CardViewModel? accessed = _currentSnapshot.View.Run.Access.Accessed[^1];
+						if (accessed is not { IsKnown: true } || !_tableAccessPanel.Visible
+							|| _tableAccessCard.Card?.Id != accessed.Id || _tableAccessTitle.Text != accessed.Title
+							|| !_tableHistory.Entries.Any(entry => entry.Summary.Contains($"accesses {accessed.Title}", StringComparison.Ordinal)))
+							throw new InvalidOperationException("R&D access card or named history missing from the table.");
+						if (_tableActionButtons[next.Id].Text != "Continue access")
+							throw new InvalidOperationException("Access continuation has an unclear label.");
+						GD.Print($"M49_ACCESS_READY action_count={_currentSnapshot.ActionCount}");
+						if (screenshots) await SaveTableEvidence("rd-access");
+						sawAccess = true;
+					}
+					await ClickTableButton(_tableActionButtons[next.Id]);
+				}
+				await _coordinator.GetObservationAsync(PlayerSide.Runner);
+				await TableFrames(3);
+				if (!sawAccess || _currentSnapshot.View.Run is not null || _tableAccessPanel.Visible)
+					throw new InvalidOperationException("R&D access did not finish and clear its panel.");
+				GD.Print("M49_RD_ACCESS PASS seed=47042 visible_card=true named_history=true cleared=true");
 				GD.Print("M49_CONTEXT PASS event_from_hand=true run_from_server=true");
 				_coordinator!.SnapshotPublished -= QueueSnapshot;
 				_coordinator.Dispose();
 				_coordinator = null;
+				CloseFullMatchDiagnostics("m4-9-official-complete");
 				GD.Print("M49_NICO PASS mouse=true replacements=2 hidden_install=true");
 			}
 			(CardViewModel[] sampleHand, IReadOnlyList<ServerViewModel> sampleServers, CardViewModel[] sampleRig) = CreateSlice48Board();
@@ -140,6 +190,7 @@ public partial class Main
 					RenderSnapshot(CreateSlice48Snapshot(view, view.Decision));
 					_matchHistory.SetExpanded(false);
 					await TableFrames(4);
+					AssertCentralServerPresentation(view);
 					Rect2 viewport = GetViewport().GetVisibleRect();
 					if (!viewport.Encloses(_tableActions.GetGlobalRect())
 						|| !viewport.Encloses(_gameTable.GetGlobalRect()))
@@ -326,6 +377,23 @@ public partial class Main
 	private async Task TableFrames(int count)
 	{
 		for (int i = 0; i < count; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+	}
+
+	private void AssertCentralServerPresentation(MatchViewModel view)
+	{
+		ServerViewModel? hq = view.Servers.FirstOrDefault(server => server.Kind == ServerKind.Headquarters);
+		if (hq is null) return; // The dense layout fixture contains only remotes.
+		string[] expected = ["Archives", "R&D", "HQ"];
+		Button[] headers = FindDescendants<Button>(_gameTable)
+			.Where(button => expected.Contains(button.Text, StringComparer.Ordinal))
+			.OrderBy(button => button.GlobalPosition.X).ToArray();
+		if (!headers.Select(button => button.Text).SequenceEqual(expected))
+			throw new InvalidOperationException("Central server labels or left-to-right order are incorrect.");
+		if (_gameTable.GetServerDisplayName(hq.Id) != "HQ"
+			|| _gameTable.VisibleCards.Keys.Any(key => key.StartsWith($"slot:pile:{hq.Id}:", StringComparison.Ordinal)))
+			throw new InvalidOperationException("HQ has a remote label or decorative hand backs.");
+		if (!FindDescendants<Label>(_gameTable).Any(label => label.Text.Replace('\n', ' ') == $"{view.CorpHand.Count} cards in hand"))
+			throw new InvalidOperationException("HQ public hand count is missing.");
 	}
 
 	private async Task SaveTableEvidence(string name)

@@ -262,6 +262,7 @@ public partial class Main : Control
 
 	public override void _ExitTree()
 	{
+		CloseFullMatchDiagnostics("shutdown");
 		if (_coordinator is null)
 		{
 			return;
@@ -574,6 +575,12 @@ public partial class Main : Control
 		}
 		catch (Exception exception)
 		{
+			RecordFullMatchException(exception, "start");
+			_status.Text = $"Match failed to start: {exception.Message}";
+			if (_useCardTable && IsInstanceValid(_tableLastAction))
+			{
+				_tableLastAction.Text = exception.Message;
+			}
 			GD.PushError(exception.ToString());
 			GD.Print($"M3_START FAIL {exception.Message}");
 		}
@@ -1029,6 +1036,7 @@ public partial class Main : Control
 		bool decisionChanged = previous is null
 			|| !SameDecision(previous.View.Decision, snapshot.View.Decision);
 		_currentSnapshot = snapshot;
+		RecordFullMatchDisplayedSnapshot(snapshot);
 		_smokeRunEndedObserved |= _smokeTest
 			&& snapshot.Events.Any(value => value.Kind == EngineEventKinds.RunEnded);
 		if (decisionChanged)
@@ -1154,6 +1162,7 @@ public partial class Main : Control
 		}
 
 		_inspectedCard = card;
+		RecordFullMatchSelection("card-inspect", card.Id);
 		_details.Text = $"{card.Title}\n{card.Type} · {card.DefinitionId}\n"
 			+ (card.AbilityCue is { Length: > 0 } cue ? $"{cue}\n" : string.Empty)
 			+ (card.FirstXUseCue is { Length: > 0 } firstXCue ? $"{firstXCue}\n" : string.Empty)

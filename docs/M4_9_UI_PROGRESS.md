@@ -148,3 +148,63 @@ understanding the replacement without developer explanation. No named player
 session or usability approval has yet been supplied. Remaining layout or
 interaction defects found by that review must be fixed before declaring M4.9
 complete or starting M5.
+
+## Local playtest follow-up: R&D access and macOS focus loss
+
+Seed 47042, default decks, Runner seat:
+
+- The two R&D backs were a decorative stack capped at two, not an access count.
+  R&D now uses one deck back and labels its actual card count.
+- The card table omitted the access presentation available in the diagnostic UI.
+  A bounded access panel now shows the current viewer-visible accessed card and
+  opens its full text. It clears when that access window ends. History also
+  includes the accessed identity from the viewer's observation. The pass option
+  reads “Continue access”; engine-issued trash/ability choices remain authoritative.
+- A separate native crash was reported when switching away during the Runner
+  turn: Godot 4.7.2 mono, SIG11 in `CGFontStrikeRelease`, `CGFontCacheReset`, and
+  `HIApplication::FrontUILost`, followed by process exit 134. This is unresolved.
+  The stack identifies macOS font-cache cleanup during app deactivation; it does
+  not establish whether the engine, OS, or application caused the invalid access.
+  No speculative renderer/font change has been applied. The project uses the
+  default Godot font, with no custom font assets or `SystemFont` instances.
+
+For crash reproduction, start `make play` with seed 47042 and default decks,
+reach the Runner turn, then switch to another app and back. Record the exact
+switch method, macOS build, and full macOS crash report if it recurs. Native UI
+smoke success does not validate this external app-deactivation path.
+
+These follow-up changes include the 1920×1080 default.
+
+Validation: Match tests 125/125 in standard synthetic mode; official Godot build
+and native M4.9 smoke pass, including a mouse-driven regular R&D run at seed
+47042 that shows Government Subsidy, retains its name in history, and clears
+its access panel afterward. The access screenshot was visually reviewed at
+1280×720; existing dense-board checks also pass at 2560×1440 for both seats.
+An initial full Match run in official mode passed 124/125: its remaining fixture
+explicitly asserts synthetic metadata. The standard synthetic run passes it.
+
+## Local follow-up: central servers and card backs
+
+Central lanes now appear as Archives, R&D, HQ, then numbered remotes. Server
+names are registered before rendering run prompts; an unknown lookup cannot
+consume a remote ordinal. HQ shows the public Corp identity and an adjacent
+hand count, preserving installed upgrades and the local playable hand.
+See [the later Corp hand plan](CORP_HAND_PRESENTATION_PLAN.md).
+
+The card renderer loads side-specific `corp.png` and `runner.png` from
+`NETRUNNER_CARD_BACK_DIRECTORY`, or `user://card-backs` when no override exists.
+`make play` points to the ignored `.tools/card-backs` directory. The two NSG
+backs were extracted unchanged from Chiriboga's separate image bundle for this
+local playtest; source URLs and hashes are recorded in that cache's `SOURCE.md`.
+These images are not included in repository assets or covered by the code
+license. No network request occurs during play. Missing local images retain
+the geometric fallback. Back selection uses public zone ownership, including
+motion ghosts, and never looks up a concealed card definition.
+
+Follow-up validation: 801 Core, 138 Match, and 78 CLI tests pass in standard
+mode; the official active-run snapshot export regression also passes. The
+original failing action-35 session replays with its recorded hash and continues
+through the completed Jailbreak run. Native recovery and the official M4.9 UI
+smoke pass, including both seats at 720p/1440p, central labels/order, HQ count,
+both local back textures, access presentation, and keyboard interactions.
+Formatting verification passes. Updated screenshots capture the local assets.

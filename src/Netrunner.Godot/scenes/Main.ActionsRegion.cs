@@ -258,6 +258,11 @@ public partial class Main
 
 	private void SubmitAction(DecisionViewModel decision, LegalActionViewModel action)
 	{
+		if (_fullMatchResumePaused)
+		{
+			_status.Text = "Recovered match is paused · press Continue before choosing an action.";
+			return;
+		}
 		if (_useCardTable && _coordinator?.CurrentSnapshot is { } latest
 			&& (!SameDecision(decision, latest.View.Decision)
 				|| !latest.View.LegalActions.Any(candidate => candidate.Id == action.Id)))
@@ -272,21 +277,36 @@ public partial class Main
 			return;
 		}
 
-		_ = SubmitActionAsync(new ActionSubmission(
+		ActionSubmission submission = new(
 			decision.Owner,
 			new DecisionId(decision.Id),
 			decision.Revision,
-			action.Id));
+			action.Id);
+		RecordFullMatchSubmission(submission, action.Kind);
+		_ = SubmitActionAsync(submission);
 	}
 
 	private async Task SubmitActionAsync(ActionSubmission submission)
 	{
 		try
 		{
-			await _coordinator!.SubmitActionAsync(submission);
+			MatchSubmissionResult result = await _coordinator!.SubmitActionAsync(submission);
+			WriteFullMatchDiagnostic("submission-result", new
+			{
+				accepted = result.Accepted,
+				actionCount = result.Snapshot.ActionCount,
+				sequence = result.Snapshot.Sequence,
+				feedback = result.Feedback,
+			});
 		}
 		catch (Exception exception)
 		{
+			RecordFullMatchException(exception, "submit");
+			_status.Text = $"Action failed: {exception.Message}";
+			if (_useCardTable && IsInstanceValid(_tableLastAction))
+			{
+				_tableLastAction.Text = exception.Message;
+			}
 			GD.PushError(exception.ToString());
 		}
 		finally

@@ -1,5 +1,6 @@
 using System.Text;
 using Godot;
+using Netrunner.Core;
 using Netrunner.Match;
 
 namespace Netrunner.GodotClient;
@@ -23,6 +24,31 @@ public partial class TableCardControl : Control
 
 	private CardViewModel? _card;
 	private Texture2D? _artwork;
+	private PlayerSide _backSide = PlayerSide.Corp;
+	private Texture2D? _backTexture;
+	private static readonly Dictionary<PlayerSide, Texture2D?> BackTextures = new();
+	public PlayerSide BackSide => _backSide;
+	public bool HasCardBackTexture => _backTexture is not null;
+
+	public void SetBackSide(PlayerSide side)
+	{
+		_backSide = side;
+		if (!BackTextures.TryGetValue(side, out _backTexture))
+		{
+			string filename = side == PlayerSide.Corp ? "corp.png" : "runner.png";
+			string? directory = System.Environment.GetEnvironmentVariable("NETRUNNER_CARD_BACK_DIRECTORY");
+			string path = string.IsNullOrWhiteSpace(directory)
+				? $"user://card-backs/{filename}" : System.IO.Path.Combine(directory, filename);
+			if (Godot.FileAccess.FileExists(path))
+			{
+				using Image image = Image.LoadFromFile(path);
+				if (!image.IsEmpty()) _backTexture = ImageTexture.CreateFromImage(image);
+			}
+			BackTextures[side] = _backTexture;
+		}
+		RefreshDynamicPresentation();
+		QueueRedraw();
+	}
 	private Label _title = null!;
 	private Label _type = null!;
 	private Label _stats = null!;
@@ -70,6 +96,7 @@ public partial class TableCardControl : Control
 		TooltipText = "Inspect card details; press Enter or Space to select.";
 
 		BuildLabels();
+		SetBackSide(_backSide);
 		MouseEntered += HandleMouseEntered;
 		MouseExited += HandleMouseExited;
 		FocusEntered += HandleFocusEntered;
@@ -318,6 +345,11 @@ public partial class TableCardControl : Control
 		}
 
 		bool known = _card?.IsKnown == true;
+		bool showText = known || _backTexture is null;
+		_title.Visible = showText;
+		_type.Visible = showText;
+		_stats.Visible = showText;
+		_status.Visible = showText;
 		bool compact = IsCompactPortrait;
 		_title.Text = known ? compact ? CompactTitle(_card!.Title) : _card!.Title : "FACE-DOWN";
 		_title.AutowrapMode = TextServer.AutowrapMode.Off;
@@ -520,6 +552,17 @@ public partial class TableCardControl : Control
 
 	private void DrawNeutralBack(Rect2 cardRect, Color border)
 	{
+		if (_backTexture is not null)
+		{
+			Vector2 available = cardRect.Size - new Vector2(6, 6);
+			if (_isIce) available = new Vector2(available.Y, available.X);
+			Vector2 imageSize = _backTexture.GetSize();
+			Vector2 size = imageSize * Mathf.Min(available.X / imageSize.X, available.Y / imageSize.Y);
+			DrawSetTransform(cardRect.GetCenter(), _isIce ? Mathf.Pi / 2 : 0);
+			DrawTextureRect(_backTexture, new Rect2(-size / 2, size), false);
+			DrawSetTransform(Vector2.Zero);
+			return;
+		}
 		Rect2 inset = new(cardRect.Position + new Vector2(8, 8), cardRect.Size - new Vector2(16, 16));
 		DrawRect(inset, new Color(border.R, border.G, border.B, 0.22f), false, 1.0f);
 		Vector2 center = cardRect.GetCenter();

@@ -54,7 +54,7 @@ internal sealed class MatchHistoryProjector
                     break;
                 case CardAccessedEventPayload access:
                     Reveal(access.CardId.Value);
-                    details.Add($"Runner accesses {Name(access.CardId.Value)}.");
+                    summary = $"Runner accesses {Name(access.CardId.Value)}.";
                     break;
                 case CardPlayStartedEventPayload play:
                     Reveal(play.CardId.Value);
@@ -146,6 +146,7 @@ internal sealed class MatchHistoryProjector
             ActionKind.PassPriority => $"{actor} passes priority.",
             ActionKind.GainCredit => $"{actor} spends a click to gain a credit.",
             ActionKind.DrawCard => $"{actor} spends a click to draw a card.",
+            ActionKind.NoAccessAction => ContinueAccessSummary(),
             ActionKind.UseAbility when action.Parameters is AbilityActionParameters ability => $"{actor} uses {Name(ability.SourceCardId.Value)}.",
             ActionKind.EndTurn => $"{actor} ends their turn.",
             ActionKind.ChooseNumber when before.Turn.Phase == TurnPhase.Setup => $"{actor} resolves their opening-hand choice.",
@@ -174,6 +175,15 @@ internal sealed class MatchHistoryProjector
             if (!known.TryGetValue(id, out CardViewModel? card)) return "a face-down card";
             mentioned[id] = card;
             return card.Title;
+        }
+        string ContinueAccessSummary()
+        {
+            CardViewModel? accessed = before.Run?.Access.Accessed is { Count: > 0 } accesses
+                ? accesses[^1]
+                : null;
+            return accessed is null
+                ? "Runner takes no action during access."
+                : $"Runner continues after accessing {Name(accessed.Id)}.";
         }
         string ServerName(string id) => _serverNames.GetValueOrDefault(id, "server");
         string ZoneName(ZoneId id)
@@ -207,11 +217,20 @@ internal sealed class MatchHistoryProjector
         || destination == ZoneKind.CorpHand && viewer != PlayerSide.Corp
         || destination == ZoneKind.RunnerGrip && viewer != PlayerSide.Runner;
 
-    private static IEnumerable<CardViewModel> Cards(MatchViewModel view) =>
-        view.Servers.SelectMany(server => server.Ice.Concat(server.Root)).OfType<CardViewModel>()
+    private static IEnumerable<CardViewModel> Cards(MatchViewModel view)
+    {
+        IEnumerable<CardViewModel?> runCards = view.Run is { } run
+            ? new CardViewModel?[] { run.CurrentIce, run.Encounter?.Ice, run.InitiatingSource }
+                .Concat(run.Access.Candidates)
+                .Concat(run.Access.Chosen)
+                .Concat(run.Access.Accessed)
+            : Array.Empty<CardViewModel?>();
+        return view.Servers.SelectMany(server => server.Ice.Concat(server.Root)).OfType<CardViewModel>()
             .Concat(view.RunnerRig).Concat(view.CorpHand.VisibleCards).Concat(view.RunnerHand.VisibleCards)
             .Concat(view.CorpScore).Concat(view.RunnerScore).Concat(view.CorpDiscard).Concat(view.RunnerHeap)
-            .Concat(new[] { view.CorpIdentity, view.RunnerIdentity }.OfType<CardViewModel>());
+            .Concat(new[] { view.CorpIdentity, view.RunnerIdentity }.OfType<CardViewModel>())
+            .Concat(runCards.OfType<CardViewModel>());
+    }
 
     private static string Words(string value) => string.Concat(value.Select((c, i) =>
         i > 0 && char.IsUpper(c) ? " " + char.ToLowerInvariant(c) : char.ToLowerInvariant(c).ToString()));

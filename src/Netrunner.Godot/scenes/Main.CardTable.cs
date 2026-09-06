@@ -15,6 +15,9 @@ public partial class Main
 	private Label _tablePrompt = null!;
 	private Label _tableLastAction = null!;
 	private Button _tableInspect = null!;
+	private PanelContainer _tableAccessPanel = null!;
+	private TableCardControl _tableAccessCard = null!;
+	private Label _tableAccessTitle = null!;
 	private string? _tableSelectedCard;
 	private string? _tableSelectedServer;
 	private bool _tableAllActions;
@@ -71,6 +74,7 @@ public partial class Main
 		_gameTable.CardSelected += SelectTableCard;
 		_gameTable.CardInspected += id =>
 		{
+			RecordFullMatchSelection("card-inspect", id);
 			if (_gameTable.VisibleCards.TryGetValue(id, out TableCardControl? control) && control.Card is { IsKnown: true } card)
 			{
 				_inspectedCard = card;
@@ -86,6 +90,7 @@ public partial class Main
 		};
 		_gameTable.ServerSelected += id =>
 		{
+			RecordFullMatchSelection("server", id);
 			if (ShowTablePile(id)) return;
 			_tableSelectedServer = id;
 			_gameTable.SetSelectedServer(id);
@@ -93,6 +98,31 @@ public partial class Main
 			_tableAllActions = false;
 			if (_currentSnapshot is { } snapshot) RenderCardTableActions(snapshot);
 		};
+		_tableAccessPanel = MakePanel();
+		_tableAccessPanel.Visible = false;
+		_tableAccessPanel.Position = new Vector2(12, 12);
+		_tableAccessPanel.CustomMinimumSize = new Vector2(300, 180);
+		tableViewport.AddChild(_tableAccessPanel);
+		HBoxContainer accessRow = new();
+		_tableAccessPanel.AddChild(accessRow);
+		_tableAccessCard = new TableCardControl();
+		accessRow.AddChild(_tableAccessCard);
+		VBoxContainer accessDetails = new() { CustomMinimumSize = new Vector2(180, 0) };
+		accessRow.AddChild(accessDetails);
+		accessDetails.AddChild(new Label { Text = "ACCESSING" });
+		_tableAccessTitle = MakeWrappedLabel("", 16, Accent);
+		accessDetails.AddChild(_tableAccessTitle);
+		Button inspectAccess = new() { Text = "Read card ↗" };
+		inspectAccess.Pressed += () =>
+		{
+			if (_tableAccessCard.Card is { IsKnown: true } card)
+			{
+				_inspectedCard = card;
+				ShowInspectedCardZoom();
+			}
+		};
+		accessDetails.AddChild(inspectAccess);
+		_tableAccessCard.CardSelected += _ => inspectAccess.EmitSignal(BaseButton.SignalName.Pressed);
 		_matchHistory = new MatchHistoryPanel();
 		tableViewport.AddChild(_matchHistory);
 		_matchHistory.InspectCard += card => { _inspectedCard = card; ShowInspectedCardZoom(); };
@@ -136,6 +166,7 @@ public partial class Main
 
 	private void SelectTableCard(string id)
 	{
+		RecordFullMatchSelection("card", id);
 		_tableSelectedCard = id;
 		_tableSelectedServer = null;
 		_tableAllActions = false;
@@ -159,6 +190,11 @@ public partial class Main
 		_gameTable.MotionEnabled = !_reducedMotion.ButtonPressed && !_skipAnimation;
 		_gameTable.MotionDuration = 0.32 / _speed.Value;
 		_gameTable.Render(snapshot.View);
+		CardViewModel? accessed = snapshot.View.Run is { Step: RunTimingStep.BreachAccessAbility, Access.Accessed.Count: > 0 } accessRun
+			? accessRun.Access.Accessed[^1] : null;
+		_tableAccessCard.SetCard(accessed);
+		_tableAccessPanel.Visible = accessed is { IsKnown: true };
+		_tableAccessTitle.Text = accessed?.Title ?? "";
 		_gameTable.SetSelectedServer(_tableSelectedServer);
 		_gameTable.SetSelection(_tableSelectedCard);
 		if (snapshot.History.Count > 0) _tableLastAction.Text = snapshot.History[^1].Summary;
@@ -180,11 +216,24 @@ public partial class Main
 		DecisionViewModel? decision = snapshot.View.Decision;
 		_tablePrompt.Text = snapshot.IsOpponentThinking ? "Opponent is thinking. You can inspect cards and read history."
 			: snapshot.IsTerminal ? "Match complete."
+			: _fullMatchResumePaused ? $"Recovered at action {snapshot.ActionCount}. Continue when ready."
 			: decision is null ? "Waiting for the next decision…"
 			: $"{decision.OwnerSide}: {TablePrompt(decision)}";
 		if (snapshot.View.Run is { } run)
 			_tablePrompt.Text = $"Run on {_gameTable.GetServerDisplayName(run.AttackedServerId)} · {run.Step} · " + _tablePrompt.Text;
 		_gameTable.SetTargets(new HashSet<string>(StringComparer.Ordinal));
+		if (_fullMatchResumePaused && !snapshot.IsTerminal)
+		{
+			Button continueButton = new()
+			{
+				Text = "Continue recovered match",
+				CustomMinimumSize = new Vector2(0, 36),
+				Disabled = _fullMatchResumeContinueInFlight,
+			};
+			continueButton.Pressed += ContinueRecoveredFullMatch;
+			_tableActions.AddChild(continueButton);
+			return;
+		}
 		if (decision is null || snapshot.IsOpponentThinking || snapshot.IsTerminal) return;
 		IReadOnlyList<LegalActionViewModel> all = ActionsRegionPresenter.Present(snapshot).Actions;
 		_gameTable.SetTargets(all.Select(a => TableActionCardId(a.Parameters))
@@ -273,6 +322,7 @@ public partial class Main
 		ActionKind.GainCredit => "Gain 1 credit · 1 click",
 		ActionKind.DrawCard => "Draw a card · 1 click",
 		ActionKind.PassPriority => "Pass priority",
+		ActionKind.NoAccessAction => "Continue access",
 		ActionKind.EndTurn => "End turn",
 		ActionKind.StartRun when action.Parameters is RunServerParameters run => $"Run {_gameTable.GetServerDisplayName(run.ServerId.Value)} · 1 click",
 		ActionKind.RezCard when action.Parameters is RezCardParameters rez => $"Rez {FriendlyText(rez.CardId.Value)} · {rez.CreditCost} credits",
@@ -288,6 +338,8 @@ public partial class Main
 
 	private string FriendlyText(string text)
 	{
+		if (_tableAccessCard.Card is { IsKnown: true } accessed)
+			text = text.Replace(accessed.Id, accessed.Title, StringComparison.Ordinal);
 		foreach ((string id, TableCardControl control) in _gameTable.VisibleCards.OrderByDescending(pair => pair.Key.Length))
 			text = text.Replace(id, control.Card?.Title ?? "face-down card", StringComparison.Ordinal);
 		text = Regex.Replace(text, @"server:\d+", match => _gameTable.GetServerDisplayName(match.Value));

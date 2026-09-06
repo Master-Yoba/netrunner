@@ -140,19 +140,25 @@ public partial class GameTableControl : Control
 			return "Server";
 		}
 
+		if (_serverKinds.TryGetValue(serverId, out ServerKind knownKind)
+			&& knownKind != ServerKind.Remote)
+		{
+			// The engine's central-server kind is authoritative. Rewriting the
+			// cached value also repairs a label that was allocated before the
+			// server appeared in an observation.
+			string authoritative = DisplayNameForKind(knownKind, 0);
+			_serverDisplayNames[serverId] = authoritative;
+			return authoritative;
+		}
+
 		if (_serverDisplayNames.TryGetValue(serverId, out string? existing))
 		{
 			return existing;
 		}
 
-		if (_serverKinds.TryGetValue(serverId, out ServerKind knownKind))
-		{
-			return DisplayNameForKind(knownKind, 0);
-		}
-
-		string fallback = $"Remote {_nextRemoteDisplayNumber++}";
-		_serverDisplayNames[serverId] = fallback;
-		return fallback;
+		// A caller may ask for the run label before the server list has been
+		// reconciled. An unknown ID must not consume a remote ordinal.
+		return "Server";
 	}
 
 	public override void _Ready()
@@ -454,6 +460,7 @@ public partial class GameTableControl : Control
 
 	private void RenderView(MatchViewModel view)
 	{
+		CacheServerDisplayNames(view.Servers);
 		_turnLabel.Text = FormatTurn(view);
 		_runLabel.Text = FormatRun(view);
 		_corpResources.Text = FormatResources(view.Corp);
@@ -525,11 +532,8 @@ public partial class GameTableControl : Control
 		MatchViewModel view,
 		Dictionary<string, TableCardControl> nextVisibleCards)
 	{
-		bool corpLocal = view.Viewer == PlayerSide.Corp;
 		bool runnerLocal = view.Viewer == PlayerSide.Runner;
-		_corpHandCaption.Text = corpLocal
-			? $"HQ · {view.CorpHand.Count} cards · local"
-			: $"HQ · {view.CorpHand.Count} cards · opponent backs";
+		_corpHandCaption.Text = $"HQ · {view.CorpHand.Count} cards";
 		_runnerHandCaption.Text = runnerLocal
 			? $"Grip · {view.RunnerHand.Count} cards · local"
 			: $"Grip · {view.RunnerHand.Count} cards · opponent backs";
@@ -553,14 +557,7 @@ public partial class GameTableControl : Control
 		MatchViewModel view,
 		Dictionary<string, TableCardControl> nextVisibleCards)
 	{
-		foreach (ServerViewModel server in view.Servers)
-		{
-			_serverKinds[server.Id] = server.Kind;
-			if (!_serverDisplayNames.ContainsKey(server.Id))
-			{
-				_serverDisplayNames[server.Id] = AllocateServerDisplayName(server, view.Servers);
-			}
-		}
+		CacheServerDisplayNames(view.Servers);
 
 		IReadOnlyList<ServerViewModel> ordered = view.Servers
 			.OrderBy(static server => ServerKindRank(server.Kind))
@@ -599,20 +596,21 @@ public partial class GameTableControl : Control
 				: server.Kind == ServerKind.Archives
 					? "ROOT · public archive"
 					: server.Kind == ServerKind.RAndD
-						? "ROOT · deck stack"
+						? $"R&D DECK · {view.CorpDeck.Count} cards"
 						: "ROOT · HQ";
 
 			ClearNonCardChildren(lane.RootCards);
+			lane.RootCards.AddThemeConstantOverride("separation", server.Kind == ServerKind.Headquarters ? 8 : -18);
 			ClearNonCardChildren(lane.IceCards);
 			RenderServerRoot(
 				server,
 				lane.RootCards,
 				server.Kind == ServerKind.Headquarters ? view.CorpIdentity : null,
+				server.Kind == ServerKind.Headquarters ? view.CorpHand.Count : null,
 				nextVisibleCards);
-			if (server.Kind is ServerKind.RAndD or ServerKind.Headquarters)
+			if (server.Kind == ServerKind.RAndD)
 			{
-				int count = server.Kind == ServerKind.RAndD ? view.CorpDeck.Count : view.CorpHand.Count;
-				for (int back = 0; back < Math.Min(count, 2); back++)
+				for (int back = 0; back < Math.Min(view.CorpDeck.Count, 1); back++)
 					EnsureCard($"pile:{server.Id}:{back}", lane.RootCards, null, false, nextVisibleCards);
 			}
 			if (server.Kind == ServerKind.Archives && view.CorpDiscard.Count > 0)
@@ -620,14 +618,21 @@ public partial class GameTableControl : Control
 			RenderServerIce(server, lane.IceCards, nextVisibleCards);
 		}
 
+		int visibleIndex = 0;
+		foreach (ServerViewModel server in ordered)
+		{
+			ServerLaneParts lane = _serverLanes[server.Id];
+			if (lane.Panel.GetParent() != _serverLaneRow)
+			{
+				_serverLaneRow.AddChild(lane.Panel);
+			}
+			_serverLaneRow.MoveChild(lane.Panel, visibleIndex++);
+		}
+
 		foreach ((string id, ServerLaneParts lane) in _serverLanes)
 		{
 			if (currentServerIds.Contains(id))
 			{
-				if (lane.Panel.GetParent() != _serverLaneRow)
-				{
-					_serverLaneRow.AddChild(lane.Panel);
-				}
 				continue;
 			}
 
@@ -640,6 +645,7 @@ public partial class GameTableControl : Control
 		ServerViewModel server,
 		HBoxContainer rootCards,
 		CardViewModel? corpIdentity,
+		int? corpHandCount,
 		Dictionary<string, TableCardControl> nextVisibleCards)
 	{
 		int index = 0;
@@ -647,6 +653,14 @@ public partial class GameTableControl : Control
 		{
 			TableCardControl identity = EnsureCard("corp-identity", rootCards, corpIdentity, false, nextVisibleCards);
 			SetCompactCard(identity, new Vector2(70, 98));
+		}
+		if (corpHandCount is { } handCount)
+		{
+			Label handLabel = MakeLabel($"{handCount} cards\nin hand", 10, MutedColor);
+			handLabel.CustomMinimumSize = new Vector2(78, 0);
+			handLabel.VerticalAlignment = VerticalAlignment.Center;
+			rootCards.AddChild(handLabel);
+			rootCards.MoveChild(handLabel, corpIdentity is not null ? 1 : 0);
 		}
 		foreach (CardViewModel? card in server.OrderedRoot)
 		{
@@ -678,7 +692,13 @@ public partial class GameTableControl : Control
 				EnsureCard(slot, stack, card, true, nextVisibleCards);
 				for (int index = 0; index < hosted.Length; index++)
 				{
-					TableCardControl attachment = EnsureCard($"hosted:{hosted[index].Id}", stack, hosted[index], false, nextVisibleCards);
+					TableCardControl attachment = EnsureCard(
+						$"hosted:{hosted[index].Id}",
+						stack,
+						hosted[index],
+						false,
+						nextVisibleCards,
+						PlayerSide.Runner);
 					attachment.SetDisplaySize(new Vector2(60, 84));
 					attachment.Position = new Vector2(22 + 14 * index, 20);
 					attachment.TooltipText = $"Hosted on {card?.Title ?? "face-down ICE"}\n" + attachment.TooltipText;
@@ -761,7 +781,13 @@ public partial class GameTableControl : Control
 		IReadOnlyList<CardViewModel> attachments,
 		Dictionary<string, TableCardControl> nextVisibleCards)
 	{
-		TableCardControl hostControl = EnsureCard($"rig:{host.Id}", slot, host, false, nextVisibleCards);
+		TableCardControl hostControl = EnsureCard(
+			$"rig:{host.Id}",
+			slot,
+			host,
+			false,
+			nextVisibleCards,
+			PlayerSide.Runner);
 		hostControl.Position = Vector2.Zero;
 		foreach ((CardViewModel attachment, int index) in attachments.Select((card, index) => (card, index)))
 		{
@@ -770,7 +796,8 @@ public partial class GameTableControl : Control
 				slot,
 				attachment,
 				false,
-				nextVisibleCards);
+				nextVisibleCards,
+				PlayerSide.Runner);
 			attachmentControl.CustomMinimumSize = new Vector2(60, 84);
 			attachmentControl.Position = new Vector2(22 + (index * 13), 18 + (index * 7));
 			attachmentControl.ZIndex = index + 2;
@@ -795,7 +822,13 @@ public partial class GameTableControl : Control
 		}
 		foreach (CardViewModel card in cards)
 		{
-			EnsureCard($"{zone}:{card.Id}", _localHandRow, card, false, nextVisibleCards);
+			EnsureCard(
+				$"{zone}:{card.Id}",
+				_localHandRow,
+				card,
+				false,
+				nextVisibleCards,
+				corpLocal ? PlayerSide.Corp : PlayerSide.Runner);
 		}
 	}
 
@@ -900,7 +933,8 @@ public partial class GameTableControl : Control
 		Control parent,
 		CardViewModel? model,
 		bool isIce,
-		Dictionary<string, TableCardControl> nextVisibleCards)
+		Dictionary<string, TableCardControl> nextVisibleCards,
+		PlayerSide? backSide = null)
 	{
 		string identity = model is { Id.Length: > 0 }
 			? $"card:{model.Id}"
@@ -929,6 +963,7 @@ public partial class GameTableControl : Control
 			_cardModels[identity] = model;
 		}
 		control.SetIce(isIce);
+		control.SetBackSide(backSide ?? BackSideForSlot(slot));
 		control.Scale = Vector2.One;
 		{
 			control.SetDisplaySize(isIce ? new Vector2(160, 58) : new Vector2(70, 98));
@@ -937,6 +972,15 @@ public partial class GameTableControl : Control
 		string publicKey = model?.Id is { Length: > 0 } id ? id : slot;
 		nextVisibleCards[publicKey] = control;
 		return control;
+	}
+
+	private static PlayerSide BackSideForSlot(string slot)
+	{
+		return slot.StartsWith("runner-", StringComparison.Ordinal)
+			|| slot.StartsWith("rig:", StringComparison.Ordinal)
+			|| slot.StartsWith("hosted:", StringComparison.Ordinal)
+			? PlayerSide.Runner
+			: PlayerSide.Corp;
 	}
 
 	private static void SetCompactCard(TableCardControl control, Vector2 layoutSize)
@@ -1214,7 +1258,26 @@ public partial class GameTableControl : Control
 		return $"RUN · {GetServerDisplayName(run.AttackedServerId)} · {run.FocusLabel}";
 	}
 
-	private string AllocateServerDisplayName(ServerViewModel server, IReadOnlyList<ServerViewModel> allServers)
+	private void CacheServerDisplayNames(IReadOnlyList<ServerViewModel> servers)
+	{
+		foreach (ServerViewModel server in servers)
+		{
+			_serverKinds[server.Id] = server.Kind;
+			if (server.Kind != ServerKind.Remote)
+			{
+				// Central names come from the server kind on every observation. This
+				// prevents a prior fallback from surviving once the authoritative
+				// server list is available.
+				_serverDisplayNames[server.Id] = DisplayNameForKind(server.Kind, 0);
+			}
+			else if (!_serverDisplayNames.ContainsKey(server.Id))
+			{
+				_serverDisplayNames[server.Id] = AllocateServerDisplayName(server);
+			}
+		}
+	}
+
+	private string AllocateServerDisplayName(ServerViewModel server)
 	{
 		if (server.Kind != ServerKind.Remote)
 		{
@@ -1241,9 +1304,9 @@ public partial class GameTableControl : Control
 
 	private static int ServerKindRank(ServerKind kind) => kind switch
 	{
-		ServerKind.Headquarters => 0,
+		ServerKind.Archives => 0,
 		ServerKind.RAndD => 1,
-		ServerKind.Archives => 2,
+		ServerKind.Headquarters => 2,
 		_ => 3,
 	};
 

@@ -276,6 +276,119 @@ public sealed class FirstHqBreachAccessModifierTests
     }
 
     [Fact]
+    public void MovingHiddenAgendaOutOfHandKeepsRemainingAccessCursorValid()
+    {
+        Fixture fixture = CreateFixture(
+            includeSource: true,
+            hiddenIsAgenda: true,
+            handCards:
+            [
+                new CardInstanceId("card:first-hq-hand-one"),
+                new CardInstanceId("card:first-hq-hand-two"),
+                new CardInstanceId("card:first-hq-hand-three"),
+            ]);
+        BreachCursor breach = BeginBreach(fixture, ServerKind.Headquarters);
+        Assert.Equal(2, breach.State.RunState!.RandomAccessLimit);
+
+        LegalAction hiddenToken = Assert.Single(breach.State.PendingDecision!.LegalActions);
+        ApplyResult chosen = Apply(breach.State, hiddenToken, fixture.Catalog);
+        Assert.True(chosen.Accepted, chosen.Rejection?.Message);
+        Assert.Equal(1, chosen.State.RunState!.RandomAccessLimit);
+
+        ApplyResult stolen = Apply(
+            chosen.State,
+            Assert.Single(chosen.State.PendingDecision!.LegalActions),
+            fixture.Catalog);
+        Assert.True(stolen.Accepted, stolen.Rejection?.Message);
+        Assert.Equal(RunTimingStep.BreachCandidateSelection, stolen.State.RunState!.Step);
+        Assert.Equal(1, stolen.State.RunState.RandomAccessLimit);
+        CardInstanceId accessed = chosen.State.RunState!.ChosenAccessCards[^1];
+        Assert.Equal(
+            stolen.State.GetZone(ZoneKind.RunnerScore).Id,
+            stolen.State.GetCard(accessed).ZoneId);
+        Assert.DoesNotContain(
+            StateInvariantValidator.Collect(stolen.State, fixture.Catalog),
+            violation => violation.Code == "run.random-access-limit-mismatch");
+
+        RunState stolenRun = stolen.State.RunState!;
+        RunState forgedMoved = CopyRun(
+            stolenRun,
+            randomAccessLimit: stolenRun.RandomAccessLimit + 2);
+        Assert.Contains(
+            StateInvariantValidator.Collect(ReplaceRun(stolen.State, forgedMoved), fixture.Catalog),
+            violation => violation.Code == "run.random-access-limit-mismatch");
+    }
+
+    [Fact]
+    public void MovingRootAgendaOutOfRootDoesNotConsumeHiddenAccess()
+    {
+        Fixture fixture = CreateFixture(
+            includeSource: true,
+            hiddenIsAgenda: true,
+            handCards:
+            [
+                new CardInstanceId("card:first-hq-hand-one"),
+                new CardInstanceId("card:first-hq-hand-two"),
+                new CardInstanceId("card:first-hq-hand-three"),
+            ],
+            hqRootCards: [new CardInstanceId("card:first-hq-root-one")]);
+        BreachCursor breach = BeginBreach(fixture, ServerKind.Headquarters);
+        Assert.Equal(2, breach.State.RunState!.RandomAccessLimit);
+
+        CardInstanceId rootCard = new("card:first-hq-root-one");
+        LegalAction rootCandidate = Assert.Single(
+            breach.State.PendingDecision!.LegalActions,
+            action => (action.Parameters as BreachCandidateParameters)?.CardId == rootCard);
+        ApplyResult chosen = Apply(breach.State, rootCandidate, fixture.Catalog);
+        Assert.True(chosen.Accepted, chosen.Rejection?.Message);
+        Assert.Equal(2, chosen.State.RunState!.RandomAccessLimit);
+
+        ApplyResult stolen = Apply(
+            chosen.State,
+            Assert.Single(chosen.State.PendingDecision!.LegalActions),
+            fixture.Catalog);
+        Assert.True(stolen.Accepted, stolen.Rejection?.Message);
+        Assert.Equal(2, stolen.State.RunState!.RandomAccessLimit);
+        Assert.Equal(
+            stolen.State.GetZone(ZoneKind.RunnerScore).Id,
+            stolen.State.GetCard(rootCard).ZoneId);
+        Assert.DoesNotContain(
+            StateInvariantValidator.Collect(stolen.State, fixture.Catalog),
+            violation => violation.Code == "run.random-access-limit-mismatch");
+    }
+
+    [Fact]
+    public void MovingTheLastHiddenAgendaOutOfASmallPoolLeavesZeroCursorValid()
+    {
+        Fixture fixture = CreateFixture(
+            includeSource: true,
+            hiddenIsAgenda: true,
+            handCards: [new CardInstanceId("card:first-hq-hand-one")],
+            hqRootCards: [new CardInstanceId("card:first-hq-root-one")]);
+        BreachCursor breach = BeginBreach(fixture, ServerKind.Headquarters);
+        Assert.Equal(1, breach.State.RunState!.RandomAccessLimit);
+
+        LegalAction hiddenToken = Assert.Single(
+            breach.State.PendingDecision!.LegalActions,
+            action => Assert.IsType<BreachCandidateParameters>(action.Parameters).Source
+                == BreachHiddenCandidateSource.CorpHand);
+        ApplyResult chosen = Apply(breach.State, hiddenToken, fixture.Catalog);
+        Assert.True(chosen.Accepted, chosen.Rejection?.Message);
+        Assert.Equal(0, chosen.State.RunState!.RandomAccessLimit);
+
+        ApplyResult stolen = Apply(
+            chosen.State,
+            Assert.Single(chosen.State.PendingDecision!.LegalActions),
+            fixture.Catalog);
+        Assert.True(stolen.Accepted, stolen.Rejection?.Message);
+        Assert.Equal(RunTimingStep.BreachCandidateSelection, stolen.State.RunState!.Step);
+        Assert.Equal(0, stolen.State.RunState.RandomAccessLimit);
+        Assert.DoesNotContain(
+            StateInvariantValidator.Collect(stolen.State, fixture.Catalog),
+            violation => violation.Code == "run.random-access-limit-mismatch");
+    }
+
+    [Fact]
     public void ForgedSourceKindDeclarationLedgerAndAccessQuoteAreRejectedByInvariants()
     {
         Fixture fixture = CreateFixture(
@@ -428,7 +541,8 @@ public sealed class FirstHqBreachAccessModifierTests
     private static BehaviorCatalog CreateCatalog(
         bool includeSecondSource,
         int firstDelta,
-        int secondDelta)
+        int secondDelta,
+        bool hiddenIsAgenda = false)
     {
         BehaviorCatalogBuilder builder = new("test:first-hq-catalog");
         builder.Add(new CardBehaviorDefinition(
@@ -444,6 +558,11 @@ public sealed class FirstHqBreachAccessModifierTests
                 [new BehaviorFirstHqBreachAccessModifier(secondDelta, "second-first-hq-test")]));
         }
 
+        if (hiddenIsAgenda)
+        {
+            builder.AddAgenda(new AgendaBehaviorSpec(HiddenDefinition, agendaPoints: 2));
+        }
+
         return builder.Build();
     }
 
@@ -452,10 +571,12 @@ public sealed class FirstHqBreachAccessModifierTests
         bool includeSecondSource = false,
         int firstDelta = 1,
         int secondDelta = 1,
+        bool hiddenIsAgenda = false,
         IReadOnlyList<CardInstanceId>? handCards = null,
-        IReadOnlyList<CardInstanceId>? deckCards = null)
+        IReadOnlyList<CardInstanceId>? deckCards = null,
+        IReadOnlyList<CardInstanceId>? hqRootCards = null)
     {
-        BehaviorCatalog catalog = CreateCatalog(includeSecondSource, firstDelta, secondDelta);
+        BehaviorCatalog catalog = CreateCatalog(includeSecondSource, firstDelta, secondDelta, hiddenIsAgenda);
         GameState baseline = GameState.CreateNew(
             seed: 41601,
             behaviorRegistryVersion: catalog.Version,
@@ -463,6 +584,8 @@ public sealed class FirstHqBreachAccessModifierTests
         ZoneState rig = baseline.GetZone(ZoneKind.RunnerRig);
         ZoneState hand = baseline.GetZone(ZoneKind.CorpHand);
         ZoneState deck = baseline.GetZone(ZoneKind.CorpDeck);
+        ServerState headquarters = baseline.Servers.Single(server => server.Kind == ServerKind.Headquarters);
+        ZoneState hqRoot = baseline.GetZone(headquarters.RootZoneId);
         List<CardInstanceState> cards = [];
         List<CardInstanceId> rigCards = [];
         if (includeSource)
@@ -489,13 +612,21 @@ public sealed class FirstHqBreachAccessModifierTests
             cards.Add(new CardInstanceState(cardId, HiddenDefinition, deck.Id, PlayerSide.Corp));
         }
 
+        CardInstanceId[] hqRootIds = hqRootCards?.ToArray() ?? [];
+        foreach (CardInstanceId cardId in hqRootIds)
+        {
+            cards.Add(new CardInstanceState(cardId, HiddenDefinition, hqRoot.Id, PlayerSide.Corp));
+        }
+
         ZoneState[] zones = baseline.Zones.Select(zone => zone.Id == rig.Id
                 ? new ZoneState(zone.Id, zone.Kind, zone.OwnerSide, zone.ServerId, rigCards)
                 : zone.Id == hand.Id
                     ? new ZoneState(zone.Id, zone.Kind, zone.OwnerSide, zone.ServerId, handIds)
                     : zone.Id == deck.Id
                         ? new ZoneState(zone.Id, zone.Kind, zone.OwnerSide, zone.ServerId, deckIds)
-                        : zone)
+                        : zone.Id == hqRoot.Id
+                            ? new ZoneState(zone.Id, zone.Kind, zone.OwnerSide, zone.ServerId, hqRootIds)
+                            : zone)
             .ToArray();
         PlayerState[] players = baseline.Players
             .Select(player => player.Side == PlayerSide.Runner
@@ -792,7 +923,10 @@ public sealed class FirstHqBreachAccessModifierTests
         source.ActiveRunEventId,
         source.LingeringEffects,
         modifiers ?? source.BreachAccessModifiers,
-        source.RezCostModifiers);
+        source.RezCostModifiers,
+        source.RunRestrictions,
+        source.ResolvedSubroutineLedger,
+        source.PersistentContext);
 
     private sealed record Fixture(
         GameState State,

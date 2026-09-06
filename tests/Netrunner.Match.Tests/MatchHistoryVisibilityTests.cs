@@ -97,6 +97,54 @@ public sealed class MatchHistoryVisibilityTests
     }
 
     [Fact]
+    public void RegularRAndDAccessUsesTheAccessedCardInHistorySummary()
+    {
+        GameState state = RepresentativeState();
+        CardViewModel accessed = VisibleCard("card:rd-access", "R&D Asset");
+        MatchViewModel before = EmptyView();
+        MatchViewModel after = WithAccess(before, accessed);
+
+        MatchHistoryEntry entry = Project(
+            NewProjector(),
+            before,
+            after,
+            state,
+            [new EngineEvent(
+                1,
+                EngineEventKinds.CardAccessed,
+                new CardAccessedEventPayload(
+                    new RunId("run:rd-access"),
+                    new ServerId("server:rd"),
+                    new CardInstanceId(accessed.Id)))],
+            PlayerSide.Runner,
+            Action(ActionKind.ChooseBreachCandidate)).Single();
+
+        Assert.Equal("Runner accesses R&D Asset.", entry.Summary);
+        Assert.Contains(entry.Cards, card => card.Title == accessed.Title);
+        Assert.DoesNotContain("choose breach candidate", entry.Summary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void NoAccessActionSummarizesContinuingAfterTheCurrentAccess()
+    {
+        GameState state = RepresentativeState();
+        CardViewModel accessed = VisibleCard("card:rd-no-action", "R&D Upgrade");
+        MatchViewModel before = WithAccess(EmptyView(), accessed);
+
+        MatchHistoryEntry entry = Project(
+            NewProjector(),
+            before,
+            before,
+            state,
+            Array.Empty<EngineEvent>(),
+            PlayerSide.Runner,
+            Action(ActionKind.NoAccessAction)).Single();
+
+        Assert.Equal("Runner continues after accessing R&D Upgrade.", entry.Summary);
+        Assert.Contains(entry.Cards, card => card.Title == accessed.Title);
+    }
+
+    [Fact]
     public void AutomaticCorpRezIsAttributedToCorpRatherThanSubmittedRunnerAction()
     {
         GameState state = RepresentativeState();
@@ -405,6 +453,32 @@ public sealed class MatchHistoryVisibilityTests
         Array.Empty<LegalActionViewModel>())
     {
         Turn = new TurnViewModel(true, PlayerSide.Corp, TurnPhase.Corp, TurnStep.CorpAction, 1, null),
+    };
+
+    private static MatchViewModel WithAccess(MatchViewModel view, CardViewModel accessed) => view with
+    {
+        Run = new RunFocusViewModel(
+            "run:rd-access",
+            "server:rd",
+            PlayerSide.Runner,
+            RunCrPhase.Success,
+            RunTimingStep.BreachAccessAbility,
+            -1,
+            null,
+            true,
+            false,
+            null,
+            null,
+            null,
+            new AccessViewModel(
+                Array.Empty<CardViewModel?>(),
+                1,
+                null,
+                Array.Empty<CardViewModel?>(),
+                [accessed],
+                RunAccessState.InProgress),
+            0,
+            null),
     };
 
     private static CardViewModel VisibleCard(string id, string title) => new(
