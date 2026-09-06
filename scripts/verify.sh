@@ -338,12 +338,17 @@ cat "$slice48_ux_smoke_log"
 m49_ui_smoke_log="$coverage_report_dir/m49-ui-smoke.log"
 m49_ui_content_args=("${slice48_content_args[@]}")
 m49_ui_content_env=()
+card_back_dir="$verify_root/.tools/card-backs"
 if ((card_data_content_enabled == 1)); then
   m49_ui_content_env=(
     NetrunnerContentEnabled=true
     NetrunnerCardDataMode=official
     NetrunnerCardDataInputRoot="$card_data_dir"
   )
+  # Local official card backs are never committed; use the provisioned copy.
+  if [[ -d "$card_back_dir" ]]; then
+    m49_ui_content_env+=(NETRUNNER_CARD_BACK_DIRECTORY="$card_back_dir")
+  fi
 fi
 if ! run_with_timeout 120 env "${m49_ui_content_env[@]}" XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
   "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \
