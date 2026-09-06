@@ -37,12 +37,20 @@ public partial class TableCardControl : Control
 		{
 			string filename = side == PlayerSide.Corp ? "corp.png" : "runner.png";
 			string? directory = System.Environment.GetEnvironmentVariable("NETRUNNER_CARD_BACK_DIRECTORY");
-			string path = string.IsNullOrWhiteSpace(directory)
-				? $"user://card-backs/{filename}" : System.IO.Path.Combine(directory, filename);
-			if (Godot.FileAccess.FileExists(path))
+			string[] candidates = string.IsNullOrWhiteSpace(directory)
+				? new[] { $"user://card-backs/{filename}", $"res://card-backs/{filename}" }
+				: new[] { System.IO.Path.Combine(directory, filename), $"user://card-backs/{filename}", $"res://card-backs/{filename}" };
+			foreach (string path in candidates)
 			{
-				using Image image = Image.LoadFromFile(path);
-				if (!image.IsEmpty()) _backTexture = ImageTexture.CreateFromImage(image);
+				if (Godot.FileAccess.FileExists(path))
+				{
+					using Image image = Image.LoadFromFile(path);
+					if (!image.IsEmpty())
+					{
+						_backTexture = ImageTexture.CreateFromImage(image);
+						break;
+					}
+				}
 			}
 			BackTextures[side] = _backTexture;
 		}

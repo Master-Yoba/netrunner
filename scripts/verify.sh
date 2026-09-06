@@ -345,7 +345,8 @@ if ((card_data_content_enabled == 1)); then
     NetrunnerCardDataMode=official
     NetrunnerCardDataInputRoot="$card_data_dir"
   )
-  # Local official card backs are never committed; use the provisioned copy.
+  # Prefer the provisioned local copy; CI falls back to the committed
+  # res://card-backs defaults.
   if [[ -d "$card_back_dir" ]]; then
     m49_ui_content_env+=(NETRUNNER_CARD_BACK_DIRECTORY="$card_back_dir")
   fi

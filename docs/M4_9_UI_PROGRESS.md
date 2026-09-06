@@ -193,14 +193,17 @@ hand count, preserving installed upgrades and the local playable hand.
 See [the later Corp hand plan](CORP_HAND_PRESENTATION_PLAN.md).
 
 The card renderer loads side-specific `corp.png` and `runner.png` from
-`NETRUNNER_CARD_BACK_DIRECTORY`, or `user://card-backs` when no override exists.
-`make play` points to the ignored `.tools/card-backs` directory. The two NSG
-backs were extracted unchanged from Chiriboga's separate image bundle for this
-local playtest; source URLs and hashes are recorded in that cache's `SOURCE.md`.
-These images are not included in repository assets or covered by the code
-license. No network request occurs during play. Missing local images retain
-the geometric fallback. Back selection uses public zone ownership, including
-motion ghosts, and never looks up a concealed card definition.
+`NETRUNNER_CARD_BACK_DIRECTORY`, then `user://card-backs`, then the committed
+`res://card-backs` default so the official CI gate can load them. `make play`
+still points to the ignored `.tools/card-backs` directory, which overrides the
+committed copies locally. The two NSG backs were extracted unchanged from
+Chiriboga's separate image bundle; source URLs, hashes, and the license note
+are recorded in `src/Netrunner.Godot/card-backs/SOURCE.md`. Committing them is
+a for-now CI parity measure while the project remains undistributed; the PRD's
+no-redistribution rule still applies to any distributed build. No network
+request occurs during play. Missing local images retain the geometric
+fallback. Back selection uses public zone ownership, including motion ghosts,
+and never looks up a concealed card definition.
 
 Follow-up validation: 801 Core, 138 Match, and 78 CLI tests pass in standard
 mode; the official active-run snapshot export regression also passes. The
