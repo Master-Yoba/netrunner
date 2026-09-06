@@ -65,7 +65,7 @@ borders in addition to colour.
 - Native macOS packaging is configured by `scripts/package-macos.sh` and runs
   both bounded smokes: the full-slice `M3_SMOKE` and the real ten-second
   `M3_LATENCY_SMOKE` (one-frame inspection/control, near-60-FPS assertion,
-  hover/selection, card zoom, and 1280×720 and 2560×1440 layout checks). The
+  hover/selection, card zoom, and 1920×1080 and 2560×1440 layout checks). The
   fresh universal bundle passed both packaged smokes: the latency hold lasted
   10,253 ms while 1,486 frames rendered (144.9 FPS on the verification host).
 

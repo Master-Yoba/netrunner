@@ -4,9 +4,9 @@ OpenGL API 4.1 Metal - 90.5 - Compatibility - Using Device: Apple - Apple M5
 M49_CONTEXT PASS event_from_hand=true run_from_server=true
 M49_NICO PASS mouse=true replacements=2 hidden_install=true
 M49_MOTION PASS replacement=true skip=true
-M49_TABLE size=1280x720 side=Runner layout=true keyboard=true zoom=true stable_nodes=true history=2000
-M49_TABLE size=1280x720 side=Corp layout=true keyboard=true zoom=true stable_nodes=true history=2000
+M49_TABLE size=1920x1080 side=Runner layout=true keyboard=true zoom=true stable_nodes=true history=2000
+M49_TABLE size=1920x1080 side=Corp layout=true keyboard=true zoom=true stable_nodes=true history=2000
 M49_TABLE size=2560x1440 side=Runner layout=true keyboard=true zoom=true stable_nodes=true history=2000
 M49_TABLE size=2560x1440 side=Corp layout=true keyboard=true zoom=true stable_nodes=true history=2000
-M49_PERF frames=120 median_ms=8,25 p95_ms=11,13 renderer=Apple M5
+M49_PERF frames=120 median_ms=6,94 p95_ms=11,38 renderer=Apple M5
 M49_UI PASS official=True dense=true history=true

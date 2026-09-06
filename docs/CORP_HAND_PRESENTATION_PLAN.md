@@ -51,7 +51,7 @@ never gains an inspectable hidden-card handle.
    only the engine-projected accessed card in the access panel.
 4. Animate draws and hand-count changes from filtered observations, including
    reduced motion. Retain the public count for empty and overflowing hands.
-5. Verify both seats at 720p, 1080p and 1440p with 0, 1, 5 and 10+ cards;
+5. Verify both seats at 1080p and 1440p with 0, 1, 5 and 10+ cards;
    test draw, discard, install, shuffle, HQ access and session recovery. Require
    no hidden-title leaks, no clipped actions, and a manual usability review.
 

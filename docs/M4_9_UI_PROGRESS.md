@@ -34,7 +34,8 @@ Draft PR: [#15](https://github.com/Master-Yoba/netrunner/pull/15).
   Public card faces open inspection; concealed piles remain count-only.
 - A compact right-edge history rail expands to readable chronological history,
   with turn separators, details, frozen known-card inspection and copy/export.
-  Pinning reserves a separate column on large windows; 720p keeps an overlay.
+  Pinning reserves a separate column on windows at least 1800px wide; narrower
+  windows keep an overlay.
   Older-page reading survives new entries and shows an unread count. All
   in-session entries are retained; only 80 groups are rendered per page.
 - Accepted publications are presented in order. Movement, reduced-motion
@@ -93,7 +94,7 @@ Focused tests cover legacy omission, initial 0/4, and an active modifier.
   card/dock bounds, stable nodes, keyboard overflow, inspection, history paging,
   motion cancellation, piles, run and outcome/restart presentation.
 - Native OpenGL review was performed on Apple M5, Godot 4.7.2 .NET, at
-  1280×720 and 2560×1440. Earlier rejected screenshots exposed clipped hand
+  1920×1080 and 2560×1440. Earlier rejected screenshots exposed clipped hand
   content; the strengthened smoke now asserts actual hand and rig visibility.
 - A 120-frame native dense-board/history sample measured median 8.25 ms and
   p95 11.13 ms on Apple M5. This is an idle presentation sample, not a claim
@@ -121,14 +122,14 @@ Focused tests cover legacy omission, initial 0/4, and an active modifier.
 - [User reference](evidence/m4-9/reference/chiriboga.png)
 - [Nico opening table](evidence/m4-9/nico-table.png)
 - [Nico history](evidence/m4-9/nico-history.png)
-- [Dense Runner table, 720p](evidence/m4-9/dense-runner-1280.png)
-- [Dense Corp table, 720p](evidence/m4-9/dense-corp-1280.png)
+- [Dense Runner table, 1080p](evidence/m4-9/dense-runner-1920.png)
+- [Dense Corp table, 1080p](evidence/m4-9/dense-corp-1920.png)
 - [Dense Runner table, 1440p](evidence/m4-9/dense-runner-2560.png)
 - [Dense Corp table, 1440p](evidence/m4-9/dense-corp-2560.png)
-- [Encounter presentation](evidence/m4-9/active-run-runner-1280.png)
-- [Expanded history](evidence/m4-9/history-runner-1280.png)
-- [Archives browser](evidence/m4-9/archives-browser-1280.png)
-- [Outcome presentation](evidence/m4-9/outcome-runner-1280.png)
+- [Encounter presentation](evidence/m4-9/active-run-runner-1920.png)
+- [Expanded history](evidence/m4-9/history-runner-1920.png)
+- [Archives browser](evidence/m4-9/archives-browser-1920.png)
+- [Outcome presentation](evidence/m4-9/outcome-runner-1920.png)
 
 These are native screenshots of scripted real-game/fixture sessions. They are
 not evidence that a human completed or accepted a manual game.
@@ -139,7 +140,7 @@ Launch `make play`. Use basic decks and seed `47042` as Runner, keep the hand,
 and pass Corp priority windows to review the Nico opening. Then complete a
 basic game in each seat and exercise expanded decks, run/break/access,
 installation destinations, paid abilities, nested choices, cancellation and
-history browsing while actions arrive. Use both 720p and 1440p; UI-scale options
+history browsing while actions arrive. Use both 1080p and 1440p; UI-scale options
 are available in the toolbar for larger displays.
 
 Record seed, deck pair, build (included in copied history), observed problems
@@ -179,7 +180,7 @@ Validation: Match tests 125/125 in standard synthetic mode; official Godot build
 and native M4.9 smoke pass, including a mouse-driven regular R&D run at seed
 47042 that shows Government Subsidy, retains its name in history, and clears
 its access panel afterward. The access screenshot was visually reviewed at
-1280×720; existing dense-board checks also pass at 2560×1440 for both seats.
+1920×1080; existing dense-board checks also pass at 2560×1440 for both seats.
 An initial full Match run in official mode passed 124/125: its remaining fixture
 explicitly asserts synthetic metadata. The standard synthetic run passes it.
 
@@ -205,6 +206,6 @@ Follow-up validation: 801 Core, 138 Match, and 78 CLI tests pass in standard
 mode; the official active-run snapshot export regression also passes. The
 original failing action-35 session replays with its recorded hash and continues
 through the completed Jailbreak run. Native recovery and the official M4.9 UI
-smoke pass, including both seats at 720p/1440p, central labels/order, HQ count,
+smoke pass, including both seats at 1080p/1440p, central labels/order, HQ count,
 both local back textures, access presentation, and keyboard interactions.
 Formatting verification passes. Updated screenshots capture the local assets.

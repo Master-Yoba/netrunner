@@ -27,10 +27,10 @@ public partial class Main
 			}
 			if (requireOfficial && (!_metadataSnapshot.IsOfficial || _metadataSnapshot.CardCount != 77))
 				throw new InvalidOperationException("The M4.9 provisioned gate requires 77 official card designs.");
-			GetWindow().Size = new Vector2I(1280, 720);
-			GetWindow().ContentScaleSize = new Vector2I(1280, 720);
+			GetWindow().Size = new Vector2I(1920, 1080);
+			GetWindow().ContentScaleSize = new Vector2I(1920, 1080);
 			await TableFrames(3);
-			if (screenshots) await SaveTableEvidence("setup-1280");
+			if (screenshots) await SaveTableEvidence("setup-1920");
 			if (_metadataSnapshot.IsOfficial)
 			{
 				_seedInput.Text = "47042";
@@ -116,7 +116,7 @@ public partial class Main
 					throw new InvalidOperationException("R&D access did not finish and clear its panel.");
 				GD.Print("M49_RD_ACCESS PASS seed=47042 visible_card=true named_history=true cleared=true");
 				GD.Print("M49_CONTEXT PASS event_from_hand=true run_from_server=true");
-				await AssertHoverStable("live-1280");
+				await AssertHoverStable("live-1920");
 				_coordinator!.SnapshotPublished -= QueueSnapshot;
 				_coordinator.Dispose();
 				_coordinator = null;
@@ -173,7 +173,7 @@ public partial class Main
 			if (_matchHistory.PageStart != Math.Max(0, _matchHistory.EntryCount - _matchHistory.PageSize)
 				|| _matchHistory.NewEntryCount != 0)
 				throw new InvalidOperationException("History did not follow the newest page or clear unread entries.");
-			foreach (Vector2I size in new[] { new Vector2I(1280, 720), new Vector2I(2560, 1440) })
+			foreach (Vector2I size in new[] { new Vector2I(1920, 1080), new Vector2I(2560, 1440) })
 			{
 				GetWindow().Size = size;
 				GetWindow().ContentScaleSize = size;
@@ -240,7 +240,7 @@ public partial class Main
 					if (!_zoomOverlay.Visible) throw new InvalidOperationException("Card zoom failed.");
 					HideCardZoom();
 					if (screenshots) await SaveTableEvidence($"dense-{side.ToString().ToLowerInvariant()}-{size.X}");
-					if (size.X == 1280 && side == PlayerSide.Runner)
+					if (size.X == 1920 && side == PlayerSide.Runner)
 					{
 						CardViewModel outgoing = view.Servers[0].Root.OfType<CardViewModel>().First();
 						ServerViewModel[] replaced = view.Servers.Select((server, index) => index == 0 ? server with { Root = [null] } : server).ToArray();
@@ -304,7 +304,7 @@ public partial class Main
 					if (!ShowTablePile("zone:corp-archives") || _tablePileCards.GetChildCount() == 0)
 						throw new InvalidOperationException("Public pile browser failed to open.");
 					await TableFrames(2);
-					if (screenshots && size.X == 1280 && side == PlayerSide.Runner) await SaveTableEvidence("archives-browser-1280");
+					if (screenshots && size.X == 1920 && side == PlayerSide.Runner) await SaveTableEvidence("archives-browser-1920");
 					HideTablePile();
 
 					MatchViewModel outcomeView = discardView with
@@ -423,7 +423,13 @@ public partial class Main
 
 	private async Task SaveTableEvidence(string name)
 	{
-		await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+		// The headless display server never emits frame_post_draw, so sync on
+		// main-loop frames instead of waiting for a render callback that would
+		// block the smoke forever.
+		if (DisplayServer.GetName() != "headless")
+			await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+		else
+			await TableFrames(2);
 		string directory = ProjectSettings.GlobalizePath("res://../../docs/evidence/m4-9");
 		Directory.CreateDirectory(directory);
 		using Image frame = GetViewport().GetTexture().GetImage();

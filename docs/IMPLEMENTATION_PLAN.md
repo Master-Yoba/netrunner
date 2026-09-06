@@ -225,7 +225,7 @@ Deliverables:
   action feedback; drag is optional enhancement only.
 - UI-305: event animation queue, speed controls, reduced motion, and batch skip.
 - UI-306: access/encounter/paid-window focused presentations.
-- UI-307: accessibility pass for non-color cues and 1280×720 through 2560×1440.
+- UI-307: accessibility pass for non-color cues and 1920×1080 through 2560×1440.
 - SLICE-301: match setup screen launches the M2 micro-decks and reaches outcome.
 
 Gate: packaged Linux build plays the M2 slice without CLI; hover/selection is

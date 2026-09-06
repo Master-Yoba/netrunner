@@ -201,7 +201,7 @@ public partial class GameTableControl : Control
 		MouseFilter = MouseFilterEnum.Ignore;
 		FocusMode = FocusModeEnum.None;
 		// The parent reserves the decision dock below the table. Keep the board
-		// willing to fit a 1280×720 viewport; each hand/ICE strip owns its local
+		// willing to fit a 1920×1080 viewport; each hand/ICE strip owns its local
 		// overflow instead of forcing a document-sized table.
 		CustomMinimumSize = new Vector2(760, 0);
 

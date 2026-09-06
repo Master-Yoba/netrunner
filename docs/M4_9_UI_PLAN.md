@@ -106,7 +106,7 @@ a satisfactory fallback design.
 
 This screenshot changes the initial layout proposal: use the compact history
 rail by default, with an expandable/pinnable readable panel. Do not permanently
-reserve 280–320 pixels for history at 1280×720.
+reserve 280–320 pixels for history at 1920×1080.
 
 ### Reproduction that anchors the redesign
 
@@ -157,9 +157,10 @@ Layout rules:
 - Reserve only a 56–72 logical-pixel history rail by default. Each marker has
   an action icon, a side cue and accessible text; click or keyboard activation
   opens its entry in the readable history panel.
-- Expand history to an initially 300–360 logical-pixel panel. At 1280×720 use
-  a dismissible overlay that leaves the decision dock accessible; at larger
-  sizes allow pinning it beside the board with a deliberate layout adjustment.
+- Expand history to an initially 300–360 logical-pixel panel. At 1920×1080 and
+  larger, allow pinning it beside the board with a deliberate layout adjustment;
+  in narrower resized windows use a dismissible overlay that leaves the
+  decision dock accessible.
   Preserve the selected entry and scroll position across collapse/expansion.
   Validate these dimensions in native mockups, not from screenshot ratios alone.
 - Keep identities and compact resource counters close to their own table edge.
@@ -358,7 +359,7 @@ revise after the first native prototype and visibility spike.
 |---|---|---|---|
 | UI-490 — Visual baseline (1–2 days) | Native static board prototype at both sizes and both seats; card face/back, zones, compact/expanded history and choice dock; supplied screenshot comparison | None | Review table geography, card readability and density before wiring behavior. Compare directly with the supplied screenshot; review collapsed and expanded history states. |
 | UI-491 — History and safe transitions (3–5 days) | Typed viewer-safe summaries, retained history, deduplication, filtered report export; Nico regression | UI-490 for panel shape; projection work can start independently | Root reviews visibility and event ordering. Skip/fast mode cannot drop history; no hidden names/IDs leak. |
-| UI-492 — Live table and cards (4–6 days) | Persistent card nodes, player zones, servers/ICE, hands/piles/hosts, inspection and overflow | UI-490; consume UI-491 contracts | Both seats usable at 720p; installed cards remain spatially stable; metadata fallback and optional art path reviewed. |
+| UI-492 — Live table and cards (4–6 days) | Persistent card nodes, player zones, servers/ICE, hands/piles/hosts, inspection and overflow | UI-490; consume UI-491 contracts | Both seats usable at 1080p; installed cards remain spatially stable; metadata fallback and optional art path reviewed. |
 | UI-493 — Decisions and runs (3–5 days) | Contextual actions, target staging, priority prompts, run path, nested/discard/access choices | UI-492 | Complete named interactions mouse-first and keyboard-only; every legal action remains reachable; stale actions safely rejected. |
 | UI-494 — Motion and comprehension (2–4 days) | Ordered visual batches, replacements/reveals, speed/skip, reduced motion, log-to-board highlighting | UI-491–493 | Nico sequence understandable without developer tools; human decisions never appear against an obsolete board. |
 | UI-495 — Playtest gate (2–3 days) | Real manual sessions, screenshots, defect fixes, regression/CI and progress record | All previous slices | Explicit pre-M5 usability gate below passes. |
@@ -403,7 +404,7 @@ review; that would lock in conflicting board and history assumptions.
 
 ### Manual acceptance — required, not replaced by smoke tests
 
-Test at 1280×720 and 2560×1440, with screenshots of each human seat. Complete a
+Test at 1920×1080 and 2560×1440, with screenshots of each human seat. Complete a
 basic game as Runner and as Corp, and exercise expanded-deck runs, hosted cards
 and nested choices. Record seed, deck pair, build and observed problems.
 

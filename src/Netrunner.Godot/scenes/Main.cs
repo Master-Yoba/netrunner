@@ -508,7 +508,7 @@ public partial class Main : Control
 	private void BuildFooter()
 	{
 		Label footer = MakeLabel(
-			"Engine-issued actions · deterministic setup · 1280×720 ↔ 2560×1440",
+			"Engine-issued actions · deterministic setup · 1920×1080 ↔ 2560×1440",
 			11,
 			new Color(0.42f, 0.5f, 0.56f));
 		_layout.AddChild(footer);
@@ -828,7 +828,7 @@ public partial class Main : Control
 		bool controlWithinOneFrame = false;
 		bool hoverSelectionWithinOneFrame = false;
 		bool zoomVisible = false;
-		bool layoutAt1280x720 = false;
+		bool layoutAt1920x1080 = false;
 		bool layoutAt2560x1440 = false;
 		bool heldTenSeconds = false;
 		int thinkingFrames = 0;
@@ -915,7 +915,7 @@ public partial class Main : Control
 			thinkingFrames = (int)Math.Max(0, _processFrameCount - holdStartFrames);
 			heldTenSeconds = holdDuration >= TimeSpan.FromSeconds(10);
 			averageFps = thinkingFrames / Math.Max(holdDuration.TotalSeconds, 0.001);
-			layoutAt1280x720 = await CheckViewportLayoutAsync(new Vector2I(1280, 720));
+			layoutAt1920x1080 = await CheckViewportLayoutAsync(new Vector2I(1920, 1080));
 			layoutAt2560x1440 = await CheckViewportLayoutAsync(new Vector2I(2560, 1440));
 
 			// The M3 gate is a 60-FPS interaction target. Allow a small timing
@@ -931,7 +931,7 @@ public partial class Main : Control
 				&& hoverSelectionWithinOneFrame
 				&& zoomVisible
 				&& responsiveFps
-				&& layoutAt1280x720
+				&& layoutAt1920x1080
 				&& layoutAt2560x1440;
 			GD.Print(
 				$"M3_LATENCY_SMOKE {(passed ? "PASS" : "FAIL")} "
@@ -940,7 +940,7 @@ public partial class Main : Control
 				+ $"thinking_frames={thinkingFrames} avg_fps={averageFps.ToString("F1", CultureInfo.InvariantCulture)} "
 				+ $"inspection_one_frame={inspectionWithinOneFrame} control_one_frame={controlWithinOneFrame} "
 				+ $"hover_selection_one_frame={hoverSelectionWithinOneFrame} "
-				+ $"zoom_in_viewport={zoomVisible} layout_1280x720={layoutAt1280x720} "
+				+ $"zoom_in_viewport={zoomVisible} layout_1920x1080={layoutAt1920x1080} "
 				+ $"layout_2560x1440={layoutAt2560x1440}");
 			await _coordinator.DisposeAsync();
 			GetTree().Quit(passed ? 0 : 1);
@@ -953,7 +953,7 @@ public partial class Main : Control
 				+ $"held_ms={holdDuration.TotalMilliseconds.ToString("F0", CultureInfo.InvariantCulture)} "
 				+ $"inspection_one_frame={inspectionWithinOneFrame} control_one_frame={controlWithinOneFrame} "
 				+ $"hover_selection_one_frame={hoverSelectionWithinOneFrame} "
-				+ $"zoom_in_viewport={zoomVisible} layout_1280x720={layoutAt1280x720} "
+				+ $"zoom_in_viewport={zoomVisible} layout_1920x1080={layoutAt1920x1080} "
 				+ $"layout_2560x1440={layoutAt2560x1440} error={exception.Message}");
 			if (_coordinator is not null)
 			{

@@ -28,7 +28,7 @@ The final integration matrix is:
 | `M4_FULL_SMOKE`, human Corp, basic and expanded | Official preset pair | Scripted human submissions through client controls against Runner contract agent |
 | `M4_FULL_SMOKE`, human Runner, basic and expanded | Official preset pair | Scripted human submissions through client controls against Corp contract agent |
 | Client reload | Each official full smoke | Terminal presentation, activate New match, fresh selectable setup |
-| `M4_SLICE48_UX` | Real Gateway metadata on provisioned lane | Setup, five-card hand, dense board/rig, choices, discard, run and outcome at 1280×720 and 2560×1440; keyboard, reduced motion, state cues, scrolling and readable text |
+| `M4_SLICE48_UX` | Real Gateway metadata on provisioned lane | Setup, five-card hand, dense board/rig, choices, discard, run and outcome at 1920×1080 and 2560×1440; keyboard, reduced motion, state cues, scrolling and readable text |
 
 The scripted human chooses only issued actions. Core owns authoritative state;
 Match publishes filtered presentation, accepted-action count and public setup

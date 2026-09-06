@@ -56,7 +56,7 @@ public partial class Main
 		{
 			float factor = new[] { 1f, 1.25f, 1.5f, 2f }[(int)index];
 			Vector2I physical = GetWindow().Size;
-			GetWindow().ContentScaleSize = new Vector2I(Math.Max(1280, (int)(physical.X / factor)), Math.Max(720, (int)(physical.Y / factor)));
+			GetWindow().ContentScaleSize = new Vector2I(Math.Max(1920, (int)(physical.X / factor)), Math.Max(1080, (int)(physical.Y / factor)));
 		};
 		toolbar.AddChild(scale);
 		_skipAnimations = new Button { Text = "Skip animation" };

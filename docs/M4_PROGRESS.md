@@ -327,7 +327,7 @@ the preceding setup and server-lifecycle compatibility evidence.
 - Godot editor import, the fast M3 smoke, and the separate real-delay latency
   smoke passed. Latency evidence: `held_ms=10253`, 1,486 thinking frames,
   144.9 average FPS, one-frame inspection/control/hover feedback, zoom in
-  viewport, and both 1280x720 and 2560x1440 layouts green.
+  viewport, and both 1920x1080 and 2560x1440 layouts green.
 - The architect reviewed every Luna stream and the independent audit. All five
   audit findings and the final UI-401/D-412 dependency issue are closed; no
   Slice 4.2 behavior entered this change set.
@@ -4660,11 +4660,11 @@ errors; runtime action expansion and full verification remain pending.
 
 - The strict UX smoke passes setup, five-card hand, dense servers/rig, nested
   choices, forced discard, run and outcome surfaces using real metadata for all
-  77 cards. Both 1280×720 and 2560×1440 pass forward/reverse keyboard traversal,
+  77 cards. Both 1920×1080 and 2560×1440 pass forward/reverse keyboard traversal,
   scroll reachability and layout containment, with zoom focus restoration,
   reduced motion, text escaping and non-color state cues also verified.
-- Native Godot evidence is recorded in [setup at 1280×720](evidence/slice48/setup-1280x720.png),
-  [board at 1280×720](evidence/slice48/board-1280x720.png),
+- Native Godot evidence is recorded in [setup at 1920×1080](evidence/slice48/setup-1920x1080.png),
+  [board at 1920×1080](evidence/slice48/board-1920x1080.png),
   [setup at 2560×1440](evidence/slice48/setup-2560x1440.png) and
   [board at 2560×1440](evidence/slice48/board-2560x1440.png).
   UX board screenshots use presentation fixtures with official metadata; the
