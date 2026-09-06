@@ -184,7 +184,7 @@ public partial class Main
 		if (encounter.Ice is { } ice)
 		{
 			TextCardControl iceCard = MakeCard(ice);
-			iceCard.CustomMinimumSize = new Vector2(172, 122);
+			iceCard.CustomMinimumSize = new Vector2(258, 183);
 			iceCard.SetEncounterStrength(encounter.StrengthBreakdown);
 			encounterRow.AddChild(iceCard);
 		}
@@ -357,7 +357,7 @@ public partial class Main
 			foreach (CardViewModel? candidate in access.Candidates)
 			{
 				TextCardControl card = MakeCard(candidate);
-				card.CustomMinimumSize = new Vector2(140, 100);
+				card.CustomMinimumSize = new Vector2(210, 150);
 				candidates.AddChild(card);
 			}
 			_focusPresentation.AddChild(candidates);
@@ -377,7 +377,7 @@ public partial class Main
 			foreach (CardViewModel? cardModel in access.Accessed)
 			{
 				TextCardControl card = MakeCard(cardModel);
-				card.CustomMinimumSize = new Vector2(140, 100);
+				card.CustomMinimumSize = new Vector2(210, 150);
 				accessed.AddChild(card);
 			}
 			_focusPresentation.AddChild(accessed);

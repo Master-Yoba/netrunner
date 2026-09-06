@@ -329,7 +329,7 @@ public partial class GameTableControl : Control
 
 	private void BuildServerField()
 	{
-		PanelContainer surface = MakeSurfacePanel(new Vector2(0, 200), expandVertical: true);
+		PanelContainer surface = MakeSurfacePanel(new Vector2(0, 300), expandVertical: true);
 		_tableLayout.AddChild(surface);
 		VBoxContainer content = MakeVBox(4);
 		surface.AddChild(content);
@@ -364,7 +364,7 @@ public partial class GameTableControl : Control
 
 	private void BuildRunnerField()
 	{
-		PanelContainer surface = MakeSurfacePanel(new Vector2(0, 150), expandVertical: false);
+		PanelContainer surface = MakeSurfacePanel(new Vector2(0, 225), expandVertical: false);
 		_tableLayout.AddChild(surface);
 		HBoxContainer field = new()
 		{
@@ -388,7 +388,7 @@ public partial class GameTableControl : Control
 		field.AddChild(summary);
 
 		_runnerIdentitySlot = MakeIdentitySlot("Runner identity");
-		_runnerIdentitySlot.CustomMinimumSize = new Vector2(64, 100);
+		_runnerIdentitySlot.CustomMinimumSize = new Vector2(96, 150);
 		field.AddChild(_runnerIdentitySlot);
 
 		_runnerDeckPile = MakePileButton("Stack\n—", "zone:runner-deck", "Runner Stack · face-down pile");
@@ -398,7 +398,7 @@ public partial class GameTableControl : Control
 		_runnerHeapPile.CustomMinimumSize = new Vector2(62, 30);
 		field.AddChild(_runnerHeapPile);
 
-		PanelContainer rig = MakeInnerPanel(new Vector2(210, 0));
+		PanelContainer rig = MakeInnerPanel(new Vector2(315, 0));
 		rig.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		VBoxContainer rigContent = MakeVBox(1);
 		rig.AddChild(rigContent);
@@ -420,7 +420,7 @@ public partial class GameTableControl : Control
 		rigContent.AddChild(_runnerRigScroll);
 		field.AddChild(rig);
 
-		PanelContainer hand = MakeInnerPanel(new Vector2(270, 0));
+		PanelContainer hand = MakeInnerPanel(new Vector2(405, 0));
 		hand.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		VBoxContainer handContent = MakeVBox(1);
 		hand.AddChild(handContent);
@@ -452,7 +452,7 @@ public partial class GameTableControl : Control
 		};
 		// A controlled overlap keeps a normal five-card hand compact while the
 		// scroll container still makes every card focusable at overflow.
-		_localHandRow.AddThemeConstantOverride("separation", -24);
+		_localHandRow.AddThemeConstantOverride("separation", -36);
 		_localHandScroll.AddChild(_localHandRow);
 		handContent.AddChild(_localHandScroll);
 		field.AddChild(hand);
@@ -600,7 +600,7 @@ public partial class GameTableControl : Control
 						: "ROOT · HQ";
 
 			ClearNonCardChildren(lane.RootCards);
-			lane.RootCards.AddThemeConstantOverride("separation", server.Kind == ServerKind.Headquarters ? 8 : -18);
+			lane.RootCards.AddThemeConstantOverride("separation", server.Kind == ServerKind.Headquarters ? 12 : -27);
 			ClearNonCardChildren(lane.IceCards);
 			RenderServerRoot(
 				server,
@@ -652,7 +652,7 @@ public partial class GameTableControl : Control
 		if (corpIdentity is not null)
 		{
 			TableCardControl identity = EnsureCard("corp-identity", rootCards, corpIdentity, false, nextVisibleCards);
-			SetCompactCard(identity, new Vector2(70, 98));
+			SetCompactCard(identity, new Vector2(105, 147));
 		}
 		if (corpHandCount is { } handCount)
 		{
@@ -666,7 +666,7 @@ public partial class GameTableControl : Control
 		{
 			string slot = $"server:{server.Id}:root:{index++}";
 			TableCardControl control = EnsureCard(slot, rootCards, card, isIce: false, nextVisibleCards);
-			SetCompactCard(control, new Vector2(70, 98));
+			SetCompactCard(control, new Vector2(105, 147));
 		}
 	}
 
@@ -687,7 +687,7 @@ public partial class GameTableControl : Control
 				EnsureCard(slot, iceCards, card, isIce: true, nextVisibleCards);
 			else
 			{
-				Control stack = new() { CustomMinimumSize = new Vector2(160, 104), MouseFilter = MouseFilterEnum.Ignore };
+				Control stack = new() { CustomMinimumSize = new Vector2(240, 156), MouseFilter = MouseFilterEnum.Ignore };
 				iceCards.AddChild(stack);
 				EnsureCard(slot, stack, card, true, nextVisibleCards);
 				for (int index = 0; index < hosted.Length; index++)
@@ -699,8 +699,8 @@ public partial class GameTableControl : Control
 						false,
 						nextVisibleCards,
 						PlayerSide.Runner);
-					attachment.SetDisplaySize(new Vector2(60, 84));
-					attachment.Position = new Vector2(22 + 14 * index, 20);
+					attachment.SetDisplaySize(new Vector2(90, 126));
+					attachment.Position = new Vector2(33 + 21 * index, 30);
 					attachment.TooltipText = $"Hosted on {card?.Title ?? "face-down ICE"}\n" + attachment.TooltipText;
 				}
 			}
@@ -746,7 +746,7 @@ public partial class GameTableControl : Control
 		{
 			slot = new Control
 			{
-				CustomMinimumSize = new Vector2(80, 110),
+				CustomMinimumSize = new Vector2(120, 165),
 				MouseFilter = MouseFilterEnum.Ignore,
 			};
 			_rigSlots[key] = slot;
@@ -798,8 +798,8 @@ public partial class GameTableControl : Control
 				false,
 				nextVisibleCards,
 				PlayerSide.Runner);
-			attachmentControl.CustomMinimumSize = new Vector2(60, 84);
-			attachmentControl.Position = new Vector2(22 + (index * 13), 18 + (index * 7));
+			attachmentControl.CustomMinimumSize = new Vector2(90, 126);
+			attachmentControl.Position = new Vector2(33 + (index * 20), 27 + (index * 11));
 			attachmentControl.ZIndex = index + 2;
 		}
 	}
@@ -849,7 +849,7 @@ public partial class GameTableControl : Control
 		{
 			target.AddChild(row);
 		}
-		row.AddThemeConstantOverride("separation", visibleCards.Count > 0 ? -62 : -74);
+		row.AddThemeConstantOverride("separation", visibleCards.Count > 0 ? -93 : -111);
 		foreach (Node child in row.GetChildren().ToArray())
 		{
 			row.RemoveChild(child);
@@ -901,7 +901,7 @@ public partial class GameTableControl : Control
 		}
 
 		TableCardControl control = EnsureCard(slot, parent, card, isIce, nextVisibleCards);
-		SetCompactCard(control, new Vector2(70, 98));
+		SetCompactCard(control, new Vector2(105, 147));
 	}
 
 	private void RenderScoreCards(
@@ -918,7 +918,7 @@ public partial class GameTableControl : Control
 		foreach (CardViewModel card in cards.Take(3))
 		{
 			TableCardControl control = EnsureCard($"{zone}:{card.Id}", target, card, isIce, nextVisibleCards);
-			control.CustomMinimumSize = new Vector2(62, 86);
+			control.CustomMinimumSize = new Vector2(93, 129);
 		}
 		if (cards.Count > 3)
 		{
@@ -966,7 +966,7 @@ public partial class GameTableControl : Control
 		control.SetBackSide(backSide ?? BackSideForSlot(slot));
 		control.Scale = Vector2.One;
 		{
-			control.SetDisplaySize(isIce ? new Vector2(160, 58) : new Vector2(70, 98));
+			control.SetDisplaySize(isIce ? new Vector2(240, 87) : new Vector2(105, 147));
 		}
 		_activeCardKeys.Add(identity);
 		string publicKey = model?.Id is { Length: > 0 } id ? id : slot;
@@ -996,7 +996,7 @@ public partial class GameTableControl : Control
 	{
 		PanelContainer panel = new()
 		{
-			CustomMinimumSize = new Vector2(190, 0),
+			CustomMinimumSize = new Vector2(285, 0),
 			SizeFlagsVertical = SizeFlags.ExpandFill,
 			MouseFilter = MouseFilterEnum.Ignore,
 		};
@@ -1027,9 +1027,9 @@ public partial class GameTableControl : Control
 		HBoxContainer rootCards = new()
 		{
 			MouseFilter = MouseFilterEnum.Ignore,
-			CustomMinimumSize = new Vector2(0, 94),
+			CustomMinimumSize = new Vector2(0, 141),
 		};
-		rootCards.AddThemeConstantOverride("separation", -18);
+		rootCards.AddThemeConstantOverride("separation", -27);
 		content.AddChild(rootCards);
 
 		Label iceCaption = MakeLabel("ICE · inner → outer", 9, MutedColor);
@@ -1040,7 +1040,7 @@ public partial class GameTableControl : Control
 			VerticalScrollMode = ScrollContainer.ScrollMode.Auto,
 			HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
 			SizeFlagsVertical = SizeFlags.ExpandFill,
-			CustomMinimumSize = new Vector2(0, 64),
+			CustomMinimumSize = new Vector2(0, 96),
 			FollowFocus = true,
 		};
 		VBoxContainer iceCards = new()
@@ -1075,7 +1075,7 @@ public partial class GameTableControl : Control
 	{
 		PanelContainer panel = new()
 		{
-			CustomMinimumSize = new Vector2(96, 76),
+			CustomMinimumSize = new Vector2(144, 114),
 			TooltipText = tooltip,
 			MouseFilter = MouseFilterEnum.Ignore,
 		};

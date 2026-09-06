@@ -12,8 +12,8 @@ namespace Netrunner.GodotClient;
 /// </summary>
 public partial class TableCardControl : Control
 {
-	public static readonly Vector2 PortraitCardSize = new(100, 140);
-	public static readonly Vector2 IceCardSize = new(160, 72);
+	public static readonly Vector2 PortraitCardSize = new(150, 210);
+	public static readonly Vector2 IceCardSize = new(240, 108);
 
 	private static readonly Color Frame = new(0.39f, 0.47f, 0.55f);
 	private static readonly Color FocusFrame = new(0.46f, 0.95f, 0.82f);
@@ -142,7 +142,7 @@ public partial class TableCardControl : Control
 
 	/// <summary>
 	/// Changes the physical orientation/shape used for an ICE lane. The card
-	/// remains fixed at 160×72 in this mode and 100×140 otherwise.
+	/// remains fixed at 240×108 in this mode and 150×210 otherwise.
 	/// </summary>
 	public void SetIce(bool ice)
 	{
@@ -160,7 +160,7 @@ public partial class TableCardControl : Control
 
 	/// <summary>
 	/// Sets the actual rendered footprint used by this card. This is intended
-	/// for table lanes that need a compact portrait such as 70×98; callers
+	/// for table lanes that need a compact portrait such as 105×147; callers
 	/// should keep <see cref="Scale"/> at one so text remains pixel-legible.
 	/// </summary>
 	public void SetDisplaySize(Vector2 size)
@@ -255,7 +255,7 @@ public partial class TableCardControl : Control
 					cardSize.Y * 0.47f,
 					Mathf.Max(1, cardSize.X - 12),
 					Mathf.Max(1, cardSize.Y * 0.13f))
-				: new Rect2(8, 39, Mathf.Max(1, cardSize.X - 16), 55);
+				: new Rect2(12, 58, Mathf.Max(1, cardSize.X - 24), 82);
 		if (_artwork is not null)
 		{
 			DrawTextureRect(_artwork, motifRect, false, new Color(1, 1, 1, 0.87f));
@@ -325,12 +325,12 @@ public partial class TableCardControl : Control
 		}
 		else
 		{
-			SetLabelRect(_title, new Rect2(5, 4, 90, 20), 10, Colors.White);
-			SetLabelRect(_type, new Rect2(5, 23, 90, 14), 7, new Color(0.80f, 0.88f, 0.92f));
-			SetLabelRect(_stats, new Rect2(5, 96, 90, 14), 8, new Color(0.91f, 0.94f, 0.98f));
-			SetLabelRect(_rulesCue, new Rect2(5, 110, 90, 14), 7, new Color(0.66f, 0.73f, 0.79f));
-			SetLabelRect(_status, new Rect2(5, 124, 90, 12), 7, new Color(0.74f, 0.81f, 0.86f));
-			SetLabelRect(_counters, new Rect2(5, 82, 90, 15), 7, new Color(1.0f, 0.83f, 0.39f));
+			SetLabelRect(_title, new Rect2(7, 6, 136, 30), 10, Colors.White);
+			SetLabelRect(_type, new Rect2(7, 34, 136, 21), 7, new Color(0.80f, 0.88f, 0.92f));
+			SetLabelRect(_stats, new Rect2(7, 144, 136, 21), 8, new Color(0.91f, 0.94f, 0.98f));
+			SetLabelRect(_rulesCue, new Rect2(7, 165, 136, 21), 7, new Color(0.66f, 0.73f, 0.79f));
+			SetLabelRect(_status, new Rect2(7, 186, 136, 18), 7, new Color(0.74f, 0.81f, 0.86f));
+			SetLabelRect(_counters, new Rect2(7, 123, 136, 23), 7, new Color(1.0f, 0.83f, 0.39f));
 		}
 
 		RefreshDynamicPresentation();
