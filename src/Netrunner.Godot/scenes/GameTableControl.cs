@@ -329,7 +329,7 @@ public partial class GameTableControl : Control
 
 	private void BuildServerField()
 	{
-		PanelContainer surface = MakeSurfacePanel(new Vector2(0, 300), expandVertical: true);
+		PanelContainer surface = MakeSurfacePanel(new Vector2(0, 150), expandVertical: true);
 		_tableLayout.AddChild(surface);
 		VBoxContainer content = MakeVBox(4);
 		surface.AddChild(content);
@@ -344,10 +344,12 @@ public partial class GameTableControl : Control
 		label.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		heading.AddChild(label);
 
+		// The 1.5x card sizes outgrow short viewports, so the lane row keeps a
+		// small fixed minimum and owns its vertical overflow locally.
 		_serverScroll = new ScrollContainer
 		{
 			HorizontalScrollMode = ScrollContainer.ScrollMode.Auto,
-			VerticalScrollMode = ScrollContainer.ScrollMode.Disabled,
+			VerticalScrollMode = ScrollContainer.ScrollMode.Auto,
 			FollowFocus = true,
 			SizeFlagsHorizontal = SizeFlags.ExpandFill,
 			SizeFlagsVertical = SizeFlags.ExpandFill,
@@ -364,7 +366,7 @@ public partial class GameTableControl : Control
 
 	private void BuildRunnerField()
 	{
-		PanelContainer surface = MakeSurfacePanel(new Vector2(0, 225), expandVertical: false);
+		PanelContainer surface = MakeSurfacePanel(new Vector2(0, 200), expandVertical: false);
 		_tableLayout.AddChild(surface);
 		HBoxContainer field = new()
 		{

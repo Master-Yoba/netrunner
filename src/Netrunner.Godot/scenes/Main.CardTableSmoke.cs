@@ -116,6 +116,7 @@ public partial class Main
 					throw new InvalidOperationException("R&D access did not finish and clear its panel.");
 				GD.Print("M49_RD_ACCESS PASS seed=47042 visible_card=true named_history=true cleared=true");
 				GD.Print("M49_CONTEXT PASS event_from_hand=true run_from_server=true");
+				await AssertHoverStable("live-1280");
 				_coordinator!.SnapshotPublished -= QueueSnapshot;
 				_coordinator.Dispose();
 				_coordinator = null;
@@ -191,6 +192,7 @@ public partial class Main
 					_matchHistory.SetExpanded(false);
 					await TableFrames(4);
 					AssertCentralServerPresentation(view);
+					await AssertHoverStable($"fixture-{size.X}-{side}");
 					Rect2 viewport = GetViewport().GetVisibleRect();
 					if (!viewport.Encloses(_tableActions.GetGlobalRect())
 						|| !viewport.Encloses(_gameTable.GetGlobalRect()))
@@ -377,6 +379,29 @@ public partial class Main
 	private async Task TableFrames(int count)
 	{
 		for (int i = 0; i < count; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+	}
+
+	// The inspect button toggles between the disabled and enabled theme
+	// styleboxes on hover; both must keep the dock and table at a stable size.
+	private async Task AssertHoverStable(string tag)
+	{
+		TableCardControl? known = _gameTable.VisibleCards.Values
+			.FirstOrDefault(c => c.IsInsideTree() && c.Card is { IsKnown: true } && c.Card!.Title.Length >= 10);
+		TableCardControl? hidden = _gameTable.VisibleCards.Values
+			.FirstOrDefault(c => c.IsInsideTree() && c.Card is null);
+		if (known is null || hidden is null) return;
+
+		Vector2 baseTable = _gameTable.Size;
+		known.EmitSignal(Control.SignalName.MouseEntered);
+		await TableFrames(6);
+		Vector2 knownTable = _gameTable.Size;
+		hidden.EmitSignal(Control.SignalName.MouseEntered);
+		await TableFrames(6);
+		Vector2 hiddenTable = _gameTable.Size;
+		known.EmitSignal(Control.SignalName.MouseExited);
+		await TableFrames(6);
+		if (knownTable != baseTable || hiddenTable != baseTable)
+			throw new InvalidOperationException($"Hovering a card resizes the table at {tag}: base={baseTable} known={knownTable} hidden={hiddenTable}.");
 	}
 
 	private void AssertCentralServerPresentation(MatchViewModel view)
