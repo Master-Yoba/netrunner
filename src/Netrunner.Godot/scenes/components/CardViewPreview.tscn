@@ -1,0 +1,40 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scenes/components/CardViewPreview.cs" id="1_card_preview"]
+[ext_resource type="Theme" path="res://themes/M4Theme.tres" id="2_preview_theme"]
+[ext_resource type="Resource" path="res://themes/CardAppearance.tres" id="3_preview_appearance"]
+
+[node name="CardViewPreview" type="Control"]
+custom_minimum_size = Vector2(360, 320)
+offset_right = 360.0
+offset_bottom = 320.0
+theme = ExtResource("2_preview_theme")
+script = ExtResource("1_card_preview")
+Appearance = ExtResource("3_preview_appearance")
+SampleKnown = true
+SampleBackSide = 0
+SampleIce = false
+SampleActionable = true
+SampleSelected = false
+SampleTarget = false
+SampleHovered = false
+
+[node name="PreviewCaption" type="Label" parent="."]
+layout_mode = 0
+offset_left = 16.0
+offset_top = 12.0
+offset_right = 344.0
+offset_bottom = 32.0
+mouse_filter = 2
+text = "SYNTHETIC CARD · KNOWN"
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(0.65, 0.9, 0.82, 1)
+theme_override_font_sizes/font_size = 11
+
+[node name="PreviewHost" type="Control" parent="."]
+layout_mode = 0
+offset_left = 105.0
+offset_top = 48.0
+offset_right = 255.0
+offset_bottom = 258.0
+mouse_filter = 2

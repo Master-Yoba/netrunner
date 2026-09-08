@@ -10,26 +10,136 @@ namespace Netrunner.GodotClient;
 /// only: a table can replace <see cref="Card"/> without giving the control any
 /// access to authoritative game state.
 /// </summary>
+[Tool]
 public partial class TableCardControl : Control
 {
+	public const string CardViewScenePath = "res://scenes/components/CardView.tscn";
+	public const string DefaultAppearancePath = "res://themes/CardAppearance.tres";
+
 	public static readonly Vector2 PortraitCardSize = new(150, 210);
 	public static readonly Vector2 IceCardSize = new(240, 108);
-
-	private static readonly Color Frame = new(0.39f, 0.47f, 0.55f);
-	private static readonly Color FocusFrame = new(0.46f, 0.95f, 0.82f);
-	private static readonly Color SelectedFrame = new(0.34f, 0.70f, 1.0f);
-	private static readonly Color TargetFrame = new(0.39f, 0.92f, 0.82f);
-	private static readonly Color ActionableFrame = new(0.96f, 0.99f, 1.0f);
-	private static readonly Color HiddenFrame = new(0.31f, 0.39f, 0.48f);
-	private static readonly Color HiddenSurface = new(0.075f, 0.10f, 0.15f);
 
 	private CardViewModel? _card;
 	private Texture2D? _artwork;
 	private PlayerSide _backSide = PlayerSide.Corp;
 	private Texture2D? _backTexture;
 	private static readonly Dictionary<PlayerSide, Texture2D?> BackTextures = new();
+	private CardAppearance? _appearance;
+	private bool _appearanceConnected;
 	public PlayerSide BackSide => _backSide;
 	public bool HasCardBackTexture => _backTexture is not null;
+
+	/// <summary>
+	/// Shared card visual values. The resource is shared intentionally; state
+	/// such as selection and actionability remains local to this control.
+	/// </summary>
+	[ExportGroup("Card appearance")]
+	[Export]
+	public CardAppearance Appearance
+	{
+		get => _appearance ??= LoadDefaultAppearance();
+		set => ReplaceAppearance(value);
+	}
+
+	private CardAppearance CurrentAppearance => Appearance;
+
+	/// <summary>
+	/// Creates the authored card scene. Runtime callers should use this factory
+	/// so the fixed label tree comes from CardView.tscn rather than from a C#
+	/// layout builder.
+	/// </summary>
+	public static TableCardControl Create()
+	{
+		PackedScene? scene = GD.Load<PackedScene>(CardViewScenePath);
+		if (scene is null)
+		{
+			string message = $"Production card scene is missing: {CardViewScenePath}";
+			GD.PushError(message);
+			throw new InvalidOperationException(message);
+		}
+
+		return scene.Instantiate<TableCardControl>();
+	}
+
+	private void ReplaceAppearance(CardAppearance? value)
+	{
+		value ??= LoadDefaultAppearance();
+		if (ReferenceEquals(_appearance, value))
+		{
+			return;
+		}
+
+		DisconnectAppearance();
+		_appearance = value;
+		if (IsInsideTree())
+		{
+			ConnectAppearance();
+		}
+		RefreshAppearance();
+	}
+
+	private void ConnectAppearance()
+	{
+		if (_appearanceConnected || _appearance is null || !GodotObject.IsInstanceValid(_appearance))
+		{
+			return;
+		}
+
+		_appearance.Changed += HandleAppearanceChanged;
+		_appearanceConnected = true;
+	}
+
+	private void DisconnectAppearance()
+	{
+		if (!_appearanceConnected || _appearance is null || !GodotObject.IsInstanceValid(_appearance))
+		{
+			_appearanceConnected = false;
+			return;
+		}
+
+		_appearance.Changed -= HandleAppearanceChanged;
+		_appearanceConnected = false;
+	}
+
+	private void HandleAppearanceChanged()
+	{
+		if (!GodotObject.IsInstanceValid(this))
+		{
+			return;
+		}
+
+		RefreshAppearance();
+	}
+
+	private static CardAppearance LoadDefaultAppearance()
+	{
+		CardAppearance? appearance = GD.Load<CardAppearance>(DefaultAppearancePath);
+		if (appearance is not null)
+		{
+			return appearance;
+		}
+
+		GD.PushError($"Shared card appearance resource is missing: {DefaultAppearancePath}");
+		return new CardAppearance();
+	}
+
+	private void RefreshAppearance()
+	{
+		if (!_hasExplicitDisplaySize)
+		{
+			_displaySize = _isIce ? CurrentAppearance.IceSize : CurrentAppearance.PortraitSize;
+		}
+
+		ApplySize();
+		if (_title is not null)
+		{
+			RefreshPresentation();
+		}
+		else
+		{
+			QueueRedraw();
+		}
+	}
 
 	public void SetBackSide(PlayerSide side)
 	{
@@ -43,6 +153,17 @@ public partial class TableCardControl : Control
 				: new[] { System.IO.Path.Combine(directory, filename), $"user://card-backs/{filename}", $"res://card-backs/{filename}" };
 			foreach (string path in candidates)
 			{
+				if (path.StartsWith("res://", StringComparison.Ordinal))
+				{
+					_backTexture = GD.Load<Texture2D>(path);
+					if (_backTexture is not null)
+					{
+						break;
+					}
+
+					continue;
+				}
+
 				if (Godot.FileAccess.FileExists(path))
 				{
 					using Image image = Image.LoadFromFile(path);
@@ -58,13 +179,14 @@ public partial class TableCardControl : Control
 		RefreshDynamicPresentation();
 		QueueRedraw();
 	}
-	private Label _title = null!;
-	private Label _type = null!;
-	private Label _stats = null!;
-	private Label _rulesCue = null!;
-	private Label _status = null!;
-	private Label _counters = null!;
+	private Label? _title;
+	private Label? _type;
+	private Label? _stats;
+	private Label? _rulesCue;
+	private Label? _status;
+	private Label? _counters;
 	private Vector2 _displaySize = PortraitCardSize;
+	private bool _hasExplicitDisplaySize;
 	private bool _isIce;
 	private bool _selected;
 	private bool _targetCandidate;
@@ -107,17 +229,30 @@ public partial class TableCardControl : Control
 	public Vector2 DisplaySize => _displaySize;
 
 	private bool IsCompactPortrait => !_isIce
-		&& (_displaySize.X < PortraitCardSize.X - 0.5f || _displaySize.Y < PortraitCardSize.Y - 0.5f);
+		&& (_displaySize.X < CurrentAppearance.PortraitSize.X - 0.5f
+			|| _displaySize.Y < CurrentAppearance.PortraitSize.Y - 0.5f);
+
+	public override void _EnterTree()
+	{
+		base._EnterTree();
+		ConnectAppearance();
+	}
 
 	public override void _Ready()
 	{
-		MouseFilter = MouseFilterEnum.Stop;
-		FocusMode = FocusModeEnum.All;
-		// Allow the soft border halo outside the card without changing its hit area.
-		ClipContents = false;
-		TooltipText = "Inspect card details; press Enter or Space to select.";
+		bool legacyConstructed = string.IsNullOrWhiteSpace(SceneFilePath);
+		EnsureAuthoredLayout();
+		ConnectAppearance();
+		if (legacyConstructed)
+		{
+			// These values are authored on CardView.tscn. They are copied here
+			// only for controls created by legacy `new TableCardControl()` calls.
+			MouseFilter = MouseFilterEnum.Stop;
+			FocusMode = FocusModeEnum.All;
+			ClipContents = false;
+			TooltipText = "Inspect card details; press Enter or Space to select.";
+		}
 
-		BuildLabels();
 		SetBackSide(_backSide);
 		MouseEntered += HandleMouseEntered;
 		MouseExited += HandleMouseExited;
@@ -126,6 +261,77 @@ public partial class TableCardControl : Control
 
 		ApplySize();
 		RefreshPresentation();
+	}
+
+	public override void _ExitTree()
+	{
+		DisconnectAppearance();
+		base._ExitTree();
+	}
+
+	/// <summary>
+	/// Legacy callers may still construct the script with <c>new</c>. Move the
+	/// authored children from a temporary CardView instance in that case so
+	/// there is one layout definition and no generated duplicate tree.
+	/// </summary>
+	private void EnsureAuthoredLayout()
+	{
+		TryBindAuthoredLabels();
+		if (HasAuthoredLabels())
+		{
+			return;
+		}
+
+		PackedScene? scene = GD.Load<PackedScene>(CardViewScenePath);
+		if (scene is not null)
+		{
+			Node? template = scene.Instantiate();
+			if (template is TableCardControl templateCard)
+			{
+				if (_appearance is null && templateCard._appearance is not null)
+				{
+					ReplaceAppearance(templateCard._appearance);
+				}
+
+				foreach (Node child in template.GetChildren().ToArray())
+				{
+					template.RemoveChild(child);
+					AddChild(child);
+				}
+
+				template.Free();
+			}
+			else
+			{
+				template?.Free();
+			}
+		}
+
+		TryBindAuthoredLabels();
+	}
+
+	private bool HasAuthoredLabels() => _title is not null
+		&& IsInstanceValid(_title)
+		&& _type is not null
+		&& IsInstanceValid(_type)
+		&& _stats is not null
+		&& IsInstanceValid(_stats)
+		&& _rulesCue is not null
+		&& IsInstanceValid(_rulesCue)
+		&& _status is not null
+		&& IsInstanceValid(_status)
+		&& _counters is not null
+		&& IsInstanceValid(_counters);
+
+	private bool TryBindAuthoredLabels()
+	{
+		_title = GetNodeOrNull<Label>("Title");
+		_type = GetNodeOrNull<Label>("Type");
+		_stats = GetNodeOrNull<Label>("Stats");
+		_rulesCue = GetNodeOrNull<Label>("RulesCue");
+		_status = GetNodeOrNull<Label>("Status");
+		_counters = GetNodeOrNull<Label>("Counters");
+		return HasAuthoredLabels();
 	}
 
 	/// <summary>
@@ -195,7 +401,8 @@ public partial class TableCardControl : Control
 		}
 
 		_isIce = ice;
-		_displaySize = ice ? IceCardSize : PortraitCardSize;
+		_hasExplicitDisplaySize = false;
+		_displaySize = ice ? CurrentAppearance.IceSize : CurrentAppearance.PortraitSize;
 		ApplySize();
 		RefreshPresentation();
 		QueueRedraw();
@@ -213,6 +420,7 @@ public partial class TableCardControl : Control
 			throw new ArgumentOutOfRangeException(nameof(size), "A card display size must be positive.");
 		}
 
+		_hasExplicitDisplaySize = true;
 		_displaySize = size;
 		ApplySize();
 		RefreshPresentation();
@@ -247,30 +455,31 @@ public partial class TableCardControl : Control
 
 	public override void _Draw()
 	{
+		CardAppearance appearance = CurrentAppearance;
 		Vector2 cardSize = _displaySize;
 		Rect2 cardRect = new(Vector2.Zero, cardSize);
 		Color accent = ResolveAccent();
 		Color border = ResolveBorder();
 		Color surface = _card is { IsKnown: true }
-			? new Color(0.055f, 0.075f, 0.11f)
-			: HiddenSurface;
+			? appearance.SurfaceColor
+			: appearance.HiddenSurfaceColor;
 
 		using var frame = new StyleBoxFlat
 		{
 			BgColor = surface,
 			BorderColor = border,
-			BorderWidthLeft = _selected || _targetCandidate ? 2 : 1,
-			BorderWidthTop = _selected || _targetCandidate ? 2 : 1,
-			BorderWidthRight = _selected || _targetCandidate ? 2 : 1,
-			BorderWidthBottom = _selected || _targetCandidate ? 2 : 1,
-			CornerRadiusTopLeft = 7,
-			CornerRadiusTopRight = 7,
-			CornerRadiusBottomLeft = 7,
-			CornerRadiusBottomRight = 7,
+			BorderWidthLeft = ToPixel(_selected || _targetCandidate ? appearance.EmphasisFrameWidth : appearance.FrameWidth),
+			BorderWidthTop = ToPixel(_selected || _targetCandidate ? appearance.EmphasisFrameWidth : appearance.FrameWidth),
+			BorderWidthRight = ToPixel(_selected || _targetCandidate ? appearance.EmphasisFrameWidth : appearance.FrameWidth),
+			BorderWidthBottom = ToPixel(_selected || _targetCandidate ? appearance.EmphasisFrameWidth : appearance.FrameWidth),
+			CornerRadiusTopLeft = ToPixel(appearance.CornerRadius),
+			CornerRadiusTopRight = ToPixel(appearance.CornerRadius),
+			CornerRadiusBottomLeft = ToPixel(appearance.CornerRadius),
+			CornerRadiusBottomRight = ToPixel(appearance.CornerRadius),
 			ShadowColor = _actionableSource
-				? new Color(border.R, border.G, border.B, 0.65f)
-				: new Color(0, 0, 0, 0.33f),
-			ShadowSize = _actionableSource ? 16 : 4,
+				? WithAlpha(border, appearance.GlowOpacity)
+				: new Color(0, 0, 0, appearance.FrameShadowOpacity),
+			ShadowSize = _actionableSource ? ToPixel(appearance.GlowOuterExtent) : 4,
 		};
 		DrawStyleBox(frame, new Rect2(Vector2.One, cardSize - new Vector2(2, 2)));
 
@@ -283,10 +492,10 @@ public partial class TableCardControl : Control
 		float headerHeight = _isIce
 			? Mathf.Min(22, cardSize.Y * 0.34f)
 			: IsCompactPortrait ? 43 : Mathf.Min(29, cardSize.Y * 0.30f);
-		DrawRect(new Rect2(2, 2, cardSize.X - 4, headerHeight), accent.Darkened(0.42f));
+		DrawRect(new Rect2(2, 2, cardSize.X - 4, headerHeight), accent.Darkened(appearance.HeaderDarken));
 		DrawRect(
 			new Rect2(2, 2 + headerHeight - 2, cardSize.X - 4, 2),
-			accent.Lightened(0.12f));
+			accent.Lightened(appearance.HeaderLighten));
 
 		Rect2 motifRect = _isIce
 			? new Rect2(
@@ -303,29 +512,15 @@ public partial class TableCardControl : Control
 				: new Rect2(12, 58, Mathf.Max(1, cardSize.X - 24), 82);
 		if (_artwork is not null)
 		{
-			DrawTextureRect(_artwork, motifRect, false, new Color(1, 1, 1, 0.87f));
+			DrawTextureRect(_artwork, motifRect, false, new Color(1, 1, 1, appearance.ArtworkOpacity));
 		}
 
-		DrawMotif(motifRect, accent, _artwork is not null ? 0.26f : 0.72f);
+		DrawMotif(
+			motifRect,
+			accent,
+			_artwork is not null ? appearance.MotifOpacityWithArtwork : appearance.MotifOpacityWithoutArtwork);
 		DrawStateBadge(accent, cardSize);
 		if (_actionableSource) DrawActionGlow(cardSize, border);
-	}
-
-	private void BuildLabels()
-	{
-		_title = MakeLabel(10, Colors.White);
-		_type = MakeLabel(8, new Color(0.80f, 0.88f, 0.92f));
-		_stats = MakeLabel(8, new Color(0.91f, 0.94f, 0.98f));
-		_rulesCue = MakeLabel(7, new Color(0.66f, 0.73f, 0.79f));
-		_status = MakeLabel(7, new Color(0.74f, 0.81f, 0.86f));
-		_counters = MakeLabel(7, new Color(1.0f, 0.83f, 0.39f));
-
-		AddChild(_title);
-		AddChild(_type);
-		AddChild(_stats);
-		AddChild(_rulesCue);
-		AddChild(_status);
-		AddChild(_counters);
 	}
 
 	private void ApplySize()
@@ -347,36 +542,40 @@ public partial class TableCardControl : Control
 
 		if (_isIce)
 		{
+			CardAppearance appearance = CurrentAppearance;
 			float leftWidth = Mathf.Max(1, _displaySize.X * 0.52f);
 			float rightX = _displaySize.X * 0.56f;
 			float rightWidth = Mathf.Max(1, _displaySize.X - rightX - 5);
-			SetLabelRect(_title, new Rect2(5, 4, leftWidth, 14), 10, Colors.White);
-			SetLabelRect(_type, new Rect2(5, 18, leftWidth, 12), 7, new Color(0.80f, 0.88f, 0.92f));
-			SetLabelRect(_stats, new Rect2(5, _displaySize.Y - 20, leftWidth, 14), 8, new Color(0.91f, 0.94f, 0.98f));
-			SetLabelRect(_rulesCue, new Rect2(5, 34, leftWidth, 15), 7, new Color(0.66f, 0.73f, 0.79f));
-			SetLabelRect(_status, new Rect2(rightX, _displaySize.Y - 18, rightWidth, 13), 7, new Color(0.74f, 0.81f, 0.86f));
-			SetLabelRect(_counters, new Rect2(rightX, 3, rightWidth, 16), 7, new Color(1.0f, 0.83f, 0.39f));
+			SetLabelRect(_title!, new Rect2(5, 4, leftWidth, 14), appearance.TitleFontSize, appearance.TitleColor);
+			SetLabelRect(_type!, new Rect2(5, 18, leftWidth, 12), appearance.TypeFontSize, appearance.TypeColor);
+			SetLabelRect(_stats!, new Rect2(5, _displaySize.Y - 20, leftWidth, 14), appearance.StatsFontSize, appearance.StatsColor);
+			SetLabelRect(_rulesCue!, new Rect2(5, 34, leftWidth, 15), appearance.RulesFontSize, appearance.RulesColor);
+			SetLabelRect(_status!, new Rect2(rightX, _displaySize.Y - 18, rightWidth, 13), appearance.StatusFontSize, appearance.StatusColor);
+			SetLabelRect(_counters!, new Rect2(rightX, 3, rightWidth, 16), appearance.CounterFontSize, appearance.CounterColor);
 		}
 		else if (IsCompactPortrait)
 		{
+			CardAppearance appearance = CurrentAppearance;
 			float width = Mathf.Max(1, _displaySize.X - 8);
 			float statusY = Mathf.Max(0, _displaySize.Y - 14);
 			float statsY = Mathf.Max(0, _displaySize.Y - 34);
-			SetLabelRect(_title, new Rect2(4, 2, width, 31), 10, Colors.White);
-			SetLabelRect(_type, new Rect2(4, 33, width, 10), 8, new Color(0.80f, 0.88f, 0.92f));
-			SetLabelRect(_stats, new Rect2(4, statsY, width, 11), 9, new Color(0.91f, 0.94f, 0.98f));
-			SetLabelRect(_rulesCue, new Rect2(4, 0, width, 1), 7, new Color(0.66f, 0.73f, 0.79f));
-			SetLabelRect(_status, new Rect2(4, statusY, width, 10), 7, new Color(0.74f, 0.81f, 0.86f));
-			SetLabelRect(_counters, new Rect2(4, Mathf.Max(0, _displaySize.Y - 24), width, 10), 7, new Color(1.0f, 0.83f, 0.39f));
+			SetLabelRect(_title!, new Rect2(4, 2, width, 31), appearance.TitleFontSize, appearance.TitleColor);
+			SetLabelRect(_type!, new Rect2(4, 33, width, 10), appearance.TypeFontSize, appearance.TypeColor);
+			SetLabelRect(_stats!, new Rect2(4, statsY, width, 11), appearance.CompactStatsFontSize, appearance.StatsColor);
+			SetLabelRect(_rulesCue!, new Rect2(4, 0, width, 1), appearance.RulesFontSize, appearance.RulesColor);
+			SetLabelRect(_status!, new Rect2(4, statusY, width, 10), appearance.StatusFontSize, appearance.StatusColor);
+			SetLabelRect(_counters!, new Rect2(4, Mathf.Max(0, _displaySize.Y - 24), width, 10), appearance.CounterFontSize, appearance.CounterColor);
 		}
 		else
 		{
-			SetLabelRect(_title, new Rect2(7, 6, 136, 30), 10, Colors.White);
-			SetLabelRect(_type, new Rect2(7, 34, 136, 21), 7, new Color(0.80f, 0.88f, 0.92f));
-			SetLabelRect(_stats, new Rect2(7, 144, 136, 21), 8, new Color(0.91f, 0.94f, 0.98f));
-			SetLabelRect(_rulesCue, new Rect2(7, 165, 136, 21), 7, new Color(0.66f, 0.73f, 0.79f));
-			SetLabelRect(_status, new Rect2(7, 186, 136, 18), 7, new Color(0.74f, 0.81f, 0.86f));
-			SetLabelRect(_counters, new Rect2(7, 123, 136, 23), 7, new Color(1.0f, 0.83f, 0.39f));
+			CardAppearance appearance = CurrentAppearance;
+			float width = Mathf.Max(1, _displaySize.X - 14);
+			SetLabelRect(_title!, new Rect2(7, 6, width, 30), appearance.TitleFontSize, appearance.TitleColor);
+			SetLabelRect(_type!, new Rect2(7, 34, width, 21), appearance.TypeFontSize, appearance.TypeColor);
+			SetLabelRect(_stats!, new Rect2(7, 144, width, 21), appearance.StatsFontSize, appearance.StatsColor);
+			SetLabelRect(_rulesCue!, new Rect2(7, 165, width, 21), appearance.RulesFontSize, appearance.RulesColor);
+			SetLabelRect(_status!, new Rect2(7, 186, width, 18), appearance.StatusFontSize, appearance.StatusColor);
+			SetLabelRect(_counters!, new Rect2(7, 123, width, 23), appearance.CounterFontSize, appearance.CounterColor);
 		}
 
 		RefreshDynamicPresentation();
@@ -392,58 +591,25 @@ public partial class TableCardControl : Control
 
 		bool known = _card?.IsKnown == true;
 		bool showText = known || _backTexture is null;
-		_title.Visible = showText;
-		_type.Visible = showText;
-		_stats.Visible = showText;
-		_status.Visible = showText;
+		_title!.Visible = showText;
+		_type!.Visible = showText;
+		_stats!.Visible = showText;
+		_status!.Visible = showText;
 		bool compact = IsCompactPortrait;
-		_title.Text = known ? compact ? CompactTitle(_card!.Title) : _card!.Title : "FACE-DOWN";
-		_title.AutowrapMode = TextServer.AutowrapMode.Off;
-		_title.VerticalAlignment = VerticalAlignment.Top;
-		_title.MaxLinesVisible = compact ? 2 : 1;
-		_title.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
-		_type.Text = known ? FormatType(_card!, compact || _isIce) : "UNKNOWN";
-		_stats.Text = known ? FormatStats(_card!, compact) : "HIDDEN";
-		_rulesCue.Text = known
+		_title!.Text = known ? compact ? CompactTitle(_card!.Title) : _card!.Title : "FACE-DOWN";
+		_title!.AutowrapMode = TextServer.AutowrapMode.Off;
+		_title!.VerticalAlignment = VerticalAlignment.Top;
+		_title!.MaxLinesVisible = compact ? 2 : 1;
+		_title!.TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis;
+		_type!.Text = known ? FormatType(_card!, compact || _isIce) : "UNKNOWN";
+		_stats!.Text = known ? FormatStats(_card!, compact) : "HIDDEN";
+		_rulesCue!.Text = known
 			? BuildRulesCue(_card!.RulesText, _isIce ? 38 : compact ? 20 : 30)
 			: "NO PUBLIC DETAILS";
-		_status.Text = known ? FormatStatus(_card!, compact) : "FACE-DOWN";
-		_counters.Text = known ? FormatCounters(_card!, compact) : string.Empty;
-		_counters.Visible = _counters.Text.Length > 0;
-		_rulesCue.Visible = known && !_isIce && !compact;
-
-		using var statusStyle = new StyleBoxFlat
-		{
-			BgColor = known ? new Color(0.08f, 0.12f, 0.17f, 0.88f) : new Color(0.07f, 0.09f, 0.13f, 0.92f),
-			CornerRadiusTopLeft = 3,
-			CornerRadiusTopRight = 3,
-			CornerRadiusBottomLeft = 3,
-			CornerRadiusBottomRight = 3,
-			ContentMarginLeft = 3,
-			ContentMarginRight = 3,
-			ContentMarginTop = 1,
-			ContentMarginBottom = 1,
-		};
-		_status.AddThemeStyleboxOverride("normal", statusStyle);
-
-		using var counterStyle = new StyleBoxFlat
-		{
-			BgColor = new Color(0.20f, 0.14f, 0.08f, 0.94f),
-			BorderColor = new Color(0.80f, 0.57f, 0.20f, 0.75f),
-			BorderWidthLeft = 1,
-			BorderWidthTop = 1,
-			BorderWidthRight = 1,
-			BorderWidthBottom = 1,
-			CornerRadiusTopLeft = 4,
-			CornerRadiusTopRight = 4,
-			CornerRadiusBottomLeft = 4,
-			CornerRadiusBottomRight = 4,
-			ContentMarginLeft = 3,
-			ContentMarginRight = 3,
-			ContentMarginTop = 1,
-			ContentMarginBottom = 1,
-		};
-		_counters.AddThemeStyleboxOverride("normal", counterStyle);
+		_status!.Text = known ? FormatStatus(_card!, compact) : "FACE-DOWN";
+		_counters!.Text = known ? FormatCounters(_card!, compact) : string.Empty;
+		_counters!.Visible = _counters!.Text.Length > 0;
+		_rulesCue!.Visible = known && !_isIce && !compact;
 		TooltipText = known
 			? BuildTooltip(_card!)
 			: "Face-down card; identity is concealed.";
@@ -475,20 +641,6 @@ public partial class TableCardControl : Control
 		label.Size = rect.Size;
 		label.AddThemeFontSizeOverride("font_size", fontSize);
 		label.AddThemeColorOverride("font_color", colour);
-	}
-
-	private static Label MakeLabel(int fontSize, Color colour)
-	{
-		var label = new Label
-		{
-			MouseFilter = MouseFilterEnum.Ignore,
-			ClipText = true,
-			AutowrapMode = TextServer.AutowrapMode.Off,
-			VerticalAlignment = VerticalAlignment.Center,
-		};
-		label.AddThemeFontSizeOverride("font_size", fontSize);
-		label.AddThemeColorOverride("font_color", colour);
-		return label;
 	}
 
 	private void HandleMouseEntered()
@@ -542,84 +694,87 @@ public partial class TableCardControl : Control
 
 	private Color ResolveAccent()
 	{
+		CardAppearance appearance = CurrentAppearance;
 		if (_card is not { IsKnown: true })
 		{
-			return HiddenFrame;
+			return appearance.HiddenColor;
 		}
 
 		string faction = _card.Faction.ToLowerInvariant();
 		if (faction.Contains("anarch", StringComparison.Ordinal))
 		{
-			return new Color(0.82f, 0.30f, 0.42f);
+			return appearance.AnarchAccent;
 		}
 
 		if (faction.Contains("criminal", StringComparison.Ordinal))
 		{
-			return new Color(0.30f, 0.55f, 0.92f);
+			return appearance.CriminalAccent;
 		}
 
 		if (faction.Contains("shaper", StringComparison.Ordinal))
 		{
-			return new Color(0.35f, 0.78f, 0.63f);
+			return appearance.ShaperAccent;
 		}
 
 		if (faction.Contains("haas", StringComparison.Ordinal)
 			|| faction.Contains("bioroid", StringComparison.Ordinal))
 		{
-			return new Color(0.74f, 0.42f, 0.84f);
+			return appearance.HaasAccent;
 		}
 
 		if (faction.Contains("jinteki", StringComparison.Ordinal))
 		{
-			return new Color(0.93f, 0.38f, 0.42f);
+			return appearance.JintekiAccent;
 		}
 
 		if (faction.Contains("nbn", StringComparison.Ordinal))
 		{
-			return new Color(0.95f, 0.66f, 0.25f);
+			return appearance.NbnAccent;
 		}
 
 		if (faction.Contains("weyland", StringComparison.Ordinal))
 		{
-			return new Color(0.38f, 0.68f, 0.47f);
+			return appearance.WeylandAccent;
 		}
 
 		if (_card.Type.Contains("ice", StringComparison.OrdinalIgnoreCase))
 		{
-			return new Color(0.31f, 0.67f, 0.80f);
+			return appearance.IceAccent;
 		}
 
-		return new Color(0.61f, 0.68f, 0.75f);
+		return appearance.DefaultAccent;
 	}
 
 	private Color ResolveBorder()
 	{
+		CardAppearance appearance = CurrentAppearance;
 		if (_selected)
 		{
-			return SelectedFrame;
+			return appearance.SelectedColor;
 		}
 
 		if (_targetCandidate)
 		{
-			return TargetFrame;
+			return appearance.TargetColor;
 		}
 
 		if (_actionableSource)
 		{
-			return ActionableFrame;
+			return appearance.ActionableColor;
 		}
 
 		if (_hovered || HasFocus())
 		{
-			return FocusFrame;
+			return appearance.FocusColor;
 		}
 
-		return _card is { IsKnown: true } ? Frame : HiddenFrame;
+		return _card is { IsKnown: true } ? appearance.FrameColor : appearance.HiddenColor;
 	}
 
 	private void DrawActionGlow(Vector2 cardSize, Color color)
 	{
 		// A broad inner fade complements the outer shadow where hand cards overlap.
+		CardAppearance appearance = CurrentAppearance;
 		using var glow = new StyleBoxFlat
 		{
 			BgColor = Colors.Transparent,
@@ -627,23 +782,29 @@ public partial class TableCardControl : Control
 			BorderWidthTop = 1,
 			BorderWidthRight = 1,
 			BorderWidthBottom = 1,
-			CornerRadiusTopLeft = 7,
-			CornerRadiusTopRight = 7,
-			CornerRadiusBottomLeft = 7,
-			CornerRadiusBottomRight = 7,
+			CornerRadiusTopLeft = ToPixel(appearance.CornerRadius),
+			CornerRadiusTopRight = ToPixel(appearance.CornerRadius),
+			CornerRadiusBottomLeft = ToPixel(appearance.CornerRadius),
+			CornerRadiusBottomRight = ToPixel(appearance.CornerRadius),
 		};
-		const int glowWidth = 12;
+		int glowWidth = ToPixel(appearance.GlowInnerExtent);
+		if (glowWidth <= 0)
+		{
+			return;
+		}
+
 		for (int inset = 1; inset <= glowWidth; inset++)
 		{
-			float distance = (inset - 1f) / (glowWidth - 1f);
-			float fade = 1f - distance;
-			glow.BorderColor = new Color(color.R, color.G, color.B, 0.65f * fade * fade);
+			float distance = glowWidth <= 1 ? 0.0f : (inset - 1f) / (glowWidth - 1f);
+			float fade = Mathf.Pow(1f - distance, appearance.GlowFalloff);
+			glow.BorderColor = WithAlpha(color, appearance.GlowOpacity * fade);
 			DrawStyleBox(glow, new Rect2(Vector2.One * inset, cardSize - Vector2.One * inset * 2));
 		}
 	}
 
 	private void DrawNeutralBack(Rect2 cardRect, Color border)
 	{
+		CardAppearance appearance = CurrentAppearance;
 		if (_backTexture is not null)
 		{
 			Vector2 available = cardRect.Size - new Vector2(6, 6);
@@ -656,27 +817,28 @@ public partial class TableCardControl : Control
 			return;
 		}
 		Rect2 inset = new(cardRect.Position + new Vector2(8, 8), cardRect.Size - new Vector2(16, 16));
-		DrawRect(inset, new Color(border.R, border.G, border.B, 0.22f), false, 1.0f);
+		DrawRect(inset, WithAlpha(border, appearance.BackInsetOpacity), false, appearance.BackLineWidth);
 		Vector2 center = cardRect.GetCenter();
 		float radius = Mathf.Min(
 			_isIce
 				? Mathf.Min(19, cardRect.Size.Y * 0.22f)
 				: IsCompactPortrait ? cardRect.Size.X * 0.26f : 28,
 			Mathf.Min(cardRect.Size.X, cardRect.Size.Y) * 0.30f);
-		DrawCircle(center, radius, new Color(0.11f, 0.17f, 0.25f, 0.75f));
-		DrawArc(center, radius, 0, Mathf.Tau, 32, new Color(border.R, border.G, border.B, 0.72f), 1.3f);
-		DrawLine(center + new Vector2(-radius * 0.55f, 0), center + new Vector2(radius * 0.55f, 0), border, 2);
-		DrawLine(center + new Vector2(0, -radius * 0.55f), center + new Vector2(0, radius * 0.55f), border, 2);
+		DrawCircle(center, radius, WithAlpha(appearance.HiddenSurfaceColor, appearance.BackCenterOpacity));
+		DrawArc(center, radius, 0, Mathf.Tau, 32, WithAlpha(border, appearance.BackRingOpacity), appearance.BackLineWidth);
+		DrawLine(center + new Vector2(-radius * 0.55f, 0), center + new Vector2(radius * 0.55f, 0), border, appearance.BackCrossWidth);
+		DrawLine(center + new Vector2(0, -radius * 0.55f), center + new Vector2(0, radius * 0.55f), border, appearance.BackCrossWidth);
 	}
 
 	private void DrawMotif(Rect2 motifRect, Color accent, float alpha)
 	{
+		CardAppearance appearance = CurrentAppearance;
 		Color line = new(accent.R, accent.G, accent.B, alpha);
 		Vector2 center = motifRect.GetCenter();
 		float radius = Mathf.Min(motifRect.Size.X, motifRect.Size.Y) * 0.31f;
-		DrawCircle(center, radius, new Color(accent.R, accent.G, accent.B, alpha * 0.16f));
-		DrawArc(center, radius, 0, Mathf.Tau, 28, line, 1.3f);
-		DrawArc(center, radius * 0.63f, Mathf.Pi * 0.18f, Mathf.Pi * 1.35f, 18, line, 1.0f);
+		DrawCircle(center, radius, new Color(accent.R, accent.G, accent.B, alpha * appearance.MotifFillOpacity));
+		DrawArc(center, radius, 0, Mathf.Tau, 28, line, appearance.MotifLineWidth);
+		DrawArc(center, radius * 0.63f, Mathf.Pi * 0.18f, Mathf.Pi * 1.35f, 18, line, appearance.MotifLineWidth);
 
 		if (_isIce)
 		{
@@ -708,19 +870,21 @@ public partial class TableCardControl : Control
 			return;
 		}
 
+		CardAppearance appearance = CurrentAppearance;
+
 		if (_targetCandidate)
 		{
 			Rect2 target = _isIce
 				? new Rect2(cardSize.X - 48, cardSize.Y - 19, 43, 14)
 				: new Rect2(cardSize.X - 58, cardSize.Y - 18, 53, 13);
-			DrawRect(target, new Color(TargetFrame.R, TargetFrame.G, TargetFrame.B, 0.18f));
-			DrawRect(target, TargetFrame, false, 1.0f);
+			DrawRect(target, WithAlpha(appearance.TargetColor, appearance.TargetBadgeOpacity));
+			DrawRect(target, appearance.TargetColor, false, appearance.FrameWidth);
 		}
 
 		if (_selected)
 		{
 			Rect2 selected = new(new Vector2(3, 3), cardSize - new Vector2(6, 6));
-			DrawRect(selected, new Color(SelectedFrame.R, SelectedFrame.G, SelectedFrame.B, 0.20f), false, 1.0f);
+			DrawRect(selected, WithAlpha(appearance.SelectedColor, appearance.SelectedBadgeOpacity), false, appearance.FrameWidth);
 		}
 
 		if (_card.Rezzed || _card.IsAbilityUsed || _card.IsFirstXUsedThisTurn)
@@ -730,9 +894,17 @@ public partial class TableCardControl : Control
 				: IsCompactPortrait
 					? new Rect2(4, Mathf.Max(0, cardSize.Y - 15), Mathf.Max(1, cardSize.X - 8), 11)
 					: new Rect2(5, cardSize.Y - 14, Mathf.Max(1, cardSize.X - 10), 10);
-			DrawRect(status, new Color(accent.R, accent.G, accent.B, 0.16f));
+			DrawRect(status, WithAlpha(accent, appearance.StatusBadgeOpacity));
 		}
 	}
+
+	private static int ToPixel(float value) => Mathf.Max(0, Mathf.RoundToInt(value));
+
+	private static Color WithAlpha(Color color, float alpha) => new(
+		color.R,
+		color.G,
+		color.B,
+		Mathf.Clamp(alpha, 0.0f, 1.0f));
 
 	private static string FormatType(CardViewModel card, bool compact = false)
 	{

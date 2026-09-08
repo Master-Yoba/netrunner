@@ -26,6 +26,7 @@ scope progression.
 | M3 | Native playable micro-decks | 4–6 weeks | The same M2 match is playable through Godot |
 | M4 | Complete Gateway rules/cards | 12–18 weeks | All designs implemented, reviewed, and card-tested |
 | M4.9 | Card-table UI and understandable history | See [UI plan](M4_9_UI_PLAN.md) | Native layout, history/visibility and manual usability gate before M5 |
+| M4.10 | Editor-friendly UI and live visual authoring | See [slice 4.10 plan](M4_10_EDITOR_FRIENDLY_UI_PLAN.md) | Reusable production scenes, persistent Inspector styling, safe live previews and manual authoring gate before M5 |
 | M5 | Complete offline solo mode | 6–8 weeks | Both bots finish stress runs; save/resume works |
 | M6 | Safe LLM/hybrid mode | 4–6 weeks | Intent play, constrained actions, timeout/takeover pass |
 | RC | Polish, packaging, QA | 3–5 weeks | Release matrix and all PRD exit criteria pass |

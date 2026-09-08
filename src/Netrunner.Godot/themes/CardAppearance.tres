@@ -1,0 +1,66 @@
+[gd_resource type="Resource" script_class="CardAppearance" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/CardAppearance.cs" id="1_card_appearance"]
+
+[resource]
+resource_name = "CardAppearance"
+script = ExtResource("1_card_appearance")
+PortraitSize = Vector2(150, 210)
+IceSize = Vector2(240, 108)
+CornerRadius = 7.0
+FrameWidth = 1.0
+EmphasisFrameWidth = 2.0
+TitleFontSize = 10
+TypeFontSize = 8
+StatsFontSize = 8
+CompactStatsFontSize = 9
+RulesFontSize = 7
+StatusFontSize = 7
+CounterFontSize = 7
+TitleColor = Color(1, 1, 1, 1)
+TypeColor = Color(0.8, 0.88, 0.92, 1)
+StatsColor = Color(0.91, 0.94, 0.98, 1)
+RulesColor = Color(0.66, 0.73, 0.79, 1)
+StatusColor = Color(0.74, 0.81, 0.86, 1)
+CounterColor = Color(1, 0.83, 0.39, 1)
+SurfaceColor = Color(0.055, 0.075, 0.11, 1)
+HiddenSurfaceColor = Color(0.075, 0.1, 0.15, 1)
+FrameColor = Color(0.39, 0.47, 0.55, 1)
+FocusColor = Color(0.46, 0.95, 0.82, 1)
+SelectedColor = Color(0.34, 0.7, 1, 1)
+TargetColor = Color(0.39, 0.92, 0.82, 1)
+ActionableColor = Color(0.96, 0.99, 1, 1)
+HiddenColor = Color(0.31, 0.39, 0.48, 1)
+StatusBackground = Color(0.08, 0.12, 0.17, 0.88)
+HiddenStatusBackground = Color(0.07, 0.09, 0.13, 0.92)
+CounterBackground = Color(0.2, 0.14, 0.08, 0.94)
+CounterBorderColor = Color(0.8, 0.57, 0.2, 0.75)
+AnarchAccent = Color(0.82, 0.3, 0.42, 1)
+CriminalAccent = Color(0.3, 0.55, 0.92, 1)
+ShaperAccent = Color(0.35, 0.78, 0.63, 1)
+HaasAccent = Color(0.74, 0.42, 0.84, 1)
+JintekiAccent = Color(0.93, 0.38, 0.42, 1)
+NbnAccent = Color(0.95, 0.66, 0.25, 1)
+WeylandAccent = Color(0.38, 0.68, 0.47, 1)
+IceAccent = Color(0.31, 0.67, 0.8, 1)
+DefaultAccent = Color(0.61, 0.68, 0.75, 1)
+HeaderDarken = 0.42
+HeaderLighten = 0.12
+ArtworkOpacity = 0.87
+MotifOpacityWithArtwork = 0.26
+MotifOpacityWithoutArtwork = 0.72
+MotifFillOpacity = 0.16
+BackInsetOpacity = 0.22
+BackCenterOpacity = 0.75
+BackRingOpacity = 0.72
+TargetBadgeOpacity = 0.18
+SelectedBadgeOpacity = 0.2
+StatusBadgeOpacity = 0.16
+MotifLineWidth = 1.3
+BackLineWidth = 1.3
+BackCrossWidth = 2.0
+GlowOuterExtent = 16.0
+GlowInnerExtent = 12.0
+GlowOpacity = 0.65
+GlowFalloff = 2.0
+FrameShadowOpacity = 0.33

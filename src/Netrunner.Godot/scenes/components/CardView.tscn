@@ -1,0 +1,124 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://scenes/TableCardControl.cs" id="1_card_view"]
+[ext_resource type="Theme" path="res://themes/M4Theme.tres" id="2_card_theme"]
+[ext_resource type="Resource" path="res://themes/CardAppearance.tres" id="3_card_appearance"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_card_status"]
+bg_color = Color(0.08, 0.12, 0.17, 0.88)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+content_margin_left = 3.0
+content_margin_top = 1.0
+content_margin_right = 3.0
+content_margin_bottom = 1.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_card_counter"]
+bg_color = Color(0.2, 0.14, 0.08, 0.94)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.8, 0.57, 0.2, 0.75)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+content_margin_left = 3.0
+content_margin_top = 1.0
+content_margin_right = 3.0
+content_margin_bottom = 1.0
+
+[node name="CardView" type="Control"]
+custom_minimum_size = Vector2(150, 210)
+offset_right = 150.0
+offset_bottom = 210.0
+mouse_filter = 0
+focus_mode = 2
+clip_contents = false
+tooltip_text = "Inspect card details; press Enter or Space to select."
+theme = ExtResource("2_card_theme")
+script = ExtResource("1_card_view")
+Appearance = ExtResource("3_card_appearance")
+
+[node name="Title" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 7.0
+offset_top = 6.0
+offset_right = 143.0
+offset_bottom = 36.0
+mouse_filter = 2
+clip_text = true
+autowrap_mode = 0
+vertical_alignment = 0
+theme_override_font_sizes/font_size = 10
+
+[node name="Type" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 7.0
+offset_top = 34.0
+offset_right = 143.0
+offset_bottom = 55.0
+mouse_filter = 2
+clip_text = true
+autowrap_mode = 0
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 8
+
+[node name="Stats" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 7.0
+offset_top = 144.0
+offset_right = 143.0
+offset_bottom = 165.0
+mouse_filter = 2
+clip_text = true
+autowrap_mode = 0
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 8
+
+[node name="RulesCue" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 7.0
+offset_top = 165.0
+offset_right = 143.0
+offset_bottom = 186.0
+mouse_filter = 2
+clip_text = true
+autowrap_mode = 0
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 7
+
+[node name="Status" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 7.0
+offset_top = 186.0
+offset_right = 143.0
+offset_bottom = 204.0
+mouse_filter = 2
+clip_text = true
+autowrap_mode = 0
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 7
+theme_override_styles/normal = SubResource("StyleBox_card_status")
+
+[node name="Counters" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 7.0
+offset_top = 123.0
+offset_right = 143.0
+offset_bottom = 146.0
+mouse_filter = 2
+clip_text = true
+autowrap_mode = 0
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 7
+theme_override_styles/normal = SubResource("StyleBox_card_counter")
