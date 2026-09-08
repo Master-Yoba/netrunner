@@ -17,8 +17,9 @@ public partial class TableCardControl : Control
 
 	private static readonly Color Frame = new(0.39f, 0.47f, 0.55f);
 	private static readonly Color FocusFrame = new(0.46f, 0.95f, 0.82f);
-	private static readonly Color SelectedFrame = new(1.0f, 0.76f, 0.28f);
-	private static readonly Color TargetFrame = new(0.39f, 0.78f, 1.0f);
+	private static readonly Color SelectedFrame = new(0.34f, 0.70f, 1.0f);
+	private static readonly Color TargetFrame = new(0.39f, 0.92f, 0.82f);
+	private static readonly Color ActionableFrame = new(0.96f, 0.99f, 1.0f);
 	private static readonly Color HiddenFrame = new(0.31f, 0.39f, 0.48f);
 	private static readonly Color HiddenSurface = new(0.075f, 0.10f, 0.15f);
 
@@ -67,13 +68,21 @@ public partial class TableCardControl : Control
 	private bool _isIce;
 	private bool _selected;
 	private bool _targetCandidate;
+	private bool _actionableSource;
 	private bool _hovered;
+	private bool _interactionActive;
 
 	/// <summary>Raised after a visible card is activated by mouse or keyboard.</summary>
 	public event Action<string>? CardSelected;
 
 	/// <summary>Raised when a card is hovered, focused, or activated for preview.</summary>
 	public event Action<string>? CardInspected;
+
+	/// <summary>
+	/// Raised when this control becomes or ceases to be the active hover/focus
+	/// source. The table forwards this without changing the card's layout.
+	/// </summary>
+	public event Action<TableCardControl, bool>? CardHoverChanged;
 
 	public CardViewModel? Card => _card;
 
@@ -85,7 +94,11 @@ public partial class TableCardControl : Control
 
 	public bool IsTargetCandidate => _targetCandidate;
 
+	public bool IsActionableSource => _actionableSource;
+
 	public bool IsHovered => _hovered;
+
+	public bool IsInteractionActive => _interactionActive;
 
 	/// <summary>
 	/// The rendered footprint. The table may choose a compact footprint while
@@ -120,11 +133,21 @@ public partial class TableCardControl : Control
 	/// </summary>
 	public void SetCard(CardViewModel? card)
 	{
+		bool wasActive = _interactionActive;
 		_card = card;
 		_selected = false;
 		_targetCandidate = false;
+		_actionableSource = false;
 		RefreshArtwork();
 		RefreshPresentation();
+		// A concealed or removed projection must dismiss any preview that was
+		// associated with this control. A newly known projection waits for a new
+		// hover/focus transition so a state revision cannot resurrect stale text.
+		if (wasActive && _card?.IsKnown != true)
+		{
+			_interactionActive = false;
+			CardHoverChanged?.Invoke(this, false);
+		}
 	}
 
 	/// <summary>Marks this card as the currently selected local target.</summary>
@@ -144,6 +167,17 @@ public partial class TableCardControl : Control
 			_selected = false;
 		}
 
+		RefreshDynamicPresentation();
+		QueueRedraw();
+	}
+
+	/// <summary>
+	/// Marks this card as the source of at least one currently issued action.
+	/// This state is presentation-only and is never inferred from card text.
+	/// </summary>
+	public void SetActionableSource(bool actionable)
+	{
+		_actionableSource = actionable && _card?.IsKnown == true;
 		RefreshDynamicPresentation();
 		QueueRedraw();
 	}
@@ -232,8 +266,10 @@ public partial class TableCardControl : Control
 			CornerRadiusTopRight = 7,
 			CornerRadiusBottomLeft = 7,
 			CornerRadiusBottomRight = 7,
-			ShadowColor = new Color(0, 0, 0, 0.33f),
-			ShadowSize = 4,
+			ShadowColor = _actionableSource
+				? new Color(ActionableFrame.R, ActionableFrame.G, ActionableFrame.B, 0.54f)
+				: new Color(0, 0, 0, 0.33f),
+			ShadowSize = _actionableSource ? 8 : 4,
 		};
 		DrawStyleBox(frame, new Rect2(Vector2.One, cardSize - new Vector2(2, 2)));
 
@@ -271,6 +307,7 @@ public partial class TableCardControl : Control
 
 		DrawMotif(motifRect, accent, _artwork is not null ? 0.26f : 0.72f);
 		DrawStateBadge(accent, cardSize);
+		if (_actionableSource) DrawActionGlow(cardSize, border);
 	}
 
 	private void BuildLabels()
@@ -459,6 +496,7 @@ public partial class TableCardControl : Control
 		ZIndex = 10;
 		QueueRedraw();
 		EmitInspection();
+		UpdateInteractionState(force: true);
 	}
 
 	private void HandleMouseExited()
@@ -466,6 +504,7 @@ public partial class TableCardControl : Control
 		_hovered = false;
 		ZIndex = HasFocus() ? 10 : 0;
 		QueueRedraw();
+		UpdateInteractionState();
 	}
 
 	private void HandleFocusEntered()
@@ -473,17 +512,31 @@ public partial class TableCardControl : Control
 		ZIndex = 10;
 		QueueRedraw();
 		EmitInspection();
+		UpdateInteractionState(force: true);
 	}
 
 	private void HandleFocusExited()
 	{
 		ZIndex = _hovered ? 10 : 0;
 		QueueRedraw();
+		UpdateInteractionState();
 	}
 
 	private void EmitInspection()
 	{
 		CardInspected?.Invoke(_card is { IsKnown: true } ? _card.Id : string.Empty);
+	}
+
+	private void UpdateInteractionState(bool force = false)
+	{
+		bool active = (_hovered || HasFocus()) && _card?.IsKnown == true;
+		if (!force && active == _interactionActive)
+		{
+			return;
+		}
+
+		_interactionActive = active;
+		CardHoverChanged?.Invoke(this, active);
 	}
 
 	private Color ResolveAccent()
@@ -550,12 +603,39 @@ public partial class TableCardControl : Control
 			return TargetFrame;
 		}
 
+		if (_actionableSource)
+		{
+			return ActionableFrame;
+		}
+
 		if (_hovered || HasFocus())
 		{
 			return FocusFrame;
 		}
 
 		return _card is { IsKnown: true } ? Frame : HiddenFrame;
+	}
+
+	private void DrawActionGlow(Vector2 cardSize, Color color)
+	{
+		// Draw inward after the face: the table clips each card at its hit area.
+		using var glow = new StyleBoxFlat
+		{
+			BgColor = Colors.Transparent,
+			BorderWidthLeft = 1,
+			BorderWidthTop = 1,
+			BorderWidthRight = 1,
+			BorderWidthBottom = 1,
+			CornerRadiusTopLeft = 7,
+			CornerRadiusTopRight = 7,
+			CornerRadiusBottomLeft = 7,
+			CornerRadiusBottomRight = 7,
+		};
+		for (int inset = 1; inset <= 6; inset++)
+		{
+			glow.BorderColor = new Color(color.R, color.G, color.B, 0.65f / (inset * inset));
+			DrawStyleBox(glow, new Rect2(Vector2.One * inset, cardSize - Vector2.One * inset * 2));
+		}
 	}
 
 	private void DrawNeutralBack(Rect2 cardRect, Color border)

@@ -165,6 +165,7 @@ public partial class Main
 		var options = new MatchCoordinatorOptions
 		{
 			HumanSide = humanSide,
+			AutoPassPriority = true,
 			AgentDelay = TimeSpan.FromMilliseconds(45),
 			SessionTraceDirectory = _fullMatchSessionGlobalDirectory,
 			ResumeTraceDirectory = resumeSource,

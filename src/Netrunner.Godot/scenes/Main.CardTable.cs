@@ -10,6 +10,7 @@ public partial class Main
 {
 	private bool _useCardTable;
 	private GameTableControl _gameTable = null!;
+	private Control _tableViewport = null!;
 	private MatchHistoryPanel _matchHistory = null!;
 	private HFlowContainer _tableActions = null!;
 	private Label _tablePrompt = null!;
@@ -66,12 +67,15 @@ public partial class Main
 		_tableLastAction.SizeFlagsHorizontal = SizeFlags.ExpandFill;
 		toolbar.AddChild(_tableLastAction);
 		Control tableViewport = new() { SizeFlagsVertical = SizeFlags.ExpandFill, ClipContents = true };
+		_tableViewport = tableViewport;
+		tableViewport.Resized += HandleCardHoverPreviewViewportResized;
 		_board.AddChild(tableViewport);
 		_gameTable = new GameTableControl();
 		SetFullRect(_gameTable);
 		_gameTable.OffsetRight = -66;
 		tableViewport.AddChild(_gameTable);
 		_gameTable.CardSelected += SelectTableCard;
+		_gameTable.CardHoverChanged += HandleTableCardHoverChanged;
 		_gameTable.CardInspected += id =>
 		{
 			RecordFullMatchSelection("card-inspect", id);
@@ -123,6 +127,8 @@ public partial class Main
 		};
 		accessDetails.AddChild(inspectAccess);
 		_tableAccessCard.CardSelected += _ => inspectAccess.EmitSignal(BaseButton.SignalName.Pressed);
+		_tableAccessCard.CardHoverChanged += HandleTableCardHoverChanged;
+		BuildCardHoverPreview(tableViewport);
 		_matchHistory = new MatchHistoryPanel();
 		tableViewport.AddChild(_matchHistory);
 		_matchHistory.InspectCard += card => { _inspectedCard = card; ShowInspectedCardZoom(); };
@@ -177,6 +183,7 @@ public partial class Main
 
 	private void RenderCardTable(MatchSnapshot snapshot, bool decisionChanged)
 	{
+		BeginCardHoverPreviewSnapshot(snapshot);
 		_board.Visible = true;
 		_status.Text = snapshot.IsTerminal ? $"{snapshot.View.Outcome.Winner} wins · {snapshot.View.Outcome.Reason}"
 			: snapshot.IsOpponentThinking ? "Opponent is thinking" : $"Playing {snapshot.View.Viewer}";
@@ -222,6 +229,7 @@ public partial class Main
 		if (snapshot.View.Run is { } run)
 			_tablePrompt.Text = $"Run on {_gameTable.GetServerDisplayName(run.AttackedServerId)} · {run.Step} · " + _tablePrompt.Text;
 		_gameTable.SetTargets(new HashSet<string>(StringComparer.Ordinal));
+		_gameTable.SetActionableSources(new HashSet<string>(StringComparer.Ordinal));
 		if (_fullMatchResumePaused && !snapshot.IsTerminal)
 		{
 			Button continueButton = new()
@@ -234,10 +242,23 @@ public partial class Main
 			_tableActions.AddChild(continueButton);
 			return;
 		}
-		if (decision is null || snapshot.IsOpponentThinking || snapshot.IsTerminal) return;
+		if (decision is null || snapshot.IsOpponentThinking || snapshot.IsTerminal)
+		{
+			return;
+		}
 		IReadOnlyList<LegalActionViewModel> all = ActionsRegionPresenter.Present(snapshot).Actions;
-		_gameTable.SetTargets(all.Select(a => TableActionCardId(a.Parameters))
-			.OfType<string>().ToHashSet(StringComparer.Ordinal));
+		if (decision.OwnerSide == snapshot.View.Viewer
+			&& decision.Kind != DecisionKind.Setup
+			&& !_tableAwaitingSettlement
+			&& Volatile.Read(ref _submissionInFlight) == 0)
+		{
+			_gameTable.SetActionableSources(all
+				.SelectMany(TableActionSourceCardIds)
+				.ToHashSet(StringComparer.Ordinal));
+			_gameTable.SetTargets(all
+				.SelectMany(TableActionTargetCardIds)
+				.ToHashSet(StringComparer.Ordinal));
+		}
 		if (_stagedAction is { } staged && _stagedDecision is { } stagedDecision)
 		{
 			_tablePrompt.Text = $"Confirm: {TableActionLabel(staged)}";
@@ -303,6 +324,49 @@ public partial class Main
 		_ => ActionsRegionPresenter.GetTargetCardId(parameters),
 	};
 
+	private static IEnumerable<string> TableActionSourceCardIds(LegalActionViewModel action)
+	{
+		ArgumentNullException.ThrowIfNull(action);
+		return action.Parameters switch
+		{
+			PlayCardParameters play => [play.CardId.Value],
+			InstallCardParameters install => [install.CardId.Value],
+			AbilityActionParameters ability => [ability.SourceCardId.Value],
+			RezCardParameters rez => [rez.CardId.Value],
+			AdvanceCardParameters advance => [advance.CardId.Value],
+			ScoreAgendaParameters score => [score.CardId.Value],
+			RunIceParameters runIce => [runIce.IceId.Value],
+			RunBreakerParameters breaker => [breaker.BreakerId.Value],
+			RunBreakParameters breakAction => [breakAction.BreakerId.Value],
+			RunBioroidAbilityParameters bioroid => [bioroid.IceId.Value],
+			IceSubroutineChoiceParameters { Choice: IceSubroutineChoiceKind.InstallCard, CardId: { } cardId }
+				=> [cardId.Value],
+			_ => [],
+		};
+	}
+
+	private static IEnumerable<string> TableActionTargetCardIds(LegalActionViewModel action)
+	{
+		ArgumentNullException.ThrowIfNull(action);
+		return action.Parameters switch
+		{
+			CardChoiceParameters choice => [choice.CardId.Value],
+			TrashTaggedResourceParameters tagged => [tagged.CardId.Value],
+			RunCardPaymentParameters payment => [payment.CardId.Value],
+			BreachCandidateParameters { CardId: { } cardId } => [cardId.Value],
+			BehaviorChoiceParameters behavior => behavior.CardIds.Select(card => card.Value),
+			AbilityActionParameters ability => ability.TargetCardIds.Select(card => card.Value),
+			InstallCardParameters install => install.CandidateReplacementCardIds.Select(card => card.Value),
+			IceSubroutineChoiceParameters
+			{
+				Choice: IceSubroutineChoiceKind.TrashInstalledRunnerCard,
+				CardId: { } cardId,
+			}
+				=> [cardId.Value],
+			_ => [],
+		};
+	}
+
 	private string TablePrompt(DecisionViewModel decision) => decision.Kind switch
 	{
 		DecisionKind.TurnTiming => decision.OwnerSide == PlayerSide.Corp
@@ -349,6 +413,7 @@ public partial class Main
 
 	private void PollCardTable(double delta)
 	{
+		PollCardHoverPreview();
 		_tablePlaybackWait = Math.Max(0, _tablePlaybackWait - delta);
 		if (_tableAwaitingSettlement && _tablePlaybackWait == 0 && _gameTable.ActiveMotionCount == 0 && _tablePublications.Count == 0)
 		{

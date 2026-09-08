@@ -62,6 +62,7 @@ public partial class GameTableControl : Control
 	private string? _selection;
 	private string? _selectedServer;
 	private IReadOnlySet<string> _targets = new HashSet<string>(StringComparer.Ordinal);
+	private IReadOnlySet<string> _actionableSources = new HashSet<string>(StringComparer.Ordinal);
 	private int _nextRemoteDisplayNumber = 1;
 	private bool _shellBuilt;
 	private string? _lastRunFocus;
@@ -71,6 +72,9 @@ public partial class GameTableControl : Control
 
 	/// <summary>Raised with an engine-visible card handle when a card is inspected.</summary>
 	public event Action<string>? CardInspected;
+
+	/// <summary>Raised when a known card enters or leaves mouse/focus interaction.</summary>
+	public event Action<TableCardControl, bool>? CardHoverChanged;
 
 	/// <summary>
 	/// Raised with a server or public zone handle when a lane or pile is clicked.
@@ -119,6 +123,17 @@ public partial class GameTableControl : Control
 	{
 		ArgumentNullException.ThrowIfNull(targets);
 		_targets = targets;
+		ApplySelectionAndTargets();
+	}
+
+	/// <summary>
+	/// Marks only card handles that occur as the source of a currently issued
+	/// action. The table never infers availability from card metadata.
+	/// </summary>
+	public void SetActionableSources(IReadOnlySet<string> sources)
+	{
+		ArgumentNullException.ThrowIfNull(sources);
+		_actionableSources = sources;
 		ApplySelectionAndTargets();
 	}
 
@@ -946,6 +961,7 @@ public partial class GameTableControl : Control
 			control = new TableCardControl();
 			control.CardSelected += HandleCardSelected;
 			control.CardInspected += HandleCardInspected;
+			control.CardHoverChanged += HandleCardHoverChanged;
 			_cards[identity] = control;
 			_cardModels[identity] = null;
 		}
@@ -1336,7 +1352,11 @@ public partial class GameTableControl : Control
 			bool candidate = _targets.Contains(card.CardId)
 				|| _targets.Contains(key)
 				|| _targets.Contains(key.StartsWith("card:", StringComparison.Ordinal) ? key[5..] : key);
+			bool actionable = _actionableSources.Contains(card.CardId)
+				|| _actionableSources.Contains(key)
+				|| _actionableSources.Contains(key.StartsWith("card:", StringComparison.Ordinal) ? key[5..] : key);
 			card.SetTargetCandidate(candidate);
+			card.SetActionableSource(actionable);
 			card.SetSelected(selected);
 		}
 	}
@@ -1367,6 +1387,8 @@ public partial class GameTableControl : Control
 	}
 
 	private void HandleCardInspected(string cardId) => CardInspected?.Invoke(cardId);
+
+	private void HandleCardHoverChanged(TableCardControl card, bool active) => CardHoverChanged?.Invoke(card, active);
 
 	private static void ClearNonCardChildren(Node parent)
 	{
@@ -1414,6 +1436,7 @@ public partial class GameTableControl : Control
 	{
 		card.CardSelected -= HandleCardSelected;
 		card.CardInspected -= HandleCardInspected;
+		card.CardHoverChanged -= HandleCardHoverChanged;
 	}
 
 	private sealed record ServerLaneParts(

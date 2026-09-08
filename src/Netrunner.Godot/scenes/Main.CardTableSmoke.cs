@@ -39,9 +39,7 @@ public partial class Main
 				_reducedMotion.ButtonPressed = true;
 				for (int choice = 0; choice < 12; choice++)
 				{
-					Observation observation = await _coordinator!.GetObservationAsync(PlayerSide.Runner)
-						.WaitAsync(TimeSpan.FromSeconds(10));
-					await TableFrames(3);
+					Observation observation = await SettledTableObservationAsync();
 					if (_currentSnapshot!.View.Turn.ActiveSide == PlayerSide.Runner) break;
 					LegalAction action = observation.LegalActions.First(a => a.Kind == ActionKind.PassPriority
 						|| a.Parameters is NumberChoiceParameters { Value: 0 });
@@ -59,15 +57,25 @@ public partial class Main
 				if (screenshots) await SaveTableEvidence("nico-history");
 				for (int priority = 0; priority < 8 && _currentSnapshot!.View.Decision?.Kind != DecisionKind.TurnAction; priority++)
 				{
-					Observation current = await _coordinator!.GetObservationAsync(PlayerSide.Runner);
-					await TableFrames(3);
+					Observation current = await SettledTableObservationAsync();
 					LegalAction? pass = current.LegalActions.FirstOrDefault(action => action.Kind == ActionKind.PassPriority);
 					if (pass is null) break;
 					await ClickTableButton(_tableActionButtons[pass.Id]);
 				}
-				await _coordinator!.GetObservationAsync(PlayerSide.Runner);
-				await TableFrames(3);
+				await SettledTableObservationAsync();
+				if (_tableHistory.Entries.Any(entry => entry.Summary.Contains("passes priority", StringComparison.Ordinal)))
+					throw new InvalidOperationException("Pass-priority chatter remains in the visible history.");
 				LegalActionViewModel eventPlay = _currentSnapshot!.View.LegalActions.First(action => action.Parameters is PlayCardParameters);
+				string playableId = ((PlayCardParameters)eventPlay.Parameters).CardId.Value;
+				if (!_gameTable.VisibleCards.TryGetValue(playableId, out TableCardControl? playable)
+					|| !playable.IsActionableSource
+					|| _gameTable.VisibleCards.Values.Any(card => card.Card?.IsKnown != true && card.IsActionableSource))
+					throw new InvalidOperationException("Issued playable-card glow is missing or reveals hidden cards.");
+				if (screenshots) await SaveTableEvidence("actionable-cards-1920");
+				RenderCardTableActions(_currentSnapshot with { IsOpponentThinking = true });
+				if (_gameTable.VisibleCards.Values.Any(card => card.IsActionableSource || card.IsTargetCandidate))
+					throw new InvalidOperationException("Card action cues remained active during opponent thinking.");
+				RenderCardTableActions(_currentSnapshot);
 				SelectTableCard(((PlayCardParameters)eventPlay.Parameters).CardId.Value);
 				if (!_tableActionButtons.ContainsKey(eventPlay.Id)) throw new InvalidOperationException("Selecting a hand event did not offer its issued play action.");
 				string rdId = _currentSnapshot.View.Servers.Single(server => server.Kind == ServerKind.RAndD).Id;
@@ -78,14 +86,13 @@ public partial class Main
 				if (!_tableActionButtons.TryGetValue(basicRun.Id, out Button? runButton))
 					throw new InvalidOperationException("Selecting a server did not offer its issued run action.");
 				await ClickTableButton(runButton);
-				await _coordinator.GetObservationAsync(PlayerSide.Runner);
+				await _coordinator!.GetObservationAsync(PlayerSide.Runner);
 				await TableFrames(3);
 				if (_currentSnapshot.View.Run is null) throw new InvalidOperationException("Contextual run action did not start its run.");
 				bool sawAccess = false;
 				for (int step = 0; step < 120 && _currentSnapshot.View.Run is not null; step++)
 				{
-					await _coordinator.GetObservationAsync(PlayerSide.Runner);
-					await TableFrames(3);
+					await SettledTableObservationAsync();
 					if (_currentSnapshot.View.Run is null) break;
 					if (_currentSnapshot.IsOpponentThinking || Volatile.Read(ref _submissionInFlight) != 0) continue;
 					if (_stagedAction is not null)
@@ -376,6 +383,24 @@ public partial class Main
 		await TableFrames(3);
 	}
 
+	private async Task<Observation> SettledTableObservationAsync()
+	{
+		Observation observation = await _coordinator!.GetObservationAsync(PlayerSide.Runner)
+			.WaitAsync(TimeSpan.FromSeconds(10));
+		for (int frame = 0; frame < 180; frame++)
+		{
+			await TableFrames(1);
+			if (_currentSnapshot?.View.Decision?.Id == observation.Decision?.Id.Value
+				&& _tablePublications.Count == 0 && Volatile.Read(ref _submissionInFlight) == 0)
+			{
+				if (observation.LegalActions is [{ Kind: ActionKind.PassPriority }])
+					throw new InvalidOperationException("A sole human Pass Priority decision did not advance automatically.");
+				return observation;
+			}
+		}
+		throw new InvalidOperationException("The displayed decision did not settle after automatic actions.");
+	}
+
 	private async Task TableFrames(int count)
 	{
 		for (int i = 0; i < count; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -392,13 +417,35 @@ public partial class Main
 		if (known is null || hidden is null) return;
 
 		Vector2 baseTable = _gameTable.Size;
+		Rect2 sourceRect = known.GetGlobalRect();
 		known.EmitSignal(Control.SignalName.MouseEntered);
 		await TableFrames(6);
 		Vector2 knownTable = _gameTable.Size;
+		if (!CardHoverPreviewVisible || CardHoverPreviewCardId != known.CardId
+			|| !GetViewport().GetVisibleRect().Encloses(CardHoverPreviewGlobalRect)
+			|| sourceRect != known.GetGlobalRect())
+			throw new InvalidOperationException($"Known-card hover preview invalid at {tag}: visible={CardHoverPreviewVisible} id={CardHoverPreviewCardId}/{known.CardId} rect={CardHoverPreviewGlobalRect} source={sourceRect}/{known.GetGlobalRect()}.");
+		if (OS.GetCmdlineUserArgs().Contains("--m4-9-screenshots", StringComparer.Ordinal))
+			await SaveTableEvidence($"hover-{tag}");
+		known.EmitSignal(Control.SignalName.MouseExited);
+		known.ReleaseFocus();
 		hidden.EmitSignal(Control.SignalName.MouseEntered);
 		await TableFrames(6);
 		Vector2 hiddenTable = _gameTable.Size;
-		known.EmitSignal(Control.SignalName.MouseExited);
+		if (CardHoverPreviewVisible || CardHoverPreviewCardId is not null)
+			throw new InvalidOperationException($"Hidden-card hover retained a known preview at {tag}.");
+		hidden.EmitSignal(Control.SignalName.MouseExited);
+		known.GrabFocus();
+		await TableFrames(3);
+		if (!CardHoverPreviewVisible || CardHoverPreviewCardId != known.CardId)
+			throw new InvalidOperationException($"Keyboard focus did not show the card preview at {tag}.");
+		CardViewModel? savedCard = known.Card;
+		known.SetCard(null);
+		await TableFrames(2);
+		if (CardHoverPreviewVisible || CardHoverPreviewCardId is not null)
+			throw new InvalidOperationException($"Concealing the previewed card did not clear its face at {tag}.");
+		known.SetCard(savedCard);
+		known.ReleaseFocus();
 		await TableFrames(6);
 		if (knownTable != baseTable || hiddenTable != baseTable)
 			throw new InvalidOperationException($"Hovering a card resizes the table at {tag}: base={baseTable} known={knownTable} hidden={hiddenTable}.");
