@@ -113,7 +113,8 @@ public partial class TableCardControl : Control
 	{
 		MouseFilter = MouseFilterEnum.Stop;
 		FocusMode = FocusModeEnum.All;
-		ClipContents = true;
+		// Allow the soft border halo outside the card without changing its hit area.
+		ClipContents = false;
 		TooltipText = "Inspect card details; press Enter or Space to select.";
 
 		BuildLabels();
@@ -267,9 +268,9 @@ public partial class TableCardControl : Control
 			CornerRadiusBottomLeft = 7,
 			CornerRadiusBottomRight = 7,
 			ShadowColor = _actionableSource
-				? new Color(ActionableFrame.R, ActionableFrame.G, ActionableFrame.B, 0.54f)
+				? new Color(border.R, border.G, border.B, 0.65f)
 				: new Color(0, 0, 0, 0.33f),
-			ShadowSize = _actionableSource ? 8 : 4,
+			ShadowSize = _actionableSource ? 16 : 4,
 		};
 		DrawStyleBox(frame, new Rect2(Vector2.One, cardSize - new Vector2(2, 2)));
 
@@ -618,7 +619,7 @@ public partial class TableCardControl : Control
 
 	private void DrawActionGlow(Vector2 cardSize, Color color)
 	{
-		// Draw inward after the face: the table clips each card at its hit area.
+		// A broad inner fade complements the outer shadow where hand cards overlap.
 		using var glow = new StyleBoxFlat
 		{
 			BgColor = Colors.Transparent,
@@ -631,9 +632,12 @@ public partial class TableCardControl : Control
 			CornerRadiusBottomLeft = 7,
 			CornerRadiusBottomRight = 7,
 		};
-		for (int inset = 1; inset <= 6; inset++)
+		const int glowWidth = 12;
+		for (int inset = 1; inset <= glowWidth; inset++)
 		{
-			glow.BorderColor = new Color(color.R, color.G, color.B, 0.65f / (inset * inset));
+			float distance = (inset - 1f) / (glowWidth - 1f);
+			float fade = 1f - distance;
+			glow.BorderColor = new Color(color.R, color.G, color.B, 0.65f * fade * fade);
 			DrawStyleBox(glow, new Rect2(Vector2.One * inset, cardSize - Vector2.One * inset * 2));
 		}
 	}
