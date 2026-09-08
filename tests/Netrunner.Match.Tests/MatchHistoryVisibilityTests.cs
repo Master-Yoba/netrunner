@@ -145,6 +145,44 @@ public sealed class MatchHistoryVisibilityTests
     }
 
     [Fact]
+    public void PassPriorityHistoryHidesPassChatterButRetainsTurnAndDrawEffects()
+    {
+        GameState state = RepresentativeState();
+        ZoneState runnerStack = state.GetZone(ZoneKind.RunnerStack);
+        ZoneState runnerGrip = state.GetZone(ZoneKind.RunnerGrip);
+        MatchHistoryEntry entry = Project(
+            NewProjector(),
+            EmptyView(),
+            EmptyView(),
+            state,
+            [
+                new EngineEvent(
+                    1,
+                    EngineEventKinds.TurnEnded,
+                    new TurnEndedEventPayload(PlayerSide.Corp, 1)),
+                new EngineEvent(
+                    2,
+                    EngineEventKinds.TurnStarted,
+                    new TurnStartedEventPayload(PlayerSide.Runner, 2, 4)),
+                new EngineEvent(
+                    3,
+                    EngineEventKinds.CardDrawn,
+                    new CardDrawnEventPayload(
+                        PlayerSide.Runner,
+                        new CardInstanceId("card:drawn-after-pass"),
+                        runnerStack.Id,
+                        runnerGrip.Id)),
+            ],
+            PlayerSide.Runner,
+            Action(ActionKind.PassPriority)).Single();
+
+        string text = Flatten(entry);
+        Assert.DoesNotContain("passes priority", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("turn 2 begins", text, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("draws a card", text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void AutomaticCorpRezIsAttributedToCorpRatherThanSubmittedRunnerAction()
     {
         GameState state = RepresentativeState();

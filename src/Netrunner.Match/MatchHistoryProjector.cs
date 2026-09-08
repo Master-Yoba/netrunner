@@ -99,6 +99,24 @@ internal sealed class MatchHistoryProjector
                 case RunEndedEventPayload run:
                     details.Add($"Run ends: {Words(run.Reason.ToString())}.");
                     break;
+                case TurnStartedEventPayload turn:
+                    details.Add($"{turn.ActiveSide} turn {turn.TurnNumber} begins.");
+                    break;
+                case TurnEndedEventPayload turn:
+                    details.Add($"{turn.Side} turn {turn.TurnNumber} ends.");
+                    break;
+                case TurnClicksAllottedEventPayload clicks:
+                    details.Add($"{clicks.Side} receives {clicks.Clicks} clicks.");
+                    break;
+                case TurnPhaseStartedEventPayload phase:
+                    details.Add($"{phase.Side} begins {Words(phase.Step.ToString())}.");
+                    break;
+                case TurnPhaseEndedEventPayload phase:
+                    details.Add($"{phase.Side} ends {Words(phase.Step.ToString())}.");
+                    break;
+                case TurnClicksLostEventPayload lost when lost.ClicksLost > 0:
+                    details.Add($"{lost.Side} loses {lost.ClicksLost} click(s).");
+                    break;
                 case AgendaScoredEventPayload score:
                     Reveal(score.AgendaId.Value);
                     summary = $"Corp scores {Name(score.AgendaId.Value)}.";
@@ -136,6 +154,15 @@ internal sealed class MatchHistoryProjector
                 case DamageDealtEventPayload damage:
                     details.Add($"Damage: {damage.Amount} {Words(damage.Kind.ToString())}.");
                     break;
+                case ServerApproachedEventPayload approached:
+                    details.Add($"Runner reaches {ServerName(approached.ServerId.Value)}.");
+                    break;
+                case RunMovedEventPayload moved:
+                    details.Add("Runner advances through the run.");
+                    break;
+                case RunSuccessfulEventPayload successful:
+                    summary = $"Runner completes a successful run on {ServerName(successful.ServerId.Value)}.";
+                    break;
             }
         }
         if (!installed) details.AddRange(moves);
@@ -154,6 +181,19 @@ internal sealed class MatchHistoryProjector
         };
         if (after.Outcome.IsTerminal)
             details.Add($"Match complete: {after.Outcome.Winner} wins ({after.Outcome.Reason}).");
+
+        if (kind == ActionKind.PassPriority
+            && string.Equals(summary, $"{actor} passes priority.", StringComparison.Ordinal))
+        {
+            if (details.Count == 0)
+                return Array.Empty<MatchHistoryEntry>();
+
+            // A pass can also complete a timing window and emit a draw, turn,
+            // or run transition. Promote the first meaningful effect so the
+            // entry remains useful without retaining the pass wording.
+            summary = details[0];
+        }
+
         return [new MatchHistoryEntry($"action-{state.ActionSequence}", state.ActionSequence,
             before.Turn.TurnNumber ?? 0, actor, summary, details.AsReadOnly())
         {

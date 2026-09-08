@@ -95,6 +95,6 @@ public sealed class MatchHistoryTests
         Assert.DoesNotContain("card:", serialized);
         Assert.DoesNotContain("zone:", serialized);
         Assert.DoesNotContain("server:", serialized);
-        Assert.Contains(entries, e => e.Summary.Contains("passes priority", StringComparison.Ordinal));
+        Assert.DoesNotContain(entries, e => e.Summary.Contains("passes priority", StringComparison.Ordinal));
     }
 }

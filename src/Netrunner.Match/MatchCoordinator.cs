@@ -80,6 +80,13 @@ public sealed class MatchCoordinatorOptions
     public PlayerSide HumanSide { get; init; } = PlayerSide.Runner;
 
     /// <summary>
+    /// Automatically submit a human PassPriority when it is the only legal
+    /// action in the issued decision. The default keeps the caller-driven
+    /// behavior used by existing clients.
+    /// </summary>
+    public bool AutoPassPriority { get; init; }
+
+    /// <summary>
     /// Immutable card metadata supplied by composition. When omitted, the
     /// generated Cards resource is used; Match never reads the ignored source
     /// directory itself.
@@ -684,9 +691,76 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
     private async Task DriveAgentsAsync()
     {
         while (_state is { } state
-            && state.PendingDecision is { } pending
-            && pending.Owner == state.Players.Single(player => player.Side != _options.HumanSide).Id)
+            && !_recoveredPaused
+            && state.PendingDecision is { } pending)
         {
+            PlayerSide ownerSide = state.GetPlayer(pending.Owner).Side;
+            if (ownerSide == _options.HumanSide)
+            {
+                if (!_options.AutoPassPriority
+                    || pending.LegalActions.Count != 1
+                    || pending.LegalActions[0].Kind != ActionKind.PassPriority)
+                {
+                    return;
+                }
+
+                if (_cancellation.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                ApplyResult applied;
+                try
+                {
+                    LegalAction pass = pending.LegalActions[0];
+                    applied = ApplyEngineAction(
+                        state,
+                        new ActionSubmission(pending.Owner, pending.Id, pending.Revision, pass.Id));
+                }
+                catch (OperationCanceledException) when (_cancellation.IsCancellationRequested)
+                {
+                    Publish(
+                        Array.Empty<EngineEvent>(),
+                        new MatchFeedback(MatchFeedbackKind.Cancelled, "Automatic pass priority was cancelled."),
+                        thinking: false);
+                    return;
+                }
+                catch (Exception exception)
+                {
+                    if (_traceFault is not null)
+                    {
+                        Publish(
+                            Array.Empty<EngineEvent>(),
+                            new MatchFeedback(
+                                MatchFeedbackKind.AgentFailure,
+                                $"Durable session trace failed; the match stopped: {_traceFault.Message}",
+                                ApplyRejectionCode.InvalidInputState),
+                            thinking: false);
+                        throw;
+                    }
+
+                    Publish(
+                        Array.Empty<EngineEvent>(),
+                        new MatchFeedback(MatchFeedbackKind.AgentFailure, exception.Message),
+                        thinking: false);
+                    return;
+                }
+
+                if (!applied.Accepted)
+                {
+                    MatchFeedback feedback = new(
+                        MatchFeedbackKind.Rejected,
+                        applied.Rejection?.Message ?? "The automatic pass-priority action was rejected.",
+                        applied.Rejection?.Code);
+                    Publish(Array.Empty<EngineEvent>(), feedback, thinking: false);
+                    return;
+                }
+
+                _state = applied.State;
+                Publish(applied.Events, feedback: null, thinking: false);
+                continue;
+            }
+
             Publish(Array.Empty<EngineEvent>(), feedback: null, thinking: true);
             // The published snapshot is intentionally Runner-filtered. Corp
             // policy receives its own filtered observation, never the
@@ -843,7 +917,9 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
         return snapshot;
     }
 
-    private ApplyResult ApplyEngineAction(GameState state, ActionSubmission submission)
+    private ApplyResult ApplyEngineAction(
+        GameState state,
+        ActionSubmission submission)
     {
         if (_traceFault is not null)
         {
