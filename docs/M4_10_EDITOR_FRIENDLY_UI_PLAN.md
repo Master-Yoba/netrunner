@@ -1,6 +1,6 @@
 # Slice 4.10 — Editor-friendly Godot UI
 
-Status: implementation in progress; see [the progress record](M4_10_UI_PROGRESS.md).
+Status: implemented; independent user acceptance pending. See [the progress record](M4_10_UI_PROGRESS.md).
 
 Date: 8 September 2026
 
@@ -24,7 +24,7 @@ without editing C# or rebuilding between value changes.
 An initial C# build is expected when adding or changing script types. Subsequent
 appearance edits must use scene/resource values and require no C# build.
 
-## 2. Current implementation and gap
+## 2. Pre-slice implementation and gap
 
 - `Main.tscn` contains a root Control with `Main.cs` and `M4Theme.tres` attached.
   Most visible children are created by C# builder methods at runtime.

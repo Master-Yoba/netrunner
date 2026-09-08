@@ -17,6 +17,23 @@ Use the repository's pinned Godot .NET editor. C# script types need an initial
 build before their exported properties appear. Changing appearance values after
 that build does not require rebuilding C#.
 
+For a real match with **F5** and Remote editing, launch the editor with the
+local official content configuration (the same metadata used by `make play`):
+
+```sh
+source scripts/env.sh
+export NetrunnerContentEnabled=true
+export NetrunnerCardDataMode=official
+export NetrunnerCardDataInputRoot="$PWD/data/vendor/system-gateway"
+dotnet build src/Netrunner.Godot --no-restore
+"$GODOT4" --editor --path src/Netrunner.Godot
+```
+
+Synthetic previews work without that metadata. If the editor was started with
+the synthetic configuration, **F6** can still launch `UiPreview.tscn`; use
+`make play` from a terminal to build and launch an official match with your
+saved appearance values. Do not rebuild after each visual edit.
+
 ## Tune the glow and save it
 
 Open `scenes/UiPreview.tscn` in the FileSystem dock. Select its root and set

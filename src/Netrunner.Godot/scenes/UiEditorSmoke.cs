@@ -96,6 +96,8 @@ public partial class UiEditorSmoke : Node
 			UiPreview preview = GD.Load<PackedScene>("res://scenes/UiPreview.tscn").Instantiate<UiPreview>();
 			AddChild(preview);
 			await Frames(3);
+			foreach (TableCardControl sample in preview.FindChildren("Card", "Control", true, false).OfType<TableCardControl>())
+				Require(sample.Size.IsEqualApprox(sample.DisplaySize), "Sample label layout differs from its drawn card footprint.");
 			GameTableControl board = preview.GetNode<GameTableControl>("Margin/Content/Pages/Board/MatchTable/TableViewport/GameBoard");
 			Control access = preview.GetNode<Control>("Margin/Content/Pages/Board/MatchTable/TableViewport/AccessPanel");
 			Require(access.GetNode<TableCardControl>("%Card").Card is { IsKnown: true }, "Preview did not bind the accessed card.");

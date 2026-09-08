@@ -1,7 +1,7 @@
 # M4.10 — Editor-friendly UI progress
 
-Status: implementation delivered on `feat/m4-10-editor-ui`; final verification
-and the independent user authoring exercise are pending.
+Status: implementation delivered on `feat/m4-10-editor-ui`; the independent
+user authoring exercise and manual playtest acceptance remain pending.
 
 Specification: [editor-friendly UI plan](M4_10_EDITOR_FRIENDLY_UI_PLAN.md).
 Authoring instructions: [UI editor guide](UI_EDITOR_GUIDE.md).
@@ -15,7 +15,7 @@ Authoring instructions: [UI editor guide](UI_EDITOR_GUIDE.md).
 | UI-4102: board and zones | Implemented | GameBoard, ServerLane, PlayerArea, HandView and PileView; notifying BoardLayout |
 | UI-4103: decisions and history | Implemented | Authored dock/actions, access, hover, inspection, outcome, pile browser and history rows/details |
 | UI-4104: shell and cleanup | Implemented | Main binds authored production composition; fixed production builders removed |
-| UI-4105: editing and gameplay gate | Pending user exercise and final checks | Evidence below; automated checks do not replace user acceptance |
+| UI-4105: editing and gameplay gate | Pending user acceptance | Evidence below; automated checks do not replace user acceptance |
 
 ## Architecture
 
@@ -64,10 +64,36 @@ Using the pinned Godot 4.7.2 .NET editor, without rebuilding between edits:
   at 1920×1080 and 2560×1440: dense boards, 2,000-entry history, runs/access,
   keyboard/hover/unknown-card behavior, selection and motion replacement.
 - Paired Apple M5 measurement, 120 idle frames: baseline `dd33647` median
-  2.43 ms / p95 2.68 ms; initial migrated UI 2.66 ms / p95 2.78 ms. Managed
+  2.43 ms / p95 2.68 ms; final migrated UI 2.68 ms / p95 2.78 ms. Managed
   allocation was identical: 32,800 bytes total, 273.33 bytes/frame. These are
   single-run measurements, not a statistical benchmark.
-- Full repository verification and final native rerun: pending.
+- `make verify` passed: 1,397 unit tests plus 15 official-content focused
+  tests, formatting, CLI proofs, current 77/77 Gateway coverage, Godot import,
+  gallery and UI smoke checks, responsiveness, complete basic/expanded games
+  in both seats, fresh setup reloads and secret scanning.
+- The last preview-only ICE anchor correction passed its native visual check;
+  the final focused smoke and formatting checks passed. An intermediate smoke
+  attempt overlapped another full-match process and saw that process create a
+  diagnostics folder; rerunning serially passed without errors or warnings.
+- Native seed-47042 recovery at action 31 passed with `paused=True` and
+  `authoritative=True`.
+- Final native UI rerun passed every scenario at both resolutions/seats, with
+  zero errors/warnings. Native complete basic matches also passed for Corp
+  (928 actions) and Runner (1,715 actions), including new-game reloads.
+- Before/after captures show temporary in-memory glow/font edits in the
+  production preview scene; no experimental resource values were saved.
+
+## Visual evidence
+
+- [Card preview before](evidence/m4-10/card-preview-before.png) and
+  [after](evidence/m4-10/card-preview-after.png) temporary glow/font edits.
+- [Setup](evidence/m4-10/setup-1920.png),
+  [Corp dense board](evidence/m4-10/dense-corp-1920.png),
+  [Runner dense board](evidence/m4-10/dense-runner-2560.png),
+  [history](evidence/m4-10/history-corp-2560.png),
+  [hover](evidence/m4-10/hover-live-1920.png),
+  [R&D access](evidence/m4-10/rd-access.png) and
+  [public pile browser](evidence/m4-10/archives-browser-1920.png).
 
 ## Outstanding acceptance
 
