@@ -1,8 +1,9 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scenes/components/CardViewPreview.cs" id="1_card_preview"]
 [ext_resource type="Theme" path="res://themes/M4Theme.tres" id="2_preview_theme"]
 [ext_resource type="Resource" path="res://themes/CardAppearance.tres" id="3_preview_appearance"]
+[ext_resource type="PackedScene" path="res://scenes/components/CardView.tscn" id="4_card_view"]
 
 [node name="CardViewPreview" type="Control"]
 custom_minimum_size = Vector2(360, 320)
@@ -18,6 +19,9 @@ SampleActionable = true
 SampleSelected = false
 SampleTarget = false
 SampleHovered = false
+SampleDisabled = false
+SampleCounters = 3
+SampleHosted = false
 
 [node name="PreviewCaption" type="Label" parent="."]
 layout_mode = 0
@@ -38,3 +42,14 @@ offset_top = 48.0
 offset_right = 255.0
 offset_bottom = 258.0
 mouse_filter = 2
+
+[node name="Card" parent="PreviewHost" instance=ExtResource("4_card_view")]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+focus_mode = 0

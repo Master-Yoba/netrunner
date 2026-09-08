@@ -37,7 +37,15 @@ public partial class TableCardControl : Control
 	[Export]
 	public CardAppearance Appearance
 	{
-		get => _appearance ??= LoadDefaultAppearance();
+		get
+		{
+			if (_appearance is null || !GodotObject.IsInstanceValid(_appearance))
+			{
+				ReplaceAppearance(LoadDefaultAppearance());
+			}
+
+			return _appearance!;
+		}
 		set => ReplaceAppearance(value);
 	}
 
@@ -76,6 +84,7 @@ public partial class TableCardControl : Control
 			ConnectAppearance();
 		}
 		RefreshAppearance();
+		AppearanceReplaced?.Invoke(this);
 	}
 
 	private void ConnectAppearance()
@@ -131,7 +140,12 @@ public partial class TableCardControl : Control
 		}
 
 		ApplySize();
-		if (_title is not null)
+		if (!HasAuthoredLabels())
+		{
+			TryBindAuthoredLabels();
+		}
+
+		if (HasAuthoredLabels())
 		{
 			RefreshPresentation();
 		}
@@ -185,6 +199,11 @@ public partial class TableCardControl : Control
 	private Label? _rulesCue;
 	private Label? _status;
 	private Label? _counters;
+	private Control? _layoutHost;
+	private Control? _portraitLayout;
+	private Control? _compactLayout;
+	private Control? _iceLayout;
+	private Control? _activeLayout;
 	private Vector2 _displaySize = PortraitCardSize;
 	private bool _hasExplicitDisplaySize;
 	private bool _isIce;
@@ -205,6 +224,9 @@ public partial class TableCardControl : Control
 	/// source. The table forwards this without changing the card's layout.
 	/// </summary>
 	public event Action<TableCardControl, bool>? CardHoverChanged;
+
+	/// <summary>Notifies layout owners when an Inspector resource assignment changes.</summary>
+	public event Action<TableCardControl>? AppearanceReplaced;
 
 	public CardViewModel? Card => _card;
 
@@ -235,7 +257,13 @@ public partial class TableCardControl : Control
 	public override void _EnterTree()
 	{
 		base._EnterTree();
+		// A detached control can miss a resource change while the editor moves
+		// it between owners. Rebind authored children and apply the current
+		// shared values before it becomes visible again.
+		_ = Appearance;
 		ConnectAppearance();
+		TryBindAuthoredLabels();
+		RefreshAppearance();
 	}
 
 	public override void _Ready()
@@ -310,6 +338,15 @@ public partial class TableCardControl : Control
 		TryBindAuthoredLabels();
 	}
 
+	private bool HasAuthoredLayouts() => _layoutHost is not null
+		&& IsInstanceValid(_layoutHost)
+		&& _portraitLayout is not null
+		&& IsInstanceValid(_portraitLayout)
+		&& _compactLayout is not null
+		&& IsInstanceValid(_compactLayout)
+		&& _iceLayout is not null
+		&& IsInstanceValid(_iceLayout);
+
 	private bool HasAuthoredLabels() => _title is not null
 		&& IsInstanceValid(_title)
 		&& _type is not null
@@ -325,13 +362,61 @@ public partial class TableCardControl : Control
 
 	private bool TryBindAuthoredLabels()
 	{
-		_title = GetNodeOrNull<Label>("Title");
-		_type = GetNodeOrNull<Label>("Type");
-		_stats = GetNodeOrNull<Label>("Stats");
-		_rulesCue = GetNodeOrNull<Label>("RulesCue");
-		_status = GetNodeOrNull<Label>("Status");
-		_counters = GetNodeOrNull<Label>("Counters");
+		_layoutHost = GetNodeOrNull<Control>("LayoutHost");
+		_portraitLayout = GetNodeOrNull<Control>("LayoutHost/PortraitLayout");
+		_compactLayout = GetNodeOrNull<Control>("LayoutHost/CompactLayout");
+		_iceLayout = GetNodeOrNull<Control>("LayoutHost/IceLayout");
+		if (!HasAuthoredLayouts())
+		{
+			return false;
+		}
+
+		if (_activeLayout is not null && !IsInstanceValid(_activeLayout))
+		{
+			_activeLayout = null;
+		}
+
+		BindLabelLayout(_activeLayout ?? _portraitLayout!);
 		return HasAuthoredLabels();
+	}
+
+	private void BindLabelLayout(Control layout)
+	{
+		_title = layout.GetNodeOrNull<Label>("Title");
+		_type = layout.GetNodeOrNull<Label>("Type");
+		_stats = layout.GetNodeOrNull<Label>("Stats");
+		_rulesCue = layout.GetNodeOrNull<Label>("RulesCue");
+		_status = layout.GetNodeOrNull<Label>("Status");
+		_counters = layout.GetNodeOrNull<Label>("Counters");
+	}
+
+	private void SelectLabelLayout()
+	{
+		Control? desired = _isIce
+			? _iceLayout
+			: IsCompactPortrait ? _compactLayout : _portraitLayout;
+		if (desired is null || !IsInstanceValid(desired))
+		{
+			return;
+		}
+		// A card can receive its compact/ICE role before entering the tree.
+		// In that case the authored portrait is initially visible even though
+		// no active layout has been bound yet.
+		_portraitLayout!.Visible = ReferenceEquals(desired, _portraitLayout);
+		_compactLayout!.Visible = ReferenceEquals(desired, _compactLayout);
+		_iceLayout!.Visible = ReferenceEquals(desired, _iceLayout);
+
+		if (!ReferenceEquals(_activeLayout, desired))
+		{
+			if (_activeLayout is not null && IsInstanceValid(_activeLayout))
+			{
+				_activeLayout.Visible = false;
+			}
+
+			_activeLayout = desired;
+			_activeLayout.Visible = true;
+			BindLabelLayout(_activeLayout);
+		}
 	}
 
 	/// <summary>
@@ -490,26 +575,20 @@ public partial class TableCardControl : Control
 		}
 
 		float headerHeight = _isIce
-			? Mathf.Min(22, cardSize.Y * 0.34f)
-			: IsCompactPortrait ? 43 : Mathf.Min(29, cardSize.Y * 0.30f);
+			? Mathf.Min(appearance.IceHeaderHeight, cardSize.Y * 0.34f)
+			: IsCompactPortrait
+				? Mathf.Min(appearance.CompactHeaderHeight, cardSize.Y * 0.34f)
+				: Mathf.Min(appearance.PortraitHeaderHeight, cardSize.Y * 0.30f);
 		DrawRect(new Rect2(2, 2, cardSize.X - 4, headerHeight), accent.Darkened(appearance.HeaderDarken));
 		DrawRect(
-			new Rect2(2, 2 + headerHeight - 2, cardSize.X - 4, 2),
+			new Rect2(
+				2,
+				2 + headerHeight - appearance.HeaderUnderlineHeight,
+				cardSize.X - 4,
+				appearance.HeaderUnderlineHeight),
 			accent.Lightened(appearance.HeaderLighten));
 
-		Rect2 motifRect = _isIce
-			? new Rect2(
-				cardSize.X * 0.56f,
-				cardSize.Y * 0.11f,
-				cardSize.X * 0.40f,
-				cardSize.Y * 0.63f)
-			: IsCompactPortrait
-				? new Rect2(
-					6,
-					cardSize.Y * 0.47f,
-					Mathf.Max(1, cardSize.X - 12),
-					Mathf.Max(1, cardSize.Y * 0.13f))
-				: new Rect2(12, 58, Mathf.Max(1, cardSize.X - 24), 82);
+		Rect2 motifRect = ResolveMotifRect(cardSize, appearance);
 		if (_artwork is not null)
 		{
 			DrawTextureRect(_artwork, motifRect, false, new Color(1, 1, 1, appearance.ArtworkOpacity));
@@ -523,10 +602,34 @@ public partial class TableCardControl : Control
 		if (_actionableSource) DrawActionGlow(cardSize, border);
 	}
 
+	private Rect2 ResolveMotifRect(Vector2 cardSize, CardAppearance appearance)
+	{
+		Rect2 normalized = _isIce
+			? appearance.IceMotifRect
+			: IsCompactPortrait ? appearance.CompactMotifRect : appearance.PortraitMotifRect;
+		return new Rect2(
+			cardSize.X * normalized.Position.X,
+			cardSize.Y * normalized.Position.Y,
+			Mathf.Max(1.0f, cardSize.X * normalized.Size.X),
+			Mathf.Max(1.0f, cardSize.Y * normalized.Size.Y));
+	}
+
 	private void ApplySize()
 	{
 		Vector2 desired = _displaySize;
 		CustomMinimumSize = desired;
+		// A CardView can be authored as a full-stretch child of a host. In that
+		// case the parent owns its footprint; assigning Size during EnterTree or
+		// Ready makes Godot warn and overrides the saved layout after ready. Keep
+		// the minimum-size hint for containers, while leaving stretch offsets and
+		// the editor-authored child geometry intact.
+		bool ownsSize = Mathf.IsEqualApprox(AnchorLeft, AnchorRight)
+			&& Mathf.IsEqualApprox(AnchorTop, AnchorBottom);
+		if (!ownsSize)
+		{
+			return;
+		}
+
 		Size = desired;
 		SizeFlagsHorizontal = SizeFlags.ShrinkCenter;
 		SizeFlagsVertical = SizeFlags.ShrinkCenter;
@@ -534,57 +637,46 @@ public partial class TableCardControl : Control
 
 	private void RefreshPresentation()
 	{
-		if (_title is null)
+		if (!HasAuthoredLabels())
+		{
+			TryBindAuthoredLabels();
+		}
+
+		if (!HasAuthoredLabels())
 		{
 			QueueRedraw();
 			return;
 		}
 
-		if (_isIce)
-		{
-			CardAppearance appearance = CurrentAppearance;
-			float leftWidth = Mathf.Max(1, _displaySize.X * 0.52f);
-			float rightX = _displaySize.X * 0.56f;
-			float rightWidth = Mathf.Max(1, _displaySize.X - rightX - 5);
-			SetLabelRect(_title!, new Rect2(5, 4, leftWidth, 14), appearance.TitleFontSize, appearance.TitleColor);
-			SetLabelRect(_type!, new Rect2(5, 18, leftWidth, 12), appearance.TypeFontSize, appearance.TypeColor);
-			SetLabelRect(_stats!, new Rect2(5, _displaySize.Y - 20, leftWidth, 14), appearance.StatsFontSize, appearance.StatsColor);
-			SetLabelRect(_rulesCue!, new Rect2(5, 34, leftWidth, 15), appearance.RulesFontSize, appearance.RulesColor);
-			SetLabelRect(_status!, new Rect2(rightX, _displaySize.Y - 18, rightWidth, 13), appearance.StatusFontSize, appearance.StatusColor);
-			SetLabelRect(_counters!, new Rect2(rightX, 3, rightWidth, 16), appearance.CounterFontSize, appearance.CounterColor);
-		}
-		else if (IsCompactPortrait)
-		{
-			CardAppearance appearance = CurrentAppearance;
-			float width = Mathf.Max(1, _displaySize.X - 8);
-			float statusY = Mathf.Max(0, _displaySize.Y - 14);
-			float statsY = Mathf.Max(0, _displaySize.Y - 34);
-			SetLabelRect(_title!, new Rect2(4, 2, width, 31), appearance.TitleFontSize, appearance.TitleColor);
-			SetLabelRect(_type!, new Rect2(4, 33, width, 10), appearance.TypeFontSize, appearance.TypeColor);
-			SetLabelRect(_stats!, new Rect2(4, statsY, width, 11), appearance.CompactStatsFontSize, appearance.StatsColor);
-			SetLabelRect(_rulesCue!, new Rect2(4, 0, width, 1), appearance.RulesFontSize, appearance.RulesColor);
-			SetLabelRect(_status!, new Rect2(4, statusY, width, 10), appearance.StatusFontSize, appearance.StatusColor);
-			SetLabelRect(_counters!, new Rect2(4, Mathf.Max(0, _displaySize.Y - 24), width, 10), appearance.CounterFontSize, appearance.CounterColor);
-		}
-		else
-		{
-			CardAppearance appearance = CurrentAppearance;
-			float width = Mathf.Max(1, _displaySize.X - 14);
-			SetLabelRect(_title!, new Rect2(7, 6, width, 30), appearance.TitleFontSize, appearance.TitleColor);
-			SetLabelRect(_type!, new Rect2(7, 34, width, 21), appearance.TypeFontSize, appearance.TypeColor);
-			SetLabelRect(_stats!, new Rect2(7, 144, width, 21), appearance.StatsFontSize, appearance.StatsColor);
-			SetLabelRect(_rulesCue!, new Rect2(7, 165, width, 21), appearance.RulesFontSize, appearance.RulesColor);
-			SetLabelRect(_status!, new Rect2(7, 186, width, 18), appearance.StatusFontSize, appearance.StatusColor);
-			SetLabelRect(_counters!, new Rect2(7, 123, width, 23), appearance.CounterFontSize, appearance.CounterColor);
-		}
+		SelectLabelLayout();
+		ApplyLabelAppearance();
 
 		RefreshDynamicPresentation();
 		QueueRedraw();
 	}
 
+	private void ApplyLabelAppearance()
+	{
+		if (!HasAuthoredLabels())
+		{
+			return;
+		}
+
+		CardAppearance appearance = CurrentAppearance;
+		bool compact = IsCompactPortrait;
+		int typeFontSize = compact ? appearance.CompactTypeFontSize : appearance.TypeFontSize;
+		int statsFontSize = compact ? appearance.CompactStatsFontSize : appearance.StatsFontSize;
+		SetLabelAppearance(_title!, appearance.TitleFontSize, appearance.TitleColor);
+		SetLabelAppearance(_type!, typeFontSize, appearance.TypeColor);
+		SetLabelAppearance(_stats!, statsFontSize, appearance.StatsColor);
+		SetLabelAppearance(_rulesCue!, appearance.RulesFontSize, appearance.RulesColor);
+		SetLabelAppearance(_status!, appearance.StatusFontSize, appearance.StatusColor);
+		SetLabelAppearance(_counters!, appearance.CounterFontSize, appearance.CounterColor);
+	}
+
 	private void RefreshDynamicPresentation()
 	{
-		if (_title is null)
+		if (!HasAuthoredLabels())
 		{
 			return;
 		}
@@ -635,10 +727,13 @@ public partial class TableCardControl : Control
 		_artwork = LocalCardArtworkResolver.TryLoad(definitionId);
 	}
 
-	private static void SetLabelRect(Label label, Rect2 rect, int fontSize, Color colour)
+	private static void SetLabelAppearance(Label? label, int fontSize, Color colour)
 	{
-		label.Position = rect.Position;
-		label.Size = rect.Size;
+		if (label is null)
+		{
+			return;
+		}
+
 		label.AddThemeFontSizeOverride("font_size", fontSize);
 		label.AddThemeColorOverride("font_color", colour);
 	}

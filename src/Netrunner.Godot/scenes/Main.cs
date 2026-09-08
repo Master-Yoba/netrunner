@@ -262,6 +262,7 @@ public partial class Main : Control
 
 	public override void _ExitTree()
 	{
+		DisconnectCardHoverPreview();
 		CloseFullMatchDiagnostics("shutdown");
 		if (_coordinator is null)
 		{
@@ -275,6 +276,17 @@ public partial class Main : Control
 
 	private void BuildShell()
 	{
+		if (_useCardTable)
+		{
+			BindProductionShell();
+			return;
+		}
+		// Diagnostic modes retain their existing layout, outside the production scene.
+		foreach (Node child in GetChildren())
+		{
+			RemoveChild(child);
+			child.Free();
+		}
 		ApplyThemeFoundation();
 		ColorRect backdrop = new()
 		{
@@ -302,8 +314,7 @@ public partial class Main : Control
 		BuildHeader();
 		BuildStartPanel();
 		BuildBoard();
-		if (_useCardTable) BuildCardTable();
-		else BuildFooter();
+		BuildFooter();
 		BuildCardZoomOverlay();
 		// Keep the initial setup surface keyboard navigable before any match
 		// publication exists. Dynamic action controls refresh this same order

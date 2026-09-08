@@ -7,7 +7,9 @@ namespace Netrunner.GodotClient;
 ///
 /// This resource deliberately contains presentation values only.  A card
 /// control may share one instance with any number of cards; per-card state is
-/// kept by the control and never written back to this resource.
+/// kept by the control and never written back to this resource. Normalized
+/// motif rectangles and header measurements are drawing geometry; label
+/// rectangles themselves belong to the CardLabelLayout scenes.
 /// </summary>
 [Tool]
 [GlobalClass]
@@ -21,6 +23,7 @@ public partial class CardAppearance : Resource
 
 	private int _titleFontSize = 10;
 	private int _typeFontSize = 8;
+	private int _compactTypeFontSize = 8;
 	private int _statsFontSize = 8;
 	private int _compactStatsFontSize = 9;
 	private int _rulesFontSize = 7;
@@ -41,10 +44,6 @@ public partial class CardAppearance : Resource
 	private Color _targetColor = new(0.39f, 0.92f, 0.82f);
 	private Color _actionableColor = new(0.96f, 0.99f, 1.0f);
 	private Color _hiddenColor = new(0.31f, 0.39f, 0.48f);
-	private Color _counterBackground = new(0.20f, 0.14f, 0.08f, 0.94f);
-	private Color _counterBorderColor = new(0.80f, 0.57f, 0.20f, 0.75f);
-	private Color _statusBackground = new(0.08f, 0.12f, 0.17f, 0.88f);
-	private Color _hiddenStatusBackground = new(0.07f, 0.09f, 0.13f, 0.92f);
 
 	private Color _anarchAccent = new(0.82f, 0.30f, 0.42f);
 	private Color _criminalAccent = new(0.30f, 0.55f, 0.92f);
@@ -58,6 +57,10 @@ public partial class CardAppearance : Resource
 
 	private float _headerDarken = 0.42f;
 	private float _headerLighten = 0.12f;
+	private float _portraitHeaderHeight = 29.0f;
+	private float _compactHeaderHeight = 43.0f;
+	private float _iceHeaderHeight = 22.0f;
+	private float _headerUnderlineHeight = 2.0f;
 	private float _artworkOpacity = 0.87f;
 	private float _motifOpacityWithArtwork = 0.26f;
 	private float _motifOpacityWithoutArtwork = 0.72f;
@@ -71,6 +74,9 @@ public partial class CardAppearance : Resource
 	private float _motifLineWidth = 1.3f;
 	private float _backLineWidth = 1.3f;
 	private float _backCrossWidth = 2.0f;
+	private Rect2 _portraitMotifRect = new(0.08f, 0.276f, 0.84f, 0.39f);
+	private Rect2 _compactMotifRect = new(0.057f, 0.47f, 0.886f, 0.13f);
+	private Rect2 _iceMotifRect = new(0.56f, 0.11f, 0.40f, 0.63f);
 
 	private float _glowOuterExtent = 16.0f;
 	private float _glowInnerExtent = 12.0f;
@@ -127,6 +133,13 @@ public partial class CardAppearance : Resource
 	{
 		get => _typeFontSize;
 		set => SetInt(ref _typeFontSize, Mathf.Clamp(value, 6, 32));
+	}
+
+	[Export(PropertyHint.Range, "6,32,1")]
+	public int CompactTypeFontSize
+	{
+		get => _compactTypeFontSize;
+		set => SetInt(ref _compactTypeFontSize, Mathf.Clamp(value, 6, 32));
 	}
 
 	[Export(PropertyHint.Range, "6,32,1")]
@@ -263,34 +276,6 @@ public partial class CardAppearance : Resource
 		set => SetColor(ref _hiddenColor, value);
 	}
 
-	[Export]
-	public Color StatusBackground
-	{
-		get => _statusBackground;
-		set => SetColor(ref _statusBackground, value);
-	}
-
-	[Export]
-	public Color HiddenStatusBackground
-	{
-		get => _hiddenStatusBackground;
-		set => SetColor(ref _hiddenStatusBackground, value);
-	}
-
-	[Export]
-	public Color CounterBackground
-	{
-		get => _counterBackground;
-		set => SetColor(ref _counterBackground, value);
-	}
-
-	[Export]
-	public Color CounterBorderColor
-	{
-		get => _counterBorderColor;
-		set => SetColor(ref _counterBorderColor, value);
-	}
-
 	[ExportGroup("Faction accents")]
 	[Export] public Color AnarchAccent { get => _anarchAccent; set => SetColor(ref _anarchAccent, value); }
 	[Export] public Color CriminalAccent { get => _criminalAccent; set => SetColor(ref _criminalAccent, value); }
@@ -315,6 +300,34 @@ public partial class CardAppearance : Resource
 	{
 		get => _headerLighten;
 		set => SetFloat(ref _headerLighten, Mathf.Clamp(value, 0.0f, 1.0f));
+	}
+
+	[Export(PropertyHint.Range, "8,120,1")]
+	public float PortraitHeaderHeight
+	{
+		get => _portraitHeaderHeight;
+		set => SetFloat(ref _portraitHeaderHeight, Mathf.Clamp(value, 8.0f, 120.0f));
+	}
+
+	[Export(PropertyHint.Range, "8,120,1")]
+	public float CompactHeaderHeight
+	{
+		get => _compactHeaderHeight;
+		set => SetFloat(ref _compactHeaderHeight, Mathf.Clamp(value, 8.0f, 120.0f));
+	}
+
+	[Export(PropertyHint.Range, "8,80,1")]
+	public float IceHeaderHeight
+	{
+		get => _iceHeaderHeight;
+		set => SetFloat(ref _iceHeaderHeight, Mathf.Clamp(value, 8.0f, 80.0f));
+	}
+
+	[Export(PropertyHint.Range, "0,16,1")]
+	public float HeaderUnderlineHeight
+	{
+		get => _headerUnderlineHeight;
+		set => SetFloat(ref _headerUnderlineHeight, Mathf.Clamp(value, 0.0f, 16.0f));
 	}
 
 	[Export(PropertyHint.Range, "0,1,0.01")]
@@ -408,6 +421,28 @@ public partial class CardAppearance : Resource
 		set => SetFloat(ref _backCrossWidth, Mathf.Clamp(value, 0.5f, 8.0f));
 	}
 
+	[ExportGroup("Drawing geometry")]
+	[Export]
+	public Rect2 PortraitMotifRect
+	{
+		get => _portraitMotifRect;
+		set => SetRect(ref _portraitMotifRect, ClampNormalizedRect(value));
+	}
+
+	[Export]
+	public Rect2 CompactMotifRect
+	{
+		get => _compactMotifRect;
+		set => SetRect(ref _compactMotifRect, ClampNormalizedRect(value));
+	}
+
+	[Export]
+	public Rect2 IceMotifRect
+	{
+		get => _iceMotifRect;
+		set => SetRect(ref _iceMotifRect, ClampNormalizedRect(value));
+	}
+
 	[ExportGroup("Action glow")]
 	[Export(PropertyHint.Range, "0,48,1")]
 	public float GlowOuterExtent
@@ -497,5 +532,25 @@ public partial class CardAppearance : Resource
 
 		field = value;
 		EmitChanged();
+	}
+
+	private void SetRect(ref Rect2 field, Rect2 value)
+	{
+		if (field == value)
+		{
+			return;
+		}
+
+		field = value;
+		EmitChanged();
+	}
+
+	private static Rect2 ClampNormalizedRect(Rect2 value)
+	{
+		float left = Mathf.Clamp(value.Position.X, 0.0f, 1.0f);
+		float top = Mathf.Clamp(value.Position.Y, 0.0f, 1.0f);
+		float width = Mathf.Clamp(value.Size.X, 0.0f, 1.0f - left);
+		float height = Mathf.Clamp(value.Size.Y, 0.0f, 1.0f - top);
+		return new Rect2(left, top, width, height);
 	}
 }

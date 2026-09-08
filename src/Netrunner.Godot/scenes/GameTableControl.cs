@@ -12,17 +12,16 @@ namespace Netrunner.GodotClient;
 /// card/server events and map the selected presentation handle to its current
 /// legal action set.
 /// </summary>
+[Tool]
 public partial class GameTableControl : Control
 {
-	private static readonly Color TableColor = new(0.018f, 0.083f, 0.074f);
-	private static readonly Color TableEdgeColor = new(0.07f, 0.28f, 0.23f);
-	private static readonly Color SurfaceColor = new(0.035f, 0.12f, 0.12f, 0.96f);
-	private static readonly Color SurfaceSoftColor = new(0.025f, 0.095f, 0.095f, 0.93f);
+	private static readonly Color WarningColor = new(0.98f, 0.76f, 0.37f);
 	private static readonly Color AccentColor = new(0.43f, 0.94f, 0.72f);
 	private static readonly Color MutedColor = new(0.62f, 0.76f, 0.75f);
-	private static readonly Color CorpColor = new(0.82f, 0.47f, 0.62f);
-	private static readonly Color RunnerColor = new(0.34f, 0.73f, 0.96f);
-	private static readonly Color WarningColor = new(0.98f, 0.76f, 0.37f);
+	public const string BoardScenePath = "res://scenes/components/GameBoard.tscn";
+	public const string BoardLayoutPath = "res://themes/BoardLayout.tres";
+	public enum PreviewDensity { Off, Empty, Normal, Dense }
+	private enum CardSizeRole { CompactPortrait, Ice, HostedPortrait, FullPortrait }
 
 	private readonly Dictionary<string, TableCardControl> _cards = new(StringComparer.Ordinal);
 	private readonly Dictionary<string, CardViewModel?> _cardModels = new(StringComparer.Ordinal);
@@ -33,9 +32,14 @@ public partial class GameTableControl : Control
 	private readonly Dictionary<string, ServerKind> _serverKinds = new(StringComparer.Ordinal);
 	private readonly HashSet<string> _activeCardKeys = new(StringComparer.Ordinal);
 	private readonly Dictionary<string, TableCardControl> _visibleCards = new(StringComparer.Ordinal);
+	private readonly Dictionary<string, CardSizeIntent> _cardSizeIntents = new(StringComparer.Ordinal);
+	private readonly Dictionary<string, (CardAppearance Appearance, Action Handler)> _cardAppearanceHandlers = new(StringComparer.Ordinal);
 
 	private MatchViewModel? _pendingView;
 	private string? _lastBoardFingerprint;
+	private BoardLayout? _boardLayout;
+	private bool _boardLayoutConnected;
+	private bool _previewDirty;
 	private VBoxContainer _tableLayout = null!;
 	private HBoxContainer _corpStrip = null!;
 	private HBoxContainer _serverLaneRow = null!;
@@ -66,6 +70,75 @@ public partial class GameTableControl : Control
 	private int _nextRemoteDisplayNumber = 1;
 	private bool _shellBuilt;
 	private string? _lastRunFocus;
+	private PreviewDensity _previewMode;
+	private PlayerSide _previewSeat = PlayerSide.Runner;
+
+	/// <summary>
+	/// Shared authored board geometry. Card footprints are derived from each
+	/// card's CardAppearance and the scale intent in this resource.
+	/// </summary>
+	[ExportGroup("Board authoring")]
+	[Export]
+	public BoardLayout BoardLayout
+	{
+		get => _boardLayout ??= LoadDefaultBoardLayout();
+		set
+		{
+			var next = value ?? LoadDefaultBoardLayout();
+			if (ReferenceEquals(_boardLayout, next))
+			{
+				return;
+			}
+
+			DisconnectBoardLayout();
+			_boardLayout = next;
+			ConnectBoardLayout();
+			ApplyBoardLayout();
+		}
+	}
+
+	/// <summary>Compatibility alias used by board-authoring helpers.</summary>
+	public BoardLayout Layout => BoardLayout;
+
+	[Export]
+	public PreviewDensity PreviewMode
+	{
+		get => _previewMode;
+		set
+		{
+			if (_previewMode == value)
+			{
+				return;
+			}
+
+			_previewMode = value;
+			_previewDirty = true;
+			if (IsInsideTree())
+			{
+				SetProcess(Engine.IsEditorHint() && value != PreviewDensity.Off);
+			}
+		}
+	}
+
+	[Export]
+	public PlayerSide PreviewSeat
+	{
+		get => _previewSeat;
+		set
+		{
+			if (_previewSeat == value)
+			{
+				return;
+			}
+
+			_previewSeat = value;
+			_previewDirty = true;
+			if (IsInsideTree() && Engine.IsEditorHint() && _previewMode != PreviewDensity.Off)
+			{
+				SetProcess(true);
+			}
+		}
+	}
 
 	/// <summary>Raised with an engine-visible card handle when a card is selected.</summary>
 	public event Action<string>? CardSelected;
@@ -176,6 +249,19 @@ public partial class GameTableControl : Control
 		return "Server";
 	}
 
+	public static GameTableControl Create()
+	{
+		PackedScene? scene = GD.Load<PackedScene>(BoardScenePath);
+		if (scene is null)
+		{
+			string message = $"Production board scene is missing: {BoardScenePath}";
+			GD.PushError(message);
+			throw new InvalidOperationException(message);
+		}
+
+		return scene.Instantiate<GameTableControl>();
+	}
+
 	public override void _Ready()
 	{
 		BuildShell();
@@ -183,25 +269,45 @@ public partial class GameTableControl : Control
 		{
 			RenderView(view);
 		}
+		else if (Engine.IsEditorHint() && _previewMode != PreviewDensity.Off)
+		{
+			_previewDirty = true;
+			SetProcess(true);
+			RefreshEditorPreview();
+		}
+	}
+
+	public override void _EnterTree()
+	{
+		ConnectBoardLayout();
+		foreach ((string identity, TableCardControl card) in _cards)
+		{
+			AttachCard(card);
+			ConnectCardAppearance(identity, card);
+			ApplyCardDisplaySize(identity);
+		}
+		ApplyBoardLayout();
+	}
+
+	public override void _Process(double delta)
+	{
+		if (Engine.IsEditorHint() && _previewDirty && _shellBuilt)
+		{
+			RefreshEditorPreview();
+		}
 	}
 
 	public override void _ExitTree()
 	{
+		DisconnectBoardLayout();
 		StopMotion();
-		foreach (TableCardControl card in _cards.Values)
+		foreach ((string identity, TableCardControl card) in _cards.Select(pair => (pair.Key, pair.Value)).ToArray())
 		{
+			// The board can leave and re-enter the tree while an editor preview or
+			// host scene is rebuilt. Drop callbacks, but retain each card's sizing
+			// intent so re-entry can reconnect and refresh the same controls.
+			DetachCardAppearance(identity, clearIntent: false);
 			DetachCard(card);
-			// Some cards can be temporarily detached while a slot is being
-			// reconciled. Queue every cached node explicitly so it cannot outlive
-			// the table and leak artwork/text resources on scene reload.
-			card.QueueFree();
-		}
-		foreach (Control slot in _rigSlots.Values)
-		{
-			if (!slot.IsQueuedForDeletion())
-			{
-				slot.QueueFree();
-			}
 		}
 	}
 
@@ -212,267 +318,236 @@ public partial class GameTableControl : Control
 			return;
 		}
 
+		// Main still has a compatibility path that constructs this control with
+		// `new`. Move the authored children from the production PackedScene into
+		// that instance so there is one layout definition and no duplicate tree.
+		if (!TryBindAuthoredShell())
+		{
+			TransferAuthoredShell();
+		}
+
+		if (!TryBindAuthoredShell())
+		{
+			GD.PushError("GameTableControl requires the authored GameBoard scene tree.");
+			return;
+		}
+
 		_shellBuilt = true;
 		MouseFilter = MouseFilterEnum.Ignore;
 		FocusMode = FocusModeEnum.None;
-		// The parent reserves the decision dock below the table. Keep the board
-		// willing to fit a 1920×1080 viewport; each hand/ICE strip owns its local
-		// overflow instead of forcing a document-sized table.
-		CustomMinimumSize = new Vector2(760, 0);
-
-		ColorRect tableBackdrop = new()
-		{
-			Color = TableColor,
-			MouseFilter = MouseFilterEnum.Ignore,
-		};
-		SetFullRect(tableBackdrop);
-		AddChild(tableBackdrop);
-
-		PanelContainer tableSurface = new()
-		{
-			MouseFilter = MouseFilterEnum.Ignore,
-		};
-		SetFullRect(tableSurface);
-		tableSurface.AddThemeStyleboxOverride("panel", MakePanelStyle(TableColor, TableEdgeColor, 1, 10));
-		AddChild(tableSurface);
-
-		MarginContainer margin = new();
-		margin.AddThemeConstantOverride("margin_left", 14);
-		margin.AddThemeConstantOverride("margin_top", 4);
-		margin.AddThemeConstantOverride("margin_right", 14);
-		margin.AddThemeConstantOverride("margin_bottom", 4);
-		SetFullRect(margin);
-		tableSurface.AddChild(margin);
-
-		_tableLayout = new VBoxContainer
-		{
-			MouseFilter = MouseFilterEnum.Ignore,
-			SizeFlagsVertical = SizeFlags.ExpandFill,
-		};
-		_tableLayout.AddThemeConstantOverride("separation", 4);
-		margin.AddChild(_tableLayout);
-
-		BuildCorpStrip();
-		BuildServerField();
-		BuildRunnerField();
-
-		_tableHint = MakeLabel(
-			"Select a card or lane to stage a contextual action · Escape cancels local staging",
-			11,
-			MutedColor);
-		_tableHint.HorizontalAlignment = HorizontalAlignment.Center;
-		_tableHint.CustomMinimumSize = new Vector2(0, 12);
-		_tableLayout.AddChild(_tableHint);
-		_tableHint.Visible = false;
+		ClipContents = true;
+		ConnectAuthoredZoneButtons();
+		ConnectBoardLayout();
+		ApplyBoardLayout();
 	}
 
-	private void BuildHeader()
+	private void ConnectAuthoredZoneButtons()
 	{
-		HBoxContainer header = new()
+		_corpDeckPile.Pressed += () => ServerSelected?.Invoke("zone:corp-deck");
+		_corpArchivesPile.Pressed += () => ServerSelected?.Invoke("zone:corp-archives");
+		_runnerDeckPile.Pressed += () => ServerSelected?.Invoke("zone:runner-deck");
+		_runnerHeapPile.Pressed += () => ServerSelected?.Invoke("zone:runner-heap");
+		Button? corpScored = GetNodeOrNull<Button>("Surface/Margins/Layout/CorpStrip/Content/CorpScored");
+		Button? runnerScored = GetNodeOrNull<Button>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/Scored");
+		if (corpScored is not null)
 		{
-			CustomMinimumSize = new Vector2(0, 42),
-			MouseFilter = MouseFilterEnum.Ignore,
-		};
-		header.AddThemeConstantOverride("separation", 10);
-		_tableLayout.AddChild(header);
-
-		Label title = MakeLabel("NETRUNNER TABLE", 18, AccentColor);
-		title.VerticalAlignment = VerticalAlignment.Center;
-		title.CustomMinimumSize = new Vector2(190, 0);
-		header.AddChild(title);
-
-		_turnLabel = MakeLabel("Waiting for a public turn", 13, Colors.White);
-		_turnLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		_turnLabel.VerticalAlignment = VerticalAlignment.Center;
-		_turnLabel.HorizontalAlignment = HorizontalAlignment.Center;
-		header.AddChild(_turnLabel);
-
-		_runLabel = MakeLabel("No active run", 12, MutedColor);
-		_runLabel.CustomMinimumSize = new Vector2(220, 0);
-		_runLabel.VerticalAlignment = VerticalAlignment.Center;
-		_runLabel.HorizontalAlignment = HorizontalAlignment.Right;
-		header.AddChild(_runLabel);
+			corpScored.Pressed += () => ServerSelected?.Invoke("zone:corp-score");
+		}
+		if (runnerScored is not null)
+		{
+			runnerScored.Pressed += () => ServerSelected?.Invoke("zone:runner-score");
+		}
 	}
 
-	private void BuildCorpStrip()
+	private bool TryBindAuthoredShell()
 	{
-		PanelContainer surface = MakeSurfacePanel(new Vector2(0, 26), expandVertical: false);
-		_tableLayout.AddChild(surface);
-		_corpStrip = new HBoxContainer
-		{
-			MouseFilter = MouseFilterEnum.Ignore,
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-		};
-		_corpStrip.AddThemeConstantOverride("separation", 7);
-		surface.AddChild(_corpStrip);
+		_tableLayout = GetNodeOrNull<VBoxContainer>("Surface/Margins/Layout")!;
+		_corpStrip = GetNodeOrNull<HBoxContainer>("Surface/Margins/Layout/CorpStrip/Content")!;
+		_serverScroll = GetNodeOrNull<ScrollContainer>("Surface/Margins/Layout/ServerField/Content/Scroll")!;
+		_serverLaneRow = GetNodeOrNull<HBoxContainer>("Surface/Margins/Layout/ServerField/Content/Scroll/Lanes")!;
+		_runnerRigScroll = GetNodeOrNull<ScrollContainer>("Surface/Margins/Layout/RunnerField/Content/Rig/Content/Scroll")!;
+		_runnerRigRow = GetNodeOrNull<HBoxContainer>("Surface/Margins/Layout/RunnerField/Content/Rig/Content/Scroll/Cards")!;
+		_localHandScroll = GetNodeOrNull<ScrollContainer>("Surface/Margins/Layout/RunnerField/Content/LocalHand/Content/Scroll")!;
+		_localHandRow = GetNodeOrNull<HBoxContainer>("Surface/Margins/Layout/RunnerField/Content/LocalHand/Content/Scroll/Cards")!;
+		_turnLabel = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/Turn")!;
+		_runLabel = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/Run")!;
+		_corpResources = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/Resources")!;
+		_runnerResources = GetNodeOrNull<Label>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/Resources")!;
+		_corpHandCaption = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/HQ")!;
+		_runnerHandCaption = GetNodeOrNull<Label>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/HandCaption")!;
+		_localHandCaption = GetNodeOrNull<Label>("Surface/Margins/Layout/RunnerField/Content/LocalHand/Content/Heading/Caption")!;
+		_runnerIdentitySlot = GetNodeOrNull<PanelContainer>("Surface/Margins/Layout/RunnerField/Content/Identity")!;
+		_tableHint = GetNodeOrNull<Label>("Surface/Margins/Layout/Hint")!;
+		_corpScoreLabel = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/Score")!;
+		_runnerScoreLabel = GetNodeOrNull<Label>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/Score")!;
+		_corpDeckPile = GetNodeOrNull<Button>("Surface/Margins/Layout/CorpStrip/Content/CorpDeck")!;
+		_corpArchivesPile = GetNodeOrNull<Button>("Surface/Margins/Layout/CorpStrip/Content/CorpArchives")!;
+		_runnerDeckPile = GetNodeOrNull<Button>("Surface/Margins/Layout/RunnerField/Content/Deck")!;
+		_runnerHeapPile = GetNodeOrNull<Button>("Surface/Margins/Layout/RunnerField/Content/Discard")!;
 
-		Label side = MakeLabel("CORP", 11, CorpColor);
-		side.CustomMinimumSize = new Vector2(48, 0);
-		side.VerticalAlignment = VerticalAlignment.Center;
-		_corpStrip.AddChild(side);
-		_corpResources = MakeLabel("Credits · Clicks · Score", 11, Colors.White);
-		_corpResources.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		_corpResources.VerticalAlignment = VerticalAlignment.Center;
-		_corpStrip.AddChild(_corpResources);
-		_corpScoreLabel = MakeLabel("Score pile · 0", 10, MutedColor);
-		_corpScoreLabel.CustomMinimumSize = new Vector2(92, 0);
-		_corpScoreLabel.VerticalAlignment = VerticalAlignment.Center;
-		_corpStrip.AddChild(_corpScoreLabel);
-		_corpStrip.AddChild(MakePileButton("Scored", "zone:corp-score", "Browse Corp score area"));
-
-		_corpHandCaption = MakeLabel("HQ · hand", 10, MutedColor);
-		_corpHandCaption.CustomMinimumSize = new Vector2(150, 0);
-		_corpHandCaption.VerticalAlignment = VerticalAlignment.Center;
-		_corpStrip.AddChild(_corpHandCaption);
-
-		_corpDeckPile = MakePileButton("R&D · —", "zone:corp-deck", "Corp R&D · face-down pile");
-		_corpStrip.AddChild(_corpDeckPile);
-		_corpArchivesPile = MakePileButton("Archives · —", "zone:corp-archives", "Corp Archives · public discard pile");
-		_corpStrip.AddChild(_corpArchivesPile);
-
-		_turnLabel = MakeLabel("Turn · phase", 10, AccentColor);
-		_turnLabel.CustomMinimumSize = new Vector2(132, 0);
-		_turnLabel.VerticalAlignment = VerticalAlignment.Center;
-		_turnLabel.HorizontalAlignment = HorizontalAlignment.Right;
-		_corpStrip.AddChild(_turnLabel);
-		_runLabel = MakeLabel("No active run", 10, WarningColor);
-		_runLabel.CustomMinimumSize = new Vector2(160, 0);
-		_runLabel.VerticalAlignment = VerticalAlignment.Center;
-		_runLabel.HorizontalAlignment = HorizontalAlignment.Right;
-		_corpStrip.AddChild(_runLabel);
+		return _tableLayout is not null
+			&& _corpStrip is not null
+			&& _serverScroll is not null
+			&& _serverLaneRow is not null
+			&& _runnerRigScroll is not null
+			&& _runnerRigRow is not null
+			&& _localHandScroll is not null
+			&& _localHandRow is not null
+			&& _turnLabel is not null
+			&& _runLabel is not null
+			&& _corpResources is not null
+			&& _runnerResources is not null
+			&& _corpHandCaption is not null
+			&& _runnerHandCaption is not null
+			&& _localHandCaption is not null
+			&& _runnerIdentitySlot is not null
+			&& _tableHint is not null
+			&& _corpScoreLabel is not null
+			&& _runnerScoreLabel is not null
+			&& _corpDeckPile is not null
+			&& _corpArchivesPile is not null
+			&& _runnerDeckPile is not null
+			&& _runnerHeapPile is not null;
 	}
 
-	private void BuildServerField()
+	private void TransferAuthoredShell()
 	{
-		PanelContainer surface = MakeSurfacePanel(new Vector2(0, 150), expandVertical: true);
-		_tableLayout.AddChild(surface);
-		VBoxContainer content = MakeVBox(4);
-		surface.AddChild(content);
+		PackedScene? scene = GD.Load<PackedScene>(BoardScenePath);
+		if (scene is null)
+		{
+			return;
+		}
 
-		HBoxContainer heading = new()
+		Node? template = scene.Instantiate();
+		if (template is not GameTableControl templateBoard)
 		{
-			MouseFilter = MouseFilterEnum.Ignore,
-			CustomMinimumSize = new Vector2(0, 16),
-		};
-		content.AddChild(heading);
-		Label label = MakeLabel("CORP NETWORK · roots above · inner ICE top · outer ICE toward Runner", 10, MutedColor);
-		label.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		heading.AddChild(label);
+			template?.Free();
+			return;
+		}
 
-		// The 1.5x card sizes outgrow short viewports, so the lane row keeps a
-		// small fixed minimum and owns its vertical overflow locally.
-		_serverScroll = new ScrollContainer
+		if (_boardLayout is null)
 		{
-			HorizontalScrollMode = ScrollContainer.ScrollMode.Auto,
-			VerticalScrollMode = ScrollContainer.ScrollMode.Auto,
-			FollowFocus = true,
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-			SizeFlagsVertical = SizeFlags.ExpandFill,
-		};
-		_serverLaneRow = new HBoxContainer
+			_boardLayout = templateBoard.BoardLayout;
+		}
+
+		foreach (Node child in template.GetChildren().ToArray())
 		{
-			MouseFilter = MouseFilterEnum.Ignore,
-			SizeFlagsVertical = SizeFlags.ExpandFill,
-		};
-		_serverLaneRow.AddThemeConstantOverride("separation", 9);
-		_serverScroll.AddChild(_serverLaneRow);
-		content.AddChild(_serverScroll);
+			template.RemoveChild(child);
+			AddChild(child);
+		}
+
+		template.Free();
 	}
 
-	private void BuildRunnerField()
+	private static BoardLayout LoadDefaultBoardLayout()
 	{
-		PanelContainer surface = MakeSurfacePanel(new Vector2(0, 200), expandVertical: false);
-		_tableLayout.AddChild(surface);
-		HBoxContainer field = new()
+		BoardLayout? layout = GD.Load<BoardLayout>(BoardLayoutPath);
+		if (layout is not null)
 		{
-			MouseFilter = MouseFilterEnum.Ignore,
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-		};
-		field.AddThemeConstantOverride("separation", 6);
-		surface.AddChild(field);
+			return layout;
+		}
 
-		PanelContainer summary = MakeInnerPanel(new Vector2(174, 0));
-		VBoxContainer summaryContent = MakeVBox(2);
-		summary.AddChild(summaryContent);
-		summaryContent.AddChild(MakeLabel("RUNNER", 11, RunnerColor));
-		_runnerResources = MakeLabel("Credits · Clicks · Score", 10, Colors.White);
-		summaryContent.AddChild(_runnerResources);
-		_runnerHandCaption = MakeLabel("Grip · hand", 10, MutedColor);
-		summaryContent.AddChild(_runnerHandCaption);
-		_runnerScoreLabel = MakeLabel("Score pile · 0", 10, MutedColor);
-		summaryContent.AddChild(_runnerScoreLabel);
-		summaryContent.AddChild(MakePileButton("Scored", "zone:runner-score", "Browse Runner score area"));
-		field.AddChild(summary);
+		GD.PushError($"Shared board layout resource is missing: {BoardLayoutPath}");
+		return new BoardLayout();
+	}
 
-		_runnerIdentitySlot = MakeIdentitySlot("Runner identity");
-		_runnerIdentitySlot.CustomMinimumSize = new Vector2(96, 150);
-		field.AddChild(_runnerIdentitySlot);
-
-		_runnerDeckPile = MakePileButton("Stack\n—", "zone:runner-deck", "Runner Stack · face-down pile");
-		_runnerDeckPile.CustomMinimumSize = new Vector2(62, 30);
-		field.AddChild(_runnerDeckPile);
-		_runnerHeapPile = MakePileButton("Heap\n—", "zone:runner-heap", "Runner Heap · public discard pile");
-		_runnerHeapPile.CustomMinimumSize = new Vector2(62, 30);
-		field.AddChild(_runnerHeapPile);
-
-		PanelContainer rig = MakeInnerPanel(new Vector2(315, 0));
-		rig.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		VBoxContainer rigContent = MakeVBox(1);
-		rig.AddChild(rigContent);
-		rigContent.AddChild(MakeLabel("RIG", 9, MutedColor));
-		_runnerRigScroll = new ScrollContainer
+	private void ConnectBoardLayout()
+	{
+		if (!IsInsideTree() || _boardLayoutConnected || _boardLayout is null || !GodotObject.IsInstanceValid(_boardLayout))
 		{
-			HorizontalScrollMode = ScrollContainer.ScrollMode.Auto,
-			VerticalScrollMode = ScrollContainer.ScrollMode.Disabled,
-			FollowFocus = true,
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-		};
-		_runnerRigRow = new HBoxContainer
-		{
-			MouseFilter = MouseFilterEnum.Ignore,
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-		};
-		_runnerRigRow.AddThemeConstantOverride("separation", 8);
-		_runnerRigScroll.AddChild(_runnerRigRow);
-		rigContent.AddChild(_runnerRigScroll);
-		field.AddChild(rig);
+			return;
+		}
 
-		PanelContainer hand = MakeInnerPanel(new Vector2(405, 0));
-		hand.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		VBoxContainer handContent = MakeVBox(1);
-		hand.AddChild(handContent);
-		HBoxContainer heading = new()
-		{
-			MouseFilter = MouseFilterEnum.Ignore,
-			CustomMinimumSize = new Vector2(0, 17),
-		};
-		_localHandCaption = MakeLabel("LOCAL HAND", 9, AccentColor);
-		_localHandCaption.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		heading.AddChild(_localHandCaption);
-		Label hint = MakeLabel("focus to lift", 9, MutedColor);
-		hint.HorizontalAlignment = HorizontalAlignment.Right;
-		heading.AddChild(hint);
-		handContent.AddChild(heading);
+		_boardLayout.Changed += HandleBoardLayoutChanged;
+		_boardLayoutConnected = true;
+	}
 
-		_localHandScroll = new ScrollContainer
+	private void DisconnectBoardLayout()
+	{
+		if (!_boardLayoutConnected || _boardLayout is null || !GodotObject.IsInstanceValid(_boardLayout))
 		{
-			HorizontalScrollMode = ScrollContainer.ScrollMode.Auto,
-			VerticalScrollMode = ScrollContainer.ScrollMode.Disabled,
-			FollowFocus = true,
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-			SizeFlagsVertical = SizeFlags.ExpandFill,
-		};
-		_localHandRow = new HBoxContainer
+			_boardLayoutConnected = false;
+			return;
+		}
+
+		_boardLayout.Changed -= HandleBoardLayoutChanged;
+		_boardLayoutConnected = false;
+	}
+
+	private void HandleBoardLayoutChanged()
+	{
+		ApplyBoardLayout();
+	}
+
+	private void ApplyBoardLayout()
+	{
+		if (!_shellBuilt || _boardLayout is null || !IsInstanceValid(_boardLayout))
 		{
-			MouseFilter = MouseFilterEnum.Ignore,
-			SizeFlagsVertical = SizeFlags.ExpandFill,
-		};
-		// A controlled overlap keeps a normal five-card hand compact while the
-		// scroll container still makes every card focusable at overflow.
-		_localHandRow.AddThemeConstantOverride("separation", -36);
-		_localHandScroll.AddChild(_localHandRow);
-		handContent.AddChild(_localHandScroll);
-		field.AddChild(hand);
+			return;
+		}
+
+		int regionSpacing = Mathf.RoundToInt(_boardLayout.RegionSpacing);
+		int cardSeparation = Mathf.RoundToInt(_boardLayout.CardSeparation);
+		CustomMinimumSize = new Vector2(_boardLayout.MinimumBoardWidth, CustomMinimumSize.Y);
+		MarginContainer? margins = GetNodeOrNull<MarginContainer>("Surface/Margins");
+		if (margins is not null)
+		{
+			Vector4 outer = _boardLayout.Margins;
+			margins.AddThemeConstantOverride("margin_left", Mathf.RoundToInt(outer.X));
+			margins.AddThemeConstantOverride("margin_top", Mathf.RoundToInt(outer.Y));
+			margins.AddThemeConstantOverride("margin_right", Mathf.RoundToInt(outer.Z));
+			margins.AddThemeConstantOverride("margin_bottom", Mathf.RoundToInt(outer.W));
+		}
+
+		_tableLayout.AddThemeConstantOverride("separation", regionSpacing);
+		_corpStrip.AddThemeConstantOverride("separation", cardSeparation);
+		_serverLaneRow.AddThemeConstantOverride("separation", regionSpacing);
+		_runnerRigRow.AddThemeConstantOverride("separation", cardSeparation);
+		_localHandRow.AddThemeConstantOverride("separation", -Mathf.RoundToInt(_boardLayout.HandOverlap));
+
+		PanelContainer? serverField = GetNodeOrNull<PanelContainer>("Surface/Margins/Layout/ServerField");
+		if (serverField is not null)
+		{
+			serverField.CustomMinimumSize = new Vector2(serverField.CustomMinimumSize.X, _boardLayout.ServerFieldMinimumHeight);
+		}
+		Node? runnerField = GetNodeOrNull<Node>("Surface/Margins/Layout/RunnerField");
+		if (runnerField is Control runnerControl)
+		{
+			runnerControl.CustomMinimumSize = new Vector2(runnerControl.CustomMinimumSize.X, _boardLayout.RunnerFieldMinimumHeight);
+		}
+
+		foreach (ServerLaneParts lane in _serverLanes.Values)
+		{
+			ApplyLaneLayout(lane);
+		}
+		foreach (string identity in _cardSizeIntents.Keys.ToArray())
+		{
+			ApplyCardDisplaySize(identity);
+		}
+	}
+
+	private void ApplyLaneLayout(ServerLaneParts lane)
+	{
+		if (_boardLayout is null || !IsInstanceValid(lane.Panel))
+		{
+			return;
+		}
+
+		lane.Panel.CustomMinimumSize = new Vector2(_boardLayout.LaneWidth, lane.Panel.CustomMinimumSize.Y);
+		lane.RootCards.AddThemeConstantOverride("separation", -Mathf.RoundToInt(_boardLayout.RootCardOverlap));
+		lane.IceCards.AddThemeConstantOverride("separation", Mathf.RoundToInt(_boardLayout.CardSeparation));
+	}
+
+	private void RefreshEditorPreview()
+	{
+		_previewDirty = false;
+		if (!Engine.IsEditorHint() || !_shellBuilt || _previewMode == PreviewDensity.Off)
+		{
+			return;
+		}
+
+		UiPreviewSamples.Density density = (UiPreviewSamples.Density)((int)_previewMode - 1);
+		Render(UiPreviewSamples.Board(_previewSeat, density));
 	}
 
 	private void RenderView(MatchViewModel view)
@@ -513,6 +588,7 @@ public partial class GameTableControl : Control
 				parent.RemoveChild(stale);
 			}
 			DetachCard(stale);
+			DetachCardAppearance(staleKey);
 			stale.QueueFree();
 			_cards.Remove(staleKey);
 			_cardModels.Remove(staleKey);
@@ -600,8 +676,6 @@ public partial class GameTableControl : Control
 				? $"ACTIVE RUN · {run.FocusLabel}"
 				: string.Empty;
 			lane.RunMarker.Visible = lane.RunMarker.Text.Length > 0;
-			lane.Panel.AddThemeStyleboxOverride("panel", MakePanelStyle(SurfaceSoftColor,
-				lane.RunMarker.Visible ? WarningColor : TableEdgeColor, lane.RunMarker.Visible ? 3 : 1, 8));
 			if (lane.RunMarker.Visible && view.Run?.Encounter is { } encounter)
 			{
 				lane.RunMarker.Text = $"▶ {encounter.Ice?.Title ?? "Face-down ICE"} · {encounter.RemainingSubroutines} unbroken";
@@ -614,10 +688,12 @@ public partial class GameTableControl : Control
 					? "ROOT · public archive"
 					: server.Kind == ServerKind.RAndD
 						? $"R&D DECK · {view.CorpDeck.Count} cards"
-						: "ROOT · HQ";
+							: "ROOT · HQ";
+			lane.RootCaption.Visible = true;
+			lane.IceCaption.Visible = true;
 
 			ClearNonCardChildren(lane.RootCards);
-			lane.RootCards.AddThemeConstantOverride("separation", server.Kind == ServerKind.Headquarters ? 12 : -27);
+			ApplyLaneLayout(lane);
 			ClearNonCardChildren(lane.IceCards);
 			RenderServerRoot(
 				server,
@@ -668,8 +744,7 @@ public partial class GameTableControl : Control
 		int index = 0;
 		if (corpIdentity is not null)
 		{
-			TableCardControl identity = EnsureCard("corp-identity", rootCards, corpIdentity, false, nextVisibleCards);
-			SetCompactCard(identity, new Vector2(105, 147));
+			EnsureCard("corp-identity", rootCards, corpIdentity, false, nextVisibleCards);
 		}
 		if (corpHandCount is { } handCount)
 		{
@@ -682,8 +757,7 @@ public partial class GameTableControl : Control
 		foreach (CardViewModel? card in server.OrderedRoot)
 		{
 			string slot = $"server:{server.Id}:root:{index++}";
-			TableCardControl control = EnsureCard(slot, rootCards, card, isIce: false, nextVisibleCards);
-			SetCompactCard(control, new Vector2(105, 147));
+			EnsureCard(slot, rootCards, card, isIce: false, nextVisibleCards);
 		}
 	}
 
@@ -704,7 +778,11 @@ public partial class GameTableControl : Control
 				EnsureCard(slot, iceCards, card, isIce: true, nextVisibleCards);
 			else
 			{
-				Control stack = new() { CustomMinimumSize = new Vector2(240, 156), MouseFilter = MouseFilterEnum.Ignore };
+				Control stack = new()
+				{
+					CustomMinimumSize = HostedStackMinimumSize(),
+					MouseFilter = MouseFilterEnum.Ignore,
+				};
 				iceCards.AddChild(stack);
 				EnsureCard(slot, stack, card, true, nextVisibleCards);
 				for (int index = 0; index < hosted.Length; index++)
@@ -715,9 +793,9 @@ public partial class GameTableControl : Control
 						hosted[index],
 						false,
 						nextVisibleCards,
-						PlayerSide.Runner);
-					attachment.SetDisplaySize(new Vector2(90, 126));
-					attachment.Position = new Vector2(33 + 21 * index, 30);
+						PlayerSide.Runner,
+						CardSizeRole.HostedPortrait);
+					attachment.Position = HostedCardPosition(index);
 					attachment.TooltipText = $"Hosted on {card?.Title ?? "face-down ICE"}\n" + attachment.TooltipText;
 				}
 			}
@@ -763,7 +841,7 @@ public partial class GameTableControl : Control
 		{
 			slot = new Control
 			{
-				CustomMinimumSize = new Vector2(120, 165),
+				CustomMinimumSize = RigSlotMinimumSize(),
 				MouseFilter = MouseFilterEnum.Ignore,
 			};
 			_rigSlots[key] = slot;
@@ -814,9 +892,9 @@ public partial class GameTableControl : Control
 				attachment,
 				false,
 				nextVisibleCards,
-				PlayerSide.Runner);
-			attachmentControl.CustomMinimumSize = new Vector2(90, 126);
-			attachmentControl.Position = new Vector2(33 + (index * 20), 27 + (index * 11));
+				PlayerSide.Runner,
+				CardSizeRole.HostedPortrait);
+			attachmentControl.Position = HostedCardPosition(index);
 			attachmentControl.ZIndex = index + 2;
 		}
 	}
@@ -833,67 +911,25 @@ public partial class GameTableControl : Control
 		_localHandCaption.Text = corpLocal
 			? $"LOCAL HAND · HQ · {cards.Count} visible cards"
 			: $"LOCAL HAND · GRIP · {cards.Count} visible cards";
-		foreach (Control child in _localHandRow.GetChildren().OfType<Control>().ToArray())
+		HashSet<string> activeHandIds = cards.Select(card => card.Id).ToHashSet(StringComparer.Ordinal);
+		foreach (TableCardControl existing in _localHandRow.GetChildren().OfType<TableCardControl>().ToArray())
 		{
-			_localHandRow.RemoveChild(child);
+			if (!activeHandIds.Contains(existing.CardId))
+			{
+				_localHandRow.RemoveChild(existing);
+			}
 		}
+		int displayIndex = 0;
 		foreach (CardViewModel card in cards)
 		{
-			EnsureCard(
+			TableCardControl control = EnsureCard(
 				$"{zone}:{card.Id}",
 				_localHandRow,
 				card,
 				false,
 				nextVisibleCards,
 				corpLocal ? PlayerSide.Corp : PlayerSide.Runner);
-		}
-	}
-
-	private void RenderHandOrBacks(
-		string zone,
-		VBoxContainer target,
-		IReadOnlyList<CardViewModel> visibleCards,
-		int backCount,
-		bool isIce,
-		Dictionary<string, TableCardControl> nextVisibleCards)
-	{
-		HBoxContainer row = target.GetChildren().OfType<HBoxContainer>().FirstOrDefault() ?? new HBoxContainer
-		{
-			MouseFilter = MouseFilterEnum.Ignore,
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-		};
-		if (row.GetParent() != target)
-		{
-			target.AddChild(row);
-		}
-		row.AddThemeConstantOverride("separation", visibleCards.Count > 0 ? -93 : -111);
-		foreach (Node child in row.GetChildren().ToArray())
-		{
-			row.RemoveChild(child);
-			if (child is not TableCardControl)
-			{
-				child.QueueFree();
-			}
-		}
-		if (visibleCards.Count > 0)
-		{
-			foreach (CardViewModel card in visibleCards)
-			{
-				EnsureCard($"{zone}:{card.Id}", row, card, isIce, nextVisibleCards);
-			}
-			return;
-		}
-
-		int shownBacks = Math.Min(backCount, 4);
-		for (int index = 0; index < shownBacks; index++)
-		{
-			EnsureCard($"{zone}:back:{index}", row, null, isIce, nextVisibleCards);
-		}
-		if (backCount > shownBacks)
-		{
-			Label more = MakeLabel($"+{backCount - shownBacks}", 11, MutedColor);
-			more.VerticalAlignment = VerticalAlignment.Center;
-			row.AddChild(more);
+			_localHandRow.MoveChild(control, displayIndex++);
 		}
 	}
 
@@ -907,6 +943,10 @@ public partial class GameTableControl : Control
 		foreach (Control child in parent.GetChildren().OfType<Control>().ToArray())
 		{
 			parent.RemoveChild(child);
+			if (child is not TableCardControl)
+			{
+				child.QueueFree();
+			}
 		}
 		if (card is null)
 		{
@@ -917,32 +957,7 @@ public partial class GameTableControl : Control
 			return;
 		}
 
-		TableCardControl control = EnsureCard(slot, parent, card, isIce, nextVisibleCards);
-		SetCompactCard(control, new Vector2(105, 147));
-	}
-
-	private void RenderScoreCards(
-		string zone,
-		HBoxContainer target,
-		IReadOnlyList<CardViewModel> cards,
-		bool isIce,
-		Dictionary<string, TableCardControl> nextVisibleCards)
-	{
-		foreach (Control child in target.GetChildren().OfType<Control>().ToArray())
-		{
-			target.RemoveChild(child);
-		}
-		foreach (CardViewModel card in cards.Take(3))
-		{
-			TableCardControl control = EnsureCard($"{zone}:{card.Id}", target, card, isIce, nextVisibleCards);
-			control.CustomMinimumSize = new Vector2(93, 129);
-		}
-		if (cards.Count > 3)
-		{
-			Label more = MakeLabel($"+{cards.Count - 3}", 11, MutedColor);
-			more.VerticalAlignment = VerticalAlignment.Center;
-			target.AddChild(more);
-		}
+		EnsureCard(slot, parent, card, isIce, nextVisibleCards);
 	}
 
 	private TableCardControl EnsureCard(
@@ -951,17 +966,16 @@ public partial class GameTableControl : Control
 		CardViewModel? model,
 		bool isIce,
 		Dictionary<string, TableCardControl> nextVisibleCards,
-		PlayerSide? backSide = null)
+		PlayerSide? backSide = null,
+		CardSizeRole sizeRole = CardSizeRole.CompactPortrait)
 	{
 		string identity = model is { Id.Length: > 0 }
 			? $"card:{model.Id}"
 			: $"slot:{slot}";
 		if (!_cards.TryGetValue(identity, out TableCardControl? control))
 		{
-			control = new TableCardControl();
-			control.CardSelected += HandleCardSelected;
-			control.CardInspected += HandleCardInspected;
-			control.CardHoverChanged += HandleCardHoverChanged;
+			control = TableCardControl.Create();
+			AttachCard(control);
 			_cards[identity] = control;
 			_cardModels[identity] = null;
 		}
@@ -983,13 +997,123 @@ public partial class GameTableControl : Control
 		control.SetIce(isIce);
 		control.SetBackSide(backSide ?? BackSideForSlot(slot));
 		control.Scale = Vector2.One;
-		{
-			control.SetDisplaySize(isIce ? new Vector2(240, 87) : new Vector2(105, 147));
-		}
+		SetCardSizeIntent(identity, control, isIce, sizeRole);
 		_activeCardKeys.Add(identity);
 		string publicKey = model?.Id is { Length: > 0 } id ? id : slot;
 		nextVisibleCards[publicKey] = control;
 		return control;
+	}
+
+	private void AttachCard(TableCardControl card)
+	{
+		card.CardSelected += HandleCardSelected;
+		card.CardInspected += HandleCardInspected;
+		card.CardHoverChanged += HandleCardHoverChanged;
+		card.AppearanceReplaced += HandleCardAppearanceReplaced;
+	}
+
+	private void HandleCardAppearanceReplaced(TableCardControl changed)
+	{
+		foreach ((string identity, TableCardControl card) in _cards)
+		{
+			if (!ReferenceEquals(card, changed)) continue;
+			ConnectCardAppearance(identity, card);
+			ApplyCardDisplaySize(identity);
+			break;
+		}
+	}
+
+	private void ConnectCardAppearance(string identity, TableCardControl card)
+	{
+		CardAppearance appearance = card.Appearance;
+		if (_cardAppearanceHandlers.TryGetValue(identity, out (CardAppearance Appearance, Action Handler) existing))
+		{
+			if (ReferenceEquals(existing.Appearance, appearance))
+			{
+				return;
+			}
+
+			DetachCardAppearance(identity, clearIntent: false);
+		}
+
+		Action handler = () => ApplyCardDisplaySize(identity);
+		appearance.Changed += handler;
+		_cardAppearanceHandlers[identity] = (appearance, handler);
+	}
+
+	private void DetachCardAppearance(string identity, bool clearIntent = true)
+	{
+		if (!_cardAppearanceHandlers.TryGetValue(identity, out (CardAppearance Appearance, Action Handler) subscription))
+		{
+			if (clearIntent)
+			{
+				_cardSizeIntents.Remove(identity);
+			}
+			return;
+		}
+
+		if (GodotObject.IsInstanceValid(subscription.Appearance))
+		{
+			subscription.Appearance.Changed -= subscription.Handler;
+		}
+		_cardAppearanceHandlers.Remove(identity);
+		if (clearIntent)
+		{
+			_cardSizeIntents.Remove(identity);
+		}
+	}
+
+	private void SetCardSizeIntent(string identity, TableCardControl control, bool isIce, CardSizeRole role)
+	{
+		ConnectCardAppearance(identity, control);
+		_cardSizeIntents[identity] = new CardSizeIntent(control, isIce, role);
+		ApplyCardDisplaySize(identity);
+	}
+
+	private void ApplyCardDisplaySize(string identity)
+	{
+		if (!_cardSizeIntents.TryGetValue(identity, out CardSizeIntent? intent)
+			|| intent is null
+			|| !GodotObject.IsInstanceValid(intent.Control))
+		{
+			return;
+		}
+
+		Vector2 source = intent.IsIce ? intent.Control.Appearance.IceSize : intent.Control.Appearance.PortraitSize;
+		float scale = intent.IsIce ? 1.0f : intent.Role switch
+		{
+			CardSizeRole.HostedPortrait => BoardLayout.HostedPortraitScale,
+			CardSizeRole.FullPortrait => 1.0f,
+			_ => BoardLayout.CompactPortraitScale,
+		};
+		intent.Control.SetDisplaySize(intent.IsIce ? source * new Vector2(1, BoardLayout.IceHeightScale) : source * scale);
+	}
+
+	private Vector2 HostedCardPosition(int index)
+	{
+		if (_boardLayout is null)
+		{
+			return Vector2.Zero;
+		}
+
+		return _boardLayout.HostedCardOffset + (_boardLayout.HostedCardStep * index);
+	}
+
+	private Vector2 HostedStackMinimumSize()
+	{
+		BoardLayout layout = BoardLayout;
+		CardAppearance? appearance = GD.Load<CardAppearance>(TableCardControl.DefaultAppearancePath);
+		Vector2 ice = (appearance?.IceSize ?? TableCardControl.IceCardSize) * new Vector2(1, layout.IceHeightScale);
+		Vector2 hosted = (appearance?.PortraitSize ?? TableCardControl.PortraitCardSize) * layout.HostedPortraitScale;
+		return new Vector2(layout.LaneWidth, Mathf.Max(ice.Y, hosted.Y) + layout.HostedCardOffset.Y + layout.HostedCardStep.Y);
+	}
+
+	private Vector2 RigSlotMinimumSize()
+	{
+		BoardLayout layout = BoardLayout;
+		CardAppearance? appearance = GD.Load<CardAppearance>(TableCardControl.DefaultAppearancePath);
+		Vector2 card = (appearance?.PortraitSize ?? TableCardControl.PortraitCardSize) * layout.CompactPortraitScale;
+		return new Vector2(card.X, card.Y + layout.HostedCardOffset.Y + layout.HostedCardStep.Y);
 	}
 
 	private static PlayerSide BackSideForSlot(string slot)
@@ -1001,139 +1125,26 @@ public partial class GameTableControl : Control
 			: PlayerSide.Corp;
 	}
 
-	private static void SetCompactCard(TableCardControl control, Vector2 layoutSize)
-	{
-		// TableCardControl draws its bounded face from the control's requested
-		// size. Keep this helper scale-neutral; the caller's compact dimensions
-		// are the actual card face size and remain legible in the server lane.
-		control.Scale = Vector2.One;
-		control.SetDisplaySize(layoutSize);
-	}
-
 	private ServerLaneParts CreateServerLane(string serverId)
 	{
-		PanelContainer panel = new()
+		PackedScene? scene = GD.Load<PackedScene>("res://scenes/components/ServerLane.tscn");
+		if (scene is null)
 		{
-			CustomMinimumSize = new Vector2(285, 0),
-			SizeFlagsVertical = SizeFlags.ExpandFill,
-			MouseFilter = MouseFilterEnum.Ignore,
-		};
-		panel.AddThemeStyleboxOverride("panel", MakePanelStyle(SurfaceSoftColor, TableEdgeColor, 1, 8));
-		VBoxContainer content = MakeVBox(2);
-		panel.AddChild(content);
+			throw new InvalidOperationException("Production server lane scene is missing.");
+		}
 
-		Button header = new()
-		{
-			CustomMinimumSize = new Vector2(0, 22),
-			Flat = true,
-			FocusMode = FocusModeEnum.All,
-			MouseDefaultCursorShape = Control.CursorShape.PointingHand,
-		};
+		PanelContainer panel = scene.Instantiate<PanelContainer>();
+		Button header = panel.GetNode<Button>("Content/Header");
+		Label runMarker = panel.GetNode<Label>("Content/RunMarker");
+		Label rootCaption = panel.GetNode<Label>("Content/RootCaption");
+		HBoxContainer rootCards = panel.GetNode<HBoxContainer>("Content/RootCards");
+		Label iceCaption = panel.GetNode<Label>("Content/IceCaption");
+		VBoxContainer iceCards = panel.GetNode<VBoxContainer>("Content/IceScroll/IceCards");
 		header.Pressed += () => ServerSelected?.Invoke(serverId);
-		content.AddChild(header);
-
-		Label runMarker = MakeLabel(string.Empty, 9, WarningColor);
-		runMarker.HorizontalAlignment = HorizontalAlignment.Center;
-		runMarker.CustomMinimumSize = new Vector2(0, 20);
-		runMarker.AutowrapMode = TextServer.AutowrapMode.Off;
-		runMarker.Visible = false;
-		content.AddChild(runMarker);
-
-		Label rootCaption = MakeLabel("ROOT", 9, MutedColor);
-		rootCaption.Visible = false;
-		content.AddChild(rootCaption);
-		HBoxContainer rootCards = new()
-		{
-			MouseFilter = MouseFilterEnum.Ignore,
-			CustomMinimumSize = new Vector2(0, 141),
-		};
-		rootCards.AddThemeConstantOverride("separation", -27);
-		content.AddChild(rootCards);
-
-		Label iceCaption = MakeLabel("ICE · inner → outer", 9, MutedColor);
-		iceCaption.Visible = false;
-		content.AddChild(iceCaption);
-		ScrollContainer iceScroll = new()
-		{
-			VerticalScrollMode = ScrollContainer.ScrollMode.Auto,
-			HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-			SizeFlagsVertical = SizeFlags.ExpandFill,
-			CustomMinimumSize = new Vector2(0, 96),
-			FollowFocus = true,
-		};
-		VBoxContainer iceCards = new()
-		{
-			MouseFilter = MouseFilterEnum.Ignore,
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-		};
-		iceCards.AddThemeConstantOverride("separation", 4);
-		iceScroll.AddChild(iceCards);
-		content.AddChild(iceScroll);
-
 		_serverLaneRow.AddChild(panel);
-		return new ServerLaneParts(panel, header, runMarker, rootCaption, rootCards, iceCards);
-	}
-
-	private Button MakePileButton(string text, string handle, string tooltip)
-	{
-		Button button = new()
-		{
-			Text = text,
-			CustomMinimumSize = new Vector2(68, 26),
-			TooltipText = tooltip,
-			FocusMode = FocusModeEnum.All,
-			MouseDefaultCursorShape = Control.CursorShape.PointingHand,
-		};
-		button.AddThemeFontSizeOverride("font_size", 11);
-		button.Pressed += () => ServerSelected?.Invoke(handle);
-		return button;
-	}
-
-	private static PanelContainer MakeIdentitySlot(string tooltip)
-	{
-		PanelContainer panel = new()
-		{
-			CustomMinimumSize = new Vector2(144, 114),
-			TooltipText = tooltip,
-			MouseFilter = MouseFilterEnum.Ignore,
-		};
-		panel.AddThemeStyleboxOverride("panel", MakePanelStyle(SurfaceColor, TableEdgeColor, 1, 6));
-		return panel;
-	}
-
-	private static PanelContainer MakeSurfacePanel(Vector2 minimum, bool expandVertical)
-	{
-		PanelContainer panel = new()
-		{
-			CustomMinimumSize = minimum,
-			SizeFlagsVertical = expandVertical ? SizeFlags.ExpandFill : SizeFlags.ShrinkCenter,
-			MouseFilter = MouseFilterEnum.Ignore,
-		};
-		panel.AddThemeStyleboxOverride("panel", MakePanelStyle(SurfaceColor, TableEdgeColor, 1, 8));
-		return panel;
-	}
-
-	private static PanelContainer MakeInnerPanel(Vector2 minimum)
-	{
-		PanelContainer panel = new()
-		{
-			CustomMinimumSize = minimum,
-			MouseFilter = MouseFilterEnum.Ignore,
-		};
-		panel.AddThemeStyleboxOverride("panel", MakePanelStyle(new Color(0.02f, 0.08f, 0.08f, 0.68f), TableEdgeColor, 1, 6));
-		return panel;
-	}
-
-	private static VBoxContainer MakeVBox(int separation)
-	{
-		VBoxContainer box = new()
-		{
-			MouseFilter = MouseFilterEnum.Ignore,
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-			SizeFlagsVertical = SizeFlags.ExpandFill,
-		};
-		box.AddThemeConstantOverride("separation", separation);
-		return box;
+		ServerLaneParts lane = new(panel, header, runMarker, rootCaption, rootCards, iceCaption, iceCards);
+		ApplyLaneLayout(lane);
+		return lane;
 	}
 
 	private static Label MakeLabel(string text, int fontSize, Color color)
@@ -1148,32 +1159,6 @@ public partial class GameTableControl : Control
 		label.AddThemeFontSizeOverride("font_size", fontSize);
 		label.AddThemeColorOverride("font_color", color);
 		return label;
-	}
-
-	private static StyleBoxFlat MakePanelStyle(Color background, Color border, int borderWidth, int radius)
-	{
-		return new StyleBoxFlat
-		{
-			BgColor = background,
-			BorderColor = border,
-			BorderWidthLeft = borderWidth,
-			BorderWidthTop = borderWidth,
-			BorderWidthRight = borderWidth,
-			BorderWidthBottom = borderWidth,
-			CornerRadiusTopLeft = radius,
-			CornerRadiusTopRight = radius,
-			CornerRadiusBottomLeft = radius,
-			CornerRadiusBottomRight = radius,
-			ContentMarginLeft = 8,
-			ContentMarginTop = 6,
-			ContentMarginRight = 8,
-			ContentMarginBottom = 6,
-		};
-	}
-
-	private static void SetFullRect(Control control)
-	{
-		control.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
 	}
 
 	private static string FormatResources(PlayerViewModel player)
@@ -1437,6 +1422,7 @@ public partial class GameTableControl : Control
 		card.CardSelected -= HandleCardSelected;
 		card.CardInspected -= HandleCardInspected;
 		card.CardHoverChanged -= HandleCardHoverChanged;
+		card.AppearanceReplaced -= HandleCardAppearanceReplaced;
 	}
 
 	private sealed record ServerLaneParts(
@@ -1445,5 +1431,8 @@ public partial class GameTableControl : Control
 		Label RunMarker,
 		Label RootCaption,
 		HBoxContainer RootCards,
+		Label IceCaption,
 		VBoxContainer IceCards);
+
+	private sealed record CardSizeIntent(TableCardControl Control, bool IsIce, CardSizeRole Role);
 }

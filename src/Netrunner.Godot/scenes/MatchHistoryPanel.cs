@@ -13,40 +13,56 @@ namespace Netrunner.GodotClient;
 /// snapshots, engine events, or authoritative state, so hidden-card history
 /// remains bounded by the projection that created each entry.
 /// </summary>
+[Tool]
 public partial class MatchHistoryPanel : PanelContainer
 {
-	private const int RailWidth = 60;
-	private const int ExpandedWidth = 320;
+	public const string PanelScenePath = "res://scenes/components/MatchHistoryPanel.tscn";
+	public const string EntryScenePath = "res://scenes/components/HistoryEntry.tscn";
+	public const string DetailScenePath = "res://scenes/components/HistoryDetail.tscn";
+	public const string RailEntryScenePath = "res://scenes/components/HistoryRailEntry.tscn";
+
 	private const int MaxEntriesPerPage = 80;
 	private const int MaxRailMarkers = 24;
-	private const string PanelTitle = "Match history";
-
-	private static readonly Color Background = new(0.035f, 0.055f, 0.07f);
-	private static readonly Color Surface = new(0.055f, 0.085f, 0.105f);
-	private static readonly Color SurfaceRaised = new(0.075f, 0.11f, 0.13f);
-	private static readonly Color Border = new(0.18f, 0.31f, 0.36f);
-	private static readonly Color Accent = new(0.36f, 0.9f, 0.74f);
-	private static readonly Color Muted = new(0.64f, 0.74f, 0.79f);
-	private static readonly Color CorpCue = new(0.95f, 0.55f, 0.42f);
-	private static readonly Color RunnerCue = new(0.4f, 0.75f, 1.0f);
+	private const float DefaultRailWidth = 60.0f;
+	private const float DefaultExpandedWidth = 320.0f;
 
 	private readonly List<MatchHistoryEntry> _entries = new();
 	private readonly HashSet<string> _entryKeys = new(StringComparer.Ordinal);
 	private readonly HashSet<string> _expandedKeys = new(StringComparer.Ordinal);
+	private readonly List<StyleBox> _connectedStyles = new();
 	private string _reportHeader = "MATCH HISTORY";
 	private bool _ready;
 	private bool _expanded;
 	private bool _pinned;
 	private bool _followNewestOnRefresh;
 	private bool _pagePositionIntentional;
+	private bool _samplePreview;
+	private float _railWidth = DefaultRailWidth;
+	private float _expandedWidth = DefaultExpandedWidth;
+	private float _rowSpacing = 7.0f;
+	private float _railRowSpacing = 4.0f;
+	private int _headerFontSize = 15;
+	private int _bodyFontSize = 12;
+	private int _smallFontSize = 11;
+	private Color _accentColor = new(0.36f, 0.9f, 0.74f);
+	private Color _mutedColor = new(0.64f, 0.74f, 0.79f);
+	private Color _corpCueColor = new(0.95f, 0.55f, 0.42f);
+	private Color _runnerCueColor = new(0.4f, 0.75f, 1.0f);
+	private StyleBox? _panelStyle;
+	private StyleBox? _surfaceStyle;
+	private StyleBox? _raisedStyle;
+	private PackedScene? _entryScene;
+	private PackedScene? _detailScene;
+	private PackedScene? _railEntryScene;
 	private int _pageStart;
 	private int _newEntryCount;
 	private readonly int _pageSize = MaxEntriesPerPage;
+	private string? _focusedEntryKey;
+	private bool _fixedSignalsBound;
 
 	private VBoxContainer _shell = null!;
 	private VBoxContainer _railRoot = null!;
 	private VBoxContainer _railRows = null!;
-	private ScrollContainer _railScroll = null!;
 	private Button _openButton = null!;
 	private Label _railCount = null!;
 	private VBoxContainer _expandedRoot = null!;
@@ -60,6 +76,8 @@ public partial class MatchHistoryPanel : PanelContainer
 	private Label _pageLabel = null!;
 	private ScrollContainer _pageScroll = null!;
 	private VBoxContainer _pageRows = null!;
+	private Label _emptyRailLabel = null!;
+	private Label _emptyPageLabel = null!;
 
 	/// <summary>Raised when a known historical card is selected for inspection.</summary>
 	public event Action<CardViewModel>? InspectCard;
@@ -69,6 +87,221 @@ public partial class MatchHistoryPanel : PanelContainer
 
 	/// <summary>Raised when the reader asks the parent layout to reserve the panel.</summary>
 	public event Action<bool>? PinnedChanged;
+
+	/// <summary>Raised when an Inspector edit changes the width used by the parent layout.</summary>
+	public event Action? LayoutChanged;
+
+	[ExportGroup("History layout")]
+	[Export(PropertyHint.Range, "40,480,1")]
+	public float RailWidth
+	{
+		get => _railWidth;
+		set
+		{
+			float width = Mathf.Max(1.0f, value);
+			if (Mathf.IsEqualApprox(_railWidth, width))
+			{
+				return;
+			}
+
+			_railWidth = width;
+			ApplyLayout();
+			LayoutChanged?.Invoke();
+		}
+	}
+
+	[Export(PropertyHint.Range, "160,640,1")]
+	public float ExpandedWidth
+	{
+		get => _expandedWidth;
+		set
+		{
+			float width = Mathf.Max(1.0f, value);
+			if (Mathf.IsEqualApprox(_expandedWidth, width))
+			{
+				return;
+			}
+
+			_expandedWidth = width;
+			ApplyLayout();
+			LayoutChanged?.Invoke();
+		}
+	}
+
+	[Export(PropertyHint.Range, "0,32,1")]
+	public float RowSpacing
+	{
+		get => _rowSpacing;
+		set
+		{
+			_rowSpacing = Mathf.Clamp(value, 0.0f, 32.0f);
+			ApplyAppearance();
+		}
+	}
+
+	[Export(PropertyHint.Range, "0,24,1")]
+	public float RailRowSpacing
+	{
+		get => _railRowSpacing;
+		set
+		{
+			_railRowSpacing = Mathf.Clamp(value, 0.0f, 24.0f);
+			ApplyAppearance();
+		}
+	}
+
+	[ExportGroup("History typography")]
+	[Export(PropertyHint.Range, "8,32,1")]
+	public int HeaderFontSize
+	{
+		get => _headerFontSize;
+		set
+		{
+			_headerFontSize = Math.Clamp(value, 8, 32);
+			ApplyAppearance();
+		}
+	}
+
+	[Export(PropertyHint.Range, "8,28,1")]
+	public int BodyFontSize
+	{
+		get => _bodyFontSize;
+		set
+		{
+			_bodyFontSize = Math.Clamp(value, 8, 28);
+			ApplyAppearance();
+		}
+	}
+
+	[Export(PropertyHint.Range, "7,24,1")]
+	public int SmallFontSize
+	{
+		get => _smallFontSize;
+		set
+		{
+			_smallFontSize = Math.Clamp(value, 7, 24);
+			ApplyAppearance();
+		}
+	}
+
+	[ExportGroup("History colours")]
+	[Export]
+	public Color AccentColor
+	{
+		get => _accentColor;
+		set
+		{
+			_accentColor = value;
+			ApplyAppearance();
+		}
+	}
+
+	[Export]
+	public Color MutedColor
+	{
+		get => _mutedColor;
+		set
+		{
+			_mutedColor = value;
+			ApplyAppearance();
+		}
+	}
+
+	[Export]
+	public Color CorpCueColor
+	{
+		get => _corpCueColor;
+		set
+		{
+			_corpCueColor = value;
+			ApplyAppearance();
+		}
+	}
+
+	[Export]
+	public Color RunnerCueColor
+	{
+		get => _runnerCueColor;
+		set
+		{
+			_runnerCueColor = value;
+			ApplyAppearance();
+		}
+	}
+
+	[ExportGroup("History style boxes")]
+	[Export]
+	public StyleBox? PanelStyle
+	{
+		get => _panelStyle;
+		set
+		{
+			_panelStyle = value;
+			ReconnectStyleSignals();
+			ApplyAppearance();
+		}
+	}
+
+	[Export]
+	public StyleBox? SurfaceStyle
+	{
+		get => _surfaceStyle;
+		set
+		{
+			_surfaceStyle = value;
+			ReconnectStyleSignals();
+			ApplyAppearance();
+		}
+	}
+
+	[Export]
+	public StyleBox? RaisedStyle
+	{
+		get => _raisedStyle;
+		set
+		{
+			_raisedStyle = value;
+			ReconnectStyleSignals();
+			ApplyAppearance();
+		}
+	}
+
+	[ExportGroup("Scene templates")]
+	[Export]
+	public PackedScene? EntryScene
+	{
+		get => _entryScene ??= GD.Load<PackedScene>(EntryScenePath);
+		set => _entryScene = value;
+	}
+
+	[Export]
+	public PackedScene? DetailScene
+	{
+		get => _detailScene ??= GD.Load<PackedScene>(DetailScenePath);
+		set => _detailScene = value;
+	}
+
+	[Export]
+	public PackedScene? RailEntryScene
+	{
+		get => _railEntryScene ??= GD.Load<PackedScene>(RailEntryScenePath);
+		set => _railEntryScene = value;
+	}
+
+	[ExportGroup("Editor preview")]
+	[Export]
+	public bool PreviewSamples
+	{
+		get => _samplePreview;
+		set => _samplePreview = value;
+	}
+
+	/// <summary>Compatibility alias for preview hosts using the earlier name.</summary>
+	public bool SamplePreview
+	{
+		get => PreviewSamples;
+		set => PreviewSamples = value;
+	}
 
 	/// <summary>Whether the readable history panel is expanded beside the rail.</summary>
 	public bool Expanded => _expanded;
@@ -83,7 +316,7 @@ public partial class MatchHistoryPanel : PanelContainer
 		set
 		{
 			_reportHeader = string.IsNullOrWhiteSpace(value) ? "MATCH HISTORY" : value.Trim();
-			if (_headerLabel is not null)
+			if (_headerLabel is not null && IsInstanceValid(_headerLabel))
 			{
 				_headerLabel.TooltipText = _reportHeader;
 			}
@@ -110,19 +343,50 @@ public partial class MatchHistoryPanel : PanelContainer
 
 	public override void _Ready()
 	{
-		BuildPanel();
+		EnsureAuthoredLayout();
+		BindAuthoredNodes();
+		ReconnectStyleSignals();
 		_ready = true;
+		if (Engine.IsEditorHint() && PreviewSamples)
+		{
+			_expanded = true;
+		}
+		ApplyAppearance();
+		if (Engine.IsEditorHint() && PreviewSamples)
+		{
+			Append(CreatePreviewEntries());
+		}
 		RefreshPanel();
+	}
+
+	public override void _EnterTree()
+	{
+		if (_shell is null || !IsInstanceValid(_shell))
+		{
+			return;
+		}
+
+		// Godot calls _Ready once for a node lifetime. Reconnect the authored
+		// controls and appearance resources when an already-built scene is
+		// temporarily detached and re-entered.
+		BindAuthoredNodes();
+		ReconnectStyleSignals();
+		_ready = true;
+		Callable.From(() =>
+		{
+			if (IsInsideTree())
+			{
+				ApplyAppearance();
+				RefreshPanel();
+			}
+		}).CallDeferred();
 	}
 
 	public override void _ExitTree()
 	{
 		_ready = false;
-		InspectCard = null;
-		ExpandedChanged = null;
-		PinnedChanged = null;
-		FreeDetachedBranch(_railRoot);
-		FreeDetachedBranch(_expandedRoot);
+		DisconnectFixedSignals();
+		DisconnectStyleSignals();
 	}
 
 	/// <summary>Changes the layout preference without changing history or page state.</summary>
@@ -134,7 +398,7 @@ public partial class MatchHistoryPanel : PanelContainer
 		}
 
 		_pinned = pinned;
-		if (_pinButton is not null)
+		if (_pinButton is not null && IsInstanceValid(_pinButton))
 		{
 			_pinButton.SetPressedNoSignal(pinned);
 			_pinButton.TooltipText = pinned
@@ -244,7 +508,7 @@ public partial class MatchHistoryPanel : PanelContainer
 			_pageStart = LastPageStart();
 			_followNewestOnRefresh = true;
 		}
-		CustomMinimumSize = new Vector2(expanded ? ExpandedWidth : RailWidth, 0);
+		ApplyLayout();
 		if (_ready)
 		{
 			RefreshPanel();
@@ -299,151 +563,220 @@ public partial class MatchHistoryPanel : PanelContainer
 		return report.ToString().TrimEnd();
 	}
 
-	private void BuildPanel()
+	private void EnsureAuthoredLayout()
 	{
-		MouseFilter = MouseFilterEnum.Stop;
-		CustomMinimumSize = new Vector2(_expanded ? ExpandedWidth : RailWidth, 0);
-		SizeFlagsVertical = SizeFlags.ExpandFill;
-		AddThemeStyleboxOverride("panel", CreateStyle(Background, Border, 1, 8));
-
-		_shell = new VBoxContainer
+		if (GetNodeOrNull<Node>("Shell") is not null)
 		{
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-			SizeFlagsVertical = SizeFlags.ExpandFill,
-		};
-		_shell.AddThemeConstantOverride("separation", 8);
-		AddChild(_shell);
+			return;
+		}
 
-		BuildRail();
-		BuildExpandedPanel();
+		PackedScene? scene = GD.Load<PackedScene>(PanelScenePath);
+		if (scene is null)
+		{
+			return;
+		}
+
+		Node? template = scene.Instantiate();
+		if (template is MatchHistoryPanel templatePanel)
+		{
+			_panelStyle ??= templatePanel.PanelStyle;
+			_surfaceStyle ??= templatePanel.SurfaceStyle;
+			_raisedStyle ??= templatePanel.RaisedStyle;
+			_entryScene ??= templatePanel.EntryScene;
+			_detailScene ??= templatePanel.DetailScene;
+			_railEntryScene ??= templatePanel.RailEntryScene;
+			foreach (Node child in template.GetChildren().ToArray())
+			{
+				template.RemoveChild(child);
+				AddChild(child);
+			}
+		}
+		else
+		{
+			template?.Free();
+		}
+
+		if (template is not null && IsInstanceValid(template))
+		{
+			template.Free();
+		}
 	}
 
-	private void BuildRail()
+	private void BindAuthoredNodes()
 	{
-		_railRoot = new VBoxContainer
-		{
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-			SizeFlagsVertical = SizeFlags.ExpandFill,
-		};
-		_railRoot.AddThemeConstantOverride("separation", 6);
-		_shell.AddChild(_railRoot);
+		_shell = GetNode<VBoxContainer>("Shell");
+		_railRoot = GetNode<VBoxContainer>("Shell/RailRoot");
+		_railRows = GetNode<VBoxContainer>("Shell/RailRoot/RailScroll/RailRows");
+		_openButton = GetNode<Button>("Shell/RailRoot/OpenButton");
+		_railCount = GetNode<Label>("Shell/RailRoot/RailCount");
+		_emptyRailLabel = GetNode<Label>("Shell/RailRoot/EmptyRailLabel");
+		_expandedRoot = GetNode<VBoxContainer>("Shell/ExpandedRoot");
+		_headerLabel = GetNode<Label>("Shell/ExpandedRoot/Heading/HeaderLabel");
+		_pinButton = GetNode<Button>("Shell/ExpandedRoot/Heading/PinButton");
+		_copyButton = GetNode<Button>("Shell/ExpandedRoot/Heading/CopyButton");
+		_collapseButton = GetNode<Button>("Shell/ExpandedRoot/Heading/CollapseButton");
+		_olderButton = GetNode<Button>("Shell/ExpandedRoot/Navigation/OlderButton");
+		_newerButton = GetNode<Button>("Shell/ExpandedRoot/Navigation/NewerButton");
+		_pageLabel = GetNode<Label>("Shell/ExpandedRoot/Navigation/PageLabel");
+		_newEntriesButton = GetNode<Button>("Shell/ExpandedRoot/Navigation/NewEntriesButton");
+		_pageScroll = GetNode<ScrollContainer>("Shell/ExpandedRoot/PageScroll");
+		_pageRows = GetNode<VBoxContainer>("Shell/ExpandedRoot/PageScroll/PageRows");
+		_emptyPageLabel = GetNode<Label>("Shell/ExpandedRoot/EmptyPageLabel");
 
-		Label title = MakeLabel("H\nI\nS\nT", 10, Accent);
-		title.HorizontalAlignment = HorizontalAlignment.Center;
-		_railRoot.AddChild(title);
-
-		_openButton = MakeButton("Open history", 13);
-		_openButton.Text = "H";
-		_openButton.TooltipText = "Open readable match history";
-		_openButton.Pressed += () => SetExpanded(true);
-		_railRoot.AddChild(_openButton);
-
-		_railCount = MakeLabel("0", 11, Muted);
-		_railCount.HorizontalAlignment = HorizontalAlignment.Center;
-		_railRoot.AddChild(_railCount);
-
-		_railScroll = new ScrollContainer
-		{
-			HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-			VerticalScrollMode = ScrollContainer.ScrollMode.Auto,
-			ClipContents = true,
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-			SizeFlagsVertical = SizeFlags.ExpandFill,
-		};
-		_railRows = new VBoxContainer
-		{
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-		};
-		_railRows.AddThemeConstantOverride("separation", 4);
-		_railScroll.AddChild(_railRows);
-		_railRoot.AddChild(_railScroll);
+		ConnectFixedSignals();
 	}
 
-	private void BuildExpandedPanel()
+	private void ConnectFixedSignals()
 	{
-		_expandedRoot = new VBoxContainer
+		if (_fixedSignalsBound)
 		{
-			Visible = false,
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-			SizeFlagsVertical = SizeFlags.ExpandFill,
-		};
-		_expandedRoot.AddThemeConstantOverride("separation", 7);
-		_shell.AddChild(_expandedRoot);
+			return;
+		}
 
-		HBoxContainer heading = new()
-		{
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-		};
-		heading.AddThemeConstantOverride("separation", 5);
-		_headerLabel = MakeLabel(PanelTitle, 15, Accent);
-		_headerLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		_headerLabel.AutowrapMode = TextServer.AutowrapMode.Off;
-		_headerLabel.TooltipText = ReportHeader;
-		heading.AddChild(_headerLabel);
-		_pinButton = new Button
-		{
-			Text = "Pin",
-			ToggleMode = true,
-			CustomMinimumSize = new Vector2(56, 30),
-			FocusMode = FocusModeEnum.All,
-			TooltipText = "Allow expanded history to overlay the table",
-		};
-		_pinButton.AddThemeFontSizeOverride("font_size", 11);
-		_pinButton.SetPressedNoSignal(_pinned);
+		_openButton.Pressed += OpenExpanded;
 		_pinButton.Toggled += SetPinned;
-		heading.AddChild(_pinButton);
-		_copyButton = MakeButton("Copy", 11);
-		_copyButton.CustomMinimumSize = new Vector2(58, 30);
-		_copyButton.TooltipText = "Copy the complete public history report";
 		_copyButton.Pressed += CopyReport;
-		heading.AddChild(_copyButton);
-		_collapseButton = MakeButton("Close", 11);
-		_collapseButton.CustomMinimumSize = new Vector2(58, 30);
-		_collapseButton.TooltipText = "Collapse to the history rail";
-		_collapseButton.Pressed += () => SetExpanded(false);
-		heading.AddChild(_collapseButton);
-		_expandedRoot.AddChild(heading);
-
-		HBoxContainer navigation = new()
-		{
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-		};
-		navigation.AddThemeConstantOverride("separation", 5);
-		_olderButton = MakeButton("Older", 11);
-		_olderButton.TooltipText = "Read older history entries";
+		_collapseButton.Pressed += CloseExpanded;
 		_olderButton.Pressed += ShowOlderPage;
-		navigation.AddChild(_olderButton);
-		_newerButton = MakeButton("Newer", 11);
-		_newerButton.TooltipText = "Read newer history entries";
 		_newerButton.Pressed += ShowNewerPage;
-		navigation.AddChild(_newerButton);
-		_pageLabel = MakeLabel("0 entries", 11, Muted);
-		_pageLabel.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		_pageLabel.HorizontalAlignment = HorizontalAlignment.Center;
-		navigation.AddChild(_pageLabel);
-		_newEntriesButton = MakeButton("", 11);
-		_newEntriesButton.TooltipText = "Follow the newest history entries";
 		_newEntriesButton.Pressed += FollowNewest;
-		_newEntriesButton.Visible = false;
-		navigation.AddChild(_newEntriesButton);
-		_expandedRoot.AddChild(navigation);
-
-		_pageScroll = new ScrollContainer
-		{
-			HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-			VerticalScrollMode = ScrollContainer.ScrollMode.Auto,
-			ClipContents = true,
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-			SizeFlagsVertical = SizeFlags.ExpandFill,
-		};
-		_pageRows = new VBoxContainer
-		{
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-		};
-		_pageRows.AddThemeConstantOverride("separation", 7);
-		_pageScroll.AddChild(_pageRows);
-		_expandedRoot.AddChild(_pageScroll);
+		_fixedSignalsBound = true;
 	}
+
+	private void DisconnectFixedSignals()
+	{
+		if (!_fixedSignalsBound)
+		{
+			return;
+		}
+
+		if (_openButton is not null && IsInstanceValid(_openButton)) _openButton.Pressed -= OpenExpanded;
+		if (_pinButton is not null && IsInstanceValid(_pinButton)) _pinButton.Toggled -= SetPinned;
+		if (_copyButton is not null && IsInstanceValid(_copyButton)) _copyButton.Pressed -= CopyReport;
+		if (_collapseButton is not null && IsInstanceValid(_collapseButton)) _collapseButton.Pressed -= CloseExpanded;
+		if (_olderButton is not null && IsInstanceValid(_olderButton)) _olderButton.Pressed -= ShowOlderPage;
+		if (_newerButton is not null && IsInstanceValid(_newerButton)) _newerButton.Pressed -= ShowNewerPage;
+		if (_newEntriesButton is not null && IsInstanceValid(_newEntriesButton)) _newEntriesButton.Pressed -= FollowNewest;
+		_fixedSignalsBound = false;
+	}
+
+	private void OpenExpanded() => SetExpanded(true);
+
+	private void CloseExpanded() => SetExpanded(false);
+
+	private void ApplyLayout()
+	{
+		if (!IsInsideTree() || _shell is null || !IsInstanceValid(_shell))
+		{
+			return;
+		}
+
+		float width = _expanded ? ExpandedWidth : RailWidth;
+		CustomMinimumSize = new Vector2(width, 0);
+		_shell.CustomMinimumSize = new Vector2(Mathf.Max(0, width - PanelHorizontalMargins()), 0);
+	}
+
+	private void ApplyAppearance()
+	{
+		if (!_ready || _shell is null || !IsInstanceValid(_shell))
+		{
+			return;
+		}
+
+		float width = _expanded ? ExpandedWidth : RailWidth;
+		CustomMinimumSize = new Vector2(width, 0);
+		_shell.CustomMinimumSize = new Vector2(Mathf.Max(0, width - PanelHorizontalMargins()), 0);
+		_shell.AddThemeConstantOverride("separation", Mathf.RoundToInt(RowSpacing));
+		_railRoot.AddThemeConstantOverride("separation", Mathf.RoundToInt(RailRowSpacing + 2));
+		_railRows.AddThemeConstantOverride("separation", Mathf.RoundToInt(RailRowSpacing));
+		_pageRows.AddThemeConstantOverride("separation", Mathf.RoundToInt(RowSpacing));
+		_headerLabel.AddThemeFontSizeOverride("font_size", HeaderFontSize);
+		_headerLabel.AddThemeColorOverride("font_color", AccentColor);
+		_headerLabel.TooltipText = ReportHeader;
+		_railCount.AddThemeFontSizeOverride("font_size", SmallFontSize);
+		_railCount.AddThemeColorOverride("font_color", MutedColor);
+		_emptyRailLabel.AddThemeFontSizeOverride("font_size", HeaderFontSize);
+		_emptyRailLabel.AddThemeColorOverride("font_color", MutedColor);
+		_pageLabel.AddThemeFontSizeOverride("font_size", SmallFontSize);
+		_pageLabel.AddThemeColorOverride("font_color", MutedColor);
+		_openButton.AddThemeFontSizeOverride("font_size", BodyFontSize + 1);
+		_openButton.AddThemeColorOverride("font_hover_color", AccentColor);
+		_copyButton.AddThemeFontSizeOverride("font_size", SmallFontSize);
+		_collapseButton.AddThemeFontSizeOverride("font_size", SmallFontSize);
+		_pinButton.AddThemeFontSizeOverride("font_size", SmallFontSize);
+		_olderButton.AddThemeFontSizeOverride("font_size", SmallFontSize);
+		_newerButton.AddThemeFontSizeOverride("font_size", SmallFontSize);
+		_newEntriesButton.AddThemeFontSizeOverride("font_size", SmallFontSize);
+		foreach (Node child in _pageRows.GetChildren())
+		{
+			if (child is HistoryEntry entry)
+			{
+				entry.ApplyAppearance(
+					RowSpacing,
+					HeaderFontSize,
+					BodyFontSize,
+					SmallFontSize,
+					AccentColor,
+					MutedColor,
+					CorpCueColor,
+					RunnerCueColor,
+					SurfaceStyle,
+					RaisedStyle);
+			}
+		}
+		foreach (Node child in _railRows.GetChildren())
+		{
+			if (child is HistoryRailEntry marker)
+			{
+				marker.ApplyAppearance(SmallFontSize, AccentColor, MutedColor, CorpCueColor, RunnerCueColor);
+			}
+		}
+		if (PanelStyle is not null)
+		{
+			AddThemeStyleboxOverride("panel", PanelStyle);
+		}
+		else
+		{
+			RemoveThemeStyleboxOverride("panel");
+		}
+	}
+
+	private void ReconnectStyleSignals()
+	{
+		DisconnectStyleSignals();
+		if (!IsInsideTree())
+		{
+			return;
+		}
+
+		foreach (StyleBox style in new[] { PanelStyle, SurfaceStyle, RaisedStyle }.OfType<StyleBox>())
+		{
+			style.Changed += HandleStyleChanged;
+			_connectedStyles.Add(style);
+		}
+	}
+
+	private void DisconnectStyleSignals()
+	{
+		foreach (StyleBox style in _connectedStyles)
+		{
+			if (GodotObject.IsInstanceValid(style))
+			{
+				style.Changed -= HandleStyleChanged;
+			}
+		}
+		_connectedStyles.Clear();
+	}
+
+	private void HandleStyleChanged()
+	{
+		ApplyAppearance();
+	}
+
+	private float PanelHorizontalMargins()
+		=> PanelStyle is StyleBoxFlat flat
+			? Math.Max(0.0f, flat.ContentMarginLeft + flat.ContentMarginRight)
+			: 0.0f;
 
 	private void RefreshPanel()
 	{
@@ -452,31 +785,9 @@ public partial class MatchHistoryPanel : PanelContainer
 			return;
 		}
 
-		if (_expanded)
-		{
-			if (_railRoot.GetParent() == _shell)
-			{
-				_shell.RemoveChild(_railRoot);
-			}
-			if (_expandedRoot.GetParent() != _shell)
-			{
-				_shell.AddChild(_expandedRoot);
-			}
-			_expandedRoot.Visible = true;
-		}
-		else
-		{
-			if (_expandedRoot.GetParent() == _shell)
-			{
-				_shell.RemoveChild(_expandedRoot);
-			}
-			if (_railRoot.GetParent() != _shell)
-			{
-				_shell.AddChild(_railRoot);
-			}
-			_railRoot.Visible = true;
-		}
-		CustomMinimumSize = new Vector2(_expanded ? ExpandedWidth : RailWidth, 0);
+		_railRoot.Visible = !_expanded;
+		_expandedRoot.Visible = _expanded;
+		ApplyLayout();
 		RefreshRail();
 		if (_expanded)
 		{
@@ -492,24 +803,34 @@ public partial class MatchHistoryPanel : PanelContainer
 			: _entries.Count == 0
 				? "0"
 				: _entries.Count.ToString(CultureInfo.InvariantCulture);
+		_emptyRailLabel.Visible = _entries.Count == 0;
 		if (_entries.Count == 0)
 		{
-			Label empty = MakeLabel("·", 16, Muted);
-			empty.HorizontalAlignment = HorizontalAlignment.Center;
-			_railRows.AddChild(empty);
+			return;
+		}
+
+		HistoryRailEntry? template = RailEntryScene?.Instantiate<HistoryRailEntry>();
+		if (template is null)
+		{
 			return;
 		}
 
 		int first = Math.Max(0, _entries.Count - MaxRailMarkers);
 		for (int index = first; index < _entries.Count; index++)
 		{
+			HistoryRailEntry marker = index == first
+				? template
+				: RailEntryScene!.Instantiate<HistoryRailEntry>();
 			MatchHistoryEntry entry = _entries[index];
-			Button marker = MakeButton(FormatSide(entry.Side)[..1], 11);
-			marker.TooltipText = FormatEntryTooltip(entry);
-			marker.AddThemeColorOverride("font_color", SideColour(entry.Side));
-			string key = entry.Key;
-			marker.Pressed += () => OpenEntry(key);
 			_railRows.AddChild(marker);
+			marker.Bind(
+				entry,
+				OpenEntry,
+				SmallFontSize,
+				AccentColor,
+				MutedColor,
+				CorpCueColor,
+				RunnerCueColor);
 		}
 	}
 
@@ -526,133 +847,81 @@ public partial class MatchHistoryPanel : PanelContainer
 		_newerButton.Disabled = _entries.Count == 0 || _pageStart >= LastPageStart();
 		_newEntriesButton.Visible = _newEntryCount > 0;
 		_newEntriesButton.Text = $"{_newEntryCount} new";
+		_focusedEntryKey ??= FindFocusedEntryKey();
 		ClearContainer(_pageRows);
+		_emptyPageLabel.Visible = _entries.Count == 0;
 		RenderedEntryCount = 0;
 
 		if (_entries.Count == 0)
 		{
-			_pageRows.AddChild(MakeLabel("No public actions yet.", 13, Muted));
+			return;
+		}
+
+		HistoryEntry? template = EntryScene?.Instantiate<HistoryEntry>();
+		if (template is null)
+		{
 			return;
 		}
 
 		for (int index = _pageStart; index < pageEnd; index++)
 		{
-			AddEntryGroup(index, _entries[index]);
+			HistoryEntry row = index == _pageStart
+				? template
+				: EntryScene!.Instantiate<HistoryEntry>();
+			MatchHistoryEntry entry = _entries[index];
+			_pageRows.AddChild(row);
+			row.Bind(
+				entry,
+				index == 0 || entry.TurnNumber != _entries[index - 1].TurnNumber,
+				_expandedKeys.Contains(entry.Key),
+				ToggleEntry,
+				NotifyInspectCard,
+				RowSpacing,
+				HeaderFontSize,
+				BodyFontSize,
+				SmallFontSize,
+				AccentColor,
+				MutedColor,
+				CorpCueColor,
+				RunnerCueColor,
+				SurfaceStyle,
+				RaisedStyle,
+				DetailScene);
 			RenderedEntryCount++;
 		}
 
+		string? restoreFocusKey = _focusedEntryKey;
+		_focusedEntryKey = null;
 		int preservedScroll = Math.Max(0, previousScroll);
 		ScrollContainer pageScroll = _pageScroll;
 		Callable.From(() =>
 		{
-			if (IsInstanceValid(pageScroll))
+			if (!IsInstanceValid(pageScroll))
 			{
-				pageScroll.ScrollVertical = followNewest
-					? (int)Math.Max(0, pageScroll.GetVScrollBar().MaxValue)
-					: preservedScroll;
+				return;
+			}
+
+			pageScroll.ScrollVertical = followNewest
+				? (int)Math.Max(0, pageScroll.GetVScrollBar().MaxValue)
+				: preservedScroll;
+			if (!string.IsNullOrWhiteSpace(restoreFocusKey))
+			{
+				foreach (Node child in _pageRows.GetChildren())
+				{
+					if (child is HistoryEntry row && row.EntryKey == restoreFocusKey)
+					{
+						row.GrabSummaryFocus();
+						break;
+					}
+				}
 			}
 		}).CallDeferred();
 		_followNewestOnRefresh = false;
 	}
 
-	private void AddEntryGroup(int index, MatchHistoryEntry entry)
-	{
-		VBoxContainer group = new();
-		group.AddThemeConstantOverride("separation", 4);
-
-		if (index == 0 || entry.TurnNumber != _entries[index - 1].TurnNumber)
-		{
-			Label turn = MakeLabel($"TURN {entry.TurnNumber}", 10, Muted);
-			turn.AddThemeColorOverride("font_color", Accent);
-			group.AddChild(turn);
-		}
-
-		PanelContainer row = new()
-		{
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-		};
-		row.AddThemeStyleboxOverride("panel", CreateStyle(Surface, Border, 1, 5));
-		HBoxContainer rowContent = new()
-		{
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-		};
-		rowContent.AddThemeConstantOverride("separation", 6);
-		Label side = MakeLabel(FormatSide(entry.Side), 10, SideColour(entry.Side));
-		side.CustomMinimumSize = new Vector2(48, 0);
-		side.VerticalAlignment = VerticalAlignment.Center;
-		rowContent.AddChild(side);
-
-		bool detailsExpanded = _expandedKeys.Contains(entry.Key);
-		Button summary = MakeButton((detailsExpanded ? "▾ " : "▸ ") + entry.Summary, 12);
-		summary.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		summary.Alignment = HorizontalAlignment.Left;
-		summary.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-		summary.CustomMinimumSize = new Vector2(0, 42);
-		summary.TooltipText = FormatEntryTooltip(entry);
-		string key = entry.Key;
-		summary.Pressed += () => ToggleEntry(key);
-		rowContent.AddChild(summary);
-		row.AddChild(rowContent);
-		group.AddChild(row);
-
-		if (detailsExpanded)
-		{
-			group.AddChild(BuildDetails(entry));
-		}
-
-		_pageRows.AddChild(group);
-	}
-
-	private PanelContainer BuildDetails(MatchHistoryEntry entry)
-	{
-		PanelContainer panel = new()
-		{
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-		};
-		panel.AddThemeStyleboxOverride("panel", CreateStyle(SurfaceRaised, Border, 1, 5));
-		VBoxContainer details = new()
-		{
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-		};
-		details.AddThemeConstantOverride("separation", 4);
-		panel.AddChild(details);
-
-		string[] publicDetails = (entry.Details ?? Array.Empty<string>())
-			.Where(static detail => !string.IsNullOrWhiteSpace(detail))
-			.Select(static detail => detail.Trim())
-			.ToArray();
-		if (publicDetails.Length == 0)
-		{
-			details.AddChild(MakeLabel("No additional public details.", 11, Muted));
-		}
-		else
-		{
-			foreach (string detail in publicDetails)
-			{
-				Label line = MakeLabel("• " + detail, 11, Colors.White);
-				line.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-				details.AddChild(line);
-			}
-		}
-
-		if (entry.Cards is { Count: > 0 })
-		{
-			Label cardsHeading = MakeLabel("KNOWN CARDS", 10, Muted);
-			details.AddChild(cardsHeading);
-			foreach (CardViewModel card in entry.Cards.Where(static card => card is not null))
-			{
-				Button cardButton = MakeButton($"Inspect · {card.Title}", 11);
-				cardButton.TooltipText = "Inspect this known historical card";
-				cardButton.Pressed += () => InspectCard?.Invoke(card);
-				details.AddChild(cardButton);
-			}
-		}
-
-		return panel;
-	}
-
 	private void ToggleEntry(string key)
 	{
+		_focusedEntryKey = key;
 		_pagePositionIntentional = true;
 		_followNewestOnRefresh = false;
 		if (!_expandedKeys.Add(key))
@@ -660,6 +929,11 @@ public partial class MatchHistoryPanel : PanelContainer
 			_expandedKeys.Remove(key);
 		}
 		RefreshPanel();
+	}
+
+	private void NotifyInspectCard(CardViewModel card)
+	{
+		InspectCard?.Invoke(card);
 	}
 
 	private void OpenEntry(string key)
@@ -675,6 +949,7 @@ public partial class MatchHistoryPanel : PanelContainer
 		_pagePositionIntentional = true;
 		_followNewestOnRefresh = false;
 		_expandedKeys.Add(key);
+		_focusedEntryKey = key;
 		SetExpanded(true);
 	}
 
@@ -739,6 +1014,27 @@ public partial class MatchHistoryPanel : PanelContainer
 	private int LastPageStart()
 		=> Math.Max(0, _entries.Count - MaxEntriesPerPage);
 
+	private string? FindFocusedEntryKey()
+	{
+		if (!_ready || !_expanded)
+		{
+			return null;
+		}
+
+		Control? owner = GetViewport().GuiGetFocusOwner();
+		while (owner is not null && IsInstanceValid(owner))
+		{
+			if (owner is HistoryEntry entry)
+			{
+				return entry.EntryKey;
+			}
+
+			owner = owner.GetParent() as Control;
+		}
+
+		return null;
+	}
+
 	private static void ClearContainer(Container container)
 	{
 		foreach (Node child in container.GetChildren().ToArray())
@@ -748,68 +1044,58 @@ public partial class MatchHistoryPanel : PanelContainer
 		}
 	}
 
-	private static void FreeDetachedBranch(Node? branch)
-	{
-		if (branch is not null
-			&& IsInstanceValid(branch)
-			&& branch.GetParent() is null)
-		{
-			branch.Free();
-		}
-	}
-
-	private static string FormatEntryTooltip(MatchHistoryEntry entry)
-		=> $"Turn {entry.TurnNumber} · {FormatSide(entry.Side)}\n{entry.Summary}";
-
 	private static string FormatSide(PlayerSide side)
 		=> side == PlayerSide.Corp ? "CORP" : "RUNNER";
 
-	private static Color SideColour(PlayerSide side)
-		=> side == PlayerSide.Corp ? CorpCue : RunnerCue;
-
-	private static Label MakeLabel(string text, int size, Color colour)
+	private static IReadOnlyList<MatchHistoryEntry> CreatePreviewEntries()
 	{
-		var label = new Label
-		{
-			Text = text,
-			MouseFilter = MouseFilterEnum.Ignore,
-			AutowrapMode = TextServer.AutowrapMode.WordSmart,
-		};
-		label.AddThemeFontSizeOverride("font_size", size);
-		label.AddThemeColorOverride("font_color", colour);
-		return label;
+		CardViewModel sampleCard = new(
+			"history-preview-card",
+			null,
+			"Synthetic Asset",
+			"Asset",
+			true,
+			false,
+			2,
+			2,
+			null,
+			null,
+			null,
+			["Connection", "Virtual"],
+			"Synthetic viewer-safe card content for the editor preview.",
+			"Shaper");
+		return
+		[
+			new MatchHistoryEntry(
+				"history-preview-1",
+				1,
+				1,
+				PlayerSide.Runner,
+				"Runner runs Remote 1.",
+				["Runner approaches a synthetic piece of ICE.", "A public effect remains visible while the reader browses."])
+			{
+				Cards = [sampleCard],
+			},
+			new MatchHistoryEntry(
+				"history-preview-2",
+				2,
+				1,
+				PlayerSide.Corp,
+				"Corp gains a credit.",
+				["The preview contains no coordinator or authoritative state."]),
+			new MatchHistoryEntry(
+				"history-preview-3",
+				3,
+				2,
+				PlayerSide.Runner,
+				"Runner continues after access.",
+				["Synthetic history demonstrates pagination and keyboard focus."]),
+		];
 	}
 
-	private static Button MakeButton(string text, int size)
-	{
-		var button = new Button
-		{
-			Text = text,
-			FocusMode = FocusModeEnum.All,
-			CustomMinimumSize = new Vector2(0, 30),
-		};
-		button.AddThemeFontSizeOverride("font_size", size);
-		button.AddThemeColorOverride("font_color", Colors.White);
-		button.AddThemeColorOverride("font_hover_color", Accent);
-		return button;
-	}
+	internal static string FormatEntryTooltip(MatchHistoryEntry entry)
+		=> $"Turn {entry.TurnNumber} · {FormatSide(entry.Side)}\n{entry.Summary}";
 
-	private static StyleBoxFlat CreateStyle(Color background, Color border, int width, int radius)
-		=> new()
-		{
-			BgColor = background,
-			BorderColor = border,
-			BorderWidthLeft = width,
-			BorderWidthTop = width,
-			BorderWidthRight = width,
-			BorderWidthBottom = width,
-			CornerRadiusTopLeft = radius,
-			CornerRadiusTopRight = radius,
-			CornerRadiusBottomLeft = radius,
-			CornerRadiusBottomRight = radius,
-			ContentMarginLeft = 7,
-			ContentMarginTop = 6,
-			ContentMarginRight = 7,
-			ContentMarginBottom = 6,
-		};
+	internal static Color SideColour(PlayerSide side, Color corpCue, Color runnerCue)
+		=> side == PlayerSide.Corp ? corpCue : runnerCue;
 }

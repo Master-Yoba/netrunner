@@ -366,6 +366,22 @@ if ! grep -Eq "M49_UI PASS .*dense=true history=true" "$m49_ui_smoke_log" \
 fi
 cat "$m49_ui_smoke_log"
 echo "m4-9-ui-smoke=PASS"
+m410_ui_smoke_log="$coverage_report_dir/m410-editor-ui-smoke.log"
+if ! run_with_timeout 60 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
+  "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \
+  res://scenes/UiEditorSmoke.tscn >"$m410_ui_smoke_log" 2>&1; then
+  echo "M4.10 editor UI smoke failed or timed out; see $m410_ui_smoke_log." >&2
+  cat "$m410_ui_smoke_log" >&2
+  exit 1
+fi
+if ! grep -Fq "M410_EDITOR_UI PASS" "$m410_ui_smoke_log" \
+  || grep -Eq "M410_EDITOR_UI FAIL|SCRIPT ERROR|ERROR:" "$m410_ui_smoke_log"; then
+  echo "M4.10 editor UI smoke did not prove appearance binding and preview isolation." >&2
+  cat "$m410_ui_smoke_log" >&2
+  exit 1
+fi
+cat "$m410_ui_smoke_log"
+echo "m4-10-editor-ui-smoke=PASS"
 latency_smoke_log="$coverage_report_dir/latency-smoke.log"
 if ! run_with_timeout 45 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
   "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \

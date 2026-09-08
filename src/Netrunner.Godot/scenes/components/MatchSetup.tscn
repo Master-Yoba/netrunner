@@ -1,0 +1,124 @@
+[gd_scene format=3]
+
+[ext_resource type="Theme" path="res://themes/M4Theme.tres" id="theme"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_t4cnm"]
+content_margin_left = 10.0
+content_margin_top = 8.0
+content_margin_right = 10.0
+content_margin_bottom = 8.0
+bg_color = Color(0.055, 0.08, 0.105, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.17, 0.28, 0.34, 1)
+corner_radius_top_left = 7
+corner_radius_top_right = 7
+corner_radius_bottom_right = 7
+corner_radius_bottom_left = 7
+
+[node name="MatchSetup" type="PanelContainer"]
+custom_minimum_size = Vector2(0, 150)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_t4cnm")
+
+theme = ExtResource("theme")
+
+[node name="SetupContent" type="VBoxContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="SetupTitle" type="Label" parent="SetupContent"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.36, 0.9, 0.74, 1)
+theme_override_font_sizes/font_size = 18
+text = "MATCH SETUP · SETUP TO OUTCOME"
+
+[node name="Description" type="Label" parent="SetupContent"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.65, 0.74, 0.8, 1)
+theme_override_font_sizes/font_size = 14
+text = "Choose your side and decks to play against the contract agent. Basic decks introduce the game; expanded decks add the booster cards."
+autowrap_mode = 3
+
+[node name="PresetHeading" type="Label" parent="SetupContent"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.98, 0.74, 0.28, 1)
+theme_override_font_sizes/font_size = 12
+text = "OFFICIAL PRESETS"
+
+[node name="CorpDeckLabel" type="Label" parent="SetupContent"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.65, 0.74, 0.8, 1)
+theme_override_font_sizes/font_size = 11
+text = "Corp deck"
+
+[node name="CorpPreset" type="OptionButton" parent="SetupContent"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Choose the Corp basic or expanded official preset."
+selected = 0
+item_count = 2
+popup/item_0/text = "BASIC (STARTER) · system-gateway-basic-corp · 34 cards · READY"
+popup/item_0/id = 0
+popup/item_1/text = "EXPANDED · system-gateway-expanded-corp · 44 cards · READY"
+popup/item_1/id = 1
+
+[node name="RunnerDeckLabel" type="Label" parent="SetupContent"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.65, 0.74, 0.8, 1)
+theme_override_font_sizes/font_size = 11
+text = "Runner deck"
+
+[node name="RunnerPreset" type="OptionButton" parent="SetupContent"]
+unique_name_in_owner = true
+layout_mode = 2
+tooltip_text = "Choose the Runner basic or expanded official preset."
+selected = 0
+item_count = 2
+popup/item_0/text = "BASIC (STARTER) · system-gateway-basic-runner · 30 cards · READY"
+popup/item_0/id = 0
+popup/item_1/text = "EXPANDED · system-gateway-expanded-runner · 40 cards · READY"
+popup/item_1/id = 1
+
+[node name="HumanSide" type="OptionButton" parent="SetupContent"]
+unique_name_in_owner = true
+layout_mode = 2
+selected = 0
+item_count = 2
+popup/item_0/text = "Play Runner"
+popup/item_0/id = 1
+popup/item_1/text = "Play Corp"
+popup/item_1/id = 0
+
+[node name="SeedLabel" type="Label" parent="SetupContent"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.65, 0.74, 0.8, 1)
+theme_override_font_sizes/font_size = 11
+text = "Game seed"
+
+[node name="SeedInput" type="LineEdit" parent="SetupContent"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 34)
+layout_mode = 2
+tooltip_text = "Use the same seed and choices to reproduce a game."
+theme_override_font_sizes/font_size = 14
+text = "42"
+placeholder_text = "42"
+
+[node name="StartMatch" type="Button" parent="SetupContent"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(240, 42)
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Start selected official match"
+
+[node name="OpenGallery" type="Button" parent="SetupContent"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(300, 36)
+layout_mode = 2
+text = "Open 77-card metadata gallery (dev)"
+

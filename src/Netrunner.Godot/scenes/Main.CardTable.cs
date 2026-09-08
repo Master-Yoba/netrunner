@@ -30,50 +30,25 @@ public partial class Main
 
 	private void BuildCardTable()
 	{
-		_board = new VBoxContainer { Visible = false, SizeFlagsVertical = SizeFlags.ExpandFill };
-		_board.AddThemeConstantOverride("separation", 6);
-		_layout.AddChild(_board);
-		HBoxContainer toolbar = new();
-		_board.AddChild(toolbar);
-		Button restart = new() { Text = "New game" };
-		restart.Pressed += () => GetTree().ReloadCurrentScene();
-		toolbar.AddChild(restart);
-		_reducedMotion = new CheckButton { Text = "Reduced motion" };
-		toolbar.AddChild(_reducedMotion);
+		_board = _layout.GetNode<VBoxContainer>("MatchTable");
+		Control toolbar = _board.GetNode<Control>("Toolbar");
+		toolbar.GetNode<Button>("NewGame").Pressed += () => GetTree().ReloadCurrentScene();
+		_reducedMotion = toolbar.GetNode<CheckButton>("ReducedMotion");
 		_reducedMotion.Toggled += reduced => { if (reduced) { _tablePlaybackWait = 0; _gameTable.StopMotion(); } };
-		_speed = new HSlider
-		{
-			MinValue = 0.5,
-			MaxValue = 3,
-			Step = 0.5,
-			Value = 1,
-			CustomMinimumSize = new Vector2(90, 24),
-			TooltipText = "Playback speed"
-		};
-		toolbar.AddChild(_speed);
-		OptionButton scale = new() { TooltipText = "UI scale" };
-		foreach (string label in new[] { "100%", "125%", "150%", "200%" }) scale.AddItem(label);
+		_speed = toolbar.GetNode<HSlider>("Speed");
+		OptionButton scale = toolbar.GetNode<OptionButton>("Scale");
 		scale.ItemSelected += index =>
 		{
 			float factor = new[] { 1f, 1.25f, 1.5f, 2f }[(int)index];
 			Vector2I physical = GetWindow().Size;
 			GetWindow().ContentScaleSize = new Vector2I(Math.Max(1920, (int)(physical.X / factor)), Math.Max(1080, (int)(physical.Y / factor)));
 		};
-		toolbar.AddChild(scale);
-		_skipAnimations = new Button { Text = "Skip animation" };
+		_skipAnimations = toolbar.GetNode<Button>("SkipAnimation");
 		_skipAnimations.Pressed += () => { _tablePlaybackWait = 0; _skipAnimation = true; _gameTable.StopMotion(); };
-		toolbar.AddChild(_skipAnimations);
-		_tableLastAction = MakeWrappedLabel("Choose your opening hand.", 14, Accent);
-		_tableLastAction.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		toolbar.AddChild(_tableLastAction);
-		Control tableViewport = new() { SizeFlagsVertical = SizeFlags.ExpandFill, ClipContents = true };
-		_tableViewport = tableViewport;
-		tableViewport.Resized += HandleCardHoverPreviewViewportResized;
-		_board.AddChild(tableViewport);
-		_gameTable = new GameTableControl();
-		SetFullRect(_gameTable);
-		_gameTable.OffsetRight = -66;
-		tableViewport.AddChild(_gameTable);
+		_tableLastAction = toolbar.GetNode<Label>("LastAction");
+		_tableViewport = _board.GetNode<Control>("TableViewport");
+		_tableViewport.Resized += HandleCardHoverPreviewViewportResized;
+		_gameTable = _tableViewport.GetNode<GameTableControl>("GameBoard");
 		_gameTable.CardSelected += SelectTableCard;
 		_gameTable.CardHoverChanged += HandleTableCardHoverChanged;
 		_gameTable.CardInspected += id =>
@@ -102,21 +77,10 @@ public partial class Main
 			_tableAllActions = false;
 			if (_currentSnapshot is { } snapshot) RenderCardTableActions(snapshot);
 		};
-		_tableAccessPanel = MakePanel();
-		_tableAccessPanel.Visible = false;
-		_tableAccessPanel.Position = new Vector2(12, 12);
-		_tableAccessPanel.CustomMinimumSize = new Vector2(300, 180);
-		tableViewport.AddChild(_tableAccessPanel);
-		HBoxContainer accessRow = new();
-		_tableAccessPanel.AddChild(accessRow);
-		_tableAccessCard = new TableCardControl();
-		accessRow.AddChild(_tableAccessCard);
-		VBoxContainer accessDetails = new() { CustomMinimumSize = new Vector2(180, 0) };
-		accessRow.AddChild(accessDetails);
-		accessDetails.AddChild(new Label { Text = "ACCESSING" });
-		_tableAccessTitle = MakeWrappedLabel("", 16, Accent);
-		accessDetails.AddChild(_tableAccessTitle);
-		Button inspectAccess = new() { Text = "Read card ↗" };
+		_tableAccessPanel = _tableViewport.GetNode<PanelContainer>("AccessPanel");
+		_tableAccessCard = _tableAccessPanel.GetNode<TableCardControl>("%Card");
+		_tableAccessTitle = _tableAccessPanel.GetNode<Label>("%Title");
+		Button inspectAccess = _tableAccessPanel.GetNode<Button>("%Inspect");
 		inspectAccess.Pressed += () =>
 		{
 			if (_tableAccessCard.Card is { IsKnown: true } card)
@@ -125,49 +89,17 @@ public partial class Main
 				ShowInspectedCardZoom();
 			}
 		};
-		accessDetails.AddChild(inspectAccess);
 		_tableAccessCard.CardSelected += _ => inspectAccess.EmitSignal(BaseButton.SignalName.Pressed);
 		_tableAccessCard.CardHoverChanged += HandleTableCardHoverChanged;
-		BuildCardHoverPreview(tableViewport);
-		_matchHistory = new MatchHistoryPanel();
-		tableViewport.AddChild(_matchHistory);
+		BuildCardHoverPreview(_tableViewport);
+		_matchHistory = _tableViewport.GetNode<MatchHistoryPanel>("History");
 		_matchHistory.InspectCard += card => { _inspectedCard = card; ShowInspectedCardZoom(); };
-		tableViewport.Resized += PositionHistory;
-		_matchHistory.ExpandedChanged += _ => PositionHistory();
-		_matchHistory.PinnedChanged += _ => PositionHistory();
-		void PositionHistory()
-		{
-			float width = _matchHistory.Expanded ? 320 : 60;
-			_gameTable.OffsetRight = _matchHistory.Expanded && _matchHistory.Pinned && tableViewport.Size.X >= 1800 ? -326 : -66;
-			_matchHistory.Position = new Vector2(Math.Max(0, tableViewport.Size.X - width), 0);
-			_matchHistory.Size = new Vector2(width, tableViewport.Size.Y);
-		}
-		PanelContainer dock = MakePanel();
-		_board.AddChild(dock);
-		VBoxContainer dockContent = new();
-		dock.AddChild(dockContent);
-		HBoxContainer promptRow = new();
-		dockContent.AddChild(promptRow);
-		_tablePrompt = MakeWrappedLabel("", 15, Colors.White);
-		_tablePrompt.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-		promptRow.AddChild(_tablePrompt);
-		_tableInspect = new Button { Text = "Inspect a card", Disabled = true };
+		Control dock = _board.GetNode<Control>("DecisionDock");
+		_tablePrompt = dock.GetNode<Label>("%Prompt");
+		_tableInspect = dock.GetNode<Button>("%Inspect");
 		_tableInspect.Pressed += ShowInspectedCardZoom;
-		promptRow.AddChild(_tableInspect);
-		Control actionViewport = new() { CustomMinimumSize = new Vector2(0, 84) };
-		dockContent.AddChild(actionViewport);
-		ScrollContainer scroll = new()
-		{
-			HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-			VerticalScrollMode = ScrollContainer.ScrollMode.Auto,
-			FollowFocus = true
-		};
-		SetFullRect(scroll);
-		actionViewport.AddChild(scroll);
-		_tableActions = new HFlowContainer { SizeFlagsHorizontal = SizeFlags.ExpandFill };
-		scroll.AddChild(_tableActions);
-		_focusPresentation = new VBoxContainer();
-		dockContent.AddChild(_focusPresentation);
+		_tableActions = dock.GetNode<HFlowContainer>("%Actions");
+		_focusPresentation = dock.GetNode<VBoxContainer>("%FocusPresentation");
 	}
 
 	private void SelectTableCard(string id)
@@ -209,9 +141,10 @@ public partial class Main
 		ClearChildren(_focusPresentation);
 		if (snapshot.IsTerminal)
 		{
-			Button again = new() { Text = "New match" };
-			again.Pressed += () => GetTree().ReloadCurrentScene();
-			_focusPresentation.AddChild(again);
+			Control outcome = GD.Load<PackedScene>("res://scenes/components/OutcomePanel.tscn").Instantiate<Control>();
+			outcome.GetNode<Label>("Summary").Text = $"{snapshot.View.Outcome.Winner} wins · {snapshot.View.Outcome.Reason}";
+			outcome.GetNode<Button>("NewMatch").Pressed += () => GetTree().ReloadCurrentScene();
+			_focusPresentation.AddChild(outcome);
 		}
 		RenderCardTableActions(snapshot);
 	}
@@ -232,12 +165,8 @@ public partial class Main
 		_gameTable.SetActionableSources(new HashSet<string>(StringComparer.Ordinal));
 		if (_fullMatchResumePaused && !snapshot.IsTerminal)
 		{
-			Button continueButton = new()
-			{
-				Text = "Continue recovered match",
-				CustomMinimumSize = new Vector2(0, 36),
-				Disabled = _fullMatchResumeContinueInFlight,
-			};
+			Button continueButton = CreateTableActionButton("Continue recovered match");
+			continueButton.Disabled = _fullMatchResumeContinueInFlight;
 			continueButton.Pressed += ContinueRecoveredFullMatch;
 			_tableActions.AddChild(continueButton);
 			return;
@@ -300,11 +229,19 @@ public partial class Main
 		}
 		Button AddButton(string text, Action callback)
 		{
-			Button button = new() { Text = text, CustomMinimumSize = new Vector2(0, 32), Disabled = _tableAwaitingSettlement };
+			Button button = CreateTableActionButton(text);
+			button.Disabled = _tableAwaitingSettlement;
 			button.Pressed += callback;
 			_tableActions.AddChild(button);
 			return button;
 		}
+	}
+
+	private static Button CreateTableActionButton(string text)
+	{
+		Button button = GD.Load<PackedScene>("res://scenes/components/ActionButton.tscn").Instantiate<Button>();
+		button.Text = text;
+		return button;
 	}
 
 	private static string? TableActionServerId(ActionParameters parameters) => parameters switch

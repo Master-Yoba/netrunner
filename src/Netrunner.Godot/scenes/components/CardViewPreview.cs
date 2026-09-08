@@ -22,13 +22,21 @@ public partial class CardViewPreview : Control
 	private bool _sampleSelected;
 	private bool _sampleTarget;
 	private bool _sampleHovered;
+	private bool _sampleDisabled;
+	private int _sampleCounters = 3;
+	private bool _sampleHosted;
 	private CardAppearance? _appearance;
 	private TableCardControl? _card;
 	private Control? _previewHost;
 	private Label? _caption;
 	private bool _previewDirty = true;
-	private bool _lastHovered;
 	private static readonly string[] PreviewSubtypes = ["Connection", "Virtual"];
+	private static readonly CardCounterViewModel[] PreviewCounters =
+	[
+		new("power", CardCounterPurpose.Generic, 2, null),
+		new("virus", CardCounterPurpose.Virus, 1, null),
+		new("credit", CardCounterPurpose.HostedCredit, 2, HostedCreditSpendRestriction.AnyCost),
+	];
 
 	[ExportGroup("Synthetic card sample")]
 	[Export]
@@ -80,11 +88,40 @@ public partial class CardViewPreview : Control
 		set => SetPreviewValue(ref _sampleHovered, value);
 	}
 
+	[Export]
+	public bool SampleDisabled
+	{
+		get => _sampleDisabled;
+		set => SetPreviewValue(ref _sampleDisabled, value);
+	}
+
+	[Export(PropertyHint.Range, "0,99,1")]
+	public int SampleCounters
+	{
+		get => _sampleCounters;
+		set => SetPreviewValue(ref _sampleCounters, Mathf.Clamp(value, 0, 99));
+	}
+
+	[Export]
+	public bool SampleHosted
+	{
+		get => _sampleHosted;
+		set => SetPreviewValue(ref _sampleHosted, value);
+	}
+
 	[ExportGroup("Shared appearance")]
 	[Export]
 	public CardAppearance Appearance
 	{
-		get => _appearance ??= LoadDefaultAppearance();
+		get
+		{
+			if (_appearance is null || !GodotObject.IsInstanceValid(_appearance))
+			{
+				_appearance = LoadDefaultAppearance();
+			}
+
+			return _appearance!;
+		}
 		set
 		{
 			_appearance = value ?? LoadDefaultAppearance();
@@ -102,9 +139,9 @@ public partial class CardViewPreview : Control
 	public override void _Ready()
 	{
 		BindPreviewNodes();
-		if (_previewHost is null)
+		if (_previewHost is null || _card is null)
 		{
-			GD.PushWarning($"{nameof(CardViewPreview)} expects a PreviewHost child.");
+			GD.PushWarning($"{nameof(CardViewPreview)} expects PreviewHost/Card authored children.");
 			return;
 		}
 
@@ -121,17 +158,10 @@ public partial class CardViewPreview : Control
 		}
 	}
 
-	public override void _ExitTree()
-	{
-		// The host owns this runtime-only instance. Keep references while the
-		// scene is detached so re-entry reuses the same card instead of spawning
-		// a second child; a freed child is recreated by EnsureCard.
-		base._ExitTree();
-	}
-
 	private void BindPreviewNodes()
 	{
 		_previewHost = GetNodeOrNull<Control>("PreviewHost");
+		_card = GetNodeOrNull<TableCardControl>("PreviewHost/Card");
 		_caption = GetNodeOrNull<Label>("PreviewCaption");
 	}
 
@@ -149,13 +179,8 @@ public partial class CardViewPreview : Control
 	private void RefreshPreview()
 	{
 		_previewDirty = false;
-		if (_previewHost is null || !IsInstanceValid(_previewHost))
-		{
-			return;
-		}
-
-		EnsureCard();
-		if (_card is null)
+		if (_previewHost is null || !IsInstanceValid(_previewHost)
+			|| _card is null || !IsInstanceValid(_card))
 		{
 			return;
 		}
@@ -163,56 +188,49 @@ public partial class CardViewPreview : Control
 		_card.Appearance = Appearance;
 		_card.SetBackSide(_sampleBackSide);
 		_card.SetIce(_sampleIce);
-		_card.SetCard(_sampleKnown ? CreateKnownSample(_sampleIce) : CreateHiddenSample());
+		_card.SetCard(_sampleKnown ? CreateKnownSample(_sampleIce, _sampleCounters, _sampleHosted) : CreateHiddenSample());
 		_card.SetTargetCandidate(_sampleTarget);
 		_card.SetSelected(_sampleSelected);
-		_card.SetActionableSource(_sampleActionable);
+		_card.SetActionableSource(_sampleActionable && !_sampleDisabled);
 		_card.MouseFilter = Control.MouseFilterEnum.Ignore;
 		_card.FocusMode = Control.FocusModeEnum.None;
 
-		if (_sampleHovered != _lastHovered)
-		{
-			_card.EmitSignal(_sampleHovered
-				? Control.SignalName.MouseEntered
-				: Control.SignalName.MouseExited);
-			_lastHovered = _sampleHovered;
-		}
+		_card.EmitSignal(_sampleHovered && _sampleKnown && !_sampleDisabled
+			? Control.SignalName.MouseEntered
+			: Control.SignalName.MouseExited);
 
 		if (_caption is not null)
 		{
 			_caption.Text = _sampleKnown
-				? "SYNTHETIC CARD · KNOWN"
+				? $"SYNTHETIC CARD · KNOWN{(_sampleDisabled ? " · DISABLED" : string.Empty)}"
 				: $"SYNTHETIC CARD · {(_sampleBackSide == PlayerSide.Corp ? "CORP" : "RUNNER")} BACK";
 		}
 	}
 
-	private void EnsureCard()
+	private static CardViewModel CreateKnownSample(bool ice, int counters, bool hosted)
 	{
-		if (_card is not null && IsInstanceValid(_card))
+		CardViewModel card = new(
+			"preview:synthetic-known",
+			null,
+			"Synthetic Asset: Long Editor Preview Title",
+			ice ? "ICE" : "Asset",
+			true,
+			false,
+			counters,
+			2,
+			ice ? 5 : null,
+			null,
+			null,
+			PreviewSubtypes,
+			"<strong>Install</strong> this synthetic card for a long rules preview. "
+			+ "The editor sample contains no authoritative game state.",
+			ice ? "Weyland" : "Shaper");
+		return card with
 		{
-			return;
-		}
-
-		_card = TableCardControl.Create();
-		_previewHost!.AddChild(_card);
+			HostCardId = hosted ? "preview:synthetic-host" : null,
+			TypedCounters = PreviewCounters,
+		};
 	}
-
-	private static CardViewModel CreateKnownSample(bool ice) => new(
-		"preview:synthetic-known",
-		null,
-		"Synthetic Asset: Long Editor Preview Title",
-		ice ? "ICE" : "Asset",
-		true,
-		false,
-		3,
-		2,
-		ice ? 5 : null,
-		null,
-		null,
-		PreviewSubtypes,
-		"<strong>Install</strong> this synthetic card for a long rules preview. "
-		+ "The editor sample contains no authoritative game state.",
-		"Shaper");
 
 	private static CardViewModel CreateHiddenSample() => new(
 		"preview:synthetic-hidden",

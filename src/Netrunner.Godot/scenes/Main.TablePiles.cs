@@ -83,82 +83,20 @@ public partial class Main
 
 	private void BuildTablePileOverlay()
 	{
-		if (_tablePileOverlay is not null)
+		if (_tablePileOverlay is not null) return;
+		_tablePileOverlay = GetNodeOrNull<PanelContainer>("PileBrowser");
+		if (_tablePileOverlay is null)
 		{
-			return;
+			_tablePileOverlay = GD.Load<PackedScene>("res://scenes/components/PileBrowser.tscn").Instantiate<PanelContainer>();
+			AddChild(_tablePileOverlay);
 		}
-
-		_tablePileOverlay = new PanelContainer
-		{
-			Visible = false,
-			MouseFilter = MouseFilterEnum.Stop,
-		};
-		_tablePileOverlay.AddThemeStyleboxOverride("panel", new StyleBoxFlat
-		{
-			BgColor = new Color(0.018f, 0.035f, 0.05f, 0.98f),
-			BorderColor = Accent,
-			BorderWidthLeft = 2,
-			BorderWidthTop = 2,
-			BorderWidthRight = 2,
-			BorderWidthBottom = 2,
-			CornerRadiusTopLeft = 10,
-			CornerRadiusTopRight = 10,
-			CornerRadiusBottomLeft = 10,
-			CornerRadiusBottomRight = 10,
-			ContentMarginLeft = 18,
-			ContentMarginTop = 16,
-			ContentMarginRight = 18,
-			ContentMarginBottom = 16,
-		});
-		SetFullRect(_tablePileOverlay);
-		AddChild(_tablePileOverlay);
-
-		MarginContainer margin = new();
-		margin.AddThemeConstantOverride("margin_left", 24);
-		margin.AddThemeConstantOverride("margin_top", 18);
-		margin.AddThemeConstantOverride("margin_right", 24);
-		margin.AddThemeConstantOverride("margin_bottom", 18);
-		_tablePileOverlay.AddChild(margin);
-
-		VBoxContainer content = new();
-		content.AddThemeConstantOverride("separation", 8);
-		margin.AddChild(content);
-
-		_tablePileTitle = MakeLabel("PILE", 20, Accent);
-		_tablePileTitle.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-		content.AddChild(_tablePileTitle);
-		_tablePileSummary = MakeWrappedLabel(string.Empty, 12, Muted);
-		content.AddChild(_tablePileSummary);
-
-		_tablePileScroll = new ScrollContainer
-		{
-			HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-			VerticalScrollMode = ScrollContainer.ScrollMode.Auto,
-			FollowFocus = true,
-			ClipContents = true,
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-			SizeFlagsVertical = SizeFlags.ExpandFill,
-			FocusMode = FocusModeEnum.None,
-		};
-		_tablePileCards = new GridContainer
-		{
-			Columns = 4,
-			SizeFlagsHorizontal = SizeFlags.ExpandFill,
-		};
-		_tablePileCards.AddThemeConstantOverride("h_separation", 10);
-		_tablePileCards.AddThemeConstantOverride("v_separation", 10);
-		_tablePileScroll.AddChild(_tablePileCards);
-		content.AddChild(_tablePileScroll);
-
-		_tablePileClose = new Button
-		{
-			Text = "Close pile",
-			CustomMinimumSize = new Vector2(180, 40),
-			FocusMode = FocusModeEnum.All,
-			TooltipText = "Close the pile browser and return to the table",
-		};
+		_tablePileOverlay.Visible = false;
+		_tablePileTitle = _tablePileOverlay.GetNode<Label>("%Title");
+		_tablePileSummary = _tablePileOverlay.GetNode<Label>("%Summary");
+		_tablePileScroll = _tablePileOverlay.GetNode<ScrollContainer>("%CardsScroll");
+		_tablePileCards = _tablePileOverlay.GetNode<GridContainer>("%Cards");
+		_tablePileClose = _tablePileOverlay.GetNode<Button>("%Close");
 		_tablePileClose.Pressed += HideTablePile;
-		content.AddChild(_tablePileClose);
 	}
 
 	private void RenderTablePileCards(
@@ -223,12 +161,9 @@ public partial class Main
 
 	private TableCardControl AddTablePileCard(CardViewModel? card)
 	{
-		TableCardControl control = new()
-		{
-			FocusMode = card is not null ? FocusModeEnum.All : FocusModeEnum.None,
-		};
+		TableCardControl control = TableCardControl.Create();
+		control.FocusMode = card is not null ? FocusModeEnum.All : FocusModeEnum.None;
 		_tablePileCards.AddChild(control);
-		control.SetDisplaySize(TableCardControl.PortraitCardSize);
 		control.SetCard(card);
 		if (card is null)
 		{

@@ -10,7 +10,7 @@ public partial class Main
 	{
 		try
 		{
-			bool screenshots = OS.GetCmdlineUserArgs().Contains("--m4-9-screenshots", StringComparer.Ordinal);
+			bool screenshots = (OS.GetCmdlineUserArgs().Contains("--m4-9-screenshots", StringComparer.Ordinal) || OS.GetCmdlineUserArgs().Contains("--m4-10-screenshots", StringComparer.Ordinal));
 			bool requireOfficial = OS.GetCmdlineUserArgs().Contains("--require-official-content", StringComparer.Ordinal);
 			// An action prompt can request a name before the first board render.
 			_gameTable.GetServerDisplayName("server:4");
@@ -329,15 +329,18 @@ public partial class Main
 					GD.Print($"M49_TABLE size={size.X}x{size.Y} side={side} layout=true keyboard=true zoom=true stable_nodes=true history=2000");
 				}
 			}
-			var frameTimes = new List<double>();
+			var frameTimes = new List<double>(120);
+			long allocationStart = GC.GetTotalAllocatedBytes(false);
 			for (int frame = 0; frame < 120; frame++)
 			{
 				long started = System.Diagnostics.Stopwatch.GetTimestamp();
 				await TableFrames(1);
 				frameTimes.Add(System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds);
 			}
+			long idleAllocatedBytes = Math.Max(0, GC.GetTotalAllocatedBytes(false) - allocationStart);
 			frameTimes.Sort();
 			GD.Print($"M49_PERF frames=120 median_ms={frameTimes[60]:F2} p95_ms={frameTimes[114]:F2} renderer={RenderingServer.GetVideoAdapterName()}");
+			GD.Print($"M410_ALLOC frames=120 allocated_bytes={idleAllocatedBytes} bytes_per_frame={idleAllocatedBytes / 120.0:F2}");
 			GD.Print($"M49_UI PASS official={_metadataSnapshot.IsOfficial} dense=true history=true");
 			GetTree().Quit();
 		}
@@ -425,7 +428,7 @@ public partial class Main
 			|| !GetViewport().GetVisibleRect().Encloses(CardHoverPreviewGlobalRect)
 			|| sourceRect != known.GetGlobalRect())
 			throw new InvalidOperationException($"Known-card hover preview invalid at {tag}: visible={CardHoverPreviewVisible} id={CardHoverPreviewCardId}/{known.CardId} rect={CardHoverPreviewGlobalRect} source={sourceRect}/{known.GetGlobalRect()}.");
-		if (OS.GetCmdlineUserArgs().Contains("--m4-9-screenshots", StringComparer.Ordinal))
+		if ((OS.GetCmdlineUserArgs().Contains("--m4-9-screenshots", StringComparer.Ordinal) || OS.GetCmdlineUserArgs().Contains("--m4-10-screenshots", StringComparer.Ordinal)))
 			await SaveTableEvidence($"hover-{tag}");
 		known.EmitSignal(Control.SignalName.MouseExited);
 		known.ReleaseFocus();
@@ -477,7 +480,8 @@ public partial class Main
 			await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
 		else
 			await TableFrames(2);
-		string directory = ProjectSettings.GlobalizePath("res://../../docs/evidence/m4-9");
+		string milestone = OS.GetCmdlineUserArgs().Contains("--m4-10-screenshots", StringComparer.Ordinal) ? "m4-10" : "m4-9";
+		string directory = ProjectSettings.GlobalizePath($"res://../../docs/evidence/{milestone}");
 		Directory.CreateDirectory(directory);
 		using Image frame = GetViewport().GetTexture().GetImage();
 		if (frame.SavePng(Path.Combine(directory, name + ".png")) != Error.Ok)

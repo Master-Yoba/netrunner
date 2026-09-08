@@ -10,7 +10,7 @@ namespace Netrunner.GodotClient;
 /// </summary>
 public partial class Main
 {
-	private PanelContainer? _cardHoverPreview;
+	private CardPreviewLayout? _cardHoverPreview;
 	private TableCardControl? _cardHoverPreviewFace;
 	private Label? _cardHoverPreviewTitle;
 	private Label? _cardHoverPreviewType;
@@ -38,95 +38,16 @@ public partial class Main
 	private void BuildCardHoverPreview(Control viewport)
 	{
 		GetWindow().FocusExited += HideCardHoverPreview;
-		_cardHoverPreview = new PanelContainer
-		{
-			Visible = false,
-			MouseFilter = Control.MouseFilterEnum.Ignore,
-			FocusMode = Control.FocusModeEnum.None,
-			ZIndex = 100,
-			ClipContents = true,
-			CustomMinimumSize = new Vector2(620, 380),
-		};
-		_cardHoverPreview.AddThemeStyleboxOverride("panel", new StyleBoxFlat
-		{
-			BgColor = new Color(0.018f, 0.035f, 0.055f, 0.98f),
-			BorderColor = new Color(0.92f, 0.97f, 1.0f, 0.88f),
-			BorderWidthLeft = 1,
-			BorderWidthTop = 1,
-			BorderWidthRight = 1,
-			BorderWidthBottom = 1,
-			CornerRadiusTopLeft = 9,
-			CornerRadiusTopRight = 9,
-			CornerRadiusBottomLeft = 9,
-			CornerRadiusBottomRight = 9,
-			ShadowColor = new Color(0.75f, 0.90f, 1.0f, 0.34f),
-			ShadowSize = 8,
-			ContentMarginLeft = 10,
-			ContentMarginTop = 10,
-			ContentMarginRight = 10,
-			ContentMarginBottom = 10,
-		});
-		viewport.AddChild(_cardHoverPreview);
-
-		HBoxContainer row = new()
-		{
-			MouseFilter = Control.MouseFilterEnum.Ignore,
-			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
-			SizeFlagsVertical = Control.SizeFlags.ExpandFill,
-		};
-		row.AddThemeConstantOverride("separation", 12);
-		_cardHoverPreview.AddChild(row);
-
-		_cardHoverPreviewFace = new TableCardControl
-		{
-			MouseFilter = Control.MouseFilterEnum.Ignore,
-			FocusMode = Control.FocusModeEnum.None,
-			CustomMinimumSize = new Vector2(240, 336),
-		};
-		row.AddChild(_cardHoverPreviewFace);
-		// TableCardControl applies its regular interactive defaults in _Ready;
-		// restore the preview's passive behavior after it enters the tree.
-		_cardHoverPreviewFace.MouseFilter = Control.MouseFilterEnum.Ignore;
-		_cardHoverPreviewFace.FocusMode = Control.FocusModeEnum.None;
-		_cardHoverPreviewFace.SetDisplaySize(new Vector2(240, 336));
-
-		VBoxContainer details = new()
-		{
-			MouseFilter = Control.MouseFilterEnum.Ignore,
-			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
-			SizeFlagsVertical = Control.SizeFlags.ExpandFill,
-		};
-		details.AddThemeConstantOverride("separation", 3);
-		ScrollContainer detailsScroll = new()
-		{
-			MouseFilter = Control.MouseFilterEnum.Ignore,
-			FocusMode = Control.FocusModeEnum.None,
-			HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
-			VerticalScrollMode = ScrollContainer.ScrollMode.Auto,
-			SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
-			SizeFlagsVertical = Control.SizeFlags.ExpandFill,
-		};
-		row.AddChild(detailsScroll);
-		detailsScroll.AddChild(details);
-
-		_cardHoverPreviewTitle = MakeWrappedLabel(string.Empty, 17, Colors.White);
-		_cardHoverPreviewTitle.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-		details.AddChild(_cardHoverPreviewTitle);
-		_cardHoverPreviewType = MakeWrappedLabel(string.Empty, 11, Accent);
-		details.AddChild(_cardHoverPreviewType);
-		_cardHoverPreviewStats = MakeWrappedLabel(string.Empty, 11, Colors.White);
-		details.AddChild(_cardHoverPreviewStats);
-		_cardHoverPreviewStatus = MakeWrappedLabel(string.Empty, 10, Muted);
-		details.AddChild(_cardHoverPreviewStatus);
-		_cardHoverPreviewCounters = MakeWrappedLabel(string.Empty, 10, Warning);
-		details.AddChild(_cardHoverPreviewCounters);
-		_cardHoverPreviewRules = MakeWrappedLabel(string.Empty, 12, Colors.White);
-		_cardHoverPreviewRules.AutowrapMode = TextServer.AutowrapMode.WordSmart;
-		_cardHoverPreviewRules.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
-		details.AddChild(_cardHoverPreviewRules);
-
-		// BuildCardTable runs before BuildCardZoomOverlay. Defer the connection so
-		// a card preview is dismissed as soon as the existing modal zoom opens.
+		_cardHoverPreview = viewport.GetNode<CardPreviewLayout>("CardHoverPreview");
+		_cardHoverPreviewFace = _cardHoverPreview.GetNode<TableCardControl>("%Card");
+		_cardHoverPreviewFace.MouseFilter = MouseFilterEnum.Ignore;
+		_cardHoverPreviewFace.FocusMode = FocusModeEnum.None;
+		_cardHoverPreviewTitle = _cardHoverPreview.GetNode<Label>("%Title");
+		_cardHoverPreviewType = _cardHoverPreview.GetNode<Label>("%CardType");
+		_cardHoverPreviewStats = _cardHoverPreview.GetNode<Label>("%Stats");
+		_cardHoverPreviewStatus = _cardHoverPreview.GetNode<Label>("%Status");
+		_cardHoverPreviewCounters = _cardHoverPreview.GetNode<Label>("%Counters");
+		_cardHoverPreviewRules = _cardHoverPreview.GetNode<Label>("%Rules");
 		Callable.From(AttachHoverPreviewModalHooks).CallDeferred();
 	}
 
@@ -136,6 +57,16 @@ public partial class Main
 		{
 			_zoomOverlay.VisibilityChanged += HandleHoverPreviewModalVisibilityChanged;
 		}
+	}
+
+	private void DisconnectCardHoverPreview()
+	{
+		if (!_useCardTable) return;
+		GetWindow().FocusExited -= HideCardHoverPreview;
+		if (IsInstanceValid(_tableViewport))
+			_tableViewport.Resized -= HandleCardHoverPreviewViewportResized;
+		if (IsInstanceValid(_zoomOverlay))
+			_zoomOverlay.VisibilityChanged -= HandleHoverPreviewModalVisibilityChanged;
 	}
 
 	private void HandleHoverPreviewModalVisibilityChanged()
@@ -186,7 +117,7 @@ public partial class Main
 
 		CardViewModel visible = card.Card!;
 		_cardHoverPreviewFace.SetIce(card.IsIce);
-		_cardHoverPreviewFace.SetDisplaySize(card.IsIce ? new Vector2(320, 144) : new Vector2(240, 336));
+		_cardHoverPreview.RefreshCardSize();
 		_cardHoverPreviewFace.SetCard(visible);
 		_cardHoverPreviewFace.MouseFilter = Control.MouseFilterEnum.Ignore;
 		_cardHoverPreviewFace.FocusMode = Control.FocusModeEnum.None;
@@ -248,8 +179,8 @@ public partial class Main
 		}
 
 		Vector2 desired = new(
-			Mathf.Min(640, Mathf.Max(0, viewportRect.Size.X - 16)),
-			Mathf.Min(400, Mathf.Max(0, viewportRect.Size.Y - 16)));
+			Mathf.Min(_cardHoverPreview.PreferredSize.X, Mathf.Max(0, viewportRect.Size.X - 2 * _cardHoverPreview.ViewportMargin)),
+			Mathf.Min(_cardHoverPreview.PreferredSize.Y, Mathf.Max(0, viewportRect.Size.Y - 2 * _cardHoverPreview.ViewportMargin)));
 		if (desired.X < 1 || desired.Y < 1)
 		{
 			HideCardHoverPreview();
@@ -259,14 +190,14 @@ public partial class Main
 		_cardHoverPreview.Size = desired;
 		Rect2 sourceRect = source.GetGlobalRect();
 		Vector2 sourceLocal = sourceRect.Position - viewportRect.Position;
-		Vector2 position = new(sourceLocal.X + sourceRect.Size.X + 12, sourceLocal.Y);
-		if (position.X + desired.X > viewportRect.Size.X - 8)
+		Vector2 position = new(sourceLocal.X + sourceRect.Size.X + _cardHoverPreview.SourceGap, sourceLocal.Y);
+		if (position.X + desired.X > viewportRect.Size.X - _cardHoverPreview.ViewportMargin)
 		{
-			position.X = sourceLocal.X - desired.X - 12;
+			position.X = sourceLocal.X - desired.X - _cardHoverPreview.SourceGap;
 		}
 
-		position.X = Mathf.Clamp(position.X, 8, Mathf.Max(8, viewportRect.Size.X - desired.X - 8));
-		position.Y = Mathf.Clamp(position.Y, 8, Mathf.Max(8, viewportRect.Size.Y - desired.Y - 8));
+		position.X = Mathf.Clamp(position.X, _cardHoverPreview.ViewportMargin, Mathf.Max(_cardHoverPreview.ViewportMargin, viewportRect.Size.X - desired.X - _cardHoverPreview.ViewportMargin));
+		position.Y = Mathf.Clamp(position.Y, _cardHoverPreview.ViewportMargin, Mathf.Max(_cardHoverPreview.ViewportMargin, viewportRect.Size.Y - desired.Y - _cardHoverPreview.ViewportMargin));
 		_cardHoverPreview.Position = position;
 	}
 

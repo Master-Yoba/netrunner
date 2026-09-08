@@ -94,7 +94,10 @@ public partial class GameTableControl
 
 	private void AnimateCard(CardViewModel? model, Rect2 source, Vector2 destination, bool ice, Netrunner.Core.PlayerSide side = Netrunner.Core.PlayerSide.Corp)
 	{
-		TableCardControl ghost = new() { MouseFilter = MouseFilterEnum.Ignore, FocusMode = FocusModeEnum.None, ZIndex = 20 };
+		TableCardControl ghost = TableCardControl.Create();
+		ghost.MouseFilter = MouseFilterEnum.Ignore;
+		ghost.FocusMode = FocusModeEnum.None;
+		ghost.ZIndex = 20;
 		AddChild(ghost);
 		ghost.MouseFilter = MouseFilterEnum.Ignore;
 		ghost.FocusMode = FocusModeEnum.None;

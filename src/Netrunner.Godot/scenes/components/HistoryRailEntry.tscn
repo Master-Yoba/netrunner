@@ -1,0 +1,15 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scenes/components/HistoryRailEntry.cs" id="1_history_rail_entry"]
+[ext_resource type="Theme" path="res://themes/M4Theme.tres" id="2_history_theme"]
+
+[node name="HistoryRailEntry" type="Button"]
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 2
+theme = ExtResource("2_history_theme")
+theme_type_variation = &"HistoryControl"
+theme_override_font_sizes/font_size = 11
+text = "R"
+script = ExtResource("1_history_rail_entry")
