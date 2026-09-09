@@ -1,54 +1,10 @@
-[gd_resource type="Theme" load_steps=6 format=3]
+[gd_resource type="Theme" format=3 uid="uid://chrlx0twk2fi1"]
 
-[sub_resource type="StyleBoxFlat" id="StyleBox_panel"]
-bg_color = Color(0.055, 0.08, 0.105, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.17, 0.28, 0.34, 1)
-corner_radius_top_left = 7
-corner_radius_top_right = 7
-corner_radius_bottom_right = 7
-corner_radius_bottom_left = 7
-content_margin_left = 10.0
-content_margin_top = 8.0
-content_margin_right = 10.0
-content_margin_bottom = 8.0
-
-[sub_resource type="StyleBoxFlat" id="StyleBox_button"]
-bg_color = Color(0.08, 0.13, 0.16, 1)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.24, 0.38, 0.44, 1)
-corner_radius_top_left = 5
-corner_radius_top_right = 5
-corner_radius_bottom_right = 5
-corner_radius_bottom_left = 5
+[sub_resource type="StyleBoxFlat" id="StyleBox_button_disabled"]
 content_margin_left = 12.0
 content_margin_top = 8.0
 content_margin_right = 12.0
 content_margin_bottom = 8.0
-
-[sub_resource type="StyleBoxFlat" id="StyleBox_button_focus"]
-bg_color = Color(0.1, 0.18, 0.2, 1)
-border_width_left = 2
-border_width_top = 2
-border_width_right = 2
-border_width_bottom = 2
-border_color = Color(0.36, 0.9, 0.74, 1)
-corner_radius_top_left = 5
-corner_radius_top_right = 5
-corner_radius_bottom_right = 5
-corner_radius_bottom_left = 5
-content_margin_left = 11.0
-content_margin_top = 7.0
-content_margin_right = 11.0
-content_margin_bottom = 7.0
-
-[sub_resource type="StyleBoxFlat" id="StyleBox_button_disabled"]
 bg_color = Color(0.06, 0.1, 0.12, 1)
 border_width_left = 1
 border_width_top = 1
@@ -59,44 +15,88 @@ corner_radius_top_left = 5
 corner_radius_top_right = 5
 corner_radius_bottom_right = 5
 corner_radius_bottom_left = 5
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_button_focus"]
+content_margin_left = 11.0
+content_margin_top = 7.0
+content_margin_right = 11.0
+content_margin_bottom = 7.0
+bg_color = Color(0.1, 0.18, 0.2, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.36, 0.9, 0.74, 1)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_button"]
 content_margin_left = 12.0
 content_margin_top = 8.0
 content_margin_right = 12.0
 content_margin_bottom = 8.0
+bg_color = Color(0.08, 0.13, 0.16, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.24, 0.38, 0.44, 1)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_panel"]
+content_margin_left = 10.0
+content_margin_top = 8.0
+content_margin_right = 10.0
+content_margin_bottom = 8.0
+bg_color = Color(0.055, 0.08, 0.105, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.17, 0.28, 0.34, 1)
+corner_radius_top_left = 7
+corner_radius_top_right = 7
+corner_radius_bottom_right = 7
+corner_radius_bottom_left = 7
 
 [resource]
 default_font_size = 14
-PanelContainer/styles/panel = SubResource("StyleBox_panel")
+AppStatus/base_type = &"Label"
+AppStatus/colors/font_color = Color(0.65, 0.74, 0.8, 1)
+AppStatus/font_sizes/font_size = 15
+AppTitle/base_type = &"Label"
+AppTitle/colors/font_color = Color(0.36, 0.9, 0.74, 1)
+AppTitle/font_sizes/font_size = 22
 Button/colors/font_color = Color(0.94, 0.98, 1, 1)
-Button/colors/font_hover_color = Color(0.36, 0.9, 0.74, 1)
 Button/colors/font_focus_color = Color(1, 1, 1, 1)
+Button/colors/font_hover_color = Color(0.36, 0.9, 0.74, 1)
 Button/colors/font_pressed_color = Color(1, 1, 1, 1)
-Button/styles/normal = SubResource("StyleBox_button")
-Button/styles/hover = SubResource("StyleBox_button_focus")
-Button/styles/focus = SubResource("StyleBox_button_focus")
-Button/styles/pressed = SubResource("StyleBox_button_focus")
 Button/styles/disabled = SubResource("StyleBox_button_disabled")
+Button/styles/focus = SubResource("StyleBox_button_focus")
+Button/styles/hover = SubResource("StyleBox_button_focus")
+Button/styles/normal = SubResource("StyleBox_button")
+Button/styles/pressed = SubResource("StyleBox_button_focus")
+CheckButton/colors/font_color = Color(0.65, 0.74, 0.8, 1)
+HistoryControl/base_type = &"Button"
+HistoryControl/font_sizes/font_size = 11
 Label/colors/font_color = Color(0.94, 0.98, 1, 1)
 Label/colors/font_uneditable_color = Color(0.65, 0.74, 0.8, 1)
-CheckButton/colors/font_color = Color(0.65, 0.74, 0.8, 1)
-AppTitle/base_type = &"Label"
-AppTitle/font_sizes/font_size = 22
-AppTitle/colors/font_color = Color(0.36, 0.9, 0.74, 1)
-AppStatus/base_type = &"Label"
-AppStatus/font_sizes/font_size = 15
-AppStatus/colors/font_color = Color(0.65, 0.74, 0.8, 1)
-PhaseLabel/base_type = &"Label"
-PhaseLabel/font_sizes/font_size = 14
-PhaseLabel/colors/font_color = Color(0.98, 0.74, 0.28, 1)
-TableStatus/base_type = &"Label"
-TableStatus/font_sizes/font_size = 14
-TableStatus/colors/font_color = Color(0.36, 0.9, 0.74, 1)
 LaneHeading/base_type = &"Label"
-LaneHeading/font_sizes/font_size = 14
 LaneHeading/colors/font_color = Color(0.36, 0.9, 0.74, 1)
+LaneHeading/font_sizes/font_size = 14
+PanelContainer/styles/panel = SubResource("StyleBox_panel")
+PhaseLabel/base_type = &"Label"
+PhaseLabel/colors/font_color = Color(0.98, 0.74, 0.28, 1)
+PhaseLabel/font_sizes/font_size = 14
 PrimaryAction/base_type = &"Button"
 PrimaryAction/font_sizes/font_size = 14
 SecondaryAction/base_type = &"Button"
 SecondaryAction/font_sizes/font_size = 12
-HistoryControl/base_type = &"Button"
-HistoryControl/font_sizes/font_size = 11
+TableStatus/base_type = &"Label"
+TableStatus/colors/font_color = Color(0.36, 0.9, 0.74, 1)
+TableStatus/font_sizes/font_size = 14
