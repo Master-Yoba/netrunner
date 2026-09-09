@@ -1,0 +1,43 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scenes/components/HistoryDetail.cs" id="1_history_detail"]
+[ext_resource type="Theme" path="res://themes/M4Theme.tres" id="2_history_theme"]
+
+[node name="HistoryDetail" type="HBoxContainer"]
+custom_minimum_size = Vector2(0, 24)
+layout_mode = 2
+size_flags_horizontal = 3
+theme = ExtResource("2_history_theme")
+theme_override_constants/separation = 6
+script = ExtResource("1_history_detail")
+
+[node name="Bullet" type="Label" parent="."]
+custom_minimum_size = Vector2(12, 0)
+layout_mode = 2
+mouse_filter = 2
+text = "•"
+vertical_alignment = 1
+theme_override_colors/font_color = Color(0.64, 0.74, 0.79, 1)
+theme_override_font_sizes/font_size = 11
+
+[node name="Text" type="Label" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+autowrap_mode = 3
+vertical_alignment = 1
+theme_override_font_sizes/font_size = 12
+
+[node name="CardHost" type="Control" parent="."]
+custom_minimum_size = Vector2(92, 128)
+layout_mode = 2
+mouse_filter = 2
+visible = false
+
+[node name="InspectButton" type="Button" parent="."]
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+focus_mode = 2
+theme_type_variation = &"HistoryControl"
+text = "Inspect"
+visible = false

@@ -2067,16 +2067,19 @@ public static partial class StateInvariantValidator
         }
 
         // A legacy hand-authored observation fixture may describe an
-        // already-accessed hidden card without carrying the breach snapshot
-        // that the production boundary persists. There is no modifier
-        // arithmetic to reconstruct in that shape; modifier-bearing runs are
-        // always checked against the authoritative hidden-pool cursor below.
+        // already-accessed hidden card without carrying modifier provenance.
+        // There is no access arithmetic to reconstruct in that shape;
+        // modifier-bearing runs are checked against the authoritative
+        // hidden-pool cursor below.
         if (run.BreachAccessModifiers is null)
         {
             return;
         }
 
         ServerState? server = state.Servers.FirstOrDefault(candidate => candidate?.Id == run.AttackedServer);
+        ZoneState? rootZone = server is null
+            ? null
+            : state.Zones.FirstOrDefault(zone => zone?.Id == server.RootZoneId);
         ZoneState? hiddenZone = server?.Kind switch
         {
             ServerKind.Headquarters => state.Zones.FirstOrDefault(zone =>
@@ -2089,28 +2092,67 @@ public static partial class StateInvariantValidator
                 && zone.ServerId is null),
             _ => null,
         };
+
+        // The access cursor is decremented when a hidden candidate is chosen,
+        // while the chosen card normally remains in the hidden zone until the
+        // mid-access window resolves. If that window moves the card (for
+        // example, an agenda is stolen into RunnerScore), reconstructing from
+        // the current hidden-zone count alone loses the card's origin. A
+        // chosen card that is still in the attacked root is definitely a root
+        // candidate and did not consume the hidden cursor. A chosen card that
+        // left both pools is ambiguous: it may have been a root candidate or
+        // a hidden candidate. Keep that uncertainty explicit and validate the
+        // authoritative cursor against every feasible origin assignment.
         int hiddenCount = hiddenZone?.CardIds.Count ?? 0;
-        long requested = hiddenCount > 0 ? 1 : 0;
+        HashSet<CardInstanceId> hiddenIds = hiddenZone is null
+            ? []
+            : hiddenZone.CardIds.ToHashSet();
+        HashSet<CardInstanceId> rootIds = rootZone is null
+            ? []
+            : rootZone.CardIds.ToHashSet();
+        int hiddenChosen = run.ChosenAccessCards.Count(hiddenIds.Contains);
+        int movedOutOfPools = hiddenZone is null
+            ? 0
+            : run.ChosenAccessCards.Count(cardId =>
+                !hiddenIds.Contains(cardId) && !rootIds.Contains(cardId));
+
+        long additionalRandomAccess = 0;
         if (run.BreachAccessModifiers is { } modifiers)
         {
             foreach (RunBreachAccessModifier? modifier in modifiers)
             {
                 if (modifier is not null && modifier.AttackedServerId == run.AttackedServer)
                 {
-                    requested += modifier.Delta;
+                    additionalRandomAccess += modifier.Delta;
                 }
             }
         }
 
-        int initial = hiddenCount > 0
-            ? (int)Math.Min(hiddenCount, Math.Max(0L, requested))
-            : 0;
-        int hiddenChosen = hiddenZone is null
-            ? 0
-            : run.ChosenAccessCards.Count(hiddenZone.CardIds.Contains);
-        int expected = Math.Max(0, initial - hiddenChosen);
-        if (run.RandomAccessLimit != expected)
+        static long ExpectedCursor(
+            long currentHiddenCount,
+            long hiddenChosenCount,
+            long movedHiddenCount,
+            long additionalAccess)
         {
+            long originalHiddenCount = checked(currentHiddenCount + movedHiddenCount);
+            long requested = (originalHiddenCount > 0 ? 1L : 0L) + additionalAccess;
+            long initial = Math.Min(originalHiddenCount, Math.Max(0L, requested));
+            return Math.Max(0L, initial - hiddenChosenCount - movedHiddenCount);
+        }
+
+        long expectedAtMinimum = ExpectedCursor(hiddenCount, hiddenChosen, 0, additionalRandomAccess);
+        long expectedAtMaximum = ExpectedCursor(
+            hiddenCount,
+            hiddenChosen,
+            movedOutOfPools,
+            additionalRandomAccess);
+        long expectedMinimum = Math.Min(expectedAtMinimum, expectedAtMaximum);
+        long expectedMaximum = Math.Max(expectedAtMinimum, expectedAtMaximum);
+        if (run.RandomAccessLimit < expectedMinimum || run.RandomAccessLimit > expectedMaximum)
+        {
+            string expected = expectedMinimum == expectedMaximum
+                ? expectedMinimum.ToString(CultureInfo.InvariantCulture)
+                : $"[{expectedMinimum}, {expectedMaximum}]";
             Add(
                 violations,
                 "run.random-access-limit-mismatch",

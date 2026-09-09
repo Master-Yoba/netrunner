@@ -1,0 +1,20 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Theme" path="res://themes/M4Theme.tres" id="theme"]
+
+[node name="OutcomePanel" type="HBoxContainer"]
+size_flags_horizontal = 3
+theme = ExtResource("theme")
+theme_override_constants/separation = 12
+
+[node name="Summary" type="Label" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"TableStatus"
+text = "Runner wins · Agenda points"
+autowrap_mode = 3
+
+[node name="NewMatch" type="Button" parent="."]
+layout_mode = 2
+theme_type_variation = &"PrimaryAction"
+text = "New match"

@@ -1,0 +1,93 @@
+[gd_scene format=3]
+
+[ext_resource type="Theme" path="res://themes/M4Theme.tres" id="theme"]
+[ext_resource type="PackedScene" path="res://scenes/components/GameBoard.tscn" id="board"]
+[ext_resource type="PackedScene" path="res://scenes/components/AccessPanel.tscn" id="access"]
+[ext_resource type="PackedScene" path="res://scenes/components/CardHoverPreview.tscn" id="hover"]
+[ext_resource type="PackedScene" path="res://scenes/components/MatchHistoryPanel.tscn" id="history"]
+[ext_resource type="PackedScene" path="res://scenes/components/DecisionDock.tscn" id="dock"]
+[ext_resource type="Script" path="res://scenes/components/TableWorkspace.cs" id="workspace"]
+
+[node name="MatchTable" type="VBoxContainer"]
+size_flags_vertical = 3
+theme = ExtResource("theme")
+theme_override_constants/separation = 6
+
+[node name="Toolbar" type="HBoxContainer" parent="."]
+layout_mode = 2
+
+[node name="NewGame" type="Button" parent="Toolbar"]
+layout_mode = 2
+text = "New game"
+
+[node name="ReducedMotion" type="CheckButton" parent="Toolbar"]
+layout_mode = 2
+text = "Reduced motion"
+
+[node name="Speed" type="HSlider" parent="Toolbar"]
+layout_mode = 2
+custom_minimum_size = Vector2(90, 24)
+min_value = 0.5
+max_value = 3.0
+step = 0.5
+value = 1.0
+tooltip_text = "Playback speed"
+
+[node name="Scale" type="OptionButton" parent="Toolbar"]
+layout_mode = 2
+tooltip_text = "UI scale"
+selected = 0
+item_count = 4
+popup/item_0/text = "100%"
+popup/item_0/id = 0
+popup/item_1/text = "125%"
+popup/item_1/id = 1
+popup/item_2/text = "150%"
+popup/item_2/id = 2
+popup/item_3/text = "200%"
+popup/item_3/id = 3
+
+[node name="SkipAnimation" type="Button" parent="Toolbar"]
+layout_mode = 2
+text = "Skip animation"
+
+[node name="LastAction" type="Label" parent="Toolbar"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"TableStatus"
+text = "Choose your opening hand."
+autowrap_mode = 3
+
+[node name="TableViewport" type="Control" parent="."]
+layout_mode = 2
+size_flags_vertical = 3
+clip_contents = true
+script = ExtResource("workspace")
+
+[node name="GameBoard" parent="TableViewport" instance=ExtResource("board")]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_right = -66.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="AccessPanel" parent="TableViewport" instance=ExtResource("access")]
+visible = false
+
+[node name="CardHoverPreview" parent="TableViewport" instance=ExtResource("hover")]
+visible = false
+
+[node name="History" parent="TableViewport" instance=ExtResource("history")]
+layout_mode = 1
+anchors_preset = 11
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -60.0
+grow_horizontal = 0
+grow_vertical = 2
+
+[node name="DecisionDock" parent="." instance=ExtResource("dock")]
+layout_mode = 2

@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+play_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$play_root/scripts/env.sh"
+export NetrunnerContentEnabled=true
+export NetrunnerCardDataMode=official
+export NetrunnerCardDataInputRoot="$play_root/data/vendor/system-gateway"
+export NETRUNNER_CARD_BACK_DIRECTORY="$play_root/.tools/card-backs"
+if [[ ! -f "$NetrunnerCardDataInputRoot/cards.json" ]]; then
+  echo "Official card metadata is missing. Run ./scripts/update-card-data.sh --commit 236140cf84491c23995b028bc791281837520b97 --retrieval-date 2026-08-28" >&2
+  exit 1
+fi
+play_diagnostics_root="$NETRUNNER_GODOT_DATA/diagnostics"
+mkdir -p "$play_diagnostics_root"
+play_launch_dir="$(mktemp -d "$play_diagnostics_root/launch.XXXXXX")"
+play_output_log="$play_launch_dir/play-output.log"
+godot_log_file="$play_launch_dir/godot.log"
+export NETRUNNER_LAUNCH_DIAGNOSTICS="$play_launch_dir"
+export NETRUNNER_LAUNCH_WORKING_DIRECTORY="$PWD"
+echo "PLAY_DIAGNOSTICS directory=$play_launch_dir"
+echo "PLAY_DIAGNOSTICS output=$play_output_log godot=$godot_log_file"
+
+set +e
+{
+  dotnet build "$play_root/src/Netrunner.Godot" --no-restore
+  play_build_status=$?
+  if (( play_build_status != 0 )); then
+    exit "$play_build_status"
+  fi
+  XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" "$GODOT4" \
+    --path "$play_root/src/Netrunner.Godot" \
+    --log-file "$godot_log_file" \
+    -- "$@"
+} 2>&1 | tee "$play_output_log"
+play_status="${PIPESTATUS[0]}"
+set -e
+exit "$play_status"

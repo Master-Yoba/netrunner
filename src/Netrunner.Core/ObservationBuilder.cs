@@ -155,6 +155,18 @@ public static partial class ObservationBuilder
             ["runnerScore"] = ZoneCards(state, ZoneKind.RunnerScore).Select(card => CardView(state, card)).ToArray(),
         };
 
+        // Full observations carry public totals for zones whose visible card
+        // projection may omit facedown cards. Keep this additive so the
+        // canonical M1 observation shape remains unchanged, and expose only
+        // counts rather than any hidden card identity.
+        if (state.RulesState is not null || state.BehaviorCatalogFingerprint is not null)
+        {
+            publicState["zoneCounts"] = new Dictionary<string, object?>
+            {
+                ["corpDiscard"] = ZoneCount(state, ZoneKind.CorpDiscard),
+            };
+        }
+
         foreach (ZoneKind identity in new[] { ZoneKind.CorpIdentity, ZoneKind.RunnerIdentity })
         {
             if (state.Zones.Any(zone => zone.Kind == identity))
@@ -796,9 +808,9 @@ public static partial class ObservationBuilder
         };
 
         // Keep the M1 observation golden unchanged when the optional M2
-        // rules aggregate is absent. Once it is present, expose only the
-        // viewer-safe derived limit; base damage and hidden card contents are
-        // not leaked through this public projection.
+        // rules aggregate is absent. Once it is present, expose only
+        // viewer-safe derived rules values; base damage and hidden card
+        // contents are not leaked through this public projection.
         if (state.RulesState?.Players.SingleOrDefault(value => value.PlayerId == player.Id) is { } rules)
         {
             int modifier = BehaviorStaticModifierProjection.Sum(
@@ -810,6 +822,22 @@ public static partial class ObservationBuilder
             view["maximumHandSize"] = checked(rules.MaximumHandSize + modifier);
             view["tags"] = Math.Max(0, rules.Tags);
             if (rules.CoreDamage != 0) view["coreDamage"] = rules.CoreDamage;
+
+            // Runner memory is a public rules projection. Keep it tied to the
+            // optional RulesState so legacy M1 observations retain their
+            // canonical shape, and derive the limit with the same active-card
+            // static modifier projection used by the engine.
+            if (player.Side == PlayerSide.Runner)
+            {
+                int memoryModifier = BehaviorStaticModifierProjection.Sum(
+                    behaviorCatalog,
+                    state.Cards,
+                    state.Zones,
+                    player.Side,
+                    BehaviorStaticModifierKind.MemoryUnits);
+                view["usedMemory"] = rules.UsedMemory;
+                view["memoryLimit"] = checked(rules.BaseMemory + memoryModifier);
+            }
         }
 
         return view;

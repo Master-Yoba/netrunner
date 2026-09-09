@@ -1,0 +1,174 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/components/PileView.tscn" id="1_pile"]
+[ext_resource type="PackedScene" path="res://scenes/components/HandView.tscn" id="2_hand"]
+[ext_resource type="Theme" path="res://themes/M4Theme.tres" id="3_theme"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_area"]
+content_margin_left = 8.0
+content_margin_top = 6.0
+content_margin_right = 8.0
+content_margin_bottom = 6.0
+bg_color = Color(0.035, 0.12, 0.12, 0.96)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.07, 0.28, 0.23, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_inner"]
+content_margin_left = 8.0
+content_margin_top = 6.0
+content_margin_right = 8.0
+content_margin_bottom = 6.0
+bg_color = Color(0.02, 0.08, 0.08, 0.68)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.07, 0.28, 0.23, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_identity"]
+content_margin_left = 8.0
+content_margin_top = 6.0
+content_margin_right = 8.0
+content_margin_bottom = 6.0
+bg_color = Color(0.035, 0.12, 0.12, 0.96)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.07, 0.28, 0.23, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[node name="PlayerArea" type="PanelContainer"]
+custom_minimum_size = Vector2(0, 200)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+theme = ExtResource("3_theme")
+theme_override_styles/panel = SubResource("StyleBoxFlat_area")
+
+[node name="Content" type="HBoxContainer" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_constants/separation = 6
+
+[node name="Summary" type="PanelContainer" parent="Content"]
+custom_minimum_size = Vector2(174, 0)
+layout_mode = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_inner")
+
+[node name="Content" type="VBoxContainer" parent="Content/Summary"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_constants/separation = 2
+
+[node name="Side" type="Label" parent="Content/Summary/Content"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.34, 0.73, 0.96, 1)
+theme_override_font_sizes/font_size = 11
+text = "RUNNER"
+text_overrun_behavior = 3
+
+[node name="Resources" type="Label" parent="Content/Summary/Content"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 10
+text = "Credits · Clicks · Score"
+text_overrun_behavior = 3
+
+[node name="HandCaption" type="Label" parent="Content/Summary/Content"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.62, 0.76, 0.75, 1)
+theme_override_font_sizes/font_size = 10
+text = "Grip · hand"
+text_overrun_behavior = 3
+
+[node name="Score" type="Label" parent="Content/Summary/Content"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.62, 0.76, 0.75, 1)
+theme_override_font_sizes/font_size = 10
+text = "Score pile · 0"
+text_overrun_behavior = 3
+
+[node name="Scored" parent="Content/Summary/Content" instance=ExtResource("1_pile")]
+layout_mode = 2
+text = "Scored"
+tooltip_text = "Browse Runner score area"
+
+[node name="Identity" type="PanelContainer" parent="Content"]
+custom_minimum_size = Vector2(96, 150)
+layout_mode = 2
+tooltip_text = "Runner identity"
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_identity")
+
+[node name="Deck" parent="Content" instance=ExtResource("1_pile")]
+custom_minimum_size = Vector2(62, 30)
+layout_mode = 2
+text = "Stack\n—"
+tooltip_text = "Runner Stack · face-down pile"
+
+[node name="Discard" parent="Content" instance=ExtResource("1_pile")]
+custom_minimum_size = Vector2(62, 30)
+layout_mode = 2
+text = "Heap\n—"
+tooltip_text = "Runner Heap · public discard pile"
+
+[node name="Rig" type="PanelContainer" parent="Content"]
+custom_minimum_size = Vector2(315, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_inner")
+
+[node name="Content" type="VBoxContainer" parent="Content/Rig"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_constants/separation = 1
+
+[node name="Caption" type="Label" parent="Content/Rig/Content"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.62, 0.76, 0.75, 1)
+theme_override_font_sizes/font_size = 9
+text = "RIG"
+text_overrun_behavior = 3
+
+[node name="Scroll" type="ScrollContainer" parent="Content/Rig/Content"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+follow_focus = true
+vertical_scroll_mode = 0
+
+[node name="Cards" type="HBoxContainer" parent="Content/Rig/Content/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="LocalHand" parent="Content" instance=ExtResource("2_hand")]
+layout_mode = 2

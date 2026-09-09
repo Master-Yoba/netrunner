@@ -129,6 +129,12 @@ public partial class Main
 		try
 		{
 			ResetFullMatchSetupTrace();
+			if (_fullMatchResumeSessionDirectory is not null)
+			{
+				BeginResumedFullMatch();
+				return;
+			}
+
 			PlayerSide humanSide = (PlayerSide)_humanSide.GetSelectedId();
 			if (_fullMatchSmoke && !_m4FullMatchSmoke)
 			{
@@ -160,14 +166,15 @@ public partial class Main
 			string runnerPresetId = SelectedPreset(_runnerPreset, _runnerPresetIds)
 				?? throw new InvalidOperationException("Choose a playable official Runner preset before starting.");
 
-			_coordinator = FullMatchFactory.CreateOfficial(
+			if (_useCardTable)
+				_matchHistory.ReportHeader = $"Netrunner · seed {seed} · {humanSide} · {corpPresetId} / {runnerPresetId} · {System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>(typeof(Main).Assembly)?.InformationalVersion ?? "unknown build"}";
+			_coordinator = CreateOfficialFullMatchCoordinator(
 				corpPresetId,
 				runnerPresetId,
 				_embeddedCardData!,
 				humanSide,
 				seed: seed,
-				agentDelay: TimeSpan.FromMilliseconds(45),
-				officialPresets: _officialPresetCatalog);
+				officialPresets: _officialPresetCatalog!);
 			_coordinator.SnapshotPublished += QueueSnapshot;
 			_coordinator.SnapshotPublished += CaptureFullMatchSetupSnapshot;
 			_startButton.Disabled = true;
@@ -176,6 +183,7 @@ public partial class Main
 		}
 		catch (Exception exception)
 		{
+			RecordFullMatchException(exception, "begin");
 			_status.Text = $"Match setup failed: {exception.Message}";
 			GD.PushError(exception.ToString());
 			if (_m4FullMatchSmoke)
@@ -246,6 +254,7 @@ public partial class Main
 		}
 		catch (Exception exception)
 		{
+			RecordFullMatchException(exception, "full-match-smoke");
 			GD.PushError(exception.ToString());
 			GD.Print($"M4_FULL_SMOKE FAIL side={_fullMatchSmokeSide} preset={_fullMatchSmokePreset} seed={_fullMatchSmokeSeed} reload=true error={exception.Message}");
 			GetTree().Quit(1);
@@ -331,8 +340,11 @@ public partial class Main
 						$"Full-match smoke reached its {actionCap}-action cap before terminal outcome at action_count={snapshot.ActionCount}.");
 				}
 				identities |= snapshot.View.CorpIdentity is not null && snapshot.View.RunnerIdentity is not null
-					&& _corpIdentityDetails.Text.Contains(snapshot.View.CorpIdentity.Title, StringComparison.Ordinal)
-					&& _runnerIdentityDetails.Text.Contains(snapshot.View.RunnerIdentity.Title, StringComparison.Ordinal);
+					&& (_useCardTable
+						? _gameTable.VisibleCards.Values.Any(card => card.IsVisibleInTree() && card.Card?.Id == snapshot.View.CorpIdentity.Id)
+							&& _gameTable.VisibleCards.Values.Any(card => card.IsVisibleInTree() && card.Card?.Id == snapshot.View.RunnerIdentity.Id)
+						: _corpIdentityDetails.Text.Contains(snapshot.View.CorpIdentity.Title, StringComparison.Ordinal)
+							&& _runnerIdentityDetails.Text.Contains(snapshot.View.RunnerIdentity.Title, StringComparison.Ordinal));
 				turnPair |= snapshot.View.Turn.TurnNumber > 1;
 				if (snapshot.IsTerminal)
 				{
@@ -383,7 +395,20 @@ public partial class Main
 				}
 				mulligan |= redraw is not null;
 				// Use the same submission handler as the rendered action buttons.
-				SubmitAction(snapshot.View.Decision!, action);
+				if (_useCardTable)
+				{
+					_tableAllActions = true;
+					RenderCardTableActions(snapshot);
+					if (!_tableActionButtons.TryGetValue(action.Id, out Button? actionButton))
+						throw new InvalidOperationException("Issued action is unreachable in the table controls.");
+					actionButton.EmitSignal(BaseButton.SignalName.Pressed);
+					if (_stagedAction is not null)
+					{
+						Button confirm = FindDescendants<Button>(_tableActions).Single(button => button.Text == "Confirm");
+						confirm.EmitSignal(BaseButton.SignalName.Pressed);
+					}
+				}
+				else SubmitAction(snapshot.View.Decision!, action);
 				await WaitForPublishedSnapshotAsync(snapshot.Sequence, 240);
 			}
 		}
@@ -405,6 +430,7 @@ public partial class Main
 					diagnosticSnapshot.Feedback,
 				}));
 			}
+			RecordFullMatchException(exception, "full-match-smoke");
 			GD.PushError(exception.ToString());
 			string marker = _m4FullMatchSmoke ? "M4_FULL_SMOKE" : "FULL_MATCH_SMOKE";
 			string details = _m4FullMatchSmoke

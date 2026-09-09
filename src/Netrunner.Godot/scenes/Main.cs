@@ -189,8 +189,15 @@ public partial class Main : Control
 		_smokeTest = arguments.Contains("--smoke-test", StringComparer.Ordinal)
 			|| arguments.Contains("--m3-responsiveness-smoke", StringComparer.Ordinal);
 		_responsivenessSmoke = arguments.Contains("--m3-responsiveness-smoke", StringComparer.Ordinal);
+		_useCardTable = !_smokeTest && !_gallerySmoke && !_slice43UiSmoke && !_slice44UiSmoke
+			&& !_slice45UiSmoke && !_slice46UiSmoke && !_slice47UiSmoke && !_slice48UxSmoke && !_fullMatchSmoke
+			&& !arguments.Contains("--diagnostic-ui", StringComparer.Ordinal);
 		BuildShell();
-		if (_fullMatchSmoke || _m4FullMatchSmoke)
+		if (arguments.Contains("--m4-9-ui-smoke", StringComparer.Ordinal))
+		{
+			_ = RunCardTableSmokeAsync();
+		}
+		else if (_fullMatchSmoke || _m4FullMatchSmoke)
 		{
 			_seedInput.Text = _fullMatchSmokeSeed.ToString(CultureInfo.InvariantCulture);
 			_humanSide.Select(_fullMatchSmokeSide == PlayerSide.Runner ? 0 : 1);
@@ -245,7 +252,8 @@ public partial class Main : Control
 	public override void _Process(double delta)
 	{
 		_processFrameCount++;
-		PollCoordinator();
+		if (_useCardTable) PollCardTable(delta);
+		else PollCoordinator();
 		if (_animationRunning)
 		{
 			_framesWhileAnimating++;
@@ -254,6 +262,8 @@ public partial class Main : Control
 
 	public override void _ExitTree()
 	{
+		DisconnectCardHoverPreview();
+		CloseFullMatchDiagnostics("shutdown");
 		if (_coordinator is null)
 		{
 			return;
@@ -266,6 +276,17 @@ public partial class Main : Control
 
 	private void BuildShell()
 	{
+		if (_useCardTable)
+		{
+			BindProductionShell();
+			return;
+		}
+		// Diagnostic modes retain their existing layout, outside the production scene.
+		foreach (Node child in GetChildren())
+		{
+			RemoveChild(child);
+			child.Free();
+		}
 		ApplyThemeFoundation();
 		ColorRect backdrop = new()
 		{
@@ -276,10 +297,10 @@ public partial class Main : Control
 		AddChild(backdrop);
 
 		MarginContainer margin = new();
-		margin.AddThemeConstantOverride("margin_left", 28);
-		margin.AddThemeConstantOverride("margin_top", 22);
-		margin.AddThemeConstantOverride("margin_right", 28);
-		margin.AddThemeConstantOverride("margin_bottom", 22);
+		margin.AddThemeConstantOverride("margin_left", _useCardTable ? 10 : 28);
+		margin.AddThemeConstantOverride("margin_top", _useCardTable ? 8 : 22);
+		margin.AddThemeConstantOverride("margin_right", _useCardTable ? 10 : 28);
+		margin.AddThemeConstantOverride("margin_bottom", _useCardTable ? 8 : 22);
 		SetFullRect(margin);
 		AddChild(margin);
 
@@ -304,6 +325,12 @@ public partial class Main : Control
 
 	public override void _UnhandledInput(InputEvent @event)
 	{
+		if (_useCardTable && !_zoomOverlay.Visible && @event is InputEventKey { Pressed: true, Keycode: Key.Escape })
+		{
+			CancelStagedAction();
+			_matchHistory.SetExpanded(false);
+			return;
+		}
 		if (!_zoomOverlay.Visible
 			|| @event is not InputEventKey key
 			|| !key.Pressed
@@ -320,7 +347,7 @@ public partial class Main : Control
 	{
 		var header = new HBoxContainer
 		{
-			CustomMinimumSize = new Vector2(0, 62),
+			CustomMinimumSize = new Vector2(0, _useCardTable ? 36 : 62),
 		};
 		header.AddThemeConstantOverride("separation", 18);
 		_layout.AddChild(header);
@@ -330,7 +357,7 @@ public partial class Main : Control
 			Text = "NETRUNNER SOLO",
 			VerticalAlignment = VerticalAlignment.Center,
 		};
-		title.AddThemeFontSizeOverride("font_size", 30);
+		title.AddThemeFontSizeOverride("font_size", _useCardTable ? 22 : 30);
 		title.AddThemeColorOverride("font_color", Accent);
 		header.AddChild(title);
 
@@ -492,7 +519,7 @@ public partial class Main : Control
 	private void BuildFooter()
 	{
 		Label footer = MakeLabel(
-			"Engine-issued actions · deterministic setup · 1280×720 ↔ 2560×1440",
+			"Engine-issued actions · deterministic setup · 1920×1080 ↔ 2560×1440",
 			11,
 			new Color(0.42f, 0.5f, 0.56f));
 		_layout.AddChild(footer);
@@ -559,6 +586,12 @@ public partial class Main : Control
 		}
 		catch (Exception exception)
 		{
+			RecordFullMatchException(exception, "start");
+			_status.Text = $"Match failed to start: {exception.Message}";
+			if (_useCardTable && IsInstanceValid(_tableLastAction))
+			{
+				_tableLastAction.Text = exception.Message;
+			}
 			GD.PushError(exception.ToString());
 			GD.Print($"M3_START FAIL {exception.Message}");
 		}
@@ -806,7 +839,7 @@ public partial class Main : Control
 		bool controlWithinOneFrame = false;
 		bool hoverSelectionWithinOneFrame = false;
 		bool zoomVisible = false;
-		bool layoutAt1280x720 = false;
+		bool layoutAt1920x1080 = false;
 		bool layoutAt2560x1440 = false;
 		bool heldTenSeconds = false;
 		int thinkingFrames = 0;
@@ -893,7 +926,7 @@ public partial class Main : Control
 			thinkingFrames = (int)Math.Max(0, _processFrameCount - holdStartFrames);
 			heldTenSeconds = holdDuration >= TimeSpan.FromSeconds(10);
 			averageFps = thinkingFrames / Math.Max(holdDuration.TotalSeconds, 0.001);
-			layoutAt1280x720 = await CheckViewportLayoutAsync(new Vector2I(1280, 720));
+			layoutAt1920x1080 = await CheckViewportLayoutAsync(new Vector2I(1920, 1080));
 			layoutAt2560x1440 = await CheckViewportLayoutAsync(new Vector2I(2560, 1440));
 
 			// The M3 gate is a 60-FPS interaction target. Allow a small timing
@@ -909,7 +942,7 @@ public partial class Main : Control
 				&& hoverSelectionWithinOneFrame
 				&& zoomVisible
 				&& responsiveFps
-				&& layoutAt1280x720
+				&& layoutAt1920x1080
 				&& layoutAt2560x1440;
 			GD.Print(
 				$"M3_LATENCY_SMOKE {(passed ? "PASS" : "FAIL")} "
@@ -918,7 +951,7 @@ public partial class Main : Control
 				+ $"thinking_frames={thinkingFrames} avg_fps={averageFps.ToString("F1", CultureInfo.InvariantCulture)} "
 				+ $"inspection_one_frame={inspectionWithinOneFrame} control_one_frame={controlWithinOneFrame} "
 				+ $"hover_selection_one_frame={hoverSelectionWithinOneFrame} "
-				+ $"zoom_in_viewport={zoomVisible} layout_1280x720={layoutAt1280x720} "
+				+ $"zoom_in_viewport={zoomVisible} layout_1920x1080={layoutAt1920x1080} "
 				+ $"layout_2560x1440={layoutAt2560x1440}");
 			await _coordinator.DisposeAsync();
 			GetTree().Quit(passed ? 0 : 1);
@@ -931,7 +964,7 @@ public partial class Main : Control
 				+ $"held_ms={holdDuration.TotalMilliseconds.ToString("F0", CultureInfo.InvariantCulture)} "
 				+ $"inspection_one_frame={inspectionWithinOneFrame} control_one_frame={controlWithinOneFrame} "
 				+ $"hover_selection_one_frame={hoverSelectionWithinOneFrame} "
-				+ $"zoom_in_viewport={zoomVisible} layout_1280x720={layoutAt1280x720} "
+				+ $"zoom_in_viewport={zoomVisible} layout_1920x1080={layoutAt1920x1080} "
 				+ $"layout_2560x1440={layoutAt2560x1440} error={exception.Message}");
 			if (_coordinator is not null)
 			{
@@ -1014,6 +1047,7 @@ public partial class Main : Control
 		bool decisionChanged = previous is null
 			|| !SameDecision(previous.View.Decision, snapshot.View.Decision);
 		_currentSnapshot = snapshot;
+		RecordFullMatchDisplayedSnapshot(snapshot);
 		_smokeRunEndedObserved |= _smokeTest
 			&& snapshot.Events.Any(value => value.Kind == EngineEventKinds.RunEnded);
 		if (decisionChanged)
@@ -1025,6 +1059,11 @@ public partial class Main : Control
 		if (_startPanel.GetParent() is CanvasItem startPanel)
 		{
 			startPanel.Visible = false;
+		}
+		if (_useCardTable)
+		{
+			RenderCardTable(snapshot, decisionChanged);
+			return;
 		}
 		_board.Visible = true;
 		MatchViewModel view = snapshot.View;
@@ -1134,6 +1173,7 @@ public partial class Main : Control
 		}
 
 		_inspectedCard = card;
+		RecordFullMatchSelection("card-inspect", card.Id);
 		_details.Text = $"{card.Title}\n{card.Type} · {card.DefinitionId}\n"
 			+ (card.AbilityCue is { Length: > 0 } cue ? $"{cue}\n" : string.Empty)
 			+ (card.FirstXUseCue is { Length: > 0 } firstXCue ? $"{firstXCue}\n" : string.Empty)

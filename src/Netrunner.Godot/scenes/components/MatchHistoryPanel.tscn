@@ -1,0 +1,253 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://scenes/MatchHistoryPanel.cs" id="1_history_panel"]
+[ext_resource type="Theme" path="res://themes/M4Theme.tres" id="2_history_theme"]
+[ext_resource type="PackedScene" path="res://scenes/components/HistoryEntry.tscn" id="3_history_entry"]
+[ext_resource type="PackedScene" path="res://scenes/components/HistoryDetail.tscn" id="4_history_detail"]
+[ext_resource type="PackedScene" path="res://scenes/components/HistoryRailEntry.tscn" id="5_history_rail_entry"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_history_panel"]
+content_margin_left = 7.0
+content_margin_top = 6.0
+content_margin_right = 7.0
+content_margin_bottom = 6.0
+bg_color = Color(0.035, 0.055, 0.07, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.18, 0.31, 0.36, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_history_surface"]
+content_margin_left = 7.0
+content_margin_top = 5.0
+content_margin_right = 7.0
+content_margin_bottom = 5.0
+bg_color = Color(0.055, 0.085, 0.105, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.18, 0.31, 0.36, 1)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_history_raised"]
+content_margin_left = 7.0
+content_margin_top = 6.0
+content_margin_right = 7.0
+content_margin_bottom = 6.0
+bg_color = Color(0.075, 0.11, 0.13, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.18, 0.31, 0.36, 1)
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+
+[node name="MatchHistoryPanel" type="PanelContainer"]
+custom_minimum_size = Vector2(60, 0)
+layout_mode = 0
+size_flags_vertical = 3
+theme = ExtResource("2_history_theme")
+script = ExtResource("1_history_panel")
+RailWidth = 60.0
+ExpandedWidth = 320.0
+RowSpacing = 7.0
+RailRowSpacing = 4.0
+HeaderFontSize = 15
+BodyFontSize = 12
+SmallFontSize = 11
+AccentColor = Color(0.36, 0.9, 0.74, 1)
+MutedColor = Color(0.64, 0.74, 0.79, 1)
+CorpCueColor = Color(0.95, 0.55, 0.42, 1)
+RunnerCueColor = Color(0.4, 0.75, 1, 1)
+PanelStyle = SubResource("StyleBox_history_panel")
+SurfaceStyle = SubResource("StyleBox_history_surface")
+RaisedStyle = SubResource("StyleBox_history_raised")
+EntryScene = ExtResource("3_history_entry")
+DetailScene = ExtResource("4_history_detail")
+RailEntryScene = ExtResource("5_history_rail_entry")
+PreviewSamples = true
+
+[node name="Shell" type="VBoxContainer" parent="."]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 7
+
+[node name="RailRoot" type="VBoxContainer" parent="Shell"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 6
+
+[node name="RailTitle" type="Label" parent="Shell/RailRoot"]
+layout_mode = 2
+mouse_filter = 2
+text = "H\nI\nS\nT"
+horizontal_alignment = 1
+autowrap_mode = 3
+theme_override_colors/font_color = Color(0.36, 0.9, 0.74, 1)
+theme_override_font_sizes/font_size = 10
+
+[node name="OpenButton" type="Button" parent="Shell/RailRoot"]
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+focus_mode = 2
+theme_type_variation = &"HistoryControl"
+tooltip_text = "Open readable match history"
+text = "H"
+theme_override_font_sizes/font_size = 13
+
+[node name="RailCount" type="Label" parent="Shell/RailRoot"]
+layout_mode = 2
+mouse_filter = 2
+text = "0"
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(0.64, 0.74, 0.79, 1)
+theme_override_font_sizes/font_size = 11
+
+[node name="EmptyRailLabel" type="Label" parent="Shell/RailRoot"]
+layout_mode = 2
+mouse_filter = 2
+text = "·"
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(0.64, 0.74, 0.79, 1)
+theme_override_font_sizes/font_size = 16
+
+[node name="RailScroll" type="ScrollContainer" parent="Shell/RailRoot"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+follow_focus = true
+horizontal_scroll_mode = 0
+vertical_scroll_mode = 1
+clip_contents = true
+
+[node name="RailRows" type="VBoxContainer" parent="Shell/RailRoot/RailScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+
+[node name="ExpandedRoot" type="VBoxContainer" parent="Shell"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 7
+visible = false
+
+[node name="Heading" type="HBoxContainer" parent="Shell/ExpandedRoot"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 5
+
+[node name="HeaderLabel" type="Label" parent="Shell/ExpandedRoot/Heading"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+text = "Match history"
+autowrap_mode = 0
+theme_override_colors/font_color = Color(0.36, 0.9, 0.74, 1)
+theme_override_font_sizes/font_size = 15
+
+[node name="PinButton" type="Button" parent="Shell/ExpandedRoot/Heading"]
+custom_minimum_size = Vector2(56, 30)
+layout_mode = 2
+focus_mode = 2
+toggle_mode = true
+theme_type_variation = &"HistoryControl"
+text = "Pin"
+theme_override_font_sizes/font_size = 11
+
+[node name="CopyButton" type="Button" parent="Shell/ExpandedRoot/Heading"]
+custom_minimum_size = Vector2(58, 30)
+layout_mode = 2
+focus_mode = 2
+theme_type_variation = &"HistoryControl"
+tooltip_text = "Copy the complete public history report"
+text = "Copy"
+theme_override_font_sizes/font_size = 11
+
+[node name="CollapseButton" type="Button" parent="Shell/ExpandedRoot/Heading"]
+custom_minimum_size = Vector2(58, 30)
+layout_mode = 2
+focus_mode = 2
+theme_type_variation = &"HistoryControl"
+tooltip_text = "Collapse to the history rail"
+text = "Close"
+theme_override_font_sizes/font_size = 11
+
+[node name="Navigation" type="HBoxContainer" parent="Shell/ExpandedRoot"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 5
+
+[node name="OlderButton" type="Button" parent="Shell/ExpandedRoot/Navigation"]
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+focus_mode = 2
+theme_type_variation = &"HistoryControl"
+tooltip_text = "Read older history entries"
+text = "Older"
+theme_override_font_sizes/font_size = 11
+
+[node name="NewerButton" type="Button" parent="Shell/ExpandedRoot/Navigation"]
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+focus_mode = 2
+theme_type_variation = &"HistoryControl"
+tooltip_text = "Read newer history entries"
+text = "Newer"
+theme_override_font_sizes/font_size = 11
+
+[node name="PageLabel" type="Label" parent="Shell/ExpandedRoot/Navigation"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+text = "0 entries"
+horizontal_alignment = 1
+vertical_alignment = 1
+theme_override_colors/font_color = Color(0.64, 0.74, 0.79, 1)
+theme_override_font_sizes/font_size = 11
+
+[node name="NewEntriesButton" type="Button" parent="Shell/ExpandedRoot/Navigation"]
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+focus_mode = 2
+theme_type_variation = &"HistoryControl"
+tooltip_text = "Follow the newest history entries"
+text = "0 new"
+visible = false
+theme_override_font_sizes/font_size = 11
+
+[node name="EmptyPageLabel" type="Label" parent="Shell/ExpandedRoot"]
+layout_mode = 2
+mouse_filter = 2
+text = "No public actions yet."
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(0.64, 0.74, 0.79, 1)
+theme_override_font_sizes/font_size = 13
+
+[node name="PageScroll" type="ScrollContainer" parent="Shell/ExpandedRoot"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+follow_focus = true
+horizontal_scroll_mode = 0
+vertical_scroll_mode = 1
+clip_contents = true
+
+[node name="PageRows" type="VBoxContainer" parent="Shell/ExpandedRoot/PageScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 7

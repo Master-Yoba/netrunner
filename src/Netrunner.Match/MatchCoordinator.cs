@@ -47,6 +47,8 @@ public sealed record MatchSnapshot(
     /// <summary>Accepted engine actions, excluding UI and opponent-thinking publications.</summary>
     public long ActionCount { get; init; }
 
+    public IReadOnlyList<MatchHistoryEntry> History { get; init; } = Array.Empty<MatchHistoryEntry>();
+
     public bool IsTerminal => View.Outcome.IsTerminal;
 
     public bool AwaitingHumanDecision => !IsOpponentThinking
@@ -78,6 +80,13 @@ public sealed class MatchCoordinatorOptions
     public PlayerSide HumanSide { get; init; } = PlayerSide.Runner;
 
     /// <summary>
+    /// Automatically submit a human PassPriority when it is the only legal
+    /// action in the issued decision. The default keeps the caller-driven
+    /// behavior used by existing clients.
+    /// </summary>
+    public bool AutoPassPriority { get; init; }
+
+    /// <summary>
     /// Immutable card metadata supplied by composition. When omitted, the
     /// generated Cards resource is used; Match never reads the ignored source
     /// directory itself.
@@ -100,6 +109,23 @@ public sealed class MatchCoordinatorOptions
     /// snapshot. Omitting it preserves the legacy behavior-only adapter.
     /// </summary>
     public IRuntimeCardCatalog? RuntimeCardCatalog { get; init; }
+
+    /// <summary>
+    /// Optional directory for a new durable session trace. The directory may
+    /// contain unrelated UI files, but authoritative trace files are never
+    /// overwritten.
+    /// </summary>
+    public string? SessionTraceDirectory { get; init; }
+
+    /// <summary>
+    /// Existing durable trace to recover. A resumed coordinator publishes the
+    /// recovered decision paused until <see cref="MatchCoordinator.ContinueRecoveredSessionAsync"/>
+    /// is called, so an opponent agent never advances before the UI confirms.
+    /// </summary>
+    public string? ResumeTraceDirectory { get; init; }
+
+    /// <summary>Optional earlier accepted-action boundary within the source trace.</summary>
+    public long? ResumeThroughActionSequence { get; init; }
 }
 
 /// <summary>
@@ -134,6 +160,11 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
     private MatchSnapshot? _currentSnapshot;
     private RunOutcomeViewModel? _runOutcome;
     private long _publicationSequence;
+    private readonly MatchHistoryProjector _historyProjector = new();
+    private (MatchViewModel Before, PlayerSide Actor, LegalAction Action)? _historyContext;
+    private SessionTrace? _sessionTrace;
+    private Exception? _traceFault;
+    private bool _recoveredPaused;
     private bool _disposed;
 
     public MatchCoordinator(
@@ -178,6 +209,29 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
             throw new ArgumentOutOfRangeException(nameof(options), "Agent delay must not be negative.");
         }
 
+        if (_options.ResumeThroughActionSequence is { } resumeSequence
+            && (resumeSequence < 0 || string.IsNullOrWhiteSpace(_options.ResumeTraceDirectory)))
+            throw new ArgumentException("A nonnegative resume action sequence requires ResumeTraceDirectory.", nameof(options));
+
+        if (!string.IsNullOrWhiteSpace(_options.ResumeTraceDirectory)
+            && string.IsNullOrWhiteSpace(_options.SessionTraceDirectory))
+        {
+            throw new ArgumentException(
+                "SessionTraceDirectory must name a new destination when ResumeTraceDirectory is configured.",
+                nameof(options));
+        }
+
+        if (!string.IsNullOrWhiteSpace(_options.ResumeTraceDirectory)
+            && string.Equals(
+                Path.GetFullPath(_options.SessionTraceDirectory!),
+                Path.GetFullPath(_options.ResumeTraceDirectory),
+                StringComparison.Ordinal))
+        {
+            throw new ArgumentException(
+                "SessionTraceDirectory and ResumeTraceDirectory must be distinct.",
+                nameof(options));
+        }
+
         _worker = RunWorkerAsync();
     }
 
@@ -217,6 +271,18 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
     {
         return Enqueue(
             new StartCommand(),
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Allows a recovered session to resume its normal agent-driving loop.
+    /// Resume startup deliberately publishes the exact recovered decision
+    /// first, with no agent call, until this command is accepted.
+    /// </summary>
+    public Task<MatchSnapshot> ContinueRecoveredSessionAsync(CancellationToken cancellationToken = default)
+    {
+        return Enqueue(
+            new ContinueRecoveredCommand(),
             cancellationToken);
     }
 
@@ -322,6 +388,9 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
                     case StartCommand start:
                         await HandleStartAsync(start).ConfigureAwait(false);
                         break;
+                    case ContinueRecoveredCommand continueRecovered:
+                        await HandleContinueRecoveredAsync(continueRecovered).ConfigureAwait(false);
+                        break;
                     case SubmitCommand submit:
                         await HandleSubmitAsync(submit).ConfigureAwait(false);
                         break;
@@ -350,6 +419,15 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
         }
         finally
         {
+            try
+            {
+                _sessionTrace?.Dispose();
+            }
+            catch (Exception exception)
+            {
+                _traceFault ??= exception;
+            }
+
             _commands.Writer.TryComplete();
             activeCommand?.Fail(new OperationCanceledException("The match coordinator stopped."));
             while (_commands.Reader.TryRead(out CoordinatorCommand? command))
@@ -370,10 +448,21 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
 
         try
         {
+            if (!string.IsNullOrWhiteSpace(_options.ResumeTraceDirectory))
+            {
+                SessionRecoveryResult recovered = RecoverSession(_options.ResumeTraceDirectory);
+                _state = recovered.State;
+                InitializeSessionTrace(recovered.State);
+                _recoveredPaused = true;
+                command.Complete(Publish(Array.Empty<EngineEvent>(), feedback: null, thinking: false));
+                return;
+            }
+
             if (_fullMatch is not null)
             {
                 GameEngine.TurnStartResult setup = _fullMatch.Start();
                 _state = setup.State;
+                InitializeSessionTrace(setup.State);
                 command.Complete(Publish(setup.Events, feedback: null, thinking: false));
                 await DriveAgentsAsync().ConfigureAwait(false);
                 return;
@@ -401,6 +490,7 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
                     _runtimeCardCatalog,
                     initiatingSource: new CardInstanceId(run.Source));
             _state = started.State;
+            InitializeSessionTrace(started.State);
             MatchSnapshot snapshot = Publish(started.Events, feedback: null, thinking: false);
             command.Complete(snapshot);
 
@@ -412,11 +502,125 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
         }
     }
 
+    private async Task HandleContinueRecoveredAsync(ContinueRecoveredCommand command)
+    {
+        if (_state is null)
+        {
+            command.Fail(new InvalidOperationException("The match has not been started."));
+            return;
+        }
+
+        if (!_recoveredPaused)
+        {
+            command.Complete(CurrentSnapshot
+                ?? throw new InvalidOperationException("The started match has no current publication."));
+            return;
+        }
+
+        _recoveredPaused = false;
+        MatchSnapshot snapshot = CurrentSnapshot
+            ?? Publish(Array.Empty<EngineEvent>(), feedback: null, thinking: false);
+        command.Complete(snapshot);
+        // Complete the UI command at the paused boundary. Agent driving may
+        // immediately publish a later thinking/decision snapshot.
+        await DriveAgentsAsync().ConfigureAwait(false);
+    }
+
+    private SessionRecoveryResult RecoverSession(string directory)
+    {
+        if (_fullMatch is null)
+        {
+            _behaviorCatalog = _document!.Validate(_suppliedBehaviorCatalog);
+        }
+
+        SessionRecoveryResult recovered = SessionTrace.Recover(
+            directory,
+            _behaviorCatalog,
+            _runtimeCardCatalog,
+            _options.ResumeThroughActionSequence);
+        if (recovered.Manifest.HumanSide != _options.HumanSide)
+        {
+            throw new SessionTraceException(
+                $"The trace was created for human side {recovered.Manifest.HumanSide}, not {_options.HumanSide}.");
+        }
+
+        if (_fullMatch is not null)
+        {
+            if (recovered.Manifest.Request is null
+                || !string.Equals(
+                    MatchRequestJson.Serialize(_fullMatch.Request),
+                    MatchRequestJson.Serialize(recovered.Manifest.Request),
+                    StringComparison.Ordinal))
+            {
+                throw new SessionTraceException("The recovered trace MatchRequest does not match the supplied match definition.");
+            }
+        }
+        else if (!string.Equals(recovered.Manifest.ScenarioId, _document!.ScenarioId, StringComparison.Ordinal))
+        {
+            throw new SessionTraceException("The recovered trace scenario does not match the supplied scenario.");
+        }
+
+        SessionTraceAgentInfo? expectedAgent = DescribeAgent(_corpAgent);
+        if (recovered.Manifest.Agent is { } recordedAgent
+            && expectedAgent is { } currentAgent
+            && (!string.Equals(recordedAgent.Type, currentAgent.Type, StringComparison.Ordinal)
+                || !string.Equals(recordedAgent.Version, currentAgent.Version, StringComparison.Ordinal)
+                || !string.Equals(recordedAgent.PolicyVersion, currentAgent.PolicyVersion, StringComparison.Ordinal)))
+        {
+            throw new SessionTraceException("The recovered trace opponent agent does not match the supplied agent.");
+        }
+
+        return recovered;
+    }
+
+    private void InitializeSessionTrace(GameState state)
+    {
+        if (string.IsNullOrWhiteSpace(_options.SessionTraceDirectory))
+        {
+            return;
+        }
+
+        _sessionTrace = SessionTrace.CreateNew(
+            _options.SessionTraceDirectory,
+            state,
+            _options.HumanSide,
+            _behaviorCatalog,
+            _runtimeCardCatalog,
+            _fullMatch?.Request,
+            _document?.ScenarioId,
+            DescribeAgent(_corpAgent));
+    }
+
+    private static SessionTraceAgentInfo DescribeAgent(IGameAgent agent)
+    {
+        Type type = agent.GetType();
+        string typeName = type.FullName ?? type.Name;
+        string version = type.GetProperty("AgentVersion")?.GetValue(agent) as string
+            ?? type.Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+            ?? type.Assembly.GetName().Version?.ToString()
+            ?? "unknown";
+        string? policyVersion = agent is FullGameContractAgent ? FullGameContractPolicy.Version : null;
+        return new SessionTraceAgentInfo(typeName, version, policyVersion);
+    }
+
     private async Task HandleSubmitAsync(SubmitCommand command)
     {
         if (_state is null)
         {
             command.Fail(new InvalidOperationException("The match has not been started."));
+            return;
+        }
+
+        if (_recoveredPaused)
+        {
+            ApplyRejection rejection = new(
+                ApplyRejectionCode.InvalidInputState,
+                "The recovered match is paused; call ContinueRecoveredSessionAsync before submitting an action.");
+            MatchSnapshot paused = Publish(
+                Array.Empty<EngineEvent>(),
+                new MatchFeedback(MatchFeedbackKind.Rejected, rejection.Message, rejection.Code),
+                thinking: false);
+            command.Complete(new MatchSubmissionResult(false, paused, rejection));
             return;
         }
 
@@ -430,7 +634,26 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
             return;
         }
 
-        ApplyResult applied = ApplyEngineAction(_state, command.Submission);
+        ApplyResult applied;
+        try
+        {
+            applied = ApplyEngineAction(_state, command.Submission);
+        }
+        catch (SessionTraceException exception)
+        {
+            MatchSnapshot failed = Publish(
+                Array.Empty<EngineEvent>(),
+                new MatchFeedback(
+                    MatchFeedbackKind.AgentFailure,
+                    $"Durable session trace failed; the match stopped: {exception.Message}",
+                    ApplyRejectionCode.InvalidInputState),
+                thinking: false);
+            command.Complete(new MatchSubmissionResult(
+                false,
+                failed,
+                new ApplyRejection(ApplyRejectionCode.InvalidInputState, exception.Message)));
+            throw;
+        }
         if (!applied.Accepted)
         {
             MatchFeedback feedback = new(
@@ -469,9 +692,76 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
     private async Task DriveAgentsAsync()
     {
         while (_state is { } state
-            && state.PendingDecision is { } pending
-            && pending.Owner == state.Players.Single(player => player.Side != _options.HumanSide).Id)
+            && !_recoveredPaused
+            && state.PendingDecision is { } pending)
         {
+            PlayerSide ownerSide = state.GetPlayer(pending.Owner).Side;
+            if (ownerSide == _options.HumanSide)
+            {
+                if (!_options.AutoPassPriority
+                    || pending.LegalActions.Count != 1
+                    || pending.LegalActions[0].Kind != ActionKind.PassPriority)
+                {
+                    return;
+                }
+
+                if (_cancellation.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                ApplyResult applied;
+                try
+                {
+                    LegalAction pass = pending.LegalActions[0];
+                    applied = ApplyEngineAction(
+                        state,
+                        new ActionSubmission(pending.Owner, pending.Id, pending.Revision, pass.Id));
+                }
+                catch (OperationCanceledException) when (_cancellation.IsCancellationRequested)
+                {
+                    Publish(
+                        Array.Empty<EngineEvent>(),
+                        new MatchFeedback(MatchFeedbackKind.Cancelled, "Automatic pass priority was cancelled."),
+                        thinking: false);
+                    return;
+                }
+                catch (Exception exception)
+                {
+                    if (_traceFault is not null)
+                    {
+                        Publish(
+                            Array.Empty<EngineEvent>(),
+                            new MatchFeedback(
+                                MatchFeedbackKind.AgentFailure,
+                                $"Durable session trace failed; the match stopped: {_traceFault.Message}",
+                                ApplyRejectionCode.InvalidInputState),
+                            thinking: false);
+                        throw;
+                    }
+
+                    Publish(
+                        Array.Empty<EngineEvent>(),
+                        new MatchFeedback(MatchFeedbackKind.AgentFailure, exception.Message),
+                        thinking: false);
+                    return;
+                }
+
+                if (!applied.Accepted)
+                {
+                    MatchFeedback feedback = new(
+                        MatchFeedbackKind.Rejected,
+                        applied.Rejection?.Message ?? "The automatic pass-priority action was rejected.",
+                        applied.Rejection?.Code);
+                    Publish(Array.Empty<EngineEvent>(), feedback, thinking: false);
+                    return;
+                }
+
+                _state = applied.State;
+                Publish(applied.Events, feedback: null, thinking: false);
+                continue;
+            }
+
             Publish(Array.Empty<EngineEvent>(), feedback: null, thinking: true);
             // The published snapshot is intentionally Runner-filtered. Corp
             // policy receives its own filtered observation, never the
@@ -510,6 +800,18 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
             }
             catch (Exception exception)
             {
+                if (_traceFault is not null)
+                {
+                    Publish(
+                        Array.Empty<EngineEvent>(),
+                        new MatchFeedback(
+                            MatchFeedbackKind.AgentFailure,
+                            $"Durable session trace failed; the match stopped: {_traceFault.Message}",
+                            ApplyRejectionCode.InvalidInputState),
+                        thinking: false);
+                    throw;
+                }
+
                 Publish(
                     Array.Empty<EngineEvent>(),
                     new MatchFeedback(MatchFeedbackKind.AgentFailure, exception.Message),
@@ -566,6 +868,12 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
         IReadOnlyList<EngineEvent> visibleEvents = _options.HumanSide == PlayerSide.Runner
             ? RunnerEventVisibility.Filter(events, state) : CorpEventVisibility.Filter(events, state);
         IReadOnlyList<EngineEvent> frozenEvents = new ReadOnlyCollection<EngineEvent>(visibleEvents.ToArray());
+        IReadOnlyList<MatchHistoryEntry> history = Array.Empty<MatchHistoryEntry>();
+        if (_historyContext is { } context)
+        {
+            history = _historyProjector.Project(context.Before, view, state, events, context.Actor, context.Action);
+            _historyContext = null;
+        }
         MatchSnapshot snapshot = new(
             Interlocked.Increment(ref _publicationSequence),
             observation,
@@ -576,6 +884,7 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
             _runOutcome)
         {
             ActionCount = state.ActionSequence,
+            History = history,
             SetupDecisionOwnerSide = state.PendingDecision is { Kind: DecisionKind.Setup } pending
                 ? state.GetPlayer(pending.Owner).Side
                 : null,
@@ -609,10 +918,71 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
         return snapshot;
     }
 
-    private ApplyResult ApplyEngineAction(GameState state, ActionSubmission submission) =>
-        _runtimeCardCatalog is null
-            ? GameEngine.Apply(state, submission, _behaviorCatalog)
-            : GameEngine.Apply(state, submission, _behaviorCatalog, _runtimeCardCatalog);
+    private ApplyResult ApplyEngineAction(
+        GameState state,
+        ActionSubmission submission)
+    {
+        if (_traceFault is not null)
+        {
+            throw new SessionTraceException(
+                "The session trace is faulted; no further actions are accepted.",
+                _traceFault);
+        }
+
+        string? traceOperation = null;
+        try
+        {
+            traceOperation = _sessionTrace?.AppendIntent(state, submission);
+        }
+        catch (Exception exception) when (_sessionTrace is not null)
+        {
+            SessionTraceException fault = exception as SessionTraceException
+                ?? new SessionTraceException("The session trace could not record the action intent.", exception);
+            _traceFault = fault;
+            throw fault;
+        }
+
+        PlayerState? actor = state.Players.FirstOrDefault(player => player.Id == submission.Actor);
+        Observation? actorView = actor is null
+            ? null
+            : ObservationBuilder.Build(state, actor.Side, _behaviorCatalog);
+        LegalAction? action = actorView?.LegalActions.FirstOrDefault(candidate => candidate.Id == submission.ActionId);
+        MatchViewModel before = ObservationViewMapper.Build(
+            ObservationBuilder.Build(state, _options.HumanSide, _behaviorCatalog), _metadataResolver, _behaviorCatalog);
+        ApplyResult applied;
+        try
+        {
+            applied = _runtimeCardCatalog is null
+                ? GameEngine.Apply(state, submission, _behaviorCatalog)
+                : GameEngine.Apply(state, submission, _behaviorCatalog, _runtimeCardCatalog);
+            if (traceOperation is not null)
+            {
+                if (applied.Accepted)
+                {
+                    AcceptedActionRecord accepted = applied.AcceptedAction
+                        ?? throw new InvalidOperationException("An accepted ApplyResult must contain an action record.");
+                    _sessionTrace!.AppendAccepted(traceOperation, state, accepted);
+                }
+                else
+                {
+                    ApplyRejection rejection = applied.Rejection
+                        ?? throw new InvalidOperationException("A rejected ApplyResult must contain a rejection.");
+                    _sessionTrace!.AppendRejected(traceOperation, state, submission, rejection);
+                }
+            }
+        }
+        catch (Exception exception) when (_sessionTrace is not null)
+        {
+            SessionTraceException fault = exception as SessionTraceException
+                ?? new SessionTraceException("The session trace could not commit the action result.", exception);
+            _traceFault = fault;
+            throw fault;
+        }
+
+        if (applied.Accepted && actorView is not null && action is not null)
+            _historyContext = (before, actorView.Viewer, action);
+        return applied;
+    }
 
     private static ServerId ResolveServer(GameState state, string reference)
     {
@@ -660,6 +1030,10 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
     }
 
     private sealed class StartCommand : CoordinatorCommand<MatchSnapshot>
+    {
+    }
+
+    private sealed class ContinueRecoveredCommand : CoordinatorCommand<MatchSnapshot>
     {
     }
 

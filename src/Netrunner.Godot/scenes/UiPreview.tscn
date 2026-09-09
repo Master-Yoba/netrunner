@@ -1,0 +1,144 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/UiPreview.cs" id="preview"]
+[ext_resource type="Theme" path="res://themes/M4Theme.tres" id="theme"]
+[ext_resource type="PackedScene" path="res://scenes/components/MatchTable.tscn" id="table"]
+[ext_resource type="PackedScene" path="res://scenes/components/CardViewPreview.tscn" id="card"]
+[ext_resource type="PackedScene" path="res://scenes/components/MatchSetup.tscn" id="setup"]
+[ext_resource type="PackedScene" path="res://scenes/components/CardInspection.tscn" id="inspection"]
+[ext_resource type="PackedScene" path="res://scenes/components/PileBrowser.tscn" id="piles"]
+
+[node name="UiPreview" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("preview")
+theme = ExtResource("theme")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.025, 0.04, 0.055, 1)
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 8
+
+[node name="Content" type="VBoxContainer" parent="Margin"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Instructions" type="Label" parent="Margin/Content"]
+layout_mode = 2
+text = "UI AUTHORING · Synthetic samples · Select the root for seat, density and decision samples. Edit CardAppearance.tres for glow and typography."
+autowrap_mode = 3
+
+[node name="Pages" type="TabContainer" parent="Margin/Content"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Board" type="Control" parent="Margin/Content/Pages"]
+layout_mode = 2
+
+[node name="MatchTable" parent="Margin/Content/Pages/Board" instance=ExtResource("table")]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Cards" type="ScrollContainer" parent="Margin/Content/Pages"]
+layout_mode = 2
+horizontal_scroll_mode = 0
+
+[node name="States" type="HFlowContainer" parent="Margin/Content/Pages/Cards"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+
+[node name="Normal" parent="Margin/Content/Pages/Cards/States" instance=ExtResource("card")]
+layout_mode = 2
+SampleActionable = false
+
+[node name="Actionable" parent="Margin/Content/Pages/Cards/States" instance=ExtResource("card")]
+layout_mode = 2
+
+[node name="Selected" parent="Margin/Content/Pages/Cards/States" instance=ExtResource("card")]
+layout_mode = 2
+SampleActionable = false
+SampleSelected = true
+
+[node name="Target" parent="Margin/Content/Pages/Cards/States" instance=ExtResource("card")]
+layout_mode = 2
+SampleActionable = false
+SampleTarget = true
+
+[node name="Hovered" parent="Margin/Content/Pages/Cards/States" instance=ExtResource("card")]
+layout_mode = 2
+SampleActionable = false
+SampleHovered = true
+
+[node name="CorpBack" parent="Margin/Content/Pages/Cards/States" instance=ExtResource("card")]
+layout_mode = 2
+SampleKnown = false
+SampleActionable = false
+
+[node name="RunnerBack" parent="Margin/Content/Pages/Cards/States" instance=ExtResource("card")]
+layout_mode = 2
+SampleKnown = false
+SampleBackSide = 1
+SampleActionable = false
+
+[node name="Ice" parent="Margin/Content/Pages/Cards/States" instance=ExtResource("card")]
+layout_mode = 2
+SampleIce = true
+
+[node name="HostedCounters" parent="Margin/Content/Pages/Cards/States" instance=ExtResource("card")]
+layout_mode = 2
+SampleHosted = true
+
+[node name="Disabled" parent="Margin/Content/Pages/Cards/States" instance=ExtResource("card")]
+layout_mode = 2
+SampleDisabled = true
+SampleActionable = false
+
+[node name="Setup" type="Control" parent="Margin/Content/Pages"]
+layout_mode = 2
+
+[node name="MatchSetup" parent="Margin/Content/Pages/Setup" instance=ExtResource("setup")]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Inspection" type="Control" parent="Margin/Content/Pages"]
+layout_mode = 2
+
+[node name="CardInspection" parent="Margin/Content/Pages/Inspection" instance=ExtResource("inspection")]
+layout_mode = 1
+
+[node name="Piles" type="Control" parent="Margin/Content/Pages"]
+layout_mode = 2
+
+[node name="PileBrowser" parent="Margin/Content/Pages/Piles" instance=ExtResource("piles")]
+layout_mode = 1

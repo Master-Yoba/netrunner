@@ -29,11 +29,11 @@ public partial class Main
 		bool officialContent = false;
 		bool requireOfficialContent = false;
 		bool zoomFocus = false;
-		bool layout1280x720 = false;
+		bool layout1920x1080 = false;
 		bool layout2560x1440 = false;
-		bool focus1280x720 = false;
+		bool focus1920x1080 = false;
 		bool focus2560x1440 = false;
-		bool scroll1280x720 = false;
+		bool scroll1920x1080 = false;
 		bool scroll2560x1440 = false;
 		bool screenshotRequested = false;
 		bool screenshotSaved = false;
@@ -246,20 +246,20 @@ public partial class Main
 					null,
 					["MATCH OUTCOME", "New match"]),
 			];
-			Slice48ResolutionEvidence layout1280Evidence = await CheckSlice48SurfaceLayoutsAsync(
-				new Vector2I(1280, 720),
+			Slice48ResolutionEvidence layout1920Evidence = await CheckSlice48SurfaceLayoutsAsync(
+				new Vector2I(1920, 1080),
 				surfaces);
-			layout1280x720 = layout1280Evidence.Layout;
-			focus1280x720 = layout1280Evidence.FocusOrder;
-			scroll1280x720 = layout1280Evidence.ScrollReachability;
+			layout1920x1080 = layout1920Evidence.Layout;
+			focus1920x1080 = layout1920Evidence.FocusOrder;
+			scroll1920x1080 = layout1920Evidence.ScrollReachability;
 			Slice48ResolutionEvidence layout2560Evidence = await CheckSlice48SurfaceLayoutsAsync(
 				new Vector2I(2560, 1440),
 				surfaces);
 			layout2560x1440 = layout2560Evidence.Layout;
 			focus2560x1440 = layout2560Evidence.FocusOrder;
 			scroll2560x1440 = layout2560Evidence.ScrollReachability;
-			focusOrder &= focus1280x720 && focus2560x1440;
-			scrollContainment &= scroll1280x720 && scroll2560x1440;
+			focusOrder &= focus1920x1080 && focus2560x1440;
+			scrollContainment &= scroll1920x1080 && scroll2560x1440;
 
 			bool passed = setup
 				&& fiveCardHand
@@ -275,7 +275,7 @@ public partial class Main
 				&& scrollContainment
 				&& metadata
 				&& zoomFocus
-				&& layout1280x720
+				&& layout1920x1080
 				&& layout2560x1440
 				&& screenshotSaved;
 			GD.Print(
@@ -292,17 +292,17 @@ public partial class Main
 				+ $"metadata_mode={_metadataSnapshot.Mode} "
 				+ $"metadata_cards={_metadataSnapshot.CardCount} "
 				+ $"focus_order={FormatSlice48Bool(focusOrder)} "
-				+ $"focus_1280x720={FormatSlice48Bool(focus1280x720)} "
+				+ $"focus_1920x1080={FormatSlice48Bool(focus1920x1080)} "
 				+ $"focus_2560x1440={FormatSlice48Bool(focus2560x1440)} "
 				+ $"reduced_motion={FormatSlice48Bool(reducedMotion)} "
 				+ $"non_color={FormatSlice48Bool(nonColorCues)} "
 				+ $"scroll_containment={FormatSlice48Bool(scrollContainment)} "
-				+ $"scroll_1280x720={FormatSlice48Bool(scroll1280x720)} "
+				+ $"scroll_1920x1080={FormatSlice48Bool(scroll1920x1080)} "
 				+ $"scroll_2560x1440={FormatSlice48Bool(scroll2560x1440)} "
 				+ $"metadata={FormatSlice48Bool(metadata)} "
 				+ $"metadata_markup_probe={FormatSlice48Bool(metadataMarkupProbe)} "
 				+ $"zoom_focus={FormatSlice48Bool(zoomFocus)} "
-				+ $"layout_1280x720={FormatSlice48Bool(layout1280x720)} "
+				+ $"layout_1920x1080={FormatSlice48Bool(layout1920x1080)} "
 				+ $"layout_2560x1440={FormatSlice48Bool(layout2560x1440)}");
 			GD.Print(
 				$"M4_SLICE48_UX_SCREENSHOT requested={FormatSlice48Bool(screenshotRequested)} "
@@ -326,17 +326,17 @@ public partial class Main
 				+ $"metadata_mode={_metadataSnapshot.Mode} "
 				+ $"metadata_cards={_metadataSnapshot.CardCount} "
 				+ $"focus_order={FormatSlice48Bool(focusOrder)} "
-				+ $"focus_1280x720={FormatSlice48Bool(focus1280x720)} "
+				+ $"focus_1920x1080={FormatSlice48Bool(focus1920x1080)} "
 				+ $"focus_2560x1440={FormatSlice48Bool(focus2560x1440)} "
 				+ $"reduced_motion={FormatSlice48Bool(reducedMotion)} "
 				+ $"non_color={FormatSlice48Bool(nonColorCues)} "
 				+ $"scroll_containment={FormatSlice48Bool(scrollContainment)} "
-				+ $"scroll_1280x720={FormatSlice48Bool(scroll1280x720)} "
+				+ $"scroll_1920x1080={FormatSlice48Bool(scroll1920x1080)} "
 				+ $"scroll_2560x1440={FormatSlice48Bool(scroll2560x1440)} "
 				+ $"metadata={FormatSlice48Bool(metadata)} "
 				+ $"metadata_markup_probe={FormatSlice48Bool(metadataMarkupProbe)} "
 				+ $"zoom_focus={FormatSlice48Bool(zoomFocus)} "
-				+ $"layout_1280x720={FormatSlice48Bool(layout1280x720)} "
+				+ $"layout_1920x1080={FormatSlice48Bool(layout1920x1080)} "
 				+ $"layout_2560x1440={FormatSlice48Bool(layout2560x1440)} "
 				+ $"screenshot={FormatSlice48Bool(screenshotSaved)} "
 				+ $"error={exception.Message.Replace('\n', ' ').Replace('\r', ' ')}");

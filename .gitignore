@@ -31,3 +31,7 @@ src/Netrunner.Godot/.godot/
 .DS_Store
 Thumbs.db
 *~
+
+# Local reference screenshots contain third-party card artwork.
+/chiriboga.png
+/docs/evidence/m4-9/reference/chiriboga.png

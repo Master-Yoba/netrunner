@@ -63,7 +63,7 @@ public partial class TextCardControl : PanelContainer
 		MouseFilter = MouseFilterEnum.Stop;
 		FocusMode = FocusModeEnum.All;
 		TooltipText = "Inspect card details; press Enter or Space to select.";
-		CustomMinimumSize = new Vector2(116, 92);
+		CustomMinimumSize = new Vector2(174, 138);
 
 		var content = new VBoxContainer
 		{

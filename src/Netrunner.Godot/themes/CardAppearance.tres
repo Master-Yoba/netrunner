@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="CardAppearance" format=3 uid="uid://ujwfui8ew4ra"]
+
+[ext_resource type="Script" uid="uid://e6ju0sn5k22a" path="res://resources/CardAppearance.cs" id="1_card_appearance"]
+
+[resource]
+resource_name = "CardAppearance"
+script = ExtResource("1_card_appearance")
+GlowOuterExtent = 12.0
+GlowOpacity = 0.5

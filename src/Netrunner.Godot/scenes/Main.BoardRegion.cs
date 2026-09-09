@@ -305,7 +305,7 @@ public partial class Main
 						foreach (CardViewModel child in children)
 						{
 							TextCardControl childControl = MakeCard(child);
-							childControl.CustomMinimumSize = new Vector2(104, 78);
+							childControl.CustomMinimumSize = new Vector2(156, 117);
 							iceSlot.AddChild(childControl);
 						}
 					}

@@ -1,0 +1,1445 @@
+using Godot;
+using Netrunner.Core;
+using Netrunner.Match;
+
+namespace Netrunner.GodotClient;
+
+/// <summary>
+/// Spatial presentation of one filtered match observation.
+///
+/// This control owns only presentation state. It does not know how an action
+/// is issued and it never reaches into Core. The parent can listen to the
+/// card/server events and map the selected presentation handle to its current
+/// legal action set.
+/// </summary>
+[Tool]
+public partial class GameTableControl : Control
+{
+	private static readonly Color WarningColor = new(0.98f, 0.76f, 0.37f);
+	private static readonly Color AccentColor = new(0.43f, 0.94f, 0.72f);
+	private static readonly Color MutedColor = new(0.62f, 0.76f, 0.75f);
+	public const string BoardScenePath = "res://scenes/components/GameBoard.tscn";
+	public const string BoardLayoutPath = "res://themes/BoardLayout.tres";
+	public enum PreviewDensity { Off, Empty, Normal, Dense }
+	private enum CardSizeRole { CompactPortrait, Ice, HostedPortrait, FullPortrait }
+
+	private readonly Dictionary<string, TableCardControl> _cards = new(StringComparer.Ordinal);
+	private readonly Dictionary<string, CardViewModel?> _cardModels = new(StringComparer.Ordinal);
+	private readonly Dictionary<string, ServerLaneParts> _serverLanes = new(StringComparer.Ordinal);
+	private readonly Dictionary<string, Control> _rigSlots = new(StringComparer.Ordinal);
+	private readonly HashSet<string> _activeRigSlots = new(StringComparer.Ordinal);
+	private readonly Dictionary<string, string> _serverDisplayNames = new(StringComparer.Ordinal);
+	private readonly Dictionary<string, ServerKind> _serverKinds = new(StringComparer.Ordinal);
+	private readonly HashSet<string> _activeCardKeys = new(StringComparer.Ordinal);
+	private readonly Dictionary<string, TableCardControl> _visibleCards = new(StringComparer.Ordinal);
+	private readonly Dictionary<string, CardSizeIntent> _cardSizeIntents = new(StringComparer.Ordinal);
+	private readonly Dictionary<string, (CardAppearance Appearance, Action Handler)> _cardAppearanceHandlers = new(StringComparer.Ordinal);
+
+	private MatchViewModel? _pendingView;
+	private string? _lastBoardFingerprint;
+	private BoardLayout? _boardLayout;
+	private bool _boardLayoutConnected;
+	private bool _previewDirty;
+	private VBoxContainer _tableLayout = null!;
+	private HBoxContainer _corpStrip = null!;
+	private HBoxContainer _serverLaneRow = null!;
+	private HBoxContainer _runnerRigRow = null!;
+	private HBoxContainer _localHandRow = null!;
+	private ScrollContainer _serverScroll = null!;
+	private ScrollContainer _runnerRigScroll = null!;
+	private ScrollContainer _localHandScroll = null!;
+	private Label _turnLabel = null!;
+	private Label _runLabel = null!;
+	private Label _corpResources = null!;
+	private Label _runnerResources = null!;
+	private Label _corpHandCaption = null!;
+	private Label _runnerHandCaption = null!;
+	private Label _localHandCaption = null!;
+	private PanelContainer _runnerIdentitySlot = null!;
+	private Label _tableHint = null!;
+	private Label _corpScoreLabel = null!;
+	private Label _runnerScoreLabel = null!;
+	private Button _corpDeckPile = null!;
+	private Button _corpArchivesPile = null!;
+	private Button _runnerDeckPile = null!;
+	private Button _runnerHeapPile = null!;
+	private string? _selection;
+	private string? _selectedServer;
+	private IReadOnlySet<string> _targets = new HashSet<string>(StringComparer.Ordinal);
+	private IReadOnlySet<string> _actionableSources = new HashSet<string>(StringComparer.Ordinal);
+	private int _nextRemoteDisplayNumber = 1;
+	private bool _shellBuilt;
+	private string? _lastRunFocus;
+	private PreviewDensity _previewMode;
+	private PlayerSide _previewSeat = PlayerSide.Runner;
+
+	/// <summary>
+	/// Shared authored board geometry. Card footprints are derived from each
+	/// card's CardAppearance and the scale intent in this resource.
+	/// </summary>
+	[ExportGroup("Board authoring")]
+	[Export]
+	public BoardLayout BoardLayout
+	{
+		get => _boardLayout ??= LoadDefaultBoardLayout();
+		set
+		{
+			var next = value ?? LoadDefaultBoardLayout();
+			if (ReferenceEquals(_boardLayout, next))
+			{
+				return;
+			}
+
+			DisconnectBoardLayout();
+			_boardLayout = next;
+			ConnectBoardLayout();
+			ApplyBoardLayout();
+		}
+	}
+
+	/// <summary>Compatibility alias used by board-authoring helpers.</summary>
+	public BoardLayout Layout => BoardLayout;
+
+	[Export]
+	public PreviewDensity PreviewMode
+	{
+		get => _previewMode;
+		set
+		{
+			if (_previewMode == value)
+			{
+				return;
+			}
+
+			_previewMode = value;
+			_previewDirty = true;
+			if (IsInsideTree())
+			{
+				SetProcess(Engine.IsEditorHint() && value != PreviewDensity.Off);
+			}
+		}
+	}
+
+	[Export]
+	public PlayerSide PreviewSeat
+	{
+		get => _previewSeat;
+		set
+		{
+			if (_previewSeat == value)
+			{
+				return;
+			}
+
+			_previewSeat = value;
+			_previewDirty = true;
+			if (IsInsideTree() && Engine.IsEditorHint() && _previewMode != PreviewDensity.Off)
+			{
+				SetProcess(true);
+			}
+		}
+	}
+
+	/// <summary>Raised with an engine-visible card handle when a card is selected.</summary>
+	public event Action<string>? CardSelected;
+
+	/// <summary>Raised with an engine-visible card handle when a card is inspected.</summary>
+	public event Action<string>? CardInspected;
+
+	/// <summary>Raised when a known card enters or leaves mouse/focus interaction.</summary>
+	public event Action<TableCardControl, bool>? CardHoverChanged;
+
+	/// <summary>
+	/// Raised with a server or public zone handle when a lane or pile is clicked.
+	/// Zone handles are prefixed with <c>zone:</c>; server handles remain the
+	/// supplied opaque presentation reference.
+	/// </summary>
+	public event Action<string>? ServerSelected;
+
+	/// <summary>
+	/// All card controls currently represented on the board. Keys are visible
+	/// card IDs for known cards and stable slot handles for face-down cards.
+	/// Hidden IDs are never used as display text.
+	/// </summary>
+	public IReadOnlyDictionary<string, TableCardControl> VisibleCards => _visibleCards;
+
+	/// <summary>
+	/// Renders a new immutable observation into the persistent table shell.
+	/// Thinking-only publications leave the existing controls in place; card
+	/// controls are updated only when their viewer-safe presentation changed.
+	/// </summary>
+	public void Render(MatchViewModel view)
+	{
+		ArgumentNullException.ThrowIfNull(view);
+		_pendingView = view;
+		if (!_shellBuilt)
+		{
+			if (IsInsideTree())
+			{
+				BuildShell();
+			}
+			return;
+		}
+
+		RenderView(view);
+	}
+
+	/// <summary>Sets the presentation selection without submitting an action.</summary>
+	public void SetSelection(string? cardId)
+	{
+		_selection = string.IsNullOrWhiteSpace(cardId) ? null : cardId;
+		ApplySelectionAndTargets();
+	}
+
+	/// <summary>Marks viewer-safe legal targets without inferring any new ones.</summary>
+	public void SetTargets(IReadOnlySet<string> targets)
+	{
+		ArgumentNullException.ThrowIfNull(targets);
+		_targets = targets;
+		ApplySelectionAndTargets();
+	}
+
+	/// <summary>
+	/// Marks only card handles that occur as the source of a currently issued
+	/// action. The table never infers availability from card metadata.
+	/// </summary>
+	public void SetActionableSources(IReadOnlySet<string> sources)
+	{
+		ArgumentNullException.ThrowIfNull(sources);
+		_actionableSources = sources;
+		ApplySelectionAndTargets();
+	}
+
+	/// <summary>Marks the selected server lane without committing an action.</summary>
+	public void SetSelectedServer(string? serverId)
+	{
+		_selectedServer = string.IsNullOrWhiteSpace(serverId) ? null : serverId;
+		ApplyServerSelection();
+	}
+
+	/// <summary>
+	/// Returns the stable display name assigned to a server. Remote labels are
+	/// allocated once and remain stable when another remote disappears.
+	/// </summary>
+	public string GetServerDisplayName(string serverId)
+	{
+		if (string.IsNullOrWhiteSpace(serverId))
+		{
+			return "Server";
+		}
+
+		if (_serverKinds.TryGetValue(serverId, out ServerKind knownKind)
+			&& knownKind != ServerKind.Remote)
+		{
+			// The engine's central-server kind is authoritative. Rewriting the
+			// cached value also repairs a label that was allocated before the
+			// server appeared in an observation.
+			string authoritative = DisplayNameForKind(knownKind, 0);
+			_serverDisplayNames[serverId] = authoritative;
+			return authoritative;
+		}
+
+		if (_serverDisplayNames.TryGetValue(serverId, out string? existing))
+		{
+			return existing;
+		}
+
+		// A caller may ask for the run label before the server list has been
+		// reconciled. An unknown ID must not consume a remote ordinal.
+		return "Server";
+	}
+
+	public static GameTableControl Create()
+	{
+		PackedScene? scene = GD.Load<PackedScene>(BoardScenePath);
+		if (scene is null)
+		{
+			string message = $"Production board scene is missing: {BoardScenePath}";
+			GD.PushError(message);
+			throw new InvalidOperationException(message);
+		}
+
+		return scene.Instantiate<GameTableControl>();
+	}
+
+	public override void _Ready()
+	{
+		BuildShell();
+		if (_pendingView is { } view)
+		{
+			RenderView(view);
+		}
+		else if (Engine.IsEditorHint() && _previewMode != PreviewDensity.Off)
+		{
+			_previewDirty = true;
+			SetProcess(true);
+			RefreshEditorPreview();
+		}
+	}
+
+	public override void _EnterTree()
+	{
+		ConnectBoardLayout();
+		foreach ((string identity, TableCardControl card) in _cards)
+		{
+			AttachCard(card);
+			ConnectCardAppearance(identity, card);
+			ApplyCardDisplaySize(identity);
+		}
+		ApplyBoardLayout();
+	}
+
+	public override void _Process(double delta)
+	{
+		if (Engine.IsEditorHint() && _previewDirty && _shellBuilt)
+		{
+			RefreshEditorPreview();
+		}
+	}
+
+	public override void _ExitTree()
+	{
+		DisconnectBoardLayout();
+		StopMotion();
+		foreach ((string identity, TableCardControl card) in _cards.Select(pair => (pair.Key, pair.Value)).ToArray())
+		{
+			// The board can leave and re-enter the tree while an editor preview or
+			// host scene is rebuilt. Drop callbacks, but retain each card's sizing
+			// intent so re-entry can reconnect and refresh the same controls.
+			DetachCardAppearance(identity, clearIntent: false);
+			DetachCard(card);
+		}
+	}
+
+	private void BuildShell()
+	{
+		if (_shellBuilt)
+		{
+			return;
+		}
+
+		// Main still has a compatibility path that constructs this control with
+		// `new`. Move the authored children from the production PackedScene into
+		// that instance so there is one layout definition and no duplicate tree.
+		if (!TryBindAuthoredShell())
+		{
+			TransferAuthoredShell();
+		}
+
+		if (!TryBindAuthoredShell())
+		{
+			GD.PushError("GameTableControl requires the authored GameBoard scene tree.");
+			return;
+		}
+
+		_shellBuilt = true;
+		MouseFilter = MouseFilterEnum.Ignore;
+		FocusMode = FocusModeEnum.None;
+		ClipContents = true;
+		ConnectAuthoredZoneButtons();
+		ConnectBoardLayout();
+		ApplyBoardLayout();
+	}
+
+	private void ConnectAuthoredZoneButtons()
+	{
+		_corpDeckPile.Pressed += () => ServerSelected?.Invoke("zone:corp-deck");
+		_corpArchivesPile.Pressed += () => ServerSelected?.Invoke("zone:corp-archives");
+		_runnerDeckPile.Pressed += () => ServerSelected?.Invoke("zone:runner-deck");
+		_runnerHeapPile.Pressed += () => ServerSelected?.Invoke("zone:runner-heap");
+		Button? corpScored = GetNodeOrNull<Button>("Surface/Margins/Layout/CorpStrip/Content/CorpScored");
+		Button? runnerScored = GetNodeOrNull<Button>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/Scored");
+		if (corpScored is not null)
+		{
+			corpScored.Pressed += () => ServerSelected?.Invoke("zone:corp-score");
+		}
+		if (runnerScored is not null)
+		{
+			runnerScored.Pressed += () => ServerSelected?.Invoke("zone:runner-score");
+		}
+	}
+
+	private bool TryBindAuthoredShell()
+	{
+		_tableLayout = GetNodeOrNull<VBoxContainer>("Surface/Margins/Layout")!;
+		_corpStrip = GetNodeOrNull<HBoxContainer>("Surface/Margins/Layout/CorpStrip/Content")!;
+		_serverScroll = GetNodeOrNull<ScrollContainer>("Surface/Margins/Layout/ServerField/Content/Scroll")!;
+		_serverLaneRow = GetNodeOrNull<HBoxContainer>("Surface/Margins/Layout/ServerField/Content/Scroll/Lanes")!;
+		_runnerRigScroll = GetNodeOrNull<ScrollContainer>("Surface/Margins/Layout/RunnerField/Content/Rig/Content/Scroll")!;
+		_runnerRigRow = GetNodeOrNull<HBoxContainer>("Surface/Margins/Layout/RunnerField/Content/Rig/Content/Scroll/Cards")!;
+		_localHandScroll = GetNodeOrNull<ScrollContainer>("Surface/Margins/Layout/RunnerField/Content/LocalHand/Content/Scroll")!;
+		_localHandRow = GetNodeOrNull<HBoxContainer>("Surface/Margins/Layout/RunnerField/Content/LocalHand/Content/Scroll/Cards")!;
+		_turnLabel = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/Turn")!;
+		_runLabel = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/Run")!;
+		_corpResources = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/Resources")!;
+		_runnerResources = GetNodeOrNull<Label>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/Resources")!;
+		_corpHandCaption = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/HQ")!;
+		_runnerHandCaption = GetNodeOrNull<Label>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/HandCaption")!;
+		_localHandCaption = GetNodeOrNull<Label>("Surface/Margins/Layout/RunnerField/Content/LocalHand/Content/Heading/Caption")!;
+		_runnerIdentitySlot = GetNodeOrNull<PanelContainer>("Surface/Margins/Layout/RunnerField/Content/Identity")!;
+		_tableHint = GetNodeOrNull<Label>("Surface/Margins/Layout/Hint")!;
+		_corpScoreLabel = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/Score")!;
+		_runnerScoreLabel = GetNodeOrNull<Label>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/Score")!;
+		_corpDeckPile = GetNodeOrNull<Button>("Surface/Margins/Layout/CorpStrip/Content/CorpDeck")!;
+		_corpArchivesPile = GetNodeOrNull<Button>("Surface/Margins/Layout/CorpStrip/Content/CorpArchives")!;
+		_runnerDeckPile = GetNodeOrNull<Button>("Surface/Margins/Layout/RunnerField/Content/Deck")!;
+		_runnerHeapPile = GetNodeOrNull<Button>("Surface/Margins/Layout/RunnerField/Content/Discard")!;
+
+		return _tableLayout is not null
+			&& _corpStrip is not null
+			&& _serverScroll is not null
+			&& _serverLaneRow is not null
+			&& _runnerRigScroll is not null
+			&& _runnerRigRow is not null
+			&& _localHandScroll is not null
+			&& _localHandRow is not null
+			&& _turnLabel is not null
+			&& _runLabel is not null
+			&& _corpResources is not null
+			&& _runnerResources is not null
+			&& _corpHandCaption is not null
+			&& _runnerHandCaption is not null
+			&& _localHandCaption is not null
+			&& _runnerIdentitySlot is not null
+			&& _tableHint is not null
+			&& _corpScoreLabel is not null
+			&& _runnerScoreLabel is not null
+			&& _corpDeckPile is not null
+			&& _corpArchivesPile is not null
+			&& _runnerDeckPile is not null
+			&& _runnerHeapPile is not null;
+	}
+
+	private void TransferAuthoredShell()
+	{
+		PackedScene? scene = GD.Load<PackedScene>(BoardScenePath);
+		if (scene is null)
+		{
+			return;
+		}
+
+		Node? template = scene.Instantiate();
+		if (template is not GameTableControl templateBoard)
+		{
+			template?.Free();
+			return;
+		}
+
+		if (_boardLayout is null)
+		{
+			_boardLayout = templateBoard.BoardLayout;
+		}
+
+		foreach (Node child in template.GetChildren().ToArray())
+		{
+			template.RemoveChild(child);
+			AddChild(child);
+		}
+
+		template.Free();
+	}
+
+	private static BoardLayout LoadDefaultBoardLayout()
+	{
+		BoardLayout? layout = GD.Load<BoardLayout>(BoardLayoutPath);
+		if (layout is not null)
+		{
+			return layout;
+		}
+
+		GD.PushError($"Shared board layout resource is missing: {BoardLayoutPath}");
+		return new BoardLayout();
+	}
+
+	private void ConnectBoardLayout()
+	{
+		if (!IsInsideTree() || _boardLayoutConnected || _boardLayout is null || !GodotObject.IsInstanceValid(_boardLayout))
+		{
+			return;
+		}
+
+		_boardLayout.Changed += HandleBoardLayoutChanged;
+		_boardLayoutConnected = true;
+	}
+
+	private void DisconnectBoardLayout()
+	{
+		if (!_boardLayoutConnected || _boardLayout is null || !GodotObject.IsInstanceValid(_boardLayout))
+		{
+			_boardLayoutConnected = false;
+			return;
+		}
+
+		_boardLayout.Changed -= HandleBoardLayoutChanged;
+		_boardLayoutConnected = false;
+	}
+
+	private void HandleBoardLayoutChanged()
+	{
+		ApplyBoardLayout();
+	}
+
+	private void ApplyBoardLayout()
+	{
+		if (!_shellBuilt || _boardLayout is null || !IsInstanceValid(_boardLayout))
+		{
+			return;
+		}
+
+		int regionSpacing = Mathf.RoundToInt(_boardLayout.RegionSpacing);
+		int cardSeparation = Mathf.RoundToInt(_boardLayout.CardSeparation);
+		CustomMinimumSize = new Vector2(_boardLayout.MinimumBoardWidth, CustomMinimumSize.Y);
+		MarginContainer? margins = GetNodeOrNull<MarginContainer>("Surface/Margins");
+		if (margins is not null)
+		{
+			Vector4 outer = _boardLayout.Margins;
+			margins.AddThemeConstantOverride("margin_left", Mathf.RoundToInt(outer.X));
+			margins.AddThemeConstantOverride("margin_top", Mathf.RoundToInt(outer.Y));
+			margins.AddThemeConstantOverride("margin_right", Mathf.RoundToInt(outer.Z));
+			margins.AddThemeConstantOverride("margin_bottom", Mathf.RoundToInt(outer.W));
+		}
+
+		_tableLayout.AddThemeConstantOverride("separation", regionSpacing);
+		_corpStrip.AddThemeConstantOverride("separation", cardSeparation);
+		_serverLaneRow.AddThemeConstantOverride("separation", regionSpacing);
+		_runnerRigRow.AddThemeConstantOverride("separation", cardSeparation);
+		_localHandRow.AddThemeConstantOverride("separation", -Mathf.RoundToInt(_boardLayout.HandOverlap));
+
+		PanelContainer? serverField = GetNodeOrNull<PanelContainer>("Surface/Margins/Layout/ServerField");
+		if (serverField is not null)
+		{
+			serverField.CustomMinimumSize = new Vector2(serverField.CustomMinimumSize.X, _boardLayout.ServerFieldMinimumHeight);
+		}
+		Node? runnerField = GetNodeOrNull<Node>("Surface/Margins/Layout/RunnerField");
+		if (runnerField is Control runnerControl)
+		{
+			runnerControl.CustomMinimumSize = new Vector2(runnerControl.CustomMinimumSize.X, _boardLayout.RunnerFieldMinimumHeight);
+		}
+
+		foreach (ServerLaneParts lane in _serverLanes.Values)
+		{
+			ApplyLaneLayout(lane);
+		}
+		foreach (string identity in _cardSizeIntents.Keys.ToArray())
+		{
+			ApplyCardDisplaySize(identity);
+		}
+	}
+
+	private void ApplyLaneLayout(ServerLaneParts lane)
+	{
+		if (_boardLayout is null || !IsInstanceValid(lane.Panel))
+		{
+			return;
+		}
+
+		lane.Panel.CustomMinimumSize = new Vector2(_boardLayout.LaneWidth, lane.Panel.CustomMinimumSize.Y);
+		lane.RootCards.AddThemeConstantOverride("separation", -Mathf.RoundToInt(_boardLayout.RootCardOverlap));
+		lane.IceCards.AddThemeConstantOverride("separation", Mathf.RoundToInt(_boardLayout.CardSeparation));
+	}
+
+	private void RefreshEditorPreview()
+	{
+		_previewDirty = false;
+		if (!Engine.IsEditorHint() || !_shellBuilt || _previewMode == PreviewDensity.Off)
+		{
+			return;
+		}
+
+		UiPreviewSamples.Density density = (UiPreviewSamples.Density)((int)_previewMode - 1);
+		Render(UiPreviewSamples.Board(_previewSeat, density));
+	}
+
+	private void RenderView(MatchViewModel view)
+	{
+		CacheServerDisplayNames(view.Servers);
+		_turnLabel.Text = FormatTurn(view);
+		_runLabel.Text = FormatRun(view);
+		_corpResources.Text = FormatResources(view.Corp);
+		_runnerResources.Text = $"Credits {view.Runner.Credits} · Clicks {view.Runner.Clicks}\nScore {view.Runner.AgendaPoints} · Tags {view.Runner.Tags?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—"}";
+		_corpScoreLabel.Text = $"Score {view.Corp.AgendaPoints}";
+		if (view.Runner.UsedMemory is { } used && view.Runner.MemoryLimit is { } limit)
+			_runnerResources.Text += $"\nMU {used}/{limit}";
+		_runnerScoreLabel.Text = $"Score pile · {view.RunnerScore.Count} · {view.Runner.AgendaPoints} agenda point(s)";
+		string boardFingerprint = BuildBoardFingerprint(view);
+		if (string.Equals(_lastBoardFingerprint, boardFingerprint, StringComparison.Ordinal))
+		{
+			// Priority/thinking snapshots commonly change only the decision or
+			// legal-action envelope. Keep every physical card and lane node in
+			// place while those publications settle.
+			ApplySelectionAndTargets();
+			return;
+		}
+		var previousCards = CaptureMotionCards();
+		_lastBoardFingerprint = boardFingerprint;
+
+		Dictionary<string, TableCardControl> nextVisibleCards = new(StringComparer.Ordinal);
+		_activeCardKeys.Clear();
+		RenderTopZones(view, nextVisibleCards);
+		RenderServers(view, nextVisibleCards);
+		RenderRunnerRig(view, nextVisibleCards);
+		RenderLocalHand(view, nextVisibleCards);
+
+		foreach (string staleKey in _cards.Keys.Where(key => !_activeCardKeys.Contains(key)).ToArray())
+		{
+			TableCardControl stale = _cards[staleKey];
+			if (stale.GetParent() is Node parent)
+			{
+				parent.RemoveChild(stale);
+			}
+			DetachCard(stale);
+			DetachCardAppearance(staleKey);
+			stale.QueueFree();
+			_cards.Remove(staleKey);
+			_cardModels.Remove(staleKey);
+		}
+
+		_visibleCards.Clear();
+		foreach ((string key, TableCardControl card) in nextVisibleCards)
+		{
+			_visibleCards[key] = card;
+		}
+		ApplySelectionAndTargets();
+		PresentMotion(previousCards, view);
+		EnsureRunVisible(view.Run);
+	}
+
+	private void EnsureRunVisible(RunFocusViewModel? run)
+	{
+		string? focusKey = run is null ? null : $"{run.Id}:{run.Step}:{run.CurrentIceIndex}";
+		if (_lastRunFocus == focusKey) return;
+		_lastRunFocus = focusKey;
+		if (run is null || !_serverLanes.TryGetValue(run.AttackedServerId, out ServerLaneParts? lane)) return;
+		Callable.From(() =>
+		{
+			if (!IsInsideTree() || _lastRunFocus != focusKey) return;
+			_serverScroll.EnsureControlVisible(lane.Panel);
+			string? id = run.CurrentIce?.Id;
+			if (id is null || !_visibleCards.TryGetValue(id, out TableCardControl? ice)) return;
+			for (Node? parent = ice.GetParent(); parent is not null && parent != this; parent = parent.GetParent())
+				if (parent is ScrollContainer scroll) scroll.EnsureControlVisible(ice);
+		}).CallDeferred();
+	}
+
+	private void RenderTopZones(
+		MatchViewModel view,
+		Dictionary<string, TableCardControl> nextVisibleCards)
+	{
+		bool runnerLocal = view.Viewer == PlayerSide.Runner;
+		_corpHandCaption.Text = $"HQ · {view.CorpHand.Count} cards";
+		_runnerHandCaption.Text = runnerLocal
+			? $"Grip · {view.RunnerHand.Count} cards · local"
+			: $"Grip · {view.RunnerHand.Count} cards · opponent backs";
+
+		_corpDeckPile.Text = $"R&D · {view.CorpDeck.Count}";
+		_corpArchivesPile.Text = $"Archives · {view.CorpDiscardCount}";
+		_runnerDeckPile.Text = $"Stack\n{view.RunnerDeck.Count} cards";
+		_runnerHeapPile.Text = $"Heap\n{view.RunnerHeap.Count} cards";
+		UpdatePileTooltip(_corpDeckPile, $"Corp R&D · {view.CorpDeck.Count} face-down cards");
+		UpdatePileTooltip(_corpArchivesPile, $"Corp Archives · {view.CorpDiscardCount} cards · {view.CorpDiscard.Count} visible");
+		UpdatePileTooltip(_runnerDeckPile, $"Runner Stack · {view.RunnerDeck.Count} face-down cards");
+		UpdatePileTooltip(_runnerHeapPile, $"Runner Heap · {view.RunnerHeap.Count} public cards");
+
+		RenderIdentity("runner-identity", _runnerIdentitySlot, view.RunnerIdentity, false, nextVisibleCards);
+		// The upper strip carries the opponent HQ count and the local hand is
+		// rendered in the lower hand lane. The opponent Grip remains a count-only
+		// projection, preserving hidden information at both seats.
+	}
+
+	private void RenderServers(
+		MatchViewModel view,
+		Dictionary<string, TableCardControl> nextVisibleCards)
+	{
+		CacheServerDisplayNames(view.Servers);
+
+		IReadOnlyList<ServerViewModel> ordered = view.Servers
+			.OrderBy(static server => ServerKindRank(server.Kind))
+			.ThenBy(server => server.Kind == ServerKind.Remote
+				? RemoteNumber(_serverDisplayNames[server.Id])
+				: 0)
+			.ToArray();
+		HashSet<string> currentServerIds = ordered.Select(server => server.Id).ToHashSet(StringComparer.Ordinal);
+
+		foreach (ServerViewModel server in ordered)
+		{
+			if (!_serverLanes.TryGetValue(server.Id, out ServerLaneParts? lane))
+			{
+				lane = CreateServerLane(server.Id);
+				_serverLanes[server.Id] = lane;
+			}
+
+			lane.Panel.Visible = true;
+			lane.Header.Text = _serverDisplayNames[server.Id];
+			lane.Header.TooltipText = $"Select {_serverDisplayNames[server.Id]} for contextual actions.";
+			lane.RunMarker.Text = view.Run is { } run
+				&& string.Equals(run.AttackedServerId, server.Id, StringComparison.Ordinal)
+				? $"ACTIVE RUN · {run.FocusLabel}"
+				: string.Empty;
+			lane.RunMarker.Visible = lane.RunMarker.Text.Length > 0;
+			if (lane.RunMarker.Visible && view.Run?.Encounter is { } encounter)
+			{
+				lane.RunMarker.Text = $"▶ {encounter.Ice?.Title ?? "Face-down ICE"} · {encounter.RemainingSubroutines} unbroken";
+				lane.RunMarker.TooltipText = $"Strength {encounter.EffectiveStrength ?? encounter.Ice?.Strength}\n"
+					+ string.Join("\n", encounter.Subroutines.Select(sub => $"Subroutine {sub.Ordinal + 1}: {(sub.Broken ? "broken" : sub.Resolved ? "resolved" : "unbroken")}"));
+			}
+			lane.RootCaption.Text = server.Kind == ServerKind.Remote
+				? "ROOT · remote content"
+				: server.Kind == ServerKind.Archives
+					? "ROOT · public archive"
+					: server.Kind == ServerKind.RAndD
+						? $"R&D DECK · {view.CorpDeck.Count} cards"
+							: "ROOT · HQ";
+			lane.RootCaption.Visible = true;
+			lane.IceCaption.Visible = true;
+
+			ClearNonCardChildren(lane.RootCards);
+			ApplyLaneLayout(lane);
+			ClearNonCardChildren(lane.IceCards);
+			RenderServerRoot(
+				server,
+				lane.RootCards,
+				server.Kind == ServerKind.Headquarters ? view.CorpIdentity : null,
+				server.Kind == ServerKind.Headquarters ? view.CorpHand.Count : null,
+				nextVisibleCards);
+			if (server.Kind == ServerKind.RAndD)
+			{
+				for (int back = 0; back < Math.Min(view.CorpDeck.Count, 1); back++)
+					EnsureCard($"pile:{server.Id}:{back}", lane.RootCards, null, false, nextVisibleCards);
+			}
+			if (server.Kind == ServerKind.Archives && view.CorpDiscardCount > 0)
+				EnsureCard($"archives:{view.CorpDiscard[^1].Id}", lane.RootCards, view.CorpDiscard[^1], false, nextVisibleCards);
+			RenderServerIce(server, lane.IceCards, nextVisibleCards);
+		}
+
+		int visibleIndex = 0;
+		foreach (ServerViewModel server in ordered)
+		{
+			ServerLaneParts lane = _serverLanes[server.Id];
+			if (lane.Panel.GetParent() != _serverLaneRow)
+			{
+				_serverLaneRow.AddChild(lane.Panel);
+			}
+			_serverLaneRow.MoveChild(lane.Panel, visibleIndex++);
+		}
+
+		foreach ((string id, ServerLaneParts lane) in _serverLanes)
+		{
+			if (currentServerIds.Contains(id))
+			{
+				continue;
+			}
+
+			lane.Panel.Visible = false;
+		}
+		ApplyServerSelection();
+	}
+
+	private void RenderServerRoot(
+		ServerViewModel server,
+		HBoxContainer rootCards,
+		CardViewModel? corpIdentity,
+		int? corpHandCount,
+		Dictionary<string, TableCardControl> nextVisibleCards)
+	{
+		int index = 0;
+		if (corpIdentity is not null)
+		{
+			EnsureCard("corp-identity", rootCards, corpIdentity, false, nextVisibleCards);
+		}
+		if (corpHandCount is { } handCount)
+		{
+			Label handLabel = MakeLabel($"{handCount} cards\nin hand", 10, MutedColor);
+			handLabel.CustomMinimumSize = new Vector2(78, 0);
+			handLabel.VerticalAlignment = VerticalAlignment.Center;
+			rootCards.AddChild(handLabel);
+			rootCards.MoveChild(handLabel, corpIdentity is not null ? 1 : 0);
+		}
+		foreach (CardViewModel? card in server.OrderedRoot)
+		{
+			string slot = $"server:{server.Id}:root:{index++}";
+			EnsureCard(slot, rootCards, card, isIce: false, nextVisibleCards);
+		}
+	}
+
+	private void RenderServerIce(
+		ServerViewModel server,
+		VBoxContainer iceCards,
+		Dictionary<string, TableCardControl> nextVisibleCards)
+	{
+		// Match supplies outer-to-inner; the table puts inner ICE at the top
+		// nearest the root and the outermost ICE at the bottom near the Runner.
+		for (int displayIndex = server.OrderedIce.Count - 1; displayIndex >= 0; displayIndex--)
+		{
+			CardViewModel? card = server.OrderedIce[displayIndex];
+			string slot = $"server:{server.Id}:ice:{displayIndex}";
+			string? hostId = card?.Id ?? server.IcePositions.FirstOrDefault(position => position.Index == displayIndex)?.CardId;
+			CardViewModel[] hosted = _pendingView?.RunnerRig.Where(child => hostId is not null && child.HostCardId == hostId).ToArray() ?? [];
+			if (hosted.Length == 0)
+				EnsureCard(slot, iceCards, card, isIce: true, nextVisibleCards);
+			else
+			{
+				Control stack = new()
+				{
+					CustomMinimumSize = HostedStackMinimumSize(),
+					MouseFilter = MouseFilterEnum.Ignore,
+				};
+				iceCards.AddChild(stack);
+				EnsureCard(slot, stack, card, true, nextVisibleCards);
+				for (int index = 0; index < hosted.Length; index++)
+				{
+					TableCardControl attachment = EnsureCard(
+						$"hosted:{hosted[index].Id}",
+						stack,
+						hosted[index],
+						false,
+						nextVisibleCards,
+						PlayerSide.Runner,
+						CardSizeRole.HostedPortrait);
+					attachment.Position = HostedCardPosition(index);
+					attachment.TooltipText = $"Hosted on {card?.Title ?? "face-down ICE"}\n" + attachment.TooltipText;
+				}
+			}
+		}
+	}
+
+	private void RenderRunnerRig(
+		MatchViewModel view,
+		Dictionary<string, TableCardControl> nextVisibleCards)
+	{
+		_activeRigSlots.Clear();
+
+		IReadOnlyList<CardViewModel> cards = view.RunnerRig;
+		var hosted = cards
+			.Where(card => card.HostCardId is { Length: > 0 })
+			.GroupBy(card => card.HostCardId!, StringComparer.Ordinal)
+			.ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.Ordinal);
+		foreach (CardViewModel card in cards.Where(card => string.IsNullOrEmpty(card.HostCardId)))
+		{
+			Control slot = EnsureRigSlot(card.Id);
+			_activeRigSlots.Add(card.Id);
+			ClearRigSlot(slot);
+			RenderHostedSlot(slot, card, hosted.GetValueOrDefault(card.Id) ?? Array.Empty<CardViewModel>(), nextVisibleCards);
+		}
+		foreach (CardViewModel card in cards.Where(card => !string.IsNullOrEmpty(card.HostCardId) && !cards.Any(host => host.Id == card.HostCardId)
+			&& !view.Servers.SelectMany(server => server.OrderedIce).Any(host => host?.Id == card.HostCardId)
+			&& !view.Servers.SelectMany(server => server.IcePositions).Any(host => host.CardId == card.HostCardId)))
+		{
+			_activeRigSlots.Add($"orphan:{card.Id}");
+			Control slot = EnsureRigSlot($"orphan:{card.Id}");
+			ClearRigSlot(slot);
+			RenderHostedSlot(slot, card, Array.Empty<CardViewModel>(), nextVisibleCards);
+		}
+		foreach ((string key, Control slot) in _rigSlots)
+		{
+			slot.Visible = _activeRigSlots.Contains(key);
+		}
+	}
+
+	private Control EnsureRigSlot(string key)
+	{
+		if (!_rigSlots.TryGetValue(key, out Control? slot))
+		{
+			slot = new Control
+			{
+				CustomMinimumSize = RigSlotMinimumSize(),
+				MouseFilter = MouseFilterEnum.Ignore,
+			};
+			_rigSlots[key] = slot;
+		}
+
+		if (slot.GetParent() != _runnerRigRow)
+		{
+			if (slot.GetParent() is Node oldParent)
+			{
+				oldParent.RemoveChild(slot);
+			}
+			_runnerRigRow.AddChild(slot);
+		}
+		return slot;
+	}
+
+	private static void ClearRigSlot(Control slot)
+	{
+		foreach (Node child in slot.GetChildren().ToArray())
+		{
+			slot.RemoveChild(child);
+			if (child is not TableCardControl)
+			{
+				child.QueueFree();
+			}
+		}
+	}
+
+	private void RenderHostedSlot(
+		Control slot,
+		CardViewModel host,
+		IReadOnlyList<CardViewModel> attachments,
+		Dictionary<string, TableCardControl> nextVisibleCards)
+	{
+		TableCardControl hostControl = EnsureCard(
+			$"rig:{host.Id}",
+			slot,
+			host,
+			false,
+			nextVisibleCards,
+			PlayerSide.Runner);
+		hostControl.Position = Vector2.Zero;
+		foreach ((CardViewModel attachment, int index) in attachments.Select((card, index) => (card, index)))
+		{
+			TableCardControl attachmentControl = EnsureCard(
+				$"rig:{host.Id}:hosted:{attachment.Id}",
+				slot,
+				attachment,
+				false,
+				nextVisibleCards,
+				PlayerSide.Runner,
+				CardSizeRole.HostedPortrait);
+			attachmentControl.Position = HostedCardPosition(index);
+			attachmentControl.ZIndex = index + 2;
+		}
+	}
+
+	private void RenderLocalHand(
+		MatchViewModel view,
+		Dictionary<string, TableCardControl> nextVisibleCards)
+	{
+		bool corpLocal = view.Viewer == PlayerSide.Corp;
+		IReadOnlyList<CardViewModel> cards = corpLocal
+			? view.CorpHand.VisibleCards
+			: view.RunnerHand.VisibleCards;
+		string zone = corpLocal ? "corp-hand" : "runner-hand";
+		_localHandCaption.Text = corpLocal
+			? $"LOCAL HAND · HQ · {cards.Count} visible cards"
+			: $"LOCAL HAND · GRIP · {cards.Count} visible cards";
+		HashSet<string> activeHandIds = cards.Select(card => card.Id).ToHashSet(StringComparer.Ordinal);
+		foreach (TableCardControl existing in _localHandRow.GetChildren().OfType<TableCardControl>().ToArray())
+		{
+			if (!activeHandIds.Contains(existing.CardId))
+			{
+				_localHandRow.RemoveChild(existing);
+			}
+		}
+		int displayIndex = 0;
+		foreach (CardViewModel card in cards)
+		{
+			TableCardControl control = EnsureCard(
+				$"{zone}:{card.Id}",
+				_localHandRow,
+				card,
+				false,
+				nextVisibleCards,
+				corpLocal ? PlayerSide.Corp : PlayerSide.Runner);
+			_localHandRow.MoveChild(control, displayIndex++);
+		}
+	}
+
+	private void RenderIdentity(
+		string slot,
+		PanelContainer parent,
+		CardViewModel? card,
+		bool isIce,
+		Dictionary<string, TableCardControl> nextVisibleCards)
+	{
+		foreach (Control child in parent.GetChildren().OfType<Control>().ToArray())
+		{
+			parent.RemoveChild(child);
+			if (child is not TableCardControl)
+			{
+				child.QueueFree();
+			}
+		}
+		if (card is null)
+		{
+			Label label = MakeLabel("Identity\nconcealed", 10, MutedColor);
+			label.HorizontalAlignment = HorizontalAlignment.Center;
+			label.VerticalAlignment = VerticalAlignment.Center;
+			parent.AddChild(label);
+			return;
+		}
+
+		EnsureCard(slot, parent, card, isIce, nextVisibleCards);
+	}
+
+	private TableCardControl EnsureCard(
+		string slot,
+		Control parent,
+		CardViewModel? model,
+		bool isIce,
+		Dictionary<string, TableCardControl> nextVisibleCards,
+		PlayerSide? backSide = null,
+		CardSizeRole sizeRole = CardSizeRole.CompactPortrait)
+	{
+		string identity = model is { Id.Length: > 0 }
+			? $"card:{model.Id}"
+			: $"slot:{slot}";
+		if (!_cards.TryGetValue(identity, out TableCardControl? control))
+		{
+			control = TableCardControl.Create();
+			AttachCard(control);
+			_cards[identity] = control;
+			_cardModels[identity] = null;
+		}
+
+		if (control.GetParent() is Node oldParent && oldParent != parent)
+		{
+			oldParent.RemoveChild(control);
+		}
+		if (control.GetParent() != parent)
+		{
+			parent.AddChild(control);
+		}
+
+		if (!CardsMatch(_cardModels[identity], model))
+		{
+			control.SetCard(model);
+			_cardModels[identity] = model;
+		}
+		control.SetIce(isIce);
+		control.SetBackSide(backSide ?? BackSideForSlot(slot));
+		control.Scale = Vector2.One;
+		SetCardSizeIntent(identity, control, isIce, sizeRole);
+		_activeCardKeys.Add(identity);
+		string publicKey = model?.Id is { Length: > 0 } id ? id : slot;
+		nextVisibleCards[publicKey] = control;
+		return control;
+	}
+
+	private void AttachCard(TableCardControl card)
+	{
+		card.CardSelected += HandleCardSelected;
+		card.CardInspected += HandleCardInspected;
+		card.CardHoverChanged += HandleCardHoverChanged;
+		card.AppearanceReplaced += HandleCardAppearanceReplaced;
+	}
+
+	private void HandleCardAppearanceReplaced(TableCardControl changed)
+	{
+		foreach ((string identity, TableCardControl card) in _cards)
+		{
+			if (!ReferenceEquals(card, changed)) continue;
+			ConnectCardAppearance(identity, card);
+			ApplyCardDisplaySize(identity);
+			break;
+		}
+	}
+
+	private void ConnectCardAppearance(string identity, TableCardControl card)
+	{
+		CardAppearance appearance = card.Appearance;
+		if (_cardAppearanceHandlers.TryGetValue(identity, out (CardAppearance Appearance, Action Handler) existing))
+		{
+			if (ReferenceEquals(existing.Appearance, appearance))
+			{
+				return;
+			}
+
+			DetachCardAppearance(identity, clearIntent: false);
+		}
+
+		Action handler = () => ApplyCardDisplaySize(identity);
+		appearance.Changed += handler;
+		_cardAppearanceHandlers[identity] = (appearance, handler);
+	}
+
+	private void DetachCardAppearance(string identity, bool clearIntent = true)
+	{
+		if (!_cardAppearanceHandlers.TryGetValue(identity, out (CardAppearance Appearance, Action Handler) subscription))
+		{
+			if (clearIntent)
+			{
+				_cardSizeIntents.Remove(identity);
+			}
+			return;
+		}
+
+		if (GodotObject.IsInstanceValid(subscription.Appearance))
+		{
+			subscription.Appearance.Changed -= subscription.Handler;
+		}
+		_cardAppearanceHandlers.Remove(identity);
+		if (clearIntent)
+		{
+			_cardSizeIntents.Remove(identity);
+		}
+	}
+
+	private void SetCardSizeIntent(string identity, TableCardControl control, bool isIce, CardSizeRole role)
+	{
+		ConnectCardAppearance(identity, control);
+		_cardSizeIntents[identity] = new CardSizeIntent(control, isIce, role);
+		ApplyCardDisplaySize(identity);
+	}
+
+	private void ApplyCardDisplaySize(string identity)
+	{
+		if (!_cardSizeIntents.TryGetValue(identity, out CardSizeIntent? intent)
+			|| intent is null
+			|| !GodotObject.IsInstanceValid(intent.Control))
+		{
+			return;
+		}
+
+		Vector2 source = intent.IsIce ? intent.Control.Appearance.IceSize : intent.Control.Appearance.PortraitSize;
+		float scale = intent.IsIce ? 1.0f : intent.Role switch
+		{
+			CardSizeRole.HostedPortrait => BoardLayout.HostedPortraitScale,
+			CardSizeRole.FullPortrait => 1.0f,
+			_ => BoardLayout.CompactPortraitScale,
+		};
+		intent.Control.SetDisplaySize(intent.IsIce ? source * new Vector2(1, BoardLayout.IceHeightScale) : source * scale);
+	}
+
+	private Vector2 HostedCardPosition(int index)
+	{
+		if (_boardLayout is null)
+		{
+			return Vector2.Zero;
+		}
+
+		return _boardLayout.HostedCardOffset + (_boardLayout.HostedCardStep * index);
+	}
+
+	private Vector2 HostedStackMinimumSize()
+	{
+		BoardLayout layout = BoardLayout;
+		CardAppearance? appearance = GD.Load<CardAppearance>(TableCardControl.DefaultAppearancePath);
+		Vector2 ice = (appearance?.IceSize ?? TableCardControl.IceCardSize) * new Vector2(1, layout.IceHeightScale);
+		Vector2 hosted = (appearance?.PortraitSize ?? TableCardControl.PortraitCardSize) * layout.HostedPortraitScale;
+		return new Vector2(layout.LaneWidth, Mathf.Max(ice.Y, hosted.Y) + layout.HostedCardOffset.Y + layout.HostedCardStep.Y);
+	}
+
+	private Vector2 RigSlotMinimumSize()
+	{
+		BoardLayout layout = BoardLayout;
+		CardAppearance? appearance = GD.Load<CardAppearance>(TableCardControl.DefaultAppearancePath);
+		Vector2 card = (appearance?.PortraitSize ?? TableCardControl.PortraitCardSize) * layout.CompactPortraitScale;
+		return new Vector2(card.X, card.Y + layout.HostedCardOffset.Y + layout.HostedCardStep.Y);
+	}
+
+	private static PlayerSide BackSideForSlot(string slot)
+	{
+		return slot.StartsWith("runner-", StringComparison.Ordinal)
+			|| slot.StartsWith("rig:", StringComparison.Ordinal)
+			|| slot.StartsWith("hosted:", StringComparison.Ordinal)
+			? PlayerSide.Runner
+			: PlayerSide.Corp;
+	}
+
+	private ServerLaneParts CreateServerLane(string serverId)
+	{
+		PackedScene? scene = GD.Load<PackedScene>("res://scenes/components/ServerLane.tscn");
+		if (scene is null)
+		{
+			throw new InvalidOperationException("Production server lane scene is missing.");
+		}
+
+		PanelContainer panel = scene.Instantiate<PanelContainer>();
+		Button header = panel.GetNode<Button>("Content/Header");
+		Label runMarker = panel.GetNode<Label>("Content/RunMarker");
+		Label rootCaption = panel.GetNode<Label>("Content/RootCaption");
+		HBoxContainer rootCards = panel.GetNode<HBoxContainer>("Content/RootCards");
+		Label iceCaption = panel.GetNode<Label>("Content/IceCaption");
+		VBoxContainer iceCards = panel.GetNode<VBoxContainer>("Content/IceScroll/IceCards");
+		header.Pressed += () => ServerSelected?.Invoke(serverId);
+		_serverLaneRow.AddChild(panel);
+		ServerLaneParts lane = new(panel, header, runMarker, rootCaption, rootCards, iceCaption, iceCards);
+		ApplyLaneLayout(lane);
+		return lane;
+	}
+
+	private static Label MakeLabel(string text, int fontSize, Color color)
+	{
+		Label label = new()
+		{
+			Text = text,
+			MouseFilter = MouseFilterEnum.Ignore,
+			AutowrapMode = TextServer.AutowrapMode.Off,
+			TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis,
+		};
+		label.AddThemeFontSizeOverride("font_size", fontSize);
+		label.AddThemeColorOverride("font_color", color);
+		return label;
+	}
+
+	private static string FormatResources(PlayerViewModel player)
+	{
+		string tags = player.Tags is { } tagCount ? $" · Tags {tagCount}" : string.Empty;
+		return $"Credits {player.Credits} · Clicks {player.Clicks} · Score {player.AgendaPoints}{tags}";
+	}
+
+	private static string BuildBoardFingerprint(MatchViewModel view)
+	{
+		var parts = new List<string>
+		{
+			$"viewer:{view.Viewer}",
+			$"corpdeck:{view.CorpDeck.Count}",
+			$"runnerdeck:{view.RunnerDeck.Count}",
+			$"corpdiscard:{view.CorpDiscardCount}",
+			$"runnerheap:{view.RunnerHeap.Count}",
+			$"corphand:{view.CorpHand.Count}:{CardsFingerprint(view.CorpHand.VisibleCards)}",
+			$"runnerhand:{view.RunnerHand.Count}:{CardsFingerprint(view.RunnerHand.VisibleCards)}",
+			$"rigrig:{CardsFingerprint(view.RunnerRig)}",
+			$"corpscore:{CardsFingerprint(view.CorpScore)}",
+			$"runnerscore:{CardsFingerprint(view.RunnerScore)}",
+			$"corpid:{CardFingerprint(view.CorpIdentity)}",
+			$"runnerid:{CardFingerprint(view.RunnerIdentity)}",
+			$"run:{RunFingerprint(view.Run)}",
+		};
+		foreach (ServerViewModel server in view.Servers)
+		{
+			parts.Add($"server:{server.Id}:{server.Kind}:{CardsFingerprint(server.OrderedIce)}:{CardsFingerprint(server.OrderedRoot)}");
+		}
+
+		return string.Join("|", parts);
+	}
+
+	private static string RunFingerprint(RunFocusViewModel? run)
+	{
+		if (run is null)
+		{
+			return "none";
+		}
+
+		return string.Join(
+			":",
+			run.Id,
+			run.AttackedServerId,
+			run.Phase,
+			run.Step,
+			run.CurrentIceIndex,
+			CardFingerprint(run.CurrentIce),
+			run.Successful,
+			run.Unsuccessful,
+			run.FocusLabel,
+			run.Access.State,
+			run.RunCredits,
+			run.Encounter?.Id,
+			run.Encounter?.Status,
+			CardFingerprint(run.Encounter?.Ice),
+			run.Encounter?.EffectiveStrength,
+			run.Encounter is { } encounter
+				? string.Join(";", encounter.Subroutines.Select(sub => $"{sub.Ordinal}:{sub.Broken}:{sub.Resolved}"))
+				: string.Empty);
+	}
+
+	private static string CardsFingerprint(IEnumerable<CardViewModel?> cards) =>
+		string.Join(",", cards.Select(CardFingerprint));
+
+	private static string CardFingerprint(CardViewModel? card)
+	{
+		if (card is null)
+		{
+			return "hidden";
+		}
+
+		return string.Join(
+			":",
+			card.IsKnown ? card.Id : "hidden",
+			card.IsKnown ? card.Title : string.Empty,
+			card.IsKnown ? card.Type : string.Empty,
+			card.Rezzed,
+			card.AdvancementCounters,
+			card.HostCardId ?? string.Empty,
+			string.Join(";", card.CounterChips),
+			card.AbilityCue ?? string.Empty,
+			card.FirstXUseCue ?? string.Empty);
+	}
+
+	private static string FormatTurn(MatchViewModel view)
+	{
+		if (!view.Turn.IsAvailable)
+		{
+			return "TURN · awaiting public timing";
+		}
+
+		string turn = view.Turn.TurnNumber is { } number ? $"Turn {number}" : "Turn";
+		string active = view.Turn.ActiveSide is { } side ? side.ToString() : "side unavailable";
+		string phase = view.Turn.Phase is { } currentPhase ? currentPhase.ToString() : "phase unavailable";
+		return $"{turn} · {active} · {phase}";
+	}
+
+	private string FormatRun(MatchViewModel view)
+	{
+		if (view.Run is not { } run)
+		{
+			return "No active run";
+		}
+
+		return $"RUN · {GetServerDisplayName(run.AttackedServerId)} · {run.FocusLabel}";
+	}
+
+	private void CacheServerDisplayNames(IReadOnlyList<ServerViewModel> servers)
+	{
+		foreach (ServerViewModel server in servers)
+		{
+			_serverKinds[server.Id] = server.Kind;
+			if (server.Kind != ServerKind.Remote)
+			{
+				// Central names come from the server kind on every observation. This
+				// prevents a prior fallback from surviving once the authoritative
+				// server list is available.
+				_serverDisplayNames[server.Id] = DisplayNameForKind(server.Kind, 0);
+			}
+			else if (!_serverDisplayNames.ContainsKey(server.Id))
+			{
+				_serverDisplayNames[server.Id] = AllocateServerDisplayName(server);
+			}
+		}
+	}
+
+	private string AllocateServerDisplayName(ServerViewModel server)
+	{
+		if (server.Kind != ServerKind.Remote)
+		{
+			return DisplayNameForKind(server.Kind, 0);
+		}
+
+		// Allocate remotes in first-observed order, then keep the mapping even if
+		// a server is removed. This prevents “Remote 2” becoming “Remote 1”.
+		int ordinal = _nextRemoteDisplayNumber++;
+		return $"Remote {ordinal}";
+	}
+
+	private static string DisplayNameForKind(ServerKind kind, int remoteNumber)
+	{
+		return kind switch
+		{
+			ServerKind.Headquarters => "HQ",
+			ServerKind.RAndD => "R&D",
+			ServerKind.Archives => "Archives",
+			ServerKind.Remote => $"Remote {remoteNumber}",
+			_ => "Server",
+		};
+	}
+
+	private static int ServerKindRank(ServerKind kind) => kind switch
+	{
+		ServerKind.Archives => 0,
+		ServerKind.RAndD => 1,
+		ServerKind.Headquarters => 2,
+		_ => 3,
+	};
+
+	private static int RemoteNumber(string displayName)
+	{
+		int separator = displayName.LastIndexOf(' ');
+		return separator >= 0 && int.TryParse(displayName[(separator + 1)..], out int value)
+			? value
+			: int.MaxValue;
+	}
+
+	private static void UpdatePileTooltip(Button button, string tooltip)
+	{
+		button.TooltipText = $"{tooltip}. Click to inspect the public pile summary.";
+	}
+
+	private void ApplySelectionAndTargets()
+	{
+		foreach ((string key, TableCardControl card) in _cards)
+		{
+			bool selected = _selection is not null
+				&& (string.Equals(key, $"card:{_selection}", StringComparison.Ordinal)
+					|| string.Equals(key, $"slot:{_selection}", StringComparison.Ordinal)
+					|| string.Equals(card.CardId, _selection, StringComparison.Ordinal));
+			bool candidate = _targets.Contains(card.CardId)
+				|| _targets.Contains(key)
+				|| _targets.Contains(key.StartsWith("card:", StringComparison.Ordinal) ? key[5..] : key);
+			bool actionable = _actionableSources.Contains(card.CardId)
+				|| _actionableSources.Contains(key)
+				|| _actionableSources.Contains(key.StartsWith("card:", StringComparison.Ordinal) ? key[5..] : key);
+			card.SetTargetCandidate(candidate);
+			card.SetActionableSource(actionable);
+			card.SetSelected(selected);
+		}
+	}
+
+	private void ApplyServerSelection()
+	{
+		foreach ((string id, ServerLaneParts lane) in _serverLanes)
+		{
+			bool selected = string.Equals(id, _selectedServer, StringComparison.Ordinal);
+			lane.Header.AddThemeColorOverride("font_color", selected ? WarningColor : Colors.White);
+			lane.Header.AddThemeColorOverride("font_hover_color", selected ? WarningColor : AccentColor);
+			lane.Header.TooltipText = selected
+				? $"Selected {_serverDisplayNames.GetValueOrDefault(id, "server")}. Choose a contextual action below."
+				: $"Select {_serverDisplayNames.GetValueOrDefault(id, "server")} for contextual actions.";
+		}
+	}
+
+	private void HandleCardSelected(string cardId)
+	{
+		if (string.IsNullOrWhiteSpace(cardId))
+		{
+			return;
+		}
+
+		_selection = cardId;
+		ApplySelectionAndTargets();
+		CardSelected?.Invoke(cardId);
+	}
+
+	private void HandleCardInspected(string cardId) => CardInspected?.Invoke(cardId);
+
+	private void HandleCardHoverChanged(TableCardControl card, bool active) => CardHoverChanged?.Invoke(card, active);
+
+	private static void ClearNonCardChildren(Node parent)
+	{
+		foreach (Node child in parent.GetChildren().ToArray())
+		{
+			if (child is not TableCardControl)
+			{
+				parent.RemoveChild(child);
+				child.QueueFree();
+			}
+		}
+	}
+
+	private static bool CardsMatch(CardViewModel? left, CardViewModel? right)
+	{
+		if (ReferenceEquals(left, right))
+		{
+			return true;
+		}
+		if (left is null || right is null)
+		{
+			return false;
+		}
+
+		return string.Equals(left.Id, right.Id, StringComparison.Ordinal)
+			&& string.Equals(left.DefinitionId, right.DefinitionId, StringComparison.Ordinal)
+			&& string.Equals(left.Title, right.Title, StringComparison.Ordinal)
+			&& string.Equals(left.Type, right.Type, StringComparison.Ordinal)
+			&& left.IsKnown == right.IsKnown
+			&& left.Rezzed == right.Rezzed
+			&& left.AdvancementCounters == right.AdvancementCounters
+			&& left.Cost == right.Cost
+			&& left.Strength == right.Strength
+			&& left.AgendaPoints == right.AgendaPoints
+			&& left.TrashCost == right.TrashCost
+			&& string.Equals(left.RulesText, right.RulesText, StringComparison.Ordinal)
+			&& string.Equals(left.HostCardId, right.HostCardId, StringComparison.Ordinal)
+			&& left.Subtypes.SequenceEqual(right.Subtypes, StringComparer.Ordinal)
+			&& left.CounterChips.SequenceEqual(right.CounterChips, StringComparer.Ordinal)
+			&& string.Equals(left.AbilityCue, right.AbilityCue, StringComparison.Ordinal)
+			&& string.Equals(left.FirstXUseCue, right.FirstXUseCue, StringComparison.Ordinal);
+	}
+
+	private void DetachCard(TableCardControl card)
+	{
+		card.CardSelected -= HandleCardSelected;
+		card.CardInspected -= HandleCardInspected;
+		card.CardHoverChanged -= HandleCardHoverChanged;
+		card.AppearanceReplaced -= HandleCardAppearanceReplaced;
+	}
+
+	private sealed record ServerLaneParts(
+		PanelContainer Panel,
+		Button Header,
+		Label RunMarker,
+		Label RootCaption,
+		HBoxContainer RootCards,
+		Label IceCaption,
+		VBoxContainer IceCards);
+
+	private sealed record CardSizeIntent(TableCardControl Control, bool IsIce, CardSizeRole Role);
+}

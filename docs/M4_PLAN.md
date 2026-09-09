@@ -346,7 +346,7 @@ is intentionally separate so batch review is not hidden inside stabilization.
 | DATA-401B | Revalidate all four official code/quantity presets against the authenticated runtime catalog and published lists. Basic presets are Catalyst Runner 30 and Syndicate Corp 34; expanded starter+booster presets are Runner 40 and Corp 44. Record provenance and do not invent a 50-card "official" deck. |
 | MATCH-402 | Enable side/preset selection, one mulligan per player in Corp-then-Runner order, restart/new match, and deterministic seed injection for the client and CLI. The client never starts a deck with incomplete behavior coverage. |
 | GATE-401 | `M4_FULL_SMOKE`: teaching preset to a real outcome with scripted human policy versus contract agent, with the agent in each role in separate runs. Full regression includes M1/M2/M3, schema/replay round-trips, card-data/content build validation, 77/77 coverage/checklist, preset validation, and an action-count stall cap with diagnostic snapshot. |
-| UX-401 | Accessibility/layout re-check at 1280×720 and 2560×1440 for setup, five-card hand, dense server/rig, nested choice, discard prompt, run focus and outcome. Verify keyboard focus order, reduced motion, non-color state cues, scroll containment, and readable metadata markup. |
+| UX-401 | Accessibility/layout re-check at 1920×1080 and 2560×1440 for setup, five-card hand, dense server/rig, nested choice, discard prompt, run focus and outcome. Verify keyboard focus order, reduced motion, non-color state cues, scroll containment, and readable metadata markup. |
 
 Exit: the M4 gate (§7) passes. The forecast is gate-driven; the original
 12–18 week milestone should be revised if the primitive audit or content-build
@@ -430,7 +430,7 @@ completed batch with any required field empty fails CARD-401.
 - [x] DATA-401: official basic 30-Runner/34-Corp and expanded 40-Runner/44-Corp
       teaching presets have recorded provenance and load, validate, and play.
 - [x] UI-408: setup screen, identity panel, outcome screen, all choice
-      windows click-first; accessibility re-check at 1280×720 and 2560×1440
+      windows click-first; accessibility re-check at 1920×1080 and 2560×1440
       with full-game content.
 - [x] `docs/M4_PROGRESS.md` complete with evidence and any deviations.
 

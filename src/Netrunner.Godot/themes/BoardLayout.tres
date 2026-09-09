@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="BoardLayout" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://resources/BoardLayout.cs" id="1_board_layout"]
+
+[resource]
+resource_name = "BoardLayout"
+script = ExtResource("1_board_layout")
+LaneWidth = 285.0
+MinimumBoardWidth = 760.0
+RegionSpacing = 9.0
+HandOverlap = 36.0
+CardSeparation = 8.0
+RootCardOverlap = 27.0
+Margins = Vector4(14, 4, 14, 4)
+ServerFieldMinimumHeight = 150.0
+RunnerFieldMinimumHeight = 200.0
+CompactPortraitScale = 0.7
+IceHeightScale = 0.8055556
+HostedPortraitScale = 0.6
+HostedCardOffset = Vector2(33, 27)
+HostedCardStep = Vector2(20, 11)

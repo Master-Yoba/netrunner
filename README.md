@@ -95,6 +95,24 @@ Generate the pinned 77-card snapshot explicitly with:
 present, skips it without network access in a clean clone, and rejects a partial
 snapshot. No official card artwork is downloaded.
 
+To play the card-table client with the provisioned official metadata:
+
+```bash
+make play
+```
+
+Select your side, decks and seed on the setup screen. Click a card or server
+for contextual actions; the right-edge history rail expands into the retained
+match log. Hover/focus inspects a card, and the Inspect button opens full text.
+“Skip animation” preserves history. Use “Copy log” for a filtered playtest report.
+Optional local PNG artwork is loaded only for visible cards from Godot's
+`user://card-art/<card-code>.png`; missing images use the original metadata card
+frames. No artwork is downloaded. The developer view remains available through
+`./scripts/play.sh --diagnostic-ui`.
+
+See [the M4.9 UI plan](docs/M4_9_UI_PLAN.md) and
+[implementation evidence](docs/M4_9_UI_PROGRESS.md).
+
 After `make m4-gate` has built the official content, run a preset directly:
 
 ```bash

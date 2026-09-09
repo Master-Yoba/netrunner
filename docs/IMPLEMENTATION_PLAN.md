@@ -25,6 +25,8 @@ scope progression.
 | M2 | Representative Netrunner run | 5–7 weeks | Run/ICE/break/access path passes timing scenarios |
 | M3 | Native playable micro-decks | 4–6 weeks | The same M2 match is playable through Godot |
 | M4 | Complete Gateway rules/cards | 12–18 weeks | All designs implemented, reviewed, and card-tested |
+| M4.9 | Card-table UI and understandable history | See [UI plan](M4_9_UI_PLAN.md) | Native layout, history/visibility and manual usability gate before M5 |
+| M4.10 | Editor-friendly UI and live visual authoring | Implemented; [user acceptance pending](M4_10_UI_PROGRESS.md) | Reusable production scenes, persistent Inspector styling, safe live previews and manual authoring gate before M5 |
 | M5 | Complete offline solo mode | 6–8 weeks | Both bots finish stress runs; save/resume works |
 | M6 | Safe LLM/hybrid mode | 4–6 weeks | Intent play, constrained actions, timeout/takeover pass |
 | RC | Polish, packaging, QA | 3–5 weeks | Release matrix and all PRD exit criteria pass |
@@ -224,7 +226,7 @@ Deliverables:
   action feedback; drag is optional enhancement only.
 - UI-305: event animation queue, speed controls, reduced motion, and batch skip.
 - UI-306: access/encounter/paid-window focused presentations.
-- UI-307: accessibility pass for non-color cues and 1280×720 through 2560×1440.
+- UI-307: accessibility pass for non-color cues and 1920×1080 through 2560×1440.
 - SLICE-301: match setup screen launches the M2 micro-decks and reaches outcome.
 
 Gate: packaged Linux build plays the M2 slice without CLI; hover/selection is

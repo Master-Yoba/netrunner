@@ -29,6 +29,17 @@ public sealed record MatchViewModel(
     OutcomeViewModel Outcome,
     IReadOnlyList<LegalActionViewModel> LegalActions)
 {
+    public IReadOnlyList<CardViewModel> CorpDiscard { get; init; } = Array.Empty<CardViewModel>();
+    public IReadOnlyList<CardViewModel> RunnerHeap { get; init; } = Array.Empty<CardViewModel>();
+
+    private int _corpDiscardCount;
+    /// <summary>Public total, including concealed Archives cards; legacy projections fall back to visible cards.</summary>
+    public int CorpDiscardCount
+    {
+        get => Math.Max(_corpDiscardCount, CorpDiscard.Count);
+        init => _corpDiscardCount = value;
+    }
+
     public CardViewModel? CorpIdentity { get; init; }
     public CardViewModel? RunnerIdentity { get; init; }
     /// <summary>
@@ -249,6 +260,18 @@ public sealed record PlayerViewModel(
     /// keeps older observations explicitly unavailable to the renderer.
     /// </summary>
     public int? CoreDamage { get; init; }
+
+    /// <summary>
+    /// Public Runner memory currently occupied by installed programs. Null
+    /// means the observation predates the optional RulesState projection.
+    /// </summary>
+    public int? UsedMemory { get; init; }
+
+    /// <summary>
+    /// Authoritative effective Runner memory limit, including active static
+    /// modifiers. Null means the observation did not supply memory state.
+    /// </summary>
+    public int? MemoryLimit { get; init; }
 
     public bool IsTagStateKnown => Tags.HasValue;
 
@@ -819,6 +842,12 @@ public static class ObservationViewMapper
             handSizeProjection);
         return view with
         {
+            CorpDiscard = ReadCards(publicState, "corpDiscard", metadataResolver, abilityCue)
+                .Concat(ReadCards(privateState, "faceDownArchives", metadataResolver, abilityCue))
+                .GroupBy(card => card.Id).Select(group => group.Last()).ToArray(),
+            CorpDiscardCount = OptionalMap(publicState, "zoneCounts") is { } zoneCounts
+                ? ReadInt(zoneCounts, "corpDiscard", fallback: 0) : 0,
+            RunnerHeap = ReadCards(publicState, "runnerHeap", metadataResolver, abilityCue),
             CorpIdentity = ReadCards(publicState, "corpIdentity", metadataResolver, abilityCue).SingleOrDefault(),
             RunnerIdentity = ReadCards(publicState, "runnerIdentity", metadataResolver, abilityCue).SingleOrDefault(),
             Turn = MapTurn(publicState),
@@ -1211,6 +1240,12 @@ public static class ObservationViewMapper
         int? coreDamage = TryReadOptionalInt(map, "coreDamage", out int observedCoreDamage)
             ? observedCoreDamage
             : null;
+        int? usedMemory = TryReadOptionalInt(map, "usedMemory", out int observedUsedMemory)
+            ? observedUsedMemory
+            : null;
+        int? memoryLimit = TryReadOptionalInt(map, "memoryLimit", out int observedMemoryLimit)
+            ? observedMemoryLimit
+            : null;
         return new PlayerViewModel(
             ReadString(map, "id"),
             side,
@@ -1220,6 +1255,8 @@ public static class ObservationViewMapper
         {
             Tags = tags,
             CoreDamage = coreDamage,
+            UsedMemory = usedMemory,
+            MemoryLimit = memoryLimit,
         };
     }
 

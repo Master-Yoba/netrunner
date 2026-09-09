@@ -161,6 +161,70 @@ public sealed class MatchCoordinatorTests
         Assert.Equal(MatchFeedbackKind.Rejected, rejected.Snapshot.Feedback?.Kind);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UnknownScenarioActorIsRejectedAndNextSubmissionCanProceed(bool traceEnabled)
+    {
+        string? directory = traceEnabled
+            ? Path.Combine(Path.GetTempPath(), $"netrunner-coordinator-{Guid.NewGuid():N}")
+            : null;
+        var agentGate = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        try
+        {
+            await using MatchCoordinator coordinator = M2MatchFactory.CreateRepresentative(
+                new MatchCoordinatorOptions
+                {
+                    AgentDelay = TimeSpan.FromSeconds(10),
+                    Delay = (_, cancellationToken) => new ValueTask(agentGate.Task.WaitAsync(cancellationToken)),
+                    SessionTraceDirectory = directory,
+                },
+                new FirstLegalAgent());
+
+            MatchSnapshot initial = await coordinator.StartAsync();
+            ObservationDecision decision = initial.Observation.Decision
+                ?? throw new Xunit.Sdk.XunitException("The scenario should await a Runner decision.");
+            LegalAction action = initial.Observation.LegalActions[0];
+
+            MatchSubmissionResult rejected = await coordinator.SubmitActionAsync(
+                new ActionSubmission(
+                    new PlayerId("player:unknown"),
+                    decision.Id,
+                    decision.Revision,
+                    action.Id));
+
+            Assert.False(rejected.Accepted);
+            Assert.Equal(ApplyRejectionCode.WrongOwner, rejected.Rejection?.Code);
+            Assert.Equal(initial.ActionCount, rejected.Snapshot.ActionCount);
+
+            MatchSubmissionResult accepted = await coordinator.SubmitActionAsync(
+                new ActionSubmission(decision.Owner, decision.Id, decision.Revision, action.Id));
+            Assert.True(accepted.Accepted, accepted.Feedback);
+
+            if (traceEnabled)
+            {
+                await WaitForAsync(
+                    () => coordinator.CurrentSnapshot?.IsOpponentThinking == true,
+                    TimeSpan.FromSeconds(2));
+                M2ScenarioDocument document = M2ScenarioProvider.LoadRepresentative();
+                BehaviorCatalog behavior = document.CreateBehaviorCatalog(GatewayBehaviorCatalog.Create());
+                SessionRecoveryResult recovered = SessionTrace.Recover(directory!, behavior);
+                Assert.False(recovered.HasInterruptedAction);
+                Assert.Contains(
+                    "\"rejection\"",
+                    File.ReadAllText(Path.Combine(directory!, SessionTrace.JournalFileName)),
+                    StringComparison.Ordinal);
+            }
+        }
+        finally
+        {
+            if (directory is not null && Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+    }
+
     [Fact]
     public async Task ThrowingSnapshotSubscriberDoesNotBlockStartOrLaterCommands()
     {

@@ -1,0 +1,10 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Theme" path="res://themes/M4Theme.tres" id="theme"]
+
+[node name="ActionButton" type="Button"]
+custom_minimum_size = Vector2(0, 32)
+focus_mode = 2
+theme = ExtResource("theme")
+theme_type_variation = &"PrimaryAction"
+text = "Choose action"
