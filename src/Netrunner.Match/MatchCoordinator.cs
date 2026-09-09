@@ -564,7 +564,8 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
         if (recovered.Manifest.Agent is { } recordedAgent
             && expectedAgent is { } currentAgent
             && (!string.Equals(recordedAgent.Type, currentAgent.Type, StringComparison.Ordinal)
-                || !string.Equals(recordedAgent.Version, currentAgent.Version, StringComparison.Ordinal)))
+                || !string.Equals(recordedAgent.Version, currentAgent.Version, StringComparison.Ordinal)
+                || !string.Equals(recordedAgent.PolicyVersion, currentAgent.PolicyVersion, StringComparison.Ordinal)))
         {
             throw new SessionTraceException("The recovered trace opponent agent does not match the supplied agent.");
         }
@@ -941,8 +942,11 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
             throw fault;
         }
 
-        Observation actorView = ObservationBuilder.Build(state, state.GetPlayer(submission.Actor).Side, _behaviorCatalog);
-        LegalAction? action = actorView.LegalActions.FirstOrDefault(candidate => candidate.Id == submission.ActionId);
+        PlayerState? actor = state.Players.FirstOrDefault(player => player.Id == submission.Actor);
+        Observation? actorView = actor is null
+            ? null
+            : ObservationBuilder.Build(state, actor.Side, _behaviorCatalog);
+        LegalAction? action = actorView?.LegalActions.FirstOrDefault(candidate => candidate.Id == submission.ActionId);
         MatchViewModel before = ObservationViewMapper.Build(
             ObservationBuilder.Build(state, _options.HumanSide, _behaviorCatalog), _metadataResolver, _behaviorCatalog);
         ApplyResult applied;
@@ -975,7 +979,7 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
             throw fault;
         }
 
-        if (applied.Accepted && action is not null)
+        if (applied.Accepted && actorView is not null && action is not null)
             _historyContext = (before, actorView.Viewer, action);
         return applied;
     }

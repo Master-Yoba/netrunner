@@ -170,6 +170,66 @@ public sealed class SessionCoordinatorTests
     }
 
     [Fact]
+    public async Task RecoveryRejectsOpponentPolicyVersionMismatch()
+    {
+        string sourceDirectory = NewDirectory();
+        string destinationDirectory = NewDirectory();
+        try
+        {
+            FullMatchDefinition definition = FullMatchDefinition.Developer(47042);
+            var opponent = new FullGameContractAgent(
+                new FullGameContractPolicy(PlayerSide.Runner),
+                definition.Runtime);
+            await using (var sourceCoordinator = new MatchCoordinator(
+                definition,
+                opponent,
+                new MatchCoordinatorOptions
+                {
+                    HumanSide = PlayerSide.Corp,
+                    SessionTraceDirectory = sourceDirectory,
+                }))
+            {
+                await sourceCoordinator.StartAsync().WaitAsync(TimeSpan.FromSeconds(5));
+            }
+
+            SessionTraceManifest manifest = SessionTrace.ReadManifest(sourceDirectory);
+            SessionTraceAgentInfo recordedAgent = Assert.IsType<SessionTraceAgentInfo>(manifest.Agent);
+            Assert.Equal(typeof(FullGameContractAgent).FullName, recordedAgent.Type);
+            Assert.Equal(FullGameContractAgentVersion.AgentVersion, recordedAgent.Version);
+            Assert.Equal(FullGameContractAgentVersion.PolicyVersion, recordedAgent.PolicyVersion);
+
+            string manifestPath = Path.Combine(sourceDirectory, SessionTrace.ManifestFileName);
+            string manifestJson = File.ReadAllText(manifestPath);
+            string policyJson = $"\"policyVersion\":\"{FullGameContractAgentVersion.PolicyVersion}\"";
+            Assert.Contains(policyJson, manifestJson, StringComparison.Ordinal);
+            File.WriteAllText(
+                manifestPath,
+                manifestJson.Replace(
+                    policyJson,
+                    "\"policyVersion\":\"full-game-contract-policy-tampered\"",
+                    StringComparison.Ordinal));
+
+            await using var resumed = new MatchCoordinator(
+                definition,
+                opponent,
+                new MatchCoordinatorOptions
+                {
+                    HumanSide = PlayerSide.Corp,
+                    ResumeTraceDirectory = sourceDirectory,
+                    SessionTraceDirectory = destinationDirectory,
+                });
+            SessionTraceException exception = await Assert.ThrowsAsync<SessionTraceException>(
+                () => resumed.StartAsync().WaitAsync(TimeSpan.FromSeconds(5)));
+            Assert.Contains("opponent agent", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            DeleteDirectory(sourceDirectory);
+            DeleteDirectory(destinationDirectory);
+        }
+    }
+
+    [Fact]
     public async Task RecordingFailureStopsPublicationAndFurtherSubmissions()
     {
         string directory = NewDirectory();
