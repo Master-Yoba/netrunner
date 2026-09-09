@@ -32,6 +32,14 @@ public sealed record MatchViewModel(
     public IReadOnlyList<CardViewModel> CorpDiscard { get; init; } = Array.Empty<CardViewModel>();
     public IReadOnlyList<CardViewModel> RunnerHeap { get; init; } = Array.Empty<CardViewModel>();
 
+    private int _corpDiscardCount;
+    /// <summary>Public total, including concealed Archives cards; legacy projections fall back to visible cards.</summary>
+    public int CorpDiscardCount
+    {
+        get => Math.Max(_corpDiscardCount, CorpDiscard.Count);
+        init => _corpDiscardCount = value;
+    }
+
     public CardViewModel? CorpIdentity { get; init; }
     public CardViewModel? RunnerIdentity { get; init; }
     /// <summary>
@@ -837,6 +845,8 @@ public static class ObservationViewMapper
             CorpDiscard = ReadCards(publicState, "corpDiscard", metadataResolver, abilityCue)
                 .Concat(ReadCards(privateState, "faceDownArchives", metadataResolver, abilityCue))
                 .GroupBy(card => card.Id).Select(group => group.Last()).ToArray(),
+            CorpDiscardCount = OptionalMap(publicState, "zoneCounts") is { } zoneCounts
+                ? ReadInt(zoneCounts, "corpDiscard", fallback: 0) : 0,
             RunnerHeap = ReadCards(publicState, "runnerHeap", metadataResolver, abilityCue),
             CorpIdentity = ReadCards(publicState, "corpIdentity", metadataResolver, abilityCue).SingleOrDefault(),
             RunnerIdentity = ReadCards(publicState, "runnerIdentity", metadataResolver, abilityCue).SingleOrDefault(),

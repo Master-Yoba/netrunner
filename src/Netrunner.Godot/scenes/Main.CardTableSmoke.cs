@@ -292,6 +292,7 @@ public partial class Main
 					{
 						Run = activeRun,
 						CorpDiscard = [corpDiscardCard],
+						CorpDiscardCount = 3,
 						RunnerHeap = [runnerHeapCard],
 					};
 					RenderSnapshot(CreateSlice48Snapshot(activeRunView, activeRunView.Decision));
@@ -302,6 +303,18 @@ public partial class Main
 						throw new InvalidOperationException("Active-run table fixture did not expose its lane route.");
 					if (screenshots) await SaveTableEvidence($"active-run-{side.ToString().ToLowerInvariant()}-{size.X}");
 
+					EncounterViewModel brokenEncounter = activeRun.Encounter! with
+					{
+						Subroutines = activeRun.Encounter!.Subroutines.Select(sub => sub with { Broken = true }).ToArray(),
+						EffectiveStrength = 99,
+					};
+					MatchViewModel brokenView = activeRunView with { Run = activeRun with { Encounter = brokenEncounter } };
+					RenderSnapshot(CreateSlice48Snapshot(brokenView, brokenView.Decision));
+					await TableFrames(3);
+					if (!SceneTreeContainsText(_gameTable, "0 unbroken")
+						|| !_gameTable.FindChildren("RunMarker", "Label", true, false).Cast<Label>()
+							.Any(label => label.Visible && label.TooltipText.Contains("Strength 99", StringComparison.Ordinal)))
+						throw new InvalidOperationException("Encounter-only change left the lane marker stale.");
 					MatchViewModel discardView = activeRunView with { Run = null };
 					RenderSnapshot(CreateSlice48Snapshot(discardView, discardView.Decision));
 					await TableFrames(3);
@@ -311,6 +324,10 @@ public partial class Main
 					if (!ShowTablePile("zone:corp-archives") || _tablePileCards.GetChildCount() == 0)
 						throw new InvalidOperationException("Public pile browser failed to open.");
 					await TableFrames(2);
+					TableCardControl[] archiveCards = _tablePileCards.GetChildren().OfType<TableCardControl>().ToArray();
+					if (archiveCards.Length != 3 || archiveCards.Count(card => card.Card is null) != 2
+						|| !SceneTreeContainsText(_gameTable, "Archives · 3"))
+						throw new InvalidOperationException("Archives total or concealed placeholders were lost.");
 					if (screenshots && size.X == 1920 && side == PlayerSide.Runner) await SaveTableEvidence("archives-browser-1920");
 					HideTablePile();
 

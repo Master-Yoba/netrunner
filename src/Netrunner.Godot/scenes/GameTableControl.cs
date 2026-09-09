@@ -632,11 +632,11 @@ public partial class GameTableControl : Control
 			: $"Grip · {view.RunnerHand.Count} cards · opponent backs";
 
 		_corpDeckPile.Text = $"R&D · {view.CorpDeck.Count}";
-		_corpArchivesPile.Text = $"Archives · {view.CorpDiscard.Count}";
+		_corpArchivesPile.Text = $"Archives · {view.CorpDiscardCount}";
 		_runnerDeckPile.Text = $"Stack\n{view.RunnerDeck.Count} cards";
 		_runnerHeapPile.Text = $"Heap\n{view.RunnerHeap.Count} cards";
 		UpdatePileTooltip(_corpDeckPile, $"Corp R&D · {view.CorpDeck.Count} face-down cards");
-		UpdatePileTooltip(_corpArchivesPile, $"Corp Archives · {view.CorpDiscard.Count} public cards");
+		UpdatePileTooltip(_corpArchivesPile, $"Corp Archives · {view.CorpDiscardCount} cards · {view.CorpDiscard.Count} visible");
 		UpdatePileTooltip(_runnerDeckPile, $"Runner Stack · {view.RunnerDeck.Count} face-down cards");
 		UpdatePileTooltip(_runnerHeapPile, $"Runner Heap · {view.RunnerHeap.Count} public cards");
 
@@ -706,7 +706,7 @@ public partial class GameTableControl : Control
 				for (int back = 0; back < Math.Min(view.CorpDeck.Count, 1); back++)
 					EnsureCard($"pile:{server.Id}:{back}", lane.RootCards, null, false, nextVisibleCards);
 			}
-			if (server.Kind == ServerKind.Archives && view.CorpDiscard.Count > 0)
+			if (server.Kind == ServerKind.Archives && view.CorpDiscardCount > 0)
 				EnsureCard($"archives:{view.CorpDiscard[^1].Id}", lane.RootCards, view.CorpDiscard[^1], false, nextVisibleCards);
 			RenderServerIce(server, lane.IceCards, nextVisibleCards);
 		}
@@ -1174,7 +1174,7 @@ public partial class GameTableControl : Control
 			$"viewer:{view.Viewer}",
 			$"corpdeck:{view.CorpDeck.Count}",
 			$"runnerdeck:{view.RunnerDeck.Count}",
-			$"corpdiscard:{view.CorpDiscard.Count}",
+			$"corpdiscard:{view.CorpDiscardCount}",
 			$"runnerheap:{view.RunnerHeap.Count}",
 			$"corphand:{view.CorpHand.Count}:{CardsFingerprint(view.CorpHand.VisibleCards)}",
 			$"runnerhand:{view.RunnerHand.Count}:{CardsFingerprint(view.RunnerHand.VisibleCards)}",
@@ -1212,7 +1212,14 @@ public partial class GameTableControl : Control
 			run.Unsuccessful,
 			run.FocusLabel,
 			run.Access.State,
-			run.RunCredits);
+			run.RunCredits,
+			run.Encounter?.Id,
+			run.Encounter?.Status,
+			CardFingerprint(run.Encounter?.Ice),
+			run.Encounter?.EffectiveStrength,
+			run.Encounter is { } encounter
+				? string.Join(";", encounter.Subroutines.Select(sub => $"{sub.Ordinal}:{sub.Broken}:{sub.Resolved}"))
+				: string.Empty);
 	}
 
 	private static string CardsFingerprint(IEnumerable<CardViewModel?> cards) =>

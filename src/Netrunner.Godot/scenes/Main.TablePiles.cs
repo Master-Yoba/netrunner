@@ -203,7 +203,7 @@ public partial class Main
 		{
 			case "zone:corp-archives":
 				title = "CORP ARCHIVES";
-				count = view.CorpDiscard.Count;
+				count = view.CorpDiscardCount;
 				cards = view.CorpDiscard;
 				break;
 			case "zone:runner-heap":

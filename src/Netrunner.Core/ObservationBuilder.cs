@@ -155,6 +155,18 @@ public static partial class ObservationBuilder
             ["runnerScore"] = ZoneCards(state, ZoneKind.RunnerScore).Select(card => CardView(state, card)).ToArray(),
         };
 
+        // Full observations carry public totals for zones whose visible card
+        // projection may omit facedown cards. Keep this additive so the
+        // canonical M1 observation shape remains unchanged, and expose only
+        // counts rather than any hidden card identity.
+        if (state.RulesState is not null || state.BehaviorCatalogFingerprint is not null)
+        {
+            publicState["zoneCounts"] = new Dictionary<string, object?>
+            {
+                ["corpDiscard"] = ZoneCount(state, ZoneKind.CorpDiscard),
+            };
+        }
+
         foreach (ZoneKind identity in new[] { ZoneKind.CorpIdentity, ZoneKind.RunnerIdentity })
         {
             if (state.Zones.Any(zone => zone.Kind == identity))
