@@ -103,3 +103,25 @@ This is acceptance item 9 in the plan and remains pending. Manual exploratory
 playtesting in both seats also remains user acceptance; automated native
 scenarios are recorded separately. The M4.9 manual usability gate remains
 separate. M5 is not unblocked by this implementation alone.
+
+## 9 September — card rendering follow-up
+
+Editor zooming exposed a square header covering the rounded top border and
+visible concentric lines in the inner glow. The header now follows the frame's
+inner rounded corners. The inner glow is a continuous vertex-colored fade,
+submitted as one indexed triangle array and drawn beneath artwork, motifs,
+badges and labels. The outer shadow and Inspector controls remain intact.
+
+Reviewed Luna Max's implementation, corrected arc endpoints, and batched the
+gradient submission. Compared portrait and ICE cards at 3× scale and inspected
+zero/wide glow, sharp/rounded corners and selected/target color samples.
+[Before](evidence/m4-10/card-corners-before.png) and
+[after](evidence/m4-10/card-corners-after.png) show the rendering correction.
+
+Godot build (zero warnings/errors), `UiEditorSmoke`, native M4.9 UI regression
+for both seats/resolutions, and formatting verification passed. The user's
+local CardAppearance, M4Theme and project settings were preserved and remain
+outside this rendering commit. Manual acceptance remains pending.
+A same-session native baseline comparison measured median/p95 8.61/11.09 ms
+before the slice versus 8.57/11.31 ms with this fix under the current workload;
+these single runs do not indicate a material frame-time regression.

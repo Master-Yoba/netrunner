@@ -549,14 +549,16 @@ public partial class TableCardControl : Control
 			? appearance.SurfaceColor
 			: appearance.HiddenSurfaceColor;
 
+		int frameWidth = ToPixel(_selected || _targetCandidate ? appearance.EmphasisFrameWidth : appearance.FrameWidth);
+		Rect2 frameRect = new(Vector2.One, cardSize - new Vector2(2, 2));
 		using var frame = new StyleBoxFlat
 		{
 			BgColor = surface,
 			BorderColor = border,
-			BorderWidthLeft = ToPixel(_selected || _targetCandidate ? appearance.EmphasisFrameWidth : appearance.FrameWidth),
-			BorderWidthTop = ToPixel(_selected || _targetCandidate ? appearance.EmphasisFrameWidth : appearance.FrameWidth),
-			BorderWidthRight = ToPixel(_selected || _targetCandidate ? appearance.EmphasisFrameWidth : appearance.FrameWidth),
-			BorderWidthBottom = ToPixel(_selected || _targetCandidate ? appearance.EmphasisFrameWidth : appearance.FrameWidth),
+			BorderWidthLeft = frameWidth,
+			BorderWidthTop = frameWidth,
+			BorderWidthRight = frameWidth,
+			BorderWidthBottom = frameWidth,
 			CornerRadiusTopLeft = ToPixel(appearance.CornerRadius),
 			CornerRadiusTopRight = ToPixel(appearance.CornerRadius),
 			CornerRadiusBottomLeft = ToPixel(appearance.CornerRadius),
@@ -566,7 +568,7 @@ public partial class TableCardControl : Control
 				: new Color(0, 0, 0, appearance.FrameShadowOpacity),
 			ShadowSize = _actionableSource ? ToPixel(appearance.GlowOuterExtent) : 4,
 		};
-		DrawStyleBox(frame, new Rect2(Vector2.One, cardSize - new Vector2(2, 2)));
+		DrawStyleBox(frame, frameRect);
 
 		if (_card is not { IsKnown: true })
 		{
@@ -574,19 +576,46 @@ public partial class TableCardControl : Control
 			return;
 		}
 
+		// Keep the header inside the frame's actual border. Its top corners
+		// follow the frame's inner radius so the header cannot square off or
+		// cover the rounded outer border, including selected/target frames.
+		float frameInset = Mathf.Max(1.0f, frameWidth);
+		Rect2 contentRect = InsetRect(frameRect, frameInset);
 		float headerHeight = _isIce
 			? Mathf.Min(appearance.IceHeaderHeight, cardSize.Y * 0.34f)
 			: IsCompactPortrait
 				? Mathf.Min(appearance.CompactHeaderHeight, cardSize.Y * 0.34f)
 				: Mathf.Min(appearance.PortraitHeaderHeight, cardSize.Y * 0.30f);
-		DrawRect(new Rect2(2, 2, cardSize.X - 4, headerHeight), accent.Darkened(appearance.HeaderDarken));
-		DrawRect(
-			new Rect2(
-				2,
-				2 + headerHeight - appearance.HeaderUnderlineHeight,
-				cardSize.X - 4,
-				appearance.HeaderUnderlineHeight),
-			accent.Lightened(appearance.HeaderLighten));
+		headerHeight = Mathf.Min(headerHeight, contentRect.Size.Y);
+		Rect2 headerRect = new(contentRect.Position, new Vector2(contentRect.Size.X, headerHeight));
+		int headerRadius = ToPixel(Mathf.Max(0.0f, appearance.CornerRadius - frameInset));
+		using var header = new StyleBoxFlat
+		{
+			BgColor = accent.Darkened(appearance.HeaderDarken),
+			CornerRadiusTopLeft = headerRadius,
+			CornerRadiusTopRight = headerRadius,
+		};
+		DrawStyleBox(header, headerRect);
+
+		float underlineHeight = Mathf.Min(appearance.HeaderUnderlineHeight, headerRect.Size.Y);
+		if (underlineHeight > 0.0f)
+		{
+			DrawRect(
+				new Rect2(
+					headerRect.Position + new Vector2(0, headerRect.Size.Y - underlineHeight),
+					new Vector2(headerRect.Size.X, underlineHeight)),
+				accent.Lightened(appearance.HeaderLighten));
+		}
+
+		// The glow is part of the card surface. Draw it before motif/artwork,
+		// badges, and child labels so it cannot cut through presentation detail.
+		if (_actionableSource)
+		{
+			DrawActionGlow(
+				border,
+				contentRect,
+				Mathf.Max(0.0f, appearance.CornerRadius - frameInset));
+		}
 
 		Rect2 motifRect = ResolveMotifRect(cardSize, appearance);
 		if (_artwork is not null)
@@ -599,7 +628,6 @@ public partial class TableCardControl : Control
 			accent,
 			_artwork is not null ? appearance.MotifOpacityWithArtwork : appearance.MotifOpacityWithoutArtwork);
 		DrawStateBadge(accent, cardSize);
-		if (_actionableSource) DrawActionGlow(cardSize, border);
 	}
 
 	private Rect2 ResolveMotifRect(Vector2 cardSize, CardAppearance appearance)
@@ -866,35 +894,121 @@ public partial class TableCardControl : Control
 		return _card is { IsKnown: true } ? appearance.FrameColor : appearance.HiddenColor;
 	}
 
-	private void DrawActionGlow(Vector2 cardSize, Color color)
+	private void DrawActionGlow(Color color, Rect2 contentRect, float contentRadius)
 	{
-		// A broad inner fade complements the outer shadow where hand cards overlap.
 		CardAppearance appearance = CurrentAppearance;
-		using var glow = new StyleBoxFlat
-		{
-			BgColor = Colors.Transparent,
-			BorderWidthLeft = 1,
-			BorderWidthTop = 1,
-			BorderWidthRight = 1,
-			BorderWidthBottom = 1,
-			CornerRadiusTopLeft = ToPixel(appearance.CornerRadius),
-			CornerRadiusTopRight = ToPixel(appearance.CornerRadius),
-			CornerRadiusBottomLeft = ToPixel(appearance.CornerRadius),
-			CornerRadiusBottomRight = ToPixel(appearance.CornerRadius),
-		};
-		int glowWidth = ToPixel(appearance.GlowInnerExtent);
-		if (glowWidth <= 0)
+		float glowWidth = appearance.GlowInnerExtent;
+		if (glowWidth <= 0.0f || appearance.GlowOpacity <= 0.0f)
 		{
 			return;
 		}
 
-		for (int inset = 1; inset <= glowWidth; inset++)
+		// Keep the filled gradient inside the frame and leave enough room for a
+		// non-degenerate inner rectangle on both portrait and ICE footprints.
+		float maxWidth = Mathf.Max(0.0f, Mathf.Min(contentRect.Size.X, contentRect.Size.Y) * 0.5f - 0.5f);
+		glowWidth = Mathf.Min(glowWidth, maxWidth);
+		if (glowWidth <= 0.0f)
 		{
-			float distance = glowWidth <= 1 ? 0.0f : (inset - 1f) / (glowWidth - 1f);
-			float fade = Mathf.Pow(1f - distance, appearance.GlowFalloff);
-			glow.BorderColor = WithAlpha(color, appearance.GlowOpacity * fade);
-			DrawStyleBox(glow, new Rect2(Vector2.One * inset, cardSize - Vector2.One * inset * 2));
+			return;
 		}
+
+		// A small number of filled bands preserves the exported falloff without
+		// drawing separate antialiased outline StyleBoxes. Adjacent bands share
+		// exact vertices and colors, so the result is a continuous surface fade.
+		int bandCount = Mathf.Clamp(Mathf.CeilToInt(glowWidth / 2.0f), 1, 8);
+		int cornerSegments = Mathf.Clamp(Mathf.CeilToInt(Mathf.Max(contentRadius, 1.0f)), 8, 16);
+		int pointsPerRing = (cornerSegments + 1) * 4;
+		Vector2[] vertices = new Vector2[(bandCount + 1) * pointsPerRing];
+		Color[] colors = new Color[vertices.Length];
+		int[] indices = new int[bandCount * pointsPerRing * 6];
+		for (int ring = 0; ring <= bandCount; ring++)
+		{
+			float distance = ring / (float)bandCount;
+			float inset = glowWidth * distance;
+			Vector2[] path = RoundedRectPath(
+				InsetRect(contentRect, inset),
+				Mathf.Max(0.0f, contentRadius - inset),
+				cornerSegments);
+			int offset = ring * pointsPerRing;
+			path.CopyTo(vertices, offset);
+			Color ringColor = WithAlpha(color, appearance.GlowOpacity * Mathf.Pow(1.0f - distance, appearance.GlowFalloff));
+			Array.Fill(colors, ringColor, offset, pointsPerRing);
+			if (ring == bandCount) continue;
+			for (int point = 0; point < pointsPerRing; point++)
+			{
+				int next = (point + 1) % pointsPerRing;
+				int index = (offset + point) * 6;
+				indices[index] = offset + point;
+				indices[index + 1] = offset + next;
+				indices[index + 2] = offset + pointsPerRing + next;
+				indices[index + 3] = offset + point;
+				indices[index + 4] = offset + pointsPerRing + next;
+				indices[index + 5] = offset + pointsPerRing + point;
+			}
+		}
+		// One cached canvas command, rather than a draw call for every quad.
+		RenderingServer.CanvasItemAddTriangleArray(
+			GetCanvasItem(), indices, vertices, colors,
+			Array.Empty<Vector2>(), Array.Empty<int>(), Array.Empty<float>(), default, -1);
+	}
+
+	private static Vector2[] RoundedRectPath(Rect2 rect, float radius, int cornerSegments)
+	{
+		float maxRadius = Mathf.Min(rect.Size.X, rect.Size.Y) * 0.5f;
+		radius = Mathf.Clamp(radius, 0.0f, maxRadius);
+		Vector2 endPosition = rect.Position + rect.Size;
+		List<Vector2> points = new((cornerSegments + 1) * 4);
+		AppendRoundedCorner(
+			points,
+			new Vector2(rect.Position.X + radius, rect.Position.Y + radius),
+			radius,
+			Mathf.Pi,
+			Mathf.Pi * 1.5f,
+			cornerSegments);
+		AppendRoundedCorner(
+			points,
+			new Vector2(endPosition.X - radius, rect.Position.Y + radius),
+			radius,
+			Mathf.Pi * 1.5f,
+			Mathf.Tau,
+			cornerSegments);
+		AppendRoundedCorner(
+			points,
+			new Vector2(endPosition.X - radius, endPosition.Y - radius),
+			radius,
+			0.0f,
+			Mathf.Pi * 0.5f,
+			cornerSegments);
+		AppendRoundedCorner(
+			points,
+			new Vector2(rect.Position.X + radius, endPosition.Y - radius),
+			radius,
+			Mathf.Pi * 0.5f,
+			Mathf.Pi,
+			cornerSegments);
+		return points.ToArray();
+	}
+
+	private static void AppendRoundedCorner(
+		List<Vector2> points,
+		Vector2 center,
+		float radius,
+		float startAngle,
+		float endAngle,
+		int segments)
+	{
+		for (int index = 0; index <= segments; index++)
+		{
+			float fraction = index / (float)segments;
+			float angle = Mathf.Lerp(startAngle, endAngle, fraction);
+			points.Add(center + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius);
+		}
+	}
+
+	private static Rect2 InsetRect(Rect2 rect, float inset)
+	{
+		Vector2 delta = Vector2.One * inset;
+		return new Rect2(rect.Position + delta, rect.Size - delta * 2.0f);
 	}
 
 	private void DrawNeutralBack(Rect2 cardRect, Color border)
