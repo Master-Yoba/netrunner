@@ -169,6 +169,8 @@ public partial class TableCardControl : Control
 			{
 				if (path.StartsWith("res://", StringComparison.Ordinal))
 				{
+					// Release presets omit development-only card backs.
+					if (!ResourceLoader.Exists(path)) continue;
 					_backTexture = GD.Load<Texture2D>(path);
 					if (_backTexture is not null)
 					{

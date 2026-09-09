@@ -119,7 +119,7 @@ Focused tests cover legacy omission, initial 0/4, and an active modifier.
 ## Visual evidence
 
 - [Native check output](evidence/m4-9/native-ui-smoke.txt)
-- [User reference](evidence/m4-9/reference/chiriboga.png)
+- User reference: local-only `chiriboga.png`; source links are in the plan.
 - [Nico opening table](evidence/m4-9/nico-table.png)
 - [Nico history](evidence/m4-9/nico-history.png)
 - [Dense Runner table, 1080p](evidence/m4-9/dense-runner-1920.png)

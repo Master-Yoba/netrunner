@@ -42,7 +42,7 @@ mobile layouts, 3D tables and release packaging are outside this pass.
 
 Reference revision inspected: `c863f5af74ceb4fa821a4c84d3f643efffacb7ba`
 on Chiriboga's `dev` branch. Source review is supplemented by the user-provided ongoing-game screenshot
-[chiriboga.png](evidence/m4-9/reference/chiriboga.png). The screenshot is a visual
+`chiriboga.png` (local-only). The screenshot is a visual
 reference; its exact build/revision is not established.
 
 | Reference source | Observed pattern | Application here |
@@ -75,7 +75,7 @@ Current repository findings:
 
 ### Screenshot review — concrete visual direction
 
-![User-provided Chiriboga game reference](evidence/m4-9/reference/chiriboga.png)
+The user-provided screenshot remains local-only because it contains card artwork.
 
 The supplied 2048×1080 frame shows the Runner's action phase with several Corp
 server positions, face-up and face-down ICE, a hosted Runner card, installed
@@ -438,7 +438,7 @@ green.
 
 Build UI-490 as a native, noninteractive table using real Gateway metadata and
 the Nico opening as a visual storyboard. Show normal board, replacement,
-encounter and nested-choice states. Use the supplied [ongoing-game screenshot](evidence/m4-9/reference/chiriboga.png)
+encounter and nested-choice states. Use the supplied ongoing-game screenshot (local-only `chiriboga.png`)
 as the board-density and composition reference. An expanded-history screenshot
 would further inform that interaction, but does not block the prototype. Review those concrete frames before expanding the live
 implementation.
