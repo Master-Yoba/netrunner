@@ -1,0 +1,176 @@
+using Godot;
+using Netrunner.Core;
+using Netrunner.Match;
+
+namespace Netrunner.GodotClient;
+
+public partial class Main
+{
+	private async Task RunInteractionSmokeAsync()
+	{
+		try
+		{
+			OpenInteractionLab();
+			_reducedMotion.ButtonPressed = true;
+			foreach (Vector2I size in new[] { new Vector2I(1920, 1080), new Vector2I(2560, 1440) })
+			{
+				GetWindow().Size = size;
+				GetWindow().ContentScaleSize = size;
+				foreach (int scenario in Enumerable.Range(0, InteractionLabSamples.Names.Length))
+				{
+					_labScenario = scenario;
+					_labScenarios!.Select(scenario);
+					ResetInteractionLab();
+					await TableFrames(4);
+					var projection = BoardInteractionProjector.Project(_currentSnapshot!.View);
+					RequireInteraction(projection.Sources.Count > 0, "Lab scenario has no draggable source.");
+					BoardInteractionSource source = projection.Sources.Single(s => s.CardId == "lab-hand");
+					TableCardControl card = _gameTable.VisibleCards[source.CardId];
+					Vector2 start = card.GetGlobalRect().GetCenter();
+					// Cancel once before every valid drop, proving no submission or loss of source.
+					await LabPointer(start);
+					LabButton(start, true);
+					await LabPointer(start + new Vector2(0, -40));
+					RequireInteraction(_boardDrag!.IsDragging, $"Drag did not start for scenario {scenario}.");
+					GetViewport().PushInput(new InputEventKey { Keycode = Key.Escape, Pressed = true });
+					LabButton(start, false);
+					await TableFrames(2);
+					RequireInteraction(!_boardDrag.IsDragging && _labSubmissionCount == 0, "Cancellation submitted or retained a drag.");
+					await LabPointer(start);
+					LabButton(start, true);
+					await LabPointer(start + new Vector2(0, -40));
+					BoardInteractionDestination destination = source.Destinations[0];
+					Rect2? rect = _gameTable.GetDropRect(destination.Kind.ToString(), destination.TargetId);
+					for (int scroll = 0; rect is null && scroll < 100; scroll++)
+					{
+						Rect2 board = _gameTable.GetGlobalRect();
+						_gameTable.ScrollDragEdges(new Vector2(board.End.X - 12, board.Position.Y + 180), .05, 60, 1500);
+						await TableFrames(1);
+						rect = _gameTable.GetDropRect(destination.Kind.ToString(), destination.TargetId);
+					}
+					RequireInteraction(rect is { } area && area.HasArea(), $"No visible destination for scenario {scenario}.");
+					Vector2 drop = destination.Kind == BoardInteractionDestinationKind.GeneralPlay
+						? _gameTable.GetDropRect("RunnerRig", null)!.Value.GetCenter() : rect!.Value.GetCenter();
+					await LabPointer(drop);
+					if (OS.GetCmdlineUserArgs().Contains("--m4-11-screenshots") && scenario is 1 or 3 or 6 or 7)
+						await SaveInteractionEvidence($"drag-{scenario}-{size.X}");
+					LabButton(drop, false);
+					await TableFrames(3);
+					if (scenario == 1)
+					{
+						RequireInteraction(_boardChoiceServerCues.Count > 0, "General run-event drop did not stage server choices.");
+						Vector2 target = _boardChoiceServerCues[0].GetGlobalRect().GetCenter();
+						await LabPointer(target); LabButton(target, true); LabButton(target, false);
+					}
+					else if (scenario == 8)
+					{
+						RequireInteraction(TrySelectBoardChoiceCard("preview-root-0"), "Replacement card was not selectable.");
+						await TableFrames(2);
+						// Finalization must remain an explicit issued action, also available in backup controls.
+						var finish = _currentSnapshot!.View.LegalActions.Single();
+						RequireInteraction(_tableActionButtons.ContainsKey(finish.Id), "Backup finalize action missing.");
+						await ClickTableButton(_boardChoiceOptions!.GetChildren().OfType<Button>().Single());
+					}
+					else if (scenario is 9 or 10)
+						RequireInteraction(TrySelectBoardChoiceCard("preview-rig-0"), "Immediate card choice was not selectable.");
+					else if (scenario == 13)
+					{
+						TableCardControl choice = _boardChoiceOptions!.FindChildren("*", "Control", true, false).OfType<TableCardControl>().Single();
+						Vector2 target = choice.GetGlobalRect().GetCenter();
+						await LabPointer(target); LabButton(target, true); LabButton(target, false);
+					}
+					else if (scenario == 14)
+					{
+						RequireInteraction(TrySelectBoardChoiceCard("preview-rig-0"), "Ambiguous card target was not selectable.");
+						RequireInteraction(_labSubmissionCount == 1, "Ambiguous target silently submitted an action.");
+						await TableFrames(2);
+						await ClickTableButton(_boardChoiceOptions!.GetChildren().OfType<Button>().First());
+					}
+					else if (scenario == 11)
+						await ClickTableButton(_boardChoiceOptions!.GetChildren().OfType<Button>().First());
+					await TableFrames(2);
+					RequireInteraction(_labSubmissionCount > 0 && _currentSnapshot!.View.Decision is null,
+						$"Scenario {scenario} did not complete through its production controls.");
+				}
+			}
+			_labScenario = 0;
+			ResetInteractionLab();
+			await TableFrames(3);
+			Vector2 initial = _gameTable.VisibleCards["lab-hand"].GetGlobalRect().GetCenter();
+			await LabPointer(initial); LabButton(initial, true); await LabPointer(initial + new Vector2(0, -40));
+			_labRevision++;
+			PublishLabView(InteractionLabSamples.Create(0, _labRevision));
+			LabButton(initial, false);
+			RequireInteraction(!_boardDrag!.IsDragging && _labSubmissionCount == 0, "Stale gesture submitted after decision revision.");
+			foreach (string cancellation in new[] { "right-click", "focus-loss", "invalid-drop" })
+			{
+				ResetInteractionLab();
+				await TableFrames(3);
+				initial = _gameTable.VisibleCards["lab-hand"].GetGlobalRect().GetCenter();
+				await LabPointer(initial); LabButton(initial, true); await LabPointer(initial + new Vector2(0, -40));
+				if (cancellation == "right-click")
+					GetViewport().PushInput(new InputEventMouseButton { Position = initial, ButtonIndex = MouseButton.Right, Pressed = true });
+				else if (cancellation == "focus-loss") GetWindow().EmitSignal(Window.SignalName.FocusExited);
+				else await LabPointer(initial);
+				LabButton(initial, false);
+				await TableFrames(2);
+				RequireInteraction(!_boardDrag!.IsDragging && _labSubmissionCount == 0, $"{cancellation} submitted an action.");
+			}
+			_labScenario = 3;
+			ResetInteractionLab();
+			_labRevision++;
+			MatchViewModel positional = InteractionLabSamples.Create(3, _labRevision) with
+			{
+				Servers = [new ServerViewModel("server:4", ServerKind.Headquarters, [null], [])
+				{
+					IcePositions = [new("card:hidden-host", "server:4", 0)],
+				}],
+				LegalActions = [InteractionLabSamples.Action("hidden-host", ActionKind.InstallCard,
+					new InstallCardParameters(new("lab-hand"), InstallDestinationKind.RunnerRig, null, false, 3, hostCardId: new("card:hidden-host")), _labRevision)],
+			};
+			PublishLabView(positional);
+			await TableFrames(4);
+			RequireInteraction(_gameTable.GetDropRect("ServerRoot", "server:4") is not null, "Exact server ID lost its root drop region.");
+			Vector2 hiddenHost = _gameTable.GetDropRect("HostCard", "card:hidden-host")!.Value.GetCenter();
+			initial = _gameTable.VisibleCards["lab-hand"].GetGlobalRect().GetCenter();
+			await LabPointer(initial); LabButton(initial, true); await LabPointer(hiddenHost);
+			RequireInteraction(_boardDrag!.IsDragging, "Positional hidden host did not allow dragging.");
+			LabButton(hiddenHost, false);
+			await TableFrames(3);
+			RequireInteraction(_labSubmissionCount == 1 && _currentSnapshot!.View.RunnerRig.Any(c => c.HostCardId == "card:hidden-host"),
+				"Drop onto an exposed face-down ICE position failed.");
+			GD.Print("M411_INTERACTION PASS scenarios=15 resolutions=2 drag=true cancel=true stale=true choices=true menu_fallback=true hidden_host=true focus_loss=true invalid_drop=true");
+			GetTree().Quit();
+		}
+		catch (Exception error)
+		{
+			GD.PrintErr($"M411_INTERACTION FAIL {error}");
+			GetTree().Quit(1);
+		}
+	}
+
+	private async Task LabPointer(Vector2 point)
+	{
+		GetViewport().PushInput(new InputEventMouseMotion { Position = point, GlobalPosition = point });
+		await TableFrames(2);
+	}
+	private void LabButton(Vector2 point, bool pressed) => GetViewport().PushInput(new InputEventMouseButton
+	{
+		Position = point,
+		GlobalPosition = point,
+		ButtonIndex = MouseButton.Left,
+		Pressed = pressed,
+	});
+	private static void RequireInteraction(bool condition, string message)
+	{
+		if (!condition) throw new InvalidOperationException(message);
+	}
+	private async Task SaveInteractionEvidence(string name)
+	{
+		await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+		string directory = ProjectSettings.GlobalizePath("res://../../docs/evidence/m4-11");
+		DirAccess.MakeDirRecursiveAbsolute(directory);
+		using Image image = GetViewport().GetTexture().GetImage();
+		image.SavePng(System.IO.Path.Combine(directory, name + ".png"));
+	}
+}

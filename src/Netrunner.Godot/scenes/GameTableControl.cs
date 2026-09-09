@@ -706,7 +706,7 @@ public partial class GameTableControl : Control
 				for (int back = 0; back < Math.Min(view.CorpDeck.Count, 1); back++)
 					EnsureCard($"pile:{server.Id}:{back}", lane.RootCards, null, false, nextVisibleCards);
 			}
-			if (server.Kind == ServerKind.Archives && view.CorpDiscardCount > 0)
+			if (server.Kind == ServerKind.Archives && view.CorpDiscard.Count > 0)
 				EnsureCard($"archives:{view.CorpDiscard[^1].Id}", lane.RootCards, view.CorpDiscard[^1], false, nextVisibleCards);
 			RenderServerIce(server, lane.IceCards, nextVisibleCards);
 		}

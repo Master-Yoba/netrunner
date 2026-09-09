@@ -56,6 +56,6 @@ paid abilities, and combat/access redesign are excluded.
 ## Interaction lab
 
 User-requested addition: a setup entry and `make interaction-lab` launcher expose
-13 resettable synthetic scenarios using the production drag and board-choice
+15 resettable synthetic scenarios using the production drag and board-choice
 controls. Fixtures test UI behavior without starting a match or requiring official
 metadata. Keep them visibly distinct from engine-backed play and recovery tests.

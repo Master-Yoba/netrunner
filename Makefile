@@ -56,3 +56,7 @@ m4-gate:
 
 play:
 	./scripts/play.sh $(PLAY_ARGS)
+
+.PHONY: interaction-lab
+interaction-lab:
+	./scripts/interaction-lab.sh

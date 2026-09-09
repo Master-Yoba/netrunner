@@ -258,6 +258,7 @@ public partial class Main
 
 	private void SubmitAction(DecisionViewModel decision, LegalActionViewModel action)
 	{
+		if (SubmitInteractionLab(decision, action)) return;
 		if (_fullMatchResumePaused)
 		{
 			_status.Text = "Recovered match is paused · press Continue before choosing an action.";

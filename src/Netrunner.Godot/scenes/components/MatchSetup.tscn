@@ -122,3 +122,8 @@ custom_minimum_size = Vector2(300, 36)
 layout_mode = 2
 text = "Open 77-card metadata gallery (dev)"
 
+
+[node name="InteractionLab" type="Button" parent="SetupContent"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Practice board interactions"

@@ -1,0 +1,19 @@
+[gd_scene format=3]
+
+[node name="InteractionLabToolbar" type="HBoxContainer"]
+visible = false
+theme_override_constants/separation = 12
+
+[node name="Scenarios" type="OptionButton" parent="."]
+custom_minimum_size = Vector2(260, 36)
+
+[node name="Reset" type="Button" parent="."]
+text = "Reset scenario"
+
+[node name="Exit" type="Button" parent="."]
+text = "Exit lab"
+
+[node name="Instructions" type="Label" parent="."]
+size_flags_horizontal = 3
+autowrap_mode = 3
+text = "Practice board interactions"

@@ -34,6 +34,7 @@ public partial class Main
 		_galleryButton.Pressed += ShowCardGallery;
 		if (!_metadataSnapshot.IsOfficial)
 			_galleryButton.TooltipText = "Provision the authenticated 77-card snapshot for the dev gallery.";
+		setup.GetNode<Button>("%InteractionLab").Pressed += OpenInteractionLab;
 		BuildCardTable();
 		BuildCardZoomOverlay();
 		ApplyAccessibilityFocusOrder(_startPanel);

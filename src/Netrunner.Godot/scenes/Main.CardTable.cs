@@ -69,6 +69,7 @@ public partial class Main
 		};
 		_gameTable.ServerSelected += id =>
 		{
+			if (TrySelectBoardChoiceServer(id)) return;
 			RecordFullMatchSelection("server", id);
 			if (ShowTablePile(id)) return;
 			_tableSelectedServer = id;
@@ -100,10 +101,12 @@ public partial class Main
 		_tableInspect.Pressed += ShowInspectedCardZoom;
 		_tableActions = dock.GetNode<HFlowContainer>("%Actions");
 		_focusPresentation = dock.GetNode<VBoxContainer>("%FocusPresentation");
+		BuildBoardDrag();
 	}
 
 	private void SelectTableCard(string id)
 	{
+		if (TrySelectBoardChoiceCard(id)) return;
 		RecordFullMatchSelection("card", id);
 		_tableSelectedCard = id;
 		_tableSelectedServer = null;
@@ -151,89 +154,97 @@ public partial class Main
 
 	private void RenderCardTableActions(MatchSnapshot snapshot)
 	{
-		ClearChildren(_tableActions);
-		_tableActionButtons.Clear();
-		DecisionViewModel? decision = snapshot.View.Decision;
-		_tablePrompt.Text = snapshot.IsOpponentThinking ? "Opponent is thinking. You can inspect cards and read history."
-			: snapshot.IsTerminal ? "Match complete."
-			: _fullMatchResumePaused ? $"Recovered at action {snapshot.ActionCount}. Continue when ready."
-			: decision is null ? "Waiting for the next decision…"
-			: $"{decision.OwnerSide}: {TablePrompt(decision)}";
-		if (snapshot.View.Run is { } run)
-			_tablePrompt.Text = $"Run on {_gameTable.GetServerDisplayName(run.AttackedServerId)} · {run.Step} · " + _tablePrompt.Text;
-		_gameTable.SetTargets(new HashSet<string>(StringComparer.Ordinal));
-		_gameTable.SetActionableSources(new HashSet<string>(StringComparer.Ordinal));
-		if (_fullMatchResumePaused && !snapshot.IsTerminal)
+		RefreshDragPlay(snapshot);
+		try
 		{
-			Button continueButton = CreateTableActionButton("Continue recovered match");
-			continueButton.Disabled = _fullMatchResumeContinueInFlight;
-			continueButton.Pressed += ContinueRecoveredFullMatch;
-			_tableActions.AddChild(continueButton);
-			return;
-		}
-		if (decision is null || snapshot.IsOpponentThinking || snapshot.IsTerminal)
-		{
-			return;
-		}
-		IReadOnlyList<LegalActionViewModel> all = ActionsRegionPresenter.Present(snapshot).Actions;
-		if (decision.OwnerSide == snapshot.View.Viewer
-			&& decision.Kind != DecisionKind.Setup
-			&& !_tableAwaitingSettlement
-			&& Volatile.Read(ref _submissionInFlight) == 0)
-		{
-			_gameTable.SetActionableSources(all
-				.SelectMany(TableActionSourceCardIds)
-				.ToHashSet(StringComparer.Ordinal));
-			_gameTable.SetTargets(all
-				.SelectMany(TableActionTargetCardIds)
-				.ToHashSet(StringComparer.Ordinal));
-		}
-		if (_stagedAction is { } staged && _stagedDecision is { } stagedDecision)
-		{
-			_tablePrompt.Text = $"Confirm: {TableActionLabel(staged)}";
-			AddButton("Confirm", () => ConfirmStagedAction(stagedDecision, staged));
-			AddButton("Back", CancelStagedAction);
-			return;
-		}
-		bool ordinary = decision.Kind is DecisionKind.TurnAction or DecisionKind.TurnTiming;
-		IEnumerable<LegalActionViewModel> displayed = all;
-		if (ordinary && !_tableAllActions)
-		{
-			displayed = all.Where(a => _tableSelectedCard is not null
-				? TableActionCardId(a.Parameters) == _tableSelectedCard
-				: _tableSelectedServer is not null
-					? TableActionServerId(a.Parameters) == _tableSelectedServer
-					: a.Kind is ActionKind.GainCredit or ActionKind.DrawCard or ActionKind.PassPriority
-						or ActionKind.EndTurn or ActionKind.RemoveTag or ActionKind.PurgeVirusCounters);
-			AddButton(_tableSelectedCard is null && _tableSelectedServer is null ? "Choose a card / server" : "Clear selection", () =>
+			ClearChildren(_tableActions);
+			_tableActionButtons.Clear();
+			DecisionViewModel? decision = snapshot.View.Decision;
+			_tablePrompt.Text = snapshot.IsOpponentThinking ? "Opponent is thinking. You can inspect cards and read history."
+				: snapshot.IsTerminal ? "Match complete."
+				: _fullMatchResumePaused ? $"Recovered at action {snapshot.ActionCount}. Continue when ready."
+				: decision is null ? "Waiting for the next decision…"
+				: $"{decision.OwnerSide}: {TablePrompt(decision)}";
+			if (snapshot.View.Run is { } run)
+				_tablePrompt.Text = $"Run on {_gameTable.GetServerDisplayName(run.AttackedServerId)} · {run.Step} · " + _tablePrompt.Text;
+			_gameTable.SetTargets(new HashSet<string>(StringComparer.Ordinal));
+			_gameTable.SetActionableSources(new HashSet<string>(StringComparer.Ordinal));
+			if (_fullMatchResumePaused && !snapshot.IsTerminal)
 			{
-				_tableSelectedCard = null; _tableSelectedServer = null;
-				_gameTable.SetSelection(null);
-				_gameTable.SetSelectedServer(null);
-				RenderCardTableActions(snapshot);
-			});
-			AddButton("All legal actions…", () => { _tableAllActions = true; RenderCardTableActions(snapshot); });
-		}
-		else if (_tableAllActions)
-			AddButton("Back to table", () => { _tableAllActions = false; RenderCardTableActions(snapshot); });
-		foreach (LegalActionViewModel action in displayed)
-		{
-			Button button = AddButton(TableActionLabel(action), () =>
+				Button continueButton = CreateTableActionButton("Continue recovered match");
+				continueButton.Disabled = _fullMatchResumeContinueInFlight;
+				continueButton.Pressed += ContinueRecoveredFullMatch;
+				_tableActions.AddChild(continueButton);
+				return;
+			}
+			if (decision is null || snapshot.IsOpponentThinking || snapshot.IsTerminal)
 			{
-				if (ActionsRegionPresenter.IsTargetedAction(action)) StageTargetAction(decision, action);
-				else SubmitAction(decision, action);
-			});
-			button.TooltipText = action.CostSummary ?? TableActionLabel(action);
-			button.Disabled = _tableAwaitingSettlement || Volatile.Read(ref _submissionInFlight) != 0;
-			_tableActionButtons[action.Id] = button;
+				return;
+			}
+			IReadOnlyList<LegalActionViewModel> all = ActionsRegionPresenter.Present(snapshot).Actions;
+			if (decision.OwnerSide == snapshot.View.Viewer
+				&& decision.Kind != DecisionKind.Setup
+				&& !_tableAwaitingSettlement
+				&& Volatile.Read(ref _submissionInFlight) == 0)
+			{
+				_gameTable.SetActionableSources(all
+					.SelectMany(TableActionSourceCardIds)
+					.ToHashSet(StringComparer.Ordinal));
+				_gameTable.SetTargets(all
+					.SelectMany(TableActionTargetCardIds)
+					.ToHashSet(StringComparer.Ordinal));
+			}
+			if (_stagedAction is { } staged && _stagedDecision is { } stagedDecision)
+			{
+				_tablePrompt.Text = $"Confirm: {TableActionLabel(staged)}";
+				AddButton("Confirm", () => ConfirmStagedAction(stagedDecision, staged));
+				AddButton("Back", CancelStagedAction);
+				return;
+			}
+			bool ordinary = decision.Kind is DecisionKind.TurnAction or DecisionKind.TurnTiming;
+			IEnumerable<LegalActionViewModel> displayed = all;
+			if (ordinary && !_tableAllActions)
+			{
+				displayed = all.Where(a => _tableSelectedCard is not null
+					? TableActionCardId(a.Parameters) == _tableSelectedCard
+					: _tableSelectedServer is not null
+						? TableActionServerId(a.Parameters) == _tableSelectedServer
+						: a.Kind is ActionKind.GainCredit or ActionKind.DrawCard or ActionKind.PassPriority
+							or ActionKind.EndTurn or ActionKind.RemoveTag or ActionKind.PurgeVirusCounters);
+				AddButton(_tableSelectedCard is null && _tableSelectedServer is null ? "Choose a card / server" : "Clear selection", () =>
+				{
+					_tableSelectedCard = null; _tableSelectedServer = null;
+					_gameTable.SetSelection(null);
+					_gameTable.SetSelectedServer(null);
+					RenderCardTableActions(snapshot);
+				});
+				AddButton("All legal actions…", () => { _tableAllActions = true; RenderCardTableActions(snapshot); });
+			}
+			else if (_tableAllActions)
+				AddButton("Back to table", () => { _tableAllActions = false; RenderCardTableActions(snapshot); });
+			foreach (LegalActionViewModel action in displayed)
+			{
+				Button button = AddButton(TableActionLabel(action), () =>
+				{
+					if (ActionsRegionPresenter.IsTargetedAction(action)) StageTargetAction(decision, action);
+					else SubmitAction(decision, action);
+				});
+				button.TooltipText = action.CostSummary ?? TableActionLabel(action);
+				button.Disabled = _tableAwaitingSettlement || Volatile.Read(ref _submissionInFlight) != 0;
+				_tableActionButtons[action.Id] = button;
+			}
+			Button AddButton(string text, Action callback)
+			{
+				Button button = CreateTableActionButton(text);
+				button.Disabled = _tableAwaitingSettlement;
+				button.Pressed += callback;
+				_tableActions.AddChild(button);
+				return button;
+			}
 		}
-		Button AddButton(string text, Action callback)
+		finally
 		{
-			Button button = CreateTableActionButton(text);
-			button.Disabled = _tableAwaitingSettlement;
-			button.Pressed += callback;
-			_tableActions.AddChild(button);
-			return button;
+			RefreshBoardChoices(snapshot);
 		}
 	}
 

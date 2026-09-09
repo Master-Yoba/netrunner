@@ -125,3 +125,17 @@ After the implementation checks pass, tune the glow without changing C#,
 save the resource, reopen the preview, and launch a game. Record whether the
 result persists and whether any step required help. This user exercise is a
 required M4.10 gate; automated checks do not replace it.
+
+## Practice drag interactions
+
+Run `make interaction-lab`, or select **Practice board interactions** on the
+setup screen. Choose a scenario and drag the practice card from hand. **Reset
+scenario** restores the fixture immediately. The lab uses synthetic presentation
+data and the production interaction controls; it is not a rules simulator or a
+saved match. No official card metadata is required.
+
+Tune `themes/DragAppearance.tres` for drag threshold, preview scale, return
+duration, edge scrolling, and destination styles. Production scenes are
+`BoardDragController.tscn`, `DropDestination.tscn`, and `BoardChoicePanel.tscn`.
+Use the Remote Inspector for temporary live changes and the local resources for
+persistent edits.
