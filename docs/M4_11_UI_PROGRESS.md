@@ -1,6 +1,7 @@
 # Slice 4.11 progress
 
-Status: implemented on `feat/m4-11-drag-play`; final gate in progress.
+Status: implemented on `feat/m4-11-drag-play`; complete local M4 gate passed.
+[PR #18](https://github.com/Master-Yoba/netrunner/pull/18) targets `dev`.
 Independent manual usability acceptance is pending.
 
 The [approved plan](M4_11_DRAG_PLAY_PLAN.md) introduces drag-to-play/install and
@@ -40,7 +41,9 @@ face-down positional hosts and general-play geometry beside the hand.
   [new remote](evidence/m4-11/drag-7-1920.png).
 - Native demonstration: `--m4-11-demo` records hosted installation and a new remote;
   the local recording is `/tmp/m411-drag-demo.avi` (9.6 seconds). It is not committed.
-- Full official M4 gate: running. CI will validate the pushed slice independently.
+- Full official M4 gate: PASS, coverage 77/77, both seats and basic/expanded
+  decks, recovery, native UI, formatting and secret scanning. GitHub CI validates
+  the pushed slice independently; its current result is visible on PR #18.
 
 ## Manual acceptance
 
