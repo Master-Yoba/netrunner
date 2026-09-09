@@ -199,6 +199,11 @@ public partial class TableCardControl : Control
 	private Label? _rulesCue;
 	private Label? _status;
 	private Label? _counters;
+	private StyleBox? _statusBadgeStyle;
+	private bool _statusBadgeStyleConnected;
+	private CardLabelLayout? _statusBadgeLayout;
+	private bool _statusBadgeLayoutConnected;
+	private bool _statusRectConnected;
 	private Control? _layoutHost;
 	private Control? _portraitLayout;
 	private Control? _compactLayout;
@@ -293,6 +298,9 @@ public partial class TableCardControl : Control
 
 	public override void _ExitTree()
 	{
+		DisconnectStatusRect();
+		DisconnectStatusBadgeLayout();
+		DisconnectStatusBadgeStyle();
 		DisconnectAppearance();
 		base._ExitTree();
 	}
@@ -382,12 +390,137 @@ public partial class TableCardControl : Control
 
 	private void BindLabelLayout(Control layout)
 	{
+		DisconnectStatusRect();
 		_title = layout.GetNodeOrNull<Label>("Title");
 		_type = layout.GetNodeOrNull<Label>("Type");
 		_stats = layout.GetNodeOrNull<Label>("Stats");
 		_rulesCue = layout.GetNodeOrNull<Label>("RulesCue");
 		_status = layout.GetNodeOrNull<Label>("Status");
 		_counters = layout.GetNodeOrNull<Label>("Counters");
+		BindStatusBadgeStyle(layout);
+		ConnectStatusRect();
+	}
+
+	private void BindStatusBadgeStyle(Control layout)
+	{
+		CardLabelLayout? authoredLayout = layout as CardLabelLayout;
+		if (!ReferenceEquals(_statusBadgeLayout, authoredLayout))
+		{
+			DisconnectStatusBadgeLayout();
+			_statusBadgeLayout = authoredLayout;
+		}
+		ConnectStatusBadgeLayout();
+
+		StyleBox? style = authoredLayout?.StatusBadgeStyle;
+		if (!ReferenceEquals(_statusBadgeStyle, style))
+		{
+			DisconnectStatusBadgeStyle();
+			_statusBadgeStyle = style;
+		}
+
+		ConnectStatusBadgeStyle();
+	}
+
+	private void ConnectStatusBadgeLayout()
+	{
+		if (_statusBadgeLayoutConnected
+			|| !IsInsideTree()
+			|| _statusBadgeLayout is null
+			|| !GodotObject.IsInstanceValid(_statusBadgeLayout))
+		{
+			return;
+		}
+
+		_statusBadgeLayout.StatusBadgeStyleChanged += HandleStatusBadgeStyleReplaced;
+		_statusBadgeLayoutConnected = true;
+	}
+
+	private void DisconnectStatusBadgeLayout()
+	{
+		if (!_statusBadgeLayoutConnected
+			|| _statusBadgeLayout is null
+			|| !GodotObject.IsInstanceValid(_statusBadgeLayout))
+		{
+			_statusBadgeLayoutConnected = false;
+			return;
+		}
+
+		_statusBadgeLayout.StatusBadgeStyleChanged -= HandleStatusBadgeStyleReplaced;
+		_statusBadgeLayoutConnected = false;
+	}
+
+	private void HandleStatusBadgeStyleReplaced()
+	{
+		if (_activeLayout is not null && IsInstanceValid(_activeLayout))
+		{
+			BindStatusBadgeStyle(_activeLayout);
+		}
+
+		QueueRedraw();
+	}
+
+	private void ConnectStatusBadgeStyle()
+	{
+		if (_statusBadgeStyleConnected
+			|| !IsInsideTree()
+			|| _statusBadgeStyle is null
+			|| !GodotObject.IsInstanceValid(_statusBadgeStyle))
+		{
+			return;
+		}
+
+		_statusBadgeStyle.Changed += HandleStatusBadgeStyleChanged;
+		_statusBadgeStyleConnected = true;
+	}
+
+	private void DisconnectStatusBadgeStyle()
+	{
+		if (!_statusBadgeStyleConnected
+			|| _statusBadgeStyle is null
+			|| !GodotObject.IsInstanceValid(_statusBadgeStyle))
+		{
+			_statusBadgeStyleConnected = false;
+			return;
+		}
+
+		_statusBadgeStyle.Changed -= HandleStatusBadgeStyleChanged;
+		_statusBadgeStyleConnected = false;
+	}
+
+	private void HandleStatusBadgeStyleChanged()
+	{
+		if (GodotObject.IsInstanceValid(this))
+		{
+			QueueRedraw();
+		}
+	}
+
+	private void ConnectStatusRect()
+	{
+		if (_statusRectConnected || !IsInsideTree() || _status is null || !IsInstanceValid(_status))
+		{
+			return;
+		}
+
+		_status.ItemRectChanged += HandleStatusRectChanged;
+		_statusRectConnected = true;
+	}
+
+	private void DisconnectStatusRect()
+	{
+		if (!_statusRectConnected || _status is null || !IsInstanceValid(_status))
+		{
+			_statusRectConnected = false;
+			return;
+		}
+
+		_status.ItemRectChanged -= HandleStatusRectChanged;
+		_statusRectConnected = false;
+	}
+
+	private void HandleStatusRectChanged()
+	{
+		QueueRedraw();
 	}
 
 	private void SelectLabelLayout()
@@ -606,9 +739,12 @@ public partial class TableCardControl : Control
 					new Vector2(headerRect.Size.X, underlineHeight)),
 				accent.Lightened(appearance.HeaderLighten));
 		}
+		DrawAuthoredStatusBadge();
+		DrawStatusBadge(accent, cardSize);
 
 		// The glow is part of the card surface. Draw it before motif/artwork,
-		// badges, and child labels so it cannot cut through presentation detail.
+		// non-status badges, and child labels. The bottom status background
+		// deliberately sits beneath the glow while its text stays above it.
 		if (_actionableSource)
 		{
 			DrawActionGlow(
@@ -1096,15 +1232,45 @@ public partial class TableCardControl : Control
 			DrawRect(selected, WithAlpha(appearance.SelectedColor, appearance.SelectedBadgeOpacity), false, appearance.FrameWidth);
 		}
 
-		if (_card.Rezzed || _card.IsAbilityUsed || _card.IsFirstXUsedThisTurn)
+	}
+
+	private void DrawAuthoredStatusBadge()
+	{
+		if (_status is null
+			|| !IsInstanceValid(_status)
+			|| !_status.Visible
+			|| _statusBadgeStyle is null
+			|| !GodotObject.IsInstanceValid(_statusBadgeStyle)
+			|| _status.Size.X <= 0.0f
+			|| _status.Size.Y <= 0.0f)
 		{
-			Rect2 status = _isIce
-				? new Rect2(cardSize.X - 69, 21, 64, 13)
-				: IsCompactPortrait
-					? new Rect2(4, Mathf.Max(0, cardSize.Y - 15), Mathf.Max(1, cardSize.X - 8), 11)
-					: new Rect2(5, cardSize.Y - 14, Mathf.Max(1, cardSize.X - 10), 10);
-			DrawRect(status, WithAlpha(accent, appearance.StatusBadgeOpacity));
+			return;
 		}
+
+		// The visible badge belongs to the authored layout resource, but is
+		// painted by the card surface before the glow. The label keeps only a
+		// transparent padded style, so its text remains the final layer.
+		DrawSetTransformMatrix(GetGlobalTransform().AffineInverse() * _status.GetGlobalTransform());
+		DrawStyleBox(_statusBadgeStyle, new Rect2(Vector2.Zero, _status.Size));
+		DrawSetTransformMatrix(Transform2D.Identity);
+	}
+
+	private void DrawStatusBadge(Color accent, Vector2 cardSize)
+	{
+		if (_card is null
+			|| !_card.IsKnown
+			|| (!_card.Rezzed && !_card.IsAbilityUsed && !_card.IsFirstXUsedThisTurn))
+		{
+			return;
+		}
+
+		CardAppearance appearance = CurrentAppearance;
+		Rect2 status = _isIce
+			? new Rect2(cardSize.X - 69, 21, 64, 13)
+			: IsCompactPortrait
+				? new Rect2(4, Mathf.Max(0, cardSize.Y - 15), Mathf.Max(1, cardSize.X - 8), 11)
+				: new Rect2(5, cardSize.Y - 14, Mathf.Max(1, cardSize.X - 10), 10);
+		DrawRect(status, WithAlpha(accent, appearance.StatusBadgeOpacity));
 	}
 
 	private static int ToPixel(float value) => Mathf.Max(0, Mathf.RoundToInt(value));

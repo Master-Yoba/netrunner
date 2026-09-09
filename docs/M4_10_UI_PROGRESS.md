@@ -125,3 +125,17 @@ outside this rendering commit. Manual acceptance remains pending.
 A same-session native baseline comparison measured median/p95 8.61/11.09 ms
 before the slice versus 8.57/11.31 ms with this fix under the current workload;
 these single runs do not indicate a material frame-time regression.
+
+### Bottom status badge layering
+
+The inner glow now renders above the bottom status badge background and below
+its text, as requested during review. Its background remains an authored
+`StatusBadgeStyle` on each label layout. Style edits/replacement and status
+geometry changes trigger redraws; no per-frame polling or cross-card z-order
+changes were introduced. Corrected subscription reentry and converted label
+coordinates into card space during review.
+
+[Updated enlarged preview](evidence/m4-10/status-glow-after.png).
+Build, editor smoke (including status-style replacement/reentry), native UI
+checks for both seats/resolutions, and formatting passed. Local user theme and
+project edits were preserved.

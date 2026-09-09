@@ -99,6 +99,9 @@ provides authored sample instances for selecting cards in the Local tree.
 
 The board resource owns its named geometry settings. Card appearance owns
 custom drawing and typography; component scenes own their fixed label layouts.
+The bottom status badge background is the **Status Badge Style** resource on
+each card label layout root (`components/layouts/CardLabelLayout*.tscn`). It
+renders beneath the inner glow; status text and its padding render above it.
 History's exported text/style settings own its rows. These explicit authorities
 prevent an arbitrary raw-node override from competing with the setting that
 the game actually uses. Other component-specific StyleBoxes remain editable

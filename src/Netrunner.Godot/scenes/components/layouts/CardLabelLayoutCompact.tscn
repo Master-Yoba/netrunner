@@ -1,6 +1,7 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Theme" path="res://themes/M4Theme.tres" id="1_theme"]
+[ext_resource type="Script" path="res://scenes/components/layouts/CardLabelLayout.cs" id="2_layout"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBox_status"]
 bg_color = Color(0.08, 0.12, 0.17, 0.88)
@@ -29,6 +30,13 @@ content_margin_top = 1.0
 content_margin_right = 3.0
 content_margin_bottom = 1.0
 
+[sub_resource type="StyleBoxFlat" id="StyleBox_status_text"]
+bg_color = Color(0, 0, 0, 0)
+content_margin_left = 3.0
+content_margin_top = 1.0
+content_margin_right = 3.0
+content_margin_bottom = 1.0
+
 [node name="CompactLayout" type="Control"]
 layout_mode = 3
 anchors_preset = 15
@@ -38,6 +46,8 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 theme = ExtResource("1_theme")
+script = ExtResource("2_layout")
+StatusBadgeStyle = SubResource("StyleBox_status")
 
 [node name="Title" type="Label" parent="."]
 layout_mode = 1
@@ -108,7 +118,7 @@ mouse_filter = 2
 clip_text = true
 autowrap_mode = 0
 vertical_alignment = 1
-theme_override_styles/normal = SubResource("StyleBox_status")
+theme_override_styles/normal = SubResource("StyleBox_status_text")
 
 [node name="Counters" type="Label" parent="."]
 layout_mode = 1

@@ -66,6 +66,15 @@ public partial class UiEditorSmoke : Node
 			AddChild(first);
 			replacement.TitleFontSize = 16;
 			Require(VisibleTitle(first).GetThemeFontSize("font_size") == 16, "Resource subscription did not reconnect after tree reentry.");
+			CardLabelLayout statusLayout = first.GetNode<CardLabelLayout>("LayoutHost/PortraitLayout");
+			StyleBox? originalBadge = statusLayout.StatusBadgeStyle;
+			using var replacementBadge = new StyleBoxFlat();
+			statusLayout.StatusBadgeStyle = replacementBadge;
+			Require(replacementBadge.GetSignalConnectionList(Resource.SignalName.Changed).Count > 0,
+				"Status badge replacement did not reconnect after tree reentry.");
+			statusLayout.StatusBadgeStyle = originalBadge;
+			Require(replacementBadge.GetSignalConnectionList(Resource.SignalName.Changed).Count == 0,
+				"Replaced status badge retained its redraw subscription.");
 			first.EmitSignal(Control.SignalName.MouseEntered);
 			Require(first.IsInteractionActive, "Known-card hover did not activate.");
 			first.SetCard(new CardViewModel("editor-smoke-hidden", null, "PRIVATE TITLE MUST NOT RENDER", "", false, false, 0,
