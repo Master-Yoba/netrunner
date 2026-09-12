@@ -6,16 +6,13 @@ namespace Netrunner.GodotClient;
 
 public partial class GameTableControl
 {
-	private MatchViewModel? _drawView;
 	private readonly HashSet<TableCardControl> _drawArrivals = new();
 	public int DrawMotionCount => _drawArrivals.Count;
 
 	private sealed record DrawPlan(Rect2 Source, IReadOnlyList<string> CardIds);
 
-	private DrawPlan? CaptureDrawPlan(MatchViewModel view)
+	private DrawPlan? CaptureDrawPlan(MatchViewModel? previous, MatchViewModel view)
 	{
-		MatchViewModel? previous = _drawView;
-		_drawView = view;
 		if (previous is null || previous.Viewer != view.Viewer || !MotionEnabled || MotionDuration <= 0
 			|| Hand.ReducedMotion || Hand.DrawSeconds <= 0 || Engine.IsEditorHint()) return null;
 		bool corp = view.Viewer == PlayerSide.Corp;

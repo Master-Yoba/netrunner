@@ -403,7 +403,7 @@ public partial class Main
 			_tablePublications.Enqueue(snapshot);
 		}
 		if (_tablePublications.Count > 24) _skipAnimation = true;
-		if (!_skipAnimation && (_tablePlaybackWait > 0 || _gameTable.DrawMotionCount > 0)) return;
+		if (!_skipAnimation && (_tablePlaybackWait > 0 || _gameTable.DrawMotionCount > 0 || _gameTable.DiscardMotionCount > 0)) return;
 		while (_tablePublications.TryDequeue(out MatchSnapshot? next))
 		{
 			if (next.Sequence <= _renderedSequence) continue;
@@ -417,6 +417,7 @@ public partial class Main
 				foreach (Button actionButton in _tableActions.GetChildren().OfType<Button>()) actionButton.Disabled = true;
 				break;
 			}
+			if (!_skipAnimation && _gameTable.DiscardMotionCount > 0) break;
 		}
 		if (_tablePublications.Count == 0) _skipAnimation = false;
 	}

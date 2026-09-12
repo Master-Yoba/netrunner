@@ -97,3 +97,28 @@ and glow settings are documented in the [editor guide](UI_EDITOR_GUIDE.md).
 - Evidence: [Runner discard](evidence/m4-12/discard-runner-1920.png),
   [Corp discard](evidence/m4-12/discard-corp-1920.png),
   [pending selection](evidence/m4-12/discard-pending-1920.png).
+
+## 2026-09-12 — Discard animation correction
+
+- The first selection previously produced no flight because it remained in the
+  authoritative hand. The final selection could produce two flights when the
+  first selected card became the pile top: the generic renderer treated that
+  newly visible face as a card arriving from the Corp header.
+- Each newly accepted choice now gets one hand-to-pile flight with its original
+  position, scale and rotation. Previously selected cards are excluded when the
+  engine commits the complete set. Exposing an older pile face does not invent
+  movement. A final arriving face stays hidden until its flight finishes; Skip,
+  Reduced motion and replacement rendering restore it safely. Playback waits
+  for pending discard motion, including choices without public history events.
+- The original discard interaction smoke used Reduced motion and missed this
+  regression. New native and headless checks run with animation enabled for
+  both seats at 1080p/1440p, discarding the leftmost and rightmost cards twice.
+  They verify one flight per choice, hand origin, travel toward the pile, clean
+  completion, repeated observations, pile-top changes, menu choices, Skip and
+  Reduced motion. Existing drag/draw, dense-board and editor checks pass, as
+  does formatting verification. No engine or Match contracts changed.
+- Logs: `/tmp/discard-motion-headless.log`, `/tmp/discard-motion-native.log`,
+  `/tmp/discard-motion-table.log`, `/tmp/discard-motion-editor.log`,
+  `/tmp/discard-motion-format.log`.
+- Evidence: [first rightmost discard](evidence/m4-12/discard-motion-1-1920.png),
+  [second rightmost discard](evidence/m4-12/discard-motion-2-1920.png).

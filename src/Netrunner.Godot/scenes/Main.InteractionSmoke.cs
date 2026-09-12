@@ -159,6 +159,7 @@ public partial class Main
 			await CheckBoardRefinements();
 			await CheckDrawMotion();
 			await CheckHandDiscard();
+			await CheckDiscardMotion();
 			GD.Print("M411_INTERACTION PASS scenarios=15 resolutions=2 drag=true cancel=true stale=true choices=true menu_fallback=true hidden_host=true focus_loss=true invalid_drop=true centered=true smooth_follow=true");
 			GetTree().Quit();
 		}

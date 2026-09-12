@@ -176,3 +176,6 @@ Each accepted choice leaves the fan; the pile shows the pending selection count
 until both choices resolve. Reset to repeat. Invalid drops and Escape return the
 card to hand. **All legal actions…** retains the existing confirmation controls
 for keyboard use. The pile's `Pending` label is authored in `BoardPile.tscn`.
+With Reduced motion off, each accepted choice animates once from hand to the
+pile, including the first choice. Try the rightmost card twice; completing the
+set should not replay the first card or create a flight from the upper board.

@@ -578,7 +578,9 @@ public partial class GameTableControl : Control
 			ApplySelectionAndTargets();
 			return;
 		}
-		DrawPlan? draw = CaptureDrawPlan(view);
+		MatchViewModel? previousView = _motionView;
+		_motionView = view;
+		DrawPlan? draw = CaptureDrawPlan(previousView, view);
 		var previousCards = CaptureMotionCards();
 		_lastBoardFingerprint = boardFingerprint;
 
@@ -610,7 +612,7 @@ public partial class GameTableControl : Control
 		}
 		ApplySelectionAndTargets();
 		PresentDrawMotion(draw, view.Viewer);
-		PresentMotion(previousCards, view);
+		PresentMotion(previousCards, view, previousView);
 		EnsureRunVisible(view.Run);
 	}
 
