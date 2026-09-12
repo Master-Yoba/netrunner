@@ -54,10 +54,11 @@ public partial class Main
 
 	private void UpdateBoardChoiceGeometry()
 	{
+		RefreshBoardChoiceAvailability();
 		foreach (PanelContainer cue in _boardChoiceServerCues)
 		{
 			Rect2? rect = _gameTable.GetDropRect(cue.GetMeta("target_kind").AsString(), cue.GetMeta("target_id").AsString());
-			cue.Visible = rect is { } area && area.HasArea();
+			cue.Visible = _boardChoiceInputEnabled == true && rect is { } area && area.HasArea();
 			if (rect is not { } visible) continue;
 			cue.GlobalPosition = visible.Position;
 			cue.Size = visible.Size;

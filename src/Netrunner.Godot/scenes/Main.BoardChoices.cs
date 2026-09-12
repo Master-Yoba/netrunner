@@ -23,8 +23,9 @@ public partial class Main
 	private Button? _boardChoiceDismiss;
 	private DecisionViewModel? _boardChoiceDecision;
 	private MatchSnapshot? _boardChoiceSnapshot;
-	private IReadOnlyList<LegalActionViewModel> _boardChoiceActions = Array.Empty<LegalActionViewModel>();
+	private LegalActionViewModel[] _boardChoiceActions = Array.Empty<LegalActionViewModel>();
 	private bool _boardChoiceVisible;
+	private bool? _boardChoiceInputEnabled;
 	private bool _boardChoiceDisambiguating;
 	private readonly List<PanelContainer> _boardChoiceServerCues = new();
 	private bool _boardChoiceIsInitialStage;
@@ -325,23 +326,12 @@ public partial class Main
 
 		decision = selectedDecision;
 		actions = Array.Empty<LegalActionViewModel>();
-		if (!_boardChoiceVisible || _boardChoiceSnapshot is null)
+		if (!CanUseBoardChoiceInput())
 		{
 			return false;
 		}
 
-		MatchSnapshot? current = _currentSnapshot ?? _boardChoiceSnapshot;
-		if (_fullMatchResumePaused || _tableAwaitingSettlement || Volatile.Read(ref _submissionInFlight) != 0
-			|| _zoomOverlay?.Visible == true || _tablePileOverlay?.Visible == true
-			|| current.IsOpponentThinking
-			|| current.View.Run is not null
-			|| current.View.Decision is not { } currentDecision
-			|| !SameDecision(decision, currentDecision)
-			|| currentDecision.OwnerSide != current.View.Viewer)
-		{
-			return false;
-		}
-
+		MatchSnapshot current = (_currentSnapshot ?? _boardChoiceSnapshot)!;
 		HashSet<ActionId> issued = current.View.LegalActions.Select(action => action.Id).ToHashSet();
 		LegalActionViewModel[] retained = _boardChoiceActions
 			.Where(action => issued.Contains(action.Id))
@@ -353,6 +343,29 @@ public partial class Main
 
 		actions = retained;
 		return true;
+	}
+
+	private bool CanUseBoardChoiceInput() => _boardChoiceVisible
+		&& (_currentSnapshot ?? _boardChoiceSnapshot) is { IsOpponentThinking: false, IsTerminal: false } current
+		&& current.View.Run is null && current.View.Decision is { } decision
+		&& decision.OwnerSide == current.View.Viewer && SameDecision(_boardChoiceDecision, decision)
+		&& !_fullMatchResumePaused && !_tableAwaitingSettlement && Volatile.Read(ref _submissionInFlight) == 0
+		&& _stagedAction is null && _zoomOverlay?.Visible != true && _tablePileOverlay?.Visible != true;
+
+	private void RefreshBoardChoiceAvailability()
+	{
+		if (!_boardChoiceVisible || _boardChoiceOptions is null) return;
+		bool enabled = CanUseBoardChoiceInput();
+		if (_boardChoiceInputEnabled == enabled) return;
+		_boardChoiceInputEnabled = enabled;
+		foreach (Button option in _boardChoiceOptions.GetChildren().OfType<Button>()) option.Disabled = !enabled;
+		foreach (TableCardControl card in _boardChoiceOptions.FindChildren("*", "Control", true, false).OfType<TableCardControl>())
+		{
+			card.SetTargetCandidate(enabled);
+			card.Modulate = new Color(1, 1, 1, enabled ? 1 : 0.5f);
+		}
+		_gameTable.SetTargets(enabled
+			? _boardChoiceActions.SelectMany(action => BoardCardTargetIds(action, _boardChoiceActions)).ToHashSet(StringComparer.Ordinal) : []);
 	}
 
 	private void ShowBoardChoicePanel(
@@ -403,6 +416,8 @@ public partial class Main
 
 		RenderBoardChoiceCards(actions);
 		ApplyBoardChoiceTargets(actions);
+		_boardChoiceInputEnabled = null;
+		RefreshBoardChoiceAvailability();
 		_boardChoicePanel.Visible = true;
 		_boardChoicePanel.MoveToFront();
 		_boardChoiceDismiss?.GrabFocus();
@@ -448,6 +463,7 @@ public partial class Main
 	private void HideBoardChoicePanel()
 	{
 		_boardChoiceVisible = false;
+		_boardChoiceInputEnabled = null;
 		ClearBoardServerCues();
 		if (_boardChoicePanel is not null && IsInstanceValid(_boardChoicePanel))
 		{

@@ -10,6 +10,7 @@ public partial class BoardDragController : Control
 	public GameTableControl Board { get; set; } = null!;
 	public Func<bool>? CanInteract { get; set; }
 	public Func<InputEvent, bool>? InputFilter { get; set; }
+	public Func<bool>? FocusLossFilter { get; set; }
 	public event Action<DecisionViewModel, IReadOnlyList<LegalActionViewModel>>? Dropped;
 	public event Action? DragStarted;
 	public event Action<string, string?>? GestureEnded;
@@ -228,7 +229,10 @@ public partial class BoardDragController : Control
 		_returnTween.TweenCallback(Callable.From(returning.QueueFree));
 	}
 
-	private void OnFocusLost() => Cancel("focus-lost", false);
+	private void OnFocusLost()
+	{
+		if (FocusLossFilter?.Invoke() != false) Cancel("focus-lost", false);
+	}
 	private void RestoreSource()
 	{
 		if (IsInstanceValid(_sourceControl)) _sourceControl!.Modulate = _sourceModulate;

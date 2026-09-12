@@ -8,6 +8,7 @@ public partial class Main
 {
 	private const int SmokeInputDevice = 47012;
 	private bool _isolateSmokeInput;
+	private bool _smokeFocusLoss;
 	public override void _Input(InputEvent @event)
 	{
 		// Native smoke events must not race the desktop's real pointer.
@@ -20,6 +21,7 @@ public partial class Main
 		{
 			_isolateSmokeInput = true;
 			_boardDrag!.InputFilter = input => input.Device == SmokeInputDevice;
+			_boardDrag.FocusLossFilter = () => _smokeFocusLoss;
 			_boardDrag.GestureEnded += (outcome, card) => GD.Print($"M411_GESTURE scenario={_labScenario} card={card} outcome={outcome}");
 			OpenInteractionLab();
 			_reducedMotion.ButtonPressed = true;
@@ -126,7 +128,12 @@ public partial class Main
 				await LabPointer(initial); LabButton(initial, true); await LabPointer(initial + new Vector2(0, -40));
 				if (cancellation == "right-click")
 					GetViewport().PushInput(new InputEventMouseButton { Device = SmokeInputDevice, Position = initial, ButtonIndex = MouseButton.Right, Pressed = true });
-				else if (cancellation == "focus-loss") GetWindow().EmitSignal(Window.SignalName.FocusExited);
+				else if (cancellation == "focus-loss")
+				{
+					_smokeFocusLoss = true;
+					GetWindow().EmitSignal(Window.SignalName.FocusExited);
+					_smokeFocusLoss = false;
+				}
 				else await LabPointer(initial);
 				LabButton(initial, false);
 				await TableFrames(2);
@@ -160,6 +167,7 @@ public partial class Main
 			await CheckDrawMotion();
 			await CheckHandDiscard();
 			await CheckDiscardMotion();
+			await CheckReviewInteractionGuards();
 			GD.Print("M411_INTERACTION PASS scenarios=15 resolutions=2 drag=true cancel=true stale=true choices=true menu_fallback=true hidden_host=true focus_loss=true invalid_drop=true centered=true smooth_follow=true");
 			GetTree().Quit();
 		}

@@ -122,3 +122,24 @@ and glow settings are documented in the [editor guide](UI_EDITOR_GUIDE.md).
   `/tmp/discard-motion-format.log`.
 - Evidence: [first rightmost discard](evidence/m4-12/discard-motion-1-1920.png),
   [second rightmost discard](evidence/m4-12/discard-motion-2-1920.png).
+
+## 2026-09-12 — PR review integration
+
+- Reviewed all feedback on #18 and #19 on the combined M4.11/M4.12 branch;
+  #19 contains every commit in #18 and supersedes it for the merge into `dev`.
+- #19: hand dragging now respects a pending menu confirmation at both press
+  and release. The native regression reproduces the issue with an install
+  confirmation, verifies that cancellation restores dragging, and also stages
+  confirmation during an active gesture.
+- #18: the busy submission guard was already present. Contextual buttons,
+  card targets, pile-browser choices and server cues now also show their
+  unavailable state while submission or board settlement is pending. They
+  recover automatically when input becomes available. Confirmation also blocks
+  contextual submissions, and target inspection remains available.
+- Native regression checks passed at 1080p and 1440p, including attempts through
+  disabled buttons, card/server selection and direct callbacks. Smoke input
+  isolation covers unrelated desktop focus changes; an explicit focus-loss
+  signal still exercises the production cancellation handler.
+- Evidence: [contextual controls while settling](evidence/m4-12/choice-settling-1920.png).
+  Native log: `/tmp/pr19-review-native.log`. Final full M4 gate and CI results
+  are recorded in [PR #19](https://github.com/Master-Yoba/netrunner/pull/19).
