@@ -783,6 +783,13 @@ public partial class TableCardControl : Control
 	/// <summary>Optional stable pointer geometry supplied by an animated hand.</summary>
 	public Func<Vector2, bool>? PointerHitTest { get; set; }
 
+	/// <summary>Lets an interactive pile forward hover/focus to its decorative card face.</summary>
+	public void SetContainerHover(bool active)
+	{
+		if (active) HandleMouseEntered();
+		else HandleMouseExited();
+	}
+
 	public override bool _HasPoint(Vector2 point) => PointerHitTest?.Invoke(GetGlobalTransform() * point)
 		?? new Rect2(Vector2.Zero, Size).HasPoint(point);
 

@@ -56,9 +56,9 @@ public partial class GameTableControl
 		pile.Text = count == 0 ? (handle == "zone:corp-deck" ? "R&D\nEmpty" : "Archives\nEmpty") : string.Empty;
 	}
 
-	private void HoverPileFace(BoardActionButton pile, bool active)
+	private static void HoverPileFace(BoardActionButton pile, bool active)
 	{
 		TableCardControl? face = pile.GetChildren().OfType<TableCardControl>().FirstOrDefault(card => card.Visible);
-		if (face is not null) HandleCardHoverChanged(face, active);
+		face?.SetContainerHover(active || pile.IsHovered() || pile.HasFocus());
 	}
 }

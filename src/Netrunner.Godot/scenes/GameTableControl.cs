@@ -981,6 +981,7 @@ public partial class GameTableControl : Control
 
 		if (control.GetParent() is Node oldParent && oldParent != parent)
 		{
+			if (oldParent is BoardActionButton) control.SetContainerHover(false);
 			oldParent.RemoveChild(control);
 		}
 		if (control.GetParent() != parent)
