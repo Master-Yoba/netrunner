@@ -79,6 +79,7 @@ Select the `UiPreview` root to change **Viewer Seat**, **Density** (empty,
 normal or dense), **Decision**, **History Expanded**, and **Show Hover Preview**.
 The **Page** property also exposes setup, inspection and public pile examples.
 These are authoring samples; their buttons do not submit game actions.
+Choose **Decision: Ordinary** to preview the local credit and draw glows.
 
 | What to change | Authoring location |
 | --- | --- |

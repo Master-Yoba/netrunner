@@ -62,6 +62,8 @@ public partial class UiPreview : Control
 		board.PreviewMode = GameTableControl.PreviewDensity.Off;
 		board.MotionEnabled = false;
 		board.Render(view);
+		board.SetBasicActionAvailability(Decision == SampleDecision.Ordinary,
+			Decision == SampleDecision.Ordinary && (ViewerSeat == PlayerSide.Corp ? view.CorpDeck.Count : view.RunnerDeck.Count) > 0);
 		board.SetActionableSources(new HashSet<string>(["preview-hand-1", "preview-hand-3"], StringComparer.Ordinal));
 		board.SetTargets(new HashSet<string>(["preview-root-0"], StringComparer.Ordinal));
 		board.SetSelection("preview-rig-0");
@@ -99,7 +101,8 @@ public partial class UiPreview : Control
 			SampleDecision.NestedChoice => ["Choose Remote 1", "Choose Remote 2", "Back"],
 			SampleDecision.Outcome => [],
 			SampleDecision.Recovery => ["Continue recovered match"],
-			_ => ["Gain 1 credit · 1 click", "Draw a card · 1 click", "All legal actions…"],
+			_ => ViewerSeat == PlayerSide.Runner ? ["Run", "Choose a card / server", "All legal actions…"]
+				: ["Choose a card / server", "All legal actions…"],
 		};
 		foreach (string label in labels)
 		{

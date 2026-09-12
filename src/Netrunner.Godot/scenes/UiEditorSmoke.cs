@@ -110,6 +110,12 @@ public partial class UiEditorSmoke : Node
 			GameTableControl board = preview.GetNode<GameTableControl>("Margin/Content/Pages/Board/MatchTable/TableViewport/GameBoard");
 			Control access = preview.GetNode<Control>("Margin/Content/Pages/Board/MatchTable/TableViewport/AccessPanel");
 			Require(access.GetNode<TableCardControl>("%Card").Card is { IsKnown: true }, "Preview did not bind the accessed card.");
+			preview.Decision = UiPreview.SampleDecision.Ordinary;
+			await Frames(2);
+			Require(board.FindChildren("*", "Button", true, false).OfType<BoardActionButton>().Count(button => button.ActionAvailable) == 2,
+				"Ordinary board preview does not expose the local credit and deck glows.");
+			preview.Decision = UiPreview.SampleDecision.Access;
+			await Frames(2);
 			TableCardControl stable = board.VisibleCards["preview-hand-1"];
 			CardAppearance original = stable.Appearance;
 			CardAppearance replacement = (CardAppearance)original.Duplicate();
