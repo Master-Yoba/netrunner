@@ -83,10 +83,12 @@ These are authoring samples; their buttons do not submit game actions.
 | What to change | Authoring location |
 | --- | --- |
 | Glow, state colors, card sizes and typography | `themes/CardAppearance.tres` |
-| Lane width, hand overlap, card separation and board margins | `themes/BoardLayout.tres` |
+| Lane width, card separation and board margins | `themes/BoardLayout.tres` |
 | Common button/focus styles and heading variations | `themes/M4Theme.tres` |
 | Fixed board regions | `scenes/components/GameBoard.tscn` |
 | Lane, player area, local hand and pile composition | `ServerLane.tscn`, `PlayerArea.tscn`, `HandView.tscn`, `PileView.tscn` in `scenes/components` |
+| Hand spacing, fan angle, curve, hover lift, scale and timing | Root of `scenes/components/HandView.tscn` |
+| Credit/deck action glow | `CreditIndicator.tscn` and `BoardPile.tscn` (`GlowWidth`, `GlowColor`) |
 | History widths, row spacing, text and styles | Root of `scenes/components/MatchHistoryPanel.tscn` |
 | Dock and action-button layout | `DecisionDock.tscn` and `ActionButton.tscn` |
 | Hover dimensions and card magnification | Root of `CardHoverPreview.tscn` |
@@ -97,9 +99,11 @@ Edit the component scene to retain layout changes; do not save a synthetic
 board's generated runtime instances as production content. The Cards page
 provides authored sample instances for selecting cards in the Local tree.
 
-Runner identity, rig and hand use top-aligned card rows under 17-pixel headings.
-Keep the identity/rig captions in `PlayerArea.tscn` and the heading in
-`HandView.tscn` the same height when editing them. Server roots are centered in
+Runner identity and rig use top-aligned card rows under 17-pixel headings.
+The local hand occupies its own lower-right area. Edit `LocalHand` in
+`GameBoard.tscn` to change its footprint; the workspace adjusts the play area
+and action dock around it. Hand spacing now belongs to `HandView.CardStep`;
+the old `BoardLayout.HandOverlap` setting has been removed. Server roots are centered in
 `ServerLane.tscn`; its run-marker row stays reserved even when empty. ICE scrolling
 reserves the scrollbar space, with a matching left gutter derived from the theme,
 so crowded servers keep the same centerline as their roots.
@@ -151,3 +155,10 @@ Dragged cards are centered on the pointer. `FollowSmoothing` controls how softly
 they follow movement (default 0.04 seconds; higher is softer, zero is immediate).
 Reduced motion also makes tracking immediate. Drop targets follow the pointer
 directly even while the preview is catching up.
+
+The lab also includes **Runner: hand and board actions** and **Corp: hand and
+board actions**. These show a five-card fan and let you try the credit icon,
+Stack/R&D draw, Archives browsing, and the Runner's cancellable Run selection.
+`MotionSeconds` controls hover easing; `HoverLift` and `HoverScale` control its
+extent. Reduced motion applies the raised pose immediately, including keyboard
+focus. Card dimensions continue to come from `CardAppearance.PortraitSize`.

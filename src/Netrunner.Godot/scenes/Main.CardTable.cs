@@ -50,6 +50,8 @@ public partial class Main
 		_tableViewport.Resized += HandleCardHoverPreviewViewportResized;
 		_gameTable = _tableViewport.GetNode<GameTableControl>("GameBoard");
 		_gameTable.CardSelected += SelectTableCard;
+		_gameTable.BasicActionRequested += SubmitBasicBoardAction;
+		_gameTable.PileRequested += id => ShowTablePile(id);
 		_gameTable.CardHoverChanged += HandleTableCardHoverChanged;
 		_gameTable.CardInspected += id =>
 		{
@@ -70,6 +72,8 @@ public partial class Main
 		_gameTable.ServerSelected += id =>
 		{
 			if (TrySelectBoardChoiceServer(id)) return;
+			if (_currentSnapshot?.View.Servers.Any(server => server.Id == id && server.Kind == ServerKind.Archives) == true
+				&& ShowTablePile("zone:corp-archives")) return;
 			RecordFullMatchSelection("server", id);
 			if (ShowTablePile(id)) return;
 			_tableSelectedServer = id;
@@ -95,7 +99,7 @@ public partial class Main
 		BuildCardHoverPreview(_tableViewport);
 		_matchHistory = _tableViewport.GetNode<MatchHistoryPanel>("History");
 		_matchHistory.InspectCard += card => { _inspectedCard = card; ShowInspectedCardZoom(); };
-		Control dock = _board.GetNode<Control>("DecisionDock");
+		Control dock = _board.GetNode<Control>("TableViewport/DecisionDock");
 		_tablePrompt = dock.GetNode<Label>("%Prompt");
 		_tableInspect = dock.GetNode<Button>("%Inspect");
 		_tableInspect.Pressed += ShowInspectedCardZoom;
@@ -129,6 +133,7 @@ public partial class Main
 			_tableSelectedCard = null;
 			_tableSelectedServer = null;
 		}
+		_gameTable.Hand.ReducedMotion = _reducedMotion.ButtonPressed;
 		_gameTable.MotionEnabled = !_reducedMotion.ButtonPressed && !_skipAnimation;
 		_gameTable.MotionDuration = 0.32 / _speed.Value;
 		_gameTable.Render(snapshot.View);
@@ -205,11 +210,13 @@ public partial class Main
 			IEnumerable<LegalActionViewModel> displayed = all;
 			if (ordinary && !_tableAllActions)
 			{
+				if (snapshot.View.Viewer == PlayerSide.Runner && all.Any(action => action.Kind == ActionKind.StartRun))
+					AddButton("Run", StartBoardRunSelection);
 				displayed = all.Where(a => _tableSelectedCard is not null
 					? TableActionCardId(a.Parameters) == _tableSelectedCard
 					: _tableSelectedServer is not null
 						? TableActionServerId(a.Parameters) == _tableSelectedServer
-						: a.Kind is ActionKind.GainCredit or ActionKind.DrawCard or ActionKind.PassPriority
+						: a.Kind is ActionKind.PassPriority
 							or ActionKind.EndTurn or ActionKind.RemoveTag or ActionKind.PurgeVirusCounters);
 				AddButton(_tableSelectedCard is null && _tableSelectedServer is null ? "Choose a card / server" : "Clear selection", () =>
 				{
@@ -245,6 +252,7 @@ public partial class Main
 		finally
 		{
 			RefreshBoardChoices(snapshot);
+			RefreshBasicBoardActions(snapshot);
 		}
 	}
 
@@ -362,6 +370,8 @@ public partial class Main
 	private void PollCardTable(double delta)
 	{
 		PollCardHoverPreview();
+		_gameTable.Hand.ReducedMotion = _reducedMotion.ButtonPressed;
+		if (_currentSnapshot is { } current) RefreshBasicBoardActions(current);
 		_tablePlaybackWait = Math.Max(0, _tablePlaybackWait - delta);
 		if (_tableAwaitingSettlement && _tablePlaybackWait == 0 && _gameTable.ActiveMotionCount == 0 && _tablePublications.Count == 0)
 		{

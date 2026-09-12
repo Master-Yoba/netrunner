@@ -28,6 +28,7 @@ public partial class Main
 	private bool _boardChoiceDisambiguating;
 	private readonly List<PanelContainer> _boardChoiceServerCues = new();
 	private bool _boardChoiceIsInitialStage;
+	private bool _boardChoiceRunSelection;
 	private bool _boardPlayResolutionTracking;
 	private string? _boardPlaySourceDecisionId;
 	private long _boardPlaySourceDecisionRevision;
@@ -168,8 +169,8 @@ public partial class Main
 			ShowBoardChoicePanel(
 				decision,
 				refreshed,
-				"Choose a play or install destination",
-				BoardChoiceInitialPrompt(refreshed));
+				_boardChoiceRunSelection ? "Choose a server to run" : "Choose a play or install destination",
+				_boardChoiceRunSelection ? "Select a highlighted server · 1 click. Cancel or Esc returns to the board." : BoardChoiceInitialPrompt(refreshed));
 			return;
 		}
 
@@ -234,14 +235,17 @@ public partial class Main
 	/// drag controller. Candidates are retained verbatim; no action ID or typed
 	/// destination is synthesized by the UI.
 	/// </summary>
-	public void StageBoardPlayChoices(
-		DecisionViewModel decision,
-		IReadOnlyList<LegalActionViewModel> candidates)
+	public void StageBoardPlayChoices(DecisionViewModel decision, IReadOnlyList<LegalActionViewModel> candidates)
+		=> StageBoardInitialChoices(decision, candidates, runSelection: false);
+
+	private void StageBoardInitialChoices(DecisionViewModel decision, IReadOnlyList<LegalActionViewModel> candidates, bool runSelection)
 	{
 		ArgumentNullException.ThrowIfNull(decision);
 		ArgumentNullException.ThrowIfNull(candidates);
 		if (candidates.Count == 0
-			|| candidates.Any(action => !IsBoardPlayInstallCandidate(action)))
+			|| candidates.Any(action => runSelection
+				? action.Kind != ActionKind.StartRun || action.Parameters is not RunServerParameters
+				: !IsBoardPlayInstallCandidate(action)))
 		{
 			return;
 		}
@@ -262,18 +266,20 @@ public partial class Main
 		_boardChoiceSnapshot = _currentSnapshot;
 		_boardChoiceActions = candidates.ToArray();
 		_boardChoiceIsInitialStage = true;
+		_boardChoiceRunSelection = runSelection;
 		_boardChoiceVisible = true;
 		ShowBoardChoicePanel(
 			decision,
 			_boardChoiceActions,
-			"Choose a play or install destination",
-			BoardChoiceInitialPrompt(_boardChoiceActions));
+			runSelection ? "Choose a server to run" : "Choose a play or install destination",
+			runSelection ? "Select a highlighted server · 1 click. Cancel or Esc returns to the board." : BoardChoiceInitialPrompt(_boardChoiceActions));
 	}
 
 	/// <summary>Dismisses only the local contextual surface; it never rolls back Core.</summary>
 	public void DismissBoardChoices()
 	{
 		ClearBoardChoiceState(clearTracking: true, restoreTargets: true);
+		if (_currentSnapshot is { } snapshot) RefreshBasicBoardActions(snapshot);
 	}
 
 	private void SubmitBoardChoiceAction(DecisionViewModel decision, LegalActionViewModel action)
@@ -325,7 +331,9 @@ public partial class Main
 		}
 
 		MatchSnapshot? current = _currentSnapshot ?? _boardChoiceSnapshot;
-		if (current.IsOpponentThinking
+		if (_fullMatchResumePaused || _tableAwaitingSettlement || Volatile.Read(ref _submissionInFlight) != 0
+			|| _zoomOverlay?.Visible == true || _tablePileOverlay?.Visible == true
+			|| current.IsOpponentThinking
 			|| current.View.Run is not null
 			|| current.View.Decision is not { } currentDecision
 			|| !SameDecision(decision, currentDecision)
@@ -366,6 +374,7 @@ public partial class Main
 		}
 
 		_boardChoiceTitle.Text = title;
+		_boardChoiceDismiss!.Text = _boardChoiceRunSelection ? "Cancel run" : "Back to table";
 		_boardChoicePrompt.Text = prompt;
 		ClearChildren(_boardChoiceOptions);
 		_boardChoicePanel.GetNode<ScrollContainer>("Content/OptionsScroll").CustomMinimumSize = new Vector2(0, 52);
@@ -453,6 +462,7 @@ public partial class Main
 		_boardChoiceSnapshot = null;
 		_boardChoiceActions = Array.Empty<LegalActionViewModel>();
 		_boardChoiceIsInitialStage = false;
+		_boardChoiceRunSelection = false;
 		if (clearTracking)
 		{
 			_boardPlayResolutionTracking = false;
@@ -558,6 +568,7 @@ public partial class Main
 
 	private string? BoardServerTargetId(LegalActionViewModel action) => !_boardChoiceIsInitialStage ? null : action.Parameters switch
 	{
+		RunServerParameters run => run.ServerId.Value,
 		InstallCardParameters install when install.ServerId is { } server => server.Value,
 		PlayCardParameters play when play.TargetServerId is { } server => server.Value,
 		_ => null,

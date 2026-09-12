@@ -35,3 +35,6 @@ Thumbs.db
 # Local reference screenshots contain third-party card artwork.
 /chiriboga.png
 /docs/evidence/m4-9/reference/chiriboga.png
+
+# Local reference video contains third-party card artwork.
+/reference hand.mov

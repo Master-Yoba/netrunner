@@ -48,7 +48,7 @@ public partial class GameTableControl
 				if (_visibleCards.ContainsKey(id) || old.Card is not { IsKnown: true }) continue;
 				// Animate only a destination explicitly present in this viewer's
 				// discard projection. Never track a remembered identity into a deck.
-				Control? destination = view.CorpDiscard.Any(card => card.Id == id) ? _corpArchivesPile
+				Control? destination = view.CorpDiscard.Any(card => card.Id == id) ? _zonePiles.GetValueOrDefault("zone:corp-archives")
 					: view.RunnerHeap.Any(card => card.Id == id) ? _runnerHeapPile : null;
 				if (destination is not null)
 					AnimateCard(old.Card, old.Rect, destination.GlobalPosition - GlobalPosition, false);
@@ -66,7 +66,7 @@ public partial class GameTableControl
 				// A new face-down slot receives a neutral back, never a card
 				// recovered from an authoritative action or hidden instance ID.
 				Vector2 source = view.RunnerRig.Any(card => card.Id == id)
-					? _localHandScroll.GlobalPosition : _corpHandCaption.GlobalPosition;
+					? _localHandRow.GlobalPosition : _corpHandCaption.GlobalPosition;
 				AnimateCard(current.Card, new Rect2(source, rect.Size), rect.Position - GlobalPosition, current.IsIce, current.BackSide);
 			}
 		}).CallDeferred();

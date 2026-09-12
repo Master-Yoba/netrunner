@@ -391,12 +391,14 @@ if ! run_with_timeout 120 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
   exit 1
 fi
 if ! grep -Fq "M411_INTERACTION PASS" "$m411_ui_smoke_log" \
+  || ! grep -Fq "M412_BOARD_ACTIONS PASS" "$m411_ui_smoke_log" \
   || grep -Eq "M411_INTERACTION FAIL|SCRIPT ERROR|ERROR:" "$m411_ui_smoke_log"; then
   cat "$m411_ui_smoke_log" >&2
   exit 1
 fi
 cat "$m411_ui_smoke_log"
 echo "m4-11-interaction-smoke=PASS"
+echo "m4-12-board-actions-smoke=PASS"
 latency_smoke_log="$coverage_report_dir/latency-smoke.log"
 if ! run_with_timeout 45 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
   "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \

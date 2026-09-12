@@ -8,7 +8,7 @@ public static class InteractionLabSamples
 {
 	public static readonly string[] Names = ["Runner: event", "Runner: run event", "Runner: rig install", "Runner: hosted install",
 		"Corp: operation", "Corp: root install", "Corp: ICE install", "Corp: new remote", "Corp: replacement",
-		"Runner: memory cleanup", "Runner: card choice", "Runner: non-spatial choice", "Dense board: scrolling", "Runner: pile card choice", "Runner: multiple targets"];
+		"Runner: memory cleanup", "Runner: card choice", "Runner: non-spatial choice", "Dense board: scrolling", "Runner: pile card choice", "Runner: multiple targets", "Runner: hand and board actions", "Corp: hand and board actions"];
 	public static readonly string[] Instructions = [
 		"Drag the event from hand into the board. It should play immediately.",
 		"Drag onto a central server, or into general space then click a highlighted server.",
@@ -24,11 +24,13 @@ public static class InteractionLabSamples
 		"Play the event, then choose a non-spatial option in the contextual panel.",
 		"Drag a hand card while scrolling near board edges. Escape, right-click, or focus loss cancels.",
 		"Play the event, then select the displayed card from the heap choice browser.",
-		"Play the event, click a highlighted program, then explicitly choose one target pair."];
+		"Play the event, click a highlighted program, then explicitly choose one target pair.",
+		"Hover the hand. Click credits or Stack, browse Archives, or choose Run and select a server. Reset to repeat.",
+		"Hover the hand. Click credits or R&D, or click Archives to browse. Reset to repeat."];
 
 	public static MatchViewModel Create(int scenario, long revision)
 	{
-		PlayerSide side = scenario is >= 4 and <= 8 ? PlayerSide.Corp : PlayerSide.Runner;
+		PlayerSide side = scenario is >= 4 and <= 8 or 16 ? PlayerSide.Corp : PlayerSide.Runner;
 		var view = UiPreviewSamples.Board(side, scenario == 12 ? UiPreviewSamples.Density.Dense : UiPreviewSamples.Density.Normal);
 		view = view with { RunnerRig = view.RunnerRig.Select((card, index) => card with { Title = $"Practice program {index + 1}" }).ToArray() };
 		string type = scenario switch { 2 or 3 or 9 => "Program", 5 => "Upgrade", 6 => "ICE", 7 or 8 => "Asset", 4 => "Operation", _ => "Event" };
@@ -37,6 +39,17 @@ public static class InteractionLabSamples
 		view = side == PlayerSide.Runner ? view with { RunnerHand = new(ZoneKind.RunnerGrip, hand.Length, hand) }
 			: view with { CorpHand = new(ZoneKind.CorpHand, hand.Length, hand) };
 		var actions = new List<LegalActionViewModel>();
+		if (scenario >= 15)
+		{
+			CardViewModel[] practiceHand = Enumerable.Range(0, 5).Select(i => UiPreviewSamples.Known($"lab-fan-{i}", type, $"Practice card {i + 1}")).ToArray();
+			view = side == PlayerSide.Runner ? view with { RunnerHand = new(ZoneKind.RunnerGrip, 5, practiceHand) }
+				: view with { CorpHand = new(ZoneKind.CorpHand, 5, practiceHand) };
+			actions.Add(Action("credit", ActionKind.GainCredit, new NoActionParameters(), revision));
+			actions.Add(Action("draw", ActionKind.DrawCard, new NoActionParameters(), revision));
+			if (side == PlayerSide.Runner)
+				foreach (var server in view.Servers.Where(server => server.Id != "preview-remote-1"))
+					actions.Add(Action("run-" + server.Id, ActionKind.StartRun, new RunServerParameters(new(server.Id)), revision));
+		}
 		if (scenario is 0 or 4 or 10 or 11 or 12 or 13 or 14) actions.Add(Action("play", ActionKind.PlayCard, new PlayCardParameters(new(card.Id), 3), revision));
 		else if (scenario == 1)
 			foreach (var server in view.Servers) actions.Add(Action("play-" + server.Id, ActionKind.PlayCard, new PlayCardParameters(new(card.Id), 3, new(server.Id)), revision));

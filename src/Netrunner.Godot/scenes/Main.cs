@@ -197,7 +197,8 @@ public partial class Main : Control
 		{
 			_ = RunInteractionDemoAsync();
 		}
-		else if (arguments.Contains("--m4-11-ui-smoke", StringComparer.Ordinal))
+		else if (arguments.Contains("--m4-11-ui-smoke", StringComparer.Ordinal)
+			|| arguments.Contains("--m4-12-ui-smoke", StringComparer.Ordinal))
 		{
 			_ = RunInteractionSmokeAsync();
 		}

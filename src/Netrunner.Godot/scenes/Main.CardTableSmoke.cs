@@ -206,7 +206,7 @@ public partial class Main
 						|| !viewport.Encloses(_gameTable.GetGlobalRect()))
 						throw new InvalidOperationException($"Table/dock escaped viewport at {size} ({side}).");
 					int visibleHand = _gameTable.VisibleCards.Values.Count(c => c.Card?.Id.StartsWith("table-hand-", StringComparison.Ordinal) == true
-						&& _gameTable.GetGlobalRect().Encloses(c.GetGlobalRect()));
+						&& _gameTable.GetGlobalRect().Intersection(c.GetGlobalRect()).Size.Y >= c.Size.Y * 0.6f);
 					int visibleRig = _gameTable.VisibleCards.Values.Count(c => c.Card?.Id.StartsWith("table-rig-", StringComparison.Ordinal) == true
 						&& _gameTable.GetGlobalRect().Encloses(c.GetGlobalRect()));
 					if (visibleHand < 3 || visibleRig < 2)
@@ -217,9 +217,9 @@ public partial class Main
 					if (!_gameTable.VisibleCards.Values.Any(c => c.GetInstanceId() == node))
 						throw new InvalidOperationException("Unchanged board rebuilt its card nodes.");
 					card.GrabFocus();
-					Input.ParseInputEvent(new InputEventKey { Keycode = Key.Enter, Pressed = true });
+					Input.ParseInputEvent(new InputEventKey { Device = SmokeInputDevice, Keycode = Key.Enter, Pressed = true });
 					await TableFrames(2);
-					Input.ParseInputEvent(new InputEventKey { Keycode = Key.Enter, Pressed = false });
+					Input.ParseInputEvent(new InputEventKey { Device = SmokeInputDevice, Keycode = Key.Enter, Pressed = false });
 					if (!card.IsSelected) throw new InvalidOperationException("Keyboard card selection failed.");
 					TableCardControl[] handControls = _gameTable.VisibleCards.Values
 						.Where(control => control.Card?.Id.StartsWith("table-hand-", StringComparison.Ordinal) == true)
@@ -237,7 +237,7 @@ public partial class Main
 						throw new InvalidOperationException($"Dense overflow fixture lost cards: hand={handControls.Length}, rig={rigControls.Length}.");
 					await AssertOverflowFocus(handControls, "local hand");
 					await AssertOverflowFocus(rigControls, "runner rig");
-					TableCardControl hidden = _gameTable.VisibleCards.Values.First(control => control.Card is null);
+					TableCardControl hidden = _gameTable.VisibleCards.Values.First(control => control.Card is null && control.FocusMode != Control.FocusModeEnum.None);
 					hidden.GrabFocus();
 					await TableFrames(2);
 					if (_inspectedCard is not null || !_tableInspect.Disabled)
@@ -320,7 +320,8 @@ public partial class Main
 					MatchViewModel discardView = activeRunView with { Run = null };
 					RenderSnapshot(CreateSlice48Snapshot(discardView, discardView.Decision));
 					await TableFrames(3);
-					if (!SceneTreeContainsText(_gameTable, "Archives") || !SceneTreeContainsText(_gameTable, "Heap"))
+					// This fixture contains only remotes; Archives is exercised through its pile browser below.
+					if (!SceneTreeContainsText(_gameTable, "Heap"))
 						throw new InvalidOperationException("Discard/heap table fixture did not expose public pile labels.");
 					if (screenshots) await SaveTableEvidence($"discard-{side.ToString().ToLowerInvariant()}-{size.X}");
 					if (!ShowTablePile("zone:corp-archives") || _tablePileCards.GetChildCount() == 0)
@@ -328,7 +329,7 @@ public partial class Main
 					await TableFrames(2);
 					TableCardControl[] archiveCards = _tablePileCards.GetChildren().OfType<TableCardControl>().ToArray();
 					if (archiveCards.Length != 3 || archiveCards.Count(card => card.Card is null) != 2
-						|| !SceneTreeContainsText(_gameTable, "Archives · 3"))
+						|| !_tablePileSummary.Text.StartsWith("3 card(s)", StringComparison.Ordinal))
 						throw new InvalidOperationException("Archives total or concealed placeholders were lost.");
 					if (screenshots && size.X == 1920 && side == PlayerSide.Runner) await SaveTableEvidence("archives-browser-1920");
 					HideTablePile();
@@ -387,8 +388,11 @@ public partial class Main
 	private async Task ClickTableButton(Button button)
 	{
 		Vector2 point = button.GetGlobalRect().GetCenter();
+		GetViewport().PushInput(new InputEventMouseMotion { Device = SmokeInputDevice, Position = point, GlobalPosition = point });
+		await TableFrames(1);
 		Input.ParseInputEvent(new InputEventMouseButton
 		{
+			Device = SmokeInputDevice,
 			ButtonIndex = MouseButton.Left,
 			Pressed = true,
 			Position = point,
@@ -397,6 +401,7 @@ public partial class Main
 		await TableFrames(1);
 		Input.ParseInputEvent(new InputEventMouseButton
 		{
+			Device = SmokeInputDevice,
 			ButtonIndex = MouseButton.Left,
 			Pressed = false,
 			Position = point,
@@ -492,9 +497,7 @@ public partial class Main
 
 	private void AssertBoardCardAlignment(MatchViewModel view)
 	{
-		IEnumerable<CardViewModel> hand = view.Viewer == PlayerSide.Runner
-			? view.RunnerHand.VisibleCards : view.CorpHand.VisibleCards;
-		var runnerCards = hand.Concat(view.RunnerRig.Where(card => string.IsNullOrEmpty(card.HostCardId)))
+		var runnerCards = view.RunnerRig.Where(card => string.IsNullOrEmpty(card.HostCardId))
 			.Concat(view.RunnerIdentity is { } identity ? [identity] : [])
 			.Where(card => _gameTable.VisibleCards.ContainsKey(card.Id))
 			.Select(card => _gameTable.VisibleCards[card.Id].GetGlobalRect()).ToArray();

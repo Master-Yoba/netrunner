@@ -1,8 +1,10 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/components/PileView.tscn" id="1_pile"]
-[ext_resource type="PackedScene" path="res://scenes/components/HandView.tscn" id="2_hand"]
 [ext_resource type="Theme" path="res://themes/M4Theme.tres" id="3_theme"]
+
+[ext_resource type="PackedScene" path="res://scenes/components/CreditIndicator.tscn" id="credits"]
+[ext_resource type="PackedScene" path="res://scenes/components/BoardPile.tscn" id="deck"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_area"]
 content_margin_left = 8.0
@@ -87,6 +89,9 @@ theme_override_font_sizes/font_size = 11
 text = "RUNNER"
 text_overrun_behavior = 3
 
+[node name="Credits" parent="Content/Summary/Content" instance=ExtResource("credits")]
+layout_mode = 2
+
 [node name="Resources" type="Label" parent="Content/Summary/Content"]
 layout_mode = 2
 mouse_filter = 2
@@ -142,8 +147,8 @@ layout_mode = 2
 size_flags_vertical = 0
 mouse_filter = 2
 
-[node name="Deck" parent="Content" instance=ExtResource("1_pile")]
-custom_minimum_size = Vector2(62, 30)
+[node name="Deck" parent="Content" instance=ExtResource("deck")]
+custom_minimum_size = Vector2(105, 147)
 layout_mode = 2
 text = "Stack\n—"
 tooltip_text = "Runner Stack · face-down pile"
@@ -191,6 +196,3 @@ size_flags_horizontal = 3
 size_flags_vertical = 0
 mouse_filter = 2
 theme_override_constants/separation = 8
-
-[node name="LocalHand" parent="Content" instance=ExtResource("2_hand")]
-layout_mode = 2

@@ -27,15 +27,19 @@ public partial class Main
 
 	private void AddBoardChoiceCue(string kind, string target, string caption, Action choose)
 	{
-		if (_gameTable.GetDropRect(kind, target) is not { } rect) return;
+		Rect2? rect = _gameTable.GetDropRect(kind, target);
 		PanelContainer cue = GD.Load<PackedScene>("res://scenes/components/DropDestination.tscn").Instantiate<PanelContainer>();
 		cue.MouseFilter = MouseFilterEnum.Stop;
 		cue.ZIndex = 10;
 		cue.SetMeta("target_id", target);
 		cue.SetMeta("target_kind", kind);
 		_tableViewport.AddChild(cue);
-		cue.GlobalPosition = rect.Position;
-		cue.Size = rect.Size;
+		cue.Visible = rect is not null;
+		if (rect is { } area)
+		{
+			cue.GlobalPosition = area.Position;
+			cue.Size = area.Size;
+		}
 		cue.GetNode<Label>("%Caption").Text = caption;
 		cue.GuiInput += input =>
 		{

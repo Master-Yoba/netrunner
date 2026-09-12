@@ -6,18 +6,29 @@ namespace Netrunner.GodotClient;
 
 public partial class Main
 {
+	private const int SmokeInputDevice = 47012;
+	private bool _isolateSmokeInput;
+	public override void _Input(InputEvent @event)
+	{
+		// Native smoke events must not race the desktop's real pointer.
+		if (_isolateSmokeInput && @event.Device != SmokeInputDevice) GetViewport().SetInputAsHandled();
+	}
+
 	private async Task RunInteractionSmokeAsync()
 	{
 		try
 		{
+			_isolateSmokeInput = true;
+			_boardDrag!.InputFilter = input => input.Device == SmokeInputDevice;
 			OpenInteractionLab();
 			_reducedMotion.ButtonPressed = true;
 			foreach (Vector2I size in new[] { new Vector2I(1920, 1080), new Vector2I(2560, 1440) })
 			{
 				GetWindow().Size = size;
 				GetWindow().ContentScaleSize = size;
-				foreach (int scenario in Enumerable.Range(0, InteractionLabSamples.Names.Length))
+				foreach (int scenario in Enumerable.Range(0, 15))
 				{
+					GD.Print($"M411_SCENARIO size={size.X} scenario={scenario}");
 					_labScenario = scenario;
 					_labScenarios!.Select(scenario);
 					ResetInteractionLab();
@@ -27,7 +38,7 @@ public partial class Main
 					RequireInteraction(projection.Sources.Count > 0, "Lab scenario has no draggable source.");
 					BoardInteractionSource source = projection.Sources.Single(s => s.CardId == "lab-hand");
 					TableCardControl card = _gameTable.VisibleCards[source.CardId];
-					Vector2 start = card.GetGlobalRect().GetCenter();
+					Vector2 start = card.GetGlobalTransform() * new Vector2(12, 45);
 					// Cancel once before every valid drop, proving no submission or loss of source.
 					await LabPointer(start);
 					LabButton(start, true);
@@ -35,7 +46,7 @@ public partial class Main
 					RequireInteraction(_boardDrag!.IsDragging, $"Drag did not start for scenario {scenario}.");
 					RequireInteraction(_boardDrag.GetNode<TableCardControl>("DragPreview").GetGlobalRect().GetCenter()
 						.DistanceTo(start + new Vector2(0, -40)) < 0.1f, "Drag preview is not centered on the pointer.");
-					GetViewport().PushInput(new InputEventKey { Keycode = Key.Escape, Pressed = true });
+					GetViewport().PushInput(new InputEventKey { Device = SmokeInputDevice, Keycode = Key.Escape, Pressed = true });
 					LabButton(start, false);
 					await TableFrames(2);
 					RequireInteraction(!_boardDrag.IsDragging && _labSubmissionCount == 0, "Cancellation submitted or retained a drag.");
@@ -93,7 +104,7 @@ public partial class Main
 						await ClickTableButton(_boardChoiceOptions!.GetChildren().OfType<Button>().First());
 					await TableFrames(2);
 					RequireInteraction(_labSubmissionCount > 0 && _currentSnapshot!.View.Decision is null,
-						$"Scenario {scenario} did not complete through its production controls.");
+						$"Scenario {scenario} did not complete: submissions={_labSubmissionCount}, decision={_currentSnapshot?.View.Decision?.Kind}, choices={_boardChoiceVisible}, focus={GetViewport().GuiGetFocusOwner()?.Name}.");
 				}
 			}
 			_labScenario = 0;
@@ -112,7 +123,7 @@ public partial class Main
 				initial = _gameTable.VisibleCards["lab-hand"].GetGlobalRect().GetCenter();
 				await LabPointer(initial); LabButton(initial, true); await LabPointer(initial + new Vector2(0, -40));
 				if (cancellation == "right-click")
-					GetViewport().PushInput(new InputEventMouseButton { Position = initial, ButtonIndex = MouseButton.Right, Pressed = true });
+					GetViewport().PushInput(new InputEventMouseButton { Device = SmokeInputDevice, Position = initial, ButtonIndex = MouseButton.Right, Pressed = true });
 				else if (cancellation == "focus-loss") GetWindow().EmitSignal(Window.SignalName.FocusExited);
 				else await LabPointer(initial);
 				LabButton(initial, false);
@@ -143,11 +154,13 @@ public partial class Main
 			RequireInteraction(_labSubmissionCount == 1 && _currentSnapshot!.View.RunnerRig.Any(c => c.HostCardId == "card:hidden-host"),
 				"Drop onto an exposed face-down ICE position failed.");
 			await CheckDragFollowing();
+			await CheckBoardRefinements();
 			GD.Print("M411_INTERACTION PASS scenarios=15 resolutions=2 drag=true cancel=true stale=true choices=true menu_fallback=true hidden_host=true focus_loss=true invalid_drop=true centered=true smooth_follow=true");
 			GetTree().Quit();
 		}
 		catch (Exception error)
 		{
+			if (OS.GetCmdlineUserArgs().Contains("--m4-12-screenshots")) await SaveRefinementEvidence("failure");
 			GD.PrintErr($"M411_INTERACTION FAIL {error}");
 			GetTree().Quit(1);
 		}
@@ -203,16 +216,17 @@ public partial class Main
 			drag.Cancel("smoke-cleanup", false);
 			drag.SetProcess(true);
 		}
-		void Move(Vector2 point) => GetViewport().PushInput(new InputEventMouseMotion { Position = point, GlobalPosition = point });
+		void Move(Vector2 point) => GetViewport().PushInput(new InputEventMouseMotion { Device = SmokeInputDevice, Position = point, GlobalPosition = point });
 	}
 
 	private async Task LabPointer(Vector2 point)
 	{
-		GetViewport().PushInput(new InputEventMouseMotion { Position = point, GlobalPosition = point });
+		GetViewport().PushInput(new InputEventMouseMotion { Device = SmokeInputDevice, Position = point, GlobalPosition = point });
 		await TableFrames(2);
 	}
 	private void LabButton(Vector2 point, bool pressed) => GetViewport().PushInput(new InputEventMouseButton
 	{
+		Device = SmokeInputDevice,
 		Position = point,
 		GlobalPosition = point,
 		ButtonIndex = MouseButton.Left,
@@ -224,7 +238,8 @@ public partial class Main
 	}
 	private async Task SaveInteractionEvidence(string name)
 	{
-		await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+		await TableFrames(2);
+		RenderingServer.ForceDraw();
 		string directory = ProjectSettings.GlobalizePath("res://../../docs/evidence/m4-11");
 		DirAccess.MakeDirRecursiveAbsolute(directory);
 		using Image image = GetViewport().GetTexture().GetImage();

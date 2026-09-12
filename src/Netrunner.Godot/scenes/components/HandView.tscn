@@ -1,72 +1,55 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=2 format=3]
 
-[ext_resource type="Theme" path="res://themes/M4Theme.tres" id="1_theme"]
+[ext_resource type="Script" path="res://scenes/HandFanControl.cs" id="script"]
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hand"]
-content_margin_left = 8.0
-content_margin_top = 6.0
-content_margin_right = 8.0
-content_margin_bottom = 6.0
-bg_color = Color(0.02, 0.08, 0.08, 0.68)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.07, 0.28, 0.23, 1)
-corner_radius_top_left = 6
-corner_radius_top_right = 6
-corner_radius_bottom_right = 6
-corner_radius_bottom_left = 6
-
-[node name="HandView" type="PanelContainer"]
-custom_minimum_size = Vector2(405, 0)
-layout_mode = 2
-size_flags_horizontal = 3
+[node name="HandView" type="Control"]
+custom_minimum_size = Vector2(420, 190)
 mouse_filter = 2
-theme = ExtResource("1_theme")
-theme_override_styles/panel = SubResource("StyleBoxFlat_hand")
+script = ExtResource("script")
 
-[node name="Content" type="VBoxContainer" parent="."]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
+[node name="Caption" type="Label" parent="."]
+offset_left = 26.0
+offset_right = 360.0
+offset_bottom = 18.0
 mouse_filter = 2
-theme_override_constants/separation = 1
-
-[node name="Heading" type="HBoxContainer" parent="Content"]
-custom_minimum_size = Vector2(0, 17)
-layout_mode = 2
-mouse_filter = 2
-
-[node name="Caption" type="Label" parent="Content/Heading"]
-layout_mode = 2
-size_flags_horizontal = 3
-mouse_filter = 2
-theme_type_variation = &"LaneHeading"
-theme_override_colors/font_color = Color(0.43, 0.94, 0.72, 1)
-theme_override_font_sizes/font_size = 9
-text = "LOCAL HAND"
-text_overrun_behavior = 3
-
-[node name="Hint" type="Label" parent="Content/Heading"]
-layout_mode = 2
-mouse_filter = 2
+theme_override_font_sizes/font_size = 10
 theme_override_colors/font_color = Color(0.62, 0.76, 0.75, 1)
-theme_override_font_sizes/font_size = 9
-text = "focus to lift"
-horizontal_alignment = 2
-text_overrun_behavior = 3
+text = "GRIP · YOUR HAND"
 
-[node name="Scroll" type="ScrollContainer" parent="Content"]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
+[node name="Count" type="Label" parent="."]
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_left = -78.0
+offset_right = -8.0
+offset_top = -30.0
+offset_bottom = 12.0
 mouse_filter = 2
-follow_focus = true
-vertical_scroll_mode = 0
+theme_override_font_sizes/font_size = 32
+text = "0"
+horizontal_alignment = 1
 
-[node name="Cards" type="HBoxContainer" parent="Content/Scroll"]
-layout_mode = 2
-size_flags_vertical = 0
+[node name="CountCaption" type="Label" parent="."]
+anchor_left = 1.0
+anchor_right = 1.0
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_left = -78.0
+offset_right = -8.0
+offset_top = 14.0
+offset_bottom = 30.0
 mouse_filter = 2
-theme_override_constants/separation = -36
+theme_override_font_sizes/font_size = 10
+text = "IN HAND"
+horizontal_alignment = 1
+
+[node name="Empty" type="Label" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_right = -88.0
+mouse_filter = 2
+theme_override_font_sizes/font_size = 14
+text = "Your hand is empty"
+horizontal_alignment = 1
+vertical_alignment = 1

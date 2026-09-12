@@ -115,22 +115,22 @@ public partial class UiEditorSmoke : Node
 			CardAppearance replacement = (CardAppearance)original.Duplicate();
 			stable.Appearance = replacement;
 			replacement.PortraitSize = new Vector2(180, 252);
-			Require(stable.DisplaySize == replacement.PortraitSize * board.Layout.CompactPortraitScale,
+			Require(stable.DisplaySize == replacement.PortraitSize,
 				"Board did not rebind the replacement resource to its card footprint.");
 			stable.Appearance = original;
 			float width = board.Layout.LaneWidth;
-			float overlap = board.Layout.HandOverlap;
+			float overlap = board.Hand.CardStep;
 			try
 			{
 				board.Layout.LaneWidth = width + 8;
-				board.Layout.HandOverlap = overlap + 4;
+				board.Hand.CardStep = overlap + 4;
 				await Frames(2);
 				Require(ReferenceEquals(stable, board.VisibleCards["preview-hand-1"]), "Appearance editing replaced a stable card control.");
 			}
 			finally
 			{
 				board.Layout.LaneWidth = width;
-				board.Layout.HandOverlap = overlap;
+				board.Hand.CardStep = overlap;
 			}
 			preview.Density = UiPreviewSamples.Density.Dense;
 			preview.ViewerSeat = cycle % 2 == 0 ? PlayerSide.Corp : PlayerSide.Runner;

@@ -81,7 +81,7 @@ public partial class UiPreview : Control
 		hover.GetNode<TableCardControl>("%Card").SetCard(UiPreviewSamples.Known("preview-hover"));
 		hover.GetNode<Label>("%Title").Text = "Synthetic hovered card with a long title";
 		hover.GetNode<Label>("%Rules").Text = UiPreviewSamples.Known("preview-hover").RulesText;
-		Control dock = table.GetNode<Control>("DecisionDock");
+		Control dock = table.GetNode<Control>("TableViewport/DecisionDock");
 		Label prompt = dock.GetNode<Label>("%Prompt");
 		prompt.Text = Decision switch
 		{

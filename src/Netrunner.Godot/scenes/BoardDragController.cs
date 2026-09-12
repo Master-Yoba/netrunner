@@ -9,6 +9,7 @@ public partial class BoardDragController : Control
 	[Export] public DragAppearance Appearance { get; set; } = null!;
 	public GameTableControl Board { get; set; } = null!;
 	public Func<bool>? CanInteract { get; set; }
+	public Func<InputEvent, bool>? InputFilter { get; set; }
 	public event Action<DecisionViewModel, IReadOnlyList<LegalActionViewModel>>? Dropped;
 	public event Action? DragStarted;
 	public event Action<string, string?>? GestureEnded;
@@ -50,7 +51,7 @@ public partial class BoardDragController : Control
 
 	public override void _Input(InputEvent @event)
 	{
-		if (!IsVisibleInTree() || Engine.IsEditorHint()) return;
+		if (!IsVisibleInTree() || Engine.IsEditorHint() || InputFilter?.Invoke(@event) == false) return;
 		if (@event is InputEventMouse pointerEvent) _pointer = GetCanvasTransform().AffineInverse() * pointerEvent.Position;
 		if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape }
 			|| @event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Right })
@@ -106,6 +107,7 @@ public partial class BoardDragController : Control
 	{
 		if (_sourceControl?.Card is not { IsKnown: true } card || _source is null) return;
 		DragStarted?.Invoke();
+		Board.Hand.DragActive = true;
 		_preview = TableCardControl.Create();
 		_preview.Name = "DragPreview";
 		_preview.SetCard(card);
@@ -236,7 +238,11 @@ public partial class BoardDragController : Control
 		_preview = null;
 		foreach (var (_, panel, _) in _zones) { RemoveChild(panel); panel.QueueFree(); }
 		_zones.Clear();
-		if (IsInstanceValid(Board)) Board.SetNewRemoteDropVisible(false);
+		if (IsInstanceValid(Board))
+		{
+			Board.SetNewRemoteDropVisible(false);
+			Board.Hand.DragActive = false;
+		}
 		if (IsInstanceValid(_hint)) _hint.Hide();
 	}
 }

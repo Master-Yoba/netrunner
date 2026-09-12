@@ -141,30 +141,7 @@ public partial class GameTableControl
 		return _shellBuilt && IsInsideTree();
 	}
 
-	private Rect2? GetGeneralPlayRect()
-	{
-		Rect2? board = GetClippedGlobalRect(this);
-		if (board is not { } boardRect)
-		{
-			return null;
-		}
-
-		Rect2? hand = GetClippedGlobalRect(_localHandScroll);
-		if (hand is not { } handRect || handRect.Position.Y > boardRect.End.Y)
-		{
-			return boardRect;
-		}
-
-		float bottom = Mathf.Clamp(handRect.Position.Y, boardRect.Position.Y, boardRect.End.Y);
-		if (bottom <= boardRect.Position.Y + 0.5f)
-		{
-			return null;
-		}
-
-		return new Rect2(
-			boardRect.Position,
-			new Vector2(boardRect.Size.X, bottom - boardRect.Position.Y));
-	}
+	private Rect2? GetGeneralPlayRect() => GetClippedGlobalRect(PlayArea);
 
 	private Rect2? GetVisibleCardRect(string? targetId)
 	{

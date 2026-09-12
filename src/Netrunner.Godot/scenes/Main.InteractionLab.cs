@@ -47,7 +47,7 @@ public partial class Main
 		_tableHistory.Clear();
 		PublishLabView(InteractionLabSamples.Create(_labScenario, _labRevision));
 		_labInstructions!.Text = InteractionLabSamples.Instructions[_labScenario];
-		_tableLastAction.Text = "Drag the practice card from hand";
+		_tableLastAction.Text = _labScenario >= 15 ? "Practice the hand and board actions" : "Drag the practice card from hand";
 	}
 
 	private void PublishLabView(MatchViewModel view)
@@ -58,6 +58,31 @@ public partial class Main
 		_phase.Text = "Reset or switch scenarios at any time";
 	}
 
+	private void SubmitBoardActionLab(MatchViewModel view, LegalActionViewModel action)
+	{
+		bool corp = view.Viewer == PlayerSide.Corp;
+		PlayerViewModel player = corp ? view.Corp : view.Runner;
+		player = player with { Clicks = Math.Max(0, player.Clicks - 1), Credits = player.Credits + (action.Kind == ActionKind.GainCredit ? 1 : 0) };
+		view = corp ? view with { Corp = player } : view with { Runner = player };
+		if (action.Kind == ActionKind.DrawCard)
+		{
+			ZoneViewModel hand = corp ? view.CorpHand : view.RunnerHand;
+			CardViewModel drawn = UiPreviewSamples.Known($"lab-drawn-{_labRevision}", corp ? "Operation" : "Event", "Practice drawn card");
+			hand = hand with { Count = hand.Count + 1, VisibleCards = [.. hand.VisibleCards, drawn] };
+			view = corp ? view with { CorpHand = hand, CorpDeck = view.CorpDeck with { Count = Math.Max(0, view.CorpDeck.Count - 1) } }
+				: view with { RunnerHand = hand, RunnerDeck = view.RunnerDeck with { Count = Math.Max(0, view.RunnerDeck.Count - 1) } };
+		}
+		bool complete = action.Kind == ActionKind.StartRun || player.Clicks == 0;
+		view = view with
+		{
+			Decision = complete ? null : InteractionLabSamples.Decision(view.Viewer, _labRevision, DecisionKind.TurnAction, "Practice board actions"),
+			LegalActions = complete ? [] : view.LegalActions.Select(current => InteractionLabSamples.Action(current.Kind + current.Id.Value, current.Kind, current.Parameters, _labRevision)).ToArray(),
+		};
+		PublishLabView(view);
+		_tableLastAction.Text = action.Parameters is RunServerParameters run
+			? $"Lab selected run on {_gameTable.GetServerDisplayName(run.ServerId.Value)} · reset to repeat" : $"Lab accepted: {action.Kind}";
+	}
+
 	private bool SubmitInteractionLab(DecisionViewModel decision, LegalActionViewModel action)
 	{
 		if (!_interactionLab) return false;
@@ -66,6 +91,11 @@ public partial class Main
 		_labSubmissionCount++;
 		_labRevision++;
 		MatchViewModel view = snapshot.View;
+		if (_labScenario >= 15)
+		{
+			SubmitBoardActionLab(view, action);
+			return true;
+		}
 		LegalActionViewModel Next(string id, ActionKind kind, ActionParameters parameters) => InteractionLabSamples.Action(id, kind, parameters, _labRevision);
 		MatchViewModel Choice(DecisionKind kind, string prompt, params LegalActionViewModel[] actions) => view with
 		{

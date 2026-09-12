@@ -16,7 +16,6 @@ public partial class BoardLayout : Resource
 	private float _laneWidth = 285.0f;
 	private float _minimumBoardWidth = 760.0f;
 	private float _regionSpacing = 9.0f;
-	private float _handOverlap = 36.0f;
 	private float _cardSeparation = 8.0f;
 	private float _rootCardOverlap = 27.0f;
 	private Vector4 _outerMargins = new(14.0f, 4.0f, 14.0f, 4.0f);
@@ -48,13 +47,6 @@ public partial class BoardLayout : Resource
 	{
 		get => _regionSpacing;
 		set => SetFloat(ref _regionSpacing, Mathf.Clamp(value, 0.0f, 48.0f));
-	}
-
-	[Export(PropertyHint.Range, "0,140,1")]
-	public float HandOverlap
-	{
-		get => _handOverlap;
-		set => SetFloat(ref _handOverlap, Mathf.Clamp(value, 0.0f, 140.0f));
 	}
 
 	[Export(PropertyHint.Range, "0,48,1")]

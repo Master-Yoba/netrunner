@@ -28,6 +28,7 @@ scope progression.
 | M4.9 | Card-table UI and understandable history | See [UI plan](M4_9_UI_PLAN.md) | Native layout, history/visibility and manual usability gate before M5 |
 | M4.10 | Editor-friendly UI and live visual authoring | Implemented; [user acceptance pending](M4_10_UI_PROGRESS.md) | Reusable production scenes, persistent Inspector styling, safe live previews and manual authoring gate before M5 |
 | M4.11 | Drag-to-play and install | Implemented; [validation](M4_11_UI_PROGRESS.md) | Board-first hand play/install, preserved menu fallback and native interaction gate |
+| M4.12 | Hand fan and direct board actions | [UI refinement](M4_12_UI_PLAN.md) | Native hand hover/drag, legal credit/draw affordances, Archives browsing and cancellable Run selection |
 | M5 | Complete offline solo mode | 6–8 weeks | Both bots finish stress runs; save/resume works |
 | M6 | Safe LLM/hybrid mode | 4–6 weeks | Intent play, constrained actions, timeout/takeover pass |
 | RC | Polish, packaging, QA | 3–5 weeks | Release matrix and all PRD exit criteria pass |
