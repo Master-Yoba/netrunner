@@ -1,10 +1,14 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://scenes/GameTableControl.cs" id="1_board_script"]
 [ext_resource type="Resource" path="res://themes/BoardLayout.tres" id="2_board_layout"]
 [ext_resource type="PackedScene" path="res://scenes/components/PlayerArea.tscn" id="3_player_area"]
 [ext_resource type="PackedScene" path="res://scenes/components/PileView.tscn" id="4_pile"]
 [ext_resource type="Theme" path="res://themes/M4Theme.tres" id="5_theme"]
+
+[ext_resource type="PackedScene" path="res://scenes/components/CreditIndicator.tscn" id="credits"]
+
+[ext_resource type="PackedScene" path="res://scenes/components/HandView.tscn" id="hand"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_board"]
 content_margin_left = 8.0
@@ -56,12 +60,13 @@ layout_mode = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
-color = Color(0.018, 0.083, 0.074, 1)
+color = Color(0.025, 0.045, 0.05, 1)
 
 [node name="Surface" type="PanelContainer" parent="."]
 layout_mode = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_bottom = -226.0
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_board")
 
@@ -97,6 +102,9 @@ text = "CORP"
 vertical_alignment = 1
 text_overrun_behavior = 3
 
+[node name="Credits" parent="Surface/Margins/Layout/CorpStrip/Content" instance=ExtResource("credits")]
+layout_mode = 2
+
 [node name="Resources" type="Label" parent="Surface/Margins/Layout/CorpStrip/Content"]
 layout_mode = 2
 size_flags_horizontal = 3
@@ -130,16 +138,6 @@ theme_override_font_sizes/font_size = 10
 text = "HQ · hand"
 vertical_alignment = 1
 text_overrun_behavior = 3
-
-[node name="CorpDeck" parent="Surface/Margins/Layout/CorpStrip/Content" instance=ExtResource("4_pile")]
-layout_mode = 2
-text = "R&D · —"
-tooltip_text = "Corp R&D · face-down pile"
-
-[node name="CorpArchives" parent="Surface/Margins/Layout/CorpStrip/Content" instance=ExtResource("4_pile")]
-layout_mode = 2
-text = "Archives · —"
-tooltip_text = "Corp Archives · public discard pile"
 
 [node name="Turn" type="Label" parent="Surface/Margins/Layout/CorpStrip/Content"]
 custom_minimum_size = Vector2(132, 0)
@@ -214,3 +212,16 @@ theme_override_font_sizes/font_size = 11
 text = "Select a card or lane to stage a contextual action · Escape cancels local staging"
 horizontal_alignment = 1
 text_overrun_behavior = 3
+
+[node name="LocalHand" parent="." instance=ExtResource("hand")]
+layout_mode = 1
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -720.0
+offset_top = -220.0
+offset_right = -8.0
+grow_horizontal = 0
+grow_vertical = 0
+z_index = 35

@@ -44,10 +44,10 @@ public partial class GameTableControl : Control
 	private HBoxContainer _corpStrip = null!;
 	private HBoxContainer _serverLaneRow = null!;
 	private HBoxContainer _runnerRigRow = null!;
-	private HBoxContainer _localHandRow = null!;
+	private HandFanControl _localHandRow = null!;
+	public HandFanControl Hand => _localHandRow;
 	private ScrollContainer _serverScroll = null!;
 	private ScrollContainer _runnerRigScroll = null!;
-	private ScrollContainer _localHandScroll = null!;
 	private Label _turnLabel = null!;
 	private Label _runLabel = null!;
 	private Label _corpResources = null!;
@@ -55,12 +55,10 @@ public partial class GameTableControl : Control
 	private Label _corpHandCaption = null!;
 	private Label _runnerHandCaption = null!;
 	private Label _localHandCaption = null!;
-	private PanelContainer _runnerIdentitySlot = null!;
+	private MarginContainer _runnerIdentitySlot = null!;
 	private Label _tableHint = null!;
 	private Label _corpScoreLabel = null!;
 	private Label _runnerScoreLabel = null!;
-	private Button _corpDeckPile = null!;
-	private Button _corpArchivesPile = null!;
 	private Button _runnerDeckPile = null!;
 	private Button _runnerHeapPile = null!;
 	private string? _selection;
@@ -343,10 +341,15 @@ public partial class GameTableControl : Control
 
 	private void ConnectAuthoredZoneButtons()
 	{
-		_corpDeckPile.Pressed += () => ServerSelected?.Invoke("zone:corp-deck");
-		_corpArchivesPile.Pressed += () => ServerSelected?.Invoke("zone:corp-archives");
-		_runnerDeckPile.Pressed += () => ServerSelected?.Invoke("zone:runner-deck");
+		_runnerDeckPile.Pressed += () => BasicActionRequested?.Invoke(PlayerSide.Runner, ActionKind.DrawCard);
+		_corpCredits.Pressed += () => BasicActionRequested?.Invoke(PlayerSide.Corp, ActionKind.GainCredit);
+		_runnerCredits.Pressed += () => BasicActionRequested?.Invoke(PlayerSide.Runner, ActionKind.GainCredit);
 		_runnerHeapPile.Pressed += () => ServerSelected?.Invoke("zone:runner-heap");
+		BoardActionButton heap = (BoardActionButton)_runnerHeapPile;
+		heap.MouseEntered += () => HoverPileFace(heap, true);
+		heap.MouseExited += () => HoverPileFace(heap, false);
+		heap.FocusEntered += () => HoverPileFace(heap, true);
+		heap.FocusExited += () => HoverPileFace(heap, false);
 		Button? corpScored = GetNodeOrNull<Button>("Surface/Margins/Layout/CorpStrip/Content/CorpScored");
 		Button? runnerScored = GetNodeOrNull<Button>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/Scored");
 		if (corpScored is not null)
@@ -367,21 +370,20 @@ public partial class GameTableControl : Control
 		_serverLaneRow = GetNodeOrNull<HBoxContainer>("Surface/Margins/Layout/ServerField/Content/Scroll/Lanes")!;
 		_runnerRigScroll = GetNodeOrNull<ScrollContainer>("Surface/Margins/Layout/RunnerField/Content/Rig/Content/Scroll")!;
 		_runnerRigRow = GetNodeOrNull<HBoxContainer>("Surface/Margins/Layout/RunnerField/Content/Rig/Content/Scroll/Cards")!;
-		_localHandScroll = GetNodeOrNull<ScrollContainer>("Surface/Margins/Layout/RunnerField/Content/LocalHand/Content/Scroll")!;
-		_localHandRow = GetNodeOrNull<HBoxContainer>("Surface/Margins/Layout/RunnerField/Content/LocalHand/Content/Scroll/Cards")!;
+		_localHandRow = GetNodeOrNull<HandFanControl>("LocalHand")!;
 		_turnLabel = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/Turn")!;
 		_runLabel = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/Run")!;
 		_corpResources = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/Resources")!;
 		_runnerResources = GetNodeOrNull<Label>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/Resources")!;
 		_corpHandCaption = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/HQ")!;
 		_runnerHandCaption = GetNodeOrNull<Label>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/HandCaption")!;
-		_localHandCaption = GetNodeOrNull<Label>("Surface/Margins/Layout/RunnerField/Content/LocalHand/Content/Heading/Caption")!;
-		_runnerIdentitySlot = GetNodeOrNull<PanelContainer>("Surface/Margins/Layout/RunnerField/Content/Identity")!;
+		_localHandCaption = GetNodeOrNull<Label>("LocalHand/Caption")!;
+		_runnerIdentitySlot = GetNodeOrNull<MarginContainer>("Surface/Margins/Layout/RunnerField/Content/Identity/Content/Cards")!;
 		_tableHint = GetNodeOrNull<Label>("Surface/Margins/Layout/Hint")!;
 		_corpScoreLabel = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/Score")!;
 		_runnerScoreLabel = GetNodeOrNull<Label>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/Score")!;
-		_corpDeckPile = GetNodeOrNull<Button>("Surface/Margins/Layout/CorpStrip/Content/CorpDeck")!;
-		_corpArchivesPile = GetNodeOrNull<Button>("Surface/Margins/Layout/CorpStrip/Content/CorpArchives")!;
+		_corpCredits = GetNodeOrNull<BoardActionButton>("Surface/Margins/Layout/CorpStrip/Content/Credits")!;
+		_runnerCredits = GetNodeOrNull<BoardActionButton>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/Credits")!;
 		_runnerDeckPile = GetNodeOrNull<Button>("Surface/Margins/Layout/RunnerField/Content/Deck")!;
 		_runnerHeapPile = GetNodeOrNull<Button>("Surface/Margins/Layout/RunnerField/Content/Discard")!;
 
@@ -391,7 +393,6 @@ public partial class GameTableControl : Control
 			&& _serverLaneRow is not null
 			&& _runnerRigScroll is not null
 			&& _runnerRigRow is not null
-			&& _localHandScroll is not null
 			&& _localHandRow is not null
 			&& _turnLabel is not null
 			&& _runLabel is not null
@@ -404,8 +405,8 @@ public partial class GameTableControl : Control
 			&& _tableHint is not null
 			&& _corpScoreLabel is not null
 			&& _runnerScoreLabel is not null
-			&& _corpDeckPile is not null
-			&& _corpArchivesPile is not null
+			&& _corpCredits is not null
+			&& _runnerCredits is not null
 			&& _runnerDeckPile is not null
 			&& _runnerHeapPile is not null;
 	}
@@ -503,7 +504,6 @@ public partial class GameTableControl : Control
 		_corpStrip.AddThemeConstantOverride("separation", cardSeparation);
 		_serverLaneRow.AddThemeConstantOverride("separation", regionSpacing);
 		_runnerRigRow.AddThemeConstantOverride("separation", cardSeparation);
-		_localHandRow.AddThemeConstantOverride("separation", -Mathf.RoundToInt(_boardLayout.HandOverlap));
 
 		PanelContainer? serverField = GetNodeOrNull<PanelContainer>("Surface/Margins/Layout/ServerField");
 		if (serverField is not null)
@@ -536,6 +536,12 @@ public partial class GameTableControl : Control
 		lane.Panel.CustomMinimumSize = new Vector2(_boardLayout.LaneWidth, lane.Panel.CustomMinimumSize.Y);
 		lane.RootCards.AddThemeConstantOverride("separation", -Mathf.RoundToInt(_boardLayout.RootCardOverlap));
 		lane.IceCards.AddThemeConstantOverride("separation", Mathf.RoundToInt(_boardLayout.CardSeparation));
+		// Reserve matching gutters: the scrollbar must not move ICE off the
+		// root centerline when a server gains more cards or the window shrinks.
+		ScrollContainer scroll = lane.IceCards.GetParent<ScrollContainer>();
+		StyleBox panel = scroll.GetThemeStylebox("panel");
+		panel.ContentMarginLeft = scroll.GetVScrollBar().GetCombinedMinimumSize().X
+			+ scroll.GetThemeConstant("scrollbar_h_separation");
 	}
 
 	private void RefreshEditorPreview()
@@ -555,8 +561,10 @@ public partial class GameTableControl : Control
 		CacheServerDisplayNames(view.Servers);
 		_turnLabel.Text = FormatTurn(view);
 		_runLabel.Text = FormatRun(view);
-		_corpResources.Text = FormatResources(view.Corp);
-		_runnerResources.Text = $"Credits {view.Runner.Credits} · Clicks {view.Runner.Clicks}\nScore {view.Runner.AgendaPoints} · Tags {view.Runner.Tags?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—"}";
+		_corpResources.Text = $"Clicks {view.Corp.Clicks} · Score {view.Corp.AgendaPoints}";
+		_corpCredits.Text = view.Corp.Credits.ToString(System.Globalization.CultureInfo.InvariantCulture);
+		_runnerCredits.Text = view.Runner.Credits.ToString(System.Globalization.CultureInfo.InvariantCulture);
+		_runnerResources.Text = $"Clicks {view.Runner.Clicks}\nScore {view.Runner.AgendaPoints} · Tags {view.Runner.Tags?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—"}";
 		_corpScoreLabel.Text = $"Score {view.Corp.AgendaPoints}";
 		if (view.Runner.UsedMemory is { } used && view.Runner.MemoryLimit is { } limit)
 			_runnerResources.Text += $"\nMU {used}/{limit}";
@@ -570,6 +578,9 @@ public partial class GameTableControl : Control
 			ApplySelectionAndTargets();
 			return;
 		}
+		MatchViewModel? previousView = _motionView;
+		_motionView = view;
+		DrawPlan? draw = CaptureDrawPlan(previousView, view);
 		var previousCards = CaptureMotionCards();
 		_lastBoardFingerprint = boardFingerprint;
 
@@ -600,7 +611,8 @@ public partial class GameTableControl : Control
 			_visibleCards[key] = card;
 		}
 		ApplySelectionAndTargets();
-		PresentMotion(previousCards, view);
+		PresentDrawMotion(draw, view.Viewer);
+		PresentMotion(previousCards, view, previousView);
 		EnsureRunVisible(view.Run);
 	}
 
@@ -631,13 +643,15 @@ public partial class GameTableControl : Control
 			? $"Grip · {view.RunnerHand.Count} cards · local"
 			: $"Grip · {view.RunnerHand.Count} cards · opponent backs";
 
-		_corpDeckPile.Text = $"R&D · {view.CorpDeck.Count}";
-		_corpArchivesPile.Text = $"Archives · {view.CorpDiscardCount}";
-		_runnerDeckPile.Text = $"Stack\n{view.RunnerDeck.Count} cards";
-		_runnerHeapPile.Text = $"Heap\n{view.RunnerHeap.Count} cards";
-		UpdatePileTooltip(_corpDeckPile, $"Corp R&D · {view.CorpDeck.Count} face-down cards");
-		UpdatePileTooltip(_corpArchivesPile, $"Corp Archives · {view.CorpDiscardCount} cards · {view.CorpDiscard.Count} visible");
-		UpdatePileTooltip(_runnerDeckPile, $"Runner Stack · {view.RunnerDeck.Count} face-down cards");
+		_runnerDeckPile.TooltipText = $"Stack · {view.RunnerDeck.Count} cards · draw for 1 click when available";
+		TableCardControl stack = EnsureCard("runner-stack", _runnerDeckPile, null, false, nextVisibleCards, PlayerSide.Runner);
+		stack.MouseFilter = MouseFilterEnum.Ignore;
+		stack.FocusMode = FocusModeEnum.None;
+		stack.Visible = view.RunnerDeck.Count > 0;
+		_runnerDeckPile.GetNode<Label>("Count").Text = view.RunnerDeck.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+		_runnerDeckPile.Text = view.RunnerDeck.Count == 0 ? "Stack\nEmpty" : string.Empty;
+		RenderPileFace("zone:runner-heap", (BoardActionButton)_runnerHeapPile,
+			view.RunnerHeap.Count > 0 ? view.RunnerHeap[^1] : null, view.RunnerHeap.Count, "Heap", PlayerSide.Runner, nextVisibleCards);
 		UpdatePileTooltip(_runnerHeapPile, $"Runner Heap · {view.RunnerHeap.Count} public cards");
 
 		RenderIdentity("runner-identity", _runnerIdentitySlot, view.RunnerIdentity, false, nextVisibleCards);
@@ -675,8 +689,9 @@ public partial class GameTableControl : Control
 				&& string.Equals(run.AttackedServerId, server.Id, StringComparison.Ordinal)
 				? $"ACTIVE RUN · {run.FocusLabel}"
 				: string.Empty;
-			lane.RunMarker.Visible = lane.RunMarker.Text.Length > 0;
-			if (lane.RunMarker.Visible && view.Run?.Encounter is { } encounter)
+			// Keep this row in every lane so entering a run never moves its cards.
+			lane.RunMarker.TooltipText = string.Empty;
+			if (lane.RunMarker.Text.Length > 0 && view.Run?.Encounter is { } encounter)
 			{
 				lane.RunMarker.Text = $"▶ {encounter.Ice?.Title ?? "Face-down ICE"} · {encounter.RemainingSubroutines} unbroken";
 				lane.RunMarker.TooltipText = $"Strength {encounter.EffectiveStrength ?? encounter.Ice?.Strength}\n"
@@ -685,10 +700,10 @@ public partial class GameTableControl : Control
 			lane.RootCaption.Text = server.Kind == ServerKind.Remote
 				? "ROOT · remote content"
 				: server.Kind == ServerKind.Archives
-					? "ROOT · public archive"
+					? $"Archives · {view.CorpDiscardCount} cards"
 					: server.Kind == ServerKind.RAndD
 						? $"R&D DECK · {view.CorpDeck.Count} cards"
-							: "ROOT · HQ";
+							: $"ROOT · HQ · {view.CorpHand.Count} cards in hand";
 			lane.RootCaption.Visible = true;
 			lane.IceCaption.Visible = true;
 
@@ -699,15 +714,13 @@ public partial class GameTableControl : Control
 				server,
 				lane.RootCards,
 				server.Kind == ServerKind.Headquarters ? view.CorpIdentity : null,
-				server.Kind == ServerKind.Headquarters ? view.CorpHand.Count : null,
 				nextVisibleCards);
 			if (server.Kind == ServerKind.RAndD)
 			{
-				for (int back = 0; back < Math.Min(view.CorpDeck.Count, 1); back++)
-					EnsureCard($"pile:{server.Id}:{back}", lane.RootCards, null, false, nextVisibleCards);
+				RenderZonePile("zone:corp-deck", lane.RootCards, null, view.CorpDeck.Count, nextVisibleCards);
 			}
-			if (server.Kind == ServerKind.Archives && view.CorpDiscardCount > 0)
-				EnsureCard($"archives:{view.CorpDiscard[^1].Id}", lane.RootCards, view.CorpDiscard[^1], false, nextVisibleCards);
+			if (server.Kind == ServerKind.Archives)
+				RenderZonePile("zone:corp-archives", lane.RootCards, view.CorpDiscard.Count > 0 ? view.CorpDiscard[^1] : null, view.CorpDiscardCount, nextVisibleCards);
 			RenderServerIce(server, lane.IceCards, nextVisibleCards);
 		}
 
@@ -738,21 +751,12 @@ public partial class GameTableControl : Control
 		ServerViewModel server,
 		HBoxContainer rootCards,
 		CardViewModel? corpIdentity,
-		int? corpHandCount,
 		Dictionary<string, TableCardControl> nextVisibleCards)
 	{
 		int index = 0;
 		if (corpIdentity is not null)
 		{
 			EnsureCard("corp-identity", rootCards, corpIdentity, false, nextVisibleCards);
-		}
-		if (corpHandCount is { } handCount)
-		{
-			Label handLabel = MakeLabel($"{handCount} cards\nin hand", 10, MutedColor);
-			handLabel.CustomMinimumSize = new Vector2(78, 0);
-			handLabel.VerticalAlignment = VerticalAlignment.Center;
-			rootCards.AddChild(handLabel);
-			rootCards.MoveChild(handLabel, corpIdentity is not null ? 1 : 0);
 		}
 		foreach (CardViewModel? card in server.OrderedRoot)
 		{
@@ -781,10 +785,11 @@ public partial class GameTableControl : Control
 				Control stack = new()
 				{
 					CustomMinimumSize = HostedStackMinimumSize(),
+					SizeFlagsHorizontal = SizeFlags.ShrinkCenter,
 					MouseFilter = MouseFilterEnum.Ignore,
 				};
 				iceCards.AddChild(stack);
-				EnsureCard(slot, stack, card, true, nextVisibleCards);
+				EnsureCard(slot, stack, card, true, nextVisibleCards).Position = Vector2.Zero;
 				for (int index = 0; index < hosted.Length; index++)
 				{
 					TableCardControl attachment = EnsureCard(
@@ -884,6 +889,7 @@ public partial class GameTableControl : Control
 			nextVisibleCards,
 			PlayerSide.Runner);
 		hostControl.Position = Vector2.Zero;
+		Vector2 footprint = hostControl.DisplaySize;
 		foreach ((CardViewModel attachment, int index) in attachments.Select((card, index) => (card, index)))
 		{
 			TableCardControl attachmentControl = EnsureCard(
@@ -896,7 +902,10 @@ public partial class GameTableControl : Control
 				CardSizeRole.HostedPortrait);
 			attachmentControl.Position = HostedCardPosition(index);
 			attachmentControl.ZIndex = index + 2;
+			Vector2 edge = attachmentControl.Position + attachmentControl.DisplaySize;
+			footprint = new Vector2(Mathf.Max(footprint.X, edge.X), Mathf.Max(footprint.Y, edge.Y));
 		}
+		slot.CustomMinimumSize = footprint;
 	}
 
 	private void RenderLocalHand(
@@ -907,10 +916,12 @@ public partial class GameTableControl : Control
 		IReadOnlyList<CardViewModel> cards = corpLocal
 			? view.CorpHand.VisibleCards
 			: view.RunnerHand.VisibleCards;
+		HashSet<string> selected = BoardInteractionProjector.SelectedDiscards(view).Select(card => card.Id).ToHashSet(StringComparer.Ordinal);
+		int handCount = corpLocal ? view.CorpHand.Count : view.RunnerHand.Count;
+		cards = cards.Where(card => !selected.Contains(card.Id)).ToArray();
 		string zone = corpLocal ? "corp-hand" : "runner-hand";
 		_localHandCaption.Text = corpLocal
-			? $"LOCAL HAND · HQ · {cards.Count} visible cards"
-			: $"LOCAL HAND · GRIP · {cards.Count} visible cards";
+			? "HQ · YOUR HAND" : "GRIP · YOUR HAND";
 		HashSet<string> activeHandIds = cards.Select(card => card.Id).ToHashSet(StringComparer.Ordinal);
 		foreach (TableCardControl existing in _localHandRow.GetChildren().OfType<TableCardControl>().ToArray())
 		{
@@ -919,7 +930,7 @@ public partial class GameTableControl : Control
 				_localHandRow.RemoveChild(existing);
 			}
 		}
-		int displayIndex = 0;
+		var handControls = new List<TableCardControl>();
 		foreach (CardViewModel card in cards)
 		{
 			TableCardControl control = EnsureCard(
@@ -928,14 +939,17 @@ public partial class GameTableControl : Control
 				card,
 				false,
 				nextVisibleCards,
-				corpLocal ? PlayerSide.Corp : PlayerSide.Runner);
-			_localHandRow.MoveChild(control, displayIndex++);
+				corpLocal ? PlayerSide.Corp : PlayerSide.Runner, CardSizeRole.FullPortrait);
+			handControls.Add(control);
 		}
+		_localHandRow.SetCards(handControls, MotionEnabled);
+		_localHandRow.GetNode<Label>("Count").Text = handCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
+		if (selected.Count > 0) _localHandCaption.Text += $" · {selected.Count} selected for discard";
 	}
 
 	private void RenderIdentity(
 		string slot,
-		PanelContainer parent,
+		Control parent,
 		CardViewModel? card,
 		bool isIce,
 		Dictionary<string, TableCardControl> nextVisibleCards)
@@ -980,8 +994,10 @@ public partial class GameTableControl : Control
 			_cardModels[identity] = null;
 		}
 
+		bool retainHandPose = parent is HandFanControl && control.GetParent() == parent;
 		if (control.GetParent() is Node oldParent && oldParent != parent)
 		{
+			if (oldParent is BoardActionButton) control.SetContainerHover(false);
 			oldParent.RemoveChild(control);
 		}
 		if (control.GetParent() != parent)
@@ -996,7 +1012,15 @@ public partial class GameTableControl : Control
 		}
 		control.SetIce(isIce);
 		control.SetBackSide(backSide ?? BackSideForSlot(slot));
-		control.Scale = Vector2.One;
+		if (!retainHandPose)
+		{
+			control.Scale = Vector2.One;
+			control.Rotation = 0;
+			control.PivotOffset = Vector2.Zero;
+		}
+		control.PointerHitTest = null;
+		control.MouseFilter = MouseFilterEnum.Stop;
+		control.FocusMode = FocusModeEnum.All;
 		SetCardSizeIntent(identity, control, isIce, sizeRole);
 		_activeCardKeys.Add(identity);
 		string publicKey = model?.Id is { Length: > 0 } id ? id : slot;
@@ -1087,6 +1111,7 @@ public partial class GameTableControl : Control
 			_ => BoardLayout.CompactPortraitScale,
 		};
 		intent.Control.SetDisplaySize(intent.IsIce ? source * new Vector2(1, BoardLayout.IceHeightScale) : source * scale);
+		if (intent.Control.GetParent() is BoardActionButton pile) pile.CustomMinimumSize = intent.Control.DisplaySize;
 	}
 
 	private Vector2 HostedCardPosition(int index)
@@ -1105,7 +1130,7 @@ public partial class GameTableControl : Control
 		CardAppearance? appearance = GD.Load<CardAppearance>(TableCardControl.DefaultAppearancePath);
 		Vector2 ice = (appearance?.IceSize ?? TableCardControl.IceCardSize) * new Vector2(1, layout.IceHeightScale);
 		Vector2 hosted = (appearance?.PortraitSize ?? TableCardControl.PortraitCardSize) * layout.HostedPortraitScale;
-		return new Vector2(layout.LaneWidth, Mathf.Max(ice.Y, hosted.Y) + layout.HostedCardOffset.Y + layout.HostedCardStep.Y);
+		return new Vector2(ice.X, Mathf.Max(ice.Y, hosted.Y) + layout.HostedCardOffset.Y + layout.HostedCardStep.Y);
 	}
 
 	private Vector2 RigSlotMinimumSize()
@@ -1113,7 +1138,7 @@ public partial class GameTableControl : Control
 		BoardLayout layout = BoardLayout;
 		CardAppearance? appearance = GD.Load<CardAppearance>(TableCardControl.DefaultAppearancePath);
 		Vector2 card = (appearance?.PortraitSize ?? TableCardControl.PortraitCardSize) * layout.CompactPortraitScale;
-		return new Vector2(card.X, card.Y + layout.HostedCardOffset.Y + layout.HostedCardStep.Y);
+		return card;
 	}
 
 	private static PlayerSide BackSideForSlot(string slot)
@@ -1174,8 +1199,9 @@ public partial class GameTableControl : Control
 			$"viewer:{view.Viewer}",
 			$"corpdeck:{view.CorpDeck.Count}",
 			$"runnerdeck:{view.RunnerDeck.Count}",
-			$"corpdiscard:{view.CorpDiscardCount}",
-			$"runnerheap:{view.RunnerHeap.Count}",
+			$"corpdiscard:{view.CorpDiscardCount}:{CardsFingerprint(view.CorpDiscard)}",
+			$"runnerheap:{view.RunnerHeap.Count}:{CardsFingerprint(view.RunnerHeap)}",
+			$"selected-discard:{string.Join(',', BoardInteractionProjector.SelectedDiscards(view).Select(card => card.Id))}",
 			$"corphand:{view.CorpHand.Count}:{CardsFingerprint(view.CorpHand.VisibleCards)}",
 			$"runnerhand:{view.RunnerHand.Count}:{CardsFingerprint(view.RunnerHand.VisibleCards)}",
 			$"rigrig:{CardsFingerprint(view.RunnerRig)}",
@@ -1380,13 +1406,17 @@ public partial class GameTableControl : Control
 
 	private void HandleCardInspected(string cardId) => CardInspected?.Invoke(cardId);
 
-	private void HandleCardHoverChanged(TableCardControl card, bool active) => CardHoverChanged?.Invoke(card, active);
+	private void HandleCardHoverChanged(TableCardControl card, bool active)
+	{
+		_localHandRow.Hover(card, active);
+		CardHoverChanged?.Invoke(card, active);
+	}
 
 	private static void ClearNonCardChildren(Node parent)
 	{
 		foreach (Node child in parent.GetChildren().ToArray())
 		{
-			if (child is not TableCardControl)
+			if (child is not TableCardControl and not BoardActionButton)
 			{
 				parent.RemoveChild(child);
 				child.QueueFree();

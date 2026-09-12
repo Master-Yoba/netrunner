@@ -8,6 +8,10 @@
 [ext_resource type="PackedScene" path="res://scenes/components/DecisionDock.tscn" id="dock"]
 [ext_resource type="Script" path="res://scenes/components/TableWorkspace.cs" id="workspace"]
 
+[ext_resource type="PackedScene" path="res://scenes/components/BoardDragController.tscn" id="drag"]
+
+[ext_resource type="PackedScene" path="res://scenes/components/InteractionLabToolbar.tscn" id="lab"]
+
 [node name="MatchTable" type="VBoxContainer"]
 size_flags_vertical = 3
 theme = ExtResource("theme")
@@ -58,6 +62,8 @@ theme_type_variation = &"TableStatus"
 text = "Choose your opening hand."
 autowrap_mode = 3
 
+[node name="InteractionLabToolbar" parent="." instance=ExtResource("lab")]
+
 [node name="TableViewport" type="Control" parent="."]
 layout_mode = 2
 size_flags_vertical = 3
@@ -89,5 +95,14 @@ offset_left = -60.0
 grow_horizontal = 0
 grow_vertical = 2
 
-[node name="DecisionDock" parent="." instance=ExtResource("dock")]
-layout_mode = 2
+[node name="DecisionDock" parent="TableViewport" instance=ExtResource("dock")]
+layout_mode = 1
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -214.0
+offset_right = -800.0
+offset_bottom = -8.0
+grow_vertical = 0
+
+[node name="BoardDragController" parent="TableViewport" instance=ExtResource("drag")]

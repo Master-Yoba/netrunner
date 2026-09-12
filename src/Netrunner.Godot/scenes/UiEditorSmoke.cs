@@ -110,27 +110,33 @@ public partial class UiEditorSmoke : Node
 			GameTableControl board = preview.GetNode<GameTableControl>("Margin/Content/Pages/Board/MatchTable/TableViewport/GameBoard");
 			Control access = preview.GetNode<Control>("Margin/Content/Pages/Board/MatchTable/TableViewport/AccessPanel");
 			Require(access.GetNode<TableCardControl>("%Card").Card is { IsKnown: true }, "Preview did not bind the accessed card.");
+			preview.Decision = UiPreview.SampleDecision.Ordinary;
+			await Frames(2);
+			Require(board.FindChildren("*", "Button", true, false).OfType<BoardActionButton>().Count(button => button.ActionAvailable) == 2,
+				"Ordinary board preview does not expose the local credit and deck glows.");
+			preview.Decision = UiPreview.SampleDecision.Access;
+			await Frames(2);
 			TableCardControl stable = board.VisibleCards["preview-hand-1"];
 			CardAppearance original = stable.Appearance;
 			CardAppearance replacement = (CardAppearance)original.Duplicate();
 			stable.Appearance = replacement;
 			replacement.PortraitSize = new Vector2(180, 252);
-			Require(stable.DisplaySize == replacement.PortraitSize * board.Layout.CompactPortraitScale,
+			Require(stable.DisplaySize == replacement.PortraitSize,
 				"Board did not rebind the replacement resource to its card footprint.");
 			stable.Appearance = original;
 			float width = board.Layout.LaneWidth;
-			float overlap = board.Layout.HandOverlap;
+			float overlap = board.Hand.CardStep;
 			try
 			{
 				board.Layout.LaneWidth = width + 8;
-				board.Layout.HandOverlap = overlap + 4;
+				board.Hand.CardStep = overlap + 4;
 				await Frames(2);
 				Require(ReferenceEquals(stable, board.VisibleCards["preview-hand-1"]), "Appearance editing replaced a stable card control.");
 			}
 			finally
 			{
 				board.Layout.LaneWidth = width;
-				board.Layout.HandOverlap = overlap;
+				board.Hand.CardStep = overlap;
 			}
 			preview.Density = UiPreviewSamples.Density.Dense;
 			preview.ViewerSeat = cycle % 2 == 0 ? PlayerSide.Corp : PlayerSide.Runner;

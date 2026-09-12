@@ -79,14 +79,17 @@ Select the `UiPreview` root to change **Viewer Seat**, **Density** (empty,
 normal or dense), **Decision**, **History Expanded**, and **Show Hover Preview**.
 The **Page** property also exposes setup, inspection and public pile examples.
 These are authoring samples; their buttons do not submit game actions.
+Choose **Decision: Ordinary** to preview the local credit and draw glows.
 
 | What to change | Authoring location |
 | --- | --- |
 | Glow, state colors, card sizes and typography | `themes/CardAppearance.tres` |
-| Lane width, hand overlap, card separation and board margins | `themes/BoardLayout.tres` |
+| Lane width, card separation and board margins | `themes/BoardLayout.tres` |
 | Common button/focus styles and heading variations | `themes/M4Theme.tres` |
 | Fixed board regions | `scenes/components/GameBoard.tscn` |
 | Lane, player area, local hand and pile composition | `ServerLane.tscn`, `PlayerArea.tscn`, `HandView.tscn`, `PileView.tscn` in `scenes/components` |
+| Hand spacing, fan angle, curve, hover lift, scale and timing | Root of `scenes/components/HandView.tscn` |
+| Credit/deck action glow | `CreditIndicator.tscn` and `BoardPile.tscn` (`GlowWidth`, `GlowColor`) |
 | History widths, row spacing, text and styles | Root of `scenes/components/MatchHistoryPanel.tscn` |
 | Dock and action-button layout | `DecisionDock.tscn` and `ActionButton.tscn` |
 | Hover dimensions and card magnification | Root of `CardHoverPreview.tscn` |
@@ -96,6 +99,15 @@ Variable cards, server lanes and history rows are created from component scenes.
 Edit the component scene to retain layout changes; do not save a synthetic
 board's generated runtime instances as production content. The Cards page
 provides authored sample instances for selecting cards in the Local tree.
+
+Runner identity and rig use top-aligned card rows under 17-pixel headings.
+The local hand occupies its own lower-right area. Edit `LocalHand` in
+`GameBoard.tscn` to change its footprint; the workspace adjusts the play area
+and action dock around it. Hand spacing now belongs to `HandView.CardStep`;
+the old `BoardLayout.HandOverlap` setting has been removed. Server roots are centered in
+`ServerLane.tscn`; its run-marker row stays reserved even when empty. ICE scrolling
+reserves the scrollbar space, with a matching left gutter derived from the theme,
+so crowded servers keep the same centerline as their roots.
 
 The board resource owns its named geometry settings. Card appearance owns
 custom drawing and typography; component scenes own their fixed label layouts.
@@ -125,3 +137,45 @@ After the implementation checks pass, tune the glow without changing C#,
 save the resource, reopen the preview, and launch a game. Record whether the
 result persists and whether any step required help. This user exercise is a
 required M4.10 gate; automated checks do not replace it.
+
+## Practice drag interactions
+
+Run `make interaction-lab`, or select **Practice board interactions** on the
+setup screen. Choose a scenario and drag the practice card from hand. **Reset
+scenario** restores the fixture immediately. The lab uses synthetic presentation
+data and the production interaction controls; it is not a rules simulator or a
+saved match. No official card metadata is required.
+
+Tune `themes/DragAppearance.tres` for drag threshold, preview scale, return
+duration, edge scrolling, and destination styles. Production scenes are
+`BoardDragController.tscn`, `DropDestination.tscn`, and `BoardChoicePanel.tscn`.
+Use the Remote Inspector for temporary live changes and the local resources for
+persistent edits.
+
+Dragged cards are centered on the pointer. `FollowSmoothing` controls how softly
+they follow movement (default 0.04 seconds; higher is softer, zero is immediate).
+Reduced motion also makes tracking immediate. Drop targets follow the pointer
+directly even while the preview is catching up.
+
+The lab also includes **Runner: hand and board actions** and **Corp: hand and
+board actions**. These show a five-card fan and let you try the credit icon,
+Stack/R&D draw, Archives browsing, and the Runner's cancellable Run selection.
+`MotionSeconds` controls hover easing; `HoverLift` and `HoverScale` control its
+extent. Reduced motion applies the raised pose immediately, including keyboard
+focus. Card dimensions continue to come from `CardAppearance.PortraitSize`.
+
+Draws travel from Stack/R&D into the hand, flipping from the appropriate back
+to the local player's known face. The other cards ease apart to make room.
+On `HandView`, tune `DrawSeconds`, `DrawArcHeight` and `DrawStaggerSeconds`;
+the playback speed slider scales the duration. Zero `DrawSeconds` disables the
+flight. Reduced motion and Skip animation reveal pending arrivals immediately.
+
+**Runner: discard from hand** and **Corp: discard from hand** start with seven
+cards and ask you to discard two. Drag highlighted cards to Heap or Archives.
+Each accepted choice leaves the fan; the pile shows the pending selection count
+until both choices resolve. Reset to repeat. Invalid drops and Escape return the
+card to hand. **All legal actions…** retains the existing confirmation controls
+for keyboard use. The pile's `Pending` label is authored in `BoardPile.tscn`.
+With Reduced motion off, each accepted choice animates once from hand to the
+pile, including the first choice. Try the rightmost card twice; completing the
+set should not replay the first card or create a flight from the upper board.

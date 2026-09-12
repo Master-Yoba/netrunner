@@ -500,3 +500,9 @@ details (UI-303), coordinator worker boundary (UI-301).
 boundary, following the `docs/M2_PROGRESS.md` / `docs/M3_PROGRESS.md`
 convention: status line, date, rules/data baseline, architecture record,
 evidence (test counts, pins, smoke output), and documented deviations.
+
+## Slice 4.11 — Drag-to-play and install
+
+Pre-M5 UI follow-up: see [the implementation plan](M4_11_DRAG_PLAY_PLAN.md) and
+[progress](M4_11_UI_PROGRESS.md). This does not reopen the completed rules gate
+or declare earlier manual usability acceptance complete.

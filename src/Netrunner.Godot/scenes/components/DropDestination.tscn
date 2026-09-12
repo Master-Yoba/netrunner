@@ -1,0 +1,37 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Theme" path="res://themes/M4Theme.tres" id="1_theme"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_drop_destination"]
+content_margin_left = 10.0
+content_margin_top = 8.0
+content_margin_right = 10.0
+content_margin_bottom = 8.0
+bg_color = Color(0.07, 0.26, 0.23, 0.34)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.30, 0.96, 0.76, 0.86)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[node name="DropDestination" type="PanelContainer"]
+custom_minimum_size = Vector2(180, 58)
+layout_mode = 0
+mouse_filter = 2
+theme = ExtResource("1_theme")
+theme_override_styles/panel = SubResource("StyleBoxFlat_drop_destination")
+
+[node name="Caption" type="Label" parent="."]
+unique_name_in_owner = true
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.88, 1, 0.95, 1)
+theme_override_font_sizes/font_size = 11
+text = "Drop here"
+horizontal_alignment = 1
+vertical_alignment = 1
+text_overrun_behavior = 3

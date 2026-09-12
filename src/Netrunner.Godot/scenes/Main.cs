@@ -193,7 +193,20 @@ public partial class Main : Control
 			&& !_slice45UiSmoke && !_slice46UiSmoke && !_slice47UiSmoke && !_slice48UxSmoke && !_fullMatchSmoke
 			&& !arguments.Contains("--diagnostic-ui", StringComparer.Ordinal);
 		BuildShell();
-		if (arguments.Contains("--m4-9-ui-smoke", StringComparer.Ordinal))
+		if (arguments.Contains("--m4-11-demo", StringComparer.Ordinal))
+		{
+			_ = RunInteractionDemoAsync();
+		}
+		else if (arguments.Contains("--m4-11-ui-smoke", StringComparer.Ordinal)
+			|| arguments.Contains("--m4-12-ui-smoke", StringComparer.Ordinal))
+		{
+			_ = RunInteractionSmokeAsync();
+		}
+		else if (arguments.Contains("--interaction-lab", StringComparer.Ordinal))
+		{
+			OpenInteractionLab();
+		}
+		else if (arguments.Contains("--m4-9-ui-smoke", StringComparer.Ordinal))
 		{
 			_ = RunCardTableSmokeAsync();
 		}
@@ -252,7 +265,11 @@ public partial class Main : Control
 	public override void _Process(double delta)
 	{
 		_processFrameCount++;
-		if (_useCardTable) PollCardTable(delta);
+		if (_useCardTable)
+		{
+			PollCardTable(delta);
+			UpdateBoardChoiceGeometry();
+		}
 		else PollCoordinator();
 		if (_animationRunning)
 		{
@@ -325,6 +342,13 @@ public partial class Main : Control
 
 	public override void _UnhandledInput(InputEvent @event)
 	{
+		if (_boardChoiceVisible && (@event is InputEventKey { Pressed: true, Keycode: Key.Escape }
+			|| @event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Right }))
+		{
+			DismissBoardChoices();
+			GetViewport().SetInputAsHandled();
+			return;
+		}
 		if (_useCardTable && !_zoomOverlay.Visible && @event is InputEventKey { Pressed: true, Keycode: Key.Escape })
 		{
 			CancelStagedAction();

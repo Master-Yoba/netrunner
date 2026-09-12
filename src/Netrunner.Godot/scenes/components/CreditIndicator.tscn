@@ -1,0 +1,18 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scenes/BoardActionButton.cs" id="script"]
+[ext_resource type="Texture2D" path="res://icons/credit.svg" id="icon"]
+
+[node name="Credits" type="Button"]
+custom_minimum_size = Vector2(94, 44)
+layout_mode = 2
+mouse_default_cursor_shape = 2
+disabled = true
+theme_override_font_sizes/font_size = 24
+theme_override_colors/font_disabled_color = Color(0.85, 0.86, 0.78, 1)
+theme_override_colors/icon_disabled_color = Color(1, 1, 1, 0.8)
+theme_override_constants/icon_max_width = 32
+text = "0"
+icon = ExtResource("icon")
+script = ExtResource("script")
+tooltip_text = "Credits · take 1 credit for 1 click when available"

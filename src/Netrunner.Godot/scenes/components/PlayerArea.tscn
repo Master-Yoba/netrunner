@@ -1,8 +1,10 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/components/PileView.tscn" id="1_pile"]
-[ext_resource type="PackedScene" path="res://scenes/components/HandView.tscn" id="2_hand"]
 [ext_resource type="Theme" path="res://themes/M4Theme.tres" id="3_theme"]
+
+[ext_resource type="PackedScene" path="res://scenes/components/CreditIndicator.tscn" id="credits"]
+[ext_resource type="PackedScene" path="res://scenes/components/BoardPile.tscn" id="deck"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_area"]
 content_margin_left = 8.0
@@ -87,6 +89,9 @@ theme_override_font_sizes/font_size = 11
 text = "RUNNER"
 text_overrun_behavior = 3
 
+[node name="Credits" parent="Content/Summary/Content" instance=ExtResource("credits")]
+layout_mode = 2
+
 [node name="Resources" type="Label" parent="Content/Summary/Content"]
 layout_mode = 2
 mouse_filter = 2
@@ -123,14 +128,33 @@ tooltip_text = "Runner identity"
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_identity")
 
-[node name="Deck" parent="Content" instance=ExtResource("1_pile")]
-custom_minimum_size = Vector2(62, 30)
+[node name="Content" type="VBoxContainer" parent="Content/Identity"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 1
+
+[node name="Caption" type="Label" parent="Content/Identity/Content"]
+custom_minimum_size = Vector2(0, 17)
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.62, 0.76, 0.75, 1)
+theme_override_font_sizes/font_size = 9
+text = "IDENTITY"
+text_overrun_behavior = 3
+
+[node name="Cards" type="MarginContainer" parent="Content/Identity/Content"]
+layout_mode = 2
+size_flags_vertical = 0
+mouse_filter = 2
+
+[node name="Deck" parent="Content" instance=ExtResource("deck")]
+custom_minimum_size = Vector2(105, 147)
 layout_mode = 2
 text = "Stack\n—"
 tooltip_text = "Runner Stack · face-down pile"
 
-[node name="Discard" parent="Content" instance=ExtResource("1_pile")]
-custom_minimum_size = Vector2(62, 30)
+[node name="Discard" parent="Content" instance=ExtResource("deck")]
+custom_minimum_size = Vector2(105, 147)
 layout_mode = 2
 text = "Heap\n—"
 tooltip_text = "Runner Heap · public discard pile"
@@ -150,6 +174,7 @@ mouse_filter = 2
 theme_override_constants/separation = 1
 
 [node name="Caption" type="Label" parent="Content/Rig/Content"]
+custom_minimum_size = Vector2(0, 17)
 layout_mode = 2
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.62, 0.76, 0.75, 1)
@@ -160,6 +185,7 @@ text_overrun_behavior = 3
 [node name="Scroll" type="ScrollContainer" parent="Content/Rig/Content"]
 layout_mode = 2
 size_flags_horizontal = 3
+size_flags_vertical = 3
 mouse_filter = 2
 follow_focus = true
 vertical_scroll_mode = 0
@@ -167,8 +193,6 @@ vertical_scroll_mode = 0
 [node name="Cards" type="HBoxContainer" parent="Content/Rig/Content/Scroll"]
 layout_mode = 2
 size_flags_horizontal = 3
+size_flags_vertical = 0
 mouse_filter = 2
 theme_override_constants/separation = 8
-
-[node name="LocalHand" parent="Content" instance=ExtResource("2_hand")]
-layout_mode = 2

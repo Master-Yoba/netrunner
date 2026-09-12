@@ -43,6 +43,7 @@ public partial class TableWorkspace : Control
 	{
 		if (!_connected || _history is null) return;
 		Resized -= PositionHistory;
+		if (_board?.Hand is { } hand) hand.Resized -= PositionHistory;
 		_history.ExpandedChanged -= HandleModeChanged;
 		_history.PinnedChanged -= HandleModeChanged;
 		_history.LayoutChanged -= PositionHistory;
@@ -54,6 +55,7 @@ public partial class TableWorkspace : Control
 	{
 		if (_connected || _history is null) return;
 		Resized += PositionHistory;
+		if (_board?.Hand is { } hand) hand.Resized += PositionHistory;
 		_history.ExpandedChanged += HandleModeChanged;
 		_history.PinnedChanged += HandleModeChanged;
 		_history.LayoutChanged += PositionHistory;
@@ -75,5 +77,12 @@ public partial class TableWorkspace : Control
 		_history.OffsetRight = 0;
 		_history.OffsetTop = 0;
 		_history.OffsetBottom = 0;
+		Control? dock = GetNodeOrNull<Control>("DecisionDock");
+		if (dock is not null)
+		{
+			dock.OffsetRight = _board.OffsetRight + _board.Hand.OffsetLeft - HistoryGap;
+			dock.OffsetTop = _board.Hand.OffsetTop + HistoryGap;
+		}
+		_board.PlayArea.OffsetBottom = _board.Hand.OffsetTop - HistoryGap;
 	}
 }

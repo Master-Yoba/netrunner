@@ -95,6 +95,7 @@ public partial class Main
 			return;
 		}
 
+		if (_boardDrag?.IsDragging == true) return;
 		_hoveredTableCard = card;
 		ShowCardHoverPreview(card);
 	}

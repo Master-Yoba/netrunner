@@ -164,3 +164,10 @@ be written into saves or action logs.
   handles.
 - Official card art, frames, and backs are not runtime dependencies and are not
   bundled without appropriate permission.
+
+### Practice board interactions
+
+Use `make interaction-lab` for resettable drag/play/install UI scenarios without
+playing a match. The setup screen also has **Practice board interactions**.
+Fixtures are synthetic and exercise the production UI; game-rule correctness
+is covered separately by engine tests.
