@@ -153,8 +153,8 @@ layout_mode = 2
 text = "Stack\n—"
 tooltip_text = "Runner Stack · face-down pile"
 
-[node name="Discard" parent="Content" instance=ExtResource("1_pile")]
-custom_minimum_size = Vector2(62, 30)
+[node name="Discard" parent="Content" instance=ExtResource("deck")]
+custom_minimum_size = Vector2(105, 147)
 layout_mode = 2
 text = "Heap\n—"
 tooltip_text = "Runner Heap · public discard pile"

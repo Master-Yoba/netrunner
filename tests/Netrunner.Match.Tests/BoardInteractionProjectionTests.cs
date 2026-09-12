@@ -7,6 +7,106 @@ namespace Netrunner.Match.Tests;
 
 public sealed class BoardInteractionProjectionTests
 {
+    [Theory]
+    [InlineData(PlayerSide.Runner)]
+    [InlineData(PlayerSide.Corp)]
+    public void DiscardProjectionTracksEngineSelectionsAcrossSaveRestore(PlayerSide side)
+    {
+        FullMatchDefinition definition = FullMatchDefinition.Developer(47042);
+        GameState state = GameEngine.CreateMatch(definition.Request.Seed, definition.Request.CorpDeck,
+            definition.Request.RunnerDeck, definition.Request.CardDataVersion, definition.Behavior, definition.Runtime).State;
+        for (int step = 0; step < 128; step++)
+        {
+            PendingDecision decision = Assert.IsType<PendingDecision>(state.PendingDecision);
+            if (decision.Kind == DecisionKind.TurnDiscard && state.GetPlayer(decision.Owner).Side == side) break;
+            LegalAction action = decision.LegalActions.FirstOrDefault(candidate => candidate.Kind == ActionKind.DrawCard)
+                ?? decision.LegalActions.FirstOrDefault(candidate => candidate.Kind == ActionKind.PassPriority)
+                ?? decision.LegalActions[0];
+            state = Apply(state, action.Id).State;
+        }
+
+        Assert.Equal(DecisionKind.TurnDiscard, state.PendingDecision!.Kind);
+        Assert.Equal(side, state.GetPlayer(state.PendingDecision.Owner).Side);
+        MatchViewModel initial = Project(state);
+        int count = Hand(initial).Count;
+        int maximum = Assert.IsType<int>(initial.ForcedDiscard!.Hand.MaximumHandSize);
+        Assert.True(count > maximum);
+        // The reduced Corp deck has six cards; the Runner fixture exercises batching.
+        if (side == PlayerSide.Runner) Assert.True(count - maximum > 1);
+        var selected = new List<string>();
+        while (state.PendingDecision?.Kind == DecisionKind.TurnDiscard)
+        {
+            // Selection must be derivable after a resume, without UI gesture history.
+            state = EngineJson.DeserializeState(EngineJson.Serialize(state), definition.Behavior, definition.Runtime);
+            MatchViewModel view = Project(state);
+            Assert.Equal(count, Hand(view).Count);
+            Assert.Equal(selected.Order(), BoardInteractionProjector.SelectedDiscards(view).Select(card => card.Id).Order());
+            BoardInteractionViewModel drag = BoardInteractionProjector.Project(view);
+            Assert.Equal(count - selected.Count, drag.Sources.Count);
+            BoardInteractionSource source = drag.Sources[0];
+            BoardInteractionDestination target = Assert.Single(source.Destinations);
+            Assert.Equal(side == PlayerSide.Corp ? BoardInteractionDestinationKind.CorpArchives : BoardInteractionDestinationKind.RunnerHeap, target.Kind);
+            LegalActionViewModel dropped = Assert.Single(target.Actions);
+            LegalAction menu = state.PendingDecision!.LegalActions.Single(action =>
+                action.Parameters is CardChoiceParameters choice && choice.CardId.Value == source.CardId);
+            ApplyResult fromMenu = Apply(state, menu.Id);
+            ApplyResult fromDrop = Apply(state, dropped.Id);
+            Assert.Equal(EngineJson.Serialize(fromMenu.State), EngineJson.Serialize(fromDrop.State));
+            Assert.Equal(EngineJson.Serialize(fromMenu.Events), EngineJson.Serialize(fromDrop.Events));
+            selected.Add(source.CardId);
+            state = fromDrop.State;
+        }
+        MatchViewModel complete = Project(state);
+        Assert.Equal(maximum, Hand(complete).Count);
+        Assert.Empty(BoardInteractionProjector.SelectedDiscards(complete));
+        Assert.All(selected, id => Assert.Contains(side == PlayerSide.Corp ? complete.CorpDiscard : complete.RunnerHeap, card => card.Id == id));
+
+        MatchViewModel Project(GameState current) => ObservationViewMapper.Build(
+            ObservationBuilder.Build(current, side, definition.Behavior), definition.Metadata, definition.Behavior);
+        ZoneViewModel Hand(MatchViewModel view) => side == PlayerSide.Corp ? view.CorpHand : view.RunnerHand;
+        ApplyResult Apply(GameState current, ActionId id)
+        {
+            PendingDecision decision = current.PendingDecision!;
+            ApplyResult result = GameEngine.Apply(current, new ActionSubmission(decision.Owner, decision.Id, decision.Revision, id),
+                definition.Behavior, definition.Runtime);
+            Assert.True(result.Accepted, result.Rejection?.Message);
+            return result;
+        }
+    }
+
+    [Theory]
+    [InlineData(PlayerSide.Runner, BoardInteractionDestinationKind.RunnerHeap)]
+    [InlineData(PlayerSide.Corp, BoardInteractionDestinationKind.CorpArchives)]
+    public void DiscardDropsUseOnlyIssuedLocalHandCandidates(PlayerSide side, BoardInteractionDestinationKind pile)
+    {
+        CardViewModel eligible = Card("eligible", "Anything", true);
+        CardViewModel selected = Card("selected", "Anything", true);
+        CardViewModel hidden = Card("hidden", "Anything", false);
+        LegalActionViewModel choose = new(new("discard-issued"), ActionKind.ChooseCard, "ignored", new CardChoiceParameters(new(eligible.Id)));
+        LegalActionViewModel notInHand = choose with { Id = new("outside"), Parameters = new CardChoiceParameters(new("outside-hand")) };
+        LegalActionViewModel concealed = choose with { Id = new("concealed"), Parameters = new CardChoiceParameters(new(hidden.Id)) };
+        MatchViewModel view = View(side, [eligible, selected, hidden], [], [choose, notInHand, concealed], decisionKind: DecisionKind.TurnDiscard);
+
+        BoardInteractionSource source = Assert.Single(BoardInteractionProjector.Project(view).Sources);
+        Assert.Equal(eligible.Id, source.CardId);
+        BoardInteractionDestination destination = Assert.Single(source.Destinations);
+        Assert.Equal(pile, destination.Kind);
+        Assert.Same(choose, Assert.Single(destination.Actions));
+        Assert.Same(selected, Assert.Single(BoardInteractionProjector.SelectedDiscards(view)));
+        foreach (DecisionKind other in new[] { DecisionKind.ChooseCard, DecisionKind.MemoryCleanup, DecisionKind.BehaviorChoice, DecisionKind.TurnAction })
+        {
+            MatchViewModel unrelated = view with { Decision = view.Decision! with { Kind = other } };
+            Assert.Empty(BoardInteractionProjector.Project(unrelated).Sources);
+            Assert.Empty(BoardInteractionProjector.SelectedDiscards(unrelated));
+        }
+        MatchViewModel opponent = view with { Decision = view.Decision! with { OwnerSide = side == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp } };
+        Assert.Empty(BoardInteractionProjector.Project(opponent).Sources);
+        Assert.Empty(BoardInteractionProjector.SelectedDiscards(opponent));
+        MatchViewModel noChoices = view with { LegalActions = [] };
+        Assert.Empty(BoardInteractionProjector.Project(noChoices).Sources);
+        Assert.Empty(BoardInteractionProjector.SelectedDiscards(noChoices));
+    }
+
     [Fact]
     public void ProjectsTypedPlayAndInstallDestinationsWithoutInspectingSubtypes()
     {

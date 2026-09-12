@@ -194,8 +194,11 @@ public partial class Main
 			{
 				_gameTable.SetActionableSources(all
 					.SelectMany(TableActionSourceCardIds)
+					.Concat(decision.Kind == DecisionKind.TurnDiscard
+						? BoardInteractionProjector.Project(snapshot.View).Sources.Select(source => source.CardId) : [])
 					.ToHashSet(StringComparer.Ordinal));
 				_gameTable.SetTargets(all
+					.Where(_ => decision.Kind != DecisionKind.TurnDiscard)
 					.SelectMany(TableActionTargetCardIds)
 					.ToHashSet(StringComparer.Ordinal));
 			}
@@ -208,7 +211,12 @@ public partial class Main
 			}
 			bool ordinary = decision.Kind is DecisionKind.TurnAction or DecisionKind.TurnTiming;
 			IEnumerable<LegalActionViewModel> displayed = all;
-			if (ordinary && !_tableAllActions)
+			if (decision.Kind == DecisionKind.TurnDiscard && !_tableAllActions)
+			{
+				displayed = [];
+				AddButton("All legal actions…", () => { _tableAllActions = true; RenderCardTableActions(snapshot); });
+			}
+			else if (ordinary && !_tableAllActions)
 			{
 				if (snapshot.View.Viewer == PlayerSide.Runner && all.Any(action => action.Kind == ActionKind.StartRun))
 					AddButton("Run", StartBoardRunSelection);
@@ -330,12 +338,22 @@ public partial class Main
 			: "Use a paid ability — or pass priority.",
 		DecisionKind.TurnAction => "Choose a card, a server or a basic action.",
 		DecisionKind.Setup => "Keep this hand or take one mulligan.",
-		DecisionKind.TurnDiscard when _currentSnapshot?.View.ForcedDiscard is { Hand.MaximumHandSize: { } maximum } discard =>
-			$"Discard {Math.Max(0, discard.Hand.Count - maximum)} more · hand {discard.Hand.Count}/{maximum}.",
-		DecisionKind.TurnDiscard => "Choose cards to discard down to your hand limit.",
+		DecisionKind.TurnDiscard => HandDiscardPrompt(decision),
 		DecisionKind.MemoryCleanup => "Choose programs to trash to free memory.",
 		_ => FriendlyText(decision.Prompt),
 	};
+
+	private string HandDiscardPrompt(DecisionViewModel decision)
+	{
+		string pile = decision.OwnerSide == PlayerSide.Corp ? "Archives" : "Heap";
+		if (_currentSnapshot?.View is not { } view) return $"Drag a highlighted hand card to {pile}.";
+		int selected = BoardInteractionProjector.SelectedDiscards(view).Count;
+		string progress = selected > 0 ? $"{selected} selected. " : string.Empty;
+		if (view.ForcedDiscard?.Hand is not { MaximumHandSize: { } maximum } hand)
+			return $"{progress}Drag a highlighted hand card to {pile}. {decision.Prompt}";
+		int remaining = Math.Max(0, hand.Count - maximum - selected);
+		return $"{progress}Drag {remaining}{(selected > 0 ? " more" : "")} {(remaining == 1 ? "card" : "cards")} from hand to {pile}.";
+	}
 
 	private string TableActionLabel(LegalActionViewModel action) => action.Kind switch
 	{

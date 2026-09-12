@@ -17,6 +17,8 @@ public enum BoardInteractionDestinationKind
     ServerIce,
     NewRemote,
     ServerTarget,
+    RunnerHeap,
+    CorpArchives,
 }
 
 /// <summary>
@@ -57,7 +59,7 @@ public sealed record BoardInteractionViewModel(
 }
 
 /// <summary>
-/// Projects engine-issued play/install actions into semantic board drop
+/// Projects engine-issued play, install, and hand-discard actions into semantic board drop
 /// targets.  This projector never reads card subtypes, definitions, rules
 /// text, or authoritative state; destination semantics come only from typed
 /// action payloads already admitted to the viewer's observation.
@@ -92,7 +94,7 @@ public static class BoardInteractionProjector
         var builders = new List<SourceBuilder>();
         foreach (LegalActionViewModel action in view.LegalActions)
         {
-            if (!TryGetSourceCardId(action, out string? cardId)
+            if (!TryGetSourceCardId(view, action, out string? cardId)
                 || cardId is null
                 || !knownHand.ContainsKey(cardId))
             {
@@ -235,6 +237,10 @@ public static class BoardInteractionProjector
     {
         switch (action.Parameters)
         {
+            case CardChoiceParameters when view.Decision?.Kind == DecisionKind.TurnDiscard && action.Kind == ActionKind.ChooseCard:
+                yield return Destination(view.Viewer == PlayerSide.Corp
+                    ? BoardInteractionDestinationKind.CorpArchives : BoardInteractionDestinationKind.RunnerHeap, null, action);
+                yield break;
             case PlayCardParameters play:
                 // A targeted event remains playable from the board-wide event
                 // surface, where the controller can stage a server choice,
@@ -306,6 +312,7 @@ public static class BoardInteractionProjector
         new ReadOnlyCollection<LegalActionViewModel>([action]));
 
     private static bool TryGetSourceCardId(
+        MatchViewModel view,
         LegalActionViewModel action,
         out string? cardId)
     {
@@ -313,10 +320,29 @@ public static class BoardInteractionProjector
         {
             PlayCardParameters play => play.CardId.Value,
             InstallCardParameters install => install.CardId.Value,
+            CardChoiceParameters choice when view.Decision?.Kind == DecisionKind.TurnDiscard && action.Kind == ActionKind.ChooseCard => choice.CardId.Value,
             _ => null,
         };
-        return action.Kind is ActionKind.PlayCard or ActionKind.InstallCard
+        return (action.Kind is ActionKind.PlayCard or ActionKind.InstallCard
+            || (view.Decision?.Kind == DecisionKind.TurnDiscard && action.Kind == ActionKind.ChooseCard))
             && !string.IsNullOrWhiteSpace(cardId);
+    }
+
+    /// <summary>
+    /// TurnDiscard retains selected cards in hand until the complete set is chosen.
+    /// Its issued candidates exclude those selections, so presentation can mark
+    /// them as pending without mutating zones or reading the resolution stack.
+    /// </summary>
+    public static IReadOnlyList<CardViewModel> SelectedDiscards(MatchViewModel view)
+    {
+        ArgumentNullException.ThrowIfNull(view);
+        if (!IsLocalDecision(view) || view.Decision?.Kind != DecisionKind.TurnDiscard) return Array.Empty<CardViewModel>();
+        HashSet<string> candidates = view.LegalActions
+            .Where(action => action.Kind == ActionKind.ChooseCard)
+            .Select(action => action.Parameters).OfType<CardChoiceParameters>()
+            .Select(choice => choice.CardId.Value).ToHashSet(StringComparer.Ordinal);
+        if (candidates.Count == 0) return Array.Empty<CardViewModel>();
+        return LocalKnownHand(view).Where(card => card.IsKnown && !candidates.Contains(card.Id)).ToArray();
     }
 
     private static IReadOnlyList<CardViewModel> LocalKnownHand(MatchViewModel view) =>

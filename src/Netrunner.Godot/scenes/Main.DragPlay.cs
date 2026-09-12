@@ -1,3 +1,4 @@
+using Netrunner.Core;
 using Netrunner.Match;
 
 namespace Netrunner.GodotClient;
@@ -29,7 +30,7 @@ public partial class Main
 			if (_currentSnapshot?.View.Decision is not { } current || !SameDecision(decision, current)) return;
 			if (actions.Count == 1)
 			{
-				BeginBoardPlayResolution();
+				if (decision.Kind != DecisionKind.TurnDiscard) BeginBoardPlayResolution();
 				SubmitAction(decision, actions[0]);
 			}
 			else if (actions.Count > 1) StageBoardPlayChoices(decision, actions);

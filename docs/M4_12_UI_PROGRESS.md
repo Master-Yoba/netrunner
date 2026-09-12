@@ -65,3 +65,35 @@ and glow settings are documented in the [editor guide](UI_EDITOR_GUIDE.md).
   `/tmp/draw-editor.log`, `/tmp/draw-format-verify.log`.
 - Evidence: [Runner draw](evidence/m4-12/draw-runner-1920.png),
   [Corp draw](evidence/m4-12/draw-corp-1920.png).
+
+## 2026-09-12 — Dragging hand discards
+
+- End-of-turn discard candidates glow and drag to the local Heap or Archives.
+  The destination highlight fits the actual pile. Wrong-pile drops return to
+  hand; ordinary card choices remain separate. Default per-card buttons are
+  replaced by the drag instruction; **All legal actions…** preserves the
+  existing confirmation controls for keyboard and recovery use.
+- Accepted selections leave the fan immediately and show a pending count at
+  the pile. The engine retains selected cards in hand until the complete set
+  resolves, so authoritative hand/pile counts are preserved. Selection display
+  is reconstructed from the latest issued candidates, including after resume.
+- Heap is a card-sized pile with a visible label, public top face, hover preview
+  and click-to-browse. Pile faces remain available in contextual choice browsers.
+- Two new lab scenarios, **Runner: discard from hand** and **Corp: discard from
+  hand**, each exercise a two-card discard without playing a match.
+- Validation: 166 Match tests passed, including real-engine menu/drop state and
+  event equivalence, save/restore during selection, and exclusions for unrelated
+  choices or hidden cards. Native and headless interactions passed for both
+  seats at 1080p/1440p: wrong pile, pending selections, complete discard sets,
+  top-face hover, empty/nonempty browsing and fallback confirmation. Native
+  checks also verify highlight dimensions. Existing drag, draw motion, dense
+  table, editor and formatting checks passed. The full M4 gate above predates
+  this refinement and was not rerun.
+- Logs: `/tmp/discard-match-tests.log`, `/tmp/discard-native.log`,
+  `/tmp/discard-headless.log`, `/tmp/discard-table.log`,
+  `/tmp/discard-editor.log`, `/tmp/discard-format-verify.log`.
+  One editor run emitted a Godot `SwapGCHandleForType` resource-handle error;
+  a separate rerun completed cleanly.
+- Evidence: [Runner discard](evidence/m4-12/discard-runner-1920.png),
+  [Corp discard](evidence/m4-12/discard-corp-1920.png),
+  [pending selection](evidence/m4-12/discard-pending-1920.png).

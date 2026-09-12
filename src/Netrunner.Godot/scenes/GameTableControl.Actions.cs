@@ -46,14 +46,27 @@ public partial class GameTableControl
 		pile.TooltipText = handle == "zone:corp-deck" ? $"R&D · {count} cards · draw for 1 click when available"
 			: $"Archives · {count} cards · click to browse";
 		if (handle == "zone:corp-deck") pile.SetActionAvailable(false);
-		TableCardControl face = EnsureCard(handle, pile, model, false, visible, PlayerSide.Corp);
+		RenderPileFace(handle, pile, model, count, handle == "zone:corp-deck" ? "R&D" : "Archives", PlayerSide.Corp, visible);
+	}
+
+	private void RenderPileFace(string handle, BoardActionButton pile, CardViewModel? model, int count, string title,
+		PlayerSide side, Dictionary<string, TableCardControl> visible)
+	{
+		TableCardControl face = EnsureCard(handle, pile, model, false, visible, side);
 		face.Position = Vector2.Zero;
 		face.MouseFilter = MouseFilterEnum.Ignore;
 		face.FocusMode = FocusModeEnum.None;
 		face.Visible = count > 0;
 		pile.CustomMinimumSize = face.DisplaySize;
 		pile.GetNode<Label>("Count").Text = count.ToString(System.Globalization.CultureInfo.InvariantCulture);
-		pile.Text = count == 0 ? (handle == "zone:corp-deck" ? "R&D\nEmpty" : "Archives\nEmpty") : string.Empty;
+		pile.Text = count == 0 ? $"{title}\nEmpty" : string.Empty;
+		int selected = handle != "zone:corp-deck" && _pendingView is { } view && view.Viewer == side
+			? BoardInteractionProjector.SelectedDiscards(view).Count : 0;
+		Label pending = pile.GetNode<Label>("Pending");
+		pending.Visible = selected > 0;
+		bool heap = handle == "zone:runner-heap";
+		pile.GetNode<Label>("Caption").Visible = heap && selected == 0;
+		pending.Text = $"{(heap ? "Heap · " : "")}{selected} selected";
 	}
 
 	private static void HoverPileFace(BoardActionButton pile, bool active)

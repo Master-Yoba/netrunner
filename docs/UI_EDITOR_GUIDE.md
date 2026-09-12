@@ -169,3 +169,10 @@ to the local player's known face. The other cards ease apart to make room.
 On `HandView`, tune `DrawSeconds`, `DrawArcHeight` and `DrawStaggerSeconds`;
 the playback speed slider scales the duration. Zero `DrawSeconds` disables the
 flight. Reduced motion and Skip animation reveal pending arrivals immediately.
+
+**Runner: discard from hand** and **Corp: discard from hand** start with seven
+cards and ask you to discard two. Drag highlighted cards to Heap or Archives.
+Each accepted choice leaves the fan; the pile shows the pending selection count
+until both choices resolve. Reset to repeat. Invalid drops and Escape return the
+card to hand. **All legal actions…** retains the existing confirmation controls
+for keyboard use. The pile's `Pending` label is authored in `BoardPile.tscn`.

@@ -20,6 +20,7 @@ public partial class Main
 		{
 			_isolateSmokeInput = true;
 			_boardDrag!.InputFilter = input => input.Device == SmokeInputDevice;
+			_boardDrag.GestureEnded += (outcome, card) => GD.Print($"M411_GESTURE scenario={_labScenario} card={card} outcome={outcome}");
 			OpenInteractionLab();
 			_reducedMotion.ButtonPressed = true;
 			foreach (Vector2I size in new[] { new Vector2I(1920, 1080), new Vector2I(2560, 1440) })
@@ -54,6 +55,7 @@ public partial class Main
 					LabButton(start, true);
 					await LabPointer(start + new Vector2(0, -40));
 					BoardInteractionDestination destination = source.Destinations[0];
+					RequireInteraction(_boardDrag.IsDragging, $"Second drag did not start for scenario {scenario}.");
 					Rect2? rect = _gameTable.GetDropRect(destination.Kind.ToString(), destination.TargetId);
 					for (int scroll = 0; rect is null && scroll < 100; scroll++)
 					{
@@ -156,6 +158,7 @@ public partial class Main
 			await CheckDragFollowing();
 			await CheckBoardRefinements();
 			await CheckDrawMotion();
+			await CheckHandDiscard();
 			GD.Print("M411_INTERACTION PASS scenarios=15 resolutions=2 drag=true cancel=true stale=true choices=true menu_fallback=true hidden_host=true focus_loss=true invalid_drop=true centered=true smooth_follow=true");
 			GetTree().Quit();
 		}

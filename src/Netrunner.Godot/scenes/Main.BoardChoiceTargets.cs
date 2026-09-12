@@ -69,7 +69,8 @@ public partial class Main
 		if (_currentSnapshot?.View is not { } view || _boardChoiceOptions is null) return;
 		HashSet<string> ids = actions.SelectMany(a => BoardCardTargetIds(a, actions)).ToHashSet(StringComparer.Ordinal);
 		CardViewModel[] cards = BoardChoiceCards(view).Where(c => ids.Contains(c.Id)
-			&& !_gameTable.VisibleCards.ContainsKey(c.Id)).ToArray();
+			&& (!_gameTable.VisibleCards.TryGetValue(c.Id, out TableCardControl? tableCard)
+				|| tableCard.MouseFilter == MouseFilterEnum.Ignore)).ToArray();
 		if (cards.Length == 0) return;
 		_boardChoicePanel!.GetNode<ScrollContainer>("Content/OptionsScroll").CustomMinimumSize = new Vector2(0, 220);
 		HFlowContainer browser = GD.Load<PackedScene>("res://scenes/components/BoardChoiceCards.tscn").Instantiate<HFlowContainer>();

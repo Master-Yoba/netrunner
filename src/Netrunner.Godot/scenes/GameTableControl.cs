@@ -345,6 +345,11 @@ public partial class GameTableControl : Control
 		_corpCredits.Pressed += () => BasicActionRequested?.Invoke(PlayerSide.Corp, ActionKind.GainCredit);
 		_runnerCredits.Pressed += () => BasicActionRequested?.Invoke(PlayerSide.Runner, ActionKind.GainCredit);
 		_runnerHeapPile.Pressed += () => ServerSelected?.Invoke("zone:runner-heap");
+		BoardActionButton heap = (BoardActionButton)_runnerHeapPile;
+		heap.MouseEntered += () => HoverPileFace(heap, true);
+		heap.MouseExited += () => HoverPileFace(heap, false);
+		heap.FocusEntered += () => HoverPileFace(heap, true);
+		heap.FocusExited += () => HoverPileFace(heap, false);
 		Button? corpScored = GetNodeOrNull<Button>("Surface/Margins/Layout/CorpStrip/Content/CorpScored");
 		Button? runnerScored = GetNodeOrNull<Button>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/Scored");
 		if (corpScored is not null)
@@ -643,7 +648,8 @@ public partial class GameTableControl : Control
 		stack.Visible = view.RunnerDeck.Count > 0;
 		_runnerDeckPile.GetNode<Label>("Count").Text = view.RunnerDeck.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
 		_runnerDeckPile.Text = view.RunnerDeck.Count == 0 ? "Stack\nEmpty" : string.Empty;
-		_runnerHeapPile.Text = $"Heap\n{view.RunnerHeap.Count} cards";
+		RenderPileFace("zone:runner-heap", (BoardActionButton)_runnerHeapPile,
+			view.RunnerHeap.Count > 0 ? view.RunnerHeap[^1] : null, view.RunnerHeap.Count, "Heap", PlayerSide.Runner, nextVisibleCards);
 		UpdatePileTooltip(_runnerHeapPile, $"Runner Heap · {view.RunnerHeap.Count} public cards");
 
 		RenderIdentity("runner-identity", _runnerIdentitySlot, view.RunnerIdentity, false, nextVisibleCards);
@@ -908,6 +914,9 @@ public partial class GameTableControl : Control
 		IReadOnlyList<CardViewModel> cards = corpLocal
 			? view.CorpHand.VisibleCards
 			: view.RunnerHand.VisibleCards;
+		HashSet<string> selected = BoardInteractionProjector.SelectedDiscards(view).Select(card => card.Id).ToHashSet(StringComparer.Ordinal);
+		int handCount = corpLocal ? view.CorpHand.Count : view.RunnerHand.Count;
+		cards = cards.Where(card => !selected.Contains(card.Id)).ToArray();
 		string zone = corpLocal ? "corp-hand" : "runner-hand";
 		_localHandCaption.Text = corpLocal
 			? "HQ · YOUR HAND" : "GRIP · YOUR HAND";
@@ -932,6 +941,8 @@ public partial class GameTableControl : Control
 			handControls.Add(control);
 		}
 		_localHandRow.SetCards(handControls, MotionEnabled);
+		_localHandRow.GetNode<Label>("Count").Text = handCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
+		if (selected.Count > 0) _localHandCaption.Text += $" · {selected.Count} selected for discard";
 	}
 
 	private void RenderIdentity(
@@ -1186,8 +1197,9 @@ public partial class GameTableControl : Control
 			$"viewer:{view.Viewer}",
 			$"corpdeck:{view.CorpDeck.Count}",
 			$"runnerdeck:{view.RunnerDeck.Count}",
-			$"corpdiscard:{view.CorpDiscardCount}",
-			$"runnerheap:{view.RunnerHeap.Count}",
+			$"corpdiscard:{view.CorpDiscardCount}:{CardsFingerprint(view.CorpDiscard)}",
+			$"runnerheap:{view.RunnerHeap.Count}:{CardsFingerprint(view.RunnerHeap)}",
+			$"selected-discard:{string.Join(',', BoardInteractionProjector.SelectedDiscards(view).Select(card => card.Id))}",
 			$"corphand:{view.CorpHand.Count}:{CardsFingerprint(view.CorpHand.VisibleCards)}",
 			$"runnerhand:{view.RunnerHand.Count}:{CardsFingerprint(view.RunnerHand.VisibleCards)}",
 			$"rigrig:{CardsFingerprint(view.RunnerRig)}",

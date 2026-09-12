@@ -43,6 +43,9 @@ public partial class GameTableControl
 			"ServerIce" => GetServerIceRect(targetId),
 			"NewRemote" => GetNewRemoteRect(),
 			"ServerTarget" => GetServerTargetRect(targetId),
+			"RunnerHeap" => GetClippedGlobalRect(_runnerHeapPile),
+			"CorpArchives" => _zonePiles.TryGetValue("zone:corp-archives", out BoardActionButton? archives)
+				? GetClippedGlobalRect(archives) : null,
 			_ => null,
 		};
 	}

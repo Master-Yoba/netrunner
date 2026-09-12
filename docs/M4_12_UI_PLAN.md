@@ -24,6 +24,14 @@ fan, overlapping faces, side count and eased hover lift follow the supplied
 - Archives opens from the pile or server heading, including when empty.
   Browsing uses the existing viewer-filtered pile projection. The former top
   Archives and R&D buttons are removed; the piles show public card counts.
+- During end-of-turn discard, highlighted hand cards drag to the local Heap or
+  Archives. Only issued `TurnDiscard` choices admit these destinations; other
+  card choices retain their existing interactions. Invalid drops return to hand.
+  Accepted selections leave the fan and show a pending count until the engine
+  commits the complete discard set. This presentation is rebuilt from the current
+  candidates after a resume; authoritative hand and pile counts stay unchanged
+  until the discard resolves. Per-card buttons move under **All legal actions**.
+  Heap uses the same card-sized, browsable pile component as Archives.
 - Runner **Run** stages a local server choice. Only issued StartRun destinations
   are selectable. Selecting one submits its ID; Cancel, Escape or right-click
   spend nothing. Decision changes invalidate the staged selection.
@@ -37,6 +45,10 @@ Use `make interaction-lab` and select either **hand and board actions** scenario
 Verify both seats, five-card and crowded fans, moving between adjacent cards,
 keyboard hover, Reduced motion, all existing drag destinations, active/disabled
 credit and deck controls, empty/nonempty Archives, Run selection and cancellation.
+Use **Runner: discard from hand** and **Corp: discard from hand** for two-card
+discards, wrong-pile drops, pending counts, pile browsing and the menu fallback.
+Engine projection tests verify selections after save/restore and equivalence
+between menu and drag submissions.
 
 The native regression entry point is `--m4-12-ui-smoke`; the existing
 `--m4-11-ui-smoke` gate includes these checks too. `--m4-12-screenshots` saves

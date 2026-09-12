@@ -47,7 +47,8 @@ public partial class Main
 		_tableHistory.Clear();
 		PublishLabView(InteractionLabSamples.Create(_labScenario, _labRevision));
 		_labInstructions!.Text = InteractionLabSamples.Instructions[_labScenario];
-		_tableLastAction.Text = _labScenario >= 15 ? "Practice the hand and board actions" : "Drag the practice card from hand";
+		_tableLastAction.Text = _labScenario is 17 or 18 ? "Discard two cards by dragging them to the pile"
+			: _labScenario >= 15 ? "Practice the hand and board actions" : "Drag the practice card from hand";
 	}
 
 	private void PublishLabView(MatchViewModel view)
@@ -91,6 +92,11 @@ public partial class Main
 		_labSubmissionCount++;
 		_labRevision++;
 		MatchViewModel view = snapshot.View;
+		if (_labScenario is 17 or 18)
+		{
+			SubmitDiscardLab(view, action);
+			return true;
+		}
 		if (_labScenario >= 15)
 		{
 			SubmitBoardActionLab(view, action);
@@ -162,5 +168,32 @@ public partial class Main
 		_labInstructions!.Text = $"Completed in {_labSubmissionCount} action(s). Reset to repeat or choose another scenario.";
 		_tableLastAction.Text = $"Lab accepted: {action.Description}";
 		return true;
+	}
+
+	private void SubmitDiscardLab(MatchViewModel view, LegalActionViewModel action)
+	{
+		if (action.Parameters is not CardChoiceParameters chosen) return;
+		bool corp = view.Viewer == PlayerSide.Corp;
+		ZoneViewModel hand = corp ? view.CorpHand : view.RunnerHand;
+		string[] selected = [.. BoardInteractionProjector.SelectedDiscards(view).Select(card => card.Id), chosen.CardId.Value];
+		if (selected.Length < 2)
+		{
+			PublishLabView(view with
+			{
+				Decision = InteractionLabSamples.Decision(view.Viewer, _labRevision, DecisionKind.TurnDiscard, "Choose 1 more card to discard"),
+				LegalActions = view.LegalActions.Where(candidate => candidate.Id != action.Id)
+					.Select(candidate => InteractionLabSamples.Action("discard-" + ((CardChoiceParameters)candidate.Parameters).CardId.Value,
+						ActionKind.ChooseCard, candidate.Parameters, _labRevision)).ToArray(),
+			});
+		}
+		else
+		{
+			CardViewModel[] discarded = hand.VisibleCards.Where(card => selected.Contains(card.Id, StringComparer.Ordinal)).ToArray();
+			hand = hand with { Count = hand.Count - discarded.Length, VisibleCards = hand.VisibleCards.Except(discarded).ToArray() };
+			view = corp ? view with { CorpHand = hand, CorpDiscard = [.. view.CorpDiscard, .. discarded], CorpDiscardCount = view.CorpDiscardCount + discarded.Length }
+				: view with { RunnerHand = hand, RunnerHeap = [.. view.RunnerHeap, .. discarded] };
+			PublishLabView(view with { Decision = null, LegalActions = [], ForcedDiscard = null });
+		}
+		_tableLastAction.Text = selected.Length < 2 ? "One selected · drag one more card" : "Discard complete · reset to repeat";
 	}
 }

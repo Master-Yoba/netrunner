@@ -8,7 +8,7 @@ public static class InteractionLabSamples
 {
 	public static readonly string[] Names = ["Runner: event", "Runner: run event", "Runner: rig install", "Runner: hosted install",
 		"Corp: operation", "Corp: root install", "Corp: ICE install", "Corp: new remote", "Corp: replacement",
-		"Runner: memory cleanup", "Runner: card choice", "Runner: non-spatial choice", "Dense board: scrolling", "Runner: pile card choice", "Runner: multiple targets", "Runner: hand and board actions", "Corp: hand and board actions"];
+		"Runner: memory cleanup", "Runner: card choice", "Runner: non-spatial choice", "Dense board: scrolling", "Runner: pile card choice", "Runner: multiple targets", "Runner: hand and board actions", "Corp: hand and board actions", "Runner: discard from hand", "Corp: discard from hand"];
 	public static readonly string[] Instructions = [
 		"Drag the event from hand into the board. It should play immediately.",
 		"Drag onto a central server, or into general space then click a highlighted server.",
@@ -26,12 +26,30 @@ public static class InteractionLabSamples
 		"Play the event, then select the displayed card from the heap choice browser.",
 		"Play the event, click a highlighted program, then explicitly choose one target pair.",
 		"Hover the hand. Click credits or Stack, browse Archives, or choose Run and select a server. Reset to repeat.",
-		"Hover the hand. Click credits or R&D, or click Archives to browse. Reset to repeat."];
+		"Hover the hand. Click credits or R&D, or click Archives to browse. Reset to repeat.",
+		"Drag two cards from hand to Heap. Escape or an invalid drop cancels the gesture. Reset to repeat.",
+		"Drag two cards from hand to Archives. Selected cards wait for the complete discard choice. Reset to repeat."];
 
 	public static MatchViewModel Create(int scenario, long revision)
 	{
-		PlayerSide side = scenario is >= 4 and <= 8 or 16 ? PlayerSide.Corp : PlayerSide.Runner;
+		PlayerSide side = scenario is >= 4 and <= 8 or 16 or 18 ? PlayerSide.Corp : PlayerSide.Runner;
 		var view = UiPreviewSamples.Board(side, scenario == 12 ? UiPreviewSamples.Density.Dense : UiPreviewSamples.Density.Normal);
+		if (scenario is 17 or 18)
+		{
+			CardViewModel[] discardHand = Enumerable.Range(0, 7).Select(i => UiPreviewSamples.Known($"lab-discard-{i}",
+				side == PlayerSide.Corp ? "Operation" : "Event", $"Practice discard {i + 1}")).ToArray();
+			view = side == PlayerSide.Corp ? view with { CorpHand = new(ZoneKind.CorpHand, 7, discardHand) }
+				: view with { RunnerHand = new(ZoneKind.RunnerGrip, 7, discardHand) };
+			return view with
+			{
+				Decision = Decision(side, revision, DecisionKind.TurnDiscard, "Choose 2 cards to discard"),
+				LegalActions = discardHand.Select(card => Action("discard-" + card.Id, ActionKind.ChooseCard, new CardChoiceParameters(new(card.Id)), revision)).ToArray(),
+				ForcedDiscard = new(side, "Choose 2 cards to discard", new(side, 7, 5, null)),
+				CorpDiscard = [],
+				CorpDiscardCount = 0,
+				RunnerHeap = [],
+			};
+		}
 		view = view with { RunnerRig = view.RunnerRig.Select((card, index) => card with { Title = $"Practice program {index + 1}" }).ToArray() };
 		string type = scenario switch { 2 or 3 or 9 => "Program", 5 => "Upgrade", 6 => "ICE", 7 or 8 => "Asset", 4 => "Operation", _ => "Event" };
 		CardViewModel card = UiPreviewSamples.Known("lab-hand", type, "Practice " + type);

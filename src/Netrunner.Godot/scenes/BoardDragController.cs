@@ -122,6 +122,8 @@ public partial class BoardDragController : Control
 				? new[] { "GeneralPlay", "RunnerRig" } : new[] { destination.Kind.ToString() })
 			{
 				PanelContainer panel = GD.Load<PackedScene>("res://scenes/components/DropDestination.tscn").Instantiate<PanelContainer>();
+				if (destination.Kind is BoardInteractionDestinationKind.RunnerHeap or BoardInteractionDestinationKind.CorpArchives)
+					panel.CustomMinimumSize = Vector2.Zero;
 				panel.MouseFilter = MouseFilterEnum.Ignore;
 				AddChild(panel);
 				_zones.Add((destination, panel, geometry));
@@ -186,6 +188,8 @@ public partial class BoardDragController : Control
 
 	private string DestinationLabel(BoardInteractionDestination destination)
 	{
+		if (destination.Kind is BoardInteractionDestinationKind.RunnerHeap or BoardInteractionDestinationKind.CorpArchives)
+			return destination.Kind == BoardInteractionDestinationKind.RunnerHeap ? "Discard to Heap" : "Discard to Archives";
 		string label = destination.Kind.ToString() switch
 		{
 			"GeneralPlay" => "Play",
