@@ -22,7 +22,7 @@ echo "PLAY_DIAGNOSTICS output=$play_output_log godot=$godot_log_file"
 
 set +e
 {
-  dotnet build "$play_root/src/Netrunner.Godot" --no-restore
+  dotnet build "$play_root/src/Netrunner.Godot"
   play_build_status=$?
   if (( play_build_status != 0 )); then
     exit "$play_build_status"
