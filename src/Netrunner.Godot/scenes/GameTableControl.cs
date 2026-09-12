@@ -55,7 +55,7 @@ public partial class GameTableControl : Control
 	private Label _corpHandCaption = null!;
 	private Label _runnerHandCaption = null!;
 	private Label _localHandCaption = null!;
-	private PanelContainer _runnerIdentitySlot = null!;
+	private MarginContainer _runnerIdentitySlot = null!;
 	private Label _tableHint = null!;
 	private Label _corpScoreLabel = null!;
 	private Label _runnerScoreLabel = null!;
@@ -376,7 +376,7 @@ public partial class GameTableControl : Control
 		_corpHandCaption = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/HQ")!;
 		_runnerHandCaption = GetNodeOrNull<Label>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/HandCaption")!;
 		_localHandCaption = GetNodeOrNull<Label>("Surface/Margins/Layout/RunnerField/Content/LocalHand/Content/Heading/Caption")!;
-		_runnerIdentitySlot = GetNodeOrNull<PanelContainer>("Surface/Margins/Layout/RunnerField/Content/Identity")!;
+		_runnerIdentitySlot = GetNodeOrNull<MarginContainer>("Surface/Margins/Layout/RunnerField/Content/Identity/Content/Cards")!;
 		_tableHint = GetNodeOrNull<Label>("Surface/Margins/Layout/Hint")!;
 		_corpScoreLabel = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/Score")!;
 		_runnerScoreLabel = GetNodeOrNull<Label>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/Score")!;
@@ -536,6 +536,12 @@ public partial class GameTableControl : Control
 		lane.Panel.CustomMinimumSize = new Vector2(_boardLayout.LaneWidth, lane.Panel.CustomMinimumSize.Y);
 		lane.RootCards.AddThemeConstantOverride("separation", -Mathf.RoundToInt(_boardLayout.RootCardOverlap));
 		lane.IceCards.AddThemeConstantOverride("separation", Mathf.RoundToInt(_boardLayout.CardSeparation));
+		// Reserve matching gutters: the scrollbar must not move ICE off the
+		// root centerline when a server gains more cards or the window shrinks.
+		ScrollContainer scroll = lane.IceCards.GetParent<ScrollContainer>();
+		StyleBox panel = scroll.GetThemeStylebox("panel");
+		panel.ContentMarginLeft = scroll.GetVScrollBar().GetCombinedMinimumSize().X
+			+ scroll.GetThemeConstant("scrollbar_h_separation");
 	}
 
 	private void RefreshEditorPreview()
@@ -675,8 +681,9 @@ public partial class GameTableControl : Control
 				&& string.Equals(run.AttackedServerId, server.Id, StringComparison.Ordinal)
 				? $"ACTIVE RUN · {run.FocusLabel}"
 				: string.Empty;
-			lane.RunMarker.Visible = lane.RunMarker.Text.Length > 0;
-			if (lane.RunMarker.Visible && view.Run?.Encounter is { } encounter)
+			// Keep this row in every lane so entering a run never moves its cards.
+			lane.RunMarker.TooltipText = string.Empty;
+			if (lane.RunMarker.Text.Length > 0 && view.Run?.Encounter is { } encounter)
 			{
 				lane.RunMarker.Text = $"▶ {encounter.Ice?.Title ?? "Face-down ICE"} · {encounter.RemainingSubroutines} unbroken";
 				lane.RunMarker.TooltipText = $"Strength {encounter.EffectiveStrength ?? encounter.Ice?.Strength}\n"
@@ -688,7 +695,7 @@ public partial class GameTableControl : Control
 					? "ROOT · public archive"
 					: server.Kind == ServerKind.RAndD
 						? $"R&D DECK · {view.CorpDeck.Count} cards"
-							: "ROOT · HQ";
+							: $"ROOT · HQ · {view.CorpHand.Count} cards in hand";
 			lane.RootCaption.Visible = true;
 			lane.IceCaption.Visible = true;
 
@@ -699,7 +706,6 @@ public partial class GameTableControl : Control
 				server,
 				lane.RootCards,
 				server.Kind == ServerKind.Headquarters ? view.CorpIdentity : null,
-				server.Kind == ServerKind.Headquarters ? view.CorpHand.Count : null,
 				nextVisibleCards);
 			if (server.Kind == ServerKind.RAndD)
 			{
@@ -738,21 +744,12 @@ public partial class GameTableControl : Control
 		ServerViewModel server,
 		HBoxContainer rootCards,
 		CardViewModel? corpIdentity,
-		int? corpHandCount,
 		Dictionary<string, TableCardControl> nextVisibleCards)
 	{
 		int index = 0;
 		if (corpIdentity is not null)
 		{
 			EnsureCard("corp-identity", rootCards, corpIdentity, false, nextVisibleCards);
-		}
-		if (corpHandCount is { } handCount)
-		{
-			Label handLabel = MakeLabel($"{handCount} cards\nin hand", 10, MutedColor);
-			handLabel.CustomMinimumSize = new Vector2(78, 0);
-			handLabel.VerticalAlignment = VerticalAlignment.Center;
-			rootCards.AddChild(handLabel);
-			rootCards.MoveChild(handLabel, corpIdentity is not null ? 1 : 0);
 		}
 		foreach (CardViewModel? card in server.OrderedRoot)
 		{
@@ -781,10 +778,11 @@ public partial class GameTableControl : Control
 				Control stack = new()
 				{
 					CustomMinimumSize = HostedStackMinimumSize(),
+					SizeFlagsHorizontal = SizeFlags.ShrinkCenter,
 					MouseFilter = MouseFilterEnum.Ignore,
 				};
 				iceCards.AddChild(stack);
-				EnsureCard(slot, stack, card, true, nextVisibleCards);
+				EnsureCard(slot, stack, card, true, nextVisibleCards).Position = Vector2.Zero;
 				for (int index = 0; index < hosted.Length; index++)
 				{
 					TableCardControl attachment = EnsureCard(
@@ -935,7 +933,7 @@ public partial class GameTableControl : Control
 
 	private void RenderIdentity(
 		string slot,
-		PanelContainer parent,
+		Control parent,
 		CardViewModel? card,
 		bool isIce,
 		Dictionary<string, TableCardControl> nextVisibleCards)
@@ -1105,7 +1103,7 @@ public partial class GameTableControl : Control
 		CardAppearance? appearance = GD.Load<CardAppearance>(TableCardControl.DefaultAppearancePath);
 		Vector2 ice = (appearance?.IceSize ?? TableCardControl.IceCardSize) * new Vector2(1, layout.IceHeightScale);
 		Vector2 hosted = (appearance?.PortraitSize ?? TableCardControl.PortraitCardSize) * layout.HostedPortraitScale;
-		return new Vector2(layout.LaneWidth, Mathf.Max(ice.Y, hosted.Y) + layout.HostedCardOffset.Y + layout.HostedCardStep.Y);
+		return new Vector2(ice.X, Mathf.Max(ice.Y, hosted.Y) + layout.HostedCardOffset.Y + layout.HostedCardStep.Y);
 	}
 
 	private Vector2 RigSlotMinimumSize()

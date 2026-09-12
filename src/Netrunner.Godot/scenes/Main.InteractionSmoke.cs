@@ -22,6 +22,7 @@ public partial class Main
 					_labScenarios!.Select(scenario);
 					ResetInteractionLab();
 					await TableFrames(4);
+					AssertBoardCardAlignment(_currentSnapshot!.View);
 					var projection = BoardInteractionProjector.Project(_currentSnapshot!.View);
 					RequireInteraction(projection.Sources.Count > 0, "Lab scenario has no draggable source.");
 					BoardInteractionSource source = projection.Sources.Single(s => s.CardId == "lab-hand");

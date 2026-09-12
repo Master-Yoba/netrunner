@@ -123,6 +123,25 @@ tooltip_text = "Runner identity"
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_identity")
 
+[node name="Content" type="VBoxContainer" parent="Content/Identity"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 1
+
+[node name="Caption" type="Label" parent="Content/Identity/Content"]
+custom_minimum_size = Vector2(0, 17)
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.62, 0.76, 0.75, 1)
+theme_override_font_sizes/font_size = 9
+text = "IDENTITY"
+text_overrun_behavior = 3
+
+[node name="Cards" type="MarginContainer" parent="Content/Identity/Content"]
+layout_mode = 2
+size_flags_vertical = 0
+mouse_filter = 2
+
 [node name="Deck" parent="Content" instance=ExtResource("1_pile")]
 custom_minimum_size = Vector2(62, 30)
 layout_mode = 2
@@ -150,6 +169,7 @@ mouse_filter = 2
 theme_override_constants/separation = 1
 
 [node name="Caption" type="Label" parent="Content/Rig/Content"]
+custom_minimum_size = Vector2(0, 17)
 layout_mode = 2
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.62, 0.76, 0.75, 1)
@@ -160,6 +180,7 @@ text_overrun_behavior = 3
 [node name="Scroll" type="ScrollContainer" parent="Content/Rig/Content"]
 layout_mode = 2
 size_flags_horizontal = 3
+size_flags_vertical = 3
 mouse_filter = 2
 follow_focus = true
 vertical_scroll_mode = 0
@@ -167,6 +188,7 @@ vertical_scroll_mode = 0
 [node name="Cards" type="HBoxContainer" parent="Content/Rig/Content/Scroll"]
 layout_mode = 2
 size_flags_horizontal = 3
+size_flags_vertical = 0
 mouse_filter = 2
 theme_override_constants/separation = 8
 

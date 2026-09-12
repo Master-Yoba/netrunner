@@ -64,3 +64,17 @@ remain unchanged; passing automated fixtures does not declare them complete.
 - Screenshots refreshed. One screenshot run emitted a Godot `SwapGCHandleForType`
   exception while loading an action-button resource; a subsequent native run
   passed without errors. Log: `/tmp/m411-follow-native.log`.
+
+## 2026-09-12 — Board card alignment
+
+- Runner identity, rig and local hand cards share a top edge beneath matching
+  headings. The layout remains authored in the player-area and hand scenes.
+- Server root groups and ICE share a centerline, including hosted ICE and lanes
+  with scrollbars. Run-marker rows stay reserved so active runs do not shift cards.
+- HQ's public hand count appears in the root caption, leaving its identity centered.
+- Build and formatting passed. Native interaction checks passed all 15 scenarios
+  at 1080p and 1440p; headless table checks covered dense boards and active runs
+  from both seats at both resolutions. Editor resource/preview checks also passed.
+  Coordinate assertions cover Runner card tops, server rows, root groups and ICE.
+- Refreshed the interaction screenshots. Logs: `/tmp/card-alignment-native.log`,
+  `/tmp/card-alignment-table.log`, `/tmp/card-alignment-editor.log`.

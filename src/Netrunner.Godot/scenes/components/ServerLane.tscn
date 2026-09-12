@@ -1,4 +1,4 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Theme" path="res://themes/M4Theme.tres" id="1_theme"]
 
@@ -17,6 +17,9 @@ corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_right = 8
 corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_ice_scroll"]
+resource_local_to_scene = true
 
 [node name="ServerLane" type="PanelContainer"]
 custom_minimum_size = Vector2(285, 0)
@@ -44,13 +47,12 @@ theme_type_variation = &"LaneHeading"
 text = "Server"
 
 [node name="RunMarker" type="Label" parent="Content"]
-visible = false
 custom_minimum_size = Vector2(0, 20)
 layout_mode = 2
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.98, 0.76, 0.37, 1)
 theme_override_font_sizes/font_size = 9
-text = "ACTIVE RUN"
+text = ""
 horizontal_alignment = 1
 text_overrun_behavior = 3
 
@@ -70,6 +72,7 @@ layout_mode = 2
 mouse_filter = 2
 clip_contents = false
 theme_override_constants/separation = -27
+alignment = 1
 
 [node name="IceCaption" type="Label" parent="Content"]
 visible = false
@@ -86,8 +89,10 @@ custom_minimum_size = Vector2(0, 96)
 layout_mode = 2
 size_flags_vertical = 3
 mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxEmpty_ice_scroll")
 follow_focus = true
 horizontal_scroll_mode = 0
+vertical_scroll_mode = 4
 
 [node name="IceCards" type="VBoxContainer" parent="Content/IceScroll"]
 layout_mode = 2

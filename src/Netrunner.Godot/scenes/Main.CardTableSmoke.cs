@@ -199,6 +199,7 @@ public partial class Main
 					_matchHistory.SetExpanded(false);
 					await TableFrames(4);
 					AssertCentralServerPresentation(view);
+					AssertBoardCardAlignment(view);
 					await AssertHoverStable($"fixture-{size.X}-{side}");
 					Rect2 viewport = GetViewport().GetVisibleRect();
 					if (!viewport.Encloses(_tableActions.GetGlobalRect())
@@ -297,6 +298,7 @@ public partial class Main
 					};
 					RenderSnapshot(CreateSlice48Snapshot(activeRunView, activeRunView.Decision));
 					await TableFrames(3);
+					AssertBoardCardAlignment(activeRunView);
 					if (!SceneTreeContainsText(_gameTable, "▶")
 						&& !SceneTreeContainsText(_gameTable, "ACTIVE RUN")
 						&& !SceneTreeContainsText(_gameTable, "RUN ·"))
@@ -484,8 +486,41 @@ public partial class Main
 		if (_gameTable.GetServerDisplayName(hq.Id) != "HQ"
 			|| _gameTable.VisibleCards.Keys.Any(key => key.StartsWith($"slot:pile:{hq.Id}:", StringComparison.Ordinal)))
 			throw new InvalidOperationException("HQ has a remote label or decorative hand backs.");
-		if (!FindDescendants<Label>(_gameTable).Any(label => label.Text.Replace('\n', ' ') == $"{view.CorpHand.Count} cards in hand"))
+		if (!FindDescendants<Label>(_gameTable).Any(label => label.Text == $"ROOT · HQ · {view.CorpHand.Count} cards in hand"))
 			throw new InvalidOperationException("HQ public hand count is missing.");
+	}
+
+	private void AssertBoardCardAlignment(MatchViewModel view)
+	{
+		IEnumerable<CardViewModel> hand = view.Viewer == PlayerSide.Runner
+			? view.RunnerHand.VisibleCards : view.CorpHand.VisibleCards;
+		var runnerCards = hand.Concat(view.RunnerRig.Where(card => string.IsNullOrEmpty(card.HostCardId)))
+			.Concat(view.RunnerIdentity is { } identity ? [identity] : [])
+			.Where(card => _gameTable.VisibleCards.ContainsKey(card.Id))
+			.Select(card => _gameTable.VisibleCards[card.Id].GetGlobalRect()).ToArray();
+		if (runnerCards.Length > 1 && runnerCards.Max(rect => rect.Position.Y) - runnerCards.Min(rect => rect.Position.Y) > 1)
+			throw new InvalidOperationException($"Runner card tops are misaligned: {string.Join(", ", runnerCards.Select(rect => rect.Position.Y))}.");
+
+		HBoxContainer[] roots = _gameTable.FindChildren("RootCards", "HBoxContainer", true, false)
+			.Cast<HBoxContainer>().Where(row => row.IsVisibleInTree()).ToArray();
+		float? rootTop = null;
+		float? iceTop = null;
+		foreach (HBoxContainer root in roots)
+		{
+			ScrollContainer iceScroll = root.GetParent().GetNode<ScrollContainer>("IceScroll");
+			rootTop ??= root.GlobalPosition.Y;
+			iceTop ??= iceScroll.GlobalPosition.Y;
+			if (Mathf.Abs(root.GlobalPosition.Y - rootTop.Value) > 1 || Mathf.Abs(iceScroll.GlobalPosition.Y - iceTop.Value) > 1)
+				throw new InvalidOperationException("Server root/ICE rows shifted between lanes.");
+			Rect2[] cards = root.GetChildren().OfType<TableCardControl>().Where(card => card.Visible)
+				.Select(card => card.GetGlobalRect()).ToArray();
+			float center = root.GetGlobalRect().GetCenter().X;
+			if (cards.Length > 0 && Mathf.Abs((cards.Min(rect => rect.Position.X) + cards.Max(rect => rect.End.X)) / 2 - center) > 1)
+				throw new InvalidOperationException("Server root cards are off the lane centerline.");
+			foreach (TableCardControl ice in FindDescendants<TableCardControl>(iceScroll).Where(card => card.IsIce))
+				if (Mathf.Abs(ice.GetGlobalRect().GetCenter().X - center) > 1)
+					throw new InvalidOperationException($"ICE is off the root centerline: {ice.GetGlobalRect().GetCenter().X} vs {center}.");
+		}
 	}
 
 	private async Task SaveTableEvidence(string name)

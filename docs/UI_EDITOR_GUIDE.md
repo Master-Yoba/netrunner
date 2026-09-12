@@ -97,6 +97,13 @@ Edit the component scene to retain layout changes; do not save a synthetic
 board's generated runtime instances as production content. The Cards page
 provides authored sample instances for selecting cards in the Local tree.
 
+Runner identity, rig and hand use top-aligned card rows under 17-pixel headings.
+Keep the identity/rig captions in `PlayerArea.tscn` and the heading in
+`HandView.tscn` the same height when editing them. Server roots are centered in
+`ServerLane.tscn`; its run-marker row stays reserved even when empty. ICE scrolling
+reserves the scrollbar space, with a matching left gutter derived from the theme,
+so crowded servers keep the same centerline as their roots.
+
 The board resource owns its named geometry settings. Card appearance owns
 custom drawing and typography; component scenes own their fixed label layouts.
 The bottom status badge background is the **Status Badge Style** resource on
