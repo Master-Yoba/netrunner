@@ -44,3 +44,24 @@ Run `make interaction-lab` and choose **Runner: hand and board actions** or
 presentation fixtures; use `make play` to assess the feel in a real match.
 The supplied reference video remains local and ignored by Git. Hand animation
 and glow settings are documented in the [editor guide](UI_EDITOR_GUIDE.md).
+
+## 2026-09-12 — Deck-to-hand animation
+
+- Drawn cards leave Stack/R&D on the appropriate NSG back, grow and flip during
+  an eased arc, then settle at the correct angle in the hand. Existing hand
+  cards ease apart, and multiple arrivals are staggered.
+- Incoming hand faces stay hidden until landing. Skip animation, Reduced motion
+  and interrupted transitions restore them. Playback waits for the flight before
+  presenting the next queued state; repeated snapshots do not replay a draw.
+- Animation reads only the filtered hand and public deck counts, excluding
+  known cards returning from other zones. The initial board and opponent hand
+  identities remain outside the local draw animation.
+- `HandView` exposes duration, arc height and stagger timing in the Inspector.
+- Validation: native and headless interaction checks passed for both seats at
+  1080p/1440p, including deck origin, back-to-face reveal, landing, multiple draws,
+  interruption/skip, Reduced motion and hidden-information checks. Existing drag,
+  dense table, card motion, editor-preview and formatting checks also passed.
+  Logs: `/tmp/draw-native.log`, `/tmp/draw-headless.log`, `/tmp/draw-table.log`,
+  `/tmp/draw-editor.log`, `/tmp/draw-format-verify.log`.
+- Evidence: [Runner draw](evidence/m4-12/draw-runner-1920.png),
+  [Corp draw](evidence/m4-12/draw-corp-1920.png).

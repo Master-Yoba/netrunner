@@ -6,7 +6,8 @@ namespace Netrunner.GodotClient;
 public partial class GameTableControl
 {
 	public bool MotionEnabled { get; set; } = true;
-	public double MotionDuration { get; set; } = 0.32;
+	public const double DefaultMotionDuration = 0.32;
+	public double MotionDuration { get; set; } = DefaultMotionDuration;
 	private readonly List<Control> _motionCards = new();
 	private readonly List<Tween> _motionTweens = new();
 	private int _motionRevision;
@@ -19,6 +20,9 @@ public partial class GameTableControl
 		foreach (Control ghost in _motionCards)
 			if (IsInstanceValid(ghost)) ghost.QueueFree();
 		_motionCards.Clear();
+		foreach (TableCardControl card in _drawArrivals)
+			if (IsInstanceValid(card)) card.Show();
+		_drawArrivals.Clear();
 	}
 
 	private Dictionary<string, (CardViewModel? Card, Rect2 Rect)> CaptureMotionCards()
@@ -55,6 +59,8 @@ public partial class GameTableControl
 			}
 			foreach ((string id, TableCardControl current) in _visibleCards)
 			{
+				// The fan owns hand reflow; arrivals use the dedicated deck-to-hand flight.
+				if (Hand.ContainsCard(current)) continue;
 				Rect2 rect = current.GetGlobalRect();
 				if (!GetGlobalRect().Encloses(rect)) continue;
 				if (previous.TryGetValue(id, out var old))

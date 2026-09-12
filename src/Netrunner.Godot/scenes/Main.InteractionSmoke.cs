@@ -155,6 +155,7 @@ public partial class Main
 				"Drop onto an exposed face-down ICE position failed.");
 			await CheckDragFollowing();
 			await CheckBoardRefinements();
+			await CheckDrawMotion();
 			GD.Print("M411_INTERACTION PASS scenarios=15 resolutions=2 drag=true cancel=true stale=true choices=true menu_fallback=true hidden_host=true focus_loss=true invalid_drop=true centered=true smooth_follow=true");
 			GetTree().Quit();
 		}

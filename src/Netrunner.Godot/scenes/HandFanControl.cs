@@ -13,6 +13,10 @@ public partial class HandFanControl : Control
 	[Export(PropertyHint.Range, "0,100,1")] public float HoverLift { get; set; } = 44;
 	[Export(PropertyHint.Range, "1,1.4,0.01")] public float HoverScale { get; set; } = 1.08f;
 	[Export(PropertyHint.Range, "0,0.3,0.01")] public float MotionSeconds { get; set; } = 0.055f;
+	[ExportGroup("Draw animation")]
+	[Export(PropertyHint.Range, "0,2,0.01")] public float DrawSeconds { get; set; } = 0.55f;
+	[Export(PropertyHint.Range, "0,180,1")] public float DrawArcHeight { get; set; } = 64;
+	[Export(PropertyHint.Range, "0,0.3,0.01")] public float DrawStaggerSeconds { get; set; } = 0.08f;
 	public bool ReducedMotion { get; set; }
 	public bool DragActive { get; set; }
 	private readonly List<HandEntry> _entries = new();
@@ -20,8 +24,10 @@ public partial class HandFanControl : Control
 	public string? HoveredCardId => _hovered?.CardId;
 	public bool ContainsCard(TableCardControl card) => _entries.Any(entry => ReferenceEquals(entry.Card, card));
 
-	public void SetCards(IReadOnlyList<TableCardControl> cards)
+	public void SetCards(IReadOnlyList<TableCardControl> cards, bool animateLayout = true)
 	{
+		var retained = _entries.Where(entry => cards.Contains(entry.Card)).ToDictionary(entry => entry.Card,
+			entry => (entry.Card.Position, entry.Card.Rotation, entry.Card.Scale));
 		foreach (HandEntry old in _entries)
 			if (!cards.Contains(old.Card) && IsInstanceValid(old.Card)) old.Card.PointerHitTest = null;
 		_entries.Clear();
@@ -34,6 +40,13 @@ public partial class HandFanControl : Control
 		GetNode<Label>("Count").Text = cards.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
 		GetNode<Label>("Empty").Visible = cards.Count == 0;
 		LayoutCards(0);
+		if (animateLayout && !ReducedMotion && !Engine.IsEditorHint())
+			foreach ((TableCardControl card, var pose) in retained)
+			{
+				card.Position = pose.Position;
+				card.Rotation = pose.Rotation;
+				card.Scale = pose.Scale;
+			}
 	}
 
 	public void Hover(TableCardControl card, bool active)
@@ -93,6 +106,7 @@ public partial class HandFanControl : Control
 		for (int i = _entries.Count - 1; i >= 0; i--)
 		{
 			HandEntry entry = _entries[i];
+			if (!entry.Card.Visible) continue;
 			if (new Rect2(Vector2.Zero, entry.Card.Size).HasPoint(entry.Home.AffineInverse() * point)) return entry.Card;
 		}
 		// Resting footprints win over the fan; the lifted card remains reachable above it.

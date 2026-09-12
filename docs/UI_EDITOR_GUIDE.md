@@ -163,3 +163,9 @@ Stack/R&D draw, Archives browsing, and the Runner's cancellable Run selection.
 `MotionSeconds` controls hover easing; `HoverLift` and `HoverScale` control its
 extent. Reduced motion applies the raised pose immediately, including keyboard
 focus. Card dimensions continue to come from `CardAppearance.PortraitSize`.
+
+Draws travel from Stack/R&D into the hand, flipping from the appropriate back
+to the local player's known face. The other cards ease apart to make room.
+On `HandView`, tune `DrawSeconds`, `DrawArcHeight` and `DrawStaggerSeconds`;
+the playback speed slider scales the duration. Zero `DrawSeconds` disables the
+flight. Reduced motion and Skip animation reveal pending arrivals immediately.

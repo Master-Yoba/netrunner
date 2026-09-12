@@ -392,6 +392,7 @@ if ! run_with_timeout 120 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
 fi
 if ! grep -Fq "M411_INTERACTION PASS" "$m411_ui_smoke_log" \
   || ! grep -Fq "M412_BOARD_ACTIONS PASS" "$m411_ui_smoke_log" \
+  || ! grep -Fq "M412_DRAW_MOTION PASS" "$m411_ui_smoke_log" \
   || grep -Eq "M411_INTERACTION FAIL|SCRIPT ERROR|ERROR:" "$m411_ui_smoke_log"; then
   cat "$m411_ui_smoke_log" >&2
   exit 1

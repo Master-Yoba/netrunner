@@ -573,6 +573,7 @@ public partial class GameTableControl : Control
 			ApplySelectionAndTargets();
 			return;
 		}
+		DrawPlan? draw = CaptureDrawPlan(view);
 		var previousCards = CaptureMotionCards();
 		_lastBoardFingerprint = boardFingerprint;
 
@@ -603,6 +604,7 @@ public partial class GameTableControl : Control
 			_visibleCards[key] = card;
 		}
 		ApplySelectionAndTargets();
+		PresentDrawMotion(draw, view.Viewer);
 		PresentMotion(previousCards, view);
 		EnsureRunVisible(view.Run);
 	}
@@ -929,7 +931,7 @@ public partial class GameTableControl : Control
 				corpLocal ? PlayerSide.Corp : PlayerSide.Runner, CardSizeRole.FullPortrait);
 			handControls.Add(control);
 		}
-		_localHandRow.SetCards(handControls);
+		_localHandRow.SetCards(handControls, MotionEnabled);
 	}
 
 	private void RenderIdentity(
@@ -979,6 +981,7 @@ public partial class GameTableControl : Control
 			_cardModels[identity] = null;
 		}
 
+		bool retainHandPose = parent is HandFanControl && control.GetParent() == parent;
 		if (control.GetParent() is Node oldParent && oldParent != parent)
 		{
 			if (oldParent is BoardActionButton) control.SetContainerHover(false);
@@ -996,9 +999,12 @@ public partial class GameTableControl : Control
 		}
 		control.SetIce(isIce);
 		control.SetBackSide(backSide ?? BackSideForSlot(slot));
-		control.Scale = Vector2.One;
-		control.Rotation = 0;
-		control.PivotOffset = Vector2.Zero;
+		if (!retainHandPose)
+		{
+			control.Scale = Vector2.One;
+			control.Rotation = 0;
+			control.PivotOffset = Vector2.Zero;
+		}
 		control.PointerHitTest = null;
 		control.MouseFilter = MouseFilterEnum.Stop;
 		control.FocusMode = FocusModeEnum.All;

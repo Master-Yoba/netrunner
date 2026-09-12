@@ -10,6 +10,10 @@ fan, overlapping faces, side count and eased hover lift follow the supplied
   footprints decide pointer targets so animation cannot make hovering oscillate.
   Keyboard focus lifts cards too; Reduced motion switches poses immediately.
   The production card controls and drag controller remain in use.
+- Newly observed local hand cards accompany a decrease in the local deck count
+  with a deck-to-hand flight. The card starts on the correct back, flips during
+  an eased arc, and lands in the fan. Known cards returning from other zones
+  are excluded. Multiple draws are staggered; skipping restores all arrivals.
 - The main play surface excludes the hand and action dock. `TableWorkspace`
   coordinates the hand footprint, board, dock and history widths. Component
   scenes retain editable layout and appearance properties.

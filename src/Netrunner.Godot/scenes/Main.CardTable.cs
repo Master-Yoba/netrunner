@@ -135,7 +135,7 @@ public partial class Main
 		}
 		_gameTable.Hand.ReducedMotion = _reducedMotion.ButtonPressed;
 		_gameTable.MotionEnabled = !_reducedMotion.ButtonPressed && !_skipAnimation;
-		_gameTable.MotionDuration = 0.32 / _speed.Value;
+		_gameTable.MotionDuration = GameTableControl.DefaultMotionDuration / _speed.Value;
 		_gameTable.Render(snapshot.View);
 		CardViewModel? accessed = snapshot.View.Run is { Step: RunTimingStep.BreachAccessAbility, Access.Accessed.Count: > 0 } accessRun
 			? accessRun.Access.Accessed[^1] : null;
@@ -385,7 +385,7 @@ public partial class Main
 			_tablePublications.Enqueue(snapshot);
 		}
 		if (_tablePublications.Count > 24) _skipAnimation = true;
-		if (_tablePlaybackWait > 0 && !_skipAnimation) return;
+		if (!_skipAnimation && (_tablePlaybackWait > 0 || _gameTable.DrawMotionCount > 0)) return;
 		while (_tablePublications.TryDequeue(out MatchSnapshot? next))
 		{
 			if (next.Sequence <= _renderedSequence) continue;
