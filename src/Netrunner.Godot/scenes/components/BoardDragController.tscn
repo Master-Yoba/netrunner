@@ -4,6 +4,7 @@
 [ext_resource type="Resource" path="res://themes/DragAppearance.tres" id="appearance"]
 
 [node name="BoardDragController" type="Control"]
+z_index = 50
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0

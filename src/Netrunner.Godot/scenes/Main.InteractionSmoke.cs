@@ -32,6 +32,8 @@ public partial class Main
 					LabButton(start, true);
 					await LabPointer(start + new Vector2(0, -40));
 					RequireInteraction(_boardDrag!.IsDragging, $"Drag did not start for scenario {scenario}.");
+					RequireInteraction(_boardDrag.GetNode<TableCardControl>("DragPreview").GetGlobalRect().GetCenter()
+						.DistanceTo(start + new Vector2(0, -40)) < 0.1f, "Drag preview is not centered on the pointer.");
 					GetViewport().PushInput(new InputEventKey { Keycode = Key.Escape, Pressed = true });
 					LabButton(start, false);
 					await TableFrames(2);
@@ -139,7 +141,8 @@ public partial class Main
 			await TableFrames(3);
 			RequireInteraction(_labSubmissionCount == 1 && _currentSnapshot!.View.RunnerRig.Any(c => c.HostCardId == "card:hidden-host"),
 				"Drop onto an exposed face-down ICE position failed.");
-			GD.Print("M411_INTERACTION PASS scenarios=15 resolutions=2 drag=true cancel=true stale=true choices=true menu_fallback=true hidden_host=true focus_loss=true invalid_drop=true");
+			await CheckDragFollowing();
+			GD.Print("M411_INTERACTION PASS scenarios=15 resolutions=2 drag=true cancel=true stale=true choices=true menu_fallback=true hidden_host=true focus_loss=true invalid_drop=true centered=true smooth_follow=true");
 			GetTree().Quit();
 		}
 		catch (Exception error)
@@ -147,6 +150,59 @@ public partial class Main
 			GD.PrintErr($"M411_INTERACTION FAIL {error}");
 			GetTree().Quit(1);
 		}
+	}
+
+	private async Task CheckDragFollowing()
+	{
+		_labScenario = 0;
+		ResetInteractionLab();
+		await TableFrames(3);
+		Vector2 start = _gameTable.VisibleCards["lab-hand"].GetGlobalRect().GetCenter();
+		Vector2 parked = start + new Vector2(0, -40);
+		Vector2 target = parked + new Vector2(-180, -120);
+		await LabPointer(start); LabButton(start, true); await LabPointer(parked);
+		BoardDragController drag = _boardDrag!;
+		TableCardControl preview = drag.GetNode<TableCardControl>("DragPreview");
+		float savedSmoothing = drag.Appearance.FollowSmoothing;
+		drag.SetProcess(false);
+		try
+		{
+			Vector2? firstResult = null;
+			foreach (int fps in new[] { 60, 120 })
+			{
+				drag.ReducedMotion = true;
+				Move(parked); drag._Process(1.0 / fps);
+				RequireInteraction(preview.GetGlobalRect().GetCenter().DistanceTo(parked) < 0.1f, "Reduced motion did not center immediately.");
+				drag.ReducedMotion = false;
+				Move(target); drag._Process(1.0 / fps);
+				Vector2 center = preview.GetGlobalRect().GetCenter();
+				RequireInteraction(center.DistanceTo(parked) > 1 && center.DistanceTo(target) > 1
+					&& center.DistanceTo(target) < parked.DistanceTo(target), "Following jumped or moved away from the pointer.");
+				for (int step = 1; step < fps / 10; step++) drag._Process(1.0 / fps);
+				center = preview.GetGlobalRect().GetCenter();
+				RequireInteraction(center.DistanceTo(target) < 25, "Following is too slow to catch the pointer.");
+				if (firstResult is { } previous)
+					RequireInteraction(center.DistanceTo(previous) < 0.1f, "Following depends on frame rate.");
+				firstResult = center;
+			}
+			drag.Appearance.FollowSmoothing = 0;
+			Move(parked); drag._Process(1.0 / 60);
+			RequireInteraction(preview.GetGlobalRect().GetCenter().DistanceTo(parked) < 0.1f, "Zero smoothing did not track immediately.");
+			drag.Appearance.FollowSmoothing = savedSmoothing;
+			Move(target);
+			// Release before the next preview frame: the pointer, not the lagging
+			// card image, must determine where the action is dropped.
+			LabButton(target, false);
+			RequireInteraction(_labSubmissionCount == 1, "Smooth following changed drop hit testing.");
+		}
+		finally
+		{
+			drag.Appearance.FollowSmoothing = savedSmoothing;
+			drag.ReducedMotion = _reducedMotion.ButtonPressed;
+			drag.Cancel("smoke-cleanup", false);
+			drag.SetProcess(true);
+		}
+		void Move(Vector2 point) => GetViewport().PushInput(new InputEventMouseMotion { Position = point, GlobalPosition = point });
 	}
 
 	private async Task LabPointer(Vector2 point)

@@ -139,3 +139,8 @@ duration, edge scrolling, and destination styles. Production scenes are
 `BoardDragController.tscn`, `DropDestination.tscn`, and `BoardChoicePanel.tscn`.
 Use the Remote Inspector for temporary live changes and the local resources for
 persistent edits.
+
+Dragged cards are centered on the pointer. `FollowSmoothing` controls how softly
+they follow movement (default 0.04 seconds; higher is softer, zero is immediate).
+Reduced motion also makes tracking immediate. Drop targets follow the pointer
+directly even while the preview is catching up.

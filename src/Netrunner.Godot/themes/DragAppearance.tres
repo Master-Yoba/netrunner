@@ -39,6 +39,7 @@ resource_name = "DragAppearance"
 script = ExtResource("1_drag_appearance")
 DragThreshold = 8.0
 PreviewScale = 1.05
+FollowSmoothing = 0.04
 ReturnDuration = 0.16
 EdgeWidth = 36.0
 ScrollSpeed = 600.0

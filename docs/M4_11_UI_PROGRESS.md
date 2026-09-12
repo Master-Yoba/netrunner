@@ -51,3 +51,16 @@ Run `make interaction-lab`, select each scenario, and reset freely. Also play a
 normal official match from each seat to assess target visibility, drag comfort,
 scrolling and the preserved menu fallback. Prior manual UI acceptance statuses
 remain unchanged; passing automated fixtures does not declare them complete.
+
+## 2026-09-12 — Centered, smooth dragging
+
+- Drag previews start centered on the pointer and follow movement smoothly,
+  above hovered board cards. Destination hit testing still uses the pointer.
+- Inspector setting `FollowSmoothing` defaults to 0.04 seconds; zero or Reduced
+  motion tracks immediately. The destination hint sits above the preview.
+- Build, formatting, and the full interaction smoke passed. Added checks cover
+  centering at both resolutions, equivalent following at 60/120 FPS, immediate
+  reduced-motion/zero-smoothing tracking, and drops while the image catches up.
+- Screenshots refreshed. One screenshot run emitted a Godot `SwapGCHandleForType`
+  exception while loading an action-button resource; a subsequent native run
+  passed without errors. Log: `/tmp/m411-follow-native.log`.

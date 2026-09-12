@@ -14,6 +14,7 @@ public partial class DragAppearance : Resource
 {
 	private float _dragThreshold = 8.0f;
 	private float _previewScale = 1.05f;
+	private float _followSmoothing = 0.04f;
 	private float _returnDuration = 0.16f;
 	private float _edgeWidth = 36.0f;
 	private float _scrollSpeed = 600.0f;
@@ -35,6 +36,14 @@ public partial class DragAppearance : Resource
 	{
 		get => _previewScale;
 		set => SetFloat(ref _previewScale, Mathf.Clamp(value, 1.0f, 1.5f));
+	}
+
+	/// <summary>Pointer-follow smoothing in seconds; zero tracks immediately.</summary>
+	[Export(PropertyHint.Range, "0,0.2,0.005,suffix:s")]
+	public float FollowSmoothing
+	{
+		get => _followSmoothing;
+		set => SetFloat(ref _followSmoothing, Mathf.Clamp(value, 0.0f, 0.2f));
 	}
 
 	[Export(PropertyHint.Range, "0,1,0.01")]

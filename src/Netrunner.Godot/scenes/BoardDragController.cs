@@ -136,14 +136,21 @@ public partial class BoardDragController : Control
 			Cancel("unavailable", false);
 		if (!IsDragging) return;
 		Board.ScrollDragEdges(_pointer, delta, Appearance.EdgeWidth, Appearance.ScrollSpeed);
-		RefreshGeometry();
+		RefreshGeometry(delta);
 	}
 
-	private void RefreshGeometry()
+	private void RefreshGeometry(double delta = 0)
 	{
 		if (_preview is null) return;
 		Vector2 pointer = _pointer;
-		_preview.GlobalPosition = pointer + new Vector2(18, 18);
+		Vector2 target = pointer - _preview.GetGlobalRect().Size * 0.5f;
+		// Exponential following feels the same at different frame rates. Start
+		// centered immediately; only subsequent pointer movement is smoothed.
+		float weight = ReducedMotion || Appearance.FollowSmoothing <= 0 || delta <= 0
+			? 1f : 1f - Mathf.Exp(-(float)delta / Appearance.FollowSmoothing);
+		_preview.GlobalPosition = _preview.GlobalPosition.Lerp(target, weight);
+		if (_preview.GlobalPosition.DistanceSquaredTo(target) < 0.01f)
+			_preview.GlobalPosition = target;
 		var hovered = HitDestination(pointer);
 		foreach (var (destination, panel, geometry) in _zones)
 		{
@@ -161,7 +168,7 @@ public partial class BoardDragController : Control
 		}
 		_hint.Text = hovered is null ? "Release here to return to hand · Esc cancels" : DestinationLabel(hovered);
 		_hint.GlobalPosition = new Vector2(Math.Clamp(pointer.X + 18, GlobalPosition.X, Math.Max(GlobalPosition.X, GetGlobalRect().End.X - 380)),
-			Math.Clamp(pointer.Y - 42, GlobalPosition.Y, Math.Max(GlobalPosition.Y, GetGlobalRect().End.Y - 40)));
+			Math.Clamp(target.Y - 40, GlobalPosition.Y, Math.Max(GlobalPosition.Y, GetGlobalRect().End.Y - 40)));
 	}
 
 	private BoardInteractionDestination? HitDestination(Vector2 point) => _zones
