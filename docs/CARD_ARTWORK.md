@@ -20,6 +20,12 @@ make card-art-validate
 make play
 ```
 
+`make interaction-lab` and the setup screen's **Practice board interactions**
+use this same cache. Known fixtures have representative Gateway artwork IDs,
+including hand, board, pile, identity, and newly drawn cards. Their practice
+instructions and actions remain synthetic; printed rules do not define scenario
+behavior. The lab also works without official metadata or a cache.
+
 The downloader uses the [NetrunnerDB V3 API](https://api.netrunnerdb.com/api/docs/)
 to select all 77 Gateway printing IDs, requiring Null Signal Games as publisher.
 It prefers the advertised high-resolution WebP face, or the large JPEG when no
@@ -105,6 +111,8 @@ No official images or live network requests are required in CI. With a real
 cache, run Godot with `-- --card-art-cache-smoke` to check all 77 images. Use
 `-- --card-art-smoke --card-art-screenshots` for synthetic evidence safe to commit;
 live-cache screenshots go under ignored `artifacts/card-artwork` instead.
+Interaction/refinement smoke screenshots also go under ignored `artifacts/`
+when their board displays cached artwork.
 
 The cache schema is version 1: English `system_gateway`, with 77 definition-ID
 entries pointing to `images/<sha256>.<png|jpg|webp>`. Import rejects other schemas,

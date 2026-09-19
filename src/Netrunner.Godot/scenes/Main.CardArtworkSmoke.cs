@@ -104,7 +104,8 @@ public partial class Main
 			}
 			row.QueueFree();
 			await CheckArtworkBoardPreviewAsync(card);
-			GD.Print($"CARD_ART_SMOKE PASS live_cache={liveCache} cards=77 resolutions=2 portrait=true ice=true inspection=true hover=true overlays=true hidden_safe=true reuse=true fallback=true");
+			await CheckInteractionLabArtworkAsync(liveCache);
+			GD.Print($"CARD_ART_SMOKE PASS live_cache={liveCache} cards=77 resolutions=2 portrait=true ice=true inspection=true hover=true overlays=true hidden_safe=true reuse=true fallback=true lab_scenarios=19 lab_draw=true");
 			GetTree().Quit();
 		}
 		catch (Exception error)
@@ -156,6 +157,48 @@ public partial class Main
 			RequireInteraction(!_zoomOverlay.Visible && _zoomArtwork.Texture is null,
 				"A new snapshot retained stale inspected artwork.");
 		}
+	}
+
+	private async Task CheckInteractionLabArtworkAsync(bool liveCache)
+	{
+		OpenInteractionLab();
+		_reducedMotion.ButtonPressed = true;
+		foreach (Vector2I size in new[] { new Vector2I(1920, 1080), new Vector2I(2560, 1440) })
+		{
+			GetWindow().Size = size;
+			GetWindow().ContentScaleSize = size;
+			foreach (int scenario in Enumerable.Range(0, InteractionLabSamples.Names.Length))
+			{
+				_labScenario = scenario;
+				_labScenarios!.Select(scenario);
+				ResetInteractionLab();
+				await TableFrames(2);
+				RequireInteraction(_gameTable.VisibleCards.Values.Where(card => card.Card?.IsKnown == true)
+					.All(card => card.HasFullCardArtwork), $"Lab scenario {scenario} did not resolve known card artwork.");
+			}
+			foreach (int scenario in new[] { 15, 16 })
+			{
+				_labScenario = scenario;
+				_labScenarios!.Select(scenario);
+				ResetInteractionLab();
+				MatchViewModel view = _currentSnapshot!.View;
+				SubmitInteractionLab(view.Decision!, view.LegalActions.Single(action => action.Kind == Netrunner.Core.ActionKind.DrawCard));
+				await TableFrames(3);
+				RequireInteraction(_gameTable.VisibleCards[$"lab-drawn-{_labRevision}"].HasFullCardArtwork,
+					"A newly drawn lab card did not resolve artwork.");
+				if (OS.GetCmdlineUserArgs().Contains("--card-art-screenshots") && size.X == 1920)
+					await SaveArtworkEvidence($"lab-{(scenario == 15 ? "runner" : "corp")}-{size.X}", liveCache);
+			}
+		}
+		_labScenario = 0;
+		ResetInteractionLab();
+		MatchViewModel known = _currentSnapshot!.View;
+		CardViewModel hidden = known.RunnerHand.VisibleCards[0] with { IsKnown = false, DefinitionId = null };
+		int loads = LocalCardArtworkResolver.Shared.LoadCount;
+		PublishLabView(known with { RunnerHand = known.RunnerHand with { VisibleCards = [hidden] } });
+		RequireInteraction(_currentSnapshot!.View.RunnerHand.VisibleCards[0].DefinitionId is null
+			&& !_gameTable.VisibleCards[hidden.Id].HasFullCardArtwork && LocalCardArtworkResolver.Shared.LoadCount == loads,
+			"The lab assigned or loaded artwork for a concealed card.");
 	}
 
 	private async Task SaveArtworkEvidence(string name, bool liveCache)

@@ -174,4 +174,8 @@ be written into saves or action logs.
 Use `make interaction-lab` for resettable drag/play/install UI scenarios without
 playing a match. The setup screen also has **Practice board interactions**.
 Fixtures are synthetic and exercise the production UI; game-rule correctness
-is covered separately by engine tests.
+is covered separately by engine tests. Known practice cards use the same local
+artwork cache as `make play`, including cards drawn during a scenario. Run
+`make card-art-fetch` to populate it, or set `NETRUNNER_CARD_ART_DIRECTORY` to an
+unpacked cache. The lab does not require official metadata or internet access;
+without artwork it retains the generated card layout.

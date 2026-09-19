@@ -8,9 +8,12 @@ The concealed card uses the existing committed generic NSG back.
   selected/actionable and target cues, counters, a concealed card, and text fallback.
 - `inspection-1920.png` and `inspection-2560.png`: upright artwork next to
   current rules and state, with the underlying table behind the modal.
+- `lab-runner-1920.png` and `lab-corp-1920.png`: interaction-lab boards using
+  the cache, including newly drawn cards.
 
 Regenerate with Godot arguments `-- --card-art-smoke --card-art-screenshots`.
 The smoke additionally checks both hover orientations, retained inspection on
 ordinary snapshot updates, immediate clearing on concealment, texture reuse,
-and missing/corrupt image fallback. Real-cache captures are written only under
+all 19 lab scenarios, lab draws for both seats, and missing/corrupt image
+fallback. Real-cache captures are written only under
 ignored `artifacts/card-artwork` by `--card-art-cache-smoke --card-art-screenshots`.
