@@ -3,12 +3,13 @@ using Netrunner.Match;
 
 namespace Netrunner.GodotClient;
 
-/// <summary>Owns the inspected-card zoom overlay and its text-only details.</summary>
+/// <summary>Owns upright artwork inspection alongside current, viewer-safe details.</summary>
 public partial class Main
 {
 	private ScrollContainer _zoomScroll = null!;
 	private Button _zoomCloseButton = null!;
 	private Control? _zoomPreviousFocus;
+	private TextureRect _zoomArtwork = null!;
 
 	private void BuildCardZoomOverlay()
 	{
@@ -21,6 +22,7 @@ public partial class Main
 		_zoomOverlay.Visible = false;
 		_zoomTitle = _zoomOverlay.GetNode<Label>("%Title");
 		_zoomText = _zoomOverlay.GetNode<Label>("%Rules");
+		_zoomArtwork = _zoomOverlay.GetNode<TextureRect>("%Artwork");
 		_zoomScroll = _zoomOverlay.GetNode<ScrollContainer>("%TextScroll");
 		_zoomCloseButton = _zoomOverlay.GetNode<Button>("%Close");
 		_zoomCloseButton.Pressed += HideCardZoom;
@@ -32,7 +34,7 @@ public partial class Main
 
 	private void ShowInspectedCardZoom()
 	{
-		if (_inspectedCard is not { } card)
+		if (_inspectedCard is not { IsKnown: true } card)
 		{
 			return;
 		}
@@ -43,6 +45,10 @@ public partial class Main
 		}
 		_zoomTitle.Text = $"CARD ZOOM · {card.Title}";
 		_zoomText.Text = FormatCardZoom(card);
+		LocalCardArtworkResolver.Artwork? artwork = card.DefinitionId is { } definition
+			? LocalCardArtworkResolver.Shared.TryLoad(definition) : null;
+		_zoomArtwork.Texture = artwork is { FullFace: true } ? artwork.Texture : null;
+		_zoomArtwork.Visible = _zoomArtwork.Texture is not null;
 		_zoomOverlay.Visible = true;
 		_zoomOverlay.MoveToFront();
 		_zoomScroll.ScrollVertical = 0;
@@ -52,6 +58,7 @@ public partial class Main
 	private void HideCardZoom()
 	{
 		_zoomOverlay.Visible = false;
+		_zoomArtwork.Texture = null;
 		if (IsInstanceValid(_zoomPreviousFocus)
 			&& !_zoomPreviousFocus!.IsQueuedForDeletion()
 			&& _zoomPreviousFocus.IsVisibleInTree())

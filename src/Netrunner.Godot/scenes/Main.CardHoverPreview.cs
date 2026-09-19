@@ -117,9 +117,9 @@ public partial class Main
 		}
 
 		CardViewModel visible = card.Card!;
-		_cardHoverPreviewFace.SetIce(card.IsIce);
-		_cardHoverPreview.RefreshCardSize();
 		_cardHoverPreviewFace.SetCard(visible);
+		_cardHoverPreviewFace.SetIce(card.IsIce && !_cardHoverPreviewFace.HasFullCardArtwork);
+		_cardHoverPreview.RefreshCardSize();
 		_cardHoverPreviewFace.MouseFilter = Control.MouseFilterEnum.Ignore;
 		_cardHoverPreviewFace.FocusMode = Control.FocusModeEnum.None;
 		_cardHoverPreviewTitle.Text = visible.Title;

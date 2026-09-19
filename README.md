@@ -105,9 +105,13 @@ Select your side, decks and seed on the setup screen. Click a card or server
 for contextual actions; the right-edge history rail expands into the retained
 match log. Hover/focus inspects a card, and the Inspect button opens full text.
 “Skip animation” preserves history. Use “Copy log” for a filtered playtest report.
-Optional local PNG artwork is loaded only for visible cards from Godot's
-`user://card-art/<card-code>.png`; missing images use the original metadata card
-frames. No artwork is downloaded. The developer view remains available through
+Official full card faces can be provisioned explicitly with `make card-art-fetch`.
+The game reads a local cache only; missing images use the generated card frames.
+Use `make card-art-pack ART_ARGS='--output artifacts/gateway-art.zip'` to carry
+the cache to an offline machine. See [artwork caches](docs/CARD_ARTWORK.md) for
+unpacking, optional metadata bundles, cache locations, and exported builds.
+Legacy `user://card-art/<card-code>.png` illustrations remain supported.
+The developer view remains available through
 `./scripts/play.sh --diagnostic-ui`.
 
 See [the M4.9 UI plan](docs/M4_9_UI_PLAN.md) and

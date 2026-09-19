@@ -382,6 +382,19 @@ if ! grep -Fq "M410_EDITOR_UI PASS" "$m410_ui_smoke_log" \
 fi
 cat "$m410_ui_smoke_log"
 echo "m4-10-editor-ui-smoke=PASS"
+artwork_smoke_log="$coverage_report_dir/card-art-smoke.log"
+if ! run_with_timeout 45 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
+  "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \
+  -- --card-art-smoke >"$artwork_smoke_log" 2>&1; then
+  cat "$artwork_smoke_log" >&2
+  exit 1
+fi
+if ! grep -Fq "CARD_ART_SMOKE PASS" "$artwork_smoke_log" \
+  || grep -Eq "CARD_ART_SMOKE FAIL|SCRIPT ERROR|ERROR:" "$artwork_smoke_log"; then
+  cat "$artwork_smoke_log" >&2
+  exit 1
+fi
+echo "card-art-smoke=PASS"
 m411_ui_smoke_log="$coverage_report_dir/m411-interaction-smoke.log"
 if ! run_with_timeout 120 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
   "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \

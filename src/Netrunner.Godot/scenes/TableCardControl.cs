@@ -21,6 +21,8 @@ public partial class TableCardControl : Control
 
 	private CardViewModel? _card;
 	private Texture2D? _artwork;
+	private bool _fullCardFace;
+	public bool HasFullCardArtwork => _fullCardFace && _artwork is not null;
 	private PlayerSide _backSide = PlayerSide.Corp;
 	private Texture2D? _backTexture;
 	private static readonly Dictionary<PlayerSide, Texture2D?> BackTextures = new();
@@ -711,6 +713,17 @@ public partial class TableCardControl : Control
 			return;
 		}
 
+		if (HasFullCardArtwork)
+		{
+			DrawCardFace(InsetRect(frameRect, Mathf.Max(1, frameWidth)));
+			DrawAuthoredStatusBadge();
+			DrawStatusBadge(accent, cardSize);
+			if (_actionableSource)
+				DrawActionGlow(border, InsetRect(frameRect, frameWidth), appearance.CornerRadius);
+			DrawStateBadge(accent, cardSize);
+			return;
+		}
+
 		// Keep the header inside the frame's actual border. Its top corners
 		// follow the frame's inner radius so the header cannot square off or
 		// cover the rounded outer border, including selected/target frames.
@@ -778,6 +791,16 @@ public partial class TableCardControl : Control
 			cardSize.Y * normalized.Position.Y,
 			Mathf.Max(1.0f, cardSize.X * normalized.Size.X),
 			Mathf.Max(1.0f, cardSize.Y * normalized.Size.Y));
+	}
+
+	private void DrawCardFace(Rect2 rectangle)
+	{
+		Vector2 available = _isIce ? new Vector2(rectangle.Size.Y, rectangle.Size.X) : rectangle.Size;
+		Vector2 imageSize = _artwork!.GetSize();
+		Vector2 size = imageSize * Mathf.Min(available.X / imageSize.X, available.Y / imageSize.Y);
+		DrawSetTransform(rectangle.GetCenter(), _isIce ? Mathf.Pi / 2 : 0);
+		DrawTextureRect(_artwork, new Rect2(-size / 2, size), false);
+		DrawSetTransform(Vector2.Zero);
 	}
 
 	/// <summary>Optional stable pointer geometry supplied by an animated hand.</summary>
@@ -862,10 +885,11 @@ public partial class TableCardControl : Control
 
 		bool known = _card?.IsKnown == true;
 		bool showText = known || _backTexture is null;
-		_title!.Visible = showText;
-		_type!.Visible = showText;
-		_stats!.Visible = showText;
-		_status!.Visible = showText;
+		_title!.Visible = showText && !HasFullCardArtwork;
+		_type!.Visible = showText && !HasFullCardArtwork;
+		_stats!.Visible = showText && !HasFullCardArtwork;
+		_status!.Visible = showText && (!HasFullCardArtwork || _card is { Rezzed: true }
+			|| _card is { IsAbilityUsed: true } || _card is { IsFirstXUsedThisTurn: true });
 		bool compact = IsCompactPortrait;
 		_title!.Text = known ? compact ? CompactTitle(_card!.Title) : _card!.Title : "FACE-DOWN";
 		_title!.AutowrapMode = TextServer.AutowrapMode.Off;
@@ -880,7 +904,7 @@ public partial class TableCardControl : Control
 		_status!.Text = known ? FormatStatus(_card!, compact) : "FACE-DOWN";
 		_counters!.Text = known ? FormatCounters(_card!, compact) : string.Empty;
 		_counters!.Visible = _counters!.Text.Length > 0;
-		_rulesCue!.Visible = known && !_isIce && !compact;
+		_rulesCue!.Visible = known && !_isIce && !compact && !HasFullCardArtwork;
 		TooltipText = known
 			? BuildTooltip(_card!)
 			: "Face-down card; identity is concealed.";
@@ -897,13 +921,16 @@ public partial class TableCardControl : Control
 	private void RefreshArtwork()
 	{
 		_artwork = null;
+		_fullCardFace = false;
 		if (_card is not { IsKnown: true, DefinitionId: { } definitionId }
 			|| string.IsNullOrWhiteSpace(definitionId))
 		{
 			return;
 		}
 
-		_artwork = LocalCardArtworkResolver.TryLoad(definitionId);
+		LocalCardArtworkResolver.Artwork? artwork = LocalCardArtworkResolver.Shared.TryLoad(definitionId);
+		_artwork = artwork?.Texture;
+		_fullCardFace = artwork?.FullFace == true;
 	}
 
 	private static void SetLabelAppearance(Label? label, int fontSize, Color colour)
@@ -1475,39 +1502,4 @@ public partial class TableCardControl : Control
 		return builder.ToString().Trim();
 	}
 
-	private static class LocalCardArtworkResolver
-	{
-		public static ImageTexture? TryLoad(string definitionId)
-		{
-			string code = ToSafeCode(definitionId);
-			if (code.Length == 0)
-			{
-				return null;
-			}
-
-			string path = $"user://card-art/{code}.png";
-			if (!Godot.FileAccess.FileExists(path))
-			{
-				return null;
-			}
-
-			Image image = Image.LoadFromFile(path);
-			return image.GetWidth() > 0 && image.GetHeight() > 0
-				? ImageTexture.CreateFromImage(image)
-				: null;
-		}
-
-		private static string ToSafeCode(string definitionId)
-		{
-			var builder = new StringBuilder(definitionId.Length);
-			foreach (char character in definitionId.Trim())
-			{
-				builder.Append(char.IsLetterOrDigit(character) || character is '-' or '_' or '.'
-					? character
-					: '_');
-			}
-
-			return builder.ToString();
-		}
-	}
 }

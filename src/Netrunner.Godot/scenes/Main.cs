@@ -192,8 +192,13 @@ public partial class Main : Control
 		_useCardTable = !_smokeTest && !_gallerySmoke && !_slice43UiSmoke && !_slice44UiSmoke
 			&& !_slice45UiSmoke && !_slice46UiSmoke && !_slice47UiSmoke && !_slice48UxSmoke && !_fullMatchSmoke
 			&& !arguments.Contains("--diagnostic-ui", StringComparer.Ordinal);
+		if (arguments.Contains("--card-art-smoke", StringComparer.Ordinal)) PrepareCardArtworkSmoke();
 		BuildShell();
-		if (arguments.Contains("--m4-11-demo", StringComparer.Ordinal))
+		if (arguments.Contains("--card-art-smoke", StringComparer.Ordinal) || arguments.Contains("--card-art-cache-smoke", StringComparer.Ordinal))
+		{
+			_ = RunCardArtworkSmokeAsync(arguments.Contains("--card-art-cache-smoke", StringComparer.Ordinal));
+		}
+		else if (arguments.Contains("--m4-11-demo", StringComparer.Ordinal))
 		{
 			_ = RunInteractionDemoAsync();
 		}
@@ -1067,6 +1072,13 @@ public partial class Main : Control
 
 	private void RenderSnapshot(MatchSnapshot snapshot)
 	{
+		if (_zoomOverlay.Visible) HideCardZoom();
+		_inspectedCard = null;
+		if (_useCardTable)
+		{
+			_tableInspect.Disabled = true;
+			_tableInspect.Text = "Inspect card";
+		}
 		MatchSnapshot? previous = _currentSnapshot;
 		bool decisionChanged = previous is null
 			|| !SameDecision(previous.View.Decision, snapshot.View.Decision);
