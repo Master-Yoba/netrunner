@@ -23,6 +23,13 @@ public partial class TableCardControl : Control
 	private Texture2D? _artwork;
 	private bool _fullCardFace;
 	public bool HasFullCardArtwork => _fullCardFace && _artwork is not null;
+	private bool _useHoverPreview;
+	/// <summary>The owning table supplies the artwork preview instead of a native text tooltip.</summary>
+	public bool UseHoverPreview
+	{
+		get => _useHoverPreview;
+		set { _useHoverPreview = value; RefreshTooltip(); }
+	}
 	private PlayerSide _backSide = PlayerSide.Corp;
 	private Texture2D? _backTexture;
 	private static readonly Dictionary<PlayerSide, Texture2D?> BackTextures = new();
@@ -905,10 +912,11 @@ public partial class TableCardControl : Control
 		_counters!.Text = known ? FormatCounters(_card!, compact) : string.Empty;
 		_counters!.Visible = _counters!.Text.Length > 0;
 		_rulesCue!.Visible = known && !_isIce && !compact && !HasFullCardArtwork;
-		TooltipText = known
-			? BuildTooltip(_card!)
-			: "Face-down card; identity is concealed.";
+		RefreshTooltip();
 	}
+
+	private void RefreshTooltip() => TooltipText = _useHoverPreview ? string.Empty
+		: _card is { IsKnown: true } card ? BuildTooltip(card) : "Face-down card; identity is concealed.";
 
 	private static string CompactTitle(string title)
 	{

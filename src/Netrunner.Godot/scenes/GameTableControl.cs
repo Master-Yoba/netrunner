@@ -147,6 +147,9 @@ public partial class GameTableControl : Control
 	/// <summary>Raised when a known card enters or leaves mouse/focus interaction.</summary>
 	public event Action<TableCardControl, bool>? CardHoverChanged;
 
+	/// <summary>Set before rendering when the owner provides a custom card hover preview.</summary>
+	public bool UseCardHoverPreview { get; set; }
+
 	/// <summary>
 	/// Raised with a server or public zone handle when a lane or pile is clicked.
 	/// Zone handles are prefixed with <c>zone:</c>; server handles remain the
@@ -652,7 +655,8 @@ public partial class GameTableControl : Control
 		_runnerDeckPile.Text = view.RunnerDeck.Count == 0 ? "Stack\nEmpty" : string.Empty;
 		RenderPileFace("zone:runner-heap", (BoardActionButton)_runnerHeapPile,
 			view.RunnerHeap.Count > 0 ? view.RunnerHeap[^1] : null, view.RunnerHeap.Count, "Heap", PlayerSide.Runner, nextVisibleCards);
-		UpdatePileTooltip(_runnerHeapPile, $"Runner Heap · {view.RunnerHeap.Count} public cards");
+		UpdatePileTooltip(_runnerHeapPile, $"Runner Heap · {view.RunnerHeap.Count} public cards",
+			view.RunnerHeap.Count > 0 && view.RunnerHeap[^1].IsKnown);
 
 		RenderIdentity("runner-identity", _runnerIdentitySlot, view.RunnerIdentity, false, nextVisibleCards);
 		// The upper strip carries the opponent HQ count and the local hand is
@@ -801,7 +805,8 @@ public partial class GameTableControl : Control
 						PlayerSide.Runner,
 						CardSizeRole.HostedPortrait);
 					attachment.Position = HostedCardPosition(index);
-					attachment.TooltipText = $"Hosted on {card?.Title ?? "face-down ICE"}\n" + attachment.TooltipText;
+					if (!attachment.UseHoverPreview)
+						attachment.TooltipText = $"Hosted on {card?.Title ?? "face-down ICE"}\n" + attachment.TooltipText;
 				}
 			}
 		}
@@ -1030,6 +1035,7 @@ public partial class GameTableControl : Control
 
 	private void AttachCard(TableCardControl card)
 	{
+		card.UseHoverPreview = UseCardHoverPreview;
 		card.CardSelected += HandleCardSelected;
 		card.CardInspected += HandleCardInspected;
 		card.CardHoverChanged += HandleCardHoverChanged;
@@ -1354,9 +1360,10 @@ public partial class GameTableControl : Control
 			: int.MaxValue;
 	}
 
-	private static void UpdatePileTooltip(Button button, string tooltip)
+	private void UpdatePileTooltip(Button button, string tooltip, bool knownFace)
 	{
-		button.TooltipText = $"{tooltip}. Click to inspect the public pile summary.";
+		button.TooltipText = UseCardHoverPreview && knownFace
+			? string.Empty : $"{tooltip}. Click to inspect the public pile summary.";
 	}
 
 	private void ApplySelectionAndTargets()

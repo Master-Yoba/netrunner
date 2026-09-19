@@ -5,6 +5,10 @@ Installed ICE is sideways; hover and inspection artwork is upright. Selection,
 legal-action cues, counters, and state badges remain visible. Inspection retains
 the game's current rules text alongside the printed face. Hidden cards never
 look up artwork. Missing or invalid images use the generated card layout.
+Table cards use one artwork hover preview, with current rules, subtypes, numeric
+stats, advancement and typed counters, ability-use state, and viewer-safe hosting
+details. Face-up piles include their count and browse hint in this same preview.
+Native text tooltips are suppressed where the table provides this preview.
 
 Artwork is optional and local-only. Launching, playing, importing, exporting,
 and validating a cache never downloads anything. Only `card-art fetch` contacts

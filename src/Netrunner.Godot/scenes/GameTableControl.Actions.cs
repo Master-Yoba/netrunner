@@ -47,6 +47,7 @@ public partial class GameTableControl
 			: $"Archives · {count} cards · click to browse";
 		if (handle == "zone:corp-deck") pile.SetActionAvailable(false);
 		RenderPileFace(handle, pile, model, count, handle == "zone:corp-deck" ? "R&D" : "Archives", PlayerSide.Corp, visible);
+		if (UseCardHoverPreview && model is { IsKnown: true }) pile.TooltipText = string.Empty;
 	}
 
 	private void RenderPileFace(string handle, BoardActionButton pile, CardViewModel? model, int count, string title,

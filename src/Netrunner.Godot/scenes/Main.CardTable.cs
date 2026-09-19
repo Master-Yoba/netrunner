@@ -49,6 +49,7 @@ public partial class Main
 		_tableViewport = _board.GetNode<Control>("TableViewport");
 		_tableViewport.Resized += HandleCardHoverPreviewViewportResized;
 		_gameTable = _tableViewport.GetNode<GameTableControl>("GameBoard");
+		_gameTable.UseCardHoverPreview = true;
 		_gameTable.CardSelected += SelectTableCard;
 		_gameTable.BasicActionRequested += SubmitBasicBoardAction;
 		_gameTable.PileRequested += id => ShowTablePile(id);
@@ -84,6 +85,7 @@ public partial class Main
 		};
 		_tableAccessPanel = _tableViewport.GetNode<PanelContainer>("AccessPanel");
 		_tableAccessCard = _tableAccessPanel.GetNode<TableCardControl>("%Card");
+		_tableAccessCard.UseHoverPreview = true;
 		_tableAccessTitle = _tableAccessPanel.GetNode<Label>("%Title");
 		Button inspectAccess = _tableAccessPanel.GetNode<Button>("%Inspect");
 		inspectAccess.Pressed += () =>

@@ -114,3 +114,10 @@ theme_override_colors/font_color = Color(1, 1, 1, 1)
 theme_override_font_sizes/font_size = 12
 autowrap_mode = 3
 
+[node name="Hint" type="Label" parent="Content/DetailsScroll/Details"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.65, 0.74, 0.8, 1)
+theme_override_font_sizes/font_size = 10
+autowrap_mode = 3
