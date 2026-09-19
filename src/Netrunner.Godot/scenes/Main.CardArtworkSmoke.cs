@@ -63,7 +63,7 @@ public partial class Main
 				portrait.SetSelected(true);
 				ice.SetIce(true);
 				ice.SetDisplaySize(new Vector2(420, 300));
-				ice.SetCard(card with { Id = "art-smoke-ice", DefinitionId = "30042", Type = "ICE", Rezzed = true });
+				ice.SetCard(card with { Id = "art-smoke-ice", DefinitionId = "30038", Type = "ICE", Rezzed = true });
 				ice.SetTargetCandidate(true);
 				int loads = LocalCardArtworkResolver.Shared.LoadCount;
 				concealed.SetBackSide(Netrunner.Core.PlayerSide.Corp);
@@ -103,7 +103,8 @@ public partial class Main
 					$"Unexpected artwork/fallback for {code}.");
 			}
 			row.QueueFree();
-			GD.Print($"CARD_ART_SMOKE PASS live_cache={liveCache} cards=77 resolutions=2 portrait=true ice=true inspection=true overlays=true hidden_safe=true reuse=true fallback=true");
+			await CheckArtworkBoardPreviewAsync(card);
+			GD.Print($"CARD_ART_SMOKE PASS live_cache={liveCache} cards=77 resolutions=2 portrait=true ice=true inspection=true hover=true overlays=true hidden_safe=true reuse=true fallback=true");
 			GetTree().Quit();
 		}
 		catch (Exception error)
@@ -114,6 +115,46 @@ public partial class Main
 		finally
 		{
 			if (_artworkSmokeDirectory is not null) Directory.Delete(_artworkSmokeDirectory, recursive: true);
+		}
+	}
+
+	private async Task CheckArtworkBoardPreviewAsync(CardViewModel card)
+	{
+		(CardViewModel[] hand, IReadOnlyList<ServerViewModel> servers, CardViewModel[] rig) = CreateSlice48Board();
+		CardViewModel previewIce = card with { Id = "art-preview-ice", DefinitionId = "30038", Type = "ICE", Rezzed = true };
+		ServerViewModel[] boardServers = servers.Select((server, index) => index == 0
+			? server with { Ice = new CardViewModel?[] { previewIce } } : server).ToArray();
+		var decision = new DecisionViewModel("art-preview", 1, new Netrunner.Core.PlayerId("art-player"),
+			Netrunner.Core.PlayerSide.Runner, Netrunner.Core.DecisionKind.TurnAction, "Inspect artwork");
+		MatchViewModel view = CreateSlice48View(hand, boardServers, rig, decision, [], null,
+			new OutcomeViewModel(Netrunner.Core.GameOutcomeKind.Ongoing, null, null));
+		foreach (Vector2I size in new[] { new Vector2I(1920, 1080), new Vector2I(2560, 1440) })
+		{
+			GetWindow().Size = size;
+			GetWindow().ContentScaleSize = size;
+			RenderSnapshot(CreateSlice48Snapshot(view, decision));
+			await TableFrames(3);
+			TableCardControl source = _gameTable.VisibleCards[previewIce.Id];
+			source.SetContainerHover(true);
+			await TableFrames(2);
+			RequireInteraction(CardHoverPreviewVisible && _cardHoverPreviewFace is { HasFullCardArtwork: true, IsIce: false },
+				"Board ICE hover did not show upright artwork.");
+			source.SetCard(previewIce with { IsKnown = false });
+			RequireInteraction(!CardHoverPreviewVisible && !source.HasFullCardArtwork,
+				"Concealing a board card retained its artwork preview.");
+			_inspectedCard = previewIce;
+			ShowInspectedCardZoom();
+			RenderSnapshot(CreateSlice48Snapshot(view, decision));
+			RequireInteraction(_zoomOverlay.Visible && _zoomArtwork.Texture is not null,
+				"An unchanged visible card lost its inspection during a snapshot update.");
+			MatchViewModel concealedView = view with
+			{
+				Servers = boardServers.Select((server, index) => index == 0
+					? server with { Ice = new CardViewModel?[] { previewIce with { IsKnown = false } } } : server).ToArray(),
+			};
+			RenderSnapshot(CreateSlice48Snapshot(concealedView, decision));
+			RequireInteraction(!_zoomOverlay.Visible && _zoomArtwork.Texture is null,
+				"A new snapshot retained stale inspected artwork.");
 		}
 	}
 

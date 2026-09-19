@@ -97,7 +97,8 @@ public sealed class CardArtworkDownloader
             CardArtworkEntry? entry = JsonSerializer.Deserialize<CardArtworkEntry>(
                 CardArtworkCache.ReadBounded(path, CardArtworkCache.MaxManifestBytes), JsonOptions);
             if (entry is null || entry.DefinitionId != printing.Id || entry.PrintingId != printing.Id
-                || entry.SourceUrl != printing.Url || !CardArtworkCache.IsSha256(entry.Sha256)
+                || entry.SourceUrl != printing.Url || entry.Artist is null || entry.RetrievedAt == default
+                || !CardArtworkCache.IsSha256(entry.Sha256)
                 || entry.Path != $"images/{entry.Sha256}{Path.GetExtension(entry.Path)}") return null;
             CardArtworkCache.ReadImage(directory, entry);
             return entry;

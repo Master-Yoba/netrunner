@@ -43,16 +43,41 @@ public partial class Main
 		{
 			_zoomPreviousFocus = GetViewport().GuiGetFocusOwner();
 		}
+		RefreshCardZoomContent(card);
+		_zoomOverlay.Visible = true;
+		_zoomOverlay.MoveToFront();
+		_zoomScroll.ScrollVertical = 0;
+		_zoomScroll.GrabFocus();
+	}
+
+	private void RefreshInspectedCard(MatchViewModel view)
+	{
+		if (_inspectedCard is not { } inspected) return;
+		CardViewModel? visible = BoardChoiceCards(view)
+			.Concat(view.CorpDeck.VisibleCards).Concat(view.RunnerDeck.VisibleCards)
+			.FirstOrDefault(card => card.Id == inspected.Id && card.IsKnown && card.DefinitionId == inspected.DefinitionId);
+		_inspectedCard = visible;
+		if (visible is not null)
+		{
+			if (_zoomOverlay.Visible) RefreshCardZoomContent(visible);
+			return;
+		}
+		if (_zoomOverlay.Visible) HideCardZoom();
+		if (_useCardTable)
+		{
+			_tableInspect.Disabled = true;
+			_tableInspect.Text = "Inspect card";
+		}
+	}
+
+	private void RefreshCardZoomContent(CardViewModel card)
+	{
 		_zoomTitle.Text = $"CARD ZOOM · {card.Title}";
 		_zoomText.Text = FormatCardZoom(card);
 		LocalCardArtworkResolver.Artwork? artwork = card.DefinitionId is { } definition
 			? LocalCardArtworkResolver.Shared.TryLoad(definition) : null;
 		_zoomArtwork.Texture = artwork is { FullFace: true } ? artwork.Texture : null;
 		_zoomArtwork.Visible = _zoomArtwork.Texture is not null;
-		_zoomOverlay.Visible = true;
-		_zoomOverlay.MoveToFront();
-		_zoomScroll.ScrollVertical = 0;
-		_zoomScroll.GrabFocus();
 	}
 
 	private void HideCardZoom()

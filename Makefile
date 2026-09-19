@@ -63,4 +63,4 @@ interaction-lab:
 
 .PHONY: card-art-fetch card-art-validate card-art-pack card-art-unpack
 card-art-fetch card-art-validate card-art-pack card-art-unpack:
-	./scripts/card-art.sh $(patsubst card-art-%,%,$@) $(ART_ARGS)
+	@./scripts/card-art.sh $(patsubst card-art-%,%,$@) $(ART_ARGS)

@@ -1072,13 +1072,7 @@ public partial class Main : Control
 
 	private void RenderSnapshot(MatchSnapshot snapshot)
 	{
-		if (_zoomOverlay.Visible) HideCardZoom();
-		_inspectedCard = null;
-		if (_useCardTable)
-		{
-			_tableInspect.Disabled = true;
-			_tableInspect.Text = "Inspect card";
-		}
+		RefreshInspectedCard(snapshot.View);
 		MatchSnapshot? previous = _currentSnapshot;
 		bool decisionChanged = previous is null
 			|| !SameDecision(previous.View.Decision, snapshot.View.Decision);
