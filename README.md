@@ -104,10 +104,20 @@ make play
 Select your side, decks and seed on the setup screen. Click a card or server
 for contextual actions; the right-edge history rail expands into the retained
 match log. Hover/focus inspects a card, and the Inspect button opens full text.
+Escape closes the topmost inspection or pile panel, cancels local staging, or
+clears the selected card/server when back on the board.
 “Skip animation” preserves history. Use “Copy log” for a filtered playtest report.
-Optional local PNG artwork is loaded only for visible cards from Godot's
-`user://card-art/<card-code>.png`; missing images use the original metadata card
-frames. No artwork is downloaded. The developer view remains available through
+Official full card faces can be provisioned explicitly with `make card-art-fetch`.
+Board resources, hover rules, and full card inspection use bundled
+[Null Signal game symbols](src/Netrunner.Godot/icons/SOURCE.md), including clicks,
+credits, memory, link, recurring credits, and subroutines. They work offline in
+both the game and interaction lab, independently of the artwork cache.
+The game reads a local cache only; missing images use the generated card frames.
+Use `make card-art-pack ART_ARGS='--output artifacts/gateway-art.zip'` to carry
+the cache to an offline machine. See [artwork caches](docs/CARD_ARTWORK.md) for
+unpacking, optional metadata bundles, cache locations, and exported builds.
+Legacy `user://card-art/<card-code>.png` illustrations remain supported.
+The developer view remains available through
 `./scripts/play.sh --diagnostic-ui`.
 
 See [the M4.9 UI plan](docs/M4_9_UI_PLAN.md) and
@@ -170,4 +180,8 @@ be written into saves or action logs.
 Use `make interaction-lab` for resettable drag/play/install UI scenarios without
 playing a match. The setup screen also has **Practice board interactions**.
 Fixtures are synthetic and exercise the production UI; game-rule correctness
-is covered separately by engine tests.
+is covered separately by engine tests. Known practice cards use the same local
+artwork cache as `make play`, including cards drawn during a scenario. Run
+`make card-art-fetch` to populate it, or set `NETRUNNER_CARD_ART_DIRECTORY` to an
+unpacked cache. The lab does not require official metadata or internet access;
+without artwork it retains the generated card layout.

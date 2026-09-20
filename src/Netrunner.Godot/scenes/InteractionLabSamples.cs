@@ -51,7 +51,7 @@ public static class InteractionLabSamples
 			};
 		}
 		view = view with { RunnerRig = view.RunnerRig.Select((card, index) => card with { Title = $"Practice program {index + 1}" }).ToArray() };
-		string type = scenario switch { 2 or 3 or 9 => "Program", 5 => "Upgrade", 6 => "ICE", 7 or 8 => "Asset", 4 => "Operation", _ => "Event" };
+		string type = scenario switch { 2 or 3 or 9 => "Program", 5 => "Upgrade", 6 => "ICE", 7 or 8 => "Asset", 4 or 16 => "Operation", _ => "Event" };
 		CardViewModel card = UiPreviewSamples.Known("lab-hand", type, "Practice " + type);
 		CardViewModel[] hand = scenario == 12 ? [card, .. view.RunnerHand.VisibleCards] : [card];
 		view = side == PlayerSide.Runner ? view with { RunnerHand = new(ZoneKind.RunnerGrip, hand.Length, hand) }
@@ -87,4 +87,50 @@ public static class InteractionLabSamples
 		new($"lab-decision-{revision}", revision, new(side == PlayerSide.Corp ? "preview-corp" : "preview-runner"), side, kind, prompt);
 	public static LegalActionViewModel Action(string suffix, ActionKind kind, ActionParameters parameters, long revision) =>
 		new(new($"lab-action-{revision}-{suffix}"), kind, suffix.Replace('-', ' '), parameters);
+
+	/// <summary>Give known practice cards artwork keys without requiring official metadata or changing scenario actions.</summary>
+	public static MatchViewModel WithArtwork(MatchViewModel view, int scenario)
+	{
+		CardViewModel Map(CardViewModel card, bool corp = false)
+		{
+			if (!card.IsKnown || card.DefinitionId is not null) return card;
+			string? code = card.Type switch
+			{
+				"Event" => scenario == 1 && card.Id == "lab-hand" ? "30028" : "30030",
+				"Operation" => "30075",
+				"Program" => scenario == 3 && card.Id == "lab-hand" ? "30004" : "30026",
+				"ICE" => "30038",
+				"Asset" => "30037",
+				"Upgrade" => "30042",
+				"Agenda" => "30067",
+				"Hardware" => "30031",
+				"Resource" => "30027",
+				"Identity" => corp ? "30035" : "30019",
+				_ => null,
+			};
+			return card with { DefinitionId = code };
+		}
+		CardViewModel? Slot(CardViewModel? card, bool corp = false) => card is null ? null : Map(card, corp);
+		CardViewModel[] Cards(IReadOnlyList<CardViewModel> cards, bool corp = false) => cards.Select(card => Map(card, corp)).ToArray();
+		ZoneViewModel Zone(ZoneViewModel zone, bool corp = false) => zone with { VisibleCards = Cards(zone.VisibleCards, corp) };
+		return view with
+		{
+			CorpHand = Zone(view.CorpHand, true),
+			CorpDeck = Zone(view.CorpDeck, true),
+			RunnerHand = Zone(view.RunnerHand),
+			RunnerDeck = Zone(view.RunnerDeck),
+			CorpIdentity = Slot(view.CorpIdentity, true),
+			RunnerIdentity = Slot(view.RunnerIdentity),
+			CorpScore = Cards(view.CorpScore, true),
+			RunnerScore = Cards(view.RunnerScore),
+			CorpDiscard = Cards(view.CorpDiscard, true),
+			RunnerHeap = Cards(view.RunnerHeap),
+			RunnerRig = Cards(view.RunnerRig),
+			Servers = view.Servers.Select(server => server with
+			{
+				Ice = server.Ice.Select(card => Slot(card, true)).ToArray(),
+				Root = server.Root.Select(card => Slot(card, true)).ToArray(),
+			}).ToArray(),
+		};
+	}
 }

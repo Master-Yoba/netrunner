@@ -47,6 +47,7 @@ public partial class GameTableControl
 			: $"Archives · {count} cards · click to browse";
 		if (handle == "zone:corp-deck") pile.SetActionAvailable(false);
 		RenderPileFace(handle, pile, model, count, handle == "zone:corp-deck" ? "R&D" : "Archives", PlayerSide.Corp, visible);
+		if (UseCardHoverPreview && model is { IsKnown: true }) pile.TooltipText = string.Empty;
 	}
 
 	private void RenderPileFace(string handle, BoardActionButton pile, CardViewModel? model, int count, string title,
@@ -72,6 +73,6 @@ public partial class GameTableControl
 	private static void HoverPileFace(BoardActionButton pile, bool active)
 	{
 		TableCardControl? face = pile.GetChildren().OfType<TableCardControl>().FirstOrDefault(card => card.Visible);
-		face?.SetContainerHover(active || pile.IsHovered() || pile.HasFocus());
+		face?.SetContainerHover(active || pile.IsHovered() || pile.HasFocus(ignoreHiddenFocus: true));
 	}
 }

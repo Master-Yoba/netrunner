@@ -42,6 +42,11 @@ public static partial class CliCommands
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(error);
 
+        if (args.Length > 0 && args[0] == "card-art")
+        {
+            return RunCardArtwork(args, output, error);
+        }
+
         if (args.Length > 0 && args[0] == "session-recover")
         {
             return RunSessionRecover(args, output, error);
@@ -136,6 +141,7 @@ public static partial class CliCommands
             + "card-data normalize --upstream <file> --copyright <file> --commit <40-hex-sha> "
             + "--retrieval-date YYYY-MM-DD --output-dir <directory> [--json] | "
             + "card-data validate [--root <directory>] [--json] | "
+            + "card-art fetch|validate|pack|unpack [options] [--json] | "
             + "play --seed <unsigned-integer> --goal corp-score|runner-steal|deck-out "
             + "[--json] [--replay-out <file>] | "
             + "m2-proof [scenarioPath] [--json]");

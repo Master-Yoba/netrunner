@@ -82,7 +82,7 @@ public partial class UiPreview : Control
 		hover.Size = hover.PreferredSize;
 		hover.GetNode<TableCardControl>("%Card").SetCard(UiPreviewSamples.Known("preview-hover"));
 		hover.GetNode<Label>("%Title").Text = "Synthetic hovered card with a long title";
-		hover.GetNode<Label>("%Rules").Text = UiPreviewSamples.Known("preview-hover").RulesText;
+		hover.GetNode<GameSymbolLabel>("%Rules").SymbolText = CardMarkupFormatter.Format(UiPreviewSamples.Known("preview-hover").RulesText);
 		Control dock = table.GetNode<Control>("TableViewport/DecisionDock");
 		Label prompt = dock.GetNode<Label>("%Prompt");
 		prompt.Text = Decision switch
@@ -101,8 +101,8 @@ public partial class UiPreview : Control
 			SampleDecision.NestedChoice => ["Choose Remote 1", "Choose Remote 2", "Back"],
 			SampleDecision.Outcome => [],
 			SampleDecision.Recovery => ["Continue recovered match"],
-			_ => ViewerSeat == PlayerSide.Runner ? ["Run", "Choose a card / server", "All legal actions…"]
-				: ["Choose a card / server", "All legal actions…"],
+			_ => ViewerSeat == PlayerSide.Runner ? ["Run", "All legal actions…"]
+				: ["All legal actions…"],
 		};
 		foreach (string label in labels)
 		{
@@ -123,7 +123,7 @@ public partial class UiPreview : Control
 		table.GetNode<Label>("Toolbar/LastAction").Text = "Synthetic preview · no match is running";
 		Control inspection = _tabs.GetNode<Control>("Inspection/CardInspection");
 		inspection.GetNode<Label>("%Title").Text = "Sample card inspection";
-		inspection.GetNode<Label>("%Rules").Text = UiPreviewSamples.Known("preview-inspection").RulesText;
+		inspection.GetNode<GameSymbolLabel>("%Rules").SymbolText = CardMarkupFormatter.Format(UiPreviewSamples.Known("preview-inspection").RulesText);
 		Control piles = _tabs.GetNode<Control>("Piles/PileBrowser");
 		piles.GetNode<Label>("%Title").Text = "Sample public discard pile";
 		Control pileCards = piles.GetNode<Control>("%Cards");

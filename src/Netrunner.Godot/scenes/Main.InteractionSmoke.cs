@@ -253,9 +253,15 @@ public partial class Main
 	{
 		await TableFrames(2);
 		RenderingServer.ForceDraw();
-		string directory = ProjectSettings.GlobalizePath("res://../../docs/evidence/m4-11");
+		string directory = InteractionEvidenceDirectory("m4-11");
 		DirAccess.MakeDirRecursiveAbsolute(directory);
 		using Image image = GetViewport().GetTexture().GetImage();
 		image.SavePng(System.IO.Path.Combine(directory, name + ".png"));
+	}
+
+	private string InteractionEvidenceDirectory(string milestone)
+	{
+		bool artwork = _gameTable.VisibleCards.Values.Any(card => card.HasFullCardArtwork);
+		return ProjectSettings.GlobalizePath($"res://../../{(artwork ? "artifacts" : "docs/evidence")}/{milestone}");
 	}
 }

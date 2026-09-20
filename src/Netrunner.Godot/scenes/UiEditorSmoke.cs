@@ -100,9 +100,11 @@ public partial class UiEditorSmoke : Node
 		string[] before = DiagnosticFiles(diagnostics);
 		CardAppearance appearance = GD.Load<CardAppearance>(TableCardControl.DefaultAppearancePath);
 		int beforeConnections = appearance.GetSignalConnectionList(Resource.SignalName.Changed).Count;
+		// Retain the scene resource while repeatedly creating and freeing its instances.
+		using PackedScene previewScene = GD.Load<PackedScene>("res://scenes/UiPreview.tscn");
 		for (int cycle = 0; cycle < 3; cycle++)
 		{
-			UiPreview preview = GD.Load<PackedScene>("res://scenes/UiPreview.tscn").Instantiate<UiPreview>();
+			UiPreview preview = previewScene.Instantiate<UiPreview>();
 			AddChild(preview);
 			await Frames(3);
 			foreach (TableCardControl sample in preview.FindChildren("Card", "Control", true, false).OfType<TableCardControl>())

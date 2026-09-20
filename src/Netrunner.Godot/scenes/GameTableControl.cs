@@ -50,8 +50,8 @@ public partial class GameTableControl : Control
 	private ScrollContainer _runnerRigScroll = null!;
 	private Label _turnLabel = null!;
 	private Label _runLabel = null!;
-	private Label _corpResources = null!;
-	private Label _runnerResources = null!;
+	private GameSymbolLabel _corpResources = null!;
+	private GameSymbolLabel _runnerResources = null!;
 	private Label _corpHandCaption = null!;
 	private Label _runnerHandCaption = null!;
 	private Label _localHandCaption = null!;
@@ -146,6 +146,9 @@ public partial class GameTableControl : Control
 
 	/// <summary>Raised when a known card enters or leaves mouse/focus interaction.</summary>
 	public event Action<TableCardControl, bool>? CardHoverChanged;
+
+	/// <summary>Set before rendering when the owner provides a custom card hover preview.</summary>
+	public bool UseCardHoverPreview { get; set; }
 
 	/// <summary>
 	/// Raised with a server or public zone handle when a lane or pile is clicked.
@@ -373,8 +376,8 @@ public partial class GameTableControl : Control
 		_localHandRow = GetNodeOrNull<HandFanControl>("LocalHand")!;
 		_turnLabel = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/Turn")!;
 		_runLabel = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/Run")!;
-		_corpResources = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/Resources")!;
-		_runnerResources = GetNodeOrNull<Label>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/Resources")!;
+		_corpResources = GetNodeOrNull<GameSymbolLabel>("Surface/Margins/Layout/CorpStrip/Content/Resources")!;
+		_runnerResources = GetNodeOrNull<GameSymbolLabel>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/Resources")!;
 		_corpHandCaption = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/HQ")!;
 		_runnerHandCaption = GetNodeOrNull<Label>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/HandCaption")!;
 		_localHandCaption = GetNodeOrNull<Label>("LocalHand/Caption")!;
@@ -561,13 +564,13 @@ public partial class GameTableControl : Control
 		CacheServerDisplayNames(view.Servers);
 		_turnLabel.Text = FormatTurn(view);
 		_runLabel.Text = FormatRun(view);
-		_corpResources.Text = $"Clicks {view.Corp.Clicks} · Score {view.Corp.AgendaPoints}";
+		_corpResources.SymbolText = $"[click] {view.Corp.Clicks} · [agenda point] {view.Corp.AgendaPoints}";
 		_corpCredits.Text = view.Corp.Credits.ToString(System.Globalization.CultureInfo.InvariantCulture);
 		_runnerCredits.Text = view.Runner.Credits.ToString(System.Globalization.CultureInfo.InvariantCulture);
-		_runnerResources.Text = $"Clicks {view.Runner.Clicks}\nScore {view.Runner.AgendaPoints} · Tags {view.Runner.Tags?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—"}";
+		_runnerResources.SymbolText = $"[click] {view.Runner.Clicks} · [agenda point] {view.Runner.AgendaPoints} · [tag] {view.Runner.Tags?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—"}";
 		_corpScoreLabel.Text = $"Score {view.Corp.AgendaPoints}";
 		if (view.Runner.UsedMemory is { } used && view.Runner.MemoryLimit is { } limit)
-			_runnerResources.Text += $"\nMU {used}/{limit}";
+			_runnerResources.SymbolText += $"\n[MU] {used}/{limit}";
 		_runnerScoreLabel.Text = $"Score pile · {view.RunnerScore.Count} · {view.Runner.AgendaPoints} agenda point(s)";
 		string boardFingerprint = BuildBoardFingerprint(view);
 		if (string.Equals(_lastBoardFingerprint, boardFingerprint, StringComparison.Ordinal))
@@ -652,7 +655,8 @@ public partial class GameTableControl : Control
 		_runnerDeckPile.Text = view.RunnerDeck.Count == 0 ? "Stack\nEmpty" : string.Empty;
 		RenderPileFace("zone:runner-heap", (BoardActionButton)_runnerHeapPile,
 			view.RunnerHeap.Count > 0 ? view.RunnerHeap[^1] : null, view.RunnerHeap.Count, "Heap", PlayerSide.Runner, nextVisibleCards);
-		UpdatePileTooltip(_runnerHeapPile, $"Runner Heap · {view.RunnerHeap.Count} public cards");
+		UpdatePileTooltip(_runnerHeapPile, $"Runner Heap · {view.RunnerHeap.Count} public cards",
+			view.RunnerHeap.Count > 0 && view.RunnerHeap[^1].IsKnown);
 
 		RenderIdentity("runner-identity", _runnerIdentitySlot, view.RunnerIdentity, false, nextVisibleCards);
 		// The upper strip carries the opponent HQ count and the local hand is
@@ -801,7 +805,8 @@ public partial class GameTableControl : Control
 						PlayerSide.Runner,
 						CardSizeRole.HostedPortrait);
 					attachment.Position = HostedCardPosition(index);
-					attachment.TooltipText = $"Hosted on {card?.Title ?? "face-down ICE"}\n" + attachment.TooltipText;
+					if (!attachment.UseHoverPreview)
+						attachment.TooltipText = $"Hosted on {card?.Title ?? "face-down ICE"}\n" + attachment.TooltipText;
 				}
 			}
 		}
@@ -1030,6 +1035,7 @@ public partial class GameTableControl : Control
 
 	private void AttachCard(TableCardControl card)
 	{
+		card.UseHoverPreview = UseCardHoverPreview;
 		card.CardSelected += HandleCardSelected;
 		card.CardInspected += HandleCardInspected;
 		card.CardHoverChanged += HandleCardHoverChanged;
@@ -1354,9 +1360,10 @@ public partial class GameTableControl : Control
 			: int.MaxValue;
 	}
 
-	private static void UpdatePileTooltip(Button button, string tooltip)
+	private void UpdatePileTooltip(Button button, string tooltip, bool knownFace)
 	{
-		button.TooltipText = $"{tooltip}. Click to inspect the public pile summary.";
+		button.TooltipText = UseCardHoverPreview && knownFace
+			? string.Empty : $"{tooltip}. Click to inspect the public pile summary.";
 	}
 
 	private void ApplySelectionAndTargets()

@@ -49,6 +49,7 @@ public partial class Main
 		_tableViewport = _board.GetNode<Control>("TableViewport");
 		_tableViewport.Resized += HandleCardHoverPreviewViewportResized;
 		_gameTable = _tableViewport.GetNode<GameTableControl>("GameBoard");
+		_gameTable.UseCardHoverPreview = true;
 		_gameTable.CardSelected += SelectTableCard;
 		_gameTable.BasicActionRequested += SubmitBasicBoardAction;
 		_gameTable.PileRequested += id => ShowTablePile(id);
@@ -84,6 +85,7 @@ public partial class Main
 		};
 		_tableAccessPanel = _tableViewport.GetNode<PanelContainer>("AccessPanel");
 		_tableAccessCard = _tableAccessPanel.GetNode<TableCardControl>("%Card");
+		_tableAccessCard.UseHoverPreview = true;
 		_tableAccessTitle = _tableAccessPanel.GetNode<Label>("%Title");
 		Button inspectAccess = _tableAccessPanel.GetNode<Button>("%Inspect");
 		inspectAccess.Pressed += () =>
@@ -118,6 +120,17 @@ public partial class Main
 		_gameTable.SetSelection(id);
 		_gameTable.SetSelectedServer(null);
 		if (_currentSnapshot is { } snapshot) RenderCardTableActions(snapshot);
+	}
+
+	private void ClearTableSelection()
+	{
+		_tableSelectedCard = null;
+		_tableSelectedServer = null;
+		_tableAllActions = false;
+		_gameTable.SetSelection(null);
+		_gameTable.SetSelectedServer(null);
+		CancelStagedAction();
+		HideCardHoverPreview();
 	}
 
 	private void RenderCardTable(MatchSnapshot snapshot, bool decisionChanged)
@@ -226,13 +239,8 @@ public partial class Main
 						? TableActionServerId(a.Parameters) == _tableSelectedServer
 						: a.Kind is ActionKind.PassPriority
 							or ActionKind.EndTurn or ActionKind.RemoveTag or ActionKind.PurgeVirusCounters);
-				AddButton(_tableSelectedCard is null && _tableSelectedServer is null ? "Choose a card / server" : "Clear selection", () =>
-				{
-					_tableSelectedCard = null; _tableSelectedServer = null;
-					_gameTable.SetSelection(null);
-					_gameTable.SetSelectedServer(null);
-					RenderCardTableActions(snapshot);
-				});
+				if (_tableSelectedCard is not null || _tableSelectedServer is not null)
+					_tablePrompt.Text += " · Esc clears selection";
 				AddButton("All legal actions…", () => { _tableAllActions = true; RenderCardTableActions(snapshot); });
 			}
 			else if (_tableAllActions)

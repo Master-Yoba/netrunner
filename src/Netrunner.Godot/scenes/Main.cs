@@ -80,7 +80,7 @@ public partial class Main : Control
 	private Button _galleryButton = null!;
 	private PanelContainer? _galleryOverlay;
 	private Label _zoomTitle = null!;
-	private Label _zoomText = null!;
+	private GameSymbolLabel _zoomText = null!;
 	private HSlider _speed = null!;
 	private CheckButton _reducedMotion = null!;
 	private Button _skipAnimations = null!;
@@ -192,8 +192,13 @@ public partial class Main : Control
 		_useCardTable = !_smokeTest && !_gallerySmoke && !_slice43UiSmoke && !_slice44UiSmoke
 			&& !_slice45UiSmoke && !_slice46UiSmoke && !_slice47UiSmoke && !_slice48UxSmoke && !_fullMatchSmoke
 			&& !arguments.Contains("--diagnostic-ui", StringComparer.Ordinal);
+		if (arguments.Contains("--card-art-smoke", StringComparer.Ordinal)) PrepareCardArtworkSmoke();
 		BuildShell();
-		if (arguments.Contains("--m4-11-demo", StringComparer.Ordinal))
+		if (arguments.Contains("--card-art-smoke", StringComparer.Ordinal) || arguments.Contains("--card-art-cache-smoke", StringComparer.Ordinal))
+		{
+			_ = RunCardArtworkSmokeAsync(arguments.Contains("--card-art-cache-smoke", StringComparer.Ordinal));
+		}
+		else if (arguments.Contains("--m4-11-demo", StringComparer.Ordinal))
 		{
 			_ = RunInteractionDemoAsync();
 		}
@@ -342,29 +347,30 @@ public partial class Main : Control
 
 	public override void _UnhandledInput(InputEvent @event)
 	{
-		if (_boardChoiceVisible && (@event is InputEventKey { Pressed: true, Keycode: Key.Escape }
+		bool escape = @event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Escape };
+		if (_zoomOverlay.Visible)
+		{
+			if (escape) { HideCardZoom(); GetViewport().SetInputAsHandled(); }
+			return;
+		}
+		if (_tablePileOverlay?.Visible == true)
+		{
+			if (escape) { HideTablePile(); GetViewport().SetInputAsHandled(); }
+			return;
+		}
+		if (_boardChoiceVisible && (escape
 			|| @event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Right }))
 		{
 			DismissBoardChoices();
 			GetViewport().SetInputAsHandled();
 			return;
 		}
-		if (_useCardTable && !_zoomOverlay.Visible && @event is InputEventKey { Pressed: true, Keycode: Key.Escape })
+		if (_useCardTable && escape)
 		{
-			CancelStagedAction();
+			ClearTableSelection();
 			_matchHistory.SetExpanded(false);
-			return;
+			GetViewport().SetInputAsHandled();
 		}
-		if (!_zoomOverlay.Visible
-			|| @event is not InputEventKey key
-			|| !key.Pressed
-			|| key.Keycode != Key.Escape)
-		{
-			return;
-		}
-
-		HideCardZoom();
-		GetViewport().SetInputAsHandled();
 	}
 
 	private void BuildHeader()
@@ -1067,6 +1073,7 @@ public partial class Main : Control
 
 	private void RenderSnapshot(MatchSnapshot snapshot)
 	{
+		RefreshInspectedCard(snapshot.View);
 		MatchSnapshot? previous = _currentSnapshot;
 		bool decisionChanged = previous is null
 			|| !SameDecision(previous.View.Decision, snapshot.View.Decision);

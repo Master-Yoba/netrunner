@@ -14,10 +14,11 @@ public partial class Main
 	private TableCardControl? _cardHoverPreviewFace;
 	private Label? _cardHoverPreviewTitle;
 	private Label? _cardHoverPreviewType;
-	private Label? _cardHoverPreviewStats;
+	private GameSymbolLabel? _cardHoverPreviewStats;
 	private Label? _cardHoverPreviewStatus;
 	private Label? _cardHoverPreviewCounters;
-	private Label? _cardHoverPreviewRules;
+	private GameSymbolLabel? _cardHoverPreviewRules;
+	private Label? _cardHoverPreviewHint;
 	private TableCardControl? _hoveredTableCard;
 	private long _hoverPreviewSnapshotSequence = -1;
 
@@ -40,14 +41,16 @@ public partial class Main
 		GetWindow().FocusExited += HideCardHoverPreview;
 		_cardHoverPreview = viewport.GetNode<CardPreviewLayout>("CardHoverPreview");
 		_cardHoverPreviewFace = _cardHoverPreview.GetNode<TableCardControl>("%Card");
+		_cardHoverPreviewFace.UseHoverPreview = true;
 		_cardHoverPreviewFace.MouseFilter = MouseFilterEnum.Ignore;
 		_cardHoverPreviewFace.FocusMode = FocusModeEnum.None;
 		_cardHoverPreviewTitle = _cardHoverPreview.GetNode<Label>("%Title");
 		_cardHoverPreviewType = _cardHoverPreview.GetNode<Label>("%CardType");
-		_cardHoverPreviewStats = _cardHoverPreview.GetNode<Label>("%Stats");
+		_cardHoverPreviewStats = _cardHoverPreview.GetNode<GameSymbolLabel>("%Stats");
 		_cardHoverPreviewStatus = _cardHoverPreview.GetNode<Label>("%Status");
 		_cardHoverPreviewCounters = _cardHoverPreview.GetNode<Label>("%Counters");
-		_cardHoverPreviewRules = _cardHoverPreview.GetNode<Label>("%Rules");
+		_cardHoverPreviewRules = _cardHoverPreview.GetNode<GameSymbolLabel>("%Rules");
+		_cardHoverPreviewHint = _cardHoverPreview.GetNode<Label>("%Hint");
 		Callable.From(AttachHoverPreviewModalHooks).CallDeferred();
 	}
 
@@ -110,28 +113,37 @@ public partial class Main
 			|| _cardHoverPreviewStats is null
 			|| _cardHoverPreviewStatus is null
 			|| _cardHoverPreviewCounters is null
-			|| _cardHoverPreviewRules is null)
+			|| _cardHoverPreviewRules is null
+			|| _cardHoverPreviewHint is null)
 		{
 			HideCardHoverPreview();
 			return;
 		}
 
 		CardViewModel visible = card.Card!;
-		_cardHoverPreviewFace.SetIce(card.IsIce);
-		_cardHoverPreview.RefreshCardSize();
 		_cardHoverPreviewFace.SetCard(visible);
+		_cardHoverPreviewFace.SetIce(card.IsIce && !_cardHoverPreviewFace.HasFullCardArtwork);
+		_cardHoverPreview.RefreshCardSize();
 		_cardHoverPreviewFace.MouseFilter = Control.MouseFilterEnum.Ignore;
 		_cardHoverPreviewFace.FocusMode = Control.FocusModeEnum.None;
 		_cardHoverPreviewTitle.Text = visible.Title;
 		_cardHoverPreviewType.Text = FormatPreviewType(visible);
-		_cardHoverPreviewStats.Text = FormatPreviewStats(visible);
-		_cardHoverPreviewStatus.Text = visible.StatusLabel;
-		_cardHoverPreviewCounters.Text = visible.CounterChips.Count == 0
-			? string.Empty
-			: string.Join(" · ", visible.CounterChips);
+		_cardHoverPreviewStats.SymbolText = FormatPreviewStats(visible);
+		_cardHoverPreviewStatus.Text = FormatPreviewStatus(visible);
+		_cardHoverPreviewCounters.Text = string.Join(" · ", visible.Counters.Concat(visible.CounterChips));
 		_cardHoverPreviewCounters.Visible = _cardHoverPreviewCounters.Text.Length > 0;
-		_cardHoverPreviewRules.Text = FormatCardRules(visible.RulesText);
-		_cardHoverPreviewRules.Visible = _cardHoverPreviewRules.Text.Length > 0;
+		_cardHoverPreviewRules.SymbolText = FormatCardRules(visible.RulesText);
+		_cardHoverPreviewRules.Visible = _cardHoverPreviewRules.SymbolText.Length > 0;
+		_cardHoverPreviewHint.Text = "Press Enter or Space to select. Inspect card for full details.";
+		if (card.GetParent() is BoardActionButton && _currentSnapshot is { } snapshot)
+		{
+			bool archives = snapshot.View.CorpDiscard.Any(candidate => candidate.Id == visible.Id);
+			_cardHoverPreviewStatus.Text += archives
+				? $"\nArchives · {snapshot.View.CorpDiscardCount} cards"
+				: $"\nHeap · {snapshot.View.RunnerHeap.Count} public cards";
+			_cardHoverPreviewHint.Text = "Click or press Enter to browse this pile. Inspect card for full details.";
+		}
+		_cardHoverPreview.GetNode<ScrollContainer>("%DetailsScroll").ScrollVertical = 0;
 
 		_cardHoverPreview.Visible = true;
 		_cardHoverPreview.MoveToFront();
@@ -234,27 +246,44 @@ public partial class Main
 		_cardHoverPreviewFace?.SetCard(null);
 		if (_cardHoverPreviewTitle is not null) _cardHoverPreviewTitle.Text = string.Empty;
 		if (_cardHoverPreviewType is not null) _cardHoverPreviewType.Text = string.Empty;
-		if (_cardHoverPreviewStats is not null) _cardHoverPreviewStats.Text = string.Empty;
+		if (_cardHoverPreviewStats is not null) _cardHoverPreviewStats.SymbolText = string.Empty;
 		if (_cardHoverPreviewStatus is not null) _cardHoverPreviewStatus.Text = string.Empty;
 		if (_cardHoverPreviewCounters is not null) _cardHoverPreviewCounters.Text = string.Empty;
-		if (_cardHoverPreviewRules is not null) _cardHoverPreviewRules.Text = string.Empty;
+		if (_cardHoverPreviewRules is not null) _cardHoverPreviewRules.SymbolText = string.Empty;
+		if (_cardHoverPreviewHint is not null) _cardHoverPreviewHint.Text = string.Empty;
 	}
 
 	private static string FormatPreviewType(CardViewModel card)
 	{
 		string faction = card.Faction.Trim();
 		string type = card.Type.Trim();
+		if (card.Subtypes.Count > 0) type += " · " + string.Join(" · ", card.Subtypes);
 		return faction.Length == 0 ? type : $"{faction} · {type}";
+	}
+
+	private string FormatPreviewStatus(CardViewModel card)
+	{
+		var values = new List<string> { card.StatusLabel };
+		if (card.AbilityCue is { Length: > 0 } ability) values.Add(ability);
+		if (card.FirstXUseCue is { } firstUse) values.Add(firstUse);
+		string status = string.Join(" · ", values);
+		if (card.HostCardId is { } hostId && _currentSnapshot is { } snapshot)
+		{
+			CardViewModel? host = BoardChoiceCards(snapshot.View).FirstOrDefault(candidate => candidate.Id == hostId);
+			status += $"\nHosted on {(host is { IsKnown: true } ? host.Title : "face-down card")}";
+		}
+		return status;
 	}
 
 	private static string FormatPreviewStats(CardViewModel card)
 	{
 		var values = new List<string>();
-		if (card.Cost is { } cost) values.Add($"Cost {cost}");
+		if (card.Cost is { } cost) values.Add($"Cost {cost} [credit]");
 		if (card.Strength is { } strength) values.Add($"Strength {strength}");
-		if (card.AgendaPoints is { } points) values.Add($"Agenda {points}");
-		if (card.MemoryCost is { } memory) values.Add($"Memory {memory}");
-		if (card.TrashCost is { } trash) values.Add($"Trash {trash}");
+		if (card.AgendaPoints is { } points) values.Add($"Agenda {points} [agenda point]");
+		if (card.MemoryCost is { } memory) values.Add($"Memory {memory} [MU]");
+		if (card.TrashCost is { } trash) values.Add($"Trash {trash} [trash cost]");
+		if (card.AdvancementRequirement is { } advancement) values.Add($"Advancement requirement {advancement}");
 		return values.Count == 0 ? "Public card" : string.Join(" · ", values);
 	}
 }

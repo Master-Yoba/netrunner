@@ -53,6 +53,7 @@ public partial class Main
 
 	private void PublishLabView(MatchViewModel view)
 	{
+		view = InteractionLabSamples.WithArtwork(view, _labScenario);
 		Observation observation = new(view.Viewer, view.Decision?.Id ?? "", [], new Dictionary<string, object?>(), new Dictionary<string, object?>());
 		RenderSnapshot(new MatchSnapshot(_labRevision, observation, view, [], null, false));
 		_status.Text = "INTERACTION LAB · synthetic UI fixtures · no live match";

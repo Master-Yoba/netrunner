@@ -17,6 +17,7 @@ public partial class Main
 	private ScrollContainer _tablePileScroll = null!;
 	private GridContainer _tablePileCards = null!;
 	private Control? _tablePilePreviousFocus;
+	private bool _tablePilePreviousFocusHidden;
 
 	/// <summary>
 	/// Opens a viewer-safe pile browser for a table zone handle. Returns false
@@ -35,6 +36,7 @@ public partial class Main
 		if (!_tablePileOverlay!.Visible)
 		{
 			_tablePilePreviousFocus = GetViewport().GuiGetFocusOwner();
+			_tablePilePreviousFocusHidden = _tablePilePreviousFocus?.HasFocus(ignoreHiddenFocus: true) == false;
 		}
 
 		_tablePileTitle.Text = title;
@@ -42,6 +44,7 @@ public partial class Main
 			? $"{count} card(s) · count only · cards remain concealed"
 			: $"{count} card(s) · public faces shown where available · select a known card to inspect";
 		RenderTablePileCards(cards, count, concealed);
+		HideCardHoverPreview();
 		_tablePileOverlay.Visible = true;
 		_tablePileOverlay.MoveToFront();
 		_tablePileClose.GrabFocus();
@@ -61,34 +64,21 @@ public partial class Main
 			&& !_tablePilePreviousFocus!.IsQueuedForDeletion()
 			&& _tablePilePreviousFocus.IsVisibleInTree())
 		{
-			_tablePilePreviousFocus.GrabFocus();
+			_tablePilePreviousFocus.GrabFocus(hideFocus: _tablePilePreviousFocusHidden);
 		}
 
 		_tablePilePreviousFocus = null;
 	}
 
-	/// <summary>Closes the pile before Main's generic Escape handler can collapse history.</summary>
-	public override void _UnhandledKeyInput(InputEvent @event)
-	{
-		if (_tablePileOverlay?.Visible != true
-			|| _zoomOverlay.Visible
-			|| @event is not InputEventKey { Pressed: true, Keycode: Key.Escape })
-		{
-			return;
-		}
-
-		HideTablePile();
-		GetViewport().SetInputAsHandled();
-	}
-
 	private void BuildTablePileOverlay()
 	{
 		if (_tablePileOverlay is not null) return;
-		_tablePileOverlay = GetNodeOrNull<PanelContainer>("PileBrowser");
+		CanvasLayer layer = GetModalLayer("PileLayer", 10);
+		_tablePileOverlay = layer.GetNodeOrNull<PanelContainer>("PileBrowser");
 		if (_tablePileOverlay is null)
 		{
 			_tablePileOverlay = GD.Load<PackedScene>("res://scenes/components/PileBrowser.tscn").Instantiate<PanelContainer>();
-			AddChild(_tablePileOverlay);
+			layer.AddChild(_tablePileOverlay);
 		}
 		_tablePileOverlay.Visible = false;
 		_tablePileTitle = _tablePileOverlay.GetNode<Label>("%Title");

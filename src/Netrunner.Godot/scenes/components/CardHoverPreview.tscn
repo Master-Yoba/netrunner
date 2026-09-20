@@ -1,5 +1,7 @@
 [gd_scene format=3]
 
+[ext_resource type="Script" path="res://scenes/GameSymbolLabel.cs" id="symbols"]
+
 [ext_resource type="Script" path="res://scenes/components/CardPreviewLayout.cs" id="layout"]
 
 [ext_resource type="PackedScene" path="res://scenes/components/CardView.tscn" id="CardScene"]
@@ -81,13 +83,17 @@ theme_override_colors/font_color = Color(0.36, 0.9, 0.74, 1)
 theme_override_font_sizes/font_size = 11
 autowrap_mode = 3
 
-[node name="Stats" type="Label" parent="Content/DetailsScroll/Details"]
+[node name="Stats" type="RichTextLabel" parent="Content/DetailsScroll/Details"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 11
+theme_override_colors/default_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/normal_font_size = 12
 autowrap_mode = 3
+script = ExtResource("symbols")
+fit_content = true
+scroll_active = false
+mouse_filter = 2
 
 [node name="Status" type="Label" parent="Content/DetailsScroll/Details"]
 unique_name_in_owner = true
@@ -105,12 +111,23 @@ theme_override_colors/font_color = Color(0.98, 0.74, 0.28, 1)
 theme_override_font_sizes/font_size = 10
 autowrap_mode = 3
 
-[node name="Rules" type="Label" parent="Content/DetailsScroll/Details"]
+[node name="Rules" type="RichTextLabel" parent="Content/DetailsScroll/Details"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
-theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 12
+theme_override_colors/default_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/normal_font_size = 14
 autowrap_mode = 3
+script = ExtResource("symbols")
+fit_content = true
+scroll_active = false
+mouse_filter = 2
 
+[node name="Hint" type="Label" parent="Content/DetailsScroll/Details"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.65, 0.74, 0.8, 1)
+theme_override_font_sizes/font_size = 10
+autowrap_mode = 3

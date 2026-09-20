@@ -144,7 +144,7 @@ public partial class Main
 		if (DisplayServer.GetName() == "headless") return;
 		await TableFrames(2);
 		RenderingServer.ForceDraw();
-		string directory = ProjectSettings.GlobalizePath("res://../../docs/evidence/m4-12");
+		string directory = InteractionEvidenceDirectory("m4-12");
 		DirAccess.MakeDirRecursiveAbsolute(directory);
 		using Image screenshot = GetViewport().GetTexture().GetImage();
 		screenshot.SavePng(System.IO.Path.Combine(directory, name + ".png"));
