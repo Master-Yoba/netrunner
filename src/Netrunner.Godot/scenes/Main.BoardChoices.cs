@@ -396,7 +396,7 @@ public partial class Main
 		if (visibleButtons.Count == 0)
 		{
 			Label hint = MakeWrappedLabel(
-				"Click a highlighted card or server on the board. The action dock remains available as a fallback.",
+				"Click a highlighted card or server. Back to table or Esc opens the action dock.",
 				11,
 				Muted);
 			_boardChoiceOptions.AddChild(hint);
@@ -419,6 +419,9 @@ public partial class Main
 		_boardChoiceInputEnabled = null;
 		RefreshBoardChoiceAvailability();
 		_boardChoicePanel.Visible = true;
+		// The dock keeps its issued actions for the fallback, but only one
+		// surface should expose controls for this decision at a time.
+		_tableActions.Hide();
 		_boardChoicePanel.MoveToFront();
 		_boardChoiceDismiss?.GrabFocus();
 	}
@@ -464,6 +467,7 @@ public partial class Main
 	{
 		_boardChoiceVisible = false;
 		_boardChoiceInputEnabled = null;
+		_tableActions?.Show();
 		ClearBoardServerCues();
 		if (_boardChoicePanel is not null && IsInstanceValid(_boardChoicePanel))
 		{

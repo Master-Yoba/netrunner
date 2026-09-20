@@ -374,13 +374,28 @@ public partial class Main
 		ActionKind.RezCard when action.Parameters is RezCardParameters rez => $"Rez {FriendlyText(rez.CardId.Value)} · {rez.CreditCost} credits",
 		ActionKind.PlayCard when action.Parameters is PlayCardParameters play => $"Play {FriendlyText(play.CardId.Value)} · {play.CreditCost} credits",
 		ActionKind.InstallCard when action.Parameters is InstallCardParameters install =>
-			$"{(install.FinalizeSelection ? "Install" : "Choose install")} {FriendlyText(install.CardId.Value)} → "
-			+ (install.CreateNewRemote ? "New remote" : install.ServerId is { } server ? _gameTable.GetServerDisplayName(server.Value) : "Rig")
-			+ $" · {install.CreditCost} credits",
+			TableInstallActionLabel(install),
 		ActionKind.ChooseNumber when action.Parameters is NumberChoiceParameters number
 			&& _currentSnapshot?.View.Decision?.Kind == DecisionKind.Setup => number.Value == 0 ? "Keep hand" : "Mulligan",
 		_ => FriendlyText(Slice46PresentationProjector.Label(action)),
 	};
+
+	private string TableInstallActionLabel(InstallCardParameters install)
+	{
+		string label = $"{(install.FinalizeSelection ? "Install" : "Choose install")} {FriendlyText(install.CardId.Value)} → "
+			+ (install.CreateNewRemote ? "New remote" : install.ServerId is { } server ? _gameTable.GetServerDisplayName(server.Value) : "Rig")
+			+ $" · {install.CreditCost} credits";
+		if (install.SelectedReplacementCardIds.Count > 0)
+		{
+			string cards = string.Join(", ", install.SelectedReplacementCardIds.Select(card => FriendlyText(card.Value)));
+			label += $" · {(install.FinalizeSelection ? "Trash" : "Select to trash")}: {cards}";
+		}
+		else if (install.FinalizeSelection && install.CandidateReplacementCardIds.Count > 0)
+		{
+			label += " · Keep installed cards";
+		}
+		return label;
+	}
 
 	private string FriendlyText(string text)
 	{
