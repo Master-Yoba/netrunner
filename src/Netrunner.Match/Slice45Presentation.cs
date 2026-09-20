@@ -101,6 +101,7 @@ public sealed record Slice45BehaviorChoiceOptionViewModel(
     BehaviorChoiceOptionSemantic? Semantic,
     IReadOnlyList<Slice45BehaviorCostViewModel> Costs)
 {
+    public string? EffectLabel { get; init; }
     public bool IsOptionalSkip => OptionKey is null && Mode == BehaviorChoiceMode.Optional;
 
     public string? SemanticLabel => IsOptionalSkip
@@ -403,7 +404,7 @@ public static class Slice45PresentationProjector
             return null;
         }
 
-        BehaviorChoiceSpec[] choices = FindChoiceSpecs(behaviorCatalog)
+        BehaviorChoiceSpec[] choices = FindChoiceSpecs(behaviorCatalog.GenericSpecs)
             .Where(candidate => string.Equals(candidate.Key, choice.ChoiceKey, StringComparison.Ordinal))
             .Distinct()
             .ToArray();
@@ -442,12 +443,19 @@ public static class Slice45PresentationProjector
         {
             return null;
         }
+        PlayerSide[] controllers = behaviorCatalog.GenericSpecs
+            .Where(definition => FindChoiceSpecs([definition]).Contains(specification))
+            .Select(definition => definition.Controller).Distinct().ToArray();
         return new Slice45BehaviorChoiceOptionViewModel(
             specification.Key,
             option?.Key,
             specification.Mode,
             option?.Semantic,
-            new ReadOnlyCollection<Slice45BehaviorCostViewModel>(costs));
+            new ReadOnlyCollection<Slice45BehaviorCostViewModel>(costs))
+        {
+            EffectLabel = option is not null && controllers.Length == 1
+                ? BehaviorEffectLabels.Describe(option.Instructions, controllers[0]) : null,
+        };
     }
 
     /// <summary>
@@ -950,10 +958,10 @@ public static class Slice45PresentationProjector
         && value.Length <= 128
         && value.All(character => !char.IsWhiteSpace(character) && !char.IsControl(character));
 
-    private static BehaviorChoiceSpec[] FindChoiceSpecs(IBehaviorCatalog catalog)
+    private static BehaviorChoiceSpec[] FindChoiceSpecs(IEnumerable<CardBehaviorDefinition> definitions)
     {
         var choices = new List<BehaviorChoiceSpec>();
-        foreach (CardBehaviorDefinition definition in catalog.GenericSpecs)
+        foreach (CardBehaviorDefinition definition in definitions)
         {
             AddChoices(definition.Instructions, choices);
             foreach (BehaviorTrigger trigger in definition.Triggers)

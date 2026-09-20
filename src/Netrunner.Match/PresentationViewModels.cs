@@ -485,7 +485,12 @@ public sealed record LegalActionViewModel(
     /// never infer option semantics from <see cref="Description"/>.
     /// </summary>
     public Slice45BehaviorChoiceOptionViewModel? Slice45BehaviorChoice { get; init; }
+
+    public ActionSourceViewModel? Source { get; init; }
+    public string? EffectLabel { get; init; }
 }
+
+public sealed record ActionSourceViewModel(string CardId, string Title, string? RuleKey, string? EffectLabel = null);
 
 /// <summary>Run focus, current ICE, encounter, and breach/access state.</summary>
 public sealed record RunFocusViewModel(
@@ -648,6 +653,23 @@ public sealed record RunOutcomeViewModel(
 /// <summary>Maps filtered Core observations to immutable typed UI data.</summary>
 public static class ObservationViewMapper
 {
+    private static ActionSourceViewModel? MapActionSource(Observation observation, ActionId actionId,
+        ICardMetadataResolver metadata)
+    {
+        ObservationActionSource? source = observation.ActionSources.FirstOrDefault(value => value.ActionId == actionId);
+        return source is null ? null : new(source.CardId.Value,
+            metadata.TryResolve(source.DefinitionId.Value, out CardPresentationMetadata card) ? card.Title : "Known card",
+            source.RuleKey, source.ReplacementDrawCount is { } count ? $"Draw {count} cards instead" : null);
+    }
+
+    private static string? PaidAbilityEffect(ActionParameters parameters, IBehaviorCatalog catalog)
+    {
+        if (parameters is not AbilityActionParameters ability
+            || !catalog.TryGet(ability.DefinitionId, out CardBehaviorDefinition? definition)) return null;
+        BehaviorPaidAbility? declared = definition.PaidAbilities.FirstOrDefault(value => value.Key == ability.AbilityKey);
+        return declared is null ? null : BehaviorEffectLabels.Describe(declared.Instructions, definition.Controller);
+    }
+
     private sealed record CardAbilityCueContext(
         IReadOnlySet<string> ReadySourceIds,
         IReadOnlySet<string> UsedSourceIds,
@@ -806,6 +828,8 @@ public static class ObservationViewMapper
                     action.Parameters);
                 return viewAction with
                 {
+                    Source = MapActionSource(observation, action.Id, metadataResolver),
+                    EffectLabel = PaidAbilityEffect(action.Parameters, behaviorCatalog),
                     Slice45BehaviorChoice = Slice45PresentationProjector.ResolveChoiceMetadata(
                         action.Parameters,
                         behaviorCatalog),

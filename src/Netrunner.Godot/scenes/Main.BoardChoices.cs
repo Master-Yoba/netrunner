@@ -69,7 +69,7 @@ public partial class Main
 			ShowBoardChoicePanel(
 				decision,
 				matches,
-				"Choose an issued continuation",
+				"Choose an action",
 				$"{BoardCardDisplayName(id)} has more than one legal choice.");
 		}
 
@@ -107,7 +107,7 @@ public partial class Main
 			ShowBoardChoicePanel(
 				decision,
 				matches,
-				"Choose an issued continuation",
+				"Choose an action",
 				$"{_gameTable.GetServerDisplayName(id)} has more than one legal choice.");
 		}
 
@@ -686,15 +686,7 @@ public partial class Main
 
 	private string BoardChoiceActionLabel(LegalActionViewModel action)
 	{
-		string label = FriendlyBoardText(TableActionLabel(action));
-		if (action.Parameters is BehaviorChoiceParameters { CardIds.Count: > 1 } targets)
-			label += " · " + string.Join(" + ", targets.CardIds.Select(id => BoardCardDisplayName(id.Value)));
-		if (action.Parameters is InstallCardParameters install && install.HostCardId is { } host)
-		{
-			label += $" · host {BoardCardDisplayName(host.Value)}";
-		}
-
-		return label;
+		return TableActionLabel(action);
 	}
 
 	private string BoardCardDisplayName(string id)
@@ -780,8 +772,8 @@ public partial class Main
 			.Select(server => server!)
 			.ToHashSet(StringComparer.Ordinal);
 		return servers.Count > 0
-			? "Choose a highlighted server, then confirm any remaining issued choice."
-			: "Choose one of the issued play/install actions.";
+			? "Choose a highlighted server, then confirm any remaining choice."
+			: "Choose how to play or install this card.";
 	}
 
 	private static string BoardChoiceFollowUpTitle(DecisionKind kind) => kind switch
@@ -797,5 +789,5 @@ public partial class Main
 		FriendlyBoardText(decision.Prompt)
 		+ (actions.Any(action => BoardCardTargetIds(action, actions).Count > 0)
 			? " Click a highlighted card on the board."
-			: " Choose an issued option below.");
+			: " Choose an option below.");
 }

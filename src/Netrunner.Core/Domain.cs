@@ -29,7 +29,19 @@ public sealed record Observation(
     /// </summary>
     [JsonIgnore]
     public ObservationDecision? Decision { get; init; }
+
+    /// <summary>Viewer-safe source metadata for issued trigger/interrupt choices.
+    /// Like Decision, this is UI metadata and preserves the serialized agent contract.</summary>
+    [JsonIgnore]
+    public IReadOnlyList<ObservationActionSource> ActionSources { get; init; } = [];
 }
+
+public sealed record ObservationActionSource(
+    ActionId ActionId,
+    CardInstanceId CardId,
+    CardDefinitionId DefinitionId,
+    string? RuleKey,
+    int? ReplacementDrawCount = null);
 
 /// <summary>Viewer-owned metadata for the currently issued decision.</summary>
 public sealed record ObservationDecision(

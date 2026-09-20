@@ -26,6 +26,7 @@ public partial class Main
 			OpenInteractionLab();
 			_reducedMotion.ButtonPressed = true;
 			await CheckInstallChoiceControls();
+			await CheckActionLabels();
 			foreach (Vector2I size in new[] { new Vector2I(1920, 1080), new Vector2I(2560, 1440) })
 			{
 				GetWindow().Size = size;

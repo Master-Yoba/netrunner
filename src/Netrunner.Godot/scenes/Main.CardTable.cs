@@ -367,42 +367,11 @@ public partial class Main
 		return $"{progress}Drag {remaining}{(selected > 0 ? " more" : "")} {(remaining == 1 ? "card" : "cards")} from hand to {pile}.";
 	}
 
-	private string TableActionLabel(LegalActionViewModel action) => action.Kind switch
-	{
-		ActionKind.GainCredit => "Gain 1 credit · 1 click",
-		ActionKind.DrawCard => "Draw a card · 1 click",
-		ActionKind.PassPriority => "Pass priority",
-		ActionKind.NoAccessAction => "Continue access",
-		ActionKind.EndTurn => "End turn",
-		ActionKind.StartRun when action.Parameters is RunServerParameters run => $"Run {_gameTable.GetServerDisplayName(run.ServerId.Value)} · 1 click",
-		ActionKind.RezCard when action.Parameters is RezCardParameters rez => $"Rez {FriendlyText(rez.CardId.Value)} · {rez.CreditCost} credits",
-		ActionKind.PlayCard when action.Parameters is PlayCardParameters play => $"Play {FriendlyText(play.CardId.Value)} · {play.CreditCost} credits",
-		ActionKind.InstallCard when action.Parameters is InstallCardParameters install =>
-			TableInstallActionLabel(install),
-		ActionKind.ChooseNumber when action.Parameters is NumberChoiceParameters number
-			&& _currentSnapshot?.View.Decision?.Kind == DecisionKind.Setup => number.Value == 0 ? "Keep hand" : "Mulligan",
-		_ => FriendlyText(Slice46PresentationProjector.Label(action)),
-	};
-
-	private string TableInstallActionLabel(InstallCardParameters install)
-	{
-		string label = $"{(install.FinalizeSelection ? "Install" : "Choose install")} {FriendlyText(install.CardId.Value)} → "
-			+ (install.CreateNewRemote ? "New remote" : install.ServerId is { } server ? _gameTable.GetServerDisplayName(server.Value) : "Rig")
-			+ $" · {install.CreditCost} credits";
-		if (install.SelectedReplacementCardIds.Count > 0)
-		{
-			string cards = string.Join(", ", install.SelectedReplacementCardIds.Select(card => FriendlyText(card.Value)));
-			label += $" · {(install.FinalizeSelection ? "Trash" : "Select to trash")}: {cards}";
-		}
-		else if (install.FinalizeSelection && install.CandidateReplacementCardIds.Count > 0)
-		{
-			label += " · Keep installed cards";
-		}
-		return label;
-	}
-
 	private string FriendlyText(string text)
 	{
+		if (_currentSnapshot?.View is { } view)
+			foreach (CardViewModel card in BoardChoiceCards(view).OrderByDescending(card => card.Id.Length))
+				text = text.Replace(card.Id, ActionCardName(card.Id), StringComparison.Ordinal);
 		if (_tableAccessCard.Card is { IsKnown: true } accessed)
 			text = text.Replace(accessed.Id, accessed.Title, StringComparison.Ordinal);
 		foreach ((string id, TableCardControl control) in _gameTable.VisibleCards.OrderByDescending(pair => pair.Key.Length))
