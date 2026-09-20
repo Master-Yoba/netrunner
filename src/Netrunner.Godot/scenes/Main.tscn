@@ -83,8 +83,14 @@ layout_mode = 2
 visible = false
 layout_mode = 2
 
-[node name="CardInspection" parent="." instance=ExtResource("inspection")]
+[node name="PileLayer" type="CanvasLayer" parent="."]
+layer = 10
+
+[node name="PileBrowser" parent="PileLayer" instance=ExtResource("piles")]
 visible = false
 
-[node name="PileBrowser" parent="." instance=ExtResource("piles")]
+[node name="InspectionLayer" type="CanvasLayer" parent="."]
+layer = 11
+
+[node name="CardInspection" parent="InspectionLayer" instance=ExtResource("inspection")]
 visible = false

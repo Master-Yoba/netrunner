@@ -122,6 +122,16 @@ public partial class Main
 		if (_currentSnapshot is { } snapshot) RenderCardTableActions(snapshot);
 	}
 
+	private void ClearTableSelection()
+	{
+		_tableSelectedCard = null;
+		_tableSelectedServer = null;
+		_tableAllActions = false;
+		_gameTable.SetSelection(null);
+		_gameTable.SetSelectedServer(null);
+		CancelStagedAction();
+	}
+
 	private void RenderCardTable(MatchSnapshot snapshot, bool decisionChanged)
 	{
 		BeginCardHoverPreviewSnapshot(snapshot);
@@ -228,13 +238,8 @@ public partial class Main
 						? TableActionServerId(a.Parameters) == _tableSelectedServer
 						: a.Kind is ActionKind.PassPriority
 							or ActionKind.EndTurn or ActionKind.RemoveTag or ActionKind.PurgeVirusCounters);
-				AddButton(_tableSelectedCard is null && _tableSelectedServer is null ? "Choose a card / server" : "Clear selection", () =>
-				{
-					_tableSelectedCard = null; _tableSelectedServer = null;
-					_gameTable.SetSelection(null);
-					_gameTable.SetSelectedServer(null);
-					RenderCardTableActions(snapshot);
-				});
+				if (_tableSelectedCard is not null || _tableSelectedServer is not null)
+					_tablePrompt.Text += " · Esc clears selection";
 				AddButton("All legal actions…", () => { _tableAllActions = true; RenderCardTableActions(snapshot); });
 			}
 			else if (_tableAllActions)

@@ -101,8 +101,8 @@ public partial class UiPreview : Control
 			SampleDecision.NestedChoice => ["Choose Remote 1", "Choose Remote 2", "Back"],
 			SampleDecision.Outcome => [],
 			SampleDecision.Recovery => ["Continue recovered match"],
-			_ => ViewerSeat == PlayerSide.Runner ? ["Run", "Choose a card / server", "All legal actions…"]
-				: ["Choose a card / server", "All legal actions…"],
+			_ => ViewerSeat == PlayerSide.Runner ? ["Run", "All legal actions…"]
+				: ["All legal actions…"],
 		};
 		foreach (string label in labels)
 		{

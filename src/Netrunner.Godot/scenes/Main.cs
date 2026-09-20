@@ -347,29 +347,30 @@ public partial class Main : Control
 
 	public override void _UnhandledInput(InputEvent @event)
 	{
-		if (_boardChoiceVisible && (@event is InputEventKey { Pressed: true, Keycode: Key.Escape }
+		bool escape = @event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Escape };
+		if (_zoomOverlay.Visible)
+		{
+			if (escape) { HideCardZoom(); GetViewport().SetInputAsHandled(); }
+			return;
+		}
+		if (_tablePileOverlay?.Visible == true)
+		{
+			if (escape) { HideTablePile(); GetViewport().SetInputAsHandled(); }
+			return;
+		}
+		if (_boardChoiceVisible && (escape
 			|| @event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Right }))
 		{
 			DismissBoardChoices();
 			GetViewport().SetInputAsHandled();
 			return;
 		}
-		if (_useCardTable && !_zoomOverlay.Visible && @event is InputEventKey { Pressed: true, Keycode: Key.Escape })
+		if (_useCardTable && escape)
 		{
-			CancelStagedAction();
+			ClearTableSelection();
 			_matchHistory.SetExpanded(false);
-			return;
+			GetViewport().SetInputAsHandled();
 		}
-		if (!_zoomOverlay.Visible
-			|| @event is not InputEventKey key
-			|| !key.Pressed
-			|| key.Keycode != Key.Escape)
-		{
-			return;
-		}
-
-		HideCardZoom();
-		GetViewport().SetInputAsHandled();
 	}
 
 	private void BuildHeader()

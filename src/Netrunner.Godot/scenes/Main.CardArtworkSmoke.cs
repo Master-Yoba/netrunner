@@ -106,7 +106,8 @@ public partial class Main
 			await CheckArtworkBoardPreviewAsync(card);
 			await CheckInteractionLabArtworkAsync(liveCache);
 			await CheckSingleCardHoverAsync(liveCache);
-			GD.Print($"CARD_ART_SMOKE PASS live_cache={liveCache} cards=77 resolutions=2 portrait=true ice=true inspection=true hover=true single_hover=true hover_details=true game_symbols=true overlays=true hidden_safe=true reuse=true fallback=true lab_scenarios=19 lab_draw=true");
+			await CheckModalLayersAndEscapeAsync(liveCache);
+			GD.Print($"CARD_ART_SMOKE PASS live_cache={liveCache} cards=77 resolutions=2 portrait=true ice=true inspection=true hover=true single_hover=true hover_details=true game_symbols=true modal_layers=true escape_selection=true overlays=true hidden_safe=true reuse=true fallback=true lab_scenarios=19 lab_draw=true");
 			GetTree().Quit();
 		}
 		catch (Exception error)

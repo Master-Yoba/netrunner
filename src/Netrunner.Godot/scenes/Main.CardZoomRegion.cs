@@ -13,11 +13,12 @@ public partial class Main
 
 	private void BuildCardZoomOverlay()
 	{
-		_zoomOverlay = GetNodeOrNull<PanelContainer>("CardInspection")!;
+		CanvasLayer layer = GetModalLayer("InspectionLayer", 11);
+		_zoomOverlay = layer.GetNodeOrNull<PanelContainer>("CardInspection")!;
 		if (_zoomOverlay is null)
 		{
 			_zoomOverlay = GD.Load<PackedScene>("res://scenes/components/CardInspection.tscn").Instantiate<PanelContainer>();
-			AddChild(_zoomOverlay);
+			layer.AddChild(_zoomOverlay);
 		}
 		_zoomOverlay.Visible = false;
 		_zoomTitle = _zoomOverlay.GetNode<Label>("%Title");
@@ -32,6 +33,17 @@ public partial class Main
 		_zoomCloseButton.FocusPrevious = _zoomScroll.GetPath();
 	}
 
+	// Separate canvases keep board/hand ZIndex changes below modals, including
+	// a focused pile card underneath the inspection opened from that pile.
+	private CanvasLayer GetModalLayer(string name, int order)
+	{
+		CanvasLayer? layer = GetNodeOrNull<CanvasLayer>(name);
+		if (layer is not null) return layer;
+		layer = new CanvasLayer { Name = name, Layer = order };
+		AddChild(layer);
+		return layer;
+	}
+
 	private void ShowInspectedCardZoom()
 	{
 		if (_inspectedCard is not { IsKnown: true } card)
@@ -44,6 +56,7 @@ public partial class Main
 			_zoomPreviousFocus = GetViewport().GuiGetFocusOwner();
 		}
 		RefreshCardZoomContent(card);
+		HideCardHoverPreview();
 		_zoomOverlay.Visible = true;
 		_zoomOverlay.MoveToFront();
 		_zoomScroll.ScrollVertical = 0;

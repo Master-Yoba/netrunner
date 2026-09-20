@@ -16,6 +16,10 @@ The concealed card uses the existing committed generic NSG back.
 - `symbol-inspection-1920.png` and `symbol-inspection-2560.png`: full inspection
   with inline click, credit, recurring-credit, memory, link, subroutine, and trash
   glyphs. Hover and lab captures also show the matching board resource icons.
+- `score-modal-1920.png` and `score-modal-2560.png`: a score-area browser above
+  the entire board, including raised hand cards and pile counters.
+- `pile-inspection-1920.png` and `pile-inspection-2560.png`: inspection opened
+  from a pile, covering both the pile browser and board.
 
 The bundled game glyphs are by [Null Signal Games](../../../src/Netrunner.Godot/icons/SOURCE.md),
 under CC BY-ND 4.0, recolored for this UI.
@@ -27,5 +31,9 @@ all 19 lab scenarios, lab draws for both seats, and missing/corrupt image
 fallback. It checks suppression of native card/pile tooltips and clearing of
 hover details, including concealed hosts. Symbol checks cover normalized and legacy
 tokens, all bundled glyphs, text fallback, literal BBCode, and clearing on dismissal.
+Modal checks cover all four public piles, nested inspection, focus restoration,
+Escape selection clearing and dismissal order, and held-key repeats. Native
+pixel checks confirm an element at the maximum Z index is visible before a modal
+opens and fully covered afterward, both on the board and inside the pile browser.
 Real-cache captures are written only under
 ignored `artifacts/card-artwork` by `--card-art-cache-smoke --card-art-screenshots`.

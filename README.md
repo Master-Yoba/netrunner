@@ -104,6 +104,8 @@ make play
 Select your side, decks and seed on the setup screen. Click a card or server
 for contextual actions; the right-edge history rail expands into the retained
 match log. Hover/focus inspects a card, and the Inspect button opens full text.
+Escape closes the topmost inspection or pile panel, cancels local staging, or
+clears the selected card/server when back on the board.
 “Skip animation” preserves history. Use “Copy log” for a filtered playtest report.
 Official full card faces can be provisioned explicitly with `make card-art-fetch`.
 Board resources, hover rules, and full card inspection use bundled
