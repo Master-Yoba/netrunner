@@ -8,6 +8,9 @@ namespace Netrunner.GodotClient;
 /// <summary>Card-table composition and issued-action routing; no authoritative state.</summary>
 public partial class Main
 {
+	// Keep the managed scene wrapper alive across button rebuilds and scene
+	// reloads; repeated Load calls can race Godot's weak resource-handle cleanup.
+	private static PackedScene? _tableActionButtonScene;
 	private bool _useCardTable;
 	private GameTableControl _gameTable = null!;
 	private Control _tableViewport = null!;
@@ -274,7 +277,8 @@ public partial class Main
 
 	private static Button CreateTableActionButton(string text)
 	{
-		Button button = GD.Load<PackedScene>("res://scenes/components/ActionButton.tscn").Instantiate<Button>();
+		_tableActionButtonScene ??= GD.Load<PackedScene>("res://scenes/components/ActionButton.tscn");
+		Button button = _tableActionButtonScene.Instantiate<Button>();
 		button.Text = text;
 		return button;
 	}

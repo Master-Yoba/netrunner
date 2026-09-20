@@ -458,7 +458,7 @@ if ((card_data_content_enabled == 1)); then
       if ! grep -Fq "M4_FULL_SMOKE PASS" "$m4_full_smoke_log" \
         || ! grep -Fq "preset=$m4_preset seed=47042" "$m4_full_smoke_log" \
         || ! grep -Fq "reload=true fresh_setup=true" "$m4_full_smoke_log" \
-        || grep -Fq "M4_FULL_SMOKE FAIL" "$m4_full_smoke_log"; then
+        || grep -Eq "M4_FULL_SMOKE FAIL|SCRIPT ERROR|ERROR:" "$m4_full_smoke_log"; then
         cat "$m4_full_smoke_log" >&2
         exit 1
       fi
