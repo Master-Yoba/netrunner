@@ -9,6 +9,7 @@ public partial class Main
 	private ScrollContainer _zoomScroll = null!;
 	private Button _zoomCloseButton = null!;
 	private Control? _zoomPreviousFocus;
+	private bool _zoomPreviousFocusHidden;
 	private TextureRect _zoomArtwork = null!;
 
 	private void BuildCardZoomOverlay()
@@ -54,6 +55,7 @@ public partial class Main
 		if (!_zoomOverlay.Visible)
 		{
 			_zoomPreviousFocus = GetViewport().GuiGetFocusOwner();
+			_zoomPreviousFocusHidden = _zoomPreviousFocus?.HasFocus(ignoreHiddenFocus: true) == false;
 		}
 		RefreshCardZoomContent(card);
 		HideCardHoverPreview();
@@ -101,7 +103,7 @@ public partial class Main
 			&& !_zoomPreviousFocus!.IsQueuedForDeletion()
 			&& _zoomPreviousFocus.IsVisibleInTree())
 		{
-			_zoomPreviousFocus.GrabFocus();
+			_zoomPreviousFocus.GrabFocus(hideFocus: _zoomPreviousFocusHidden);
 		}
 		else if (_useCardTable && _tableInspect.IsVisibleInTree())
 		{

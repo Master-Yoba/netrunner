@@ -677,7 +677,11 @@ public partial class TableCardControl : Control
 		_selected = !_selected;
 		RefreshDynamicPresentation();
 		QueueRedraw();
-		GrabFocus();
+		// Mouse focus must not pin the hover preview after the pointer leaves.
+		// Keep the focus owner for keyboard navigation, without promoting it to
+		// visible keyboard focus merely because this card was clicked.
+		GrabFocus(hideFocus: @event is InputEventMouseButton);
+		UpdateInteractionState();
 		CardSelected?.Invoke(_card.Id);
 		AcceptEvent();
 	}
@@ -964,7 +968,7 @@ public partial class TableCardControl : Control
 	private void HandleMouseExited()
 	{
 		_hovered = false;
-		ZIndex = HasFocus() ? 10 : 0;
+		ZIndex = HasFocus(ignoreHiddenFocus: true) ? 10 : 0;
 		QueueRedraw();
 		UpdateInteractionState();
 	}
@@ -991,7 +995,7 @@ public partial class TableCardControl : Control
 
 	private void UpdateInteractionState(bool force = false)
 	{
-		bool active = (_hovered || HasFocus()) && _card?.IsKnown == true;
+		bool active = (_hovered || HasFocus(ignoreHiddenFocus: true)) && _card?.IsKnown == true;
 		if (!force && active == _interactionActive)
 		{
 			return;
@@ -1072,7 +1076,7 @@ public partial class TableCardControl : Control
 			return appearance.ActionableColor;
 		}
 
-		if (_hovered || HasFocus())
+		if (_hovered || HasFocus(ignoreHiddenFocus: true))
 		{
 			return appearance.FocusColor;
 		}

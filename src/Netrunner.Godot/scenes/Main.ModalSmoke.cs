@@ -106,7 +106,7 @@ public partial class Main
 	private async Task CheckModalPixelsAsync(bool covered = true)
 	{
 		if (DisplayServer.GetName().Equals("headless", StringComparison.OrdinalIgnoreCase)) return;
-		await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+		await TableFrames(2);
 		RenderingServer.ForceDraw();
 		using Image frame = GetViewport().GetTexture().GetImage();
 		Vector2 scale = new Vector2(frame.GetWidth(), frame.GetHeight()) / GetViewportRect().Size;

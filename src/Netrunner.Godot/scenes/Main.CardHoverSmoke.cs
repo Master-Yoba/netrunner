@@ -6,6 +6,89 @@ namespace Netrunner.GodotClient;
 
 public partial class Main
 {
+	private async Task CheckClickedCardHoverAsync(bool liveCache)
+	{
+		_isolateSmokeInput = true;
+		_boardDrag!.InputFilter = input => input.Device == SmokeInputDevice;
+		_reducedMotion.ButtonPressed = true;
+		foreach (Vector2I size in new[] { new Vector2I(1920, 1080), new Vector2I(2560, 1440) })
+		{
+			GetWindow().Size = size;
+			GetWindow().ContentScaleSize = size;
+			_labScenario = 15;
+			_labScenarios!.Select(_labScenario);
+			ResetInteractionLab();
+			await TableFrames(3);
+			foreach (string id in new[] { "lab-fan-0", "preview-rig-0", "preview-runner-id", "preview-ice-Headquarters", "preview-root-0" })
+			{
+				TableCardControl card = _gameTable.VisibleCards[id];
+				for (Node? parent = card.GetParent(); parent is not null; parent = parent.GetParent())
+					if (parent is ScrollContainer scroll) scroll.EnsureControlVisible(card);
+				await TableFrames(3);
+				Vector2 CardPoint() => _gameTable.Hand.ContainsCard(card)
+					? card.GetGlobalTransform() * new Vector2(12, 45) : card.GetGlobalRect().GetCenter();
+				await LabPointer(new Vector2(20, 20));
+				await LabPointer(CardPoint());
+				RequireInteraction(CardHoverPreviewCardId == id,
+					$"Hover did not show {id} at {size}: actual={CardHoverPreviewCardId}, hovered={card.IsHovered}, active={card.IsInteractionActive}, pointer={CardPoint()}, rect={card.GetGlobalRect()}, gui={GetViewport().GuiGetHoveredControl()?.GetPath()}.");
+				Vector2 point = CardPoint();
+				LabButton(point, true); LabButton(point, false);
+				await TableFrames(2);
+				RequireInteraction(_tableSelectedCard == id && card.HasFocus(), $"Click did not select/focus {id}.");
+				_inspectedCard = card.Card;
+				ShowInspectedCardZoom();
+				await PressModalEscapeAsync();
+				RequireInteraction(card.HasFocus() && !card.HasFocus(ignoreHiddenFocus: true),
+					$"Closing inspection converted {id}'s mouse focus into a persistent keyboard preview.");
+				await LabPointer(new Vector2(20, 20));
+				await TableFrames(8);
+				RequireInteraction(!CardHoverPreviewVisible && card.IsSelected && !card.IsInteractionActive,
+					$"Click focus pinned {id}'s preview after leaving it for empty space.");
+				await PressModalEscapeAsync();
+				RequireInteraction(_tableSelectedCard is null && !CardHoverPreviewVisible,
+					$"Clearing {id}'s selection retained its preview.");
+				await LabPointer(CardPoint());
+				RequireInteraction(CardHoverPreviewCardId == id, $"A fresh hover did not reopen {id}'s preview.");
+				point = CardPoint();
+				LabButton(point, true); LabButton(point, false);
+				await PressModalEscapeAsync();
+				await TableFrames(8);
+				RequireInteraction(_tableSelectedCard is null && !CardHoverPreviewVisible
+					&& _cardHoverPreviewFace!.Card is null && _cardHoverPreviewRules!.SymbolText.Length == 0,
+					$"Escape over {id} did not dismiss and clear its preview.");
+				await LabPointer(new Vector2(20, 20));
+				await TableFrames(8);
+				RequireInteraction(!CardHoverPreviewVisible, $"Moving away resurrected {id}'s dismissed preview.");
+				if (OS.GetCmdlineUserArgs().Contains("--card-art-screenshots") && id == "preview-rig-0")
+					await SaveArtworkEvidence($"hover-dismissed-{size.X}", liveCache);
+				card.ReleaseFocus();
+				card.GrabFocus();
+				await TableFrames(2);
+				RequireInteraction(CardHoverPreviewCardId == id, $"Keyboard focus no longer previews {id}.");
+				GetViewport().PushInput(new InputEventKey { Device = SmokeInputDevice, Keycode = Key.Enter, Pressed = true });
+				GetViewport().PushInput(new InputEventKey { Device = SmokeInputDevice, Keycode = Key.Enter, Pressed = false });
+				RequireInteraction(_tableSelectedCard == id && CardHoverPreviewCardId == id,
+					$"Keyboard activation lost {id}'s selection or preview.");
+				await PressModalEscapeAsync();
+				RequireInteraction(!CardHoverPreviewVisible, $"Keyboard selection clearing retained {id}'s preview.");
+				card.ReleaseFocus();
+			}
+			foreach (string id in new[] { "preview-archives", "preview-heap" })
+			{
+				var pile = (BoardActionButton)_gameTable.VisibleCards[id].GetParent();
+				await ClickTableButton(pile);
+				RequireInteraction(_tablePileOverlay?.Visible == true, "Clicking a public pile did not open its browser.");
+				await PressModalEscapeAsync();
+				await LabPointer(new Vector2(20, 20));
+				await TableFrames(8);
+				RequireInteraction(!CardHoverPreviewVisible && !pile.HasFocus(ignoreHiddenFocus: true),
+					"Returning to a clicked pile pinned its hover preview.");
+				pile.ReleaseFocus();
+			}
+			RequireInteraction(_labSubmissionCount == 0, "Hover/selection dismissal submitted a game action.");
+		}
+	}
+
 	private async Task CheckSingleCardHoverAsync(bool liveCache)
 	{
 		CheckGameSymbolRendering();

@@ -107,7 +107,8 @@ public partial class Main
 			await CheckInteractionLabArtworkAsync(liveCache);
 			await CheckSingleCardHoverAsync(liveCache);
 			await CheckModalLayersAndEscapeAsync(liveCache);
-			GD.Print($"CARD_ART_SMOKE PASS live_cache={liveCache} cards=77 resolutions=2 portrait=true ice=true inspection=true hover=true single_hover=true hover_details=true game_symbols=true modal_layers=true escape_selection=true overlays=true hidden_safe=true reuse=true fallback=true lab_scenarios=19 lab_draw=true");
+			await CheckClickedCardHoverAsync(liveCache);
+			GD.Print($"CARD_ART_SMOKE PASS live_cache={liveCache} cards=77 resolutions=2 portrait=true ice=true inspection=true hover=true single_hover=true hover_details=true hover_dismissal=true game_symbols=true modal_layers=true escape_selection=true overlays=true hidden_safe=true reuse=true fallback=true lab_scenarios=19 lab_draw=true");
 			GetTree().Quit();
 		}
 		catch (Exception error)
@@ -206,7 +207,8 @@ public partial class Main
 	private async Task SaveArtworkEvidence(string name, bool liveCache)
 	{
 		if (DisplayServer.GetName().Equals("headless", StringComparison.OrdinalIgnoreCase)) return;
-		await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+		await TableFrames(2);
+		RenderingServer.ForceDraw();
 		string directory = Path.GetFullPath(Path.Combine(ProjectSettings.GlobalizePath("res://"), "../..",
 			liveCache ? "artifacts/card-artwork" : "docs/evidence/card-artwork"));
 		Directory.CreateDirectory(directory);

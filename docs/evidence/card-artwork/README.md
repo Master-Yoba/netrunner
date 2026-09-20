@@ -20,6 +20,8 @@ The concealed card uses the existing committed generic NSG back.
   the entire board, including raised hand cards and pile counters.
 - `pile-inspection-1920.png` and `pile-inspection-2560.png`: inspection opened
   from a pile, covering both the pile browser and board.
+- `hover-dismissed-1920.png` and `hover-dismissed-2560.png`: the board after
+  clicking a card and pressing Escape; selection and the hover preview are gone.
 
 The bundled game glyphs are by [Null Signal Games](../../../src/Netrunner.Godot/icons/SOURCE.md),
 under CC BY-ND 4.0, recolored for this UI.
@@ -35,5 +37,9 @@ Modal checks cover all four public piles, nested inspection, focus restoration,
 Escape selection clearing and dismissal order, and held-key repeats. Native
 pixel checks confirm an element at the maximum Z index is visible before a modal
 opens and fully covered afterward, both on the board and inside the pile browser.
+Pointer regressions click hand/rig/identity/ICE/asset cards, move into empty space,
+clear selection with and without the pointer over the card, and re-enter it.
+They also check keyboard previews/activation and preserve mouse focus when
+returning from inspection or a public pile, at both resolutions.
 Real-cache captures are written only under
 ignored `artifacts/card-artwork` by `--card-art-cache-smoke --card-art-screenshots`.

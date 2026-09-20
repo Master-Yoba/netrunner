@@ -130,6 +130,7 @@ public partial class Main
 		_gameTable.SetSelection(null);
 		_gameTable.SetSelectedServer(null);
 		CancelStagedAction();
+		HideCardHoverPreview();
 	}
 
 	private void RenderCardTable(MatchSnapshot snapshot, bool decisionChanged)

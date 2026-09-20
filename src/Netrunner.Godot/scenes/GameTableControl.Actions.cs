@@ -73,6 +73,6 @@ public partial class GameTableControl
 	private static void HoverPileFace(BoardActionButton pile, bool active)
 	{
 		TableCardControl? face = pile.GetChildren().OfType<TableCardControl>().FirstOrDefault(card => card.Visible);
-		face?.SetContainerHover(active || pile.IsHovered() || pile.HasFocus());
+		face?.SetContainerHover(active || pile.IsHovered() || pile.HasFocus(ignoreHiddenFocus: true));
 	}
 }

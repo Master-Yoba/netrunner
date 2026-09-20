@@ -17,6 +17,7 @@ public partial class Main
 	private ScrollContainer _tablePileScroll = null!;
 	private GridContainer _tablePileCards = null!;
 	private Control? _tablePilePreviousFocus;
+	private bool _tablePilePreviousFocusHidden;
 
 	/// <summary>
 	/// Opens a viewer-safe pile browser for a table zone handle. Returns false
@@ -35,6 +36,7 @@ public partial class Main
 		if (!_tablePileOverlay!.Visible)
 		{
 			_tablePilePreviousFocus = GetViewport().GuiGetFocusOwner();
+			_tablePilePreviousFocusHidden = _tablePilePreviousFocus?.HasFocus(ignoreHiddenFocus: true) == false;
 		}
 
 		_tablePileTitle.Text = title;
@@ -62,7 +64,7 @@ public partial class Main
 			&& !_tablePilePreviousFocus!.IsQueuedForDeletion()
 			&& _tablePilePreviousFocus.IsVisibleInTree())
 		{
-			_tablePilePreviousFocus.GrabFocus();
+			_tablePilePreviousFocus.GrabFocus(hideFocus: _tablePilePreviousFocusHidden);
 		}
 
 		_tablePilePreviousFocus = null;
