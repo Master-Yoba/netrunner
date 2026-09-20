@@ -571,6 +571,7 @@ public partial class TableCardControl : Control
 	{
 		bool wasActive = _interactionActive;
 		_card = card;
+		EncounterStrength = null;
 		_selected = false;
 		_targetCandidate = false;
 		_actionableSource = false;
@@ -584,6 +585,18 @@ public partial class TableCardControl : Control
 			_interactionActive = false;
 			CardHoverChanged?.Invoke(this, false);
 		}
+	}
+
+	/// <summary>Current strength supplied by the public encounter projection, separate from printed stats.</summary>
+	public int? EncounterStrength { get; private set; }
+
+	public void SetEncounterStrength(int? strength)
+	{
+		int? visible = _card?.IsKnown == true ? strength : null;
+		if (EncounterStrength == visible) return;
+		EncounterStrength = visible;
+		RefreshDynamicPresentation();
+		QueueRedraw();
 	}
 
 	/// <summary>Marks this card as the currently selected local target.</summary>
@@ -899,7 +912,7 @@ public partial class TableCardControl : Control
 		_title!.Visible = showText && !HasFullCardArtwork;
 		_type!.Visible = showText && !HasFullCardArtwork;
 		_stats!.Visible = showText && !HasFullCardArtwork;
-		_status!.Visible = showText && (!HasFullCardArtwork || _card is { Rezzed: true }
+		_status!.Visible = showText && (!HasFullCardArtwork || EncounterStrength is not null || _card is { Rezzed: true }
 			|| _card is { IsAbilityUsed: true } || _card is { IsFirstXUsedThisTurn: true });
 		bool compact = IsCompactPortrait;
 		_title!.Text = known ? compact ? CompactTitle(_card!.Title) : _card!.Title : "FACE-DOWN";
@@ -913,6 +926,7 @@ public partial class TableCardControl : Control
 			? BuildRulesCue(_card!.RulesText, _isIce ? 38 : compact ? 20 : 30)
 			: "NO PUBLIC DETAILS";
 		_status!.Text = known ? FormatStatus(_card!, compact) : "FACE-DOWN";
+		if (known && EncounterStrength is { } strength) _status.Text = $"STR {strength} · {_status.Text}";
 		_counters!.Text = known ? FormatCounters(_card!, compact) : string.Empty;
 		_counters!.Visible = _counters!.Text.Length > 0;
 		_rulesCue!.Visible = known && !_isIce && !compact && !HasFullCardArtwork;

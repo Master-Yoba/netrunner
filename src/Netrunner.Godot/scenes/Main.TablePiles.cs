@@ -33,6 +33,7 @@ public partial class Main
 		}
 
 		BuildTablePileOverlay();
+		CloseBoardIcebreaker();
 		if (!_tablePileOverlay!.Visible)
 		{
 			_tablePilePreviousFocus = GetViewport().GuiGetFocusOwner();

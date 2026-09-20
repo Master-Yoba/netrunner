@@ -75,6 +75,7 @@ public partial class Main
 		};
 		_gameTable.ServerSelected += id =>
 		{
+			CloseBoardIcebreaker();
 			if (TrySelectBoardChoiceServer(id)) return;
 			if (_currentSnapshot?.View.Servers.Any(server => server.Id == id && server.Kind == ServerKind.Archives) == true
 				&& ShowTablePile("zone:corp-archives")) return;
@@ -115,6 +116,8 @@ public partial class Main
 
 	private void SelectTableCard(string id)
 	{
+		if (TrySelectBoardIcebreaker(id)) return;
+		CloseBoardIcebreaker();
 		if (TrySelectBoardChoiceCard(id)) return;
 		RecordFullMatchSelection("card", id);
 		_tableSelectedCard = id;
@@ -127,6 +130,7 @@ public partial class Main
 
 	private void ClearTableSelection()
 	{
+		CloseBoardIcebreaker();
 		_tableSelectedCard = null;
 		_tableSelectedServer = null;
 		_tableAllActions = false;
@@ -226,8 +230,16 @@ public partial class Main
 				return;
 			}
 			bool ordinary = decision.Kind is DecisionKind.TurnAction or DecisionKind.TurnTiming;
+			bool encounter = decision.Kind == DecisionKind.RunTiming && snapshot.View.Viewer == PlayerSide.Runner
+				&& snapshot.View.Run is { Step: RunTimingStep.EncounterPaidWindow, Encounter: not null };
 			IEnumerable<LegalActionViewModel> displayed = all;
-			if (decision.Kind == DecisionKind.TurnDiscard && !_tableAllActions)
+			if (encounter && !_tableAllActions)
+			{
+				displayed = all.Where(action => BoardIcebreakerPresenter.Source(action) is null);
+				_tablePrompt.Text += " · Click an installed icebreaker to boost or break";
+				AddButton("All legal actions…", () => { _tableAllActions = true; RenderCardTableActions(snapshot); });
+			}
+			else if (decision.Kind == DecisionKind.TurnDiscard && !_tableAllActions)
 			{
 				displayed = [];
 				AddButton("All legal actions…", () => { _tableAllActions = true; RenderCardTableActions(snapshot); });
@@ -272,6 +284,7 @@ public partial class Main
 		{
 			RefreshBoardChoices(snapshot);
 			RefreshBasicBoardActions(snapshot);
+			RefreshBoardIcebreaker(snapshot);
 		}
 	}
 
@@ -385,7 +398,11 @@ public partial class Main
 	{
 		PollCardHoverPreview();
 		_gameTable.Hand.ReducedMotion = _reducedMotion.ButtonPressed;
-		if (_currentSnapshot is { } current) RefreshBasicBoardActions(current);
+		if (_currentSnapshot is { } current)
+		{
+			RefreshBasicBoardActions(current);
+			RefreshBoardIcebreaker(current);
+		}
 		_tablePlaybackWait = Math.Max(0, _tablePlaybackWait - delta);
 		if (_tableAwaitingSettlement && _tablePlaybackWait == 0 && _gameTable.ActiveMotionCount == 0 && _tablePublications.Count == 0)
 		{

@@ -579,6 +579,7 @@ public partial class GameTableControl : Control
 			// legal-action envelope. Keep every physical card and lane node in
 			// place while those publications settle.
 			ApplySelectionAndTargets();
+			RefreshEncounterStrength(view);
 			return;
 		}
 		MatchViewModel? previousView = _motionView;
@@ -613,10 +614,19 @@ public partial class GameTableControl : Control
 		{
 			_visibleCards[key] = card;
 		}
+		RefreshEncounterStrength(view);
 		ApplySelectionAndTargets();
 		PresentDrawMotion(draw, view.Viewer);
 		PresentMotion(previousCards, view, previousView);
 		EnsureRunVisible(view.Run);
+	}
+
+	private void RefreshEncounterStrength(MatchViewModel view)
+	{
+		EncounterViewModel? encounter = view.Run?.Encounter is { Status: RunEncounterStatus.Initialized } current ? current : null;
+		foreach ((string id, TableCardControl card) in _visibleCards)
+			card.SetEncounterStrength(encounter?.Ice?.Id == id ? encounter.EffectiveStrength
+				: encounter?.Breakers.FirstOrDefault(breaker => breaker.CardId == id)?.EffectiveStrength);
 	}
 
 	private void EnsureRunVisible(RunFocusViewModel? run)

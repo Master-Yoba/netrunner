@@ -158,6 +158,8 @@ public partial class Main
 			|| !_tableViewport.IsVisibleInTree()
 			|| !_board.IsVisibleInTree()
 			|| _currentSnapshot is null
+			|| (_icebreakerPanel?.Visible == true && (card.CardId == _boardBreakerId
+				|| _icebreakerPanel.GetGlobalRect().HasPoint(GetViewport().GetMousePosition())))
 			|| _startPanel.IsVisibleInTree()
 			|| _zoomOverlay?.Visible == true
 			|| _galleryOverlay?.Visible == true

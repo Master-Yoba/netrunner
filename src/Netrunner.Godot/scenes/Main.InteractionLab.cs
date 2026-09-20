@@ -36,6 +36,7 @@ public partial class Main
 
 	private void ResetInteractionLab()
 	{
+		CloseBoardIcebreaker();
 		_boardDrag?.Cancel("lab-reset", false);
 		DismissBoardChoices();
 		HideTablePile();
@@ -47,7 +48,8 @@ public partial class Main
 		_tableHistory.Clear();
 		PublishLabView(InteractionLabSamples.Create(_labScenario, _labRevision));
 		_labInstructions!.Text = InteractionLabSamples.Instructions[_labScenario];
-		_tableLastAction.Text = _labScenario is 17 or 18 ? "Discard two cards by dragging them to the pile"
+		_tableLastAction.Text = _labScenario == 19 ? "Click an icebreaker in the rig"
+			: _labScenario is 17 or 18 ? "Discard two cards by dragging them to the pile"
 			: _labScenario >= 15 ? "Practice the hand and board actions" : "Drag the practice card from hand";
 	}
 
@@ -93,6 +95,11 @@ public partial class Main
 		_labSubmissionCount++;
 		_labRevision++;
 		MatchViewModel view = snapshot.View;
+		if (_labScenario == 19)
+		{
+			SubmitIcebreakerLab(view, action);
+			return true;
+		}
 		if (_labScenario is 17 or 18)
 		{
 			SubmitDiscardLab(view, action);
