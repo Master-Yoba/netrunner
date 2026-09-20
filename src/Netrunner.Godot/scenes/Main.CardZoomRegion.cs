@@ -21,7 +21,7 @@ public partial class Main
 		}
 		_zoomOverlay.Visible = false;
 		_zoomTitle = _zoomOverlay.GetNode<Label>("%Title");
-		_zoomText = _zoomOverlay.GetNode<Label>("%Rules");
+		_zoomText = _zoomOverlay.GetNode<GameSymbolLabel>("%Rules");
 		_zoomArtwork = _zoomOverlay.GetNode<TextureRect>("%Artwork");
 		_zoomScroll = _zoomOverlay.GetNode<ScrollContainer>("%TextScroll");
 		_zoomCloseButton = _zoomOverlay.GetNode<Button>("%Close");
@@ -73,7 +73,7 @@ public partial class Main
 	private void RefreshCardZoomContent(CardViewModel card)
 	{
 		_zoomTitle.Text = $"CARD ZOOM · {card.Title}";
-		_zoomText.Text = FormatCardZoom(card);
+		_zoomText.SymbolText = FormatCardZoom(card);
 		LocalCardArtworkResolver.Artwork? artwork = card.DefinitionId is { } definition
 			? LocalCardArtworkResolver.Shared.TryLoad(definition) : null;
 		_zoomArtwork.Texture = artwork is { FullFace: true } ? artwork.Texture : null;

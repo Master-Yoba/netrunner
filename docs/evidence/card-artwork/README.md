@@ -13,11 +13,19 @@ The concealed card uses the existing committed generic NSG back.
 - `hover-details-1920.png` and `hover-details-2560.png`: a single artwork preview
   with subtypes, current stats, advancement/typed counters, use state, hosting,
   rules, and interaction hints.
+- `symbol-inspection-1920.png` and `symbol-inspection-2560.png`: full inspection
+  with inline click, credit, recurring-credit, memory, link, subroutine, and trash
+  glyphs. Hover and lab captures also show the matching board resource icons.
+
+The bundled game glyphs are by [Null Signal Games](../../../src/Netrunner.Godot/icons/SOURCE.md),
+under CC BY-ND 4.0, recolored for this UI.
 
 Regenerate with Godot arguments `-- --card-art-smoke --card-art-screenshots`.
 The smoke additionally checks both hover orientations, retained inspection on
 ordinary snapshot updates, immediate clearing on concealment, texture reuse,
 all 19 lab scenarios, lab draws for both seats, and missing/corrupt image
 fallback. It checks suppression of native card/pile tooltips and clearing of
-hover details, including concealed hosts. Real-cache captures are written only under
+hover details, including concealed hosts. Symbol checks cover normalized and legacy
+tokens, all bundled glyphs, text fallback, literal BBCode, and clearing on dismissal.
+Real-cache captures are written only under
 ignored `artifacts/card-artwork` by `--card-art-cache-smoke --card-art-screenshots`.

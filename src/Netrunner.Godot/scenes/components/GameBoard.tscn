@@ -1,4 +1,6 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/GameSymbolLabel.cs" id="symbols"]
 
 [ext_resource type="Script" path="res://scenes/GameTableControl.cs" id="1_board_script"]
 [ext_resource type="Resource" path="res://themes/BoardLayout.tres" id="2_board_layout"]
@@ -105,14 +107,16 @@ text_overrun_behavior = 3
 [node name="Credits" parent="Surface/Margins/Layout/CorpStrip/Content" instance=ExtResource("credits")]
 layout_mode = 2
 
-[node name="Resources" type="Label" parent="Surface/Margins/Layout/CorpStrip/Content"]
+[node name="Resources" type="RichTextLabel" parent="Surface/Margins/Layout/CorpStrip/Content"]
 layout_mode = 2
 size_flags_horizontal = 3
 mouse_filter = 2
-theme_override_font_sizes/font_size = 11
-text = "Credits · Clicks · Score"
+theme_override_font_sizes/normal_font_size = 14
+script = ExtResource("symbols")
+SymbolText = "[click] 0 · [agenda point] 0"
 vertical_alignment = 1
-text_overrun_behavior = 3
+fit_content = true
+scroll_active = false
 
 [node name="Score" type="Label" parent="Surface/Margins/Layout/CorpStrip/Content"]
 custom_minimum_size = Vector2(92, 0)

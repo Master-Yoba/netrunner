@@ -50,8 +50,8 @@ public partial class GameTableControl : Control
 	private ScrollContainer _runnerRigScroll = null!;
 	private Label _turnLabel = null!;
 	private Label _runLabel = null!;
-	private Label _corpResources = null!;
-	private Label _runnerResources = null!;
+	private GameSymbolLabel _corpResources = null!;
+	private GameSymbolLabel _runnerResources = null!;
 	private Label _corpHandCaption = null!;
 	private Label _runnerHandCaption = null!;
 	private Label _localHandCaption = null!;
@@ -376,8 +376,8 @@ public partial class GameTableControl : Control
 		_localHandRow = GetNodeOrNull<HandFanControl>("LocalHand")!;
 		_turnLabel = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/Turn")!;
 		_runLabel = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/Run")!;
-		_corpResources = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/Resources")!;
-		_runnerResources = GetNodeOrNull<Label>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/Resources")!;
+		_corpResources = GetNodeOrNull<GameSymbolLabel>("Surface/Margins/Layout/CorpStrip/Content/Resources")!;
+		_runnerResources = GetNodeOrNull<GameSymbolLabel>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/Resources")!;
 		_corpHandCaption = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/HQ")!;
 		_runnerHandCaption = GetNodeOrNull<Label>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/HandCaption")!;
 		_localHandCaption = GetNodeOrNull<Label>("LocalHand/Caption")!;
@@ -564,13 +564,13 @@ public partial class GameTableControl : Control
 		CacheServerDisplayNames(view.Servers);
 		_turnLabel.Text = FormatTurn(view);
 		_runLabel.Text = FormatRun(view);
-		_corpResources.Text = $"Clicks {view.Corp.Clicks} · Score {view.Corp.AgendaPoints}";
+		_corpResources.SymbolText = $"[click] {view.Corp.Clicks} · [agenda point] {view.Corp.AgendaPoints}";
 		_corpCredits.Text = view.Corp.Credits.ToString(System.Globalization.CultureInfo.InvariantCulture);
 		_runnerCredits.Text = view.Runner.Credits.ToString(System.Globalization.CultureInfo.InvariantCulture);
-		_runnerResources.Text = $"Clicks {view.Runner.Clicks}\nScore {view.Runner.AgendaPoints} · Tags {view.Runner.Tags?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—"}";
+		_runnerResources.SymbolText = $"[click] {view.Runner.Clicks} · [agenda point] {view.Runner.AgendaPoints} · [tag] {view.Runner.Tags?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—"}";
 		_corpScoreLabel.Text = $"Score {view.Corp.AgendaPoints}";
 		if (view.Runner.UsedMemory is { } used && view.Runner.MemoryLimit is { } limit)
-			_runnerResources.Text += $"\nMU {used}/{limit}";
+			_runnerResources.SymbolText += $"\n[MU] {used}/{limit}";
 		_runnerScoreLabel.Text = $"Score pile · {view.RunnerScore.Count} · {view.Runner.AgendaPoints} agenda point(s)";
 		string boardFingerprint = BuildBoardFingerprint(view);
 		if (string.Equals(_lastBoardFingerprint, boardFingerprint, StringComparison.Ordinal))

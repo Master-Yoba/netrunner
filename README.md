@@ -106,6 +106,10 @@ for contextual actions; the right-edge history rail expands into the retained
 match log. Hover/focus inspects a card, and the Inspect button opens full text.
 “Skip animation” preserves history. Use “Copy log” for a filtered playtest report.
 Official full card faces can be provisioned explicitly with `make card-art-fetch`.
+Board resources, hover rules, and full card inspection use bundled
+[Null Signal game symbols](src/Netrunner.Godot/icons/SOURCE.md), including clicks,
+credits, memory, link, recurring credits, and subroutines. They work offline in
+both the game and interaction lab, independently of the artwork cache.
 The game reads a local cache only; missing images use the generated card frames.
 Use `make card-art-pack ART_ARGS='--output artifacts/gateway-art.zip'` to carry
 the cache to an offline machine. See [artwork caches](docs/CARD_ARTWORK.md) for

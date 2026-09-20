@@ -80,7 +80,7 @@ public partial class Main : Control
 	private Button _galleryButton = null!;
 	private PanelContainer? _galleryOverlay;
 	private Label _zoomTitle = null!;
-	private Label _zoomText = null!;
+	private GameSymbolLabel _zoomText = null!;
 	private HSlider _speed = null!;
 	private CheckButton _reducedMotion = null!;
 	private Button _skipAnimations = null!;

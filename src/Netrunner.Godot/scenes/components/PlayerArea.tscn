@@ -1,4 +1,6 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/GameSymbolLabel.cs" id="symbols"]
 
 [ext_resource type="PackedScene" path="res://scenes/components/PileView.tscn" id="1_pile"]
 [ext_resource type="Theme" path="res://themes/M4Theme.tres" id="3_theme"]
@@ -92,13 +94,16 @@ text_overrun_behavior = 3
 [node name="Credits" parent="Content/Summary/Content" instance=ExtResource("credits")]
 layout_mode = 2
 
-[node name="Resources" type="Label" parent="Content/Summary/Content"]
+[node name="Resources" type="RichTextLabel" parent="Content/Summary/Content"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 10
-text = "Credits · Clicks · Score"
-text_overrun_behavior = 3
+theme_override_colors/default_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/normal_font_size = 14
+script = ExtResource("symbols")
+SymbolText = "[click] 0 · [agenda point] 0"
+fit_content = true
+scroll_active = false
+custom_minimum_size = Vector2(150, 0)
 
 [node name="HandCaption" type="Label" parent="Content/Summary/Content"]
 layout_mode = 2
