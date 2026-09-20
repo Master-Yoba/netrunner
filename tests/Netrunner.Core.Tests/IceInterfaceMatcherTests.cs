@@ -101,7 +101,8 @@ public sealed class IceInterfaceMatcherTests
             encounter.PendingDecision!.LegalActions,
             action => action.Kind == ActionKind.BreakSubroutines
                 && ((RunBreakParameters)action.Parameters).BreakerId == breakerId
-                && ((RunBreakParameters)action.Parameters).Quantity == 1);
+                && ((RunBreakParameters)action.Parameters).Quantity == 1
+                && ((RunBreakParameters)action.Parameters).SubroutineOrdinals!.SequenceEqual([0]));
         ApplyResult result = RunTimingTests.ApplyAction(encounter, breakAction);
 
         Assert.True(result.Accepted, result.Rejection?.Message);

@@ -8522,7 +8522,9 @@ public static partial class StateInvariantValidator
             return;
         }
 
-        var expected = new List<(ActionKind Kind, CardInstanceId? Target, int Quantity, int HostedCredits)>();
+        var expected = new List<(ActionKind Kind, CardInstanceId? Target, int Quantity, int HostedCredits, string Targets)>();
+        // Pre-targeting saved decisions have no ordinal lists and retain their quantity-only envelope.
+        bool exactTargets = pending.LegalActions.Any(action => action?.Parameters is RunBreakParameters { SubroutineOrdinals: not null });
         IReadOnlyList<RezCardParameters> expectedRuntimeRezes = [];
         var expectedRunRezes = new List<RunIceParameters>();
         var expectedBioroidAbilities = new List<RunBioroidAbilityParameters>();
@@ -8535,7 +8537,7 @@ public static partial class StateInvariantValidator
             case RunTimingStep.EncounterPaidWindow:
             case RunTimingStep.MovementPaidWindow:
             case RunTimingStep.AfterMovePaidWindow:
-                expected.Add((ActionKind.PassPriority, null, 0, 0));
+                expected.Add((ActionKind.PassPriority, null, 0, 0, ""));
                 if (runtimeCardCatalog is not null)
                 {
                     try
@@ -8575,7 +8577,7 @@ public static partial class StateInvariantValidator
                         PlayerState? corp = state.Players.FirstOrDefault(player => player?.Side == PlayerSide.Corp);
                         if (corp is not null && corp.Credits >= approachedCost)
                         {
-                            expected.Add((ActionKind.RezIce, run.CurrentIceId.Value, 0, 0));
+                            expected.Add((ActionKind.RezIce, run.CurrentIceId.Value, 0, 0, ""));
                             expectedRunRezes.Add(new RunIceParameters(
                                 run.CurrentIceId.Value,
                                 approachedCostQuote));
@@ -8617,7 +8619,6 @@ public static partial class StateInvariantValidator
                         }
 
                         int iceStrength = expectedIceQuote.EffectiveValue;
-                        int unbrokenCount = run.Encounter.Subroutines.Count(subroutine => !subroutine.Broken);
                         // Run-scoped hosted credits (Overclock) are spendable
                         // during the run, so they count toward the offer. Each
                         // legal wallet/hosted division is a distinct action.
@@ -8702,10 +8703,12 @@ public static partial class StateInvariantValidator
                                         BehaviorCostModifierKind.IcebreakerBreakCreditCost,
                                         expectedBreakerSpec.BreakCost);
                                     int expectedBreakCost = expectedBreakQuote?.EffectiveCost ?? expectedBreakerSpec.BreakCost;
-                                    for (int quantity = 1;
-                                        quantity <= Math.Min(expectedBreakerSpec.BreakLimit, unbrokenCount);
-                                        quantity++)
+                                    int[] availableTargets = run.Encounter.Subroutines.Where(sub => !sub.Broken && !sub.Resolved)
+                                        .Select(sub => sub.Ordinal).ToArray();
+                                    foreach (IReadOnlyList<int> targets in SubroutineTargeting.Choices(availableTargets, expectedBreakerSpec.BreakLimit)
+                                        .Where(targets => exactTargets || targets.SequenceEqual(availableTargets.Take(targets.Count))))
                                     {
+                                        int quantity = targets.Count;
                                         foreach (int hostedCredits in LegalHostedCreditSplits(
                                             runnerPlayer,
                                             run,
@@ -8715,7 +8718,7 @@ public static partial class StateInvariantValidator
                                                 ActionKind.BreakSubroutines,
                                                 cardId,
                                                 quantity,
-                                                hostedCredits));
+                                                hostedCredits, exactTargets ? string.Join(",", targets) : ""));
                                         }
                                     }
                                 }
@@ -8742,7 +8745,7 @@ public static partial class StateInvariantValidator
                                             ActionKind.PumpBreaker,
                                             cardId,
                                             0,
-                                            hostedCredits));
+                                            hostedCredits, ""));
                                     }
                                 }
                             }
@@ -8752,13 +8755,13 @@ public static partial class StateInvariantValidator
 
                 break;
             case RunTimingStep.JackOutDecision:
-                expected.Add((ActionKind.JackOut, null, 0, 0));
-                expected.Add((ActionKind.ContinueRun, null, 0, 0));
+                expected.Add((ActionKind.JackOut, null, 0, 0, ""));
+                expected.Add((ActionKind.ContinueRun, null, 0, 0, ""));
                 break;
             case RunTimingStep.BreachCandidateSelection:
                 foreach (CardInstanceId candidate in run.BreachCandidates)
                 {
-                    expected.Add((ActionKind.ChooseBreachCandidate, candidate, 0, 0));
+                    expected.Add((ActionKind.ChooseBreachCandidate, candidate, 0, 0, ""));
                 }
 
                 ServerState? breachServer = state.Servers.FirstOrDefault(server => server?.Id == run.AttackedServer);
@@ -8775,7 +8778,7 @@ public static partial class StateInvariantValidator
                         run.RandomAccessLimit,
                         run.AccessedCards) is not null)
                 {
-                    expected.Add((ActionKind.ChooseBreachCandidate, null, 0, 0));
+                    expected.Add((ActionKind.ChooseBreachCandidate, null, 0, 0, ""));
                 }
 
                 break;
@@ -8817,21 +8820,21 @@ public static partial class StateInvariantValidator
                                         ActionKind.TrashAccessedCard,
                                         accessedCardId,
                                         0,
-                                        hostedCredits));
+                                        hostedCredits, ""));
                                 }
                             }
                         }
                     }
                 }
 
-                expected.Add((ActionKind.NoAccessAction, null, 0, 0));
+                expected.Add((ActionKind.NoAccessAction, null, 0, 0, ""));
                 break;
             default:
                 Add(violations, "run.unexpected-prompt", $"{path}.legalActions", $"Run step '{run.Step}' must not have a pending decision.");
                 return;
         }
 
-        var actual = new List<(ActionKind Kind, CardInstanceId? Target, int Quantity, int HostedCredits)>();
+        var actual = new List<(ActionKind Kind, CardInstanceId? Target, int Quantity, int HostedCredits, string Targets)>();
         var actualRuntimeRezes = new List<RezCardParameters>();
         var actualRunRezes = new List<RunIceParameters>();
         var actualBioroidAbilities = new List<RunBioroidAbilityParameters>();
@@ -8868,10 +8871,10 @@ public static partial class StateInvariantValidator
                 case (ActionKind.PassPriority, NoActionParameters):
                 case (ActionKind.JackOut, NoActionParameters):
                 case (ActionKind.ContinueRun, NoActionParameters):
-                    actual.Add((action.Kind, null, 0, 0));
+                    actual.Add((action.Kind, null, 0, 0, ""));
                     break;
                 case (ActionKind.RezIce, RunIceParameters rez):
-                    actual.Add((action.Kind, rez.IceId, 0, 0));
+                    actual.Add((action.Kind, rez.IceId, 0, 0, ""));
                     actualRunRezes.Add(rez);
                     break;
                 case (ActionKind.RezCard, RezCardParameters rez):
@@ -8885,7 +8888,9 @@ public static partial class StateInvariantValidator
                     {
                         if (breakSubroutinesAction.SubroutineId is not { } target || breakSubroutinesAction.Quantity != 1
                             || breakSubroutinesAction.HostedCredits != 0 || breakSubroutinesAction.CostQuote is not null
-                            || !actualHostedBreaks.Add((breakSource.Id, target)))
+                            || !actualHostedBreaks.Add((breakSource.Id, target))
+                            || (breakSubroutinesAction.SubroutineOrdinals is { } hostedTargets
+                                && (hostedTargets.Count != 1 || !run.Encounter!.Subroutines.Any(sub => sub.Id == target && sub.Ordinal == hostedTargets[0]))))
                         {
                             Add(violations, "run.invalid-hosted-break", path, "Hosted breaks require one distinct target and one counter payment.");
                         }
@@ -8893,7 +8898,7 @@ public static partial class StateInvariantValidator
                     }
                     if (breakSubroutinesAction.SubroutineId is not null)
                     {
-                        Add(violations, "run.invalid-break-target", path, "Ordinary count-based breakers cannot contain a hosted target.");
+                        Add(violations, "run.invalid-break-target", path, "Ordinary breakers cannot contain a hosted target.");
                     }
                     CostQuote? expectedBreakQuote = null;
                     if (breakSource is not null
@@ -8924,26 +8929,26 @@ public static partial class StateInvariantValidator
                         action.Kind,
                         breakSubroutinesAction.BreakerId,
                         breakSubroutinesAction.Quantity,
-                        breakSubroutinesAction.HostedCredits));
+                        breakSubroutinesAction.HostedCredits, breakSubroutinesAction.SubroutineOrdinals is { } ordinals ? string.Join(",", ordinals) : ""));
                     break;
                 case (ActionKind.PumpBreaker, RunBreakerParameters pumpBreaker):
-                    actual.Add((action.Kind, pumpBreaker.BreakerId, 0, pumpBreaker.HostedCredits));
+                    actual.Add((action.Kind, pumpBreaker.BreakerId, 0, pumpBreaker.HostedCredits, ""));
                     break;
                 case (ActionKind.ChooseBreachCandidate, BreachCandidateParameters breachCandidate):
-                    actual.Add((action.Kind, breachCandidate.CardId, 0, 0));
+                    actual.Add((action.Kind, breachCandidate.CardId, 0, 0, ""));
                     break;
                 case (ActionKind.NoAccessAction, NoActionParameters):
-                    actual.Add((action.Kind, null, 0, 0));
+                    actual.Add((action.Kind, null, 0, 0, ""));
                     break;
                 case (ActionKind.TrashAccessedCard, RunCardPaymentParameters trash):
-                    actual.Add((action.Kind, trash.CardId, 0, trash.HostedCredits));
+                    actual.Add((action.Kind, trash.CardId, 0, trash.HostedCredits, ""));
                     break;
             }
         }
 
         var expectedCounts = expected.GroupBy(value => value).ToDictionary(group => group.Key, group => group.Count());
         var actualCounts = actual.GroupBy(value => value).ToDictionary(group => group.Key, group => group.Count());
-        foreach (((ActionKind Kind, CardInstanceId? Target, int Quantity, int HostedCredits) spec, int count) in expectedCounts)
+        foreach (((ActionKind Kind, CardInstanceId? Target, int Quantity, int HostedCredits, string Targets) spec, int count) in expectedCounts)
         {
             actualCounts.TryGetValue(spec, out int actualCount);
             if (actualCount != count)
@@ -8953,11 +8958,11 @@ public static partial class StateInvariantValidator
                     actualCount == 0 ? "run.missing-action" : "run.action-count-mismatch",
                     $"{path}.legalActions",
                     $"Run timing decision requires exactly {count} '{spec.Kind}' action(s) for target '{spec.Target?.ToString() ?? "none"}', "
-                    + $"quantity {spec.Quantity}, hosted credits {spec.HostedCredits}, but contains {actualCount}.");
+                    + $"quantity {spec.Quantity}, targets [{spec.Targets}], hosted credits {spec.HostedCredits}, but contains {actualCount}.");
             }
         }
 
-        foreach (((ActionKind Kind, CardInstanceId? Target, int Quantity, int HostedCredits) spec, int count) in actualCounts)
+        foreach (((ActionKind Kind, CardInstanceId? Target, int Quantity, int HostedCredits, string Targets) spec, int count) in actualCounts)
         {
             if (!expectedCounts.TryGetValue(spec, out int expectedCount))
             {
@@ -8975,7 +8980,7 @@ public static partial class StateInvariantValidator
                     "run.duplicate-action",
                     $"{path}.legalActions",
                     $"Run timing decision contains {count} copies of '{spec.Kind}' for target '{spec.Target?.ToString() ?? "none"}', "
-                    + $"quantity {spec.Quantity}, hosted credits {spec.HostedCredits}, expected {expectedCount}.");
+                    + $"quantity {spec.Quantity}, targets [{spec.Targets}], hosted credits {spec.HostedCredits}, expected {expectedCount}.");
             }
         }
 

@@ -29,7 +29,7 @@ public static partial class InteractionLabSamples
 		"Hover the hand. Click credits or R&D, or click Archives to browse. Reset to repeat.",
 		"Drag two cards from hand to Heap. Escape or an invalid drop cancels the gesture. Reset to repeat.",
 		"Drag two cards from hand to Archives. Selected cards wait for the complete discard choice. Reset to repeat.",
-		"Click Practice Fracter in the rig. Boost its strength, then break subroutines. Choose a payment; Escape closes. Reset to repeat."];
+		"Click Practice Fracter in the rig. Boost its strength, choose Break, and select subroutines beside the ICE. Choose a payment; Escape cancels. Reset to repeat."];
 
 	public static MatchViewModel Create(int scenario, long revision)
 	{

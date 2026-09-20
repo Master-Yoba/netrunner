@@ -9,13 +9,13 @@ public static partial class InteractionLabSamples
 	{
 		MatchViewModel view = UiPreviewSamples.Board(PlayerSide.Runner, UiPreviewSamples.Density.Normal);
 		CardViewModel ice = UiPreviewSamples.Known("lab-encounter-ice", "ICE", "Practice Barrier") with
-		{ Strength = 3, Subtypes = ["Barrier"], RulesText = "[subroutine] End the run.\n[subroutine] End the run." };
+		{ Strength = 3, Subtypes = ["Barrier"], RulesText = "[subroutine] Lose 1[credit].\n[subroutine] End the run.\n[subroutine] End the run." };
 		CardViewModel fracter = UiPreviewSamples.Known("lab-fracter", "Program", "Practice Fracter") with
 		{ Strength = 1, Subtypes = ["Icebreaker", "Fracter"], RulesText = "1[credit]: +2 strength.\n1[credit]: Break up to 2 barrier subroutines." };
 		CardViewModel decoder = UiPreviewSamples.Known("lab-decoder", "Program", "Practice Decoder") with
 		{ Strength = 2, Subtypes = ["Icebreaker", "Decoder"], RulesText = "1[credit]: +1 strength.\n1[credit]: Break 1 code gate subroutine." };
 		EncounterViewModel encounter = new("lab-encounter", ice, RunEncounterStatus.Initialized,
-			[new(0, false, false), new(1, false, false)])
+			[new(0, false, false), new(1, false, false), new(2, false, false)])
 		{ EffectiveStrength = 3, Breakers = [new(fracter.Id, fracter.Title, 1, 1), new(decoder.Id, decoder.Title, 2, 2)] };
 		view = view with
 		{
@@ -46,10 +46,10 @@ public static partial class InteractionLabSamples
 					new RunBreakerParameters(new(breaker.CardId), hosted), revision) with
 				{ Description = $"Pump {breaker.CardId} ({payment})" });
 				if (breaker.CardId != "lab-fracter" || breaker.EffectiveStrength < encounter.EffectiveStrength) continue;
-				for (int quantity = 1; quantity <= Math.Min(2, encounter.RemainingSubroutines); quantity++)
-					actions.Add(Action($"break-{breaker.CardId}-{quantity}-{hosted}", ActionKind.BreakSubroutines,
-						new RunBreakParameters(new(breaker.CardId), quantity, hosted), revision) with
-					{ Description = $"Break {quantity} subroutine(s) with {breaker.CardId} ({payment})" });
+				foreach (IReadOnlyList<int> targets in SubroutineTargeting.Choices(encounter.Subroutines.Where(sub => !sub.Broken && !sub.Resolved).Select(sub => sub.Ordinal), 2))
+					actions.Add(Action($"break-{breaker.CardId}-{string.Join("-", targets)}-{hosted}", ActionKind.BreakSubroutines,
+						new RunBreakParameters(new(breaker.CardId), targets.Count, hosted, subroutineOrdinals: targets), revision) with
+					{ Description = $"Break subroutines {string.Join(", ", targets.Select(ordinal => ordinal + 1))} with {breaker.CardId} ({payment})" });
 			}
 		}
 		actions.Add(Action("pass", ActionKind.PassPriority, new NoActionParameters(), revision));

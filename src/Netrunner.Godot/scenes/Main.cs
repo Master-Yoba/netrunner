@@ -367,6 +367,13 @@ public partial class Main : Control
 		}
 		if (_useCardTable && escape)
 		{
+			if (_boardChoosingSubroutines)
+			{
+				CancelBoardBreakTargets();
+				if (_currentSnapshot is { } snapshot) RefreshBoardIcebreaker(snapshot);
+				GetViewport().SetInputAsHandled();
+				return;
+			}
 			ClearTableSelection();
 			_matchHistory.SetExpanded(false);
 			GetViewport().SetInputAsHandled();

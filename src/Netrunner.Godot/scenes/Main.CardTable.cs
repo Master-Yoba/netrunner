@@ -116,6 +116,7 @@ public partial class Main
 
 	private void SelectTableCard(string id)
 	{
+		if (_boardChoosingSubroutines && id == _currentSnapshot?.View.Run?.Encounter?.Ice?.Id) return;
 		if (TrySelectBoardIcebreaker(id)) return;
 		CloseBoardIcebreaker();
 		if (TrySelectBoardChoiceCard(id)) return;

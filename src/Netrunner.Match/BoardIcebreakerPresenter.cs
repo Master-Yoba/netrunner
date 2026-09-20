@@ -32,10 +32,19 @@ public static class BoardIcebreakerPresenter
         return actions.Length == 0 && strength is null ? null : new(encounter.Id, card, encounter, strength, actions);
     }
 
-    /// <summary>Ordinary engine break actions affect the next unbroken subroutines, in order.</summary>
+    /// <summary>Targets from the issued action, with a fallback for saved legacy count-only decisions.</summary>
     public static IReadOnlyList<int> BrokenOrdinals(EncounterViewModel encounter, LegalActionViewModel action) =>
-        action.Parameters is RunBreakParameters { SubroutineId: null } broken
-            ? encounter.Subroutines.Where(subroutine => !subroutine.Broken).Take(broken.Quantity)
-                .Select(subroutine => subroutine.Ordinal).ToArray()
+        action.Parameters is RunBreakParameters broken
+            ? broken.SubroutineOrdinals ?? (broken.SubroutineId is null
+                ? encounter.Subroutines.Where(subroutine => !subroutine.Broken && !subroutine.Resolved).Take(broken.Quantity)
+                    .Select(subroutine => subroutine.Ordinal).ToArray()
+                : [])
             : [];
+
+    public static IReadOnlyList<LegalActionViewModel> SelectedBreaks(BoardIcebreakerViewModel breaker, IEnumerable<int> selected)
+    {
+        int[] targets = selected.Order().ToArray();
+        return breaker.Actions.Where(action => action.Kind == ActionKind.BreakSubroutines
+            && targets.Length > 0 && BrokenOrdinals(breaker.Encounter, action).Order().SequenceEqual(targets)).ToArray();
+    }
 }

@@ -16,8 +16,10 @@ public sealed class M2ProofCommandTests
     // serialized approach occurrence (schema 9 -> 10), then targeted run-event
     // play and breach provenance (schema 10 -> 11). The explicit 6.9.4g
     // server-approach event also changes the event-stream pin.
+    // Exact subroutine targeting adds issued alternatives, advancing the action allocator.
+    // Both policies still produce the same 32 actions and unchanged event stream.
     private const string ExpectedFinalStateHash =
-        "3242c530703869a08b82457d0399cc1a2e214d8ad07922a698cb06f53e6de969";
+        "1df2d6682393f40268aa977c5ff5b87d453bfeb5cf99cebd23066ea5dfe75660";
     private const string ExpectedEventStreamHash =
         "33af2b049fbad324ed5ff0ee130740c3d65c03f2cb1196100afbdc73e9f0e67c";
 

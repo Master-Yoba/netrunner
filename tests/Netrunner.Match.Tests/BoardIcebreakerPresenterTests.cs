@@ -68,6 +68,25 @@ public sealed class BoardIcebreakerPresenterTests
         { Parameters = new RunBreakParameters(new("card:5"), 1, subroutineId: new("subroutine:opaque")) }));
     }
 
+    [Fact]
+    public void SelectedTargetsReturnOnlyIssuedActionsForThatExactSet()
+    {
+        var encounter = new EncounterViewModel("encounter:test", null, RunEncounterStatus.Initialized,
+            [new(0, false, false), new(1, false, false), new(2, false, false)]);
+        LegalActionViewModel[] actions = Enumerable.Range(0, 2).Select(hosted => new LegalActionViewModel(
+            new($"action:{hosted}"), ActionKind.BreakSubroutines, "Break selected",
+            new RunBreakParameters(new("card:5"), 2, hosted, subroutineOrdinals: [0, 2]))).ToArray();
+        var breaker = new BoardIcebreakerViewModel(encounter.Id, null!, encounter, null, actions);
+        Assert.Empty(BoardIcebreakerPresenter.SelectedBreaks(breaker, []));
+        Assert.Empty(BoardIcebreakerPresenter.SelectedBreaks(breaker, [0]));
+        Assert.Empty(BoardIcebreakerPresenter.SelectedBreaks(breaker, [0, 1]));
+        IReadOnlyList<LegalActionViewModel> payments = BoardIcebreakerPresenter.SelectedBreaks(breaker, [2, 0]);
+        Assert.Equal(2, payments.Count);
+        Assert.Same(actions[0], payments[0]);
+        Assert.Same(actions[1], payments[1]);
+        Assert.Equal([0, 2], BoardIcebreakerPresenter.BrokenOrdinals(encounter, actions[0]));
+    }
+
     private static MatchViewModel View(GameState state, IBehaviorCatalog catalog) =>
         ObservationViewMapper.Build(ObservationBuilder.Build(state, PlayerSide.Runner, catalog));
 

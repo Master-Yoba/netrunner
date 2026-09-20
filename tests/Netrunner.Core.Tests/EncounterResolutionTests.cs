@@ -36,7 +36,8 @@ public sealed class EncounterResolutionTests
         GameState window = EncounterBreakerTests.ReachEncounterWindow(preRun);
         LegalAction breakOne = Assert.Single(window.PendingDecision!.LegalActions, action =>
             action.Kind == ActionKind.BreakSubroutines
-            && Assert.IsType<RunBreakParameters>(action.Parameters).Quantity == 1);
+            && Assert.IsType<RunBreakParameters>(action.Parameters).Quantity == 1
+            && ((RunBreakParameters)action.Parameters).SubroutineOrdinals!.SequenceEqual([0]));
 
         ApplyResult broken = RunTimingTests.ApplyAction(window, breakOne);
         Assert.True(broken.Accepted, broken.Rejection?.Message);
@@ -108,7 +109,8 @@ public sealed class EncounterResolutionTests
         LegalAction breakOne = Assert.Single(window.PendingDecision!.LegalActions, action =>
             action.Kind == ActionKind.BreakSubroutines
             && ((RunBreakParameters)action.Parameters).Quantity == 1
-            && ((RunBreakParameters)action.Parameters).BreakerId == breakerId);
+            && ((RunBreakParameters)action.Parameters).BreakerId == breakerId
+            && ((RunBreakParameters)action.Parameters).SubroutineOrdinals!.SequenceEqual([0]));
         ApplyResult broken = RunTimingTests.ApplyAction(window, breakOne);
         Assert.True(broken.Accepted, broken.Rejection?.Message);
         Assert.Contains(broken.Events, value => value.Kind == EngineEventKinds.SubroutinesBroken);

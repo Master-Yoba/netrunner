@@ -1542,7 +1542,8 @@ public sealed class FullGameContractAgent : IGameAgent
         RunBreakParameters runBreak =>
             $"break:{runBreak.BreakerId.Value}:quantity:{runBreak.Quantity.ToString(CultureInfo.InvariantCulture)}"
             + $":hosted:{runBreak.HostedCredits.ToString(CultureInfo.InvariantCulture)}"
-            + $":subroutine:{runBreak.SubroutineId?.Value ?? string.Empty}",
+            + $":subroutine:{runBreak.SubroutineId?.Value ?? string.Empty}"
+            + $":targets:{string.Join(",", runBreak.SubroutineOrdinals ?? [])}",
         RunBioroidAbilityParameters bioroid =>
             $"bioroid:ice:{bioroid.IceId.Value}:ordinal:{bioroid.SubroutineOrdinal.ToString(CultureInfo.InvariantCulture)}"
             + $":subroutine:{bioroid.SubroutineId.Value}"
