@@ -1000,6 +1000,7 @@
       "tests": [
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch4ReactionBehaviorSpecTests.ManegarmDeclaresMandatorySameServerRunnerAlternatives",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch4ReactionRuntimeTests.ManegarmApproachReactionUsesRunnerAlternativesAtExactApproachBoundary",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch4ReactionRuntimeTests.ManegarmCanBePaidWithOverclockCreditsBeforePersonalCredits",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch4ReactionRuntimeTests.ManegarmPaysFiveCreditsOrFallsBackToEndRunAndDoesNotMatchAnotherServer"
       ],
       "fullTextComplete": true,
@@ -1196,7 +1197,8 @@
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch4ReactionBehaviorSpecTests.AnoeticVoidDeclaresOptionalCorpCompoundPrivateCost",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch4ReactionRuntimeTests.AnoeticVoidCanBeDeclinedAndIsNotOfferedWithoutItsFullCompoundCost",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch4ReactionRuntimeTests.AnoeticVoidOptionalUsePaysAndTrashesExactlyTwoPrivateHqCardsThenEndsRun",
-        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch4ReactionRuntimeTests.AnoeticVoidStateRejectsAChangedCatalogFingerprintAtSaveLoadBoundary"
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch4ReactionRuntimeTests.AnoeticVoidStateRejectsAChangedCatalogFingerprintAtSaveLoadBoundary",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.GatewayBatch4ReactionRuntimeTests.CorpCannotPayAnoeticVoidWithTheRunnersOverclockPool"
       ],
       "fullTextComplete": true,
       "partial": false,

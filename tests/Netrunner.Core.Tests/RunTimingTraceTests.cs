@@ -39,7 +39,7 @@ public sealed class RunTimingTraceTests
         // access kinds re-pinned by U6. Every string is asserted exactly so a
         // regression to a wrong rule number fails this test.
         Assert.Equal(
-            "CR 26.03 1.10.3c/1.10.4b: spending credits uses the player-chosen division between the Runner wallet and hosted run credits",
+            "CR 26.03 1.10.3c/1.10.4b: credit costs use an issued source split, or run credits before the Runner wallet for generic ability/choice costs",
             RunTimingCitations.ForEvent(EngineEventKinds.RunCreditsAdjusted));
         Assert.Equal(
             "CR 26.03 9.2: priority is passed inside a paid-ability window (9.2.7; the engine's alternating-priority pass model is a documented simplification)",

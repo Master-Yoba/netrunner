@@ -141,6 +141,49 @@ public sealed partial class GatewayBatch4ReactionRuntimeTests
         Assert.Empty(completed.State.ResolutionStack);
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(7)]
+    [Trait("GatewayCard", "30042")]
+    public void ManegarmCanBePaidWithOverclockCreditsBeforePersonalCredits(int startingCredits)
+    {
+        BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();
+        RuntimeCardCatalog runtime = CreateRuntimeCatalog();
+        GameState prompt = ReachApproach(BuildState(catalog, runtime, GatewayBatch4CardCodes.Manegarm,
+            runnerCredits: startingCredits, overclock: true), catalog, runtime, ServerKind.Remote);
+        Assert.Equal(5, prompt.RunState!.RunCredits);
+        Assert.Equal(startingCredits - 1, prompt.GetPlayerBySide(PlayerSide.Runner).Credits);
+        LegalAction pay = Assert.Single(prompt.PendingDecision!.LegalActions,
+            action => IsChoice(action, "manegarm-approach-choice", "pay-credits"));
+        GameState restored = EngineJson.DeserializeState(EngineJson.Serialize(prompt), catalog, runtime);
+        ApplyResult paid = Apply(prompt, pay, catalog, runtime);
+        ApplyResult replay = Apply(restored, pay, catalog, runtime);
+        Assert.True(paid.Accepted, paid.Rejection?.Message);
+        Assert.True(replay.Accepted, replay.Rejection?.Message);
+        Assert.Equal(startingCredits - 1, paid.State.GetPlayerBySide(PlayerSide.Runner).Credits);
+        Assert.Equal(0, paid.State.RunState!.RunCredits);
+        Assert.Contains(paid.Events, value => value.Payload is RunCreditsAdjustedEventPayload { Delta: -5, RunCreditsAfter: 0 });
+        Assert.DoesNotContain(paid.Events, value => value.Kind == EngineEventKinds.CreditsAdjusted);
+        Assert.Equal(EngineJson.Serialize(paid.State), EngineJson.Serialize(replay.State));
+        Assert.Equal(EngineJson.Serialize(paid.Events), EngineJson.Serialize(replay.Events));
+        Assert.Empty(StateInvariantValidator.Collect(paid.State, catalog, runtime));
+    }
+
+    [Fact]
+    [Trait("GatewayCard", "30050")]
+    public void CorpCannotPayAnoeticVoidWithTheRunnersOverclockPool()
+    {
+        BehaviorCatalog catalog = GatewayBehaviorCatalog.Create();
+        RuntimeCardCatalog runtime = CreateRuntimeCatalog();
+        GameState prompt = ReachApproach(BuildState(catalog, runtime, GatewayBatch4CardCodes.AnoeticVoid,
+            runnerCredits: 1, corpCredits: 1, hqCards: 2, overclock: true), catalog, runtime, ServerKind.Remote);
+        Assert.Equal(5, prompt.RunState!.RunCredits);
+        Assert.Equal(1, prompt.GetPlayerBySide(PlayerSide.Corp).Credits);
+        Assert.Equal(RunTimingStep.BreachCandidateSelection, prompt.RunState.Step);
+        Assert.NotEqual(DecisionKind.TriggerChoice, prompt.PendingDecision?.Kind);
+        Assert.NotEqual(DecisionKind.BehaviorChoice, prompt.PendingDecision?.Kind);
+    }
+
     [Fact]
     [Trait("GatewayCard", "30050")]
     public void AnoeticVoidOptionalUsePaysAndTrashesExactlyTwoPrivateHqCardsThenEndsRun()
@@ -384,6 +427,7 @@ public sealed partial class GatewayBatch4ReactionRuntimeTests
     private static RuntimeCardCatalog CreateRuntimeCatalog() =>
         new RuntimeCardCatalog(
             "fixture:batch4-reactions-runtime",
+            new CardRuntimeSpec(GatewayCardCodes.Overclock, PlayerSide.Runner, RuntimeCardClass.Event, playCost: 1),
             new CardRuntimeSpec(
                 GatewayBatch4CardCodes.Manegarm,
                 PlayerSide.Corp,
@@ -422,7 +466,8 @@ public sealed partial class GatewayBatch4ReactionRuntimeTests
         int corpCredits = 5,
         int hqCards = 0,
         bool sourceRezzed = true,
-        int advancementCounters = 0)
+        int advancementCounters = 0,
+        bool overclock = false)
     {
         GameState baseline = GameState.CreateNew(
             seed: 45042,
@@ -478,7 +523,9 @@ public sealed partial class GatewayBatch4ReactionRuntimeTests
                 PlayerSide.Corp,
                 faceUp: false))
             .ToArray();
-        CardInstanceState[] cards = [source, .. hq];
+        CardInstanceId? eventId = overclock ? allocator.NextCardInstanceId() : null;
+        CardInstanceState[] cards = [source, .. hq, .. eventId is { } id
+            ? new[] { new CardInstanceState(id, GatewayCardCodes.Overclock, baseZones.Single(zone => zone.Kind == ZoneKind.RunnerGrip).Id, PlayerSide.Runner, faceUp: false) } : []];
         ZoneState[] zones = baseZones
             .Select(zone => zone.Id == sourceZone.Id
                 ? new ZoneState(
@@ -494,7 +541,8 @@ public sealed partial class GatewayBatch4ReactionRuntimeTests
                         zone.OwnerSide,
                         zone.ServerId,
                         hqIds)
-                    : zone)
+                    : zone.Kind == ZoneKind.RunnerGrip && eventId is { } runEvent
+                        ? new ZoneState(zone.Id, zone.Kind, zone.OwnerSide, zone.ServerId, [runEvent]) : zone)
             .ToArray();
         PlayerState baselineCorp = baseline.Players.Single(player => player.Side == PlayerSide.Corp);
         PlayerState baselineRunner = baseline.Players.Single(player => player.Side == PlayerSide.Runner);
@@ -561,7 +609,8 @@ public sealed partial class GatewayBatch4ReactionRuntimeTests
             state,
             state.Servers.Single(server => server.Kind == targetServer).Id,
             catalog,
-            runtime);
+            runtime,
+            initiatingSource: state.Cards.SingleOrDefault(card => card.DefinitionId == GatewayCardCodes.Overclock)?.Id);
 
     private static GameState ReachApproach(
         GameState state,

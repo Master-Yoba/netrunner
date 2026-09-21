@@ -88,7 +88,7 @@ public static class RunTimingCitations
         EngineEventKinds.CardAccessed => "CR 26.03 7.1: the Runner accesses the card",
         EngineEventKinds.AgendaStolen => "CR 26.03 7.2.3: if the accessed card is an agenda, the Runner must steal it",
         EngineEventKinds.AccessedCardTrashed => "CR 26.03 7.2.2: the Runner uses the basic trash ability, a mid-access ability, to trash the accessed card",
-        EngineEventKinds.RunCreditsAdjusted => "CR 26.03 1.10.3c/1.10.4b: spending credits uses the player-chosen division between the Runner wallet and hosted run credits",
+        EngineEventKinds.RunCreditsAdjusted => "CR 26.03 1.10.3c/1.10.4b: credit costs use an issued source split, or run credits before the Runner wallet for generic ability/choice costs",
         EngineEventKinds.RunPriorityPassed => "CR 26.03 9.2: priority is passed inside a paid-ability window (9.2.7; the engine's alternating-priority pass model is a documented simplification)",
         EngineEventKinds.RunEnded => "CR 26.03 6.9.6: the run ends and run-scoped effects are cleaned up",
         _ => throw new ArgumentException($"No CR citation is defined for run event kind '{kind}'.", nameof(kind)),

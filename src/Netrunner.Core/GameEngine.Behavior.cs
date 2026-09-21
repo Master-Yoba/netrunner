@@ -2381,7 +2381,7 @@ public static partial class GameEngine
                 }
             }
 
-            return credits <= payer.Credits
+            return credits <= int.MaxValue && credits <= AvailableCreditsForPayment(working, owner)
                 && clicks <= payer.Clicks
                 && (!HasBehaviorChoiceAdditionalCardCost(option)
                     || EnumerateBehaviorChoiceAdditionalSelections(working, option).Any());
@@ -2688,7 +2688,7 @@ public static partial class GameEngine
             }
         }
 
-        if (credits > payer.Credits || clicks > payer.Clicks)
+        if (credits > int.MaxValue || credits > AvailableCreditsForPayment(working, owner) || clicks > payer.Clicks)
         {
             throw new ResolutionFailureException(
                 "The behavior option cost is no longer affordable by its chooser.");
@@ -2698,7 +2698,7 @@ public static partial class GameEngine
         // atomic rejection contract for stale/forged option payloads.
         if (credits != 0)
         {
-            ApplyCreditDeltaIfNonZero(working, owner, checked(-(int)credits));
+            PayCreditCost(working, owner, (int)credits);
         }
 
         if (clicks != 0)

@@ -1048,7 +1048,7 @@ public static partial class GameEngine
                 }
             }
 
-            return credits <= controller.Credits
+            return credits <= AvailableCreditsForPayment(working, controllerId)
                 && clicks <= controller.Clicks
                 && tags <= availableTags
                 && counters.All(pair => CurrentAbilityCounter(working, source.Id, pair.Key) >= pair.Value);
@@ -1560,7 +1560,7 @@ public static partial class GameEngine
             switch (cost.Kind)
             {
                 case BehaviorCostKind.Credits:
-                    ApplyCreditDeltaIfNonZero(working, frame.Controller, checked(-cost.Amount));
+                    PayCreditCost(working, frame.Controller, cost.Amount);
                     break;
                 case BehaviorCostKind.Clicks:
                     SpendClick(working, frame.Controller);

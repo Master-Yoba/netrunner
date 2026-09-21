@@ -64,6 +64,16 @@ the fallback list: among otherwise equivalent issued actions, spend the maximum
 legal run-credit amount before personal credits. Target sets, effect choices,
 cost quotes, and costs remain distinct.
 
+The audit found a separate engine gap: generic behavior choices and paid
+abilities counted only personal credits. A Runner with Overclock credits but
+fewer than five personal credits could not choose Mânegarm Skunkworks' credit
+payment. Those costs now use the same run-payment reducer: include the Runner's
+live run pool when checking affordability and spend it before personal credits.
+Corp costs cannot use the Runner's pool. Credit loss effects and explicitly
+restricted hosted-counter costs keep their existing semantics. Production
+Mânegarm/Overclock and Anoetic Void regressions, mixed-source ability payments,
+atomic stale rejection, and save/reload tests cover this behavior.
+
 The current `RunCredits` pool already includes Overclock's expiring credits;
 `HostedCredits` is the historical name for that contribution in action contracts.
 Unspent run credits expire at run end, and credit loss effects do not consume
@@ -84,8 +94,10 @@ viewer-authorized card views, and current selection cardinality/provenance.
 Installed backs expose positions without definitions. Search candidates are
 sorted by stable ID in the presentation metadata/browser, without deck ordering.
 Random HQ and top-of-R&D access use aggregate server handles. Opponent-owned
-choices do not expose this metadata. State schemas, serialized observation
-contracts, legal-action allocation, and replay IDs are unchanged.
+choices do not expose this metadata. The board projection does not change state
+schemas or serialized observation contracts. The credit-cost fix can expose
+previously missing affordable actions; saved-state schemas stay unchanged and
+continuation remains deterministic under the corrected payment rules.
 
 A confirmed large multi-card choice uses `BoardSelectionSubmission` to submit
 current issued add-selection actions, reacquire each next decision, and submit
