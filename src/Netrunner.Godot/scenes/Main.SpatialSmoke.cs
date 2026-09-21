@@ -72,6 +72,15 @@ public partial class Main
 					else await ClickTableButton(_spatialCues.Single(cue => cue.Target == target).Button);
 					RequireInteraction(_labSubmissionCount == 0, "Target selection spent resources before confirmation.");
 					RequireInteraction(_spatialSelection?.Selected.Contains(target) == true, $"Native target click missed {target}. Selected: {string.Join(",", _spatialSelection?.Selected ?? [])}");
+					if (_spatialSelection!.Selected.Count == 1 && scenario is 26 or 31)
+					{
+						string next = scenario == 26 ? "ICE position" : "position 2";
+						RequireInteraction(_spatialPendingConfirm is { Disabled: true }
+							&& _spatialPanel!.GetNode<Label>("%Prompt").Text.Contains(next, StringComparison.Ordinal),
+							"A partial ordered or install choice did not explain its next target.");
+						if (OS.GetCmdlineUserArgs().Contains("--interaction-guidance-screenshots") && scenario == 31)
+							await SaveInteractionEvidence($"guidance-ordered-selection-{size.X}");
+					}
 				}
 				RequireInteraction(_spatialConfirmButtons.ContainsKey(chosen.Action.Id), "Complete selection has no confirmation.");
 				RequireInteraction(_tableViewport.GetGlobalRect().Encloses(_spatialPanel!.GetGlobalRect()), "Spatial panel escaped the viewport.");

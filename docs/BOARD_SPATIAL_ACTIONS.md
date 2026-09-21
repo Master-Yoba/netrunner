@@ -124,6 +124,38 @@ selectable card browser. Card artwork continues to come from the local cache.
 
 ## Verification
 
+### Interaction clarity audit
+
+The follow-up audit checked local card actions, ability payments, mandatory
+targets, ordered and incremental choices, subroutine installs, icebreaker
+selection, run destinations, access, forced discard, and fallback controls.
+
+| Gap found | Updated interaction |
+| --- | --- |
+| Exact multi-card selection hid confirmation until complete and displayed enum names | Plain count requirement, selected count, and a disabled confirmation naming the missing count; selecting again removes a local choice |
+| Incremental selection left its hover preview over the next candidate | Choosing a card dismisses its preview; fresh hover still inspects other candidates |
+| Empty optional selection said “Finish selection: no cards” | **Continue without selecting cards**, with zero-card eligibility still controlled by the published choice |
+| Ordered choices used a generic next-target prompt | The prompt identifies the next position; clicking an earlier selected card undoes that position and subsequent choices |
+| Subroutine install did not identify its second step | After card selection, the prompt requests the ICE position/server root or new remote |
+| Breaker selection hid confirmation and omitted permitted quantities | Issued target sets determine allowed counts, progress, and disabled confirmation; exact selection exposes a priced **Confirm** action |
+| Server picker suggested a later confirmation, but its click committed immediately | Prompt explains commitment; each unambiguous server cue includes the action and cost |
+| “Back to table” looked like cancellation of a mandatory resolution | **Use action list · Esc** states the actual fallback; initial local staging retains **Cancel** |
+
+`BoardSelectionPresenter` derives guidance from published cardinality and issued
+target sets. It introduces no new legality or payment policy. Access controls,
+priced source-only actions, forced discard guidance, and modal/busy guards needed
+no behavioral changes in this pass and remain covered by the interaction suite.
+Global actions such as Run and Purge remain buttons.
+
+`INTERACTION_GUIDANCE PASS` covers exact partial selections, deselection, Escape,
+fresh-action finalization, and zero-card continuation at both supported smoke
+resolutions. Existing ordered/install, breaker, server, and fallback checks also
+assert their next-step guidance. Screenshots with synthetic card faces are saved
+as `docs/evidence/m4-11/guidance-*.png` using
+`--m4-11-ui-smoke --interaction-guidance-screenshots`.
+
+### Lab and regression coverage
+
 `make interaction-lab` groups 26 practice scenarios behind a Runner/Corp
 selector (18 Runner, 8 Corp). The menu covers card actions, identity abilities/card
 costs, forced run choices, hidden breach targets, access payments, bioroid

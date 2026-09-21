@@ -75,8 +75,8 @@ public sealed class ActionLabelPresenterTests
         var empty = Action(ActionKind.ChooseBehavior, new BehaviorChoiceParameters("selection"));
         Assert.Equal("Add to selection: Cleaver", Label(add));
         Assert.Equal("Finish selection: Carmen", Label(finish, peers: [add, finish]));
-        Assert.Equal("Finish selection: no cards", Label(empty, peers: [add, empty]));
-        Assert.Equal("Choose no cards", Label(empty));
+        Assert.Equal("Continue without selecting cards", Label(empty, peers: [add, empty]));
+        Assert.Equal("Continue without selecting cards", Label(empty));
     }
 
     [Fact]

@@ -134,9 +134,13 @@ public static partial class InteractionLabSamples
 	public static MatchViewModel RefreshSpatialIncremental(MatchViewModel view, long revision)
 	{
 		ObservationCardSelection context = view.CardSelection!;
-		LegalActionViewModel[] actions = [.. context.Candidates.Except(context.Selected).Select(id => Action("add-" + id, ActionKind.ChooseBehavior,
-			new BehaviorChoiceParameters(context.ChoiceKey, cardIds: [new(id)], finalizeSelection: false), revision)),
-			Action("finish", ActionKind.ChooseBehavior, new BehaviorChoiceParameters(context.ChoiceKey, cardIds: context.Selected.Select(id => new CardInstanceId(id)).ToArray()), revision)];
+		List<LegalActionViewModel> actions = [];
+		if (context.Cardinality == BehaviorChoiceCardinalityKind.AnyNumber || context.Selected.Count < context.Count)
+			actions.AddRange(context.Candidates.Except(context.Selected).Select(id => Action("add-" + id, ActionKind.ChooseBehavior,
+				new BehaviorChoiceParameters(context.ChoiceKey, cardIds: [new(id)], finalizeSelection: false), revision)));
+		if (BoardSelectionSubmission.CanConfirm(context, context.Selected))
+			actions.Add(Action("finish", ActionKind.ChooseBehavior, new BehaviorChoiceParameters(context.ChoiceKey,
+				cardIds: context.Selected.Select(id => new CardInstanceId(id)).ToArray()), revision));
 		return view with { Decision = Decision(view.Viewer, revision, DecisionKind.BehaviorChoice, "Select programs"), LegalActions = actions };
 	}
 }

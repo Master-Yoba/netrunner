@@ -101,8 +101,12 @@ public sealed class BoardSpatialActionsTests
         { CardSelection = Context() with { Mode = BehaviorChoiceMode.OrderSelection } };
         var selection = new BoardSpatialSelection(BoardSpatialActions.Project(view));
         Assert.True(selection.Toggle(new(BoardTargetKind.Card, "b", "Position 1")));
+        BoardSelectionGuidance pending = BoardSelectionPresenter.Spatial(selection, view);
+        Assert.False(pending.CanConfirm);
+        Assert.Contains("position 2", pending.Instruction, StringComparison.Ordinal);
         Assert.True(selection.Toggle(new(BoardTargetKind.Card, "a", "Position 2")));
         Assert.Equal("ba", Assert.Single(selection.CompleteActions).Action.Id.Value);
+        Assert.True(BoardSelectionPresenter.Spatial(selection, view).CanConfirm);
     }
 
     [Fact]
@@ -148,8 +152,12 @@ public sealed class BoardSpatialActionsTests
         var selection = new BoardSpatialSelection(BoardSpatialActions.Project(view));
         Assert.True(selection.Toggle(new(BoardTargetKind.Card, "a", "Install card")));
         Assert.Empty(selection.CompleteActions);
+        BoardSelectionGuidance pending = BoardSelectionPresenter.Spatial(selection, view);
+        Assert.False(pending.CanConfirm);
+        Assert.Contains("ICE position", pending.Instruction, StringComparison.Ordinal);
         Assert.True(selection.Toggle(new(BoardTargetKind.ServerIce, "hq", "Destination")));
         Assert.Single(selection.CompleteActions);
+        Assert.True(BoardSelectionPresenter.Spatial(selection, view).CanConfirm);
     }
 
     [Fact]

@@ -30,6 +30,7 @@ public partial class Main
 			await CheckActionLabels();
 			await CheckBoardIcebreakers();
 			await CheckTargetedAbilityPayment();
+			await CheckInteractionGuidance();
 			await CheckSpatialActions();
 			foreach (Vector2I size in new[] { new Vector2I(1920, 1080), new Vector2I(2560, 1440) })
 			{
@@ -215,6 +216,7 @@ public partial class Main
 			RequireInteraction(install.Text.Contains("Keep installed cards", StringComparison.Ordinal)
 				&& _gameTable.VisibleCards["preview-rig-0"].IsTargetCandidate,
 				"The install choice does not explain keeping the optional replacement.");
+			RequireInteraction(_boardChoiceDismiss!.Text == "Use action list · Esc", "Mandatory install resolution suggests it can be cancelled.");
 			if (OS.GetCmdlineUserArgs().Contains("--install-choice-screenshots"))
 				await SaveInteractionEvidence($"install-choice-{size.X}");
 			await PressModalEscapeAsync();

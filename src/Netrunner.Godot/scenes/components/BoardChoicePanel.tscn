@@ -70,4 +70,4 @@ unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(0, 30)
 text = "Dismiss · use action dock"
-tooltip_text = "Hide this local board-first surface without changing the engine resolution."
+tooltip_text = "Switch to the action list. This choice still needs to be resolved."

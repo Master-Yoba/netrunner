@@ -28,6 +28,7 @@ public partial class Main
 			if (context.Cardinality != BehaviorChoiceCardinalityKind.AnyNumber && _spatialIncrementalCards.Count >= context.Count) return true;
 			_spatialIncrementalCards.Add(id);
 		}
+		HideCardHoverPreview();
 		RenderSpatialPanel(_currentSnapshot, BoardSpatialActions.Project(_currentSnapshot.View));
 		return true;
 	}
@@ -35,17 +36,20 @@ public partial class Main
 	private void RenderIncrementalSelection(MatchSnapshot snapshot)
 	{
 		ObservationCardSelection context = snapshot.View.CardSelection!;
-		_spatialPanel!.GetNode<Label>("%Prompt").Text = $"Selected {_spatialIncrementalCards!.Count} · {context.Cardinality} {context.Count?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "cards"}\n"
-			+ string.Join(", ", _spatialIncrementalCards.Select(id => SpatialTargetLabel(new(BoardTargetKind.Card, id))))
-			+ "\nConfirm the complete selection. Esc clears unsubmitted choices.";
+		IReadOnlyList<string> selected = _spatialIncrementalCards!;
+		BoardSelectionGuidance guidance = BoardSelectionPresenter.Incremental(context, selected);
+		_spatialPanel!.GetNode<Label>("%Prompt").Text = guidance.Instruction + "\n"
+			+ string.Join(", ", selected.Select(id => SpatialTargetLabel(new(BoardTargetKind.Card, id))))
+			+ "\nClick a newly selected card to remove it. Esc resets unconfirmed choices.";
 		RenderSpatialTargets(snapshot, context.Candidates.Select(id => new BoardTarget(BoardTargetKind.Card, id)).ToArray());
-		if (BoardSelectionSubmission.CanConfirm(context, _spatialIncrementalCards))
-			AddSpatialButton($"Confirm selection · {_spatialIncrementalCards.Count} cards", () =>
+		if (guidance.CanConfirm)
+			AddSpatialButton(guidance.ConfirmationLabel, () =>
 			{
 				if (!CurrentSpatialDecision(snapshot.View.Decision!) || _spatialSubmission is not null) return;
-				_spatialSubmission = new(context, _spatialIncrementalCards.ToArray());
+				_spatialSubmission = new(context, selected);
 				AdvanceSpatialSubmission(_currentSnapshot!);
 			});
+		else AddPendingSpatialConfirm(guidance);
 	}
 
 	private bool AdvanceSpatialSubmission(MatchSnapshot snapshot)

@@ -176,14 +176,11 @@ public partial class Main
 				: ActionLabelPresenter.AbilityChoiceLabel(remainingActions[0].Action, ActionCardName)) + "\n" : "";
 		IReadOnlyList<BoardTarget> candidates = selection.Candidates;
 		IReadOnlyList<BoardSpatialAction> completeActions = selection.CompleteActions;
-		bool paymentStep = candidates.Count > 0 && candidates.All(target => target.PaymentKind == BehaviorAdditionalCostKind.TrashCards);
 		IReadOnlyList<CardViewModel> hand = snapshot.View.Viewer == PlayerSide.Corp ? snapshot.View.CorpHand.VisibleCards : snapshot.View.RunnerHand.VisibleCards;
-		bool fromHand = paymentStep && candidates.All(target => hand.Any(card => card.Id == target.Id));
-		string nextStep = completeActions.Count > 0 ? "Ready to confirm."
-			: paymentStep ? $"Select a {(fromHand ? "card from your hand" : "highlighted card")} to trash as payment."
-			: "Select the next highlighted target.";
-		_spatialPanel.GetNode<Label>("%Prompt").Text = effect + (selected.Length > 0 ? selected + "\n" : "") + nextStep
-			+ "\nNothing is paid until you confirm. Esc cancels unsubmitted choices.";
+		BoardSelectionGuidance guidance = BoardSelectionPresenter.Spatial(selection, snapshot.View);
+		_spatialPanel.GetNode<Label>("%Prompt").Text = effect + (selected.Length > 0 ? selected + "\n" : "") + guidance.Instruction
+			+ "\nClick a selected card to undo it and later choices. Nothing is paid until confirmation."
+			+ (_spatialAutomatic ? " Esc resets unconfirmed choices." : " Esc cancels this ability.");
 		RenderSpatialTargets(snapshot, selection.Candidates.Concat(selection.Selected).Distinct().ToArray());
 		foreach (BoardTarget payment in candidates.Where(target => target.PaymentKind == BehaviorAdditionalCostKind.TrashCards))
 		{
@@ -193,12 +190,14 @@ public partial class Main
 			pick.SetMeta("payment_card_id", payment.Id);
 		}
 		foreach (BoardSpatialAction complete in completeActions) AddSpatialConfirm(snapshot, complete);
-		if (completeActions.Count == 0)
-		{
-			_spatialPendingConfirm = AddSpatialButton(paymentStep ? "Confirm · select a payment card first" : "Confirm · finish selecting targets", () => { });
-			_spatialPendingConfirm.TooltipText = nextStep;
-			_spatialPendingConfirm.Disabled = true;
-		}
+		if (completeActions.Count == 0) AddPendingSpatialConfirm(guidance);
+	}
+
+	private void AddPendingSpatialConfirm(BoardSelectionGuidance guidance)
+	{
+		_spatialPendingConfirm = AddSpatialButton(guidance.ConfirmationLabel, () => { });
+		_spatialPendingConfirm.TooltipText = guidance.Instruction;
+		_spatialPendingConfirm.Disabled = true;
 	}
 
 	private void AddSpatialConfirm(MatchSnapshot snapshot, BoardSpatialAction action)

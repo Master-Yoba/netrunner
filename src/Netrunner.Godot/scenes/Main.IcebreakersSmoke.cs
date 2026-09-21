@@ -139,11 +139,18 @@ public partial class Main
 				int submissions = _labSubmissionCount;
 				await ClickTableButton(_boardChooseBreak!);
 				RequireInteraction(_boardChoosingSubroutines && _boardBreakerButtons.Count == 0, "Break did not open target selection on the ICE.");
+				Button pending = _icebreakerPanel!.GetNode<VBoxContainer>("%Actions").GetChildren().OfType<Button>().Single(button => button.HasMeta("pending_break"));
+				RequireInteraction(pending.Disabled && pending.Text.Contains("select 1 more", StringComparison.Ordinal)
+					&& _icebreakerPanel.GetNode<Label>("%Subroutines").Text.Contains("0 selected", StringComparison.Ordinal),
+					"Break selection does not explain its missing target or show pending confirmation.");
+				if (OS.GetCmdlineUserArgs().Contains("--interaction-guidance-screenshots"))
+					await SaveInteractionEvidence($"guidance-break-selection-{GetWindow().Size.X}");
 				foreach (int ordinal in targets) await ClickTableButton(_boardSubroutineButtons[ordinal]);
 				RequireInteraction(_tableViewport.GetGlobalRect().Encloses(_icebreakerPanel!.GetGlobalRect()), "Subroutine controls escaped the board viewport.");
 				RequireInteraction(_boardSubroutineButtons[0].GetChild<GameSymbolLabel>(0).RenderedSymbolCount == 2,
 					"Subroutine target text did not render subroutine and credit icons.");
 				RequireInteraction(_boardBreakerButtons.Count == 1, "Break selection did not collapse payments to one action.");
+				RequireInteraction(_boardBreakerButtons.Values.Single().Text.StartsWith("Confirm · ", StringComparison.Ordinal), "Break payment does not identify its confirmation step.");
 				RequireInteraction(_labSubmissionCount == submissions && _boardBreakTargets.SetEquals(targets), "Selecting targets paid or selected the wrong set.");
 				RequireInteraction(_boardSubroutineButtons.Where(pair => !targets.Contains(pair.Key)).All(pair => targets.Count < 2 || pair.Value.Disabled),
 					"Selection exceeded the ability's target limit.");

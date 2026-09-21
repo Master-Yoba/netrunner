@@ -180,7 +180,7 @@ public partial class Main
 				decision,
 				refreshed,
 				_boardChoiceRunSelection ? "Choose a server to run" : "Choose a play or install destination",
-				_boardChoiceRunSelection ? "Select a highlighted server · 1 click. Cancel or Esc returns to the board." : BoardChoiceInitialPrompt(refreshed));
+				_boardChoiceRunSelection ? "Click a highlighted server to start the run immediately · 1 click. Cancel or Esc returns to the board." : BoardChoiceInitialPrompt(refreshed));
 			return;
 		}
 
@@ -282,7 +282,7 @@ public partial class Main
 			decision,
 			_boardChoiceActions,
 			runSelection ? "Choose a server to run" : "Choose a play or install destination",
-			runSelection ? "Select a highlighted server · 1 click. Cancel or Esc returns to the board." : BoardChoiceInitialPrompt(_boardChoiceActions));
+			runSelection ? "Click a highlighted server to start the run immediately · 1 click. Cancel or Esc returns to the board." : BoardChoiceInitialPrompt(_boardChoiceActions));
 	}
 
 	/// <summary>Dismisses only the local contextual surface; it never rolls back Core.</summary>
@@ -397,7 +397,9 @@ public partial class Main
 		}
 
 		_boardChoiceTitle.Text = title;
-		_boardChoiceDismiss!.Text = _boardChoiceRunSelection ? "Cancel run" : "Back to table";
+		_boardChoiceDismiss!.Text = _boardChoiceRunSelection ? "Cancel run" : _boardChoiceIsInitialStage ? "Cancel selection" : "Use action list · Esc";
+		_boardChoiceDismiss.TooltipText = _boardChoiceIsInitialStage ? "Cancel this selection without paying."
+			: "Switch to the action list. This choice still needs to be resolved.";
 		_boardChoicePrompt.Text = prompt;
 		ClearChildren(_boardChoiceOptions);
 		_boardChoicePanel.GetNode<ScrollContainer>("Content/OptionsScroll").CustomMinimumSize = new Vector2(0, 52);
@@ -406,7 +408,8 @@ public partial class Main
 		if (visibleButtons.Count == 0)
 		{
 			Label hint = MakeWrappedLabel(
-				"Click a highlighted card or server. Back to table or Esc opens the action dock.",
+				_boardChoiceIsInitialStage ? "Cancel or Esc returns to the board without paying."
+					: "This choice must still be resolved. Use action list or Esc switches controls.",
 				11,
 				Muted);
 			_boardChoiceOptions.AddChild(hint);
@@ -750,8 +753,8 @@ public partial class Main
 			.Select(server => server!)
 			.ToHashSet(StringComparer.Ordinal);
 		return servers.Count > 0
-			? "Choose a highlighted server, then confirm any remaining choice."
-			: "Choose how to play or install this card.";
+			? "Click a highlighted server to play or install at the displayed cost. If it has multiple options, choose one to pay."
+			: "Choose how to play or install this card. Choosing an option pays its displayed cost.";
 	}
 
 	private static string BoardChoiceFollowUpTitle(DecisionKind kind) => kind switch
