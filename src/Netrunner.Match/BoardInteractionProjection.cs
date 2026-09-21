@@ -53,6 +53,8 @@ public sealed record BoardInteractionViewModel(
     IReadOnlyList<BoardInteractionSource> Sources,
     IReadOnlyList<BoardInteractionChoiceViewModel> Choices)
 {
+    public IReadOnlyList<BoardSpatialAction> SpatialActions { get; init; } = [];
+
     public static BoardInteractionViewModel Empty { get; } = new(
         Array.Empty<BoardInteractionSource>(),
         Array.Empty<BoardInteractionChoiceViewModel>());
@@ -72,7 +74,10 @@ public static class BoardInteractionProjector
     /// clients must not offer drag submissions while another player owns the
     /// decision.
     /// </summary>
-    public static BoardInteractionViewModel Project(MatchViewModel view)
+    public static BoardInteractionViewModel Project(MatchViewModel view) =>
+        ProjectDrag(view) with { SpatialActions = BoardSpatialActions.Project(view) };
+
+    private static BoardInteractionViewModel ProjectDrag(MatchViewModel view)
     {
         ArgumentNullException.ThrowIfNull(view);
         if (!IsLocalDecision(view))

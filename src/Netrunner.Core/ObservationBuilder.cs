@@ -83,6 +83,7 @@ public static partial class ObservationBuilder
         return new Observation(viewer, decisionId, legalActions, publicState, privateState)
         {
             ActionSources = BuildActionSources(state, viewer, accessVisible, legalActions),
+            BoardContext = BuildBoardContext(state, viewer, accessVisible, legalActions),
             Decision = pending is null
                 || state.GetPlayer(pending.Owner).Side != viewer
                 ? null

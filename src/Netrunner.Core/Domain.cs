@@ -34,7 +34,23 @@ public sealed record Observation(
     /// Like Decision, this is UI metadata and preserves the serialized agent contract.</summary>
     [JsonIgnore]
     public IReadOnlyList<ObservationActionSource> ActionSources { get; init; } = [];
+
+    [JsonIgnore]
+    public ObservationBoardContext BoardContext { get; init; } = new([], [], null);
 }
+
+/// <summary>Presentation handles only; never part of the serialized agent or replay contract.</summary>
+public sealed record ObservationBoardContext(
+    IReadOnlyList<ObservationCardPosition> Positions,
+    IReadOnlyList<IReadOnlyDictionary<string, object?>> ChoiceCards,
+    ObservationCardSelection? Selection);
+
+public sealed record ObservationCardPosition(string CardId, string ServerId, ZoneKind Zone, int Index);
+
+public sealed record ObservationCardSelection(
+    string ContinuationId, string ChoiceKey, BehaviorChoiceMode Mode,
+    BehaviorChoiceCardinalityKind Cardinality, int? Count,
+    IReadOnlyList<string> Candidates, IReadOnlyList<string> Selected);
 
 public sealed record ObservationActionSource(
     ActionId ActionId,

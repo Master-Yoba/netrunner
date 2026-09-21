@@ -31,6 +31,9 @@ public sealed record MatchViewModel(
 {
     public IReadOnlyList<CardViewModel> CorpDiscard { get; init; } = Array.Empty<CardViewModel>();
     public IReadOnlyList<CardViewModel> RunnerHeap { get; init; } = Array.Empty<CardViewModel>();
+    public IReadOnlyList<ObservationCardPosition> CardPositions { get; init; } = [];
+    public IReadOnlyList<CardViewModel> ChoiceCards { get; init; } = [];
+    public ObservationCardSelection? CardSelection { get; init; }
 
     private int _corpDiscardCount;
     /// <summary>Public total, including concealed Archives cards; legacy projections fall back to visible cards.</summary>
@@ -869,6 +872,9 @@ public static class ObservationViewMapper
             handSizeProjection);
         return view with
         {
+            CardPositions = Array.AsReadOnly(observation.BoardContext.Positions.ToArray()),
+            ChoiceCards = Array.AsReadOnly(observation.BoardContext.ChoiceCards.Select(card => MapCard(card, metadataResolver, abilityCue)).ToArray()),
+            CardSelection = observation.BoardContext.Selection,
             CorpDiscard = ReadCards(publicState, "corpDiscard", metadataResolver, abilityCue)
                 .Concat(ReadCards(privateState, "faceDownArchives", metadataResolver, abilityCue))
                 .GroupBy(card => card.Id).Select(group => group.Last()).ToArray(),

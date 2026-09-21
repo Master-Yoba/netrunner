@@ -136,6 +136,16 @@ public static class ActionLabelPresenter
         };
     }
 
+    /// <summary>Names a source ability and its full cost before physical targets are selected.</summary>
+    public static string AbilityChoiceLabel(LegalActionViewModel action, Func<string, string> cardName)
+    {
+        if (action.Parameters is not AbilityActionParameters ability) return action.Description;
+        string costs = string.Join(" + ", ability.Costs.Select(cost => Cost(cost, cardName(ability.SourceCardId.Value), null, cardName)));
+        return (action.EffectLabel ?? Words(ability.AbilityKey))
+            + (costs.Length > 0 ? " · Cost: " + costs : "")
+            + (ability.Usage.Limit == BehaviorAbilityUsageLimit.OncePerTurn ? " · Once per turn" : "");
+    }
+
     private static string Cost(BehaviorCost cost, string source, IReadOnlyList<CardInstanceId>? selected,
         Func<string, string> cardName) => cost.Kind switch
         {

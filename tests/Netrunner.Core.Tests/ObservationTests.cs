@@ -318,6 +318,13 @@ public sealed class ObservationTests
         Observation corpView = ObservationBuilder.Build(breached, PlayerSide.Corp);
         Assert.Single(runnerView.LegalActions);
         Assert.IsType<BreachCandidateParameters>(runnerView.LegalActions[0].Parameters);
+        Assert.Contains(runnerView.BoardContext.Positions, position => position.CardId == ids.IceFaceDown.Value);
+        Assert.DoesNotContain(runnerView.BoardContext.Positions, position => position.CardId == ids.CorpHandOne.Value);
+        Assert.DoesNotContain(runnerView.BoardContext.Positions, position => position.CardId == ids.CorpHandTwo.Value);
+        Assert.Empty(runnerView.BoardContext.ChoiceCards);
+        Assert.Empty(corpView.BoardContext.Positions);
+        Assert.Null(runnerView.BoardContext.Selection);
+        Assert.DoesNotContain("definitionId", EngineJson.Serialize(runnerView.BoardContext), StringComparison.Ordinal);
         Assert.Empty(corpView.LegalActions);
         Assert.Equal(decision.Id.Value, runnerView.DecisionId);
         Assert.Equal(decision.Id.Value, corpView.DecisionId);
