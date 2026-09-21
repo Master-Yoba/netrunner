@@ -54,7 +54,18 @@ public partial class Main
 				}
 				foreach (BoardTarget target in chosen.Targets)
 				{
-					if (target.Kind == BoardTargetKind.Card) await ClickSpatialCard(target.Id);
+					if (scenario == 28)
+					{
+						TableCardControl candidate = _spatialOptions!.FindChildren("*", "Control", true, false).OfType<TableCardControl>().Single();
+						await LabPointer(candidate.GetGlobalRect().GetCenter());
+						RequireInteraction(candidate.UseHoverPreview && candidate.TooltipText.Length == 0 && CanShowCardHoverPreview(candidate), "Search browser lost its artwork tooltip.");
+						candidate.GrabFocus();
+						GetViewport().PushInput(new InputEventKey { Device = SmokeInputDevice, Keycode = Key.Space, Pressed = true });
+						GetViewport().PushInput(new InputEventKey { Device = SmokeInputDevice, Keycode = Key.Space, Pressed = false });
+						await TableFrames(3);
+						RequireInteraction(_spatialConfirmButtons.Values.Any(button => button.HasFocus()), "Browser selection did not move keyboard focus to confirmation.");
+					}
+					else if (target.Kind == BoardTargetKind.Card) await ClickSpatialCard(target.Id);
 					else if (target.Kind == BoardTargetKind.Subroutine)
 						await ClickTableButton(_spatialOptions!.GetChildren().OfType<Button>().First(button => button.GetMeta("subroutine_ordinal", -1).AsInt32() == 0));
 					else await ClickTableButton(_spatialCues.Single(cue => cue.Target == target).Button);

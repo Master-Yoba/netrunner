@@ -173,7 +173,8 @@ public partial class Main
 			|| !card.IsInteractionActive
 			|| !card.IsVisibleInTree()
 			|| (!_gameTable.VisibleCards.Values.Contains(card)
-				&& !(ReferenceEquals(card, _tableAccessCard) && _tableAccessPanel.IsVisibleInTree())))
+				&& !(ReferenceEquals(card, _tableAccessCard) && _tableAccessPanel.IsVisibleInTree())
+				&& !(SpatialVisible && _spatialOptions?.IsAncestorOf(card) == true)))
 		{
 			return false;
 		}

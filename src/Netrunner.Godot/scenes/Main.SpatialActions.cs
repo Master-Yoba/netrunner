@@ -168,7 +168,6 @@ public partial class Main
 			+ "\nConfirm after selecting. Esc clears unsubmitted choices.";
 		RenderSpatialTargets(snapshot, selection.Candidates.Concat(selection.Selected).Distinct().ToArray());
 		foreach (BoardSpatialAction complete in selection.CompleteActions) AddSpatialConfirm(snapshot, complete);
-		if (selection.Selected.Count > 0) AddSpatialButton("Reset selection · Esc", CancelSpatialSelection);
 	}
 
 	private void AddSpatialConfirm(MatchSnapshot snapshot, BoardSpatialAction action)
@@ -208,6 +207,7 @@ public partial class Main
 		if (_spatialDecision is not { } decision || !CurrentSpatialDecision(decision) || _spatialSelection?.Toggle(target) != true) return;
 		HideCardHoverPreview();
 		RenderSpatialPanel(_currentSnapshot!, BoardSpatialActions.Project(_currentSnapshot!.View));
+		_spatialConfirmButtons.Values.FirstOrDefault()?.GrabFocus();
 	}
 
 	private string SpatialTargetLabel(BoardTarget target) => target.Kind switch
@@ -253,6 +253,7 @@ public partial class Main
 			{
 				_spatialPanel!.GetNode<ScrollContainer>("Content/OptionsScroll").CustomMinimumSize = new(0, 230);
 				TableCardControl card = TableCardControl.Create();
+				card.UseHoverPreview = true;
 				card.SetCard(model);
 				card.SetDisplaySize(new(105, 147));
 				card.SetTargetCandidate(true);

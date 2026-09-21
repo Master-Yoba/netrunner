@@ -46,7 +46,6 @@ public partial class Main
 				_spatialSubmission = new(context, _spatialIncrementalCards.ToArray());
 				AdvanceSpatialSubmission(_currentSnapshot!);
 			});
-		AddSpatialButton("Reset selection · Esc", CancelSpatialSelection);
 	}
 
 	private bool AdvanceSpatialSubmission(MatchSnapshot snapshot)
