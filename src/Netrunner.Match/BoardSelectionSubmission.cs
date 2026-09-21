@@ -8,14 +8,14 @@ namespace Netrunner.Match;
 /// </summary>
 public sealed class BoardSelectionSubmission
 {
-    private readonly ObservationCardSelection _origin;
+    private readonly CardSelectionViewModel _origin;
     private readonly string[] _desired;
     private string[] _expected;
     private (string Id, long Revision)? _lastDecision;
     public bool Finished { get; private set; }
     public string? Error { get; private set; }
 
-    public BoardSelectionSubmission(ObservationCardSelection origin, IEnumerable<string> desired)
+    public BoardSelectionSubmission(CardSelectionViewModel origin, IEnumerable<string> desired)
     {
         _origin = origin;
         _desired = desired.ToArray();
@@ -23,7 +23,7 @@ public sealed class BoardSelectionSubmission
         if (!CanConfirm(origin, _desired)) throw new ArgumentException("The staged selection is incomplete or contains ineligible cards.", nameof(desired));
     }
 
-    public static bool CanConfirm(ObservationCardSelection context, IReadOnlyList<string> selected) =>
+    public static bool CanConfirm(CardSelectionViewModel context, IReadOnlyList<string> selected) =>
         selected.Distinct(StringComparer.Ordinal).Count() == selected.Count
         && selected.All(context.Candidates.Contains)
         && selected.Take(context.Selected.Count).SequenceEqual(context.Selected)

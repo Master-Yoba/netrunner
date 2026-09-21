@@ -176,7 +176,7 @@ public sealed class BoardSpatialActionsTests
     [Fact]
     public void IncrementalSubmissionReacquiresActionsAndFinalizesExactlyOnce()
     {
-        ObservationCardSelection context = Context();
+        CardSelectionViewModel context = Context();
         var submission = new BoardSelectionSubmission(context, ["b", "a"]);
         MatchViewModel initial = Incremental(context, 1);
         Assert.Equal("add-b-1", submission.Next(initial)!.Id.Value);
@@ -194,7 +194,7 @@ public sealed class BoardSpatialActionsTests
     [InlineData(false)]
     public void InterruptedIncrementalSubmissionNeverContinuesAcrossDifferentState(bool continuationChanged)
     {
-        ObservationCardSelection context = Context();
+        CardSelectionViewModel context = Context();
         var submission = new BoardSelectionSubmission(context, ["a", "b"]);
         Assert.NotNull(submission.Next(Incremental(context, 1)));
         var unexpected = continuationChanged ? context with { ContinuationId = "different", Selected = ["a"] } : context with { Selected = ["c"] };
@@ -206,16 +206,16 @@ public sealed class BoardSpatialActionsTests
     [Fact]
     public void IncrementalConfirmationRespectsCardinalityAndAcceptedPrefix()
     {
-        ObservationCardSelection context = Context() with { Cardinality = BehaviorChoiceCardinalityKind.Exactly, Count = 2, Selected = ["a"] };
+        CardSelectionViewModel context = Context() with { Cardinality = BehaviorChoiceCardinalityKind.Exactly, Count = 2, Selected = ["a"] };
         Assert.False(BoardSelectionSubmission.CanConfirm(context, ["a"]));
         Assert.False(BoardSelectionSubmission.CanConfirm(context, ["b", "a"]));
         Assert.False(BoardSelectionSubmission.CanConfirm(context, ["a", "a"]));
         Assert.True(BoardSelectionSubmission.CanConfirm(context, ["a", "b"]));
     }
 
-    private static ObservationCardSelection Context() => new("frame:choice", "choice", BehaviorChoiceMode.Mandatory,
+    private static CardSelectionViewModel Context() => new("frame:choice", "choice", BehaviorChoiceMode.Mandatory,
         BehaviorChoiceCardinalityKind.AnyNumber, null, ["a", "b", "c"], []);
-    private static MatchViewModel Incremental(ObservationCardSelection context, int revision) => View(
+    private static MatchViewModel Incremental(CardSelectionViewModel context, int revision) => View(
         [.. context.Candidates.Except(context.Selected).Select(id => Action($"add-{id}-{revision}", ActionKind.ChooseBehavior,
             new BehaviorChoiceParameters("choice", cardIds: [new(id)], finalizeSelection: false))),
         Action($"finish-{revision}", ActionKind.ChooseBehavior, new BehaviorChoiceParameters("choice", cardIds: context.Selected.Select(id => new CardInstanceId(id)).ToArray()))]) with

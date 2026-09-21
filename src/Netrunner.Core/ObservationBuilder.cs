@@ -82,8 +82,6 @@ public static partial class ObservationBuilder
 
         return new Observation(viewer, decisionId, legalActions, publicState, privateState)
         {
-            ActionSources = BuildActionSources(state, viewer, accessVisible, legalActions),
-            BoardContext = BuildBoardContext(state, viewer, accessVisible, legalActions),
             Decision = pending is null
                 || state.GetPlayer(pending.Owner).Side != viewer
                 ? null
@@ -95,41 +93,6 @@ public static partial class ObservationBuilder
                     pending.Kind,
                     pending.Prompt),
         };
-    }
-
-    private static System.Collections.ObjectModel.ReadOnlyCollection<ObservationActionSource> BuildActionSources(
-        GameState state, PlayerSide viewer, IReadOnlySet<CardInstanceId> accessVisible,
-        IReadOnlyList<LegalAction> actions)
-    {
-        var sources = new List<ObservationActionSource>();
-        EffectCheckpointFrame[] checkpoints = state.ResolutionStack.OfType<EffectCheckpointFrame>().ToArray();
-        foreach (LegalAction action in actions)
-        {
-            TriggerId? triggerId = action.Parameters switch
-            {
-                TriggerChoiceParameters trigger => trigger.TriggerId,
-                TriggerOrderParameters order => order.TriggerId,
-                _ => null,
-            };
-            InterruptId? interruptId = action.Parameters switch
-            {
-                PreventionChoiceParameters prevention => prevention.InterruptId,
-                ReplacementChoiceParameters replacement => replacement.InterruptId,
-                _ => null,
-            };
-            TriggerInvocation? triggerSource = triggerId is null ? null
-                : checkpoints.SelectMany(frame => frame.TriggerQueue).FirstOrDefault(trigger => trigger.Id == triggerId);
-            InterruptInvocation? interruptSource = interruptId is null ? null
-                : checkpoints.SelectMany(frame => frame.InterruptQueue).FirstOrDefault(interrupt => interrupt.Id == interruptId);
-            CardInstanceId? cardId = triggerSource?.SourceCardId ?? interruptSource?.SourceCardId;
-            if (cardId is { } id && state.Cards.FirstOrDefault(card => card.Id == id) is { } card
-                && IsVisibleTo(card, state.GetZone(card.ZoneId), viewer, accessVisible))
-            {
-                sources.Add(new(action.Id, card.Id, card.DefinitionId,
-                    triggerSource?.TriggerKey ?? interruptSource?.InterruptKey, interruptSource?.BasicDrawCount));
-            }
-        }
-        return sources.AsReadOnly();
     }
 
     /// <summary>

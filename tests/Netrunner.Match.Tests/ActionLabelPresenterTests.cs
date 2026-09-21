@@ -105,6 +105,38 @@ public sealed class ActionLabelPresenterTests
         Assert.Equal("Use triggered ability", Label(use with { Source = null }));
     }
 
+    [Theory]
+    [InlineData(ActionKind.UseTrigger)]
+    [InlineData(ActionKind.DeclineTrigger)]
+    [InlineData(ActionKind.OrderTriggers)]
+    [InlineData(ActionKind.UsePrevention)]
+    [InlineData(ActionKind.UseReplacement)]
+    public void SameTitleTriggerAndInterruptSourcesUseDisambiguatedCardNames(ActionKind kind)
+    {
+        ActionParameters parameters = kind switch
+        {
+            ActionKind.OrderTriggers => new TriggerOrderParameters(new("trigger:1")),
+            ActionKind.UsePrevention => new PreventionChoiceParameters(new("interrupt:1"), 1),
+            ActionKind.UseReplacement => new ReplacementChoiceParameters(new("interrupt:1")),
+            _ => new TriggerChoiceParameters(new("trigger:1")),
+        };
+        LegalActionViewModel first = Action(kind, parameters) with { Source = new("copy-a", "Daily Casts", "payout") };
+        LegalActionViewModel second = first with { Source = first.Source! with { CardId = "copy-b" } };
+        string Name(string id) => id == "copy-a" ? "Daily Casts (Rig 1)" : "Daily Casts (Rig 2)";
+        Assert.Contains("Daily Casts (Rig 1)", ActionLabelPresenter.Label(first, null, Name, Server), StringComparison.Ordinal);
+        Assert.Contains("Daily Casts (Rig 2)", ActionLabelPresenter.Label(second, null, Name, Server), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PaidAbilityTagCostRemovesExistingTags()
+    {
+        var ability = new AbilityActionParameters(new("card:1"), new("test:tags"), "spend-tags",
+            BehaviorAbilityTiming.AnyPaidWindow, BehaviorAbilityActivation.PaidAbility,
+            [new(BehaviorCostKind.Tags, 2)], [], new(BehaviorAbilityUsageLimit.Unlimited, 0),
+            new string('a', 64), new string('b', 64), new("zone:rig"), ZoneKind.RunnerRig);
+        Assert.Contains("Cost: Remove 2 tags", Label(Action(ActionKind.UseAbility, ability)), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void MapperRetainsKnownTriggerAndReplacementSourcesWithoutChangingIssuedParameters()
     {
@@ -113,10 +145,11 @@ public sealed class ActionLabelPresenterTests
         Observation observation = baseline with
         {
             LegalActions = [new(new("action:1"), ActionKind.UseReplacement, "Use replacement", parameters)],
-            ActionSources = [new(new("action:1"), new("card:1"), new("test:known"), "first-draw", 2)],
         };
         LegalActionViewModel action = Assert.Single(ObservationViewMapper.Build(observation,
-            CardMetadataResolvers.Default, GatewayBehaviorCatalog.Create()).LegalActions);
+            CardMetadataResolvers.Default, GatewayBehaviorCatalog.Create(), handSizeProjection: null,
+            presentationContext: MatchPresentationContext.Empty with
+            { ActionSources = [new(new("action:1"), new("card:1"), new("test:known"), "first-draw", 2)] }).LegalActions);
         Assert.NotNull(action.Source);
         Assert.Equal("Draw 2 cards instead", action.Source.EffectLabel);
         Assert.Same(parameters, action.Parameters);

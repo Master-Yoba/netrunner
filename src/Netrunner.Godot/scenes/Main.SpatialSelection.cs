@@ -35,7 +35,7 @@ public partial class Main
 
 	private void RenderIncrementalSelection(MatchSnapshot snapshot)
 	{
-		ObservationCardSelection context = snapshot.View.CardSelection!;
+		CardSelectionViewModel context = snapshot.View.CardSelection!;
 		IReadOnlyList<string> selected = _spatialIncrementalCards!;
 		BoardSelectionGuidance guidance = BoardSelectionPresenter.Incremental(context, selected);
 		_spatialPanel!.GetNode<Label>("%Prompt").Text = guidance.Instruction + "\n"

@@ -7,7 +7,7 @@ public sealed record BoardSelectionGuidance(string Instruction, string Confirmat
 /// <summary>Explains the next local selection using published constraints and issued target sets.</summary>
 public static class BoardSelectionPresenter
 {
-    public static BoardSelectionGuidance Incremental(ObservationCardSelection context, IReadOnlyList<string> selected)
+    public static BoardSelectionGuidance Incremental(CardSelectionViewModel context, IReadOnlyList<string> selected)
     {
         bool ready = BoardSelectionSubmission.CanConfirm(context, selected);
         string optional = context.Selected.Count == 0 ? ", or continue without cards" : "";

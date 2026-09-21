@@ -8,7 +8,7 @@ public sealed class BoardSelectionPresenterTests
     [Fact]
     public void ExactSelectionExplainsMissingCardsAndOnlyEnablesACompleteSelection()
     {
-        ObservationCardSelection context = Context(BehaviorChoiceCardinalityKind.Exactly, 2);
+        CardSelectionViewModel context = Context(BehaviorChoiceCardinalityKind.Exactly, 2);
         BoardSelectionGuidance empty = BoardSelectionPresenter.Incremental(context, []);
         Assert.False(empty.CanConfirm);
         Assert.Contains("exactly 2 cards", empty.Instruction, StringComparison.Ordinal);
@@ -27,14 +27,14 @@ public sealed class BoardSelectionPresenterTests
     [InlineData(BehaviorChoiceCardinalityKind.AnyNumber, null)]
     public void EmptySelectionsExplicitlyContinueWithoutCards(BehaviorChoiceCardinalityKind cardinality, int? count)
     {
-        ObservationCardSelection context = Context(cardinality, count);
+        CardSelectionViewModel context = Context(cardinality, count);
         BoardSelectionGuidance empty = BoardSelectionPresenter.Incremental(context, []);
         Assert.True(empty.CanConfirm);
         Assert.Equal("Continue without selecting cards", empty.ConfirmationLabel);
         Assert.DoesNotContain(cardinality.ToString(), empty.Instruction, StringComparison.Ordinal);
         Assert.True(BoardSelectionPresenter.Incremental(context, ["a", "b"]).CanConfirm);
         Assert.Equal(count is null, BoardSelectionPresenter.Incremental(context, ["a", "b", "c"]).CanConfirm);
-        ObservationCardSelection accepted = context with { Selected = ["a"] };
+        CardSelectionViewModel accepted = context with { Selected = ["a"] };
         Assert.False(BoardSelectionPresenter.Incremental(accepted, []).CanConfirm);
         Assert.DoesNotContain("without cards", BoardSelectionPresenter.Incremental(accepted, ["a"]).Instruction, StringComparison.Ordinal);
         Assert.False(BoardSelectionPresenter.Incremental(accepted, ["b", "a"]).CanConfirm);
@@ -66,7 +66,7 @@ public sealed class BoardSelectionPresenterTests
         Assert.Equal("Confirm break · select 1 more", partial.ConfirmationLabel);
     }
 
-    private static ObservationCardSelection Context(BehaviorChoiceCardinalityKind cardinality, int? count) =>
+    private static CardSelectionViewModel Context(BehaviorChoiceCardinalityKind cardinality, int? count) =>
         new("frame", "choice", BehaviorChoiceMode.Mandatory, cardinality, count, ["a", "b", "c"], []);
 
     private static BoardIcebreakerViewModel Breaker(params int[][] sets)

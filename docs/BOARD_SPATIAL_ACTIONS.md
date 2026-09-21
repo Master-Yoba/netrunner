@@ -97,14 +97,19 @@ before extending the preference to temporary → eligible hosted → personal.
 Porting Chiriboga's generic automatic spend loop into the UI would bypass those
 contracts. The existing run-credit support needs no additional temporary pool.
 
-`Observation.BoardContext` is a nonserialized presentation sidecar, like the
-existing decision/source metadata. It contains installed position handles,
-viewer-authorized card views, and current selection cardinality/provenance.
-Installed backs expose positions without definitions. Search candidates are
-sorted by stable ID in the presentation metadata/browser, without deck ordering.
-Random HQ and top-of-R&D access use aggregate server handles. Opponent-owned
-choices do not expose this metadata. The board projection does not change state
-schemas or serialized observation contracts. The credit-cost fix can expose
+`MatchPresentationProjector` builds a separate `MatchPresentationContext` on the
+match worker, containing installed position handles, authorized choice cards,
+selection cardinality/provenance, and trigger/interrupt source metadata. This
+context is supplied to the UI mapper and is never attached to `Observation` or
+passed to `IGameAgent`. JSON exclusion alone would not protect in-process agents
+from correlating stable hidden-card IDs with earlier reveals. Core retains only
+the UI-neutral `ObserveCard` visibility query, including permission to inspect
+owned candidates in an active choice. Presentation models and projection live in
+Match. Installed backs expose positions without definitions. Search candidates
+are sorted by stable ID without deck ordering. Random HQ and top-of-R&D access
+use aggregate server handles. Opponent-owned choices expose no context. The
+board projection does not change state schemas or serialized observation
+contracts. The credit-cost fix can expose
 previously missing affordable actions; saved-state schemas stay unchanged and
 continuation remains deterministic under the corrected payment rules.
 

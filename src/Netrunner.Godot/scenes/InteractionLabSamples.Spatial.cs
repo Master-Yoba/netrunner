@@ -133,7 +133,7 @@ public static partial class InteractionLabSamples
 
 	public static MatchViewModel RefreshSpatialIncremental(MatchViewModel view, long revision)
 	{
-		ObservationCardSelection context = view.CardSelection!;
+		CardSelectionViewModel context = view.CardSelection!;
 		List<LegalActionViewModel> actions = [];
 		if (context.Cardinality == BehaviorChoiceCardinalityKind.AnyNumber || context.Selected.Count < context.Count)
 			actions.AddRange(context.Candidates.Except(context.Selected).Select(id => Action("add-" + id, ActionKind.ChooseBehavior,

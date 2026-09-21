@@ -12,7 +12,7 @@ public static class ActionLabelPresenter
     {
         string Card(CardInstanceId card) => cardName(card.Value);
         string Cards(IEnumerable<CardInstanceId> cards) => string.Join(", ", cards.Select(Card));
-        string Source() => action.Source is { } source ? source.Title
+        string Source() => action.Source is { } source ? cardName(source.CardId)
             + (source.EffectLabel is { } effect ? $": {effect}" : source.RuleKey is { } key ? $": {Words(key)}" : "") : "triggered ability";
         string Destination(InstallDestinationKind kind, ServerId? server, bool newRemote) =>
             kind == InstallDestinationKind.RunnerRig ? "Rig"
@@ -157,7 +157,7 @@ public static class ActionLabelPresenter
             BehaviorCostKind.HostedCredits => Count(cost.Amount, "hosted credit"),
             BehaviorCostKind.TrashSelf => $"Trash {source}",
             BehaviorCostKind.RemoveSelfFromGame => $"Remove {source} from game",
-            BehaviorCostKind.Tags => $"Take {Count(cost.Amount, "tag")}",
+            BehaviorCostKind.Tags => $"Remove {Count(cost.Amount, "tag")}",
             BehaviorCostKind.Additional when cost.AdditionalKind == BehaviorAdditionalCostKind.TrashCards =>
                 selected is { Count: > 0 } ? "Trash " + string.Join(", ", selected.Select(card => cardName(card.Value)))
                     : $"Trash {Count(cost.Amount, "card")}",

@@ -764,7 +764,7 @@ public sealed class BehaviorRuntimeTests
     }
 
     [Fact]
-    public void SearchPresentationDoesNotExposeDeckOrderOrOpponentCandidateFaces()
+    public void CardObservationRequiresSearchPermissionForOwnedDeckCards()
     {
         CardDefinitionId definition = new("test:search-order");
         CardInstanceId source = new("card:search-source");
@@ -779,12 +779,13 @@ public sealed class BehaviorRuntimeTests
         GameState prompt = GameEngine.BeginBehaviorForTesting(state, new BehaviorInvocationContext(source, runner), catalog);
         string before = EngineJson.Serialize(prompt);
         Observation view = ObservationBuilder.Build(prompt, PlayerSide.Runner, catalog);
-        Assert.Equal(["card:a", "card:z"], view.BoardContext.Selection!.Candidates);
-        Assert.Equal(["card:a", "card:z"], view.BoardContext.ChoiceCards.Select(card => card["id"]));
+        Assert.Null(ObservationBuilder.ObserveCard(state, PlayerSide.Runner, new("card:a")));
+        Assert.Equal("test:a", ObservationBuilder.ObserveCard(prompt, PlayerSide.Runner, new("card:a"))!["definitionId"]);
+        Assert.Equal("test:z", ObservationBuilder.ObserveCard(prompt, PlayerSide.Runner, new("card:z"))!["definitionId"]);
         Assert.Equal(before, EngineJson.Serialize(prompt));
         Observation opponent = ObservationBuilder.Build(prompt, PlayerSide.Corp, catalog);
-        Assert.Null(opponent.BoardContext.Selection);
-        Assert.Empty(opponent.BoardContext.ChoiceCards);
+        Assert.Null(opponent.Decision);
+        Assert.Null(ObservationBuilder.ObserveCard(prompt, PlayerSide.Corp, new("card:a")));
         Assert.DoesNotContain("test:z", EngineJson.Serialize(view), StringComparison.Ordinal);
     }
 
@@ -812,11 +813,11 @@ public sealed class BehaviorRuntimeTests
         GameState prompt = GameEngine.BeginBehaviorForTesting(state, new BehaviorInvocationContext(sourceId, runner), catalog);
         Assert.Single(prompt.PendingDecision!.LegalActions);
         Observation searchView = ObservationBuilder.Build(prompt, PlayerSide.Runner, catalog);
-        Assert.Equal(hidden.Value, Assert.Single(searchView.BoardContext.ChoiceCards)["id"]);
-        Assert.Equal("test:hidden", Assert.Single(searchView.BoardContext.ChoiceCards)["definitionId"]);
-        Assert.Equal(hidden.Value, Assert.Single(searchView.BoardContext.Selection!.Candidates));
-        Assert.Empty(ObservationBuilder.Build(prompt, PlayerSide.Corp, catalog).BoardContext.ChoiceCards);
-        Assert.DoesNotContain("boardContext", EngineJson.Serialize(searchView), StringComparison.OrdinalIgnoreCase);
+        IReadOnlyDictionary<string, object?> inspected = ObservationBuilder.ObserveCard(prompt, PlayerSide.Runner, hidden)!;
+        Assert.Equal(hidden.Value, inspected["id"]);
+        Assert.Equal("test:hidden", inspected["definitionId"]);
+        Assert.Null(ObservationBuilder.ObserveCard(prompt, PlayerSide.Corp, hidden));
+        Assert.DoesNotContain("test:hidden", EngineJson.Serialize(searchView), StringComparison.Ordinal);
         GameState promptRoundTrip = EngineJson.DeserializeState(EngineJson.Serialize(prompt), catalog);
         Assert.Equal(DeterministicHash.ForState(prompt), DeterministicHash.ForState(promptRoundTrip));
 
@@ -872,8 +873,7 @@ public sealed class BehaviorRuntimeTests
 
         Observation runnerObservation = ObservationBuilder.Build(prompt, PlayerSide.Runner);
         Assert.Null(runnerObservation.Decision);
-        Assert.Null(runnerObservation.BoardContext.Selection);
-        Assert.Empty(runnerObservation.BoardContext.ChoiceCards);
+        Assert.Null(ObservationBuilder.ObserveCard(prompt, PlayerSide.Runner, hidden));
         Assert.DoesNotContain(hidden.Value, EngineJson.Serialize(runnerObservation), StringComparison.Ordinal);
 
         LegalAction action = Assert.Single(prompt.PendingDecision!.LegalActions);
@@ -1398,11 +1398,9 @@ public sealed class BehaviorRuntimeTests
         BehaviorResolutionFrame partialFrame = Assert.IsType<BehaviorResolutionFrame>(
             partial.State.ResolutionStack.Single());
         Assert.Equal(addParameters.CardIds, partialFrame.Choice!.SelectedCardIds);
-        ObservationCardSelection beforeSelection = ObservationBuilder.Build(prompt, PlayerSide.Corp, catalog).BoardContext.Selection!;
-        ObservationCardSelection afterSelection = ObservationBuilder.Build(partial.State, PlayerSide.Corp, catalog).BoardContext.Selection!;
-        Assert.Equal(beforeSelection.ContinuationId, afterSelection.ContinuationId);
-        Assert.Equal(addParameters.CardIds.Select(id => id.Value), afterSelection.Selected);
-        Assert.Equal(beforeSelection.Candidates, afterSelection.Candidates);
+        BehaviorResolutionFrame beforeFrame = Assert.IsType<BehaviorResolutionFrame>(prompt.ResolutionStack.Single());
+        Assert.Equal(beforeFrame.FrameIdentity, partialFrame.FrameIdentity);
+        Assert.Equal(beforeFrame.Choice!.CandidateCardIds, partialFrame.Choice.CandidateCardIds);
 
         string partialJson = EngineJson.Serialize(partial.State);
         GameState restored = EngineJson.DeserializeState(partialJson, catalog);

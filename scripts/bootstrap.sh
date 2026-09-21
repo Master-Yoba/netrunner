@@ -48,10 +48,10 @@ fi
 
 if [[ ! -d "$bootstrap_godot" ]]; then
   echo "Installing Godot ${bootstrap_godot_version} .NET into $bootstrap_godot"
-  mkdir -p "$bootstrap_godot"
-  curl --fail --location --silent --show-error \
+  curl --fail --location --silent --show-error --retry 3 --retry-max-time 120 \
     "$bootstrap_godot_url" \
     --output "$bootstrap_tmp/$bootstrap_godot_zip"
+  mkdir -p "$bootstrap_godot"
   unzip -q "$bootstrap_tmp/$bootstrap_godot_zip" -d "$bootstrap_godot"
   find "$bootstrap_godot" -maxdepth 2 -type f -name 'Godot*' -exec chmod +x {} \;
 fi

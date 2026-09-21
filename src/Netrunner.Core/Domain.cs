@@ -29,35 +29,7 @@ public sealed record Observation(
     /// </summary>
     [JsonIgnore]
     public ObservationDecision? Decision { get; init; }
-
-    /// <summary>Viewer-safe source metadata for issued trigger/interrupt choices.
-    /// Like Decision, this is UI metadata and preserves the serialized agent contract.</summary>
-    [JsonIgnore]
-    public IReadOnlyList<ObservationActionSource> ActionSources { get; init; } = [];
-
-    [JsonIgnore]
-    public ObservationBoardContext BoardContext { get; init; } = new([], [], null);
 }
-
-/// <summary>Presentation handles only; never part of the serialized agent or replay contract.</summary>
-public sealed record ObservationBoardContext(
-    IReadOnlyList<ObservationCardPosition> Positions,
-    IReadOnlyList<IReadOnlyDictionary<string, object?>> ChoiceCards,
-    ObservationCardSelection? Selection);
-
-public sealed record ObservationCardPosition(string CardId, string ServerId, ZoneKind Zone, int Index);
-
-public sealed record ObservationCardSelection(
-    string ContinuationId, string ChoiceKey, BehaviorChoiceMode Mode,
-    BehaviorChoiceCardinalityKind Cardinality, int? Count,
-    IReadOnlyList<string> Candidates, IReadOnlyList<string> Selected);
-
-public sealed record ObservationActionSource(
-    ActionId ActionId,
-    CardInstanceId CardId,
-    CardDefinitionId DefinitionId,
-    string? RuleKey,
-    int? ReplacementDrawCount = null);
 
 /// <summary>Viewer-owned metadata for the currently issued decision.</summary>
 public sealed record ObservationDecision(
