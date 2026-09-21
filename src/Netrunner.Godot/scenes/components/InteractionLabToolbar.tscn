@@ -4,8 +4,15 @@
 visible = false
 theme_override_constants/separation = 12
 
+[node name="Side" type="OptionButton" parent="."]
+custom_minimum_size = Vector2(120, 36)
+tooltip_text = "Choose Runner or Corp scenarios"
+accessibility_name = "Practice side"
+
 [node name="Scenarios" type="OptionButton" parent="."]
-custom_minimum_size = Vector2(260, 36)
+custom_minimum_size = Vector2(380, 36)
+tooltip_text = "Choose an interaction to practice"
+accessibility_name = "Practice scenario"
 
 [node name="Reset" type="Button" parent="."]
 text = "Reset scenario"

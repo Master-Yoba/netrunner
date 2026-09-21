@@ -15,7 +15,6 @@ public partial class Main
 			{
 				GD.Print($"SPATIAL_SCENARIO size={size.X} scenario={scenario}");
 				_labScenario = scenario;
-				_labScenarios!.Select(scenario);
 				ResetInteractionLab();
 				await TableFrames(5);
 				_gameTable.StopMotion();

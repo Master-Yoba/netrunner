@@ -14,7 +14,6 @@ public partial class Main
 			foreach (bool corp in new[] { false, true })
 			{
 				_labScenario = corp ? 18 : 17;
-				_labScenarios!.Select(_labScenario);
 				foreach (bool rightmost in new[] { false, true })
 				{
 					await ResetDiscardMotionFixture();

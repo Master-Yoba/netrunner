@@ -14,7 +14,6 @@ public partial class Main
 			GetWindow().Size = size;
 			GetWindow().ContentScaleSize = size;
 			_labScenario = 15;
-			_labScenarios!.Select(_labScenario);
 			ResetInteractionLab();
 			await TableFrames(3);
 			TableCardControl source = _gameTable.VisibleCards["lab-fan-0"];

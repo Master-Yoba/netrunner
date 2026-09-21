@@ -16,7 +16,6 @@ public partial class Main
 			GetWindow().Size = size;
 			GetWindow().ContentScaleSize = size;
 			_labScenario = 15;
-			_labScenarios!.Select(_labScenario);
 			ResetInteractionLab();
 			await TableFrames(3);
 			foreach (string id in new[] { "lab-fan-0", "preview-rig-0", "preview-runner-id", "preview-ice-Headquarters", "preview-root-0" })
@@ -93,7 +92,6 @@ public partial class Main
 	{
 		CheckGameSymbolRendering();
 		_labScenario = 12;
-		_labScenarios!.Select(_labScenario);
 		ResetInteractionLab();
 		MatchViewModel view = _currentSnapshot!.View;
 		CardViewModel hosted = view.RunnerRig[0] with

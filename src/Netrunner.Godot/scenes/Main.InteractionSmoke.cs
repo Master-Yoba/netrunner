@@ -25,6 +25,7 @@ public partial class Main
 			_boardDrag.GestureEnded += (outcome, card) => GD.Print($"M411_GESTURE scenario={_labScenario} card={card} outcome={outcome}");
 			OpenInteractionLab();
 			_reducedMotion.ButtonPressed = true;
+			await CheckLabScenarioPicker();
 			await CheckInstallChoiceControls();
 			await CheckActionLabels();
 			await CheckBoardIcebreakers();
@@ -37,7 +38,6 @@ public partial class Main
 				{
 					GD.Print($"M411_SCENARIO size={size.X} scenario={scenario}");
 					_labScenario = scenario;
-					_labScenarios!.Select(scenario);
 					ResetInteractionLab();
 					await TableFrames(4);
 					AssertBoardCardAlignment(_currentSnapshot!.View);
@@ -184,7 +184,6 @@ public partial class Main
 			GetWindow().Size = size;
 			GetWindow().ContentScaleSize = size;
 			_labScenario = 2;
-			_labScenarios!.Select(_labScenario);
 			ResetInteractionLab();
 			MatchViewModel turn = _currentSnapshot!.View;
 			turn = turn with

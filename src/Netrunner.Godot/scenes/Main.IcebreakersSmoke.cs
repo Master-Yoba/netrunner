@@ -13,7 +13,6 @@ public partial class Main
 			GetWindow().Size = size;
 			GetWindow().ContentScaleSize = size;
 			_labScenario = 19;
-			_labScenarios!.Select(_labScenario);
 			ResetInteractionLab();
 			await TableFrames(5);
 			_gameTable.StopMotion();

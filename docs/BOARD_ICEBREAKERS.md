@@ -45,7 +45,7 @@ payment preference do not change engine actions, state, or replay IDs. The Godot
 revision, source, targets, and action ID before using the existing submission
 path. Board selection is local UI state, never game state.
 
-The interaction lab includes **Runner: icebreakers** with an understrength
+The interaction lab includes **Runner → Boost & break with an icebreaker** with an understrength
 fracter, an incompatible decoder, three subroutines, and both personal and hosted
 credits. It uses the existing artwork cache. Engine-backed tests cover exact
 single and non-adjacent targets, one payment per activation, malformed or stale

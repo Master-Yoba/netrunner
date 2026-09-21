@@ -13,7 +13,6 @@ public partial class Main
 			GetWindow().Size = size;
 			GetWindow().ContentScaleSize = size;
 			_labScenario = 1;
-			_labScenarios!.Select(_labScenario);
 			ResetInteractionLab();
 			MatchViewModel view = _currentSnapshot!.View;
 			PublishLabView(view with
@@ -32,7 +31,6 @@ public partial class Main
 				"Confirmation lost the run-event destination or submitted prematurely.");
 			CancelStagedAction();
 			_labScenario = 17;
-			_labScenarios.Select(_labScenario);
 			ResetInteractionLab();
 			view = _currentSnapshot!.View;
 			PublishLabView(view with

@@ -141,7 +141,7 @@ required M4.10 gate; automated checks do not replace it.
 ## Practice drag interactions
 
 Run `make interaction-lab`, or select **Practice board interactions** on the
-setup screen. Choose a scenario and drag the practice card from hand. **Reset
+setup screen. Choose **Runner** or **Corp**, then a scenario. **Reset
 scenario** restores the fixture immediately. The lab uses synthetic presentation
 data and the production interaction controls; it is not a rules simulator or a
 saved match. No official card metadata is required.
@@ -157,9 +157,9 @@ they follow movement (default 0.04 seconds; higher is softer, zero is immediate)
 Reduced motion also makes tracking immediate. Drop targets follow the pointer
 directly even while the preview is catching up.
 
-The lab also includes **Runner: hand and board actions** and **Corp: hand and
-board actions**. These show a five-card fan and let you try the credit icon,
-Stack/R&D draw, Archives browsing, and the Runner's cancellable Run selection.
+Each side starts with **Hand & board basics**. These show a five-card fan and
+let you play events/operations, use the credit icon, draw from Stack/R&D,
+browse Archives, and try the Runner's cancellable Run selection.
 `MotionSeconds` controls hover easing; `HoverLift` and `HoverScale` control its
 extent. Reduced motion applies the raised pose immediately, including keyboard
 focus. Card dimensions continue to come from `CardAppearance.PortraitSize`.
@@ -170,7 +170,7 @@ On `HandView`, tune `DrawSeconds`, `DrawArcHeight` and `DrawStaggerSeconds`;
 the playback speed slider scales the duration. Zero `DrawSeconds` disables the
 flight. Reduced motion and Skip animation reveal pending arrivals immediately.
 
-**Runner: discard from hand** and **Corp: discard from hand** start with seven
+Both sides' **Discard from hand** scenarios start with seven
 cards and ask you to discard two. Drag highlighted cards to Heap or Archives.
 Each accepted choice leaves the fan; the pile shows the pending selection count
 until both choices resolve. Reset to repeat. Invalid drops and Escape return the

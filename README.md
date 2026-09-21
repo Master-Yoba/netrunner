@@ -179,6 +179,8 @@ be written into saves or action logs.
 
 Use `make interaction-lab` for resettable drag/play/install UI scenarios without
 playing a match. The setup screen also has **Practice board interactions**.
+Choose **Runner** or **Corp**, then an interaction. **Hand & board basics**
+combines playing events/operations, drawing, credits, and pile browsing.
 Fixtures are synthetic and exercise the production UI; game-rule correctness
 is covered separately by engine tests. Known practice cards use the same local
 artwork cache as `make play`, including cards drawn during a scenario. Run

@@ -15,7 +15,6 @@ public partial class Main
 			foreach (PlayerSide side in new[] { PlayerSide.Runner, PlayerSide.Corp })
 			{
 				_labScenario = side == PlayerSide.Runner ? 15 : 16;
-				_labScenarios!.Select(_labScenario);
 				ResetInteractionLab();
 				await TableFrames(6);
 				RequireInteraction(_gameTable.Hand.GlobalPosition.Y >= _gameTable.PlayArea.GetGlobalRect().End.Y,

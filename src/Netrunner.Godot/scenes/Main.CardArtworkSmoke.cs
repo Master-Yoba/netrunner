@@ -173,7 +173,6 @@ public partial class Main
 			foreach (int scenario in Enumerable.Range(0, InteractionLabSamples.Names.Length))
 			{
 				_labScenario = scenario;
-				_labScenarios!.Select(scenario);
 				ResetInteractionLab();
 				await TableFrames(2);
 				RequireInteraction(_gameTable.VisibleCards.Values.Where(card => card.Card?.IsKnown == true)
@@ -182,7 +181,6 @@ public partial class Main
 			foreach (int scenario in new[] { 15, 16 })
 			{
 				_labScenario = scenario;
-				_labScenarios!.Select(scenario);
 				ResetInteractionLab();
 				MatchViewModel view = _currentSnapshot!.View;
 				SubmitInteractionLab(view.Decision!, view.LegalActions.Single(action => action.Kind == Netrunner.Core.ActionKind.DrawCard));

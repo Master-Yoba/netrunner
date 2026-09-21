@@ -115,11 +115,21 @@ selectable card browser. Card artwork continues to come from the local cache.
 
 ## Verification
 
-`make interaction-lab` includes twelve new scenarios (20–31) covering card-local
-actions, identity abilities/card costs, forced run choices, hidden breach targets,
-access payments, bioroid abilities, subroutine installs, incremental choices,
-searches, tagged resources, pile abilities, and ordered targets. Existing memory,
-pile, and multi-target scenarios now require confirmation.
+`make interaction-lab` groups 26 practice scenarios behind a Runner/Corp
+selector (18 Runner, 8 Corp). The menu covers card actions, identity abilities/card
+costs, forced run choices, hidden breach targets, access payments, bioroid
+abilities, subroutine installs, incremental choices, searches, tagged resources,
+pile abilities, and ordered targets. Memory, pile, and multi-target choices
+require confirmation.
+
+The menu uses stable fixture IDs rather than list positions. **Hand & board
+basics** includes event/operation play, and **Install in a server or new remote**
+covers both destinations. Separate event/operation, new-remote, generic target,
+heap-choice, and dense-scrolling entries are omitted from the picker; all 32
+original fixtures remain in the automated regression suite. This keeps layout
+stress and equivalent target/browser paths covered without duplicating practice
+entries. The selector smoke checks both side groups, reordered IDs, and the
+merged play/install interactions at both resolutions.
 
 The interaction smoke exercises native input at 1920×1080 and 2560×1440, local
 selection without payment, Escape, keyboard selection, busy and modal guards,

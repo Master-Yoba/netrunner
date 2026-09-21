@@ -13,7 +13,6 @@ public partial class Main
 			foreach (int scenario in new[] { 3, 7 })
 			{
 				_labScenario = scenario;
-				_labScenarios!.Select(scenario);
 				ResetInteractionLab();
 				await TableFrames(25);
 				Vector2 start = _gameTable.VisibleCards["lab-hand"].GetGlobalRect().GetCenter();
