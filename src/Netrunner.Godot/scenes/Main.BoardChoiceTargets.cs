@@ -52,7 +52,10 @@ public partial class Main
 		label.AddThemeStyleboxOverride("normal", new StyleBoxFlat
 		{
 			BgColor = new Color(0.018f, 0.035f, 0.05f, 0.98f),
-			ContentMarginLeft = 8, ContentMarginRight = 8, ContentMarginTop = 6, ContentMarginBottom = 6,
+			ContentMarginLeft = 8,
+			ContentMarginRight = 8,
+			ContentMarginTop = 6,
+			ContentMarginBottom = 6,
 		});
 		cue.GuiInput += input =>
 		{
