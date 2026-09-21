@@ -52,10 +52,11 @@ public partial class Main
 
 	private void BuildBoardSubroutineControls(MatchSnapshot snapshot, BoardIcebreakerViewModel breaker, VBoxContainer actions)
 	{
-		_icebreakerPanel!.GetNode<Label>("%Strength").Text = $"Breaking with {breaker.Card.Title} · strength {breaker.Strength?.EffectiveStrength.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—"}";
+		_icebreakerPanel!.GetNode<Label>("%Strength").Text = $"Breaking with {breaker.Card.Title} · "
+			+ (breaker.Strength is { } strength ? $"strength {strength.EffectiveStrength}" : "hosted ability");
 		BoardSelectionGuidance guidance = BoardSelectionPresenter.Breaks(breaker, _boardBreakTargets);
 		_icebreakerPanel.GetNode<Label>("%Subroutines").Text = guidance.Instruction;
-		_icebreakerPanel.GetNode<Label>("%Hint").Text = "Click a selected subroutine to remove it. Confirm pays the displayed cost using run credits first. Back or Esc cancels.";
+		_icebreakerPanel.GetNode<Label>("%Hint").Text = "Click a selected subroutine to remove it. Confirm pays the displayed cost. Back or Esc cancels.";
 		string[] printed = (breaker.Encounter.Ice!.RulesText ?? "").Split("[subroutine]", StringSplitOptions.None).Skip(1)
 			.Select(text => text.Trim()).ToArray();
 		foreach (SubroutineViewModel subroutine in breaker.Encounter.Subroutines)

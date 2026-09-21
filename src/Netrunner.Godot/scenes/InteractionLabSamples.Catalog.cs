@@ -16,6 +16,7 @@ public static partial class InteractionLabSamples
 		new(3, PlayerSide.Runner, "Install on ICE"),
 		new(1, PlayerSide.Runner, "Play a run event"),
 		new(19, PlayerSide.Runner, "Boost & break with an icebreaker"),
+		new(HostedVirusScenario, PlayerSide.Runner, "Spend hosted virus counters"),
 		new(25, PlayerSide.Runner, "Break a bioroid with clicks"),
 		new(22, PlayerSide.Runner, "Choose a card to trash for ICE"),
 		new(23, PlayerSide.Runner, "Choose a breach target"),

@@ -29,6 +29,7 @@ public partial class Main
 			await CheckInstallChoiceControls();
 			await CheckActionLabels();
 			await CheckBoardIcebreakers();
+			await CheckHostedVirusCounters();
 			await CheckTargetedAbilityPayment();
 			await CheckInteractionGuidance();
 			await CheckSpatialActions();

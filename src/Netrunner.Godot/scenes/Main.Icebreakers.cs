@@ -87,7 +87,12 @@ public partial class Main
 			_icebreakerPanel.GetNode<Label>("%Strength").Text = $"{current}  →  {ice} · strength {breaker.Encounter.EffectiveStrength?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?"}";
 			_icebreakerPanel.GetNode<Label>("%Subroutines").Text = string.Join(" · ", breaker.Encounter.Subroutines.Select(sub =>
 				$"{sub.Ordinal + 1}: {(sub.Broken ? "broken" : sub.Resolved ? "resolved" : "unbroken")}"));
-			_icebreakerPanel.GetNode<Label>("%Hint").Text = $"Available: {snapshot.View.Run!.RunCredits} run + {snapshot.View.Runner.Credits} personal credits.\nRun credits expire at run end and are spent first. Boost pays immediately; Break lets you select targets first.";
+			bool hostedVirus = breaker.Card.HostCardId == breaker.Encounter.Ice?.Id
+				&& breaker.Actions.Any(action => action.Parameters is RunBreakParameters { SubroutineId: not null });
+			int virusCounters = breaker.Card.TypedCounters.Where(counter => counter.Purpose == CardCounterPurpose.Virus).Sum(counter => counter.Count);
+			_icebreakerPanel.GetNode<Label>("%Hint").Text = hostedVirus
+				? $"Hosted virus counters: {virusCounters}.\nEach break spends 1 counter. Select a subroutine, then confirm."
+				: $"Available: {snapshot.View.Run!.RunCredits} run + {snapshot.View.Runner.Credits} personal credits.\nRun credits expire at run end and are spent first. Boost pays immediately; Break lets you select targets first.";
 			VBoxContainer actions = _icebreakerPanel.GetNode<VBoxContainer>("%Actions");
 			ClearChildren(actions);
 			_boardBreakerButtons.Clear();

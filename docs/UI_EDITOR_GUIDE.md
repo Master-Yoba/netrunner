@@ -146,6 +146,14 @@ scenario** restores the fixture immediately. The lab uses synthetic presentation
 data and the production interaction controls; it is not a rules simulator or a
 saved match. No official card metadata is required.
 
+Runner's **Spend hosted virus counters** scenario starts with Practice Botulus
+attached to ICE and holding two virus counters. Click the hosted card, choose
+**Break subroutines…**, select one subroutine, and confirm. The counter chip
+decreases while personal and run credits stay unchanged. After two breaks,
+one subroutine remains and the virus cannot break again. Escape cancels an
+unconfirmed selection; **Reset scenario** restores both counters and all three
+subroutines. Artwork comes from the same optional local cache as other scenarios.
+
 Tune `themes/DragAppearance.tres` for drag threshold, preview scale, return
 duration, edge scrolling, and destination styles. Production scenes are
 `BoardDragController.tscn`, `DropDestination.tscn`, and `BoardChoicePanel.tscn`.

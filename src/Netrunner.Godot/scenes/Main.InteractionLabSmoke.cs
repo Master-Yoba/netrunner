@@ -75,6 +75,74 @@ public partial class Main
 		GD.Print("LAB_SCENARIOS PASS sides=2 resolutions=2 grouped=true stable_ids=true merged_play=true merged_install=true");
 	}
 
+	private async Task CheckHostedVirusCounters()
+	{
+		foreach (Vector2I size in new[] { new Vector2I(1920, 1080), new Vector2I(2560, 1440) })
+		{
+			GetWindow().Size = size;
+			GetWindow().ContentScaleSize = size;
+			_labSides!.EmitSignal(OptionButton.SignalName.ItemSelected, (long)_labSides.GetItemIndex((int)PlayerSide.Runner));
+			SelectLabScenarioItem(InteractionLabSamples.HostedVirusScenario);
+			await TableFrames(5);
+			MatchViewModel original = _currentSnapshot!.View;
+			CardViewModel virus = original.RunnerRig.Single();
+			RequireInteraction(virus.HostCardId == original.Run!.Encounter!.Ice!.Id
+				&& _gameTable.VisibleCards.ContainsKey(virus.Id) && _gameTable.VisibleCards[virus.Id].IsActionableSource,
+				"Hosted virus practice did not expose its attached card as an actionable source.");
+			_gameTable.VisibleCards[virus.Id].GrabFocus();
+			await TableFrames(3);
+			RequireInteraction(CardHoverPreviewVisible && _cardHoverPreviewCounters!.Text.Contains("VIRUS ×2", StringComparison.Ordinal)
+				&& _cardHoverPreviewStatus!.Text.Contains("Hosted on Practice Barrier", StringComparison.Ordinal),
+				"Hosted virus preview lost its counters or host.");
+			await ClickSpatialCard(virus.Id);
+			RequireInteraction(_icebreakerPanel?.Visible == true && _boardChooseBreak is { Disabled: false }
+				&& _icebreakerPanel.GetNode<Label>("%Hint").Text.Contains("Hosted virus counters: 2", StringComparison.Ordinal),
+				"Hosted virus controls advertised credit costs or required icebreaker strength.");
+			await ClickTableButton(_boardChooseBreak!);
+			await ClickTableButton(_boardSubroutineButtons[2]);
+			RequireInteraction(_labSubmissionCount == 0 && ReferenceEquals(original, _currentSnapshot!.View),
+				"Selecting a hosted-virus target spent a counter before confirmation.");
+			await PressModalEscapeAsync();
+			RequireInteraction(_labSubmissionCount == 0 && _boardBreakTargets.Count == 0 && ReferenceEquals(original, _currentSnapshot!.View),
+				"Cancelling a hosted-virus break spent a counter or retained its target.");
+			foreach (int ordinal in new[] { 2, 0 })
+			{
+				await ClickSpatialCard(virus.Id);
+				await ClickTableButton(_boardChooseBreak!);
+				await ClickTableButton(_boardSubroutineButtons[ordinal]);
+				Button confirm = _boardBreakerButtons.Values.Single();
+				RequireInteraction(confirm.Text.Contains("1 hosted virus counter", StringComparison.Ordinal)
+					&& _boardSubroutineButtons.Where(pair => pair.Key != ordinal).All(pair => pair.Value.Disabled),
+					"Hosted-virus confirmation lost its counter cost or allowed more than one target.");
+				if (OS.GetCmdlineUserArgs().Contains("--hosted-virus-screenshots") && ordinal == 2)
+					await SaveInteractionEvidence($"hosted-virus-{size.X}");
+				await ClickTableButton(confirm);
+				await TableFrames(3);
+				MatchViewModel after = _currentSnapshot!.View;
+				int remaining = 2 - _labSubmissionCount;
+				RequireInteraction(after.RunnerRig.Single().TypedCounters.Sum(counter => counter.Count) == remaining
+					&& after.Run!.Encounter!.Subroutines[ordinal].Broken
+					&& after.Run.Encounter.Subroutines.Count(subroutine => subroutine.Broken) == _labSubmissionCount
+					&& !after.Run.Encounter.Subroutines[1].Broken
+					&& after.Runner == original.Runner && after.Run.RunCredits == original.Run!.RunCredits,
+					"Hosted-virus break spent credits, failed to consume exactly one counter, or broke the wrong subroutine.");
+				Label counterChip = _gameTable.VisibleCards[virus.Id].GetNode<Label>("LayoutHost/CompactLayout/Counters");
+				RequireInteraction(counterChip.Text == (remaining > 0 ? $"VIR×{remaining}" : "") && counterChip.Visible == (remaining > 0),
+					"The hosted card's displayed counter chip did not follow counter depletion.");
+			}
+			SubmitInteractionLab(original.Decision!, original.LegalActions[0]);
+			RequireInteraction(_labSubmissionCount == 2 && _currentSnapshot!.View.LegalActions.All(action => action.Kind != ActionKind.BreakSubroutines)
+				&& !_gameTable.VisibleCards[virus.Id].IsActionableSource && _icebreakerPanel?.Visible != true,
+				"An exhausted virus retained a break action or accepted a stale counter payment.");
+			ResetInteractionLab();
+			await TableFrames(3);
+			RequireInteraction(_labSubmissionCount == 0 && _currentSnapshot!.View.RunnerRig.Single().TypedCounters.Single().Count == 2
+				&& _currentSnapshot.View.Run!.Encounter!.RemainingSubroutines == 3,
+				"Reset did not restore the virus counters and unbroken subroutines.");
+		}
+		GD.Print("HOSTED_VIRUS PASS resolutions=2 hosted=true counters=true exact_targets=true no_credit_cost=true escape=true depleted=true stale=true reset=true");
+	}
+
 	private void SelectLabScenarioItem(int id) =>
 		_labScenarios!.EmitSignal(OptionButton.SignalName.ItemSelected, (long)_labScenarios.GetItemIndex(id));
 

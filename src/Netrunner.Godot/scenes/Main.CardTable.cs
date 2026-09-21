@@ -245,7 +245,9 @@ public partial class Main
 			if (encounter && !_tableAllActions)
 			{
 				displayed = all.Where(action => BoardIcebreakerPresenter.Source(action) is null);
-				_tablePrompt.Text += " · Click a matching icebreaker to boost or break";
+				_tablePrompt.Text += all.Any(action => action.Parameters is RunBreakParameters { SubroutineId: not null })
+					? " · Click an available icebreaker or hosted card"
+					: " · Click a matching icebreaker to boost or break";
 				AddButton("All legal actions…", () => { _tableAllActions = true; RenderCardTableActions(snapshot); });
 			}
 			else if (decision.Kind == DecisionKind.TurnDiscard && !_tableAllActions)
