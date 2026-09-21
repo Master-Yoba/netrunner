@@ -274,6 +274,7 @@ public partial class Main : Control
 		{
 			PollCardTable(delta);
 			UpdateBoardChoiceGeometry();
+			UpdateSpatialGeometry();
 		}
 		else PollCoordinator();
 		if (_animationRunning)
@@ -356,6 +357,12 @@ public partial class Main : Control
 		if (_tablePileOverlay?.Visible == true)
 		{
 			if (escape) { HideTablePile(); GetViewport().SetInputAsHandled(); }
+			return;
+		}
+		if (SpatialVisible && escape)
+		{
+			CancelSpatialSelection();
+			GetViewport().SetInputAsHandled();
 			return;
 		}
 		if (_boardChoiceVisible && (escape

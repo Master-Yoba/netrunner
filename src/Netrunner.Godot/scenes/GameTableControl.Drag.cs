@@ -43,6 +43,7 @@ public partial class GameTableControl
 			"ServerIce" => GetServerIceRect(targetId),
 			"NewRemote" => GetNewRemoteRect(),
 			"ServerTarget" => GetServerTargetRect(targetId),
+			"ServerAccess" => TryGetServerLane(targetId, out ServerLaneParts accessLane) ? GetClippedGlobalRect(accessLane.Header) : null,
 			"RunnerHeap" => GetClippedGlobalRect(_runnerHeapPile),
 			"CorpArchives" => _zonePiles.TryGetValue("zone:corp-archives", out BoardActionButton? archives)
 				? GetClippedGlobalRect(archives) : null,
@@ -236,6 +237,12 @@ public partial class GameTableControl
 				card = positional;
 				return IsVisibleCard(card);
 			}
+		}
+		foreach (var position in _pendingView?.CardPositions ?? [])
+		{
+			string region = position.Zone == Netrunner.Core.ZoneKind.ServerIce ? "ice" : "root";
+			if (position.CardId == targetId && _visibleCards.TryGetValue($"server:{position.ServerId}:{region}:{position.Index}", out var positional))
+			{ card = positional; return IsVisibleCard(card); }
 		}
 		card = null;
 		return false;

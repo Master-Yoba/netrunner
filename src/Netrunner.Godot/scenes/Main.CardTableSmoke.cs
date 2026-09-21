@@ -115,6 +115,11 @@ public partial class Main
 						if (screenshots) await SaveTableEvidence("rd-access");
 						sawAccess = true;
 					}
+					if (!_tableActionButtons.ContainsKey(next.Id))
+					{
+						if (SpatialVisible) await ClickTableButton(_spatialPanel!.GetNode<Button>("%Dismiss"));
+						else await ClickTableButton(_tableActions.GetChildren().OfType<Button>().Single(button => button.Text == "All legal actions…"));
+					}
 					await ClickTableButton(_tableActionButtons[next.Id]);
 				}
 				await _coordinator.GetObservationAsync(PlayerSide.Runner);

@@ -26,6 +26,8 @@ public partial class Main
 			if (server.IcePositions.FirstOrDefault(ice => ice.CardId == id) is { } ice)
 				location ??= $"{name} ICE {ice.Index + 1}";
 		}
+		if (view.CardPositions.FirstOrDefault(position => position.CardId == id) is { } installed)
+			location ??= $"{_gameTable.GetServerDisplayName(installed.ServerId)} {(installed.Zone == Netrunner.Core.ZoneKind.ServerIce ? "ICE" : "root")} {installed.Index + 1}";
 		return location is null ? title : $"{title} ({location})";
 
 		string? Position(IEnumerable<CardViewModel?> zone, string name)

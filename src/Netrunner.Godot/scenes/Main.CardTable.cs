@@ -75,6 +75,7 @@ public partial class Main
 		};
 		_gameTable.ServerSelected += id =>
 		{
+			if (TrySelectSpatialServer(id)) return;
 			CloseBoardIcebreaker();
 			if (TrySelectBoardChoiceServer(id)) return;
 			if (_currentSnapshot?.View.Servers.Any(server => server.Id == id && server.Kind == ServerKind.Archives) == true
@@ -100,7 +101,7 @@ public partial class Main
 				ShowInspectedCardZoom();
 			}
 		};
-		_tableAccessCard.CardSelected += _ => inspectAccess.EmitSignal(BaseButton.SignalName.Pressed);
+		_tableAccessCard.CardSelected += id => { if (!TrySelectSpatialCard(id)) inspectAccess.EmitSignal(BaseButton.SignalName.Pressed); };
 		_tableAccessCard.CardHoverChanged += HandleTableCardHoverChanged;
 		BuildCardHoverPreview(_tableViewport);
 		_matchHistory = _tableViewport.GetNode<MatchHistoryPanel>("History");
@@ -116,10 +117,11 @@ public partial class Main
 
 	private void SelectTableCard(string id)
 	{
+		if (_boardChoiceVisible) { TrySelectBoardChoiceCard(id); return; }
+		if (TrySelectSpatialCard(id)) return;
 		if (_boardChoosingSubroutines && id == _currentSnapshot?.View.Run?.Encounter?.Ice?.Id) return;
 		if (TrySelectBoardIcebreaker(id)) return;
 		CloseBoardIcebreaker();
-		if (TrySelectBoardChoiceCard(id)) return;
 		RecordFullMatchSelection("card", id);
 		_tableSelectedCard = id;
 		_tableSelectedServer = null;
@@ -131,6 +133,7 @@ public partial class Main
 
 	private void ClearTableSelection()
 	{
+		CloseSpatialActions();
 		CloseBoardIcebreaker();
 		_tableSelectedCard = null;
 		_tableSelectedServer = null;
@@ -215,6 +218,7 @@ public partial class Main
 			{
 				_gameTable.SetActionableSources(all
 					.SelectMany(TableActionSourceCardIds)
+					.Concat(BoardSpatialActions.Project(snapshot.View).Select(action => action.SourceId).OfType<string>())
 					.Concat(decision.Kind == DecisionKind.TurnDiscard
 						? BoardInteractionProjector.Project(snapshot.View).Sources.Select(source => source.CardId) : [])
 					.ToHashSet(StringComparer.Ordinal));
@@ -261,6 +265,17 @@ public partial class Main
 			}
 			else if (_tableAllActions)
 				AddButton("Back to table", () => { _tableAllActions = false; RenderCardTableActions(snapshot); });
+			if (!_tableAllActions)
+			{
+				IReadOnlyList<BoardSpatialAction> spatial = BoardSpatialActions.Project(snapshot.View);
+				foreach (string source in spatial.Select(action => action.SourceId).OfType<string>().Distinct(StringComparer.Ordinal))
+					if (_gameTable.GetDropRect("HostCard", source) is null && _tableAccessCard.CardId != source)
+						AddButton(ActionCardName(source) + " · card actions…", () => TrySelectSpatialCard(source));
+				if (spatial.Count > 0 && !ordinary && !encounter && decision.Kind != DecisionKind.TurnDiscard)
+					AddButton("All legal actions…", () => { _tableAllActions = true; RenderCardTableActions(snapshot); });
+				HashSet<ActionId> spatialIds = spatial.Select(action => action.Action.Id).ToHashSet();
+				displayed = displayed.Where(action => !spatialIds.Contains(action.Id));
+			}
 			foreach (LegalActionViewModel action in displayed)
 			{
 				Button button = AddButton(TableActionLabel(action), () =>
@@ -284,6 +299,7 @@ public partial class Main
 		finally
 		{
 			RefreshBoardChoices(snapshot);
+			RefreshSpatialActions(snapshot);
 			RefreshBasicBoardActions(snapshot);
 			RefreshBoardIcebreaker(snapshot);
 		}
@@ -331,7 +347,7 @@ public partial class Main
 			RunBioroidAbilityParameters bioroid => [bioroid.IceId.Value],
 			IceSubroutineChoiceParameters { Choice: IceSubroutineChoiceKind.InstallCard, CardId: { } cardId }
 				=> [cardId.Value],
-			_ => [],
+			_ => action.Source is { } source ? [source.CardId] : [],
 		};
 	}
 

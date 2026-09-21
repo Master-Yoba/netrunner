@@ -14,7 +14,7 @@ public partial class Main
 		_boardDrag.CanInteract = () => _currentSnapshot is { IsOpponentThinking: false, IsTerminal: false } snapshot
 			&& snapshot.View.Run is null
 			&& snapshot.View.Decision is { } decision && decision.OwnerSide == snapshot.View.Viewer
-			&& !_fullMatchResumePaused && !_tableAwaitingSettlement && _stagedAction is null
+			&& !SpatialVisible && !_fullMatchResumePaused && !_tableAwaitingSettlement && _stagedAction is null
 			&& Volatile.Read(ref _submissionInFlight) == 0
 			&& _zoomOverlay?.Visible != true && _tablePileOverlay?.Visible != true;
 		_boardDrag.DragStarted += () => { HideCardHoverPreview(); DismissBoardChoices(); };

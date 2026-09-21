@@ -60,6 +60,7 @@ public sealed class BoardSpatialActionsTests
             new(BehaviorAbilityUsageLimit.Unlimited, 0), new string('a', 64), new string('b', 64), new("rig"), ZoneKind.RunnerRig,
             [new(0, "trash", [new("c")])]);
         var view = View(Action("ability", ActionKind.UseAbility, ability));
+        Assert.True(ActionsRegionPresenter.IsTargetedAction(view.LegalActions[0]));
         var selection = new BoardSpatialSelection(BoardSpatialActions.Project(view));
         Assert.Empty(selection.CompleteActions);
         Assert.Equal("b", Assert.Single(selection.Candidates).Id);
@@ -81,6 +82,7 @@ public sealed class BoardSpatialActionsTests
     public void MultipleUnorderedTargetsAllowAnyClickOrderAndRejectIncompleteSets()
     {
         var view = View(Choose("ab", "a", "b"), Choose("ac", "a", "c"));
+        Assert.All(view.LegalActions, action => Assert.True(ActionsRegionPresenter.IsTargetedAction(action)));
         var selection = new BoardSpatialSelection(BoardSpatialActions.Project(view));
         Assert.True(selection.Toggle(new(BoardTargetKind.Card, "b")));
         Assert.Equal("a", Assert.Single(selection.Candidates).Id);

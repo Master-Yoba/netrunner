@@ -492,6 +492,8 @@ public static class ActionsRegionPresenter
     {
         ArgumentNullException.ThrowIfNull(action);
         return GetTargetCardId(action.Parameters) is not null
+            || action.Parameters is BehaviorChoiceParameters { CardIds.Count: > 0 }
+            || action.Parameters is AbilityActionParameters ability && (ability.TargetCardIds.Count > 0 || ability.AdditionalCostSelectionsOrEmpty.Count > 0)
             || action.Parameters is BreachCandidateParameters
             || Slice45PresentationProjector.GetTargetServerId(action.Parameters) is not null;
     }

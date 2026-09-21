@@ -49,7 +49,7 @@ public partial class Main
 			await TableFrames(3);
 			RequireInteraction(_labSubmissionCount == 1, "The legal drag did not work after cancelling confirmation.");
 
-			foreach (int scenario in new[] { 1, 10, 11, 13 })
+			foreach (int scenario in new[] { 1, 11 })
 			{
 				_labScenario = scenario;
 				_labScenarios!.Select(scenario);

@@ -28,6 +28,7 @@ public partial class Main
 			await CheckInstallChoiceControls();
 			await CheckActionLabels();
 			await CheckBoardIcebreakers();
+			await CheckSpatialActions();
 			foreach (Vector2I size in new[] { new Vector2I(1920, 1080), new Vector2I(2560, 1440) })
 			{
 				GetWindow().Size = size;
@@ -92,20 +93,12 @@ public partial class Main
 						RequireInteraction(_tableActionButtons.ContainsKey(finish.Id), "Backup finalize action missing.");
 						await ClickTableButton(_boardChoiceOptions!.GetChildren().OfType<Button>().Single());
 					}
-					else if (scenario is 9 or 10)
-						RequireInteraction(TrySelectBoardChoiceCard("preview-rig-0"), "Immediate card choice was not selectable.");
-					else if (scenario == 13)
+					else if (scenario is 9 or 10 or 13 or 14)
 					{
-						TableCardControl choice = _boardChoiceOptions!.FindChildren("*", "Control", true, false).OfType<TableCardControl>().Single();
-						Vector2 target = choice.GetGlobalRect().GetCenter();
-						await LabPointer(target); LabButton(target, true); LabButton(target, false);
-					}
-					else if (scenario == 14)
-					{
-						RequireInteraction(TrySelectBoardChoiceCard("preview-rig-0"), "Ambiguous card target was not selectable.");
-						RequireInteraction(_labSubmissionCount == 1, "Ambiguous target silently submitted an action.");
-						await TableFrames(2);
-						await ClickTableButton(_boardChoiceOptions!.GetChildren().OfType<Button>().First());
+						BoardSpatialAction choice = BoardSpatialActions.Project(_currentSnapshot!.View)[0];
+						foreach (BoardTarget target in choice.Targets) await ClickSpatialCard(target.Id);
+						RequireInteraction(_labSubmissionCount == 1, "Target clicks submitted before confirmation.");
+						await ClickTableButton(_spatialConfirmButtons[choice.Action.Id]);
 					}
 					else if (scenario == 11)
 						await ClickTableButton(_boardChoiceOptions!.GetChildren().OfType<Button>().First());

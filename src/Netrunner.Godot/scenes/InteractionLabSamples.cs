@@ -8,7 +8,7 @@ public static partial class InteractionLabSamples
 {
 	public static readonly string[] Names = ["Runner: event", "Runner: run event", "Runner: rig install", "Runner: hosted install",
 		"Corp: operation", "Corp: root install", "Corp: ICE install", "Corp: new remote", "Corp: replacement",
-		"Runner: memory cleanup", "Runner: card choice", "Runner: non-spatial choice", "Dense board: scrolling", "Runner: pile card choice", "Runner: multiple targets", "Runner: hand and board actions", "Corp: hand and board actions", "Runner: discard from hand", "Corp: discard from hand", "Runner: icebreakers"];
+		"Runner: memory cleanup", "Runner: card choice", "Runner: non-spatial choice", "Dense board: scrolling", "Runner: pile card choice", "Runner: multiple targets", "Runner: hand and board actions", "Corp: hand and board actions", "Runner: discard from hand", "Corp: discard from hand", "Runner: icebreakers", .. SpatialNames];
 	public static readonly string[] Instructions = [
 		"Drag the event from hand into the board. It should play immediately.",
 		"Drag onto a central server, or into general space then click a highlighted server.",
@@ -29,10 +29,11 @@ public static partial class InteractionLabSamples
 		"Hover the hand. Click credits or R&D, or click Archives to browse. Reset to repeat.",
 		"Drag two cards from hand to Heap. Escape or an invalid drop cancels the gesture. Reset to repeat.",
 		"Drag two cards from hand to Archives. Selected cards wait for the complete discard choice. Reset to repeat.",
-		"Click Practice Fracter in the rig. Boost its strength, choose Break, and select subroutines beside the ICE. Confirm the break; hosted credits are spent first. Escape cancels. Reset to repeat."];
+		"Click Practice Fracter in the rig. Boost its strength, choose Break, and select subroutines beside the ICE. Confirm the break; hosted credits are spent first. Escape cancels. Reset to repeat.", .. SpatialInstructions];
 
 	public static MatchViewModel Create(int scenario, long revision)
 	{
+		if (scenario >= 20) return Spatial(scenario, revision);
 		if (scenario == 19) return IcebreakerEncounter(revision);
 		PlayerSide side = scenario is >= 4 and <= 8 or 16 or 18 ? PlayerSide.Corp : PlayerSide.Runner;
 		var view = UiPreviewSamples.Board(side, scenario == 12 ? UiPreviewSamples.Density.Dense : UiPreviewSamples.Density.Normal);
@@ -127,6 +128,7 @@ public static partial class InteractionLabSamples
 			RunnerScore = Cards(view.RunnerScore),
 			CorpDiscard = Cards(view.CorpDiscard, true),
 			RunnerHeap = Cards(view.RunnerHeap),
+			ChoiceCards = Cards(view.ChoiceCards),
 			RunnerRig = Cards(view.RunnerRig),
 			Servers = view.Servers.Select(server => server with
 			{

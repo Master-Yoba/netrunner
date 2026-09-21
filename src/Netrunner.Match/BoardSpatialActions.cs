@@ -43,7 +43,7 @@ public static class BoardSpatialActions
                     family += ":" + p.AbilityKey;
                     for (int i = 0; i < p.TargetCardIds.Count; i++) Card(p.TargetCardIds[i].Value, $"Target {i + 1}");
                     foreach (AbilityAdditionalCostSelection cost in p.AdditionalCostSelectionsOrEmpty)
-                        foreach (CardInstanceId id in cost.CardIds) Card(id.Value, $"Pay card cost {cost.CostIndex + 1} ({cost.CostKey})");
+                        foreach (CardInstanceId id in cost.CardIds) Card(id.Value, $"Pay card cost {cost.CostIndex + 1}");
                     break;
                 case (ActionKind.UseBioroidAbility, RunBioroidAbilityParameters p):
                     source = p.IceId.Value;
@@ -73,6 +73,7 @@ public static class BoardSpatialActions
                     break;
                 default: continue;
             }
+            if (action.Kind == ActionKind.ChooseBreachCandidate && targets.Count == 0) continue;
             // Do not offer a partly exposed target set. The fallback remains available.
             if (source is not null && !cards.Contains(source)
                 || targets.Any(target => target.Kind == BoardTargetKind.Card && !cards.Contains(target.Id))) continue;
