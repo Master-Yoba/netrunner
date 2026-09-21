@@ -259,7 +259,8 @@ public sealed class BioroidMayflyTests
         {
             LegalAction action = Assert.Single(
                 encounter.PendingDecision!.LegalActions,
-                candidate => candidate.Kind == ActionKind.BreakSubroutines);
+                candidate => candidate.Kind == ActionKind.BreakSubroutines
+                && ((RunBreakParameters)candidate.Parameters).SubroutineOrdinals!.SequenceEqual([index]));
             ApplyResult broken = RunTimingTests.ApplyAction(encounter, action);
             Assert.True(broken.Accepted, broken.Rejection?.Message);
             encounter = broken.State;

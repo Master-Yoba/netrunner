@@ -288,6 +288,31 @@ public sealed class ObservationTests
     }
 
     [Fact]
+    public void PreviouslyAccessedCardCannotBeTrackedThroughAnInMemoryObservationAfterConcealedInstall()
+    {
+        (GameState baseline, FixtureIds ids) = BuildState();
+        RunState run = BuildHqBreachRun(ids, RunTimingStep.BreachAccessAbility, chosen: [ids.CorpHandOne]);
+        GameState accessed = BuildState(run: run).State;
+        Assert.Contains(ids.CorpHandOne.Value, EngineJson.Serialize(ObservationBuilder.Build(accessed, PlayerSide.Runner)), StringComparison.Ordinal);
+        CardInstanceState known = baseline.GetCard(ids.CorpHandOne);
+        ZoneState destination = baseline.Zones.First(zone => zone.Kind == ZoneKind.ServerRoot);
+        CardInstanceState[] cards = baseline.Cards.Select(card => card.Id == known.Id
+            ? new CardInstanceState(card.Id, card.DefinitionId, destination.Id, card.OwnerSide) : card).ToArray();
+        ZoneState[] zones = baseline.Zones.Select(zone => new ZoneState(zone.Id, zone.Kind, zone.OwnerSide, zone.ServerId,
+            zone.Id == destination.Id ? zone.CardIds.Append(known.Id).ToArray() : zone.CardIds.Where(id => id != known.Id).ToArray())).ToArray();
+        PendingDecision decision = BuildRunnerDecision(ids, "Pass priority",
+            [new(new("action:pass"), ActionKind.PassPriority, "Pass", new NoActionParameters())]);
+        GameState concealed = new(baseline.GameId, baseline.RulesVersion, baseline.CardDataVersion, baseline.Players,
+            cards, zones, baseline.Servers, baseline.Turn, baseline.Outcome, baseline.RandomState, baseline.Allocator, pendingDecision: decision);
+        Observation observation = ObservationBuilder.Build(concealed, PlayerSide.Runner);
+        string properties = EngineJson.Serialize(typeof(Observation).GetProperties()
+            .ToDictionary(property => property.Name, property => property.GetValue(observation)));
+        Assert.DoesNotContain(known.Id.Value, properties, StringComparison.Ordinal);
+        Assert.DoesNotContain(known.DefinitionId.Value, properties, StringComparison.Ordinal);
+        Assert.Null(ObservationBuilder.ObserveCard(concealed, PlayerSide.Runner, known.Id));
+    }
+
+    [Fact]
     public void DuringBreachCandidateSelectionTheRunnerCannotSeeTheHiddenPool()
     {
         (GameState state, FixtureIds ids) = BuildState();
@@ -318,6 +343,12 @@ public sealed class ObservationTests
         Observation corpView = ObservationBuilder.Build(breached, PlayerSide.Corp);
         Assert.Single(runnerView.LegalActions);
         Assert.IsType<BreachCandidateParameters>(runnerView.LegalActions[0].Parameters);
+        // Agents receive the in-memory object, including JsonIgnore properties.
+        string objectProperties = EngineJson.Serialize(typeof(Observation).GetProperties()
+            .ToDictionary(property => property.Name, property => property.GetValue(runnerView)));
+        Assert.DoesNotContain(ids.IceFaceDown.Value, objectProperties, StringComparison.Ordinal);
+        Assert.DoesNotContain(ids.CorpHandOne.Value, objectProperties, StringComparison.Ordinal);
+        Assert.DoesNotContain(ids.CorpHandTwo.Value, objectProperties, StringComparison.Ordinal);
         Assert.Empty(corpView.LegalActions);
         Assert.Equal(decision.Id.Value, runnerView.DecisionId);
         Assert.Equal(decision.Id.Value, corpView.DecisionId);

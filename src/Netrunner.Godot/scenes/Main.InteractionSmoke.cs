@@ -25,6 +25,13 @@ public partial class Main
 			_boardDrag.GestureEnded += (outcome, card) => GD.Print($"M411_GESTURE scenario={_labScenario} card={card} outcome={outcome}");
 			OpenInteractionLab();
 			_reducedMotion.ButtonPressed = true;
+			await CheckLabScenarioPicker();
+			await CheckInstallChoiceControls();
+			await CheckActionLabels();
+			await CheckBoardIcebreakers();
+			await CheckTargetedAbilityPayment();
+			await CheckInteractionGuidance();
+			await CheckSpatialActions();
 			foreach (Vector2I size in new[] { new Vector2I(1920, 1080), new Vector2I(2560, 1440) })
 			{
 				GetWindow().Size = size;
@@ -33,7 +40,6 @@ public partial class Main
 				{
 					GD.Print($"M411_SCENARIO size={size.X} scenario={scenario}");
 					_labScenario = scenario;
-					_labScenarios!.Select(scenario);
 					ResetInteractionLab();
 					await TableFrames(4);
 					AssertBoardCardAlignment(_currentSnapshot!.View);
@@ -89,20 +95,12 @@ public partial class Main
 						RequireInteraction(_tableActionButtons.ContainsKey(finish.Id), "Backup finalize action missing.");
 						await ClickTableButton(_boardChoiceOptions!.GetChildren().OfType<Button>().Single());
 					}
-					else if (scenario is 9 or 10)
-						RequireInteraction(TrySelectBoardChoiceCard("preview-rig-0"), "Immediate card choice was not selectable.");
-					else if (scenario == 13)
+					else if (scenario is 9 or 10 or 13 or 14)
 					{
-						TableCardControl choice = _boardChoiceOptions!.FindChildren("*", "Control", true, false).OfType<TableCardControl>().Single();
-						Vector2 target = choice.GetGlobalRect().GetCenter();
-						await LabPointer(target); LabButton(target, true); LabButton(target, false);
-					}
-					else if (scenario == 14)
-					{
-						RequireInteraction(TrySelectBoardChoiceCard("preview-rig-0"), "Ambiguous card target was not selectable.");
-						RequireInteraction(_labSubmissionCount == 1, "Ambiguous target silently submitted an action.");
-						await TableFrames(2);
-						await ClickTableButton(_boardChoiceOptions!.GetChildren().OfType<Button>().First());
+						BoardSpatialAction choice = BoardSpatialActions.Project(_currentSnapshot!.View)[0];
+						foreach (BoardTarget target in choice.Targets) await ClickSpatialCard(target.Id);
+						RequireInteraction(_labSubmissionCount == 1, "Target clicks submitted before confirmation.");
+						await ClickTableButton(_spatialConfirmButtons[choice.Action.Id]);
 					}
 					else if (scenario == 11)
 						await ClickTableButton(_boardChoiceOptions!.GetChildren().OfType<Button>().First());
@@ -177,6 +175,73 @@ public partial class Main
 			GD.PrintErr($"M411_INTERACTION FAIL {error}");
 			GetTree().Quit(1);
 		}
+	}
+
+	private async Task CheckInstallChoiceControls()
+	{
+		// Same public choice as the Cleaver/Carmen playtest at action 76.
+		// Keep the recorded game and official card data out of the fixture.
+		foreach (Vector2I size in new[] { new Vector2I(1920, 1080), new Vector2I(2560, 1440) })
+		{
+			GetWindow().Size = size;
+			GetWindow().ContentScaleSize = size;
+			_labScenario = 2;
+			ResetInteractionLab();
+			MatchViewModel turn = _currentSnapshot!.View;
+			turn = turn with
+			{
+				RunnerHand = turn.RunnerHand with { VisibleCards = [turn.RunnerHand.VisibleCards[0] with { Title = "Cleaver" }] },
+				RunnerRig = [turn.RunnerRig[0] with { Title = "Carmen" }],
+			};
+			PublishLabView(turn);
+			BeginBoardPlayResolution();
+			_labRevision++;
+			LegalActionViewModel replace = InteractionLabSamples.Action("replace-carmen", ActionKind.InstallCard,
+				new InstallCardParameters(new("lab-hand"), InstallDestinationKind.RunnerRig, null, false, 3,
+					[new("preview-rig-0")], [], [new("preview-rig-0")], false), _labRevision);
+			LegalActionViewModel finish = InteractionLabSamples.Action("keep-carmen", ActionKind.InstallCard,
+				new InstallCardParameters(new("lab-hand"), InstallDestinationKind.RunnerRig, null, false, 3,
+					[new("preview-rig-0")], [], [], true), _labRevision);
+			MatchViewModel choice = turn with
+			{
+				Decision = InteractionLabSamples.Decision(PlayerSide.Runner, _labRevision, DecisionKind.InstallChoice,
+					"Choose cards to trash before installing"),
+				LegalActions = [replace, finish],
+			};
+			PublishLabView(choice);
+			await TableFrames(4);
+			Button install = _boardChoiceOptions!.GetChildren().OfType<Button>().Single();
+			RequireInteraction(install.IsVisibleInTree() && !_tableActionButtons[finish.Id].IsVisibleInTree(),
+				"The same install action appears in both the contextual panel and action dock.");
+			RequireInteraction(install.Text.Contains("Keep installed cards", StringComparison.Ordinal)
+				&& _gameTable.VisibleCards["preview-rig-0"].IsTargetCandidate,
+				"The install choice does not explain keeping the optional replacement.");
+			RequireInteraction(_boardChoiceDismiss!.Text == "Use action list · Esc", "Mandatory install resolution suggests it can be cancelled.");
+			if (OS.GetCmdlineUserArgs().Contains("--install-choice-screenshots"))
+				await SaveInteractionEvidence($"install-choice-{size.X}");
+			await PressModalEscapeAsync();
+			RequireInteraction(!_boardChoiceVisible && _tableActionButtons[finish.Id].IsVisibleInTree()
+				&& _tableActionButtons[replace.Id].IsVisibleInTree() && _labSubmissionCount == 0,
+				"Escape did not restore the complete action dock without submitting a choice.");
+			RequireInteraction(_tableActionButtons[replace.Id].Text.Contains("Select to trash: Carmen", StringComparison.Ordinal)
+				&& !_tableActionButtons[finish.Id].Text.Contains("trash", StringComparison.OrdinalIgnoreCase),
+				"Replacement selection looks like a second identical install action.");
+			if (OS.GetCmdlineUserArgs().Contains("--install-choice-screenshots"))
+				await SaveInteractionEvidence($"install-fallback-{size.X}");
+			await ClickTableButton(_tableActionButtons[replace.Id]);
+			RequireInteraction(_stagedAction?.Id == replace.Id && _tablePrompt.Text.Contains("Carmen", StringComparison.Ordinal)
+				&& _labSubmissionCount == 0, "Replacement confirmation lost the selected trash target.");
+			CancelStagedAction();
+			_boardPlayResolutionTracking = true;
+			RefreshBoardChoices(_currentSnapshot!);
+			await TableFrames(2);
+			await ClickTableButton(_boardChoiceOptions!.GetChildren().OfType<Button>().Single());
+			RequireInteraction(_labSubmissionCount == 1 && !_boardChoiceVisible && _tableActions.IsVisibleInTree()
+				&& _currentSnapshot!.View.RunnerRig.Any(card => card.Title == "Cleaver")
+				&& _currentSnapshot.View.RunnerRig.Any(card => card.Title == "Carmen"),
+				"Finalizing did not submit once, preserve Carmen, and restore ordinary controls.");
+		}
+		GD.Print("INSTALL_CHOICE_CONTROLS PASS resolutions=2 single_controls=true replacement_labels=true escape_fallback=true confirmation=true submit_once=true");
 	}
 
 	private async Task CheckDragFollowing()

@@ -22,6 +22,7 @@ public partial class Main
 	private VBoxContainer? _boardChoiceOptions;
 	private Button? _boardChoiceDismiss;
 	private DecisionViewModel? _boardChoiceDecision;
+	private DecisionViewModel? _boardChoiceDismissedDecision;
 	private MatchSnapshot? _boardChoiceSnapshot;
 	private LegalActionViewModel[] _boardChoiceActions = Array.Empty<LegalActionViewModel>();
 	private bool _boardChoiceVisible;
@@ -69,7 +70,7 @@ public partial class Main
 			ShowBoardChoicePanel(
 				decision,
 				matches,
-				"Choose an issued continuation",
+				"Choose an action",
 				$"{BoardCardDisplayName(id)} has more than one legal choice.");
 		}
 
@@ -107,7 +108,7 @@ public partial class Main
 			ShowBoardChoicePanel(
 				decision,
 				matches,
-				"Choose an issued continuation",
+				"Choose an action",
 				$"{_gameTable.GetServerDisplayName(id)} has more than one legal choice.");
 		}
 
@@ -116,9 +117,9 @@ public partial class Main
 
 	/// <summary>
 	/// Refreshes the board-first surface from the latest immutable publication.
-	/// The surface is enabled only for a local play/install resolution and its
-	/// typed follow-up choices; run, encounter, breach, and access surfaces are
-	/// left to the existing action dock.
+	/// Install choices follow the current decision, including during runs.
+	/// Other spatial choices use the shared spatial controller; abstract
+	/// play follow-ups retain their compact decision controls.
 	/// </summary>
 	public void RefreshBoardChoices(MatchSnapshot snapshot)
 	{
@@ -126,7 +127,8 @@ public partial class Main
 		if (!SameDecision(_boardChoiceDecision, snapshot.View.Decision)) _boardChoiceDisambiguating = false;
 		_boardChoiceSnapshot = snapshot;
 
-		if (snapshot.IsTerminal || snapshot.View.Run is not null)
+		if (snapshot.IsTerminal
+			|| BoardSpatialActions.Project(snapshot.View).Any(action => action.Automatic))
 		{
 			ClearBoardChoiceState(clearTracking: true, restoreTargets: false);
 			return;
@@ -138,6 +140,13 @@ public partial class Main
 			// The coordinator intentionally withholds the opponent's decision. Keep
 			// the tracking bit across that publication so the next local resolution
 			// can restore board-first controls, but never leave stale cues visible.
+			HideBoardChoicePanel();
+			return;
+		}
+
+		if (_stagedAction is not null || _tableAllActions && !_boardChoiceIsInitialStage
+			|| !_boardPlayResolutionTracking && !_boardChoiceIsInitialStage && SameDecision(_boardChoiceDismissedDecision, decision))
+		{
 			HideBoardChoicePanel();
 			return;
 		}
@@ -171,11 +180,11 @@ public partial class Main
 				decision,
 				refreshed,
 				_boardChoiceRunSelection ? "Choose a server to run" : "Choose a play or install destination",
-				_boardChoiceRunSelection ? "Select a highlighted server · 1 click. Cancel or Esc returns to the board." : BoardChoiceInitialPrompt(refreshed));
+				_boardChoiceRunSelection ? "Click a highlighted server to start the run immediately · 1 click. Cancel or Esc returns to the board." : BoardChoiceInitialPrompt(refreshed));
 			return;
 		}
 
-		if (!_boardPlayResolutionTracking)
+		if (!_boardPlayResolutionTracking && decision.Kind != DecisionKind.InstallChoice)
 		{
 			HideBoardChoicePanel();
 			return;
@@ -273,12 +282,13 @@ public partial class Main
 			decision,
 			_boardChoiceActions,
 			runSelection ? "Choose a server to run" : "Choose a play or install destination",
-			runSelection ? "Select a highlighted server · 1 click. Cancel or Esc returns to the board." : BoardChoiceInitialPrompt(_boardChoiceActions));
+			runSelection ? "Click a highlighted server to start the run immediately · 1 click. Cancel or Esc returns to the board." : BoardChoiceInitialPrompt(_boardChoiceActions));
 	}
 
 	/// <summary>Dismisses only the local contextual surface; it never rolls back Core.</summary>
 	public void DismissBoardChoices()
 	{
+		_boardChoiceDismissedDecision = _currentSnapshot?.View.Decision;
 		ClearBoardChoiceState(clearTracking: true, restoreTargets: true);
 		if (_currentSnapshot is { } snapshot) RefreshBasicBoardActions(snapshot);
 	}
@@ -347,7 +357,7 @@ public partial class Main
 
 	private bool CanUseBoardChoiceInput() => _boardChoiceVisible
 		&& (_currentSnapshot ?? _boardChoiceSnapshot) is { IsOpponentThinking: false, IsTerminal: false } current
-		&& current.View.Run is null && current.View.Decision is { } decision
+		&& current.View.Decision is { } decision
 		&& decision.OwnerSide == current.View.Viewer && SameDecision(_boardChoiceDecision, decision)
 		&& !_fullMatchResumePaused && !_tableAwaitingSettlement && Volatile.Read(ref _submissionInFlight) == 0
 		&& _stagedAction is null && _zoomOverlay?.Visible != true && _tablePileOverlay?.Visible != true;
@@ -387,7 +397,9 @@ public partial class Main
 		}
 
 		_boardChoiceTitle.Text = title;
-		_boardChoiceDismiss!.Text = _boardChoiceRunSelection ? "Cancel run" : "Back to table";
+		_boardChoiceDismiss!.Text = _boardChoiceRunSelection ? "Cancel run" : _boardChoiceIsInitialStage ? "Cancel selection" : "Use action list · Esc";
+		_boardChoiceDismiss.TooltipText = _boardChoiceIsInitialStage ? "Cancel this selection without paying."
+			: "Switch to the action list. This choice still needs to be resolved.";
 		_boardChoicePrompt.Text = prompt;
 		ClearChildren(_boardChoiceOptions);
 		_boardChoicePanel.GetNode<ScrollContainer>("Content/OptionsScroll").CustomMinimumSize = new Vector2(0, 52);
@@ -396,7 +408,8 @@ public partial class Main
 		if (visibleButtons.Count == 0)
 		{
 			Label hint = MakeWrappedLabel(
-				"Click a highlighted card or server on the board. The action dock remains available as a fallback.",
+				_boardChoiceIsInitialStage ? "Cancel or Esc returns to the board without paying."
+					: "This choice must still be resolved. Use action list or Esc switches controls.",
 				11,
 				Muted);
 			_boardChoiceOptions.AddChild(hint);
@@ -419,6 +432,9 @@ public partial class Main
 		_boardChoiceInputEnabled = null;
 		RefreshBoardChoiceAvailability();
 		_boardChoicePanel.Visible = true;
+		// The dock keeps its issued actions for the fallback, but only one
+		// surface should expose controls for this decision at a time.
+		_tableActions.Hide();
 		_boardChoicePanel.MoveToFront();
 		_boardChoiceDismiss?.GrabFocus();
 	}
@@ -464,6 +480,7 @@ public partial class Main
 	{
 		_boardChoiceVisible = false;
 		_boardChoiceInputEnabled = null;
+		_tableActions?.Show();
 		ClearBoardServerCues();
 		if (_boardChoicePanel is not null && IsInstanceValid(_boardChoicePanel))
 		{
@@ -682,15 +699,7 @@ public partial class Main
 
 	private string BoardChoiceActionLabel(LegalActionViewModel action)
 	{
-		string label = FriendlyBoardText(TableActionLabel(action));
-		if (action.Parameters is BehaviorChoiceParameters { CardIds.Count: > 1 } targets)
-			label += " · " + string.Join(" + ", targets.CardIds.Select(id => BoardCardDisplayName(id.Value)));
-		if (action.Parameters is InstallCardParameters install && install.HostCardId is { } host)
-		{
-			label += $" · host {BoardCardDisplayName(host.Value)}";
-		}
-
-		return label;
+		return TableActionLabel(action);
 	}
 
 	private string BoardCardDisplayName(string id)
@@ -734,39 +743,7 @@ public partial class Main
 		return result;
 	}
 
-	private static CardViewModel[] BoardChoiceCards(MatchViewModel view)
-	{
-		var cards = new List<CardViewModel>();
-		cards.AddRange(view.CorpHand.VisibleCards);
-		cards.AddRange(view.RunnerHand.VisibleCards);
-		cards.AddRange(view.CorpDiscard);
-		cards.AddRange(view.RunnerHeap);
-		cards.AddRange(view.RunnerRig);
-		cards.AddRange(view.CorpScore);
-		cards.AddRange(view.RunnerScore);
-		if (view.CorpIdentity is not null) cards.Add(view.CorpIdentity);
-		if (view.RunnerIdentity is not null) cards.Add(view.RunnerIdentity);
-		foreach (ServerViewModel server in view.Servers)
-		{
-			cards.AddRange(server.Ice.Where(card => card is not null).Select(card => card!));
-			cards.AddRange(server.Root.Where(card => card is not null).Select(card => card!));
-		}
-
-		if (view.Run is { } run)
-		{
-			if (run.CurrentIce is not null) cards.Add(run.CurrentIce);
-			if (run.InitiatingSource is not null) cards.Add(run.InitiatingSource);
-			if (run.Encounter?.Ice is not null) cards.Add(run.Encounter.Ice);
-			cards.AddRange(run.Access.Candidates.Where(card => card is not null).Select(card => card!));
-			cards.AddRange(run.Access.Chosen.Where(card => card is not null).Select(card => card!));
-			cards.AddRange(run.Access.Accessed.Where(card => card is not null).Select(card => card!));
-		}
-
-		return cards
-			.GroupBy(card => card.Id, StringComparer.Ordinal)
-			.Select(group => group.Last())
-			.ToArray();
-	}
+	private static CardViewModel[] BoardChoiceCards(MatchViewModel view) => BoardSpatialActions.Cards(view).ToArray();
 
 	private string BoardChoiceInitialPrompt(IReadOnlyList<LegalActionViewModel> actions)
 	{
@@ -776,8 +753,8 @@ public partial class Main
 			.Select(server => server!)
 			.ToHashSet(StringComparer.Ordinal);
 		return servers.Count > 0
-			? "Choose a highlighted server, then confirm any remaining issued choice."
-			: "Choose one of the issued play/install actions.";
+			? "Click a highlighted server to play or install at the displayed cost. If it has multiple options, choose one to pay."
+			: "Choose how to play or install this card. Choosing an option pays its displayed cost.";
 	}
 
 	private static string BoardChoiceFollowUpTitle(DecisionKind kind) => kind switch
@@ -793,5 +770,5 @@ public partial class Main
 		FriendlyBoardText(decision.Prompt)
 		+ (actions.Any(action => BoardCardTargetIds(action, actions).Count > 0)
 			? " Click a highlighted card on the board."
-			: " Choose an issued option below.");
+			: " Choose an option below.");
 }

@@ -274,6 +274,8 @@ public partial class Main : Control
 		{
 			PollCardTable(delta);
 			UpdateBoardChoiceGeometry();
+			UpdateSpatialGeometry();
+			UpdateAccessControls();
 		}
 		else PollCoordinator();
 		if (_animationRunning)
@@ -358,6 +360,12 @@ public partial class Main : Control
 			if (escape) { HideTablePile(); GetViewport().SetInputAsHandled(); }
 			return;
 		}
+		if (SpatialVisible && escape)
+		{
+			CancelSpatialSelection();
+			GetViewport().SetInputAsHandled();
+			return;
+		}
 		if (_boardChoiceVisible && (escape
 			|| @event is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Right }))
 		{
@@ -367,6 +375,13 @@ public partial class Main : Control
 		}
 		if (_useCardTable && escape)
 		{
+			if (_boardChoosingSubroutines)
+			{
+				CancelBoardBreakTargets();
+				if (_currentSnapshot is { } snapshot) RefreshBoardIcebreaker(snapshot);
+				GetViewport().SetInputAsHandled();
+				return;
+			}
 			ClearTableSelection();
 			_matchHistory.SetExpanded(false);
 			GetViewport().SetInputAsHandled();

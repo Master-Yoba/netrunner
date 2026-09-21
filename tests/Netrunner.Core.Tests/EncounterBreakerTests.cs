@@ -30,12 +30,12 @@ public sealed class EncounterBreakerTests
         PendingDecision decision = Assert.IsType<PendingDecision>(encounter.PendingDecision);
         Assert.Equal(RunTimingStep.EncounterPaidWindow, encounter.RunState!.Step);
         Assert.Equal(PlayerSide.Runner, RunTimingTests.SideOf(encounter, decision.Owner));
-        // Pass, both break quantities of the eligible barrier breaker, and a
+        // Pass, all three target sets of the eligible barrier breaker, and a
         // pump for each registered rig breaker: the code gate breaker cannot
         // break barrier ICE, but its pump is not subtype-gated (CR 3.9.5h).
-        Assert.Equal(5, decision.LegalActions.Count);
+        Assert.Equal(6, decision.LegalActions.Count);
         Assert.Contains(decision.LegalActions, action => action.Kind == ActionKind.PassPriority);
-        Assert.Equal(2, decision.LegalActions.Count(action => action.Kind == ActionKind.BreakSubroutines));
+        Assert.Equal(3, decision.LegalActions.Count(action => action.Kind == ActionKind.BreakSubroutines));
         Assert.All(
             decision.LegalActions.Where(action => action.Kind == ActionKind.BreakSubroutines),
             action => Assert.Equal(breakerId, ((RunBreakParameters)action.Parameters).BreakerId));
@@ -132,7 +132,8 @@ public sealed class EncounterBreakerTests
         GameState encounter = ReachEncounterWindow(preRun);
         LegalAction breakTwo = Assert.Single(encounter.PendingDecision!.LegalActions, action =>
             action.Kind == ActionKind.BreakSubroutines
-            && ((RunBreakParameters)action.Parameters).Quantity == 2);
+            && ((RunBreakParameters)action.Parameters).Quantity == 2
+            && ((RunBreakParameters)action.Parameters).SubroutineOrdinals!.SequenceEqual([0, 1]));
 
         ApplyResult broken = RunTimingTests.ApplyAction(encounter, breakTwo);
         Assert.True(broken.Accepted, broken.Rejection?.Message);
@@ -171,7 +172,8 @@ public sealed class EncounterBreakerTests
         GameState encounter = ReachEncounterWindow(preRun);
         LegalAction breakOne = Assert.Single(encounter.PendingDecision!.LegalActions, action =>
             action.Kind == ActionKind.BreakSubroutines
-            && ((RunBreakParameters)action.Parameters).Quantity == 1);
+            && ((RunBreakParameters)action.Parameters).Quantity == 1
+            && ((RunBreakParameters)action.Parameters).SubroutineOrdinals!.SequenceEqual([0]));
         ApplyResult firstBreak = RunTimingTests.ApplyAction(encounter, breakOne);
         Assert.True(firstBreak.Accepted, firstBreak.Rejection?.Message);
 
@@ -224,7 +226,8 @@ public sealed class EncounterBreakerTests
         GameState encounter = ReachEncounterWindow(preRun);
         LegalAction breakOne = Assert.Single(encounter.PendingDecision!.LegalActions, action =>
             action.Kind == ActionKind.BreakSubroutines
-            && ((RunBreakParameters)action.Parameters).Quantity == 1);
+            && ((RunBreakParameters)action.Parameters).Quantity == 1
+            && ((RunBreakParameters)action.Parameters).SubroutineOrdinals!.SequenceEqual([0]));
 
         ApplyResult firstBreak = RunTimingTests.ApplyAction(encounter, breakOne);
         Assert.True(firstBreak.Accepted, firstBreak.Rejection?.Message);

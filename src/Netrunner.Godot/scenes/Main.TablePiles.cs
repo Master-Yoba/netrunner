@@ -33,6 +33,7 @@ public partial class Main
 		}
 
 		BuildTablePileOverlay();
+		CloseBoardIcebreaker();
 		if (!_tablePileOverlay!.Visible)
 		{
 			_tablePilePreviousFocus = GetViewport().GuiGetFocusOwner();
@@ -162,6 +163,14 @@ public partial class Main
 		}
 
 		control.CardSelected += _ => InspectTablePileCard(card);
+		if (_currentSnapshot is { } snapshot && BoardSpatialActions.Project(snapshot.View).Any(action => action.SourceId == card.Id))
+		{
+			Button actions = CreateTableActionButton("Card actions…");
+			actions.SetAnchorsAndOffsetsPreset(LayoutPreset.BottomWide);
+			actions.OffsetTop = -34;
+			control.AddChild(actions);
+			actions.Pressed += () => { HideTablePile(); TrySelectSpatialCard(card.Id); };
+		}
 		return control;
 	}
 

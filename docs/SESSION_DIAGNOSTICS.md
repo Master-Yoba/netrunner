@@ -125,3 +125,27 @@ succeeded with two Runner agenda points and one remaining access; normal agent
 continuation completed the run through action 39 without error. Snapshot export
 also now supplies the recorded session's behavior/runtime catalogs, allowing
 active official run events to be exported and validated.
+
+## Reproduced playtest failure: duplicate Cleaver install controls
+
+The 2026-09-20 Runner session started at 17:46:50 UTC with seed 42. At action 76,
+dragging Cleaver opened `decision:425`, an install choice with two legal actions:
+`action:423` selected the installed Carmen for trashing, while `action:424`
+installed Cleaver for 3 credits without trashing Carmen. The player chose the
+latter at 17:51:05 UTC. Recovery through action 76 verified state hash
+`e0eccd48a8d10bee2e1eb0b69a8bdf60a33b9ce3982e6b0b30132d00aba97724`.
+
+The contextual panel and action dock both exposed the same final install action.
+The dock also omitted which card a replacement option would select for trashing.
+While a contextual choice is open, the dock now hides its action buttons; Escape
+or **Back to table** restores them. Install labels explicitly identify selected
+trash targets or indicate that installed cards will be kept. Legal actions and
+replay state are unchanged.
+
+The interaction smoke reconstructs this public choice with synthetic metadata at
+1920×1080 and 2560×1440. It checks a single visible install control, Escape to the
+complete fallback controls, explicit replacement confirmation, and exactly one
+submission that keeps Carmen. The regression fails against the original UI.
+`--install-choice-screenshots` adds native captures under `docs/evidence/m4-11`
+when the artwork cache is empty; captures containing cached faces go to ignored
+`artifacts/m4-11` instead.

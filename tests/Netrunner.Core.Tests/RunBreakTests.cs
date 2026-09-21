@@ -22,18 +22,19 @@ public sealed class RunBreakTests
         PendingDecision decision = Assert.IsType<PendingDecision>(encounter.PendingDecision);
         Assert.Equal(RunTimingStep.EncounterPaidWindow, encounter.RunState!.Step);
         Assert.Equal(PlayerSide.Runner, RunTimingTests.SideOf(encounter, decision.Owner));
-        // Pass + both break quantities + the pump offered by the same window.
-        Assert.Equal(4, decision.LegalActions.Count);
+        // Pass + all three target sets + the pump offered by the same window.
+        Assert.Equal(5, decision.LegalActions.Count);
         Assert.Contains(decision.LegalActions, action => action.Kind == ActionKind.PassPriority);
         Assert.Contains(decision.LegalActions, action => action.Kind == ActionKind.PumpBreaker);
         LegalAction breakOne = Assert.Single(decision.LegalActions, action => action.Kind == ActionKind.BreakSubroutines
-            && Assert.IsType<RunBreakParameters>(action.Parameters).Quantity == 1);
+            && Assert.IsType<RunBreakParameters>(action.Parameters).Quantity == 1
+            && ((RunBreakParameters)action.Parameters).SubroutineOrdinals!.SequenceEqual([0]));
         LegalAction breakTwo = Assert.Single(decision.LegalActions, action => action.Kind == ActionKind.BreakSubroutines
             && Assert.IsType<RunBreakParameters>(action.Parameters).Quantity == 2);
         Assert.Equal(breakerId, Assert.IsType<RunBreakParameters>(breakOne.Parameters).BreakerId);
         Assert.Equal(breakerId, Assert.IsType<RunBreakParameters>(breakTwo.Parameters).BreakerId);
         Assert.Equal(
-            $"Break 2 subroutines on {encounter.RunState.Encounter!.IceId.Value} with {breakerId.Value} (pay 1 wallet credit(s))",
+            $"Break 2 subroutines on {encounter.RunState.Encounter!.IceId.Value} with {breakerId.Value} · subroutines 1, 2 (pay 1 wallet credit(s))",
             breakTwo.Description);
     }
 
@@ -76,7 +77,8 @@ public sealed class RunBreakTests
     {
         GameState encounter = ReachBreakWindow(FixtureIceBehaviorSpecs.BreakerBarrier);
         LegalAction breakOne = Assert.Single(encounter.PendingDecision!.LegalActions, action =>
-            action.Kind == ActionKind.BreakSubroutines && Assert.IsType<RunBreakParameters>(action.Parameters).Quantity == 1);
+            action.Kind == ActionKind.BreakSubroutines && Assert.IsType<RunBreakParameters>(action.Parameters).Quantity == 1
+            && ((RunBreakParameters)action.Parameters).SubroutineOrdinals!.SequenceEqual([0]));
 
         ApplyResult firstBreak = RunTimingTests.ApplyAction(encounter, breakOne);
         Assert.True(firstBreak.Accepted, firstBreak.Rejection?.Message);
@@ -191,7 +193,8 @@ public sealed class RunBreakTests
     {
         GameState encounter = ReachBreakWindow(FixtureIceBehaviorSpecs.BreakerBarrier);
         LegalAction breakOne = Assert.Single(encounter.PendingDecision!.LegalActions, action =>
-            action.Kind == ActionKind.BreakSubroutines && Assert.IsType<RunBreakParameters>(action.Parameters).Quantity == 1);
+            action.Kind == ActionKind.BreakSubroutines && Assert.IsType<RunBreakParameters>(action.Parameters).Quantity == 1
+            && ((RunBreakParameters)action.Parameters).SubroutineOrdinals!.SequenceEqual([0]));
 
         ApplyResult firstBreak = RunTimingTests.ApplyAction(encounter, breakOne);
         Assert.True(firstBreak.Accepted, firstBreak.Rejection?.Message);

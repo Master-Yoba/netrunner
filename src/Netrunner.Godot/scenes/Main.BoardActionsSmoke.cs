@@ -15,7 +15,6 @@ public partial class Main
 			foreach (PlayerSide side in new[] { PlayerSide.Runner, PlayerSide.Corp })
 			{
 				_labScenario = side == PlayerSide.Runner ? 15 : 16;
-				_labScenarios!.Select(_labScenario);
 				ResetInteractionLab();
 				await TableFrames(6);
 				RequireInteraction(_gameTable.Hand.GlobalPosition.Y >= _gameTable.PlayArea.GetGlobalRect().End.Y,
@@ -57,6 +56,18 @@ public partial class Main
 					RequireInteraction(_boardChoiceRunSelection && _boardChoiceVisible && _labSubmissionCount == 2,
 						"Run did not stage server selection without spending a click.");
 					RequireInteraction(_boardChoiceServerCues.Count == 4 && !TrySelectBoardChoiceServer("preview-remote-1"), "Run offers an invalid server.");
+					RequireInteraction(_boardChoicePrompt!.Text.Contains("start the run immediately", StringComparison.Ordinal)
+						&& _boardChoiceServerCues.All(cue => cue.GetNode<Label>("%Caption").Text.Contains("1 click", StringComparison.Ordinal)),
+						"Server selection does not explain immediate commitment and the click cost.");
+					foreach (PanelContainer cue in _boardChoiceServerCues)
+					{
+						Label caption = cue.GetNode<Label>("%Caption");
+						RequireInteraction(caption.IsVisibleInTree() && caption.GetVisibleLineCount() == caption.GetLineCount()
+							&& caption.GetVisibleLineCount() > 0 && cue.GetGlobalRect().Encloses(caption.GetGlobalRect()),
+							$"The server action and price are clipped: {caption.Text}, size={caption.Size}, lines={caption.GetVisibleLineCount()}/{caption.GetLineCount()}.");
+					}
+					if (OS.GetCmdlineUserArgs().Contains("--interaction-guidance-screenshots"))
+						await SaveInteractionEvidence($"guidance-run-selection-{size.X}");
 					if (OS.GetCmdlineUserArgs().Contains("--m4-12-screenshots") && size.X == 1920)
 						await SaveRefinementEvidence("run-selection-1920");
 					await ClickTableButton(_boardChoiceDismiss!);

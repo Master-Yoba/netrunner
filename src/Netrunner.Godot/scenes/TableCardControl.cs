@@ -19,6 +19,13 @@ public partial class TableCardControl : Control
 	public static readonly Vector2 PortraitCardSize = new(150, 210);
 	public static readonly Vector2 IceCardSize = new(240, 108);
 
+	// Keep the managed resource alive while runtime target panels rebuild cards.
+	// Repeated loads can race Godot's weak resource-handle cleanup, as with action buttons.
+	private static PackedScene? _runtimeCardScene;
+	private static PackedScene? LoadCardScene() => Engine.IsEditorHint()
+		? GD.Load<PackedScene>(CardViewScenePath)
+		: _runtimeCardScene ??= GD.Load<PackedScene>(CardViewScenePath);
+
 	private CardViewModel? _card;
 	private Texture2D? _artwork;
 	private bool _fullCardFace;
@@ -67,7 +74,7 @@ public partial class TableCardControl : Control
 	/// </summary>
 	public static TableCardControl Create()
 	{
-		PackedScene? scene = GD.Load<PackedScene>(CardViewScenePath);
+		PackedScene? scene = LoadCardScene();
 		if (scene is null)
 		{
 			string message = $"Production card scene is missing: {CardViewScenePath}";
@@ -329,7 +336,7 @@ public partial class TableCardControl : Control
 			return;
 		}
 
-		PackedScene? scene = GD.Load<PackedScene>(CardViewScenePath);
+		PackedScene? scene = LoadCardScene();
 		if (scene is not null)
 		{
 			Node? template = scene.Instantiate();
@@ -571,6 +578,7 @@ public partial class TableCardControl : Control
 	{
 		bool wasActive = _interactionActive;
 		_card = card;
+		EncounterStrength = null;
 		_selected = false;
 		_targetCandidate = false;
 		_actionableSource = false;
@@ -584,6 +592,18 @@ public partial class TableCardControl : Control
 			_interactionActive = false;
 			CardHoverChanged?.Invoke(this, false);
 		}
+	}
+
+	/// <summary>Current strength supplied by the public encounter projection, separate from printed stats.</summary>
+	public int? EncounterStrength { get; private set; }
+
+	public void SetEncounterStrength(int? strength)
+	{
+		int? visible = _card?.IsKnown == true ? strength : null;
+		if (EncounterStrength == visible) return;
+		EncounterStrength = visible;
+		RefreshDynamicPresentation();
+		QueueRedraw();
 	}
 
 	/// <summary>Marks this card as the currently selected local target.</summary>
@@ -899,7 +919,7 @@ public partial class TableCardControl : Control
 		_title!.Visible = showText && !HasFullCardArtwork;
 		_type!.Visible = showText && !HasFullCardArtwork;
 		_stats!.Visible = showText && !HasFullCardArtwork;
-		_status!.Visible = showText && (!HasFullCardArtwork || _card is { Rezzed: true }
+		_status!.Visible = showText && (!HasFullCardArtwork || EncounterStrength is not null || _card is { Rezzed: true }
 			|| _card is { IsAbilityUsed: true } || _card is { IsFirstXUsedThisTurn: true });
 		bool compact = IsCompactPortrait;
 		_title!.Text = known ? compact ? CompactTitle(_card!.Title) : _card!.Title : "FACE-DOWN";
@@ -913,6 +933,7 @@ public partial class TableCardControl : Control
 			? BuildRulesCue(_card!.RulesText, _isIce ? 38 : compact ? 20 : 30)
 			: "NO PUBLIC DETAILS";
 		_status!.Text = known ? FormatStatus(_card!, compact) : "FACE-DOWN";
+		if (known && EncounterStrength is { } strength) _status.Text = $"STR {strength} · {_status.Text}";
 		_counters!.Text = known ? FormatCounters(_card!, compact) : string.Empty;
 		_counters!.Visible = _counters!.Text.Length > 0;
 		_rulesCue!.Visible = known && !_isIce && !compact && !HasFullCardArtwork;

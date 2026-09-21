@@ -1,0 +1,78 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Theme" path="res://themes/M4Theme.tres" id="1"]
+
+[sub_resource type="StyleBoxFlat" id="Panel"]
+bg_color = Color(0.025, 0.045, 0.055, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.3, 0.85, 0.95, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_left = 8
+corner_radius_bottom_right = 8
+content_margin_left = 12.0
+content_margin_right = 12.0
+content_margin_top = 10.0
+content_margin_bottom = 10.0
+
+[node name="IcebreakerPanel" type="PanelContainer"]
+offset_right = 470.0
+offset_bottom = 330.0
+mouse_filter = 0
+theme = ExtResource("1")
+theme_override_styles/panel = SubResource("Panel")
+
+[node name="Content" type="VBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 7
+
+[node name="Header" type="HBoxContainer" parent="Content"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Content/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 17
+text = "Icebreaker"
+autowrap_mode = 3
+
+[node name="Close" type="Button" parent="Content/Header"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Close · Esc"
+
+[node name="Strength" type="Label" parent="Content"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Strength"
+autowrap_mode = 3
+
+[node name="Subroutines" type="Label" parent="Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+autowrap_mode = 3
+
+[node name="Scroll" type="ScrollContainer" parent="Content"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 165)
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+follow_focus = true
+
+[node name="Actions" type="VBoxContainer" parent="Content/Scroll"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="Hint" type="Label" parent="Content"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+autowrap_mode = 3
+text = "Click an ability to use it. Each use pays its displayed cost."

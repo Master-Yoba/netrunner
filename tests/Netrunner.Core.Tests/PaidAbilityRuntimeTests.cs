@@ -973,13 +973,73 @@ public sealed class PaidAbilityRuntimeTests
             behaviorCatalogFingerprint: catalog.Fingerprint);
     }
 
+    [Theory]
+    [InlineData(5, 0, 2, 0)]
+    [InlineData(2, 1, 0, 0)]
+    [InlineData(5, 6, 2, 6)]
+    [InlineData(0, 3, 0, 0)]
+    public void RunAbilityCreditCostsPreferRunPoolAndReplayExactly(int runCredits, int personal, int expectedRun, int expectedPersonal)
+    {
+        CardDefinitionId definition = new("test:run-credit-cost");
+        CardInstanceId source = new("card:run-credit-cost");
+        // Multiple cost entries must consume one shared pool without double-spending it.
+        BehaviorPaidAbility ability = Ability("pay", BehaviorAbilityTiming.MovementPaidWindow,
+            BehaviorAbilityActivation.PaidAbility, [new(BehaviorCostKind.Credits, 1), new(BehaviorCostKind.Credits, 2)],
+            [new(BehaviorInstructionKind.NoOp)]);
+        BehaviorCatalog catalog = Catalog(definition, PlayerSide.Runner, [ability]);
+        GameState state = BuildRunnerRunState(catalog, definition, source, 0, runCredits, personal);
+        GameState prompt = WithPendingRunAction(state, Assert.Single(GameEngine.MaterializeAbilityActionParameters(state, catalog)));
+        GameState restored = EngineJson.DeserializeState(EngineJson.Serialize(prompt), catalog);
+        GameState result = ApplyAbility(prompt, catalog);
+        GameState replay = ApplyAbility(restored, catalog);
+        Assert.Equal(expectedRun, result.RunState!.RunCredits);
+        Assert.Equal(expectedPersonal, result.GetPlayer(sourceOwner: PlayerSide.Runner).Credits);
+        Assert.Equal(EngineJson.Serialize(result), EngineJson.Serialize(replay));
+        Assert.Empty(StateInvariantValidator.Collect(result, catalog));
+    }
+
+    [Fact]
+    public void RunAbilityDoesNotTreatRestrictedCardCountersAsAvailableCredits()
+    {
+        CardDefinitionId definition = new("test:run-credit-cost");
+        CardInstanceId source = new("card:run-credit-cost");
+        BehaviorPaidAbility ability = Ability("pay", BehaviorAbilityTiming.MovementPaidWindow,
+            BehaviorAbilityActivation.PaidAbility, [new(BehaviorCostKind.Credits, 3)], [new(BehaviorInstructionKind.NoOp)]);
+        BehaviorCatalog catalog = Catalog(definition, PlayerSide.Runner, [ability]);
+        GameState state = BuildRunnerRunState(catalog, definition, source, 0, runCredits: 1, credits: 1);
+        state = ReplaceCounters(state, [CardCounterState.CreateHostedCredit(source, 20, HostedCreditSpendRestriction.CardEffectOnly)]);
+        Assert.Empty(GameEngine.MaterializeAbilityActionParameters(state, catalog));
+    }
+
+    [Fact]
+    public void StaleRunCreditPaymentIsRejectedWithoutSpendingEitherPool()
+    {
+        CardDefinitionId definition = new("test:run-credit-cost");
+        CardInstanceId source = new("card:run-credit-cost");
+        BehaviorPaidAbility ability = Ability("pay", BehaviorAbilityTiming.MovementPaidWindow,
+            BehaviorAbilityActivation.PaidAbility, [new(BehaviorCostKind.Credits, 3)], [new(BehaviorInstructionKind.NoOp)]);
+        BehaviorCatalog catalog = Catalog(definition, PlayerSide.Runner, [ability]);
+        GameState state = BuildRunnerRunState(catalog, definition, source, 0, runCredits: 5, credits: 0);
+        GameState prompt = WithPendingRunAction(state, Assert.Single(GameEngine.MaterializeAbilityActionParameters(state, catalog)));
+        GameState stale = ReplaceState(prompt, runState: prompt.RunState!.WithRunCredits(1));
+        PendingDecision decision = stale.PendingDecision!;
+        LegalAction action = decision.LegalActions.Single(candidate => candidate.Kind == ActionKind.UseAbility);
+        string before = EngineJson.Serialize(stale);
+        ApplyResult rejected = GameEngine.Apply(stale, new ActionSubmission(decision.Owner, decision.Id, decision.Revision, action.Id), catalog);
+        Assert.False(rejected.Accepted);
+        Assert.Equal(before, EngineJson.Serialize(rejected.State));
+        Assert.Empty(rejected.Events);
+    }
+
     private static GameState BuildRunnerRunState(
         BehaviorCatalog catalog,
         CardDefinitionId definitionId,
         CardInstanceId sourceId,
-        int consecutivePasses)
+        int consecutivePasses,
+        int runCredits = 0,
+        int credits = 5)
     {
-        GameState baseline = BuildRunnerState(catalog, definitionId, sourceId, credits: 5, clicks: 4);
+        GameState baseline = BuildRunnerState(catalog, definitionId, sourceId, credits, clicks: 4);
         PlayerId runnerId = baseline.Players.Single(player => player.Side == PlayerSide.Runner).Id;
         ServerState server = baseline.Servers.Single(value => value.Kind == ServerKind.Headquarters);
         RunId runId = new("run:runtime-paid");
@@ -1012,7 +1072,7 @@ public sealed class PaidAbilityRuntimeTests
             chosenAccessCards: [],
             accessedCards: [],
             accessState: RunAccessState.NotStarted,
-            runCredits: 0,
+            runCredits: runCredits,
             activeRunEventId: null,
             lingeringEffects: []);
         return ReplaceState(

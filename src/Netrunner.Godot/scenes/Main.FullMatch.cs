@@ -386,8 +386,12 @@ public partial class Main
 				}
 				LegalAction? redraw = !mulligan && observation.Decision.Kind == DecisionKind.Setup
 					? observation.LegalActions.FirstOrDefault(action => action.Parameters is NumberChoiceParameters { Value: 1 }) : null;
-				ActionId actionId = redraw?.Id ?? await policy(observation, CancellationToken.None);
 				ActionsRegionState actions = ActionsRegionPresenter.Present(snapshot);
+				// The smoke policy plays the human seat through the actual presented choices.
+				// This includes matching breakers and the single hosted-first payment.
+				HashSet<ActionId> visibleIds = actions.DisplayActions.Select(action => action.Id).ToHashSet();
+				Observation presented = observation with { LegalActions = observation.LegalActions.Where(action => visibleIds.Contains(action.Id)).ToArray() };
+				ActionId actionId = redraw?.Id ?? await policy(presented, CancellationToken.None);
 				LegalActionViewModel action = actions.DisplayActions.Single(candidate => candidate.Id == actionId);
 				if (redraw is not null)
 				{

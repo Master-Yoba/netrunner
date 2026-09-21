@@ -538,7 +538,7 @@ public sealed record RunBreakerParameters : ActionParameters
 
 /// <summary>
 /// Typed target and quantity for the CR 9.8 encounter subroutine break
-/// action: the named rig icebreaker and how many subroutines it breaks.
+/// action: the named rig icebreaker and exact subroutine ordinals it breaks.
 /// The quantity is bounded by the number of unbroken subroutines at the moment
 /// the action is materialized. The breaker's printed break limit applies to
 /// this interface ability activation only, not cumulatively across the
@@ -552,7 +552,8 @@ public sealed record RunBreakParameters : ActionParameters
         int quantity,
         int hostedCredits = 0,
         CostQuote? costQuote = null,
-        SubroutineId? subroutineId = null)
+        SubroutineId? subroutineId = null,
+        IReadOnlyList<int>? subroutineOrdinals = null)
     {
         if (quantity < 1)
         {
@@ -569,6 +570,14 @@ public sealed record RunBreakParameters : ActionParameters
             throw new ArgumentException("A break quote must have a nonnegative effective cost.", nameof(costQuote));
         }
 
+        if (subroutineOrdinals is not null
+            && (subroutineOrdinals.Count != quantity || subroutineOrdinals.Any(ordinal => ordinal < 0)
+                || subroutineOrdinals.Distinct().Count() != quantity))
+        {
+            throw new ArgumentException("Break targets must be distinct nonnegative ordinals matching the quantity.", nameof(subroutineOrdinals));
+        }
+
+        SubroutineOrdinals = subroutineOrdinals is null ? null : Array.AsReadOnly(subroutineOrdinals.Order().ToArray());
         BreakerId = breakerId;
         Quantity = quantity;
         HostedCredits = hostedCredits;
@@ -599,6 +608,11 @@ public sealed record RunBreakParameters : ActionParameters
     [JsonInclude]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public SubroutineId? SubroutineId { get; private set; }
+
+    /// <summary>Exact encounter ordinals; null preserves legacy first-unbroken targeting.</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<int>? SubroutineOrdinals { get; private set; }
 
     [JsonIgnore]
     public int RunCredits => HostedCredits;
@@ -1565,7 +1579,7 @@ public sealed class PendingDecision
             runBreak.BreakerId,
             runBreak.Quantity,
             runBreak.HostedCredits,
-            runBreak.CostQuote, runBreak.SubroutineId),
+            runBreak.CostQuote, runBreak.SubroutineId, runBreak.SubroutineOrdinals),
         RunBioroidAbilityParameters bioroid => new RunBioroidAbilityParameters(
             bioroid.IceId,
             bioroid.SubroutineId,

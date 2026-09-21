@@ -8,6 +8,9 @@ namespace Netrunner.GodotClient;
 /// <summary>Card-table composition and issued-action routing; no authoritative state.</summary>
 public partial class Main
 {
+	// Keep the managed scene wrapper alive across button rebuilds and scene
+	// reloads; repeated Load calls can race Godot's weak resource-handle cleanup.
+	private static PackedScene? _tableActionButtonScene;
 	private bool _useCardTable;
 	private GameTableControl _gameTable = null!;
 	private Control _tableViewport = null!;
@@ -72,6 +75,8 @@ public partial class Main
 		};
 		_gameTable.ServerSelected += id =>
 		{
+			if (TrySelectSpatialServer(id)) return;
+			CloseBoardIcebreaker();
 			if (TrySelectBoardChoiceServer(id)) return;
 			if (_currentSnapshot?.View.Servers.Any(server => server.Id == id && server.Kind == ServerKind.Archives) == true
 				&& ShowTablePile("zone:corp-archives")) return;
@@ -96,7 +101,11 @@ public partial class Main
 				ShowInspectedCardZoom();
 			}
 		};
-		_tableAccessCard.CardSelected += _ => inspectAccess.EmitSignal(BaseButton.SignalName.Pressed);
+		_tableAccessCard.CardSelected += id =>
+		{
+			if (_spatialSelection is not null && TrySelectSpatialCard(id)) return;
+			inspectAccess.EmitSignal(BaseButton.SignalName.Pressed);
+		};
 		_tableAccessCard.CardHoverChanged += HandleTableCardHoverChanged;
 		BuildCardHoverPreview(_tableViewport);
 		_matchHistory = _tableViewport.GetNode<MatchHistoryPanel>("History");
@@ -112,7 +121,11 @@ public partial class Main
 
 	private void SelectTableCard(string id)
 	{
-		if (TrySelectBoardChoiceCard(id)) return;
+		if (_boardChoiceVisible) { TrySelectBoardChoiceCard(id); return; }
+		if (TrySelectSpatialCard(id)) return;
+		if (_boardChoosingSubroutines && id == _currentSnapshot?.View.Run?.Encounter?.Ice?.Id) return;
+		if (TrySelectBoardIcebreaker(id)) return;
+		CloseBoardIcebreaker();
 		RecordFullMatchSelection("card", id);
 		_tableSelectedCard = id;
 		_tableSelectedServer = null;
@@ -124,6 +137,8 @@ public partial class Main
 
 	private void ClearTableSelection()
 	{
+		CloseSpatialActions();
+		CloseBoardIcebreaker();
 		_tableSelectedCard = null;
 		_tableSelectedServer = null;
 		_tableAllActions = false;
@@ -150,8 +165,7 @@ public partial class Main
 		_gameTable.MotionEnabled = !_reducedMotion.ButtonPressed && !_skipAnimation;
 		_gameTable.MotionDuration = GameTableControl.DefaultMotionDuration / _speed.Value;
 		_gameTable.Render(snapshot.View);
-		CardViewModel? accessed = snapshot.View.Run is { Step: RunTimingStep.BreachAccessAbility, Access.Accessed.Count: > 0 } accessRun
-			? accessRun.Access.Accessed[^1] : null;
+		CardViewModel? accessed = AccessActionsPresenter.Card(snapshot.View);
 		_tableAccessCard.SetCard(accessed);
 		_tableAccessPanel.Visible = accessed is { IsKnown: true };
 		_tableAccessTitle.Text = accessed?.Title ?? "";
@@ -177,6 +191,7 @@ public partial class Main
 		{
 			ClearChildren(_tableActions);
 			_tableActionButtons.Clear();
+			RefreshAccessActions(snapshot);
 			DecisionViewModel? decision = snapshot.View.Decision;
 			_tablePrompt.Text = snapshot.IsOpponentThinking ? "Opponent is thinking. You can inspect cards and read history."
 				: snapshot.IsTerminal ? "Match complete."
@@ -207,6 +222,7 @@ public partial class Main
 			{
 				_gameTable.SetActionableSources(all
 					.SelectMany(TableActionSourceCardIds)
+					.Concat(BoardSpatialActions.Project(snapshot.View).Select(action => action.SourceId).OfType<string>())
 					.Concat(decision.Kind == DecisionKind.TurnDiscard
 						? BoardInteractionProjector.Project(snapshot.View).Sources.Select(source => source.CardId) : [])
 					.ToHashSet(StringComparer.Ordinal));
@@ -223,8 +239,16 @@ public partial class Main
 				return;
 			}
 			bool ordinary = decision.Kind is DecisionKind.TurnAction or DecisionKind.TurnTiming;
+			bool encounter = decision.Kind == DecisionKind.RunTiming && snapshot.View.Viewer == PlayerSide.Runner
+				&& snapshot.View.Run is { Step: RunTimingStep.EncounterPaidWindow, Encounter: not null };
 			IEnumerable<LegalActionViewModel> displayed = all;
-			if (decision.Kind == DecisionKind.TurnDiscard && !_tableAllActions)
+			if (encounter && !_tableAllActions)
+			{
+				displayed = all.Where(action => BoardIcebreakerPresenter.Source(action) is null);
+				_tablePrompt.Text += " · Click a matching icebreaker to boost or break";
+				AddButton("All legal actions…", () => { _tableAllActions = true; RenderCardTableActions(snapshot); });
+			}
+			else if (decision.Kind == DecisionKind.TurnDiscard && !_tableAllActions)
 			{
 				displayed = [];
 				AddButton("All legal actions…", () => { _tableAllActions = true; RenderCardTableActions(snapshot); });
@@ -245,6 +269,17 @@ public partial class Main
 			}
 			else if (_tableAllActions)
 				AddButton("Back to table", () => { _tableAllActions = false; RenderCardTableActions(snapshot); });
+			if (!_tableAllActions)
+			{
+				IReadOnlyList<BoardSpatialAction> spatial = BoardSpatialActions.Project(snapshot.View);
+				foreach (string source in spatial.Select(action => action.SourceId).OfType<string>().Distinct(StringComparer.Ordinal))
+					if (_gameTable.GetDropRect("HostCard", source) is null && _tableAccessCard.CardId != source)
+						AddButton(ActionCardName(source) + " · card actions…", () => TrySelectSpatialCard(source));
+				if (spatial.Count > 0 && !ordinary && !encounter && decision.Kind != DecisionKind.TurnDiscard)
+					AddButton("All legal actions…", () => { _tableAllActions = true; RenderCardTableActions(snapshot); });
+				HashSet<ActionId> spatialIds = spatial.Select(action => action.Action.Id).ToHashSet();
+				displayed = displayed.Where(action => !spatialIds.Contains(action.Id) && !_accessActionButtons.ContainsKey(action.Id));
+			}
 			foreach (LegalActionViewModel action in displayed)
 			{
 				Button button = AddButton(TableActionLabel(action), () =>
@@ -268,13 +303,16 @@ public partial class Main
 		finally
 		{
 			RefreshBoardChoices(snapshot);
+			RefreshSpatialActions(snapshot);
 			RefreshBasicBoardActions(snapshot);
+			RefreshBoardIcebreaker(snapshot);
 		}
 	}
 
 	private static Button CreateTableActionButton(string text)
 	{
-		Button button = GD.Load<PackedScene>("res://scenes/components/ActionButton.tscn").Instantiate<Button>();
+		_tableActionButtonScene ??= GD.Load<PackedScene>("res://scenes/components/ActionButton.tscn");
+		Button button = _tableActionButtonScene.Instantiate<Button>();
 		button.Text = text;
 		return button;
 	}
@@ -313,7 +351,7 @@ public partial class Main
 			RunBioroidAbilityParameters bioroid => [bioroid.IceId.Value],
 			IceSubroutineChoiceParameters { Choice: IceSubroutineChoiceKind.InstallCard, CardId: { } cardId }
 				=> [cardId.Value],
-			_ => [],
+			_ => action.Source is { } source ? [source.CardId] : [],
 		};
 	}
 
@@ -363,27 +401,11 @@ public partial class Main
 		return $"{progress}Drag {remaining}{(selected > 0 ? " more" : "")} {(remaining == 1 ? "card" : "cards")} from hand to {pile}.";
 	}
 
-	private string TableActionLabel(LegalActionViewModel action) => action.Kind switch
-	{
-		ActionKind.GainCredit => "Gain 1 credit · 1 click",
-		ActionKind.DrawCard => "Draw a card · 1 click",
-		ActionKind.PassPriority => "Pass priority",
-		ActionKind.NoAccessAction => "Continue access",
-		ActionKind.EndTurn => "End turn",
-		ActionKind.StartRun when action.Parameters is RunServerParameters run => $"Run {_gameTable.GetServerDisplayName(run.ServerId.Value)} · 1 click",
-		ActionKind.RezCard when action.Parameters is RezCardParameters rez => $"Rez {FriendlyText(rez.CardId.Value)} · {rez.CreditCost} credits",
-		ActionKind.PlayCard when action.Parameters is PlayCardParameters play => $"Play {FriendlyText(play.CardId.Value)} · {play.CreditCost} credits",
-		ActionKind.InstallCard when action.Parameters is InstallCardParameters install =>
-			$"{(install.FinalizeSelection ? "Install" : "Choose install")} {FriendlyText(install.CardId.Value)} → "
-			+ (install.CreateNewRemote ? "New remote" : install.ServerId is { } server ? _gameTable.GetServerDisplayName(server.Value) : "Rig")
-			+ $" · {install.CreditCost} credits",
-		ActionKind.ChooseNumber when action.Parameters is NumberChoiceParameters number
-			&& _currentSnapshot?.View.Decision?.Kind == DecisionKind.Setup => number.Value == 0 ? "Keep hand" : "Mulligan",
-		_ => FriendlyText(Slice46PresentationProjector.Label(action)),
-	};
-
 	private string FriendlyText(string text)
 	{
+		if (_currentSnapshot?.View is { } view)
+			foreach (CardViewModel card in BoardChoiceCards(view).OrderByDescending(card => card.Id.Length))
+				text = text.Replace(card.Id, ActionCardName(card.Id), StringComparison.Ordinal);
 		if (_tableAccessCard.Card is { IsKnown: true } accessed)
 			text = text.Replace(accessed.Id, accessed.Title, StringComparison.Ordinal);
 		foreach ((string id, TableCardControl control) in _gameTable.VisibleCards.OrderByDescending(pair => pair.Key.Length))
@@ -397,7 +419,11 @@ public partial class Main
 	{
 		PollCardHoverPreview();
 		_gameTable.Hand.ReducedMotion = _reducedMotion.ButtonPressed;
-		if (_currentSnapshot is { } current) RefreshBasicBoardActions(current);
+		if (_currentSnapshot is { } current)
+		{
+			RefreshBasicBoardActions(current);
+			RefreshBoardIcebreaker(current);
+		}
 		_tablePlaybackWait = Math.Max(0, _tablePlaybackWait - delta);
 		if (_tableAwaitingSettlement && _tablePlaybackWait == 0 && _gameTable.ActiveMotionCount == 0 && _tablePublications.Count == 0)
 		{

@@ -158,6 +158,9 @@ public partial class Main
 			|| !_tableViewport.IsVisibleInTree()
 			|| !_board.IsVisibleInTree()
 			|| _currentSnapshot is null
+			|| (_icebreakerPanel?.Visible == true && (card.CardId == _boardBreakerId
+				|| (_boardChoosingSubroutines && card.CardId == _currentSnapshot?.View.Run?.Encounter?.Ice?.Id)
+				|| _icebreakerPanel.GetGlobalRect().HasPoint(GetViewport().GetMousePosition())))
 			|| _startPanel.IsVisibleInTree()
 			|| _zoomOverlay?.Visible == true
 			|| _galleryOverlay?.Visible == true
@@ -170,7 +173,8 @@ public partial class Main
 			|| !card.IsInteractionActive
 			|| !card.IsVisibleInTree()
 			|| (!_gameTable.VisibleCards.Values.Contains(card)
-				&& !(ReferenceEquals(card, _tableAccessCard) && _tableAccessPanel.IsVisibleInTree())))
+				&& !(ReferenceEquals(card, _tableAccessCard) && _tableAccessPanel.IsVisibleInTree())
+				&& !(SpatialVisible && _spatialOptions?.IsAncestorOf(card) == true)))
 		{
 			return false;
 		}

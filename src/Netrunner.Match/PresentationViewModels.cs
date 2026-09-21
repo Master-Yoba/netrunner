@@ -8,9 +8,9 @@ namespace Netrunner.Match;
 
 /// <summary>
 /// Typed presentation projection for one player-filtered observation.  The
-/// mapper accepts an <see cref="Observation"/> only; it has no path to
-/// authoritative <see cref="GameState"/> and therefore cannot accidentally
-/// render hidden cards.
+/// mapper accepts a filtered <see cref="Observation"/> and optional Match-owned
+/// presentation context. It has no path to authoritative <see cref="GameState"/>;
+/// the match worker supplies authorized choice cards and client position handles.
 /// </summary>
 public sealed record MatchViewModel(
     PlayerSide Viewer,
@@ -31,6 +31,9 @@ public sealed record MatchViewModel(
 {
     public IReadOnlyList<CardViewModel> CorpDiscard { get; init; } = Array.Empty<CardViewModel>();
     public IReadOnlyList<CardViewModel> RunnerHeap { get; init; } = Array.Empty<CardViewModel>();
+    public IReadOnlyList<CardPositionViewModel> CardPositions { get; init; } = [];
+    public IReadOnlyList<CardViewModel> ChoiceCards { get; init; } = [];
+    public CardSelectionViewModel? CardSelection { get; init; }
 
     private int _corpDiscardCount;
     /// <summary>Public total, including concealed Archives cards; legacy projections fall back to visible cards.</summary>
@@ -485,7 +488,12 @@ public sealed record LegalActionViewModel(
     /// never infer option semantics from <see cref="Description"/>.
     /// </summary>
     public Slice45BehaviorChoiceOptionViewModel? Slice45BehaviorChoice { get; init; }
+
+    public ActionSourceViewModel? Source { get; init; }
+    public string? EffectLabel { get; init; }
 }
+
+public sealed record ActionSourceViewModel(string CardId, string Title, string? RuleKey, string? EffectLabel = null);
 
 /// <summary>Run focus, current ICE, encounter, and breach/access state.</summary>
 public sealed record RunFocusViewModel(
@@ -584,6 +592,9 @@ public sealed record EncounterBreakerViewModel(
     int PrintedStrength,
     int EffectiveStrength)
 {
+    /// <summary>Whether the typed interface matches the visible encountered ICE, before strength or payment checks.</summary>
+    public bool CanInterfaceEncounter { get; init; }
+
     /// <summary>Authoritative typed breaker-strength calculation from Core.</summary>
     public ValueQuote? StrengthQuote { get; init; }
 
@@ -648,6 +659,23 @@ public sealed record RunOutcomeViewModel(
 /// <summary>Maps filtered Core observations to immutable typed UI data.</summary>
 public static class ObservationViewMapper
 {
+    private static ActionSourceViewModel? MapActionSource(MatchPresentationContext context, ActionId actionId,
+        ICardMetadataResolver metadata)
+    {
+        ActionSourceContext? source = context.ActionSources.FirstOrDefault(value => value.ActionId == actionId);
+        return source is null ? null : new(source.CardId.Value,
+            metadata.TryResolve(source.DefinitionId.Value, out CardPresentationMetadata card) ? card.Title : "Known card",
+            source.RuleKey, source.ReplacementDrawCount is { } count ? $"Draw {count} cards instead" : null);
+    }
+
+    private static string? PaidAbilityEffect(ActionParameters parameters, IBehaviorCatalog catalog)
+    {
+        if (parameters is not AbilityActionParameters ability
+            || !catalog.TryGet(ability.DefinitionId, out CardBehaviorDefinition? definition)) return null;
+        BehaviorPaidAbility? declared = definition.PaidAbilities.FirstOrDefault(value => value.Key == ability.AbilityKey);
+        return declared is null ? null : BehaviorEffectLabels.Describe(declared.Instructions, definition.Controller);
+    }
+
     private sealed record CardAbilityCueContext(
         IReadOnlySet<string> ReadySourceIds,
         IReadOnlySet<string> UsedSourceIds,
@@ -706,13 +734,15 @@ public static class ObservationViewMapper
         Observation observation,
         ICardMetadataResolver metadataResolver,
         IBehaviorCatalog behaviorCatalog,
-        HandSizeProjection? handSizeProjection)
+        HandSizeProjection? handSizeProjection,
+        MatchPresentationContext? presentationContext = null)
     {
         ArgumentNullException.ThrowIfNull(observation);
         ArgumentNullException.ThrowIfNull(metadataResolver);
         ArgumentNullException.ThrowIfNull(behaviorCatalog);
 
         handSizeProjection ??= HandSizeProjection.Unavailable;
+        presentationContext ??= MatchPresentationContext.Empty;
         IReadOnlyDictionary<string, object?> publicState = observation.PublicState;
         IReadOnlyDictionary<string, object?> privateState = observation.PrivateState;
         IReadOnlyDictionary<string, object?> players = RequiredMap(publicState, "players");
@@ -806,6 +836,8 @@ public static class ObservationViewMapper
                     action.Parameters);
                 return viewAction with
                 {
+                    Source = MapActionSource(presentationContext, action.Id, metadataResolver),
+                    EffectLabel = PaidAbilityEffect(action.Parameters, behaviorCatalog),
                     Slice45BehaviorChoice = Slice45PresentationProjector.ResolveChoiceMetadata(
                         action.Parameters,
                         behaviorCatalog),
@@ -842,6 +874,9 @@ public static class ObservationViewMapper
             handSizeProjection);
         return view with
         {
+            CardPositions = Array.AsReadOnly(presentationContext.Positions.ToArray()),
+            ChoiceCards = Array.AsReadOnly(presentationContext.ChoiceCards.Select(card => MapCard(card, metadataResolver, abilityCue)).ToArray()),
+            CardSelection = presentationContext.Selection,
             CorpDiscard = ReadCards(publicState, "corpDiscard", metadataResolver, abilityCue)
                 .Concat(ReadCards(privateState, "faceDownArchives", metadataResolver, abilityCue))
                 .GroupBy(card => card.Id).Select(group => group.Last()).ToArray(),
@@ -1363,6 +1398,7 @@ public static class ObservationViewMapper
                     publicState,
                     map,
                     encounter,
+                    encounterIce,
                     metadataResolver,
                     behaviorCatalog,
                     abilityCue),
@@ -1483,6 +1519,7 @@ public static class ObservationViewMapper
         IReadOnlyDictionary<string, object?> publicState,
         IReadOnlyDictionary<string, object?> run,
         IReadOnlyDictionary<string, object?> encounter,
+        CardViewModel? encounterIce,
         ICardMetadataResolver metadataResolver,
         IBehaviorCatalog behaviorCatalog,
         CardAbilityCueContext abilityCue)
@@ -1539,6 +1576,9 @@ public static class ObservationViewMapper
                 return group.Single().quote;
             }, StringComparer.Ordinal);
 
+        IceBehaviorSpec? iceSpec = encounterIce is { IsKnown: true, DefinitionId: { } iceDefinition }
+            && CardDefinitionId.TryParse(iceDefinition, out CardDefinitionId iceId)
+            && behaviorCatalog.TryGetIce(iceId, out IceBehaviorSpec? registeredIce) ? registeredIce : null;
         var breakers = new List<EncounterBreakerViewModel>();
         foreach (CardViewModel card in ReadCards(publicState, "runnerRig", metadataResolver, abilityCue))
         {
@@ -1568,6 +1608,7 @@ public static class ObservationViewMapper
                 spec.BaseStrength,
                 quote.EffectiveValue)
             {
+                CanInterfaceEncounter = iceSpec is not null && IceInterfaceMatcher.Matches(iceSpec, spec),
                 StrengthQuote = quote,
                 StrengthBreakdown = StrengthBreakdownViewModel.From(quote),
             });

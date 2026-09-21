@@ -19,9 +19,9 @@ public sealed class RunPumpTests
         GameState encounter = EncounterBreakerTests.ReachEncounterWindow(preRun);
 
         PendingDecision decision = Assert.IsType<PendingDecision>(encounter.PendingDecision);
-        Assert.Equal(4, decision.LegalActions.Count);
+        Assert.Equal(5, decision.LegalActions.Count);
         Assert.Contains(decision.LegalActions, action => action.Kind == ActionKind.PassPriority);
-        Assert.Equal(2, decision.LegalActions.Count(action => action.Kind == ActionKind.BreakSubroutines));
+        Assert.Equal(3, decision.LegalActions.Count(action => action.Kind == ActionKind.BreakSubroutines));
         LegalAction pump = Assert.Single(decision.LegalActions, action => action.Kind == ActionKind.PumpBreaker);
         Assert.Equal(breakerId, Assert.IsType<RunBreakerParameters>(pump.Parameters).BreakerId);
     }
@@ -40,7 +40,7 @@ public sealed class RunPumpTests
         // The barrier ICE only admits the barrier breaker to its break; the
         // code gate breaker still gets its pump offer.
         PendingDecision decision = Assert.IsType<PendingDecision>(encounter.PendingDecision);
-        Assert.Equal(5, decision.LegalActions.Count);
+        Assert.Equal(6, decision.LegalActions.Count);
         Assert.Equal(2, decision.LegalActions.Count(action => action.Kind == ActionKind.PumpBreaker));
         Assert.Contains(decision.LegalActions, action => action.Kind == ActionKind.PumpBreaker
             && ((RunBreakerParameters)action.Parameters).BreakerId == breakerId);
@@ -98,7 +98,7 @@ public sealed class RunPumpTests
         PendingDecision runnerWindow = Assert.IsType<PendingDecision>(afterPump.PendingDecision);
         Assert.Equal(RunTimingStep.EncounterPaidWindow, afterPump.RunState.Step);
         Assert.Equal(PlayerSide.Runner, RunTimingTests.SideOf(afterPump, runnerWindow.Owner));
-        Assert.Equal(4, runnerWindow.LegalActions.Count);
+        Assert.Equal(5, runnerWindow.LegalActions.Count);
     }
 
     [Fact]
@@ -156,7 +156,7 @@ public sealed class RunPumpTests
         PendingDecision decision = Assert.IsType<PendingDecision>(encounter.PendingDecision);
         Assert.DoesNotContain(decision.LegalActions, action => action.Kind == ActionKind.PumpBreaker);
         // The 1-credit break is still legal; only the 2-credit pump is not.
-        Assert.Equal(3, decision.LegalActions.Count);
+        Assert.Equal(4, decision.LegalActions.Count);
     }
 
     [Fact]

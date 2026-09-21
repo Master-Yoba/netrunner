@@ -7,11 +7,12 @@ namespace Netrunner.GodotClient;
 public partial class Main
 {
 	private bool _interactionLab;
-	private int _labScenario;
+	private int _labScenario = 15;
 	private int _labStep;
 	private long _labRevision;
 	private InstallCardParameters? _labPendingInstall;
 	private OptionButton? _labScenarios;
+	private OptionButton? _labSides;
 	private Label? _labInstructions;
 	private int _labSubmissionCount;
 
@@ -24,9 +25,17 @@ public partial class Main
 		toolbar.Show();
 		if (_labScenarios is null)
 		{
+			_labSides = toolbar.GetNode<OptionButton>("Side");
+			_labSides.AddItem("Runner", (int)PlayerSide.Runner);
+			_labSides.AddItem("Corp", (int)PlayerSide.Corp);
+			_labSides.ItemSelected += index =>
+			{
+				PlayerSide side = (PlayerSide)_labSides.GetItemId((int)index);
+				_labScenario = InteractionLabSamples.Scenarios.First(scenario => scenario.Side == side).Id;
+				ResetInteractionLab();
+			};
 			_labScenarios = toolbar.GetNode<OptionButton>("Scenarios");
-			foreach (string name in InteractionLabSamples.Names) _labScenarios.AddItem(name);
-			_labScenarios.ItemSelected += index => { _labScenario = (int)index; ResetInteractionLab(); };
+			_labScenarios.ItemSelected += index => { _labScenario = _labScenarios.GetItemId((int)index); ResetInteractionLab(); };
 			toolbar.GetNode<Button>("Reset").Pressed += ResetInteractionLab;
 			toolbar.GetNode<Button>("Exit").Pressed += () => GetTree().ReloadCurrentScene();
 			_labInstructions = toolbar.GetNode<Label>("Instructions");
@@ -34,8 +43,20 @@ public partial class Main
 		ResetInteractionLab();
 	}
 
+	private void RefreshLabScenarioPicker(PlayerSide side)
+	{
+		_labSides!.Select(_labSides.GetItemIndex((int)side));
+		_labScenarios!.Clear();
+		foreach (var scenario in InteractionLabSamples.Scenarios.Where(scenario => scenario.Side == side))
+			_labScenarios.AddItem(scenario.Name, scenario.Id);
+		_labScenarios.Select(_labScenarios.GetItemIndex(_labScenario));
+	}
+
 	private void ResetInteractionLab()
 	{
+		_spatialSubmission = null;
+		CloseSpatialActions();
+		CloseBoardIcebreaker();
 		_boardDrag?.Cancel("lab-reset", false);
 		DismissBoardChoices();
 		HideTablePile();
@@ -45,9 +66,13 @@ public partial class Main
 		_labRevision++;
 		_matchHistory.ClearHistory();
 		_tableHistory.Clear();
-		PublishLabView(InteractionLabSamples.Create(_labScenario, _labRevision));
+		MatchViewModel view = InteractionLabSamples.Create(_labScenario, _labRevision);
+		RefreshLabScenarioPicker(view.Viewer);
+		PublishLabView(view);
 		_labInstructions!.Text = InteractionLabSamples.Instructions[_labScenario];
-		_tableLastAction.Text = _labScenario is 17 or 18 ? "Discard two cards by dragging them to the pile"
+		_tableLastAction.Text = _labScenario == 24 ? "Trash or leave the accessed card using the visible controls"
+			: _labScenario >= 20 ? "Select a source or highlighted target, then confirm" : _labScenario == 19 ? "Click an icebreaker in the rig"
+			: _labScenario is 17 or 18 ? "Discard two cards by dragging them to the pile"
 			: _labScenario >= 15 ? "Practice the hand and board actions" : "Drag the practice card from hand";
 	}
 
@@ -64,7 +89,12 @@ public partial class Main
 	{
 		bool corp = view.Viewer == PlayerSide.Corp;
 		PlayerViewModel player = corp ? view.Corp : view.Runner;
-		player = player with { Clicks = Math.Max(0, player.Clicks - 1), Credits = player.Credits + (action.Kind == ActionKind.GainCredit ? 1 : 0) };
+		player = player with
+		{
+			Clicks = Math.Max(0, player.Clicks - 1),
+			Credits = player.Credits + (action.Kind == ActionKind.GainCredit ? 1 : 0)
+				- (action.Parameters is PlayCardParameters played ? played.CreditCost : 0),
+		};
 		view = corp ? view with { Corp = player } : view with { Runner = player };
 		if (action.Kind == ActionKind.DrawCard)
 		{
@@ -74,11 +104,19 @@ public partial class Main
 			view = corp ? view with { CorpHand = hand, CorpDeck = view.CorpDeck with { Count = Math.Max(0, view.CorpDeck.Count - 1) } }
 				: view with { RunnerHand = hand, RunnerDeck = view.RunnerDeck with { Count = Math.Max(0, view.RunnerDeck.Count - 1) } };
 		}
+		else if (action.Parameters is PlayCardParameters play)
+		{
+			ZoneViewModel hand = corp ? view.CorpHand : view.RunnerHand;
+			CardViewModel card = hand.VisibleCards.Single(card => card.Id == play.CardId.Value);
+			hand = hand with { Count = hand.Count - 1, VisibleCards = hand.VisibleCards.Where(card => card.Id != play.CardId.Value).ToArray() };
+			view = corp ? view with { CorpHand = hand, CorpDiscard = [.. view.CorpDiscard, card], CorpDiscardCount = view.CorpDiscardCount + 1 }
+				: view with { RunnerHand = hand, RunnerHeap = [.. view.RunnerHeap, card] };
+		}
 		bool complete = action.Kind == ActionKind.StartRun || player.Clicks == 0;
 		view = view with
 		{
 			Decision = complete ? null : InteractionLabSamples.Decision(view.Viewer, _labRevision, DecisionKind.TurnAction, "Practice board actions"),
-			LegalActions = complete ? [] : view.LegalActions.Select(current => InteractionLabSamples.Action(current.Kind + current.Id.Value, current.Kind, current.Parameters, _labRevision)).ToArray(),
+			LegalActions = complete ? [] : InteractionLabSamples.BoardActions(view, _labRevision),
 		};
 		PublishLabView(view);
 		_tableLastAction.Text = action.Parameters is RunServerParameters run
@@ -93,6 +131,12 @@ public partial class Main
 		_labSubmissionCount++;
 		_labRevision++;
 		MatchViewModel view = snapshot.View;
+		if (_labScenario >= 20) { SubmitSpatialLab(view, action); return true; }
+		if (_labScenario == 19)
+		{
+			SubmitIcebreakerLab(view, action);
+			return true;
+		}
 		if (_labScenario is 17 or 18)
 		{
 			SubmitDiscardLab(view, action);

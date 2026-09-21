@@ -432,7 +432,8 @@ public sealed class CostModifierContractTests
                 beforeSuccess.PendingDecision!.LegalActions,
                 action => action.Kind == ActionKind.BreakSubroutines
                     && ((RunBreakParameters)action.Parameters).BreakerId == breakerId
-                    && ((RunBreakParameters)action.Parameters).Quantity == 1)
+                    && ((RunBreakParameters)action.Parameters).Quantity == 1
+                    && ((RunBreakParameters)action.Parameters).SubroutineOrdinals!.SequenceEqual([0]))
             .Parameters);
         Assert.Null(baseParameters.CostQuote);
 
@@ -451,7 +452,8 @@ public sealed class CostModifierContractTests
             successful.PendingDecision!.LegalActions,
             action => action.Kind == ActionKind.BreakSubroutines
                 && ((RunBreakParameters)action.Parameters).BreakerId == breakerId
-                && ((RunBreakParameters)action.Parameters).Quantity == 1);
+                && ((RunBreakParameters)action.Parameters).Quantity == 1
+                && ((RunBreakParameters)action.Parameters).SubroutineOrdinals!.SequenceEqual([0]));
         RunBreakParameters afterSuccess = Assert.IsType<RunBreakParameters>(breakAction.Parameters);
         Assert.Equal(2, afterSuccess.CostQuote!.BaseCost);
         Assert.Equal(1, afterSuccess.CostQuote.EffectiveCost);
@@ -519,11 +521,13 @@ public sealed class CostModifierContractTests
             action.Kind == ActionKind.BreakSubroutines
             && ((RunBreakParameters)action.Parameters).BreakerId == breakerId
             && ((RunBreakParameters)action.Parameters).Quantity == 1
+                    && ((RunBreakParameters)action.Parameters).SubroutineOrdinals!.SequenceEqual([0])
             && ((RunBreakParameters)action.Parameters).HostedCredits == 0);
         LegalAction hostedOnly = Assert.Single(encounter.PendingDecision.LegalActions, action =>
             action.Kind == ActionKind.BreakSubroutines
             && ((RunBreakParameters)action.Parameters).BreakerId == breakerId
             && ((RunBreakParameters)action.Parameters).Quantity == 1
+                    && ((RunBreakParameters)action.Parameters).SubroutineOrdinals!.SequenceEqual([0])
             && ((RunBreakParameters)action.Parameters).HostedCredits == 1);
         RunBreakParameters hostedParameters = Assert.IsType<RunBreakParameters>(hostedOnly.Parameters);
         Assert.Equal(2, hostedParameters.CostQuote!.BaseCost);
@@ -536,6 +540,7 @@ public sealed class CostModifierContractTests
             action => action.Kind == ActionKind.BreakSubroutines
                 && ((RunBreakParameters)action.Parameters).BreakerId == breakerId
                 && ((RunBreakParameters)action.Parameters).Quantity == 1
+                    && ((RunBreakParameters)action.Parameters).SubroutineOrdinals!.SequenceEqual([0])
                 && ((RunBreakParameters)action.Parameters).HostedCredits == 1);
         Assert.NotSame(hostedOnly, observedBreak);
         Assert.Equal(hostedParameters.CostQuote, ((RunBreakParameters)observedBreak.Parameters).CostQuote);
@@ -557,6 +562,7 @@ public sealed class CostModifierContractTests
             action.Kind == ActionKind.BreakSubroutines
             && ((RunBreakParameters)action.Parameters).BreakerId == breakerId
             && ((RunBreakParameters)action.Parameters).Quantity == 1
+                    && ((RunBreakParameters)action.Parameters).SubroutineOrdinals!.SequenceEqual([1])
             && ((RunBreakParameters)action.Parameters).HostedCredits == 1);
         ApplyResult hostedPaid = ApplyCatalogResult(walletPaid.State, behaviorCatalog, hostedOnlySecond);
         Assert.True(hostedPaid.Accepted, hostedPaid.Rejection?.Message);
@@ -715,7 +721,8 @@ public sealed class CostModifierContractTests
             encounter.PendingDecision!.LegalActions,
             action => action.Kind == ActionKind.BreakSubroutines
                 && ((RunBreakParameters)action.Parameters).BreakerId == breakerId
-                && ((RunBreakParameters)action.Parameters).Quantity == 1);
+                && ((RunBreakParameters)action.Parameters).Quantity == 1
+                    && ((RunBreakParameters)action.Parameters).SubroutineOrdinals!.SequenceEqual([0]));
         RunBreakParameters issuedBreak = Assert.IsType<RunBreakParameters>(breakAction.Parameters);
         CostQuote staleBreakQuote = new(
             3,

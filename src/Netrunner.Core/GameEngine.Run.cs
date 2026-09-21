@@ -2198,7 +2198,7 @@ public static partial class GameEngine
                     runBreak.BreakerId,
                     runBreak.Quantity,
                     runBreak.HostedCredits,
-                    runBreak.CostQuote, runBreak.SubroutineId);
+                    runBreak.CostQuote, runBreak.SubroutineId, runBreak.SubroutineOrdinals);
                 break;
             case (ActionKind.PumpBreaker, RunBreakerParameters pump):
                 ConsumeRunPumpBreaker(working, run, pump.BreakerId, pump.HostedCredits);
@@ -2807,7 +2807,7 @@ public static partial class GameEngine
         CardInstanceId breakerId,
         int quantity,
         int hostedCredits,
-        CostQuote? suppliedCostQuote, SubroutineId? subroutineId)
+        CostQuote? suppliedCostQuote, SubroutineId? subroutineId, IReadOnlyList<int>? subroutineOrdinals)
     {
         RunPriorityState? priority = run.Priority;
         RunEncounterState? encounter = run.Encounter;
@@ -2837,6 +2837,16 @@ public static partial class GameEngine
             throw new ResolutionFailureException("The breaking breaker must be installed in the Runner rig.");
         }
 
+        int[] targets = subroutineOrdinals?.ToArray()
+            ?? encounter.Subroutines.Where(sub => !sub.Broken && !sub.Resolved).Take(quantity).Select(sub => sub.Ordinal).ToArray();
+        if (subroutineOrdinals is not null
+            && (targets.Length != quantity || targets.Distinct().Count() != quantity
+                || targets.Any(ordinal => !encounter.Subroutines.Any(sub => sub.Ordinal == ordinal && !sub.Broken && !sub.Resolved))
+                || (subroutineId is { } exactId && !encounter.Subroutines.Any(sub => sub.Id == exactId && targets.Contains(sub.Ordinal)))))
+        {
+            throw new ResolutionFailureException("Break targets must identify distinct, unresolved, unbroken subroutines in this encounter.");
+        }
+
         if (HostingSpec(working, breaker)?.BreakHostSubroutine == true)
         {
             ConsumeHostedCounterBreak(working, run, breaker, quantity, hostedCredits, suppliedCostQuote, subroutineId);
@@ -2852,7 +2862,7 @@ public static partial class GameEngine
 
         if (subroutineId is not null)
         {
-            throw new ResolutionFailureException("A count-based icebreaker action cannot contain a hosted-subroutine target.");
+            throw new ResolutionFailureException("An ordinary icebreaker action cannot contain a hosted-subroutine target.");
         }
 
         ServerState server = working.Servers.SingleOrDefault(candidate => candidate.Id == run.AttackedServer)
@@ -2877,7 +2887,7 @@ public static partial class GameEngine
                 + $"but encountered ICE '{iceSpec.DefinitionId}' is {iceSpec.IceType}.");
         }
 
-        int unbrokenCount = encounter.Subroutines.Count(subroutine => !subroutine.Broken);
+        int unbrokenCount = encounter.Subroutines.Count(subroutine => !subroutine.Broken && !subroutine.Resolved);
         if (quantity > unbrokenCount)
         {
             throw new ResolutionFailureException(
@@ -2945,12 +2955,10 @@ public static partial class GameEngine
         run = PayRunnerRunCredits(working, run, effectiveBreakCost, hostedCredits);
 
         var nextSubroutines = new List<RunSubroutineState>(encounter.Subroutines.Count);
-        int brokenSoFar = 0;
         foreach (RunSubroutineState subroutine in encounter.Subroutines)
         {
-            if (!subroutine.Broken && brokenSoFar < quantity)
+            if (targets.Contains(subroutine.Ordinal))
             {
-                brokenSoFar++;
                 nextSubroutines.Add(new RunSubroutineState(
                     subroutine.Version,
                     subroutine.Id,
@@ -3372,7 +3380,6 @@ public static partial class GameEngine
                 ?? throw new ResolutionFailureException(
                     $"Encounter ICE '{iceSpec.DefinitionId}' has no executable strength quote.");
             int iceStrength = iceQuote.EffectiveValue;
-            int unbrokenCount = run.Encounter.Subroutines.Count(subroutine => !subroutine.Broken);
             PlayerState runner = GetPlayer(working, PlayerSide.Runner);
             long availableCredits = (long)runner.Credits + run.RunCredits;
 
@@ -3419,7 +3426,7 @@ public static partial class GameEngine
                     {
                         actions.Add(new LegalAction(working.Allocator.NextActionId(), ActionKind.BreakSubroutines,
                             $"Spend hosted virus counter to break host subroutine {subroutine.Ordinal + 1}",
-                            new RunBreakParameters(hosted.Id, 1, subroutineId: subroutine.Id)));
+                            new RunBreakParameters(hosted.Id, 1, subroutineId: subroutine.Id, subroutineOrdinals: [subroutine.Ordinal])));
                     }
                 }
             }
@@ -3461,18 +3468,18 @@ public static partial class GameEngine
                         && breakerQuote.EffectiveValue >= iceStrength
                         && availableCredits >= effectiveBreakCost)
                     {
-                        for (int quantity = 1;
-                            quantity <= Math.Min(breakerSpec.BreakLimit, unbrokenCount);
-                            quantity++)
+                        foreach (IReadOnlyList<int> targets in SubroutineTargeting.Choices(
+                            run.Encounter.Subroutines.Where(sub => !sub.Broken && !sub.Resolved).Select(sub => sub.Ordinal), breakerSpec.BreakLimit))
                         {
+                            int quantity = targets.Count;
                             foreach (int hostedCredits in LegalHostedCreditSplits(runner, run, effectiveBreakCost))
                             {
                                 actions.Add(new LegalAction(
                                     working.Allocator.NextActionId(),
                                     ActionKind.BreakSubroutines,
                                     $"Break {quantity} {(quantity == 1 ? "subroutine" : "subroutines")} on {run.Encounter.IceId.Value} "
-                                    + $"with {cardId.Value} ({FormatPaymentSplit(effectiveBreakCost, hostedCredits)})",
-                                    new RunBreakParameters(cardId, quantity, hostedCredits, breakCostQuote)));
+                                    + $"with {cardId.Value} · subroutines {string.Join(", ", targets.Select(ordinal => ordinal + 1))} ({FormatPaymentSplit(effectiveBreakCost, hostedCredits)})",
+                                    new RunBreakParameters(cardId, quantity, hostedCredits, breakCostQuote, subroutineOrdinals: targets)));
                             }
                         }
                     }

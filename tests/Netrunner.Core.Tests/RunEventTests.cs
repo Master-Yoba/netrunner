@@ -115,7 +115,8 @@ public sealed class RunEventTests
         LegalAction breakOne = Assert.Single(encounter.PendingDecision!.LegalActions, action =>
             action.Kind == ActionKind.BreakSubroutines
             && Assert.IsType<RunBreakParameters>(action.Parameters).Quantity == 1
-            && Assert.IsType<RunBreakParameters>(action.Parameters).HostedCredits == 1);
+            && Assert.IsType<RunBreakParameters>(action.Parameters).HostedCredits == 1
+            && ((RunBreakParameters)action.Parameters).SubroutineOrdinals!.SequenceEqual([0]));
 
         ApplyResult broken = RunTimingTests.ApplyAction(encounter, breakOne);
         Assert.True(broken.Accepted, broken.Rejection?.Message);
@@ -456,11 +457,13 @@ public sealed class RunEventTests
         LegalAction leftBreak = Assert.Single(encounter.PendingDecision!.LegalActions, action =>
             action.Kind == ActionKind.BreakSubroutines
             && Assert.IsType<RunBreakParameters>(action.Parameters).Quantity == 1
-            && Assert.IsType<RunBreakParameters>(action.Parameters).HostedCredits == 1);
+            && Assert.IsType<RunBreakParameters>(action.Parameters).HostedCredits == 1
+            && ((RunBreakParameters)action.Parameters).SubroutineOrdinals!.SequenceEqual([0]));
         LegalAction rightBreak = Assert.Single(restored.PendingDecision!.LegalActions, action =>
             action.Kind == ActionKind.BreakSubroutines
             && Assert.IsType<RunBreakParameters>(action.Parameters).Quantity == 1
-            && Assert.IsType<RunBreakParameters>(action.Parameters).HostedCredits == 1);
+            && Assert.IsType<RunBreakParameters>(action.Parameters).HostedCredits == 1
+            && ((RunBreakParameters)action.Parameters).SubroutineOrdinals!.SequenceEqual([0]));
         ApplyResult left = RunTimingTests.ApplyAction(encounter, leftBreak);
         ApplyResult right = RunTimingTests.ApplyAction(restored, rightBreak);
         Assert.True(left.Accepted, left.Rejection?.Message);

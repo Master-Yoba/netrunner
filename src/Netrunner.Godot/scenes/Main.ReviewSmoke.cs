@@ -14,7 +14,6 @@ public partial class Main
 			GetWindow().Size = size;
 			GetWindow().ContentScaleSize = size;
 			_labScenario = 0;
-			_labScenarios!.Select(_labScenario);
 			ResetInteractionLab();
 			MatchViewModel turn = _currentSnapshot!.View;
 			CardViewModel installCard = UiPreviewSamples.Known("review-install", "Program", "Confirm this install");
@@ -49,10 +48,9 @@ public partial class Main
 			await TableFrames(3);
 			RequireInteraction(_labSubmissionCount == 1, "The legal drag did not work after cancelling confirmation.");
 
-			foreach (int scenario in new[] { 1, 10, 11, 13 })
+			foreach (int scenario in new[] { 1, 11 })
 			{
 				_labScenario = scenario;
-				_labScenarios!.Select(scenario);
 				ResetInteractionLab();
 				MatchViewModel view = _currentSnapshot!.View;
 				if (scenario == 1) StageBoardPlayChoices(view.Decision!, view.LegalActions);

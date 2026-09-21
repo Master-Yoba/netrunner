@@ -19,7 +19,11 @@ public partial class Main
 	{
 		ClearBoardServerCues();
 		foreach (string server in actions.Select(BoardServerTargetId).OfType<string>().Distinct(StringComparer.Ordinal))
-			AddBoardChoiceCue("ServerTarget", server, "Choose " + _gameTable.GetServerDisplayName(server), () => TrySelectBoardChoiceServer(server));
+		{
+			LegalActionViewModel[] choices = actions.Where(action => BoardServerTargetId(action) == server).ToArray();
+			string caption = choices.Length == 1 ? BoardChoiceActionLabel(choices[0]) : "Choose an option for " + _gameTable.GetServerDisplayName(server);
+			AddBoardChoiceCue("ServerTarget", server, caption, () => TrySelectBoardChoiceServer(server));
+		}
 		foreach (string card in actions.SelectMany(a => BoardCardTargetIds(a, actions)).Distinct(StringComparer.Ordinal))
 			if (!_gameTable.VisibleCards.ContainsKey(card))
 				AddBoardChoiceCue("HostCard", card, "Choose face-down ICE", () => TrySelectBoardChoiceCard(card));
@@ -40,7 +44,19 @@ public partial class Main
 			cue.GlobalPosition = area.Position;
 			cue.Size = area.Size;
 		}
-		cue.GetNode<Label>("%Caption").Text = caption;
+		Label label = cue.GetNode<Label>("%Caption");
+		label.Text = caption;
+		label.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		label.TextOverrunBehavior = TextServer.OverrunBehavior.NoTrimming;
+		label.SizeFlagsVertical = SizeFlags.ShrinkEnd;
+		label.AddThemeStyleboxOverride("normal", new StyleBoxFlat
+		{
+			BgColor = new Color(0.018f, 0.035f, 0.05f, 0.98f),
+			ContentMarginLeft = 8,
+			ContentMarginRight = 8,
+			ContentMarginTop = 6,
+			ContentMarginBottom = 6,
+		});
 		cue.GuiInput += input =>
 		{
 			if (input is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left })

@@ -15,7 +15,6 @@ public partial class Main
 			foreach (bool corp in new[] { false, true })
 			{
 				_labScenario = corp ? 16 : 15;
-				_labScenarios!.Select(_labScenario);
 				_reducedMotion.ButtonPressed = true;
 				ResetInteractionLab();
 				await TableFrames(4);

@@ -4,18 +4,19 @@ using Netrunner.Match;
 namespace Netrunner.GodotClient;
 
 /// <summary>Isolated presentation fixtures, not a rules engine or saved match.</summary>
-public static class InteractionLabSamples
+public static partial class InteractionLabSamples
 {
+	// Stable regression fixtures; the smaller, grouped practice menu is Scenarios.
 	public static readonly string[] Names = ["Runner: event", "Runner: run event", "Runner: rig install", "Runner: hosted install",
 		"Corp: operation", "Corp: root install", "Corp: ICE install", "Corp: new remote", "Corp: replacement",
-		"Runner: memory cleanup", "Runner: card choice", "Runner: non-spatial choice", "Dense board: scrolling", "Runner: pile card choice", "Runner: multiple targets", "Runner: hand and board actions", "Corp: hand and board actions", "Runner: discard from hand", "Corp: discard from hand"];
+		"Runner: memory cleanup", "Runner: card choice", "Runner: non-spatial choice", "Dense board: scrolling", "Runner: pile card choice", "Runner: multiple targets", "Runner: hand and board actions", "Corp: hand and board actions", "Runner: discard from hand", "Corp: discard from hand", "Runner: icebreakers", .. SpatialNames];
 	public static readonly string[] Instructions = [
 		"Drag the event from hand into the board. It should play immediately.",
 		"Drag onto a central server, or into general space then click a highlighted server.",
 		"Drag the program into the rig. Dropping it in a server should return it to hand.",
 		"Drag the program onto the highlighted ICE host. The rig is not a valid destination.",
 		"Drag the operation into the board to play it.",
-		"Drag the upgrade to an existing server root. ICE regions are separate targets.",
+		"Drag the upgrade to a server root or New remote. ICE regions are separate targets. Reset to try another destination.",
 		"Drag ICE to the outermost ICE area of an existing server.",
 		"Drag the asset to New remote at the right of the server row. Scroll if needed.",
 		"Drag the asset into Remote 1, then select the required replacement and finish installing.",
@@ -25,13 +26,16 @@ public static class InteractionLabSamples
 		"Drag a hand card while scrolling near board edges. Escape, right-click, or focus loss cancels.",
 		"Play the event, then select the displayed card from the heap choice browser.",
 		"Play the event, click a highlighted program, then explicitly choose one target pair.",
-		"Hover the hand. Click credits or Stack, browse Archives, or choose Run and select a server. Reset to repeat.",
-		"Hover the hand. Click credits or R&D, or click Archives to browse. Reset to repeat.",
+		"Drag an event onto the board to play it. Click credits or Stack, browse piles, or choose Run and select a server. Reset to repeat.",
+		"Drag an operation onto the board to play it. Click credits or R&D, or browse Archives. Reset to repeat.",
 		"Drag two cards from hand to Heap. Escape or an invalid drop cancels the gesture. Reset to repeat.",
-		"Drag two cards from hand to Archives. Selected cards wait for the complete discard choice. Reset to repeat."];
+		"Drag two cards from hand to Archives. Selected cards wait for the complete discard choice. Reset to repeat.",
+		"Click Practice Fracter in the rig. Boost its strength, choose Break, and select subroutines beside the ICE. Confirm the break; run credits are spent first. Escape cancels. Reset to repeat.", .. SpatialInstructions];
 
 	public static MatchViewModel Create(int scenario, long revision)
 	{
+		if (scenario >= 20) return Spatial(scenario, revision);
+		if (scenario == 19) return IcebreakerEncounter(revision);
 		PlayerSide side = scenario is >= 4 and <= 8 or 16 or 18 ? PlayerSide.Corp : PlayerSide.Runner;
 		var view = UiPreviewSamples.Board(side, scenario == 12 ? UiPreviewSamples.Density.Dense : UiPreviewSamples.Density.Normal);
 		if (scenario is 17 or 18)
@@ -62,11 +66,7 @@ public static class InteractionLabSamples
 			CardViewModel[] practiceHand = Enumerable.Range(0, 5).Select(i => UiPreviewSamples.Known($"lab-fan-{i}", type, $"Practice card {i + 1}")).ToArray();
 			view = side == PlayerSide.Runner ? view with { RunnerHand = new(ZoneKind.RunnerGrip, 5, practiceHand) }
 				: view with { CorpHand = new(ZoneKind.CorpHand, 5, practiceHand) };
-			actions.Add(Action("credit", ActionKind.GainCredit, new NoActionParameters(), revision));
-			actions.Add(Action("draw", ActionKind.DrawCard, new NoActionParameters(), revision));
-			if (side == PlayerSide.Runner)
-				foreach (var server in view.Servers.Where(server => server.Id != "preview-remote-1"))
-					actions.Add(Action("run-" + server.Id, ActionKind.StartRun, new RunServerParameters(new(server.Id)), revision));
+			actions.AddRange(BoardActions(view, revision));
 		}
 		if (scenario is 0 or 4 or 10 or 11 or 12 or 13 or 14) actions.Add(Action("play", ActionKind.PlayCard, new PlayCardParameters(new(card.Id), 3), revision));
 		else if (scenario == 1)
@@ -80,7 +80,26 @@ public static class InteractionLabSamples
 		else if (scenario == 7) actions.Add(Action("remote", ActionKind.InstallCard, new InstallCardParameters(new(card.Id), InstallDestinationKind.ServerRoot, null, true, 3), revision));
 		else if (scenario == 8) actions.Add(Action("replace", ActionKind.InstallCard, new InstallCardParameters(new(card.Id), InstallDestinationKind.ServerRoot,
 			new("preview-remote-0"), false, 3, [new("preview-root-0")], [new("preview-root-0")], [], false), revision));
+		if (scenario == 5) actions.Add(Action("remote", ActionKind.InstallCard,
+			new InstallCardParameters(new(card.Id), InstallDestinationKind.ServerRoot, null, true, 3), revision));
 		return view with { Decision = Decision(side, revision, DecisionKind.TurnAction, Instructions[scenario]), LegalActions = actions };
+	}
+
+	public static IReadOnlyList<LegalActionViewModel> BoardActions(MatchViewModel view, long revision)
+	{
+		bool corp = view.Viewer == PlayerSide.Corp;
+		PlayerViewModel player = corp ? view.Corp : view.Runner;
+		if (player.Clicks <= 0) return [];
+		var actions = new List<LegalActionViewModel> { Action("credit", ActionKind.GainCredit, new NoActionParameters(), revision) };
+		if ((corp ? view.CorpDeck : view.RunnerDeck).Count > 0)
+			actions.Add(Action("draw", ActionKind.DrawCard, new NoActionParameters(), revision));
+		if (player.Credits >= 3)
+			foreach (var card in (corp ? view.CorpHand : view.RunnerHand).VisibleCards)
+				actions.Add(Action("play-" + card.Id, ActionKind.PlayCard, new PlayCardParameters(new(card.Id), 3), revision));
+		if (!corp)
+			foreach (var server in view.Servers.Where(server => server.Id != "preview-remote-1"))
+				actions.Add(Action("run-" + server.Id, ActionKind.StartRun, new RunServerParameters(new(server.Id)), revision));
+		return actions;
 	}
 
 	public static DecisionViewModel Decision(PlayerSide side, long revision, DecisionKind kind, string prompt) =>
@@ -125,6 +144,7 @@ public static class InteractionLabSamples
 			RunnerScore = Cards(view.RunnerScore),
 			CorpDiscard = Cards(view.CorpDiscard, true),
 			RunnerHeap = Cards(view.RunnerHeap),
+			ChoiceCards = Cards(view.ChoiceCards),
 			RunnerRig = Cards(view.RunnerRig),
 			Servers = view.Servers.Select(server => server with
 			{

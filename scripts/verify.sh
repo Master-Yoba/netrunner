@@ -404,6 +404,13 @@ if ! run_with_timeout 120 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
   exit 1
 fi
 if ! grep -Fq "M411_INTERACTION PASS" "$m411_ui_smoke_log" \
+  || ! grep -Fq "LAB_SCENARIOS PASS" "$m411_ui_smoke_log" \
+  || ! grep -Fq "ABILITY_PAYMENT PASS" "$m411_ui_smoke_log" \
+  || ! grep -Fq "INTERACTION_GUIDANCE PASS" "$m411_ui_smoke_log" \
+  || ! grep -Fq "ACTION_LABELS PASS" "$m411_ui_smoke_log" \
+  || ! grep -Fq "BOARD_ICEBREAKERS PASS" "$m411_ui_smoke_log" \
+  || ! grep -Fq "BOARD_SPATIAL_ACTIONS PASS" "$m411_ui_smoke_log" \
+  || ! grep -Fq "ACCESS_ACTIONS PASS" "$m411_ui_smoke_log" \
   || ! grep -Fq "M412_BOARD_ACTIONS PASS" "$m411_ui_smoke_log" \
   || ! grep -Fq "M412_DRAW_MOTION PASS" "$m411_ui_smoke_log" \
   || ! grep -Fq "M412_DISCARD PASS" "$m411_ui_smoke_log" \
@@ -458,7 +465,7 @@ if ((card_data_content_enabled == 1)); then
       if ! grep -Fq "M4_FULL_SMOKE PASS" "$m4_full_smoke_log" \
         || ! grep -Fq "preset=$m4_preset seed=47042" "$m4_full_smoke_log" \
         || ! grep -Fq "reload=true fresh_setup=true" "$m4_full_smoke_log" \
-        || grep -Fq "M4_FULL_SMOKE FAIL" "$m4_full_smoke_log"; then
+        || grep -Eq "M4_FULL_SMOKE FAIL|SCRIPT ERROR|ERROR:" "$m4_full_smoke_log"; then
         cat "$m4_full_smoke_log" >&2
         exit 1
       fi

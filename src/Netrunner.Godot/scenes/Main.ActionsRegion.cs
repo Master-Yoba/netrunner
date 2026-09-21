@@ -258,6 +258,7 @@ public partial class Main
 
 	private void SubmitAction(DecisionViewModel decision, LegalActionViewModel action)
 	{
+		if (_spatialSubmission is not null && !_spatialBatchSubmitting) return;
 		if (SubmitInteractionLab(decision, action)) return;
 		if (_fullMatchResumePaused)
 		{
@@ -292,6 +293,11 @@ public partial class Main
 		try
 		{
 			MatchSubmissionResult result = await _coordinator!.SubmitActionAsync(submission);
+			if (!result.Accepted && _spatialSubmission is not null)
+			{
+				_spatialSubmission = null;
+				CloseSpatialActions();
+			}
 			WriteFullMatchDiagnostic("submission-result", new
 			{
 				accepted = result.Accepted,
@@ -302,6 +308,8 @@ public partial class Main
 		}
 		catch (Exception exception)
 		{
+			_spatialSubmission = null;
+			CloseSpatialActions();
 			RecordFullMatchException(exception, "submit");
 			_status.Text = $"Action failed: {exception.Message}";
 			if (_useCardTable && IsInstanceValid(_tableLastAction))
