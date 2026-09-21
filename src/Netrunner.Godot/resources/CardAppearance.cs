@@ -43,6 +43,7 @@ public partial class CardAppearance : Resource
 	private Color _selectedColor = new(0.34f, 0.70f, 1.0f);
 	private Color _targetColor = new(0.39f, 0.92f, 0.82f);
 	private Color _actionableColor = new(0.96f, 0.99f, 1.0f);
+	private Color _conditionMetColor = new(1.0f, 0.72f, 0.23f);
 	private Color _hiddenColor = new(0.31f, 0.39f, 0.48f);
 
 	private Color _anarchAccent = new(0.82f, 0.30f, 0.42f);
@@ -267,6 +268,13 @@ public partial class CardAppearance : Resource
 	{
 		get => _actionableColor;
 		set => SetColor(ref _actionableColor, value);
+	}
+
+	[Export]
+	public Color ConditionMetColor
+	{
+		get => _conditionMetColor;
+		set => SetColor(ref _conditionMetColor, value);
 	}
 
 	[Export]

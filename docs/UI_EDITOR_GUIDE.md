@@ -158,7 +158,12 @@ in their scenes and intentionally override the common panel style.
   A resource-owned property can override a raw node size; use its named setting.
 - A selected or target card has an instance state; it does not change the
   shared default color. White indicates an actionable source, blue selection,
-  and cyan a possible target.
+  and cyan a possible target. Amber indicates a fulfilled hand-card condition
+  or active install discount. Tune `CardAppearance.ConditionMetColor` to change it.
+  The cost badge shows the current discounted credit cost; hover and inspection
+  include the printed cost and the condition. Core supplies these values, even
+  when the player cannot afford the card. Legal actions still determine whether
+  it can be played. Cues clear when the condition expires or the card leaves hand.
 - If custom properties are absent, build the Godot C# project and check the
   editor's Errors panel before reopening the scene.
 
@@ -208,6 +213,20 @@ to the local player's known face. The other cards ease apart to make room.
 On `HandView`, tune `DrawSeconds`, `DrawArcHeight` and `DrawStaggerSeconds`;
 the playback speed slider scales the duration. Zero `DrawSeconds` disables the
 flight. Reduced motion and Skip animation reveal pending arrivals immediately.
+
+Opponent actions play in order, with time to read the last-action line. Draws
+and concealed discards move a neutral card back; installs and changes to cards
+or resource totals receive motion or a highlight. A fast opponent never causes
+an automatic animation skip. History advances with the displayed board; **Skip
+animation** preserves every queued history entry while catching up. Playback
+speed and Reduced motion remain available from the settings cog.
+
+Run server selection stays in the lower action area so HQ and the other servers
+remain visible and clickable. The interaction smoke checks this at 1080p and
+1440p, along with live condition changes and a burst of over 24 opponent updates.
+Use `--ux-feedback-screenshots` with `--m4-11-ui-smoke` for
+[hand-condition](evidence/m4-11/hand-condition-1920.png) and
+[Run-picker](evidence/m4-11/run-picker-1920.png) evidence.
 
 Both sides' **Discard from hand** scenarios start with seven
 cards and ask you to discard two. Drag highlighted cards to Heap or Archives.

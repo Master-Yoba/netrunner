@@ -459,6 +459,7 @@ public partial class Main
 		}
 
 		_boardChoicePanel = scene.Instantiate<PanelContainer>();
+		_boardChoicePanel.SetAnchorsPreset(LayoutPreset.TopLeft);
 		_boardChoicePanel.Visible = false;
 		_boardChoicePanel.ZIndex = 80;
 		// The contextual shell must not intercept a click on a server/card that

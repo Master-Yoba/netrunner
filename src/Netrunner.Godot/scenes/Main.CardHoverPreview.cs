@@ -270,6 +270,7 @@ public partial class Main
 		var values = new List<string> { card.StatusLabel };
 		if (card.AbilityCue is { Length: > 0 } ability) values.Add(ability);
 		if (card.FirstXUseCue is { } firstUse) values.Add(firstUse);
+		if (card.HandCondition is { } condition) values.Add("Condition met · " + condition.Summary);
 		string status = string.Join(" · ", values);
 		if (card.HostCardId is { } hostId && _currentSnapshot is { } snapshot)
 		{
@@ -283,6 +284,7 @@ public partial class Main
 	{
 		var values = new List<string>();
 		if (card.Cost is { } cost) values.Add($"Cost {cost} [credit]");
+		if (card.HandCondition?.InstallCost is { } install) values.Add($"Install now {install.EffectiveCost} [credit] (printed {install.BaseCost})");
 		if (card.Strength is { } strength) values.Add($"Strength {strength}");
 		if (card.AgendaPoints is { } points) values.Add($"Agenda {points} [agenda point]");
 		if (card.MemoryCost is { } memory) values.Add($"Memory {memory} [MU]");

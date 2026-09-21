@@ -55,6 +55,9 @@ public partial class Main
 					await ClickTableButton(runButton);
 					RequireInteraction(_boardChoiceRunSelection && _boardChoiceVisible && _labSubmissionCount == 2,
 						"Run did not stage server selection without spending a click.");
+					RequireInteraction(_currentSnapshot!.View.Servers.All(server => _gameTable.GetDropRect("ServerTarget", server.Id) is not { } bounds
+						|| !_boardChoicePanel!.GetGlobalRect().Intersects(bounds)), "Run picker overlaps a server.");
+					if (OS.GetCmdlineUserArgs().Contains("--ux-feedback-screenshots")) await SaveInteractionEvidence($"run-picker-{size.X}");
 					RequireInteraction(_boardChoiceServerCues.Count == 4 && !TrySelectBoardChoiceServer("preview-remote-1"), "Run offers an invalid server.");
 					RequireInteraction(_boardChoicePrompt!.Text.Contains("start the run immediately", StringComparison.Ordinal)
 						&& _boardChoiceServerCues.All(cue => cue.GetNode<Label>("%Caption").Text.Contains("1 click", StringComparison.Ordinal)),

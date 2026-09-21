@@ -71,6 +71,14 @@ public partial class Main
 	private void UpdateBoardChoiceGeometry()
 	{
 		RefreshBoardChoiceAvailability();
+		if (_boardChoicePanel?.Visible == true)
+		{
+			bool serverChoice = _boardChoiceRunSelection || _boardChoiceServerCues.Count > 0;
+			_boardChoicePanel.Size = new Vector2(460, Math.Max(170, _boardChoicePanel.GetCombinedMinimumSize().Y));
+			_boardChoicePanel.Position = serverChoice
+				? new Vector2(12, Math.Max(12, _tableViewport.Size.Y - _boardChoicePanel.Size.Y - 8))
+				: new Vector2(Math.Max(12, (_tableViewport.Size.X - _boardChoicePanel.Size.X) / 2), 12);
+		}
 		foreach (PanelContainer cue in _boardChoiceServerCues)
 		{
 			Rect2? rect = _gameTable.GetDropRect(cue.GetMeta("target_kind").AsString(), cue.GetMeta("target_id").AsString());

@@ -26,6 +26,8 @@ public partial class Main
 			OpenInteractionLab();
 			_reducedMotion.ButtonPressed = true;
 			await CheckCompactBoardLayout();
+			await CheckHandConditionFeedback();
+			await CheckOpponentPlayback();
 			await CheckLabScenarioPicker();
 			await CheckInstallChoiceControls();
 			await CheckActionLabels();

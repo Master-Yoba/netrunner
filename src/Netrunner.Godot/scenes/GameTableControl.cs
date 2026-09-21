@@ -1198,6 +1198,7 @@ public partial class GameTableControl : Control
 			$"runnerheap:{view.RunnerHeap.Count}:{CardsFingerprint(view.RunnerHeap)}",
 			$"selected-discard:{string.Join(',', BoardInteractionProjector.SelectedDiscards(view).Select(card => card.Id))}",
 			$"corphand:{view.CorpHand.Count}:{CardsFingerprint(view.CorpHand.VisibleCards)}",
+			$"resources:{view.Corp.Credits}:{view.Corp.Clicks}:{view.Runner.Credits}:{view.Runner.Clicks}",
 			$"runnerhand:{view.RunnerHand.Count}:{CardsFingerprint(view.RunnerHand.VisibleCards)}",
 			$"rigrig:{CardsFingerprint(view.RunnerRig)}",
 			$"corpscore:{CardsFingerprint(view.CorpScore)}",
@@ -1263,6 +1264,8 @@ public partial class GameTableControl : Control
 			card.HostCardId ?? string.Empty,
 			string.Join(";", card.CounterChips),
 			card.AbilityCue ?? string.Empty,
+			card.HandCondition?.Summary ?? string.Empty,
+			card.HandCondition?.InstallCost?.Summary ?? string.Empty,
 			card.FirstXUseCue ?? string.Empty);
 	}
 
@@ -1439,6 +1442,8 @@ public partial class GameTableControl : Control
 			&& left.Rezzed == right.Rezzed
 			&& left.AdvancementCounters == right.AdvancementCounters
 			&& left.Cost == right.Cost
+			&& left.HandCondition?.Summary == right.HandCondition?.Summary
+			&& left.HandCondition?.InstallCost?.Summary == right.HandCondition?.InstallCost?.Summary
 			&& left.Strength == right.Strength
 			&& left.AgendaPoints == right.AgendaPoints
 			&& left.TrashCost == right.TrashCost

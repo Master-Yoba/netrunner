@@ -150,7 +150,8 @@ public partial class Main
 		}
 		_gameTable.Hand.ReducedMotion = _reducedMotion.ButtonPressed;
 		_gameTable.MotionEnabled = !_reducedMotion.ButtonPressed && !_skipAnimation;
-		_gameTable.MotionDuration = GameTableControl.DefaultMotionDuration / _speed.Value;
+		_gameTable.MotionDuration = (snapshot.History.Any(entry => entry.Side != snapshot.View.Viewer)
+			? 0.50 : GameTableControl.DefaultMotionDuration) / _speed.Value;
 		_gameTable.Render(snapshot.View);
 		CardViewModel? accessed = AccessActionsPresenter.Card(snapshot.View);
 		_tableAccessCard.SetCard(accessed);
@@ -414,33 +415,35 @@ public partial class Main
 			RefreshBoardIcebreaker(current);
 		}
 		_tablePlaybackWait = Math.Max(0, _tablePlaybackWait - delta);
+		while (_pendingSnapshots.TryDequeue(out MatchSnapshot? snapshot))
+		{
+			_tablePublications.Enqueue(snapshot);
+		}
+		bool animate = !_skipAnimation && !_reducedMotion.ButtonPressed;
+		if (_skipAnimation) _tablePlaybackWait = 0;
 		if (_tableAwaitingSettlement && _tablePlaybackWait == 0 && _gameTable.ActiveMotionCount == 0 && _tablePublications.Count == 0)
 		{
 			_tableAwaitingSettlement = false;
 			if (_currentSnapshot is { } settled) RenderCardTableActions(settled);
 		}
-		while (_pendingSnapshots.TryDequeue(out MatchSnapshot? snapshot))
-		{
-			_tableHistory.Append(snapshot.History);
-			_matchHistory.Append(snapshot.History);
-			_tablePublications.Enqueue(snapshot);
-		}
-		if (_tablePublications.Count > 24) _skipAnimation = true;
-		if (!_skipAnimation && (_tablePlaybackWait > 0 || _gameTable.DrawMotionCount > 0 || _gameTable.DiscardMotionCount > 0)) return;
+		if (animate && (_tablePlaybackWait > 0 || _gameTable.ActiveMotionCount > 0 || _gameTable.DiscardMotionCount > 0)) return;
 		while (_tablePublications.TryDequeue(out MatchSnapshot? next))
 		{
 			if (next.Sequence <= _renderedSequence) continue;
 			_renderedSequence = next.Sequence;
+			_tableHistory.Append(next.History);
+			_matchHistory.Append(next.History);
+			_tableAwaitingSettlement = animate || _tablePublications.Count > 0;
 			RenderSnapshot(next);
 			bool meaningful = next.History.Any(entry => !entry.Summary.Contains("passes priority", StringComparison.Ordinal));
-			if (meaningful && !_skipAnimation && !_reducedMotion.ButtonPressed)
+			if (meaningful && animate)
 			{
-				_tablePlaybackWait = 0.40 / _speed.Value;
-				_tableAwaitingSettlement = true;
+				_tablePlaybackWait = (next.History.Any(entry => entry.Side != next.View.Viewer) ? 0.9 : 0.4) / _speed.Value;
 				foreach (Button actionButton in _tableActions.GetChildren().OfType<Button>()) actionButton.Disabled = true;
-				break;
 			}
-			if (!_skipAnimation && _gameTable.DiscardMotionCount > 0) break;
+			// Give deferred layout/motion a frame to start, even for a status-only
+			// publication. Never let a fast worker force the viewer to skip a turn.
+			if (animate) break;
 		}
 		if (_tablePublications.Count == 0) _skipAnimation = false;
 	}

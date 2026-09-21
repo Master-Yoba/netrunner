@@ -862,7 +862,7 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
             _metadataResolver,
             _behaviorCatalog,
             handSizeProjection: null,
-            presentationContext: MatchPresentationProjector.Build(state, _options.HumanSide));
+            presentationContext: MatchPresentationProjector.Build(state, _options.HumanSide, _behaviorCatalog, _runtimeCardCatalog));
         // Engine events are authoritative diagnostics, but this publication is
         // the Runner-facing boundary. Never forward a physical Corp card ID
         // while that card is still hidden; omission is intentional for typed
@@ -951,7 +951,7 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
         LegalAction? action = actorView?.LegalActions.FirstOrDefault(candidate => candidate.Id == submission.ActionId);
         MatchViewModel before = ObservationViewMapper.Build(
             ObservationBuilder.Build(state, _options.HumanSide, _behaviorCatalog), _metadataResolver, _behaviorCatalog,
-            handSizeProjection: null, presentationContext: MatchPresentationProjector.Build(state, _options.HumanSide));
+            handSizeProjection: null, presentationContext: MatchPresentationProjector.Build(state, _options.HumanSide, _behaviorCatalog, _runtimeCardCatalog));
         ApplyResult applied;
         try
         {
