@@ -12,8 +12,6 @@ public partial class Main
 		Control header = _layout.GetNode<Control>("Header");
 		_status = header.GetNode<Label>("Status");
 		_phase = header.GetNode<Label>("Phase");
-		_sessionLogsButton = header.GetNode<Button>("OpenLogs");
-		_sessionLogsButton.Pressed += OpenSessionLogs;
 		Control setup = _layout.GetNode<Control>("MatchSetup");
 		_startPanel = setup.GetNode<VBoxContainer>("%SetupContent");
 		_corpPreset = setup.GetNode<OptionButton>("%CorpPreset");

@@ -1,4 +1,4 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Theme" path="res://themes/M4Theme.tres" id="1_theme"]
 
@@ -17,9 +17,6 @@ corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_right = 8
 corner_radius_bottom_left = 8
-
-[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_ice_scroll"]
-resource_local_to_scene = true
 
 [node name="ServerLane" type="PanelContainer"]
 custom_minimum_size = Vector2(285, 0)
@@ -84,17 +81,8 @@ theme_override_font_sizes/font_size = 9
 text = "ICE · inner → outer"
 text_overrun_behavior = 3
 
-[node name="IceScroll" type="ScrollContainer" parent="Content"]
-custom_minimum_size = Vector2(0, 96)
-layout_mode = 2
-size_flags_vertical = 3
-mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBoxEmpty_ice_scroll")
-follow_focus = true
-horizontal_scroll_mode = 0
-vertical_scroll_mode = 4
-
-[node name="IceCards" type="VBoxContainer" parent="Content/IceScroll"]
+[node name="IceCards" type="VBoxContainer" parent="Content"]
+custom_minimum_size = Vector2(0, 64)
 layout_mode = 2
 size_flags_horizontal = 3
 mouse_filter = 2

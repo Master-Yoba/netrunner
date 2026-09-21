@@ -21,7 +21,7 @@ public partial class Main
 					"Hand overlaps the main play area at rest.");
 				bool corp = side == PlayerSide.Corp;
 				BoardActionButton credits = _gameTable.GetNode<BoardActionButton>(corp
-					? "Surface/Margins/Layout/CorpStrip/Content/Credits" : "Surface/Margins/Layout/RunnerField/Content/Summary/Content/Credits");
+					? "Surface/Margins/Layout/ServerField/Content/Summary/Content/Credits" : "Surface/Margins/Layout/RunnerField/Content/Summary/Content/Credits");
 				BoardActionButton deck = corp ? FindDescendants<BoardActionButton>(_gameTable).Single(button => button.Name == "DrawPile")
 					: _gameTable.GetNode<BoardActionButton>("Surface/Margins/Layout/RunnerField/Content/Deck");
 				RequireInteraction(credits.ActionAvailable && credits.Icon is not null && deck.ActionAvailable, "Local credit/deck glow is missing.");

@@ -1,6 +1,7 @@
 [gd_scene format=3]
 
 [ext_resource type="Script" path="res://scenes/GameSymbolLabel.cs" id="symbols"]
+[ext_resource type="Script" path="res://scenes/components/BoardFitViewport.cs" id="fit"]
 
 [ext_resource type="Script" path="res://scenes/GameTableControl.cs" id="1_board_script"]
 [ext_resource type="Resource" path="res://themes/BoardLayout.tres" id="2_board_layout"]
@@ -68,7 +69,7 @@ color = Color(0.025, 0.045, 0.05, 1)
 layout_mode = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_bottom = -226.0
+offset_bottom = -196.0
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_board")
 
@@ -81,20 +82,32 @@ size_flags_vertical = 3
 mouse_filter = 2
 theme_override_constants/separation = 4
 
-[node name="CorpStrip" type="PanelContainer" parent="Surface/Margins/Layout"]
-custom_minimum_size = Vector2(0, 26)
+[node name="ServerField" type="PanelContainer" parent="Surface/Margins/Layout"]
+custom_minimum_size = Vector2(0, 150)
 layout_mode = 2
-size_flags_vertical = 4
+size_flags_vertical = 3
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_surface")
 
-[node name="Content" type="HBoxContainer" parent="Surface/Margins/Layout/CorpStrip"]
+[node name="Content" type="HBoxContainer" parent="Surface/Margins/Layout/ServerField"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Summary" type="PanelContainer" parent="Surface/Margins/Layout/ServerField/Content"]
+custom_minimum_size = Vector2(174, 0)
+layout_mode = 2
+size_flags_vertical = 0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_surface")
+
+[node name="Content" type="VBoxContainer" parent="Surface/Margins/Layout/ServerField/Content/Summary"]
 layout_mode = 2
 size_flags_horizontal = 3
 mouse_filter = 2
-theme_override_constants/separation = 7
+theme_override_constants/separation = 3
 
-[node name="Side" type="Label" parent="Surface/Margins/Layout/CorpStrip/Content"]
+[node name="Side" type="Label" parent="Surface/Margins/Layout/ServerField/Content/Summary/Content"]
 custom_minimum_size = Vector2(48, 0)
 layout_mode = 2
 mouse_filter = 2
@@ -104,10 +117,10 @@ text = "CORP"
 vertical_alignment = 1
 text_overrun_behavior = 3
 
-[node name="Credits" parent="Surface/Margins/Layout/CorpStrip/Content" instance=ExtResource("credits")]
+[node name="Credits" parent="Surface/Margins/Layout/ServerField/Content/Summary/Content" instance=ExtResource("credits")]
 layout_mode = 2
 
-[node name="Resources" type="RichTextLabel" parent="Surface/Margins/Layout/CorpStrip/Content"]
+[node name="Resources" type="RichTextLabel" parent="Surface/Margins/Layout/ServerField/Content/Summary/Content"]
 layout_mode = 2
 size_flags_horizontal = 3
 mouse_filter = 2
@@ -118,7 +131,8 @@ vertical_alignment = 1
 fit_content = true
 scroll_active = false
 
-[node name="Score" type="Label" parent="Surface/Margins/Layout/CorpStrip/Content"]
+[node name="Score" type="Label" parent="Surface/Margins/Layout/ServerField/Content/Summary/Content"]
+visible = false
 custom_minimum_size = Vector2(92, 0)
 layout_mode = 2
 mouse_filter = 2
@@ -128,12 +142,12 @@ text = "Score pile · 0"
 vertical_alignment = 1
 text_overrun_behavior = 3
 
-[node name="CorpScored" parent="Surface/Margins/Layout/CorpStrip/Content" instance=ExtResource("4_pile")]
+[node name="CorpScored" parent="Surface/Margins/Layout/ServerField/Content/Summary/Content" instance=ExtResource("4_pile")]
 layout_mode = 2
 text = "Scored"
 tooltip_text = "Browse Corp score area"
 
-[node name="HQ" type="Label" parent="Surface/Margins/Layout/CorpStrip/Content"]
+[node name="HQ" type="Label" parent="Surface/Margins/Layout/ServerField/Content/Summary/Content"]
 custom_minimum_size = Vector2(150, 0)
 layout_mode = 2
 mouse_filter = 2
@@ -143,63 +157,50 @@ text = "HQ · hand"
 vertical_alignment = 1
 text_overrun_behavior = 3
 
-[node name="Turn" type="Label" parent="Surface/Margins/Layout/CorpStrip/Content"]
-custom_minimum_size = Vector2(132, 0)
-layout_mode = 2
-mouse_filter = 2
-theme_override_colors/font_color = Color(0.43, 0.94, 0.72, 1)
-theme_override_font_sizes/font_size = 10
-text = "Turn · phase"
-horizontal_alignment = 2
-vertical_alignment = 1
-text_overrun_behavior = 3
-
-[node name="Run" type="Label" parent="Surface/Margins/Layout/CorpStrip/Content"]
-custom_minimum_size = Vector2(160, 0)
-layout_mode = 2
-mouse_filter = 2
-theme_override_colors/font_color = Color(0.98, 0.76, 0.37, 1)
-theme_override_font_sizes/font_size = 10
-text = "No active run"
-horizontal_alignment = 2
-vertical_alignment = 1
-text_overrun_behavior = 3
-
-[node name="ServerField" type="PanelContainer" parent="Surface/Margins/Layout"]
-custom_minimum_size = Vector2(0, 150)
-layout_mode = 2
-size_flags_vertical = 3
-mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBoxFlat_surface")
-
-[node name="Content" type="VBoxContainer" parent="Surface/Margins/Layout/ServerField"]
+[node name="Network" type="VBoxContainer" parent="Surface/Margins/Layout/ServerField/Content"]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 mouse_filter = 2
 theme_override_constants/separation = 4
 
-[node name="Heading" type="Label" parent="Surface/Margins/Layout/ServerField/Content"]
-custom_minimum_size = Vector2(0, 16)
+[node name="Situation" type="HBoxContainer" parent="Surface/Margins/Layout/ServerField/Content/Network"]
 layout_mode = 2
-size_flags_horizontal = 3
 mouse_filter = 2
-theme_type_variation = &"LaneHeading"
-theme_override_colors/font_color = Color(0.62, 0.76, 0.75, 1)
+
+[node name="Turn" type="Label" parent="Surface/Margins/Layout/ServerField/Content/Network/Situation"]
+size_flags_horizontal = 3
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.43, 0.94, 0.72, 1)
 theme_override_font_sizes/font_size = 10
-text = "CORP NETWORK · roots above · inner ICE top · outer ICE toward Runner"
+text = "Turn · phase"
+horizontal_alignment = 0
+vertical_alignment = 1
 text_overrun_behavior = 3
 
-[node name="Scroll" type="ScrollContainer" parent="Surface/Margins/Layout/ServerField/Content"]
+[node name="Run" type="Label" parent="Surface/Margins/Layout/ServerField/Content/Network/Situation"]
+size_flags_horizontal = 3
+layout_mode = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.98, 0.76, 0.37, 1)
+theme_override_font_sizes/font_size = 10
+text = "No active run"
+horizontal_alignment = 0
+vertical_alignment = 1
+text_overrun_behavior = 3
+
+[node name="Viewport" type="Control" parent="Surface/Margins/Layout/ServerField/Content/Network"]
+custom_minimum_size = Vector2(0, 100)
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 mouse_filter = 2
-follow_focus = true
+clip_contents = true
+script = ExtResource("fit")
 
-[node name="Lanes" type="HBoxContainer" parent="Surface/Margins/Layout/ServerField/Content/Scroll"]
-layout_mode = 2
-size_flags_vertical = 3
+[node name="Lanes" type="HBoxContainer" parent="Surface/Margins/Layout/ServerField/Content/Network/Viewport"]
+layout_mode = 0
 mouse_filter = 2
 theme_override_constants/separation = 9
 
@@ -224,7 +225,7 @@ anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = -720.0
-offset_top = -220.0
+offset_top = -190.0
 offset_right = -8.0
 grow_horizontal = 0
 grow_vertical = 0

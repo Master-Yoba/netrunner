@@ -360,7 +360,7 @@ public partial class Main
 		&& current.View.Decision is { } decision
 		&& decision.OwnerSide == current.View.Viewer && SameDecision(_boardChoiceDecision, decision)
 		&& !_fullMatchResumePaused && !_tableAwaitingSettlement && Volatile.Read(ref _submissionInFlight) == 0
-		&& _stagedAction is null && _zoomOverlay?.Visible != true && _tablePileOverlay?.Visible != true;
+		&& _stagedAction is null && !SettingsVisible && _zoomOverlay?.Visible != true && _tablePileOverlay?.Visible != true;
 
 	private void RefreshBoardChoiceAvailability()
 	{

@@ -9,7 +9,7 @@ public partial class Main
 		&& snapshot.View.Decision is { } decision && decision.OwnerSide == snapshot.View.Viewer
 		&& !_fullMatchResumePaused && !_tableAwaitingSettlement && Volatile.Read(ref _submissionInFlight) == 0
 		&& _stagedAction is null && !SpatialVisible && !_boardChoiceVisible && _boardDrag?.IsDragging != true
-		&& _gameTable.DrawMotionCount == 0
+		&& _gameTable.DrawMotionCount == 0 && !SettingsVisible
 		&& _zoomOverlay?.Visible != true && _tablePileOverlay?.Visible != true && _galleryOverlay?.Visible != true;
 
 	private void RefreshBasicBoardActions(MatchSnapshot snapshot)

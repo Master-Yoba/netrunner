@@ -136,7 +136,7 @@ public partial class Main
 		_icebreakerPanel.Size = new Vector2(470, _boardChoosingSubroutines ? 470 : 330);
 		Vector2 anchor = _tableViewport.GetGlobalTransform().AffineInverse() * card.GetGlobalRect().Position;
 		Vector2 size = _icebreakerPanel.Size;
-		float x = anchor.X + card.Size.X + 12;
+		float x = anchor.X + card.GetGlobalRect().Size.X / _tableViewport.GetGlobalTransform().Scale.X + 12;
 		if (x + size.X > _tableViewport.Size.X - 12) x = anchor.X - size.X - 12;
 		_icebreakerPanel.Position = new Vector2(Math.Clamp(x, 12, Math.Max(12, _tableViewport.Size.X - size.X - 12)),
 			Math.Clamp(anchor.Y - size.Y + 52, 12, Math.Max(12, _tableViewport.Size.Y - size.Y - 12)));

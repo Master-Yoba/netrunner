@@ -162,7 +162,7 @@ public partial class Main
 				|| (_boardChoosingSubroutines && card.CardId == _currentSnapshot?.View.Run?.Encounter?.Ice?.Id)
 				|| _icebreakerPanel.GetGlobalRect().HasPoint(GetViewport().GetMousePosition())))
 			|| _startPanel.IsVisibleInTree()
-			|| _zoomOverlay?.Visible == true
+			|| SettingsVisible || _zoomOverlay?.Visible == true
 			|| _galleryOverlay?.Visible == true
 			|| _tablePileOverlay?.Visible == true)
 		{

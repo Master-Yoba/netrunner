@@ -120,7 +120,7 @@ public partial class UiPreview : Control
 		access.Visible = Decision == SampleDecision.Access;
 		access.GetNode<TableCardControl>("%Card").SetCard(UiPreviewSamples.Known("preview-access", "Asset"));
 		access.GetNode<Label>("%Title").Text = "Sample accessed asset";
-		table.GetNode<Label>("Toolbar/LastAction").Text = "Synthetic preview · no match is running";
+		table.GetNode<Label>("StatusBar/LastAction").Text = "Synthetic preview · no match is running";
 		Control inspection = _tabs.GetNode<Control>("Inspection/CardInspection");
 		inspection.GetNode<Label>("%Title").Text = "Sample card inspection";
 		inspection.GetNode<GameSymbolLabel>("%Rules").SymbolText = CardMarkupFormatter.Format(UiPreviewSamples.Known("preview-inspection").RulesText);

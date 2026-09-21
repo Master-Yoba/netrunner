@@ -25,6 +25,7 @@ public partial class Main
 			_boardDrag.GestureEnded += (outcome, card) => GD.Print($"M411_GESTURE scenario={_labScenario} card={card} outcome={outcome}");
 			OpenInteractionLab();
 			_reducedMotion.ButtonPressed = true;
+			await CheckCompactBoardLayout();
 			await CheckLabScenarioPicker();
 			await CheckInstallChoiceControls();
 			await CheckActionLabels();

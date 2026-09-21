@@ -350,6 +350,11 @@ public partial class Main : Control
 	public override void _UnhandledInput(InputEvent @event)
 	{
 		bool escape = @event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Escape };
+		if (SettingsVisible)
+		{
+			if (escape) { SetSettingsVisible(false); GetViewport().SetInputAsHandled(); }
+			return;
+		}
 		if (_zoomOverlay.Visible)
 		{
 			if (escape) { HideCardZoom(); GetViewport().SetInputAsHandled(); }

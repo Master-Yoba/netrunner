@@ -41,12 +41,12 @@ public partial class GameTableControl : Control
 	private bool _boardLayoutConnected;
 	private bool _previewDirty;
 	private VBoxContainer _tableLayout = null!;
-	private HBoxContainer _corpStrip = null!;
+	private VBoxContainer _corpSummary = null!;
 	private HBoxContainer _serverLaneRow = null!;
 	private HBoxContainer _runnerRigRow = null!;
 	private HandFanControl _localHandRow = null!;
 	public HandFanControl Hand => _localHandRow;
-	private ScrollContainer _serverScroll = null!;
+	private BoardFitViewport _serverViewport = null!;
 	private ScrollContainer _runnerRigScroll = null!;
 	private Label _turnLabel = null!;
 	private Label _runLabel = null!;
@@ -67,7 +67,6 @@ public partial class GameTableControl : Control
 	private IReadOnlySet<string> _actionableSources = new HashSet<string>(StringComparer.Ordinal);
 	private int _nextRemoteDisplayNumber = 1;
 	private bool _shellBuilt;
-	private string? _lastRunFocus;
 	private PreviewDensity _previewMode;
 	private PlayerSide _previewSeat = PlayerSide.Runner;
 
@@ -353,7 +352,7 @@ public partial class GameTableControl : Control
 		heap.MouseExited += () => HoverPileFace(heap, false);
 		heap.FocusEntered += () => HoverPileFace(heap, true);
 		heap.FocusExited += () => HoverPileFace(heap, false);
-		Button? corpScored = GetNodeOrNull<Button>("Surface/Margins/Layout/CorpStrip/Content/CorpScored");
+		Button? corpScored = GetNodeOrNull<Button>("Surface/Margins/Layout/ServerField/Content/Summary/Content/CorpScored");
 		Button? runnerScored = GetNodeOrNull<Button>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/Scored");
 		if (corpScored is not null)
 		{
@@ -368,31 +367,31 @@ public partial class GameTableControl : Control
 	private bool TryBindAuthoredShell()
 	{
 		_tableLayout = GetNodeOrNull<VBoxContainer>("Surface/Margins/Layout")!;
-		_corpStrip = GetNodeOrNull<HBoxContainer>("Surface/Margins/Layout/CorpStrip/Content")!;
-		_serverScroll = GetNodeOrNull<ScrollContainer>("Surface/Margins/Layout/ServerField/Content/Scroll")!;
-		_serverLaneRow = GetNodeOrNull<HBoxContainer>("Surface/Margins/Layout/ServerField/Content/Scroll/Lanes")!;
+		_corpSummary = GetNodeOrNull<VBoxContainer>("Surface/Margins/Layout/ServerField/Content/Summary/Content")!;
+		_serverViewport = GetNodeOrNull<BoardFitViewport>("Surface/Margins/Layout/ServerField/Content/Network/Viewport")!;
+		_serverLaneRow = GetNodeOrNull<HBoxContainer>("Surface/Margins/Layout/ServerField/Content/Network/Viewport/Lanes")!;
 		_runnerRigScroll = GetNodeOrNull<ScrollContainer>("Surface/Margins/Layout/RunnerField/Content/Rig/Content/Scroll")!;
 		_runnerRigRow = GetNodeOrNull<HBoxContainer>("Surface/Margins/Layout/RunnerField/Content/Rig/Content/Scroll/Cards")!;
 		_localHandRow = GetNodeOrNull<HandFanControl>("LocalHand")!;
-		_turnLabel = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/Turn")!;
-		_runLabel = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/Run")!;
-		_corpResources = GetNodeOrNull<GameSymbolLabel>("Surface/Margins/Layout/CorpStrip/Content/Resources")!;
+		_turnLabel = GetNodeOrNull<Label>("Surface/Margins/Layout/ServerField/Content/Network/Situation/Turn")!;
+		_runLabel = GetNodeOrNull<Label>("Surface/Margins/Layout/ServerField/Content/Network/Situation/Run")!;
+		_corpResources = GetNodeOrNull<GameSymbolLabel>("Surface/Margins/Layout/ServerField/Content/Summary/Content/Resources")!;
 		_runnerResources = GetNodeOrNull<GameSymbolLabel>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/Resources")!;
-		_corpHandCaption = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/HQ")!;
+		_corpHandCaption = GetNodeOrNull<Label>("Surface/Margins/Layout/ServerField/Content/Summary/Content/HQ")!;
 		_runnerHandCaption = GetNodeOrNull<Label>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/HandCaption")!;
 		_localHandCaption = GetNodeOrNull<Label>("LocalHand/Caption")!;
 		_runnerIdentitySlot = GetNodeOrNull<MarginContainer>("Surface/Margins/Layout/RunnerField/Content/Identity/Content/Cards")!;
 		_tableHint = GetNodeOrNull<Label>("Surface/Margins/Layout/Hint")!;
-		_corpScoreLabel = GetNodeOrNull<Label>("Surface/Margins/Layout/CorpStrip/Content/Score")!;
+		_corpScoreLabel = GetNodeOrNull<Label>("Surface/Margins/Layout/ServerField/Content/Summary/Content/Score")!;
 		_runnerScoreLabel = GetNodeOrNull<Label>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/Score")!;
-		_corpCredits = GetNodeOrNull<BoardActionButton>("Surface/Margins/Layout/CorpStrip/Content/Credits")!;
+		_corpCredits = GetNodeOrNull<BoardActionButton>("Surface/Margins/Layout/ServerField/Content/Summary/Content/Credits")!;
 		_runnerCredits = GetNodeOrNull<BoardActionButton>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/Credits")!;
 		_runnerDeckPile = GetNodeOrNull<Button>("Surface/Margins/Layout/RunnerField/Content/Deck")!;
 		_runnerHeapPile = GetNodeOrNull<Button>("Surface/Margins/Layout/RunnerField/Content/Discard")!;
 
 		return _tableLayout is not null
-			&& _corpStrip is not null
-			&& _serverScroll is not null
+			&& _corpSummary is not null
+			&& _serverViewport is not null
 			&& _serverLaneRow is not null
 			&& _runnerRigScroll is not null
 			&& _runnerRigRow is not null
@@ -504,7 +503,7 @@ public partial class GameTableControl : Control
 		}
 
 		_tableLayout.AddThemeConstantOverride("separation", regionSpacing);
-		_corpStrip.AddThemeConstantOverride("separation", cardSeparation);
+		_corpSummary.AddThemeConstantOverride("separation", 3);
 		_serverLaneRow.AddThemeConstantOverride("separation", regionSpacing);
 		_runnerRigRow.AddThemeConstantOverride("separation", cardSeparation);
 
@@ -539,12 +538,6 @@ public partial class GameTableControl : Control
 		lane.Panel.CustomMinimumSize = new Vector2(_boardLayout.LaneWidth, lane.Panel.CustomMinimumSize.Y);
 		lane.RootCards.AddThemeConstantOverride("separation", -Mathf.RoundToInt(_boardLayout.RootCardOverlap));
 		lane.IceCards.AddThemeConstantOverride("separation", Mathf.RoundToInt(_boardLayout.CardSeparation));
-		// Reserve matching gutters: the scrollbar must not move ICE off the
-		// root centerline when a server gains more cards or the window shrinks.
-		ScrollContainer scroll = lane.IceCards.GetParent<ScrollContainer>();
-		StyleBox panel = scroll.GetThemeStylebox("panel");
-		panel.ContentMarginLeft = scroll.GetVScrollBar().GetCombinedMinimumSize().X
-			+ scroll.GetThemeConstant("scrollbar_h_separation");
 	}
 
 	private void RefreshEditorPreview()
@@ -618,7 +611,6 @@ public partial class GameTableControl : Control
 		ApplySelectionAndTargets();
 		PresentDrawMotion(draw, view.Viewer);
 		PresentMotion(previousCards, view, previousView);
-		EnsureRunVisible(view.Run);
 	}
 
 	private void RefreshEncounterStrength(MatchViewModel view)
@@ -627,23 +619,6 @@ public partial class GameTableControl : Control
 		foreach ((string id, TableCardControl card) in _visibleCards)
 			card.SetEncounterStrength(encounter?.Ice?.Id == id ? encounter.EffectiveStrength
 				: encounter?.Breakers.FirstOrDefault(breaker => breaker.CardId == id)?.EffectiveStrength);
-	}
-
-	private void EnsureRunVisible(RunFocusViewModel? run)
-	{
-		string? focusKey = run is null ? null : $"{run.Id}:{run.Step}:{run.CurrentIceIndex}";
-		if (_lastRunFocus == focusKey) return;
-		_lastRunFocus = focusKey;
-		if (run is null || !_serverLanes.TryGetValue(run.AttackedServerId, out ServerLaneParts? lane)) return;
-		Callable.From(() =>
-		{
-			if (!IsInsideTree() || _lastRunFocus != focusKey) return;
-			_serverScroll.EnsureControlVisible(lane.Panel);
-			string? id = run.CurrentIce?.Id;
-			if (id is null || !_visibleCards.TryGetValue(id, out TableCardControl? ice)) return;
-			for (Node? parent = ice.GetParent(); parent is not null && parent != this; parent = parent.GetParent())
-				if (parent is ScrollContainer scroll) scroll.EnsureControlVisible(ice);
-		}).CallDeferred();
 	}
 
 	private void RenderTopZones(
@@ -798,12 +773,14 @@ public partial class GameTableControl : Control
 			{
 				Control stack = new()
 				{
-					CustomMinimumSize = HostedStackMinimumSize(),
+					CustomMinimumSize = HostedStackMinimumSize(hosted.Length),
 					SizeFlagsHorizontal = SizeFlags.ShrinkCenter,
 					MouseFilter = MouseFilterEnum.Ignore,
 				};
 				iceCards.AddChild(stack);
-				EnsureCard(slot, stack, card, true, nextVisibleCards).Position = Vector2.Zero;
+				TableCardControl host = EnsureCard(slot, stack, card, true, nextVisibleCards);
+				Vector2 hostOffset = new((stack.CustomMinimumSize.X - host.DisplaySize.X) * 0.5f, 0);
+				host.Position = hostOffset;
 				for (int index = 0; index < hosted.Length; index++)
 				{
 					TableCardControl attachment = EnsureCard(
@@ -814,7 +791,7 @@ public partial class GameTableControl : Control
 						nextVisibleCards,
 						PlayerSide.Runner,
 						CardSizeRole.HostedPortrait);
-					attachment.Position = HostedCardPosition(index);
+					attachment.Position = hostOffset + HostedCardPosition(index);
 					if (!attachment.UseHoverPreview)
 						attachment.TooltipText = $"Hosted on {card?.Title ?? "face-down ICE"}\n" + attachment.TooltipText;
 				}
@@ -1140,13 +1117,15 @@ public partial class GameTableControl : Control
 		return _boardLayout.HostedCardOffset + (_boardLayout.HostedCardStep * index);
 	}
 
-	private Vector2 HostedStackMinimumSize()
+	private Vector2 HostedStackMinimumSize(int count)
 	{
 		BoardLayout layout = BoardLayout;
 		CardAppearance? appearance = GD.Load<CardAppearance>(TableCardControl.DefaultAppearancePath);
 		Vector2 ice = (appearance?.IceSize ?? TableCardControl.IceCardSize) * new Vector2(1, layout.IceHeightScale);
 		Vector2 hosted = (appearance?.PortraitSize ?? TableCardControl.PortraitCardSize) * layout.HostedPortraitScale;
-		return new Vector2(ice.X, Mathf.Max(ice.Y, hosted.Y) + layout.HostedCardOffset.Y + layout.HostedCardStep.Y);
+		Vector2 end = hosted + HostedCardPosition(count - 1);
+		float sideOverflow = Mathf.Max(0, Mathf.Max(end.X - ice.X, -layout.HostedCardOffset.X));
+		return new Vector2(ice.X + sideOverflow * 2, Mathf.Max(ice.Y, end.Y));
 	}
 
 	private Vector2 RigSlotMinimumSize()
@@ -1180,7 +1159,7 @@ public partial class GameTableControl : Control
 		Label rootCaption = panel.GetNode<Label>("Content/RootCaption");
 		HBoxContainer rootCards = panel.GetNode<HBoxContainer>("Content/RootCards");
 		Label iceCaption = panel.GetNode<Label>("Content/IceCaption");
-		VBoxContainer iceCards = panel.GetNode<VBoxContainer>("Content/IceScroll/IceCards");
+		VBoxContainer iceCards = panel.GetNode<VBoxContainer>("Content/IceCards");
 		header.Pressed += () => ServerSelected?.Invoke(serverId);
 		_serverLaneRow.AddChild(panel);
 		ServerLaneParts lane = new(panel, header, runMarker, rootCaption, rootCards, iceCaption, iceCards);

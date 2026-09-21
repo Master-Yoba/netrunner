@@ -10,59 +10,28 @@
 
 [ext_resource type="PackedScene" path="res://scenes/components/BoardDragController.tscn" id="drag"]
 
-[ext_resource type="PackedScene" path="res://scenes/components/InteractionLabToolbar.tscn" id="lab"]
-
 [node name="MatchTable" type="VBoxContainer"]
 size_flags_vertical = 3
 theme = ExtResource("theme")
 theme_override_constants/separation = 6
 
-[node name="Toolbar" type="HBoxContainer" parent="."]
+[node name="StatusBar" type="VBoxContainer" parent="."]
 layout_mode = 2
+theme_override_constants/separation = 2
 
-[node name="NewGame" type="Button" parent="Toolbar"]
+[node name="LastAction" type="Label" parent="StatusBar"]
 layout_mode = 2
-text = "New game"
-
-[node name="ReducedMotion" type="CheckButton" parent="Toolbar"]
-layout_mode = 2
-text = "Reduced motion"
-
-[node name="Speed" type="HSlider" parent="Toolbar"]
-layout_mode = 2
-custom_minimum_size = Vector2(90, 24)
-min_value = 0.5
-max_value = 3.0
-step = 0.5
-value = 1.0
-tooltip_text = "Playback speed"
-
-[node name="Scale" type="OptionButton" parent="Toolbar"]
-layout_mode = 2
-tooltip_text = "UI scale"
-selected = 0
-item_count = 4
-popup/item_0/text = "100%"
-popup/item_0/id = 0
-popup/item_1/text = "125%"
-popup/item_1/id = 1
-popup/item_2/text = "150%"
-popup/item_2/id = 2
-popup/item_3/text = "200%"
-popup/item_3/id = 3
-
-[node name="SkipAnimation" type="Button" parent="Toolbar"]
-layout_mode = 2
-text = "Skip animation"
-
-[node name="LastAction" type="Label" parent="Toolbar"]
-layout_mode = 2
-size_flags_horizontal = 3
 theme_type_variation = &"TableStatus"
+theme_override_font_sizes/font_size = 13
 text = "Choose your opening hand."
-autowrap_mode = 3
+text_overrun_behavior = 3
 
-[node name="InteractionLabToolbar" parent="." instance=ExtResource("lab")]
+[node name="Instructions" type="Label" parent="StatusBar"]
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 13
+autowrap_mode = 3
+text = "Practice board interactions"
 
 [node name="TableViewport" type="Control" parent="."]
 layout_mode = 2

@@ -516,17 +516,17 @@ public partial class Main
 		float? iceTop = null;
 		foreach (HBoxContainer root in roots)
 		{
-			ScrollContainer iceScroll = root.GetParent().GetNode<ScrollContainer>("IceScroll");
+			VBoxContainer iceCards = root.GetParent().GetNode<VBoxContainer>("IceCards");
 			rootTop ??= root.GlobalPosition.Y;
-			iceTop ??= iceScroll.GlobalPosition.Y;
-			if (Mathf.Abs(root.GlobalPosition.Y - rootTop.Value) > 1 || Mathf.Abs(iceScroll.GlobalPosition.Y - iceTop.Value) > 1)
+			iceTop ??= iceCards.GlobalPosition.Y;
+			if (Mathf.Abs(root.GlobalPosition.Y - rootTop.Value) > 1 || Mathf.Abs(iceCards.GlobalPosition.Y - iceTop.Value) > 1)
 				throw new InvalidOperationException("Server root/ICE rows shifted between lanes.");
 			Rect2[] cards = root.GetChildren().OfType<TableCardControl>().Where(card => card.Visible)
 				.Select(card => card.GetGlobalRect()).ToArray();
 			float center = root.GetGlobalRect().GetCenter().X;
 			if (cards.Length > 0 && Mathf.Abs((cards.Min(rect => rect.Position.X) + cards.Max(rect => rect.End.X)) / 2 - center) > 1)
 				throw new InvalidOperationException("Server root cards are off the lane centerline.");
-			foreach (TableCardControl ice in FindDescendants<TableCardControl>(iceScroll).Where(card => card.IsIce))
+			foreach (TableCardControl ice in FindDescendants<TableCardControl>(iceCards).Where(card => card.IsIce))
 				if (Mathf.Abs(ice.GetGlobalRect().GetCenter().X - center) > 1)
 					throw new InvalidOperationException($"ICE is off the root centerline: {ice.GetGlobalRect().GetCenter().X} vs {center}.");
 		}

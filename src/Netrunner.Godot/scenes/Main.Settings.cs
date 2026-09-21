@@ -1,0 +1,58 @@
+using Godot;
+
+namespace Netrunner.GodotClient;
+
+public partial class Main
+{
+	private Control? _settingsMenu;
+	private Button? _settingsButton;
+	private bool SettingsVisible => _settingsMenu?.Visible == true;
+
+	private void BuildSettingsMenu()
+	{
+		Control header = _layout.GetNode<Control>("Header");
+		_settingsMenu = GetNode<Control>("SettingsLayer/SettingsMenu");
+		_settingsButton = header.GetNode<Button>("Settings");
+		_settingsButton.Pressed += () => SetSettingsVisible(!SettingsVisible);
+		_settingsMenu.GetNode<Button>("%Close").Pressed += () => SetSettingsVisible(false);
+		_settingsMenu.GetNode<Control>("Backdrop").GuiInput += input =>
+		{
+			if (input is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left })
+			{
+				SetSettingsVisible(false);
+				GetViewport().SetInputAsHandled();
+			}
+		};
+		header.GetNode<Button>("NewGame").Pressed += () => GetTree().ReloadCurrentScene();
+		_reducedMotion = _settingsMenu.GetNode<CheckButton>("%ReducedMotion");
+		_reducedMotion.Toggled += reduced => { if (reduced) { _tablePlaybackWait = 0; _gameTable.StopMotion(); } };
+		_speed = _settingsMenu.GetNode<HSlider>("%Speed");
+		_speed.ValueChanged += value => _settingsMenu.GetNode<Label>("%SpeedLabel").Text = $"Playback speed · {value:0.#}×";
+		_settingsMenu.GetNode<OptionButton>("%Scale").ItemSelected += index =>
+		{
+			float factor = new[] { 1f, 1.25f, 1.5f, 2f }[(int)index];
+			Vector2I physical = GetWindow().Size;
+			GetWindow().ContentScaleSize = new Vector2I(Math.Max(1920, (int)(physical.X / factor)), Math.Max(1080, (int)(physical.Y / factor)));
+		};
+		_skipAnimations = header.GetNode<Button>("SkipAnimation");
+		_skipAnimations.Pressed += () => { _tablePlaybackWait = 0; _skipAnimation = true; _gameTable.StopMotion(); };
+		_sessionLogsButton = _settingsMenu.GetNode<Button>("%OpenLogs");
+		_sessionLogsButton.Pressed += OpenSessionLogs;
+	}
+
+	private void SetSettingsVisible(bool visible)
+	{
+		if (_settingsMenu is null) return;
+		_settingsMenu.Visible = visible;
+		if (visible)
+		{
+			_boardDrag?.Cancel("settings", false);
+			ClearTableSelection();
+			HideCardHoverPreview();
+			ApplyAccessibilityFocusOrder(_settingsMenu);
+			_settingsMenu.GetNode<Button>("%Close").GrabFocus();
+		}
+		else _settingsButton?.GrabFocus();
+		if (_currentSnapshot is { } snapshot) RenderCardTableActions(snapshot);
+	}
+}

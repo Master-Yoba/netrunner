@@ -16,7 +16,7 @@ public partial class Main
 			&& snapshot.View.Decision is { } decision && decision.OwnerSide == snapshot.View.Viewer
 			&& !SpatialVisible && !_fullMatchResumePaused && !_tableAwaitingSettlement && _stagedAction is null
 			&& Volatile.Read(ref _submissionInFlight) == 0
-			&& _zoomOverlay?.Visible != true && _tablePileOverlay?.Visible != true;
+			&& !SettingsVisible && _zoomOverlay?.Visible != true && _tablePileOverlay?.Visible != true;
 		_boardDrag.DragStarted += () => { HideCardHoverPreview(); DismissBoardChoices(); };
 		_boardDrag.GestureEnded += (outcome, cardId) => WriteFullMatchDiagnostic("drag-outcome", new
 		{

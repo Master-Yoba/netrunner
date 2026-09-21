@@ -34,21 +34,7 @@ public partial class Main
 	private void BuildCardTable()
 	{
 		_board = _layout.GetNode<VBoxContainer>("MatchTable");
-		Control toolbar = _board.GetNode<Control>("Toolbar");
-		toolbar.GetNode<Button>("NewGame").Pressed += () => GetTree().ReloadCurrentScene();
-		_reducedMotion = toolbar.GetNode<CheckButton>("ReducedMotion");
-		_reducedMotion.Toggled += reduced => { if (reduced) { _tablePlaybackWait = 0; _gameTable.StopMotion(); } };
-		_speed = toolbar.GetNode<HSlider>("Speed");
-		OptionButton scale = toolbar.GetNode<OptionButton>("Scale");
-		scale.ItemSelected += index =>
-		{
-			float factor = new[] { 1f, 1.25f, 1.5f, 2f }[(int)index];
-			Vector2I physical = GetWindow().Size;
-			GetWindow().ContentScaleSize = new Vector2I(Math.Max(1920, (int)(physical.X / factor)), Math.Max(1080, (int)(physical.Y / factor)));
-		};
-		_skipAnimations = toolbar.GetNode<Button>("SkipAnimation");
-		_skipAnimations.Pressed += () => { _tablePlaybackWait = 0; _skipAnimation = true; _gameTable.StopMotion(); };
-		_tableLastAction = toolbar.GetNode<Label>("LastAction");
+		_tableLastAction = _board.GetNode<Label>("StatusBar/LastAction");
 		_tableViewport = _board.GetNode<Control>("TableViewport");
 		_tableViewport.Resized += HandleCardHoverPreviewViewportResized;
 		_gameTable = _tableViewport.GetNode<GameTableControl>("GameBoard");
@@ -117,6 +103,7 @@ public partial class Main
 		_tableActions = dock.GetNode<HFlowContainer>("%Actions");
 		_focusPresentation = dock.GetNode<VBoxContainer>("%FocusPresentation");
 		BuildBoardDrag();
+		BuildSettingsMenu();
 	}
 
 	private void SelectTableCard(string id)
