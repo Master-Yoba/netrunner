@@ -405,6 +405,7 @@ if ! run_with_timeout 120 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
 fi
 if ! grep -Fq "M411_INTERACTION PASS" "$m411_ui_smoke_log" \
   || ! grep -Fq "LAB_SCENARIOS PASS" "$m411_ui_smoke_log" \
+  || ! grep -Fq "ABILITY_PAYMENT PASS" "$m411_ui_smoke_log" \
   || ! grep -Fq "ACTION_LABELS PASS" "$m411_ui_smoke_log" \
   || ! grep -Fq "BOARD_ICEBREAKERS PASS" "$m411_ui_smoke_log" \
   || ! grep -Fq "BOARD_SPATIAL_ACTIONS PASS" "$m411_ui_smoke_log" \

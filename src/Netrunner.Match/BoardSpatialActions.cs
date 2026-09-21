@@ -5,7 +5,10 @@ namespace Netrunner.Match;
 public enum BoardTargetKind { Card, ServerRoot, ServerIce, Server, NewRemote, Subroutine }
 
 /// <summary>Role separates effect targets, ordered positions, and each additional card cost.</summary>
-public sealed record BoardTarget(BoardTargetKind Kind, string Id, string Role = "Target");
+public sealed record BoardTarget(BoardTargetKind Kind, string Id, string Role = "Target")
+{
+    public BehaviorAdditionalCostKind? PaymentKind { get; init; }
+}
 public sealed record BoardSpatialAction(
     LegalActionViewModel Action, string? SourceId, string Family,
     IReadOnlyList<BoardTarget> Targets, bool Automatic);
@@ -29,7 +32,8 @@ public static class BoardSpatialActions
             string family = action.Kind.ToString();
             bool automatic = false;
             var targets = new List<BoardTarget>();
-            void Card(string id, string role = "Target") => targets.Add(new(BoardTargetKind.Card, id, role));
+            void Card(string id, string role = "Target", BehaviorAdditionalCostKind? paymentKind = null) =>
+                targets.Add(new(BoardTargetKind.Card, id, role) { PaymentKind = paymentKind });
             switch (action.Kind, action.Parameters)
             {
                 case (ActionKind.RezCard, RezCardParameters p): source = p.CardId.Value; break;
@@ -42,7 +46,9 @@ public static class BoardSpatialActions
                     family += ":" + p.AbilityKey;
                     for (int i = 0; i < p.TargetCardIds.Count; i++) Card(p.TargetCardIds[i].Value, $"Target {i + 1}");
                     foreach (AbilityAdditionalCostSelection cost in p.AdditionalCostSelectionsOrEmpty)
-                        foreach (CardInstanceId id in cost.CardIds) Card(id.Value, $"Pay card cost {cost.CostIndex + 1}");
+                        foreach (CardInstanceId id in cost.CardIds)
+                            Card(id.Value, $"Pay card cost {cost.CostIndex + 1}",
+                                cost.CostIndex >= 0 && cost.CostIndex < p.Costs.Count ? p.Costs[cost.CostIndex].AdditionalKind : null);
                     break;
                 case (ActionKind.UseBioroidAbility, RunBioroidAbilityParameters p):
                     source = p.IceId.Value;
@@ -54,9 +60,10 @@ public static class BoardSpatialActions
                 case (ActionKind.ChooseBehavior, BehaviorChoiceParameters p) when p.CardIds.Count > 0 || view.CardSelection?.Candidates.Count > 0:
                     automatic = true;
                     family += ":" + p.ChoiceKey + ":" + string.Join("/", p.OptionKeys);
+                    bool trashPayment = action.Slice45BehaviorChoice?.Costs.Any(cost => cost.AdditionalKind == BehaviorAdditionalCostKind.TrashCards) == true;
                     for (int i = 0; i < p.CardIds.Count; i++)
                         Card(p.CardIds[i].Value, view.CardSelection?.Mode == BehaviorChoiceMode.OrderSelection ? $"Position {i + 1}"
-                            : action.Slice45BehaviorChoice?.Costs.Any(cost => cost.AdditionalKind == BehaviorAdditionalCostKind.TrashCards) == true ? "Pay card cost" : "Target");
+                            : trashPayment ? "Pay card cost" : "Target", trashPayment ? BehaviorAdditionalCostKind.TrashCards : null);
                     break;
                 case (ActionKind.ResolveIceSubroutine, IceSubroutineChoiceParameters { CardId: { } id } p):
                     automatic = true; family += ":" + p.Choice; Card(id.Value, p.Choice == IceSubroutineChoiceKind.InstallCard ? "Install card" : "Trash card");

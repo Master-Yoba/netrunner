@@ -64,11 +64,13 @@ public sealed class BoardSpatialActionsTests
         var selection = new BoardSpatialSelection(BoardSpatialActions.Project(view));
         Assert.Empty(selection.CompleteActions);
         Assert.Equal("b", Assert.Single(selection.Candidates).Id);
+        Assert.Null(Assert.Single(selection.Candidates).PaymentKind);
         Assert.False(selection.Toggle(new(BoardTargetKind.Card, "c", "Target 1")));
         Assert.True(selection.Toggle(Assert.Single(selection.Candidates)));
         Assert.Empty(selection.CompleteActions);
         BoardTarget cost = Assert.Single(selection.Candidates);
         Assert.Equal("c", cost.Id);
+        Assert.Equal(BehaviorAdditionalCostKind.TrashCards, cost.PaymentKind);
         Assert.StartsWith("Pay card cost", cost.Role, StringComparison.Ordinal);
         Assert.True(selection.Toggle(cost));
         Assert.Equal("ability", Assert.Single(selection.CompleteActions).Action.Id.Value);

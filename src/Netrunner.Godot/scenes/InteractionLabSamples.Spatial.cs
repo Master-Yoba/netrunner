@@ -10,7 +10,7 @@ public static partial class InteractionLabSamples
 		"Runner: incremental multi-card selection", "Runner: search browser", "Corp: tagged resource trash", "Runner: pile ability", "Runner: ordered targets"];
 	public static string[] SpatialInstructions => [
 		"Click the agenda to advance or score, or ICE to rez. The named action confirms its cost.",
-		"Click your identity, choose an ability, select its effect target and a separate card cost, then confirm. Esc cancels.",
+		"Click your identity and choose the targeted ability. Select an installed program, then the card in your hand to trash as payment. Confirm to pay. Esc cancels.",
 		"A forced choice during a run highlights eligible programs. Select one and confirm; clicking alone spends nothing.",
 		"Select a face-down installed card or the HQ server, then confirm access. Hidden identities stay hidden.",
 		"Use Trash or Leave card beside the artwork. The price includes the exact payment split; expiring run credits are spent first. Click the artwork to inspect.",

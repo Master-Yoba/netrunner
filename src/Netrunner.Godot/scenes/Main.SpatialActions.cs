@@ -14,6 +14,7 @@ public partial class Main
 	private bool _spatialAutomatic;
 	private readonly List<(Button Button, BoardTarget Target)> _spatialCues = [];
 	private readonly Dictionary<ActionId, Button> _spatialConfirmButtons = [];
+	private Button? _spatialPendingConfirm;
 	private bool SpatialVisible => _spatialPanel?.Visible == true;
 
 	private bool SpatialInputAvailable(MatchSnapshot snapshot) => !snapshot.IsTerminal && !snapshot.IsOpponentThinking
@@ -140,6 +141,7 @@ public partial class Main
 		ClearChildren(_spatialOptions!);
 		ClearSpatialCues();
 		_spatialConfirmButtons.Clear();
+		_spatialPendingConfirm = null;
 		_spatialPanel!.GetNode<ScrollContainer>("Content/OptionsScroll").CustomMinimumSize = new(0, 52);
 		_spatialPanel.GetNode<Label>("%Title").Text = _spatialSource is { } source ? ActionCardName(source) : FriendlyText(snapshot.View.Decision!.Prompt);
 		_spatialPanel.GetNode<Label>("%Prompt").Text = "Choose an action · Esc closes";
@@ -167,14 +169,36 @@ public partial class Main
 			return;
 		}
 		BoardSpatialSelection selection = _spatialSelection;
-		string selected = string.Join("; ", selection.Selected.Select(target => $"{target.Role}: {SpatialTargetLabel(target)}"));
+		string selected = string.Join("; ", selection.Selected.Select(target =>
+			$"{(target.PaymentKind == BehaviorAdditionalCostKind.TrashCards ? "Trash as payment" : target.Role)}: {SpatialTargetLabel(target)}"));
 		string effect = _spatialSource is not null && selection.Remaining is { Count: > 0 } remainingActions
 			? (remainingActions[0].Action.Parameters is RunBioroidAbilityParameters ? "Break a subroutine · lose 1 click"
 				: ActionLabelPresenter.AbilityChoiceLabel(remainingActions[0].Action, ActionCardName)) + "\n" : "";
-		_spatialPanel.GetNode<Label>("%Prompt").Text = effect + (selected.Length == 0 ? "Select highlighted targets." : selected)
-			+ "\nConfirm after selecting. Esc clears unsubmitted choices.";
+		IReadOnlyList<BoardTarget> candidates = selection.Candidates;
+		IReadOnlyList<BoardSpatialAction> completeActions = selection.CompleteActions;
+		bool paymentStep = candidates.Count > 0 && candidates.All(target => target.PaymentKind == BehaviorAdditionalCostKind.TrashCards);
+		IReadOnlyList<CardViewModel> hand = snapshot.View.Viewer == PlayerSide.Corp ? snapshot.View.CorpHand.VisibleCards : snapshot.View.RunnerHand.VisibleCards;
+		bool fromHand = paymentStep && candidates.All(target => hand.Any(card => card.Id == target.Id));
+		string nextStep = completeActions.Count > 0 ? "Ready to confirm."
+			: paymentStep ? $"Select a {(fromHand ? "card from your hand" : "highlighted card")} to trash as payment."
+			: "Select the next highlighted target.";
+		_spatialPanel.GetNode<Label>("%Prompt").Text = effect + (selected.Length > 0 ? selected + "\n" : "") + nextStep
+			+ "\nNothing is paid until you confirm. Esc cancels unsubmitted choices.";
 		RenderSpatialTargets(snapshot, selection.Candidates.Concat(selection.Selected).Distinct().ToArray());
-		foreach (BoardSpatialAction complete in selection.CompleteActions) AddSpatialConfirm(snapshot, complete);
+		foreach (BoardTarget payment in candidates.Where(target => target.PaymentKind == BehaviorAdditionalCostKind.TrashCards))
+		{
+			Button pick = AddSpatialButton($"Select to trash: {SpatialTargetLabel(payment)}"
+				+ (hand.Any(card => card.Id == payment.Id) ? " · from hand" : ""), () => SelectSpatialTarget(payment));
+			pick.TooltipText = "Select this card as payment. Nothing is trashed until you confirm.";
+			pick.SetMeta("payment_card_id", payment.Id);
+		}
+		foreach (BoardSpatialAction complete in completeActions) AddSpatialConfirm(snapshot, complete);
+		if (completeActions.Count == 0)
+		{
+			_spatialPendingConfirm = AddSpatialButton(paymentStep ? "Confirm · select a payment card first" : "Confirm · finish selecting targets", () => { });
+			_spatialPendingConfirm.TooltipText = nextStep;
+			_spatialPendingConfirm.Disabled = true;
+		}
 	}
 
 	private void AddSpatialConfirm(MatchSnapshot snapshot, BoardSpatialAction action)
@@ -310,7 +334,7 @@ public partial class Main
 		bool enabled = _currentSnapshot is { } snapshot && SpatialInputAvailable(snapshot) && _spatialSubmission is null;
 		foreach (Button button in _spatialOptions!.GetChildren().OfType<Button>())
 		{
-			button.Disabled = !enabled;
+			button.Disabled = !enabled || ReferenceEquals(button, _spatialPendingConfirm);
 			if (button.GetChildren().OfType<GameSymbolLabel>().FirstOrDefault() is { } symbols)
 				button.CustomMinimumSize = new(0, Math.Max(44, symbols.GetContentHeight() + 16));
 		}

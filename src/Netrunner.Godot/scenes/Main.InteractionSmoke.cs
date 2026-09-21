@@ -29,6 +29,7 @@ public partial class Main
 			await CheckInstallChoiceControls();
 			await CheckActionLabels();
 			await CheckBoardIcebreakers();
+			await CheckTargetedAbilityPayment();
 			await CheckSpatialActions();
 			foreach (Vector2I size in new[] { new Vector2I(1920, 1080), new Vector2I(2560, 1440) })
 			{

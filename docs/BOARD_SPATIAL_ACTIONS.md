@@ -43,6 +43,15 @@ costs; it never modifies authoritative state. Labels come from the shared action
 presenter. The fallback action list uses the same hosted-credit preference and
 retains explicit target confirmation.
 
+Incomplete selections keep a disabled Confirm control visible and explain the
+next step. A targeted ability's additional trash cost is marked separately from
+its effect target using issued cost metadata. After choosing the effect target,
+the panel prompts for the payment card, offers explicit **Select to trash**
+shortcuts, and keeps eligible cards highlighted on the board or in hand. Both
+paths stage the same local selection; only the final priced confirmation submits
+the issued action. The **Pay for a targeted ability** lab exercises selecting a
+program, then selecting a card from hand to trash as payment.
+
 Access already has a selected target. `AccessActionsPresenter` exposes Trash and
 Leave card directly beside the artwork, with the exact issued price and payment
 split. Clicking the art inspects it. Clicking Trash confirms payment without an
