@@ -101,7 +101,11 @@ public partial class Main
 				ShowInspectedCardZoom();
 			}
 		};
-		_tableAccessCard.CardSelected += id => { if (!TrySelectSpatialCard(id)) inspectAccess.EmitSignal(BaseButton.SignalName.Pressed); };
+		_tableAccessCard.CardSelected += id =>
+		{
+			if (_spatialSelection is not null && TrySelectSpatialCard(id)) return;
+			inspectAccess.EmitSignal(BaseButton.SignalName.Pressed);
+		};
 		_tableAccessCard.CardHoverChanged += HandleTableCardHoverChanged;
 		BuildCardHoverPreview(_tableViewport);
 		_matchHistory = _tableViewport.GetNode<MatchHistoryPanel>("History");
@@ -161,8 +165,7 @@ public partial class Main
 		_gameTable.MotionEnabled = !_reducedMotion.ButtonPressed && !_skipAnimation;
 		_gameTable.MotionDuration = GameTableControl.DefaultMotionDuration / _speed.Value;
 		_gameTable.Render(snapshot.View);
-		CardViewModel? accessed = snapshot.View.Run is { Step: RunTimingStep.BreachAccessAbility, Access.Accessed.Count: > 0 } accessRun
-			? accessRun.Access.Accessed[^1] : null;
+		CardViewModel? accessed = AccessActionsPresenter.Card(snapshot.View);
 		_tableAccessCard.SetCard(accessed);
 		_tableAccessPanel.Visible = accessed is { IsKnown: true };
 		_tableAccessTitle.Text = accessed?.Title ?? "";
@@ -188,6 +191,7 @@ public partial class Main
 		{
 			ClearChildren(_tableActions);
 			_tableActionButtons.Clear();
+			RefreshAccessActions(snapshot);
 			DecisionViewModel? decision = snapshot.View.Decision;
 			_tablePrompt.Text = snapshot.IsOpponentThinking ? "Opponent is thinking. You can inspect cards and read history."
 				: snapshot.IsTerminal ? "Match complete."
@@ -274,7 +278,7 @@ public partial class Main
 				if (spatial.Count > 0 && !ordinary && !encounter && decision.Kind != DecisionKind.TurnDiscard)
 					AddButton("All legal actions…", () => { _tableAllActions = true; RenderCardTableActions(snapshot); });
 				HashSet<ActionId> spatialIds = spatial.Select(action => action.Action.Id).ToHashSet();
-				displayed = displayed.Where(action => !spatialIds.Contains(action.Id));
+				displayed = displayed.Where(action => !spatialIds.Contains(action.Id) && !_accessActionButtons.ContainsKey(action.Id));
 			}
 			foreach (LegalActionViewModel action in displayed)
 			{

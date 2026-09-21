@@ -6,15 +6,15 @@ namespace Netrunner.GodotClient;
 public static partial class InteractionLabSamples
 {
 	public static string[] SpatialNames => ["Corp: card actions", "Runner: targeted abilities and costs", "Run: forced trash target",
-		"Breach: hidden root and HQ", "Access: hosted-first trash", "Encounter: bioroid click ability", "Corp: ICE install choice",
+		"Breach: hidden root and HQ", "Access: direct trash controls", "Encounter: bioroid click ability", "Corp: ICE install choice",
 		"Runner: incremental multi-card selection", "Runner: search browser", "Corp: tagged resource trash", "Runner: pile ability", "Runner: ordered targets"];
 	public static string[] SpatialInstructions => [
 		"Click the agenda to advance or score, or ICE to rez. The named action confirms its cost.",
 		"Click your identity, choose an ability, select its effect target and a separate card cost, then confirm. Esc cancels.",
 		"A forced choice during a run highlights eligible programs. Select one and confirm; clicking alone spends nothing.",
 		"Select a face-down installed card or the HQ server, then confirm access. Hidden identities stay hidden.",
-		"Click the accessed card to trash it. One payment uses hosted credits first. Continue remains a button.",
-		"Click the encountered ICE, choose the click ability, select an unbroken subroutine, and confirm.",
+		"Use Trash or Leave card beside the artwork. The price includes the exact payment split; expiring run credits are spent first. Click the artwork to inspect.",
+		"Click the encountered ICE, select an unbroken subroutine, and confirm the click cost.",
 		"Select the card to install, then its server root, ICE position, or new remote, and confirm.",
 		"Select any number of highlighted programs, then confirm once. The lab advances through fresh issued choices.",
 		"Select a search candidate in the card browser and confirm. Only authorized candidate faces are shown.",
@@ -68,10 +68,21 @@ public static partial class InteractionLabSamples
 			case 24:
 				decision = DecisionKind.RunTiming;
 				CardViewModel accessed = UiPreviewSamples.Known("lab-accessed", "Asset", "Practice accessed asset") with { TrashCost = 3 };
-				view = view with { Run = view.Run! with { Step = RunTimingStep.BreachAccessAbility, Access = view.Run.Access with { Accessed = [accessed] } } };
+				view = view with
+				{
+					Run = view.Run! with
+					{
+						Phase = RunCrPhase.Success,
+						Step = RunTimingStep.BreachAccessAbility,
+						Encounter = null,
+						CurrentIce = null,
+						Priority = null,
+						Access = view.Run.Access with { State = RunAccessState.InProgress, Accessed = [accessed] }
+					}
+				};
 				foreach (int hosted in new[] { 0, 1, 2 }) actions.Add(Act("trash-" + hosted, ActionKind.TrashAccessedCard, new RunCardPaymentParameters(new(accessed.Id), hosted))
 					with
-				{ Description = $"Trash {accessed.Title} for 3 credits ({hosted} hosted + {3 - hosted} personal)" });
+				{ Description = $"Trash {accessed.Id} for 3 credits ({hosted} hosted + {3 - hosted} personal)" });
 				actions.Add(Act("continue", ActionKind.NoAccessAction, new NoActionParameters()));
 				break;
 			case 25:

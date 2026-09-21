@@ -11,7 +11,6 @@ public sealed class BoardSpatialActionsTests
     [InlineData(ActionKind.AdvanceCard)]
     [InlineData(ActionKind.ScoreAgenda)]
     [InlineData(ActionKind.TrashTaggedResource)]
-    [InlineData(ActionKind.TrashAccessedCard)]
     public void CardLocalActionsUseTheirSourceAndIssuedId(ActionKind kind)
     {
         ActionParameters parameters = kind switch
@@ -47,6 +46,7 @@ public sealed class BoardSpatialActionsTests
     [InlineData(ActionKind.DeclinePrevention)]
     [InlineData(ActionKind.UseReplacement)]
     [InlineData(ActionKind.DeclineReplacement)]
+    [InlineData(ActionKind.TrashAccessedCard)]
     [InlineData(ActionKind.NoAccessAction)]
     [InlineData(ActionKind.StealAgenda)]
     public void GlobalAndAbstractDecisionsRemainButtons(ActionKind kind) =>
@@ -160,7 +160,7 @@ public sealed class BoardSpatialActionsTests
             Action("pay-personal", ActionKind.ResolveIceSubroutine, new IceSubroutineChoiceParameters("frame", IceSubroutineChoiceKind.PayCredits, creditCost: 3)),
             Action("pay-hosted", ActionKind.ResolveIceSubroutine, new IceSubroutineChoiceParameters("frame", IceSubroutineChoiceKind.PayCredits, creditCost: 3, hostedCredits: 2)),
             Action("distinct-cost", ActionKind.ResolveIceSubroutine, new IceSubroutineChoiceParameters("frame", IceSubroutineChoiceKind.PayCredits, creditCost: 2)) };
-        Assert.Equal(["hosted", "other", "pay-hosted", "distinct-cost"], BoardSpatialActions.PreferHostedCredits(actions).Select(action => action.Id.Value));
+        Assert.Equal(["hosted", "other", "pay-hosted", "distinct-cost"], RunPaymentPreference.Apply(actions).Select(action => action.Id.Value));
     }
 
     [Fact]

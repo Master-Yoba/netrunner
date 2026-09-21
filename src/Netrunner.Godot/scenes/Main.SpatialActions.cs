@@ -40,6 +40,10 @@ public partial class Main
 		CloseSpatialActions();
 		_spatialSource = id;
 		_spatialDecision = snapshot.View.Decision;
+		// With one targeted ability there is no action-family choice to make.
+		// Source selection opens targets immediately; paying still requires confirmation.
+		if (actions.Select(action => action.Family).Distinct(StringComparer.Ordinal).Count() == 1
+			&& actions.All(action => action.Targets.Count > 0)) _spatialSelection = new(actions);
 		_tableAllActions = false;
 		_tableSelectedCard = id;
 		_gameTable.SetSelection(id);
@@ -164,7 +168,10 @@ public partial class Main
 		}
 		BoardSpatialSelection selection = _spatialSelection;
 		string selected = string.Join("; ", selection.Selected.Select(target => $"{target.Role}: {SpatialTargetLabel(target)}"));
-		_spatialPanel.GetNode<Label>("%Prompt").Text = (selected.Length == 0 ? "Select highlighted targets." : selected)
+		string effect = _spatialSource is not null && selection.Remaining is { Count: > 0 } remainingActions
+			? (remainingActions[0].Action.Parameters is RunBioroidAbilityParameters ? "Break a subroutine · lose 1 click"
+				: ActionLabelPresenter.AbilityChoiceLabel(remainingActions[0].Action, ActionCardName)) + "\n" : "";
+		_spatialPanel.GetNode<Label>("%Prompt").Text = effect + (selected.Length == 0 ? "Select highlighted targets." : selected)
 			+ "\nConfirm after selecting. Esc clears unsubmitted choices.";
 		RenderSpatialTargets(snapshot, selection.Candidates.Concat(selection.Selected).Distinct().ToArray());
 		foreach (BoardSpatialAction complete in selection.CompleteActions) AddSpatialConfirm(snapshot, complete);

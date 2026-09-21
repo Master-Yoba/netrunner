@@ -1,5 +1,4 @@
 using Godot;
-using Netrunner.Core;
 using Netrunner.Match;
 
 namespace Netrunner.GodotClient;
@@ -20,6 +19,7 @@ public partial class Main
 				ResetInteractionLab();
 				await TableFrames(5);
 				_gameTable.StopMotion();
+				if (scenario == 24) { await CheckDirectAccessActions(size); continue; }
 				IReadOnlyList<BoardSpatialAction> projected = BoardSpatialActions.Project(_currentSnapshot!.View);
 				RequireInteraction(projected.Count > 0, "Spatial lab scenario has no projected actions.");
 				BoardSpatialAction chosen = projected[0];
@@ -34,8 +34,10 @@ public partial class Main
 					}
 					else await ClickSpatialCard(source);
 					RequireInteraction(SpatialVisible && _labSubmissionCount == 0, "Source click did not open controls without paying.");
-					if (chosen.Targets.Count > 0)
+					if (chosen.Targets.Count > 0 && _spatialSelection is null)
 						await ClickTableButton(_spatialOptions!.GetChildren().OfType<Button>().First(button => button.Text.Contains("choose targets", StringComparison.Ordinal)));
+					if (scenario is 25 or 30)
+						RequireInteraction(_spatialSelection is not null && !_spatialOptions!.GetChildren().OfType<Button>().Any(button => button.Text.Contains("choose targets", StringComparison.Ordinal)), "Single ability retained a redundant target submenu.");
 				}
 				RequireInteraction(SpatialVisible, "Mandatory target decision did not open controls.");
 				if (scenario == 27)
@@ -76,13 +78,11 @@ public partial class Main
 				RequireInteraction(_tableViewport.GetGlobalRect().Encloses(_spatialPanel!.GetGlobalRect()), "Spatial panel escaped the viewport.");
 				if (OS.GetCmdlineUserArgs().Contains("--spatial-screenshots") && scenario is 21 or 23 or 25 or 28)
 					await SaveInteractionEvidence($"spatial-{scenario}-{size.X}");
-				if (scenario == 24)
-					RequireInteraction(_spatialConfirmButtons.Count == 1 && chosen.Action.Parameters is RunCardPaymentParameters { HostedCredits: 2 }, "Access showed duplicate payment choices.");
-				if (scenario == 24) RequireInteraction(_spatialConfirmButtons[chosen.Action.Id].Text.Contains("3 credits (2 hosted + 1 personal)", StringComparison.Ordinal), "Access confirmation lost its full payment label.");
+				if (OS.GetCmdlineUserArgs().Contains("--access-screenshots") && scenario == 25)
+					await SaveInteractionEvidence($"bioroid-direct-{size.X}");
 				await ClickTableButton(_spatialConfirmButtons[chosen.Action.Id]);
 				await TableFrames(3);
 				RequireInteraction(_labSubmissionCount == 1 && _currentSnapshot.View.Decision is null && !CurrentSpatialDecision(original), "Confirmation failed or retained a stale spatial decision.");
-				if (scenario == 24) RequireInteraction(_currentSnapshot.View.Run!.RunCredits == 0 && _currentSnapshot.View.Runner.Credits == 5, "Access did not spend hosted credits first.");
 			}
 			foreach (int guardedScenario in new[] { 22, 28 })
 			{

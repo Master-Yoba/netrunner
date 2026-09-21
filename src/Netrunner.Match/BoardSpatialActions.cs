@@ -23,7 +23,7 @@ public static class BoardSpatialActions
             .Concat(view.Servers.SelectMany(server => server.IcePositions).Select(position => position.CardId))
             .ToHashSet(StringComparer.Ordinal);
         var result = new List<BoardSpatialAction>();
-        foreach (LegalActionViewModel action in PreferHostedCredits(view.LegalActions))
+        foreach (LegalActionViewModel action in RunPaymentPreference.Apply(view.LegalActions))
         {
             string? source = null;
             string family = action.Kind.ToString();
@@ -37,7 +37,6 @@ public static class BoardSpatialActions
                 case (ActionKind.AdvanceCard, AdvanceCardParameters p): source = p.CardId.Value; break;
                 case (ActionKind.ScoreAgenda, ScoreAgendaParameters p): source = p.CardId.Value; break;
                 case (ActionKind.TrashTaggedResource, TrashTaggedResourceParameters p): source = p.CardId.Value; break;
-                case (ActionKind.TrashAccessedCard, RunCardPaymentParameters p): source = p.CardId.Value; break;
                 case (ActionKind.UseAbility, AbilityActionParameters p):
                     source = p.SourceCardId.Value;
                     family += ":" + p.AbilityKey;
@@ -91,20 +90,6 @@ public static class BoardSpatialActions
             .Concat(view.Run is { } run ? new[] { run.CurrentIce, run.InitiatingSource, run.Encounter?.Ice }
                 .Concat(run.Access.Candidates).Concat(run.Access.Chosen).Concat(run.Access.Accessed).OfType<CardViewModel>() : [])
             .GroupBy(card => card.Id, StringComparer.Ordinal).Select(group => group.Last()).ToArray();
-
-    /// <summary>Collapse credit splits only. Every other cost, destination, and effect stays distinct.</summary>
-    public static IReadOnlyList<LegalActionViewModel> PreferHostedCredits(IEnumerable<LegalActionViewModel> actions) =>
-        actions.GroupBy(action => (action.Kind, action.Parameters) switch
-        {
-            (ActionKind.TrashAccessedCard, RunCardPaymentParameters p) => $"trash:{p.CardId}",
-            (_, IceSubroutineChoiceParameters p) => $"ice:{action.Kind}:{p.FrameIdentity}:{p.Choice}:{p.CardId}:{p.DestinationKind}:{p.ServerId}:{p.CreateNewRemote}:{p.CreditCost}",
-            _ => "action:" + action.Id.Value,
-        }).Select(group => group.MaxBy(action => action.Parameters switch
-        {
-            RunCardPaymentParameters p => p.HostedCredits,
-            IceSubroutineChoiceParameters p => p.HostedCredits,
-            _ => 0,
-        })!).ToArray();
 }
 
 /// <summary>Pure local selection. Only CompleteActions may be submitted; candidate clicks never pay costs.</summary>

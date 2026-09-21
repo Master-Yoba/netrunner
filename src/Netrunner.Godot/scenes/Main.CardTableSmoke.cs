@@ -109,7 +109,8 @@ public partial class Main
 							|| _tableAccessCard.Card?.Id != accessed.Id || _tableAccessTitle.Text != accessed.Title
 							|| !_tableHistory.Entries.Any(entry => entry.Summary.Contains($"accesses {accessed.Title}", StringComparison.Ordinal)))
 							throw new InvalidOperationException("R&D access card or named history missing from the table.");
-						if (_tableActionButtons[next.Id].Text != "Continue access")
+						if (!_accessActionButtons.TryGetValue(next.Id, out Button? accessButton)
+							|| accessButton.TooltipText != AccessActionsPresenter.Label(next, accessed))
 							throw new InvalidOperationException("Access continuation has an unclear label.");
 						GD.Print($"M49_ACCESS_READY action_count={_currentSnapshot.ActionCount}");
 						if (screenshots) await SaveTableEvidence("rd-access");

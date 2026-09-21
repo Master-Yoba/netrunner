@@ -18,17 +18,17 @@ and icebreaker gestures retain their behavior.
 | ChooseCard during TurnDiscard | Hand-to-pile drag | Existing |
 | PumpBreaker, BreakSubroutines | Matching breaker controls and exact ICE rows | Existing |
 | RezCard, RezIce, AdvanceCard, ScoreAgenda | Source card controls with prices | Migrated |
-| UseAbility | Source (including identities and accessible piles), effect targets, separate additional card costs, confirmation | Migrated |
+| UseAbility | Source (including identities and accessible piles), effect targets, separate additional card costs, confirmation; a sole targeted ability opens targets immediately | Migrated |
 | TrashTaggedResource | Eligible resource and priced trash control | Migrated |
 | ChooseCard, TrashProgram | Highlighted forced targets and confirmation | Migrated |
 | ChooseBehavior with physical cards | Board or authorized candidate browser, ordered/set selection, confirmation | Migrated |
 | ResolveIceSubroutine with card targets | Trash target or install card plus exact destination | Migrated |
 | UseBioroidAbility | Encountered ICE, specific subroutine, click-cost confirmation | Migrated |
 | ChooseBreachCandidate | Installed card/back, or HQ/R&D heading for aggregate access | Migrated |
-| TrashAccessedCard | Accessed-card controls; one hosted-first payment | Migrated |
+| TrashAccessedCard | Always-visible priced Trash button beside the accessed artwork; one run-credit-first payment | Direct access control; no source submenu |
 | StartRun | Run button and existing server picker | Intentionally retained |
 | PurgeVirusCounters, RemoveTag | Global buttons | Intentionally retained |
-| PassPriority, EndTurn, JackOut, ContinueRun, NoAccessAction | Progression buttons | Intentionally retained |
+| PassPriority, EndTurn, JackOut, ContinueRun, NoAccessAction | Progression buttons; Leave card beside accessed non-agendas, Continue access for agendas | Intentionally retained |
 | ChooseNumber, abstract ChooseBehavior, non-spatial ResolveIceSubroutine | Decision buttons | Intentionally retained |
 | UseTrigger, DeclineTrigger, OrderTriggers, UsePrevention, DeclinePrevention, UseReplacement, DeclineReplacement | Decision buttons; visible source highlighting | Intentionally retained |
 | Setup keep/mulligan | Setup buttons | Intentionally retained |
@@ -42,6 +42,41 @@ surfaces. `BoardSpatialActions` projects only current typed issued actions.
 costs; it never modifies authoritative state. Labels come from the shared action
 presenter. The fallback action list uses the same hosted-credit preference and
 retains explicit target confirmation.
+
+Access already has a selected target. `AccessActionsPresenter` exposes Trash and
+Leave card directly beside the artwork, with the exact issued price and payment
+split. Clicking the art inspects it. Clicking Trash confirms payment without an
+extra target or confirmation menu. No trash button is invented from the printed
+cost when Core has not issued that action. Agenda continuation stays explicit:
+the engine resolves the steal step after the mid-access window, so the UI never
+offers to leave an agenda. Direct controls revalidate the current decision and
+action, and are disabled while busy, inspecting, or choosing other targets.
+
+The interaction audit also removed the action-family menu when a selected source
+has only one targeted ability. This includes bioroid ICE and single-ability pile
+cards. The ability and its costs remain visible while selecting targets; payment
+still waits for confirmation. Sources with distinct abilities retain their menu.
+
+### Credit source audit
+
+`RunPaymentPreference` applies one policy to access, breakers, ICE payments, and
+the fallback list: among otherwise equivalent issued actions, spend the maximum
+legal run-credit amount before personal credits. Target sets, effect choices,
+cost quotes, and costs remain distinct.
+
+The current `RunCredits` pool already includes Overclock's expiring credits;
+`HostedCredits` is the historical name for that contribution in action contracts.
+Unspent run credits expire at run end, and credit loss effects do not consume
+them. There is no separate bad-publicity resource or recurring-credit subsystem
+in the current Gateway engine. Hosted counters on Telework, Red Team, campaigns,
+and similar cards are restricted card-effect pools, not automatically spendable
+wallets. The UI selects engine-issued payments and cannot spend those counters.
+
+For future cards that introduce additional payment sources, extend Core with
+source eligibility, expiry, serialized payment allocation, and replay checks
+before extending the preference to temporary → eligible hosted → personal.
+Porting Chiriboga's generic automatic spend loop into the UI would bypass those
+contracts. The existing run-credit support needs no additional temporary pool.
 
 `Observation.BoardContext` is a nonserialized presentation sidecar, like the
 existing decision/source metadata. It contains installed position handles,

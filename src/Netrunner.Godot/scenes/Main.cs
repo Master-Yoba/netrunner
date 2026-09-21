@@ -275,6 +275,7 @@ public partial class Main : Control
 			PollCardTable(delta);
 			UpdateBoardChoiceGeometry();
 			UpdateSpatialGeometry();
+			UpdateAccessControls();
 		}
 		else PollCoordinator();
 		if (_animationRunning)

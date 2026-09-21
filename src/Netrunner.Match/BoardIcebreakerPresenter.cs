@@ -37,7 +37,7 @@ public static class BoardIcebreakerPresenter
             .Concat(actions.Where(action => action.Kind == ActionKind.BreakSubroutines).Select(Source).OfType<string>())
             .Intersect(view.RunnerRig.Where(card => card.IsKnown).Select(card => card.Id), StringComparer.Ordinal)
             .ToHashSet(StringComparer.Ordinal);
-        return PreferHostedCredits(actions.Where(action => Source(action) is not { } source || compatible.Contains(source)));
+        return RunPaymentPreference.Apply(actions.Where(action => Source(action) is not { } source || compatible.Contains(source)));
     }
 
     private static bool IsEncounterWindow(MatchViewModel view) =>
@@ -49,22 +49,6 @@ public static class BoardIcebreakerPresenter
             Priority.Holder: PlayerSide.Runner,
             Encounter: { Status: RunEncounterStatus.Initialized, Ice.IsKnown: true }
         };
-
-    private static LegalActionViewModel[] PreferHostedCredits(IEnumerable<LegalActionViewModel> actions) =>
-        actions.GroupBy(action => (action.Kind, action.Parameters) switch
-        {
-            (ActionKind.PumpBreaker, RunBreakerParameters pump) => new PaymentChoice(action.Kind, pump.BreakerId.Value, 0, null, null, null),
-            (ActionKind.BreakSubroutines, RunBreakParameters broken) => new PaymentChoice(action.Kind, broken.BreakerId.Value,
-                broken.Quantity, broken.SubroutineId, broken.SubroutineOrdinals is { } targets ? string.Join(",", targets.Order()) : null, broken.CostQuote),
-            _ => new PaymentChoice(action.Kind, action.Id.Value, 0, null, null, null),
-        }).Select(group => group.MaxBy(action => action.Parameters switch
-        {
-            RunBreakerParameters pump => pump.HostedCredits,
-            RunBreakParameters broken => broken.HostedCredits,
-            _ => 0,
-        })!).ToArray();
-
-    private sealed record PaymentChoice(ActionKind Kind, string Source, int Quantity, SubroutineId? Subroutine, string? Targets, CostQuote? Cost);
 
     /// <summary>Targets from the issued action, with a fallback for saved legacy count-only decisions.</summary>
     public static IReadOnlyList<int> BrokenOrdinals(EncounterViewModel encounter, LegalActionViewModel action) =>
@@ -78,7 +62,7 @@ public static class BoardIcebreakerPresenter
     public static IReadOnlyList<LegalActionViewModel> SelectedBreaks(BoardIcebreakerViewModel breaker, IEnumerable<int> selected)
     {
         int[] targets = selected.Order().ToArray();
-        return PreferHostedCredits(breaker.Actions.Where(action => action.Kind == ActionKind.BreakSubroutines
+        return RunPaymentPreference.Apply(breaker.Actions.Where(action => action.Kind == ActionKind.BreakSubroutines
             && targets.Length > 0 && BrokenOrdinals(breaker.Encounter, action).Order().SequenceEqual(targets)));
     }
 }
