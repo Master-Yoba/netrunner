@@ -19,6 +19,13 @@ public partial class TableCardControl : Control
 	public static readonly Vector2 PortraitCardSize = new(150, 210);
 	public static readonly Vector2 IceCardSize = new(240, 108);
 
+	// Keep the managed resource alive while runtime target panels rebuild cards.
+	// Repeated loads can race Godot's weak resource-handle cleanup, as with action buttons.
+	private static PackedScene? _runtimeCardScene;
+	private static PackedScene? LoadCardScene() => Engine.IsEditorHint()
+		? GD.Load<PackedScene>(CardViewScenePath)
+		: _runtimeCardScene ??= GD.Load<PackedScene>(CardViewScenePath);
+
 	private CardViewModel? _card;
 	private Texture2D? _artwork;
 	private bool _fullCardFace;
@@ -67,7 +74,7 @@ public partial class TableCardControl : Control
 	/// </summary>
 	public static TableCardControl Create()
 	{
-		PackedScene? scene = GD.Load<PackedScene>(CardViewScenePath);
+		PackedScene? scene = LoadCardScene();
 		if (scene is null)
 		{
 			string message = $"Production card scene is missing: {CardViewScenePath}";
@@ -329,7 +336,7 @@ public partial class TableCardControl : Control
 			return;
 		}
 
-		PackedScene? scene = GD.Load<PackedScene>(CardViewScenePath);
+		PackedScene? scene = LoadCardScene();
 		if (scene is not null)
 		{
 			Node? template = scene.Instantiate();
