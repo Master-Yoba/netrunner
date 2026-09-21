@@ -53,10 +53,10 @@ public partial class Main
 	private void BuildBoardSubroutineControls(MatchSnapshot snapshot, BoardIcebreakerViewModel breaker, VBoxContainer actions)
 	{
 		_icebreakerPanel!.GetNode<Label>("%Strength").Text = $"Breaking with {breaker.Card.Title} · strength {breaker.Strength?.EffectiveStrength.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—"}";
-		_icebreakerPanel.GetNode<Label>("%Subroutines").Text = "Select subroutines on this ICE, then choose a payment below.";
+		_icebreakerPanel.GetNode<Label>("%Subroutines").Text = "Select subroutines on this ICE, then confirm the break below.";
 		_icebreakerPanel.GetNode<Label>("%Hint").Text = _boardBreakTargets.Count == 0
 			? "Selecting targets spends nothing. Back or Esc cancels."
-			: $"Selected: {string.Join(", ", _boardBreakTargets.Order().Select(ordinal => ordinal + 1))}. One payment activates the ability once.";
+			: $"Selected: {string.Join(", ", _boardBreakTargets.Order().Select(ordinal => ordinal + 1))}. Hosted credits are spent first.";
 		string[] printed = (breaker.Encounter.Ice!.RulesText ?? "").Split("[subroutine]", StringSplitOptions.None).Skip(1)
 			.Select(text => text.Trim()).ToArray();
 		foreach (SubroutineViewModel subroutine in breaker.Encounter.Subroutines)

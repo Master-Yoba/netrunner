@@ -361,7 +361,7 @@ public static class ActionsRegionPresenter
             status = ActionsRegionStatus.AwaitingRunnerDecision;
         }
 
-        LegalActionViewModel[] actions = snapshot.View.LegalActions
+        LegalActionViewModel[] actions = BoardIcebreakerPresenter.EncounterActions(snapshot.View, snapshot.View.LegalActions)
             .Select(Describe)
             .ToArray();
         IReadOnlyList<LegalActionViewModel> visibleActions = GroupActions(decision, actions)

@@ -16,7 +16,7 @@ public static partial class InteractionLabSamples
 		{ Strength = 2, Subtypes = ["Icebreaker", "Decoder"], RulesText = "1[credit]: +1 strength.\n1[credit]: Break 1 code gate subroutine." };
 		EncounterViewModel encounter = new("lab-encounter", ice, RunEncounterStatus.Initialized,
 			[new(0, false, false), new(1, false, false), new(2, false, false)])
-		{ EffectiveStrength = 3, Breakers = [new(fracter.Id, fracter.Title, 1, 1), new(decoder.Id, decoder.Title, 2, 2)] };
+		{ EffectiveStrength = 3, Breakers = [new(fracter.Id, fracter.Title, 1, 1) { CanInterfaceEncounter = true }, new(decoder.Id, decoder.Title, 2, 2)] };
 		view = view with
 		{
 			RunnerRig = [fracter, decoder],

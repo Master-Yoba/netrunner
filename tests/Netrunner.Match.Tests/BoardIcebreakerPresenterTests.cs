@@ -17,7 +17,7 @@ public sealed class BoardIcebreakerPresenterTests
         Assert.Equal(4, board.Encounter.EffectiveStrength);
         Assert.DoesNotContain(board.Actions, action => action.Kind == ActionKind.BreakSubroutines);
         Assert.Equal(before, EngineJson.Serialize(state));
-        Assert.True(board.Actions.Count > 1); // Exact hosted/personal splits stay separate.
+        Assert.Single(board.Actions); // One boost, using the largest issued hosted-credit portion.
         LegalActionViewModel pump = Assert.Single(board.Actions, action => action.Parameters is RunBreakerParameters { HostedCredits: 2 });
         Assert.Same(view.LegalActions.Single(action => action.Id == pump.Id), pump);
         int credits = view.Runner.Credits;
@@ -29,7 +29,7 @@ public sealed class BoardIcebreakerPresenterTests
         Assert.Equal(hosted - 2, view.Run!.RunCredits);
         Assert.Equal(4, board.Strength!.EffectiveStrength);
         Assert.DoesNotContain(board.Actions, action => action.Id == pump.Id);
-        LegalActionViewModel broken = board.Actions.First(action => action.Parameters is RunBreakParameters { Quantity: 1, HostedCredits: 0 });
+        LegalActionViewModel broken = board.Actions.First(action => action.Parameters is RunBreakParameters { Quantity: 1, HostedCredits: 1 });
         IReadOnlyList<int> targets = BoardIcebreakerPresenter.BrokenOrdinals(board.Encounter, broken);
         state = Apply(state, catalog, broken.Id);
         EncounterViewModel after = View(state, catalog).Run!.Encounter!;
@@ -81,10 +81,92 @@ public sealed class BoardIcebreakerPresenterTests
         Assert.Empty(BoardIcebreakerPresenter.SelectedBreaks(breaker, [0]));
         Assert.Empty(BoardIcebreakerPresenter.SelectedBreaks(breaker, [0, 1]));
         IReadOnlyList<LegalActionViewModel> payments = BoardIcebreakerPresenter.SelectedBreaks(breaker, [2, 0]);
-        Assert.Equal(2, payments.Count);
-        Assert.Same(actions[0], payments[0]);
-        Assert.Same(actions[1], payments[1]);
+        Assert.Same(actions[1], Assert.Single(payments));
         Assert.Equal([0, 2], BoardIcebreakerPresenter.BrokenOrdinals(encounter, actions[0]));
+    }
+
+    [Fact]
+    public void IncompatibleBreakerHasNoControlsOrFallbackActionsWhileMatchingBreakerCanBoost()
+    {
+        (GameState state, BehaviorCatalog catalog) = Encounter();
+        Observation observation = ObservationBuilder.Build(state, PlayerSide.Runner, catalog);
+        MatchViewModel view = View(state, catalog);
+        Assert.True(view.Run!.Encounter!.Breakers.Single(breaker => breaker.CardId == "card:5").CanInterfaceEncounter);
+        Assert.False(view.Run.Encounter.Breakers.Single(breaker => breaker.CardId == "card:6").CanInterfaceEncounter);
+        Assert.Contains(view.LegalActions, action => action.Parameters is RunBreakerParameters { BreakerId.Value: "card:6" });
+        Assert.Null(BoardIcebreakerPresenter.Present(view, "card:6"));
+        BoardIcebreakerViewModel matching = Assert.IsType<BoardIcebreakerViewModel>(BoardIcebreakerPresenter.Present(view, "card:5"));
+        Assert.Equal(ActionKind.PumpBreaker, Assert.Single(matching.Actions).Kind);
+        var snapshot = new MatchSnapshot(1, observation, view, [], null, false);
+        IReadOnlyList<LegalActionViewModel> controls = ActionsRegionPresenter.Present(snapshot).DisplayActions;
+        Assert.DoesNotContain(controls, action => BoardIcebreakerPresenter.Source(action) == "card:6");
+        Assert.Equal(2, controls.Count); // The matching boost plus pass priority.
+        Assert.Contains(controls, action => action.Kind == ActionKind.PassPriority);
+    }
+
+    [Theory]
+    [InlineData(IceType.Barrier, IceType.Barrier, true)]
+    [InlineData(IceType.Barrier, IceType.CodeGate, false)]
+    [InlineData(IceType.CodeGate, IceType.CodeGate, true)]
+    [InlineData(IceType.Sentry, IceType.Barrier, false)]
+    [InlineData(IceType.Barrier, IceType.Any, true)]
+    [InlineData(IceType.CodeGate, IceType.Any, true)]
+    [InlineData(IceType.Sentry, IceType.Any, true)]
+    public void CompatibilityUsesTypedInterfacesIncludingWildcardBreakers(IceType iceType, IceType breakerType, bool matches)
+    {
+        (GameState state, BehaviorCatalog catalog) = Encounter();
+        var injected = new BehaviorCatalogBuilder("ui-interface-test")
+            .AddIce(new IceBehaviorSpec(new("30072"), 4, iceType, 0, [], []))
+            .AddIcebreaker(new IcebreakerBehaviorSpec(new("30006"), 1, breakerType, 1, 2, 2, 1)).Build();
+        Observation observation = ObservationBuilder.Build(state, PlayerSide.Runner, catalog);
+        MatchViewModel view = ObservationViewMapper.Build(observation, CardMetadataResolvers.Default, injected);
+        Assert.Equal(matches, Assert.Single(view.Run!.Encounter!.Breakers).CanInterfaceEncounter);
+        Assert.Equal(matches, BoardIcebreakerPresenter.Present(view, "card:5") is not null);
+    }
+
+    [Fact]
+    public void RepeatedBoostsSpendHostedThenMixedThenPersonalCreditsThroughIssuedIds()
+    {
+        (GameState state, BehaviorCatalog catalog) = Encounter();
+        Assert.Equal(5, state.RunState!.RunCredits);
+        foreach (int expectedHosted in new[] { 2, 2, 1, 0 })
+        {
+            string before = EngineJson.Serialize(state);
+            MatchViewModel view = View(state, catalog);
+            BoardIcebreakerViewModel breaker = BoardIcebreakerPresenter.Present(view, "card:5")!;
+            LegalActionViewModel boost = Assert.Single(breaker.Actions, action => action.Kind == ActionKind.PumpBreaker);
+            Assert.Equal(expectedHosted, Assert.IsType<RunBreakerParameters>(boost.Parameters).HostedCredits);
+            Assert.Same(view.LegalActions.Single(action => action.Id == boost.Id), boost);
+            Assert.Equal(before, EngineJson.Serialize(state));
+            int personal = view.Runner.Credits;
+            int hosted = view.Run!.RunCredits;
+            state = Apply(state, catalog, boost.Id);
+            MatchViewModel after = View(state, catalog);
+            Assert.Equal(hosted - expectedHosted, after.Run!.RunCredits);
+            Assert.Equal(personal - (2 - expectedHosted), after.Runner.Credits);
+        }
+        BoardIcebreakerViewModel ready = BoardIcebreakerPresenter.Present(View(state, catalog), "card:5")!;
+        LegalActionViewModel breakOnly = Assert.Single(BoardIcebreakerPresenter.SelectedBreaks(ready, [0]));
+        Assert.Equal(0, Assert.IsType<RunBreakParameters>(breakOnly.Parameters).HostedCredits);
+        int credits = View(state, catalog).Runner.Credits;
+        state = Apply(state, catalog, breakOnly.Id);
+        Assert.Equal(credits - 1, View(state, catalog).Runner.Credits);
+        Assert.True(Assert.Single(state.RunState!.Encounter!.Subroutines).Broken);
+        Assert.Empty(StateInvariantValidator.Collect(state, catalog));
+    }
+
+    [Fact]
+    public void HostedCounterAbilitiesKeepTheirDistinctTargetsWithoutStrengthMetadata()
+    {
+        (GameState state, BehaviorCatalog catalog) = Encounter();
+        MatchViewModel view = View(state, catalog);
+        LegalActionViewModel[] actions = Enumerable.Range(0, 2).Select(ordinal => new LegalActionViewModel(
+            new($"action:host-{ordinal}"), ActionKind.BreakSubroutines, "Spend a counter",
+            new RunBreakParameters(new("card:5"), 1, subroutineId: new($"subroutine:{ordinal}"), subroutineOrdinals: [ordinal]))).ToArray();
+        view = view with { LegalActions = actions, Run = view.Run! with { Encounter = view.Run.Encounter! with { Breakers = [] } } };
+        BoardIcebreakerViewModel breaker = BoardIcebreakerPresenter.Present(view, "card:5")!;
+        Assert.Equal(2, breaker.Actions.Count);
+        Assert.Same(actions[1], Assert.Single(BoardIcebreakerPresenter.SelectedBreaks(breaker, [1])));
     }
 
     private static MatchViewModel View(GameState state, IBehaviorCatalog catalog) =>

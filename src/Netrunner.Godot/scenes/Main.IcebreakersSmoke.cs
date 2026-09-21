@@ -19,9 +19,11 @@ public partial class Main
 			_gameTable.StopMotion();
 			RequireInteraction(!_tableActionButtons.Keys.Any(id => _currentSnapshot!.View.LegalActions
 				.Any(action => action.Id == id && BoardIcebreakerPresenter.Source(action) is not null)), "Breaker actions remain in the default dock.");
+			RequireInteraction(_gameTable.VisibleCards["lab-fracter"].IsActionableSource
+				&& !_gameTable.VisibleCards["lab-decoder"].IsActionableSource, "Encounter highlights include an incompatible breaker.");
 			await ClickBreaker("lab-fracter");
 			RequireInteraction(_icebreakerPanel?.Visible == true && _labSubmissionCount == 0
-				&& _boardBreakerButtons.Count == 2, "Clicking an understrength breaker did not open only its legal boost options.");
+				&& _boardBreakerButtons.Count == 1, "Clicking an understrength breaker did not open only its legal boost options.");
 			RequireInteraction(_tableViewport.GetGlobalRect().Encloses(_icebreakerPanel!.GetGlobalRect()),
 				$"Breaker panel {_icebreakerPanel.GetGlobalRect()} escaped viewport {_tableViewport.GetGlobalRect()}.");
 			RequireInteraction(!CardHoverPreviewVisible, "Hover preview covers the selected breaker controls.");
@@ -29,6 +31,10 @@ public partial class Main
 			DecisionViewModel oldDecision = _currentSnapshot!.View.Decision!;
 			LegalActionViewModel oldPump = _currentSnapshot.View.LegalActions.Single(action => action.Parameters is RunBreakerParameters
 			{ BreakerId.Value: "lab-fracter", HostedCredits: 1 });
+			LegalActionViewModel personalPump = _currentSnapshot.View.LegalActions.Single(action => action.Parameters is RunBreakerParameters
+			{ BreakerId.Value: "lab-fracter", HostedCredits: 0 });
+			SubmitBoardIcebreaker(oldDecision, personalPump);
+			RequireInteraction(_labSubmissionCount == 0, "A nonpreferred payment was submitted through the board.");
 			await ClickAbility(oldPump.Id);
 			RequireInteraction(_labSubmissionCount == 1 && _currentSnapshot!.View.Run!.RunCredits == 1
 				&& _currentSnapshot.View.Runner.Credits == 6 && _icebreakerPanel.Visible
@@ -37,19 +43,20 @@ public partial class Main
 				"Boost did not pay the selected hosted credit exactly once and refresh the selected breaker.");
 			SubmitBoardIcebreaker(oldDecision, oldPump);
 			RequireInteraction(_labSubmissionCount == 1, "A stale boost submitted again.");
-			RequireInteraction(_boardBreakerButtons.Count == 2 && _boardChooseBreak?.Disabled == false, "Break selection did not become available after boosting.");
+			RequireInteraction(_boardBreakerButtons.Count == 1 && _boardChooseBreak?.Disabled == false, "Break selection did not become available after boosting.");
 
 			await ClickBreaker("lab-decoder");
-			RequireInteraction(_boardBreakerId == "lab-decoder" && _boardBreakerButtons.Count == 2,
-				"Switching to an incompatible breaker retained another breaker's actions.");
+			RequireInteraction(_boardBreakerId is null && !_icebreakerPanel.Visible && _boardBreakerButtons.Count == 0 && _labSubmissionCount == 1,
+				"An incompatible breaker opened encounter controls or spent credits.");
 			await ClickBreaker("lab-fracter");
 			LegalActionViewModel breakOne = _currentSnapshot!.View.LegalActions.Single(action => action.Parameters is RunBreakParameters
-			{ BreakerId.Value: "lab-fracter", Quantity: 1, HostedCredits: 0, SubroutineOrdinals: [1] });
+			{ BreakerId.Value: "lab-fracter", Quantity: 1, HostedCredits: 1, SubroutineOrdinals: [1] });
 			await ClickAbility(breakOne.Id);
-			RequireInteraction(_labSubmissionCount == 2 && _currentSnapshot!.View.Runner.Credits == 5
+			RequireInteraction(_labSubmissionCount == 2 && _currentSnapshot!.View.Runner.Credits == 6
+				&& _currentSnapshot.View.Run!.RunCredits == 0
 				&& !_currentSnapshot.View.Run!.Encounter!.Subroutines[0].Broken
 				&& _currentSnapshot.View.Run.Encounter.Subroutines[1].Broken,
-				"Breaking did not pay the exact personal cost and mark only the previewed subroutine.");
+				"Breaking did not use the remaining hosted credit and mark only the selected subroutine.");
 			await ClickTableButton(_boardChooseBreak!);
 			RequireInteraction(_boardSubroutineButtons[1].Disabled && _boardBreakerButtons.Count == 0,
 				"Broken subroutines remain selectable or payment was chosen before targets.");
@@ -75,7 +82,8 @@ public partial class Main
 			await TableFrames(3);
 			Button fallback = _tableActions.GetChildren().OfType<Button>().Single(button => button.Text == "All legal actions…");
 			await ClickTableButton(fallback);
-			RequireInteraction(!_icebreakerPanel.Visible && current.View.LegalActions.All(action => _tableActionButtons.ContainsKey(action.Id)),
+			RequireInteraction(!_icebreakerPanel.Visible && ActionsRegionPresenter.Present(current).Actions.All(action => _tableActionButtons.ContainsKey(action.Id))
+				&& !_tableActionButtons.Keys.Any(id => current.View.LegalActions.Any(action => action.Id == id && BoardIcebreakerPresenter.Source(action) == "lab-decoder")),
 				"The complete action fallback is missing or duplicates the board panel.");
 			SubmitBoardIcebreaker(current.View.Decision!, current.View.LegalActions[0]);
 			RequireInteraction(_labSubmissionCount == 2, "A callback from the hidden breaker panel submitted an action.");
@@ -83,9 +91,10 @@ public partial class Main
 			RenderCardTableActions(current);
 			await TableFrames(3);
 			LegalActionViewModel final = current.View.LegalActions.Single(action => action.Parameters is RunBreakParameters
-			{ BreakerId.Value: "lab-fracter", Quantity: 2, HostedCredits: 1, SubroutineOrdinals: [0, 2] });
+			{ BreakerId.Value: "lab-fracter", Quantity: 2, HostedCredits: 0, SubroutineOrdinals: [0, 2] });
 			await ClickAbility(final.Id);
-			RequireInteraction(_labSubmissionCount == 3 && _currentSnapshot!.View.Run!.Encounter!.RemainingSubroutines == 0,
+			RequireInteraction(_labSubmissionCount == 3 && _currentSnapshot!.View.Run!.Encounter!.RemainingSubroutines == 0
+				&& _currentSnapshot.View.Runner.Credits == 5 && _currentSnapshot.View.Run.RunCredits == 0,
 				"Repeated breaker use did not finish the encounter subroutines.");
 			PublishLabView(_currentSnapshot!.View with { Run = null, Decision = null, LegalActions = [] });
 			RequireInteraction(!_icebreakerPanel.Visible && _boardBreakerId is null, "Encounter exit retained stale breaker controls.");
@@ -94,14 +103,14 @@ public partial class Main
 			await TableFrames(4);
 			await ClickBreaker("lab-fracter");
 			LegalActionViewModel boost = _currentSnapshot!.View.LegalActions.Single(action => action.Parameters is RunBreakerParameters
-			{ BreakerId.Value: "lab-fracter", HostedCredits: 0 });
+			{ BreakerId.Value: "lab-fracter", HostedCredits: 1 });
 			await ClickAbility(boost.Id);
 			LegalActionViewModel breakTwo = _currentSnapshot!.View.LegalActions.Single(action => action.Parameters is RunBreakParameters
 			{ BreakerId.Value: "lab-fracter", Quantity: 2, HostedCredits: 1, SubroutineOrdinals: [0, 2] });
 			await ClickAbility(breakTwo.Id);
 			RequireInteraction(_labSubmissionCount == 2 && _currentSnapshot!.View.Run!.Encounter!.RemainingSubroutines == 1
 				&& !_currentSnapshot.View.Run.Encounter.Subroutines[1].Broken
-				&& _currentSnapshot.View.Run.RunCredits == 1 && _currentSnapshot.View.Runner.Credits == 5,
+				&& _currentSnapshot.View.Run.RunCredits == 0 && _currentSnapshot.View.Runner.Credits == 6,
 				"A two-subroutine activation did not pay once and break both targets.");
 			_inspectedCard = _currentSnapshot.View.RunnerRig[0];
 			ShowInspectedCardZoom();
@@ -111,7 +120,7 @@ public partial class Main
 			await TableFrames(3);
 			RequireInteraction(_icebreakerPanel.Visible, "Closing inspection lost the current breaker controls.");
 		}
-		GD.Print("BOARD_ICEBREAKERS PASS resolutions=2 click=true boost=true break=true exact_targets=true selection_no_payment=true nonadjacent=true payments=true repeated=true stale=true guards=true escape=true fallback=true");
+		GD.Print("BOARD_ICEBREAKERS PASS resolutions=2 click=true boost=true break=true exact_targets=true selection_no_payment=true nonadjacent=true payments=true hosted_first=true matching_only=true repeated=true stale=true guards=true escape=true fallback=true");
 
 		async Task ClickBreaker(string id)
 		{
@@ -135,6 +144,7 @@ public partial class Main
 				RequireInteraction(_tableViewport.GetGlobalRect().Encloses(_icebreakerPanel!.GetGlobalRect()), "Subroutine controls escaped the board viewport.");
 				RequireInteraction(_boardSubroutineButtons[0].GetChild<GameSymbolLabel>(0).RenderedSymbolCount == 2,
 					"Subroutine target text did not render subroutine and credit icons.");
+				RequireInteraction(_boardBreakerButtons.Count == 1, "Break selection did not collapse payments to one action.");
 				RequireInteraction(_labSubmissionCount == submissions && _boardBreakTargets.SetEquals(targets), "Selecting targets paid or selected the wrong set.");
 				RequireInteraction(_boardSubroutineButtons.Where(pair => !targets.Contains(pair.Key)).All(pair => targets.Count < 2 || pair.Value.Disabled),
 					"Selection exceeded the ability's target limit.");

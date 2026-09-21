@@ -589,6 +589,9 @@ public sealed record EncounterBreakerViewModel(
     int PrintedStrength,
     int EffectiveStrength)
 {
+    /// <summary>Whether the typed interface matches the visible encountered ICE, before strength or payment checks.</summary>
+    public bool CanInterfaceEncounter { get; init; }
+
     /// <summary>Authoritative typed breaker-strength calculation from Core.</summary>
     public ValueQuote? StrengthQuote { get; init; }
 
@@ -1387,6 +1390,7 @@ public static class ObservationViewMapper
                     publicState,
                     map,
                     encounter,
+                    encounterIce,
                     metadataResolver,
                     behaviorCatalog,
                     abilityCue),
@@ -1507,6 +1511,7 @@ public static class ObservationViewMapper
         IReadOnlyDictionary<string, object?> publicState,
         IReadOnlyDictionary<string, object?> run,
         IReadOnlyDictionary<string, object?> encounter,
+        CardViewModel? encounterIce,
         ICardMetadataResolver metadataResolver,
         IBehaviorCatalog behaviorCatalog,
         CardAbilityCueContext abilityCue)
@@ -1563,6 +1568,9 @@ public static class ObservationViewMapper
                 return group.Single().quote;
             }, StringComparer.Ordinal);
 
+        IceBehaviorSpec? iceSpec = encounterIce is { IsKnown: true, DefinitionId: { } iceDefinition }
+            && CardDefinitionId.TryParse(iceDefinition, out CardDefinitionId iceId)
+            && behaviorCatalog.TryGetIce(iceId, out IceBehaviorSpec? registeredIce) ? registeredIce : null;
         var breakers = new List<EncounterBreakerViewModel>();
         foreach (CardViewModel card in ReadCards(publicState, "runnerRig", metadataResolver, abilityCue))
         {
@@ -1592,6 +1600,7 @@ public static class ObservationViewMapper
                 spec.BaseStrength,
                 quote.EffectiveValue)
             {
+                CanInterfaceEncounter = iceSpec is not null && IceInterfaceMatcher.Matches(iceSpec, spec),
                 StrengthQuote = quote,
                 StrengthBreakdown = StrengthBreakdownViewModel.From(quote),
             });
