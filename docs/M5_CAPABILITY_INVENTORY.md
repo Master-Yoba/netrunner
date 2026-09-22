@@ -36,6 +36,14 @@ identify the missing value and test paired hidden-state observations. Printed
 ICE effects/strength and breaker capabilities need a static descriptor adapter;
 dynamic discounts, memory, restrictions and permissions stay Core-owned.
 
+M5.1 implementation: [typed features and lifecycle](M5_AGENT_FOUNDATION.md) now
+cover the projection/descriptor seams above. All 77 compiled designs have
+descriptor coverage with explicit approximate evaluation. Owner-only private
+search definitions are projected through existing visibility permission;
+hidden deck order remains unavailable. Strategic utility, encounter planning
+and policy tuning remain M5.3–4 work. The baseline inventory below is retained
+as historical evidence.
+
 ## Complete decision inventory
 
 Counts below refer to the first attempt of each of the 20 baseline games, not

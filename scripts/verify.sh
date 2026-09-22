@@ -109,7 +109,7 @@ elif ((card_data_present == 3)) && [[ -f "$card_data_cards" && -f "$card_data_ma
     "${official_content_properties[@]}"
   dotnet test "$verify_root/tests/Netrunner.Cards.Tests/Netrunner.Cards.Tests.csproj" \
     --no-restore --nologo -m:1 \
-    --filter FullyQualifiedName~OfficialPresetRevalidationTests \
+    --filter 'FullyQualifiedName~OfficialPresetRevalidationTests|FullyQualifiedName~GatewayEvaluationCatalogTests' \
     "${official_content_properties[@]}"
   card_data_content_enabled=1
 else

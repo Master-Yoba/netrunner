@@ -1,7 +1,8 @@
 # M5 implementation progress
 
 Plan: [M5 implementation plan](M5_PLAN.md).
-Branch: `feat/m5-0-baseline`. Record opened 22 September 2026.
+Branches: `feat/m5-0-baseline`, `feat/m5-1-agent-foundation`.
+Record opened 22 September 2026.
 
 ## Scope authorization and acceptance reconciliation
 
@@ -9,6 +10,10 @@ The user requested the detailed M5 plan and then explicitly directed work to
 begin with slice 5.0. That authorizes the baseline, inventories, case specification
 and evidence in this slice. It does not authorize silently expanding into M5.1–8.
 Work remains locally committed; no push or PR is part of this session.
+
+The subsequent implementation request explicitly authorizes M5.1 followed by
+M5.2. Those slices preserve the frozen M5.0 evidence and continue on separate
+feature branches, with local commits only.
 
 Historical M4 acceptance records need the following distinction:
 
@@ -76,11 +81,44 @@ command. It has no policy evaluator, parallel scheduler, cycle detector, new
 agent checkpoint or product-save implementation. This keeps the baseline frozen
 and leaves the planned dependencies intact.
 
+## Slice M5.1 — agent foundation
+
+Status: complete, 22 September 2026.
+
+Delivered typed immutable observations, a public definition descriptor adapter,
+versioned policy configuration/checkpoints, a deterministic transactional policy
+driver and optional lifecycle integration in the match runner/coordinator.
+The narrowly scoped private-search projection now exposes eligible definitions
+to the search owner without deck order. See
+[architecture and host protocol](M5_AGENT_FOUNDATION.md).
+
+Verification:
+
+- Final solution tests: 1,589 pass (Core 816, Cards 328, AI 79, CLI 104,
+  Match 262). Real Core-issued private-search/access twins cover both seats.
+- Retry, rejected/stale commit, cancellation, observation cursor, objective
+  invalidation and serialized checkpoint tests pass. The final post-commit
+  observation guard was additionally checked with the complete AI test project.
+- Six lifecycle integration tests pass. A complete stateful-driver game with
+  checkpoint restoration and discarded evaluation before every choice matches
+  uninterrupted replay and both final policy checkpoints exactly.
+- Full provisioned `make m4-gate` passes: official descriptor metadata,
+  replay/rules proofs, 77/77 card coverage, Godot UI/artwork/editor/interaction
+  checks, completed/reloaded games in both seats and preset families, and secret
+  scanning. Three earlier owner-search assertions were updated to check the
+  new private field while retaining public/opponent non-disclosure assertions.
+- `dotnet format Netrunner.sln --no-restore --verify-no-changes` and whitespace
+  checks pass. The existing contract policy, authoritative state schema and
+  gameplay rules remain unchanged.
+
+The final audit confirms the M5.1 observation, descriptor, information-boundary,
+deterministic selection and lifecycle requirements. M5.3–4 policy strength,
+M5.5 durable saves/trace checkpoints and M5.6 player-facing opponent selection
+are explicitly outside this completed foundation slice.
+
 ## Next slice
 
-M5.1 starts from the typed observation/capability inventory. Its first concrete
-tasks are the AI observation reader and feature DTOs, the smallest needed static
-card descriptor contract, and versioned configuration/checkpoint lifecycle.
-Preserve v6 baseline behavior and existing proofs; introduce the heuristic as a
-separate agent. Do not tune weights or mark tactical cases passed until real
-Core fixture builders and assertions exist.
+M5.2 turns the frozen tactical specifications into Core-issued fixtures and adds
+the generic benchmark harness, progress/failure classification and CLI reports.
+Preserve v6 baseline behavior and existing proofs. Do not tune weights or mark
+tactical cases passed until the actual fixture assertions execute.

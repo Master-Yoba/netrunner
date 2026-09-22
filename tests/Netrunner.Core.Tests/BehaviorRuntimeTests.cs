@@ -786,7 +786,9 @@ public sealed class BehaviorRuntimeTests
         Observation opponent = ObservationBuilder.Build(prompt, PlayerSide.Corp, catalog);
         Assert.Null(opponent.Decision);
         Assert.Null(ObservationBuilder.ObserveCard(prompt, PlayerSide.Corp, new("card:a")));
-        Assert.DoesNotContain("test:z", EngineJson.Serialize(view), StringComparison.Ordinal);
+        Assert.Contains("test:z", EngineJson.Serialize(view.PrivateState["choiceCards"]), StringComparison.Ordinal);
+        Assert.DoesNotContain("test:z", EngineJson.Serialize(view.PublicState), StringComparison.Ordinal);
+        Assert.DoesNotContain("test:z", EngineJson.Serialize(opponent), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -817,7 +819,9 @@ public sealed class BehaviorRuntimeTests
         Assert.Equal(hidden.Value, inspected["id"]);
         Assert.Equal("test:hidden", inspected["definitionId"]);
         Assert.Null(ObservationBuilder.ObserveCard(prompt, PlayerSide.Corp, hidden));
-        Assert.DoesNotContain("test:hidden", EngineJson.Serialize(searchView), StringComparison.Ordinal);
+        Assert.Contains("test:hidden", EngineJson.Serialize(searchView.PrivateState["choiceCards"]), StringComparison.Ordinal);
+        Assert.DoesNotContain("test:hidden", EngineJson.Serialize(searchView.PublicState), StringComparison.Ordinal);
+        Assert.DoesNotContain("test:hidden", EngineJson.Serialize(ObservationBuilder.Build(prompt, PlayerSide.Corp, catalog)), StringComparison.Ordinal);
         GameState promptRoundTrip = EngineJson.DeserializeState(EngineJson.Serialize(prompt), catalog);
         Assert.Equal(DeterministicHash.ForState(prompt), DeterministicHash.ForState(promptRoundTrip));
 

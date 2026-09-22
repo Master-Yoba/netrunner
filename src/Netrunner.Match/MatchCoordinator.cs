@@ -187,6 +187,9 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
         _fullMatch = definition;
         _corpAgent = corpAgent ?? throw new ArgumentNullException(nameof(corpAgent));
         _options = options ?? new MatchCoordinatorOptions();
+        AgentLifecycleHost.ValidateSeat(_corpAgent, _options.HumanSide == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp);
+        if (_corpAgent is IAgentLifecycle && !string.IsNullOrWhiteSpace(_options.ResumeTraceDirectory))
+            throw new ArgumentException("Legacy traces do not contain policy checkpoints; stateful-agent recovery requires the M5 save format.", nameof(options));
         _metadataResolver = definition?.Metadata ?? _options.CardMetadataResolver
             ?? _options.MetadataResolver
             ?? CardMetadataResolvers.Default;
@@ -462,6 +465,7 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
             {
                 GameEngine.TurnStartResult setup = _fullMatch.Start();
                 _state = setup.State;
+                AgentLifecycleHost.Observe(_corpAgent, _state, _behaviorCatalog);
                 InitializeSessionTrace(setup.State);
                 command.Complete(Publish(setup.Events, feedback: null, thinking: false));
                 await DriveAgentsAsync().ConfigureAwait(false);
@@ -490,6 +494,7 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
                     _runtimeCardCatalog,
                     initiatingSource: new CardInstanceId(run.Source));
             _state = started.State;
+            AgentLifecycleHost.Observe(_corpAgent, _state, _behaviorCatalog);
             InitializeSessionTrace(started.State);
             MatchSnapshot snapshot = Publish(started.Events, feedback: null, thinking: false);
             command.Complete(snapshot);
@@ -774,6 +779,7 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
                 ActionId actionId = await _corpAgent
                     .ChooseActionAsync(observation, _cancellation.Token)
                     .ConfigureAwait(false);
+                _cancellation.Token.ThrowIfCancellationRequested();
                 ApplyResult applied = ApplyEngineAction(
                     state,
                     new ActionSubmission(pending.Owner, pending.Id, pending.Revision, actionId));
@@ -792,6 +798,7 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
             }
             catch (OperationCanceledException) when (_cancellation.IsCancellationRequested)
             {
+                AgentLifecycleHost.Discard(_corpAgent);
                 Publish(
                     Array.Empty<EngineEvent>(),
                     new MatchFeedback(MatchFeedbackKind.Cancelled, "Opponent thinking was cancelled."),
@@ -800,6 +807,7 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
             }
             catch (Exception exception)
             {
+                AgentLifecycleHost.Discard(_corpAgent);
                 if (_traceFault is not null)
                 {
                     Publish(
@@ -984,6 +992,10 @@ public sealed class MatchCoordinator : IAsyncDisposable, IDisposable
 
         if (applied.Accepted && actorView is not null && action is not null)
             _historyContext = (before, actorView.Viewer, action);
+        if (applied.Accepted)
+            AgentLifecycleHost.Accepted(_corpAgent, submission, applied.State, _behaviorCatalog);
+        else if (actor?.Side != _options.HumanSide)
+            AgentLifecycleHost.Discard(_corpAgent);
         return applied;
     }
 
