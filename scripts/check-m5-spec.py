@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Check M5.0 specification coverage without official metadata or game execution."""
 
-import json
 import hashlib
+import json
 import re
 from collections import Counter
 from pathlib import Path
@@ -65,6 +65,14 @@ def main():
     require(report["complete"] and report["completedAttempts"] == 40, "Incomplete baseline evidence")
     require(Counter((result["id"], result["repeat"]) for result in report["results"])
             == Counter((game["id"], repeat) for game in games for repeat in (1, 2)), "Report cases/repeats disagree")
+    attempts = {(result["id"], result["repeat"]): result for result in report["results"]}
+    for game in games:
+        first, second = attempts[game["id"], 1], attempts[game["id"], 2]
+        for attempt in (first, second):
+            require(all(attempt[key] == game[key] for key in ("seed", "corpPreset", "runnerPreset")), "Report input differs from manifest")
+            require(attempt["status"] == "terminal" and attempt["replayVerified"], "Historical baseline contains a failed attempt")
+        require(all(first[key] == second[key] for key in ("replaySha256", "finalStateHash", "actionCount", "corp", "runner")), "Repeated replay/counters disagree")
+        require(second["deterministicRepeat"] is True, "Missing repeat proof")
     print("M5_SPEC PASS games=20 repeats=2 pairings=4 tactical_specs=80 corp=40 runner=40 designs=77 decisions=15 executable_tactics=0")
 
 

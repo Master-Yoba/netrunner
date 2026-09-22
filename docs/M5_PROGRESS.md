@@ -28,8 +28,7 @@ blocked despite the user's explicit slice-5.0 instruction.
 
 ## Slice M5.0 — baseline and cases
 
-Status: baseline capture and deliverables complete; final repository verification
-in progress.
+Status: complete, 22 September 2026. Main checkpoint: `9045fc0`.
 
 Delivered:
 
@@ -59,7 +58,18 @@ Verification log:
 - Official-content capture built successfully, with no production code changes.
 - Final capture agrees with the exploratory capture's complete replay hashes.
 - `make m5-spec` and shell syntax checks pass.
-- Full provisioned `make m4-gate`: running; record final result before closing.
+- Specification negative checks pass: missing game, unknown card, false tactical
+  execution claim, stale report binding, missing repeat and unequal replay hashes
+  are rejected.
+- Capture negative checks pass: synthetic content, wrong catalog pin, duplicate
+  IDs, empty suite and existing output are rejected. A deliberately capped run
+  returns failure, preserves both snapshots, and verifies both repeated prefix
+  replays.
+- Full provisioned `make m4-gate` passes: all 1,559 solution tests, additional
+  official-content checks, formatting, replay/rules proofs, Godot UI and complete
+  games in both seats/preset families, secret scanning and 77/77 coverage.
+- Documentation links and staged whitespace checks pass. No production engine,
+  card, agent or Godot behavior changed in this slice.
 
 The small capture utility is deliberately not the M5.2 generic benchmark
 command. It has no policy evaluator, parallel scheduler, cycle detector, new
