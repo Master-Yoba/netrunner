@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Netrunner.AI;
 using Netrunner.Core;
 
 namespace Netrunner.Match;
@@ -6,6 +7,37 @@ namespace Netrunner.Match;
 /// <summary>Fixed held-out seeds and pairings; policy changes never regenerate the seed set.</summary>
 public static class BenchmarkSuites
 {
+    public static AiBenchmarkManifest WithCorpProfile(AiBenchmarkManifest baseline, string profile)
+    {
+        if (baseline.ContentMode != "official") throw new ArgumentException("Gateway profiles require official content.");
+        var result = baseline with
+        {
+            SuiteId = "corp-" + profile + "-" + baseline.SuiteId,
+            Games = baseline.Games.Select(game => game with
+            {
+                Corp = BenchmarkAgentSpec.Offline(CorpPolicyProfiles.Create(profile, game.Corp.PolicySeed)),
+                ComparisonGroup = "candidate-corp",
+            }).ToImmutableArray(),
+        };
+        result.Validate();
+        return result;
+    }
+
+    public static TacticalBenchmarkManifest WithCorpProfile(TacticalBenchmarkManifest baseline, string profile)
+    {
+        var result = baseline with
+        {
+            SuiteId = "corp-" + profile + "-" + baseline.SuiteId,
+            Positions = baseline.Positions.Where(position => position.Metadata.Side == PlayerSide.Corp)
+                .Select(position => position with
+                {
+                    Agent = BenchmarkAgentSpec.Offline(CorpPolicyProfiles.Create(profile, position.Agent.PolicySeed)),
+                }).ToImmutableArray(),
+        };
+        result.Validate();
+        return result;
+    }
+
     public static AiBenchmarkManifest CreateContract(AiBenchmarkRunner runner, string suite)
     {
         if (suite is not ("smoke" or "full" or "developer"))

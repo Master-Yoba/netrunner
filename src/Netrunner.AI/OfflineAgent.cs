@@ -7,12 +7,13 @@ namespace Netrunner.AI;
 public interface IOfflinePolicy
 {
     string Version { get; }
+    void ValidateAction(AgentFeatures features, AgentAction action) { }
     AgentUtility Evaluate(AgentFeatures features, AgentAction action, AgentKnowledge knowledge, AgentObjective? objective,
         OfflineAgentConfiguration configuration, ICardEvaluationCatalog catalog, AgentWorkBudget budget);
     AgentUtility Fallback(AgentFeatures features, AgentAction action);
 }
 
-public sealed record AgentUtility(int Priority, int Score, string Reason, bool Approximate = false, AgentObjective? Objective = null);
+public sealed record AgentUtility(int Priority, int Score, string Reason, bool Approximate = false, AgentObjective? Objective = null, bool UsedFallback = false);
 public sealed record AgentCandidate(ActionId ActionId, AgentUtility Utility);
 public sealed record AgentEvaluation(string ObservationDigest, string CheckpointDigest,
     ImmutableArray<AgentCandidate> Candidates, ActionId SelectedAction, int WorkUsed, bool BudgetExhausted);
@@ -109,9 +110,10 @@ public sealed class OfflineAgent : IAgentLifecycle
             if (digest != _checkpoint.ObservationDigest) throw new InvalidOperationException("Host must observe the committed boundary before choosing.");
             if (_pending is { } retry && retry.Digest == digest) return ValueTask.FromResult(retry.Action);
             var budget = new AgentWorkBudget(Configuration.WorkBudget, cancellationToken);
+            foreach (AgentAction action in features.Actions) _policy.ValidateAction(features, action);
             var candidates = features.Actions.Select(action => new AgentCandidate(action.Id,
                 budget.TrySpend() ? _policy.Evaluate(features, action, _checkpoint.Knowledge, _checkpoint.Objective, Configuration, _catalog, budget)
-                    : _policy.Fallback(features, action))).ToImmutableArray();
+                    : _policy.Fallback(features, action) with { UsedFallback = true })).ToImmutableArray();
             int priority = candidates.Max(candidate => candidate.Utility.Priority);
             int best = candidates.Where(candidate => candidate.Utility.Priority == priority).Max(candidate => candidate.Utility.Score);
             AgentCandidate[] nearTies = candidates.Where(candidate => candidate.Utility.Priority == priority

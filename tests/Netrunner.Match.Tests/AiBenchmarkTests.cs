@@ -10,6 +10,20 @@ namespace Netrunner.Match.Tests;
 public sealed class AiBenchmarkTests
 {
     [Fact]
+    public void FallbackMetricsCountSelectedFallbacksAndLeaveUninstrumentedAgentsUnknown()
+    {
+        var metrics = new BenchmarkMetrics();
+        AgentCandidate fallback = new(new("action:fallback"), new(0, 0, "conservative", UsedFallback: true));
+        AgentCandidate evaluated = new(new("action:evaluated"), new(0, 100, "evaluated"));
+        metrics.PolicyEvaluation(PlayerSide.Corp, new("observation", "checkpoint", [fallback, evaluated], evaluated.ActionId, 2, false));
+        Assert.Equal(0, metrics.Snapshot(GameState.CreateNew(1), PlayerSide.Corp).Fallbacks);
+        metrics.PolicyEvaluation(PlayerSide.Corp, new("observation", "checkpoint", [fallback], fallback.ActionId, 1, true));
+        Assert.Equal(1, metrics.Snapshot(GameState.CreateNew(1), PlayerSide.Corp).Fallbacks);
+        metrics.PolicyEvaluation(PlayerSide.Runner, null);
+        Assert.Null(metrics.Snapshot(GameState.CreateNew(1), PlayerSide.Runner).Fallbacks);
+    }
+
+    [Fact]
     public async Task WorkerCountDoesNotChangeOrderedResultsOrAcceptedReplay()
     {
         using var files = new OutputDirectory();

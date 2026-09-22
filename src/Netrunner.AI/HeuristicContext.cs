@@ -1,0 +1,95 @@
+using Netrunner.Core;
+
+namespace Netrunner.AI;
+
+/// <summary>Observation-only metadata queries shared by the strategic evaluators.</summary>
+internal sealed class HeuristicContext
+{
+    private readonly Dictionary<string, AgentCard> _visible;
+
+    public HeuristicContext(AgentFeatures features, ICardEvaluationCatalog catalog, OfflineAgentConfiguration configuration)
+    {
+        Features = features;
+        Catalog = catalog;
+        Configuration = configuration;
+        _visible = features.VisibleCards().Select(pair => pair.Card).Concat(features.PrivateCards.Triggers.Select(trigger => trigger.Source))
+            .GroupBy(card => card.Id, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+    }
+
+    public AgentFeatures Features { get; }
+    public ICardEvaluationCatalog Catalog { get; }
+    public OfflineAgentConfiguration Configuration { get; }
+    public AgentPlayer Self => Features.Self;
+    public AgentPlayer Opponent => Features.Opponent;
+    public AgentCard? Card(CardInstanceId id) => _visible.GetValueOrDefault(id.Value);
+    public CardEvaluationDescriptor? Definition(AgentCard? card) => card is not null && Catalog.TryGet(new(card.DefinitionId), out var descriptor) ? descriptor : null;
+    public CardEvaluationDescriptor? Definition(CardInstanceId id) => Definition(Card(id));
+    public AgentServer? Server(ServerId? id) => id is { } server ? Features.Board.Servers.FirstOrDefault(value => value.Id == server.Value) : null;
+    public AgentServer? ServerOf(string cardId) => Features.Board.Servers.FirstOrDefault(server => server.Root.Concat(server.Ice).Any(card => card?.Id == cardId));
+    public int Parameter(string key, int fallback) => Configuration.Parameters.TryGetValue(key, out int value) ? value : fallback;
+    public static int Hosted(AgentCard? card) => card?.Counters.Where(counter => counter.Purpose == CardCounterPurpose.HostedCredit).Sum(counter => counter.Count) ?? 0;
+    public int AgendaCount => Features.Hand.Count(card => Definition(card)?.Agenda is not null);
+    public int CreditValue => (Self.Credits < 3 ? 140 : Self.Credits < 8 ? 110 : Self.Credits < 15 ? 80 : 45) * Parameter("credit-scale", 100) / 100;
+    public int DrawValue => (Features.Hand.Length < 2 ? 230 : Features.Hand.Length < 4 ? 125 : Features.Hand.Length < (Self.MaximumHandSize ?? 5) ? 70 : 10) * Parameter("draw-scale", 100) / 100;
+
+    public int CardValue(AgentCard? card, bool installed = false)
+    {
+        CardEvaluationDescriptor? definition = Definition(card);
+        if (definition is null) return 80; // no identity belief from an opaque ID
+        CardRuntimeSpec printed = definition.Printed;
+        if (definition.Agenda is not null) return 180 + printed.AgendaPoints * 60;
+        if (definition.Ice is not null)
+        {
+            int need = Features.Hand.Count(known => Definition(known)?.Ice is not null) <= 1 ? 100 : 0;
+            return 100 + need + Math.Max(0, 7 - (printed.RezCost ?? 0)) * 15 + AgendaCount * 40;
+        }
+        if (definition.Icebreaker is { } breaker)
+        {
+            int duplicates = Features.Board.RunnerRig.Count(known => known.Id != card!.Id && Definition(known)?.Icebreaker?.InterfaceType == breaker.InterfaceType);
+            return (duplicates == 0 ? 430 : 140) + Math.Max(0, printed.InstallCost ?? 0) * 15;
+        }
+        int hosted = Hosted(card);
+        if (hosted > 0) return 100 + hosted * 70;
+        if (printed.CardClass == RuntimeCardClass.Upgrade) return 180;
+        if (printed.CardClass is RuntimeCardClass.Operation or RuntimeCardClass.Event)
+        {
+            int gain = definition.Behavior?.Instructions.Where(instruction => instruction.Kind == BehaviorInstructionKind.GainCredits).Sum(instruction => instruction.Amount) ?? 0;
+            return gain > 0 ? 170 + Math.Max(0, gain - (printed.PlayCost ?? 0)) * 20 - Math.Max(0, (printed.PlayCost ?? 0) - Self.Credits) * 30 : 90;
+        }
+        if (printed.CardClass == RuntimeCardClass.Asset) return installed ? 50 : 150;
+        return 80 + Math.Max(0, printed.InstallCost ?? 0) * 20;
+    }
+
+    public int ServerValue(AgentServer? server)
+    {
+        if (server is null) return 0;
+        return (server.Kind switch
+        {
+            ServerKind.Headquarters => 150 + AgendaCount * 100,
+            ServerKind.RAndD => 220 + Features.Board.RunnerRig.Sum(card => Definition(card)?.Behavior?.Triggers.Any(trigger =>
+                trigger.Instructions.Any(instruction => instruction.RunOperand is not null)) == true ? 40 : 0)
+                + (Features.Board.RunnerRig.Any(card => Definition(card)?.Behavior?.PaidAbilities.Any(ability =>
+                    Flatten(ability.Instructions).Any(instruction => instruction.RunOperand is { ServerKind: ServerKind.RAndD, BreachAccessDeltaPerCounter: > 0 })) == true) ? 180 : 0),
+            ServerKind.Archives => 30 + Features.PrivateCards.FaceDownArchives.Concat(Features.Board.CorpDiscard).Count(card => Definition(card)?.Agenda is not null) * 100,
+            _ => server.Root.Where(card => card is not null).Sum(card => Definition(card)?.Agenda is not null ? 400 : Math.Min(250, CardValue(card, installed: true)))
+                + (server.Ice.Length > 0 ? 100 : 0),
+        }) * Parameter("protection-scale", 100) / 100;
+    }
+
+    public int RezReserve => Features.Board.Servers.Where(server => server.Kind is ServerKind.Headquarters or ServerKind.RAndD
+            || server.Root.Any(card => Definition(card)?.Agenda is not null))
+        .SelectMany(server => server.Ice).Where(card => card is { Rezzed: false })
+        .Select(card => Definition(card)?.Printed.RezCost ?? 0).DefaultIfEmpty(0).Min();
+
+    public static IEnumerable<BehaviorInstruction> Flatten(IEnumerable<BehaviorInstruction> instructions)
+    {
+        foreach (BehaviorInstruction instruction in instructions)
+        {
+            yield return instruction;
+            if (instruction.Choice is { } choice)
+                foreach (BehaviorInstruction child in choice.Options.SelectMany(option => Flatten(option.Instructions))) yield return child;
+            if (instruction.Branch is { } branch)
+                foreach (BehaviorInstruction child in Flatten(branch.WhenTrue.Concat(branch.WhenFalse))) yield return child;
+        }
+    }
+}

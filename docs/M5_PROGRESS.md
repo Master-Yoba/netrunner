@@ -161,5 +161,19 @@ verified replays at one and four workers and retains the original digest above.
 The gate now explicitly executes official tactical, CLI and Mutual Favor tests;
 synthetic CI continues to label official tactical checks as skipped.
 
-M5.3 Corp policy is next, followed by M5.4 Runner policy, as requested.
-Keep each slice on its own branch with local commits.
+## M5.3 — Corp policy (in progress)
+
+The observation-only Corp evaluator covers economy, server development,
+replacement loss, scoring, rez reserves, damage/tag pressure, purge and nested
+choices. Easy and Standard configurations persist exact integer weights, work
+limits and policy seeds. Both use the same information boundary. Public typed
+context for offered triggers is projected only to their owner; feature schema
+`agent-features-v2` records this additive change. Unsupported action shapes fail
+even when the evaluation budget is exhausted. Selected conservative fallbacks
+are measured separately from approximate strategic scores.
+
+Before held-out evaluation, Standard passes 24/24 frozen tuning positions.
+The initial complete-game smoke finished 20/20 with verified replays (19 Corp
+wins); it predates the final tuning adjustment and is exploratory evidence.
+Final held-out, reproducibility and gate results are pending. M5.4 follows only
+when this slice meets its exit criteria. Keep separate branches and local commits.

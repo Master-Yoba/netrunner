@@ -177,3 +177,29 @@ chain; these remain failures in the denominator. This is a diagnostic baseline,
 not a passing Standard policy. Fixture validation passes 80/80 and produces
 identical replay hashes at one and four workers (digest
 `778295a750f5f403b030b0b10d33ba0e202b3c27f0006e9105c995fbe6165f76`).
+
+## Corp policy candidates
+
+`ai-benchmark init smoke|full --corp-profile standard|easy --output <new.json>`
+keeps the baseline game seeds, decks and Runner contract policy, replacing only
+the Corp with its complete offline configuration. `ai-tactics init
+--corp-profile standard|easy --output <new.json>` retains all 40 Corp positions,
+including frozen tuning/held-out membership, root/twin hashes and policy seeds.
+Run either manifest with the existing command and a new output directory.
+Initialization and execution need preprovisioned official content and never
+fetch it. An unsupported profile is an error, not a baseline substitution.
+
+The initial Corp policy is `corp-heuristic-v1`; profiles share its typed utility
+families. Standard uses 20,000 evaluation work units and exact ties; Easy uses
+12,000 units, a 20-point near-tie range, 90% credit and 80% protection weighting.
+Both retain exact scoring and survival priorities. These are strategic
+estimates rather than a second rules engine. The policy only submits issued
+IDs and recomputes after every accepted action. It never receives a deck list,
+full state, engine RNG, UI labels, or prompt prose.
+
+Benchmark fallback counts are nullable for agents without diagnostics. For an
+offline agent they count decisions whose selected utility explicitly used a
+conservative fallback; an unselected fallback candidate does not increment the
+count. Approximate economic or defensive valuation alone is not a fallback.
+Malformed/unsupported action contracts are checked before the work budget, so
+exhaustion cannot hide a broken contract.

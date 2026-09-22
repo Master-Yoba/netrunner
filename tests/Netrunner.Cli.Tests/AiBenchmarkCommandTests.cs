@@ -14,6 +14,33 @@ public sealed class AiBenchmarkCommandTests : IDisposable
     public AiBenchmarkCommandTests() => Directory.CreateDirectory(_directory);
 
     [Fact]
+    public void CorpProfileUsesTheSameGamesAndLeavesTheRunnerBaselinePinned()
+    {
+        string path = Path.Combine(_directory, "corp.json");
+        var result = Run("init", "smoke", "--corp-profile", "standard", "--output", path);
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode)
+        {
+            Assert.Equal(2, result.Code);
+            return;
+        }
+        Assert.Equal(0, result.Code);
+        var runner = new AiBenchmarkRunner(CardDataResource.LoadEmbedded(), GatewayBehaviorCatalog.Create());
+        AiBenchmarkManifest baseline = BenchmarkSuites.CreateContract(runner, "smoke");
+        AiBenchmarkManifest manifest = EngineJson.Deserialize<AiBenchmarkManifest>(File.ReadAllText(path));
+        Assert.Equal(baseline.Games.Length, manifest.Games.Length);
+        Assert.All(manifest.Games, game =>
+        {
+            BenchmarkGameSpec original = baseline.Games.Single(value => value.Id == game.Id);
+            Assert.Equal(original.GameSeed, game.GameSeed);
+            Assert.Equal(original.CorpDeckHash, game.CorpDeckHash);
+            Assert.Equal(original.Runner, game.Runner);
+            Assert.Equal(original.Corp.PolicySeed, game.Corp.PolicySeed);
+            Assert.Equal("standard", game.Corp.Configuration!.ProfileId);
+            new BenchmarkAgentFactory().Validate(game.Corp);
+        });
+    }
+
+    [Fact]
     public void InitCreatesOfflinePinnedManifestAndRefusesToOverwriteIt()
     {
         string path = Path.Combine(_directory, "manifest.json");
@@ -51,6 +78,7 @@ public sealed class AiBenchmarkCommandTests : IDisposable
     [Theory]
     [InlineData("")]
     [InlineData("init unknown --output unused")]
+    [InlineData("init developer --corp-profile standard --output unused")]
     [InlineData("missing.json --output unused --workers 0")]
     [InlineData("missing.json --output unused --workers 65")]
     [InlineData("missing.json --output unused --workers 1 --workers 2")]

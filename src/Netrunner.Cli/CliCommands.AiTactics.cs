@@ -19,6 +19,7 @@ public static partial class CliCommands
             bool verifyFixtures = false;
             int workers = 1;
             string? destination = null;
+            string? corpProfile = null;
             var seen = new HashSet<string>(StringComparer.Ordinal);
             for (int index = 2; index < args.Length; index++)
             {
@@ -26,6 +27,7 @@ public static partial class CliCommands
                 switch (args[index])
                 {
                     case "--json": break;
+                    case "--corp-profile" when initialize && index + 1 < args.Length: corpProfile = args[++index]; break;
                     case "--output" when index + 1 < args.Length: destination = args[++index]; break;
                     case "--verify-fixtures" when !initialize: verifyFixtures = true; break;
                     case "--workers" when !initialize && index + 1 < args.Length:
@@ -42,6 +44,7 @@ public static partial class CliCommands
             if (initialize)
             {
                 TacticalBenchmarkManifest manifest = runner.CreateContractManifest();
+                if (corpProfile is not null) manifest = BenchmarkSuites.WithCorpProfile(manifest, corpProfile);
                 using var stream = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None);
                 JsonSerializer.Serialize(stream, manifest, EngineJson.Options);
                 output.WriteLine(json ? EngineJson.Serialize(new { schemaVersion = 1, status = "created", manifest.SuiteId, positions = manifest.Positions.Length })

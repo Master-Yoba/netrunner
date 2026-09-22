@@ -8,7 +8,7 @@ namespace Netrunner.AI;
 public sealed record AgentFeatures(PlayerSide Side, AgentDecision? Decision,
     ImmutableArray<AgentAction> Actions, AgentBoard Board, AgentPrivateCards PrivateCards)
 {
-    public const string Version = "agent-features-v1";
+    public const string Version = "agent-features-v2";
     public AgentPlayer Self => Side == PlayerSide.Corp ? Board.Players.Corp : Board.Players.Runner;
     public AgentPlayer Opponent => Side == PlayerSide.Corp ? Board.Players.Runner : Board.Players.Corp;
     public ImmutableArray<AgentCard> Hand => Side == PlayerSide.Corp ? PrivateCards.Hand : PrivateCards.Grip;
@@ -78,7 +78,10 @@ public sealed record AgentPrivateCards
     public ImmutableArray<AgentCard> FaceDownIce { get; init; } = [];
     public ImmutableArray<AgentCard> FaceDownArchives { get; init; } = [];
     public ImmutableArray<AgentCard> ChoiceCards { get; init; } = [];
+    public ImmutableArray<AgentTrigger> Triggers { get; init; } = [];
 }
+
+public sealed record AgentTrigger(string Id, string Key, TriggerMode Mode, AgentCard Source);
 
 public sealed record AgentTurn([property: JsonRequired] PlayerSide ActiveSide, [property: JsonRequired] TurnPhase Phase,
     [property: JsonRequired] int TurnNumber, TurnStep? Step);

@@ -13,6 +13,9 @@ public sealed record BenchmarkAgentSpec(string Kind, PlayerSide Side, string Age
     public static BenchmarkAgentSpec Contract(PlayerSide side, ulong policySeed) => new("contract", side,
         FullGameContractAgent.Version, FullGameContractPolicy.Version, "contract-baseline", policySeed);
 
+    public static BenchmarkAgentSpec Offline(OfflineAgentConfiguration configuration) => new("offline", configuration.Side,
+        configuration.AgentVersion, configuration.PolicyVersion, configuration.ProfileId, configuration.PolicySeed, configuration);
+
     public void Validate()
     {
         if (!Enum.IsDefined(Side) || string.IsNullOrWhiteSpace(Kind) || string.IsNullOrWhiteSpace(AgentVersion)
@@ -148,6 +151,12 @@ public sealed class BenchmarkAgentFactory : IBenchmarkAgentFactory
     public void Validate(BenchmarkAgentSpec specification)
     {
         specification.Validate();
+        if (specification.Kind == "offline" && specification.PolicyVersion == CorpHeuristicPolicy.PolicyVersion
+            && specification.Configuration is { } configuration)
+        {
+            CorpPolicyProfiles.Validate(configuration);
+            return;
+        }
         if (specification.Kind != "contract" || specification.AgentVersion != FullGameContractAgent.Version
             || specification.PolicyVersion != FullGameContractPolicy.Version || specification.ProfileId != "contract-baseline"
             || specification.Configuration is not null)
@@ -157,6 +166,8 @@ public sealed class BenchmarkAgentFactory : IBenchmarkAgentFactory
     public IGameAgent Create(BenchmarkAgentSpec specification, IRuntimeCardCatalog runtime, ICardEvaluationCatalog evaluation)
     {
         Validate(specification);
+        if (specification.Kind == "offline")
+            return new OfflineAgent(specification.Configuration!, new CorpHeuristicPolicy(), evaluation, captureDiagnostics: true);
         return new FullGameContractAgent(specification.Side, runtime);
     }
 }

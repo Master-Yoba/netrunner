@@ -170,6 +170,7 @@ public sealed class AiBenchmarkRunner
                 }
                 finally { metrics.Decision(side, pending.Kind, timer.Elapsed.TotalMilliseconds); }
                 linked.Token.ThrowIfCancellationRequested();
+                metrics.PolicyEvaluation(side, (agent as OfflineAgent)?.LastEvaluation);
                 LegalAction? action = pending.LegalActions.FirstOrDefault(value => value.Id == selected);
                 Remember(selected, action?.Kind);
                 if (action is null)

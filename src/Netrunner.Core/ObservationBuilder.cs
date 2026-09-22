@@ -58,6 +58,7 @@ public static partial class ObservationBuilder
         Dictionary<string, object?> publicState = BuildPublicState(state, viewer, accessVisible, behaviorCatalog);
         Dictionary<string, object?> privateState = BuildPrivateState(state, viewer);
         AddPrivateChoiceCards(state, viewer, privateState);
+        AddOwnedTriggerContext(state, viewer, privateState);
 
         PendingDecision? pending = state.PendingDecision;
         string decisionId = pending?.Id.Value ?? "";

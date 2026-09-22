@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Netrunner.AI;
 using Netrunner.Core;
 
 namespace Netrunner.Match;
@@ -8,6 +9,15 @@ internal sealed class BenchmarkMetrics
     private readonly SideCounter _corp = new();
     private readonly SideCounter _runner = new();
     private readonly Dictionary<CardInstanceId, int> _unspentPumps = [];
+
+    public void PolicyEvaluation(PlayerSide side, AgentEvaluation? evaluation)
+    {
+        if (evaluation is null) return;
+        SideCounter counter = Side(side);
+        counter.Fallbacks ??= 0;
+        if (evaluation.Candidates.Single(candidate => candidate.ActionId == evaluation.SelectedAction).Utility.UsedFallback)
+            counter.Fallbacks++;
+    }
 
     public void Decision(PlayerSide side, DecisionKind kind, double milliseconds)
     {
@@ -57,7 +67,7 @@ internal sealed class BenchmarkMetrics
         return new(count.Decisions, count.DecisionKinds.ToImmutableSortedDictionary(StringComparer.Ordinal),
             count.ActionKinds.ToImmutableSortedDictionary(StringComparer.Ordinal), count.CreditsGained, count.CreditsSpent,
             count.Installs, count.ReplacementInstalls, count.Runs, count.SuccessfulRuns, count.Pumps, count.WastedPumps,
-            null, player.Credits, player.AgendaPoints);
+            count.Fallbacks, player.Credits, player.AgendaPoints);
     }
 
     public BenchmarkLatency Latency(PlayerSide side)
@@ -84,5 +94,6 @@ internal sealed class BenchmarkMetrics
         public int SuccessfulRuns { get; set; }
         public int Pumps { get; set; }
         public int WastedPumps { get; set; }
+        public int? Fallbacks { get; set; }
     }
 }
