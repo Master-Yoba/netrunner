@@ -1,7 +1,8 @@
 # M5 benchmarks
 
-M5.2 is in progress. Batch execution is implemented; the 80 tactical cases are
-still specifications until their executable builders and assertions land.
+M5.2 is in progress. Batch execution is implemented. Executable builders and
+assertions currently cover all 40 Corp cases and the five Runner opening cases;
+the remaining 35 Runner cases and frozen tactical command/report are pending.
 The checked-in manifests currently run the unchanged v6 contract agent. They
 do not establish Standard/Easy strength or completion of the M5 milestone.
 
@@ -112,3 +113,29 @@ it isolates its late result. CI also needs an outer job/process timeout.
 The final Standard 1,000-game completion threshold, per-side tactical targets,
 Easy suite and save/UI gates remain the M5.8 acceptance criteria. These harness
 commands alone do not constitute `make m5-gate`.
+
+## Tactical fixture construction
+
+`TacticalBoard` creates explicit test positions using official metadata and
+compiled Gateway behavior. Physical card IDs come from Core's allocator; the
+builder's descriptive roles never enter policy observations. Core generates
+all legal choices. `TacticalExecution` applies only those issued IDs, validates
+state and verifies the resulting replay. A prepared position begins a new
+policy observation history at cursor zero while retaining actual engine replay
+sequences. Its initial state is an explicit scenario root, not a claimed prefix
+of a standard deck match.
+
+Fixture oracles are harness scripts that prove the intended outcome is possible.
+Contrasting legal choices prove the predicates can fail. Neither counts as a
+policy tactical score. Multi-step installs, advancement/scoring, target
+selection, private searches and simultaneous triggers assert their completed
+outcome. Hidden-state twins compare normalized observations, candidate scores
+when supplied, issued choices and committed policy checkpoints, retaining both
+different authoritative replays. They never give either state to the policy.
+
+Two M5.0 intentions were refined before policy tuning: `corp-information-03`
+uses Longevity Serum's real Corp Archives-to-R&D shuffle instead of inventing a
+Runner heap-to-stack ability; `corp-information-05` uses Brân's optional inward
+install when removing HQ's non-agenda decoy would make the current winning
+access certain and Corp cannot rez the installed ICE. The intent, case IDs and
+tuning/held-out classification remain explicit in the specification.

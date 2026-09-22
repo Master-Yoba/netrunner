@@ -10,6 +10,8 @@
     <ProjectReference Include="../Netrunner.AI/Netrunner.AI.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="../../data/m5/benchmarks/tactical-v1.json"
+                      LogicalName="Netrunner.Match.Data.m5.tactical-v1.json" />
     <EmbeddedResource Include="../../data/m2/representative-run.json"
                       LogicalName="Netrunner.Match.Data.m2.representative-run.json" />
   </ItemGroup>

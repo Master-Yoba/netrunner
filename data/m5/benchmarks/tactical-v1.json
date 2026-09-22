@@ -791,12 +791,15 @@
         "IceSubroutineChoice",
         "BehaviorChoice"
       ],
-      "cardCodes": [],
-      "preconditions": "A previously seen Runner card enters a randomized hidden zone with no trackable position.",
-      "acceptance": "Retain only justified knowledge; do not target or assume its location.",
+      "cardCodes": [
+        "30044"
+      ],
+      "preconditions": "A previously visible Corp card in Archives is selected by Longevity Serum to shuffle into R&D; no observation reveals its resulting deck position.",
+      "acceptance": "Complete the shuffle, remember the observed definition, and remove the hidden instance and location from precise policy knowledge.",
       "implementationStatus": "specified-not-executable",
       "executionSlice": "M5.2",
-      "policySlice": "M5.3"
+      "policySlice": "M5.3",
+      "implementationNotes": "M5.2 refines the initial Runner-card example to the actual Gateway Archives-to-deck shuffle. Gateway has no Runner heap-to-stack shuffle; the same knowledge invalidation boundary applies without inventing an unsupported card ability."
     },
     {
       "id": "corp-information-04",
@@ -834,13 +837,15 @@
         "BehaviorChoice"
       ],
       "cardCodes": [
-        "30039"
+        "30039",
+        "30063"
       ],
-      "preconditions": "An optional ICE installation would destroy a more valuable existing position, and declining is legal.",
-      "acceptance": "Decline the harmful optional installation.",
+      "preconditions": "Both end-the-run subroutines on Bran are broken during an HQ run. Runner is on five points; HQ holds two agendas and one Pharos. Corp has zero credits. The only eligible inward install removes the non-agenda decoy without adding affordable protection.",
+      "acceptance": "Decline the optional inward installation rather than make the winning HQ access certain.",
       "implementationStatus": "specified-not-executable",
       "executionSlice": "M5.2",
-      "policySlice": "M5.3"
+      "policySlice": "M5.3",
+      "implementationNotes": "The initial harmful-install case is made concrete using the visible run and Corp-owned HQ composition, with no fabricated replacement restriction or hidden Runner assumption."
     },
     {
       "id": "runner-opening-01",

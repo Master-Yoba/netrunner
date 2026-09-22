@@ -135,8 +135,17 @@ results/replay hashes match (digest
 They cover worker-count equivalence to the legacy runner, illegal IDs, agent and
 lifecycle exceptions/hangs, distinct caps, canceled-row retention, shared-agent
 rejection, no-decision/invalid-root/replay classification and a real Core-issued
-unlimited paid-ability cycle. The 80 tactical specifications are not yet marked
-executable; building and validating them is required before closing this slice.
+unlimited paid-ability cycle.
+
+The tactical checkpoint implements all 40 Corp positions and five Runner
+opening positions. All 45 scripted Core paths pass their outcome assertions and
+replay checks; contrasting legal choices fail their predicates. Nested scoring,
+installs, additional-cost decline, searches and simultaneous triggers execute
+real Core decisions. Corp hidden-state twins include full policy score/choice/
+checkpoint comparisons. Two initial specification examples were refined to
+actual Gateway interactions before tuning; see the benchmark documentation.
+These are fixture-validation proofs, not measured policy strength. The other
+35 Runner cases and frozen tactical CLI/report still remain before slice exit.
 
 After M5.2 is complete, continue with M5.3 Corp policy, then M5.4 Runner policy,
 as requested. Keep each slice on its own branch with local commits.
