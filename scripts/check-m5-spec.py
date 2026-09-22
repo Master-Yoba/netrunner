@@ -37,6 +37,33 @@ def main():
     require(len(groups) == 4 and set(groups.values()) == {5} and len(triples) == 20, "Deck-pair/seed matrix is incomplete or repeated")
     require({game["seed"] for game in games} == {1, 42, 123, 47042, 8675309}, "Pinned seed set changed")
     require(baseline["pins"]["presetSha256"] == hashlib.sha256((root / "data/m4/presets.json").read_bytes()).hexdigest(), "Preset pin mismatch")
+    for suite, count, seeds in (
+        ("smoke", 20, {1, 42, 123, 47042, 8675309}),
+        ("full", 1000, {5000001 + index * 104729 for index in range(250)}),
+    ):
+        batch = json.loads((root / f"data/m5/benchmarks/contract-{suite}-v1.json").read_text())
+        require(batch["schemaVersion"] == 1 and batch["kind"] == "m5-ai-benchmark", "Wrong batch schema")
+        require(batch["contentMode"] == "official", "Official batch incorrectly labels its content")
+        rows = batch["games"]
+        require(len(rows) == count and len({row["id"] for row in rows}) == count, "Batch row count/IDs changed")
+        require(Counter((row["corpPreset"], row["runnerPreset"]) for row in rows)
+                == {pair: count // 4 for pair in groups}, "Unbalanced batch pairing matrix")
+        require({(row["corpPreset"], row["runnerPreset"], row["gameSeed"]) for row in rows}
+                == {(corp, runner, seed) for corp, runner in groups for seed in seeds}, "Frozen held-out seeds changed")
+        for key in ("rulesVersion", "cardDataVersion", "cardDataSha256", "behaviorVersion", "behaviorFingerprint",
+                    "runtimeVersion", "runtimeFingerprint", "presetSha256"):
+            require(batch["pins"][key] == baseline["pins"][key], f"Batch pin changed: {key}")
+        require(batch["limits"]["turnPairs"] == 100 and batch["limits"]["actions"] == 20000, "Batch limits changed")
+        for row in rows:
+            require(row["split"] == "held-out" and row["comparisonGroup"] == "baseline", "Batch split/comparison changed")
+            for side in ("corp", "runner"):
+                agent = row[side]
+                require(agent["side"] == side and agent["kind"] == "contract"
+                        and agent["agentVersion"] == baseline["pins"]["agentVersion"]
+                        and agent["policyVersion"] == baseline["pins"]["policyVersion"]
+                        and agent["profileId"] == "contract-baseline" and agent.get("configuration") is None,
+                        "Contract batch must not claim a future strategic policy")
+                require(re.fullmatch(r"[a-f0-9]{64}", row[side + "DeckHash"]), "Missing deck hash")
     action_source = (root / "src/Netrunner.Core/ActionContracts.cs").read_text()
     enum_body = re.search(r"enum DecisionKind\s*\{([^}]+)\}", action_source).group(1)
     decisions = {item.strip() for item in enum_body.split(",") if item.strip()}

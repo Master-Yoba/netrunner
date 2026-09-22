@@ -42,6 +42,11 @@ public static partial class CliCommands
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(error);
 
+        if (args.Length > 0 && args[0] == "ai-benchmark")
+        {
+            return RunAiBenchmark(args, output, error);
+        }
+
         if (args.Length > 0 && args[0] == "card-art")
         {
             return RunCardArtwork(args, output, error);
@@ -138,6 +143,8 @@ public static partial class CliCommands
             + "session-recover <directory> [--at-action <sequence>] [--replay-out <file>] [--snapshot-out <file>] [--json] | "
             + "full-match [--preset basic|expanded] [--seed <unsigned-integer>] [--json] [--replay-out <file>] | "
             + "simulate <fixture-file> [--json] [--replay-out <file>] | "
+            + "ai-benchmark <manifest> --output <new directory> [--workers 1..64] [--json] | "
+            + "ai-benchmark init smoke|full|developer --output <new manifest> [--json] | "
             + "card-data normalize --upstream <file> --copyright <file> --commit <40-hex-sha> "
             + "--retrieval-date YYYY-MM-DD --output-dir <directory> [--json] | "
             + "card-data validate [--root <directory>] [--json] | "

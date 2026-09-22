@@ -36,3 +36,10 @@ jobs:
           else
             make verify
           fi
+      - name: Offline benchmark smoke
+        run: |
+          if [[ "${{ matrix.content }}" == "official" ]]; then
+            make ai-benchmark-smoke
+          else
+            make ai-benchmark-developer
+          fi

@@ -52,6 +52,16 @@ benchmark-m0:
 m5-spec:
 	python3 scripts/check-m5-spec.py
 
+.PHONY: ai-benchmark ai-benchmark-smoke ai-benchmark-developer
+ai-benchmark:
+	bash scripts/ai-benchmark.sh full $(BENCHMARK_ARGS)
+
+ai-benchmark-smoke:
+	bash scripts/ai-benchmark.sh smoke $(BENCHMARK_ARGS)
+
+ai-benchmark-developer:
+	bash scripts/ai-benchmark.sh developer $(BENCHMARK_ARGS)
+
 verify:
 	./scripts/verify.sh
 

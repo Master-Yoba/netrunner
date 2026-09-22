@@ -116,9 +116,27 @@ deterministic selection and lifecycle requirements. M5.3–4 policy strength,
 M5.5 durable saves/trace checkpoints and M5.6 player-facing opponent selection
 are explicitly outside this completed foundation slice.
 
-## Next slice
+## Slice M5.2 — benchmark harness
 
-M5.2 turns the frozen tactical specifications into Core-issued fixtures and adds
-the generic benchmark harness, progress/failure classification and CLI reports.
-Preserve v6 baseline behavior and existing proofs. Do not tune weights or mark
-tactical cases passed until the actual fixture assertions execute.
+Status: in progress.
+
+The generic batch runner and CLI now retain every replay and failed prefix,
+classify termination/failure causes, enforce independent agent instances and
+produce deterministic sorted reports with separate timing and comparison/preset
+totals. Frozen contract manifests cover the official 20-game smoke and balanced
+1,000-game schedule; a separate 20-game developer suite remains synthetic.
+See [commands, report semantics and limitations](M5_BENCHMARKS.md).
+
+Initial verification: all 281 Match and 112 CLI tests pass, including 19 Match
+benchmark tests and eight CLI tests. The official 20-game smoke completes with
+20 terminal games and verified replays at both one and four workers; all ordered
+results/replay hashes match (digest
+`ef38f82bf5021e0e7e059b9086f8ad4ad6a18a37c6696a05414105b8c6b53e77`).
+They cover worker-count equivalence to the legacy runner, illegal IDs, agent and
+lifecycle exceptions/hangs, distinct caps, canceled-row retention, shared-agent
+rejection, no-decision/invalid-root/replay classification and a real Core-issued
+unlimited paid-ability cycle. The 80 tactical specifications are not yet marked
+executable; building and validating them is required before closing this slice.
+
+After M5.2 is complete, continue with M5.3 Corp policy, then M5.4 Runner policy,
+as requested. Keep each slice on its own branch with local commits.

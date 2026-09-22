@@ -4,6 +4,7 @@
     <RootNamespace>Netrunner.Match</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="Netrunner.Match.Tests" />
     <ProjectReference Include="../Netrunner.Core/Netrunner.Core.csproj" />
     <ProjectReference Include="../Netrunner.Cards/Netrunner.Cards.csproj" />
     <ProjectReference Include="../Netrunner.AI/Netrunner.AI.csproj" />
