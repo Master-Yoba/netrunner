@@ -48,6 +48,10 @@ secrets:
 benchmark-m0:
 	./scripts/benchmark-m0.sh
 
+.PHONY: m5-spec
+m5-spec:
+	python3 scripts/check-m5-spec.py
+
 verify:
 	./scripts/verify.sh
 

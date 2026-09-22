@@ -97,6 +97,10 @@ Using the pinned Godot 4.7.2 .NET editor, without rebuilding between edits:
 
 ## Outstanding acceptance
 
+22 September update: [M5.0 acceptance reconciliation](M5_PROGRESS.md#scope-authorization-and-acceptance-reconciliation)
+records authorization to begin the baseline slice without claiming completion
+of the independent editor-persistence exercise below.
+
 The user must independently tune and save the glow using the delivered guide,
 reopen the preview and launch a game, then report persistence and usability.
 This is acceptance item 9 in the plan and remains pending. Manual exploratory

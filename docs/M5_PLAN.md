@@ -1,6 +1,6 @@
 # M5 implementation plan — complete offline solo mode
 
-Status: proposed execution plan; implementation has not started.
+Status: execution started with M5.0; see [progress and evidence](M5_PROGRESS.md).
 
 Baseline: 22 September 2026, repository commit `8f27bac`.
 

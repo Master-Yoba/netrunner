@@ -1,0 +1,146 @@
+{
+  "schemaVersion": 1,
+  "kind": "m5-contract-baseline",
+  "suiteId": "contract-baseline-v1",
+  "productionBaselineCommit": "8f27bac",
+  "purpose": "M5.0 characterization only; not the 1000-game M5 exit gate.",
+  "pins": {
+    "agentVersion": "full-game-contract-agent-v6",
+    "behaviorFingerprint": "dcbfdac91abe3d308c6f690495abc1b0dd4703a8bb86a82e9b188db26f83b22b",
+    "behaviorVersion": "gateway-m4-4.7",
+    "cardDataSha256": "a190e6e63a6d58734d915258ebb6b5659ffef0e253fc4c5128776256ee3d699b",
+    "cardDataVersion": "236140cf84491c23995b028bc791281837520b97",
+    "policyVersion": "full-game-contract-policy-v6",
+    "rulesVersion": "26.03",
+    "runtimeFingerprint": "5d46992f09746b4129938f7acfa02e7b6cb9a6047a1b92626dbc1558eaafe017",
+    "runtimeVersion": "gateway-runtime-v1-236140cf84491c23995b028bc791281837520b97",
+    "stateSchemaVersion": "17",
+    "presetSha256": "1cca3597bc1897935f1ba11e04fd2af20fe7b25912dfa5ce209944b59bdcd5af"
+  },
+  "actionCap": 4000,
+  "repeats": 2,
+  "timeoutSecondsPerGame": 180,
+  "policyRandomness": "none: existing contract policies are stateless and deterministic",
+  "games": [
+    {
+      "id": "basic-basic-1",
+      "corpPreset": "system-gateway-basic-corp",
+      "runnerPreset": "system-gateway-basic-runner",
+      "seed": 1
+    },
+    {
+      "id": "basic-basic-42",
+      "corpPreset": "system-gateway-basic-corp",
+      "runnerPreset": "system-gateway-basic-runner",
+      "seed": 42
+    },
+    {
+      "id": "basic-basic-123",
+      "corpPreset": "system-gateway-basic-corp",
+      "runnerPreset": "system-gateway-basic-runner",
+      "seed": 123
+    },
+    {
+      "id": "basic-basic-47042",
+      "corpPreset": "system-gateway-basic-corp",
+      "runnerPreset": "system-gateway-basic-runner",
+      "seed": 47042
+    },
+    {
+      "id": "basic-basic-8675309",
+      "corpPreset": "system-gateway-basic-corp",
+      "runnerPreset": "system-gateway-basic-runner",
+      "seed": 8675309
+    },
+    {
+      "id": "basic-expanded-1",
+      "corpPreset": "system-gateway-basic-corp",
+      "runnerPreset": "system-gateway-expanded-runner",
+      "seed": 1
+    },
+    {
+      "id": "basic-expanded-42",
+      "corpPreset": "system-gateway-basic-corp",
+      "runnerPreset": "system-gateway-expanded-runner",
+      "seed": 42
+    },
+    {
+      "id": "basic-expanded-123",
+      "corpPreset": "system-gateway-basic-corp",
+      "runnerPreset": "system-gateway-expanded-runner",
+      "seed": 123
+    },
+    {
+      "id": "basic-expanded-47042",
+      "corpPreset": "system-gateway-basic-corp",
+      "runnerPreset": "system-gateway-expanded-runner",
+      "seed": 47042
+    },
+    {
+      "id": "basic-expanded-8675309",
+      "corpPreset": "system-gateway-basic-corp",
+      "runnerPreset": "system-gateway-expanded-runner",
+      "seed": 8675309
+    },
+    {
+      "id": "expanded-basic-1",
+      "corpPreset": "system-gateway-expanded-corp",
+      "runnerPreset": "system-gateway-basic-runner",
+      "seed": 1
+    },
+    {
+      "id": "expanded-basic-42",
+      "corpPreset": "system-gateway-expanded-corp",
+      "runnerPreset": "system-gateway-basic-runner",
+      "seed": 42
+    },
+    {
+      "id": "expanded-basic-123",
+      "corpPreset": "system-gateway-expanded-corp",
+      "runnerPreset": "system-gateway-basic-runner",
+      "seed": 123
+    },
+    {
+      "id": "expanded-basic-47042",
+      "corpPreset": "system-gateway-expanded-corp",
+      "runnerPreset": "system-gateway-basic-runner",
+      "seed": 47042
+    },
+    {
+      "id": "expanded-basic-8675309",
+      "corpPreset": "system-gateway-expanded-corp",
+      "runnerPreset": "system-gateway-basic-runner",
+      "seed": 8675309
+    },
+    {
+      "id": "expanded-expanded-1",
+      "corpPreset": "system-gateway-expanded-corp",
+      "runnerPreset": "system-gateway-expanded-runner",
+      "seed": 1
+    },
+    {
+      "id": "expanded-expanded-42",
+      "corpPreset": "system-gateway-expanded-corp",
+      "runnerPreset": "system-gateway-expanded-runner",
+      "seed": 42
+    },
+    {
+      "id": "expanded-expanded-123",
+      "corpPreset": "system-gateway-expanded-corp",
+      "runnerPreset": "system-gateway-expanded-runner",
+      "seed": 123
+    },
+    {
+      "id": "expanded-expanded-47042",
+      "corpPreset": "system-gateway-expanded-corp",
+      "runnerPreset": "system-gateway-expanded-runner",
+      "seed": 47042
+    },
+    {
+      "id": "expanded-expanded-8675309",
+      "corpPreset": "system-gateway-expanded-corp",
+      "runnerPreset": "system-gateway-expanded-runner",
+      "seed": 8675309
+    }
+  ]
+}

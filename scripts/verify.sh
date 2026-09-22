@@ -4,6 +4,7 @@ set -euo pipefail
 verify_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$verify_root/scripts/env.sh"
 bash "$verify_root/scripts/test-env.sh"
+python3 "$verify_root/scripts/check-m5-spec.py"
 
 m4_gate=0
 if [[ "${1:-}" == "--m4" && $# == 1 ]]; then

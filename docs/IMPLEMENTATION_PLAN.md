@@ -277,7 +277,8 @@ the 22 September 2026 code baseline. It defines the agent architecture, tactical
 and self-play benchmarks, save/checkpoint lifecycle, client and developer flows,
 dependency-ordered slices, and acceptance evidence. Existing contract agents,
 replay and diagnostic session recovery remain foundations to extend. M5 is
-planned; its implementation and acceptance gates have not been completed.
+underway with [M5.0 baseline and case specification](M5_PROGRESS.md); the full
+milestone implementation and acceptance gates have not been completed.
 
 Deliverables:
 
