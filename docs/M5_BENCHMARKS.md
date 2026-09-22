@@ -1,8 +1,7 @@
 # M5 benchmarks
 
-M5.2 is in progress. Batch execution is implemented. Executable builders and
-assertions currently cover all 40 Corp cases and the five Runner opening cases;
-the remaining 35 Runner cases and frozen tactical command/report are pending.
+M5.2 is complete. Batch execution and all 80 executable tactical positions are implemented,
+with 40 positions per side and frozen roots, resource bounds and policy seeds.
 The checked-in manifests currently run the unchanged v6 contract agent. They
 do not establish Standard/Easy strength or completion of the M5 milestone.
 
@@ -14,6 +13,8 @@ After bootstrap/restore, with official metadata already provisioned locally:
 make ai-benchmark-smoke
 make ai-benchmark BENCHMARK_ARGS='--workers 4 --output artifacts/m5/full-check'
 make ai-benchmark-developer
+make ai-tactics-verify
+make ai-tactics
 ```
 
 The first two targets build with official content, then execute offline. The
@@ -39,6 +40,16 @@ nonzero until reviewed; it is not silently presented as a successful game.
 the installed catalogs and explicit deck hashes using the fixed seed schedule.
 Manifest regeneration is an intentional content/configuration change. Never
 regenerate held-out seeds to remove an unfavorable result.
+
+`ai-tactics init --output <new manifest>` captures all 80 tactical roots.
+`ai-tactics <manifest> --output <new directory> [--workers 1..64] [--json]`
+measures the declared policies. Its exit 0 requires 85% correctness per tested
+side, all critical cases passing, and no execution/replay failures; exit 1
+retains a below-target report. Exit 2 rejects incompatible inputs or command
+errors. `--verify-fixtures` executes harness oracles and explicitly labels the
+report `fixture-validation`; it requires all positions to pass and makes no
+claim about policy strength. `make ai-tactics` currently measures contract v6
+and is expected to exit 1. `make ai-tactics-verify` is the passing harness gate.
 
 ## Inputs and comparisons
 
@@ -126,7 +137,9 @@ sequences. Its initial state is an explicit scenario root, not a claimed prefix
 of a standard deck match.
 
 Fixture oracles are harness scripts that prove the intended outcome is possible.
-Contrasting legal choices prove the predicates can fail. Neither counts as a
+Contrasting legal choices prove the predicates can fail. A compulsory agenda
+access continuation has no legal alternative; its negative control withholds
+the required action instead. Neither counts as a
 policy tactical score. Multi-step installs, advancement/scoring, target
 selection, private searches and simultaneous triggers assert their completed
 outcome. Hidden-state twins compare normalized observations, candidate scores
@@ -139,3 +152,28 @@ Runner heap-to-stack ability; `corp-information-05` uses Brân's optional inward
 install when removing HQ's non-agenda decoy would make the current winning
 access certain and Corp cannot rez the installed ICE. The intent, case IDs and
 tuning/held-out classification remain explicit in the specification.
+
+Two Runner intentions were also corrected against actual Gateway behavior:
+`runner-choices-03` uses Carnivore's issued target/additional-cost bundle and
+subsequent access continuation, because the generic mode/target/payment lab
+example is not a Gateway card; Karuna's `runner-defense-05` exit is free.
+`runner-payments-03` pins Marjanah's existing encounter boosts as well as its
+successful-run discount. These refinements precede the frozen executable
+manifest and policy tuning.
+
+Tactical reports retain per-side, category and tuning/held-out scores, critical
+counts and execution failures. Every row retains a replay; hidden-state twins
+retain both. Failures include the final snapshot, recent accepted choices,
+available candidate evaluations and committed checkpoint. No factory may
+reuse an agent across cases or twins. Agent creation, execution and replay
+verification have separate 30-second watchdogs. Cancellation retains every row.
+The report's deterministic digest excludes build/worker provenance but includes
+the ordered tactical results. CI verifies all 80 fixtures in the official lane;
+synthetic tests explicitly skip official tactical evidence.
+
+Initial contract v6 measurement: Corp 22/40 (10/11 critical), Runner 21/40
+(10/17 critical). All 80 replay prefixes verify. Each side has one incomplete
+chain; these remain failures in the denominator. This is a diagnostic baseline,
+not a passing Standard policy. Fixture validation passes 80/80 and produces
+identical replay hashes at one and four workers (digest
+`778295a750f5f403b030b0b10d33ba0e202b3c27f0006e9105c995fbe6165f76`).

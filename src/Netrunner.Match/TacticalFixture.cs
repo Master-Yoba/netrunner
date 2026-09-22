@@ -24,7 +24,7 @@ internal sealed class TacticalTrace(TacticalFixture fixture)
 internal sealed record TacticalFixture(TacticalCaseMetadata Metadata, TacticalBoard Board, GameState Initial,
     Func<TacticalTrace, LegalAction> Oracle, Func<TacticalTrace, bool> Complete, Func<TacticalTrace, bool> Success,
     int ActionCap = 80, Func<GameState, LegalAction>? Opponent = null, GameState? HiddenTwin = null,
-    Func<TacticalTrace, LegalAction?>? Counterexample = null)
+    Func<TacticalTrace, LegalAction?>? Counterexample = null, bool ForcedContinuation = false)
 {
     public static TacticalFixture FirstChoice(TacticalCaseMetadata metadata, TacticalBoard board, GameState state,
         Func<LegalAction, bool> acceptable, bool requireAlternative = true)
@@ -45,11 +45,18 @@ public sealed record TacticalCaseResult(string Id, PlayerSide Side, string Categ
     string InitialStateHash, bool Passed, bool Completed, int Actions, bool ReplayVerified, string ReplayHash,
     string? Error, string ReplayPath, ImmutableArray<string> SemanticActions, ImmutableArray<string> ObservationDigests,
     ImmutableArray<string> SelectedActionIds, ImmutableArray<string> EvaluationDigests, string? CheckpointDigest,
-    bool? HiddenTwinEquivalent = null, string? HiddenTwinReplayHash = null);
+    bool? HiddenTwinEquivalent = null, string? HiddenTwinReplayHash = null,
+    bool? HiddenTwinReplayVerified = null, string? HiddenTwinError = null);
 
 internal sealed record TacticalArtifacts(TacticalCaseResult Result, ReplayArtifact Replay)
 {
     public ReplayArtifact? HiddenTwinReplay { get; init; }
+    public TacticalArtifacts? HiddenTwinArtifacts { get; init; }
+    public GameSnapshot? FinalSnapshot { get; init; }
+    public ImmutableArray<TacticalStep> RecentSteps { get; init; } = [];
+    public ImmutableArray<AgentEvaluation> Evaluations { get; init; } = [];
+    public OfflineAgentCheckpoint? Checkpoint { get; init; }
+    public bool CounterexampleApplied { get; init; }
 }
 
 /// <summary>
@@ -68,6 +75,7 @@ internal static class TacticalExecution
         var trace = new TacticalTrace(fixture);
         var observations = ImmutableArray.CreateBuilder<string>();
         var evaluations = ImmutableArray.CreateBuilder<string>();
+        var evaluationRecords = ImmutableArray.CreateBuilder<AgentEvaluation>();
         TacticalBoard board = fixture.Board;
         StateInvariantValidator.Validate(trace.State, board.Behavior, board.Runtime);
         GameSnapshot initial = trace.State.CreateSnapshot(board.Behavior, board.Runtime);
@@ -86,6 +94,7 @@ internal static class TacticalExecution
                 AgentLifecycleHost.ValidateSeat(agent, fixture.Metadata.Side);
                 Observation observation = ObservationBuilder.Build(trace.State, fixture.Metadata.Side, board.Behavior);
                 await Callback(() => lifecycle.Observe(observation, 0)).ConfigureAwait(false);
+                if (agent is OfflineAgent initialPolicy) trace.PolicyCheckpoint = initialPolicy.Checkpoint;
             }
             while (!fixture.Complete(trace) && trace.Steps.Count < fixture.ActionCap && trace.State.Outcome.Kind == GameOutcomeKind.Ongoing)
             {
@@ -114,7 +123,10 @@ internal static class TacticalExecution
                 }
                 linked.Token.ThrowIfCancellationRequested();
                 if (side == fixture.Metadata.Side && agent is OfflineAgent { LastEvaluation: { } evaluation })
+                {
                     evaluations.Add(BenchmarkHash.Value(evaluation));
+                    evaluationRecords.Add(evaluation);
+                }
                 ApplyResult applied = board.Apply(trace.State, action);
                 trace.Steps.Add(new(side, pending.Kind, action));
                 trace.ReplayActions.Add(ReplayAction.From(applied.AcceptedAction!));
@@ -160,9 +172,12 @@ internal static class TacticalExecution
             trace.OwnSteps.Select(step => step.Action.Id.Value).ToImmutableArray(), evaluations.ToImmutable(),
             trace.PolicyCheckpoint is { } checkpoint ? BenchmarkHash.Value(checkpoint) : null);
         ReplayArtifact? twinReplay = null;
+        TacticalArtifacts? twinArtifacts = null;
         if (fixture.HiddenTwin is { } twinState)
         {
-            TacticalArtifacts twin = await RunAsync(fixture with { Initial = twinState, HiddenTwin = null }, oracle ? null : twinFactory!(),
+            IGameAgent? twinAgent = oracle ? null : twinFactory!();
+            if (!oracle && ReferenceEquals(agent, twinAgent)) throw new ArgumentException("Hidden-state twins require independent agent instances.", nameof(twinFactory));
+            TacticalArtifacts twin = await RunAsync(fixture with { Initial = twinState, HiddenTwin = null }, twinAgent,
                 oracle: oracle, cancellationToken: cancellationToken).ConfigureAwait(false);
             bool equivalent = result.ObservationDigests.SequenceEqual(twin.Result.ObservationDigests)
                 && result.SelectedActionIds.SequenceEqual(twin.Result.SelectedActionIds)
@@ -172,11 +187,23 @@ internal static class TacticalExecution
             {
                 Passed = result.Passed && twin.Result.Passed && equivalent,
                 HiddenTwinEquivalent = equivalent,
-                HiddenTwinReplayHash = twin.Result.ReplayHash
+                HiddenTwinReplayHash = twin.Result.ReplayHash,
+                HiddenTwinReplayVerified = twin.Result.ReplayVerified,
+                HiddenTwinError = twin.Result.Error,
             };
             twinReplay = twin.Replay;
+            twinArtifacts = twin;
         }
-        return new(result, replay) { HiddenTwinReplay = twinReplay };
+        return new(result, replay)
+        {
+            HiddenTwinReplay = twinReplay,
+            HiddenTwinArtifacts = twinArtifacts,
+            FinalSnapshot = trace.State.CreateSnapshot(board.Behavior, board.Runtime),
+            RecentSteps = trace.Steps.TakeLast(50).ToImmutableArray(),
+            Evaluations = evaluationRecords.ToImmutable(),
+            Checkpoint = trace.PolicyCheckpoint,
+            CounterexampleApplied = counterexampleApplied,
+        };
 
         void RecordObservation()
         {

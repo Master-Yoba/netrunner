@@ -105,11 +105,15 @@ elif ((card_data_present == 3)) && [[ -f "$card_data_cards" && -f "$card_data_ma
   # CLI's official-content tests against an explicitly provisioned test output.
   dotnet test "$verify_root/tests/Netrunner.Cli.Tests/Netrunner.Cli.Tests.csproj" \
     --no-restore --nologo -m:1 \
-    --filter FullyQualifiedName~FullMatchCommand \
+    --filter 'FullyQualifiedName~FullMatchCommand|FullyQualifiedName~AiTacticsCommandTests' \
     "${official_content_properties[@]}"
   dotnet test "$verify_root/tests/Netrunner.Cards.Tests/Netrunner.Cards.Tests.csproj" \
     --no-restore --nologo -m:1 \
-    --filter 'FullyQualifiedName~OfficialPresetRevalidationTests|FullyQualifiedName~GatewayEvaluationCatalogTests' \
+    --filter 'FullyQualifiedName~OfficialPresetRevalidationTests|FullyQualifiedName~GatewayEvaluationCatalogTests|FullyQualifiedName~GatewayBatch1LifecycleTests' \
+    "${official_content_properties[@]}"
+  dotnet test "$verify_root/tests/Netrunner.Match.Tests/Netrunner.Match.Tests.csproj" \
+    --no-restore --nologo -m:1 \
+    --filter FullyQualifiedName~Tactical \
     "${official_content_properties[@]}"
   card_data_content_enabled=1
 else

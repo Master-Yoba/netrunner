@@ -345,7 +345,7 @@ public sealed class AiBenchmarkRunner
         sides.Sum(side => side.Pumps), sides.Sum(side => side.WastedPumps), sides.All(side => side.Fallbacks.HasValue) ? sides.Sum(side => side.Fallbacks!.Value) : null,
         sides.Sum(side => (long)side.FinalCredits), sides.Sum(side => side.FinalAgendaPoints));
 
-    private static ImmutableSortedDictionary<string, string> AssemblyHashes() => new[]
+    internal static ImmutableSortedDictionary<string, string> AssemblyHashes() => new[]
     {
         typeof(GameState).Assembly, typeof(GatewayEvaluationCatalog).Assembly,
         typeof(OfflineAgent).Assembly, typeof(AiBenchmarkRunner).Assembly, Assembly.GetEntryAssembly(),

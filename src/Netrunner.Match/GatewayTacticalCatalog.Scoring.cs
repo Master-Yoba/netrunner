@@ -84,6 +84,6 @@ public sealed partial class GatewayTacticalCatalog
                 && choice.FinalizeSelection && targets.All(choice.CardIds.Contains))
             ?? choices.Where(action => action.Parameters is BehaviorChoiceParameters { FinalizeSelection: false })
                 .OrderByDescending(action => ((BehaviorChoiceParameters)action.Parameters).CardIds.Count).FirstOrDefault()
-            ?? throw new InvalidOperationException("Tactical target continuation has no matching issued action.");
+            ?? throw new InvalidOperationException("Tactical target continuation has no matching issued action: " + EngineJson.Serialize(state.PendingDecision.LegalActions));
     }
 }

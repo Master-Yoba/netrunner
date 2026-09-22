@@ -42,6 +42,11 @@ public static partial class CliCommands
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(error);
 
+        if (args.Length > 0 && args[0] == "ai-tactics")
+        {
+            return RunAiTactics(args, output, error);
+        }
+
         if (args.Length > 0 && args[0] == "ai-benchmark")
         {
             return RunAiBenchmark(args, output, error);
@@ -145,6 +150,7 @@ public static partial class CliCommands
             + "simulate <fixture-file> [--json] [--replay-out <file>] | "
             + "ai-benchmark <manifest> --output <new directory> [--workers 1..64] [--json] | "
             + "ai-benchmark init smoke|full|developer --output <new manifest> [--json] | "
+            + "ai-tactics init|<manifest> --output <new path> [--workers 1..64] [--verify-fixtures] [--json] | "
             + "card-data normalize --upstream <file> --copyright <file> --commit <40-hex-sha> "
             + "--retrieval-date YYYY-MM-DD --output-dir <directory> [--json] | "
             + "card-data validate [--root <directory>] [--json] | "

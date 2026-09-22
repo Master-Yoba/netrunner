@@ -62,6 +62,13 @@ ai-benchmark-smoke:
 ai-benchmark-developer:
 	bash scripts/ai-benchmark.sh developer $(BENCHMARK_ARGS)
 
+.PHONY: ai-tactics ai-tactics-verify
+ai-tactics:
+	bash scripts/ai-tactics.sh $(TACTICAL_ARGS)
+
+ai-tactics-verify:
+	bash scripts/ai-tactics.sh --verify-fixtures $(TACTICAL_ARGS)
+
 verify:
 	./scripts/verify.sh
 

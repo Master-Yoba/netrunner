@@ -14,7 +14,8 @@ public sealed partial class GatewayTacticalCatalog
         return new(metadata, board, initial,
             trace => !trace.OwnSteps.Any() ? trace.State.PendingDecision!.LegalActions.First(Expected)
                 : MinimalInstallChoice(trace.State, source),
-            trace => trace.State.GetCard(source).ZoneId != oldZone,
+            trace => trace.State.GetCard(source).ZoneId != oldZone && trace.State.PendingDecision?.Kind is not
+                (DecisionKind.InstallChoice or DecisionKind.MemoryCleanup or DecisionKind.BehaviorChoice or DecisionKind.TriggerChoice or DecisionKind.TriggerOrdering),
             trace => trace.OwnSteps.FirstOrDefault() is { } first && Expected(first.Action)
                 && trace.State.GetZone(trace.State.GetCard(source).ZoneId).Kind is ZoneKind.ServerRoot or ZoneKind.ServerIce or ZoneKind.RunnerRig
                 && preserveRoles.All(role => trace.State.GetCard(board.Card(role)).ZoneId == initial.GetCard(board.Card(role)).ZoneId),

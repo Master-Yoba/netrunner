@@ -73,7 +73,7 @@ def main():
     require(Counter(case["side"] for case in positions) == {"corp": 40, "runner": 40}, "Both sides need 40 positions")
     require(len({case["preconditions"] for case in positions}) == 80, "Duplicate positions are not independent coverage")
     for case in positions:
-        require(case["implementationStatus"] == "specified-not-executable", "M5.0 specifications must not claim execution")
+        require(case["implementationStatus"] == "executable-core-fixture", "M5.2 requires every specified fixture to be executable")
         require(case["decisionKinds"] and set(case["decisionKinds"]) <= decisions - {"ToyTurn"}, "Unknown/non-Gateway decision")
         require(set(case["cardCodes"]) <= codes, "Unknown Gateway design")
         require(case["split"] in {"tuning", "held-out"} and type(case["critical"]) is bool, "Invalid case classification")
@@ -81,6 +81,19 @@ def main():
     for side in ("corp", "runner"):
         require(Counter(case["split"] for case in positions if case["side"] == side)
                 == {"tuning": 24, "held-out": 16}, "Tuning/held-out split changed")
+    executable = json.loads((root / "data/m5/benchmarks/tactical-contract-v1.json").read_text())
+    require(executable["schemaVersion"] == 1 and executable["kind"] == "m5-tactical-benchmark"
+            and executable["builderVersion"] == "gateway-tactics-v1", "Unknown tactical execution schema")
+    rows = executable["positions"]
+    require({row["metadata"]["id"] for row in rows} == {case["id"] for case in positions}
+            and len(rows) == 80, "Executable fixture set differs from the frozen specification")
+    require(len({row["initialStateHash"] for row in rows}) == 80, "Repeated initial states do not count as independent positions")
+    for row in rows:
+        case = next(case for case in positions if case["id"] == row["metadata"]["id"])
+        require(all(row["metadata"][key] == case[key] for key in row["metadata"]), "Tactical rationale/classification drift")
+        require(re.fullmatch(r"[a-f0-9]{64}", row["initialStateHash"]) and row["actionCap"] > 0, "Unpinned tactical root/bound")
+        require(row["agent"]["side"] == case["side"] and row["agent"]["kind"] == "contract", "Incorrect tactical baseline policy")
+    require(executable["pins"] == json.loads((root / "data/m5/benchmarks/contract-smoke-v1.json").read_text())["pins"], "Tactical catalog pins drifted")
     inventory = (root / "docs/M5_CAPABILITY_INVENTORY.md").read_text()
     mapped = re.findall(r"^\| (300\d\d) \|", inventory, re.MULTILINE)
     require(len(mapped) == 77 and set(mapped) == codes, "Inventory must map each of the 77 designs once")
@@ -100,7 +113,7 @@ def main():
             require(attempt["status"] == "terminal" and attempt["replayVerified"], "Historical baseline contains a failed attempt")
         require(all(first[key] == second[key] for key in ("replaySha256", "finalStateHash", "actionCount", "corp", "runner")), "Repeated replay/counters disagree")
         require(second["deterministicRepeat"] is True, "Missing repeat proof")
-    print("M5_SPEC PASS games=20 repeats=2 pairings=4 tactical_specs=80 corp=40 runner=40 designs=77 decisions=15 executable_tactics=0")
+    print("M5_SPEC PASS games=20 repeats=2 pairings=4 tactical_specs=80 corp=40 runner=40 designs=77 decisions=15 executable_tactics=80")
 
 
 if __name__ == "__main__":

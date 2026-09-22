@@ -26,16 +26,23 @@ jobs:
         run: make restore
       - name: Run frozen 1000-game contract baseline
         run: make ai-benchmark BENCHMARK_ARGS='--workers 4 --output artifacts/m5/scheduled-contract'
+      - name: Verify all frozen tactical fixtures
+        run: make ai-tactics-verify TACTICAL_ARGS='--workers 4 --output artifacts/m5/scheduled-tactics'
       - name: Export allowlisted summary
         if: always()
         run: |
           if [[ -f artifacts/m5/scheduled-contract/report.json ]]; then
             python3 scripts/summarize-ai-benchmark.py artifacts/m5/scheduled-contract/report.json artifacts/m5/summary.json
           fi
+          if [[ -f artifacts/m5/scheduled-tactics/report.json ]]; then
+            python3 scripts/summarize-ai-benchmark.py artifacts/m5/scheduled-tactics/report.json artifacts/m5/tactics-summary.json
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: offline-benchmark-summary
-          path: artifacts/m5/summary.json
+          path: |
+            artifacts/m5/summary.json
+            artifacts/m5/tactics-summary.json
           if-no-files-found: warn
           retention-days: 30

@@ -118,7 +118,7 @@ are explicitly outside this completed foundation slice.
 
 ## Slice M5.2 — benchmark harness
 
-Status: in progress.
+Status: complete, 22 September 2026.
 
 The generic batch runner and CLI now retain every replay and failed prefix,
 classify termination/failure causes, enforce independent agent instances and
@@ -137,15 +137,29 @@ lifecycle exceptions/hangs, distinct caps, canceled-row retention, shared-agent
 rejection, no-decision/invalid-root/replay classification and a real Core-issued
 unlimited paid-ability cycle.
 
-The tactical checkpoint implements all 40 Corp positions and five Runner
-opening positions. All 45 scripted Core paths pass their outcome assertions and
-replay checks; contrasting legal choices fail their predicates. Nested scoring,
-installs, additional-cost decline, searches and simultaneous triggers execute
-real Core decisions. Corp hidden-state twins include full policy score/choice/
-checkpoint comparisons. Two initial specification examples were refined to
-actual Gateway interactions before tuning; see the benchmark documentation.
-These are fixture-validation proofs, not measured policy strength. The other
-35 Runner cases and frozen tactical CLI/report still remain before slice exit.
+All 80 tactical builders are implemented (40 per side, 24 tuning/16 held-out),
+with frozen initial/twin hashes, policy seeds, resource bounds and assertions.
+`ai-tactics` measures declared policies; `--verify-fixtures` separately validates
+oracles. Both serial and parallel fixture validation pass all 80, and contract
+v6 scores 22/40 Corp and 21/40 Runner with all replay prefixes verified. These
+baseline policy failures are retained, including one incomplete chain per side.
+Reports include category/split/critical scores, twin replay verification and
+private failure snapshots/checkpoints. Shareable summaries are checked in under
+`docs/evidence/m5-2/`; hidden snapshots/replays remain local.
 
-After M5.2 is complete, continue with M5.3 Corp policy, then M5.4 Runner policy,
-as requested. Keep each slice on its own branch with local commits.
+The fixtures exposed a real Mutual Favor install-option bug: cards in temporary
+search custody were excluded before installation. Eligibility now probes the
+same restoration used by the reducer on an isolated copy, and snapshot
+validation agrees. Card-level regressions cover both empty and nonempty remaining
+Stacks. Official testing also corrected older assertions about hidden Archives,
+private search transfers and terminal operation-trash turn facts.
+
+Final validation passes: all 1,794 official-content solution tests, including
+172 tactical checks; full `make m4-gate`, formatting, specification validation
+and secret scanning. The official smoke again completes 20/20 with
+verified replays at one and four workers and retains the original digest above.
+The gate now explicitly executes official tactical, CLI and Mutual Favor tests;
+synthetic CI continues to label official tactical checks as skipped.
+
+M5.3 Corp policy is next, followed by M5.4 Runner policy, as requested.
+Keep each slice on its own branch with local commits.

@@ -49,7 +49,12 @@ public sealed class TacticalFixtureTests
     {
         var catalog = new GatewayTacticalCatalog(CardDataResource.LoadEmbedded());
         TacticalFixture fixture = catalog.Build(id);
-        (TacticalCaseResult result, _) = await TacticalExecution.RunAsync(fixture, null, oracle: true, rejectFirstOracleChoice: true);
+        // A compulsory one-action prompt has no contrasting legal choice.
+        // Its negative control is failure to complete the required action.
+        if (fixture.ForcedContinuation) fixture = fixture with { ActionCap = 0 };
+        TacticalArtifacts artifacts = await TacticalExecution.RunAsync(fixture, null, oracle: true, rejectFirstOracleChoice: true);
+        TacticalCaseResult result = artifacts.Result;
+        Assert.True(fixture.ForcedContinuation || artifacts.CounterexampleApplied, $"{id}: negative control never submitted a contrasting choice: {result.Error}");
         Assert.False(result.Passed);
         Assert.True(result.ReplayVerified);
     }
@@ -57,12 +62,13 @@ public sealed class TacticalFixtureTests
     [OfficialGatewayTheory]
     [InlineData("corp-information-01")]
     [InlineData("corp-information-02")]
+    [InlineData("runner-payments-05")]
     public async Task TwinExecutionComparesRealPolicyScoresChoicesAndCommittedCheckpoints(string id)
     {
         var catalog = new GatewayTacticalCatalog(CardDataResource.LoadEmbedded());
         TacticalFixture fixture = catalog.Build(id);
         var evaluation = new GatewayEvaluationCatalog(fixture.Board.Runtime, fixture.Board.Behavior);
-        var configuration = OfflineAgentConfiguration.Create(PlayerSide.Corp, "fixture-tie-v1", "fixture", 125);
+        var configuration = OfflineAgentConfiguration.Create(fixture.Metadata.Side, "fixture-tie-v1", "fixture", 125);
         OfflineAgent Create() => new(configuration, new TiePolicy(), evaluation, captureDiagnostics: true);
         TacticalArtifacts artifacts = await TacticalExecution.RunAsync(fixture, Create(), twinFactory: Create);
         Assert.True(artifacts.Result.Passed, artifacts.Result.Error);

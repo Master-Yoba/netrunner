@@ -26,11 +26,7 @@ public sealed partial class GatewayTacticalCatalog
     public BenchmarkPins Pins => BenchmarkPins.Capture(_data, _behavior, _runtime);
     public static ImmutableArray<TacticalCaseMetadata> Specifications { get; } = LoadSpecifications();
 
-    // This list grows only when a case has an actual Core-generated builder.
-    // The final M5.2 gate requires equality with all 80 frozen specifications.
     public static ImmutableArray<string> ImplementedIds { get; } = Specifications
-        .Where(specification => specification.Category == "opening"
-            || specification.Side == PlayerSide.Corp)
         .Select(specification => specification.Id).ToImmutableArray();
 
     internal TacticalFixture Build(string id)
@@ -39,6 +35,13 @@ public sealed partial class GatewayTacticalCatalog
         return metadata.Category switch
         {
             "opening" => BuildOpening(metadata),
+            "rig" when metadata.Side == PlayerSide.Runner => BuildRunnerRig(metadata),
+            "encounter" when metadata.Side == PlayerSide.Runner => BuildRunnerEncounter(metadata),
+            "targets" when metadata.Side == PlayerSide.Runner => BuildRunnerTargets(metadata),
+            "access" when metadata.Side == PlayerSide.Runner => BuildRunnerAccess(metadata),
+            "defense" when metadata.Side == PlayerSide.Runner => BuildRunnerDefense(metadata),
+            "choices" when metadata.Side == PlayerSide.Runner => BuildRunnerChoices(metadata),
+            "payments" when metadata.Side == PlayerSide.Runner => BuildRunnerPayments(metadata),
             "development" when metadata.Side == PlayerSide.Corp => BuildCorpDevelopment(metadata),
             "replacement" when metadata.Side == PlayerSide.Corp => BuildCorpReplacement(metadata),
             "scoring" when metadata.Side == PlayerSide.Corp => BuildCorpScoring(metadata),

@@ -43,3 +43,6 @@ jobs:
           else
             make ai-benchmark-developer
           fi
+      - name: Frozen official tactical fixture and replay proof
+        if: matrix.content == 'official'
+        run: make ai-tactics-verify TACTICAL_ARGS='--workers 4'

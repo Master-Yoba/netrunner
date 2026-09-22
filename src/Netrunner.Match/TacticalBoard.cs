@@ -17,6 +17,9 @@ internal sealed class TacticalBoard
     private readonly Dictionary<string, ServerId> _serverRoles = new(StringComparer.Ordinal);
     private readonly List<CardCounterState> _counters = [];
     private readonly HashSet<ZoneKind> _reversedZones = [];
+    private int _corpDeckFill;
+    private int _runnerDeckFill;
+    private bool _deckFillApplied;
 
     public TacticalBoard(IBehaviorCatalog behavior, IRuntimeCardCatalog runtime, string dataVersion, ulong seed = 502)
     {
@@ -71,6 +74,16 @@ internal sealed class TacticalBoard
     {
         CardDefinitionId definition = new(code);
         CardRuntimeSpec spec = Runtime.GetSpec(definition);
+        bool validPlacement = zoneKind switch
+        {
+            ZoneKind.ServerIce => spec.Side == PlayerSide.Corp && spec.CardClass == RuntimeCardClass.Ice,
+            ZoneKind.ServerRoot => spec.Side == PlayerSide.Corp && (spec.CardClass == RuntimeCardClass.Upgrade
+                || server is not ("hq" or "rd" or "archives") && spec.CardClass is RuntimeCardClass.Asset or RuntimeCardClass.Agenda),
+            ZoneKind.RunnerRig => spec.Side == PlayerSide.Runner && spec.CardClass is RuntimeCardClass.Program or RuntimeCardClass.Hardware or RuntimeCardClass.Resource,
+            ZoneKind.CorpIdentity or ZoneKind.RunnerIdentity => spec.CardClass == RuntimeCardClass.Identity,
+            _ => true,
+        };
+        if (!validPlacement) throw new ArgumentException($"Tactical role '{role}' places {code}/{spec.CardClass} in invalid {zoneKind}/{server}.");
         ZoneState zone;
         if (zoneKind is ZoneKind.ServerRoot or ZoneKind.ServerIce)
         {
@@ -94,9 +107,9 @@ internal sealed class TacticalBoard
 
     public TacticalBoard FillDecks(int corp = 12, int runner = 12)
     {
-        // Deliberate scenario supplies, not hidden-deck priors for either agent.
-        for (int index = 0; index < corp; index++) Add($"corp-deck-{index}", "30075", ZoneKind.CorpDeck);
-        for (int index = 0; index < runner; index++) Add($"runner-deck-{index}", "30030", ZoneKind.RunnerStack);
+        if (_deckFillApplied) throw new InvalidOperationException("Scenario deck supplies must be declared before building a position.");
+        _corpDeckFill = corp;
+        _runnerDeckFill = runner;
         return this;
     }
 
@@ -110,6 +123,15 @@ internal sealed class TacticalBoard
 
     public GameState Build(PlayerSide side, bool setup = false, bool discard = false)
     {
+        if (!_deckFillApplied)
+        {
+            // Materialize after explicit placements to respect the ordinary
+            // three-copy limit across the entire prepared position. These
+            // supplies are never provided as deck priors to the policy.
+            Fill(_corpDeckFill, "corp", ZoneKind.CorpDeck, ["30075", "30064", "30057", "30045", "30061", "30048", "30041", "30056"]);
+            Fill(_runnerDeckFill, "runner", ZoneKind.RunnerStack, ["30030", "30020", "30029", "30002", "30021", "30028", "30012"]);
+            _deckFillApplied = true;
+        }
         PlayerState[] players = _basis.Players.Select(player => new PlayerState(player.Id, player.Side,
             player.Side == PlayerSide.Corp ? CorpCredits : RunnerCredits, setup ? 0 : player.Side == PlayerSide.Corp ? CorpClicks : RunnerClicks,
             player.Side == PlayerSide.Corp ? CorpPoints : RunnerPoints)).ToArray();
@@ -145,6 +167,15 @@ internal sealed class TacticalBoard
         {
             IEnumerable<CardInstanceId> ids = _cards.Where(card => card.ZoneId == zone.Id).Select(card => card.Id);
             return (_reversedZones.Contains(zone.Kind) ? ids.Reverse() : ids).ToArray();
+        }
+
+        void Fill(int count, string rolePrefix, ZoneKind zone, string[] codes)
+        {
+            for (int index = 0; index < count; index++)
+            {
+                string code = codes.First(candidate => _cards.Count(card => card.DefinitionId.Value == candidate) < 3);
+                Add($"{rolePrefix}-deck-{index}", code, zone);
+            }
         }
     }
 
