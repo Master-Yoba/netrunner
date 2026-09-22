@@ -10,7 +10,7 @@ public static class CorpPolicyProfiles
         "standard" => OfflineAgentConfiguration.Create(PlayerSide.Corp, CorpHeuristicPolicy.PolicyVersion, profileId, policySeed,
             workBudget: 20000, nearTieTolerance: 0, parameters: Parameters(100, 100, 100)),
         "easy" => OfflineAgentConfiguration.Create(PlayerSide.Corp, CorpHeuristicPolicy.PolicyVersion, profileId, policySeed,
-            workBudget: 12000, nearTieTolerance: 20, parameters: Parameters(90, 80, 100)),
+            workBudget: 12000, nearTieTolerance: 15, parameters: Parameters(90, 80, 100)),
         _ => throw new ArgumentException("Unknown Corp profile.", nameof(profileId)),
     };
 

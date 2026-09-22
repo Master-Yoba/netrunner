@@ -5,7 +5,7 @@ namespace Netrunner.AI;
 /// <summary>One-ply Corp utility evaluation over filtered, engine-issued choices.</summary>
 public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
 {
-    public const string PolicyVersion = "corp-heuristic-v1";
+    public const string PolicyVersion = "corp-heuristic-v2";
     public string Version => PolicyVersion;
 
     public void ValidateAction(AgentFeatures features, AgentAction action)

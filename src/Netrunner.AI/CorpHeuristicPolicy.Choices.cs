@@ -47,7 +47,7 @@ public sealed partial class CorpHeuristicPolicy
             value -= choice.CardIds.Sum(id => context.CardValue(context.Card(id)));
             return Value(value, "choice/mode-and-additional-cost", approximate: true);
         }
-        BehaviorInstructionKind intent = plan.Consumers.FirstOrDefault(instruction => instruction.Kind is BehaviorInstructionKind.TrashCard
+        BehaviorInstructionKind intent = plan.Intent ?? plan.Consumers.FirstOrDefault(instruction => instruction.Kind is BehaviorInstructionKind.TrashCard
             or BehaviorInstructionKind.AdvanceCard or BehaviorInstructionKind.RezIgnoringCosts or BehaviorInstructionKind.AddToHand
             or BehaviorInstructionKind.ShuffleIntoDeck)?.Kind ?? BehaviorInstructionKind.AddToHand;
         int score = choice.CardIds.Sum(id => TargetValue(context, id, intent));
@@ -69,7 +69,8 @@ public sealed partial class CorpHeuristicPolicy
         };
     }
 
-    private sealed record ChoicePlan(PlayerSide Controller, BehaviorChoiceSpec? Choice, IReadOnlyList<BehaviorInstruction> Consumers);
+    private sealed record ChoicePlan(PlayerSide Controller, BehaviorChoiceSpec? Choice, IReadOnlyList<BehaviorInstruction> Consumers,
+        BehaviorInstructionKind? Intent = null);
 
     private static ChoicePlan? FindChoice(HeuristicContext context, string key)
     {
@@ -86,7 +87,7 @@ public sealed partial class CorpHeuristicPolicy
                 {
                     BehaviorInstruction instruction = instructions[index];
                     if (instruction.Kind == BehaviorInstructionKind.Search && instruction.Argument == key)
-                        return new(behavior.Controller, null, [new(BehaviorInstructionKind.AddToHand)]);
+                        return new(behavior.Controller, null, [], BehaviorInstructionKind.AddToHand);
                     if (instruction.Choice is { } choice)
                     {
                         if (choice.Key == key) return new(behavior.Controller, choice, instructions.Skip(index + 1).ToArray());

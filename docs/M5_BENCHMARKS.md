@@ -189,9 +189,9 @@ Run either manifest with the existing command and a new output directory.
 Initialization and execution need preprovisioned official content and never
 fetch it. An unsupported profile is an error, not a baseline substitution.
 
-The initial Corp policy is `corp-heuristic-v1`; profiles share its typed utility
+The initial Corp policy is `corp-heuristic-v2`; profiles share its typed utility
 families. Standard uses 20,000 evaluation work units and exact ties; Easy uses
-12,000 units, a 20-point near-tie range, 90% credit and 80% protection weighting.
+12,000 units, a 15-point near-tie range, 90% credit and 80% protection weighting.
 Both retain exact scoring and survival priorities. These are strategic
 estimates rather than a second rules engine. The policy only submits issued
 IDs and recomputes after every accepted action. It never receives a deck list,
