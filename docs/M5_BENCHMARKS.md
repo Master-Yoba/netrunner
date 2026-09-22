@@ -203,3 +203,32 @@ conservative fallback; an unselected fallback candidate does not increment the
 count. Approximate economic or defensive valuation alone is not a fallback.
 Malformed/unsupported action contracts are checked before the work budget, so
 exhaustion cannot hide a broken contract.
+
+Final M5.3 manifests are `corp-{standard,easy}-tactical-v2.json` and
+`corp-{standard,easy}-smoke-v2.json` under `data/m5/benchmarks/`. The `v2`
+suffix identifies the corrected Corp policy; original Gateway fixture and
+baseline seed suite versions remain unchanged. Current measured tactical scores
+are Standard 39/40 and Easy 38/40, both 11/11 critical. The held-out score is
+15/16 for both. Standard's remaining miss is choosing a scoring remote instead
+of preserving an R&D rez reserve (`corp-development-04`); Easy additionally
+chooses a remote over the exposed HQ in `corp-development-01`. Both are legal,
+completed outcomes retained as misses.
+
+The first Standard held-out evaluation scored 38/40 and exposed an evaluator
+exception for private searches: constructing a placeholder `AddToHand`
+instruction violated Core's required-target contract. Policy v2 carries a
+metadata-only target intent instead. It makes no strategic weight change in
+response to that held-out case. Its regression is now explicit; therefore the
+post-fix held-out result is a regression measurement, not a fresh unseen sample.
+Easy's initial 37/40 run retained one incomplete tuning chain: its 20-point
+near-tie range could defer installing an upgrade. The final 15-point range was
+chosen from that tuning case. Original reports are preserved as allowlisted
+summaries alongside the final results in `docs/evidence/m5-3/`.
+
+Both profiles finish all 20 original official smoke games against contract v6,
+with all replays verified and zero selected fallbacks: Standard wins 18, Easy
+11. The sample is a regression smoke, not evidence of a population win rate.
+Standard repeats identically at one and four workers, digest
+`e200ec9502a1dfc57406912a5501766568363e505e1c033025331bfe2cb267e7`.
+The full 1,000-game paired strength gate remains a later milestone integration
+gate; this slice does not claim that it has run it.

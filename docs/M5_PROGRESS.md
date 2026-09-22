@@ -161,7 +161,7 @@ verified replays at one and four workers and retains the original digest above.
 The gate now explicitly executes official tactical, CLI and Mutual Favor tests;
 synthetic CI continues to label official tactical checks as skipped.
 
-## M5.3 — Corp policy (in progress)
+## M5.3 — Corp policy (complete, 22 September 2026)
 
 The observation-only Corp evaluator covers economy, server development,
 replacement loss, scoring, rez reserves, damage/tag pressure, purge and nested
@@ -172,8 +172,24 @@ context for offered triggers is projected only to their owner; feature schema
 even when the evaluation budget is exhausted. Selected conservative fallbacks
 are measured separately from approximate strategic scores.
 
-Before held-out evaluation, Standard passes 24/24 frozen tuning positions.
-The initial complete-game smoke finished 20/20 with verified replays (19 Corp
-wins); it predates the final tuning adjustment and is exploratory evidence.
-Final held-out, reproducibility and gate results are pending. M5.4 follows only
-when this slice meets its exit criteria. Keep separate branches and local commits.
+Standard passes 39/40 frozen positions (24/24 tuning, 15/16 held-out), Easy
+38/40 (23/24 tuning, 15/16 held-out); both pass all 11 critical cases. Every
+position completes and its replay verifies, including identical hidden-state
+twin choices/checkpoints. Both suites are identical at one and four workers.
+The first held-out run exposed a private-search metadata construction exception;
+policy v2 fixes it without changing strategic weights. Easy's near-tie range was
+reduced from 20 to 15 from a tuning-chain failure. Initial and final measurements
+remain in `docs/evidence/m5-3/`, with the post-fix evaluation caveat described in
+`M5_BENCHMARKS.md`.
+
+Both profiles complete all 20 pinned official smoke games against contract v6,
+with verified replays and zero selected fallbacks. Standard wins 18 and Easy 11;
+these are smoke results, not a statistical strength claim. Standard's serial
+repeat preserves every replay and deterministic digest:
+`e200ec9502a1dfc57406912a5501766568363e505e1c033025331bfe2cb267e7`.
+
+Validation passes: all 1,835 official-content solution tests, the full
+`make m4-gate` (including four official save/reload games and Godot interaction
+smokes), formatting verification, frozen-spec checks and secret scanning.
+M5.3 meets its slice exit criteria. M5.4 Runner policy is next, on its own branch
+with local checkpoints.
