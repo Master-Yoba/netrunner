@@ -664,7 +664,7 @@ public sealed class GatewayBatch1LifecycleTests
         Assert.Equal(
             [trashedHeadquartersCard, fixture.CardId],
             completed.State.GetZone(ZoneKind.CorpDiscard).CardIds);
-        Assert.True(completed.State.GetCard(trashedHeadquartersCard).FaceUp);
+        Assert.False(completed.State.GetCard(trashedHeadquartersCard).FaceUp);
 
         Fixture emptyFixture = CreateFixture(
             PlayerSide.Corp,
@@ -829,7 +829,11 @@ public sealed class GatewayBatch1LifecycleTests
         Assert.Equal(GameOutcomeKind.Won, completed.State.Outcome.Kind);
         Assert.Equal(PlayerSide.Runner, completed.State.Outcome.Winner);
         Assert.Equal(GameWinReason.DeckOut, completed.State.Outcome.Reason);
-        Assert.Equal(historyJson, EngineJson.Serialize(completed.State.Turn.History));
+        var expectedHistory = System.Text.Json.Nodes.JsonNode.Parse(historyJson)!;
+        // Finishing the accepted operation trashes its play-area card even
+        // after the draw ended the game; the current turn records that fact.
+        expectedHistory["corpThisTurn"]!["trashedCardOccurrenceIds"]!.AsArray().Add(fixture.CardId.Value);
+        Assert.Equal(expectedHistory.ToJsonString(), System.Text.Json.Nodes.JsonNode.Parse(EngineJson.Serialize(completed.State.Turn.History))!.ToJsonString());
         Assert.All(completed.State.Players, player => Assert.Equal(0, player.Clicks));
         Assert.Single(completed.State.GetZone(ZoneKind.CorpDiscard).CardIds, fixture.CardId);
         Assert.True(completed.State.GetCard(fixture.CardId).FaceUp);
@@ -927,7 +931,9 @@ public sealed class GatewayBatch1LifecycleTests
         int shuffleIndex = completed.Events
             .Select((value, index) => (value, index))
             .Where(entry => entry.value.Kind == EngineEventKinds.BehaviorCardsShuffled
-                && Assert.IsType<BehaviorCardsShuffledEventPayload>(entry.value.Payload).CardCount == 1)
+                // CardCount reports cards moved into the deck, not the
+                // remaining deck size shuffled after a search.
+                && Assert.IsType<BehaviorCardsShuffledEventPayload>(entry.value.Payload).CardCount == 0)
             .Select(entry => entry.index)
             .Single();
         int revealIndex = completed.Events
@@ -936,16 +942,12 @@ public sealed class GatewayBatch1LifecycleTests
                 && Assert.IsType<BehaviorCardRevealedEventPayload>(entry.value.Payload).CardId == buzzsawId)
             .Select(entry => entry.index)
             .Single();
-        int gripMoveIndex = completed.Events
-            .Select((value, index) => (value, index))
-            .Where(entry => entry.value.Kind == EngineEventKinds.CardMoved
-                && Assert.IsType<CardMovedEventPayload>(entry.value.Payload).CardId == buzzsawId
-                && Assert.IsType<CardMovedEventPayload>(entry.value.Payload).ToZoneId
-                    == completed.State.GetZone(ZoneKind.RunnerGrip).Id)
-            .Select(entry => entry.index)
-            .Single();
         Assert.True(shuffleIndex < revealIndex);
-        Assert.True(revealIndex < gripMoveIndex);
+        // Private custody transfers do not publish a stable physical hand
+        // location after revealing the searched definition.
+        Assert.DoesNotContain(completed.Events, entry => entry.Kind == EngineEventKinds.CardMoved
+            && Assert.IsType<CardMovedEventPayload>(entry.Payload).CardId == buzzsawId
+            && Assert.IsType<CardMovedEventPayload>(entry.Payload).ToZoneId == completed.State.GetZone(ZoneKind.RunnerGrip).Id);
     }
 
     [Fact]
@@ -1074,9 +1076,11 @@ public sealed class GatewayBatch1LifecycleTests
         Assert.DoesNotContain(completed.Events, value => value.Kind == EngineEventKinds.CardInstalled);
     }
 
-    [Fact]
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     [Trait("GatewayCard", "30011")]
-    public void MutualFavorSuccessfulRunInstallUsesPrintedCostWithoutAnotherClick()
+    public void MutualFavorSuccessfulRunInstallUsesPrintedCostWithoutAnotherClick(bool remainingStack)
     {
         if (!LifecycleAvailable())
         {
@@ -1087,7 +1091,7 @@ public sealed class GatewayBatch1LifecycleTests
             PlayerSide.Runner,
             GatewayBatch1CardCodes.MutualFavor,
             credits: 8,
-            runnerStackCards: [GatewayCardCodes.Buzzsaw],
+            runnerStackCards: remainingStack ? [GatewayCardCodes.Buzzsaw, GatewayBatch1CardCodes.SureGamble] : [GatewayCardCodes.Buzzsaw],
             preInstalledRunnerPrograms:
             [
                 GatewayCardCodes.Buzzsaw,

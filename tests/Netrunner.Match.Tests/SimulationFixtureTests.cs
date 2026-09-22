@@ -320,10 +320,10 @@ public sealed class SimulationFixtureTests
         // The default clean build intentionally embeds only synthetic card
         // data; this assertion proves the execution-bound overload fails
         // closed on that metadata pin rather than starting setup anyway.
-        Assert.Contains(
-            problems,
-            diagnostic => diagnostic.Code == "metadata-pin"
-                && diagnostic.Path == "cardDataVersion");
+        if (CardDataResource.EmbeddedMode == CardDataResource.SyntheticMode)
+            Assert.Contains(problems, diagnostic => diagnostic.Code == "metadata-pin" && diagnostic.Path == "cardDataVersion");
+        else
+            Assert.DoesNotContain(problems, diagnostic => diagnostic.Code == "metadata-pin" && diagnostic.Path == "cardDataVersion");
     }
 
     private static SimulationFixtureCatalog LoadFixtures()

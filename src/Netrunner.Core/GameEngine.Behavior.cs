@@ -2965,6 +2965,15 @@ public static partial class GameEngine
         option.Instructions.Count == 1
         && option.Instructions[0].Kind == BehaviorInstructionKind.InstallCard;
 
+    internal static GameState ProjectBehaviorInstallSelection(GameState state, IBehaviorCatalog behavior,
+        IRuntimeCardCatalog runtime, BehaviorResolutionFrame frame, BehaviorInstruction instruction,
+        out BehaviorResolutionFrame prepared)
+    {
+        WorkingState probe = WorkingState.From(state, behavior, runtime);
+        prepared = RestoreBehaviorInstallSelection(probe, frame, instruction);
+        return probe.Build(state);
+    }
+
     private static bool IsBehaviorInstallOptionAvailable(
         WorkingState working,
         BehaviorResolutionFrame frame,
@@ -2977,7 +2986,13 @@ public static partial class GameEngine
 
         try
         {
-            _ = ValidateBehaviorInstallInstruction(working, frame, option.Instructions[0]);
+            // A searched card remains in temporary custody while this mode
+            // choice is open. Test the same restoration as the actual install
+            // on an isolated working copy; probing must not move cards, emit
+            // events or consume IDs in the authoritative reduction.
+            WorkingState probe = working.Fork();
+            BehaviorResolutionFrame prepared = RestoreBehaviorInstallSelection(probe, frame, option.Instructions[0]);
+            _ = ValidateBehaviorInstallInstruction(probe, prepared, option.Instructions[0]);
             return true;
         }
         catch (ResolutionFailureException)

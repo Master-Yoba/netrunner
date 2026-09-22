@@ -12539,6 +12539,11 @@ public static partial class StateInvariantValidator
         try
         {
             BehaviorInstruction instruction = option.Instructions[0];
+            if (frame.SetAside.Count > 0)
+            {
+                state = GameEngine.ProjectBehaviorInstallSelection(state, behaviorCatalog, runtimeCardCatalog,
+                    frame, instruction, out frame);
+            }
             if (instruction.Target is not { Kind: BehaviorTargetKind.ChosenCard } target
                 || instruction.SourceZone is not (BehaviorZone.Stack or BehaviorZone.Grip)
                 || instruction.DestinationZone != BehaviorZone.Rig

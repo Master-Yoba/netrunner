@@ -285,11 +285,14 @@ public static partial class GameEngine
 
     private sealed class WorkingState
     {
+        private readonly GameState _source;
+
         private WorkingState(
             GameState source,
             IBehaviorCatalog behaviorCatalog,
             IRuntimeCardCatalog? runtimeCardCatalog)
         {
+            _source = source;
             BehaviorCatalog = behaviorCatalog;
             RuntimeCardCatalog = runtimeCardCatalog;
             Players = source.Players.ToList();
@@ -358,6 +361,8 @@ public static partial class GameEngine
         public RulesState? RulesState { get; set; }
 
         public List<EngineEvent> Events { get; }
+
+        public WorkingState Fork() => From(Build(_source), BehaviorCatalog, RuntimeCardCatalog);
 
         public static WorkingState From(
             GameState source,
