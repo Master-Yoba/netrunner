@@ -71,6 +71,8 @@ public sealed record MatchSubmissionResult(
 /// <summary>Configuration for the asynchronous M3 coordinator.</summary>
 public sealed class MatchCoordinatorOptions
 {
+    public bool EnableDeveloperTools { get; init; }
+
     public TimeSpan AgentDelay { get; init; } = TimeSpan.Zero;
 
     /// <summary>
@@ -183,8 +185,9 @@ public sealed partial class MatchCoordinator : IAsyncDisposable, IDisposable
     }
 
     private MatchCoordinator(M2ScenarioDocument? document, FullMatchDefinition? definition, IGameAgent corpAgent,
-        MatchCoordinatorOptions? options, SoloSaveDocument? save = null)
+        MatchCoordinatorOptions? options, SoloSaveDocument? save = null, DeveloperSnapshotDocument? developerRoot = null)
     {
+        _developerRoot = developerRoot;
         _resumeSave = save;
         _document = document;
         _fullMatch = definition;
@@ -205,7 +208,7 @@ public sealed partial class MatchCoordinator : IAsyncDisposable, IDisposable
         // the worker replaces it with the immutable scenario slice before any
         // engine or presentation operation runs.
         _behaviorCatalog = _suppliedBehaviorCatalog;
-        if (!Enum.IsDefined(_options.HumanSide) || definition is null && _options.HumanSide != PlayerSide.Runner)
+        if (!Enum.IsDefined(_options.HumanSide) || definition is null && developerRoot is null && _options.HumanSide != PlayerSide.Runner)
         {
             throw new ArgumentException(
                 "The M3 vertical slice supports a human Runner only.",
@@ -242,6 +245,9 @@ public sealed partial class MatchCoordinator : IAsyncDisposable, IDisposable
 
         if (save is not null && (_options.HumanSide != save.Metadata.HumanSide || _options.ResumeTraceDirectory is not null))
             throw new ArgumentException("Saved human side or recovery options do not match the requested session.", nameof(options));
+        if (developerRoot is not null && (!_options.EnableDeveloperTools || _options.HumanSide != developerRoot.HumanSide
+            || _options.ResumeTraceDirectory is not null))
+            throw new ArgumentException("Developer import requires an explicit capability and the saved human seat.", nameof(options));
         _worker = RunWorkerAsync();
     }
 
@@ -420,6 +426,15 @@ public sealed partial class MatchCoordinator : IAsyncDisposable, IDisposable
                     case ObservationCommand observation:
                         HandleObservation(observation);
                         break;
+                    case DeveloperExportCommand export:
+                        HandleDeveloperExport(export);
+                        break;
+                    case DeveloperInspectCommand inspect:
+                        HandleDeveloperInspect(inspect);
+                        break;
+                    case DeveloperAdvanceCommand advance:
+                        HandleDeveloperAdvance(advance);
+                        break;
                     default:
                         throw new InvalidOperationException(
                             $"Unsupported match coordinator command '{command.GetType().Name}'.");
@@ -442,6 +457,7 @@ public sealed partial class MatchCoordinator : IAsyncDisposable, IDisposable
         }
         finally
         {
+            _developerAdvance?.Fail(new OperationCanceledException("The match coordinator stopped."));
             try
             {
                 _sessionTrace?.Dispose();
@@ -471,6 +487,16 @@ public sealed partial class MatchCoordinator : IAsyncDisposable, IDisposable
 
         try
         {
+            if (_developerRoot is not null)
+            {
+                _state = _developerRoot.Validate(_behaviorCatalog, _runtimeCardCatalog!);
+                InitializePersistence(_state, _developerRoot.Replay);
+                RestoreHistory(_developerRoot.Replay);
+                InitializeSessionTrace(_state);
+                _recoveredPaused = true;
+                command.Complete(Publish([], null, false));
+                return;
+            }
             if (_resumeSave is not null)
             {
                 RestoreSave();

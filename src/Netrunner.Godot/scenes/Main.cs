@@ -193,8 +193,13 @@ public partial class Main : Control
 			&& !_slice45UiSmoke && !_slice46UiSmoke && !_slice47UiSmoke && !_slice48UxSmoke && !_fullMatchSmoke
 			&& !arguments.Contains("--diagnostic-ui", StringComparer.Ordinal);
 		if (arguments.Contains("--card-art-smoke", StringComparer.Ordinal)) PrepareCardArtworkSmoke();
+		if (arguments.Contains("--m5-developer-smoke", StringComparer.Ordinal)) ProjectSettings.SetSetting("developer/enabled", true);
 		BuildShell();
-		if (arguments.Contains("--m5-client-smoke", StringComparer.Ordinal))
+		if (arguments.Contains("--m5-developer-smoke", StringComparer.Ordinal))
+		{
+			_ = RunDeveloperSessionSmokeAsync(arguments);
+		}
+		else if (arguments.Contains("--m5-client-smoke", StringComparer.Ordinal))
 		{
 			_ = RunSoloClientSmokeAsync(arguments);
 		}
@@ -294,6 +299,7 @@ public partial class Main : Control
 		_sessionExited = true;
 		Interlocked.Increment(ref _sessionGeneration);
 		_browserCancellation?.Cancel();
+		_developerCancellation?.Cancel();
 		DetachCoordinatorPublications();
 		_soloSession?.SetActiveSession(null);
 		DisconnectCardHoverPreview();

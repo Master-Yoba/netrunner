@@ -55,6 +55,7 @@ public sealed partial class MatchCoordinator
 
     private void PauseAtBoundary()
     {
+        if (_developerAdvance is not null) FinishDeveloperAdvance(DeveloperStopReason.Paused);
         _recoveredPaused = true;
         _generation++;
         _evaluation?.Cancellation.Cancel();
@@ -82,11 +83,22 @@ public sealed partial class MatchCoordinator
 
     private void HandlePump()
     {
+        if (TryStopDeveloperAdvance()) return;
         if (_recoveredPaused || _evaluation is not null || _cancellation.IsCancellationRequested
             || _state is not { PendingDecision: { } pending } state || state.Outcome.Kind != GameOutcomeKind.Ongoing)
             return;
         PlayerSide side = state.GetPlayer(pending.Owner).Side;
-        if (side == _options.HumanSide)
+        IGameAgent agent = _corpAgent;
+        if (side == _options.HumanSide && _developerAdvance is { } advance)
+        {
+            if (advance.Request.HumanAction is { } action)
+            {
+                CommitPumpAction(new(pending.Owner, pending.Id, pending.Revision, action));
+                return;
+            }
+            agent = new FullGameContractAgent(side, _runtimeCardCatalog!);
+        }
+        else if (side == _options.HumanSide)
         {
             if (!_options.AutoPassPriority || pending.LegalActions.Count != 1
                 || pending.LegalActions[0].Kind != ActionKind.PassPriority) return;
@@ -94,9 +106,9 @@ public sealed partial class MatchCoordinator
             return;
         }
 
-        var work = new AgentEvaluationWork(_generation, pending.Id, pending.Revision, pending.Owner,
+        var work = new AgentEvaluationWork(_generation, pending.Id, pending.Revision, pending.Owner, agent,
             (_corpAgent as OfflineAgent)?.Checkpoint,
-            CancellationTokenSource.CreateLinkedTokenSource(_cancellation.Token));
+            CancellationTokenSource.CreateLinkedTokenSource(_cancellation.Token, _developerAdvance?.Cancellation ?? default));
         _evaluation = work;
         Observation observation = ObservationBuilder.Build(state, side, _behaviorCatalog);
         Publish([], null, thinking: true);
@@ -108,8 +120,8 @@ public sealed partial class MatchCoordinator
             Exception? failure = null;
             try
             {
-                await DelayAsync(_options.AgentDelay, work.Cancellation.Token).ConfigureAwait(false);
-                action = await _corpAgent.ChooseActionAsync(observation, work.Cancellation.Token).ConfigureAwait(false);
+                await DelayAsync(_developerAdvance is null ? _options.AgentDelay : TimeSpan.Zero, work.Cancellation.Token).ConfigureAwait(false);
+                action = await work.Agent.ChooseActionAsync(observation, work.Cancellation.Token).ConfigureAwait(false);
                 work.Cancellation.Token.ThrowIfCancellationRequested();
             }
             catch (Exception exception) { failure = exception; }
@@ -131,15 +143,16 @@ public sealed partial class MatchCoordinator
             && ((_corpAgent as OfflineAgent)?.Checkpoint == work.Checkpoint);
         if (!current)
         {
-            AgentLifecycleHost.Discard(_corpAgent);
+            AgentLifecycleHost.Discard(work.Agent);
+            if (TryStopDeveloperAdvance()) return;
             _ = DriveAgentsAsync();
             return;
         }
         if (command.Failure is not null || command.Action is null)
         {
             AgentLifecycleHost.Discard(_corpAgent);
-            Publish([], new(MatchFeedbackKind.AgentFailure,
-                command.Failure?.Message ?? "Opponent returned no action."), thinking: false);
+            ReportPumpFailure(new(MatchFeedbackKind.AgentFailure,
+                command.Failure?.Message ?? "Opponent returned no action."));
             return;
         }
         CommitPumpAction(new(work.Owner, work.DecisionId, work.Revision, command.Action.Value));
@@ -152,23 +165,30 @@ public sealed partial class MatchCoordinator
             ApplyResult applied = ApplyEngineAction(_state!, submission);
             if (!applied.Accepted)
             {
-                Publish([], new(MatchFeedbackKind.AgentFailure,
-                    applied.Rejection?.Message ?? "Automatic action was rejected.", applied.Rejection?.Code), false);
+                ReportPumpFailure(new(MatchFeedbackKind.AgentFailure,
+                    applied.Rejection?.Message ?? "Automatic action was rejected.", applied.Rejection?.Code));
                 return;
             }
             _state = applied.State;
             Publish(applied.Events, null, thinking: false);
+            if (TryStopDeveloperAdvance()) return;
             _ = DriveAgentsAsync();
         }
         catch (Exception exception)
         {
             AgentLifecycleHost.Discard(_corpAgent);
-            Publish([], new(MatchFeedbackKind.AgentFailure, exception.Message), thinking: false);
+            ReportPumpFailure(new(MatchFeedbackKind.AgentFailure, exception.Message));
             if (_traceFault is not null) throw;
         }
     }
 
-    private sealed record AgentEvaluationWork(long Generation, DecisionId DecisionId, long Revision, PlayerId Owner,
+    private void ReportPumpFailure(MatchFeedback feedback)
+    {
+        if (_developerAdvance is not null) FinishDeveloperAdvance(DeveloperStopReason.Failure, feedback);
+        else Publish([], feedback, thinking: false);
+    }
+
+    private sealed record AgentEvaluationWork(long Generation, DecisionId DecisionId, long Revision, PlayerId Owner, IGameAgent Agent,
         OfflineAgentCheckpoint? Checkpoint, CancellationTokenSource Cancellation);
     private sealed class PumpCommand : CoordinatorCommand<bool>;
     private sealed class PauseCommand : CoordinatorCommand<MatchSnapshot>;

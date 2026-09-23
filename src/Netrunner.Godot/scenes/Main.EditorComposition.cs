@@ -28,6 +28,7 @@ public partial class Main
 		_startButton.Disabled = !available;
 		_startButton.Pressed += BeginMatch;
 		_galleryButton = setup.GetNode<Button>("%OpenGallery");
+		_galleryButton.Visible = DeveloperToolsEnabled;
 		_galleryButton.Disabled = !_metadataSnapshot.IsOfficial;
 		_galleryButton.Pressed += ShowCardGallery;
 		if (!_metadataSnapshot.IsOfficial)

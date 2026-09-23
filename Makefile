@@ -88,3 +88,10 @@ card-art-fetch card-art-validate card-art-pack card-art-unpack:
 
 m5-client-smoke:
 	bash scripts/m5-client-smoke.sh
+
+.PHONY: play-dev m5-developer-smoke
+play-dev:
+	bash scripts/play.sh --developer
+
+m5-developer-smoke:
+	bash scripts/m5-developer-smoke.sh

@@ -165,6 +165,7 @@ public partial class Main
 			: OfflineMatchFactory.CreateOpponent(definition, humanSide, _difficulty?.Selected == 1 ? "easy" : "standard");
 		var options = new MatchCoordinatorOptions
 		{
+			EnableDeveloperTools = DeveloperToolsEnabled,
 			HumanSide = humanSide,
 			AutoPassPriority = true,
 			AgentDelay = TimeSpan.FromMilliseconds(45),

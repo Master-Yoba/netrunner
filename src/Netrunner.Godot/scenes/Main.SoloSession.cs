@@ -25,7 +25,7 @@ public partial class Main
 	private string? _soloNotice;
 	private double _soloNoticeRemaining;
 	private bool SaveDialogVisible => _saveDialog?.Visible == true;
-	private bool SessionModalVisible => SettingsVisible || SaveDialogVisible;
+	private bool SessionModalVisible => SettingsVisible || SaveDialogVisible || DeveloperDialogVisible;
 	private bool UseContractDiagnostic => _m4FullMatchSmoke || _fullMatchSmoke
 		|| OS.GetCmdlineUserArgs().Contains("--m4-9-ui-smoke", StringComparer.Ordinal);
 
@@ -33,6 +33,13 @@ public partial class Main
 	{
 		// Native smoke events must not race the desktop's real pointer.
 		if (_isolateSmokeInput && @event.Device != SmokeInputDevice) { GetViewport().SetInputAsHandled(); return; }
+		if (DeveloperDialogVisible && @event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Escape })
+		{
+			if (_developerFiles?.Visible == true) _developerFiles.Hide();
+			else CloseDeveloperDialog();
+			GetViewport().SetInputAsHandled();
+			return;
+		}
 		if (SaveDialogVisible && @event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Escape })
 		{
 			CloseSaveDialog();
@@ -54,6 +61,7 @@ public partial class Main
 		_saveDialog.OpenFolderRequested += OpenSaveFolder;
 		_saveDialog.LoadRequested += (id, backup) => _ = LoadSavedMatchAsync(id, backup);
 		_saveDialog.SaveRequested += name => _ = SaveCurrentMatchAsync(name);
+		BindDeveloperTools();
 	}
 
 	private SoloSessionService GetSoloSessionService()
@@ -80,7 +88,7 @@ public partial class Main
 		DetachCoordinatorPublications();
 		long generation = Interlocked.Increment(ref _sessionGeneration);
 		MatchCoordinator coordinator = _coordinator!;
-		SoloSessionService? persistence = _useCardTable && !UseContractDiagnostic ? GetSoloSessionService() : null;
+		SoloSessionService? persistence = _useCardTable && !UseContractDiagnostic && coordinator.SupportsPlayerSaves ? GetSoloSessionService() : null;
 		persistence?.SetActiveSession(coordinator);
 		(int? Turn, Netrunner.Core.PlayerSide? Side)? lastAutoTurn = null;
 		bool terminalSaved = false;
@@ -150,7 +158,7 @@ public partial class Main
 
 	private void ShowSaveGame(bool quit)
 	{
-		if (_coordinator is null || _interactionLab || _manualSaveInFlight || _saveDialog is null) return;
+		if (_coordinator?.SupportsPlayerSaves != true || _interactionLab || _manualSaveInFlight || _saveDialog is null) return;
 		PrepareSaveDialog();
 		_saveAndQuit = quit;
 		_saveDialog.ShowSave($"{_currentSnapshot?.View.Viewer} · Turn {_currentSnapshot?.View.Turn.TurnNumber} · {DateTime.Now:g}", quit);
@@ -267,7 +275,7 @@ public partial class Main
 			string traceRoot = string.IsNullOrWhiteSpace(launchDiagnostics)
 				? ProjectSettings.GlobalizePath(SessionDiagnosticsRoot) : Path.GetFullPath(launchDiagnostics);
 			string trace = Path.Combine(traceRoot, $"saved-{Guid.NewGuid():N}");
-			candidate = await GetSoloSessionService().LoadAsync(id, backup, trace, token);
+			candidate = await GetSoloSessionService().LoadAsync(id, backup, trace, DeveloperToolsEnabled, token);
 			if (_sessionExited || revision != _saveDialogRevision || generation != _sessionGeneration || token.IsCancellationRequested) return;
 			MatchCoordinator? previous = _coordinator;
 			DetachCoordinatorPublications();

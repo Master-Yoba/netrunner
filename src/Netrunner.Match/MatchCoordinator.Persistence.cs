@@ -29,7 +29,7 @@ public sealed partial class MatchCoordinator
 
     private void InitializePersistence(GameState state, ReplayArtifact? replay = null)
     {
-        if (_fullMatch is null) return;
+        if (_fullMatch is null && _developerRoot is null) return;
         _replayInitial = replay?.InitialSnapshot ?? state.CreateSnapshot(_behaviorCatalog, _runtimeCardCatalog!);
         if (replay is not null) _replayActions.AddRange(replay.Actions);
         CacheCommittedAgent();

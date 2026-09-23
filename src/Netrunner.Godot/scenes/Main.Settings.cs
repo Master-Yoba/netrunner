@@ -49,7 +49,7 @@ public partial class Main
 		_settingsMenu.Visible = visible;
 		if (visible)
 		{
-			bool canSave = _coordinator?.CurrentSnapshot is not null && !_interactionLab && !_manualSaveInFlight;
+			bool canSave = _coordinator?.CurrentSnapshot is not null && _coordinator.SupportsPlayerSaves && !_interactionLab && !_manualSaveInFlight;
 			_settingsMenu.GetNode<Button>("%SaveGame").Disabled = !canSave;
 			_settingsMenu.GetNode<Button>("%SaveAndQuit").Disabled = !canSave;
 			_boardDrag?.Cancel("settings", false);

@@ -50,13 +50,14 @@ public sealed class SoloSessionService : IAsyncDisposable
         _store.BrowseAsync(cancellationToken);
 
     public async Task<LoadedSoloSession> LoadAsync(string saveId, bool backup = false,
-        string? traceDirectory = null, CancellationToken cancellationToken = default)
+        string? traceDirectory = null, bool enableDeveloperTools = false, CancellationToken cancellationToken = default)
     {
         SoloSaveDocument document = await _store.LoadAsync(saveId, backup, cancellationToken).ConfigureAwait(false);
         MatchCoordinator coordinator = await Task.Run(() => new MatchCoordinator(_compose(document.Payload.Request), document,
             new MatchCoordinatorOptions
             {
                 HumanSide = document.Metadata.HumanSide,
+                EnableDeveloperTools = enableDeveloperTools,
                 AutoPassPriority = true,
                 AgentDelay = TimeSpan.FromMilliseconds(45),
                 SessionTraceDirectory = traceDirectory,
