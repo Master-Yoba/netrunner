@@ -193,3 +193,38 @@ Validation passes: all 1,835 official-content solution tests, the full
 smokes), formatting verification, frozen-spec checks and secret scanning.
 M5.3 meets its slice exit criteria. M5.4 Runner policy is next, on its own branch
 with local checkpoints.
+
+## M5.4 — Runner policy (complete, 23 September 2026)
+
+The Runner evaluator and Standard/Easy profiles use detached observations and
+issued action IDs. A bounded encounter planner compares feasible pump/break
+chains, matching breaker strength, bioroid clicks, hosted virus counters,
+expiring run credits and future loss from disposable breakers. A shared typed
+payment helper prefers issued run-credit allocations without treating ordinary
+hosted counters as generic credits. The decision batch validates every issued
+action exactly once. Runner-specific regressions cover insufficient follow-up
+credits, counter budgets, Mayfly, conditional ICE effects, profile boundaries,
+and a completed encounter at the movement jack-out window.
+
+Both profiles pass 38/40 frozen tactical positions: 24/24 tuning and 14/16
+held-out, including all 17 critical cases. All 40 positions complete with
+verified replays; hidden twins agree, and one/four-worker deterministic digests
+match per profile. The two noncritical held-out misses are `runner-access-04`
+(the bot accesses hidden HQ cards before the visible valuable root card) and
+`runner-rig-04` (it starts a run before the requested redundant-program
+cleanup). Both are legal completed lines retained as misses. The full reports
+remain local; shareable allowlisted summaries are in `docs/evidence/m5-4/`.
+
+Both profiles finish all 20 pinned official smoke games against contract v6
+with verified replays, zero selected fallbacks and zero wasted pumps. Standard
+uses 33 pumps and wins 17; Easy uses 28 pumps and wins 17. Standard has the same
+game/replay digest at one and four workers,
+`f6460441f643d9e8cf29779b843100a07b07190b6f8d42d3938f916b76f1f727`.
+Standard Corp versus Standard Runner self-play finishes 20/20 with verified
+replays, zero selected fallbacks and zero wasted pumps (Corp 14, Runner 6).
+These are regression smokes, not population win-rate estimates.
+
+Validation passes: all 1,886 official-content solution tests, formatting
+verification, the full `make m4-gate` (including four Godot save/reload games),
+M5 specification validation and secret scanning. M5.4 meets its slice exit
+criteria. M5.5 session persistence follows on its own branch, then M5.6.

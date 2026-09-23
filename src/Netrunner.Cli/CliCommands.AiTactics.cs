@@ -20,6 +20,7 @@ public static partial class CliCommands
             int workers = 1;
             string? destination = null;
             string? corpProfile = null;
+            string? runnerProfile = null;
             var seen = new HashSet<string>(StringComparer.Ordinal);
             for (int index = 2; index < args.Length; index++)
             {
@@ -28,6 +29,7 @@ public static partial class CliCommands
                 {
                     case "--json": break;
                     case "--corp-profile" when initialize && index + 1 < args.Length: corpProfile = args[++index]; break;
+                    case "--runner-profile" when initialize && index + 1 < args.Length: runnerProfile = args[++index]; break;
                     case "--output" when index + 1 < args.Length: destination = args[++index]; break;
                     case "--verify-fixtures" when !initialize: verifyFixtures = true; break;
                     case "--workers" when !initialize && index + 1 < args.Length:
@@ -37,6 +39,7 @@ public static partial class CliCommands
                     default: throw new ArgumentException($"Unsupported tactical argument '{args[index]}'.");
                 }
             }
+            if (corpProfile is not null && runnerProfile is not null) throw new ArgumentException("Choose one tactical side per manifest.");
             if (string.IsNullOrWhiteSpace(destination)) throw new ArgumentException("--output <new path> is required.");
             if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode)
                 throw new ArgumentException("Tactical Gateway benchmarks require locally provisioned official content at build time. Execution is offline.");
@@ -45,6 +48,7 @@ public static partial class CliCommands
             {
                 TacticalBenchmarkManifest manifest = runner.CreateContractManifest();
                 if (corpProfile is not null) manifest = BenchmarkSuites.WithCorpProfile(manifest, corpProfile);
+                if (runnerProfile is not null) manifest = BenchmarkSuites.WithRunnerProfile(manifest, runnerProfile);
                 using var stream = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None);
                 JsonSerializer.Serialize(stream, manifest, EngineJson.Options);
                 output.WriteLine(json ? EngineJson.Serialize(new { schemaVersion = 1, status = "created", manifest.SuiteId, positions = manifest.Positions.Length })

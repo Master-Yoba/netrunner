@@ -11,6 +11,12 @@ public interface IOfflinePolicy
     AgentUtility Evaluate(AgentFeatures features, AgentAction action, AgentKnowledge knowledge, AgentObjective? objective,
         OfflineAgentConfiguration configuration, ICardEvaluationCatalog catalog, AgentWorkBudget budget);
     AgentUtility Fallback(AgentFeatures features, AgentAction action);
+
+    ImmutableArray<AgentCandidate> EvaluateDecision(AgentFeatures features, AgentKnowledge knowledge, AgentObjective? objective,
+        OfflineAgentConfiguration configuration, ICardEvaluationCatalog catalog, AgentWorkBudget budget) =>
+        features.Actions.Select(action => new AgentCandidate(action.Id,
+            budget.TrySpend() ? Evaluate(features, action, knowledge, objective, configuration, catalog, budget)
+                : Fallback(features, action) with { UsedFallback = true })).ToImmutableArray();
 }
 
 public sealed record AgentUtility(int Priority, int Score, string Reason, bool Approximate = false, AgentObjective? Objective = null, bool UsedFallback = false);
@@ -111,9 +117,13 @@ public sealed class OfflineAgent : IAgentLifecycle
             if (_pending is { } retry && retry.Digest == digest) return ValueTask.FromResult(retry.Action);
             var budget = new AgentWorkBudget(Configuration.WorkBudget, cancellationToken);
             foreach (AgentAction action in features.Actions) _policy.ValidateAction(features, action);
-            var candidates = features.Actions.Select(action => new AgentCandidate(action.Id,
-                budget.TrySpend() ? _policy.Evaluate(features, action, _checkpoint.Knowledge, _checkpoint.Objective, Configuration, _catalog, budget)
-                    : _policy.Fallback(features, action) with { UsedFallback = true })).ToImmutableArray();
+            ImmutableArray<AgentCandidate> candidates = _policy.EvaluateDecision(features, _checkpoint.Knowledge,
+                _checkpoint.Objective, Configuration, _catalog, budget);
+            if (candidates.IsDefault || candidates.Length != features.Actions.Length || candidates.Any(candidate => candidate?.Utility is null)
+                || !candidates.Select(candidate => candidate.ActionId).OrderBy(id => id.Value, StringComparer.Ordinal)
+                    .SequenceEqual(features.Actions.Select(action => action.Id).OrderBy(id => id.Value, StringComparer.Ordinal)))
+                throw new InvalidOperationException("Policy evaluation must score every issued action exactly once.");
+            candidates = candidates.OrderBy(candidate => candidate.ActionId.Value, StringComparer.Ordinal).ToImmutableArray();
             int priority = candidates.Max(candidate => candidate.Utility.Priority);
             int best = candidates.Where(candidate => candidate.Utility.Priority == priority).Max(candidate => candidate.Utility.Score);
             AgentCandidate[] nearTies = candidates.Where(candidate => candidate.Utility.Priority == priority

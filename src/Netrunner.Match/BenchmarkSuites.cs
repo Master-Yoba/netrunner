@@ -16,7 +16,7 @@ public static class BenchmarkSuites
             Games = baseline.Games.Select(game => game with
             {
                 Corp = BenchmarkAgentSpec.Offline(CorpPolicyProfiles.Create(profile, game.Corp.PolicySeed)),
-                ComparisonGroup = "candidate-corp",
+                ComparisonGroup = game.Runner.Kind == "offline" ? "offline-self-play" : "candidate-corp",
             }).ToImmutableArray(),
         };
         result.Validate();
@@ -32,6 +32,37 @@ public static class BenchmarkSuites
                 .Select(position => position with
                 {
                     Agent = BenchmarkAgentSpec.Offline(CorpPolicyProfiles.Create(profile, position.Agent.PolicySeed)),
+                }).ToImmutableArray(),
+        };
+        result.Validate();
+        return result;
+    }
+
+    public static AiBenchmarkManifest WithRunnerProfile(AiBenchmarkManifest baseline, string profile)
+    {
+        if (baseline.ContentMode != "official") throw new ArgumentException("Gateway profiles require official content.");
+        var result = baseline with
+        {
+            SuiteId = "runner-" + profile + "-" + baseline.SuiteId,
+            Games = baseline.Games.Select(game => game with
+            {
+                Runner = BenchmarkAgentSpec.Offline(RunnerPolicyProfiles.Create(profile, game.Runner.PolicySeed)),
+                ComparisonGroup = game.Corp.Kind == "offline" ? "offline-self-play" : "candidate-runner",
+            }).ToImmutableArray(),
+        };
+        result.Validate();
+        return result;
+    }
+
+    public static TacticalBenchmarkManifest WithRunnerProfile(TacticalBenchmarkManifest baseline, string profile)
+    {
+        var result = baseline with
+        {
+            SuiteId = "runner-" + profile + "-" + baseline.SuiteId,
+            Positions = baseline.Positions.Where(position => position.Metadata.Side == PlayerSide.Runner)
+                .Select(position => position with
+                {
+                    Agent = BenchmarkAgentSpec.Offline(RunnerPolicyProfiles.Create(profile, position.Agent.PolicySeed)),
                 }).ToImmutableArray(),
         };
         result.Validate();

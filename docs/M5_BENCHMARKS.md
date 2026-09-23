@@ -232,3 +232,49 @@ Standard repeats identically at one and four workers, digest
 `e200ec9502a1dfc57406912a5501766568363e505e1c033025331bfe2cb267e7`.
 The full 1,000-game paired strength gate remains a later milestone integration
 gate; this slice does not claim that it has run it.
+
+## Runner policy profiles
+
+`ai-benchmark init smoke|full --runner-profile standard|easy --output
+<new.json>` keeps the baseline seeds, decks and Corp contract policy while
+pinning the Runner's complete offline configuration. Both profile flags may be
+used together to create a Corp/Runner offline self-play manifest on those same
+games. `ai-tactics init --runner-profile standard|easy --output <new.json>`
+retains all 40 frozen Runner positions; tactical manifests accept one profile
+side at a time. Run either manifest with the existing command and a fresh
+output directory. Official content must already be provisioned locally.
+
+The Runner policy is `runner-heuristic-v1`. Its bounded encounter planner
+evaluates visible subroutines against matching breakers, issued pump and break
+actions, hosted virus counters, bioroid clicks and available run credits. It
+recomputes after each accepted action, so previous pump plans cannot become
+authoritative choices after the engine changes the legal action set. Equivalent
+issued payments prefer expiring run credits. Standard and Easy use separate
+persisted work limits and risk weights; neither has access to hidden card
+identities or the engine's random state. M5.4 scores and replay evidence are
+retained as allowlisted summaries in `docs/evidence/m5-4/`.
+The pinned Standard and Easy inputs are
+`data/m5/benchmarks/runner-{standard,easy}-{tactical,smoke}-v1.json`;
+their root/twin hashes, decks and policy seeds match the unchanged M5.2
+baseline. The Easy manifests retain those inputs while pinning its distinct
+work budget, near-tie range and risk weights.
+
+Final frozen results: Standard and Easy each pass 38/40 cases, all 17 critical,
+and 14/16 held-out. All positions complete and replay-verify, with hidden twins
+equivalent. Serial and four-worker tactical digests match within each profile:
+Standard `ee47d3bfd954a7cfc2ce23b19f30c8a75885d63de445087ce4545096ba3a9edb`,
+Easy `fac26d7a173a864b8a91999cb66cc841662bf0855cfeb797ef4674d19c1f8009`.
+The first held-out run scored 37/40 and missed a critical winning continuation:
+the policy counted completed ICE a second time at a movement jack-out window.
+The final 38/40 is a regression measurement after that correctness fix, not a
+fresh unseen sample. `runner-access-04` and `runner-rig-04` remain noncritical
+held-out misses; neither is silently removed from the denominator.
+
+Both profiles finish all 20 official smoke games against contract v6, with
+verified replays, zero selected fallbacks and zero wasted pumps. Standard has
+17 Runner wins and the same full-game digest at one and four workers,
+`f6460441f643d9e8cf29779b843100a07b07190b6f8d42d3938f916b76f1f727`;
+Easy also has 17 wins. A 20-game Standard Corp/Standard Runner self-play smoke
+finishes 20/20 with verified replays and no selected fallback (Corp 14,
+Runner 6). These samples establish legality and regression behavior, not a
+population strength estimate. The 1,000-game paired gate remains M5.8 work.

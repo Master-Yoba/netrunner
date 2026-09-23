@@ -67,10 +67,40 @@ public sealed class AiTacticsCommandTests : IDisposable
     }
 
     [Theory]
+    [InlineData("standard")]
+    [InlineData("easy")]
+    public void RunnerProfileInitRetainsFrozenCasesAndRecordsExactConfiguration(string profile)
+    {
+        string path = Path.Combine(_directory, "runner.json");
+        var result = Run("init", "--runner-profile", profile, "--output", path);
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode)
+        {
+            Assert.Equal(2, result.Code);
+            return;
+        }
+        Assert.Equal(0, result.Code);
+        TacticalBenchmarkManifest baseline = new TacticalBenchmarkRunner(CardDataResource.LoadEmbedded()).CreateContractManifest();
+        TacticalBenchmarkManifest manifest = EngineJson.Deserialize<TacticalBenchmarkManifest>(File.ReadAllText(path));
+        Assert.Equal(40, manifest.Positions.Length);
+        Assert.All(manifest.Positions, position =>
+        {
+            TacticalPositionSpec original = baseline.Positions.Single(value => value.Metadata.Id == position.Metadata.Id);
+            Assert.Equal(original.InitialStateHash, position.InitialStateHash);
+            Assert.Equal(original.HiddenTwinStateHash, position.HiddenTwinStateHash);
+            Assert.Equal(original.Agent.PolicySeed, position.Agent.PolicySeed);
+            Assert.Equal(PlayerSide.Runner, position.Agent.Side);
+            Assert.Equal(profile, position.Agent.Configuration!.ProfileId);
+            new BenchmarkAgentFactory().Validate(position.Agent);
+        });
+    }
+
+    [Theory]
     [InlineData("")]
     [InlineData("missing --output unused --workers 0")]
     [InlineData("init --output unused --verify-fixtures")]
     [InlineData("init --corp-profile hard --output unused")]
+    [InlineData("init --runner-profile hard --output unused")]
+    [InlineData("init --corp-profile standard --runner-profile standard --output unused")]
     [InlineData("missing --output unused --json")]
     public void MalformedInputIsVersionedAndCreatesNoEvidence(string arguments)
     {

@@ -46,6 +46,30 @@ public sealed class OfflineAgentFoundationTests
     }
 
     [Fact]
+    public async Task DecisionBatchMustScoreEveryIssuedIdExactlyOnceRegardlessOfActionOrder()
+    {
+        Observation observation = Decision(PlayerSide.Runner) with
+        {
+            LegalActions = Decision(PlayerSide.Runner).LegalActions.Reverse().ToArray(),
+        };
+        foreach (string failure in new[] { "missing", "duplicate", "unissued" })
+        {
+            var agent = new OfflineAgent(OfflineAgentConfiguration.Create(PlayerSide.Runner, "batch-policy-v1", "test", 42),
+                new BatchPolicy(failure), new EmptyCatalog(), captureDiagnostics: true);
+            agent.Observe(observation, 0);
+            string checkpoint = EngineJson.Serialize(agent.Checkpoint);
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await agent.ChooseActionAsync(observation));
+            Assert.Equal(checkpoint, EngineJson.Serialize(agent.Checkpoint));
+            Assert.Null(agent.LastEvaluation);
+        }
+        var valid = new OfflineAgent(OfflineAgentConfiguration.Create(PlayerSide.Runner, "batch-policy-v1", "test", 42),
+            new BatchPolicy("reversed"), new EmptyCatalog(), captureDiagnostics: true);
+        valid.Observe(observation, 0);
+        Assert.Contains(await valid.ChooseActionAsync(observation), observation.LegalActions.Select(action => action.Id));
+        Assert.Equal(observation.LegalActions.Count, valid.LastEvaluation!.Candidates.Length);
+    }
+
+    [Fact]
     public async Task AllDecisionFamiliesReturnIssuedIdsWithoutChangingCommittedState()
     {
         foreach (DecisionKind kind in Enum.GetValues<DecisionKind>())
@@ -324,6 +348,28 @@ public sealed class OfflineAgentFoundationTests
             return new(1, 0, "equal-test-utility");
         }
         public AgentUtility Fallback(AgentFeatures features, AgentAction action) => new(0, 0, "budget-fallback", true);
+    }
+
+    private sealed class BatchPolicy(string mode) : IOfflinePolicy
+    {
+        public string Version => "batch-policy-v1";
+        public ImmutableArray<AgentCandidate> EvaluateDecision(AgentFeatures features, AgentKnowledge knowledge, AgentObjective? objective,
+            OfflineAgentConfiguration configuration, ICardEvaluationCatalog catalog, AgentWorkBudget budget)
+        {
+            ImmutableArray<AgentCandidate> candidates = features.Actions.Reverse()
+                .Select(action => new AgentCandidate(action.Id, new(0, 0, "batch-test"))).ToImmutableArray();
+            return mode switch
+            {
+                "missing" => candidates.RemoveAt(0),
+                "duplicate" => candidates.SetItem(0, candidates[1]),
+                "unissued" => candidates.SetItem(0, candidates[0] with { ActionId = new("action:unissued") }),
+                _ => candidates,
+            };
+        }
+        public AgentUtility Evaluate(AgentFeatures features, AgentAction action, AgentKnowledge knowledge, AgentObjective? objective,
+            OfflineAgentConfiguration configuration, ICardEvaluationCatalog catalog, AgentWorkBudget budget) =>
+            throw new InvalidOperationException("Decision batch should be used.");
+        public AgentUtility Fallback(AgentFeatures features, AgentAction action) => new(0, 0, "fallback");
     }
 
     private sealed class EmptyCatalog : ICardEvaluationCatalog

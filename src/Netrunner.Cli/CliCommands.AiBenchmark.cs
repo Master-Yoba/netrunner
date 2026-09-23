@@ -19,6 +19,7 @@ public static partial class CliCommands
                 throw new ArgumentException("ai-benchmark requires a manifest, or init smoke|full|developer, and --output <new path>.");
             string? destination = null;
             string? corpProfile = null;
+            string? runnerProfile = null;
             int workers = 1;
             var seen = new HashSet<string>(StringComparer.Ordinal);
             for (int index = inputIndex + 1; index < args.Length; index++)
@@ -28,6 +29,7 @@ public static partial class CliCommands
                 {
                     case "--json": break;
                     case "--corp-profile" when initialize && index + 1 < args.Length: corpProfile = args[++index]; break;
+                    case "--runner-profile" when initialize && index + 1 < args.Length: runnerProfile = args[++index]; break;
                     case "--output" when index + 1 < args.Length:
                         destination = args[++index];
                         break;
@@ -70,6 +72,7 @@ public static partial class CliCommands
             {
                 manifest = BenchmarkSuites.CreateContract(runner, args[inputIndex]);
                 if (corpProfile is not null) manifest = BenchmarkSuites.WithCorpProfile(manifest, corpProfile);
+                if (runnerProfile is not null) manifest = BenchmarkSuites.WithRunnerProfile(manifest, runnerProfile);
                 using var stream = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None);
                 JsonSerializer.Serialize(stream, manifest, EngineJson.Options);
                 output.WriteLine(json ? EngineJson.Serialize(new { schemaVersion = 1, status = "created", manifest.SuiteId, games = manifest.Games.Length })

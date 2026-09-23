@@ -151,6 +151,12 @@ public sealed class BenchmarkAgentFactory : IBenchmarkAgentFactory
     public void Validate(BenchmarkAgentSpec specification)
     {
         specification.Validate();
+        if (specification.Kind == "offline" && specification.PolicyVersion == RunnerHeuristicPolicy.PolicyVersion
+            && specification.Configuration is { } runnerConfiguration)
+        {
+            RunnerPolicyProfiles.Validate(runnerConfiguration);
+            return;
+        }
         if (specification.Kind == "offline" && specification.PolicyVersion == CorpHeuristicPolicy.PolicyVersion
             && specification.Configuration is { } configuration)
         {
@@ -167,7 +173,8 @@ public sealed class BenchmarkAgentFactory : IBenchmarkAgentFactory
     {
         Validate(specification);
         if (specification.Kind == "offline")
-            return new OfflineAgent(specification.Configuration!, new CorpHeuristicPolicy(), evaluation, captureDiagnostics: true);
+            return new OfflineAgent(specification.Configuration!, specification.Side == PlayerSide.Corp ? new CorpHeuristicPolicy() : new RunnerHeuristicPolicy(),
+                evaluation, captureDiagnostics: true);
         return new FullGameContractAgent(specification.Side, runtime);
     }
 }

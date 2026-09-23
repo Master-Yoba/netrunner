@@ -6,14 +6,20 @@ embedded preset checksum and contract-agent/policy versions. Its 20 games are
 five seeds across four Corp/Runner basic/expanded pairings, with two independent
 executions per game and a 4,000-action bound. There is no policy RNG in v6.
 
-`tactical-v1.json` specifies 80 independent future tactical positions: 40 per
+`tactical-v1.json` specifies 80 independent tactical positions: 40 per
 side, eight categories per side, 24 tuning and 16 held-out positions per side.
 Each includes permitted decision families, relevant design IDs, preconditions,
 an acceptance predicate and criticality. It contains no official rules text.
-These positions are **not executable fixtures yet** and have no measured score.
-M5.2 supplies real Core scenario builders, exact resource counts/decision bounds,
-and semantic action assertions. Validate reachability before freezing inputs;
-do not invent a Gateway prevention card to exercise a generic engine feature.
+`tactical-contract-v1.json` is the executable M5.2 baseline: Core scenario
+builders freeze root/twin hashes and semantic assertions, and contract v6 has
+a measured score. See `docs/M5_BENCHMARKS.md` for the evidence contract.
+
+`corp-{standard,easy}-{tactical,smoke}-v2.json` pin the final M5.3 Corp profiles.
+`runner-{standard,easy}-{tactical,smoke}-v1.json` pin both M5.4 Runner profiles
+against the same 40 Runner tactical roots and 20 smoke seeds. Final M5.4
+allowlisted results are in `docs/evidence/m5-4/`. These manifests contain only
+pins, seeds, metadata and configurations; private
+snapshots and official card content remain under ignored artifacts.
 
 Run the content-independent specification/evidence check:
 
@@ -40,9 +46,9 @@ The utility wraps the unchanged contract agent with counters, calls the existing
 `FullMatchRunner`, verifies each replay and compares replay bytes plus counters
 between repetitions. It records environment and assembly hashes. It is
 deliberately sequential and uses the existing runner's action cap/cooperative
-timeout. Full M5.2 stall classification, arbitrary-agent batch scheduling,
-tactical scoring, checkpoint diagnostics and the 1,000-game gate do not exist
-yet. Do not present this 20-game capture as that gate.
+timeout. The newer `ai-benchmark` and `ai-tactics` commands provide batch
+scheduling, stall classification and tactical scoring. The 1,000-game M5 gate
+has not run; do not present this 20-game capture as that gate.
 
 The captured baseline is historical evidence: preserve it when introducing the
 new heuristic. Revise manifests/report versions explicitly when changing pinned
