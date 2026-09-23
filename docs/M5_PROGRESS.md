@@ -386,3 +386,16 @@ resume, animation/save feedback and normal/reduced-motion resolution checks have
 not yet been reported. Automated matches do not establish this acceptance.
 Implementation and automated verification are complete; M5 is not yet recorded
 as fully accepted.
+
+The subsequent [completion audit](M5_COMPLETION_AUDIT.md) found and closed one
+diagnostic gap: versioned per-decision records now have an explicit private
+JSONL export through `ai-benchmark --policy-diagnostics` (`66098d7`, cancellation
+guard `c808438`). Logging remains off by default and outside player history.
+The updated official solution passes **2,050 tests**. Twenty official games,
+logged and unlogged with different worker counts, retain identical replays and
+report digests; all 13,828 exported records match their decision/configuration
+and accepted replay. The repeated full M5 gate passes all twelve cases, with
+every deterministic digest equal to the earlier passing attempt. The complete
+provisioned M4 gate passes again, including all four native save/reload games.
+The [separate audit evidence](evidence/m5-8/audit/validation.json) records exact
+build scope and verification hashes. Human acceptance is still unreported.

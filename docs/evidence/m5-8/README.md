@@ -29,6 +29,14 @@ logs and artwork remain in ignored local storage or a private temporary folder.
   replay matches the ordinary benchmark.
 - `validation.json`: exact verification-log hashes, test counts, preserved
   failure disposition and the separately measured real-renderer frame budget.
+- `audit/diagnostics-summary.json`: post-gate private-diagnostic verification;
+  twenty official logged/unlogged games, 13,828 records checked against actual
+  replay and configuration, identical results at four/one workers, and hashes
+  of the local-only private JSONL files. Candidate records are not committed.
+- `audit/gate-summary.json` and `audit/validation.json`: the repeated full
+  twelve-case gate, all 2,050 official solution tests and provisioned repository
+  gate. All twelve deterministic digests match the preserved earlier result.
+  These records keep the post-audit attempt and its build scope separate.
 
 The final headless run is retained locally at
 `artifacts/m5/gate-20260923T081537Z-55389`. Its immutable CLI copy is built from
@@ -36,6 +44,14 @@ The final headless run is retained locally at
 that build revision plus the Godot asset probe/export changes subsequently
 committed in `a6f9300`; exact compiled bundle hashes are recorded. Policy weights
 are unchanged from the frozen previous-policy reference `de4e1cf`.
+
+The audit gate is retained at `artifacts/m5/gate-20260923T090541Z-56782`, using
+an immutable `66098d7` CLI copy with diagnostics disabled. The final `c808438`
+build's logged/unlogged games are in `artifacts/m5/diagnostics-audit-20260923`.
+That later guard only rechecks cancellation after an opt-in log write; the
+ordinary full-gate execution path is unchanged. Both builds and all private
+records remain local. Full report hashes and exact assembly hashes are bound
+by the audit summaries.
 
 The completed offline proof is outside the checkout at
 `/private/tmp/netrunner-m5-8-offline-20260923`. Both the headless and renderer

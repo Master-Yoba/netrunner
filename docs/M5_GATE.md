@@ -4,6 +4,8 @@ Evidence date: 23 September 2026. Branch: `feat/m5-8-final-gate`.
 The implementation remains locally committed; nothing was pushed or published.
 Implementation and automated verification are complete: headless, repository,
 offline-package and performance gates pass. Human acceptance remains open.
+The [completion audit](M5_COMPLETION_AUDIT.md) maps each planned deliverable to
+its implementation and evidence, and records the remaining human criteria.
 
 ## Frozen inputs and reproducibility
 
@@ -233,6 +235,42 @@ frame time is 2.91 ms and p95 is 3.05 ms, within the 16.67 ms budget for 60 FPS.
 Idle allocation remains 410 bytes/frame. Existing cancellation, stale-result
 and background-save tests pass; policy and save-file work remain off the Godot
 render thread. Log bindings are in the [validation record](evidence/m5-8/validation.json).
+
+## Completion audit: private policy diagnostics
+
+The final requirement audit added explicit opt-in per-decision JSONL to
+`ai-benchmark --policy-diagnostics` (`66098d7`), followed by a cancellation
+recheck after log writes (`c808438`). See the
+[command guide](M5_BENCHMARKS.md#private-policy-decision-logs). This closes §4.5's
+diagnostic export requirement without changing strategic weights, gameplay,
+save formats or UI behavior.
+
+All **2,050 official solution tests** pass: Core 819, Cards 331, AI 95, CLI 142,
+Match 663. The final diagnostic check completes twenty official games with
+logging enabled at four workers and again without logging at one worker.
+All **13,828 records** match the issued action, replay sequence, configuration
+and manifest/build pins; every replay and the deterministic report digest are
+identical. Normal execution emits no decision logs, and public reports contain
+no candidate scores. [Diagnostic evidence](evidence/m5-8/audit/diagnostics-summary.json)
+retains report/build/log hashes without any private candidate records.
+`workUsed` measures deterministic budget units, not processor instructions;
+69 records legitimately use zero budget units on direct encounter estimates.
+
+The repeated full M5 gate passes all twelve cases, including 1,000/1,000
+Standard and 100/100 Easy terminal games. Every case's manifest and deterministic
+digest matches the preserved passing baseline. The complete provisioned M4 gate
+also passes again, including all four native save/reload games, 77/77 coverage,
+existing interactions, formatting and secret scanning. The new
+[gate summary](evidence/m5-8/audit/gate-summary.json) and
+[validation bindings](evidence/m5-8/audit/validation.json) preserve this attempt
+separately. The long gate uses the immutable `66098d7` build with logging off;
+the final `c808438` logging/cancellation path is covered by the separate official
+logged/unlogged comparison and solution tests. No policy or rules changes
+separate those builds.
+
+The original release/offline/renderer measurements above remain tied to their
+recorded bundle. This benchmark-only addition does not retroactively change
+that provenance or claim a newly exported package.
 
 ## Human acceptance
 

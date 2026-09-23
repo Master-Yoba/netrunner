@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "kind": "m5-completion-audit-validation-summary",
+  "date": "2026-09-23",
+  "implementationCommits": [
+    "66098d7",
+    "c808438"
+  ],
+  "officialSolutionTests": 2050,
+  "officialTestCounts": {
+    "core": 819,
+    "cards": 331,
+    "ai": 95,
+    "cli": 142,
+    "match": 663
+  },
+  "repositoryGatePassed": true,
+  "gatewayCoverage": 77,
+  "nativeFullSaveReloadGames": 4,
+  "formattingPassed": true,
+  "fullHeadlessGatePassed": true,
+  "fullGateBuildRevision": "0.1.0-dev+66098d7484c42ef5438cb76dd2e5e5c4471c971e",
+  "fullGateAssemblyHashes": {
+    "netrunner.AI": "e623e866cd05cbccda31724ebf7f198ee88b60eb8ba413239a3eaf2a8bb6a928",
+    "netrunner.Cards": "4c79364fbdd2f92a75678310b74d2b169147a073575b3dd3d16fcfbf830ee6df",
+    "netrunner.Cli": "85d625d81593ca2a69f19d636f5f675edac4006c279cae6c92814d62ab04b330",
+    "netrunner.Core": "1d8c1b591e38d82f2795069ab8fb51ef43a9476085b9c946c80b648555c5aa32",
+    "netrunner.Match": "4b24b2bfd42d9da803c69771d7855c6ec2e78efa104053c8e7010fbca4200dd0"
+  },
+  "fullGateLocalPath": "artifacts/m5/gate-20260923T090541Z-56782",
+  "baselineGateSummarySha256": "cb5fd4d060edd0a224477db64462395aa1c153038930ddb7393ff5e04284011a",
+  "allTwelveCaseDigestsEqualToBaseline": true,
+  "fullGateScope": "Includes private diagnostics support in 66098d7. Diagnostics disabled; the later c808438 guard runs only after opt-in log writes. The final c808438 build passes logged/unlogged official replay equivalence separately.",
+  "diagnosticValidationSummarySha256": "1db5855aaa3524842793680bf60c81018f2e8bf7b3e51a0235a2f62de65fad11",
+  "offlineRendererPerformanceScope": "Retained original measured bundle/workload provenance; benchmark-only changes do not claim a new package or timing measurement.",
+  "humanAcceptance": false,
+  "logSha256": {
+    "officialTests": "60f233fd4b0152471f39b4742c907368ebbdac44cebb1ab95f8e6f4f1a6758ea",
+    "repositoryGate": "b22af16c9394b7ef80d48fd3f102ca5042c4fed3f5dce4a10707b20aebe72ba8",
+    "fullHeadlessGate": "d67347114e2cf55b819c485e767958626af07331a5e01b4413c8827a39fd403f",
+    "formatting": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "finalOfficialBuild": "11b325b7bce3e061f9c4267b6e501cc039e2cb17bb429dd52dfb1582dafa5c51",
+    "loggedOfficialSmoke": "fdb19bbb6ba387fdbeaa795c440e7dcbdebd6ef001e77a527332c524bd2d2b9c",
+    "normalOfficialSmoke": "fe2e7cd36193a2c81d78b7c2f259623a96117e99c6b14ac22023b7dd47798442"
+  }
+}

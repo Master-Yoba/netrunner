@@ -1,7 +1,8 @@
 # M5 implementation plan — complete offline solo mode
 
-Status: M5.0–5.8 implemented; final completion audit and human acceptance are
-tracked in [progress and evidence](M5_PROGRESS.md) and [the gate report](M5_GATE.md).
+Status: M5.0–5.8 implemented and [audited](M5_COMPLETION_AUDIT.md); human
+acceptance remains open. Results are tracked in [progress and evidence](M5_PROGRESS.md)
+and [the gate report](M5_GATE.md).
 
 Baseline: 22 September 2026, repository commit `8f27bac`.
 
