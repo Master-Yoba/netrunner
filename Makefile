@@ -95,3 +95,10 @@ play-dev:
 
 m5-developer-smoke:
 	bash scripts/m5-developer-smoke.sh
+
+.PHONY: m5-gate m5-quick
+m5-gate:
+	bash scripts/m5-gate.sh
+
+m5-quick:
+	bash scripts/m5-gate.sh --quick

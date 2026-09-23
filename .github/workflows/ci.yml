@@ -39,10 +39,13 @@ jobs:
       - name: Offline benchmark smoke
         run: |
           if [[ "${{ matrix.content }}" == "official" ]]; then
-            make ai-benchmark-smoke
+            make m5-quick
           else
             make ai-benchmark-developer
           fi
       - name: Frozen official tactical fixture and replay proof
         if: matrix.content == 'official'
         run: make ai-tactics-verify TACTICAL_ARGS='--workers 4'
+      - name: Native developer workflow
+        if: matrix.content == 'official'
+        run: make m5-developer-smoke

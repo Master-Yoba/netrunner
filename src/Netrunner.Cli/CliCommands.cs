@@ -52,6 +52,11 @@ public static partial class CliCommands
             return RunAiBenchmark(args, output, error);
         }
 
+        if (args.Length > 0 && args[0] == "ai-performance")
+        {
+            return RunPolicyPerformance(args, output, error);
+        }
+
         if (args.Length > 0 && args[0] == "card-art")
         {
             return RunCardArtwork(args, output, error);
@@ -161,6 +166,7 @@ public static partial class CliCommands
             + "full-match [--preset basic|expanded] [--seed <unsigned-integer>] [--json] [--replay-out <file>] | "
             + "simulate <fixture-file> [--json] [--replay-out <file>] | "
             + "ai-benchmark <manifest> --output <new directory> [--workers 1..64] [--json] | "
+            + "ai-performance <manifest> --output <new directory> --hardware <description> [--json] | "
             + "ai-benchmark init smoke|full|developer [--corp-profile standard|easy] [--runner-profile standard|easy] --output <new manifest> [--json] | "
             + "ai-tactics init [--corp-profile standard|easy | --runner-profile standard|easy] --output <new manifest> [--json] | "
             + "ai-tactics <manifest> --output <new directory> [--workers 1..64] [--verify-fixtures] [--json] | "

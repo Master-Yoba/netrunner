@@ -9,13 +9,14 @@ permissions:
   contents: read
 
 jobs:
-  official-contract-baseline:
+  official-m5-gate:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 180
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: 1
       DOTNET_NOLOGO: 1
       NUGET_XMLDOC_MODE: skip
+      NETRUNNER_M5_GATE_OUTPUT: artifacts/m5/scheduled-gate
     steps:
       - uses: actions/checkout@v4
       - name: Provision build tools
@@ -24,25 +25,15 @@ jobs:
         run: ./scripts/update-card-data.sh --commit 236140cf84491c23995b028bc791281837520b97 --retrieval-date 2026-08-28
       - name: Restore build dependencies
         run: make restore
-      - name: Run frozen 1000-game contract baseline
-        run: make ai-benchmark BENCHMARK_ARGS='--workers 4 --output artifacts/m5/scheduled-contract'
+      - name: Run frozen M5 Standard, Easy, comparison and tactical gates
+        run: make m5-gate
       - name: Verify all frozen tactical fixtures
         run: make ai-tactics-verify TACTICAL_ARGS='--workers 4 --output artifacts/m5/scheduled-tactics'
-      - name: Export allowlisted summary
-        if: always()
-        run: |
-          if [[ -f artifacts/m5/scheduled-contract/report.json ]]; then
-            python3 scripts/summarize-ai-benchmark.py artifacts/m5/scheduled-contract/report.json artifacts/m5/summary.json
-          fi
-          if [[ -f artifacts/m5/scheduled-tactics/report.json ]]; then
-            python3 scripts/summarize-ai-benchmark.py artifacts/m5/scheduled-tactics/report.json artifacts/m5/tactics-summary.json
-          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: offline-benchmark-summary
           path: |
-            artifacts/m5/summary.json
-            artifacts/m5/tactics-summary.json
+            artifacts/m5/scheduled-gate/*-summary.json
           if-no-files-found: warn
           retention-days: 30
