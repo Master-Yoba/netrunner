@@ -1,9 +1,11 @@
 # M5.1 agent foundation
 
-The foundation is a separate policy driver. `FullGameContractAgent` v6 remains
-unchanged and is still the production/default benchmark agent. Corp/Runner
-heuristics, measured Easy/Standard profiles and the encounter solver belong to
-M5.3–4; the foundation does not claim those policies are implemented.
+This page records the M5.1 foundation checkpoint. At that checkpoint,
+`FullGameContractAgent` v6 remained the production/default benchmark agent;
+Corp/Runner policies and the encounter solver followed in M5.3–4. The current
+[client](M5_CLIENT.md) selects the completed offline policies, and
+[benchmark diagnostics](M5_BENCHMARKS.md#private-policy-decision-logs) expose
+opt-in private decision records. The contract baseline remains unchanged.
 
 ## Input and metadata
 

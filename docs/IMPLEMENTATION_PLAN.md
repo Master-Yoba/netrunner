@@ -276,9 +276,10 @@ The [detailed M5 implementation plan](M5_PLAN.md) expands this milestone against
 the 22 September 2026 code baseline. It defines the agent architecture, tactical
 and self-play benchmarks, save/checkpoint lifecycle, client and developer flows,
 dependency-ordered slices, and acceptance evidence. Existing contract agents,
-replay and diagnostic session recovery remain foundations to extend. M5 is
-underway with [M5.0 baseline and case specification](M5_PROGRESS.md); the full
-milestone implementation and acceptance gates have not been completed.
+replay and diagnostic session recovery remain foundations. The M5 slices are
+implemented with [progress and verification records](M5_PROGRESS.md) and a
+[measured integration gate](M5_GATE.md). Human playtesting is still required
+before milestone acceptance; automated games are recorded separately.
 
 Deliverables:
 

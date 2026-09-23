@@ -1,9 +1,10 @@
 # M5 benchmarks
 
-M5.2 is complete. Batch execution and all 80 executable tactical positions are implemented,
+Batch execution and all 80 executable tactical positions are implemented,
 with 40 positions per side and frozen roots, resource bounds and policy seeds.
-The checked-in manifests currently run the unchanged v6 contract agent. They
-do not establish Standard/Easy strength or completion of the M5 milestone.
+The original contract manifests retain the unchanged v6 baseline. The later
+Standard/Easy manifests and [M5 integration gate](M5_GATE.md) provide measured
+policy evidence; human acceptance remains separate.
 
 ## Run offline
 
@@ -35,6 +36,36 @@ a terminal outcome with verified replay. Exit 1 means execution produced a cap,
 cancellation, stall or failure. Exit 2 means invalid arguments, incompatible
 pins, unavailable policy/content or an I/O/command failure. A turn cap remains
 nonzero until reviewed; it is not silently presented as a successful game.
+
+### Private policy decision logs
+
+Use `--policy-diagnostics` to write each offline policy's candidate evaluation
+to `<game-id>/policy-decisions.jsonl`. This requires an offline policy in the
+manifest and is off by default, including in normal play and scheduled gates.
+Contract-agent choices have no policy evaluation and are omitted from the log.
+
+```sh
+dotnet src/Netrunner.Cli/bin/Debug/net8.0/Netrunner.Cli.dll ai-benchmark \
+  data/m5/benchmarks/standard-smoke-v1.json \
+  --output artifacts/m5/private-policy-check --policy-diagnostics
+```
+
+Every schema-1 record includes the suite/game, build/content/manifest binding,
+exact agent/policy/feature versions and profile parameters, side, committed
+action sequence, decision ID/revision/kind, observation/checkpoint digests,
+candidate priorities/scores/reasons, selected issued ID, work count and budget
+status. Agent-call milliseconds include worker scheduling; writing the log is
+outside that timer. Timing never enters deterministic result digests.
+
+The record's `selected-before-apply` stage is explicit: selection is not proof
+of acceptance. Correlate it with the next sequence in `replay.json` to establish
+acceptance; a rejected Apply can leave a selected record without a replay action.
+Lines flush before Apply, and failed/capped attempts retain their diagnostic
+prefix. Enabling logging must preserve the exact decisions and replay hashes.
+
+These files contain private strategy and can identify cards known to the bot.
+They are developer artifacts, excluded from normal history, public report JSON
+and summary uploads. Keep them local along with the private replay/snapshot.
 
 `ai-benchmark init smoke|full|developer --output <new manifest> [--json]` captures
 the installed catalogs and explicit deck hashes using the fixed seed schedule.

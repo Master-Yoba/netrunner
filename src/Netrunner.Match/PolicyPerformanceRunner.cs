@@ -27,7 +27,7 @@ public static class PolicyPerformanceRunner
         var samples = new ConcurrentQueue<PolicyTimingSample>();
         var factory = new TimedFactory(samples);
         var runner = new AiBenchmarkRunner(data, behavior, factory);
-        AiBenchmarkReport games = await runner.RunAsync(manifest, outputDirectory, 1, buildRevision, cancellationToken).ConfigureAwait(false);
+        AiBenchmarkReport games = await runner.RunAsync(manifest, outputDirectory, 1, buildRevision, cancellationToken: cancellationToken).ConfigureAwait(false);
         ImmutableArray<PolicyTimingSample> recorded = samples.ToImmutableArray();
         ImmutableArray<PolicyTimingGroup> groups = Summarize(recorded);
         bool passed = games.Aggregate.Terminal == games.Aggregate.Games && games.Aggregate.Failures == 0

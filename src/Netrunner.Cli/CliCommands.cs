@@ -165,7 +165,7 @@ public static partial class CliCommands
             + "snapshot <file> [--synthetic] [--side corp|runner] [--output <file>] [--raw] [--step [--action <id>] | --until human|outcome|turn:N] [--max-actions 1..10000] [--json] | "
             + "full-match [--preset basic|expanded] [--seed <unsigned-integer>] [--json] [--replay-out <file>] | "
             + "simulate <fixture-file> [--json] [--replay-out <file>] | "
-            + "ai-benchmark <manifest> --output <new directory> [--workers 1..64] [--json] | "
+            + "ai-benchmark <manifest> --output <new directory> [--workers 1..64] [--policy-diagnostics] [--json] | "
             + "ai-performance <manifest> --output <new directory> --hardware <description> [--json] | "
             + "ai-benchmark init smoke|full|developer [--corp-profile standard|easy] [--runner-profile standard|easy] --output <new manifest> [--json] | "
             + "ai-tactics init [--corp-profile standard|easy | --runner-profile standard|easy] --output <new manifest> [--json] | "

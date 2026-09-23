@@ -21,6 +21,7 @@ public static partial class CliCommands
             string? corpProfile = null;
             string? runnerProfile = null;
             int workers = 1;
+            bool policyDiagnostics = false;
             var seen = new HashSet<string>(StringComparer.Ordinal);
             for (int index = inputIndex + 1; index < args.Length; index++)
             {
@@ -28,6 +29,7 @@ public static partial class CliCommands
                 switch (args[index])
                 {
                     case "--json": break;
+                    case "--policy-diagnostics" when !initialize: policyDiagnostics = true; break;
                     case "--corp-profile" when initialize && index + 1 < args.Length: corpProfile = args[++index]; break;
                     case "--runner-profile" when initialize && index + 1 < args.Length: runnerProfile = args[++index]; break;
                     case "--output" when index + 1 < args.Length:
@@ -79,7 +81,8 @@ public static partial class CliCommands
                     : $"Created {manifest.SuiteId}: {manifest.Games.Length} games.");
                 return 0;
             }
-            AiBenchmarkReport report = runner.RunAsync(manifest!, destination, workers, BuildMetadata.Current.ApplicationVersion).GetAwaiter().GetResult();
+            AiBenchmarkReport report = runner.RunAsync(manifest!, destination, workers, BuildMetadata.Current.ApplicationVersion,
+                writePolicyDiagnostics: policyDiagnostics).GetAwaiter().GetResult();
             if (json) output.WriteLine(EngineJson.Serialize(report));
             else output.WriteLine($"{report.SuiteId}: {report.Aggregate.Terminal}/{report.Aggregate.Games} terminal, {report.Aggregate.TurnCaps} turn caps, {report.Aggregate.Failures} failures. Report: {Path.Combine(destination, "report.json")}");
             // A turn cap is diagnosed evidence requiring review, not a green

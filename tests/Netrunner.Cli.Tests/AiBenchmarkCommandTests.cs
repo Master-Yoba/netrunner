@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Text.Json;
+using Netrunner.AI;
 using Netrunner.Cards;
 using Netrunner.Core;
 using Netrunner.Match;
@@ -113,6 +114,8 @@ public sealed class AiBenchmarkCommandTests : IDisposable
     [InlineData("missing.json --output unused --workers 65")]
     [InlineData("missing.json --output unused --workers 1 --workers 2")]
     [InlineData("missing.json --output unused --seed 42")]
+    [InlineData("init developer --policy-diagnostics --output unused")]
+    [InlineData("missing.json --policy-diagnostics --policy-diagnostics --output unused")]
     public void InvalidInvocationsReturnVersionedJsonWithoutCreatingEvidence(string arguments)
     {
         (int code, JsonElement result) = Run(arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries));
@@ -120,6 +123,32 @@ public sealed class AiBenchmarkCommandTests : IDisposable
         Assert.Equal("m5-ai-benchmark-error", result.GetProperty("kind").GetString());
         Assert.Equal("invalid", result.GetProperty("status").GetString());
         Assert.Empty(Directory.EnumerateFileSystemEntries(_directory));
+    }
+
+    [Fact]
+    public void PolicyDiagnosticsAreExplicitPrivateFilesAndDoNotChangeJsonResults()
+    {
+        DeveloperMatchCards cards = DeveloperMatchCards.Create();
+        var runner = new AiBenchmarkRunner(cards.Data, cards.Behavior);
+        AiBenchmarkManifest seed = BenchmarkSuites.CreateContract(runner, "developer");
+        BenchmarkGameSpec game = seed.Games[0];
+        AiBenchmarkManifest manifest = seed with
+        {
+            Games = [game with { Corp = BenchmarkAgentSpec.Offline(CorpPolicyProfiles.Create("standard", game.Corp.PolicySeed)) }],
+        };
+        string path = Path.Combine(_directory, "offline.json");
+        File.WriteAllText(path, EngineJson.Serialize(manifest));
+        var normal = Run(path, "--output", Path.Combine(_directory, "normal"));
+        string loggedPath = Path.Combine(_directory, "logged");
+        var logged = Run(path, "--output", loggedPath, "--policy-diagnostics");
+        Assert.Equal(0, normal.Code);
+        Assert.Equal(0, logged.Code);
+        Assert.Equal(normal.Result.GetProperty("deterministicDigest").GetString(), logged.Result.GetProperty("deterministicDigest").GetString());
+        string[] records = File.ReadAllLines(Path.Combine(loggedPath, game.Id, "policy-decisions.jsonl"));
+        Assert.Equal(logged.Result.GetProperty("games")[0].GetProperty("result").GetProperty("corp").GetProperty("decisions").GetInt32(), records.Length);
+        Assert.All(records, line => Assert.Equal(PlayerSide.Corp, EngineJson.Deserialize<PolicyDecisionDiagnostic>(line).Side));
+        Assert.Empty(Directory.EnumerateFiles(Path.Combine(_directory, "normal"), "*.jsonl", SearchOption.AllDirectories));
+        Assert.DoesNotContain("\"candidates\":", logged.Result.GetRawText(), StringComparison.Ordinal);
     }
 
     private static (int Code, JsonElement Result) Run(params string[] args)

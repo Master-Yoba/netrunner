@@ -60,11 +60,15 @@ public sealed class AiBenchmarkRunner
     }
 
     public async Task<AiBenchmarkReport> RunAsync(AiBenchmarkManifest manifest, string outputDirectory, int workers = 1,
-        string buildRevision = "unknown", CancellationToken cancellationToken = default)
+        string buildRevision = "unknown", bool writePolicyDiagnostics = false, CancellationToken cancellationToken = default)
     {
         manifest.Validate();
         if (workers is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(workers));
         if (manifest.Pins != Pins) throw new ArgumentException("Benchmark content/catalog pins do not match this offline build.", nameof(manifest));
+        if (writePolicyDiagnostics && !manifest.Games.Any(game => game.Corp.Kind == "offline" || game.Runner.Kind == "offline"))
+            throw new ArgumentException("Policy diagnostics require at least one offline policy in the manifest.", nameof(manifest));
+        string manifestHash = BenchmarkHash.Value(manifest);
+        PolicyDiagnosticContext? diagnostics = writePolicyDiagnostics ? new(manifest.SuiteId, manifestHash, buildRevision, manifest.Pins) : null;
         var definitions = new Dictionary<string, FullMatchDefinition>(StringComparer.Ordinal);
         foreach (BenchmarkGameSpec game in manifest.Games)
         {
@@ -80,7 +84,7 @@ public sealed class AiBenchmarkRunner
         if (Directory.Exists(output) || File.Exists(output)) throw new IOException("Choose a new output directory; existing benchmark evidence is never overwritten.");
         Directory.CreateDirectory(output);
         await File.WriteAllTextAsync(Path.Combine(output, "PRIVATE-ARTIFACTS.txt"),
-            "Local private debug artifacts: replays and failures contain hidden cards, decks and policy memory. No automatic upload.\n", CancellationToken.None).ConfigureAwait(false);
+            "Local private debug artifacts: replays, failures and optional policy logs contain hidden cards, decks and strategic reasoning. No automatic upload.\n", CancellationToken.None).ConfigureAwait(false);
         await File.WriteAllTextAsync(Path.Combine(output, "manifest.json"), EngineJson.Serialize(manifest), CancellationToken.None).ConfigureAwait(false);
         var results = new ConcurrentDictionary<string, BenchmarkGameResult>(StringComparer.Ordinal);
         var agents = new ConcurrentDictionary<IGameAgent, byte>(ReferenceEqualityComparer.Instance);
@@ -88,11 +92,12 @@ public sealed class AiBenchmarkRunner
         // retain an initial replay and stay in the report denominator.
         await Parallel.ForEachAsync(manifest.Games, new ParallelOptions { MaxDegreeOfParallelism = workers }, async (game, _) =>
         {
-            BenchmarkGameResult result = await RunPositionAsync(game, definitions[game.Id].Start().State, manifest.Limits, output, agents, cancellationToken).ConfigureAwait(false);
+            BenchmarkGameResult result = await RunPositionAsync(game, definitions[game.Id].Start().State, manifest.Limits, output, agents,
+                diagnostics, cancellationToken).ConfigureAwait(false);
             results[game.Id] = result;
         }).ConfigureAwait(false);
         ImmutableArray<BenchmarkGameResult> ordered = results.Values.OrderBy(result => result.Game.Id, StringComparer.Ordinal).ToImmutableArray();
-        var report = new AiBenchmarkReport(1, "m5-ai-benchmark-report", manifest.SuiteId, BenchmarkHash.Value(manifest), manifest.Pins,
+        var report = new AiBenchmarkReport(1, "m5-ai-benchmark-report", manifest.SuiteId, manifestHash, manifest.Pins,
             buildRevision, RuntimeInformation.FrameworkDescription, RuntimeInformation.OSDescription, RuntimeInformation.ProcessArchitecture.ToString(),
             workers, BenchmarkHash.Value(ordered.Select(result => new { result.Game, result.Result }).ToArray()), Aggregate(ordered), ordered, Stratify(ordered), AssemblyHashes());
         await File.WriteAllTextAsync(Path.Combine(output, "report.json"), EngineJson.Serialize(report), CancellationToken.None).ConfigureAwait(false);
@@ -101,11 +106,13 @@ public sealed class AiBenchmarkRunner
 
     internal async Task<BenchmarkGameResult> RunPositionAsync(BenchmarkGameSpec game, GameState state,
         BenchmarkLimits limits, string output, ConcurrentDictionary<IGameAgent, byte>? agents = null,
-        CancellationToken cancellationToken = default)
+        PolicyDiagnosticContext? diagnosticContext = null, CancellationToken cancellationToken = default)
     {
         agents ??= new(ReferenceEqualityComparer.Instance);
         string directory = Path.Combine(output, game.Id);
         Directory.CreateDirectory(directory);
+        await using PolicyDecisionLog? policyLog = diagnosticContext is null ? null
+            : new(Path.Combine(directory, "policy-decisions.jsonl"), diagnosticContext, game.Id);
         // Preserve even an invalid injected scenario as failure evidence;
         // validation below classifies it before an agent receives anything.
         GameSnapshot initial = JsonSerializer.Deserialize<GameSnapshot>(EngineJson.Serialize(state), EngineJson.Options)!;
@@ -168,8 +175,10 @@ public sealed class AiBenchmarkRunner
                     Remember(null, null);
                     throw;
                 }
-                finally { metrics.Decision(side, pending.Kind, timer.Elapsed.TotalMilliseconds); }
+                finally { timer.Stop(); metrics.Decision(side, pending.Kind, timer.Elapsed.TotalMilliseconds); }
                 linked.Token.ThrowIfCancellationRequested();
+                if (policyLog is not null && agent is OfflineAgent diagnosticAgent)
+                    await policyLog.WriteAsync(diagnosticAgent, pending, state.ActionSequence, timer.Elapsed.TotalMilliseconds).ConfigureAwait(false);
                 metrics.PolicyEvaluation(side, (agent as OfflineAgent)?.LastEvaluation);
                 LegalAction? action = pending.LegalActions.FirstOrDefault(value => value.Id == selected);
                 Remember(selected, action?.Kind);
