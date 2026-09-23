@@ -38,33 +38,54 @@ public sealed class SoloSaveTests
         SoloSaveDocument save = await original.CaptureSaveAsync("A portable match");
         SoloSaveDocument detached = EngineJson.Deserialize<SoloSaveDocument>(EngineJson.Serialize(save));
         detached.Validate(definition.Behavior, definition.Runtime);
-        await using var resumed = new MatchCoordinator(definition, detached);
-        MatchSnapshot restored = await resumed.StartAsync();
-        Assert.True(restored.IsPaused);
-        Assert.False(restored.IsOpponentThinking);
-        Assert.Empty(restored.Events);
-        Assert.Equal(EngineJson.Serialize(history), EngineJson.Serialize(restored.History));
-        Assert.Equal(save.Payload.Snapshot.ActionSequence, restored.ActionCount);
-        Assert.Equal(EngineJson.Serialize(original.CurrentSnapshot!.Observation), EngineJson.Serialize(restored.Observation));
-        var humanAgent = new FullGameContractAgent(human, definition.Runtime);
-        for (int step = 0; step < 20; step++)
+        var resumed = new MatchCoordinator(definition, detached);
+        try
         {
-            await original.ContinueAsync();
-            await resumed.ContinueAsync();
-            MatchSnapshot left = await AtHuman(original);
-            MatchSnapshot right = await AtHuman(resumed);
-            Assert.Equal(EngineJson.Serialize(left.Observation), EngineJson.Serialize(right.Observation));
-            if (left.IsTerminal) break;
-            ActionId action = await humanAgent.ChooseActionAsync(left.Observation);
-            Assert.True((await original.SubmitHumanActionAsync(action)).Accepted);
-            Assert.True((await resumed.SubmitHumanActionAsync(action)).Accepted);
-            await AtHuman(original);
-            await AtHuman(resumed);
-            SoloSaveDocument first = await original.CaptureSaveAsync("Original");
-            SoloSaveDocument second = await resumed.CaptureSaveAsync("Restored");
-            Assert.Equal(first.EngineStateHash, second.EngineStateHash);
-            Assert.Equal(first.PolicyStateHash, second.PolicyStateHash);
-            Assert.Equal(EngineJson.Serialize(first.Payload.Replay), EngineJson.Serialize(second.Payload.Replay));
+            MatchSnapshot restored = await resumed.StartAsync();
+            Assert.True(restored.IsPaused);
+            Assert.False(restored.IsOpponentThinking);
+            Assert.Empty(restored.Events);
+            Assert.Equal(EngineJson.Serialize(history), EngineJson.Serialize(restored.History));
+            Assert.Equal(save.Payload.Snapshot.ActionSequence, restored.ActionCount);
+            Assert.Equal(EngineJson.Serialize(original.CurrentSnapshot!.Observation), EngineJson.Serialize(restored.Observation));
+            var humanAgent = new FullGameContractAgent(human, definition.Runtime);
+            int reopenCount = 0;
+            for (int step = 0; step < 20; step++)
+            {
+                await original.ContinueAsync();
+                await resumed.ContinueAsync();
+                MatchSnapshot left = await AtHuman(original);
+                MatchSnapshot right = await AtHuman(resumed);
+                Assert.Equal(EngineJson.Serialize(left.Observation), EngineJson.Serialize(right.Observation));
+                if (left.IsTerminal) break;
+                ActionId action = await humanAgent.ChooseActionAsync(left.Observation);
+                Assert.True((await original.SubmitHumanActionAsync(action)).Accepted);
+                Assert.True((await resumed.SubmitHumanActionAsync(action)).Accepted);
+                await AtHuman(original);
+                await AtHuman(resumed);
+                SoloSaveDocument first = await original.CaptureSaveAsync("Original");
+                SoloSaveDocument second = await resumed.CaptureSaveAsync("Restored");
+                Assert.Equal(first.EngineStateHash, second.EngineStateHash);
+                Assert.Equal(first.PolicyStateHash, second.PolicyStateHash);
+                Assert.Equal(EngineJson.Serialize(first.Payload.Replay), EngineJson.Serialize(second.Payload.Replay));
+                if (step % 5 != 4) continue;
+                await resumed.DisposeAsync();
+                resumed = new MatchCoordinator(definition,
+                    EngineJson.Deserialize<SoloSaveDocument>(EngineJson.Serialize(second)));
+                MatchSnapshot reopened = await resumed.StartAsync();
+                reopenCount++;
+                Assert.True(reopened.IsPaused);
+                Assert.Empty(reopened.Events);
+                Assert.Equal(first.Payload.Snapshot.ActionSequence, reopened.ActionCount);
+                lock (history)
+                    Assert.Equal(EngineJson.Serialize(history), EngineJson.Serialize(reopened.History));
+                Assert.Equal(EngineJson.Serialize(original.CurrentSnapshot!.Observation), EngineJson.Serialize(reopened.Observation));
+            }
+            Assert.True(reopenCount >= 2, "The fixture must exercise repeated midgame save/load.");
+        }
+        finally
+        {
+            await resumed.DisposeAsync();
         }
     }
 
@@ -78,6 +99,37 @@ public sealed class SoloSaveTests
         await start;
         Assert.True(ready.AwaitingHumanDecision);
         Assert.Equal(PlayerSide.Runner, ready.Observation.Decision!.OwnerSide);
+    }
+
+    [Theory]
+    [InlineData(PlayerSide.Corp)]
+    [InlineData(PlayerSide.Runner)]
+    public async Task SaveAfterHumanMulliganRetainsMandatoryKeepDecksAndRandomState(PlayerSide human)
+    {
+        FullMatchDefinition definition = FullMatchDefinition.Developer(84);
+        await using var original = new MatchCoordinator(definition, Agent(definition, human),
+            new MatchCoordinatorOptions { HumanSide = human });
+        await original.StartAsync();
+        MatchSnapshot opening = await original.WaitForHumanDecisionAsync();
+        LegalAction mulligan = opening.Observation.LegalActions.Single(action => action.Parameters is NumberChoiceParameters { Value: 1 });
+        Assert.True((await original.SubmitHumanActionAsync(mulligan.Id)).Accepted);
+        SoloSaveDocument save = await original.CaptureSaveAsync("After mulligan");
+        Assert.Equal(0, Assert.IsType<NumberChoiceParameters>(Assert.Single(save.Payload.Snapshot.PendingDecision!.LegalActions).Parameters).Value);
+        await using var restored = new MatchCoordinator(definition, EngineJson.Deserialize<SoloSaveDocument>(EngineJson.Serialize(save)));
+        await restored.StartAsync();
+        SoloSaveDocument captured = await restored.CaptureSaveAsync("Restored mulligan");
+        Assert.Equal(save.EngineStateHash, captured.EngineStateHash);
+        Assert.Equal(save.PolicyStateHash, captured.PolicyStateHash);
+        Assert.Equal(save.Payload.Snapshot.RandomState, captured.Payload.Snapshot.RandomState);
+        await original.ContinueAsync();
+        await restored.ContinueAsync();
+        ActionId keep = original.CurrentSnapshot!.Observation.LegalActions.Single().Id;
+        Assert.True((await original.SubmitHumanActionAsync(keep)).Accepted);
+        Assert.True((await restored.SubmitHumanActionAsync(keep)).Accepted);
+        await original.WaitForHumanDecisionAsync();
+        await restored.WaitForHumanDecisionAsync();
+        Assert.Equal((await original.CaptureSaveAsync("Original continuation")).EngineStateHash,
+            (await restored.CaptureSaveAsync("Restored continuation")).EngineStateHash);
     }
 
     [Fact]

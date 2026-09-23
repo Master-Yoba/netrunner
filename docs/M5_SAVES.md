@@ -91,7 +91,8 @@ A version 1 trace cannot silently acquire a stateful heuristic policy.
 
 ## Verification scope
 
-`SoloSaveTests` covers both seats, setup and subsequent continuation, exact
+`SoloSaveTests` covers both seats and preset families, mulligan/mandatory keep, repeated midgame
+reloads and subsequent continuation, exact
 engine/policy/replay agreement, restored filtered history, manual and automatic
 capture during thinking, late results, terminal restore, write failures, and
 recovery after deleting prior trace folders. `SessionPolicyMatrixTests` adds

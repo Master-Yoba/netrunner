@@ -229,7 +229,7 @@ verification, the full `make m4-gate` (including four Godot save/reload games),
 M5 specification validation and secret scanning. M5.4 meets its slice exit
 criteria. M5.5 session persistence follows on its own branch, then M5.6.
 
-## M5.5 — Session persistence (in progress, 23 September 2026)
+## M5.5 — Session persistence (complete, 23 September 2026)
 
 The coordinator now pumps one accepted action at a time and services pause/save
 requests while bot evaluation is in flight. Generation and issued-decision checks
@@ -244,12 +244,21 @@ trace are implemented. Repeated trace recovery retains the original replay
 prefix after older trace directories are removed. The existing version 1
 contract-agent path remains supported. Details are in `docs/M5_SAVES.md`.
 
-Focused tests pass for both human seats and both official preset families,
-subsequent engine/policy/history agreement, late results, terminal restore, failed
-writes, and actual writer-process termination. The nested matrix includes 22
-official positions plus synthetic prevention/replacement checkpoints. The first
-full official solution run passed 1,930 tests; six subsequent readiness/preset
-regressions also pass. The native M4.9 smoke exposed a queued-start/submission
-readiness race, now fixed and verified at 1080p/1440p in both seats. Final gate
-verification is in progress. M5.6 client integration follows after this slice is
-verified.
+Verification passes for both human seats and both official preset families,
+including four successive midgame reloads with exact engine/policy/replay and
+reconstructed filtered-history agreement, and a save between mulligan and the
+mandatory keep. Late results, terminal restore, failed writes, and actual
+writer-process termination are covered. The nested matrix includes 22 official
+positions plus synthetic prevention/replacement checkpoints.
+
+All 1,938 official-content solution tests pass (Core 819, Cards 329, AI 95,
+CLI 131, Match 564), as do formatting verification and the full `make m4-gate`
+with 77/77 coverage, native 1080p/1440p checks and four completed/reloaded official
+games. The final repeated-reload enhancement additionally passes all 20 focused
+save tests. The native M4.9 smoke exposed a queued-start/submission readiness
+race, fixed with an explicit command barrier and ready-snapshot read. The
+implementation checkpoint is `f20ea5a`. M5.6 client integration follows on its own
+branch; no player-facing save UI is claimed by this persistence slice.
+
+The user has now authorized continuing through the remaining M5 slices. Local
+checkpoint commits remain the session workflow; no push or PR is requested.
