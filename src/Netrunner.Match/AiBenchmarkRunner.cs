@@ -178,7 +178,10 @@ public sealed class AiBenchmarkRunner
                 finally { timer.Stop(); metrics.Decision(side, pending.Kind, timer.Elapsed.TotalMilliseconds); }
                 linked.Token.ThrowIfCancellationRequested();
                 if (policyLog is not null && agent is OfflineAgent diagnosticAgent)
+                {
                     await policyLog.WriteAsync(diagnosticAgent, pending, state.ActionSequence, timer.Elapsed.TotalMilliseconds).ConfigureAwait(false);
+                    linked.Token.ThrowIfCancellationRequested();
+                }
                 metrics.PolicyEvaluation(side, (agent as OfflineAgent)?.LastEvaluation);
                 LegalAction? action = pending.LegalActions.FirstOrDefault(value => value.Id == selected);
                 Remember(selected, action?.Kind);

@@ -74,6 +74,24 @@ public sealed class PolicyDecisionLogTests : IDisposable
     }
 
     [Fact]
+    public async Task CancelledRunCannotInventChoiceRecordsOrAcceptActions()
+    {
+        (AiBenchmarkRunner runner, AiBenchmarkManifest manifest) = Create(2);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        AiBenchmarkReport report = await runner.RunAsync(manifest, _directory, writePolicyDiagnostics: true,
+            cancellationToken: cancellation.Token);
+        Assert.Equal(2, report.Games.Length);
+        foreach (BenchmarkGameResult game in report.Games)
+        {
+            Assert.Equal(BenchmarkTermination.Cancelled, game.Result.Termination);
+            Assert.Equal(0, game.Result.Actions);
+            Assert.True(game.Result.ReplayVerified);
+            Assert.Empty(await File.ReadAllLinesAsync(Path.Combine(_directory, game.Game.Id, "policy-decisions.jsonl")));
+        }
+    }
+
+    [Fact]
     public async Task ContractOnlyManifestCannotPretendToProvidePolicyScores()
     {
         DeveloperMatchCards cards = DeveloperMatchCards.Create();
