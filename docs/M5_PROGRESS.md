@@ -304,3 +304,38 @@ formatting check. No human acceptance is inferred from these scripted games.
 record the visible flow. M5.6 meets its automated slice exit criteria; M5.7
 developer workflow follows on a separate branch. M5's human acceptance and final
 offline/performance/benchmark gates remain outstanding.
+
+## M5.7 — Developer workflow (complete, 23 September 2026)
+
+`make play-dev` adds an explicit developer panel to the cog. It pauses, steps
+one accepted action, and advances to a human decision, chosen turn, outcome or
+bounded action cap through the existing serialized coordinator. A separate
+private inspector reveals card identities without changing player or agent
+observations. Development builds require the launch flag; the exported release
+creates no developer controls even with the flag and a developer setting.
+
+The Match-owned developer document/store and `snapshot` CLI import and export
+real Core snapshots, validate matching catalogs and replay, and preserve nested
+resolution states. Portable developer exports retain exact committed policy
+state; raw imports create a labeled new scenario replay root and fresh policy
+knowledge. Imported scenarios remain separate from player saves and auto-save.
+Invalid imports preserve the current session. See [the guide](M5_DEVELOPER.md).
+
+Implementation checkpoint: `f2348c0`. Verification includes all 2,039 official
+solution tests (Core 819, Cards 329, AI 95, CLI 139, Match 657), all 80 official
+tactical boundaries reopened/stepped/exported/replayed, and the full
+`make m4-gate`, with 77/77 coverage and four completed/reloaded official games.
+The final standalone-fixture check explicitly covers legal endpoints with no
+next decision, which stop rather than hang. Native developer tests pass in both
+seats at 1080p/1440p, including overrides, caps, reveal isolation, corrupt
+imports, pause and Escape/focus. A normal launch and the actual exported macOS
+release both exclude the controls. The CLI allowlist refinement additionally
+passes all eight focused command tests. Renderer capture, log hashes and the
+release-guard record are in [the evidence folder](evidence/m5-7/README.md).
+
+M5.8 follows on its own branch. An exploratory Standard 1,000-game run completed
+999 games with zero turn caps and one preserved resolution failure: Retribution
+trashed a memory-granting card without opening mandatory memory cleanup. That
+run is not a passing milestone gate. The next slice adds a minimal regression,
+repairs the rules defect, and runs a new frozen gate without removing the failed
+attempt from the preflight record. Human acceptance remains outstanding.

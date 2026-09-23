@@ -103,7 +103,13 @@ public static partial class CliCommands
             document.Origin,
             document.HumanSide,
             document.Snapshot.ActionSequence,
-            document.Snapshot.Turn,
+            Turn = new
+            {
+                Number = document.Snapshot.Turn.TurnNumber,
+                document.Snapshot.Turn.ActiveSide,
+                document.Snapshot.Turn.Phase,
+                document.Snapshot.Turn.Step
+            },
             document.Snapshot.Outcome,
             StateHash = document.EngineStateHash,
             PolicyHash = document.PolicyStateHash,

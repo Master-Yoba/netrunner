@@ -29,6 +29,8 @@ public sealed class SnapshotCommandTests
             using JsonDocument report = JsonDocument.Parse(output.ToString());
             Assert.Equal(1, report.RootElement.GetProperty("acceptedActions").GetInt32());
             Assert.DoesNotContain("cards", output.ToString(), StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("number,activeSide,phase,step",
+                string.Join(',', report.RootElement.GetProperty("turn").EnumerateObject().Select(property => property.Name)));
             DeveloperSnapshotDocument document = DeveloperSnapshotStore.Read(destination, PlayerSide.Runner, definition.Behavior, definition.Runtime);
             Assert.Equal(PlayerSide.Corp, document.HumanSide);
             Assert.Equal(DeveloperSnapshotDocument.ImportedRoot, document.Origin);
