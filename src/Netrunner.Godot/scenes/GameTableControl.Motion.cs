@@ -13,6 +13,13 @@ public partial class GameTableControl
 	private int _motionRevision;
 	private MatchViewModel? _motionView;
 	public int ActiveMotionCount => _motionCards.Count;
+	public void ResetPresentation()
+	{
+		StopMotion();
+		_motionView = null;
+		_lastBoardFingerprint = null;
+	}
+
 	public void StopMotion()
 	{
 		_motionRevision++;

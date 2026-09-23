@@ -38,6 +38,9 @@ public partial class Main
 		_skipAnimations.Pressed += () => { _tablePlaybackWait = 0; _skipAnimation = true; _gameTable.StopMotion(); };
 		_sessionLogsButton = _settingsMenu.GetNode<Button>("%OpenLogs");
 		_sessionLogsButton.Pressed += OpenSessionLogs;
+		_settingsMenu.GetNode<Button>("%SaveGame").Pressed += () => ShowSaveGame(false);
+		_settingsMenu.GetNode<Button>("%LoadGame").Pressed += ShowSaveBrowser;
+		_settingsMenu.GetNode<Button>("%SaveAndQuit").Pressed += () => ShowSaveGame(true);
 	}
 
 	private void SetSettingsVisible(bool visible)
@@ -46,6 +49,9 @@ public partial class Main
 		_settingsMenu.Visible = visible;
 		if (visible)
 		{
+			bool canSave = _coordinator?.CurrentSnapshot is not null && !_interactionLab && !_manualSaveInFlight;
+			_settingsMenu.GetNode<Button>("%SaveGame").Disabled = !canSave;
+			_settingsMenu.GetNode<Button>("%SaveAndQuit").Disabled = !canSave;
 			_boardDrag?.Cancel("settings", false);
 			ClearTableSelection();
 			HideCardHoverPreview();

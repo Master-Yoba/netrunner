@@ -112,3 +112,18 @@ layout_mode = 2
 text = "Open logs"
 disabled = true
 tooltip_text = "Open this match's local diagnostics folder."
+
+[node name="SaveGame" type="Button" parent="Panel/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Save game"
+
+[node name="LoadGame" type="Button" parent="Panel/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Load game"
+
+[node name="SaveAndQuit" type="Button" parent="Panel/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Save and quit"

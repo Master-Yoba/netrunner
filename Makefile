@@ -1,4 +1,4 @@
-.PHONY: bootstrap restore build test watch-core watch-cards format cli doctor godot-import event-smoke templates package-linux package-macos secrets benchmark-m0 verify m4-gate play
+.PHONY: bootstrap restore build test watch-core watch-cards format cli doctor godot-import event-smoke templates package-linux package-macos secrets benchmark-m0 verify m4-gate play m5-client-smoke
 
 bootstrap:
 	./scripts/bootstrap.sh
@@ -85,3 +85,6 @@ interaction-lab:
 .PHONY: card-art-fetch card-art-validate card-art-pack card-art-unpack
 card-art-fetch card-art-validate card-art-pack card-art-unpack:
 	@./scripts/card-art.sh $(patsubst card-art-%,%,$@) $(ART_ARGS)
+
+m5-client-smoke:
+	bash scripts/m5-client-smoke.sh

@@ -31,7 +31,7 @@ public partial class Main : Control
 	private readonly OfficialPresetCatalog? _officialPresetCatalog = TryLoadOfficialPresetCatalog();
 	private readonly IRuntimeCardCatalog? _runtimeCardCatalog = CreateRuntimeCardCatalog();
 	private readonly EventFeedRegionPresenter _eventFeedRegion = new();
-	private readonly ConcurrentQueue<MatchSnapshot> _pendingSnapshots = new();
+	private readonly ConcurrentQueue<SessionPublication> _pendingSnapshots = new();
 	private readonly ConcurrentQueue<PlayerSide> _fullMatchSetupOrder = new();
 	private readonly object _fullMatchSetupGate = new();
 	private readonly Dictionary<string, List<TextCardControl>> _cardControls = new(StringComparer.Ordinal);
@@ -194,7 +194,11 @@ public partial class Main : Control
 			&& !arguments.Contains("--diagnostic-ui", StringComparer.Ordinal);
 		if (arguments.Contains("--card-art-smoke", StringComparer.Ordinal)) PrepareCardArtworkSmoke();
 		BuildShell();
-		if (arguments.Contains("--card-art-smoke", StringComparer.Ordinal) || arguments.Contains("--card-art-cache-smoke", StringComparer.Ordinal))
+		if (arguments.Contains("--m5-client-smoke", StringComparer.Ordinal))
+		{
+			_ = RunSoloClientSmokeAsync(arguments);
+		}
+		else if (arguments.Contains("--card-art-smoke", StringComparer.Ordinal) || arguments.Contains("--card-art-cache-smoke", StringComparer.Ordinal))
 		{
 			_ = RunCardArtworkSmokeAsync(arguments.Contains("--card-art-cache-smoke", StringComparer.Ordinal));
 		}
@@ -278,6 +282,7 @@ public partial class Main : Control
 			UpdateAccessControls();
 		}
 		else PollCoordinator();
+		ReportAutomaticSaveStatus();
 		if (_animationRunning)
 		{
 			_framesWhileAnimating++;
@@ -286,6 +291,11 @@ public partial class Main : Control
 
 	public override void _ExitTree()
 	{
+		_sessionExited = true;
+		Interlocked.Increment(ref _sessionGeneration);
+		_browserCancellation?.Cancel();
+		DetachCoordinatorPublications();
+		_soloSession?.SetActiveSession(null);
 		DisconnectCardHoverPreview();
 		CloseFullMatchDiagnostics("shutdown");
 		if (_coordinator is null)
@@ -293,8 +303,6 @@ public partial class Main : Control
 			return;
 		}
 
-		_coordinator.SnapshotPublished -= QueueSnapshot;
-		_coordinator.SnapshotPublished -= CaptureFullMatchSetupSnapshot;
 		_coordinator.Dispose();
 	}
 
@@ -350,6 +358,11 @@ public partial class Main : Control
 	public override void _UnhandledInput(InputEvent @event)
 	{
 		bool escape = @event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Escape };
+		if (SaveDialogVisible)
+		{
+			if (escape) { CloseSaveDialog(); GetViewport().SetInputAsHandled(); }
+			return;
+		}
 		if (SettingsVisible)
 		{
 			if (escape) { SetSettingsVisible(false); GetViewport().SetInputAsHandled(); }
@@ -617,7 +630,7 @@ public partial class Main : Control
 		_runnerPlaybackPolicy = _smokeTest
 			? M2MatchFactory.CreateRepresentativeRunnerPolicy()
 			: null;
-		_coordinator.SnapshotPublished += QueueSnapshot;
+		AttachCoordinatorPublications();
 		_startButton.Disabled = true;
 		_startButton.Text = "Starting Core match…";
 		_status.Text = "Loading checked-in M2 scenario through MatchCoordinator…";
@@ -630,12 +643,15 @@ public partial class Main : Control
 
 	private async Task AwaitStartAsync()
 	{
+		MatchCoordinator coordinator = _coordinator!;
+		long generation = _sessionGeneration;
 		try
 		{
-			await _coordinator!.StartAsync();
+			await coordinator.StartAsync();
 		}
 		catch (Exception exception)
 		{
+			if (!IsCurrentSession(coordinator, generation)) return;
 			RecordFullMatchException(exception, "start");
 			_status.Text = $"Match failed to start: {exception.Message}";
 			if (_useCardTable && IsInstanceValid(_tableLastAction))
@@ -1068,8 +1084,10 @@ public partial class Main : Control
 
 	private void PollCoordinator()
 	{
-		while (_pendingSnapshots.TryDequeue(out MatchSnapshot? snapshot))
+		while (_pendingSnapshots.TryDequeue(out SessionPublication? publication))
 		{
+			if (publication.Generation != _sessionGeneration) continue;
+			MatchSnapshot snapshot = publication.Snapshot;
 			if (snapshot.Sequence <= _renderedSequence)
 			{
 				continue;
@@ -1089,7 +1107,7 @@ public partial class Main : Control
 		}
 	}
 
-	private void QueueSnapshot(MatchSnapshot snapshot) => _pendingSnapshots.Enqueue(snapshot);
+	private void QueueSnapshot(MatchSnapshot snapshot) => _pendingSnapshots.Enqueue(new(_sessionGeneration, snapshot));
 
 	private void RenderSnapshot(MatchSnapshot snapshot)
 	{
@@ -1098,6 +1116,7 @@ public partial class Main : Control
 		bool decisionChanged = previous is null
 			|| !SameDecision(previous.View.Decision, snapshot.View.Decision);
 		_currentSnapshot = snapshot;
+		_fullMatchResumePaused = snapshot.IsPaused;
 		RecordFullMatchDisplayedSnapshot(snapshot);
 		_smokeRunEndedObserved |= _smokeTest
 			&& snapshot.Events.Any(value => value.Kind == EngineEventKinds.RunEnded);

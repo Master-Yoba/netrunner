@@ -9,11 +9,6 @@ public partial class Main
 	private const int SmokeInputDevice = 47012;
 	private bool _isolateSmokeInput;
 	private bool _smokeFocusLoss;
-	public override void _Input(InputEvent @event)
-	{
-		// Native smoke events must not race the desktop's real pointer.
-		if (_isolateSmokeInput && @event.Device != SmokeInputDevice) GetViewport().SetInputAsHandled();
-	}
 
 	private async Task RunInteractionSmokeAsync()
 	{

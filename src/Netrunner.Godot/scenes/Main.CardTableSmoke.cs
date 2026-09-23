@@ -130,7 +130,7 @@ public partial class Main
 				GD.Print("M49_RD_ACCESS PASS seed=47042 visible_card=true named_history=true cleared=true");
 				GD.Print("M49_CONTEXT PASS event_from_hand=true run_from_server=true");
 				await AssertHoverStable("live-1920");
-				_coordinator!.SnapshotPublished -= QueueSnapshot;
+				DetachCoordinatorPublications();
 				_coordinator.Dispose();
 				_coordinator = null;
 				CloseFullMatchDiagnostics("m4-9-official-complete");

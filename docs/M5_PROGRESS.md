@@ -262,3 +262,27 @@ branch; no player-facing save UI is claimed by this persistence slice.
 
 The user has now authorized continuing through the remaining M5 slices. Local
 checkpoint commits remain the session workflow; no push or PR is requested.
+
+## M5.6 — Offline client flow (in progress, 23 September 2026)
+
+The production setup selects the new offline opponent (Standard by default,
+Easy optional), retains explicit presets/seed and adds seed generation and
+Resume. A reusable modal scene provides allowlisted save previews, compatibility
+errors and explicit verified-backup loading. Save, Load, and Save and quit are
+in the existing cog. The Match-owned client service handles private payloads,
+coalesced rolling auto-saves, and serialized writes across session switches.
+
+Loading verifies a candidate off the render thread before replacing the current
+match, restores paused history without replaying motion, and clears transient
+selection/inspection/presentation state. Publications and async UI callbacks are
+bound to their originating session. Manual saves catch presentation up to the
+captured boundary; Save and quit waits for durable storage. Existing contract
+proofs still choose their explicit baseline opponent, and crash-trace recovery
+restores the saved policy version/profile.
+
+Initial service tests pass for both seats/profiles, switching during automatic
+writes, and failures preserving play. Initial native Runner/basic and
+Corp/expanded games have saved, quit the process, resumed paused, finished, and
+reloaded terminal outcomes with matching history. The stronger native matrix
+adds save-during-animation, write-failure, backup-browser, corrupt-file, Escape,
+and stale-callback checks. Full integration verification remains in progress.

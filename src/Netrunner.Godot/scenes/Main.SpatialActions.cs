@@ -20,7 +20,7 @@ public partial class Main
 	private bool SpatialInputAvailable(MatchSnapshot snapshot) => !snapshot.IsTerminal && !snapshot.IsOpponentThinking
 		&& snapshot.View.Decision is { } decision && decision.OwnerSide == snapshot.View.Viewer
 		&& !_fullMatchResumePaused && !_tableAwaitingSettlement && Volatile.Read(ref _submissionInFlight) == 0
-		&& _stagedAction is null && _boardDrag?.IsDragging != true && _gameTable.DrawMotionCount == 0 && !SettingsVisible
+		&& _stagedAction is null && _boardDrag?.IsDragging != true && _gameTable.DrawMotionCount == 0 && !SessionModalVisible
 		&& _zoomOverlay?.Visible != true && _tablePileOverlay?.Visible != true && _galleryOverlay?.Visible != true;
 
 	private bool TrySelectSpatialCard(string id)

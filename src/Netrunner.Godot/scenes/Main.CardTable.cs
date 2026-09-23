@@ -167,6 +167,7 @@ public partial class Main
 			Control outcome = GD.Load<PackedScene>("res://scenes/components/OutcomePanel.tscn").Instantiate<Control>();
 			outcome.GetNode<Label>("Summary").Text = $"{snapshot.View.Outcome.Winner} wins · {snapshot.View.Outcome.Reason}";
 			outcome.GetNode<Button>("NewMatch").Pressed += () => GetTree().ReloadCurrentScene();
+			outcome.GetNode<Button>("Resume").Pressed += ShowSaveBrowser;
 			_focusPresentation.AddChild(outcome);
 		}
 		RenderCardTableActions(snapshot);
@@ -183,7 +184,7 @@ public partial class Main
 			DecisionViewModel? decision = snapshot.View.Decision;
 			_tablePrompt.Text = snapshot.IsOpponentThinking ? "Opponent is thinking. You can inspect cards and read history."
 				: snapshot.IsTerminal ? "Match complete."
-				: _fullMatchResumePaused ? $"Recovered at action {snapshot.ActionCount}. Continue when ready."
+				: _fullMatchResumePaused ? $"Paused at action {snapshot.ActionCount}. Continue when ready."
 				: decision is null ? "Waiting for the next decision…"
 				: $"{decision.OwnerSide}: {TablePrompt(decision)}";
 			if (snapshot.View.Run is { } run)
@@ -192,13 +193,13 @@ public partial class Main
 			_gameTable.SetActionableSources(new HashSet<string>(StringComparer.Ordinal));
 			if (_fullMatchResumePaused && !snapshot.IsTerminal)
 			{
-				Button continueButton = CreateTableActionButton("Continue recovered match");
-				continueButton.Disabled = _fullMatchResumeContinueInFlight;
+				Button continueButton = CreateTableActionButton("Continue match");
+				continueButton.Disabled = _fullMatchResumeContinueInFlight || SessionModalVisible || _manualSaveInFlight;
 				continueButton.Pressed += ContinueRecoveredFullMatch;
 				_tableActions.AddChild(continueButton);
 				return;
 			}
-			if (decision is null || snapshot.IsOpponentThinking || snapshot.IsTerminal)
+			if (SessionModalVisible || snapshot.IsPaused || decision is null || snapshot.IsOpponentThinking || snapshot.IsTerminal)
 			{
 				return;
 			}
@@ -415,9 +416,10 @@ public partial class Main
 			RefreshBoardIcebreaker(current);
 		}
 		_tablePlaybackWait = Math.Max(0, _tablePlaybackWait - delta);
-		while (_pendingSnapshots.TryDequeue(out MatchSnapshot? snapshot))
+		while (_pendingSnapshots.TryDequeue(out SessionPublication? publication))
 		{
-			_tablePublications.Enqueue(snapshot);
+			if (publication.Generation != _sessionGeneration) continue;
+			_tablePublications.Enqueue(publication.Snapshot);
 		}
 		bool animate = !_skipAnimation && !_reducedMotion.ButtonPressed;
 		if (_skipAnimation) _tablePlaybackWait = 0;

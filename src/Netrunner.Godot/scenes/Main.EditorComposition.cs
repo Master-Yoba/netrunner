@@ -35,6 +35,7 @@ public partial class Main
 		setup.GetNode<Button>("%InteractionLab").Pressed += OpenInteractionLab;
 		BuildCardTable();
 		BuildCardZoomOverlay();
+		BindOfflineSetup(setup);
 		ApplyAccessibilityFocusOrder(_startPanel);
 		ApplyAccessibilityFocusOrder(_board);
 	}

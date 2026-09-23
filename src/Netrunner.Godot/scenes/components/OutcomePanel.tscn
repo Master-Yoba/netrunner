@@ -18,3 +18,7 @@ autowrap_mode = 3
 layout_mode = 2
 theme_type_variation = &"PrimaryAction"
 text = "New match"
+
+[node name="Resume" type="Button" parent="."]
+layout_mode = 2
+text = "Resume saved game"
