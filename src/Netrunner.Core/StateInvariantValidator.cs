@@ -7699,13 +7699,23 @@ public static partial class StateInvariantValidator
                     InitiationKind: InstallInitiationKind.BehaviorEffect,
                     ParentFrameIdentity: not null,
                 } behaviorInstall
-                && ParentIdentityMatches(child, behaviorInstall.ParentFrameIdentity)))
+                && ParentIdentityMatches(child, behaviorInstall.ParentFrameIdentity))
+            && !(index + 3 == state.ResolutionStack.Count - 1
+                && child.Stage == BehaviorResolutionStage.Execute
+                && state.ResolutionStack[index + 2] is EffectResolutionFrame
+                {
+                    Stage: EffectResolutionStage.AwaitingMemoryCleanup,
+                    Costs.Instructions.Count: 0,
+                    Effects.Instructions.Count: 0,
+                } memoryEffect
+                && memoryEffect.Controller == child.Controller
+                && state.ResolutionStack[index + 3] is MemoryCleanupFrame))
         {
             Add(
                 violations,
                 "resolution.card-play-child-not-top",
                 $"{path}.child",
-                "The matching CardPlayFrame behavior child must remain the top resolution frame while it resolves.");
+                "The matching CardPlayFrame behavior child must remain top or suspend beneath its supported install or memory-cleanup continuation.");
         }
 
         if (!IsPlayerSide(frame.Side))
