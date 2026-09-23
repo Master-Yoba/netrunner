@@ -16,6 +16,21 @@ public partial class Main
 		{
 			RequireInteraction(!string.IsNullOrWhiteSpace(SoloSaveDirectory()), "Client persistence smoke requires an isolated save directory.");
 			RequireInteraction(HasAuthenticatedOfficialContent(), "Client persistence smoke requires installed official content.");
+			if (arguments.Contains("--offline-proof", StringComparer.Ordinal))
+			{
+				RequireInteraction(!OS.HasFeature("editor") && !DeveloperToolsEnabled, "Offline proof requires an exported release.");
+				RequireInteraction(GD.Load<Texture2D>("res://card-backs/corp.png") is not null
+					&& GD.Load<Texture2D>("res://card-backs/runner.png") is not null, "Generic card backs are missing from the package.");
+				TryReadOption(arguments, "--offline-art", out string? artMode, out _);
+				RequireInteraction(artMode is "missing" or "restored", "Offline proof requires an explicit artwork mode.");
+				foreach (string code in Netrunner.Cards.CardArtworkCache.GatewayCodes)
+				{
+					LocalCardArtworkResolver.Artwork? artwork = LocalCardArtworkResolver.Shared.TryLoad(code);
+					RequireInteraction(artMode == "missing" ? artwork is null : artwork?.FullFace == true,
+						$"Unexpected offline artwork availability: {artMode} {code}.");
+				}
+				GD.Print($"M5_OFFLINE_ASSETS PASS artwork={artMode} cards=77 packaged_backs=true release=true");
+			}
 			TryReadOption(arguments, "--phase", out string? phase, out _);
 			TryReadOption(arguments, "--side", out string? sideText, out _);
 			TryReadOption(arguments, "--preset", out string? preset, out _);

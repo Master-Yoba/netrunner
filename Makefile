@@ -96,9 +96,12 @@ play-dev:
 m5-developer-smoke:
 	bash scripts/m5-developer-smoke.sh
 
-.PHONY: m5-gate m5-quick
+.PHONY: m5-gate m5-quick m5-offline-proof
 m5-gate:
 	bash scripts/m5-gate.sh
 
 m5-quick:
 	bash scripts/m5-gate.sh --quick
+
+m5-offline-proof:
+	python3 scripts/m5-offline-proof.py --art-cache "$(ART_CACHE)" $(OFFLINE_ARGS)

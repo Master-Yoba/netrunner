@@ -20,6 +20,7 @@ jobs:
       DOTNET_CLI_TELEMETRY_OPTOUT: 1
       DOTNET_NOLOGO: 1
       NUGET_XMLDOC_MODE: skip
+      NETRUNNER_M5_GATE_OUTPUT: artifacts/m5/ci-gate
     steps:
       - uses: actions/checkout@v4
       - name: Check cross-platform executable discovery
@@ -49,3 +50,13 @@ jobs:
       - name: Native developer workflow
         if: matrix.content == 'official'
         run: make m5-developer-smoke
+      - name: Native saved-game restart flow
+        if: matrix.content == 'official'
+        run: bash scripts/m5-client-smoke.sh --quick
+      - uses: actions/upload-artifact@v4
+        if: always() && matrix.content == 'official'
+        with:
+          name: m5-quick-summary
+          path: artifacts/m5/ci-gate/*-summary.json
+          if-no-files-found: warn
+          retention-days: 14
