@@ -339,3 +339,50 @@ trashed a memory-granting card without opening mandatory memory cleanup. That
 run is not a passing milestone gate. The next slice adds a minimal regression,
 repairs the rules defect, and runs a new frozen gate without removing the failed
 attempt from the preflight record. Human acceptance remains outstanding.
+
+## M5.8 — Final integration gate (automated work complete, 23 September 2026)
+
+Branch: `feat/m5-8-final-gate`. Local checkpoints: `90457ea` repairs mandatory
+memory cleanup after Retribution removes a memory provider; `6c40688` freezes
+profiles/manifests and adds the measured headless gate; `a6f9300` adds the exported
+offline proof and ships generic card backs. No strategic policy weights change.
+Full results, commands, limitations and hashes are in [M5_GATE.md](M5_GATE.md).
+
+The frozen Standard suite completes **1,000/1,000 actual terminal games**, all
+replays verified, zero caps or failures, balanced 250 per preset pairing. Easy
+completes **100/100**, with the same legality/replay guarantees. Both paired
+comparison suites complete 40/40. Standard passes 39/40 Corp tactics and 38/40
+Runner tactics, every critical case, and all hidden twins; worker-count repeats
+match exactly. Easy scores 38/40 per seat. Existing held-out feedback and three
+noncritical Standard misses remain disclosed rather than removed or retuned.
+
+The failed 999/1,000 preflight and the first checker's JSON-escaping rejection
+are preserved as separate attempts. The fixed Retribution seed now finishes
+after 1,031 accepted actions. All **2,043 official solution tests** pass, as does
+the complete provisioned `make m4-gate`, with current 77/77 coverage, existing
+UI/interaction/artwork checks, four completed/reloaded official games, formatting
+and secret scanning. CI now has the quick policy/tactical repeats and native
+developer/save restart flows, plus scheduled full Standard/Easy/comparison gates.
+Only allowlisted summaries are uploaded by those workflow definitions; no remote
+workflow was launched in this local-only session.
+
+The macOS release works outside the checkout with networking, old profiles and
+source access denied. Four seat/preset/artwork cases pass eight process phases
+through midgame save, moved-save restart, paused resume, terminal reload and
+New game. Offline pack/unpack validates all 77 local artwork images. Real 1080p
+missing-art and 1440p restored-art captures also pass; official-art images and
+private saves remain outside source control. Release developer controls remain
+absent even with their launch flag.
+
+On Apple M5 / 24 GiB / macOS 27.0 / .NET 8.0.30, all 13,828 directly measured
+Standard decisions have per-seat/category p95 below 0.8 ms, within the 50/200 ms
+budgets. Timed games retain exactly the normal benchmark's replay hashes.
+Separately, actual-renderer idle frame p95 is 3.05 ms over 120 frames and idle
+allocation is 410 bytes/frame, with dense-board, history and motion checks green.
+
+**Human acceptance is the remaining milestone gate.** The requested Standard
+games in both human seats, both preset families, Easy sample, run/nested-choice
+resume, animation/save feedback and normal/reduced-motion resolution checks have
+not yet been reported. Automated matches do not establish this acceptance.
+Implementation and automated verification are complete; M5 is not yet recorded
+as fully accepted.

@@ -97,9 +97,11 @@ replay. No failed attempt is retried or dropped automatically.
 Artifacts contain hidden cards and private policy state. Keep them in ignored
 `artifacts/` storage. There is no automatic upload of private replays/failures or
 opponent access to harness snapshots. The progress fingerprint is harness-only
-inspection. CI runs the corresponding 20-game smoke in each content lane; a
-scheduled/manual 90-minute job runs the 1,000-game contract suite. It uploads
-only the allowlisted summary produced by `scripts/summarize-ai-benchmark.py`.
+inspection. Synthetic CI retains the developer smoke. Official CI now runs
+`make m5-quick`: Standard smoke and per-seat tactics at one and four workers.
+The scheduled/manual 180-minute job runs `make m5-gate`, including the frozen
+1,000-game Standard suite, 100 Easy games, paired comparisons and tactics.
+It uploads only allowlisted summaries, including failed-attempt counts.
 
 ## Bounds and failure classification
 
@@ -121,9 +123,10 @@ Timed-out instances are retired and never applied or reused. An in-process
 watchdog cannot forcibly stop arbitrary managed code that ignores cancellation;
 it isolates its late result. CI also needs an outer job/process timeout.
 
-The final Standard 1,000-game completion threshold, per-side tactical targets,
-Easy suite and save/UI gates remain the M5.8 acceptance criteria. These harness
-commands alone do not constitute `make m5-gate`.
+The final Standard completion threshold, per-side tactical targets, Easy suite
+and save/UI gates remain distinct acceptance criteria. The integrated M5.8
+launcher and evidence are described in [M5_GATE.md](M5_GATE.md); neither an
+individual benchmark command nor headless success establishes human acceptance.
 
 ## Tactical fixture construction
 

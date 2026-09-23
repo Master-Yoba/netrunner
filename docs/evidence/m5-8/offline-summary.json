@@ -1,0 +1,273 @@
+{
+  "schemaVersion": 1,
+  "kind": "m5-offline-package-proof",
+  "passed": true,
+  "networkDenied": true,
+  "checkoutDenied": true,
+  "oldProfilesDenied": true,
+  "scriptedClientAcceptance": true,
+  "humanAcceptance": false,
+  "archiveSha256": "8033a06dc812e0c1df2ecafebf1fda06d3ce39248680af04aee4e77b5ef9289b",
+  "archiveCards": 77,
+  "archiveLogSha256": {
+    "pack.log": "8b7a311b70e69341f6003f9e11f2bdb148c86a3f7929e46d59f31064ebc6018f",
+    "unpack.log": "f90192df6758e8c77b9509044fe1d97741f7aa107bd61950ce1d796482c741de",
+    "validate.log": "9a55d00b2e30c8ad95d315040a4fcbc0881bab9ed2fab2bf3fc0aea9a7e0637f"
+  },
+  "sandboxProbeLogSha256": "56756d18b4c3193b7e078f88a8d0f225ecd5ee11a8f27b94248b3fc999c0ca2b",
+  "cases": [
+    {
+      "artwork": "missing",
+      "humanSide": "corp",
+      "preset": "basic",
+      "difficulty": "standard",
+      "seed": 56142,
+      "saveDirectoryMoved": true,
+      "previousDiagnosticsDenied": true,
+      "phases": [
+        {
+          "phase": "save",
+          "passed": true,
+          "logSha256": "1bb0f8d06a229832902d1c2829dbcaef7ec7e396ca89bde16c8cc0fea46a1cd3",
+          "markers": [
+            "M5_OFFLINE_ASSETS PASS artwork=missing cards=77 packaged_backs=true release=true",
+            "M5_CLIENT SAVE_READY side=Corp preset=basic difficulty=standard save=true animation_boundary=true write_failure=true backup=true errors=true escape=true stale=true"
+          ]
+        },
+        {
+          "phase": "resume",
+          "passed": true,
+          "logSha256": "ee5e2d04a6fa0d35a6c0352cd6a99321b16d5041d14b5b34cef0d7634bbaf58b",
+          "markers": [
+            "M5_OFFLINE_ASSETS PASS artwork=missing cards=77 packaged_backs=true release=true",
+            "M5_OFFLINE_ASSETS PASS artwork=missing cards=77 packaged_backs=true release=true",
+            "M5_CLIENT PASS phase=resume side=Corp preset=basic difficulty=standard restart=true paused=true terminal=true history=true new_game=true"
+          ]
+        }
+      ],
+      "restart": {
+        "actionSequence": 53,
+        "outcome": {
+          "kind": "ongoing",
+          "winner": null,
+          "reason": null
+        },
+        "engineStateHash": "4e00b2b65890a14a4c094731f735ddb3d7a006ec9e186191b4882594270dce4e",
+        "policyStateHash": "a8387aedbdef63de884a117286dc3203aaf949295c136667dc29ad11aed1193c",
+        "integrityHash": "36084513e884c7ba8f4fce0af74167d7b3beeaaa9cb9267a8d135cb4c15486d9"
+      },
+      "terminal": {
+        "actionSequence": 129,
+        "outcome": {
+          "kind": "won",
+          "winner": "runner",
+          "reason": "agendaPoints"
+        },
+        "engineStateHash": "2d75bd8086ab459aca9b7a36243427a3ea4ab0802130b290e05b21c34a3cac7f",
+        "policyStateHash": "cd132dac10b433f0cc3dd70eb52371d1e98c0b0c688daf2e67f8c9b65cea8147",
+        "integrityHash": "61a70a911486a58adf545bea7e176f6cd2a70dd51600c07538b05e77baebfa35"
+      }
+    },
+    {
+      "artwork": "missing",
+      "humanSide": "runner",
+      "preset": "expanded",
+      "difficulty": "standard",
+      "seed": 56142,
+      "saveDirectoryMoved": true,
+      "previousDiagnosticsDenied": true,
+      "phases": [
+        {
+          "phase": "save",
+          "passed": true,
+          "logSha256": "aab63884d81e7265c02919326f460de86cb3acf58e9e361afda3663694b5ffad",
+          "markers": [
+            "M5_OFFLINE_ASSETS PASS artwork=missing cards=77 packaged_backs=true release=true",
+            "M5_CLIENT SAVE_READY side=Runner preset=expanded difficulty=standard save=true animation_boundary=true write_failure=true backup=true errors=true escape=true stale=true"
+          ]
+        },
+        {
+          "phase": "resume",
+          "passed": true,
+          "logSha256": "ecc84fcd89a81d2d92aa042e881f886d7c5b226c8c3d6ca465bd9fed64054073",
+          "markers": [
+            "M5_OFFLINE_ASSETS PASS artwork=missing cards=77 packaged_backs=true release=true",
+            "M5_OFFLINE_ASSETS PASS artwork=missing cards=77 packaged_backs=true release=true",
+            "M5_CLIENT PASS phase=resume side=Runner preset=expanded difficulty=standard restart=true paused=true terminal=true history=true new_game=true"
+          ]
+        }
+      ],
+      "restart": {
+        "actionSequence": 32,
+        "outcome": {
+          "kind": "ongoing",
+          "winner": null,
+          "reason": null
+        },
+        "engineStateHash": "040f54740a5527178ae17de04dfdbad8ea863137d83fb5704a6ed32c03da97a9",
+        "policyStateHash": "f15d180b25098f383f4e673e8273dc667bbda389ac8833adccc6ffab8299f84e",
+        "integrityHash": "0574003fa33ddf6d6bc0f683a82689f2aab7b2713fa555231a41e5daec60745e"
+      },
+      "terminal": {
+        "actionSequence": 1760,
+        "outcome": {
+          "kind": "won",
+          "winner": "corp",
+          "reason": "agendaPoints"
+        },
+        "engineStateHash": "750746625cfcdbfc90c23b2be8d3f81d902533587b8ea4da12a9007b09f10b6e",
+        "policyStateHash": "5a1b0d5fab091cbd8161093216b77c343240b1099d7d3b1e75e4c0408237c63e",
+        "integrityHash": "637c897b8c71665b415e7613c06321ade4994540014ba10969e04d8934a28464"
+      }
+    },
+    {
+      "artwork": "restored",
+      "humanSide": "corp",
+      "preset": "expanded",
+      "difficulty": "standard",
+      "seed": 56142,
+      "saveDirectoryMoved": true,
+      "previousDiagnosticsDenied": true,
+      "phases": [
+        {
+          "phase": "save",
+          "passed": true,
+          "logSha256": "199713b63a34c396238ab2aaf0970b6a1543ba21e963ba2fb332abbe6ef934ea",
+          "markers": [
+            "M5_OFFLINE_ASSETS PASS artwork=restored cards=77 packaged_backs=true release=true",
+            "M5_CLIENT SAVE_READY side=Corp preset=expanded difficulty=standard save=true animation_boundary=true write_failure=true backup=true errors=true escape=true stale=true"
+          ]
+        },
+        {
+          "phase": "resume",
+          "passed": true,
+          "logSha256": "f0c4db1a474c02c9fafdef43396eab4eafd85def16d047385e2a7bd11217887f",
+          "markers": [
+            "M5_OFFLINE_ASSETS PASS artwork=restored cards=77 packaged_backs=true release=true",
+            "M5_OFFLINE_ASSETS PASS artwork=restored cards=77 packaged_backs=true release=true",
+            "M5_CLIENT PASS phase=resume side=Corp preset=expanded difficulty=standard restart=true paused=true terminal=true history=true new_game=true"
+          ]
+        }
+      ],
+      "restart": {
+        "actionSequence": 15,
+        "outcome": {
+          "kind": "ongoing",
+          "winner": null,
+          "reason": null
+        },
+        "engineStateHash": "c385b0796dc788ca0bba23e884e0aff29a04369d5a260f6f708723c758cc1679",
+        "policyStateHash": "f3bf3088a7605690dd131a638e623b6a4e6b22f20b39ff2274c76e2a7dcbee27",
+        "integrityHash": "7e31aad926861a63bcf6221494457246658360e95f8a41b66ce060e12cf99050"
+      },
+      "terminal": {
+        "actionSequence": 1347,
+        "outcome": {
+          "kind": "won",
+          "winner": "corp",
+          "reason": "agendaPoints"
+        },
+        "engineStateHash": "4e8cf16f0032af899240ecc60251fedb4455fd724ba7fc63baeb5c87690915fd",
+        "policyStateHash": "df9b23ba5d46e9ba35e1e69e828b60aa24d43d9433a300433a659e572a5580ae",
+        "integrityHash": "a9ac1bfd79f5a39f97043f645a681a5dde134673eea6d20322a166137285b9a9"
+      }
+    },
+    {
+      "artwork": "restored",
+      "humanSide": "runner",
+      "preset": "basic",
+      "difficulty": "standard",
+      "seed": 56142,
+      "saveDirectoryMoved": true,
+      "previousDiagnosticsDenied": true,
+      "phases": [
+        {
+          "phase": "save",
+          "passed": true,
+          "logSha256": "7ce69997e4e7de971ccbd5e5f0557c1ca11275f0f10ab1f6a4aaca7077a1c3cc",
+          "markers": [
+            "M5_OFFLINE_ASSETS PASS artwork=restored cards=77 packaged_backs=true release=true",
+            "M5_CLIENT SAVE_READY side=Runner preset=basic difficulty=standard save=true animation_boundary=true write_failure=true backup=true errors=true escape=true stale=true"
+          ]
+        },
+        {
+          "phase": "resume",
+          "passed": true,
+          "logSha256": "616c66c4f3b8f5a5521cf10eec966667969a4c015d39b6ffd28a3e30e3399990",
+          "markers": [
+            "M5_OFFLINE_ASSETS PASS artwork=restored cards=77 packaged_backs=true release=true",
+            "M5_OFFLINE_ASSETS PASS artwork=restored cards=77 packaged_backs=true release=true",
+            "M5_CLIENT PASS phase=resume side=Runner preset=basic difficulty=standard restart=true paused=true terminal=true history=true new_game=true"
+          ]
+        }
+      ],
+      "restart": {
+        "actionSequence": 32,
+        "outcome": {
+          "kind": "ongoing",
+          "winner": null,
+          "reason": null
+        },
+        "engineStateHash": "2ec2173f76d4de2bdaceae4cba39f43c561a4f79cd7f84169de89c2c90481c68",
+        "policyStateHash": "fcea0d275ee34eb2524d485cdb92578379422cdfe7806c614965d38abe2b2bc7",
+        "integrityHash": "2a70e745d13607246cb38292884bb87b80f9c2161fa8ead150fce4f9d309d655"
+      },
+      "terminal": {
+        "actionSequence": 659,
+        "outcome": {
+          "kind": "won",
+          "winner": "corp",
+          "reason": "agendaPoints"
+        },
+        "engineStateHash": "ad50167c805a27d4950a130feeb2c9e7dfc9703f2f7d88095b3927ef19dc26ce",
+        "policyStateHash": "5768f4961fb9e7c6f9d4393c814996cbc328650fb934e3e5b2c8fd2e762c39ba",
+        "integrityHash": "41a1f5964452f698346911a537681d8cedba0a162bbe710493937dd2c2f4e05f"
+      }
+    }
+  ],
+  "bundleFileSha256": {
+    "Contents/MacOS/Netrunner Solo": "6a7952aa8b8f821f366abb6e88b9571523e5aaf012e739915cb237f538c42d41",
+    "Contents/Resources/Netrunner Solo.pck": "dfc11abe6170af63923481bbb879435738aa902d098db0e19a9c02578ab1c05c",
+    "Contents/Resources/data_Netrunner.Godot_macos_arm64/Netrunner.AI.dll": "cb7831a6435a16346dccf92417603c077b3998b9dafda16877ef841220a3f875",
+    "Contents/Resources/data_Netrunner.Godot_macos_arm64/Netrunner.Cards.dll": "13d00e1941a4e5503730fe6bc55d70c81153cb95172c20e85a1079202b68d8dc",
+    "Contents/Resources/data_Netrunner.Godot_macos_arm64/Netrunner.Core.dll": "247c386255108463aae2e34c62f37244b1a57ad6e9199e8bb5dd9b0eec0b0c3e",
+    "Contents/Resources/data_Netrunner.Godot_macos_arm64/Netrunner.Godot.dll": "b4ceac40e80e11d8c0d6ec9fe1ae4adccee1f53409858eec420aca1535a388ae",
+    "Contents/Resources/data_Netrunner.Godot_macos_arm64/Netrunner.Match.dll": "2a164eb9562d84330be82ae67a28ac48fb4449a0e8d9ac61946b7b45c28d7eeb",
+    "Contents/Resources/data_Netrunner.Godot_macos_x86_64/Netrunner.AI.dll": "cb7831a6435a16346dccf92417603c077b3998b9dafda16877ef841220a3f875",
+    "Contents/Resources/data_Netrunner.Godot_macos_x86_64/Netrunner.Cards.dll": "13d00e1941a4e5503730fe6bc55d70c81153cb95172c20e85a1079202b68d8dc",
+    "Contents/Resources/data_Netrunner.Godot_macos_x86_64/Netrunner.Core.dll": "247c386255108463aae2e34c62f37244b1a57ad6e9199e8bb5dd9b0eec0b0c3e",
+    "Contents/Resources/data_Netrunner.Godot_macos_x86_64/Netrunner.Godot.dll": "40cb6800334c951cdb7bbcaec92c7d084af4126d09571a704d64d53ae6183b6a",
+    "Contents/Resources/data_Netrunner.Godot_macos_x86_64/Netrunner.Match.dll": "2a164eb9562d84330be82ae67a28ac48fb4449a0e8d9ac61946b7b45c28d7eeb"
+  },
+  "renderingVerified": true,
+  "renderedCases": [
+    {
+      "artwork": "missing",
+      "side": "runner",
+      "preset": "basic",
+      "resolution": "1920x1080",
+      "logSha256": "eb2736ca61185d0e54e65788d830a841077041b9b8ba376983a3d73ba571fd9c",
+      "screenshotSha256": {
+        "setup-1920.png": "a6c6587600b9f00a4bda70007b82f9ecfe352064eb67453d8cbd5a822340e6d2",
+        "settings-1920.png": "467b3949224f5a3f408c0bd501cb0b29d3be17280b90346db11c0f19236e7676",
+        "browser-1920.png": "e26e05a45d5b501a1f982536072a276201b89a0ae2bf5f38f75cff2af1e1c36d",
+        "paused-1920.png": "f07e64ec1105cf2414a83f341cff06402bf11eedb8bfd57cf9fd63996a7cc2d0"
+      },
+      "passed": true
+    },
+    {
+      "artwork": "restored",
+      "side": "corp",
+      "preset": "expanded",
+      "resolution": "2560x1440",
+      "logSha256": "4cd1ffb4bc6a344f34f99fd2cfce4eccb4f762249112bacf7f6f2e3bf57589da",
+      "screenshotSha256": {
+        "setup-2560.png": "fcfac549424f2c7851d82ecc2fb23041f5830f3a0d9ba8fc3885be290dc97ed2",
+        "settings-2560.png": "3d843798c42329262fc96ef6a2e9981f44a49eea2802591d920552dc968e8e01",
+        "browser-2560.png": "38f5f6abe3a759880f831bc60d92a5edda7f391f31b22171db329736c90d4d61",
+        "paused-2560.png": "ee0bd3caa9d3f85f017db9000f9bf95cbdccff3c120b2e3e2866041845fdeafb"
+      },
+      "passed": true
+    }
+  ]
+}
