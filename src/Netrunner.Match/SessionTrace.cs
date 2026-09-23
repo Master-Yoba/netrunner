@@ -207,7 +207,7 @@ public sealed record SessionRecoveryResult
         SessionTraceManifest manifest,
         string directoryPath,
         bool hasInterruptedAction,
-        bool ignoredIncompleteTail)
+        bool ignoredIncompleteTail, SoloAgentState? policy = null, ReplayArtifact? sessionReplay = null)
     {
         State = state;
         Replay = replay;
@@ -215,7 +215,13 @@ public sealed record SessionRecoveryResult
         DirectoryPath = directoryPath;
         HasInterruptedAction = hasInterruptedAction;
         IgnoredIncompleteTail = ignoredIncompleteTail;
+        Policy = policy;
+        SessionReplay = sessionReplay ?? replay;
     }
+
+    public SoloAgentState? Policy { get; }
+
+    public ReplayArtifact SessionReplay { get; }
 
     public GameState State { get; }
 
@@ -331,6 +337,8 @@ public sealed record SessionTraceJournalRecord
 public sealed class SessionTrace : IDisposable
 {
     public const int CurrentSchemaVersion = 1;
+    public const int PolicySchemaVersion = 2;
+    public const string PolicyCheckpointFileName = "policy-checkpoint.json";
     public const string TraceKind = "match-session";
     public const string ManifestFileName = "manifest.json";
     public const string JournalFileName = "journal.jsonl";
@@ -342,6 +350,8 @@ public sealed class SessionTrace : IDisposable
     private readonly GameSnapshot _initialSnapshot;
     private readonly FileStream _journal;
     private readonly List<ReplayAction> _actions;
+    private readonly List<SessionPolicyBoundary> _policyBoundaries = [];
+    private ReplayArtifact? _sessionPrefix;
     private bool _disposed;
 
     private SessionTrace(
@@ -369,7 +379,8 @@ public sealed class SessionTrace : IDisposable
         IRuntimeCardCatalog? runtimeCardCatalog = null,
         MatchRequest? request = null,
         string? scenarioId = null,
-        SessionTraceAgentInfo? agent = null)
+        SessionTraceAgentInfo? agent = null,
+        SoloAgentState? policy = null, ReplayArtifact? sessionPrefix = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(directory);
         ArgumentNullException.ThrowIfNull(initialState);
@@ -384,7 +395,8 @@ public sealed class SessionTrace : IDisposable
         string manifestPath = Path.Combine(fullDirectory, ManifestFileName);
         string replayPath = Path.Combine(fullDirectory, ReplayFileName);
         string journalPath = Path.Combine(fullDirectory, JournalFileName);
-        if (File.Exists(manifestPath) || File.Exists(replayPath) || File.Exists(journalPath))
+        if (File.Exists(manifestPath) || File.Exists(replayPath) || File.Exists(journalPath)
+            || File.Exists(Path.Combine(fullDirectory, PolicyCheckpointFileName)))
         {
             throw new SessionTraceException($"Session trace directory '{fullDirectory}' already contains trace files.");
         }
@@ -398,8 +410,13 @@ public sealed class SessionTrace : IDisposable
             throw new SessionTraceException("The trace request seed does not match the initial state seed.");
         }
 
+        if (policy is not null)
+        {
+            if (runtimeCardCatalog is null) throw new SessionTraceException("Policy traces require the runtime catalog.");
+            policy.ValidateBoundary(initialState, behaviorCatalog, runtimeCardCatalog);
+        }
         SessionTraceManifest manifest = new(
-            CurrentSchemaVersion,
+            policy is null ? CurrentSchemaVersion : PolicySchemaVersion,
             TraceKind,
             Guid.NewGuid().ToString("N"),
             humanSide,
@@ -432,7 +449,14 @@ public sealed class SessionTrace : IDisposable
             4096,
             FileOptions.WriteThrough);
         journal.Flush(true);
-        return new SessionTrace(fullDirectory, manifest, replay, journal);
+        var trace = new SessionTrace(fullDirectory, manifest, replay, journal) { _sessionPrefix = sessionPrefix };
+        if (policy is not null)
+        {
+            trace._policyBoundaries.Add(new(initialState.ActionSequence, initialHash, policy));
+            try { trace.WritePolicyCheckpoint(replay); }
+            catch { trace.Dispose(); throw; }
+        }
+        return trace;
     }
 
     /// <summary>Reads and validates only the public trace manifest.</summary>
@@ -471,9 +495,18 @@ public sealed class SessionTrace : IDisposable
         SessionTraceManifest manifest = ReadManifest(fullDirectory);
         string replayPath = Path.Combine(fullDirectory, ReplayFileName);
         ReplayArtifact replay;
+        SessionPolicyCheckpoint? checkpoint = null;
         try
         {
-            replay = EngineJson.Deserialize<ReplayArtifact>(
+            if (manifest.SchemaVersion == PolicySchemaVersion)
+            {
+                if (runtimeCardCatalog is null) throw new SessionTraceException("Policy traces require the runtime catalog.");
+                checkpoint = EngineJson.Deserialize<SessionPolicyCheckpoint>(
+                    File.ReadAllText(Path.Combine(fullDirectory, PolicyCheckpointFileName)));
+                checkpoint.Validate(manifest, behaviorCatalog, runtimeCardCatalog);
+                replay = checkpoint.Replay;
+            }
+            else replay = EngineJson.Deserialize<ReplayArtifact>(
                 File.ReadAllText(replayPath),
                 behaviorCatalog,
                 runtimeCardCatalog);
@@ -508,7 +541,9 @@ public sealed class SessionTrace : IDisposable
             manifest,
             fullDirectory,
             audit.HasInterruptedAction,
-            audit.IgnoredIncompleteTail);
+            audit.IgnoredIncompleteTail,
+            checkpoint?.Boundaries.Single(boundary => boundary.ActionSequence == verified.FinalState.ActionSequence).Agent,
+            checkpoint is null ? selected : SelectReplay(checkpoint.SessionReplay, throughActionSequence));
     }
 
     /// <summary>Records an action intent and flushes it before Apply is called.</summary>
@@ -534,7 +569,7 @@ public sealed class SessionTrace : IDisposable
     /// Commits an accepted Apply result to replay.json and then flushes its
     /// completion journal record. The caller must publish only after return.
     /// </summary>
-    public void AppendAccepted(string operationId, GameState before, AcceptedActionRecord accepted)
+    public void AppendAccepted(string operationId, GameState before, AcceptedActionRecord accepted, SoloAgentState? policy = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(operationId);
         ArgumentNullException.ThrowIfNull(before);
@@ -547,6 +582,11 @@ public sealed class SessionTrace : IDisposable
                 throw new SessionTraceException("The accepted action sequence does not follow the traced state.");
             }
 
+            if (_manifest.SchemaVersion == PolicySchemaVersion && policy is null)
+                throw new SessionTraceException("A policy trace requires the committed policy with every accepted action.");
+            if (policy is not null && _manifest.SchemaVersion != PolicySchemaVersion)
+                throw new SessionTraceException("A legacy trace cannot acquire a stateful policy mid-session.");
+            if (policy is not null) _policyBoundaries.Add(new(accepted.Sequence, accepted.ResultingStateHash, policy));
             ReplayAction replayAction = ReplayAction.From(accepted);
             _actions.Add(replayAction);
             try
@@ -563,6 +603,7 @@ public sealed class SessionTrace : IDisposable
             catch
             {
                 _actions.RemoveAt(_actions.Count - 1);
+                if (policy is not null) _policyBoundaries.RemoveAt(_policyBoundaries.Count - 1);
                 throw;
             }
         }
@@ -614,7 +655,16 @@ public sealed class SessionTrace : IDisposable
             _manifest.BehaviorRegistryVersion,
             finalStateHash,
             _manifest.BehaviorCatalogFingerprint);
+        if (_manifest.SchemaVersion == PolicySchemaVersion) WritePolicyCheckpoint(replay);
         WriteAtomic(Path.Combine(_directory, ReplayFileName), EngineJson.SerializeUtf8(replay));
+    }
+
+    private void WritePolicyCheckpoint(ReplayArtifact replay)
+    {
+        ReplayArtifact session = _sessionPrefix is null ? replay : new ReplayArtifact(_sessionPrefix.InitialSnapshot,
+            replay.Seed, _sessionPrefix.Actions.Concat(replay.Actions).ToArray(), expectedFinalStateHash: replay.ExpectedFinalStateHash);
+        WriteAtomic(Path.Combine(_directory, PolicyCheckpointFileName),
+            EngineJson.SerializeUtf8(SessionPolicyCheckpoint.Create(replay, session, _policyBoundaries)));
     }
 
     private void AppendJournal(SessionTraceJournalRecord record)
@@ -669,7 +719,7 @@ public sealed class SessionTrace : IDisposable
         ReplayArtifact replay,
         IRuntimeCardCatalog? runtimeCardCatalog)
     {
-        if (manifest.SchemaVersion != CurrentSchemaVersion || !string.Equals(manifest.TraceKind, TraceKind, StringComparison.Ordinal))
+        if (manifest.SchemaVersion is not (CurrentSchemaVersion or PolicySchemaVersion) || !string.Equals(manifest.TraceKind, TraceKind, StringComparison.Ordinal))
         {
             throw new SessionTraceException("The session trace manifest schema or kind is unsupported.");
         }
@@ -903,41 +953,10 @@ public sealed class SessionTrace : IDisposable
 
     private static void WriteAtomic(string path, byte[] bytes)
     {
-        string temporary = $"{path}.{Guid.NewGuid():N}.tmp";
-        try
-        {
-            using (FileStream output = new(
-                temporary,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.None,
-                4096,
-                FileOptions.WriteThrough))
-            {
-                output.Write(bytes);
-                output.Flush(true);
-            }
-
-            File.Move(temporary, path, overwrite: true);
-        }
+        try { AtomicFile.Write(path, bytes); }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             throw new SessionTraceException($"Could not durably replace '{path}'.", exception);
-        }
-        finally
-        {
-            try
-            {
-                if (File.Exists(temporary))
-                {
-                    File.Delete(temporary);
-                }
-            }
-            catch (IOException)
-            {
-                // The durable target is already in place; leave cleanup for
-                // the next trace open rather than masking the committed write.
-            }
         }
     }
 

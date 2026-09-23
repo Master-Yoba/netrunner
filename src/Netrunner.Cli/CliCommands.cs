@@ -62,6 +62,11 @@ public static partial class CliCommands
             return RunSessionRecover(args, output, error);
         }
 
+        if (args.Length > 0 && args[0] == "save-validate")
+        {
+            return RunSaveValidate(args, output, error);
+        }
+
         if (args.Length > 0 && args[0] is "full-match" or "simulate")
         {
             return RunFullMatch(args, output, error);
@@ -146,6 +151,7 @@ public static partial class CliCommands
             "Usage: Netrunner.Cli doctor [--json] | self-test --seed <unsigned-integer> | "
             + "scenario <file> [--json] | replay <file> [--json] | "
             + "session-recover <directory> [--at-action <sequence>] [--replay-out <file>] [--snapshot-out <file>] [--json] | "
+            + "save-validate <file> [--json] | "
             + "full-match [--preset basic|expanded] [--seed <unsigned-integer>] [--json] [--replay-out <file>] | "
             + "simulate <fixture-file> [--json] [--replay-out <file>] | "
             + "ai-benchmark <manifest> --output <new directory> [--workers 1..64] [--json] | "

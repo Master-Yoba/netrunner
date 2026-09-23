@@ -43,7 +43,7 @@ public sealed class MatchHistoryTests
         await coordinator.StartAsync();
         for (int i = 0; i < 12; i++)
         {
-            Observation observation = await coordinator.GetObservationAsync(PlayerSide.Runner).WaitAsync(TimeSpan.FromSeconds(5));
+            Observation observation = await coordinator.GetReadyObservationAsync(PlayerSide.Runner).WaitAsync(TimeSpan.FromSeconds(5));
             if (coordinator.CurrentSnapshot!.View.Turn.ActiveSide == PlayerSide.Runner) break;
             LegalAction action = observation.LegalActions.First(a => a.Kind == ActionKind.PassPriority
                 || a.Parameters is NumberChoiceParameters { Value: 0 });
@@ -81,7 +81,7 @@ public sealed class MatchHistoryTests
         var policy = new FullGameContractAgent(new FullGameContractPolicy(human), definition.Runtime);
         for (int i = 0; i < 25; i++)
         {
-            Observation observation = await coordinator.GetObservationAsync(human).WaitAsync(TimeSpan.FromSeconds(5));
+            Observation observation = await coordinator.GetReadyObservationAsync(human).WaitAsync(TimeSpan.FromSeconds(5));
             if (coordinator.CurrentSnapshot!.IsTerminal) break;
             ActionId id = await policy.ChooseActionAsync(observation);
             Assert.True((await coordinator.SubmitHumanActionAsync(id)).Accepted);

@@ -86,7 +86,7 @@ public partial class Main
 				if (!_tableActionButtons.TryGetValue(basicRun.Id, out Button? runButton))
 					throw new InvalidOperationException("Selecting a server did not offer its issued run action.");
 				await ClickTableButton(runButton);
-				await _coordinator!.GetObservationAsync(PlayerSide.Runner);
+				await _coordinator!.GetReadyObservationAsync(PlayerSide.Runner);
 				await TableFrames(3);
 				if (_currentSnapshot.View.Run is null) throw new InvalidOperationException("Contextual run action did not start its run.");
 				bool sawAccess = false;
@@ -123,7 +123,7 @@ public partial class Main
 					}
 					await ClickTableButton(_tableActionButtons[next.Id]);
 				}
-				await _coordinator.GetObservationAsync(PlayerSide.Runner);
+				await _coordinator.GetReadyObservationAsync(PlayerSide.Runner);
 				await TableFrames(3);
 				if (!sawAccess || _currentSnapshot.View.Run is not null || _tableAccessPanel.Visible)
 					throw new InvalidOperationException("R&D access did not finish and clear its panel.");
@@ -418,7 +418,7 @@ public partial class Main
 
 	private async Task<Observation> SettledTableObservationAsync()
 	{
-		Observation observation = await _coordinator!.GetObservationAsync(PlayerSide.Runner)
+		Observation observation = await _coordinator!.GetReadyObservationAsync(PlayerSide.Runner)
 			.WaitAsync(TimeSpan.FromSeconds(10));
 		for (int frame = 0; frame < 180; frame++)
 		{

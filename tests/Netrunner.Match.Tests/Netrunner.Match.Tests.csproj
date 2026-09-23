@@ -11,6 +11,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <ProjectReference Include="../../src/Netrunner.Match/Netrunner.Match.csproj" />
+    <ProjectReference Include="../../tools/Netrunner.PersistenceProbe/Netrunner.PersistenceProbe.csproj" />
   </ItemGroup>
   <ItemGroup>
     <None Include="../../data/m4/scenarios/scn-402-*.json" Link="Scenarios/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

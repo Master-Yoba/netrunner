@@ -54,7 +54,7 @@ public sealed class AgentLifecycleTests
         await coordinator.StartAsync();
         for (int i = 0; i < 100; i++)
         {
-            Observation observation = await coordinator.GetObservationAsync(human);
+            Observation observation = await coordinator.GetReadyObservationAsync(human);
             if (coordinator.CurrentSnapshot!.IsTerminal) break;
             Assert.False(coordinator.CurrentSnapshot.Feedback?.IsError == true, coordinator.CurrentSnapshot.Feedback?.Message);
             Assert.True((await coordinator.SubmitHumanActionAsync(await humanAgent.ChooseActionAsync(observation))).Accepted);

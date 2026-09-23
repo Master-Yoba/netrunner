@@ -316,7 +316,7 @@ public partial class Main
 					throw new TimeoutException("Full-match smoke exceeded its developer polling cap.");
 				}
 
-				Observation observation = await _coordinator!.GetObservationAsync(side)
+				Observation observation = await _coordinator!.GetReadyObservationAsync(side)
 					.WaitAsync(TimeSpan.FromSeconds(15));
 				MatchSnapshot snapshot = _coordinator.CurrentSnapshot!;
 				diagnosticSnapshot = snapshot;

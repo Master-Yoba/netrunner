@@ -25,7 +25,7 @@ public sealed class FullMatchTelemetryTests
 
         for (int humanActions = 0; humanActions < 2; humanActions++)
         {
-            Observation observation = await coordinator.GetObservationAsync(PlayerSide.Runner)
+            Observation observation = await coordinator.GetReadyObservationAsync(PlayerSide.Runner)
                 .WaitAsync(TimeSpan.FromSeconds(5));
             Assert.Equal(DecisionKind.Setup, observation.Decision!.Kind);
             Assert.Equal(PlayerSide.Runner, coordinator.CurrentSnapshot!.SetupDecisionOwnerSide);
@@ -39,7 +39,7 @@ public sealed class FullMatchTelemetryTests
             Assert.True(result.Accepted, result.Feedback);
         }
 
-        await coordinator.GetObservationAsync(PlayerSide.Runner).WaitAsync(TimeSpan.FromSeconds(5));
+        await coordinator.GetReadyObservationAsync(PlayerSide.Runner).WaitAsync(TimeSpan.FromSeconds(5));
         Assert.True(opponent.Choices > 0);
         Assert.Equal(2 + opponent.Choices, coordinator.CurrentSnapshot!.ActionCount);
         Assert.Null(coordinator.CurrentSnapshot.SetupDecisionOwnerSide);
