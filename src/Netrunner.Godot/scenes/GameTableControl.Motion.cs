@@ -16,6 +16,7 @@ public partial class GameTableControl
 	public void ResetPresentation()
 	{
 		StopMotion();
+		Hand.ResetPresentation();
 		_motionView = null;
 		_lastBoardFingerprint = null;
 	}

@@ -16,7 +16,8 @@ match**; completed games stay completed. Loading from practice leaves the lab.
 Use **Save game** or **Save and quit** in the cog. Each manual save creates a
 named entry, preserving earlier saves. Capture pauses at a committed decision;
 the displayed board catches up to that boundary before confirmation. Normal
-saving continues an active game, while an already paused game stays paused.
+saving continues an active game, while an already paused game stays paused. A
+brief status confirmation names the saved turn and phase while play continues.
 Save and quit closes only after durable storage succeeds. A failure keeps the
 match available and explains how to retry. Escape closes the topmost dialog and
 restores focus; closing a pending load cancels its effect on the active match.

@@ -282,7 +282,7 @@ public partial class Main : Control
 			UpdateAccessControls();
 		}
 		else PollCoordinator();
-		ReportAutomaticSaveStatus();
+		ReportAutomaticSaveStatus(delta);
 		if (_animationRunning)
 		{
 			_framesWhileAnimating++;

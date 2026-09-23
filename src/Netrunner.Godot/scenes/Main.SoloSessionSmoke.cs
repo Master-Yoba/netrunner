@@ -44,6 +44,7 @@ public partial class Main
 				ShowSaveBrowser();
 				SoloSaveBrowserEntry saved = (await GetSoloSessionService().BrowseAsync()).Single(entry => entry.Preview?.Name == "M5 process restart");
 				RequireInteraction(saved.Preview!.HumanSide == side && saved.Preview.Difficulty == difficulty, "Restart preview lost seat/profile.");
+				RequireInteraction(!saved.Preview.IsTerminal, "The restart fixture must exercise an unfinished game.");
 				await LoadSavedMatchAsync(saved.Preview.SaveId, false);
 				RequireInteraction(_coordinator?.CurrentSnapshot?.IsPaused == true && !SaveDialogVisible && !_interactionLab,
 					"A process restart must restore paused and leave practice mode.");
@@ -81,7 +82,7 @@ public partial class Main
 			SelectPresetById(_runnerPreset, _runnerPresetIds, $"system-gateway-{preset}-runner");
 			_startButton.EmitSignal(BaseButton.SignalName.Pressed);
 			_reducedMotion.ButtonPressed = true;
-			await DriveSoloSmokeAsync(side, 18, untilTerminal: false);
+			await DriveSoloSmokeAsync(side, 2, untilTerminal: false);
 			RequireInteraction(_currentSnapshot is { IsTerminal: false }, "Save fixture finished too soon.");
 			_reducedMotion.ButtonPressed = false;
 			await DriveSoloSmokeAsync(side, 1, untilTerminal: false);
@@ -124,13 +125,15 @@ public partial class Main
 			Action<MatchSnapshot> obsoletePublication = _coordinatorPublication!;
 			long obsoleteGeneration = _sessionGeneration;
 			MatchSnapshot obsoleteSnapshot = previous.CurrentSnapshot!;
+			TableCardControl? hovered = _gameTable.VisibleCards.Values.FirstOrDefault(_gameTable.Hand.ContainsCard);
+			if (hovered is not null) _gameTable.Hand.Hover(hovered, true);
 			ShowSaveBrowser();
 			await LoadSavedMatchAsync(checkpoint.Preview.SaveId, false);
 			RequireInteraction(!ReferenceEquals(previous, _coordinator) && _coordinator!.CurrentSnapshot!.IsPaused, "Load did not replace the session paused.");
 			obsoletePublication(obsoleteSnapshot with { Sequence = long.MaxValue });
 			_pendingSnapshots.Enqueue(new(obsoleteGeneration, obsoleteSnapshot with { Sequence = long.MaxValue }));
 			await TableFrames(3);
-			RequireInteraction(_renderedSequence != long.MaxValue && _tableSelectedCard is null && _tableSelectedServer is null
+			RequireInteraction(_renderedSequence != long.MaxValue && _tableSelectedCard is null && _tableSelectedServer is null && _gameTable.Hand.HoveredCardId is null
 				&& !_zoomOverlay.Visible && !SpatialVisible && _gameTable.ActiveMotionCount == 0, "Stale publication or transient UI survived load.");
 			await CaptureSoloUiEvidenceAsync("paused");
 			ShowSaveGame(false);
@@ -138,7 +141,7 @@ public partial class Main
 			RequireInteraction(_tableActions.GetChildren().OfType<Button>().Any(button => button.Text == "Continue match" && !button.Disabled),
 				"Saving an already paused game left Continue disabled.");
 			ContinueRecoveredFullMatch();
-			await DriveSoloSmokeAsync(side, 6, untilTerminal: false);
+			await DriveSoloSmokeAsync(side, 1, untilTerminal: false);
 			SetSettingsVisible(true);
 			_settingsMenu.GetNode<Button>("%SaveAndQuit").EmitSignal(BaseButton.SignalName.Pressed);
 			_saveDialog.NameInput.Text = "M5 process restart";

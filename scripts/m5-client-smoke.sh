@@ -10,6 +10,7 @@ export NetrunnerCardDataMode=official
 export NetrunnerCardDataInputRoot="$client_root/data/vendor/system-gateway"
 dotnet build "$client_root/src/Netrunner.Godot" --no-restore -m:1 --disable-build-servers >&2
 python3 - "$client_root" "$client_output" "$GODOT4" "${1:-full}" <<'PY'
+import concurrent.futures
 import os
 import pathlib
 import subprocess
@@ -19,7 +20,8 @@ root, output, godot, mode = sys.argv[1:]
 matrix = [("runner", "basic", "standard"), ("corp", "expanded", "standard")]
 if mode != "--quick":
     matrix += [("corp", "basic", "standard"), ("runner", "expanded", "standard"), ("runner", "expanded", "easy")]
-for side, preset, difficulty in matrix:
+def run_case(row):
+    side, preset, difficulty = row
     case = f"{side}-{preset}-{difficulty}"
     environment = dict(os.environ, NETRUNNER_SAVE_DIRECTORY=f"{output}/{case}/saves",
                        NETRUNNER_LAUNCH_DIAGNOSTICS=f"{output}/{case}/diagnostics",
@@ -35,5 +37,7 @@ for side, preset, difficulty in matrix:
         if result.returncode or marker not in content or any(error in content for error in ("M5_CLIENT FAIL", "SCRIPT ERROR", "ERROR:")):
             raise SystemExit(f"Client smoke failed: {case} {phase}; see {log}\n{content[-6000:]}")
         print(f"M5_CLIENT_MATRIX PASS case={case} phase={phase}", flush=True)
+with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+    list(executor.map(run_case, matrix))
 print(f"M5_CLIENT_MATRIX PASS cases={len(matrix)} phases={2 * len(matrix)} output={output}")
 PY

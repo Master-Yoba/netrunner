@@ -104,4 +104,4 @@ roots are not presented as ordinary player saves or lab fixtures.
 `AtomicFileProcessTests` terminates a separate writer after primary/backup flush
 and after publication. CLI tests cover verification output and failures. The
 client save browser, playback catch-up, rolling auto-save policy, and native
-save/restart/resume flow are M5.6 integration work.
+save/restart/resume flow are documented in [the M5.6 client guide](M5_CLIENT.md).

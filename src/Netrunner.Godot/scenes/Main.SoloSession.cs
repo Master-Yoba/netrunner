@@ -22,6 +22,8 @@ public partial class Main
 	private Action<MatchSnapshot>? _coordinatorPublication;
 	private MatchCoordinator? _publicationCoordinator;
 	private string? _lastReportedAutoSaveError;
+	private string? _soloNotice;
+	private double _soloNoticeRemaining;
 	private bool SaveDialogVisible => _saveDialog?.Visible == true;
 	private bool SessionModalVisible => SettingsVisible || SaveDialogVisible;
 	private bool UseContractDiagnostic => _m4FullMatchSmoke || _fullMatchSmoke
@@ -112,12 +114,23 @@ public partial class Main
 	private bool IsCurrentSession(MatchCoordinator coordinator, long generation) =>
 		!_sessionExited && generation == _sessionGeneration && ReferenceEquals(_coordinator, coordinator);
 
-	private void ReportAutomaticSaveStatus()
+	private void ReportAutomaticSaveStatus(double delta)
 	{
+		if (_currentSnapshot?.Feedback?.IsError == true) _soloNoticeRemaining = 0;
+		_soloNoticeRemaining = Math.Max(0, _soloNoticeRemaining - delta);
+		if (_soloNoticeRemaining > 0 && _soloNotice is not null && _useCardTable)
+			_tableLastAction.Text = _soloNotice;
 		string? error = _soloSession?.AutoSaveError;
 		if (error == _lastReportedAutoSaveError) return;
 		_lastReportedAutoSaveError = error;
-		if (error is not null && _useCardTable) _tableLastAction.Text = error;
+		if (error is not null && _useCardTable) ShowSoloNotice(error);
+	}
+
+	private void ShowSoloNotice(string message)
+	{
+		_soloNotice = message;
+		_soloNoticeRemaining = 4;
+		_tableLastAction.Text = message;
 	}
 
 	private void PrepareSaveDialog()
@@ -198,7 +211,7 @@ public partial class Main
 			if (!IsCurrentSession(coordinator, generation)) return;
 			SettleSavedBoard();
 			string message = $"Saved “{receipt.Preview.Name}” · Turn {receipt.Preview.Turn} · {receipt.Preview.Phase}";
-			_tableLastAction.Text = message;
+			ShowSoloNotice(message);
 			if (revision == _saveDialogRevision)
 			{
 				_saveDialog.SetBusy(false, message);
@@ -281,7 +294,7 @@ public partial class Main
 			QueueSnapshot(_coordinator.CurrentSnapshot!);
 			SettleSavedBoard();
 			CloseSaveDialog();
-			_tableLastAction.Text = $"Loaded “{preview.Name}” · Turn {preview.Turn} · {preview.Phase}";
+			ShowSoloNotice($"Loaded “{preview.Name}” · Turn {preview.Turn} · {preview.Phase}");
 			_tableActions.GetChildren().OfType<Button>().FirstOrDefault()?.GrabFocus();
 			if (previous is not null) await previous.DisposeAsync();
 		}
@@ -296,6 +309,8 @@ public partial class Main
 
 	private void ResetSoloPresentation()
 	{
+		_soloNotice = null;
+		_soloNoticeRemaining = 0;
 		while (_pendingSnapshots.TryDequeue(out _)) { }
 		_tablePublications.Clear();
 		_animationBatches.Clear();
@@ -320,13 +335,15 @@ public partial class Main
 
 	private async void OpenSaveFolder()
 	{
+		int revision = _saveDialogRevision;
 		try
 		{
 			string directory = GetSoloSessionService().DirectoryPath;
 			await Task.Run(() => Directory.CreateDirectory(directory));
-			if (!_sessionExited && OS.ShellOpen(directory) != Error.Ok) _saveDialog!.SetBusy(false, $"Your saves are in {directory}");
+			if (!_sessionExited && revision == _saveDialogRevision && OS.ShellOpen(directory) != Error.Ok)
+				_saveDialog!.SetBusy(false, $"Your saves are in {directory}");
 		}
-		catch (Exception) { if (!_sessionExited) _saveDialog!.SetBusy(false, "The save folder could not be opened."); }
+		catch (Exception) { if (!_sessionExited && revision == _saveDialogRevision) _saveDialog!.SetBusy(false, "The save folder could not be opened."); }
 	}
 
 	private sealed record SessionPublication(long Generation, MatchSnapshot Snapshot);

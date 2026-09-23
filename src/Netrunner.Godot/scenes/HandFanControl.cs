@@ -24,6 +24,13 @@ public partial class HandFanControl : Control
 	public string? HoveredCardId => _hovered?.CardId;
 	public bool ContainsCard(TableCardControl card) => _entries.Any(entry => ReferenceEquals(entry.Card, card));
 
+	public void ResetPresentation()
+	{
+		_hovered = null;
+		DragActive = false;
+		LayoutCards(0);
+	}
+
 	public void SetCards(IReadOnlyList<TableCardControl> cards, bool animateLayout = true)
 	{
 		var retained = _entries.Where(entry => cards.Contains(entry.Card)).ToDictionary(entry => entry.Card,

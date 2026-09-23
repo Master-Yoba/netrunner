@@ -263,7 +263,7 @@ branch; no player-facing save UI is claimed by this persistence slice.
 The user has now authorized continuing through the remaining M5 slices. Local
 checkpoint commits remain the session workflow; no push or PR is requested.
 
-## M5.6 — Offline client flow (in progress, 23 September 2026)
+## M5.6 — Offline client flow (complete, 23 September 2026)
 
 The production setup selects the new offline opponent (Standard by default,
 Easy optional), retains explicit presets/seed and adds seed generation and
@@ -280,9 +280,27 @@ captured boundary; Save and quit waits for durable storage. Existing contract
 proofs still choose their explicit baseline opponent, and crash-trace recovery
 restores the saved policy version/profile.
 
-Initial service tests pass for both seats/profiles, switching during automatic
-writes, and failures preserving play. Initial native Runner/basic and
-Corp/expanded games have saved, quit the process, resumed paused, finished, and
-reloaded terminal outcomes with matching history. The stronger native matrix
-adds save-during-animation, write-failure, backup-browser, corrupt-file, Escape,
-and stale-callback checks. Full integration verification remains in progress.
+The implementation checkpoint is `8f5bc77`. All 1,944 official-content solution
+tests pass (Core 819, Cards 329, AI 95, CLI 131, Match 570), together with the full
+`make m4-gate`, formatting verification and secret scanning. The M4 gate retains
+77/77 coverage, existing board/interaction/artwork checks and all four official
+full games through outcome and a fresh setup. The final hand-hover reset is
+exercised by the native save/load regression.
+
+The final native matrix passes all 10 process phases across five cases: Standard
+in both seats/preset families plus an Easy sample. It exercises saving during
+animation, failed Save and quit, corrupt entries, verified-backup loading,
+Escape/focus, canceled loads and stale publications, terminal reload, New game,
+and saving an already paused game. All five restart checkpoints are nonterminal;
+the subsequent games finish at 129–1,760 accepted actions. The allowlisted
+[case summaries and log hashes](evidence/m5-6/client-matrix.json) retain the actual
+seeds, profiles, resolutions and engine/policy hashes. One Corp/basic fixture won before its original
+save point; the shared checkpoint was moved earlier to guarantee a genuine
+midgame restart. A smoke-only lookup was also corrected to tolerate Godot's
+renaming of dynamically recreated outcome panels. The final notification polish additionally passes the native save flow and
+formatting check. No human acceptance is inferred from these scripted games.
+
+[Client guide](M5_CLIENT.md) and [native no-art screenshots](evidence/m5-6/README.md)
+record the visible flow. M5.6 meets its automated slice exit criteria; M5.7
+developer workflow follows on a separate branch. M5's human acceptance and final
+offline/performance/benchmark gates remain outstanding.
