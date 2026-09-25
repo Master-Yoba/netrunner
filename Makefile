@@ -62,6 +62,10 @@ ai-benchmark-smoke:
 ai-benchmark-developer:
 	bash scripts/ai-benchmark.sh developer $(BENCHMARK_ARGS)
 
+.PHONY: ui-capture
+ui-capture:
+	bash scripts/ui-capture.sh $(CAPTURE_ARGS)
+
 .PHONY: fuzz fuzz-developer
 fuzz:
 	bash scripts/fuzz.sh official $(FUZZ_ARGS)
