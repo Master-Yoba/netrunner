@@ -108,8 +108,22 @@ or errors):
 | Corp | 292 [237, 351] | 70 [18, 134] | yes |
 | Runner | 209 [142, 274] | 45 [−10, 103] | no |
 
+Head-to-head ladder (Easy and Standard only; 60 seeds per pairing, 960 games,
+no caps or errors):
+
+| Seat | Standard − Easy |
+|---|---:|
+| Corp | 12 [−30, 60] |
+| Runner | −15 [−56, 19] |
+
 Findings:
 
+- Against each other, Standard and Easy are statistically indistinguishable
+  in both seats. The Corp gap in the gate ladder came mostly from how each
+  profile fares against random play. The ladder discriminates well (intervals
+  of about ±40 Elo at this size); what it found is that the two difficulty
+  levels are not distinct. This is a bot finding, not an instrument failure,
+  and it argues for moving A6's difficulty design earlier.
 - The Runner policy is barely stronger than the contract baseline: Runner Easy
   rates the same as contract v6 and Runner Standard only about 50 Elo above
   it. This supports doing A2's Runner fixes first.
@@ -132,7 +146,7 @@ Findings:
 | `Main` split changes no behavior | Pass: `m4-gate`, `event-smoke` unchanged |
 | No rules citations or step names in the dock; history side labels correct | Pass |
 | 50 fuzz games in CI | Pass (developer lane in `make verify`, official lane in `make m4-gate`) |
-| Ladder separates random, Easy and Standard per seat | Corp yes; Runner no (Standard − Easy not separated at 720 games) |
+| Ladder separates random, Easy and Standard per seat | Random vs Easy: yes in both seats. Easy vs Standard: Corp yes in the gate ladder, Runner no; head to head, neither seat separates, because the profiles are nearly equal in strength |
 
 **M4 full-match smoke cap.** The official Runner basic full-match smoke has a
 180-second wall-time cap. On this machine it reaches the cap at about action
