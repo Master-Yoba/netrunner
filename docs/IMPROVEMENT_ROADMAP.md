@@ -25,7 +25,8 @@ order*, and what must be true before moving on.
    then extended to every event.
 5. **Keep the repository contracts.** Every phase keeps `make verify` green,
    leaves frozen benchmark digests unchanged unless it deliberately re-freezes
-   them in a dedicated commit, and preserves the information boundary.
+   them in a dedicated commit, and preserves the information boundary. Every
+   wave gate also runs the full official gates (see section 3).
 
 ## 2. Dependency graph
 
@@ -90,6 +91,25 @@ weeks. The durations are rough ranges for one engineer switching between the
 listed items, not commitments. Each wave ends at a gate; the next wave starts
 once the gate passes.
 
+Every wave gate includes the standard repository gates, run on the official
+content snapshot, in addition to the wave-specific criteria below:
+
+- `make verify`: formatting, tests, proofs, generated coverage and secret scan.
+- `make m4-gate`: official client games in both seats and the resolution
+  checks.
+- `make m5-gate`: the full frozen headless suite. It covers the 1,000-game
+  Standard and 100-game Easy self-play, the tactical suites, paired
+  comparisons and worker-count determinism. `make m5-quick` is enough between
+  gates, but not at one.
+- `make m5-client-smoke`: the offline client flow, including save and resume.
+- The M5 policy performance run (`ai-performance`) on the recorded reference
+  hardware, whenever engine or policy code changed in the wave.
+
+If a wave deliberately changes frozen results, re-freeze the affected
+manifests and fixtures in a dedicated commit, with the reason and the old and
+new digests recorded in the wave's progress doc. Never regenerate held-out
+seeds to hide an unfavorable result.
+
 | Wave | Items | Rough length | Theme |
 |---|---|---:|---|
 | 0 | U0, E4a, E3 (CI part), A1 | 3–5 weeks | Tooling, safety nets and measurement |
@@ -112,11 +132,17 @@ game" at the end of Wave 3.
 | E3 random-legal fuzzing (CI part) | A cheap safety net before E1, E2 and U2 touch engine internals and rendering. |
 | A1 rating ladder and human corpus | Nothing in the AI track can be judged without it. It needs no engine work. |
 
-**Gate:**
+**Gate** (in addition to the standard gates above):
 - The capture harness produces contact sheets for the run and score scenarios.
-- `make m4-gate` passes after the `Main` split.
+- The `Main` split changes no behavior: `make m4-gate`, `make event-smoke` and
+  `make m5-client-smoke` pass unchanged.
 - The dock shows no rules citations or step names, and the history side labels
   are correct.
+- `make m5-gate` passes. Adding `SubjectSide` to events (E4a) changes the event
+  hashes in accepted-action records, so the frozen replay hashes and
+  deterministic digests are expected to change. They must be re-frozen in a
+  dedicated commit, with game outcomes, action sequences and tactical results
+  otherwise identical to the M5 evidence.
 - 50 fuzz games run in CI.
 - The ladder separates Standard, Easy and random-legal per seat.
 
