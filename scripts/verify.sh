@@ -66,6 +66,11 @@ dotnet format "$verify_root/Netrunner.sln" --no-restore --verify-no-changes
 dotnet run --project "$verify_root/src/Netrunner.Cli" --no-build --no-restore -- self-test --seed 42
 dotnet run --project "$verify_root/src/Netrunner.Cli" --no-build --no-restore -- doctor --json
 dotnet run --project "$verify_root/src/Netrunner.Cli" --no-build --no-restore -- full-match --seed 42 --json
+# Random-legal rules fuzzing: every action is fully validated, round-tripped
+# and replayed. Failures keep the prior position under the printed directory.
+fuzz_developer_dir="$(mktemp -d "${TMPDIR:-/tmp}/netrunner-fuzz-developer.XXXXXX")"
+dotnet run --project "$verify_root/src/Netrunner.Cli" --no-build --no-restore -- \
+  fuzz --content developer --games 50 --seed 1 --workers 4 --output "$fuzz_developer_dir/run"
 card_data_dir="$verify_root/data/vendor/system-gateway"
 card_data_cards="$card_data_dir/cards.json"
 card_data_manifest="$card_data_dir/manifest.json"
@@ -115,6 +120,10 @@ elif ((card_data_present == 3)) && [[ -f "$card_data_cards" && -f "$card_data_ma
     --no-restore --nologo -m:1 \
     --filter FullyQualifiedName~Tactical \
     "${official_content_properties[@]}"
+  fuzz_official_dir="$(mktemp -d "${TMPDIR:-/tmp}/netrunner-fuzz-official.XXXXXX")"
+  # The official CLI build above replaced the synthetic output in place.
+  dotnet run --project "$verify_root/src/Netrunner.Cli" --no-build --no-restore -- \
+    fuzz --content official --games 50 --seed 1 --workers 4 --output "$fuzz_official_dir/run"
   card_data_content_enabled=1
 else
   echo "card-data validation failed: local System Gateway snapshot is partial." >&2
