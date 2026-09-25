@@ -40,8 +40,10 @@ become a substitute for missing rules behavior.
 After M5, three proposed improvement tracks cover the
 [engine and architecture](ENGINE_ARCHITECTURE_PLAN.md), the
 [AI opponent](AI_OPPONENT_PLAN.md) and the
-[UI/UX redesign](UI_UX_REDESIGN_PLAN.md). They are cross-referenced by phase
-(E*, A*, U*), and their ordering relative to M6 is still to be decided.
+[UI/UX redesign](UI_UX_REDESIGN_PLAN.md). The
+[improvement roadmap](IMPROVEMENT_ROADMAP.md) orders their phases (E*, A*,
+U*) into gated waves and recommends where M6 fits. That placement is still to
+be decided.
 
 ## 2. Decisions made for implementation
 

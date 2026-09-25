@@ -2,9 +2,10 @@
 
 Status: proposed, not started
 Baseline: Godot client on `feat/m5-8-final-gate` at `1b5a58f`
-Depends on: [engine plan](ENGINE_ARCHITECTURE_PLAN.md) phase E4 (prompt keys,
-event subject side, event completeness) for U1 and U3
+Depends on: [engine plan](ENGINE_ARCHITECTURE_PLAN.md) phase E4a (prompt keys,
+event subject side) for U1 and E4b (event completeness) for U3
 Related: [AI plan](AI_OPPONENT_PLAN.md) phase A6 (pacing belongs here)
+Order: see the [improvement roadmap](IMPROVEMENT_ROADMAP.md)
 
 ## 1. Goal
 
@@ -136,15 +137,15 @@ Gate: `make godot-import`, `make event-smoke` and `make m4-gate` are unchanged,
 and the capture harness produces a contact sheet for the run and score
 scenarios.
 
-### U1. Quick wins (S) — some parts need engine E4
+### U1. Quick wins (S) — some parts need engine E4a
 
 - **History side labels.** Group history by the event's subject side (engine
-  E4), not by the actor. As a stopgap before E4, derive the subject from the
+  E4a), not by the actor. As a stopgap before E4a, derive the subject from the
   event payload in `MatchHistoryProjector` (`turn.ActiveSide`, `phase.Side`,
   `credits.Target` and so on).
 - **Z-order.** When history is open, the hand fan goes below it or moves aside.
 - **Player-facing prompts.** Map engine prompts to player text in
-  `Netrunner.Match`. Before E4 lands, strip rules citations and step names from
+  `Netrunner.Match`. Before E4a lands, strip rules citations and step names from
   the dock and put them in a developer tooltip. For example, "Whitespace blocks
   your way — break subroutines or let them fire" instead of
   "EncounterPaidWindow · CR 6.9.3b".
@@ -181,7 +182,7 @@ scoring scenarios.
 Gate: frame captures of install, play, discard and advance show no duplicate
 card and no snap-back, and the reduced-motion path still pulses.
 
-### U3. Event timeline presenter (L) — needs engine E4; the heart of "feel"
+### U3. Event timeline presenter (L) — needs engine E4b; the heart of "feel"
 
 Turn the filtered event batches into a timeline of beats that drives the
 board, not a text ticker.
@@ -321,7 +322,7 @@ access and score scenes at 1920 and 2560.
 
 ```text
 U0 capture + Main split ──> everything
-E4 (engine) ──> U1 quick wins ──> U3 timeline
+E4a (engine) ──> U1 quick wins ──> U3 timeline <── E4b (engine)
 U2 persistent board ──────────> U3 timeline ──> U4 layout ──> U5 feel/audio
 U6 alongside U4/U5
 ```

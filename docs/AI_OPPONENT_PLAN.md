@@ -5,6 +5,7 @@ Baseline: `corp-heuristic-v2` and `runner-heuristic-v1` (Standard and Easy
 profiles), frozen in `data/m5/benchmarks/frozen-profiles-v1.json`
 Depends on: [engine plan](ENGINE_ARCHITECTURE_PLAN.md) phases E1 (simulation
 `Apply`) and E5 (determinization) for phases A3 and A4 below
+Order: see the [improvement roadmap](IMPROVEMENT_ROADMAP.md)
 
 ## 1. Where the bots are today
 
@@ -142,7 +143,7 @@ other side's, and the Runner's rating against the frozen Corp improves
 noticeably. The target is Standard self-play with the Runner winning 40–60%,
 after checking the preset matchups themselves aren't lopsided.
 
-### A3. Turn planner (L) — needs engine E1
+### A3. Turn planner (L) — needs engine E1 and E5
 
 The main structural upgrade for turn-action decisions:
 

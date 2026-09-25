@@ -4,6 +4,7 @@ Status: proposed, not started
 Baseline: `feat/m5-8-final-gate` at `1b5a58f` (M5 complete, PR #30 open)
 Companion plans: [AI opponent](AI_OPPONENT_PLAN.md) and
 [UI/UX redesign](UI_UX_REDESIGN_PLAN.md)
+Order: see the [improvement roadmap](IMPROVEMENT_ROADMAP.md)
 
 ## 1. Summary
 
@@ -182,7 +183,7 @@ timing combinations much sooner.
 - Gate: zero failures across 10,000 official fuzz games before any new card
   set is started.
 
-### E4. Presentation-ready events and prompts (M) — prerequisite for UI phases U1 and U3
+### E4. Presentation-ready events and prompts (S + M) — E4a unblocks U1, E4b unblocks U3
 
 Observed in play on 25 September 2026:
 
@@ -194,7 +195,10 @@ Observed in play on 25 September 2026:
 - Generic history lines appear, such as "Corp: advance card." and "Corp: use
   trigger."
 
-Plan:
+The work splits into two parts. E4a is small and unblocks the UI quick fixes
+(U1). E4b is needed only when the event timeline (U3) starts.
+
+**E4a. Prompt keys and subject side (S)**
 
 - Replace free-text decision prompts with a typed `PromptKey` plus structured
   arguments (for example `RunPriority { Step, ServerId, IceId }`). Keep the rules
@@ -203,6 +207,9 @@ Plan:
   migration.
 - Add a `SubjectSide` (or subject player) to every event where a side is
   meaningful. The history and animation layers group by subject, not by actor.
+
+**E4b. Event completeness for animation (M)**
+
 - Audit event completeness for animation. Every visible change should have its
   own event with enough payload to animate it, including:
   - credit gains and losses, with their source
@@ -222,7 +229,7 @@ Plan:
   `CorpEventVisibility`). Add a test that every new event kind has an explicit
   visibility rule, so a new event can't leak a hidden identity by default.
 
-### E5. Determinization API (M) — prerequisite for AI phase A4
+### E5. Determinization API (M) — prerequisite for AI phases A3 and A4
 
 Search needs to sample full game states that are consistent with what an agent
 has observed. Only Core can build `GameState`, so the sampler belongs there:
@@ -270,23 +277,25 @@ public static GameState ObservationSampler.Sample(
 ## 5. Sequencing
 
 ```text
-E1 tiered Apply ─────────┬─> AI A3 turn planner
-E5 determinization ──────┴─> AI A4 search
-E2 validator split ──(uses E3 corpus)
-E3 fuzzing ──────────────> gate before next card set
-E4 prompts/events ───────> UI U1 quick fixes, U3 event timeline
+E1 tiered Apply ─────────┬─> AI A3 turn planner ──> AI A4 search
+E5 determinization ──────┘
+E3 fuzzing ──────────────┬─> E2 validator split (uses the E3 corpus)
+                         └─> gate before next card set
+E4a prompts/subject ─────> UI U1 quick fixes
+E4b event completeness ──> UI U3 event timeline
 E6 naming/growth ────────> continuous
 ```
 
-Suggested order: E4 prompt keys and subject side first (they unblock visible
-UI fixes), then E1 together with E3, then E2 and E5.
+Suggested order: E4a first (it unblocks visible UI fixes), then E1 together
+with E3, then E5 and E4b, then E2. The cross-plan order is in the
+[improvement roadmap](IMPROVEMENT_ROADMAP.md).
 
 ## 6. Verification for every phase
 
 - `make verify` passes, and the official `make m5-gate` passes where content is
   touched.
 - Deterministic digests of the frozen benchmark manifests are unchanged by
-  E1, E2 and E6. E4 may change event payloads, so re-freeze the affected
-  fixtures intentionally in a dedicated commit.
+  E1, E2 and E6. E4a and E4b may change event payloads, so re-freeze the
+  affected fixtures intentionally in a dedicated commit.
 - Report performance numbers against the section 2 baseline with the same
   command line and hardware description.
