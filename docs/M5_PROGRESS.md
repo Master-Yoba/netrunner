@@ -4,6 +4,14 @@ Plan: [M5 implementation plan](M5_PLAN.md).
 Branches: `feat/m5-0-baseline`, `feat/m5-1-agent-foundation`.
 Record opened 22 September 2026.
 
+Current status, 25 September 2026: M5 implementation and automated verification
+are complete. The user responded to the playtest request with “it seems to work
+fine, can push to GH”, accepting the result and authorizing publication. This
+supersedes the earlier local-only workflow and pending-acceptance statements
+below, which describe the history as of 23 September. Individual manual matrix
+details were not supplied or inferred. See the [acceptance record](evidence/m5-8/acceptance.json)
+and [gate report](M5_GATE.md#human-acceptance).
+
 ## Scope authorization and acceptance reconciliation
 
 The user requested the detailed M5 plan and then explicitly directed work to
@@ -399,3 +407,13 @@ every deterministic digest equal to the earlier passing attempt. The complete
 provisioned M4 gate passes again, including all four native save/reload games.
 The [separate audit evidence](evidence/m5-8/audit/validation.json) records exact
 build scope and verification hashes. Human acceptance is still unreported.
+
+## Acceptance and publication — 25 September 2026
+
+The user's general playtest acceptance closes the publication blocker for M5.
+Publish the complete milestone branch as a PR into `dev`, including the earlier
+local hosted-virus lab, compact-board and condition/playback improvements that
+form its tested baseline. The reviewed implementation is `bc2d596`; the acceptance
+update changes documentation only, so the recorded 2,050-test, full M4 and full
+M5 gate results remain the implementation's verification evidence. GitHub CI
+results are separate and must be reported from the actual published PR.

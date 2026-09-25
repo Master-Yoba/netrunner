@@ -1,9 +1,9 @@
 # M5 integration gate
 
-Evidence date: 23 September 2026. Branch: `feat/m5-8-final-gate`.
-The implementation remains locally committed; nothing was pushed or published.
+Automated evidence date: 23 September 2026. User acceptance: 25 September 2026.
+Branch: `feat/m5-8-final-gate`. The user authorized GitHub publication.
 Implementation and automated verification are complete: headless, repository,
-offline-package and performance gates pass. Human acceptance remains open.
+offline-package and performance gates pass. General human acceptance is recorded below.
 The [completion audit](M5_COMPLETION_AUDIT.md) maps each planned deliverable to
 its implementation and evidence, and records the remaining human criteria.
 
@@ -274,9 +274,17 @@ that provenance or claim a newly exported package.
 
 ## Human acceptance
 
-Not yet reported. Required: a complete Standard game in each human seat covering
-both preset families, an Easy sample, seeds/decks/build and save/resume points,
-and feedback on economy/replacements, pressure/breaker use, waiting/animations,
-save discoverability and resuming a run or nested choice. Exercise normal and
-reduced motion at 1080p/1440p. Scripted acceptance does not satisfy this record.
-M5 cannot be marked fully accepted until this gate is resolved.
+On 25 September 2026, in direct response to the request for M5 playtest results,
+the user reported: “it seems to work fine, can push to GH”. This is recorded as
+general acceptance of M5 and authorization to publish the completed work.
+The [acceptance record](evidence/m5-8/acceptance.json) binds the feedback to the
+reviewed implementation at `bc2d596`.
+
+The user did not supply individual seeds, seat/preset results, save boundaries,
+or resolution/motion observations. Those details are not inferred from the
+general acceptance. The planned manual matrix remains a useful regression
+checklist in [the audit](M5_COMPLETION_AUDIT.md#human-acceptance), while the
+automated matrices above remain explicitly scripted evidence. The publication
+blocker is resolved by the user's acceptance; no additional confirmation is
+required. Historical evidence files retain their original acceptance status
+as recorded on 23 September.

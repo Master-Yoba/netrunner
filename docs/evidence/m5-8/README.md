@@ -4,6 +4,10 @@ This folder contains allowlisted summaries and one screenshot without official
 card faces. Full accepted-action replays, private snapshots, saves, diagnostic
 logs and artwork remain in ignored local storage or a private temporary folder.
 
+- `acceptance.json`: the user's general playtest acceptance and publication
+  authorization on 25 September, bound to the reviewed implementation. It does
+  not claim individual manual-matrix results that were not reported. Earlier
+  automated evidence retains its original `humanAcceptance: false` status.
 - `failed-preflight-summary.json`: the preserved 999/1,000 exploratory result,
   including its one classified Retribution resolution failure. The repaired
   full run is a separate attempt and does not replace this denominator.

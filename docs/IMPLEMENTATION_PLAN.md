@@ -278,8 +278,10 @@ and self-play benchmarks, save/checkpoint lifecycle, client and developer flows,
 dependency-ordered slices, and acceptance evidence. Existing contract agents,
 replay and diagnostic session recovery remain foundations. The M5 slices are
 implemented with [progress and verification records](M5_PROGRESS.md) and a
-[measured integration gate](M5_GATE.md). Human playtesting is still required
-before milestone acceptance; automated games are recorded separately.
+[measured integration gate](M5_GATE.md). The user gave general playtest acceptance
+and authorized publication on 25 September 2026; its scope is recorded in
+[the acceptance section](M5_GATE.md#human-acceptance). Automated games and
+unreported individual manual-matrix details remain distinguished.
 
 Deliverables:
 

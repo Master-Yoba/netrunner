@@ -2,8 +2,9 @@
 
 Audited 23 September 2026 against [M5_PLAN.md](M5_PLAN.md), including its
 architecture, slice exits and milestone gate. Implementation is complete;
-human acceptance remains unreported. Local commits only; no remote CI run,
-push or PR is claimed.
+the user supplied general acceptance and authorized GitHub publication on
+25 September 2026. The scope of that feedback is recorded below. Automated
+evidence from 23 September remains distinct from human feedback and remote CI.
 
 ## Deliverable coverage
 
@@ -15,7 +16,7 @@ push or PR is claimed.
 | AI-504: deterministic profiles and diagnostics (§3.4, §4.5) | [OfflineAgent](../src/Netrunner.AI/OfflineAgent.cs) evaluates tentative checkpoint/RNG state and commits accepted actions only. Foundation tests cover retries, discard, cancellation and restore. Easy/Standard configurations are frozen. [Private decision logs](../src/Netrunner.Match/PolicyDecisionLog.cs) add versioned context, all candidate utilities/reasons, chosen ID, observation/checkpoint hashes and work/time; default off. [Log regressions](../tests/Netrunner.Match.Tests/PolicyDecisionLogTests.cs) check replay equivalence, failed/canceled attempts and report separation. | Implemented; diagnostics gap closed during audit |
 | AI-505: reproducible benchmarks (§5) | [Benchmark guide](M5_BENCHMARKS.md), [runner tests](../tests/Netrunner.Match.Tests/AiBenchmarkTests.cs), [failure tests](../tests/Netrunner.Match.Tests/BenchmarkFailureTests.cs) and [gate checker](../scripts/m5_gate.py). Independent workers, fixed seeds/configurations, progress detection without sequence churn, explicit failures, verified replay prefixes and private recovery artifacts. [Gate evidence](M5_GATE.md): Standard 1,000/1,000, Easy 100/100, paired comparisons 40/40 each, all critical tactics, exact worker-count repeats. | Implemented and verified |
 | SAVE-501: durable session saves (§6) | [Save contract](M5_SAVES.md), [save tests](../tests/Netrunner.Match.Tests/SoloSaveTests.cs), [nested matrix](../tests/Netrunner.Match.Tests/SessionPolicyMatrixTests.cs) and [process-kill tests](../tests/Netrunner.Match.Tests/AtomicFileProcessTests.cs). Both seats/presets, repeated reloads, setup, run/trace/payment/install/trigger boundaries, thinking/playback, terminal state, compatibility rejection, corrupt entries, backup, write failure and crash recovery. | Implemented and verified |
-| MATCH-501: offline client and lifecycle (§6.2, §6.4) | [Client guide](M5_CLIENT.md), [service](../src/Netrunner.Match/SoloSessionService.cs) and [service tests](../tests/Netrunner.Match.Tests/SoloSessionServiceTests.cs). One-action coordinator pump, off-thread policy/storage, serialized autosaves and generation guards; setup, Standard/Easy, seed, save browser, paused resume and outcome. [Native matrix](evidence/m5-6/client-matrix.json): five cases, ten process phases, including failures, stale work, focus/Escape and restart. | Implemented and automatically verified; human review open |
+| MATCH-501: offline client and lifecycle (§6.2, §6.4) | [Client guide](M5_CLIENT.md), [service](../src/Netrunner.Match/SoloSessionService.cs) and [service tests](../tests/Netrunner.Match.Tests/SoloSessionServiceTests.cs). One-action coordinator pump, off-thread policy/storage, serialized autosaves and generation guards; setup, Standard/Easy, seed, save browser, paused resume and outcome. [Native matrix](evidence/m5-6/client-matrix.json): five cases, ten process phases, including failures, stale work, focus/Escape and restart. | Implemented and automatically verified; general user acceptance recorded |
 | DEV-501: reproduce and step (§7) | [Developer guide](M5_DEVELOPER.md), [tests](../tests/Netrunner.Match.Tests/DeveloperSessionTests.cs) and [native evidence](evidence/m5-7/README.md). All 80 tactical roots reopen/step/replay; bounded advance, reveal without observation changes, validated snapshots and new replay roots for raw imports. Explicit development build plus launch flag; actual release excludes controls even when flagged. | Implemented and verified |
 
 ## Cross-cutting exit checks
@@ -64,14 +65,18 @@ without changing any replay. [Audit validation](evidence/m5-8/audit/validation.j
 records exact build scope and log hashes; [diagnostic evidence](evidence/m5-8/audit/diagnostics-summary.json)
 contains only allowlisted counts/hashes, with private JSONL retained locally.
 
-## Human acceptance still required
+## Human acceptance
 
 The historical M4 acceptance distinction remains in
 [M5_PROGRESS.md](M5_PROGRESS.md#scope-authorization-and-acceptance-reconciliation).
-General positive feedback and scripted matches do not establish the specific
-M5 human-play requirements in §9. No human result has been supplied for them.
+On 25 September the user answered the M5 playtest request with “it seems to work
+fine, can push to GH”. This resolves the acceptance/publication blocker through
+general user sign-off on the completed implementation. See the dated
+[acceptance record](evidence/m5-8/acceptance.json). Individual manual results
+for the §9 matrix were not supplied; neither this feedback nor scripted games
+is represented as proof of each specific human-play case.
 
-Record the following after playtesting; a discovered defect should include its
+Retain the following for future playtesting; a discovered defect should include its
 seed, action/decision boundary and a locally retained save or diagnostic trace.
 Private saves and official-art screenshots do not belong in repository sources.
 
@@ -87,4 +92,4 @@ Private saves and official-art screenshots do not belong in repository sources.
 
 Optional resource grants, broader search, LLM transport, cloud saves, a
 deckbuilder and installers remain outside the required M5 deliverables. The
-remaining acceptance work does not imply those features must be added.
+acceptance record does not imply those features must be added.
