@@ -66,6 +66,10 @@ ai-benchmark-developer:
 ui-capture:
 	bash scripts/ui-capture.sh $(CAPTURE_ARGS)
 
+.PHONY: ai-ladder
+ai-ladder:
+	bash scripts/ai-ladder.sh $(LADDER_ARGS)
+
 .PHONY: fuzz fuzz-developer
 fuzz:
 	bash scripts/fuzz.sh official $(FUZZ_ARGS)

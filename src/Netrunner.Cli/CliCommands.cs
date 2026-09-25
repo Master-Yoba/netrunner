@@ -57,6 +57,16 @@ public static partial class CliCommands
             return RunFuzz(args, output, error);
         }
 
+        if (args.Length > 0 && args[0] == "ai-ladder")
+        {
+            return RunAiLadder(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "ai-review")
+        {
+            return RunAiReview(args, output, error);
+        }
+
         if (args.Length > 0 && args[0] == "ai-performance")
         {
             return RunPolicyPerformance(args, output, error);
@@ -177,6 +187,9 @@ public static partial class CliCommands
             + "ai-tactics <manifest> --output <new directory> [--workers 1..64] [--verify-fixtures] [--json] | "
             + "fuzz [--games 1..100000] [--seed <unsigned-integer>] [--content developer|official] [--action-cap N] "
             + "[--workers 1..64] [--output <new directory>] [--json] | "
+            + "ai-ladder [--content developer|official] [--entrants random,contract,easy,standard] [--seeds-per-pairing N] "
+            + "[--seed <unsigned-integer>] [--bootstrap N] [--action-cap N] [--workers 1..64] [--output <new directory>] [--json] | "
+            + "ai-review <session-directory> [--profile standard|easy] [--all] [--output <new file>] [--json] | "
             + "card-data normalize --upstream <file> --copyright <file> --commit <40-hex-sha> "
             + "--retrieval-date YYYY-MM-DD --output-dir <directory> [--json] | "
             + "card-data validate [--root <directory>] [--json] | "
