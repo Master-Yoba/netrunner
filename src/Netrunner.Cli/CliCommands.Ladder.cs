@@ -110,6 +110,7 @@ public static partial class CliCommands
             capped = report.Capped,
             errors = report.Errors,
             ratings = report.Ratings,
+            differences = report.Differences,
             separations = report.Separations,
             pairings = ordered.GroupBy(result => (result.Game.Corp, result.Game.Runner))
                 .Select(group => new
@@ -122,6 +123,17 @@ public static partial class CliCommands
                 }),
             failures = ordered.Where(result => result.Error is not null)
                 .Select(result => new { id = result.Game.Id, seed = result.Game.GameSeed, result.Error }),
+            results = ordered.Select(result => new
+            {
+                id = result.Game.Id,
+                contentId = result.Game.ContentId,
+                gameSeed = result.Game.GameSeed,
+                corp = result.Game.Corp,
+                runner = result.Game.Runner,
+                corpScore = result.CorpScore,
+                capped = result.Capped,
+                actions = result.Actions,
+            }),
         });
         if (destination is not null)
         {
@@ -139,6 +151,11 @@ public static partial class CliCommands
             {
                 output.WriteLine(string.Create(CultureInfo.InvariantCulture,
                     $"{rating.Side,-6} {rating.Entrant,-9} elo={rating.Elo,7:F0} 95%=[{rating.Lower:F0}, {rating.Upper:F0}] score={rating.ScoreRate:P0} games={rating.Games}"));
+            }
+            foreach (LadderDifference difference in report.Differences)
+            {
+                output.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                    $"{difference.Side,-6} {difference.Stronger} - {difference.Weaker} = {difference.Elo:F0} 95%=[{difference.Lower:F0}, {difference.Upper:F0}]"));
             }
             foreach (LadderSeparation separation in report.Separations)
                 output.WriteLine($"{separation.Side} order {string.Join(" < ", separation.Order)} separated={separation.Separated.ToString().ToLowerInvariant()}");

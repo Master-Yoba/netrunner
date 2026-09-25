@@ -48,6 +48,9 @@ public sealed class RatingLadderTests
             Assert.Equal(0, random.Elo);
             Assert.True(standard.Elo > 200, $"{side} standard rated {standard.Elo}.");
             Assert.True(standard.Lower > random.Upper);
+            LadderDifference gap = Assert.Single(report.Differences, difference => difference.Side == side);
+            Assert.Equal(("random", "standard"), (gap.Weaker, gap.Stronger));
+            Assert.True(gap.Separated);
             Assert.True(Assert.Single(report.Separations, separation => separation.Side == side).Separated);
         }
 

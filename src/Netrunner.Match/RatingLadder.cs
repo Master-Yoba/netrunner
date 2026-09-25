@@ -11,17 +11,26 @@ public sealed record LadderGameResult(LadderGame Game, double CorpScore, bool Ca
 
 public sealed record LadderRating(PlayerSide Side, string Entrant, double Elo, double Lower, double Upper, int Games, double ScoreRate);
 
+/// <summary>Rating gap between adjacent entrants in expected order, with a paired bootstrap interval.</summary>
+public sealed record LadderDifference(PlayerSide Side, string Weaker, string Stronger, double Elo, double Lower, double Upper)
+{
+    public bool Separated => Lower > 0;
+}
+
 public sealed record LadderSeparation(PlayerSide Side, IReadOnlyList<string> Order, bool Separated);
 
-public sealed record LadderReport(IReadOnlyList<LadderRating> Ratings, IReadOnlyList<LadderSeparation> Separations,
-    int Games, int Capped, int Errors);
+public sealed record LadderReport(IReadOnlyList<LadderRating> Ratings, IReadOnlyList<LadderDifference> Differences,
+    IReadOnlyList<LadderSeparation> Separations, int Games, int Capped, int Errors);
 
 /// <summary>
 /// Head-to-head rating ladder over a fixed entrant pool. Every Corp entrant
 /// meets every Runner entrant on the same seeds and preset pairings. Ratings
 /// come from a Bradley–Terry fit (P(Corp wins) = σ(r_corp − r_runner)) with
 /// a small ridge prior, reported on the Elo scale relative to the seat's
-/// weakest expected entrant, with seeded bootstrap intervals.
+/// weakest expected entrant, with seeded bootstrap intervals. An order is
+/// separated when every adjacent gap's paired bootstrap interval is above
+/// zero; comparing separate rating intervals would be too strict because
+/// ratings fitted from the same games are correlated.
 /// </summary>
 public static class RatingLadder
 {
@@ -109,12 +118,15 @@ public static class RatingLadder
 
         Dictionary<string, double> point = Anchor(Fit(scored, keys));
         var samples = keys.ToDictionary(key => key, _ => new List<double>(bootstrap), StringComparer.Ordinal);
+        var draws = new List<Dictionary<string, double>>(bootstrap);
         var random = new DeterministicRandom(bootstrapSeed);
         for (int iteration = 0; iteration < bootstrap; iteration++)
         {
             var resample = new LadderGameResult[scored.Length];
             for (int index = 0; index < resample.Length; index++) resample[index] = scored[random.NextInt(scored.Length)];
-            foreach ((string key, double value) in Anchor(Fit(resample, keys))) samples[key].Add(value);
+            Dictionary<string, double> draw = Anchor(Fit(resample, keys));
+            draws.Add(draw);
+            foreach ((string key, double value) in draw) samples[key].Add(value);
         }
 
         var ratings = keys.Select(key =>
@@ -130,14 +142,25 @@ public static class RatingLadder
                 played.Length, sideScore);
         }).OrderBy(rating => rating.Side).ThenBy(rating => Rank(rating.Entrant)).ToArray();
 
-        var separations = new[] { PlayerSide.Corp, PlayerSide.Runner }.Select(side =>
+        var differences = new List<LadderDifference>();
+        var separations = new List<LadderSeparation>();
+        foreach (PlayerSide side in new[] { PlayerSide.Corp, PlayerSide.Runner })
         {
             LadderRating[] ordered = ratings.Where(rating => rating.Side == side).OrderBy(rating => Rank(rating.Entrant)).ToArray();
-            bool separated = ordered.Zip(ordered.Skip(1)).All(pair => pair.First.Upper < pair.Second.Lower);
-            return new LadderSeparation(side, ordered.Select(rating => rating.Entrant).ToArray(), separated);
-        }).ToArray();
+            foreach ((LadderRating weaker, LadderRating stronger) in ordered.Zip(ordered.Skip(1)))
+            {
+                string weakerKey = Key(side, weaker.Entrant);
+                string strongerKey = Key(side, stronger.Entrant);
+                List<double> gaps = draws.Select(draw => draw[strongerKey] - draw[weakerKey]).Order().ToList();
+                double gap = point[strongerKey] - point[weakerKey];
+                differences.Add(new LadderDifference(side, weaker.Entrant, stronger.Entrant, gap,
+                    gaps.Count == 0 ? gap : Percentile(gaps, 0.025), gaps.Count == 0 ? gap : Percentile(gaps, 0.975)));
+            }
+            separations.Add(new LadderSeparation(side, ordered.Select(rating => rating.Entrant).ToArray(),
+                differences.Where(difference => difference.Side == side).All(difference => difference.Separated)));
+        }
 
-        return new LadderReport(ratings, separations, results.Count, results.Count(result => result.Capped),
+        return new LadderReport(ratings, differences, separations, results.Count, results.Count(result => result.Capped),
             results.Count(result => result.Error is not null));
 
         // Ratings are identified only up to a shift; anchor each seat at its weakest entrant.
