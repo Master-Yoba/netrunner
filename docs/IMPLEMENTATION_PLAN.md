@@ -37,6 +37,12 @@ M3 UX work can continue in parallel with M4 card batches once the event bridge
 is stable. M5 benchmark design can start during M4, but bot tuning must not
 become a substitute for missing rules behavior.
 
+After M5, three proposed improvement tracks cover the
+[engine and architecture](ENGINE_ARCHITECTURE_PLAN.md), the
+[AI opponent](AI_OPPONENT_PLAN.md) and the
+[UI/UX redesign](UI_UX_REDESIGN_PLAN.md). They are cross-referenced by phase
+(E*, A*, U*), and their ordering relative to M6 is still to be decided.
+
 ## 2. Decisions made for implementation
 
 These resolve the PRD's open decisions unless later evidence forces an ADR.
