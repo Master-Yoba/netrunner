@@ -138,11 +138,11 @@ game" at the end of Wave 3.
   `make m5-client-smoke` pass unchanged.
 - The dock shows no rules citations or step names, and the history side labels
   are correct.
-- `make m5-gate` passes. Adding `SubjectSide` to events (E4a) changes the event
-  hashes in accepted-action records, so the frozen replay hashes and
-  deterministic digests are expected to change. They must be re-frozen in a
-  dedicated commit, with game outcomes, action sequences and tactical results
-  otherwise identical to the M5 evidence.
+- `make m5-gate` passes. If E4a adds serialized fields to Core events or
+  prompts, the frozen replay hashes and deterministic digests change and must
+  be re-frozen in a dedicated commit, with game outcomes, action sequences and
+  tactical results otherwise identical to the M5 evidence. (Wave 0 derived both
+  in `Netrunner.Match` instead, so the frozen results must be unchanged.)
 - 50 fuzz games run in CI.
 - The ladder separates Standard, Easy and random-legal per seat.
 

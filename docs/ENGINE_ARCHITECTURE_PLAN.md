@@ -208,6 +208,16 @@ The work splits into two parts. E4a is small and unblocks the UI quick fixes
 - Add a `SubjectSide` (or subject player) to every event where a side is
   meaningful. The history and animation layers group by subject, not by actor.
 
+*As implemented in Wave 0:* both parts are derived in `Netrunner.Match` from
+typed data Core already publishes, instead of adding serialized fields to
+Core. `DecisionPromptPresenter` maps the decision kind, run step and visible
+ICE to player wording. `MatchHistoryProjector` records the subject side of
+every summary and detail from the typed event payloads. Core's prompt text
+stays as diagnostic metadata (the dock tooltip). Serialized state, save files
+and frozen benchmark results are unchanged, so no re-freeze was needed.
+Revisit adding fields to Core only if E4b's animation layer needs subject
+data that payloads can't supply.
+
 **E4b. Event completeness for animation (M)**
 
 - Audit event completeness for animation. Every visible change should have its
@@ -221,6 +231,12 @@ The work splits into two parts. E4a is small and unblocks the UI quick fixes
   - accesses and their outcomes
   - damage per card
   - run success or failure
+
+  Known gap, found in Wave 0: the Runner receives no event at all when the
+  Corp advances a face-down card. The only event is `AgendaAdvanced`, which
+  the Runner's filter correctly suppresses because its type reveals an
+  agenda. A public "card advanced" event with only the card ID and the new
+  counter count is needed.
 
   Produce a table of event kind → present/missing → payload gaps. The typed
   event catalog in `TypedEvents.cs` is already large, so this is mostly gap
