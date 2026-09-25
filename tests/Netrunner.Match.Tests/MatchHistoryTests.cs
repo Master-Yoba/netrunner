@@ -97,4 +97,43 @@ public sealed class MatchHistoryTests
         Assert.DoesNotContain("server:", serialized);
         Assert.DoesNotContain(entries, e => e.Summary.Contains("passes priority", StringComparison.Ordinal));
     }
+
+    [Theory]
+    [InlineData(PlayerSide.Runner)]
+    [InlineData(PlayerSide.Corp)]
+    public async Task EntriesAreTaggedWithTheSideTheyDescribeNotTheActingSide(PlayerSide human)
+    {
+        FullMatchDefinition definition = FullMatchDefinition.Developer(47042);
+        PlayerSide other = human == PlayerSide.Runner ? PlayerSide.Corp : PlayerSide.Runner;
+        await using var coordinator = new MatchCoordinator(definition,
+            new FullGameContractAgent(new FullGameContractPolicy(other), definition.Runtime),
+            new MatchCoordinatorOptions { HumanSide = human });
+        var publications = new ConcurrentQueue<MatchSnapshot>();
+        coordinator.SnapshotPublished += publications.Enqueue;
+        await coordinator.StartAsync();
+        var policy = new FullGameContractAgent(new FullGameContractPolicy(human), definition.Runtime);
+        for (int i = 0; i < 60; i++)
+        {
+            Observation observation = await coordinator.GetReadyObservationAsync(human).WaitAsync(TimeSpan.FromSeconds(5));
+            if (coordinator.CurrentSnapshot!.IsTerminal) break;
+            ActionId id = await policy.ChooseActionAsync(observation);
+            Assert.True((await coordinator.SubmitHumanActionAsync(id)).Accepted);
+        }
+
+        MatchHistoryEntry[] entries = publications.SelectMany(s => s.History)
+            .GroupBy(e => e.Key).Select(group => group.First()).ToArray();
+        // A turn start is caused by the other side's final action, which is
+        // exactly where the actor and the subject differ.
+        Assert.Contains(entries, e => e.Summary.StartsWith($"{human} turn", StringComparison.Ordinal)
+            || e.Summary.StartsWith($"{other} turn", StringComparison.Ordinal));
+        Assert.All(entries.Where(e => NamedSide(e.Summary) is not null),
+            e => Assert.True(NamedSide(e.Summary) == e.Side, $"'{e.Summary}' is tagged {e.Side}."));
+        Assert.DoesNotContain(entries, e => e.Summary.Contains(": advance card", StringComparison.Ordinal)
+            || e.Summary.Contains(": use trigger", StringComparison.Ordinal));
+
+        static PlayerSide? NamedSide(string summary) =>
+            summary.StartsWith("Corp ", StringComparison.Ordinal) || summary.StartsWith("Corp:", StringComparison.Ordinal) ? PlayerSide.Corp
+            : summary.StartsWith("Runner ", StringComparison.Ordinal) || summary.StartsWith("Runner:", StringComparison.Ordinal) ? PlayerSide.Runner
+            : null;
+    }
 }

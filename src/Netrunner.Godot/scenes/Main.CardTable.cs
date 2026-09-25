@@ -186,9 +186,10 @@ public partial class Main
 				: snapshot.IsTerminal ? "Match complete."
 				: _fullMatchResumePaused ? $"Paused at action {snapshot.ActionCount}. Continue when ready."
 				: decision is null ? "Waiting for the next decision…"
-				: $"{decision.OwnerSide}: {TablePrompt(decision)}";
+				: $"{decision.OwnerSide}: {TablePrompt(decision, snapshot.View)}";
+			_tablePrompt.TooltipText = decision is null ? string.Empty : $"Engine prompt: {decision.Prompt}";
 			if (snapshot.View.Run is { } run)
-				_tablePrompt.Text = $"Run on {_gameTable.GetServerDisplayName(run.AttackedServerId)} · {run.Step} · " + _tablePrompt.Text;
+				_tablePrompt.Text = DecisionPromptPresenter.RunContext(run, _gameTable.GetServerDisplayName) + " · " + _tablePrompt.Text;
 			_gameTable.SetTargets(new HashSet<string>(StringComparer.Ordinal));
 			_gameTable.SetActionableSources(new HashSet<string>(StringComparer.Ordinal));
 			if (_fullMatchResumePaused && !snapshot.IsTerminal)
@@ -368,17 +369,11 @@ public partial class Main
 		};
 	}
 
-	private string TablePrompt(DecisionViewModel decision) => decision.Kind switch
-	{
-		DecisionKind.TurnTiming => decision.OwnerSide == PlayerSide.Corp
-			? "Rez, score or use a paid ability — or pass priority."
-			: "Use a paid ability — or pass priority.",
-		DecisionKind.TurnAction => "Choose a card, a server or a basic action.",
-		DecisionKind.Setup => "Keep this hand or take one mulligan.",
-		DecisionKind.TurnDiscard => HandDiscardPrompt(decision),
-		DecisionKind.MemoryCleanup => "Choose programs to trash to free memory.",
-		_ => FriendlyText(decision.Prompt),
-	};
+	// Core's prompt text is diagnostic (rules citations, step names); players
+	// see Match's wording, and the raw text stays in the prompt tooltip.
+	private string TablePrompt(DecisionViewModel decision, MatchViewModel view) => decision.Kind == DecisionKind.TurnDiscard
+		? HandDiscardPrompt(decision)
+		: DecisionPromptPresenter.Prompt(decision, view);
 
 	private string HandDiscardPrompt(DecisionViewModel decision)
 	{
