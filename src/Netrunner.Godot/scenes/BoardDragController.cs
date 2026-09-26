@@ -27,6 +27,9 @@ public partial class BoardDragController : Control
 	private readonly List<(BoardInteractionDestination Destination, PanelContainer Panel, string GeometryKind)> _zones = new();
 	private Label _hint = null!;
 	private Tween? _returnTween;
+	// A single-action drop waits at the drop point, dimmed, until the engine answers.
+	private (string CardId, TableCardControl Preview, TableCardControl? Source, Color SourceModulate, string? DecisionId, long Revision)? _pending;
+	public bool HasPendingDrop => _pending is not null;
 
 	public override void _Ready()
 	{
@@ -39,6 +42,7 @@ public partial class BoardDragController : Control
 	public override void _ExitTree()
 	{
 		GetWindow().FocusExited -= OnFocusLost;
+		ReleasePendingDrop(returnToHand: false);
 		RestoreSource();
 	}
 
@@ -46,6 +50,10 @@ public partial class BoardDragController : Control
 	{
 		if (_decision?.Id != view.Decision?.Id || _decision?.Revision != view.Decision?.Revision)
 			Cancel("decision-changed", false);
+		// The board's motion for this publication runs deferred and may consume
+		// the pending drop first; settle whatever is left after it.
+		if (_pending is { } pending && (pending.DecisionId != view.Decision?.Id || pending.Revision != view.Decision?.Revision))
+			Callable.From(SettlePendingDrop).CallDeferred();
 		_decision = view.Decision;
 		_interaction = BoardInteractionProjector.Project(view);
 	}
@@ -91,7 +99,8 @@ public partial class BoardDragController : Control
 				DecisionViewModel decision = _decision;
 				var actions = destination.Actions;
 				GestureEnded?.Invoke("drop", _source.CardId);
-				ClearGesture();
+				if (actions.Count == 1) HoldPendingDrop(decision);
+				else ClearGesture();
 				Dropped?.Invoke(decision, actions);
 			}
 		}
@@ -211,6 +220,58 @@ public partial class BoardDragController : Control
 		string cost = costs.Length == 1 ? $"{costs[0]} credits" : "choose cost";
 		bool selection = destination.Actions.Any(a => a.Parameters is Netrunner.Core.InstallCardParameters { FinalizeSelection: false });
 		return $"{label} · {cost}{(selection ? " · choose replacements" : destination.Actions.Count > 1 ? " · choose target" : "")}";
+	}
+
+	private void HoldPendingDrop(DecisionViewModel decision)
+	{
+		SettlePendingDrop();
+		if (_preview is null || _source is null) { ClearGesture(); return; }
+		TableCardControl? source = IsInstanceValid(_sourceControl) ? _sourceControl : null;
+		_pending = (_source.CardId, _preview, source, _sourceModulate, decision.Id, decision.Revision);
+		_preview.Modulate = new Color(1, 1, 1, 0.7f);
+		if (source is not null) source.Modulate = source.Modulate with { A = 0 };
+		// Keep the preview and the hidden source; clear only the gesture chrome.
+		_preview = null;
+		_sourceControl = null;
+		ClearGesture();
+	}
+
+	/// <summary>
+	/// Hands the held drop to the board when its card settles into a slot: the
+	/// card flies from where it was dropped instead of bouncing back to the hand.
+	/// </summary>
+	public Rect2? TakePendingDrop(string cardId)
+	{
+		if (_pending is not { } pending || !string.Equals(pending.CardId, cardId, StringComparison.Ordinal)) return null;
+		Rect2 rect = IsInstanceValid(pending.Preview) ? pending.Preview.GetGlobalRect() : default;
+		ReleasePendingDrop(returnToHand: false);
+		return rect.Size == Vector2.Zero ? null : rect;
+	}
+
+	/// <summary>The engine rejected the drop: the card returns to the hand from where it was dropped.</summary>
+	public void ReturnPendingDrop() => ReleasePendingDrop(returnToHand: true);
+
+	private void SettlePendingDrop()
+	{
+		if (_pending is not { } pending) return;
+		// Still in the hand after the decision moved on: nothing took it, so return it.
+		bool inHand = pending.Source is { } source && IsInstanceValid(source) && Board.Hand.ContainsCard(source);
+		ReleasePendingDrop(returnToHand: inHand);
+	}
+
+	private void ReleasePendingDrop(bool returnToHand)
+	{
+		if (_pending is not { } pending) return;
+		_pending = null;
+		if (pending.Source is { } source && IsInstanceValid(source)) source.Modulate = pending.SourceModulate;
+		if (!IsInstanceValid(pending.Preview)) return;
+		Vector2? target = pending.Source is { } home && IsInstanceValid(home) ? home.GlobalPosition : null;
+		if (!returnToHand || ReducedMotion || target is null) { pending.Preview.QueueFree(); return; }
+		TableCardControl returning = pending.Preview;
+		_returnTween = CreateTween();
+		_returnTween.TweenProperty(returning, "global_position", target.Value, Appearance.ReturnDuration)
+			.SetTrans(Tween.TransitionType.Quad).SetEase(Tween.EaseType.Out);
+		_returnTween.TweenCallback(Callable.From(returning.QueueFree));
 	}
 
 	public void Cancel(string reason, bool animate)

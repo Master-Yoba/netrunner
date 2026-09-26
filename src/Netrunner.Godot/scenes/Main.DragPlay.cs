@@ -11,6 +11,7 @@ public partial class Main
 	{
 		_boardDrag = _tableViewport.GetNode<BoardDragController>("BoardDragController");
 		_boardDrag.Board = _gameTable;
+		_gameTable.TakePendingDropRect = _boardDrag.TakePendingDrop;
 		_boardDrag.CanInteract = () => _currentSnapshot is { IsOpponentThinking: false, IsTerminal: false } snapshot
 			&& snapshot.View.Run is null
 			&& snapshot.View.Decision is { } decision && decision.OwnerSide == snapshot.View.Viewer

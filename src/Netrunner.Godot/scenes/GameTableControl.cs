@@ -61,6 +61,8 @@ public partial class GameTableControl : Control
 	private Label _runnerScoreLabel = null!;
 	private Button _runnerDeckPile = null!;
 	private Button _runnerHeapPile = null!;
+	/// <summary>Positional handles ("server:X:ice:0") for the card currently in each server slot.</summary>
+	private readonly Dictionary<string, TableCardControl> _slotAliases = new(StringComparer.Ordinal);
 	private BoardActionButton? _corpScoredPile;
 	private BoardActionButton? _runnerScoredPile;
 	private string? _selection;
@@ -559,8 +561,8 @@ public partial class GameTableControl : Control
 		_turnLabel.Text = FormatTurn(view);
 		_runLabel.Text = FormatRun(view);
 		_corpResources.SymbolText = $"[click] {view.Corp.Clicks} · [agenda point] {view.Corp.AgendaPoints}";
-		_corpCredits.Text = view.Corp.Credits.ToString(System.Globalization.CultureInfo.InvariantCulture);
-		_runnerCredits.Text = view.Runner.Credits.ToString(System.Globalization.CultureInfo.InvariantCulture);
+		ShowCount(_corpCredits, view.Corp.Credits);
+		ShowCount(_runnerCredits, view.Runner.Credits);
 		_runnerResources.SymbolText = $"[click] {view.Runner.Clicks} · [agenda point] {view.Runner.AgendaPoints} · [tag] {view.Runner.Tags?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—"}";
 		_corpScoreLabel.Text = $"Score {view.Corp.AgendaPoints}";
 		if (view.Runner.UsedMemory is { } used && view.Runner.MemoryLimit is { } limit)
@@ -584,6 +586,7 @@ public partial class GameTableControl : Control
 
 		Dictionary<string, TableCardControl> nextVisibleCards = new(StringComparer.Ordinal);
 		_activeCardKeys.Clear();
+		_slotAliases.Clear();
 		RenderTopZones(view, nextVisibleCards);
 		RenderServers(view, nextVisibleCards);
 		RenderRunnerRig(view, nextVisibleCards);
@@ -740,6 +743,14 @@ public partial class GameTableControl : Control
 		ApplyServerSelection();
 	}
 
+	/// <summary>
+	/// A face-down card keeps its tracked key for as long as it stays hidden,
+	/// so installing new ICE in front of it never re-keys (and re-animates) it.
+	/// </summary>
+	private static string TrackedSlot(IReadOnlyList<string?> keys, int index, string positional) =>
+		index < keys.Count && keys[index] is { } key && key.StartsWith(CardKeyTracker.TrackedPrefix, StringComparison.Ordinal)
+			? key : positional;
+
 	private void RenderServerRoot(
 		ServerViewModel server,
 		HBoxContainer rootCards,
@@ -753,8 +764,9 @@ public partial class GameTableControl : Control
 		}
 		foreach (CardViewModel? card in server.OrderedRoot)
 		{
-			string slot = $"server:{server.Id}:root:{index++}";
-			EnsureCard(slot, rootCards, card, isIce: false, nextVisibleCards);
+			string slot = $"server:{server.Id}:root:{index}";
+			_slotAliases[slot] = EnsureCard(TrackedSlot(server.RootKeys, index, slot), rootCards, card, isIce: false, nextVisibleCards);
+			index++;
 		}
 	}
 
@@ -768,11 +780,11 @@ public partial class GameTableControl : Control
 		for (int displayIndex = server.OrderedIce.Count - 1; displayIndex >= 0; displayIndex--)
 		{
 			CardViewModel? card = server.OrderedIce[displayIndex];
-			string slot = $"server:{server.Id}:ice:{displayIndex}";
+			string slot = TrackedSlot(server.IceKeys, displayIndex, $"server:{server.Id}:ice:{displayIndex}");
 			string? hostId = card?.Id ?? server.IcePositions.FirstOrDefault(position => position.Index == displayIndex)?.CardId;
 			CardViewModel[] hosted = _pendingView?.RunnerRig.Where(child => hostId is not null && child.HostCardId == hostId).ToArray() ?? [];
 			if (hosted.Length == 0)
-				EnsureCard(slot, iceCards, card, isIce: true, nextVisibleCards);
+				_slotAliases[$"server:{server.Id}:ice:{displayIndex}"] = EnsureCard(slot, iceCards, card, isIce: true, nextVisibleCards);
 			else
 			{
 				Control stack = new()
@@ -783,6 +795,7 @@ public partial class GameTableControl : Control
 				};
 				iceCards.AddChild(stack);
 				TableCardControl host = EnsureCard(slot, stack, card, true, nextVisibleCards);
+				_slotAliases[$"server:{server.Id}:ice:{displayIndex}"] = host;
 				Vector2 hostOffset = new((stack.CustomMinimumSize.X - host.DisplaySize.X) * 0.5f, 0);
 				host.Position = hostOffset;
 				for (int index = 0; index < hosted.Length; index++)
@@ -982,6 +995,15 @@ public partial class GameTableControl : Control
 		string identity = model is { Id.Length: > 0 }
 			? $"card:{model.Id}"
 			: $"slot:{slot}";
+		// A revealed face-down card keeps its node, so it flips in place.
+		if (model is { Id.Length: > 0 } && !_cards.ContainsKey(identity)
+			&& _pendingView?.RevealedFrom.GetValueOrDefault(model.Id) is { } tracked
+			&& _cards.Remove($"slot:{tracked}", out TableCardControl? revealed))
+		{
+			_cards[identity] = revealed;
+			_cardModels.Remove($"slot:{tracked}");
+			_cardModels[identity] = null;
+		}
 		if (!_cards.TryGetValue(identity, out TableCardControl? control))
 		{
 			control = TableCardControl.Create();
