@@ -89,7 +89,12 @@ public sealed partial class CorpHeuristicPolicy
         if (definition?.Agenda is null) return Value(-20, "advance/nonagenda-opportunity", approximate: true);
         int remaining = definition.Printed.AdvancementRequirement - (card!.AdvancementCounters ?? 0);
         bool finish = remaining > 0 && remaining <= Math.Min(context.Self.Clicks, context.Self.Credits);
-        int score = finish ? 600 + definition.Printed.AgendaPoints * 50 : 30 + (context.ServerOf(card.Id)?.Ice.Length ?? 0) * 35;
+        int ice = context.ServerOf(card.Id)?.Ice.Length ?? 0;
+        int score = finish ? 600 + definition.Printed.AgendaPoints * 50 : 30 + ice * 35;
+        // v4: an agenda too large to finish in one turn is advanced now so that
+        // a full next turn finishes it, but only behind ICE.
+        if (!finish && context.Generation >= 3 && ice > 0 && remaining - 1 <= 3)
+            score = 180 + definition.Printed.AgendaPoints * 40;
         if (!finish && context.Self.Credits <= context.RezReserve) score -= 200;
         return new(finish ? 10 : 0, score, finish ? "score/finish-this-turn" : "score/future-window",
             Approximate: !finish, Objective: new("score", null, null, card.Id));

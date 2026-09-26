@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Netrunner.Core;
 
 namespace Netrunner.AI;
@@ -65,6 +66,8 @@ public sealed partial class CorpHeuristicPolicy
                     total += context.Features.Board.RunnerRig.Where(card => context.Definition(card)?.Printed.CardClass == RuntimeCardClass.Resource)
                         .Select(card => context.CardValue(card, installed: true)).DefaultIfEmpty(0).Max() / 3;
                     break;
+                case BehaviorInstructionKind.Choose when context.Generation >= 3 && instruction.Choice is { Options.Count: 0 }:
+                    break; // A card-target choice; the following instructions value the best target.
                 case BehaviorInstructionKind.Choose:
                     if (instruction.Choice is { Options.Count: > 0 } choice)
                         total += choice.Options.Max(option => Effects(context, option.Instructions, source, controller)
@@ -90,6 +93,11 @@ public sealed partial class CorpHeuristicPolicy
                     if (attacked?.Root.Any(card => context.Definition(card)?.Agenda is { } agenda
                         && context.Opponent.AgendaPoints + agenda.AgendaPoints >= 7) == true) total += 5000;
                     break;
+                case BehaviorInstructionKind.AdvanceCard when context.Generation >= 3:
+                    // Playing the card spends a click before the counters land.
+                    total += AdvanceTargets(context).Select(target => AdvanceTargetValue(context, target, amount, context.Self.Clicks - 1))
+                        .DefaultIfEmpty(0).Max();
+                    break;
                 case BehaviorInstructionKind.AdvanceCard: total += amount * 110; break;
                 case BehaviorInstructionKind.RezIgnoringCosts: total += 300; break;
                 case BehaviorInstructionKind.Search: total += 180; break;
@@ -97,5 +105,36 @@ public sealed partial class CorpHeuristicPolicy
             }
         }
         return total;
+    }
+
+    /// <summary>Installed Corp cards an effect can advance: installed before this turn.</summary>
+    private static IEnumerable<AgentCard> AdvanceTargets(HeuristicContext context)
+    {
+        ImmutableArray<string> thisTurn = context.Features.Board.TurnFacts?.Corp.ThisTurn?.InstalledCardIds ?? [];
+        return context.Features.Board.Servers.SelectMany(server => server.Root.Concat(server.Ice)).OfType<AgentCard>()
+            .Select(card => context.Card(new CardInstanceId(card.Id)) ?? card)
+            .Where(card => !thisTurn.Contains(card.Id));
+    }
+
+    /// <summary>
+    /// What <paramref name="amount"/> counters on <paramref name="card"/> are worth: most when they
+    /// complete an agenda or let the remaining clicks finish it, some as progress, nothing on
+    /// cards that don't use counters.
+    /// </summary>
+    private static int AdvanceTargetValue(HeuristicContext context, AgentCard? card, int amount, int clicksAfter)
+    {
+        CardEvaluationDescriptor? definition = context.Definition(card);
+        if (definition is null || card is null) return 0;
+        if (definition.Agenda is not null)
+        {
+            int remaining = definition.Printed.AdvancementRequirement - (card.AdvancementCounters ?? 0) - amount;
+            int points = definition.Printed.AgendaPoints;
+            if (remaining <= 0) return 700 + points * 60;
+            if (remaining <= Math.Min(clicksAfter, context.Self.Credits)) return 450 + points * 50;
+            return amount * 110;
+        }
+        bool scalesWithCounters = definition.Behavior?.Triggers.SelectMany(trigger => HeuristicContext.Flatten(trigger.Instructions))
+            .Any(instruction => instruction.DamageAmountOperand?.Kind == BehaviorDamageAmountKind.SourceAdvancementCounters) == true;
+        return scalesWithCounters ? amount * 90 : 0;
     }
 }
