@@ -10,6 +10,7 @@ Stacked in order on `dev`:
 | Item | Branch |
 |---|---|
 | E4b event completeness | `feat/e4b-event-completeness` |
+| E5 determinization | `feat/e5-determinization` |
 
 ## E4b: event completeness
 
@@ -65,3 +66,42 @@ Verification: random-legal games on developer and official content project
 every slice kind; no event names a card the Runner can't see; tracked keys
 are stable while a card stays hidden; and a face-down advance reaches the
 Runner as a tracked card (official).
+
+## E5: determinization
+
+`ObservationSampler.Sample(state, viewer, knowledge, pool, runtime, random)`
+in Core returns a simulation state consistent with what the viewer observes.
+
+**Deviation from the plan's signature.** The plan sampled from an
+`Observation`, but an observation can't be turned back into a full
+`GameState` (it has no rules state or resolution stack). The sampler takes
+the authoritative state as a structural template instead. It keeps zones,
+instance IDs, public cards, counters and the rules state, strips every card
+hidden from the viewer of its identity, and deals new identities using only
+the given random source. It never reads a hidden identity, and the twin
+tests below prove the output depends only on the observation. A search
+agent would call it through its host, which holds the state; that wiring is
+A3's job.
+
+- Opponent cards are dealt from an explicit `OpponentCardPool`: `Decklist`
+  (the preset list minus visible copies), `AnyOf` (any legal card, per slot)
+  or `Placeholders`. ICE positions only receive ICE and server roots only
+  agendas, assets or upgrades.
+- The viewer's own deck order is also resampled from its own unseen cards.
+- `SamplerKnowledge` pins cards the viewer knows right now by position (for
+  example the top of R&D after an access); the caller drops a pin when a
+  shuffle or move invalidates it.
+- The engine's random state is reseeded, so a sample can't predict real
+  shuffles or random accesses. Samples are marked simulated: serializing,
+  snapshotting, hashing or applying them authoritatively fails.
+
+Verification (developer and official content, random-legal games):
+- **Self-consistency:** the observation built from a sample equals the
+  original observation, for both viewers.
+- **Twins:** twin states whose HQ/R&D cards, or face-down installed ICE, have
+  swapped identities have equal observations and produce identical samples
+  (cards and random state) for the same seed.
+- **Pinned knowledge** is respected.
+- **The opponent's card multiset** is preserved, and hidden cards really
+  change.
+- **Samples can be played forward** in Simulation mode.

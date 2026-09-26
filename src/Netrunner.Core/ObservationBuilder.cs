@@ -103,7 +103,7 @@ public static partial class ObservationBuilder
     /// Archives discard visibility is represented by authoritative FaceUp
     /// state and persists after the run. Empty when no run is active.
     /// </summary>
-    private static HashSet<CardInstanceId> BuildAccessVisibleSet(GameState state)
+    internal static HashSet<CardInstanceId> BuildAccessVisibleSet(GameState state)
     {
         RunState? run = state.RunState;
         if (run is null)
@@ -825,7 +825,7 @@ public static partial class ObservationBuilder
     /// Draw decks are hidden from both players. Ownership does not grant
     /// visibility; only the Runner's active access permission reveals R&D.
     /// </summary>
-    private static bool IsVisibleTo(CardInstanceState card, ZoneState zone, PlayerSide viewer, IReadOnlySet<CardInstanceId> accessVisible)
+    internal static bool IsVisibleTo(CardInstanceState card, ZoneState zone, PlayerSide viewer, IReadOnlySet<CardInstanceId> accessVisible)
     {
         if (zone.Kind is ZoneKind.CorpDeck or ZoneKind.RunnerStack)
         {
