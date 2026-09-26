@@ -2,6 +2,7 @@
 
 Roadmap: [improvement roadmap](IMPROVEMENT_ROADMAP.md), Wave 2 (the board comes
 alive for one run and one score).
+Evidence date: 26–27 September 2026, on the Linux x86_64 development box.
 
 ## Branches
 
@@ -203,3 +204,23 @@ Evidence:
     advance building to three counters and then scoring.
 - **Fired subroutines** are covered by the headless tests; the scripted
   captures' runs broke or avoided them.
+
+## Gate status
+
+| Criterion | Result |
+|---|---|
+| Captures show no duplicate or snap-back cards | Pass: every capture frame is checked for a card on screen twice (zero in both seats; a control run without the fix found 9); the lab smoke requires drops to wait for the engine and settle visible |
+| A Runner run and a Corp score readable from the board alone | Pass in captures (banners, lane focus, ICE emphasis, counters on face-down cards, score holds); **needs a human playtest to confirm** |
+| Zero snap mismatches on the slice's events | Pass: zero over 80 official random-legal games, both seats, and zero in every capture |
+| Sampler self-consistency and hidden-state twin tests | Pass on developer and official content |
+| `make m4-gate` | Pass (coverage 77/77) |
+| `make m5-client-smoke` | Pass (5 cases, 10 phases) |
+| `make m5-gate` | Pass; frozen results unchanged (no policy code changed) |
+
+Gates ran with `NETRUNNER_TIMEOUT_SCALE=4`. No policy code changed in this
+wave, so no policy performance run was needed.
+
+Worth checking by hand: a run into ICE from the Runner seat (the lane focus,
+the ICE growing on approach, the subroutine captions, then the run-end hold),
+a face-down card being advanced (the ADV badge on the back), and dragging a
+card to install it (it should wait where you dropped it, not bounce back).
