@@ -980,6 +980,9 @@ public sealed partial class MatchCoordinator : IAsyncDisposable, IDisposable
                 }
                 : server)],
             RevealedFrom = revealed,
+            AdvancementByKey = state.Cards.Where(card => card.AdvancementCounters > 0 && keys.ContainsKey(card.Id)
+                    && state.GetZone(card.ZoneId).Kind is ZoneKind.ServerRoot or ZoneKind.ServerIce)
+                .ToDictionary(card => keys[card.Id], card => card.AdvancementCounters, StringComparer.Ordinal),
         };
     }
 

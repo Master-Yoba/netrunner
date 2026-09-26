@@ -2,6 +2,7 @@
 
 Roadmap: [improvement roadmap](IMPROVEMENT_ROADMAP.md), Wave 2 (the board comes
 alive for one run and one score).
+Evidence date: 26–27 September 2026, on the Linux x86_64 development box.
 
 ## Branches
 
@@ -12,6 +13,7 @@ Stacked in order on `dev`:
 | E4b event completeness | `feat/e4b-event-completeness` |
 | E5 determinization | `feat/e5-determinization` |
 | U2 persistent board | `feat/u2-persistent-board` |
+| U3 vertical slice | `feat/u3-beat-slice` |
 
 ## E4b: event completeness
 
@@ -150,3 +152,75 @@ twice (a stand-in and the real card at once) and fails on any.
 - A coordinator test checks that every server position is keyed (tracked
   exactly when face-down) and that reveals map to the tracked key they had.
   It caught an ICE ordering bug during development.
+
+## U3: event timeline, vertical slice
+
+- **Beats (Match, headless).** `BeatPlanner` maps each publication's
+  presentation events to beats: a caption, a base duration (0.3–0.9 s), an
+  emphasis and a hold flag. The slice covers turn start, run start,
+  approach, rez, encounter, subroutines broken, subroutine fires, server
+  reached, run successful, access, run end, advance, score and steal.
+  Installs, draws and credits stay with U2's board motion.
+- **Presenter (Godot).** `BeatPresenter` plays beats in order:
+  - a caption banner in the empty lower half of the server field;
+  - the run's server lane stays in focus, with the others dimmed, for the
+    whole run;
+  - the approached or encountered ICE is enlarged until the Runner passes
+    it;
+  - fired subroutines, new counters, rezzes, accesses, scores and steals
+    pulse;
+  - scores, steals and run ends hold briefly.
+
+  Playback waits for the beats' total length divided by the speed setting.
+  Skip drains them, and reduced motion keeps the captions without scaling.
+- **Hidden counters.** Advancement counters are public, but a face-down
+  card showed none. Views now carry `AdvancementByKey`, and card backs draw
+  an ADV badge.
+- **Snap mismatches.** `BoardDisplayState` holds the slice's board facts:
+  advancement per card, points, the run's server and whether an encounter is
+  on. Applying a publication's events to the previous view must reproduce
+  the next view exactly; any difference is a snap mismatch. The client logs
+  mismatches to the session diagnostics, and the capture harness reports
+  them.
+
+Event gaps found by the mismatch check and fixed in the projector:
+
+| Gap | Fix |
+|---|---|
+| A breach can complete (for example on a steal) one action before Core emits `RunEnded` | End the run as soon as it has an end reason, and skip the later event |
+| The run disappears without `RunEnded` when the game ends during access | End the run when it vanishes |
+| An access reveals a face-down installed card (for example a trap) | `CardAccessed` carries the previous tracked key; any other key change becomes `CardKeyChanged` |
+| An advanced card leaving play for any reason other than a score or steal | `CardLeftPlay` for installed cards that move out of servers |
+
+Evidence:
+- **Headless snap mismatches:** zero over 80 random-legal official games (40
+  seeds, both seats) while developing. The committed test runs 12 seeds per
+  seat on each content lane.
+- **Captures:** zero snap mismatches and zero duplicates in both seats.
+  - As the Corp (seed 42, 70 local actions): 72 beats of 13 kinds, including
+    approaching and encountering Karunā and Whitespace, a broken subroutine,
+    advances, a score and a steal.
+  - As the Runner (51 local actions): 42 beats, including a face-down
+    advance building to three counters and then scoring.
+- **Fired subroutines** are covered by the headless tests; the scripted
+  captures' runs broke or avoided them.
+
+## Gate status
+
+| Criterion | Result |
+|---|---|
+| Captures show no duplicate or snap-back cards | Pass: every capture frame is checked for a card on screen twice (zero in both seats; a control run without the fix found 9); the lab smoke requires drops to wait for the engine and settle visible |
+| A Runner run and a Corp score readable from the board alone | Pass in captures (banners, lane focus, ICE emphasis, counters on face-down cards, score holds); **needs a human playtest to confirm** |
+| Zero snap mismatches on the slice's events | Pass: zero over 80 official random-legal games, both seats, and zero in every capture |
+| Sampler self-consistency and hidden-state twin tests | Pass on developer and official content |
+| `make m4-gate` | Pass (coverage 77/77) |
+| `make m5-client-smoke` | Pass (5 cases, 10 phases) |
+| `make m5-gate` | Pass; frozen results unchanged (no policy code changed) |
+
+Gates ran with `NETRUNNER_TIMEOUT_SCALE=4`. No policy code changed in this
+wave, so no policy performance run was needed.
+
+Worth checking by hand: a run into ICE from the Runner seat (the lane focus,
+the ICE growing on approach, the subroutine captions, then the run-end hold),
+a face-down card being advanced (the ADV badge on the back), and dragging a
+card to install it (it should wait where you dropped it, not bounce back).

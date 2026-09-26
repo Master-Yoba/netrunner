@@ -144,7 +144,8 @@ public partial class GameTableControl
 					|| view.RevealedFrom.TryGetValue(id, out string? tracked) && previous.TryGetValue(tracked, out old))
 				{
 					if (old.IsDiscardPile && IsDiscardPileFace(current)) continue;
-					if (old.Rect.Position.DistanceTo(rect.Position) > 8)
+					// Centers, so a card scaled in place (beat emphasis) doesn't read as moved.
+					if (old.Rect.GetCenter().DistanceTo(rect.GetCenter()) > 8)
 						AnimateCard(current.Card, TakePendingDropRect?.Invoke(id) ?? old.Rect, rect.Position - GlobalPosition, current.IsIce,
 							current.BackSide, rect.Size, current, id);
 					else if (!CardsMatch(old.Card, current.Card)) PulseCard(rect);

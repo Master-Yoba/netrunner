@@ -35,7 +35,7 @@ public partial class Main
 			GetWindow().ContentScaleSize = new Vector2I(Math.Max(1920, (int)(physical.X / factor)), Math.Max(1080, (int)(physical.Y / factor)));
 		};
 		_skipAnimations = header.GetNode<Button>("SkipAnimation");
-		_skipAnimations.Pressed += () => { _tablePlaybackWait = 0; _skipAnimation = true; _gameTable.StopMotion(); };
+		_skipAnimations.Pressed += () => { _tablePlaybackWait = 0; _skipAnimation = true; _gameTable.StopMotion(); _beats.Stop(); };
 		_sessionLogsButton = _settingsMenu.GetNode<Button>("%OpenLogs");
 		_sessionLogsButton.Pressed += OpenSessionLogs;
 		_settingsMenu.GetNode<Button>("%SaveGame").Pressed += () => ShowSaveGame(false);

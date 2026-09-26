@@ -742,6 +742,7 @@ public partial class TableCardControl : Control
 		if (_card is not { IsKnown: true })
 		{
 			DrawNeutralBack(cardRect, border);
+			DrawHiddenAdvancement(cardRect);
 			return;
 		}
 
@@ -1230,6 +1231,35 @@ public partial class TableCardControl : Control
 	{
 		Vector2 delta = Vector2.One * inset;
 		return new Rect2(rect.Position + delta, rect.Size - delta * 2.0f);
+	}
+
+	private int _hiddenAdvancement;
+
+	/// <summary>
+	/// Public advancement counters on a face-down card. The identity stays
+	/// hidden, but the counters are public, so the back shows them.
+	/// </summary>
+	public int HiddenAdvancement
+	{
+		get => _hiddenAdvancement;
+		set
+		{
+			if (_hiddenAdvancement == value) return;
+			_hiddenAdvancement = value;
+			QueueRedraw();
+		}
+	}
+
+	private void DrawHiddenAdvancement(Rect2 cardRect)
+	{
+		if (_hiddenAdvancement <= 0) return;
+		Font font = ThemeDB.FallbackFont;
+		int fontSize = IsCompactPortrait || _isIce ? 13 : 15;
+		string text = $"ADV×{_hiddenAdvancement}";
+		Vector2 size = font.GetStringSize(text, HorizontalAlignment.Left, -1, fontSize) + new Vector2(10, 4);
+		Rect2 badge = new(new Vector2(cardRect.GetCenter().X - size.X / 2, cardRect.Position.Y + 6), size);
+		DrawRect(badge, new Color(0.98f, 0.76f, 0.37f, 0.92f));
+		DrawString(font, badge.Position + new Vector2(5, size.Y - 5), text, HorizontalAlignment.Left, -1, fontSize, new Color(0.06f, 0.08f, 0.1f));
 	}
 
 	private void DrawNeutralBack(Rect2 cardRect, Color border)

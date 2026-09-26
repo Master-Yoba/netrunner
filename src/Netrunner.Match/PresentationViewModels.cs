@@ -33,6 +33,8 @@ public sealed record MatchViewModel(
     public IReadOnlyList<CardViewModel> RunnerHeap { get; init; } = Array.Empty<CardViewModel>();
     /// <summary>Public cards currently resolving: a played Operation or Event.</summary>
     public IReadOnlyList<CardViewModel> PlayArea { get; init; } = Array.Empty<CardViewModel>();
+    /// <summary>Advancement counters on installed cards, by presentation key; counters are public even on face-down cards.</summary>
+    public IReadOnlyDictionary<string, int> AdvancementByKey { get; init; } = new Dictionary<string, int>();
     /// <summary>Cards revealed by the latest action, mapped to the tracked key they had while face-down.</summary>
     public IReadOnlyDictionary<string, string> RevealedFrom { get; init; } = new Dictionary<string, string>();
     public IReadOnlyList<CardPositionViewModel> CardPositions { get; init; } = [];

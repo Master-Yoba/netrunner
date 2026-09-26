@@ -321,6 +321,7 @@ public partial class Main
 		_soloNoticeRemaining = 0;
 		while (_pendingSnapshots.TryDequeue(out _)) { }
 		_tablePublications.Clear();
+		_beats?.Stop();
 		_animationBatches.Clear();
 		_tableHistory.Clear();
 		_matchHistory.ClearHistory();

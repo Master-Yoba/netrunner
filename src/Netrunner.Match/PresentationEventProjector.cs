@@ -49,7 +49,7 @@ public static class PresentationEventProjector
         [typeof(ClickSpentEventPayload)] = PresentationEventRule.Projected,
         [typeof(IceSwappedEventPayload)] = PresentationEventRule.ViewOnly,
         [typeof(CardDerezzedEventPayload)] = PresentationEventRule.ViewOnly,
-        [typeof(CardMovedEventPayload)] = PresentationEventRule.ViewOnly,
+        [typeof(CardMovedEventPayload)] = PresentationEventRule.Projected,
         [typeof(CardDrawnEventPayload)] = PresentationEventRule.Projected,
         [typeof(CardInstalledEventPayload)] = PresentationEventRule.Projected,
         [typeof(CardRezzedEventPayload)] = PresentationEventRule.Projected,
@@ -138,13 +138,39 @@ public static class PresentationEventProjector
                 { ServerId = approached.ServerId.Value },
                 RunSuccessfulEventPayload successful => new(PresentationEventKind.RunSuccessful, PlayerSide.Runner)
                 { ServerId = successful.ServerId.Value },
-                CardAccessedEventPayload accessed => new(PresentationEventKind.CardAccessed, PlayerSide.Runner)
-                { CardKey = Key(keysAfter, accessed.CardId), ServerId = accessed.ServerId.Value },
+                CardAccessedEventPayload accessed => Revealed(PresentationEventKind.CardAccessed, accessed.CardId)
+                    with
+                { Side = PlayerSide.Runner, ServerId = accessed.ServerId.Value },
                 RunEndedEventPayload ended => new(PresentationEventKind.RunEnded, ended.InitiatingSide)
                 { RunEndReason = ended.Reason, Successful = ended.Successful },
+                CardMovedEventPayload moved when Installed(before, moved.FromZoneId) && !Installed(after, moved.ToZoneId)
+                    => new(PresentationEventKind.CardLeftPlay, before.Cards.FirstOrDefault(card => card.Id == moved.CardId)?.OwnerSide)
+                    { CardKey = Key(keysBefore, moved.CardId), ServerId = ServerOf(before, moved.FromZoneId) },
                 _ => null,
             };
+            // The run already showed as over when its end reason appeared; don't end it twice.
+            if (value is { Kind: PresentationEventKind.RunEnded } && before.RunState?.EndReason is not null) continue;
             if (value is not null) projected.Add(value);
+        }
+        // A breach can complete (for example on a steal) before Core emits RunEnded
+        // in a later action; the run is over on the board as soon as it has an end reason.
+        // It is also over when the run disappears without RunEnded, as when the game ends during access.
+        if (before.RunState is { EndReason: null } live && !events.Any(entry => entry.Payload is RunEndedEventPayload))
+        {
+            if (after.RunState is { EndReason: { } reason } over && over.Id == live.Id)
+                projected.Add(new(PresentationEventKind.RunEnded, over.InitiatingSide) { RunEndReason = reason, Successful = over.Successful });
+            else if (after.RunState is null || after.RunState.Id != live.Id)
+                projected.Add(new(PresentationEventKind.RunEnded, live.InitiatingSide) { Successful = false });
+        }
+        // Any other change of an installed card's key (revealed or concealed by
+        // some effect) still has to move what the board shows for that card.
+        HashSet<string> reported = projected.Where(value => value.PreviousCardKey is not null)
+            .Select(value => value.PreviousCardKey!).ToHashSet(StringComparer.Ordinal);
+        foreach ((CardInstanceId id, string now) in keysAfter)
+        {
+            if (keysBefore.TryGetValue(id, out string? previous) && previous != now && !reported.Contains(previous)
+                && after.Cards.FirstOrDefault(card => card.Id == id) is { } card && Installed(after, card.ZoneId))
+                projected.Add(new(PresentationEventKind.CardKeyChanged, card.OwnerSide) { CardKey = now, PreviousCardKey = previous });
         }
         return projected;
 
@@ -202,6 +228,9 @@ public static class PresentationEventProjector
         foreach (int ordinal in ordinals)
             yield return new PresentationEvent(PresentationEventKind.SubroutineFired, PlayerSide.Corp) { CardKey = iceKey, Ordinal = ordinal };
     }
+
+    private static bool Installed(GameState state, ZoneId zoneId) =>
+        state.Zones.FirstOrDefault(zone => zone.Id == zoneId)?.Kind is ZoneKind.ServerRoot or ZoneKind.ServerIce;
 
     private static string? Key(IReadOnlyDictionary<CardInstanceId, string> keys, CardInstanceId id) =>
         keys.TryGetValue(id, out string? key) ? key : null;

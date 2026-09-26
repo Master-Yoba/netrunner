@@ -24,6 +24,10 @@ public enum PresentationEventKind
     RunSuccessful,
     CardAccessed,
     RunEnded,
+    /// <summary>An installed card left its server (scored, stolen, trashed or returned).</summary>
+    CardLeftPlay,
+    /// <summary>An installed card was revealed or concealed without another event saying so.</summary>
+    CardKeyChanged,
 }
 
 /// <summary>
