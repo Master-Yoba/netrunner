@@ -198,7 +198,7 @@ public static class BoardRegionPresenter
             ConditionalValues = new ReadOnlyCollection<ConditionalValueViewModel>(
                 view.ConditionalValues.ToArray()),
             IdentityPanel = view.IdentityPanel,
-            ZahyaAccess = Slice47PresentationProjector.PresentZahyaAccess(view),
+            ZahyaAccess = IdentityChoicePresenter.PresentZahyaAccess(view),
         };
     }
 
@@ -495,7 +495,7 @@ public static class ActionsRegionPresenter
             || action.Parameters is BehaviorChoiceParameters { CardIds.Count: > 0 }
             || action.Parameters is AbilityActionParameters ability && (ability.TargetCardIds.Count > 0 || ability.AdditionalCostSelectionsOrEmpty.Count > 0)
             || action.Parameters is BreachCandidateParameters
-            || Slice45PresentationProjector.GetTargetServerId(action.Parameters) is not null;
+            || EncounterChoicePresenter.GetTargetServerId(action.Parameters) is not null;
     }
 
     public static bool IsAccessAction(LegalActionViewModel action)
@@ -513,7 +513,7 @@ public static class ActionsRegionPresenter
         ArgumentNullException.ThrowIfNull(parameters);
         return parameters is TrashTaggedResourceParameters tagged
             ? tagged.CardId.Value
-            : Slice45PresentationProjector.GetTargetCardId(parameters);
+            : EncounterChoicePresenter.GetTargetCardId(parameters);
     }
 
     /// <summary>
@@ -522,7 +522,7 @@ public static class ActionsRegionPresenter
     /// never consulted.
     /// </summary>
     public static string? GetTargetServerId(ActionParameters parameters) =>
-        Slice45PresentationProjector.GetTargetServerId(parameters);
+        EncounterChoicePresenter.GetTargetServerId(parameters);
 
     private static string FormatCardIds(IReadOnlyList<CardInstanceId> cardIds) =>
         string.Join(", ", cardIds.Select(static cardId => cardId.Value));
@@ -570,8 +570,8 @@ public sealed class EventFeedRegionPresenter
         {
             RunInitiatedEventPayload payload => $"Run initiated against {payload.ServerId.Value}.",
             RunEventPlayedEventPayload payload => $"Played {payload.DefinitionId.Value}; hosted {payload.HostedCredits} run credits.",
-            DamageDealtEventPayload payload => Slice46PresentationProjector.DescribeDamage(payload),
-            TagsAdjustedEventPayload payload => Slice46PresentationProjector.DescribeTags(payload),
+            DamageDealtEventPayload payload => UnlessChoicePresenter.DescribeDamage(payload),
+            TagsAdjustedEventPayload payload => UnlessChoicePresenter.DescribeTags(payload),
             IceApproachedEventPayload payload => $"Approached ICE {payload.IceId.Value}.",
             IceRezzedEventPayload payload => $"Corp rezzed ICE {payload.IceId.Value}.",
             EncounterInitializedEventPayload payload => $"Encountered {payload.IceId.Value} ({payload.SubroutineCount} subroutine(s)).",
@@ -593,8 +593,8 @@ public sealed class EventFeedRegionPresenter
                 $"Card moved · {payload.CardId.Value} · {payload.FromZoneId.Value} → {payload.ToZoneId.Value}.",
             RunCreditsAdjustedEventPayload payload => $"Run pool {payload.Delta:+#;-#;0} · now {payload.RunCreditsAfter}.",
             RunEndedEventPayload payload => $"Run ended · {payload.Reason}.",
-            IceSwappedEventPayload payload => Slice47PresentationProjector.DescribeIceSwap(payload),
-            CardDerezzedEventPayload payload => Slice47PresentationProjector.DescribeDerez(payload),
+            IceSwappedEventPayload payload => IdentityChoicePresenter.DescribeIceSwap(payload),
+            CardDerezzedEventPayload payload => IdentityChoicePresenter.DescribeDerez(payload),
             _ => @event.Kind,
         };
     }

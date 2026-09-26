@@ -10,12 +10,12 @@ namespace Netrunner.Match;
 /// so older or malformed observation envelopes fail closed instead of causing
 /// the presentation layer to reconstruct authoritative run state.
 /// </summary>
-public sealed record Slice45CueViewModel(
+public sealed record RunCueViewModel(
     bool? RunRestrictionActive,
     bool? BioroidAbilityReady,
     bool? MayflyBreakArmed)
 {
-    public static Slice45CueViewModel Unavailable { get; } = new(null, null, null);
+    public static RunCueViewModel Unavailable { get; } = new(null, null, null);
 
     public bool HasAnyValue => RunRestrictionActive.HasValue
         || BioroidAbilityReady.HasValue
@@ -32,7 +32,7 @@ public sealed record Slice45CueViewModel(
 }
 
 /// <summary>Whether the current engine-issued decision belongs in run focus.</summary>
-public enum Slice45DecisionSurface
+public enum ChoiceSurface
 {
     None,
     Approach,
@@ -44,7 +44,7 @@ public enum Slice45DecisionSurface
 /// catalog's target descriptor so a hidden card identity can only come from
 /// the viewer's engine-issued action payload.
 /// </summary>
-public sealed record Slice45BehaviorCostViewModel(
+public sealed record BehaviorCostViewModel(
     BehaviorCostKind Kind,
     int Amount,
     BehaviorAdditionalCostKind? AdditionalKind,
@@ -94,12 +94,12 @@ public sealed record Slice45BehaviorCostViewModel(
 /// catalog did not resolve the legacy choice; it is never reconstructed from
 /// the action description.
 /// </summary>
-public sealed record Slice45BehaviorChoiceOptionViewModel(
+public sealed record BehaviorChoiceOptionViewModel(
     string ChoiceKey,
     string? OptionKey,
     BehaviorChoiceMode? Mode,
     BehaviorChoiceOptionSemantic? Semantic,
-    IReadOnlyList<Slice45BehaviorCostViewModel> Costs)
+    IReadOnlyList<BehaviorCostViewModel> Costs)
 {
     public string? EffectLabel { get; init; }
     public bool IsOptionalSkip => OptionKey is null && Mode == BehaviorChoiceMode.Optional;
@@ -123,14 +123,14 @@ public sealed record Slice45BehaviorChoiceOptionViewModel(
 /// option labels are derived from typed action/catalog fields. Description is
 /// retained for diagnostics but is not used to infer semantics.
 /// </summary>
-public sealed record Slice45ActionPresentationViewModel(
+public sealed record EncounterChoiceActionViewModel(
     ActionId ActionId,
     ActionKind ActionKind,
     PlayerSide ActingPlayer,
     string? ChoiceKey,
     string? OptionKey,
     IReadOnlyList<string> VisibleCardIds,
-    IReadOnlyList<Slice45BehaviorCostViewModel> Costs,
+    IReadOnlyList<BehaviorCostViewModel> Costs,
     BehaviorChoiceOptionSemantic? Semantic,
     bool IsOptionalSkip,
     string? TargetServerId,
@@ -277,25 +277,25 @@ public sealed record Slice45ActionPresentationViewModel(
 }
 
 /// <summary>Projection of the active approach/encounter choice for Match and Godot.</summary>
-public sealed record Slice45DecisionViewModel(
+public sealed record EncounterChoiceViewModel(
     bool IsAvailable,
     string? Diagnostic,
-    Slice45DecisionSurface Surface,
+    ChoiceSurface Surface,
     DecisionKind? DecisionKind,
     PlayerSide? ActingPlayer,
     string? Prompt,
-    IReadOnlyList<Slice45ActionPresentationViewModel> Options)
+    IReadOnlyList<EncounterChoiceActionViewModel> Options)
 {
-    public bool IsProminent => IsAvailable && Surface != Slice45DecisionSurface.None && Options.Count > 0;
+    public bool IsProminent => IsAvailable && Surface != ChoiceSurface.None && Options.Count > 0;
 
-    public static Slice45DecisionViewModel Unavailable(string? diagnostic = null) => new(
+    public static EncounterChoiceViewModel Unavailable(string? diagnostic = null) => new(
         false,
         diagnostic ?? "Slice 4.5 decision projection unavailable.",
-        Slice45DecisionSurface.None,
+        ChoiceSurface.None,
         null,
         null,
         null,
-        Array.Empty<Slice45ActionPresentationViewModel>());
+        Array.Empty<EncounterChoiceActionViewModel>());
 }
 
 /// <summary>
@@ -303,35 +303,35 @@ public sealed record Slice45DecisionViewModel(
 /// This is the only place that knows how a behavior-choice catalog option is
 /// projected; Godot receives the result and only renders it.
 /// </summary>
-public static class Slice45PresentationProjector
+public static class EncounterChoicePresenter
 {
-    public static Slice45DecisionViewModel Present(MatchViewModel view)
+    public static EncounterChoiceViewModel Present(MatchViewModel view)
     {
         ArgumentNullException.ThrowIfNull(view);
         DecisionViewModel? decision = view.Decision;
         if (decision is null)
         {
-            return Slice45DecisionViewModel.Unavailable(
+            return EncounterChoiceViewModel.Unavailable(
                 "Slice 4.5 decision projection unavailable: no decision is issued.");
         }
 
         if (!Enum.IsDefined(decision.Kind) || !Enum.IsDefined(decision.OwnerSide))
         {
-            return Slice45DecisionViewModel.Unavailable(
+            return EncounterChoiceViewModel.Unavailable(
                 "Slice 4.5 decision projection unavailable: the issued decision enum is unsupported.");
         }
 
-        Slice45DecisionSurface surface = DetermineSurface(view, decision);
-        if (surface == Slice45DecisionSurface.None)
+        ChoiceSurface surface = DetermineSurface(view, decision);
+        if (surface == ChoiceSurface.None)
         {
-            return new Slice45DecisionViewModel(
+            return new EncounterChoiceViewModel(
                 false,
                 null,
                 surface,
                 decision.Kind,
                 decision.OwnerSide,
                 decision.Prompt,
-                Array.Empty<Slice45ActionPresentationViewModel>());
+                Array.Empty<EncounterChoiceActionViewModel>());
         }
 
         ActionKind[] allowed = decision.Kind switch
@@ -343,11 +343,11 @@ public static class Slice45PresentationProjector
         };
         if (allowed.Length == 0)
         {
-            return Slice45DecisionViewModel.Unavailable(
+            return EncounterChoiceViewModel.Unavailable(
                 "Slice 4.5 decision projection unavailable: the decision has no typed choice actions.");
         }
 
-        var options = new List<Slice45ActionPresentationViewModel>(view.LegalActions.Count);
+        var options = new List<EncounterChoiceActionViewModel>(view.LegalActions.Count);
         for (int index = 0; index < view.LegalActions.Count; index++)
         {
             LegalActionViewModel action = view.LegalActions[index];
@@ -360,10 +360,10 @@ public static class Slice45PresentationProjector
                     action,
                     decision.OwnerSide,
                     index + 1,
-                    out Slice45ActionPresentationViewModel? projected)
+                    out EncounterChoiceActionViewModel? projected)
                 || projected is null)
             {
-                return Slice45DecisionViewModel.Unavailable(
+                return EncounterChoiceViewModel.Unavailable(
                     "Slice 4.5 decision projection unavailable: an issued choice payload is malformed.");
             }
 
@@ -372,18 +372,18 @@ public static class Slice45PresentationProjector
 
         if (options.Count == 0)
         {
-            return Slice45DecisionViewModel.Unavailable(
+            return EncounterChoiceViewModel.Unavailable(
                 "Slice 4.5 decision projection unavailable: no valid engine-issued options are visible.");
         }
 
-        return new Slice45DecisionViewModel(
+        return new EncounterChoiceViewModel(
             true,
             null,
             surface,
             decision.Kind,
             decision.OwnerSide,
             decision.Prompt,
-            new ReadOnlyCollection<Slice45ActionPresentationViewModel>(options));
+            new ReadOnlyCollection<EncounterChoiceActionViewModel>(options));
     }
 
     /// <summary>
@@ -391,7 +391,7 @@ public static class Slice45PresentationProjector
     /// method is public because ObservationViewMapper attaches the immutable
     /// result to each action before it crosses into Godot.
     /// </summary>
-    public static Slice45BehaviorChoiceOptionViewModel? ResolveChoiceMetadata(
+    public static BehaviorChoiceOptionViewModel? ResolveChoiceMetadata(
         ActionParameters parameters,
         IBehaviorCatalog behaviorCatalog)
     {
@@ -427,11 +427,11 @@ public static class Slice45PresentationProjector
             return null;
         }
 
-        Slice45BehaviorCostViewModel[] costs = option?.Costs is { } optionCosts
+        BehaviorCostViewModel[] costs = option?.Costs is { } optionCosts
             ? optionCosts
                 .Select(TryMapBehaviorCost)
                 .Where(static cost => cost is not null)
-                .Cast<Slice45BehaviorCostViewModel>()
+                .Cast<BehaviorCostViewModel>()
                 .ToArray()
             : [];
         if (option?.Costs is { } && costs.Length != option.Costs.Count)
@@ -446,12 +446,12 @@ public static class Slice45PresentationProjector
         PlayerSide[] controllers = behaviorCatalog.GenericSpecs
             .Where(definition => FindChoiceSpecs([definition]).Contains(specification))
             .Select(definition => definition.Controller).Distinct().ToArray();
-        return new Slice45BehaviorChoiceOptionViewModel(
+        return new BehaviorChoiceOptionViewModel(
             specification.Key,
             option?.Key,
             specification.Mode,
             option?.Semantic,
-            new ReadOnlyCollection<Slice45BehaviorCostViewModel>(costs))
+            new ReadOnlyCollection<BehaviorCostViewModel>(costs))
         {
             EffectLabel = option is not null && controllers.Length == 1
                 ? BehaviorEffectLabels.Describe(option.Instructions, controllers[0]) : null,
@@ -463,23 +463,23 @@ public static class Slice45PresentationProjector
     /// malformed values remain null; current observations therefore render no
     /// speculative restriction/bioroid/Mayfly state.
     /// </summary>
-    public static Slice45CueViewModel ReadCues(IReadOnlyDictionary<string, object?> publicState)
+    public static RunCueViewModel ReadCues(IReadOnlyDictionary<string, object?> publicState)
     {
         ArgumentNullException.ThrowIfNull(publicState);
         if (!TryReadCueMap(publicState, out IReadOnlyDictionary<string, object?>? map)
             || map is null)
         {
-            return Slice45CueViewModel.Unavailable;
+            return RunCueViewModel.Unavailable;
         }
 
         if (!TryReadCueBool(map, "runRestrictionActive", "noStealOrTrashActive", out bool? restriction)
             || !TryReadCueBool(map, "bioroidAbilityReady", "bioroidAbilityLegal", out bool? bioroid)
             || !TryReadCueBool(map, "mayflyBreakArmed", "mayflyRunEndArmed", out bool? mayfly))
         {
-            return Slice45CueViewModel.Unavailable;
+            return RunCueViewModel.Unavailable;
         }
 
-        return new Slice45CueViewModel(restriction, bioroid, mayfly);
+        return new RunCueViewModel(restriction, bioroid, mayfly);
     }
 
     /// <summary>Gets the typed server target of a run-event play action.</summary>
@@ -532,15 +532,15 @@ public static class Slice45PresentationProjector
         if (action.Parameters is BehaviorChoiceParameters behavior
             && IsWellFormedBehaviorChoice(behavior))
         {
-            Slice45BehaviorChoiceOptionViewModel? choice = action.Slice45BehaviorChoice;
-            var presentation = new Slice45ActionPresentationViewModel(
+            BehaviorChoiceOptionViewModel? choice = action.BehaviorChoice;
+            var presentation = new EncounterChoiceActionViewModel(
                 action.Id,
                 action.Kind,
                 PlayerSide.Runner,
                 behavior.ChoiceKey,
                 behavior.OptionKeys.Count == 1 ? behavior.OptionKeys[0] : null,
                 behavior.CardIds.Select(static card => card.Value).ToArray(),
-                choice?.Costs ?? Array.Empty<Slice45BehaviorCostViewModel>(),
+                choice?.Costs ?? Array.Empty<BehaviorCostViewModel>(),
                 choice?.Semantic,
                 choice?.IsOptionalSkip == true,
                 null,
@@ -555,7 +555,7 @@ public static class Slice45PresentationProjector
                 IceChoiceOwner(iceChoice.Choice),
                 0,
                 iceChoice,
-                out Slice45ActionPresentationViewModel? icePresentation)
+                out EncounterChoiceActionViewModel? icePresentation)
             && icePresentation is not null)
         {
             return icePresentation.PresentationLabel;
@@ -581,7 +581,7 @@ public static class Slice45PresentationProjector
         LegalActionViewModel action,
         PlayerSide actingPlayer,
         int optionOrder,
-        out Slice45ActionPresentationViewModel? projected)
+        out EncounterChoiceActionViewModel? projected)
     {
         projected = null;
         switch (action.Parameters)
@@ -593,7 +593,7 @@ public static class Slice45PresentationProjector
                     return false;
                 }
 
-                Slice45BehaviorChoiceOptionViewModel? choice = action.Slice45BehaviorChoice;
+                BehaviorChoiceOptionViewModel? choice = action.BehaviorChoice;
                 if (choice is null)
                 {
                     return false;
@@ -611,14 +611,14 @@ public static class Slice45PresentationProjector
                     }
                 }
 
-                projected = new Slice45ActionPresentationViewModel(
+                projected = new EncounterChoiceActionViewModel(
                     action.Id,
                     action.Kind,
                     actingPlayer,
                     behavior.ChoiceKey,
                     behavior.OptionKeys.Count == 1 ? behavior.OptionKeys[0] : null,
                     new ReadOnlyCollection<string>(behavior.CardIds.Select(static card => card.Value).ToArray()),
-                    choice?.Costs ?? Array.Empty<Slice45BehaviorCostViewModel>(),
+                    choice?.Costs ?? Array.Empty<BehaviorCostViewModel>(),
                     choice?.Semantic,
                     choice?.IsOptionalSkip == true,
                     null,
@@ -645,14 +645,14 @@ public static class Slice45PresentationProjector
                     return false;
                 }
 
-                projected = new Slice45ActionPresentationViewModel(
+                projected = new EncounterChoiceActionViewModel(
                     action.Id,
                     action.Kind,
                     actingPlayer,
                     null,
                     null,
                     Array.Empty<string>(),
-                    Array.Empty<Slice45BehaviorCostViewModel>(),
+                    Array.Empty<BehaviorCostViewModel>(),
                     null,
                     false,
                     null,
@@ -671,7 +671,7 @@ public static class Slice45PresentationProjector
         }
     }
 
-    private static Slice45DecisionSurface DetermineSurface(
+    private static ChoiceSurface DetermineSurface(
         MatchViewModel view,
         DecisionViewModel decision)
     {
@@ -680,7 +680,7 @@ public static class Slice45PresentationProjector
             or DecisionKind.IceSubroutineChoice)
             || view.Run is not { } run)
         {
-            return Slice45DecisionSurface.None;
+            return ChoiceSurface.None;
         }
 
         if (run.Encounter is not null
@@ -689,7 +689,7 @@ public static class Slice45PresentationProjector
                 or RunTimingStep.EncounterPaidWindow
                 or RunTimingStep.Encounter)
         {
-            return Slice45DecisionSurface.Encounter;
+            return ChoiceSurface.Encounter;
         }
 
         // ServerApproached is intentionally represented by the Success cursor
@@ -703,10 +703,10 @@ public static class Slice45PresentationProjector
                     or RunTimingStep.ApproachServer
                     or RunTimingStep.Success))
         {
-            return Slice45DecisionSurface.Approach;
+            return ChoiceSurface.Approach;
         }
 
-        return Slice45DecisionSurface.None;
+        return ChoiceSurface.None;
     }
 
     private static bool IsWellFormedBehaviorChoice(BehaviorChoiceParameters choice)
@@ -722,7 +722,7 @@ public static class Slice45PresentationProjector
         return choice.CardIds.All(card => CardInstanceId.TryParse(card.Value, out _));
     }
 
-    private static Slice45BehaviorCostViewModel? TryMapBehaviorCost(BehaviorCost cost)
+    private static BehaviorCostViewModel? TryMapBehaviorCost(BehaviorCost cost)
     {
         if (!Enum.IsDefined(cost.Kind)
             || (cost.Kind == BehaviorCostKind.Credits && cost.Amount < 0)
@@ -748,7 +748,7 @@ public static class Slice45PresentationProjector
             return null;
         }
 
-        return new Slice45BehaviorCostViewModel(
+        return new BehaviorCostViewModel(
             cost.Kind,
             cost.Amount,
             cost.AdditionalKind,
@@ -764,7 +764,7 @@ public static class Slice45PresentationProjector
         PlayerSide actingPlayer,
         int optionOrder,
         IceSubroutineChoiceParameters choice,
-        out Slice45ActionPresentationViewModel? projected)
+        out EncounterChoiceActionViewModel? projected)
     {
         projected = null;
         if (action.Kind != ActionKind.ResolveIceSubroutine
@@ -857,46 +857,46 @@ public static class Slice45PresentationProjector
                 return false;
         }
 
-        Slice45BehaviorCostViewModel[] costs = choice.Choice switch
+        BehaviorCostViewModel[] costs = choice.Choice switch
         {
             IceSubroutineChoiceKind.PayCredits when choice.HostedCredits > 0 =>
             [
-                new Slice45BehaviorCostViewModel(
+                new BehaviorCostViewModel(
                     BehaviorCostKind.Credits,
                     choice.CreditCost - choice.HostedCredits,
                     null,
                     null),
-                new Slice45BehaviorCostViewModel(
+                new BehaviorCostViewModel(
                     BehaviorCostKind.HostedCredits,
                     choice.HostedCredits,
                     null,
                     null),
             ],
             IceSubroutineChoiceKind.PayCredits =>
-            [new Slice45BehaviorCostViewModel(
+            [new BehaviorCostViewModel(
                 BehaviorCostKind.Credits,
                 choice.CreditCost,
                 null,
                 null)],
             IceSubroutineChoiceKind.InstallCard when choice.CreditCost > 0 =>
-            [new Slice45BehaviorCostViewModel(
+            [new BehaviorCostViewModel(
                 BehaviorCostKind.Credits,
                 choice.CreditCost,
                 null,
                 null)],
             IceSubroutineChoiceKind.InstallCard =>
-            [new Slice45BehaviorCostViewModel(BehaviorCostKind.Credits, 0, null, null)],
+            [new BehaviorCostViewModel(BehaviorCostKind.Credits, 0, null, null)],
             _ => [],
         };
 
-        projected = new Slice45ActionPresentationViewModel(
+        projected = new EncounterChoiceActionViewModel(
             action.Id,
             action.Kind,
             actingPlayer,
             null,
             null,
             Array.Empty<string>(),
-            new ReadOnlyCollection<Slice45BehaviorCostViewModel>(costs),
+            new ReadOnlyCollection<BehaviorCostViewModel>(costs),
             choice.Choice is IceSubroutineChoiceKind.TakeTag or IceSubroutineChoiceKind.Decline
                 ? BehaviorChoiceOptionSemantic.Fallback
                 : BehaviorChoiceOptionSemantic.Normal,

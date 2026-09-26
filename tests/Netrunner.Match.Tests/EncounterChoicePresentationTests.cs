@@ -4,7 +4,7 @@ using Xunit;
 
 namespace Netrunner.Match.Tests;
 
-public sealed class Slice45UiPresentationTests
+public sealed class EncounterChoicePresentationTests
 {
     [Fact]
     public void ProjectsRunnerOwnedOptionsInEngineOrderWithTypedCostAndFallback()
@@ -26,10 +26,10 @@ public sealed class Slice45UiPresentationTests
             ],
             ApproachRun());
 
-        Slice45DecisionViewModel projected = Slice45PresentationProjector.Present(view);
+        EncounterChoiceViewModel projected = EncounterChoicePresenter.Present(view);
 
         Assert.True(projected.IsProminent);
-        Assert.Equal(Slice45DecisionSurface.Approach, projected.Surface);
+        Assert.Equal(ChoiceSurface.Approach, projected.Surface);
         Assert.Equal(PlayerSide.Runner, projected.ActingPlayer);
         Assert.Equal(
             ["pay-credits", "end-run"],
@@ -58,9 +58,9 @@ public sealed class Slice45UiPresentationTests
             ],
             ApproachRun());
 
-        Slice45DecisionViewModel projected = Slice45PresentationProjector.Present(view);
+        EncounterChoiceViewModel projected = EncounterChoicePresenter.Present(view);
 
-        Slice45ActionPresentationViewModel option = Assert.Single(projected.Options);
+        EncounterChoiceActionViewModel option = Assert.Single(projected.Options);
         Assert.Equal(PlayerSide.Corp, option.ActingPlayer);
         Assert.Equal(
             ["card:hidden-hq-1", "card:hidden-hq-2"],
@@ -95,12 +95,12 @@ public sealed class Slice45UiPresentationTests
             ],
             EncounterRun());
 
-        Slice45ActionPresentationViewModel firstOption =
-            Assert.Single(Slice45PresentationProjector.Present(first).Options);
-        Slice45ActionPresentationViewModel secondOption =
-            Assert.Single(Slice45PresentationProjector.Present(second).Options);
+        EncounterChoiceActionViewModel firstOption =
+            Assert.Single(EncounterChoicePresenter.Present(first).Options);
+        EncounterChoiceActionViewModel secondOption =
+            Assert.Single(EncounterChoicePresenter.Present(second).Options);
 
-        Assert.Equal(Slice45DecisionSurface.Encounter, Slice45PresentationProjector.Present(first).Surface);
+        Assert.Equal(ChoiceSurface.Encounter, EncounterChoicePresenter.Present(first).Surface);
         Assert.Equal(firstOption.PresentationLabel, secondOption.PresentationLabel);
         Assert.Equal("OPTION · take-tag · NORMAL", firstOption.PresentationLabel);
         Assert.Null(firstOption.CostSummary);
@@ -120,7 +120,7 @@ public sealed class Slice45UiPresentationTests
 
         Assert.Equal(
             "PLAYCARD · TARGET SERVER · server:headquarters",
-            Slice45PresentationProjector.Label(action));
+            EncounterChoicePresenter.Label(action));
         Assert.True(ActionsRegionPresenter.IsTargetedAction(action));
         Assert.Equal("server:headquarters", ActionsRegionPresenter.GetTargetServerId(action.Parameters));
     }
@@ -140,7 +140,7 @@ public sealed class Slice45UiPresentationTests
 
         Assert.Equal(
             "USE BIOROID · BREAK SUBROUTINE 1 · LOSE 1 CLICK",
-            Slice45PresentationProjector.Label(action));
+            EncounterChoicePresenter.Label(action));
         Assert.True(ActionsRegionPresenter.IsTargetedAction(action));
         Assert.Equal("card:ansel", ActionsRegionPresenter.GetTargetCardId(action.Parameters));
     }
@@ -170,7 +170,7 @@ public sealed class Slice45UiPresentationTests
                         IceSubroutineChoiceKind.TakeTag)),
             ],
             EncounterRun());
-        Slice45DecisionViewModel runnerProjected = Slice45PresentationProjector.Present(runnerView);
+        EncounterChoiceViewModel runnerProjected = EncounterChoicePresenter.Present(runnerView);
 
         Assert.True(runnerProjected.IsProminent);
         Assert.Equal(PlayerSide.Runner, runnerProjected.ActingPlayer);
@@ -215,7 +215,7 @@ public sealed class Slice45UiPresentationTests
                         cardId: new CardInstanceId("card:runner-program"))),
             ],
             EncounterRun());
-        Slice45DecisionViewModel corpProjected = Slice45PresentationProjector.Present(corpView);
+        EncounterChoiceViewModel corpProjected = EncounterChoicePresenter.Present(corpView);
 
         Assert.True(corpProjected.IsProminent);
         Assert.Equal(PlayerSide.Corp, corpProjected.ActingPlayer);
@@ -244,7 +244,7 @@ public sealed class Slice45UiPresentationTests
             ],
             EncounterRun());
 
-        Slice45DecisionViewModel projected = Slice45PresentationProjector.Present(malformed);
+        EncounterChoiceViewModel projected = EncounterChoicePresenter.Present(malformed);
 
         Assert.False(projected.IsAvailable);
         Assert.Empty(projected.Options);
@@ -271,7 +271,7 @@ public sealed class Slice45UiPresentationTests
             ],
             EncounterRun());
 
-        Slice45DecisionViewModel projected = Slice45PresentationProjector.Present(malformed);
+        EncounterChoiceViewModel projected = EncounterChoicePresenter.Present(malformed);
 
         Assert.False(projected.IsAvailable);
         Assert.Empty(projected.Options);
@@ -295,7 +295,7 @@ public sealed class Slice45UiPresentationTests
             ],
             ApproachRun());
 
-        Slice45DecisionViewModel projected = Slice45PresentationProjector.Present(malformed);
+        EncounterChoiceViewModel projected = EncounterChoicePresenter.Present(malformed);
 
         Assert.False(projected.IsAvailable);
         Assert.False(projected.IsProminent);
@@ -312,10 +312,10 @@ public sealed class Slice45UiPresentationTests
             [BehaviorAction("action:choice", "description", "manegarm-approach-choice", "end-run")],
             ApproachRun());
 
-        Assert.False(baseline.Slice45Cues.HasAnyValue);
-        Assert.Null(baseline.Slice45Cues.RunRestrictionActive);
-        Assert.Null(baseline.Slice45Cues.BioroidAbilityReady);
-        Assert.Null(baseline.Slice45Cues.MayflyBreakArmed);
+        Assert.False(baseline.RunCues.HasAnyValue);
+        Assert.Null(baseline.RunCues.RunRestrictionActive);
+        Assert.Null(baseline.RunCues.BioroidAbilityReady);
+        Assert.Null(baseline.RunCues.MayflyBreakArmed);
 
         M2ScenarioDocument document = M2ScenarioProvider.LoadRepresentative();
         Observation baselineObservation = ObservationBuilder.Build(
@@ -335,7 +335,7 @@ public sealed class Slice45UiPresentationTests
             CardMetadataResolvers.Default,
             GatewayBehaviorCatalog.Create());
 
-        Assert.False(malformed.Slice45Cues.HasAnyValue);
+        Assert.False(malformed.RunCues.HasAnyValue);
     }
 
     [Fact]
@@ -360,9 +360,9 @@ public sealed class Slice45UiPresentationTests
             CardMetadataResolvers.Default,
             GatewayBehaviorCatalog.Create());
 
-        Assert.True(view.Slice45Cues.NoStealOrTrashActive);
-        Assert.False(view.Slice45Cues.BioroidAbilityLegal);
-        Assert.True(view.Slice45Cues.MayflyRunEndArmed);
+        Assert.True(view.RunCues.NoStealOrTrashActive);
+        Assert.False(view.RunCues.BioroidAbilityLegal);
+        Assert.True(view.RunCues.MayflyRunEndArmed);
     }
 
     private static LegalAction BehaviorAction(

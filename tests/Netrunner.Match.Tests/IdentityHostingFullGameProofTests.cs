@@ -8,7 +8,7 @@ using Xunit.Abstractions;
 
 namespace Netrunner.Match.Tests;
 
-public sealed class Slice47FullGameProofTests(ITestOutputHelper output)
+public sealed class IdentityHostingFullGameProofTests(ITestOutputHelper output)
 {
     [Theory]
     [InlineData("basic")]

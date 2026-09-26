@@ -60,7 +60,7 @@ public static class BoardSpatialActions
                 case (ActionKind.ChooseBehavior, BehaviorChoiceParameters p) when p.CardIds.Count > 0 || view.CardSelection?.Candidates.Count > 0:
                     automatic = true;
                     family += ":" + p.ChoiceKey + ":" + string.Join("/", p.OptionKeys);
-                    bool trashPayment = action.Slice45BehaviorChoice?.Costs.Any(cost => cost.AdditionalKind == BehaviorAdditionalCostKind.TrashCards) == true;
+                    bool trashPayment = action.BehaviorChoice?.Costs.Any(cost => cost.AdditionalKind == BehaviorAdditionalCostKind.TrashCards) == true;
                     for (int i = 0; i < p.CardIds.Count; i++)
                         Card(p.CardIds[i].Value, view.CardSelection?.Mode == BehaviorChoiceMode.OrderSelection ? $"Position {i + 1}"
                             : trashPayment ? "Pay card cost" : "Target", trashPayment ? BehaviorAdditionalCostKind.TrashCards : null);

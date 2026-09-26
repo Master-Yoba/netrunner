@@ -13,7 +13,7 @@ namespace Netrunner.Match.Tests;
 /// compact, but every transition is performed by the public engine reducers
 /// against the Gateway behavior and runtime metadata composition roots.
 /// </summary>
-public sealed class Slice44ModifierProofTests
+public sealed class ModifierProofTests
 {
     private static readonly CardDefinitionId IceDefinition = GatewayCardCodes.Palisade;
 

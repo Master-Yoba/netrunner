@@ -4,7 +4,7 @@ using Xunit;
 
 namespace Netrunner.Match.Tests;
 
-public sealed class Slice47PresentationTests
+public sealed class IdentityPresentationTests
 {
     [Fact]
     public void MapsCoreAccessCountRunEndAndPublicIcePositions()
@@ -48,7 +48,7 @@ public sealed class Slice47PresentationTests
         Assert.Equal(
             ["card:1", "card:2"],
             view.Servers.Single(server => server.Id == serverId).IcePositions.Select(position => position.CardId));
-        Assert.Equal("ZAHYA ACCESS COUNT · 3", Slice47PresentationProjector.PresentZahyaAccess(view).Summary);
+        Assert.Equal("ZAHYA ACCESS COUNT · 3", IdentityChoicePresenter.PresentZahyaAccess(view).Summary);
     }
 
     [Fact]
@@ -90,7 +90,7 @@ public sealed class Slice47PresentationTests
                 "Choose a typed option."),
         };
 
-        Slice47DecisionViewModel projected = Slice47PresentationProjector.Present(view);
+        IdentityChoiceViewModel projected = IdentityChoicePresenter.Present(view);
 
         Assert.True(projected.HasNbnChoice);
         Assert.Contains(projected.Options, option => option.IsGainTwoChoice

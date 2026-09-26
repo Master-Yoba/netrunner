@@ -74,8 +74,8 @@ public partial class Main
 			return;
 		}
 
-		Slice45DecisionViewModel slice45 = Slice45PresentationProjector.Present(snapshot.View);
-		Slice46DecisionViewModel slice46 = Slice46PresentationProjector.Present(snapshot);
+		EncounterChoiceViewModel slice45 = EncounterChoicePresenter.Present(snapshot.View);
+		UnlessChoiceViewModel slice46 = UnlessChoicePresenter.Present(snapshot);
 		if (slice45.IsProminent)
 		{
 			_actions.AddChild(MakeLabel(
@@ -107,7 +107,7 @@ public partial class Main
 			selectedContent.AddChild(MakeLabel(
 				$"{FindSlice46Option(slice46, staged)?.OrderedPresentationLabel
 					?? FindSlice45Option(slice45, staged)?.OrderedPresentationLabel
-					?? Slice46PresentationProjector.Label(staged)}\n"
+					?? UnlessChoicePresenter.Label(staged)}\n"
 				+ "No engine action has been submitted yet.",
 				11,
 				Colors.White));
@@ -136,13 +136,13 @@ public partial class Main
 			foreach (LegalActionViewModel action in group.Actions)
 			{
 				bool targeted = ActionsRegionPresenter.IsTargetedAction(action);
-				Slice46ActionPresentationViewModel? slice46Option =
+				UnlessChoiceActionViewModel? slice46Option =
 					FindSlice46Option(slice46, action);
-				Slice45ActionPresentationViewModel? slice45Option =
+				EncounterChoiceActionViewModel? slice45Option =
 					FindSlice45Option(slice45, action);
 				string actionLabel = slice46Option?.OrderedPresentationLabel
 					?? slice45Option?.OrderedPresentationLabel
-					?? Slice46PresentationProjector.Label(action);
+					?? UnlessChoicePresenter.Label(action);
 				Button button = new()
 				{
 					Text = targeted
@@ -166,15 +166,15 @@ public partial class Main
 		ApplyAccessibilityFocusOrder(_board);
 	}
 
-	private static Slice45ActionPresentationViewModel? FindSlice45Option(
-		Slice45DecisionViewModel decision,
+	private static EncounterChoiceActionViewModel? FindSlice45Option(
+		EncounterChoiceViewModel decision,
 		LegalActionViewModel action) =>
 		decision.IsProminent
 			? decision.Options.FirstOrDefault(option => option.ActionId == action.Id)
 			: null;
 
-	private static Slice46ActionPresentationViewModel? FindSlice46Option(
-		Slice46DecisionViewModel decision,
+	private static UnlessChoiceActionViewModel? FindSlice46Option(
+		UnlessChoiceViewModel decision,
 		LegalActionViewModel action) =>
 		decision.IsProminent
 			? decision.Options.FirstOrDefault(option => option.ActionId == action.Id)

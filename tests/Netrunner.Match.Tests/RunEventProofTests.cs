@@ -12,7 +12,7 @@ namespace Netrunner.Match.Tests;
 /// reducer and observation boundary: no action payload is synthesized and no
 /// card title, code, or description is inspected by either selector.
 /// </summary>
-public sealed class Slice45RunProofTests
+public sealed class RunEventProofTests
 {
     private const string SimulationBehaviorRegistryVersion = "gateway-m4-4.5-sim-proof-c1";
     private const string BlankIceDefinition = "fixture:slice45-blank-ice";

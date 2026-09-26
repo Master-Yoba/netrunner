@@ -12,7 +12,7 @@ namespace Netrunner.Match.Tests;
 /// final replay verification; this test supplies the human-side choice and a
 /// bounded action trace for diagnostics.
 /// </summary>
-public sealed class Slice48FullGameProofTests(ITestOutputHelper output)
+public sealed class FullGameIntegrationProofTests(ITestOutputHelper output)
 {
     [Theory]
     [InlineData("basic", PlayerSide.Corp)]

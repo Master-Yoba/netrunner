@@ -12,7 +12,7 @@ namespace Netrunner.Match.Tests;
 /// <summary>SCN-402 / SIM-401: both observation-only policies traverse real
 /// damage, rez, access, and card-specific jack-out boundaries with replay and
 /// save/load at every yielded decision. CR citations are fixture data.</summary>
-public sealed class Slice46DamageProofTests
+public sealed class DamageTagProofTests
 {
     private static readonly JsonSerializerOptions FixtureJsonOptions = new()
     { PropertyNameCaseInsensitive = true, UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow };
