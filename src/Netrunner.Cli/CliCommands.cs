@@ -52,6 +52,11 @@ public static partial class CliCommands
             return RunAiBenchmark(args, output, error);
         }
 
+        if (args.Length > 0 && args[0] == "fuzz")
+        {
+            return RunFuzz(args, output, error);
+        }
+
         if (args.Length > 0 && args[0] == "ai-performance")
         {
             return RunPolicyPerformance(args, output, error);
@@ -170,6 +175,8 @@ public static partial class CliCommands
             + "ai-benchmark init smoke|full|developer [--corp-profile standard|easy] [--runner-profile standard|easy] --output <new manifest> [--json] | "
             + "ai-tactics init [--corp-profile standard|easy | --runner-profile standard|easy] --output <new manifest> [--json] | "
             + "ai-tactics <manifest> --output <new directory> [--workers 1..64] [--verify-fixtures] [--json] | "
+            + "fuzz [--games 1..100000] [--seed <unsigned-integer>] [--content developer|official] [--action-cap N] "
+            + "[--workers 1..64] [--output <new directory>] [--json] | "
             + "card-data normalize --upstream <file> --copyright <file> --commit <40-hex-sha> "
             + "--retrieval-date YYYY-MM-DD --output-dir <directory> [--json] | "
             + "card-data validate [--root <directory>] [--json] | "
