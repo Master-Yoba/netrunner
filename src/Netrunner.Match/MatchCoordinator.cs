@@ -49,6 +49,9 @@ public sealed record MatchSnapshot(
 
     public IReadOnlyList<MatchHistoryEntry> History { get; init; } = Array.Empty<MatchHistoryEntry>();
 
+    /// <summary>Viewer-safe board changes made by the accepted action, in order (engine plan E4b).</summary>
+    public IReadOnlyList<PresentationEvent> PresentationEvents { get; init; } = Array.Empty<PresentationEvent>();
+
     public bool IsTerminal => View.Outcome.IsTerminal;
 
     public bool IsPaused { get; init; }
@@ -166,6 +169,9 @@ public sealed partial class MatchCoordinator : IAsyncDisposable, IDisposable
     private long _publicationSequence;
     private readonly MatchHistoryProjector _historyProjector = new();
     private (MatchViewModel Before, PlayerSide Actor, LegalAction Action)? _historyContext;
+    private readonly CardKeyTracker _cardKeys = new();
+    private IReadOnlyDictionary<CardInstanceId, string> _currentCardKeys = new Dictionary<CardInstanceId, string>();
+    private GameState? _presentationBefore;
     private SessionTrace? _sessionTrace;
     private Exception? _traceFault;
     private bool _recoveredPaused;
@@ -818,6 +824,12 @@ public sealed partial class MatchCoordinator : IAsyncDisposable, IDisposable
             history = _historyProjector.Project(context.Before, view, state, events, context.Actor, context.Action);
             _historyContext = null;
         }
+        IReadOnlyDictionary<CardInstanceId, string> cardKeys = _cardKeys.Update(state, _options.HumanSide);
+        IReadOnlyList<PresentationEvent> presentation = _presentationBefore is { } previous && events.Count > 0
+            ? PresentationEventProjector.Project(previous, state, events, _options.HumanSide, _currentCardKeys, cardKeys, _behaviorCatalog)
+            : Array.Empty<PresentationEvent>();
+        _presentationBefore = null;
+        _currentCardKeys = cardKeys;
         MatchSnapshot snapshot = new(
             Interlocked.Increment(ref _publicationSequence),
             observation,
@@ -830,6 +842,7 @@ public sealed partial class MatchCoordinator : IAsyncDisposable, IDisposable
             ActionCount = state.ActionSequence,
             IsPaused = _recoveredPaused,
             History = history,
+            PresentationEvents = presentation,
             SetupDecisionOwnerSide = state.PendingDecision is { Kind: DecisionKind.Setup } pending
                 ? state.GetPlayer(pending.Owner).Side
                 : null,
@@ -933,6 +946,8 @@ public sealed partial class MatchCoordinator : IAsyncDisposable, IDisposable
 
         if (applied.Accepted && actorView is not null && action is not null)
             _historyContext = (before, actorView.Viewer, action);
+        if (applied.Accepted)
+            _presentationBefore = state;
         if (applied.Accepted && _replayInitial is not null)
             _replayActions.Add(ReplayAction.From(applied.AcceptedAction!));
         if (!applied.Accepted && actor?.Side != _options.HumanSide)
