@@ -1,9 +1,9 @@
 name: Offline AI benchmark
 
+# Manual only: the full M5 gate takes up to three hours of Actions minutes.
+# Run `make m5-gate` locally before releases, or dispatch this when needed.
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '30 3 * * 1'
 
 permissions:
   contents: read
