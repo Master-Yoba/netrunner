@@ -31,6 +31,8 @@ public sealed record MatchViewModel(
 {
     public IReadOnlyList<CardViewModel> CorpDiscard { get; init; } = Array.Empty<CardViewModel>();
     public IReadOnlyList<CardViewModel> RunnerHeap { get; init; } = Array.Empty<CardViewModel>();
+    /// <summary>Public cards currently resolving: a played Operation or Event.</summary>
+    public IReadOnlyList<CardViewModel> PlayArea { get; init; } = Array.Empty<CardViewModel>();
     public IReadOnlyList<CardPositionViewModel> CardPositions { get; init; } = [];
     public IReadOnlyList<CardViewModel> ChoiceCards { get; init; } = [];
     public CardSelectionViewModel? CardSelection { get; init; }
@@ -888,6 +890,8 @@ public static class ObservationViewMapper
             CorpDiscardCount = OptionalMap(publicState, "zoneCounts") is { } zoneCounts
                 ? ReadInt(zoneCounts, "corpDiscard", fallback: 0) : 0,
             RunnerHeap = ReadCards(publicState, "runnerHeap", metadataResolver, abilityCue),
+            PlayArea = ReadCards(publicState, "corpPlayArea", metadataResolver, abilityCue)
+                .Concat(ReadCards(publicState, "runnerPlayArea", metadataResolver, abilityCue)).ToArray(),
             CorpIdentity = ReadCards(publicState, "corpIdentity", metadataResolver, abilityCue).SingleOrDefault(),
             RunnerIdentity = ReadCards(publicState, "runnerIdentity", metadataResolver, abilityCue).SingleOrDefault(),
             Turn = MapTurn(publicState),

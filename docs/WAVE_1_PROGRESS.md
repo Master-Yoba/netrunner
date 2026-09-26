@@ -122,3 +122,28 @@ The frozen M4/M5 tactical suites grade exact choices of the policies they were
 written for, so `CorpPolicyTacticalTests` and `RunnerPolicyTacticalTests` pin
 Corp v2 and Runner v1. The new defaults are measured by the ladders above
 rather than by those suites.
+
+## Playtest follow-up
+
+A human playtest of the merged Wave 1 (Runner against Standard, official
+content) found six problems, fixed on `fix/playtest-1`:
+
+| Report | Cause | Fix |
+|---|---|---|
+| Corp played Seamless Launch onto Diviner | Advancement effects scored a flat value whatever the targets; the only legal target was ICE | Corp v4 values the effect by its best legal target |
+| History read "plays a face-down card", "makes a choice" | The view model dropped the public play area; behavior advancement had no history wording | Project the play area; history names the card, server and counter total |
+| A stolen agenda showed full size outside the summary pane | The score pile scaled a stale hidden face instead of the rendered one | Scale the rendered face; flight ghosts shrink to the destination size |
+| Small cards flew into the score areas on every update | An empty score pile's hidden face counted as a new arrival | Skip hidden and score-pile faces as arrivals |
+| The hand preview cut off the hovered card's top | The preview was anchored to the fan, below the lifted card | Anchor to the lifted card's top; the card-art smoke checks it |
+| Standard felt easy: agendas sat in remotes, HQ stayed at 1–2 cards | v3 advanced only agendas it could finish this turn, so 4-counter agendas never started; drawing was valued low | Corp v4 advances a protected agenda a full next turn can finish, and draws more readily with 1–3 cards |
+
+Ladder, Corp v4 against the Wave 1 policies (`standard` against
+`standard-w1`, 1,920 official games): Corp +6 [−22, 33], Runner 0 [−31, 29]
+(same Runner policy). The fixes remove visible blunders, but don't
+measurably strengthen the Corp against the bot Runner; a stronger Corp still
+waits for the A3 turn planner.
+
+Gates on `fix/playtest-1` (timeout scale 4): `make test`, `make m4-gate`
+(coverage 77/77), `make m5-gate` (frozen digests unchanged), `make
+m5-client-smoke` and the policy performance run (p95 below 1 ms in every
+group) all pass.

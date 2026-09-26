@@ -13,10 +13,10 @@ public static class CorpPolicyProfiles
 
     public static OfflineAgentConfiguration Create(string profileId, ulong policySeed, string policyVersion) => (policyVersion, profileId) switch
     {
-        (CorpHeuristicPolicy.V3, "standard") => OfflineAgentConfiguration.Create(PlayerSide.Corp, policyVersion, profileId, policySeed,
+        (CorpHeuristicPolicy.V3 or CorpHeuristicPolicy.V4, "standard") => OfflineAgentConfiguration.Create(PlayerSide.Corp, policyVersion, profileId, policySeed,
             workBudget: 20000, nearTieTolerance: 0, parameters: [.. Parameters(100, 100, 100), new("coverage-scale", 100)]),
         // Easy (A6a): a wide near-tie band and no breaker-coverage reasoning.
-        (CorpHeuristicPolicy.V3, "easy") => OfflineAgentConfiguration.Create(PlayerSide.Corp, policyVersion, profileId, policySeed,
+        (CorpHeuristicPolicy.V3 or CorpHeuristicPolicy.V4, "easy") => OfflineAgentConfiguration.Create(PlayerSide.Corp, policyVersion, profileId, policySeed,
             workBudget: 12000, nearTieTolerance: EasyNearTieTolerance, parameters: [.. Parameters(90, 80, 100), new("coverage-scale", 0)]),
         (CorpHeuristicPolicy.V2, _) => CreateV2(profileId, policySeed),
         _ => throw new ArgumentException("Unknown Corp profile or policy version.", nameof(profileId)),
@@ -39,7 +39,7 @@ public static class CorpPolicyProfiles
         string[]? keys = configuration.PolicyVersion switch
         {
             CorpHeuristicPolicy.V2 => ParameterKeys,
-            CorpHeuristicPolicy.V3 => V3ParameterKeys,
+            CorpHeuristicPolicy.V3 or CorpHeuristicPolicy.V4 => V3ParameterKeys,
             _ => null,
         };
         if (configuration.Side != PlayerSide.Corp || keys is null

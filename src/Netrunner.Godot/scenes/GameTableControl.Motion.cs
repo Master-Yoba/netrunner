@@ -41,6 +41,9 @@ public partial class GameTableControl
 
 	private sealed record MotionCard(CardViewModel? Card, Rect2 Rect, Transform2D Pose, Vector2 Size, bool IsDiscardPile);
 
+	private bool IsScorePileFace(TableCardControl card) => card.GetParent() is { } parent
+		&& (parent == _corpScoredPile || parent == _runnerScoredPile);
+
 	private bool IsDiscardPileFace(TableCardControl card) => card.GetParent() == _runnerHeapPile
 		|| (_zonePiles.TryGetValue("zone:corp-archives", out BoardActionButton? archives) && card.GetParent() == archives);
 
@@ -93,13 +96,14 @@ public partial class GameTableControl
 				{
 					if (old.IsDiscardPile && IsDiscardPileFace(current)) continue;
 					if (old.Rect.Position.DistanceTo(rect.Position) > 8)
-						AnimateCard(current.Card, old.Rect, rect.Position - GlobalPosition, current.IsIce, current.BackSide);
+						AnimateCard(current.Card, old.Rect, rect.Position - GlobalPosition, current.IsIce, current.BackSide, rect.Size);
 					else if (!CardsMatch(old.Card, current.Card)) PulseCard(rect);
 					continue;
 				}
 				// A newly exposed pile top is presentation bookkeeping, not a card
-				// arriving from an inferred hand or the Corp header.
-				if (IsDiscardPileFace(current)) continue;
+				// arriving from an inferred hand or the Corp header. An empty
+				// pile keeps a hidden face that must not fly in on every update.
+				if (IsDiscardPileFace(current) || IsScorePileFace(current) || !current.IsVisibleInTree()) continue;
 				// A new face-down slot receives a neutral back, never a card
 				// recovered from an authoritative action or hidden instance ID.
 				Vector2 source = view.RunnerRig.Any(card => card.Id == id)
@@ -130,7 +134,8 @@ public partial class GameTableControl
 		tween.TweenCallback(Callable.From(() => { _motionTweens.Remove(tween); _motionCards.Remove(ghost); ghost.QueueFree(); }));
 	}
 
-	private void AnimateCard(CardViewModel? model, Rect2 source, Vector2 destination, bool ice, Netrunner.Core.PlayerSide side = Netrunner.Core.PlayerSide.Corp)
+	private void AnimateCard(CardViewModel? model, Rect2 source, Vector2 destination, bool ice, Netrunner.Core.PlayerSide side = Netrunner.Core.PlayerSide.Corp,
+		Vector2? destinationSize = null)
 	{
 		TableCardControl ghost = TableCardControl.Create();
 		ghost.MouseFilter = MouseFilterEnum.Ignore;
@@ -149,6 +154,9 @@ public partial class GameTableControl
 		_motionTweens.Add(tween);
 		tween.SetParallel();
 		tween.TweenProperty(ghost, "position", destination, MotionDuration).SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.InOut);
+		// Land at the destination's size, e.g. a mini score-pile card, not the source's.
+		if (destinationSize is { X: > 0, Y: > 0 } size && source.Size is { X: > 0, Y: > 0 })
+			tween.TweenProperty(ghost, "scale", size / source.Size, MotionDuration).SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.InOut);
 		tween.TweenProperty(ghost, "modulate:a", 0.0, MotionDuration).SetDelay(MotionDuration * 0.2);
 		tween.Chain().TweenCallback(Callable.From(() => { _motionTweens.Remove(tween); _motionCards.Remove(ghost); ghost.QueueFree(); }));
 	}

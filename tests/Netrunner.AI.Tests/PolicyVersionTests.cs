@@ -11,6 +11,7 @@ public sealed class PolicyVersionTests
     [InlineData(PlayerSide.Runner, RunnerHeuristicPolicy.V2, "agent-features-v3")]
     [InlineData(PlayerSide.Corp, CorpHeuristicPolicy.V2, "agent-features-v2")]
     [InlineData(PlayerSide.Corp, CorpHeuristicPolicy.V3, "agent-features-v2")]
+    [InlineData(PlayerSide.Corp, CorpHeuristicPolicy.V4, "agent-features-v2")]
     public void EveryVersionConfiguresAndCreatesItsPolicy(PlayerSide side, string version, string featureVersion)
     {
         foreach (string profile in new[] { "standard", "easy" })
@@ -27,7 +28,7 @@ public sealed class PolicyVersionTests
     public void LatestVersionsAreTheDefaultsAndUnknownVersionsFail()
     {
         Assert.Equal(RunnerHeuristicPolicy.V2, OfflinePolicies.Configure(PlayerSide.Runner, "standard", 1).PolicyVersion);
-        Assert.Equal(CorpHeuristicPolicy.V3, OfflinePolicies.Configure(PlayerSide.Corp, "standard", 1).PolicyVersion);
+        Assert.Equal(CorpHeuristicPolicy.V4, OfflinePolicies.Configure(PlayerSide.Corp, "standard", 1).PolicyVersion);
         Assert.Throws<ArgumentException>(() => new RunnerHeuristicPolicy("runner-heuristic-v9"));
         Assert.Throws<ArgumentException>(() => OfflinePolicies.Configure(PlayerSide.Corp, "standard", 1, "corp-heuristic-v1"));
         // A v1 Runner profile can't claim the v3 features it doesn't read.

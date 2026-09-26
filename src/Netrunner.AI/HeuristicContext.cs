@@ -35,7 +35,10 @@ internal sealed class HeuristicContext
     public static int Hosted(AgentCard? card) => card?.Counters.Where(counter => counter.Purpose == CardCounterPurpose.HostedCredit).Sum(counter => counter.Count) ?? 0;
     public int AgendaCount => Features.Hand.Count(card => Definition(card)?.Agenda is not null);
     public int CreditValue => (Self.Credits < 3 ? 140 : Self.Credits < 8 ? 110 : Self.Credits < 15 ? 80 : 45) * Parameter("credit-scale", 100) / 100;
-    public int DrawValue => (Features.Hand.Length < 2 ? 230 : Features.Hand.Length < 4 ? 125 : Features.Hand.Length < (Self.MaximumHandSize ?? 5) ? 70 : 10) * Parameter("draw-scale", 100) / 100;
+    public int DrawValue => (Generation >= 3 && Features.Side == PlayerSide.Corp
+        ? Features.Hand.Length < 2 ? 260 : Features.Hand.Length < 3 ? 190 : Features.Hand.Length < 4 ? 140
+            : Features.Hand.Length < (Self.MaximumHandSize ?? 5) ? 70 : 10
+        : Features.Hand.Length < 2 ? 230 : Features.Hand.Length < 4 ? 125 : Features.Hand.Length < (Self.MaximumHandSize ?? 5) ? 70 : 10) * Parameter("draw-scale", 100) / 100;
 
     public int CardValue(AgentCard? card, bool installed = false)
     {

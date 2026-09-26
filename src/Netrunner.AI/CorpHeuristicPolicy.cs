@@ -9,9 +9,14 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     public const string V2 = "corp-heuristic-v2";
     /// <summary>Adds breaker-coverage protection and score-race terms (A2).</summary>
     public const string V3 = "corp-heuristic-v3";
+    /// <summary>
+    /// Values advancement effects by their best legal target, pre-advances
+    /// agendas it can finish next turn, and keeps a working hand (playtest fixes).
+    /// </summary>
+    public const string V4 = "corp-heuristic-v4";
     /// <summary>The version new games and new manifests use.</summary>
-    public const string PolicyVersion = V3;
-    public static IReadOnlyList<string> Versions { get; } = [V2, V3];
+    public const string PolicyVersion = V4;
+    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4];
 
     public CorpHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -19,7 +24,7 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Corp policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version == V2 ? 1 : 2;
+        Generation = version switch { V2 => 1, V3 => 2, _ => 3 };
     }
 
     public string Version { get; }
