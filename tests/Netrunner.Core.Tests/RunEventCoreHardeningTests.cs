@@ -7,7 +7,7 @@ namespace Netrunner.Core.Tests;
 /// exercise detached payload construction and the structural behavior filter
 /// without relying on card titles or presentation text.
 /// </summary>
-public sealed class Slice45CoreHardeningTests
+public sealed class RunEventCoreHardeningTests
 {
     [Theory]
     [InlineData(IceInstallDestinationRule.Normal, IceInstallCostRule.IgnoreAllCosts)]

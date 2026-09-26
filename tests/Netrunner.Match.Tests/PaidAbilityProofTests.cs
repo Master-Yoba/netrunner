@@ -10,7 +10,7 @@ namespace Netrunner.Match.Tests;
 /// starts at a valid installed-card turn frame; it is not MATCH-401A setup or
 /// a full-game setup/mulligan outcome.
 /// </summary>
-public sealed class Slice43AbilityProofTests
+public sealed class PaidAbilityProofTests
 {
     private const string BasicFixtureId = "sim-slice47-batch6-basic";
     private const string ExpandedFixtureId = "sim-slice47-batch6-expanded";

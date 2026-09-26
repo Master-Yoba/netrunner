@@ -108,7 +108,7 @@ public sealed record MatchViewModel(
     /// not currently project these values, so the mapper leaves them
     /// unavailable instead of deriving them from card text or action labels.
     /// </summary>
-    public Slice45CueViewModel Slice45Cues { get; init; } = Slice45CueViewModel.Unavailable;
+    public RunCueViewModel RunCues { get; init; } = RunCueViewModel.Unavailable;
 
     /// <summary>
     /// Viewer-safe damage instructions projected by Core. An empty list means
@@ -489,7 +489,7 @@ public sealed record LegalActionViewModel(
     /// catalog. It is null for legacy or unresolvable choices; clients must
     /// never infer option semantics from <see cref="Description"/>.
     /// </summary>
-    public Slice45BehaviorChoiceOptionViewModel? Slice45BehaviorChoice { get; init; }
+    public BehaviorChoiceOptionViewModel? BehaviorChoice { get; init; }
 
     public ActionSourceViewModel? Source { get; init; }
     public string? EffectLabel { get; init; }
@@ -843,7 +843,7 @@ public static class ObservationViewMapper
                 {
                     Source = MapActionSource(presentationContext, action.Id, metadataResolver),
                     EffectLabel = PaidAbilityEffect(action.Parameters, behaviorCatalog),
-                    Slice45BehaviorChoice = Slice45PresentationProjector.ResolveChoiceMetadata(
+                    BehaviorChoice = EncounterChoicePresenter.ResolveChoiceMetadata(
                         action.Parameters,
                         behaviorCatalog),
                 };
@@ -905,10 +905,10 @@ public static class ObservationViewMapper
             ForcedDiscard = MapForcedDiscard(decision, corpHandSize, runnerHandSize),
             UsedAbilityKeys = usedAbilityKeys,
             UsedFirstXKeys = usedFirstXKeys,
-            Slice45Cues = Slice45PresentationProjector.ReadCues(publicState),
-            RunEnd = Slice47ObservationProjector.ReadRunEnd(publicState),
-            PendingDamage = Slice46ObservationProjector.ReadDamageInstructions(publicState),
-            ConditionalValues = Slice46ObservationProjector.ReadConditionalValues(publicState),
+            RunCues = EncounterChoicePresenter.ReadCues(publicState),
+            RunEnd = IdentityObservationProjector.ReadRunEnd(publicState),
+            PendingDamage = DamageTagObservationProjector.ReadDamageInstructions(publicState),
+            ConditionalValues = DamageTagObservationProjector.ReadConditionalValues(publicState),
         };
     }
 

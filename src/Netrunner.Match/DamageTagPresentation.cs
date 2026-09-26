@@ -143,8 +143,8 @@ public sealed record ConditionalValueViewModel(
 }
 
 /// <summary>Explicitly marks an action as an unless payment/fallback option.</summary>
-public sealed record Slice46ActionPresentationViewModel(
-    Slice45ActionPresentationViewModel Action,
+public sealed record UnlessChoiceActionViewModel(
+    EncounterChoiceActionViewModel Action,
     bool IsUnlessChoice,
     bool IsPayAlternative,
     bool IsFallback)
@@ -167,7 +167,7 @@ public sealed record Slice46ActionPresentationViewModel(
 
     public string? TargetServerId => Action.TargetServerId;
 
-    public IReadOnlyList<Slice45BehaviorCostViewModel> Costs => Action.Costs;
+    public IReadOnlyList<BehaviorCostViewModel> Costs => Action.Costs;
 
     public string? CostSummary => Action.CostSummary;
 
@@ -197,28 +197,28 @@ public sealed record Slice46ActionPresentationViewModel(
 }
 
 /// <summary>Typed Slice 4.6 choice surface used by Match and Godot.</summary>
-public sealed record Slice46DecisionViewModel(
+public sealed record UnlessChoiceViewModel(
     bool IsAvailable,
     string? Diagnostic,
-    Slice45DecisionSurface Surface,
+    ChoiceSurface Surface,
     DecisionKind? DecisionKind,
     PlayerSide? ActingPlayer,
     string? Prompt,
-    IReadOnlyList<Slice46ActionPresentationViewModel> Options,
+    IReadOnlyList<UnlessChoiceActionViewModel> Options,
     bool JackOutAfterDamage)
 {
     public bool IsProminent => IsAvailable && Options.Count > 0;
 
     public bool HasUnlessChoice => Options.Any(static option => option.IsUnlessChoice);
 
-    public static Slice46DecisionViewModel Unavailable(string? diagnostic = null) => new(
+    public static UnlessChoiceViewModel Unavailable(string? diagnostic = null) => new(
         false,
         diagnostic ?? "Slice 4.6 decision projection unavailable.",
-        Slice45DecisionSurface.None,
+        ChoiceSurface.None,
         null,
         null,
         null,
-        Array.Empty<Slice46ActionPresentationViewModel>(),
+        Array.Empty<UnlessChoiceActionViewModel>(),
         false);
 }
 
@@ -226,7 +226,7 @@ public sealed record Slice46DecisionViewModel(
 /// Projects the explicit Slice 4.6 observation fields. The pending damage
 /// field is one object or null; conditional values are one typed array.
 /// </summary>
-public static class Slice46ObservationProjector
+public static class DamageTagObservationProjector
 {
     public static IReadOnlyList<DamagePresentationViewModel> ReadDamageInstructions(
         IReadOnlyDictionary<string, object?> publicState)
@@ -537,24 +537,24 @@ public static class Slice46ObservationProjector
 }
 
 /// <summary>Projects Slice 4.6 typed choices and labels for clients.</summary>
-public static class Slice46PresentationProjector
+public static class UnlessChoicePresenter
 {
-    public static Slice46DecisionViewModel Present(MatchViewModel view)
+    public static UnlessChoiceViewModel Present(MatchViewModel view)
     {
         ArgumentNullException.ThrowIfNull(view);
-        Slice45DecisionViewModel baseDecision = Slice45PresentationProjector.Present(view);
+        EncounterChoiceViewModel baseDecision = EncounterChoicePresenter.Present(view);
         if (!baseDecision.IsAvailable)
         {
-            return Slice46DecisionViewModel.Unavailable(baseDecision.Diagnostic);
+            return UnlessChoiceViewModel.Unavailable(baseDecision.Diagnostic);
         }
 
         var groups = baseDecision.Options
             .GroupBy(static option => option.ChoiceKey ?? string.Empty, StringComparer.Ordinal)
             .ToDictionary(static group => group.Key, static group => group.ToArray(), StringComparer.Ordinal);
-        var options = new List<Slice46ActionPresentationViewModel>(baseDecision.Options.Count);
-        foreach (Slice45ActionPresentationViewModel option in baseDecision.Options)
+        var options = new List<UnlessChoiceActionViewModel>(baseDecision.Options.Count);
+        foreach (EncounterChoiceActionViewModel option in baseDecision.Options)
         {
-            Slice45ActionPresentationViewModel[] group = groups[option.ChoiceKey ?? string.Empty];
+            EncounterChoiceActionViewModel[] group = groups[option.ChoiceKey ?? string.Empty];
             bool hasFallback = group.Any(static candidate => candidate.IsFallback);
             bool hasPaid = group.Any(static candidate => candidate.Costs.Count > 0)
                 || group.Any(static candidate => candidate.IceChoice == IceSubroutineChoiceKind.PayCredits);
@@ -565,24 +565,24 @@ public static class Slice46PresentationProjector
             bool isPayAlternative = isUnless
                 && !isFallback
                 && (option.Costs.Count > 0 || option.IceChoice == IceSubroutineChoiceKind.PayCredits);
-            options.Add(new Slice46ActionPresentationViewModel(option, isUnless, isPayAlternative, isFallback));
+            options.Add(new UnlessChoiceActionViewModel(option, isUnless, isPayAlternative, isFallback));
         }
 
-        return new Slice46DecisionViewModel(
+        return new UnlessChoiceViewModel(
             true,
             null,
             baseDecision.Surface,
             baseDecision.DecisionKind,
             baseDecision.ActingPlayer,
             baseDecision.Prompt,
-            new ReadOnlyCollection<Slice46ActionPresentationViewModel>(options),
+            new ReadOnlyCollection<UnlessChoiceActionViewModel>(options),
             false);
     }
 
-    public static Slice46DecisionViewModel Present(MatchSnapshot snapshot)
+    public static UnlessChoiceViewModel Present(MatchSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        Slice46DecisionViewModel decision = Present(snapshot.View);
+        UnlessChoiceViewModel decision = Present(snapshot.View);
         bool damageResolved = snapshot.Events.Any(static @event =>
             @event.Payload is DamageDealtEventPayload);
         bool jackOut = damageResolved
@@ -607,7 +607,7 @@ public static class Slice46PresentationProjector
                 + $@"{Pluralize(trash.ClickCost, "click")} + {Pluralize(trash.CreditCost, "credit")}";
         }
 
-        return Slice45PresentationProjector.Label(action);
+        return EncounterChoicePresenter.Label(action);
     }
 
     public static string DescribeDamage(DamageDealtEventPayload payload)

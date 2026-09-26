@@ -247,7 +247,7 @@ public partial class Main
 				&& panels.Runner.IsAvailable
 				&& _corpIdentityDetails.Text.Contains(corpIdentity.Title, StringComparison.Ordinal)
 				&& _runnerIdentityDetails.Text.Contains(runnerIdentity.Title, StringComparison.Ordinal);
-			Slice47DecisionViewModel projected = Slice47PresentationProjector.Present(snapshot);
+			IdentityChoiceViewModel projected = IdentityChoicePresenter.Present(snapshot);
 			nbnChoices = projected.HasNbnChoice
 				&& SceneTreeContainsText(_focusPresentation, "GAIN 2 CREDITS")
 				&& SceneTreeContainsText(_focusPresentation, "DRAW 2 CARDS");

@@ -4,7 +4,7 @@ using Xunit;
 
 namespace Netrunner.Match.Tests;
 
-public sealed class Slice46UiPresentationTests
+public sealed class DamageTagPresentationTests
 {
     [Fact]
     public void MapsPublicTagsAndCoreDamageWithoutInventingMissingState()
@@ -161,8 +161,8 @@ public sealed class Slice46UiPresentationTests
             },
         };
 
-        Assert.Empty(Slice46ObservationProjector.ReadDamageInstructions(publicState));
-        Assert.Single(Slice46ObservationProjector.ReadConditionalValues(publicState));
+        Assert.Empty(DamageTagObservationProjector.ReadDamageInstructions(publicState));
+        Assert.Single(DamageTagObservationProjector.ReadConditionalValues(publicState));
     }
 
     [Fact]
@@ -189,13 +189,13 @@ public sealed class Slice46UiPresentationTests
                         ["pay"],
                         finalizeSelection: true))
                 {
-                    Slice45BehaviorChoice = new Slice45BehaviorChoiceOptionViewModel(
+                    BehaviorChoice = new BehaviorChoiceOptionViewModel(
                         "slice46-unless",
                         "pay",
                         BehaviorChoiceMode.Mode,
                         BehaviorChoiceOptionSemantic.Normal,
                         [
-                            new Slice45BehaviorCostViewModel(
+                            new BehaviorCostViewModel(
                                 BehaviorCostKind.Credits,
                                 8,
                                 null,
@@ -211,7 +211,7 @@ public sealed class Slice46UiPresentationTests
                         ["decline"],
                         finalizeSelection: true))
                 {
-                    Slice45BehaviorChoice = new Slice45BehaviorChoiceOptionViewModel(
+                    BehaviorChoice = new BehaviorChoiceOptionViewModel(
                         "slice46-unless",
                         "decline",
                         BehaviorChoiceMode.Mode,
@@ -221,7 +221,7 @@ public sealed class Slice46UiPresentationTests
             ],
         };
 
-        Slice46DecisionViewModel decision = Slice46PresentationProjector.Present(view);
+        UnlessChoiceViewModel decision = UnlessChoicePresenter.Present(view);
 
         Assert.True(decision.HasUnlessChoice);
         Assert.Equal("UNLESS PAY · OPTION · pay · NORMAL · COST · 8 credits", decision.Options[0].PresentationLabel);
@@ -234,7 +234,7 @@ public sealed class Slice46UiPresentationTests
             new RemoveTagParameters(1, 2));
         Assert.Equal(
             "REMOVE TAG · COST · 1 click + 2 credits",
-            Slice46PresentationProjector.Label(removeTag));
+            UnlessChoicePresenter.Label(removeTag));
     }
 
     [Fact]
@@ -316,8 +316,8 @@ public sealed class Slice46UiPresentationTests
                         flatlined: false)),
             ]);
 
-        Assert.False(Slice46PresentationProjector.Present(beforeDamage).JackOutAfterDamage);
-        Assert.True(Slice46PresentationProjector.Present(afterDamage).JackOutAfterDamage);
+        Assert.False(UnlessChoicePresenter.Present(beforeDamage).JackOutAfterDamage);
+        Assert.True(UnlessChoicePresenter.Present(afterDamage).JackOutAfterDamage);
     }
 
     private static Observation BaselineObservation() =>

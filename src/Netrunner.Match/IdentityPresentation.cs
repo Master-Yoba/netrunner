@@ -212,7 +212,7 @@ public sealed record IceSwapPreviewViewModel(
 }
 
 /// <summary>One action row carrying typed Slice 4.7 semantics.</summary>
-public sealed record Slice47ActionPresentationViewModel(
+public sealed record IdentityChoiceActionViewModel(
     ActionId ActionId,
     ActionKind ActionKind,
     PlayerSide ActingPlayer,
@@ -249,13 +249,13 @@ public sealed record Slice47ActionPresentationViewModel(
 }
 
 /// <summary>Typed Slice 4.7 decision surface used by Match and Godot.</summary>
-public sealed record Slice47DecisionViewModel(
+public sealed record IdentityChoiceViewModel(
     bool IsAvailable,
     string? Diagnostic,
     DecisionKind? DecisionKind,
     PlayerSide? ActingPlayer,
     string? Prompt,
-    IReadOnlyList<Slice47ActionPresentationViewModel> Options,
+    IReadOnlyList<IdentityChoiceActionViewModel> Options,
     IReadOnlyList<IceSwapPreviewViewModel> SwapPreviews,
     ZahyaAccessCountViewModel ZahyaAccess)
 {
@@ -265,19 +265,19 @@ public sealed record Slice47DecisionViewModel(
 
     public bool HasNbnChoice => Options.Any(static option => option.IsNbnChoice);
 
-    public static Slice47DecisionViewModel Unavailable(string? diagnostic = null) => new(
+    public static IdentityChoiceViewModel Unavailable(string? diagnostic = null) => new(
         false,
         diagnostic ?? "Slice 4.7 decision projection unavailable.",
         null,
         null,
         null,
-        Array.Empty<Slice47ActionPresentationViewModel>(),
+        Array.Empty<IdentityChoiceActionViewModel>(),
         Array.Empty<IceSwapPreviewViewModel>(),
         ZahyaAccessCountViewModel.Unknown);
 }
 
 /// <summary>Reads additive Slice 4.7 observation envelopes.</summary>
-public static class Slice47ObservationProjector
+public static class IdentityObservationProjector
 {
     public static RunEndAccessViewModel? ReadRunEnd(IReadOnlyDictionary<string, object?> publicState)
     {
@@ -373,20 +373,20 @@ public static class Slice47ObservationProjector
 }
 
 /// <summary>Projects typed Slice 4.7 choices and event previews for clients.</summary>
-public static class Slice47PresentationProjector
+public static class IdentityChoicePresenter
 {
-    public static Slice47DecisionViewModel Present(MatchViewModel view)
+    public static IdentityChoiceViewModel Present(MatchViewModel view)
     {
         ArgumentNullException.ThrowIfNull(view);
         if (view.Decision is not { } decision)
         {
-            return Slice47DecisionViewModel.Unavailable("There is no viewer-owned decision in this observation.") with
+            return IdentityChoiceViewModel.Unavailable("There is no viewer-owned decision in this observation.") with
             {
                 ZahyaAccess = ZahyaCount(view),
             };
         }
 
-        var projected = new List<Slice47ActionPresentationViewModel>(view.LegalActions.Count);
+        var projected = new List<IdentityChoiceActionViewModel>(view.LegalActions.Count);
         foreach (LegalActionViewModel action in view.LegalActions)
         {
             projected.Add(ProjectAction(view, decision.OwnerSide, action));
@@ -396,21 +396,21 @@ public static class Slice47PresentationProjector
             .Where(static action => action.SwapPreview is not null)
             .Select(static action => action.SwapPreview!)
             .ToArray();
-        return new Slice47DecisionViewModel(
+        return new IdentityChoiceViewModel(
             true,
             null,
             decision.Kind,
             decision.OwnerSide,
             decision.Prompt,
-            new ReadOnlyCollection<Slice47ActionPresentationViewModel>(projected),
+            new ReadOnlyCollection<IdentityChoiceActionViewModel>(projected),
             new ReadOnlyCollection<IceSwapPreviewViewModel>(previews),
             ZahyaCount(view));
     }
 
-    public static Slice47DecisionViewModel Present(MatchSnapshot snapshot)
+    public static IdentityChoiceViewModel Present(MatchSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        Slice47DecisionViewModel decision = Present(snapshot.View);
+        IdentityChoiceViewModel decision = Present(snapshot.View);
         IceSwapPreviewViewModel[] eventPreviews = snapshot.Events
             .Where(static @event => @event.Payload is IceSwappedEventPayload)
             .Select(static @event => IceSwapPreviewViewModel.FromEvent((IceSwappedEventPayload)@event.Payload))
@@ -464,7 +464,7 @@ public static class Slice47PresentationProjector
         return $"DEREZZED · {payload.CardId.Value} · state changed by Core.";
     }
 
-    private static Slice47ActionPresentationViewModel ProjectAction(
+    private static IdentityChoiceActionViewModel ProjectAction(
         MatchViewModel view,
         PlayerSide actingPlayer,
         LegalActionViewModel action)
@@ -518,7 +518,7 @@ public static class Slice47PresentationProjector
             typed = action.Parameters is not LegacyActionParameters;
         }
 
-        return new Slice47ActionPresentationViewModel(
+        return new IdentityChoiceActionViewModel(
             action.Id,
             action.Kind,
             actingPlayer,

@@ -77,11 +77,11 @@ public static class ActionLabelPresenter
                     bool staged = peers?.Any(peer => peer.Parameters is BehaviorChoiceParameters candidate
                         && candidate.ChoiceKey == behavior.ChoiceKey && !candidate.FinalizeSelection) == true;
                     if (behavior.CardIds.Count == 0)
-                        return !staged && action.Slice45BehaviorChoice?.Mode == BehaviorChoiceMode.Optional
+                        return !staged && action.BehaviorChoice?.Mode == BehaviorChoiceMode.Optional
                             ? "Skip optional effect" : "Continue without selecting cards";
                     return staged ? $"Finish selection: {selection}" : $"Choose {selection}";
                 }
-                Slice45BehaviorChoiceOptionViewModel? metadata = action.Slice45BehaviorChoice;
+                BehaviorChoiceOptionViewModel? metadata = action.BehaviorChoice;
                 string option = !string.IsNullOrWhiteSpace(metadata?.EffectLabel) ? metadata.EffectLabel
                     : string.Join(" → ", behavior.OptionKeys.Select(Words));
                 if (metadata?.Costs.Count > 0)

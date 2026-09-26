@@ -62,7 +62,7 @@ public sealed class ActionLabelPresenterTests
         var parameters = new BehaviorChoiceParameters(key, option);
         var action = Action(ActionKind.ChooseBehavior, parameters) with
         {
-            Slice45BehaviorChoice = Slice45PresentationProjector.ResolveChoiceMetadata(parameters, GatewayBehaviorCatalog.Create()),
+            BehaviorChoice = EncounterChoicePresenter.ResolveChoiceMetadata(parameters, GatewayBehaviorCatalog.Create()),
         };
         Assert.Equal(expected, Label(action));
     }

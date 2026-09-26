@@ -42,7 +42,7 @@ public partial class Main
 				"description is not a presentation source",
 				payParameters)
 			{
-				Slice45BehaviorChoice = Slice45PresentationProjector.ResolveChoiceMetadata(
+				BehaviorChoice = EncounterChoicePresenter.ResolveChoiceMetadata(
 					payParameters,
 					presentationCatalog),
 			};
@@ -52,7 +52,7 @@ public partial class Main
 				"description is not a fallback source",
 				takeTagParameters)
 			{
-				Slice45BehaviorChoice = Slice45PresentationProjector.ResolveChoiceMetadata(
+				BehaviorChoice = EncounterChoicePresenter.ResolveChoiceMetadata(
 					takeTagParameters,
 					presentationCatalog),
 			};
@@ -188,7 +188,7 @@ public partial class Main
 		{
 			_damageStatus.Text = string.Join(
 				'\n',
-				damageEvents.Select(Slice46PresentationProjector.DescribeDamage));
+				damageEvents.Select(UnlessChoicePresenter.DescribeDamage));
 			_damageStatus.AddThemeColorOverride(
 				"font_color",
 				damageEvents.Any(static value => value.Flatlined) ? Warning : Muted);

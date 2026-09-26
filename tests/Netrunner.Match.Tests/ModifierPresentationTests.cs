@@ -4,7 +4,7 @@ using Xunit;
 
 namespace Netrunner.Match.Tests;
 
-public sealed class Slice44UiPresentationTests
+public sealed class ModifierPresentationTests
 {
     [Fact]
     public void StrengthBreakdownUsesOrderedRealizedTermsForIceAndBreaker()

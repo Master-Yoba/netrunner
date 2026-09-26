@@ -51,7 +51,7 @@ public partial class Main
 			return;
 		}
 
-		RenderSlice45RunCues(snapshot.View.Slice45Cues);
+		RenderSlice45RunCues(snapshot.View.RunCues);
 
 		if (focus.Mode == FocusRegionMode.Encounter && focus.Encounter is { } encounter)
 		{
@@ -111,7 +111,7 @@ public partial class Main
 			}
 		}
 
-		Slice46DecisionViewModel decision = Slice46PresentationProjector.Present(snapshot);
+		UnlessChoiceViewModel decision = UnlessChoicePresenter.Present(snapshot);
 		if (decision.HasUnlessChoice)
 		{
 			_focusPresentation.AddChild(MakeLabel("UNLESS CHOICE · CORE ISSUED ALTERNATIVES", 13, Accent));
@@ -120,7 +120,7 @@ public partial class Main
 				_focusPresentation.AddChild(MakeWrappedLabel(prompt, 11, Colors.White));
 			}
 
-			foreach (Slice46ActionPresentationViewModel option in decision.Options)
+			foreach (UnlessChoiceActionViewModel option in decision.Options)
 			{
 				_focusPresentation.AddChild(MakeWrappedLabel(
 					option.OrderedPresentationLabel,
@@ -228,7 +228,7 @@ public partial class Main
 				.Where(action => action.Kind is ActionKind.PumpBreaker
 					or ActionKind.BreakSubroutines
 					or ActionKind.UseBioroidAbility)
-				.Select(Slice45PresentationProjector.Label));
+				.Select(EncounterChoicePresenter.Label));
 		_focusPresentation.AddChild(MakeWrappedLabel(
 			string.IsNullOrWhiteSpace(breakerCue)
 				? "BREAKER OPTIONS · no breaker action is currently issued"
@@ -243,7 +243,7 @@ public partial class Main
 
 	private void RenderSlice45DecisionFocus(MatchViewModel view)
 	{
-		Slice45DecisionViewModel decision = Slice45PresentationProjector.Present(view);
+		EncounterChoiceViewModel decision = EncounterChoicePresenter.Present(view);
 		if (!decision.IsProminent)
 		{
 			return;
@@ -259,7 +259,7 @@ public partial class Main
 			_focusPresentation.AddChild(MakeWrappedLabel(prompt, 12, Colors.White));
 		}
 
-		foreach (Slice45ActionPresentationViewModel option in decision.Options)
+		foreach (EncounterChoiceActionViewModel option in decision.Options)
 		{
 			_focusPresentation.AddChild(MakeWrappedLabel(
 				option.OrderedPresentationLabel,
@@ -268,7 +268,7 @@ public partial class Main
 		}
 	}
 
-	private void RenderSlice45RunCues(Slice45CueViewModel cues)
+	private void RenderSlice45RunCues(RunCueViewModel cues)
 	{
 		if (cues.NoStealOrTrashActive == true)
 		{
@@ -297,7 +297,7 @@ public partial class Main
 
 	private void RenderSlice47DecisionFocus(MatchSnapshot snapshot)
 	{
-		Slice47DecisionViewModel decision = Slice47PresentationProjector.Present(snapshot);
+		IdentityChoiceViewModel decision = IdentityChoicePresenter.Present(snapshot);
 		if (decision.ZahyaAccess.IsKnown)
 		{
 			_focusPresentation.AddChild(MakeWrappedLabel(
@@ -325,7 +325,7 @@ public partial class Main
 			_focusPresentation.AddChild(MakeWrappedLabel(prompt, 11, Colors.White));
 		}
 
-		foreach (Slice47ActionPresentationViewModel option in decision.Options)
+		foreach (IdentityChoiceActionViewModel option in decision.Options)
 		{
 			string label = option.SemanticLabel is { } semantic
 				? $"{semantic} · {option.PresentationLabel}"

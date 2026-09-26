@@ -189,12 +189,12 @@ public partial class Main
 			Outcome: new OutcomeViewModel(GameOutcomeKind.Ongoing, Winner: null, Reason: null),
 			LegalActions: actions)
 		{
-			Slice45Cues = includeCues
-				? new Slice45CueViewModel(
+			RunCues = includeCues
+				? new RunCueViewModel(
 					RunRestrictionActive: true,
 					BioroidAbilityReady: true,
 					MayflyBreakArmed: true)
-				: Slice45CueViewModel.Unavailable,
+				: RunCueViewModel.Unavailable,
 		};
 	}
 
