@@ -8,6 +8,12 @@ on:
 permissions:
   contents: read
 
+# A newer push to the same PR or branch cancels the run it supersedes, so
+# merging a stack of PRs or force-pushing costs one run, not one per push.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
