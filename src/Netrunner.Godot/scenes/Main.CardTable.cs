@@ -30,6 +30,7 @@ public partial class Main
 	private bool _tableAwaitingSettlement;
 	private readonly MatchHistoryStore _tableHistory = new();
 	private readonly Queue<MatchSnapshot> _tablePublications = new();
+	private BeatPresenter _beats = null!;
 
 	private void BuildCardTable()
 	{
@@ -102,6 +103,8 @@ public partial class Main
 		_tableInspect.Pressed += ShowInspectedCardZoom;
 		_tableActions = dock.GetNode<HFlowContainer>("%Actions");
 		_focusPresentation = dock.GetNode<VBoxContainer>("%FocusPresentation");
+		_beats = new BeatPresenter { Name = "BeatPresenter", Board = _gameTable };
+		_tableViewport.AddChild(_beats);
 		BuildBoardDrag();
 		BuildSettingsMenu();
 	}
@@ -431,6 +434,7 @@ public partial class Main
 			_tableHistory.Append(next.History);
 			_matchHistory.Append(next.History);
 			_tableAwaitingSettlement = animate || _tablePublications.Count > 0;
+			MatchViewModel? before = _currentSnapshot?.View;
 			RenderSnapshot(next);
 			_snapshotRendered?.Invoke(next);
 			bool meaningful = next.History.Any(entry => !entry.Summary.Contains("passes priority", StringComparison.Ordinal));
@@ -439,10 +443,34 @@ public partial class Main
 				_tablePlaybackWait = (next.History.Any(entry => entry.Side != next.View.Viewer) ? 0.9 : 0.4) / _speed.Value;
 				foreach (Button actionButton in _tableActions.GetChildren().OfType<Button>()) actionButton.Disabled = true;
 			}
+			PlayBeats(before, next, animate);
 			// Give deferred layout/motion a frame to start, even for a status-only
 			// publication. Never let a fast worker force the viewer to skip a turn.
 			if (animate) break;
 		}
 		if (_tablePublications.Count == 0) _skipAnimation = false;
 	}
+
+	/// <summary>
+	/// Plays the publication's beats (U3) and paces playback by them. A change the
+	/// events don't explain is a snap mismatch: the board shows it by settling,
+	/// and the session diagnostics record it.
+	/// </summary>
+	private void PlayBeats(MatchViewModel? before, MatchSnapshot next, bool animate)
+	{
+		if (before is null || next.PresentationEvents.Count == 0) return;
+		_beats.ReducedMotion = _reducedMotion.ButtonPressed;
+		IReadOnlyList<Beat> beats = BeatPlanner.Plan(next.PresentationEvents, before, next.View, _gameTable.GetServerDisplayName);
+		double seconds = _beats.Play(beats, _speed.Value);
+		if (animate) _tablePlaybackWait = Math.Max(_tablePlaybackWait, seconds);
+		BoardDisplayState shown = next.PresentationEvents.Aggregate(BoardDisplayState.From(before), (state, value) => state.Apply(value));
+		IReadOnlyList<string> differences = shown.Differences(BoardDisplayState.From(next.View));
+		if (differences.Count > 0)
+		{
+			_snapMismatches += differences.Count;
+			WriteFullMatchDiagnostic("snap-mismatch", new { actionCount = next.ActionCount, differences });
+		}
+	}
+
+	private int _snapMismatches;
 }

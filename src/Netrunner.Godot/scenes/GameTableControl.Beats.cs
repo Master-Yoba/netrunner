@@ -1,0 +1,90 @@
+using Godot;
+
+namespace Netrunner.GodotClient;
+
+/// <summary>Board hooks the beat presenter uses to direct attention (UI plan U3).</summary>
+public partial class GameTableControl
+{
+	private const float UnfocusedLaneAlpha = 0.45f;
+	private string? _focusedServer;
+	private readonly Dictionary<TableCardControl, Tween> _emphasis = new();
+	private string? _emphasizedKey;
+
+	/// <summary>Dims every server lane but <paramref name="serverId"/>; null restores them all.</summary>
+	public void FocusServer(string? serverId)
+	{
+		_focusedServer = serverId;
+		ApplyServerFocus();
+	}
+
+	private void ApplyServerFocus()
+	{
+		foreach ((string id, ServerLaneParts lane) in _serverLanes)
+			lane.Panel.Modulate = lane.Panel.Modulate with
+			{
+				A = _focusedServer is null || string.Equals(id, _focusedServer, StringComparison.Ordinal) ? 1 : UnfocusedLaneAlpha,
+			};
+	}
+
+	/// <summary>Grows a card in place (an encountered ICE) until released; reduced motion only raises it.</summary>
+	public void EmphasizeCard(string? key, bool on)
+	{
+		if (key is null) return;
+		if (on && _emphasizedKey is { } previous && previous != key) EmphasizeCard(previous, false);
+		if (on) _emphasizedKey = key;
+		else if (_emphasizedKey == key) _emphasizedKey = null;
+		if (!_visibleCards.TryGetValue(key, out TableCardControl? card)) return;
+		if (_emphasis.Remove(card, out Tween? running) && running.IsValid()) running.Kill();
+		card.PivotOffset = card.Size * 0.5f;
+		card.ZIndex = on ? 30 : 0;
+		float scale = on ? 1.12f : 1f;
+		if (!MotionEnabled || Hand.ReducedMotion || MotionDuration <= 0)
+		{
+			card.Scale = Vector2.One * (on ? 1.04f : 1f);
+			return;
+		}
+		Tween tween = CreateTween();
+		tween.TweenProperty(card, "scale", Vector2.One * scale, MotionDuration).SetTrans(Tween.TransitionType.Back)
+			.SetEase(Tween.EaseType.Out);
+		_emphasis[card] = tween;
+	}
+
+	/// <summary>Returns the emphasized card, if any, to its normal size.</summary>
+	public void ReleaseEmphasis() => EmphasizeCard(_emphasizedKey, false);
+
+	/// <summary>Flashes a card's outline, for a fired subroutine, a new counter or a score.</summary>
+	public void PulseCardKey(string? key)
+	{
+		if (key is not null && _visibleCards.TryGetValue(key, out TableCardControl? card) && card.IsVisibleInTree())
+			PulseCard(card.GetGlobalRect());
+	}
+
+	/// <summary>A render rebuilds poses; keep the current focus and emphasis.</summary>
+	private void ReapplyBeatEffects()
+	{
+		ApplyServerFocus();
+		if (_emphasizedKey is { } key && _visibleCards.TryGetValue(key, out TableCardControl? card))
+		{
+			card.PivotOffset = card.Size * 0.5f;
+			card.ZIndex = 30;
+			card.Scale = Vector2.One * (!MotionEnabled || Hand.ReducedMotion ? 1.04f : 1.12f);
+		}
+	}
+
+	/// <summary>Clears every beat effect: lane focus and card emphasis.</summary>
+	public void ClearBeatEffects()
+	{
+		_emphasizedKey = null;
+		FocusServer(null);
+		foreach ((TableCardControl card, Tween tween) in _emphasis.ToArray())
+		{
+			if (tween.IsValid()) tween.Kill();
+			if (IsInstanceValid(card))
+			{
+				card.Scale = Vector2.One;
+				card.ZIndex = 0;
+			}
+		}
+		_emphasis.Clear();
+	}
+}

@@ -613,6 +613,7 @@ public partial class GameTableControl : Control
 		}
 		RefreshEncounterStrength(view);
 		ApplySelectionAndTargets();
+		ReapplyBeatEffects();
 		PresentDrawMotion(draw, view.Viewer);
 		PresentMotion(previousCards, view, previousView);
 	}
@@ -747,6 +748,10 @@ public partial class GameTableControl : Control
 	/// A face-down card keeps its tracked key for as long as it stays hidden,
 	/// so installing new ICE in front of it never re-keys (and re-animates) it.
 	/// </summary>
+	private int HiddenAdvancement(IReadOnlyList<string?> keys, int index) =>
+		index < keys.Count && keys[index] is { } key && key.StartsWith(CardKeyTracker.TrackedPrefix, StringComparison.Ordinal)
+			? _pendingView?.AdvancementByKey.GetValueOrDefault(key) ?? 0 : 0;
+
 	private static string TrackedSlot(IReadOnlyList<string?> keys, int index, string positional) =>
 		index < keys.Count && keys[index] is { } key && key.StartsWith(CardKeyTracker.TrackedPrefix, StringComparison.Ordinal)
 			? key : positional;
@@ -765,7 +770,9 @@ public partial class GameTableControl : Control
 		foreach (CardViewModel? card in server.OrderedRoot)
 		{
 			string slot = $"server:{server.Id}:root:{index}";
-			_slotAliases[slot] = EnsureCard(TrackedSlot(server.RootKeys, index, slot), rootCards, card, isIce: false, nextVisibleCards);
+			TableCardControl root = EnsureCard(TrackedSlot(server.RootKeys, index, slot), rootCards, card, isIce: false, nextVisibleCards);
+			root.HiddenAdvancement = HiddenAdvancement(server.RootKeys, index);
+			_slotAliases[slot] = root;
 			index++;
 		}
 	}
@@ -784,7 +791,11 @@ public partial class GameTableControl : Control
 			string? hostId = card?.Id ?? server.IcePositions.FirstOrDefault(position => position.Index == displayIndex)?.CardId;
 			CardViewModel[] hosted = _pendingView?.RunnerRig.Where(child => hostId is not null && child.HostCardId == hostId).ToArray() ?? [];
 			if (hosted.Length == 0)
-				_slotAliases[$"server:{server.Id}:ice:{displayIndex}"] = EnsureCard(slot, iceCards, card, isIce: true, nextVisibleCards);
+			{
+				TableCardControl ice = EnsureCard(slot, iceCards, card, isIce: true, nextVisibleCards);
+				ice.HiddenAdvancement = HiddenAdvancement(server.IceKeys, displayIndex);
+				_slotAliases[$"server:{server.Id}:ice:{displayIndex}"] = ice;
+			}
 			else
 			{
 				Control stack = new()
@@ -1232,10 +1243,12 @@ public partial class GameTableControl : Control
 			$"corpid:{CardFingerprint(view.CorpIdentity)}",
 			$"runnerid:{CardFingerprint(view.RunnerIdentity)}",
 			$"run:{RunFingerprint(view.Run)}",
+			$"advancement:{string.Join(',', view.AdvancementByKey.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => $"{pair.Key}={pair.Value}"))}",
 		};
 		foreach (ServerViewModel server in view.Servers)
 		{
-			parts.Add($"server:{server.Id}:{server.Kind}:{CardsFingerprint(server.OrderedIce)}:{CardsFingerprint(server.OrderedRoot)}");
+			parts.Add($"server:{server.Id}:{server.Kind}:{CardsFingerprint(server.OrderedIce)}:{CardsFingerprint(server.OrderedRoot)}"
+				+ $":{string.Join(',', server.IceKeys)}:{string.Join(',', server.RootKeys)}");
 		}
 
 		return string.Join("|", parts);

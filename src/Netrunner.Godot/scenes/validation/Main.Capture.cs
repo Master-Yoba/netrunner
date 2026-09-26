@@ -176,11 +176,16 @@ public partial class Main
 				localActions = actions,
 				motionFrames,
 				duplicates,
+				snapMismatches = _snapMismatches,
+				beats = _beats.Played.GroupBy(beat => beat.Kind).OrderBy(group => group.Key)
+					.ToDictionary(group => group.Key.ToString(), group => group.Count()),
+				beatCaptions = _beats.Played.Select(beat => beat.Caption).Distinct().Take(80),
 				bursts,
 			}, CaptureJson));
 			if (duplicates.Count > 0)
 				throw new InvalidOperationException($"{duplicates.Count} card(s) were on screen twice during motion: {string.Join(", ", duplicates.Take(8))}.");
-			GD.Print($"UI_CAPTURE PASS bursts={bursts.Count} local_actions={actions} motion_frames={motionFrames} duplicates=0 output={options.Output}");
+			GD.Print($"UI_CAPTURE PASS bursts={bursts.Count} local_actions={actions} motion_frames={motionFrames} duplicates=0 "
+				+ $"beats={_beats.Played.Count} beat_kinds={_beats.Played.Select(beat => beat.Kind).Distinct().Count()} snap_mismatches={_snapMismatches} output={options.Output}");
 			GetTree().Quit(0);
 		}
 		catch (Exception exception)
