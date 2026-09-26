@@ -9,7 +9,7 @@ namespace Netrunner.Cli;
 public static partial class CliCommands
 {
     /// <summary>
-    /// ai-ladder [--content developer|official] [--entrants random,contract,easy,standard]
+    /// ai-ladder [--content developer|official] [--entrants random,contract,easy-m5,standard-m5,easy,standard]
     /// [--seeds-per-pairing N] [--seed S] [--bootstrap N] [--action-cap N] [--workers 1..64]
     /// [--output new-dir] [--json]. Exit 0 when every seat separates in the expected
     /// order, 1 when it does not or a game failed, 2 for invalid arguments.
@@ -18,7 +18,7 @@ public static partial class CliCommands
     {
         bool json = args.Contains("--json", StringComparer.Ordinal);
         string content = "official";
-        string[] entrants = RatingLadder.EntrantOrder.ToArray();
+        string[] entrants = ["random", "contract", "easy", "standard"];
         int seedsPerPairing = 5;
         ulong seed = 1;
         int bootstrap = 200;

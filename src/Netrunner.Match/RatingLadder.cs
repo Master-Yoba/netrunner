@@ -36,8 +36,12 @@ public static class RatingLadder
 {
     public const int DefaultActionCap = 3000;
 
-    /// <summary>Entrants in expected strength order, weakest first.</summary>
-    public static IReadOnlyList<string> EntrantOrder { get; } = ["random", "contract", "easy", "standard"];
+    /// <summary>
+    /// Entrants in expected strength order, weakest first. "easy" and
+    /// "standard" are the latest policy versions; the "-m5" entrants are the
+    /// frozen M5 policies (Runner v1, Corp v2) for before/after comparisons.
+    /// </summary>
+    public static IReadOnlyList<string> EntrantOrder { get; } = ["random", "contract", "easy-m5", "standard-m5", "easy", "standard"];
 
     private const double EloScale = 400 / 2.302585092994046;
     private const double Ridge = 0.01;
@@ -80,6 +84,8 @@ public static class RatingLadder
             "random" => new RandomLegalAgent(AgentLifecycleHost.DerivePolicySeed(definition.Request.Seed, side)),
             "contract" => new FullGameContractAgent(new FullGameContractPolicy(side), definition.Runtime),
             "easy" or "standard" => OfflineMatchFactory.CreateOpponent(definition, other, entrant),
+            "easy-m5" or "standard-m5" => OfflineMatchFactory.CreateOpponent(definition, other, entrant[..^3],
+                side == PlayerSide.Corp ? CorpHeuristicPolicy.V2 : RunnerHeuristicPolicy.V1),
             _ => throw new ArgumentException($"Unknown ladder entrant '{entrant}'.", nameof(entrant)),
         };
     }

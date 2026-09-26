@@ -7,11 +7,13 @@ internal sealed class HeuristicContext
 {
     private readonly Dictionary<string, AgentCard> _visible;
 
-    public HeuristicContext(AgentFeatures features, ICardEvaluationCatalog catalog, OfflineAgentConfiguration configuration)
+    public HeuristicContext(AgentFeatures features, ICardEvaluationCatalog catalog, OfflineAgentConfiguration configuration,
+        int generation = 1)
     {
         Features = features;
         Catalog = catalog;
         Configuration = configuration;
+        Generation = generation;
         _visible = features.VisibleCards().Select(pair => pair.Card).Concat(features.PrivateCards.Triggers.Select(trigger => trigger.Source))
             .GroupBy(card => card.Id, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
     }
@@ -19,6 +21,9 @@ internal sealed class HeuristicContext
     public AgentFeatures Features { get; }
     public ICardEvaluationCatalog Catalog { get; }
     public OfflineAgentConfiguration Configuration { get; }
+
+    /// <summary>1 for the frozen M5 policies (Runner v1, Corp v2); 2 enables the A2 terms.</summary>
+    public int Generation { get; }
     public AgentPlayer Self => Features.Self;
     public AgentPlayer Opponent => Features.Opponent;
     public AgentCard? Card(CardInstanceId id) => _visible.GetValueOrDefault(id.Value);
@@ -80,6 +85,41 @@ internal sealed class HeuristicContext
             || server.Root.Any(card => Definition(card)?.Agenda is not null))
         .SelectMany(server => server.Ice).Where(card => card is { Rezzed: false })
         .Select(card => Definition(card)?.Printed.RezCost ?? 0).DefaultIfEmpty(0).Min();
+
+    /// <summary>Public advancement counters on a hidden installed card, or 0 when none are visible.</summary>
+    public int HiddenAdvancement(string serverId, string zone, int index) =>
+        Features.Board.HiddenAdvancements?.FirstOrDefault(entry => entry.ServerId == serverId && entry.Zone == zone && entry.Index == index)
+            ?.AdvancementCounters ?? 0;
+
+    /// <summary>
+    /// Estimated agenda points per unseen Corp card, relative to a fresh deck.
+    /// The total follows the deck-size rule (2 per 5 cards, plus 2) using only
+    /// public counts; points already scored, stolen or seen in Archives are
+    /// removed. Returns 1 for a deck at its starting density.
+    /// </summary>
+    public double AgendaDensityFactor()
+    {
+        AgentBoard board = Features.Board;
+        int hiddenRoots = board.Servers.Sum(server => server.Root.Count(card => card is null || Definition(card) is null));
+        int hidden = board.HiddenZoneCounts.CorpHand + board.HiddenZoneCounts.CorpDeck + hiddenRoots;
+        int deckSize = board.HiddenZoneCounts.CorpHand + board.HiddenZoneCounts.CorpDeck
+            + board.Servers.Sum(server => server.Root.Length + server.Ice.Length)
+            + (board.ZoneCounts?.CorpDiscard ?? board.CorpDiscard.Length) + board.CorpScore.Length + board.RunnerScore.Length;
+        if (hidden <= 0 || deckSize <= 0) return 0;
+        int total = 2 * (deckSize / 5) + 2;
+        int seen = board.Players.Corp.AgendaPoints + board.Players.Runner.AgendaPoints
+            + board.CorpDiscard.Sum(card => Definition(card)?.Agenda?.AgendaPoints ?? 0);
+        double density = Math.Max(0, total - seen) / (double)hidden;
+        return Math.Clamp(density / (total / (double)deckSize), 0.25, 2.5);
+    }
+
+    /// <summary>Score-race pressure from the opponent's points: 1 below 5, rising to 1.6 at 6 or more.</summary>
+    public double OpponentScorePressure => Opponent.AgendaPoints switch
+    {
+        >= 6 => 1.6,
+        5 => 1.3,
+        _ => 1.0,
+    };
 
     public static IEnumerable<BehaviorInstruction> Flatten(IEnumerable<BehaviorInstruction> instructions)
     {

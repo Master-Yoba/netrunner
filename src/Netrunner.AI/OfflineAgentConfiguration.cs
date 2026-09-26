@@ -14,10 +14,10 @@ public sealed record OfflineAgentConfiguration(
 
     public static OfflineAgentConfiguration Create(PlayerSide side, string policyVersion, string profileId,
         ulong policySeed, int workBudget = 10000, int nearTieTolerance = 0,
-        IEnumerable<KeyValuePair<string, int>>? parameters = null)
+        IEnumerable<KeyValuePair<string, int>>? parameters = null, string featureVersion = AgentFeatures.Version)
     {
         var frozen = (parameters ?? []).ToImmutableSortedDictionary(StringComparer.Ordinal);
-        var result = new OfflineAgentConfiguration(CurrentSchema, CurrentAgentVersion, policyVersion, AgentFeatures.Version,
+        var result = new OfflineAgentConfiguration(CurrentSchema, CurrentAgentVersion, policyVersion, featureVersion,
             side, profileId, frozen, ObservationReader.Hash(frozen), policySeed, workBudget, nearTieTolerance);
         result.Validate();
         return result;
@@ -41,7 +41,7 @@ public sealed record OfflineAgentConfiguration(
 
     public void Validate()
     {
-        if (SchemaVersion != CurrentSchema || AgentVersion != CurrentAgentVersion || FeatureVersion != AgentFeatures.Version
+        if (SchemaVersion != CurrentSchema || AgentVersion != CurrentAgentVersion || !AgentFeatures.IsSupported(FeatureVersion)
             || !Enum.IsDefined(Side) || string.IsNullOrWhiteSpace(PolicyVersion) || string.IsNullOrWhiteSpace(ProfileId)
             || Parameters is null || Parameters.Any(pair => string.IsNullOrWhiteSpace(pair.Key))
             || ParameterHash != ObservationReader.Hash(Parameters) || WorkBudget <= 0 || NearTieTolerance < 0)

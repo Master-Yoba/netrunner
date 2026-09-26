@@ -5,8 +5,25 @@ namespace Netrunner.AI;
 /// <summary>One-ply Corp utility evaluation over filtered, engine-issued choices.</summary>
 public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
 {
-    public const string PolicyVersion = "corp-heuristic-v2";
-    public string Version => PolicyVersion;
+    /// <summary>The M5 policy, kept exactly for frozen benchmarks and older saves.</summary>
+    public const string V2 = "corp-heuristic-v2";
+    /// <summary>Adds breaker-coverage protection and score-race terms (A2).</summary>
+    public const string V3 = "corp-heuristic-v3";
+    /// <summary>The version new games and new manifests use.</summary>
+    public const string PolicyVersion = V3;
+    public static IReadOnlyList<string> Versions { get; } = [V2, V3];
+
+    public CorpHeuristicPolicy() : this(PolicyVersion) { }
+
+    public CorpHeuristicPolicy(string version)
+    {
+        if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Corp policy version '{version}'.", nameof(version));
+        Version = version;
+        Generation = version == V2 ? 1 : 2;
+    }
+
+    public string Version { get; }
+    private int Generation { get; }
 
     public void ValidateAction(AgentFeatures features, AgentAction action)
     {
@@ -41,7 +58,7 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     {
         ValidateAction(features, action);
         if (!budget.TrySpend(8 + features.VisibleCards().Count() * 2)) return Fallback(features, action) with { UsedFallback = true };
-        var context = new HeuristicContext(features, catalog, configuration);
+        var context = new HeuristicContext(features, catalog, configuration, Generation);
         return action.Kind switch
         {
             ActionKind.GainCredit => Value(context.CreditValue + (context.Self.Credits < context.RezReserve ? 150 : 0), "economy/basic-credit-and-rez-reserve"),

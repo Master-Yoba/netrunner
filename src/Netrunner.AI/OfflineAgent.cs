@@ -158,7 +158,7 @@ public sealed class OfflineAgent : IAgentLifecycle
     public void DiscardDecision() { _pending = null; LastEvaluation = null; }
 
     private AgentFeatures ReadOwn(Observation observation) => observation.Viewer == ControlledSide
-        ? ObservationReader.Read(observation) : throw new ArgumentException("Observation viewer differs from controlled side.", nameof(observation));
+        ? ObservationReader.Read(observation, Configuration.FeatureVersion) : throw new ArgumentException("Observation viewer differs from controlled side.", nameof(observation));
 
     private void ValidateCheckpoint(OfflineAgentCheckpoint checkpoint)
     {

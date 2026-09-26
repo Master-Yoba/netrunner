@@ -27,6 +27,7 @@ internal static class RunnerValues
     public static int Server(HeuristicContext context, AgentServer? server)
     {
         if (server is null) return 0;
+        if (context.Generation >= 2) return ServerV2(context, server);
         int root = server.Root.Sum(card => card is null ? 190 : context.Definition(card)?.Agenda is { } agenda
             ? 500 + agenda.AgendaPoints * 180 : Trash(context, card));
         return root + (server.Kind switch
@@ -37,6 +38,41 @@ internal static class RunnerValues
                 + Math.Max(0, (context.Features.Board.ZoneCounts?.CorpDiscard ?? 0) - context.Features.Board.CorpDiscard.Length) * 70,
             _ => 0,
         });
+    }
+
+    /// <summary>
+    /// A2 server value. A face-down root card gains value from its public
+    /// advancement counters (an advanced card is usually an agenda). HQ and
+    /// R&D scale with the estimated agenda density of unseen Corp cards. Both
+    /// cues are weighted by the profile's inference scale, and everything
+    /// rises when the Corp is close to winning.
+    /// </summary>
+    private static int ServerV2(HeuristicContext context, AgentServer server)
+    {
+        double inference = context.Parameter("inference-scale", 100) / 100.0;
+        int root = 0;
+        for (int index = 0; index < server.Root.Length; index++)
+        {
+            AgentCard? card = server.Root[index];
+            int advancement = context.HiddenAdvancement(server.Id, "root", index);
+            root += card is null
+                ? 190 + (int)(inference * advancement * 200)
+                : context.Definition(card)?.Agenda is { } agenda ? 500 + agenda.AgendaPoints * 180 : Trash(context, card);
+        }
+
+        double density = 1 + inference * (context.AgendaDensityFactor() - 1);
+        int central = server.Kind switch
+        {
+            ServerKind.Headquarters => context.Features.Board.HiddenZoneCounts.CorpHand > 0 ? (int)(320 * density) : 0,
+            ServerKind.RAndD => context.Features.Board.HiddenZoneCounts.CorpDeck > 0 ? (int)(340 * density) : 0,
+            ServerKind.Archives => context.Features.Board.CorpDiscard.Sum(card => context.Definition(card)?.Agenda is { } agenda ? agenda.AgendaPoints * 220 : 0)
+                + Math.Max(0, (context.Features.Board.ZoneCounts?.CorpDiscard ?? 0) - context.Features.Board.CorpDiscard.Length) * 70,
+            _ => 0,
+        };
+        bool contested = server.Kind is ServerKind.Headquarters or ServerKind.RAndD
+            || Enumerable.Range(0, server.Root.Length).Any(index => context.HiddenAdvancement(server.Id, "root", index) > 0);
+        double pressure = contested ? context.OpponentScorePressure : 1.0;
+        return (int)((root + central) * pressure);
     }
 
     public static int Trash(HeuristicContext context, AgentCard? card)

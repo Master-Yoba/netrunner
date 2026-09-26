@@ -27,9 +27,8 @@ public sealed record DeveloperSnapshotDocument(int SchemaVersion, string Artifac
         GameState state = GameState.FromSnapshot(snapshot, behavior, runtime);
         PlayerSide side = humanSide == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp;
         ulong seed = AgentLifecycleHost.DerivePolicySeed(state.InitialSeed, side);
-        OfflineAgentConfiguration configuration = side == PlayerSide.Corp
-            ? CorpPolicyProfiles.Create("standard", seed) : RunnerPolicyProfiles.Create("standard", seed);
-        AgentFeatures features = ObservationReader.Read(ObservationBuilder.Build(state, side, behavior));
+        OfflineAgentConfiguration configuration = OfflinePolicies.Configure(side, "standard", seed);
+        AgentFeatures features = ObservationReader.Read(ObservationBuilder.Build(state, side, behavior), configuration.FeatureVersion);
         OfflineAgentCheckpoint checkpoint = OfflineAgentCheckpoint.Initial(configuration) with
         {
             ObservationCursor = state.ActionSequence,

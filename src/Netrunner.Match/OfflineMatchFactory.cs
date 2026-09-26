@@ -15,7 +15,9 @@ public static class OfflineMatchFactory
         return new FullGameContractAgent(humanSide == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp, definition.Runtime);
     }
 
-    public static OfflineAgent CreateOpponent(FullMatchDefinition definition, PlayerSide humanSide, string difficulty = "standard")
+    /// <summary>Creates the opponent; <paramref name="policyVersion"/> defaults to the latest version for that seat.</summary>
+    public static OfflineAgent CreateOpponent(FullMatchDefinition definition, PlayerSide humanSide, string difficulty = "standard",
+        string? policyVersion = null)
     {
         PlayerSide side = humanSide switch
         {
@@ -24,8 +26,8 @@ public static class OfflineMatchFactory
             _ => throw new ArgumentOutOfRangeException(nameof(humanSide)),
         };
         ulong seed = AgentLifecycleHost.DerivePolicySeed(definition.Request.Seed, side);
-        return new(side == PlayerSide.Corp ? CorpPolicyProfiles.Create(difficulty, seed) : RunnerPolicyProfiles.Create(difficulty, seed),
-            side == PlayerSide.Corp ? new CorpHeuristicPolicy() : new RunnerHeuristicPolicy(),
+        OfflineAgentConfiguration configuration = OfflinePolicies.Configure(side, difficulty, seed, policyVersion);
+        return new(configuration, OfflinePolicies.Create(configuration),
             new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior));
     }
 }

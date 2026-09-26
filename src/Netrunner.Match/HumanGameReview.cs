@@ -43,9 +43,10 @@ public static partial class HumanGameReview
         ArgumentNullException.ThrowIfNull(metadata);
         GameState state = GameState.FromSnapshot(replay.InitialSnapshot, behavior, runtime);
         ulong seed = AgentLifecycleHost.DerivePolicySeed(state.InitialSeed, reviewedSide);
+        OfflineAgentConfiguration configuration = OfflinePolicies.Configure(reviewedSide, profile, seed);
         var agent = new OfflineAgent(
-            reviewedSide == PlayerSide.Corp ? CorpPolicyProfiles.Create(profile, seed) : RunnerPolicyProfiles.Create(profile, seed),
-            reviewedSide == PlayerSide.Corp ? new CorpHeuristicPolicy() : new RunnerHeuristicPolicy(),
+            configuration,
+            OfflinePolicies.Create(configuration),
             new GatewayEvaluationCatalog(runtime, behavior),
             captureDiagnostics: true);
         AgentLifecycleHost.Observe(agent, state, behavior);
