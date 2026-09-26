@@ -47,6 +47,19 @@ public sealed partial class CorpHeuristicPolicy
             score = 260 + protection - lost;
             if (context.AgendaCount > 1) score += 40;
             if (context.Self.Credits < definition.Printed.AdvancementRequirement) score -= 120;
+            if (context.Generation >= 2)
+            {
+                // A2: an agenda the Corp can install and fully advance this
+                // turn never faces a run; an unprotected one it can't finish
+                // is an easy steal, since advancement counters are public.
+                int weight = context.Parameter("coverage-scale", 100);
+                int requirement = definition.Printed.AdvancementRequirement;
+                bool scoreableNow = context.Self.Clicks - 1 >= requirement
+                    && context.Self.Credits - install.CreditCost >= requirement;
+                bool unprotected = install.CreateNewRemote || (server?.Ice.Length ?? 0) == 0;
+                if (scoreableNow) score += 150 * weight / 100;
+                else if (unprotected) score -= 350 * weight / 100;
+            }
         }
         else if (definition.Printed.CardClass == RuntimeCardClass.Asset)
         {
