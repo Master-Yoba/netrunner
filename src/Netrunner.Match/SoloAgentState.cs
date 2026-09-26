@@ -27,9 +27,7 @@ public sealed record SoloAgentState(string Kind, string Version, PlayerSide Side
         if (Kind != "offline" || Version != OfflineAgentConfiguration.CurrentAgentVersion || Configuration is null
             || Checkpoint is null || ContractPolicy is not null || Configuration.Side != Side)
             throw new InvalidOperationException("The saved agent version or configuration is unavailable.");
-        if (Side == PlayerSide.Corp) CorpPolicyProfiles.Validate(Configuration);
-        else RunnerPolicyProfiles.Validate(Configuration);
-        return new OfflineAgent(Configuration, Side == PlayerSide.Corp ? new CorpHeuristicPolicy() : new RunnerHeuristicPolicy(),
+        return new OfflineAgent(Configuration, OfflinePolicies.Create(Configuration),
             new GatewayEvaluationCatalog(runtime, behavior), Checkpoint);
     }
 
@@ -37,7 +35,8 @@ public sealed record SoloAgentState(string Kind, string Version, PlayerSide Side
     {
         IGameAgent restored = Restore(behavior, runtime);
         if (restored is not OfflineAgent offline) return;
-        string digest = ObservationReader.Digest(ObservationReader.Read(ObservationBuilder.Build(state, Side, behavior)));
+        string digest = ObservationReader.Digest(ObservationReader.Read(ObservationBuilder.Build(state, Side, behavior),
+            offline.Configuration.FeatureVersion));
         if (offline.Checkpoint.ObservationCursor != state.ActionSequence || offline.Checkpoint.ObservationDigest != digest
             || offline.Checkpoint.LastCommit?.ActionSequence > state.ActionSequence)
             throw new InvalidOperationException("The saved policy checkpoint does not match the engine decision boundary.");

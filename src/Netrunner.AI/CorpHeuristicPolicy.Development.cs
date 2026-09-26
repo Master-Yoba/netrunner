@@ -24,15 +24,42 @@ public sealed partial class CorpHeuristicPolicy
             bool hasScoringRemote = context.Features.Board.Servers.Any(value => value.Kind == ServerKind.Remote && value.Ice.Length > 0);
             score = install.CreateNewRemote ? context.AgendaCount > 0 && !hasScoringRemote ? 350 : 20
                 : context.ServerValue(server) / ((server?.Ice.Length ?? 0) + 1);
+            if (context.Generation >= 2)
+            {
+                // A2: ICE the Runner can't break yet taxes every future run,
+                // and central ICE matters more as the Runner nears 7 points.
+                score += RunnerCovers(context, ice.IceType) ? 0 : 100 * context.Parameter("coverage-scale", 100) / 100;
+                if (server?.Kind is ServerKind.Headquarters or ServerKind.RAndD) score = (int)(score * context.OpponentScorePressure);
+            }
             score -= install.CreditCost * context.CreditValue;
             if (context.Self.Credits - install.CreditCost < ice.RezCost) score -= 200;
         }
         else if (definition.Agenda is not null)
         {
             int protection = (server?.Ice.Length ?? 0) * 110 + (server?.Root.Where(value => context.Definition(value)?.Printed.CardClass == RuntimeCardClass.Upgrade).Count() ?? 0) * 170;
+            if (context.Generation >= 2 && server is not null)
+            {
+                // A2: ICE the Runner's breakers already cover protects less.
+                int coverage = context.Parameter("coverage-scale", 100);
+                protection += server.Ice.Sum(value => context.Definition(value)?.Ice is { } protecting
+                    ? (RunnerCovers(context, protecting.IceType) ? -50 : 50) * coverage / 100 : 0);
+            }
             score = 260 + protection - lost;
             if (context.AgendaCount > 1) score += 40;
             if (context.Self.Credits < definition.Printed.AdvancementRequirement) score -= 120;
+            if (context.Generation >= 2)
+            {
+                // A2: an agenda the Corp can install and fully advance this
+                // turn never faces a run; an unprotected one it can't finish
+                // is an easy steal, since advancement counters are public.
+                int weight = context.Parameter("coverage-scale", 100);
+                int requirement = definition.Printed.AdvancementRequirement;
+                bool scoreableNow = context.Self.Clicks - 1 >= requirement
+                    && context.Self.Credits - install.CreditCost >= requirement;
+                bool unprotected = install.CreateNewRemote || (server?.Ice.Length ?? 0) == 0;
+                if (scoreableNow) score += 150 * weight / 100;
+                else if (unprotected) score -= 350 * weight / 100;
+            }
         }
         else if (definition.Printed.CardClass == RuntimeCardClass.Asset)
         {
@@ -46,6 +73,11 @@ public sealed partial class CorpHeuristicPolicy
                 + (server?.Root.Count(value => value is { Rezzed: true } && context.Definition(value)?.Printed.CardClass == RuntimeCardClass.Upgrade) ?? 0) * 60;
         return Value(score, "development/destination-minus-replacement-value", approximate: true, objective: new("install", null, null, install.CardId.Value));
     }
+
+    /// <summary>True when an installed Runner breaker can interface with ICE of this type.</summary>
+    private static bool RunnerCovers(HeuristicContext context, IceType iceType) =>
+        context.Features.Board.RunnerRig.Any(card => context.Definition(card)?.Icebreaker is { } breaker
+            && (breaker.InterfaceType == IceType.Any || breaker.InterfaceType == iceType));
 
     private static AgentUtility Score(HeuristicContext context, ScoreAgendaParameters score) =>
         new(context.Self.AgendaPoints + score.AgendaPoints >= 7 ? 100 : 30, score.AgendaPoints * 100, "score/available-points");

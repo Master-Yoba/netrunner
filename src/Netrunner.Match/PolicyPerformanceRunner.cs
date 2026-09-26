@@ -66,8 +66,8 @@ public static class PolicyPerformanceRunner
         public IGameAgent Create(BenchmarkAgentSpec specification, IRuntimeCardCatalog runtime, ICardEvaluationCatalog evaluation)
         {
             Validate(specification);
-            var agent = new OfflineAgent(specification.Configuration!, specification.Side == PlayerSide.Corp
-                ? new CorpHeuristicPolicy() : new RunnerHeuristicPolicy(), evaluation, captureDiagnostics: false);
+            var agent = new OfflineAgent(specification.Configuration!, OfflinePolicies.Create(specification.Configuration!),
+                evaluation, captureDiagnostics: false);
             return new TimedAgent(agent, samples);
         }
     }

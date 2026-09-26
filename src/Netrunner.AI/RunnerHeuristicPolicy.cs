@@ -5,8 +5,25 @@ namespace Netrunner.AI;
 
 public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
 {
-    public const string PolicyVersion = "runner-heuristic-v1";
-    public string Version => PolicyVersion;
+    /// <summary>The M5 policy, kept exactly for frozen benchmarks and older saves.</summary>
+    public const string V1 = "runner-heuristic-v1";
+    /// <summary>Adds advancement inference, agenda density and score-race terms (A2).</summary>
+    public const string V2 = "runner-heuristic-v2";
+    /// <summary>The version new games and new manifests use.</summary>
+    public const string PolicyVersion = V2;
+    public static IReadOnlyList<string> Versions { get; } = [V1, V2];
+
+    public RunnerHeuristicPolicy() : this(PolicyVersion) { }
+
+    public RunnerHeuristicPolicy(string version)
+    {
+        if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Runner policy version '{version}'.", nameof(version));
+        Version = version;
+        Generation = version == V1 ? 1 : 2;
+    }
+
+    public string Version { get; }
+    private int Generation { get; }
 
     public void ValidateAction(AgentFeatures features, AgentAction action)
     {
@@ -43,7 +60,7 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     {
         AgentAction[] preferred = IssuedRunPaymentPreference.Select(features.Actions, action => (action.Id, action.Kind, action.Parameters)).ToArray();
         var preferredIds = preferred.Select(action => action.Id).ToHashSet();
-        var context = new HeuristicContext(features with { Actions = preferred.ToImmutableArray() }, catalog, configuration);
+        var context = new HeuristicContext(features with { Actions = preferred.ToImmutableArray() }, catalog, configuration, Generation);
         IReadOnlyDictionary<ActionId, AgentUtility> encounter = RunnerEncounterPlanner.Evaluate(context, budget);
         return features.Actions.Select(action => new AgentCandidate(action.Id,
             !preferredIds.Contains(action.Id) ? new(int.MinValue, 0, "payment/prefer-expiring-run-credits")

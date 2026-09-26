@@ -9,6 +9,10 @@ public sealed record AgentFeatures(PlayerSide Side, AgentDecision? Decision,
     ImmutableArray<AgentAction> Actions, AgentBoard Board, AgentPrivateCards PrivateCards)
 {
     public const string Version = "agent-features-v2";
+    /// <summary>Adds public advancement counters on hidden installed cards.</summary>
+    public const string VersionWithHiddenAdvancements = "agent-features-v3";
+
+    public static bool IsSupported(string? version) => version is Version or VersionWithHiddenAdvancements;
     public AgentPlayer Self => Side == PlayerSide.Corp ? Board.Players.Corp : Board.Players.Runner;
     public AgentPlayer Opponent => Side == PlayerSide.Corp ? Board.Players.Runner : Board.Players.Corp;
     public ImmutableArray<AgentCard> Hand => Side == PlayerSide.Corp ? PrivateCards.Hand : PrivateCards.Grip;
@@ -69,7 +73,17 @@ public sealed record AgentBoard
     public AgentDamage? PendingDamage { get; init; }
     public ImmutableArray<AgentValueQuote> ConditionalValues { get; init; } = [];
     public ImmutableArray<AgentIcePosition> IcePositions { get; init; } = [];
+
+    /// <summary>
+    /// Public advancement counters on installed cards hidden from the viewer,
+    /// by position only. Null for feature version v2, and omitted from the
+    /// digest when null, so v2 digests are unchanged.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ImmutableArray<AgentHiddenAdvancement>? HiddenAdvancements { get; init; }
 }
+
+public sealed record AgentHiddenAdvancement(string ServerId, string Zone, int Index, int AdvancementCounters);
 
 public sealed record AgentPrivateCards
 {

@@ -38,3 +38,4 @@ Thumbs.db
 
 # Local reference video contains third-party card artwork.
 /reference hand.mov
+__pycache__/

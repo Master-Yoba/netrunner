@@ -9,9 +9,13 @@ namespace Netrunner.AI;
 
 public static class ObservationReader
 {
-    public static AgentFeatures Read(Observation observation)
+    public static AgentFeatures Read(Observation observation) => Read(observation, AgentFeatures.Version);
+
+    /// <summary>Reads the features defined by <paramref name="featureVersion"/>; newer fields stay null for older versions.</summary>
+    public static AgentFeatures Read(Observation observation, string featureVersion)
     {
         ArgumentNullException.ThrowIfNull(observation);
+        if (!AgentFeatures.IsSupported(featureVersion)) throw new ArgumentException("Unsupported feature version.", nameof(featureVersion));
         if (!Enum.IsDefined(observation.Viewer)) throw new ArgumentException("Invalid viewer.", nameof(observation));
         ObservationDecision? decision = observation.Decision;
         if ((decision is null && observation.LegalActions.Count > 0)
@@ -22,6 +26,9 @@ public static class ObservationReader
         // The same serializer handles native enums/dictionaries and JsonElement
         // values. The allowlisted records discard prose and unrecognized fields.
         AgentBoard board = Decode<AgentBoard>(observation.PublicState);
+        board = featureVersion == AgentFeatures.VersionWithHiddenAdvancements
+            ? board with { HiddenAdvancements = board.HiddenAdvancements ?? [] }
+            : board with { HiddenAdvancements = null };
         AgentPrivateCards cards = Decode<AgentPrivateCards>(observation.PrivateState);
         if (board.Players is null || board.Players.Corp is null || board.Players.Runner is null || board.Turn is null
             || board.Turn.TurnNumber < 0 || !Enum.IsDefined(board.Turn.ActiveSide)

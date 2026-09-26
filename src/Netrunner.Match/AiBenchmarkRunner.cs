@@ -159,7 +159,8 @@ public sealed class AiBenchmarkRunner
                 PlayerSide side = state.GetPlayer(pending.Owner).Side;
                 IGameAgent agent = side == PlayerSide.Corp ? corp : runner;
                 Observation observation = ObservationBuilder.Build(state, side, _behavior);
-                string digest = ObservationReader.Digest(ObservationReader.Read(observation));
+                string digest = ObservationReader.Digest(ObservationReader.Read(observation,
+                    agent is OfflineAgent reader ? reader.Configuration.FeatureVersion : AgentFeatures.Version));
                 string? checkpoint = agent is OfflineAgent offline ? BenchmarkHash.Value(offline.Checkpoint) : null;
                 var timer = Stopwatch.StartNew();
                 // The task boundary also bounds a synchronously blocking agent.

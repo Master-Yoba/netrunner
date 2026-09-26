@@ -157,6 +157,16 @@ public static partial class ObservationBuilder
             ["runnerScore"] = ZoneCards(state, ZoneKind.RunnerScore).Select(card => CardView(state, card)).ToArray(),
         };
 
+        // Advancement counters are public even on cards the viewer cannot see.
+        // Server views project hidden cards as null, so list the counters by
+        // position only, never by card ID. Added only when present, so
+        // observations without hidden advanced cards keep their exact shape.
+        List<Dictionary<string, object?>> hiddenAdvancements = HiddenAdvancements(state, viewer, accessVisible);
+        if (hiddenAdvancements.Count > 0)
+        {
+            publicState["hiddenAdvancements"] = hiddenAdvancements;
+        }
+
         // Full observations carry public totals for zones whose visible card
         // projection may omit facedown cards. Keep this additive so the
         // canonical M1 observation shape remains unchanged, and expose only
@@ -342,6 +352,36 @@ public static partial class ObservationBuilder
         IReadOnlySet<CardInstanceId> accessVisible) =>
         state.Cards.FirstOrDefault(card => card.Id == cardId) is { } card
         && IsVisibleTo(card, state.GetZone(card.ZoneId), viewer, accessVisible);
+
+    private static List<Dictionary<string, object?>> HiddenAdvancements(
+        GameState state,
+        PlayerSide viewer,
+        IReadOnlySet<CardInstanceId> accessVisible)
+    {
+        var result = new List<Dictionary<string, object?>>();
+        foreach (ServerState server in state.Servers.Where(server => server.Exists))
+        {
+            foreach ((ZoneId zoneId, string zoneName) in new[] { (server.IceZoneId, "ice"), (server.RootZoneId, "root") })
+            {
+                ZoneState zone = state.GetZone(zoneId);
+                for (int index = 0; index < zone.CardIds.Count; index++)
+                {
+                    CardInstanceState card = state.GetCard(zone.CardIds[index]);
+                    if (card.AdvancementCounters > 0 && !IsVisibleTo(card, zone, viewer, accessVisible))
+                    {
+                        result.Add(new Dictionary<string, object?>
+                        {
+                            ["serverId"] = server.Id.Value,
+                            ["zone"] = zoneName,
+                            ["index"] = index,
+                            ["advancementCounters"] = card.AdvancementCounters,
+                        });
+                    }
+                }
+            }
+        }
+        return result;
+    }
 
     private static Dictionary<string, object?> ServerView(GameState state, ServerState server, PlayerSide viewer, IReadOnlySet<CardInstanceId> accessVisible)
     {
