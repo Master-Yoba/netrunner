@@ -17,7 +17,7 @@ if [[ ! -x "$package_output" ]]; then
 fi
 
 XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
-  timeout 15 "$package_output" --headless -- --smoke-test
+  timeout "$(netrunner_scaled_seconds 15)" "$package_output" --headless -- --smoke-test
 
 echo "Linux package verified at $package_output"
 

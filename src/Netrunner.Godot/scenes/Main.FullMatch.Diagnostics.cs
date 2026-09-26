@@ -463,7 +463,7 @@ public partial class Main
 		MatchSnapshot? snapshot = null;
 		try
 		{
-			snapshot = await _coordinator!.StartAsync().WaitAsync(TimeSpan.FromSeconds(30));
+			snapshot = await _coordinator!.StartAsync().WaitAsync(WallTimeLimits.Seconds(30));
 			if (!await AwaitRenderedSequenceAsync(snapshot.Sequence, 240))
 			{
 				throw new TimeoutException("Recovered snapshot did not render.");

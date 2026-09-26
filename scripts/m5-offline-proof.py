@@ -33,18 +33,30 @@ def policy(denied=()):
         f"(deny file-read* file-write* (subpath {json.dumps(str(path))}))\n" for path in denied)
 
 
+def scaled(seconds):
+    """Scale a wall-time limit by NETRUNNER_TIMEOUT_SCALE (1 to 20, default 1)."""
+    try:
+        scale = float(os.environ.get("NETRUNNER_TIMEOUT_SCALE", "1"))
+    except ValueError:
+        scale = 1.0
+    return seconds * (scale if 1 <= scale <= 20 else 1.0)
+
+
 def run(command, output, name, environment, sandbox, timeout=600):
     log = output / f"{name}.log"
     with log.open("w") as stream:
         completed = subprocess.run(["/usr/bin/sandbox-exec", "-p", sandbox, *command],
-                                   cwd=output, env=environment, stdout=stream, stderr=subprocess.STDOUT, timeout=timeout)
+                                   cwd=output, env=environment, stdout=stream, stderr=subprocess.STDOUT, timeout=scaled(timeout))
     require(completed.returncode == 0, f"{name} failed ({completed.returncode}); see {log}")
     return log
 
 
 def isolated_environment():
+    # Strip Netrunner settings, except the wall-time scale: the packaged client
+    # must apply the same scaled limits as the outer subprocess deadline.
     environment = {key: value for key, value in os.environ.items()
-                   if not key.startswith("NETRUNNER_") and key not in ("DOTNET_ROOT", "XDG_DATA_HOME")}
+                   if (not key.startswith("NETRUNNER_") or key == "NETRUNNER_TIMEOUT_SCALE")
+                   and key not in ("DOTNET_ROOT", "XDG_DATA_HOME")}
     environment["DOTNET_EnableDiagnostics"] = "0"
     return environment
 

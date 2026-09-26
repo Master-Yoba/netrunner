@@ -76,6 +76,11 @@ two-resolution accessibility checks. `make verify` also supports synthetic CI
 without that snapshot and explicitly reports that the official M4 gate was not
 run.
 
+Smoke and gate wall-time limits are tuned to the reference hardware. On a
+slower machine, set `NETRUNNER_TIMEOUT_SCALE` (1 to 20, default 1) to stretch
+every "give up after" limit, for example `NETRUNNER_TIMEOUT_SCALE=4 make
+m4-gate`. It never changes game behavior or performance budgets.
+
 The toy agents can prove each M1 win path directly:
 
 ```bash
