@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     env:
+      NETRUNNER_TIMEOUT_SCALE: 3
       DOTNET_CLI_TELEMETRY_OPTOUT: 1
       DOTNET_NOLOGO: 1
       NUGET_XMLDOC_MODE: skip
