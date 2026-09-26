@@ -57,6 +57,11 @@ public static partial class CliCommands
             return RunFuzz(args, output, error);
         }
 
+        if (args.Length > 0 && args[0] == "engine-bench")
+        {
+            return RunEngineBench(args, output, error);
+        }
+
         if (args.Length > 0 && args[0] == "ai-ladder")
         {
             return RunAiLadder(args, output, error);
@@ -186,7 +191,8 @@ public static partial class CliCommands
             + "ai-tactics init [--corp-profile standard|easy | --runner-profile standard|easy] --output <new manifest> [--json] | "
             + "ai-tactics <manifest> --output <new directory> [--workers 1..64] [--verify-fixtures] [--json] | "
             + "fuzz [--games 1..100000] [--seed <unsigned-integer>] [--content developer|official] [--action-cap N] "
-            + "[--workers 1..64] [--output <new directory>] [--json] | "
+            + "[--workers 1..64] [--differential] [--output <new directory>] [--json] | "
+            + "engine-bench [--content developer|official] [--games N] [--seed <unsigned-integer>] [--json] | "
             + "ai-ladder [--content developer|official] [--entrants random,contract,easy,standard] [--seeds-per-pairing N] "
             + "[--seed <unsigned-integer>] [--bootstrap N] [--action-cap N] [--workers 1..64] [--output <new directory>] [--json] | "
             + "ai-review <session-directory> [--profile standard|easy] [--all] [--output <new file>] [--json] | "
