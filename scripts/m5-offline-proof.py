@@ -52,8 +52,11 @@ def run(command, output, name, environment, sandbox, timeout=600):
 
 
 def isolated_environment():
+    # Strip Netrunner settings, except the wall-time scale: the packaged client
+    # must apply the same scaled limits as the outer subprocess deadline.
     environment = {key: value for key, value in os.environ.items()
-                   if not key.startswith("NETRUNNER_") and key not in ("DOTNET_ROOT", "XDG_DATA_HOME")}
+                   if (not key.startswith("NETRUNNER_") or key == "NETRUNNER_TIMEOUT_SCALE")
+                   and key not in ("DOTNET_ROOT", "XDG_DATA_HOME")}
     environment["DOTNET_EnableDiagnostics"] = "0"
     return environment
 

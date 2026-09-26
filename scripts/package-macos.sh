@@ -90,7 +90,8 @@ fi
 # macOS does not ship GNU timeout. Keep the smoke bounded without requiring a
 # package-manager dependency; the timer is cancelled when the app exits.
 run_with_timeout() {
-  local limit_seconds="$1"
+  local limit_seconds
+  limit_seconds="$(netrunner_scaled_seconds "$1")"
   shift
   "$@" &
   local command_pid=$!
