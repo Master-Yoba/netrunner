@@ -56,7 +56,7 @@ public sealed class BeatPlannerTests
             Assert.False(string.IsNullOrWhiteSpace(beat.Caption));
             Assert.DoesNotContain("card:", beat.Caption, StringComparison.Ordinal);
             Assert.DoesNotContain(CardKeyTracker.TrackedPrefix, beat.Caption, StringComparison.Ordinal);
-            Assert.InRange(beat.Seconds, 0.1, 1.5);
+            Assert.InRange(beat.Seconds, 0.7, 1.6);
         });
         Assert.Contains(beats, beat => beat is { Kind: PresentationEventKind.RunEnded, Hold: true });
         Assert.Contains(beats, beat => beat.Kind == PresentationEventKind.SubroutineFired && beat.Emphasis == BeatEmphasis.High);
@@ -79,6 +79,22 @@ public sealed class BeatPlannerTests
 
         Assert.Equal("Corp advances a face-down card · 2 counters", beat.Caption);
         Assert.Equal(2, state.Advancement["tracked:4"]);
+    }
+
+    [Fact]
+    public void OneActionShowsOnlyTheStepThatMatters()
+    {
+        MatchViewModel view = ObservationViewMapper.FromObservation(ObservationBuilder.Build(GameState.CreateNew(3), PlayerSide.Runner));
+        PresentationEvent[] events =
+        [
+            new(PresentationEventKind.IceApproached, PlayerSide.Runner) { CardKey = "tracked:1" },
+            new(PresentationEventKind.EncounterStarted, PlayerSide.Runner) { CardKey = "tracked:1", Total = 2 },
+            new(PresentationEventKind.ServerApproached, PlayerSide.Runner) { ServerId = "server:1" },
+            new(PresentationEventKind.RunSuccessful, PlayerSide.Runner) { ServerId = "server:1" },
+        ];
+
+        Assert.Equal([PresentationEventKind.EncounterStarted, PresentationEventKind.RunSuccessful],
+            BeatPlanner.Plan(events, view, view, _ => "R&D").Select(beat => beat.Kind));
     }
 
     private static bool Official => CardDataResource.EmbeddedMode == CardDataResource.OfficialMode;

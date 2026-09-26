@@ -76,28 +76,41 @@ public partial class BeatPresenter : Control
 	{
 		_queue.Clear();
 		_remaining = 0;
+		_linger = 0;
 		if (_banner is not null) _banner.Visible = false;
 		Board.ClearBeatEffects();
 	}
 
+	/// <summary>How long the last caption stays up after its beat, so it can be read while the player decides.</summary>
+	private const double LingerSeconds = 2.0;
+	private double _linger;
+
 	public override void _Process(double delta)
 	{
-		if (_remaining <= 0) return;
-		_remaining -= delta;
-		if (_remaining <= 0) Next();
+		if (_remaining > 0)
+		{
+			_remaining -= delta;
+			if (_remaining <= 0) Next();
+			return;
+		}
+		if (_linger <= 0) return;
+		_linger -= delta;
+		if (_linger <= 0) _banner.Visible = false;
 	}
 
+	// Reduced motion removes movement, not reading time.
 	private double Length(Beat beat, double speed) =>
-		(ReducedMotion ? Math.Min(beat.Seconds, 0.35) : beat.Seconds + (beat.Hold ? 0.35 : 0)) / Math.Max(0.1, speed);
+		(beat.Seconds + (beat.Hold && !ReducedMotion ? 0.6 : 0)) / Math.Max(0.1, speed);
 
 	private void Next()
 	{
 		if (!_queue.TryDequeue(out Beat? beat))
 		{
 			_remaining = 0;
-			_banner.Visible = false;
+			_linger = LingerSeconds / Math.Max(0.1, _speed);
 			return;
 		}
+		_linger = 0;
 		_remaining = Length(beat, _speed);
 		Played.Add((beat.Kind, beat.Caption));
 		Show(beat);
