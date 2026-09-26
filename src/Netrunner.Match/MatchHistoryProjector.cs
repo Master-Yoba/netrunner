@@ -33,8 +33,12 @@ internal sealed class MatchHistoryProjector
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
         var mentioned = new Dictionary<string, CardViewModel>(StringComparer.Ordinal);
         var details = new List<string>();
+        // The side each detail describes, parallel to details. History groups
+        // entries by subject, not by the side whose action caused the events.
+        var detailSubjects = new List<PlayerSide?>();
         var moves = new List<string>();
         string? summary = null;
+        PlayerSide? summarySubject = null;
         bool installed = events.Any(e => e.Payload is CardInstalledEventPayload);
         foreach (EngineEvent entry in events)
         {
@@ -46,19 +50,19 @@ internal sealed class MatchHistoryProjector
                     // actor may be Runner when a run/ability causes an
                     // automatic Corp rez, so do not attribute this fact to
                     // the submitted action owner.
-                    summary = $"{PlayerSide.Corp} rezzes {Name(rez.CardId.Value)}, paying {rez.CreditCost} credits.";
+                    Summary($"{PlayerSide.Corp} rezzes {Name(rez.CardId.Value)}, paying {rez.CreditCost} credits.", PlayerSide.Corp);
                     break;
                 case IceRezzedEventPayload rez:
                     Reveal(rez.IceId.Value);
-                    summary = $"{PlayerSide.Corp} rezzes {Name(rez.IceId.Value)}.";
+                    Summary($"{PlayerSide.Corp} rezzes {Name(rez.IceId.Value)}.", PlayerSide.Corp);
                     break;
                 case CardAccessedEventPayload access:
                     Reveal(access.CardId.Value);
-                    summary = $"Runner accesses {Name(access.CardId.Value)}.";
+                    Summary($"Runner accesses {Name(access.CardId.Value)}.", PlayerSide.Runner);
                     break;
                 case CardPlayStartedEventPayload play:
                     Reveal(play.CardId.Value);
-                    summary = $"{play.Side} plays {Name(play.CardId.Value)}, paying {play.Cost} credits.";
+                    Summary($"{play.Side} plays {Name(play.CardId.Value)}, paying {play.Cost} credits.", play.Side);
                     break;
                 case CardMovedEventPayload move:
                     ZoneKind? destinationKind = ZoneKindFor(move.ToZoneId, move.ToZoneKind);
@@ -77,110 +81,133 @@ internal sealed class MatchHistoryProjector
                     // Runner installs become public; Corp installs do not reveal their identity.
                     if (install.Side == PlayerSide.Runner) Reveal(install.CardId.Value);
                     string where = ZoneName(install.ToZoneId);
-                    summary = $"{install.Side} installs {Name(install.CardId.Value)} in {where}.";
+                    Summary($"{install.Side} installs {Name(install.CardId.Value)} in {where}.", install.Side);
                     if (moves.Count > 0)
-                        summary = $"{install.Side} replaces a card in {where}: {string.Join("; ", moves)}; installs {Name(install.CardId.Value)}.";
+                        Summary($"{install.Side} replaces a card in {where}: {string.Join("; ", moves)}; installs {Name(install.CardId.Value)}.", install.Side);
                     break;
                 case CardDerezzedEventPayload derez:
-                    details.Add($"{Name(derez.CardId.Value)} is derezzed.");
+                    Detail($"{Name(derez.CardId.Value)} is derezzed.", PlayerSide.Corp);
                     break;
                 case HostedCreditPoolChangedEventPayload pool when known.ContainsKey(pool.CardId.Value):
-                    details.Add($"{Name(pool.CardId.Value)}: {pool.CountAfter} hosted credits remaining.");
+                    Detail($"{Name(pool.CardId.Value)}: {pool.CountAfter} hosted credits remaining.", null);
                     break;
                 case IceApproachedEventPayload approach:
-                    details.Add($"Runner approaches {Name(approach.IceId.Value)}.");
+                    Detail($"Runner approaches {Name(approach.IceId.Value)}.", PlayerSide.Runner);
                     break;
                 case SubroutinesBrokenEventPayload broken:
-                    details.Add($"Runner breaks {broken.BrokenCount} subroutine(s) with {Name(broken.BreakerId.Value)}.");
+                    Detail($"Runner breaks {broken.BrokenCount} subroutine(s) with {Name(broken.BreakerId.Value)}.", PlayerSide.Runner);
                     break;
                 case RunInitiatedEventPayload run:
-                    summary = $"{run.InitiatingSide} runs {ServerName(run.ServerId.Value)}.";
+                    Summary($"{run.InitiatingSide} runs {ServerName(run.ServerId.Value)}.", run.InitiatingSide);
                     break;
                 case RunEndedEventPayload run:
-                    details.Add($"Run ends: {Words(run.Reason.ToString())}.");
+                    Detail($"Run ends: {Words(run.Reason.ToString())}.", PlayerSide.Runner);
                     break;
                 case TurnStartedEventPayload turn:
-                    details.Add($"{turn.ActiveSide} turn {turn.TurnNumber} begins.");
+                    Detail($"{turn.ActiveSide} turn {turn.TurnNumber} begins.", turn.ActiveSide);
                     break;
                 case TurnEndedEventPayload turn:
-                    details.Add($"{turn.Side} turn {turn.TurnNumber} ends.");
+                    Detail($"{turn.Side} turn {turn.TurnNumber} ends.", turn.Side);
                     break;
                 case TurnClicksAllottedEventPayload clicks:
-                    details.Add($"{clicks.Side} receives {clicks.Clicks} clicks.");
+                    Detail($"{clicks.Side} receives {clicks.Clicks} clicks.", clicks.Side);
                     break;
                 case TurnPhaseStartedEventPayload phase:
-                    details.Add($"{phase.Side} begins {Words(phase.Step.ToString())}.");
+                    Detail($"{phase.Side} begins {Words(phase.Step.ToString())}.", phase.Side);
                     break;
                 case TurnPhaseEndedEventPayload phase:
-                    details.Add($"{phase.Side} ends {Words(phase.Step.ToString())}.");
+                    Detail($"{phase.Side} ends {Words(phase.Step.ToString())}.", phase.Side);
                     break;
                 case TurnClicksLostEventPayload lost when lost.ClicksLost > 0:
-                    details.Add($"{lost.Side} loses {lost.ClicksLost} click(s).");
+                    Detail($"{lost.Side} loses {lost.ClicksLost} click(s).", lost.Side);
                     break;
                 case AgendaScoredEventPayload score:
                     Reveal(score.AgendaId.Value);
-                    summary = $"Corp scores {Name(score.AgendaId.Value)}.";
+                    Summary($"Corp scores {Name(score.AgendaId.Value)}.", PlayerSide.Corp);
                     break;
                 case AgendaStolenEventPayload steal:
                     Reveal(steal.AgendaId.Value);
-                    summary = $"Runner steals {Name(steal.AgendaId.Value)}.";
+                    Summary($"Runner steals {Name(steal.AgendaId.Value)}.", PlayerSide.Runner);
                     break;
                 case ClickSpentEventPayload click:
-                    details.Add($"{click.Side} spends a click; {click.ClicksRemaining} remaining.");
+                    Detail($"{click.Side} spends a click; {click.ClicksRemaining} remaining.", click.Side);
                     break;
                 case CardDrawnEventPayload drawn:
-                    details.Add($"{drawn.Side} draws a card.");
+                    Detail($"{drawn.Side} draws a card.", drawn.Side);
                     break;
                 case TurnCardDiscardedEventPayload discarded:
                     // The discard is observable, but the physical card may
                     // remain hidden from this viewer. Name only an identity
                     // already admitted to the viewer-scoped cache.
-                    details.Add($"{discarded.Side} discards {Name(discarded.CardId.Value)}.");
+                    Detail($"{discarded.Side} discards {Name(discarded.CardId.Value)}.", discarded.Side);
                     break;
                 case AccessedCardTrashedEventPayload trashed:
                     Reveal(trashed.CardId.Value);
-                    details.Add($"Runner trashes {Name(trashed.CardId.Value)} from access, paying {trashed.TrashCost} credits.");
+                    Detail($"Runner trashes {Name(trashed.CardId.Value)} from access, paying {trashed.TrashCost} credits.", PlayerSide.Runner);
                     break;
                 case BehaviorCardsShuffledEventPayload shuffled:
                     // The typed event is identity-free public evidence. Keep
                     // the history wording free of card IDs and the payload's
                     // count, which is not needed to explain the action.
-                    details.Add(ShuffleSummary(shuffled.DestinationZoneId));
+                    Detail(ShuffleSummary(shuffled.DestinationZoneId), ShuffleSubject(shuffled.DestinationZoneId));
                     break;
                 case CreditsAdjustedEventPayload credits:
                     PlayerSide side = state.GetPlayer(credits.Target).Side;
-                    details.Add($"{side}: {(credits.Delta >= 0 ? "+" : "")}{credits.Delta} credits ({credits.CreditsAfter} total).");
+                    Detail(credits.Delta >= 0
+                        ? $"{side} gains {credits.Delta} {Credits(credits.Delta)} ({credits.CreditsAfter} total)."
+                        : $"{side} loses {-credits.Delta} {Credits(-credits.Delta)} ({credits.CreditsAfter} total).", side);
                     break;
                 case DamageDealtEventPayload damage:
-                    details.Add($"Damage: {damage.Amount} {Words(damage.Kind.ToString())}.");
+                    Detail($"Runner takes {damage.Amount} {Words(damage.Kind.ToString())} damage.", PlayerSide.Runner);
                     break;
                 case ServerApproachedEventPayload approached:
-                    details.Add($"Runner reaches {ServerName(approached.ServerId.Value)}.");
+                    Detail($"Runner reaches {ServerName(approached.ServerId.Value)}.", PlayerSide.Runner);
                     break;
                 case RunMovedEventPayload moved:
-                    details.Add("Runner advances through the run.");
+                    Detail("Runner advances through the run.", PlayerSide.Runner);
                     break;
                 case RunSuccessfulEventPayload successful:
-                    summary = $"Runner completes a successful run on {ServerName(successful.ServerId.Value)}.";
+                    Summary($"Runner completes a successful run on {ServerName(successful.ServerId.Value)}.", PlayerSide.Runner);
                     break;
             }
         }
-        if (!installed) details.AddRange(moves);
+        if (!installed)
+        {
+            foreach (string move in moves) Detail(move, null);
+        }
         if (summary is null && events.Count == 0 && kind == ActionKind.InstallCard)
             return Array.Empty<MatchHistoryEntry>(); // Nested staging did not install anything.
-        summary ??= kind switch
+        if (summary is null)
         {
-            ActionKind.PassPriority => $"{actor} passes priority.",
-            ActionKind.GainCredit => $"{actor} spends a click to gain a credit.",
-            ActionKind.DrawCard => $"{actor} spends a click to draw a card.",
-            ActionKind.NoAccessAction => ContinueAccessSummary(),
-            ActionKind.UseAbility when action.Parameters is AbilityActionParameters ability => $"{actor} uses {Name(ability.SourceCardId.Value)}.",
-            ActionKind.EndTurn => $"{actor} ends their turn.",
-            ActionKind.ChooseNumber when before.Turn.Phase == TurnPhase.Setup => $"{actor} resolves their opening-hand choice.",
-            _ => $"{actor}: {Words(kind.ToString())}.",
-        };
-        if (after.Outcome.IsTerminal)
-            details.Add($"Match complete: {after.Outcome.Winner} wins ({after.Outcome.Reason}).");
+            summarySubject = actor;
+            summary = kind switch
+            {
+                ActionKind.PassPriority => $"{actor} passes priority.",
+                ActionKind.GainCredit => $"{actor} spends a click to gain a credit.",
+                ActionKind.DrawCard => $"{actor} spends a click to draw a card.",
+                ActionKind.NoAccessAction => ContinueAccessSummary(),
+                ActionKind.UseAbility when action.Parameters is AbilityActionParameters ability => $"{actor} uses {Name(ability.SourceCardId.Value)}.",
+                ActionKind.EndTurn => $"{actor} ends their turn.",
+                ActionKind.ChooseNumber when before.Turn.Phase == TurnPhase.Setup => $"{actor} resolves their opening-hand choice.",
+                ActionKind.AdvanceCard or ActionKind.AdvanceAgenda when action.Parameters is AdvanceCardParameters advance
+                    => AdvanceSummary(advance.CardId.Value),
+                ActionKind.PumpBreaker when action.Parameters is RunBreakerParameters pump => $"{actor} boosts {Name(pump.BreakerId.Value)}.",
+                ActionKind.TrashTaggedResource when action.Parameters is TrashTaggedResourceParameters trash
+                    => $"{actor} trashes {Name(trash.CardId.Value)}.",
+                ActionKind.JackOut => $"{actor} jacks out.",
+                ActionKind.ContinueRun => $"{actor} continues the run.",
+                ActionKind.RemoveTag => $"{actor} removes a tag.",
+                ActionKind.PurgeVirusCounters => $"{actor} purges virus counters.",
+                ActionKind.UseTrigger => $"{actor} uses an optional effect.",
+                ActionKind.DeclineTrigger => $"{actor} declines an optional effect.",
+                ActionKind.OrderTriggers => $"{actor} orders simultaneous effects.",
+                ActionKind.ChooseBreachCandidate => $"{actor} chooses the next card to access.",
+                ActionKind.ChooseCard or ActionKind.ChooseBehavior or ActionKind.ChooseNumber => $"{actor} makes a choice.",
+                _ => $"{actor}: {Words(kind.ToString())}.",
+            };
+        }
+        if (after.Outcome.IsTerminal && after.Outcome.Winner is { } winner)
+            Detail($"Match complete: {winner} wins ({after.Outcome.Reason}).", winner);
 
         if (kind == ActionKind.PassPriority
             && string.Equals(summary, $"{actor} passes priority.", StringComparison.Ordinal))
@@ -192,10 +219,11 @@ internal sealed class MatchHistoryProjector
             // or run transition. Promote the first meaningful effect so the
             // entry remains useful without retaining the pass wording.
             summary = details[0];
+            summarySubject = detailSubjects[0] ?? actor;
         }
 
         return [new MatchHistoryEntry($"action-{state.ActionSequence}", state.ActionSequence,
-            before.Turn.TurnNumber ?? 0, actor, summary, details.AsReadOnly())
+            before.Turn.TurnNumber ?? 0, summarySubject ?? actor, summary, details.AsReadOnly())
         {
             Cards = mentioned.Values.Select((card, index) => card with
             {
@@ -206,6 +234,28 @@ internal sealed class MatchHistoryProjector
             }).ToArray(),
         }];
 
+        void Summary(string text, PlayerSide subject)
+        {
+            summary = text;
+            summarySubject = subject;
+        }
+        void Detail(string text, PlayerSide? subject)
+        {
+            details.Add(text);
+            detailSubjects.Add(subject);
+        }
+        string AdvanceSummary(string id)
+        {
+            // Advancement counters are public; identity and requirement are not.
+            ServerViewModel? server = after.Servers.FirstOrDefault(candidate =>
+                candidate.Root.Concat(candidate.Ice).Any(card => card?.Id == id));
+            CardViewModel? card = after.Servers.SelectMany(candidate => candidate.Root.Concat(candidate.Ice))
+                .FirstOrDefault(candidate => candidate?.Id == id);
+            string where = server is null ? string.Empty : $" in {ServerName(server.Id)}";
+            string counters = card is null ? string.Empty
+                : $" ({card.AdvancementCounters} advancement {(card.AdvancementCounters == 1 ? "counter" : "counters")})";
+            return $"{actor} advances {Name(id)}{where}{counters}.";
+        }
         void Reveal(string id)
         {
             if (newlyVisible.TryGetValue(id, out CardViewModel? card)) known[id] = card;
@@ -244,6 +294,13 @@ internal sealed class MatchHistoryProjector
         ZoneKind? ZoneKindFor(ZoneId id, ZoneKind? provenance = null) =>
             provenance ?? state.Zones.FirstOrDefault(candidate => candidate.Id == id)?.Kind;
 
+        PlayerSide? ShuffleSubject(ZoneId destinationId) => ZoneKindFor(destinationId) switch
+        {
+            ZoneKind.CorpDeck => PlayerSide.Corp,
+            ZoneKind.RunnerStack => PlayerSide.Runner,
+            _ => null,
+        };
+
         string ShuffleSummary(ZoneId destinationId) => ZoneKindFor(destinationId) switch
         {
             ZoneKind.CorpDeck => "Corp shuffles R&D.",
@@ -271,6 +328,8 @@ internal sealed class MatchHistoryProjector
             .Concat(new[] { view.CorpIdentity, view.RunnerIdentity }.OfType<CardViewModel>())
             .Concat(runCards.OfType<CardViewModel>());
     }
+
+    private static string Credits(int amount) => amount == 1 ? "credit" : "credits";
 
     private static string Words(string value) => string.Concat(value.Select((c, i) =>
         i > 0 && char.IsUpper(c) ? " " + char.ToLowerInvariant(c) : char.ToLowerInvariant(c).ToString()));
