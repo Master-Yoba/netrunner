@@ -39,6 +39,8 @@ internal sealed class MatchHistoryProjector
         var moves = new List<string>();
         string? summary = null;
         PlayerSide? summarySubject = null;
+        // A card effect resolved by this action, promoted when nothing else summarizes it.
+        string? effect = null;
         bool installed = events.Any(e => e.Payload is CardInstalledEventPayload);
         foreach (EngineEvent entry in events)
         {
@@ -87,6 +89,13 @@ internal sealed class MatchHistoryProjector
                     break;
                 case CardDerezzedEventPayload derez:
                     Detail($"{Name(derez.CardId.Value)} is derezzed.", PlayerSide.Corp);
+                    break;
+                case BehaviorCardAdvancedEventPayload advanced:
+                    // Advancement counters are public, as in AdvanceSummary.
+                    string placed = $"Corp places {advanced.Amount} advancement {Counters(advanced.Amount)} on "
+                        + $"{Name(advanced.CardId.Value)}{Where(advanced.CardId.Value)} ({advanced.AdvancementCounters} total).";
+                    effect ??= placed;
+                    Detail(placed, PlayerSide.Corp);
                     break;
                 case HostedCreditPoolChangedEventPayload pool when known.ContainsKey(pool.CardId.Value):
                     Detail($"{Name(pool.CardId.Value)}: {pool.CountAfter} hosted credits remaining.", null);
@@ -177,6 +186,13 @@ internal sealed class MatchHistoryProjector
         }
         if (summary is null && events.Count == 0 && kind == ActionKind.InstallCard)
             return Array.Empty<MatchHistoryEntry>(); // Nested staging did not install anything.
+        if (summary is null && effect is not null)
+        {
+            int index = details.IndexOf(effect);
+            details.RemoveAt(index);
+            detailSubjects.RemoveAt(index);
+            Summary(effect, PlayerSide.Corp);
+        }
         if (summary is null)
         {
             summarySubject = actor;
@@ -202,6 +218,9 @@ internal sealed class MatchHistoryProjector
                 ActionKind.DeclineTrigger => $"{actor} declines an optional effect.",
                 ActionKind.OrderTriggers => $"{actor} orders simultaneous effects.",
                 ActionKind.ChooseBreachCandidate => $"{actor} chooses the next card to access.",
+                ActionKind.ChooseCard or ActionKind.ChooseBehavior or ActionKind.ChooseNumber
+                    when before.PlayArea.FirstOrDefault(card => card.IsKnown) is { } resolving
+                    => $"{actor} makes a choice for {Name(resolving.Id)}.",
                 ActionKind.ChooseCard or ActionKind.ChooseBehavior or ActionKind.ChooseNumber => $"{actor} makes a choice.",
                 _ => $"{actor}: {Words(kind.ToString())}.",
             };
@@ -247,14 +266,17 @@ internal sealed class MatchHistoryProjector
         string AdvanceSummary(string id)
         {
             // Advancement counters are public; identity and requirement are not.
-            ServerViewModel? server = after.Servers.FirstOrDefault(candidate =>
-                candidate.Root.Concat(candidate.Ice).Any(card => card?.Id == id));
             CardViewModel? card = after.Servers.SelectMany(candidate => candidate.Root.Concat(candidate.Ice))
                 .FirstOrDefault(candidate => candidate?.Id == id);
-            string where = server is null ? string.Empty : $" in {ServerName(server.Id)}";
             string counters = card is null ? string.Empty
-                : $" ({card.AdvancementCounters} advancement {(card.AdvancementCounters == 1 ? "counter" : "counters")})";
-            return $"{actor} advances {Name(id)}{where}{counters}.";
+                : $" ({card.AdvancementCounters} advancement {Counters(card.AdvancementCounters)})";
+            return $"{actor} advances {Name(id)}{Where(id)}{counters}.";
+        }
+        string Where(string id)
+        {
+            ServerViewModel? server = after.Servers.FirstOrDefault(candidate =>
+                candidate.Root.Concat(candidate.Ice).Any(card => card?.Id == id));
+            return server is null ? string.Empty : $" in {ServerName(server.Id)}";
         }
         void Reveal(string id)
         {
@@ -325,11 +347,13 @@ internal sealed class MatchHistoryProjector
         return view.Servers.SelectMany(server => server.Ice.Concat(server.Root)).OfType<CardViewModel>()
             .Concat(view.RunnerRig).Concat(view.CorpHand.VisibleCards).Concat(view.RunnerHand.VisibleCards)
             .Concat(view.CorpScore).Concat(view.RunnerScore).Concat(view.CorpDiscard).Concat(view.RunnerHeap)
+            .Concat(view.PlayArea)
             .Concat(new[] { view.CorpIdentity, view.RunnerIdentity }.OfType<CardViewModel>())
             .Concat(runCards.OfType<CardViewModel>());
     }
 
     private static string Credits(int amount) => amount == 1 ? "credit" : "credits";
+    private static string Counters(int amount) => amount == 1 ? "counter" : "counters";
 
     private static string Words(string value) => string.Concat(value.Select((c, i) =>
         i > 0 && char.IsUpper(c) ? " " + char.ToLowerInvariant(c) : char.ToLowerInvariant(c).ToString()));
