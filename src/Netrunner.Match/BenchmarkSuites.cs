@@ -7,7 +7,7 @@ namespace Netrunner.Match;
 /// <summary>Fixed held-out seeds and pairings; policy changes never regenerate the seed set.</summary>
 public static class BenchmarkSuites
 {
-    public static AiBenchmarkManifest WithCorpProfile(AiBenchmarkManifest baseline, string profile)
+    public static AiBenchmarkManifest WithCorpProfile(AiBenchmarkManifest baseline, string profile, string? policyVersion = null)
     {
         if (baseline.ContentMode != "official") throw new ArgumentException("Gateway profiles require official content.");
         var result = baseline with
@@ -15,7 +15,7 @@ public static class BenchmarkSuites
             SuiteId = "corp-" + profile + "-" + baseline.SuiteId,
             Games = baseline.Games.Select(game => game with
             {
-                Corp = BenchmarkAgentSpec.Offline(CorpPolicyProfiles.Create(profile, game.Corp.PolicySeed)),
+                Corp = BenchmarkAgentSpec.Offline(CorpPolicyProfiles.Create(profile, game.Corp.PolicySeed, policyVersion ?? CorpHeuristicPolicy.PolicyVersion)),
                 ComparisonGroup = game.Runner.Kind == "offline" ? "offline-self-play" : "candidate-corp",
             }).ToImmutableArray(),
         };
@@ -23,7 +23,7 @@ public static class BenchmarkSuites
         return result;
     }
 
-    public static TacticalBenchmarkManifest WithCorpProfile(TacticalBenchmarkManifest baseline, string profile)
+    public static TacticalBenchmarkManifest WithCorpProfile(TacticalBenchmarkManifest baseline, string profile, string? policyVersion = null)
     {
         var result = baseline with
         {
@@ -31,14 +31,14 @@ public static class BenchmarkSuites
             Positions = baseline.Positions.Where(position => position.Metadata.Side == PlayerSide.Corp)
                 .Select(position => position with
                 {
-                    Agent = BenchmarkAgentSpec.Offline(CorpPolicyProfiles.Create(profile, position.Agent.PolicySeed)),
+                    Agent = BenchmarkAgentSpec.Offline(CorpPolicyProfiles.Create(profile, position.Agent.PolicySeed, policyVersion ?? CorpHeuristicPolicy.PolicyVersion)),
                 }).ToImmutableArray(),
         };
         result.Validate();
         return result;
     }
 
-    public static AiBenchmarkManifest WithRunnerProfile(AiBenchmarkManifest baseline, string profile)
+    public static AiBenchmarkManifest WithRunnerProfile(AiBenchmarkManifest baseline, string profile, string? policyVersion = null)
     {
         if (baseline.ContentMode != "official") throw new ArgumentException("Gateway profiles require official content.");
         var result = baseline with
@@ -46,7 +46,7 @@ public static class BenchmarkSuites
             SuiteId = "runner-" + profile + "-" + baseline.SuiteId,
             Games = baseline.Games.Select(game => game with
             {
-                Runner = BenchmarkAgentSpec.Offline(RunnerPolicyProfiles.Create(profile, game.Runner.PolicySeed)),
+                Runner = BenchmarkAgentSpec.Offline(RunnerPolicyProfiles.Create(profile, game.Runner.PolicySeed, policyVersion ?? RunnerHeuristicPolicy.PolicyVersion)),
                 ComparisonGroup = game.Corp.Kind == "offline" ? "offline-self-play" : "candidate-runner",
             }).ToImmutableArray(),
         };
@@ -54,7 +54,7 @@ public static class BenchmarkSuites
         return result;
     }
 
-    public static TacticalBenchmarkManifest WithRunnerProfile(TacticalBenchmarkManifest baseline, string profile)
+    public static TacticalBenchmarkManifest WithRunnerProfile(TacticalBenchmarkManifest baseline, string profile, string? policyVersion = null)
     {
         var result = baseline with
         {
@@ -62,7 +62,7 @@ public static class BenchmarkSuites
             Positions = baseline.Positions.Where(position => position.Metadata.Side == PlayerSide.Runner)
                 .Select(position => position with
                 {
-                    Agent = BenchmarkAgentSpec.Offline(RunnerPolicyProfiles.Create(profile, position.Agent.PolicySeed)),
+                    Agent = BenchmarkAgentSpec.Offline(RunnerPolicyProfiles.Create(profile, position.Agent.PolicySeed, policyVersion ?? RunnerHeuristicPolicy.PolicyVersion)),
                 }).ToImmutableArray(),
         };
         result.Validate();
