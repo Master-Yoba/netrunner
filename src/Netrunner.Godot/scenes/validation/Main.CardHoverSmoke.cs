@@ -30,6 +30,12 @@ public partial class Main
 				await LabPointer(CardPoint());
 				RequireInteraction(CardHoverPreviewCardId == id,
 					$"Hover did not show {id} at {size}: actual={CardHoverPreviewCardId}, hovered={card.IsHovered}, active={card.IsInteractionActive}, pointer={CardPoint()}, rect={card.GetGlobalRect()}, gui={GetViewport().GuiGetHoveredControl()?.GetPath()}.");
+				if (_gameTable.Hand.ContainsCard(card))
+				{
+					await TableFrames(6);
+					RequireInteraction(_cardHoverPreview!.GetGlobalRect().End.Y <= VisualTop(card) + 1,
+						$"The hand preview for {id} covers the lifted card at {size}: preview={_cardHoverPreview.GetGlobalRect()}, cardTop={VisualTop(card)}.");
+				}
 				Vector2 point = CardPoint();
 				LabButton(point, true); LabButton(point, false);
 				await TableFrames(2);

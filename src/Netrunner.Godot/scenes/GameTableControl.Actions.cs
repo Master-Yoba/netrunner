@@ -50,7 +50,7 @@ public partial class GameTableControl
 		if (UseCardHoverPreview && model is { IsKnown: true }) pile.TooltipText = string.Empty;
 	}
 
-	private void RenderPileFace(string handle, BoardActionButton pile, CardViewModel? model, int count, string title,
+	private TableCardControl RenderPileFace(string handle, BoardActionButton pile, CardViewModel? model, int count, string title,
 		PlayerSide side, Dictionary<string, TableCardControl> visible)
 	{
 		TableCardControl face = EnsureCard(handle, pile, model, false, visible, side);
@@ -68,6 +68,7 @@ public partial class GameTableControl
 		bool heap = handle == "zone:runner-heap";
 		pile.GetNode<Label>("Caption").Visible = heap && selected == 0;
 		pending.Text = $"{(heap ? "Heap · " : "")}{selected} selected";
+		return face;
 	}
 
 	private const float ScorePileScale = 0.55f;
@@ -77,13 +78,12 @@ public partial class GameTableControl
 		Dictionary<string, TableCardControl> visible)
 	{
 		if (pile is null) return;
-		RenderPileFace(handle, pile, scored.Count > 0 ? scored[^1] : null, scored.Count, "Score", side, visible);
 		// A mini card keeps the summary panes compact; hovering still opens the full preview.
-		if (pile.GetChildren().OfType<TableCardControl>().FirstOrDefault() is { } face)
-		{
-			face.Scale = new Vector2(ScorePileScale, ScorePileScale);
-			pile.CustomMinimumSize = face.DisplaySize * ScorePileScale;
-		}
+		// Scale the face just rendered: the pile can still hold a stale face, such as the
+		// hidden empty-pile slot, until cleanup removes it.
+		TableCardControl face = RenderPileFace(handle, pile, scored.Count > 0 ? scored[^1] : null, scored.Count, "Score", side, visible);
+		face.Scale = new Vector2(ScorePileScale, ScorePileScale);
+		pile.CustomMinimumSize = face.DisplaySize * ScorePileScale;
 		int points = scored.Sum(card => card.AgendaPoints ?? 0);
 		string owner = side == PlayerSide.Corp ? "Corp score area" : "Runner score area";
 		// Like other public piles, a known top card shows the hover preview instead of a tooltip.

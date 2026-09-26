@@ -215,9 +215,10 @@ public partial class Main
 
 		// A hand card's neighbours are the other cards being compared, so
 		// open above the hand fan instead of beside the card and over them.
+		// The hovered card lifts above the fan, so clear its top as well.
 		if (_gameTable?.Hand is { } hand && hand.IsAncestorOf(source))
 		{
-			float handTop = hand.GetGlobalRect().Position.Y - viewportRect.Position.Y;
+			float handTop = Mathf.Min(hand.GetGlobalRect().Position.Y, VisualTop(source)) - viewportRect.Position.Y;
 			position = new Vector2(
 				sourceLocal.X + (sourceRect.Size.X - desired.X) / 2,
 				handTop - desired.Y - _cardHoverPreview.SourceGap);
@@ -301,5 +302,13 @@ public partial class Main
 		if (card.TrashCost is { } trash) values.Add($"Trash {trash} [trash cost]");
 		if (card.AdvancementRequirement is { } advancement) values.Add($"Advancement requirement {advancement}");
 		return values.Count == 0 ? "Public card" : string.Join(" · ", values);
+	}
+
+	/// <summary>The highest on-screen point of a possibly rotated and scaled control.</summary>
+	private static float VisualTop(Control control)
+	{
+		Transform2D transform = control.GetGlobalTransform();
+		Vector2 size = control.Size;
+		return new[] { Vector2.Zero, new Vector2(size.X, 0), size, new Vector2(0, size.Y) }.Min(corner => (transform * corner).Y);
 	}
 }
