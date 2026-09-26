@@ -36,7 +36,8 @@ fi
 # macOS does not ship GNU timeout. Keep the content-lane gallery bounded on
 # both macOS and Linux without making a package-manager utility a prerequisite.
 run_with_timeout() {
-  local limit_seconds="$1"
+  local limit_seconds
+  limit_seconds="$(netrunner_scaled_seconds "$1")"
   shift
   "$@" &
   local command_pid=$!

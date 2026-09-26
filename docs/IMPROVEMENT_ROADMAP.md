@@ -105,6 +105,10 @@ content snapshot, in addition to the wave-specific criteria below:
 - The M5 policy performance run (`ai-performance`) on the recorded reference
   hardware, whenever engine or policy code changed in the wave.
 
+On a slower machine, run the gates with `NETRUNNER_TIMEOUT_SCALE` set (see the
+README). It stretches only "give up after" limits, so a pass means the same
+thing; performance budgets are still judged on the reference hardware.
+
 If a wave deliberately changes frozen results, re-freeze the affected
 manifests and fixtures in a dedicated commit, with the reason and the old and
 new digests recorded in the wave's progress doc. Never regenerate held-out
@@ -113,11 +117,11 @@ seeds to hide an unfavorable result.
 | Wave | Items | Rough length | Theme |
 |---|---|---:|---|
 | 0 | U0, E4a, E3 (CI part), A1 | 3–5 weeks | Tooling, safety nets and measurement |
-| 1 | U1, E1, A2, E3 (nightly), E6 (renames) | 3–5 weeks | First visible wins; the engine gets fast |
+| 1 | U1, E1, A2, A6a, E3 (nightly), E6 (renames) | 3–5 weeks | First visible wins; the engine gets fast; distinct difficulty |
 | 2 | U2, E4b, U3 slice, E5 | 5–7 weeks | The board comes alive for one run and one score |
 | 3 | U3 full, U4, A3, E2 | 7–10 weeks | Real game feel; the bot plans turns |
 | 4 | U5, U6, A4, A5 | 6–9 weeks | Polish, and the bot searches runs |
-| 5 | A6, hardening, decision point | 2–4 weeks | Difficulty, release readiness |
+| 5 | A6 (compute tiers, personalities), hardening, decision point | 2–4 weeks | Difficulty, release readiness |
 
 In total that's roughly 26–40 weeks. The UI track alone reaches "feels like a
 game" at the end of Wave 3.
@@ -153,6 +157,7 @@ game" at the end of Wave 3.
 | U1 quick wins | Visible improvements within weeks: correct history, player language, a visible score pile, a compact preview, and fixed z-order. |
 | E1 tiered `Apply` | It unblocks A3 and E5, and the fuzzing from Wave 0 protects the refactor. |
 | A2 heuristic fixes | Cheap strength gains (advancement inference, memory, breaker coverage, score race) measured on the A1 ladder. It also gives Wave 3's static evaluation its features. |
+| A6a distinct difficulty | Wave 0 found Easy and Standard indistinguishable head to head (960 games). Make Easy measurably weaker with knobs that exist today (weights, the opponent-knowledge policy, a bounded rate of deliberately second-best choices), validated on the head-to-head ladder. Compute-based tiers wait for A3 in Wave 5. |
 | E3 nightly fuzzing | Runs on official content once E1 exists, so large runs are affordable. |
 | E6 renames | Low-risk cleanup while the affected files are being touched anyway. |
 
@@ -161,6 +166,8 @@ game" at the end of Wave 3.
 - Simulation `Apply` is at least 5× faster than Authoritative, with the
   differential test green on the official corpus.
 - A2 improves each side's ladder rating without lowering the other's.
+- Head to head, Standard − Easy is separated (interval above zero) in both
+  seats.
 - A nightly run of at least 1,000 fuzz games is clean.
 
 ### Wave 2 — the board comes alive for one run and one score
@@ -214,8 +221,8 @@ game" at the end of Wave 3.
 
 ### Wave 5 — difficulty, hardening and the next decision
 
-- A6 difficulty levels and personalities, validated by the ladder and a human
-  playtest.
+- A6 compute-based difficulty tiers and personalities, validated by the ladder
+  and a human playtest. (A6a, a first distinct Easy, moved to Wave 1.)
 - A hardening pass: 10,000 clean official fuzz games (the engine plan's gate
   before any new card set), the full `make m5-gate`, and packaging.
 - **Decision point**, recorded in `IMPLEMENTATION_PLAN.md`:

@@ -202,6 +202,11 @@ Gate: the tuned weights beat the hand weights on held-out seeds.
 
 ### A6. Difficulty and personality (S → M)
 
+Wave 0's head-to-head ladder found Easy and Standard statistically
+indistinguishable in both seats (960 games). A first distinct Easy (A6a) is
+therefore scheduled in Wave 1 using today's knobs; the compute-based tiers
+below still depend on A3.
+
 - **Difficulty from compute and knowledge, not noise.** Easy uses fewer
   samples, a shallower beam and the `Empty` opponent-pool policy. Standard
   uses `GatewayPool`. An optional Hard level uses more samples and the planner

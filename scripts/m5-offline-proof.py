@@ -33,11 +33,20 @@ def policy(denied=()):
         f"(deny file-read* file-write* (subpath {json.dumps(str(path))}))\n" for path in denied)
 
 
+def scaled(seconds):
+    """Scale a wall-time limit by NETRUNNER_TIMEOUT_SCALE (1 to 20, default 1)."""
+    try:
+        scale = float(os.environ.get("NETRUNNER_TIMEOUT_SCALE", "1"))
+    except ValueError:
+        scale = 1.0
+    return seconds * (scale if 1 <= scale <= 20 else 1.0)
+
+
 def run(command, output, name, environment, sandbox, timeout=600):
     log = output / f"{name}.log"
     with log.open("w") as stream:
         completed = subprocess.run(["/usr/bin/sandbox-exec", "-p", sandbox, *command],
-                                   cwd=output, env=environment, stdout=stream, stderr=subprocess.STDOUT, timeout=timeout)
+                                   cwd=output, env=environment, stdout=stream, stderr=subprocess.STDOUT, timeout=scaled(timeout))
     require(completed.returncode == 0, f"{name} failed ({completed.returncode}); see {log}")
     return log
 

@@ -41,4 +41,12 @@ if [[ ( -z "${GODOT4:-}" || ! -x "$GODOT4" ) && -d "$netrunner_godot_root" ]]; t
 	export GODOT4
 fi
 
+# Wall-time limits for smokes and gates are tuned to the reference hardware.
+# NETRUNNER_TIMEOUT_SCALE (1 to 20, default 1) stretches them on slower
+# machines; the Godot client applies the same rule to its own limits.
+netrunner_scaled_seconds() {
+	awk -v scale="${NETRUNNER_TIMEOUT_SCALE:-1}" -v seconds="$1" \
+		'BEGIN { if (scale + 0 < 1 || scale + 0 > 20) scale = 1; value = seconds * scale; printf "%d", (value == int(value)) ? value : int(value) + 1 }'
+}
+
 unset netrunner_root netrunner_dotnet netrunner_godot_root netrunner_rg netrunner_godot_candidate

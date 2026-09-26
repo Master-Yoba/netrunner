@@ -15,6 +15,14 @@ import pathlib
 import subprocess
 import sys
 
+def scaled(seconds):
+    """Scale a wall-time limit by NETRUNNER_TIMEOUT_SCALE (1 to 20, default 1)."""
+    try:
+        scale = float(os.environ.get("NETRUNNER_TIMEOUT_SCALE", "1"))
+    except ValueError:
+        scale = 1.0
+    return seconds * (scale if 1 <= scale <= 20 else 1.0)
+
 root, output, godot = sys.argv[1:]
 for case, arguments in (("disabled", ["--expect-disabled"]),
                         ("runner", ["--developer", "--side", "runner"]),
@@ -28,7 +36,7 @@ for case, arguments in (("disabled", ["--expect-disabled"]),
     log = directory / "smoke.log"
     command = [godot, "--headless", "--path", f"{root}/src/Netrunner.Godot", "--", "--m5-developer-smoke", *arguments]
     with log.open("w") as stream:
-        result = subprocess.run(command, env=environment, stdout=stream, stderr=subprocess.STDOUT, timeout=180)
+        result = subprocess.run(command, env=environment, stdout=stream, stderr=subprocess.STDOUT, timeout=scaled(180))
     content = log.read_text()
     if result.returncode or "M5_DEVELOPER PASS" not in content or any(error in content for error in ("M5_DEVELOPER FAIL", "SCRIPT ERROR", "ERROR:")):
         raise SystemExit(f"Developer smoke failed: {case}; see {log}\n{content[-6000:]}")

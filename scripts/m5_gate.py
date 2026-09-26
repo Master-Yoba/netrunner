@@ -5,10 +5,20 @@ import argparse
 import collections
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+def scaled(seconds):
+    """Scale a wall-time limit by NETRUNNER_TIMEOUT_SCALE (1 to 20, default 1)."""
+    try:
+        scale = float(os.environ.get("NETRUNNER_TIMEOUT_SCALE", "1"))
+    except ValueError:
+        scale = 1.0
+    return seconds * (scale if 1 <= scale <= 20 else 1.0)
+
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFESTS = ROOT / "data/m5/benchmarks"
@@ -175,7 +185,7 @@ def main():
                    str(manifest_path), "--workers", str(workers), "--output", str(output / name)]
         try:
             with (output / f"{name}.log").open("w") as log:
-                completed = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=7200 if name == "standard" else 1800)
+                completed = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=scaled(7200 if name == "standard" else 1800))
             require(completed.returncode in (0, 1), "Benchmark process failed before producing a complete report")
             report_path = output / name / "report.json"
             report = json.loads(report_path.read_text())

@@ -303,10 +303,10 @@ public partial class Main
 			while (true)
 			{
 				pollingSteps++;
-				if (wallClock.Elapsed > TimeSpan.FromSeconds(180))
+				if (wallClock.Elapsed > WallTimeLimits.Seconds(180))
 				{
 					throw new TimeoutException(
-						$"Full-match smoke exceeded its 180-second wall-time cap at action_count={diagnosticSnapshot?.ActionCount ?? 0}.");
+						$"Full-match smoke exceeded its {WallTimeLimits.Seconds(180).TotalSeconds:F0}-second wall-time cap at action_count={diagnosticSnapshot?.ActionCount ?? 0}.");
 				}
 
 				if (!_m4FullMatchSmoke && pollingSteps > 600)
@@ -315,7 +315,7 @@ public partial class Main
 				}
 
 				Observation observation = await _coordinator!.GetReadyObservationAsync(side)
-					.WaitAsync(TimeSpan.FromSeconds(15));
+					.WaitAsync(WallTimeLimits.Seconds(15));
 				MatchSnapshot snapshot = _coordinator.CurrentSnapshot!;
 				diagnosticSnapshot = snapshot;
 				CaptureFullMatchSetupSnapshot(snapshot);

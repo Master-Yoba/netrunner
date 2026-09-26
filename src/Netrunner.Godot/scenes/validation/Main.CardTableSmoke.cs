@@ -419,7 +419,7 @@ public partial class Main
 	private async Task<Observation> SettledTableObservationAsync()
 	{
 		Observation observation = await _coordinator!.GetReadyObservationAsync(PlayerSide.Runner)
-			.WaitAsync(TimeSpan.FromSeconds(10));
+			.WaitAsync(WallTimeLimits.Seconds(10));
 		for (int frame = 0; frame < 180; frame++)
 		{
 			await TableFrames(1);

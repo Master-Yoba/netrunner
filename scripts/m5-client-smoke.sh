@@ -16,6 +16,14 @@ import pathlib
 import subprocess
 import sys
 
+def scaled(seconds):
+    """Scale a wall-time limit by NETRUNNER_TIMEOUT_SCALE (1 to 20, default 1)."""
+    try:
+        scale = float(os.environ.get("NETRUNNER_TIMEOUT_SCALE", "1"))
+    except ValueError:
+        scale = 1.0
+    return seconds * (scale if 1 <= scale <= 20 else 1.0)
+
 root, output, godot, mode = sys.argv[1:]
 matrix = [("runner", "basic", "standard"), ("corp", "expanded", "standard")]
 if mode != "--quick":
@@ -31,7 +39,7 @@ def run_case(row):
         command = [godot, "--headless", "--path", f"{root}/src/Netrunner.Godot", "--", "--m5-client-smoke",
                    "--phase", phase, "--side", side, "--preset", preset, "--difficulty", difficulty]
         with log.open("w") as stream:
-            result = subprocess.run(command, env=environment, stdout=stream, stderr=subprocess.STDOUT, timeout=600)
+            result = subprocess.run(command, env=environment, stdout=stream, stderr=subprocess.STDOUT, timeout=scaled(600))
         content = log.read_text()
         marker = "M5_CLIENT SAVE_READY" if phase == "save" else "M5_CLIENT PASS phase=resume"
         if result.returncode or marker not in content or any(error in content for error in ("M5_CLIENT FAIL", "SCRIPT ERROR", "ERROR:")):

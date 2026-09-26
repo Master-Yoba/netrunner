@@ -218,7 +218,7 @@ public partial class Main
 		{
 			if (step > 0 && step % 100 == 0)
 				GD.Print($"M5_CLIENT_PROGRESS side={side} human_choices={step} actions={_currentSnapshot?.ActionCount} turn={_currentSnapshot?.View.Turn.TurnNumber}");
-			MatchSnapshot ready = await _coordinator!.WaitForHumanDecisionAsync().WaitAsync(TimeSpan.FromSeconds(30));
+			MatchSnapshot ready = await _coordinator!.WaitForHumanDecisionAsync().WaitAsync(WallTimeLimits.Seconds(30));
 			await WaitSoloSmokeAsync(() => _currentSnapshot?.Sequence >= ready.Sequence && !_tableAwaitingSettlement
 				&& Volatile.Read(ref _submissionInFlight) == 0, "Board did not settle at the next decision.");
 			if (_currentSnapshot!.IsTerminal) return;
@@ -236,7 +236,7 @@ public partial class Main
 
 	private async Task WaitSoloSmokeAsync(Func<bool> predicate, string message)
 	{
-		ulong deadline = Time.GetTicksMsec() + 30000;
+		ulong deadline = Time.GetTicksMsec() + (ulong)WallTimeLimits.Seconds(30).TotalMilliseconds;
 		while (!predicate())
 		{
 			if (Time.GetTicksMsec() > deadline) throw new TimeoutException(message);

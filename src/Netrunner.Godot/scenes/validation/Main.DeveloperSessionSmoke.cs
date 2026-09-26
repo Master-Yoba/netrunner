@@ -98,7 +98,7 @@ public partial class Main
 
 	private async Task DeveloperWaitAsync(Func<bool> predicate)
 	{
-		for (int frame = 0; frame < 2000; frame++)
+		for (int frame = 0; frame < WallTimeLimits.Count(2000); frame++)
 		{
 			if (predicate()) return;
 			await TableFrames(1);
