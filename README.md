@@ -8,15 +8,19 @@ action boundary.
 The product definition is in [the PRD](docs/netrunner_solo_prd_v0.2.md). The
 dependency-ordered engineering roadmap is in
 [the implementation plan](docs/IMPLEMENTATION_PLAN.md).
-The next offline-solo milestone is detailed in [the M5 plan](docs/history/M5_PLAN.md),
-covering heuristic opponents, benchmarks, save/resume and developer tooling.
+M5 (offline solo mode: heuristic opponents, benchmarks, save/resume and
+developer tooling) is complete. Current work follows the
+[improvement roadmap](docs/IMPROVEMENT_ROADMAP.md) (engine, AI opponent and
+UI/UX waves); Wave 0 is recorded in [its progress record](docs/WAVE_0_PROGRESS.md).
+[The docs index](docs/README.md) lists current documents; milestone history is
+in `docs/history/`.
 
 ## Current state
 
 All 77 System Gateway designs have complete behavior and registered tests in
 [the generated report](docs/generated/gateway-coverage.md). With authenticated
 content provisioned, the desktop client plays official basic and expanded
-teaching presets as either side against the deterministic contract agent,
+teaching presets as either side against the offline Standard or Easy bot,
 including setup, mulligan, seed selection and a new-match flow. See
 [the M4 progress record](docs/history/M4_PROGRESS.md) for the final gate evidence and
 [preset revalidation](docs/history/M4_PRESET_REVALIDATION.md) for exact deck provenance.
