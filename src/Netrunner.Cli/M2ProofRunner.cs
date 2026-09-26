@@ -96,7 +96,7 @@ public sealed class M2ProofResult
 /// scenario, opens the contracted run, and drives it to completion through
 /// the filtered observation boundary only: every yielded decision round-trips
 /// through the canonical save/load format and the loop RESUMES from the
-/// deserialized state (docs/M2_ARCHITECTURE.md:170 — the live object never
+/// deserialized state (docs/history/M2_ARCHITECTURE.md:170 — the live object never
 /// drives the decision, the observation, or the apply of an iteration), the
 /// policy selects only issued legal action IDs, and the result is
 /// re-verified by the replay artifact and the run-timing trace validator.
@@ -183,7 +183,7 @@ public static class M2ProofRunner
             // must reproduce the authoritative state byte-for-byte, and the
             // iteration then resumes from the deserialized state, so the
             // proof exercises resumption, not only round-trip equality
-            // (docs/M2_ARCHITECTURE.md:170).
+            // (docs/history/M2_ARCHITECTURE.md:170).
             string saved = EngineJson.Serialize(current);
             GameState restored = EngineJson.DeserializeState(saved, scenarioCatalog);
             string liveHash = DeterministicHash.ForState(current);

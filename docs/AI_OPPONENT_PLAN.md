@@ -150,8 +150,10 @@ The main structural upgrade for turn-action decisions:
 - When the bot gets a `TurnAction` decision with clicks left, enumerate
   sequences of its own turn actions with a beam search (width k, depth up to
   the remaining clicks). Apply them in `Simulation` mode on a determinized
-  state (E5; for the Corp's own turn, only the Runner's hidden cards are
-  sampled).
+  state (E5). Every zone hidden from the acting side is sampled, including
+  its own R&D or stack order: the Corp can't see its own R&D, so a planner
+  that kept the real order would use future draws and break the hidden-state
+  twin guarantee.
 - Score the end-of-turn state with a static evaluation built from the A2
   features: credits, cards, board, agenda progress, protection margins and
   the opponent's threat.

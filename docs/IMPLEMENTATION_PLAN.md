@@ -25,11 +25,11 @@ scope progression.
 | M2 | Representative Netrunner run | 5–7 weeks | Run/ICE/break/access path passes timing scenarios |
 | M3 | Native playable micro-decks | 4–6 weeks | The same M2 match is playable through Godot |
 | M4 | Complete Gateway rules/cards | 12–18 weeks | All designs implemented, reviewed, and card-tested |
-| M4.9 | Card-table UI and understandable history | See [UI plan](M4_9_UI_PLAN.md) | Native layout, history/visibility and manual usability gate before M5 |
-| M4.10 | Editor-friendly UI and live visual authoring | Implemented; [user acceptance pending](M4_10_UI_PROGRESS.md) | Reusable production scenes, persistent Inspector styling, safe live previews and manual authoring gate before M5 |
-| M4.11 | Drag-to-play and install | Implemented; [validation](M4_11_UI_PROGRESS.md) | Board-first hand play/install, preserved menu fallback and native interaction gate |
-| M4.12 | Hand fan and direct board actions | Implemented; [validation](M4_12_UI_PROGRESS.md) | Native hand hover/drag, legal credit/draw affordances, Archives browsing and cancellable Run selection |
-| M5 | Complete offline solo mode | See [detailed M5 plan](M5_PLAN.md) | Both heuristic bots pass tactical/stress gates; deterministic save/resume and offline client flow work |
+| M4.9 | Card-table UI and understandable history | See [UI plan](history/M4_9_UI_PLAN.md) | Native layout, history/visibility and manual usability gate before M5 |
+| M4.10 | Editor-friendly UI and live visual authoring | Implemented; [user acceptance pending](history/M4_10_UI_PROGRESS.md) | Reusable production scenes, persistent Inspector styling, safe live previews and manual authoring gate before M5 |
+| M4.11 | Drag-to-play and install | Implemented; [validation](history/M4_11_UI_PROGRESS.md) | Board-first hand play/install, preserved menu fallback and native interaction gate |
+| M4.12 | Hand fan and direct board actions | Implemented; [validation](history/M4_12_UI_PROGRESS.md) | Native hand hover/drag, legal credit/draw affordances, Archives browsing and cancellable Run selection |
+| M5 | Complete offline solo mode | See [detailed M5 plan](history/M5_PLAN.md) | Both heuristic bots pass tactical/stress gates; deterministic save/resume and offline client flow work |
 | M6 | Safe LLM/hybrid mode | 4–6 weeks | Intent play, constrained actions, timeout/takeover pass |
 | RC | Polish, packaging, QA | 3–5 weeks | Release matrix and all PRD exit criteria pass |
 
@@ -163,7 +163,7 @@ Deliverables:
 - FND-005: packaging spike for an unsigned Linux x64 build.
 - FND-006: benchmark clean build, incremental Core test change, card-test
   change, and Godot observe loop. Record ten samples, p50/p95, hardware, and
-  commands in `docs/spikes/godot-dotnet-loop.md`.
+  commands in `docs/history/spikes/godot-dotnet-loop.md`.
 - FND-007: CI secret scan and license inventory; no telemetry.
 
 Targets for the spike are p50 ≤ 3 seconds for a focused Core/card test cycle and
@@ -280,12 +280,12 @@ finish human-vs-contract-agent games through the client.
 
 ### M5 — Complete offline solo experience
 
-The [detailed M5 implementation plan](M5_PLAN.md) expands this milestone against
+The [detailed M5 implementation plan](history/M5_PLAN.md) expands this milestone against
 the 22 September 2026 code baseline. It defines the agent architecture, tactical
 and self-play benchmarks, save/checkpoint lifecycle, client and developer flows,
 dependency-ordered slices, and acceptance evidence. Existing contract agents,
 replay and diagnostic session recovery remain foundations. The M5 slices are
-implemented with [progress and verification records](M5_PROGRESS.md) and a
+implemented with [progress and verification records](history/M5_PROGRESS.md) and a
 [measured integration gate](M5_GATE.md). The user gave general playtest acceptance
 and authorized publication on 25 September 2026; its scope is recorded in
 [the acceptance section](M5_GATE.md#human-acceptance). Automated games and

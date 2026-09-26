@@ -34,16 +34,16 @@ integration and review were performed by the primary agent, as requested.
 
 ## Evidence and quick testing
 
-- [Resting Runner hand](evidence/m4-12/hand-resting-1920.png)
-- [Runner hover](evidence/m4-12/hand-runner-1920.png)
-- [Corp hover](evidence/m4-12/hand-corp-1920.png)
-- [Run selection](evidence/m4-12/run-selection-1920.png)
+- [Resting Runner hand](../evidence/m4-12/hand-resting-1920.png)
+- [Runner hover](../evidence/m4-12/hand-runner-1920.png)
+- [Corp hover](../evidence/m4-12/hand-corp-1920.png)
+- [Run selection](../evidence/m4-12/run-selection-1920.png)
 
 Run `make interaction-lab` and choose **Runner: hand and board actions** or
 **Corp: hand and board actions**. Reset freely to repeat. These are synthetic
 presentation fixtures; use `make play` to assess the feel in a real match.
 The supplied reference video remains local and ignored by Git. Hand animation
-and glow settings are documented in the [editor guide](UI_EDITOR_GUIDE.md).
+and glow settings are documented in the [editor guide](../UI_EDITOR_GUIDE.md).
 
 ## 2026-09-12 — Deck-to-hand animation
 
@@ -63,8 +63,8 @@ and glow settings are documented in the [editor guide](UI_EDITOR_GUIDE.md).
   dense table, card motion, editor-preview and formatting checks also passed.
   Logs: `/tmp/draw-native.log`, `/tmp/draw-headless.log`, `/tmp/draw-table.log`,
   `/tmp/draw-editor.log`, `/tmp/draw-format-verify.log`.
-- Evidence: [Runner draw](evidence/m4-12/draw-runner-1920.png),
-  [Corp draw](evidence/m4-12/draw-corp-1920.png).
+- Evidence: [Runner draw](../evidence/m4-12/draw-runner-1920.png),
+  [Corp draw](../evidence/m4-12/draw-corp-1920.png).
 
 ## 2026-09-12 — Dragging hand discards
 
@@ -94,9 +94,9 @@ and glow settings are documented in the [editor guide](UI_EDITOR_GUIDE.md).
   `/tmp/discard-editor.log`, `/tmp/discard-format-verify.log`.
   One editor run emitted a Godot `SwapGCHandleForType` resource-handle error;
   a separate rerun completed cleanly.
-- Evidence: [Runner discard](evidence/m4-12/discard-runner-1920.png),
-  [Corp discard](evidence/m4-12/discard-corp-1920.png),
-  [pending selection](evidence/m4-12/discard-pending-1920.png).
+- Evidence: [Runner discard](../evidence/m4-12/discard-runner-1920.png),
+  [Corp discard](../evidence/m4-12/discard-corp-1920.png),
+  [pending selection](../evidence/m4-12/discard-pending-1920.png).
 
 ## 2026-09-12 — Discard animation correction
 
@@ -120,8 +120,8 @@ and glow settings are documented in the [editor guide](UI_EDITOR_GUIDE.md).
 - Logs: `/tmp/discard-motion-headless.log`, `/tmp/discard-motion-native.log`,
   `/tmp/discard-motion-table.log`, `/tmp/discard-motion-editor.log`,
   `/tmp/discard-motion-format.log`.
-- Evidence: [first rightmost discard](evidence/m4-12/discard-motion-1-1920.png),
-  [second rightmost discard](evidence/m4-12/discard-motion-2-1920.png).
+- Evidence: [first rightmost discard](../evidence/m4-12/discard-motion-1-1920.png),
+  [second rightmost discard](../evidence/m4-12/discard-motion-2-1920.png).
 
 ## 2026-09-12 — PR review integration
 
@@ -140,6 +140,6 @@ and glow settings are documented in the [editor guide](UI_EDITOR_GUIDE.md).
   disabled buttons, card/server selection and direct callbacks. Smoke input
   isolation covers unrelated desktop focus changes; an explicit focus-loss
   signal still exercises the production cancellation handler.
-- Evidence: [contextual controls while settling](evidence/m4-12/choice-settling-1920.png).
+- Evidence: [contextual controls while settling](../evidence/m4-12/choice-settling-1920.png).
   Native log: `/tmp/pr19-review-native.log`. Final full M4 gate and CI results
   are recorded in [PR #19](https://github.com/Master-Yoba/netrunner/pull/19).

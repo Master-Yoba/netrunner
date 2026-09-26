@@ -94,7 +94,7 @@ def main():
         require(re.fullmatch(r"[a-f0-9]{64}", row["initialStateHash"]) and row["actionCap"] > 0, "Unpinned tactical root/bound")
         require(row["agent"]["side"] == case["side"] and row["agent"]["kind"] == "contract", "Incorrect tactical baseline policy")
     require(executable["pins"] == json.loads((root / "data/m5/benchmarks/contract-smoke-v1.json").read_text())["pins"], "Tactical catalog pins drifted")
-    inventory = (root / "docs/M5_CAPABILITY_INVENTORY.md").read_text()
+    inventory = (root / "docs/history/M5_CAPABILITY_INVENTORY.md").read_text()
     mapped = re.findall(r"^\| (300\d\d) \|", inventory, re.MULTILINE)
     require(len(mapped) == 77 and set(mapped) == codes, "Inventory must map each of the 77 designs once")
     mapped_decisions = set(re.findall(r"^\| `(\w+)` \|", inventory, re.MULTILINE))

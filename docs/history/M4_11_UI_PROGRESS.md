@@ -36,9 +36,9 @@ face-down positional hosts and general-play geometry beside the hand.
 - Native smoke: 15 scenarios at 1920×1080 and 2560×1440, plus stale revisions,
   Escape/right-click/focus-loss/invalid-drop cancellation and exposed face-down ICE
   hosting. Contextual buttons, server cues and pile cards receive native input.
-- Screenshots: [hosted install](evidence/m4-11/drag-3-1920.png),
-  [outermost ICE](evidence/m4-11/drag-6-1920.png),
-  [new remote](evidence/m4-11/drag-7-1920.png).
+- Screenshots: [hosted install](../evidence/m4-11/drag-3-1920.png),
+  [outermost ICE](../evidence/m4-11/drag-6-1920.png),
+  [new remote](../evidence/m4-11/drag-7-1920.png).
 - Native demonstration: `--m4-11-demo` records hosted installation and a new remote;
   the local recording is `/tmp/m411-drag-demo.avi` (9.6 seconds). It is not committed.
 - Full official M4 gate: PASS, coverage 77/77, both seats and basic/expanded

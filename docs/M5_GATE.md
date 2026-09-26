@@ -4,7 +4,7 @@ Automated evidence date: 23 September 2026. User acceptance: 25 September 2026.
 Branch: `feat/m5-8-final-gate`. The user authorized GitHub publication.
 Implementation and automated verification are complete: headless, repository,
 offline-package and performance gates pass. General human acceptance is recorded below.
-The [completion audit](M5_COMPLETION_AUDIT.md) maps each planned deliverable to
+The [completion audit](history/M5_COMPLETION_AUDIT.md) maps each planned deliverable to
 its implementation and evidence, and records the remaining human criteria.
 
 ## Frozen inputs and reproducibility
@@ -283,7 +283,7 @@ reviewed implementation at `bc2d596`.
 The user did not supply individual seeds, seat/preset results, save boundaries,
 or resolution/motion observations. Those details are not inferred from the
 general acceptance. The planned manual matrix remains a useful regression
-checklist in [the audit](M5_COMPLETION_AUDIT.md#human-acceptance), while the
+checklist in [the audit](history/M5_COMPLETION_AUDIT.md#human-acceptance), while the
 automated matrices above remain explicitly scripted evidence. The publication
 blocker is resolved by the user's acceptance; no additional confirmation is
 required. Historical evidence files retain their original acceptance status

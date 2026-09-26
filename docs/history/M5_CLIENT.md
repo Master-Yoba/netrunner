@@ -34,7 +34,7 @@ Files live in `LocalApplicationData/NetrunnerSolo/saves`, independent of launch
 scripts and diagnostics. **Open save folder** opens that location. The optional
 `NETRUNNER_SAVE_DIRECTORY` override is useful for isolated tests. No artwork is
 stored in saves; an absent local artwork cache uses the existing fallback cards.
-See [save contract and storage guarantees](M5_SAVES.md).
+See [save contract and storage guarantees](../M5_SAVES.md).
 
 ## Implementation boundaries
 

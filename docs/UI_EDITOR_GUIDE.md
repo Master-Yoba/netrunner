@@ -1,7 +1,7 @@
 # Editing the game UI in Godot
 
 Use the shared production scenes to tune appearance without changing C#. See the
-[progress record](M4_10_UI_PROGRESS.md) for completed checks and remaining gates.
+[progress record](history/M4_10_UI_PROGRESS.md) for completed checks and remaining gates.
 
 ## First launch
 
