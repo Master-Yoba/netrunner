@@ -7,6 +7,7 @@
 [ext_resource type="Resource" path="res://themes/BoardLayout.tres" id="2_board_layout"]
 [ext_resource type="PackedScene" path="res://scenes/components/PlayerArea.tscn" id="3_player_area"]
 [ext_resource type="PackedScene" path="res://scenes/components/PileView.tscn" id="4_pile"]
+[ext_resource type="PackedScene" path="res://scenes/components/BoardPile.tscn" id="score_pile"]
 [ext_resource type="Theme" path="res://themes/M4Theme.tres" id="5_theme"]
 
 [ext_resource type="PackedScene" path="res://scenes/components/CreditIndicator.tscn" id="credits"]
@@ -142,10 +143,11 @@ text = "Score pile · 0"
 vertical_alignment = 1
 text_overrun_behavior = 3
 
-[node name="CorpScored" parent="Surface/Margins/Layout/ServerField/Content/Summary/Content" instance=ExtResource("4_pile")]
+[node name="CorpScored" parent="Surface/Margins/Layout/ServerField/Content/Summary/Content" instance=ExtResource("score_pile")]
 layout_mode = 2
-text = "Scored"
-tooltip_text = "Browse Corp score area"
+size_flags_horizontal = 0
+text = "Score\n—"
+tooltip_text = "Corp score area · scored agendas"
 
 [node name="HQ" type="Label" parent="Surface/Margins/Layout/ServerField/Content/Summary/Content"]
 custom_minimum_size = Vector2(150, 0)

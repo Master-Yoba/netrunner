@@ -70,6 +70,19 @@ public partial class GameTableControl
 		pending.Text = $"{(heap ? "Heap · " : "")}{selected} selected";
 	}
 
+	/// <summary>Scored agendas are public: show the latest one face-up with the pile count.</summary>
+	private void RenderScorePile(string handle, BoardActionButton? pile, IReadOnlyList<CardViewModel> scored, PlayerSide side,
+		Dictionary<string, TableCardControl> visible)
+	{
+		if (pile is null) return;
+		RenderPileFace(handle, pile, scored.Count > 0 ? scored[^1] : null, scored.Count, "Score", side, visible);
+		int points = scored.Sum(card => card.AgendaPoints ?? 0);
+		string owner = side == PlayerSide.Corp ? "Corp score area" : "Runner score area";
+		// Like other public piles, a known top card shows the hover preview instead of a tooltip.
+		UpdatePileTooltip(pile, scored.Count == 0 ? $"{owner} · empty"
+			: $"{owner} · {points} agenda {(points == 1 ? "point" : "points")}", scored.Count > 0 && scored[^1].IsKnown);
+	}
+
 	private static void HoverPileFace(BoardActionButton pile, bool active)
 	{
 		TableCardControl? face = pile.GetChildren().OfType<TableCardControl>().FirstOrDefault(card => card.Visible);
