@@ -432,6 +432,7 @@ public partial class Main
 			_matchHistory.Append(next.History);
 			_tableAwaitingSettlement = animate || _tablePublications.Count > 0;
 			RenderSnapshot(next);
+			_snapshotRendered?.Invoke(next);
 			bool meaningful = next.History.Any(entry => !entry.Summary.Contains("passes priority", StringComparison.Ordinal));
 			if (meaningful && animate)
 			{
