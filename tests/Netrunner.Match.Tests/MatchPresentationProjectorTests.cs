@@ -59,7 +59,10 @@ public sealed class MatchPresentationProjectorTests
         Assert.Equal(context.Selection.Candidates, partial.Selection.Candidates);
         Assert.Equal(["card:z"], partial.Selection.Selected);
         Assert.Equal(MatchPresentationContext.Empty, MatchPresentationProjector.Build(before, PlayerSide.Corp));
-        Assert.DoesNotContain("definition:a", AllProperties(ObservationBuilder.Build(before, PlayerSide.Runner)), StringComparison.Ordinal);
+        Observation ownerView = ObservationBuilder.Build(before, PlayerSide.Runner);
+        Assert.Contains("definition:a", EngineJson.Serialize(ownerView.PrivateState["choiceCards"]), StringComparison.Ordinal);
+        Assert.DoesNotContain("definition:a", EngineJson.Serialize(ownerView.PublicState), StringComparison.Ordinal);
+        Assert.DoesNotContain("definition:a", AllProperties(ObservationBuilder.Build(before, PlayerSide.Corp)), StringComparison.Ordinal);
     }
 
     [Theory]

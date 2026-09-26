@@ -159,11 +159,13 @@ public partial class Main
 		BeginFullMatchSessionTrace(request, humanSide, resumeSource);
 		FullMatchDefinition definition = FullMatchDefinition.FromRequest(request, data, behavior);
 		PlayerSide opponentSide = humanSide == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp;
-		var opponent = new FullGameContractAgent(
-			new FullGameContractPolicy(opponentSide),
-			definition.Runtime);
+		IGameAgent opponent = resumeSource is not null
+			? OfflineMatchFactory.CreateTraceOpponent(definition, humanSide, resumeSource, _resumeThroughActionSequence)
+			: UseContractDiagnostic ? new FullGameContractAgent(new FullGameContractPolicy(opponentSide), definition.Runtime)
+			: OfflineMatchFactory.CreateOpponent(definition, humanSide, _difficulty?.Selected == 1 ? "easy" : "standard");
 		var options = new MatchCoordinatorOptions
 		{
+			EnableDeveloperTools = DeveloperToolsEnabled,
 			HumanSide = humanSide,
 			AutoPassPriority = true,
 			AgentDelay = TimeSpan.FromMilliseconds(45),
@@ -396,8 +398,7 @@ public partial class Main
 			_fullMatchResumePaused = true;
 			_startButton.Disabled = true;
 			_status.Text = "Recovered decision loaded · press Continue to resume this match.";
-			_coordinator.SnapshotPublished += QueueSnapshot;
-			_coordinator.SnapshotPublished += CaptureFullMatchSetupSnapshot;
+			AttachCoordinatorPublications();
 			if (_sessionRecoverySmoke)
 			{
 				_ = RunSessionRecoverySmokeAsync();
@@ -525,22 +526,27 @@ public partial class Main
 
 	private async Task ContinueRecoveredFullMatchAsync()
 	{
+		MatchCoordinator coordinator = _coordinator!;
+		long generation = _sessionGeneration;
 		try
 		{
-			await _coordinator!.ContinueRecoveredSessionAsync();
-			_fullMatchResumePaused = false;
+			await coordinator.ContinueAsync();
+			if (IsCurrentSession(coordinator, generation)) _fullMatchResumePaused = false;
 		}
 		catch (Exception exception)
 		{
-			RecordFullMatchException(exception, "resume-continue");
-			_status.Text = $"Recovered match could not continue: {exception.Message}";
+			if (IsCurrentSession(coordinator, generation))
+			{
+				RecordFullMatchException(exception, "resume-continue");
+				_status.Text = "The match could not continue. The saved game is still available.";
+			}
 		}
 		finally
 		{
-			_fullMatchResumeContinueInFlight = false;
-			if (_currentSnapshot is { } current && _useCardTable)
+			if (IsCurrentSession(coordinator, generation))
 			{
-				RenderCardTableActions(current);
+				_fullMatchResumeContinueInFlight = false;
+				if (_currentSnapshot is { } current && _useCardTable) RenderCardTableActions(current);
 			}
 		}
 	}

@@ -455,6 +455,11 @@ public sealed class GatewayBatch2RunCostBehaviorSpecTests
         Assert.Equal(3, afterParameters.CreditCost);
         Assert.Equal(5, afterParameters.CostQuote!.BaseCost);
         Assert.Equal(3, afterParameters.CostQuote.EffectiveCost);
+        string beforeProjection = EngineJson.Serialize(afterPrompt);
+        HandCardCondition condition = Assert.Single(GameEngine.ObserveHandConditions(afterPrompt, PlayerSide.Runner, catalog, runtime));
+        Assert.Equal(afterParameters.CostQuote, condition.InstallCost);
+        Assert.Equal(beforeProjection, EngineJson.Serialize(afterPrompt));
+        Assert.Empty(GameEngine.ObserveHandConditions(afterPrompt, PlayerSide.Corp, catalog, runtime));
         Assert.Contains(
             "carmen-successful-run-install",
             EngineJson.Serialize(ObservationBuilder.Build(afterPrompt, PlayerSide.Runner, catalog)),
@@ -466,6 +471,7 @@ public sealed class GatewayBatch2RunCostBehaviorSpecTests
         Assert.Equal(0, afterInstalled.State.GetPlayer(runner).Credits);
         Assert.Equal(ZoneKind.RunnerRig, afterInstalled.State.GetZone(afterInstalled.State.GetCard(afterId).ZoneId).Kind);
         Assert.Empty(StateInvariantValidator.Collect(afterInstalled.State, catalog, runtime));
+        Assert.Empty(GameEngine.ObserveHandConditions(afterInstalled.State, PlayerSide.Runner, catalog, runtime));
     }
 
     [Fact]

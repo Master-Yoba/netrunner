@@ -1,0 +1,311 @@
+{
+  "schemaVersion": 1,
+  "kind": "m5-comparison-timing-summary",
+  "scope": "Measured benchmark agent calls include worker scheduling and diagnostic capture. Maximum per-game p95 is reported explicitly; percentiles are not pooled. Isolated direct-policy timings are separate.",
+  "suites": [
+    {
+      "suiteId": "m5-compare-contract-v1",
+      "manifestHash": "508c4216be9d5c15205b972ecc0173736c1d959b7b21de0b055df276659be8dd",
+      "buildRevision": "0.1.0-dev+6c406881231dc72f4530c77c57bb720086e5ad31",
+      "sourceReportSha256": "746db78a453d5035c9c7d9d0c2599e0b8706660e9ad12aeeaa8e49e4ba614d6a",
+      "groups": [
+        {
+          "comparisonGroup": "candidate-corp",
+          "corpPreset": "system-gateway-basic-corp",
+          "runnerPreset": "system-gateway-basic-runner",
+          "games": 5,
+          "corp": {
+            "decisions": 1553,
+            "medianOfGameMediansMilliseconds": 0.3657,
+            "maximumGameP95Milliseconds": 3.8438,
+            "maximumDecisionMilliseconds": 10.058
+          },
+          "runner": {
+            "decisions": 2440,
+            "medianOfGameMediansMilliseconds": 0.0109,
+            "maximumGameP95Milliseconds": 0.1272,
+            "maximumDecisionMilliseconds": 3.1233
+          }
+        },
+        {
+          "comparisonGroup": "candidate-corp",
+          "corpPreset": "system-gateway-basic-corp",
+          "runnerPreset": "system-gateway-expanded-runner",
+          "games": 5,
+          "corp": {
+            "decisions": 1522,
+            "medianOfGameMediansMilliseconds": 0.4052,
+            "maximumGameP95Milliseconds": 3.2645,
+            "maximumDecisionMilliseconds": 10.6163
+          },
+          "runner": {
+            "decisions": 2657,
+            "medianOfGameMediansMilliseconds": 0.0106,
+            "maximumGameP95Milliseconds": 0.0534,
+            "maximumDecisionMilliseconds": 2.5191
+          }
+        },
+        {
+          "comparisonGroup": "candidate-corp",
+          "corpPreset": "system-gateway-expanded-corp",
+          "runnerPreset": "system-gateway-basic-runner",
+          "games": 5,
+          "corp": {
+            "decisions": 1851,
+            "medianOfGameMediansMilliseconds": 0.771,
+            "maximumGameP95Milliseconds": 4.252,
+            "maximumDecisionMilliseconds": 11.7686
+          },
+          "runner": {
+            "decisions": 4707,
+            "medianOfGameMediansMilliseconds": 0.0102,
+            "maximumGameP95Milliseconds": 0.0355,
+            "maximumDecisionMilliseconds": 2.7943
+          }
+        },
+        {
+          "comparisonGroup": "candidate-corp",
+          "corpPreset": "system-gateway-expanded-corp",
+          "runnerPreset": "system-gateway-expanded-runner",
+          "games": 5,
+          "corp": {
+            "decisions": 1427,
+            "medianOfGameMediansMilliseconds": 0.5772,
+            "maximumGameP95Milliseconds": 3.3504,
+            "maximumDecisionMilliseconds": 10.9391
+          },
+          "runner": {
+            "decisions": 3295,
+            "medianOfGameMediansMilliseconds": 0.01,
+            "maximumGameP95Milliseconds": 0.0387,
+            "maximumDecisionMilliseconds": 1.4316
+          }
+        },
+        {
+          "comparisonGroup": "candidate-runner",
+          "corpPreset": "system-gateway-basic-corp",
+          "runnerPreset": "system-gateway-basic-runner",
+          "games": 5,
+          "corp": {
+            "decisions": 2109,
+            "medianOfGameMediansMilliseconds": 0.01,
+            "maximumGameP95Milliseconds": 0.0947,
+            "maximumDecisionMilliseconds": 4.0547
+          },
+          "runner": {
+            "decisions": 2652,
+            "medianOfGameMediansMilliseconds": 0.6969,
+            "maximumGameP95Milliseconds": 3.3639,
+            "maximumDecisionMilliseconds": 10.5788
+          }
+        },
+        {
+          "comparisonGroup": "candidate-runner",
+          "corpPreset": "system-gateway-basic-corp",
+          "runnerPreset": "system-gateway-expanded-runner",
+          "games": 5,
+          "corp": {
+            "decisions": 2156,
+            "medianOfGameMediansMilliseconds": 0.0096,
+            "maximumGameP95Milliseconds": 0.0487,
+            "maximumDecisionMilliseconds": 3.0053
+          },
+          "runner": {
+            "decisions": 2830,
+            "medianOfGameMediansMilliseconds": 0.395,
+            "maximumGameP95Milliseconds": 2.9911,
+            "maximumDecisionMilliseconds": 10.8495
+          }
+        },
+        {
+          "comparisonGroup": "candidate-runner",
+          "corpPreset": "system-gateway-expanded-corp",
+          "runnerPreset": "system-gateway-basic-runner",
+          "games": 5,
+          "corp": {
+            "decisions": 1714,
+            "medianOfGameMediansMilliseconds": 0.01,
+            "maximumGameP95Milliseconds": 0.0491,
+            "maximumDecisionMilliseconds": 1.275
+          },
+          "runner": {
+            "decisions": 2031,
+            "medianOfGameMediansMilliseconds": 0.3826,
+            "maximumGameP95Milliseconds": 2.8566,
+            "maximumDecisionMilliseconds": 10.4206
+          }
+        },
+        {
+          "comparisonGroup": "candidate-runner",
+          "corpPreset": "system-gateway-expanded-corp",
+          "runnerPreset": "system-gateway-expanded-runner",
+          "games": 5,
+          "corp": {
+            "decisions": 1750,
+            "medianOfGameMediansMilliseconds": 0.0099,
+            "maximumGameP95Milliseconds": 0.0408,
+            "maximumDecisionMilliseconds": 3.4018
+          },
+          "runner": {
+            "decisions": 2105,
+            "medianOfGameMediansMilliseconds": 0.403,
+            "maximumGameP95Milliseconds": 2.8329,
+            "maximumDecisionMilliseconds": 9.5403
+          }
+        }
+      ]
+    },
+    {
+      "suiteId": "m5-compare-previous-v1",
+      "manifestHash": "14f0f5c0e8b85818c153d679fe20299b46f84b2a29d689bdfd46085ae04a5e90",
+      "buildRevision": "0.1.0-dev+6c406881231dc72f4530c77c57bb720086e5ad31",
+      "sourceReportSha256": "98925480656dc7de3546fa69b46383ec806f599ca1676145b1659102249c8661",
+      "groups": [
+        {
+          "comparisonGroup": "candidate-corp",
+          "corpPreset": "system-gateway-basic-corp",
+          "runnerPreset": "system-gateway-basic-runner",
+          "games": 5,
+          "corp": {
+            "decisions": 1788,
+            "medianOfGameMediansMilliseconds": 0.6411,
+            "maximumGameP95Milliseconds": 3.9907,
+            "maximumDecisionMilliseconds": 10.1567
+          },
+          "runner": {
+            "decisions": 2107,
+            "medianOfGameMediansMilliseconds": 0.4522,
+            "maximumGameP95Milliseconds": 3.9269,
+            "maximumDecisionMilliseconds": 10.9317
+          }
+        },
+        {
+          "comparisonGroup": "candidate-corp",
+          "corpPreset": "system-gateway-basic-corp",
+          "runnerPreset": "system-gateway-expanded-runner",
+          "games": 5,
+          "corp": {
+            "decisions": 1652,
+            "medianOfGameMediansMilliseconds": 0.4995,
+            "maximumGameP95Milliseconds": 3.394,
+            "maximumDecisionMilliseconds": 11.7632
+          },
+          "runner": {
+            "decisions": 1934,
+            "medianOfGameMediansMilliseconds": 0.3838,
+            "maximumGameP95Milliseconds": 2.2296,
+            "maximumDecisionMilliseconds": 9.6914
+          }
+        },
+        {
+          "comparisonGroup": "candidate-corp",
+          "corpPreset": "system-gateway-expanded-corp",
+          "runnerPreset": "system-gateway-basic-runner",
+          "games": 5,
+          "corp": {
+            "decisions": 1611,
+            "medianOfGameMediansMilliseconds": 0.47,
+            "maximumGameP95Milliseconds": 2.8507,
+            "maximumDecisionMilliseconds": 11.1987
+          },
+          "runner": {
+            "decisions": 1956,
+            "medianOfGameMediansMilliseconds": 0.3635,
+            "maximumGameP95Milliseconds": 2.9301,
+            "maximumDecisionMilliseconds": 10.4282
+          }
+        },
+        {
+          "comparisonGroup": "candidate-corp",
+          "corpPreset": "system-gateway-expanded-corp",
+          "runnerPreset": "system-gateway-expanded-runner",
+          "games": 5,
+          "corp": {
+            "decisions": 1285,
+            "medianOfGameMediansMilliseconds": 0.3909,
+            "maximumGameP95Milliseconds": 3.6643,
+            "maximumDecisionMilliseconds": 10.3474
+          },
+          "runner": {
+            "decisions": 1495,
+            "medianOfGameMediansMilliseconds": 0.2778,
+            "maximumGameP95Milliseconds": 2.6586,
+            "maximumDecisionMilliseconds": 9.5959
+          }
+        },
+        {
+          "comparisonGroup": "candidate-runner",
+          "corpPreset": "system-gateway-basic-corp",
+          "runnerPreset": "system-gateway-basic-runner",
+          "games": 5,
+          "corp": {
+            "decisions": 1788,
+            "medianOfGameMediansMilliseconds": 0.5453,
+            "maximumGameP95Milliseconds": 4.0175,
+            "maximumDecisionMilliseconds": 10.8227
+          },
+          "runner": {
+            "decisions": 2107,
+            "medianOfGameMediansMilliseconds": 0.4538,
+            "maximumGameP95Milliseconds": 3.5809,
+            "maximumDecisionMilliseconds": 10.6688
+          }
+        },
+        {
+          "comparisonGroup": "candidate-runner",
+          "corpPreset": "system-gateway-basic-corp",
+          "runnerPreset": "system-gateway-expanded-runner",
+          "games": 5,
+          "corp": {
+            "decisions": 1652,
+            "medianOfGameMediansMilliseconds": 0.5242,
+            "maximumGameP95Milliseconds": 3.249,
+            "maximumDecisionMilliseconds": 9.6378
+          },
+          "runner": {
+            "decisions": 1934,
+            "medianOfGameMediansMilliseconds": 0.4089,
+            "maximumGameP95Milliseconds": 2.8346,
+            "maximumDecisionMilliseconds": 12.0097
+          }
+        },
+        {
+          "comparisonGroup": "candidate-runner",
+          "corpPreset": "system-gateway-expanded-corp",
+          "runnerPreset": "system-gateway-basic-runner",
+          "games": 5,
+          "corp": {
+            "decisions": 1611,
+            "medianOfGameMediansMilliseconds": 0.4949,
+            "maximumGameP95Milliseconds": 3.0184,
+            "maximumDecisionMilliseconds": 11.4422
+          },
+          "runner": {
+            "decisions": 1956,
+            "medianOfGameMediansMilliseconds": 0.363,
+            "maximumGameP95Milliseconds": 2.7668,
+            "maximumDecisionMilliseconds": 10.6335
+          }
+        },
+        {
+          "comparisonGroup": "candidate-runner",
+          "corpPreset": "system-gateway-expanded-corp",
+          "runnerPreset": "system-gateway-expanded-runner",
+          "games": 5,
+          "corp": {
+            "decisions": 1285,
+            "medianOfGameMediansMilliseconds": 0.4156,
+            "maximumGameP95Milliseconds": 2.8961,
+            "maximumDecisionMilliseconds": 8.9576
+          },
+          "runner": {
+            "decisions": 1495,
+            "medianOfGameMediansMilliseconds": 0.2849,
+            "maximumGameP95Milliseconds": 2.6196,
+            "maximumDecisionMilliseconds": 10.4406
+          }
+        }
+      ]
+    }
+  ]
+}

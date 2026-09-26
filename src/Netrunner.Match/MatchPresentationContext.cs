@@ -10,6 +10,7 @@ public sealed record MatchPresentationContext(
     IReadOnlyList<ActionSourceContext> ActionSources)
 {
     public static MatchPresentationContext Empty { get; } = new([], [], null, []);
+    public IReadOnlyList<HandCardCondition> HandConditions { get; init; } = [];
 }
 
 public sealed record CardPositionViewModel(string CardId, string ServerId, ZoneKind Zone, int Index);

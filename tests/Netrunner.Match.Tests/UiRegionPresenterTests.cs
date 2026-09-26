@@ -417,7 +417,7 @@ public sealed class UiRegionPresenterTests
 
         for (int i = 0; i < 500; i++)
         {
-            Observation observation = await coordinator.GetObservationAsync(human).WaitAsync(TimeSpan.FromSeconds(5));
+            Observation observation = await coordinator.GetReadyObservationAsync(human).WaitAsync(TimeSpan.FromSeconds(5));
             MatchSnapshot snapshot = coordinator.CurrentSnapshot!;
             Assert.False(snapshot.IsTerminal, "The full match ended before issuing the expected action.");
             Assert.True(snapshot.AwaitingHumanDecision);

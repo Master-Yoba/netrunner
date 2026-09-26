@@ -8,6 +8,8 @@ action boundary.
 The product definition is in [the PRD](docs/netrunner_solo_prd_v0.2.md). The
 dependency-ordered engineering roadmap is in
 [the implementation plan](docs/IMPLEMENTATION_PLAN.md).
+The next offline-solo milestone is detailed in [the M5 plan](docs/M5_PLAN.md),
+covering heuristic opponents, benchmarks, save/resume and developer tooling.
 
 ## Current state
 

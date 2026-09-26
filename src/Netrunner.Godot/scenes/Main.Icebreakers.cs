@@ -87,7 +87,12 @@ public partial class Main
 			_icebreakerPanel.GetNode<Label>("%Strength").Text = $"{current}  →  {ice} · strength {breaker.Encounter.EffectiveStrength?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "?"}";
 			_icebreakerPanel.GetNode<Label>("%Subroutines").Text = string.Join(" · ", breaker.Encounter.Subroutines.Select(sub =>
 				$"{sub.Ordinal + 1}: {(sub.Broken ? "broken" : sub.Resolved ? "resolved" : "unbroken")}"));
-			_icebreakerPanel.GetNode<Label>("%Hint").Text = $"Available: {snapshot.View.Run!.RunCredits} run + {snapshot.View.Runner.Credits} personal credits.\nRun credits expire at run end and are spent first. Boost pays immediately; Break lets you select targets first.";
+			bool hostedVirus = breaker.Card.HostCardId == breaker.Encounter.Ice?.Id
+				&& breaker.Actions.Any(action => action.Parameters is RunBreakParameters { SubroutineId: not null });
+			int virusCounters = breaker.Card.TypedCounters.Where(counter => counter.Purpose == CardCounterPurpose.Virus).Sum(counter => counter.Count);
+			_icebreakerPanel.GetNode<Label>("%Hint").Text = hostedVirus
+				? $"Hosted virus counters: {virusCounters}.\nEach break spends 1 counter. Select a subroutine, then confirm."
+				: $"Available: {snapshot.View.Run!.RunCredits} run + {snapshot.View.Runner.Credits} personal credits.\nRun credits expire at run end and are spent first. Boost pays immediately; Break lets you select targets first.";
 			VBoxContainer actions = _icebreakerPanel.GetNode<VBoxContainer>("%Actions");
 			ClearChildren(actions);
 			_boardBreakerButtons.Clear();
@@ -131,7 +136,7 @@ public partial class Main
 		_icebreakerPanel.Size = new Vector2(470, _boardChoosingSubroutines ? 470 : 330);
 		Vector2 anchor = _tableViewport.GetGlobalTransform().AffineInverse() * card.GetGlobalRect().Position;
 		Vector2 size = _icebreakerPanel.Size;
-		float x = anchor.X + card.Size.X + 12;
+		float x = anchor.X + card.GetGlobalRect().Size.X / _tableViewport.GetGlobalTransform().Scale.X + 12;
 		if (x + size.X > _tableViewport.Size.X - 12) x = anchor.X - size.X - 12;
 		_icebreakerPanel.Position = new Vector2(Math.Clamp(x, 12, Math.Max(12, _tableViewport.Size.X - size.X - 12)),
 			Math.Clamp(anchor.Y - size.Y + 52, 12, Math.Max(12, _tableViewport.Size.Y - size.Y - 12)));

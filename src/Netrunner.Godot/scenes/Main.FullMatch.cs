@@ -142,8 +142,7 @@ public partial class Main
 					humanSide,
 					seed: 42,
 					agentDelay: TimeSpan.FromMilliseconds(45));
-				_coordinator.SnapshotPublished += QueueSnapshot;
-				_coordinator.SnapshotPublished += CaptureFullMatchSetupSnapshot;
+				AttachCoordinatorPublications();
 				_startButton.Disabled = true;
 				_status.Text = "Starting the developer full-match proof through Core setup…";
 				_ = AwaitStartAsync();
@@ -175,8 +174,7 @@ public partial class Main
 				humanSide,
 				seed: seed,
 				officialPresets: _officialPresetCatalog!);
-			_coordinator.SnapshotPublished += QueueSnapshot;
-			_coordinator.SnapshotPublished += CaptureFullMatchSetupSnapshot;
+			AttachCoordinatorPublications();
 			_startButton.Disabled = true;
 			_status.Text = "Shuffling decks and dealing opening hands…";
 			_ = AwaitStartAsync();
@@ -316,7 +314,7 @@ public partial class Main
 					throw new TimeoutException("Full-match smoke exceeded its developer polling cap.");
 				}
 
-				Observation observation = await _coordinator!.GetObservationAsync(side)
+				Observation observation = await _coordinator!.GetReadyObservationAsync(side)
 					.WaitAsync(TimeSpan.FromSeconds(15));
 				MatchSnapshot snapshot = _coordinator.CurrentSnapshot!;
 				diagnosticSnapshot = snapshot;

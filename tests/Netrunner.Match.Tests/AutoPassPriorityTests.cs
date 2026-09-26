@@ -156,7 +156,8 @@ public sealed class AutoPassPriorityTests
             MatchSnapshot paused = await coordinator.StartAsync().WaitAsync(TimeSpan.FromSeconds(5));
             Assert.Equal(0, paused.ActionCount);
             Assert.False(paused.IsOpponentThinking);
-            Assert.True(paused.AwaitingHumanDecision);
+            Assert.True(paused.IsPaused);
+            Assert.False(paused.AwaitingHumanDecision);
             Assert.Equal(ActionKind.PassPriority, Assert.Single(paused.Observation.LegalActions).Kind);
 
             await coordinator.ContinueRecoveredSessionAsync().WaitAsync(TimeSpan.FromSeconds(5));

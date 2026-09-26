@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3]
+[gd_scene format=3]
 
 ; CardLabelLayout* scenes own label anchors and status/counter style boxes.
 ; CardAppearance owns typography, text colors, card drawing and glow values.
@@ -9,6 +9,16 @@
 [ext_resource type="PackedScene" path="res://scenes/components/layouts/CardLabelLayoutPortrait.tscn" id="4_portrait_layout"]
 [ext_resource type="PackedScene" path="res://scenes/components/layouts/CardLabelLayoutCompact.tscn" id="5_compact_layout"]
 [ext_resource type="PackedScene" path="res://scenes/components/layouts/CardLabelLayoutIce.tscn" id="6_ice_layout"]
+[ext_resource type="Script" path="res://scenes/GameSymbolLabel.cs" id="symbols"]
+
+[sub_resource type="StyleBoxFlat" id="condition_badge"]
+bg_color = Color(0.08, 0.065, 0.025, 0.98)
+border_color = Color(1, 0.72, 0.23, 1)
+border_width_bottom = 1
+corner_radius_top_left = 4
+corner_radius_bottom_right = 4
+content_margin_left = 4.0
+content_margin_right = 4.0
 
 [node name="CardView" type="Control"]
 custom_minimum_size = Vector2(150, 210)
@@ -56,3 +66,20 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+
+[node name="HandConditionBadge" type="PanelContainer" parent="."]
+visible = false
+offset_left = 4.0
+offset_top = 4.0
+offset_right = 56.0
+offset_bottom = 28.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("condition_badge")
+
+[node name="Cost" type="RichTextLabel" parent="HandConditionBadge"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_font_sizes/normal_font_size = 12
+fit_content = true
+scroll_active = false
+script = ExtResource("symbols")

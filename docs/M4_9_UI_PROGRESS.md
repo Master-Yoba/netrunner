@@ -136,6 +136,11 @@ not evidence that a human completed or accepted a manual game.
 
 ## Required player acceptance before M5
 
+22 September update: [M5.0 acceptance reconciliation](M5_PROGRESS.md#scope-authorization-and-acceptance-reconciliation)
+records subsequent player feedback and explicit authorization to begin the
+baseline slice. The formal manual matrix below is still unverified; it is not
+a blocker to the authorized baseline/specification work.
+
 Launch `make play`. Use basic decks and seed `47042` as Runner, keep the hand,
 and pass Corp priority windows to review the Nico opening. Then complete a
 basic game in each seat and exercise expanded decks, run/break/access,

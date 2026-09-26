@@ -1,0 +1,129 @@
+[gd_scene format=3]
+
+[ext_resource type="Theme" path="res://themes/M4Theme.tres" id="theme"]
+
+[sub_resource type="StyleBoxFlat" id="panel"]
+content_margin_left = 20.0
+content_margin_right = 20.0
+content_margin_top = 16.0
+content_margin_bottom = 20.0
+bg_color = Color(0.04, 0.08, 0.1, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.25, 0.7, 0.65, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_left = 8
+corner_radius_bottom_right = 8
+
+[node name="SettingsMenu" type="Control"]
+theme = ExtResource("theme")
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Backdrop" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0, 0, 0, 0.35)
+
+[node name="Panel" type="PanelContainer" parent="."]
+layout_mode = 0
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -366.0
+offset_right = -14.0
+offset_top = 54.0
+offset_bottom = 370.0
+grow_horizontal = 0
+mouse_filter = 0
+theme_override_styles/panel = SubResource("panel")
+
+[node name="Content" type="VBoxContainer" parent="Panel"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Heading" type="HBoxContainer" parent="Panel/Content"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Panel/Content/Heading"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Settings"
+theme_override_font_sizes/font_size = 20
+
+[node name="Close" type="Button" parent="Panel/Content/Heading"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Close · Esc"
+
+[node name="ReducedMotion" type="CheckButton" parent="Panel/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Reduced motion"
+
+[node name="SpeedLabel" type="Label" parent="Panel/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Playback speed · 1×"
+
+[node name="Speed" type="HSlider" parent="Panel/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+custom_minimum_size = Vector2(0, 28)
+min_value = 0.5
+max_value = 3.0
+step = 0.5
+value = 1.0
+accessibility_name = "Playback speed"
+
+[node name="ScaleRow" type="HBoxContainer" parent="Panel/Content"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="Panel/Content/ScaleRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "UI scale"
+
+[node name="Scale" type="OptionButton" parent="Panel/Content/ScaleRow"]
+unique_name_in_owner = true
+layout_mode = 2
+accessibility_name = "UI scale"
+item_count = 4
+selected = 0
+popup/item_0/text = "100%"
+popup/item_0/id = 0
+popup/item_1/text = "125%"
+popup/item_1/id = 1
+popup/item_2/text = "150%"
+popup/item_2/id = 2
+popup/item_3/text = "200%"
+popup/item_3/id = 3
+
+[node name="OpenLogs" type="Button" parent="Panel/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Open logs"
+disabled = true
+tooltip_text = "Open this match's local diagnostics folder."
+
+[node name="SaveGame" type="Button" parent="Panel/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Save game"
+
+[node name="LoadGame" type="Button" parent="Panel/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Load game"
+
+[node name="SaveAndQuit" type="Button" parent="Panel/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Save and quit"

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "kind": "m5-user-acceptance",
+  "date": "2026-09-25",
+  "reviewedImplementationCommit": "bc2d596",
+  "statement": "it seems to work fine, can push to GH",
+  "context": "Direct reply to the request for M5 human playtest results.",
+  "humanAcceptance": true,
+  "publicationAuthorized": true,
+  "detailedManualMatrixReported": false,
+  "scope": "General acceptance of the completed M5 implementation. Individual seeds, seat/preset outcomes, save boundaries and presentation checks were not supplied or inferred.",
+  "automatedValidation": "audit/validation.json"
+}

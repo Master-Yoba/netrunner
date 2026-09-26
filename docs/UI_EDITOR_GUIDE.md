@@ -94,6 +94,7 @@ Choose **Decision: Ordinary** to preview the local credit and draw glows.
 | Dock and action-button layout | `DecisionDock.tscn` and `ActionButton.tscn` |
 | Hover dimensions and card magnification | Root of `CardHoverPreview.tscn` |
 | Outer margins and setup/header composition | `scenes/Main.tscn` and `components/MatchSetup.tscn` |
+| Settings menu, playback and UI scale controls | `scenes/components/SettingsMenu.tscn` |
 
 Variable cards, server lanes and history rows are created from component scenes.
 Edit the component scene to retain layout changes; do not save a synthetic
@@ -105,9 +106,39 @@ The local hand occupies its own lower-right area. Edit `LocalHand` in
 `GameBoard.tscn` to change its footprint; the workspace adjusts the play area
 and action dock around it. Hand spacing now belongs to `HandView.CardStep`;
 the old `BoardLayout.HandOverlap` setting has been removed. Server roots are centered in
-`ServerLane.tscn`; its run-marker row stays reserved even when empty. ICE scrolling
-reserves the scrollbar space, with a matching left gutter derived from the theme,
-so crowded servers keep the same centerline as their roots.
+`ServerLane.tscn`; its run-marker row stays reserved even when empty. The server
+network has no scroll containers. `BoardFitViewport` measures all lanes, including
+their ICE and hosted cards, and uniformly scales them down only when their
+combined width or height exceeds the available area. It recalculates after
+resizing, installing cards, and pinning history. Roots and ICE share a centerline;
+hover previews and inspection keep their normal readable sizes.
+
+Corp stats occupy a compact widget beside the servers, above the Runner's
+summary. The action dock uses a shorter bottom-left area beside the hand and
+can grow to accommodate a decision. Global buttons and the lab selectors are
+in the top bar. The settings cog opens playback speed, reduced motion, UI scale
+and local logs; Escape or a click outside closes the menu. Board actions remain
+blocked while it is open.
+
+The fitting approach was informed by [Chiriboga's field layout](https://github.com/drbo6/chiriboga/blob/dev/init.js),
+which measures field width and height before applying a shared zoom. This UI
+uses Godot container minimum sizes and transforms to keep the complete server
+network visible and its targets aligned.
+
+`make verify` checks the compact layout with both seats at 1080p and 1440p,
+including dense servers, multiple hosted cards, expanded/pinned history, and
+settings keyboard and pointer interactions. To refresh synthetic screenshots:
+
+```sh
+source scripts/env.sh
+NETRUNNER_CARD_ART_DIRECTORY=/tmp/netrunner-empty-art "$GODOT4" \
+  --path src/Netrunner.Godot -- --m4-11-ui-smoke --compact-layout-screenshots
+```
+
+Examples: [normal board](evidence/m4-11/compact-runner-normal-1920.png),
+[dense board](evidence/m4-11/compact-corp-dense-2560.png), and
+[settings](evidence/m4-11/compact-settings-1920.png). Screenshots containing
+locally cached official artwork are written under ignored `artifacts/` instead.
 
 The board resource owns its named geometry settings. Card appearance owns
 custom drawing and typography; component scenes own their fixed label layouts.
@@ -127,7 +158,12 @@ in their scenes and intentionally override the common panel style.
   A resource-owned property can override a raw node size; use its named setting.
 - A selected or target card has an instance state; it does not change the
   shared default color. White indicates an actionable source, blue selection,
-  and cyan a possible target.
+  and cyan a possible target. Amber indicates a fulfilled hand-card condition
+  or active install discount. Tune `CardAppearance.ConditionMetColor` to change it.
+  The cost badge shows the current discounted credit cost; hover and inspection
+  include the printed cost and the condition. Core supplies these values, even
+  when the player cannot afford the card. Legal actions still determine whether
+  it can be played. Cues clear when the condition expires or the card leaves hand.
 - If custom properties are absent, build the Godot C# project and check the
   editor's Errors panel before reopening the scene.
 
@@ -141,10 +177,18 @@ required M4.10 gate; automated checks do not replace it.
 ## Practice drag interactions
 
 Run `make interaction-lab`, or select **Practice board interactions** on the
-setup screen. Choose **Runner** or **Corp**, then a scenario. **Reset
-scenario** restores the fixture immediately. The lab uses synthetic presentation
+setup screen. Choose **Runner** or **Corp**, then a scenario. **Reset** in the
+top bar restores the fixture immediately. The lab uses synthetic presentation
 data and the production interaction controls; it is not a rules simulator or a
 saved match. No official card metadata is required.
+
+Runner's **Spend hosted virus counters** scenario starts with Practice Botulus
+attached to ICE and holding two virus counters. Click the hosted card, choose
+**Break subroutines…**, select one subroutine, and confirm. The counter chip
+decreases while personal and run credits stay unchanged. After two breaks,
+one subroutine remains and the virus cannot break again. Escape cancels an
+unconfirmed selection; **Reset** restores both counters and all three
+subroutines. Artwork comes from the same optional local cache as other scenarios.
 
 Tune `themes/DragAppearance.tres` for drag threshold, preview scale, return
 duration, edge scrolling, and destination styles. Production scenes are
@@ -169,6 +213,20 @@ to the local player's known face. The other cards ease apart to make room.
 On `HandView`, tune `DrawSeconds`, `DrawArcHeight` and `DrawStaggerSeconds`;
 the playback speed slider scales the duration. Zero `DrawSeconds` disables the
 flight. Reduced motion and Skip animation reveal pending arrivals immediately.
+
+Opponent actions play in order, with time to read the last-action line. Draws
+and concealed discards move a neutral card back; installs and changes to cards
+or resource totals receive motion or a highlight. A fast opponent never causes
+an automatic animation skip. History advances with the displayed board; **Skip
+animation** preserves every queued history entry while catching up. Playback
+speed and Reduced motion remain available from the settings cog.
+
+Run server selection stays in the lower action area so HQ and the other servers
+remain visible and clickable. The interaction smoke checks this at 1080p and
+1440p, along with live condition changes and a burst of over 24 opponent updates.
+Use `--ux-feedback-screenshots` with `--m4-11-ui-smoke` for
+[hand-condition](evidence/m4-11/hand-condition-1920.png) and
+[Run-picker](evidence/m4-11/run-picker-1920.png) evidence.
 
 Both sides' **Discard from hand** scenarios start with seven
 cards and ask you to discard two. Drag highlighted cards to Heap or Archives.

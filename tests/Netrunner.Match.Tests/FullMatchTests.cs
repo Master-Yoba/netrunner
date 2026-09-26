@@ -40,7 +40,7 @@ public sealed class FullMatchTests
         bool mulliganTaken = false;
         for (int i = 0; i < 500; i++)
         {
-            Observation observation = await coordinator.GetObservationAsync(human).WaitAsync(TimeSpan.FromSeconds(5));
+            Observation observation = await coordinator.GetReadyObservationAsync(human).WaitAsync(TimeSpan.FromSeconds(5));
             MatchSnapshot snapshot = coordinator.CurrentSnapshot!;
             Assert.Equal(human, snapshot.View.Viewer);
             Assert.False(snapshot.Feedback?.IsError == true, snapshot.Feedback?.Message);

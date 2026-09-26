@@ -133,7 +133,7 @@ public partial class Main
 			RequireInteraction(_cardHoverPreviewRules!.RenderedSymbolCount == 8
 				&& !_cardHoverPreviewRules.GetParsedText().Contains("[credit]", StringComparison.Ordinal),
 				"Hover rules still display literal symbol placeholders.");
-			GameSymbolLabel corpResources = _gameTable.GetNode<GameSymbolLabel>("Surface/Margins/Layout/CorpStrip/Content/Resources");
+			GameSymbolLabel corpResources = _gameTable.GetNode<GameSymbolLabel>("Surface/Margins/Layout/ServerField/Content/Summary/Content/Resources");
 			GameSymbolLabel runnerResources = _gameTable.GetNode<GameSymbolLabel>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/Resources");
 			RequireInteraction(corpResources.RenderedSymbolCount == 2 && runnerResources.RenderedSymbolCount >= 3
 				&& runnerResources.GetContentHeight() <= runnerResources.Size.Y + 1,

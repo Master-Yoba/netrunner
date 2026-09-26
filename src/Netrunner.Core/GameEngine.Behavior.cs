@@ -2965,6 +2965,15 @@ public static partial class GameEngine
         option.Instructions.Count == 1
         && option.Instructions[0].Kind == BehaviorInstructionKind.InstallCard;
 
+    internal static GameState ProjectBehaviorInstallSelection(GameState state, IBehaviorCatalog behavior,
+        IRuntimeCardCatalog runtime, BehaviorResolutionFrame frame, BehaviorInstruction instruction,
+        out BehaviorResolutionFrame prepared)
+    {
+        WorkingState probe = WorkingState.From(state, behavior, runtime);
+        prepared = RestoreBehaviorInstallSelection(probe, frame, instruction);
+        return probe.Build(state);
+    }
+
     private static bool IsBehaviorInstallOptionAvailable(
         WorkingState working,
         BehaviorResolutionFrame frame,
@@ -2977,7 +2986,13 @@ public static partial class GameEngine
 
         try
         {
-            _ = ValidateBehaviorInstallInstruction(working, frame, option.Instructions[0]);
+            // A searched card remains in temporary custody while this mode
+            // choice is open. Test the same restoration as the actual install
+            // on an isolated working copy; probing must not move cards, emit
+            // events or consume IDs in the authoritative reduction.
+            WorkingState probe = working.Fork();
+            BehaviorResolutionFrame prepared = RestoreBehaviorInstallSelection(probe, frame, option.Instructions[0]);
+            _ = ValidateBehaviorInstallInstruction(probe, prepared, option.Instructions[0]);
             return true;
         }
         catch (ResolutionFailureException)
@@ -3577,6 +3592,7 @@ public static partial class GameEngine
 
         var remainingSetAside = frame.SetAside.ToList();
         var remainingBindings = frame.Bindings.ToList();
+        bool leftRunnerRig = false;
         foreach (CardInstanceId cardId in cardIds)
         {
             CardInstanceState card = GetCard(working, cardId);
@@ -3609,6 +3625,7 @@ public static partial class GameEngine
             // legal same-zone shuffle.
             if (source.Id != destination.Id)
             {
+                leftRunnerRig |= source.Kind == ZoneKind.RunnerRig;
                 bool emit = source.Kind != ZoneKind.BehaviorSetAside
                     || destination.Kind is ZoneKind.CorpDiscard
                         or ZoneKind.RunnerHeap
@@ -3679,6 +3696,12 @@ public static partial class GameEngine
                 bindings: remainingBindings,
                 setAside: remainingSetAside,
                 clearSetAsideZone: remainingSetAside.Count == 0));
+        // A transfer can remove an installed memory modifier (for example,
+        // Retribution trashing DZMZ). Suspend the already-advanced behavior
+        // cursor under the normal effect cleanup lifecycle before another
+        // instruction or the parent action can issue a decision.
+        if (leftRunnerRig && working.RulesState?.Players.Any(player => player.UsedMemory > EffectiveMemoryLimit(working, player.PlayerId)) == true)
+            working.ResolutionStack.Add(new EffectResolutionFrame(frame.Controller, new CostBundle(), new EffectBundle()));
     }
 
     private static void ResolveProvenEmptySelectionShuffle(

@@ -8,14 +8,19 @@ namespace Netrunner.Match;
 /// </summary>
 public static class MatchPresentationProjector
 {
-    public static MatchPresentationContext Build(GameState state, PlayerSide viewer)
+    public static MatchPresentationContext Build(GameState state, PlayerSide viewer,
+        IBehaviorCatalog? behaviorCatalog = null, IRuntimeCardCatalog? runtimeCardCatalog = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         if (!Enum.IsDefined(viewer)) throw new ArgumentOutOfRangeException(nameof(viewer));
+        IReadOnlyList<HandCardCondition> handConditions = behaviorCatalog is not null && runtimeCardCatalog is not null
+            ? GameEngine.ObserveHandConditions(state, viewer, behaviorCatalog, runtimeCardCatalog) : [];
+        MatchPresentationContext empty = handConditions.Count == 0 ? MatchPresentationContext.Empty
+            : MatchPresentationContext.Empty with { HandConditions = handConditions };
         if (state.PendingDecision is not { } pending || state.GetPlayer(pending.Owner).Side != viewer)
-            return MatchPresentationContext.Empty;
+            return empty;
         IReadOnlyList<LegalAction> actions = pending.LegalActions;
-        if (actions.Count == 0) return MatchPresentationContext.Empty;
+        if (actions.Count == 0) return empty;
         CardPositionViewModel[] positions = state.Zones
             .Where(zone => zone.Kind is ZoneKind.ServerIce or ZoneKind.ServerRoot)
             .SelectMany(zone => zone.CardIds.Select((id, index) =>
@@ -62,7 +67,8 @@ public static class MatchPresentationProjector
                     triggerSource?.TriggerKey ?? interruptSource?.InterruptKey, interruptSource?.BasicDrawCount));
         }
         return new(Array.AsReadOnly(positions), Array.AsReadOnly(cards.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => pair.Value).ToArray()),
-            selection, sources.AsReadOnly());
+            selection, sources.AsReadOnly())
+        { HandConditions = handConditions };
 
         bool AddCard(CardInstanceId id)
         {

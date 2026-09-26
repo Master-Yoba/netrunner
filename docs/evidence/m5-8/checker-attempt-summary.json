@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "kind": "m5-headless-gate-summary",
+  "mode": "quick",
+  "passed": false,
+  "cases": {
+    "smoke": {
+      "games": 20,
+      "terminal": 20,
+      "reviewedTurnCaps": [],
+      "verifiedReplays": 20,
+      "manifestHash": "5db57e006879cddd3a2943c2dbb26ad0b5dbebbcc351a4b128252a38f9c760a2",
+      "deterministicDigest": "cf4fc552bf838aa740d4ea99aa021f1b23ba3bd73ecccbd6d4d89c9279465550",
+      "reportSha256": "b1d49b8a2b4922243294b2268da1ec6cf57d4cd9c5231d309a773ee6c873fe2c",
+      "workers": 4
+    },
+    "smoke-repeat": {
+      "games": 20,
+      "terminal": 20,
+      "reviewedTurnCaps": [],
+      "verifiedReplays": 20,
+      "manifestHash": "5db57e006879cddd3a2943c2dbb26ad0b5dbebbcc351a4b128252a38f9c760a2",
+      "deterministicDigest": "cf4fc552bf838aa740d4ea99aa021f1b23ba3bd73ecccbd6d4d89c9279465550",
+      "reportSha256": "336756201212ead6fa982f76c05103c407386b9a02c3e6c8963bd1fccec30fab",
+      "workers": 1
+    },
+    "runner-tactics": {
+      "verifiedReplays": 40,
+      "scores": [
+        {
+          "side": "runner",
+          "passed": 38,
+          "total": 40,
+          "criticalPassed": 17,
+          "criticalTotal": 17,
+          "splits": {
+            "tuning": {
+              "passed": 24,
+              "total": 24
+            },
+            "held-out": {
+              "passed": 14,
+              "total": 16
+            }
+          }
+        }
+      ],
+      "manifestHash": "22182ada3ed22ddc717cdbe61decf7d2e6e3d7212f1282ce9b235adaed47e9db",
+      "deterministicDigest": "ee47d3bfd954a7cfc2ce23b19f30c8a75885d63de445087ce4545096ba3a9edb",
+      "reportSha256": "da0a0beb18ffd1c2abbd4f7539118bbf5a9c2abcbc84ab1cbb839c2db3d2d905",
+      "workers": 4
+    },
+    "runner-tactics-repeat": {
+      "verifiedReplays": 40,
+      "scores": [
+        {
+          "side": "runner",
+          "passed": 38,
+          "total": 40,
+          "criticalPassed": 17,
+          "criticalTotal": 17,
+          "splits": {
+            "tuning": {
+              "passed": 24,
+              "total": 24
+            },
+            "held-out": {
+              "passed": 14,
+              "total": 16
+            }
+          }
+        }
+      ],
+      "manifestHash": "22182ada3ed22ddc717cdbe61decf7d2e6e3d7212f1282ce9b235adaed47e9db",
+      "deterministicDigest": "ee47d3bfd954a7cfc2ce23b19f30c8a75885d63de445087ce4545096ba3a9edb",
+      "reportSha256": "76e344990fb602df197a51684d505db9dc6f63fea5dfee215de46a43c0d1d674",
+      "workers": 1
+    }
+  },
+  "errors": [
+    "corp-tactics: Report is bound to a different manifest",
+    "corp-tactics-repeat: Report is bound to a different manifest",
+    "corp-tactics repeat: 'corp-tactics'"
+  ],
+  "scope": "Headless legality, tactics, comparisons and worker determinism; offline package, performance and human acceptance are separate."
+}

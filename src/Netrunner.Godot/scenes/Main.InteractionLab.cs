@@ -21,7 +21,7 @@ public partial class Main
 		// Only reachable before starting a match, or through the explicit lab CLI mode.
 		if (_coordinator is not null) return;
 		_interactionLab = true;
-		Control toolbar = _board.GetNode<Control>("InteractionLabToolbar");
+		Control toolbar = _layout.GetNode<Control>("Header/InteractionLabToolbar");
 		toolbar.Show();
 		if (_labScenarios is null)
 		{
@@ -38,7 +38,8 @@ public partial class Main
 			_labScenarios.ItemSelected += index => { _labScenario = _labScenarios.GetItemId((int)index); ResetInteractionLab(); };
 			toolbar.GetNode<Button>("Reset").Pressed += ResetInteractionLab;
 			toolbar.GetNode<Button>("Exit").Pressed += () => GetTree().ReloadCurrentScene();
-			_labInstructions = toolbar.GetNode<Label>("Instructions");
+			_labInstructions = _board.GetNode<Label>("StatusBar/Instructions");
+			_labInstructions.Show();
 		}
 		ResetInteractionLab();
 	}
@@ -71,6 +72,7 @@ public partial class Main
 		PublishLabView(view);
 		_labInstructions!.Text = InteractionLabSamples.Instructions[_labScenario];
 		_tableLastAction.Text = _labScenario == 24 ? "Trash or leave the accessed card using the visible controls"
+			: _labScenario == InteractionLabSamples.HostedVirusScenario ? "Click the virus attached to the ICE · 2 virus counters available"
 			: _labScenario >= 20 ? "Select a source or highlighted target, then confirm" : _labScenario == 19 ? "Click an icebreaker in the rig"
 			: _labScenario is 17 or 18 ? "Discard two cards by dragging them to the pile"
 			: _labScenario >= 15 ? "Practice the hand and board actions" : "Drag the practice card from hand";
@@ -81,8 +83,8 @@ public partial class Main
 		view = InteractionLabSamples.WithArtwork(view, _labScenario);
 		Observation observation = new(view.Viewer, view.Decision?.Id ?? "", [], new Dictionary<string, object?>(), new Dictionary<string, object?>());
 		RenderSnapshot(new MatchSnapshot(_labRevision, observation, view, [], null, false));
-		_status.Text = "INTERACTION LAB · synthetic UI fixtures · no live match";
-		_phase.Text = "Reset or switch scenarios at any time";
+		_status.Text = "Interaction lab";
+		_phase.Text = "";
 	}
 
 	private void SubmitBoardActionLab(MatchViewModel view, LegalActionViewModel action)
@@ -131,6 +133,7 @@ public partial class Main
 		_labSubmissionCount++;
 		_labRevision++;
 		MatchViewModel view = snapshot.View;
+		if (_labScenario == InteractionLabSamples.HostedVirusScenario) { SubmitHostedVirusLab(view, action); return true; }
 		if (_labScenario >= 20) { SubmitSpatialLab(view, action); return true; }
 		if (_labScenario == 19)
 		{

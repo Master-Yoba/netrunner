@@ -34,21 +34,7 @@ public partial class Main
 	private void BuildCardTable()
 	{
 		_board = _layout.GetNode<VBoxContainer>("MatchTable");
-		Control toolbar = _board.GetNode<Control>("Toolbar");
-		toolbar.GetNode<Button>("NewGame").Pressed += () => GetTree().ReloadCurrentScene();
-		_reducedMotion = toolbar.GetNode<CheckButton>("ReducedMotion");
-		_reducedMotion.Toggled += reduced => { if (reduced) { _tablePlaybackWait = 0; _gameTable.StopMotion(); } };
-		_speed = toolbar.GetNode<HSlider>("Speed");
-		OptionButton scale = toolbar.GetNode<OptionButton>("Scale");
-		scale.ItemSelected += index =>
-		{
-			float factor = new[] { 1f, 1.25f, 1.5f, 2f }[(int)index];
-			Vector2I physical = GetWindow().Size;
-			GetWindow().ContentScaleSize = new Vector2I(Math.Max(1920, (int)(physical.X / factor)), Math.Max(1080, (int)(physical.Y / factor)));
-		};
-		_skipAnimations = toolbar.GetNode<Button>("SkipAnimation");
-		_skipAnimations.Pressed += () => { _tablePlaybackWait = 0; _skipAnimation = true; _gameTable.StopMotion(); };
-		_tableLastAction = toolbar.GetNode<Label>("LastAction");
+		_tableLastAction = _board.GetNode<Label>("StatusBar/LastAction");
 		_tableViewport = _board.GetNode<Control>("TableViewport");
 		_tableViewport.Resized += HandleCardHoverPreviewViewportResized;
 		_gameTable = _tableViewport.GetNode<GameTableControl>("GameBoard");
@@ -117,6 +103,7 @@ public partial class Main
 		_tableActions = dock.GetNode<HFlowContainer>("%Actions");
 		_focusPresentation = dock.GetNode<VBoxContainer>("%FocusPresentation");
 		BuildBoardDrag();
+		BuildSettingsMenu();
 	}
 
 	private void SelectTableCard(string id)
@@ -163,7 +150,8 @@ public partial class Main
 		}
 		_gameTable.Hand.ReducedMotion = _reducedMotion.ButtonPressed;
 		_gameTable.MotionEnabled = !_reducedMotion.ButtonPressed && !_skipAnimation;
-		_gameTable.MotionDuration = GameTableControl.DefaultMotionDuration / _speed.Value;
+		_gameTable.MotionDuration = (snapshot.History.Any(entry => entry.Side != snapshot.View.Viewer)
+			? 0.50 : GameTableControl.DefaultMotionDuration) / _speed.Value;
 		_gameTable.Render(snapshot.View);
 		CardViewModel? accessed = AccessActionsPresenter.Card(snapshot.View);
 		_tableAccessCard.SetCard(accessed);
@@ -179,6 +167,7 @@ public partial class Main
 			Control outcome = GD.Load<PackedScene>("res://scenes/components/OutcomePanel.tscn").Instantiate<Control>();
 			outcome.GetNode<Label>("Summary").Text = $"{snapshot.View.Outcome.Winner} wins · {snapshot.View.Outcome.Reason}";
 			outcome.GetNode<Button>("NewMatch").Pressed += () => GetTree().ReloadCurrentScene();
+			outcome.GetNode<Button>("Resume").Pressed += ShowSaveBrowser;
 			_focusPresentation.AddChild(outcome);
 		}
 		RenderCardTableActions(snapshot);
@@ -195,7 +184,7 @@ public partial class Main
 			DecisionViewModel? decision = snapshot.View.Decision;
 			_tablePrompt.Text = snapshot.IsOpponentThinking ? "Opponent is thinking. You can inspect cards and read history."
 				: snapshot.IsTerminal ? "Match complete."
-				: _fullMatchResumePaused ? $"Recovered at action {snapshot.ActionCount}. Continue when ready."
+				: _fullMatchResumePaused ? $"Paused at action {snapshot.ActionCount}. Continue when ready."
 				: decision is null ? "Waiting for the next decision…"
 				: $"{decision.OwnerSide}: {TablePrompt(decision)}";
 			if (snapshot.View.Run is { } run)
@@ -204,13 +193,13 @@ public partial class Main
 			_gameTable.SetActionableSources(new HashSet<string>(StringComparer.Ordinal));
 			if (_fullMatchResumePaused && !snapshot.IsTerminal)
 			{
-				Button continueButton = CreateTableActionButton("Continue recovered match");
-				continueButton.Disabled = _fullMatchResumeContinueInFlight;
+				Button continueButton = CreateTableActionButton("Continue match");
+				continueButton.Disabled = _fullMatchResumeContinueInFlight || SessionModalVisible || _manualSaveInFlight;
 				continueButton.Pressed += ContinueRecoveredFullMatch;
 				_tableActions.AddChild(continueButton);
 				return;
 			}
-			if (decision is null || snapshot.IsOpponentThinking || snapshot.IsTerminal)
+			if (SessionModalVisible || snapshot.IsPaused || decision is null || snapshot.IsOpponentThinking || snapshot.IsTerminal)
 			{
 				return;
 			}
@@ -245,7 +234,9 @@ public partial class Main
 			if (encounter && !_tableAllActions)
 			{
 				displayed = all.Where(action => BoardIcebreakerPresenter.Source(action) is null);
-				_tablePrompt.Text += " · Click a matching icebreaker to boost or break";
+				_tablePrompt.Text += all.Any(action => action.Parameters is RunBreakParameters { SubroutineId: not null })
+					? " · Click an available icebreaker or hosted card"
+					: " · Click a matching icebreaker to boost or break";
 				AddButton("All legal actions…", () => { _tableAllActions = true; RenderCardTableActions(snapshot); });
 			}
 			else if (decision.Kind == DecisionKind.TurnDiscard && !_tableAllActions)
@@ -425,33 +416,36 @@ public partial class Main
 			RefreshBoardIcebreaker(current);
 		}
 		_tablePlaybackWait = Math.Max(0, _tablePlaybackWait - delta);
+		while (_pendingSnapshots.TryDequeue(out SessionPublication? publication))
+		{
+			if (publication.Generation != _sessionGeneration) continue;
+			_tablePublications.Enqueue(publication.Snapshot);
+		}
+		bool animate = !_skipAnimation && !_reducedMotion.ButtonPressed;
+		if (_skipAnimation) _tablePlaybackWait = 0;
 		if (_tableAwaitingSettlement && _tablePlaybackWait == 0 && _gameTable.ActiveMotionCount == 0 && _tablePublications.Count == 0)
 		{
 			_tableAwaitingSettlement = false;
 			if (_currentSnapshot is { } settled) RenderCardTableActions(settled);
 		}
-		while (_pendingSnapshots.TryDequeue(out MatchSnapshot? snapshot))
-		{
-			_tableHistory.Append(snapshot.History);
-			_matchHistory.Append(snapshot.History);
-			_tablePublications.Enqueue(snapshot);
-		}
-		if (_tablePublications.Count > 24) _skipAnimation = true;
-		if (!_skipAnimation && (_tablePlaybackWait > 0 || _gameTable.DrawMotionCount > 0 || _gameTable.DiscardMotionCount > 0)) return;
+		if (animate && (_tablePlaybackWait > 0 || _gameTable.ActiveMotionCount > 0 || _gameTable.DiscardMotionCount > 0)) return;
 		while (_tablePublications.TryDequeue(out MatchSnapshot? next))
 		{
 			if (next.Sequence <= _renderedSequence) continue;
 			_renderedSequence = next.Sequence;
+			_tableHistory.Append(next.History);
+			_matchHistory.Append(next.History);
+			_tableAwaitingSettlement = animate || _tablePublications.Count > 0;
 			RenderSnapshot(next);
 			bool meaningful = next.History.Any(entry => !entry.Summary.Contains("passes priority", StringComparison.Ordinal));
-			if (meaningful && !_skipAnimation && !_reducedMotion.ButtonPressed)
+			if (meaningful && animate)
 			{
-				_tablePlaybackWait = 0.40 / _speed.Value;
-				_tableAwaitingSettlement = true;
+				_tablePlaybackWait = (next.History.Any(entry => entry.Side != next.View.Viewer) ? 0.9 : 0.4) / _speed.Value;
 				foreach (Button actionButton in _tableActions.GetChildren().OfType<Button>()) actionButton.Disabled = true;
-				break;
 			}
-			if (!_skipAnimation && _gameTable.DiscardMotionCount > 0) break;
+			// Give deferred layout/motion a frame to start, even for a status-only
+			// publication. Never let a fast worker force the viewer to skip a turn.
+			if (animate) break;
 		}
 		if (_tablePublications.Count == 0) _skipAnimation = false;
 	}

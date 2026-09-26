@@ -360,7 +360,7 @@ public partial class Main
 		&& current.View.Decision is { } decision
 		&& decision.OwnerSide == current.View.Viewer && SameDecision(_boardChoiceDecision, decision)
 		&& !_fullMatchResumePaused && !_tableAwaitingSettlement && Volatile.Read(ref _submissionInFlight) == 0
-		&& _stagedAction is null && _zoomOverlay?.Visible != true && _tablePileOverlay?.Visible != true;
+		&& _stagedAction is null && !SessionModalVisible && _zoomOverlay?.Visible != true && _tablePileOverlay?.Visible != true;
 
 	private void RefreshBoardChoiceAvailability()
 	{
@@ -459,6 +459,7 @@ public partial class Main
 		}
 
 		_boardChoicePanel = scene.Instantiate<PanelContainer>();
+		_boardChoicePanel.SetAnchorsPreset(LayoutPreset.TopLeft);
 		_boardChoicePanel.Visible = false;
 		_boardChoicePanel.ZIndex = 80;
 		// The contextual shell must not intercept a click on a server/card that

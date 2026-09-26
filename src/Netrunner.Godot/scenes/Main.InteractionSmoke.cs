@@ -9,11 +9,6 @@ public partial class Main
 	private const int SmokeInputDevice = 47012;
 	private bool _isolateSmokeInput;
 	private bool _smokeFocusLoss;
-	public override void _Input(InputEvent @event)
-	{
-		// Native smoke events must not race the desktop's real pointer.
-		if (_isolateSmokeInput && @event.Device != SmokeInputDevice) GetViewport().SetInputAsHandled();
-	}
 
 	private async Task RunInteractionSmokeAsync()
 	{
@@ -25,10 +20,14 @@ public partial class Main
 			_boardDrag.GestureEnded += (outcome, card) => GD.Print($"M411_GESTURE scenario={_labScenario} card={card} outcome={outcome}");
 			OpenInteractionLab();
 			_reducedMotion.ButtonPressed = true;
+			await CheckCompactBoardLayout();
+			await CheckHandConditionFeedback();
+			await CheckOpponentPlayback();
 			await CheckLabScenarioPicker();
 			await CheckInstallChoiceControls();
 			await CheckActionLabels();
 			await CheckBoardIcebreakers();
+			await CheckHostedVirusCounters();
 			await CheckTargetedAbilityPayment();
 			await CheckInteractionGuidance();
 			await CheckSpatialActions();

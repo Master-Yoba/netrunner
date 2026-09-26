@@ -9,7 +9,7 @@ public static partial class InteractionLabSamples
 	// Stable regression fixtures; the smaller, grouped practice menu is Scenarios.
 	public static readonly string[] Names = ["Runner: event", "Runner: run event", "Runner: rig install", "Runner: hosted install",
 		"Corp: operation", "Corp: root install", "Corp: ICE install", "Corp: new remote", "Corp: replacement",
-		"Runner: memory cleanup", "Runner: card choice", "Runner: non-spatial choice", "Dense board: scrolling", "Runner: pile card choice", "Runner: multiple targets", "Runner: hand and board actions", "Corp: hand and board actions", "Runner: discard from hand", "Corp: discard from hand", "Runner: icebreakers", .. SpatialNames];
+		"Runner: memory cleanup", "Runner: card choice", "Runner: non-spatial choice", "Dense board: scrolling", "Runner: pile card choice", "Runner: multiple targets", "Runner: hand and board actions", "Corp: hand and board actions", "Runner: discard from hand", "Corp: discard from hand", "Runner: icebreakers", .. SpatialNames, "Runner: hosted virus counters"];
 	public static readonly string[] Instructions = [
 		"Drag the event from hand into the board. It should play immediately.",
 		"Drag onto a central server, or into general space then click a highlighted server.",
@@ -30,10 +30,12 @@ public static partial class InteractionLabSamples
 		"Drag an operation onto the board to play it. Click credits or R&D, or browse Archives. Reset to repeat.",
 		"Drag two cards from hand to Heap. Escape or an invalid drop cancels the gesture. Reset to repeat.",
 		"Drag two cards from hand to Archives. Selected cards wait for the complete discard choice. Reset to repeat.",
-		"Click Practice Fracter in the rig. Boost its strength, choose Break, and select subroutines beside the ICE. Confirm the break; run credits are spent first. Escape cancels. Reset to repeat.", .. SpatialInstructions];
+		"Click Practice Fracter in the rig. Boost its strength, choose Break, and select subroutines beside the ICE. Confirm the break; run credits are spent first. Escape cancels. Reset to repeat.", .. SpatialInstructions,
+		"Click Practice Botulus attached to the ICE, choose Break, select one subroutine, and confirm. Each break spends one hosted virus counter, not credits. You have two counters for three subroutines. Esc cancels; reset restores the counters."];
 
 	public static MatchViewModel Create(int scenario, long revision)
 	{
+		if (scenario == HostedVirusScenario) return HostedVirusEncounter(revision);
 		if (scenario >= 20) return Spatial(scenario, revision);
 		if (scenario == 19) return IcebreakerEncounter(revision);
 		PlayerSide side = scenario is >= 4 and <= 8 or 16 or 18 ? PlayerSide.Corp : PlayerSide.Runner;

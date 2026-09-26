@@ -1,0 +1,149 @@
+{
+  "schemaVersion": 1,
+  "kind": "m5-private-policy-diagnostic-validation-summary",
+  "date": "2026-09-23",
+  "buildRevision": "0.1.0-dev+c8084382b918edaf5d4b654a5f5a377032ce17b2",
+  "assemblyHashes": {
+    "netrunner.AI": "fe9158038eae61ed14674e58c755a96a5b0332a347ee93eec874986d66d99e21",
+    "netrunner.Cards": "a77536b36560b03b449db1193aa6ec23402c9a268433b2995e63a935384aa04c",
+    "netrunner.Cli": "423bf5d3ff1639788ba035b2112fed882912f7032011ca0b16933c7b6cca3fef",
+    "netrunner.Core": "e57c35325fe34d6b4401f6b1f74f0d9dd31d676bf2926cbbc3822b03f50cbffb",
+    "netrunner.Match": "ce9f82aa6e351aeaa36477d64514fa7323b77f8ff02e75026f39e6a3f0cfe098"
+  },
+  "manifestHash": "5db57e006879cddd3a2943c2dbb26ad0b5dbebbcc351a4b128252a38f9c760a2",
+  "deterministicDigest": "cf4fc552bf838aa740d4ea99aa021f1b23ba3bd73ecccbd6d4d89c9279465550",
+  "loggedWorkers": 4,
+  "normalWorkers": 1,
+  "loggedReportSha256": "cf4785e9b6117c92d4ea718103aa9d77cdd3b1888f2f2ebcb4619d6abcb2c694",
+  "normalReportSha256": "60a6453cd8031a92e8d1c063132f244430bec4327cd34d33e33acb4b6c745c21",
+  "records": 13828,
+  "zeroBudgetWorkRecords": 69,
+  "games": [
+    {
+      "id": "basic-basic-0001",
+      "records": 933,
+      "replayHash": "63c788e0ee29d0225e68a62663082562b5f03750d881324cad948a831a34066b",
+      "privateDecisionLogSha256": "2e3c65af76c3ce0919cea87032d679310684318d4824a7719059af8cdcaaac26"
+    },
+    {
+      "id": "basic-basic-0002",
+      "records": 910,
+      "replayHash": "69c531124c35c19533808575a7c369593692cf01cdf14676c107fe26883b366c",
+      "privateDecisionLogSha256": "0b59cff7b07e294a4ad04963cf0bb53bb1295b64b7b4f5144dfb8f03d1aa7395"
+    },
+    {
+      "id": "basic-basic-0003",
+      "records": 859,
+      "replayHash": "4a77e0908207a365db37fc51b45635eb5c7a04ad9da9124c955b81a7c9975741",
+      "privateDecisionLogSha256": "0d63a35618a9b08ab761a5bc5a3b2a6c21de13d74dee62cf1ff6fa213bee0e9f"
+    },
+    {
+      "id": "basic-basic-0004",
+      "records": 738,
+      "replayHash": "278d3a23c2a8c33246c49807db48344694386f9d111ebc2998c338a60c3e00d1",
+      "privateDecisionLogSha256": "f26460481957193fa5ecc4995955c5e9e8beb25364a802d374f58f2c874f9c3f"
+    },
+    {
+      "id": "basic-basic-0005",
+      "records": 455,
+      "replayHash": "fe83b2387125e066589fedb2d87e9ed256475b0daa2166b07e4d031187ab4e5a",
+      "privateDecisionLogSha256": "b23a52b584afd4503bb8398060cf37241020ef14d3883635979f0bbf00b55fd3"
+    },
+    {
+      "id": "basic-expanded-0001",
+      "records": 553,
+      "replayHash": "84fcfc92588cd58b53f6e199527e64937b8827f4bb038ce423cb053470589998",
+      "privateDecisionLogSha256": "40d3b66d4036212135ea4b194794213871e65c90ee5b7473d6932d61172195b6"
+    },
+    {
+      "id": "basic-expanded-0002",
+      "records": 906,
+      "replayHash": "ca823bf21d29ae3f634bce1a14772e853f9dbc9fdaa082e8ff6e1a5327ba7826",
+      "privateDecisionLogSha256": "42684ceaf0fa4f465fd0641f8c0f8bcace30b4edfb058e3a5060eab0f47ca891"
+    },
+    {
+      "id": "basic-expanded-0003",
+      "records": 617,
+      "replayHash": "a91d11624e60f65a2194d563e6854e9ee406b5f51b741317773bf075b0fc0e31",
+      "privateDecisionLogSha256": "71f56bd9d3498c4cc9a5190c5a3caaa5ac74106b348d8fbf677b880c76beaf02"
+    },
+    {
+      "id": "basic-expanded-0004",
+      "records": 734,
+      "replayHash": "39ea06c8ad5e656fb3de67d16348f1f77042bea0c307ea32d2471a1d45509f3c",
+      "privateDecisionLogSha256": "9ee51c9677d43dd37e5c9bf10f417f119e24af12d3b7687141e9bb3383d8f9bb"
+    },
+    {
+      "id": "basic-expanded-0005",
+      "records": 776,
+      "replayHash": "c140d8ab9ab18f9a700c957077321b113717d22f8bde921e29db46c438a65076",
+      "privateDecisionLogSha256": "43d79d976a2d3b103d282e27178fe0d2efefcb9efe60a9d92b627525b90c2537"
+    },
+    {
+      "id": "expanded-basic-0001",
+      "records": 470,
+      "replayHash": "36862ca691cc0053b86d32ded1ded5b518cc3b2081708e928a720956fc36eab9",
+      "privateDecisionLogSha256": "2bbfa17281a2cf25b8304ede28fa6c69e6335c569e29872c02e814f4019bbbc1"
+    },
+    {
+      "id": "expanded-basic-0002",
+      "records": 759,
+      "replayHash": "2cf7f1ac50c73504dcce2f0243fed1e50ce98b08e0797ee947debfd358ac938b",
+      "privateDecisionLogSha256": "d3014757720103883140bbddd385986cf25dc0af55c2acf6493f7c7e67b3cde4"
+    },
+    {
+      "id": "expanded-basic-0003",
+      "records": 489,
+      "replayHash": "15d41d2862489b6343d328cd3f585a9f5fbcc4a24178b612e3c9b34d425f08b5",
+      "privateDecisionLogSha256": "d6fb5e78cb738f1ee81ae2dc25a05d3d9c79437056bf4006b656a5d71672186e"
+    },
+    {
+      "id": "expanded-basic-0004",
+      "records": 954,
+      "replayHash": "f1be03743f7f1976072f70c416b8697e7400e88aa853a6823a886d4171ead20a",
+      "privateDecisionLogSha256": "7ded018d154558a5ba058c91e9afbc5397ddb5a89b37694e9794241553ce2b3e"
+    },
+    {
+      "id": "expanded-basic-0005",
+      "records": 895,
+      "replayHash": "41c2b4ed005187dd8a212bc82989c271ca3f9c4ae4558fbb96bd3906b90b5d1f",
+      "privateDecisionLogSha256": "673c73dc72674c380272ac155ebbfb40565486dd7edc2911dfc1880e1f05a781"
+    },
+    {
+      "id": "expanded-expanded-0001",
+      "records": 752,
+      "replayHash": "411f2bee2d9befbd7f7f97aeb395858f2eabfaa6f422bf04eb031be217767a4b",
+      "privateDecisionLogSha256": "eb50f6fa33dee3785640dc55edd89597f568ccfea74eb76caa486194fba28e29"
+    },
+    {
+      "id": "expanded-expanded-0002",
+      "records": 350,
+      "replayHash": "b1bd7e024cb270aea999330e2b308c6f4c349b7275db5282411128c615874363",
+      "privateDecisionLogSha256": "ffa323e4d4d8125c498a526165dfca77621479cf1db4f1555a18a1074b718ffd"
+    },
+    {
+      "id": "expanded-expanded-0003",
+      "records": 713,
+      "replayHash": "1c47f06df522f517982d5cdf6300f0302568bb28b10c57fe168b6c75118d172e",
+      "privateDecisionLogSha256": "7bf609fb09352f077407078727f5c35bb06d7137f75d4d85bfdbf2a5049dc9c1"
+    },
+    {
+      "id": "expanded-expanded-0004",
+      "records": 674,
+      "replayHash": "0c43031bc9651a79cd35ad21b2624e2d506e71848db99a53ee30dc5cbcdff632",
+      "privateDecisionLogSha256": "17b176421ebf952be1a8ee05af3c70aa0dce00f5825a501e25f591f0e798db50"
+    },
+    {
+      "id": "expanded-expanded-0005",
+      "records": 291,
+      "replayHash": "e46008a1c396a70b60716df0eeaaadaa8175f05e1643372a3562809429791873",
+      "privateDecisionLogSha256": "b19a59d4a54fae6587abfe3c05e7b565b5521adef8a7fdc9e67ff298bc9c1c3b"
+    }
+  ],
+  "allRecordsMatchReplayAndConfiguration": true,
+  "allReplaysEqualToNormal": true,
+  "normalRunContainsNoDecisionLogs": true,
+  "publicReportContainsNoCandidateScores": true,
+  "containsPrivateRecords": false,
+  "humanAcceptance": false
+}

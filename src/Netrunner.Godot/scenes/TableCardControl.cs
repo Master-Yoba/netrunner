@@ -262,6 +262,7 @@ public partial class TableCardControl : Control
 	public bool IsTargetCandidate => _targetCandidate;
 
 	public bool IsActionableSource => _actionableSource;
+	public bool HasMetHandCondition => _card is { IsKnown: true, HandCondition: not null };
 
 	public bool IsHovered => _hovered;
 
@@ -731,10 +732,10 @@ public partial class TableCardControl : Control
 			CornerRadiusTopRight = ToPixel(appearance.CornerRadius),
 			CornerRadiusBottomLeft = ToPixel(appearance.CornerRadius),
 			CornerRadiusBottomRight = ToPixel(appearance.CornerRadius),
-			ShadowColor = _actionableSource
+			ShadowColor = _actionableSource || HasMetHandCondition
 				? WithAlpha(border, appearance.GlowOpacity)
 				: new Color(0, 0, 0, appearance.FrameShadowOpacity),
-			ShadowSize = _actionableSource ? ToPixel(appearance.GlowOuterExtent) : 4,
+			ShadowSize = _actionableSource || HasMetHandCondition ? ToPixel(appearance.GlowOuterExtent) : 4,
 		};
 		DrawStyleBox(frame, frameRect);
 
@@ -749,7 +750,7 @@ public partial class TableCardControl : Control
 			DrawCardFace(InsetRect(frameRect, Mathf.Max(1, frameWidth)));
 			DrawAuthoredStatusBadge();
 			DrawStatusBadge(accent, cardSize);
-			if (_actionableSource)
+			if (_actionableSource || HasMetHandCondition)
 				DrawActionGlow(border, InsetRect(frameRect, frameWidth), appearance.CornerRadius);
 			DrawStateBadge(accent, cardSize);
 			return;
@@ -791,7 +792,7 @@ public partial class TableCardControl : Control
 		// The glow is part of the card surface. Draw it before motif/artwork,
 		// non-status badges, and child labels. The bottom status background
 		// deliberately sits beneath the glow while its text stays above it.
-		if (_actionableSource)
+		if (_actionableSource || HasMetHandCondition)
 		{
 			DrawActionGlow(
 				border,
@@ -915,6 +916,13 @@ public partial class TableCardControl : Control
 		}
 
 		bool known = _card?.IsKnown == true;
+		if (GetNodeOrNull<PanelContainer>("HandConditionBadge") is { } badge)
+		{
+			badge.Visible = HasMetHandCondition;
+			GameSymbolLabel caption = badge.GetNode<GameSymbolLabel>("Cost");
+			caption.SymbolText = _card?.HandCondition?.InstallCost is { } cost ? $"{cost.EffectiveCost} [credit]" : "READY";
+			caption.AddThemeColorOverride("default_color", Appearance.ConditionMetColor);
+		}
 		bool showText = known || _backTexture is null;
 		_title!.Visible = showText && !HasFullCardArtwork;
 		_type!.Visible = showText && !HasFullCardArtwork;
@@ -1091,6 +1099,8 @@ public partial class TableCardControl : Control
 		{
 			return appearance.TargetColor;
 		}
+
+		if (HasMetHandCondition) return appearance.ConditionMetColor;
 
 		if (_actionableSource)
 		{
@@ -1428,6 +1438,7 @@ public partial class TableCardControl : Control
 
 	private static string FormatStatus(CardViewModel card, bool compact = false)
 	{
+		if (card.HandCondition is not null) return "CONDITION MET";
 		if (compact && (card.IsAbilityUsed || card.IsFirstXUsedThisTurn))
 		{
 			return "USED";
@@ -1476,6 +1487,11 @@ public partial class TableCardControl : Control
 			$"Status: {FormatStatus(card)}",
 		};
 		string counters = FormatCounters(card);
+		if (card.HandCondition is { } condition)
+		{
+			lines.Add("Condition met: " + condition.Summary);
+			if (condition.InstallCost is { } install) lines.Add(install.Summary + " credits");
+		}
 		if (counters.Length > 0)
 		{
 			lines.Add($"Counters: {counters}");

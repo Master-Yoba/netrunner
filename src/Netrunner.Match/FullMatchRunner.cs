@@ -19,26 +19,41 @@ public static class FullMatchRunner
         }
         corpAgent ??= new FullGameContractAgent(new FullGameContractPolicy(PlayerSide.Corp), definition.Runtime);
         runnerAgent ??= new FullGameContractAgent(new FullGameContractPolicy(PlayerSide.Runner), definition.Runtime);
+        AgentLifecycleHost.ValidateSeat(corpAgent, PlayerSide.Corp);
+        AgentLifecycleHost.ValidateSeat(runnerAgent, PlayerSide.Runner);
         GameState state = definition.Start().State;
         GameSnapshot initial = state.CreateSnapshot(definition.Behavior, definition.Runtime);
         var actions = new List<ReplayAction>();
+        AgentLifecycleHost.Observe(corpAgent, state, definition.Behavior);
+        AgentLifecycleHost.Observe(runnerAgent, state, definition.Behavior);
         while (state.Outcome.Kind == GameOutcomeKind.Ongoing && actions.Count < actionCap)
         {
             cancellationToken.ThrowIfCancellationRequested();
             PendingDecision pending = state.PendingDecision ?? throw Stall("Full match stalled without a decision.");
             PlayerSide side = state.GetPlayer(pending.Owner).Side;
             Observation observation = ObservationBuilder.Build(state, side, definition.Behavior);
-            ActionId action = await (side == PlayerSide.Corp ? corpAgent : runnerAgent).ChooseActionAsync(observation, cancellationToken).ConfigureAwait(false);
+            IGameAgent activeAgent = side == PlayerSide.Corp ? corpAgent : runnerAgent;
+            ActionId action;
+            try
+            {
+                action = await activeAgent.ChooseActionAsync(observation, cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+            catch { AgentLifecycleHost.Discard(activeAgent); throw; }
             // Every yield is a persistence boundary, including setup, nested effects,
             // paid windows, and forced discards. Restore with both frozen catalogs.
             state = EngineJson.DeserializeState(EngineJson.Serialize(state), definition.Behavior, definition.Runtime);
-            ApplyResult result = GameEngine.Apply(state, new ActionSubmission(pending.Owner, pending.Id, pending.Revision, action), definition.Behavior, definition.Runtime);
+            var submission = new ActionSubmission(pending.Owner, pending.Id, pending.Revision, action);
+            ApplyResult result = GameEngine.Apply(state, submission, definition.Behavior, definition.Runtime);
             if (!result.Accepted)
             {
+                AgentLifecycleHost.Discard(activeAgent);
                 throw new InvalidOperationException($"Full match rejected an agent action: {result.Rejection?.Message}");
             }
             state = result.State;
             actions.Add(ReplayAction.From(result.AcceptedAction!));
+            AgentLifecycleHost.Accepted(corpAgent, submission, state, definition.Behavior);
+            AgentLifecycleHost.Accepted(runnerAgent, submission, state, definition.Behavior);
         }
         if (state.Outcome.Kind != GameOutcomeKind.Won)
         {

@@ -741,6 +741,11 @@ public static class CardZoomRegionPresenter
         }
 
         lines.Add($"Status · {card.StatusLabel}");
+        if (card.HandCondition is { } condition)
+        {
+            lines.Add("Condition met · " + condition.Summary);
+            if (condition.InstallCost is { } install) lines.Add(install.Summary + " credits");
+        }
         if (card.HostLabel is { } host)
         {
             lines.Add(host);

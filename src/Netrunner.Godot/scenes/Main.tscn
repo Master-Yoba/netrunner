@@ -8,6 +8,10 @@
 
 [ext_resource type="PackedScene" path="res://scenes/components/PileBrowser.tscn" id="piles"]
 
+[ext_resource type="PackedScene" path="res://scenes/components/InteractionLabToolbar.tscn" id="lab"]
+[ext_resource type="PackedScene" path="res://scenes/components/SettingsMenu.tscn" id="settings"]
+[ext_resource type="Texture2D" path="res://icons/settings.svg" id="cog"]
+
 [node name="Main" type="Control"]
 layout_mode = 3
 anchors_preset = 15
@@ -43,12 +47,12 @@ theme_override_constants/margin_bottom = 8
 [node name="Layout" type="VBoxContainer" parent="Margin"]
 layout_mode = 2
 size_flags_vertical = 3
-theme_override_constants/separation = 12
+theme_override_constants/separation = 6
 
 [node name="Header" type="HBoxContainer" parent="Margin/Layout"]
 layout_mode = 2
 custom_minimum_size = Vector2(0, 36)
-theme_override_constants/separation = 18
+theme_override_constants/separation = 10
 
 [node name="Title" type="Label" parent="Margin/Layout/Header"]
 layout_mode = 2
@@ -61,6 +65,7 @@ layout_mode = 2
 size_flags_horizontal = 3
 theme_type_variation = &"AppStatus"
 text = "Match setup · waiting for a preset"
+text_overrun_behavior = 3
 vertical_alignment = 1
 
 [node name="Phase" type="Label" parent="Margin/Layout/Header"]
@@ -70,11 +75,23 @@ text = "SETUP"
 horizontal_alignment = 2
 vertical_alignment = 1
 
-[node name="OpenLogs" type="Button" parent="Margin/Layout/Header"]
+[node name="InteractionLabToolbar" parent="Margin/Layout/Header" instance=ExtResource("lab")]
 layout_mode = 2
-text = "Open logs"
-disabled = true
-tooltip_text = "Open this match's local diagnostics folder."
+
+[node name="NewGame" type="Button" parent="Margin/Layout/Header"]
+layout_mode = 2
+text = "New game"
+
+[node name="SkipAnimation" type="Button" parent="Margin/Layout/Header"]
+layout_mode = 2
+text = "Skip animation"
+
+[node name="Settings" type="Button" parent="Margin/Layout/Header"]
+layout_mode = 2
+custom_minimum_size = Vector2(36, 36)
+icon = ExtResource("cog")
+tooltip_text = "Settings"
+accessibility_name = "Settings"
 
 [node name="MatchSetup" parent="Margin/Layout" instance=ExtResource("setup")]
 layout_mode = 2
@@ -93,4 +110,10 @@ visible = false
 layer = 11
 
 [node name="CardInspection" parent="InspectionLayer" instance=ExtResource("inspection")]
+visible = false
+
+[node name="SettingsLayer" type="CanvasLayer" parent="."]
+layer = 12
+
+[node name="SettingsMenu" parent="SettingsLayer" instance=ExtResource("settings")]
 visible = false

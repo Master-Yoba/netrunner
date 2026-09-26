@@ -81,7 +81,9 @@ public partial class TableWorkspace : Control
 		if (dock is not null)
 		{
 			dock.OffsetRight = _board.OffsetRight + _board.Hand.OffsetLeft - HistoryGap;
-			dock.OffsetTop = _board.Hand.OffsetTop + HistoryGap;
+			float dockHeight = Mathf.Clamp(Size.Y * 0.14f, 116, 156);
+			dock.OffsetTop = -dockHeight;
+			dock.OffsetBottom = -8;
 		}
 		_board.PlayArea.OffsetBottom = _board.Hand.OffsetTop - HistoryGap;
 	}

@@ -12,8 +12,6 @@ public partial class Main
 		Control header = _layout.GetNode<Control>("Header");
 		_status = header.GetNode<Label>("Status");
 		_phase = header.GetNode<Label>("Phase");
-		_sessionLogsButton = header.GetNode<Button>("OpenLogs");
-		_sessionLogsButton.Pressed += OpenSessionLogs;
 		Control setup = _layout.GetNode<Control>("MatchSetup");
 		_startPanel = setup.GetNode<VBoxContainer>("%SetupContent");
 		_corpPreset = setup.GetNode<OptionButton>("%CorpPreset");
@@ -30,6 +28,7 @@ public partial class Main
 		_startButton.Disabled = !available;
 		_startButton.Pressed += BeginMatch;
 		_galleryButton = setup.GetNode<Button>("%OpenGallery");
+		_galleryButton.Visible = DeveloperToolsEnabled;
 		_galleryButton.Disabled = !_metadataSnapshot.IsOfficial;
 		_galleryButton.Pressed += ShowCardGallery;
 		if (!_metadataSnapshot.IsOfficial)
@@ -37,6 +36,7 @@ public partial class Main
 		setup.GetNode<Button>("%InteractionLab").Pressed += OpenInteractionLab;
 		BuildCardTable();
 		BuildCardZoomOverlay();
+		BindOfflineSetup(setup);
 		ApplyAccessibilityFocusOrder(_startPanel);
 		ApplyAccessibilityFocusOrder(_board);
 	}

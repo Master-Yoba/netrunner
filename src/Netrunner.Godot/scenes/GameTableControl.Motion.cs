@@ -13,6 +13,14 @@ public partial class GameTableControl
 	private int _motionRevision;
 	private MatchViewModel? _motionView;
 	public int ActiveMotionCount => _motionCards.Count;
+	public void ResetPresentation()
+	{
+		StopMotion();
+		Hand.ResetPresentation();
+		_motionView = null;
+		_lastBoardFingerprint = null;
+	}
+
 	public void StopMotion()
 	{
 		_motionRevision++;
@@ -62,6 +70,7 @@ public partial class GameTableControl
 						PulseCard(current.GetGlobalRect());
 				return;
 			}
+			PresentOpponentMotion(previousView, view);
 			foreach (string id in incoming)
 				if (previous.TryGetValue(id, out MotionCard? source)) PresentDiscardMotion(id, source, view.Viewer);
 			foreach ((string id, var old) in previous)
@@ -85,6 +94,7 @@ public partial class GameTableControl
 					if (old.IsDiscardPile && IsDiscardPileFace(current)) continue;
 					if (old.Rect.Position.DistanceTo(rect.Position) > 8)
 						AnimateCard(current.Card, old.Rect, rect.Position - GlobalPosition, current.IsIce, current.BackSide);
+					else if (!CardsMatch(old.Card, current.Card)) PulseCard(rect);
 					continue;
 				}
 				// A newly exposed pile top is presentation bookkeeping, not a card
@@ -93,7 +103,8 @@ public partial class GameTableControl
 				// A new face-down slot receives a neutral back, never a card
 				// recovered from an authoritative action or hidden instance ID.
 				Vector2 source = view.RunnerRig.Any(card => card.Id == id)
-					? _localHandRow.GlobalPosition : _corpHandCaption.GlobalPosition;
+					? view.Viewer == Netrunner.Core.PlayerSide.Runner ? _localHandRow.GlobalPosition : _runnerHandCaption.GlobalPosition
+					: _corpHandCaption.GlobalPosition;
 				AnimateCard(current.Card, new Rect2(source, rect.Size), rect.Position - GlobalPosition, current.IsIce, current.BackSide);
 			}
 		}).CallDeferred();

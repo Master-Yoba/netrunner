@@ -1,0 +1,226 @@
+{
+  "schemaVersion": 1,
+  "kind": "m5-headless-gate-summary",
+  "mode": "full",
+  "passed": true,
+  "cases": {
+    "smoke": {
+      "games": 20,
+      "terminal": 20,
+      "reviewedTurnCaps": [],
+      "verifiedReplays": 20,
+      "manifestHash": "5db57e006879cddd3a2943c2dbb26ad0b5dbebbcc351a4b128252a38f9c760a2",
+      "deterministicDigest": "cf4fc552bf838aa740d4ea99aa021f1b23ba3bd73ecccbd6d4d89c9279465550",
+      "reportSha256": "10b5db433e0a2858c7da64e4e6ff9f7045347def0d1d867c5331461a2f0d62a4",
+      "workers": 4
+    },
+    "smoke-repeat": {
+      "games": 20,
+      "terminal": 20,
+      "reviewedTurnCaps": [],
+      "verifiedReplays": 20,
+      "manifestHash": "5db57e006879cddd3a2943c2dbb26ad0b5dbebbcc351a4b128252a38f9c760a2",
+      "deterministicDigest": "cf4fc552bf838aa740d4ea99aa021f1b23ba3bd73ecccbd6d4d89c9279465550",
+      "reportSha256": "f34a40ad9e95e1ccad8071f041131009273c350fffedae25f5a31e60bad89991",
+      "workers": 1
+    },
+    "corp-tactics": {
+      "verifiedReplays": 40,
+      "scores": [
+        {
+          "side": "corp",
+          "passed": 39,
+          "total": 40,
+          "criticalPassed": 11,
+          "criticalTotal": 11,
+          "splits": {
+            "tuning": {
+              "passed": 24,
+              "total": 24
+            },
+            "held-out": {
+              "passed": 15,
+              "total": 16
+            }
+          }
+        }
+      ],
+      "manifestHash": "51965a0808849a67ee605d9b01c1b4c958d5b7fb3df937c561fd563aea2b1e88",
+      "deterministicDigest": "e763312304ff10bf12a162ab68c2f125353e66cfd6b3cbf515ac3b71304f3e24",
+      "reportSha256": "d2ca4195f53b191b9ca63c3c196aded65835f0335873707a9643ebe71b1f936c",
+      "workers": 4
+    },
+    "corp-tactics-repeat": {
+      "verifiedReplays": 40,
+      "scores": [
+        {
+          "side": "corp",
+          "passed": 39,
+          "total": 40,
+          "criticalPassed": 11,
+          "criticalTotal": 11,
+          "splits": {
+            "tuning": {
+              "passed": 24,
+              "total": 24
+            },
+            "held-out": {
+              "passed": 15,
+              "total": 16
+            }
+          }
+        }
+      ],
+      "manifestHash": "51965a0808849a67ee605d9b01c1b4c958d5b7fb3df937c561fd563aea2b1e88",
+      "deterministicDigest": "e763312304ff10bf12a162ab68c2f125353e66cfd6b3cbf515ac3b71304f3e24",
+      "reportSha256": "dba95e03037d5f5f072e4ec7f806f9fb7eed1322424271a18e4ae685774216da",
+      "workers": 1
+    },
+    "runner-tactics": {
+      "verifiedReplays": 40,
+      "scores": [
+        {
+          "side": "runner",
+          "passed": 38,
+          "total": 40,
+          "criticalPassed": 17,
+          "criticalTotal": 17,
+          "splits": {
+            "tuning": {
+              "passed": 24,
+              "total": 24
+            },
+            "held-out": {
+              "passed": 14,
+              "total": 16
+            }
+          }
+        }
+      ],
+      "manifestHash": "22182ada3ed22ddc717cdbe61decf7d2e6e3d7212f1282ce9b235adaed47e9db",
+      "deterministicDigest": "ee47d3bfd954a7cfc2ce23b19f30c8a75885d63de445087ce4545096ba3a9edb",
+      "reportSha256": "4f783629214758aa64f736aa647afcb9412ff36e79fcf258bd83dd3b20d6fe37",
+      "workers": 4
+    },
+    "runner-tactics-repeat": {
+      "verifiedReplays": 40,
+      "scores": [
+        {
+          "side": "runner",
+          "passed": 38,
+          "total": 40,
+          "criticalPassed": 17,
+          "criticalTotal": 17,
+          "splits": {
+            "tuning": {
+              "passed": 24,
+              "total": 24
+            },
+            "held-out": {
+              "passed": 14,
+              "total": 16
+            }
+          }
+        }
+      ],
+      "manifestHash": "22182ada3ed22ddc717cdbe61decf7d2e6e3d7212f1282ce9b235adaed47e9db",
+      "deterministicDigest": "ee47d3bfd954a7cfc2ce23b19f30c8a75885d63de445087ce4545096ba3a9edb",
+      "reportSha256": "3687f68b0f2aeb303f3f35e118ed846299c4dc40d5e3785a1c219366a73439f3",
+      "workers": 1
+    },
+    "standard": {
+      "games": 1000,
+      "terminal": 1000,
+      "reviewedTurnCaps": [],
+      "verifiedReplays": 1000,
+      "manifestHash": "108a14a94f2bc0ed80c6f377012f75cf65a98641726e25a429cd97ee48f25cd8",
+      "deterministicDigest": "202291b968fca327595919f7d8a6bff74812f0e994471aeef10c1aa783c43bd2",
+      "reportSha256": "a42f53544415825c19d086aa8f2c6d77e1157d91c36a8709a34cd7c1d4c007da",
+      "workers": 4
+    },
+    "easy": {
+      "games": 100,
+      "terminal": 100,
+      "reviewedTurnCaps": [],
+      "verifiedReplays": 100,
+      "manifestHash": "6a8631ca765d712363563686e6bce09d391cf80b944dfa236da45712ee873325",
+      "deterministicDigest": "c4cb4a3d4c0d258043a7ed15024ce388633e3625f85f90dfc1287bd0ae94e2fa",
+      "reportSha256": "912247bcf819ae22e390e5ff5fc27aaffd9821c8e2a9589f46b1eb5b0c401006",
+      "workers": 4
+    },
+    "compare-contract": {
+      "games": 40,
+      "terminal": 40,
+      "reviewedTurnCaps": [],
+      "verifiedReplays": 40,
+      "manifestHash": "508c4216be9d5c15205b972ecc0173736c1d959b7b21de0b055df276659be8dd",
+      "deterministicDigest": "b664dce0d96d738ab7c6a314bfbbbf8c83ad99821d0a9c2f6748bf9c6ae4de82",
+      "reportSha256": "746db78a453d5035c9c7d9d0c2599e0b8706660e9ad12aeeaa8e49e4ba614d6a",
+      "workers": 4
+    },
+    "compare-previous": {
+      "games": 40,
+      "terminal": 40,
+      "reviewedTurnCaps": [],
+      "verifiedReplays": 40,
+      "manifestHash": "14f0f5c0e8b85818c153d679fe20299b46f84b2a29d689bdfd46085ae04a5e90",
+      "deterministicDigest": "d26e91fa8ad8c8adca53490e17cdab49c10d22f130748874722137898567ee41",
+      "reportSha256": "98925480656dc7de3546fa69b46383ec806f599ca1676145b1659102249c8661",
+      "workers": 4
+    },
+    "corp-easy-tactics": {
+      "verifiedReplays": 40,
+      "scores": [
+        {
+          "side": "corp",
+          "passed": 38,
+          "total": 40,
+          "criticalPassed": 11,
+          "criticalTotal": 11,
+          "splits": {
+            "tuning": {
+              "passed": 23,
+              "total": 24
+            },
+            "held-out": {
+              "passed": 15,
+              "total": 16
+            }
+          }
+        }
+      ],
+      "manifestHash": "cbb809d6675f5a6f88af6e0ea59d8f24d4476f00bb2eabde3a347e45d8a449f6",
+      "deterministicDigest": "d7e4dd8011ab0f19d9703d06aa8f4ec1106c246735370ab9488ced2633cacee8",
+      "reportSha256": "15323e1383155d3ec61342cd65c1696121c1a9ebaed19bf4882a922dee592ead",
+      "workers": 4
+    },
+    "runner-easy-tactics": {
+      "verifiedReplays": 40,
+      "scores": [
+        {
+          "side": "runner",
+          "passed": 38,
+          "total": 40,
+          "criticalPassed": 17,
+          "criticalTotal": 17,
+          "splits": {
+            "tuning": {
+              "passed": 24,
+              "total": 24
+            },
+            "held-out": {
+              "passed": 14,
+              "total": 16
+            }
+          }
+        }
+      ],
+      "manifestHash": "6e25520442b5ae7bce4d2296511436ae8ac18fa42c1914c7b9bbf68501c53e35",
+      "deterministicDigest": "fac26d7a173a864b8a91999cb66cc841662bf0855cfeb797ef4674d19c1f8009",
+      "reportSha256": "e83083c8bd5629a4c6f004bb204be544fab01bb52cafe3ea543fa8917f40480e",
+      "workers": 4
+    }
+  },
+  "errors": [],
+  "scope": "Headless legality, tactics, comparisons and worker determinism; offline package, performance and human acceptance are separate."
+}

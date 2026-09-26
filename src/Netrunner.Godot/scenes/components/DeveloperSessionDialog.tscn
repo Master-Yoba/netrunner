@@ -1,0 +1,161 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scenes/DeveloperSessionDialog.cs" id="script"]
+[ext_resource type="Theme" path="res://themes/M4Theme.tres" id="theme"]
+
+[node name="DeveloperSessionDialog" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("script")
+theme = ExtResource("theme")
+
+[node name="Backdrop" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0, 0, 0, 0.8)
+
+[node name="Panel" type="PanelContainer" parent="."]
+layout_mode = 1
+anchor_left = 0.1
+anchor_top = 0.14
+anchor_right = 0.9
+anchor_bottom = 0.86
+
+[node name="Margin" type="MarginContainer" parent="Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="Content" type="VBoxContainer" parent="Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="Panel/Margin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Developer session"
+theme_override_font_sizes/font_size = 24
+
+[node name="Explanation" type="Label" parent="Panel/Margin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Step accepts one engine action. Automatic steps use the offline opponent and the contract policy for the human seat.
+Raw imports create a new scenario root. Exported sessions retain the replay and committed opponent policy."
+autowrap_mode = 3
+
+[node name="Status" type="Label" parent="Panel/Margin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Open a match or import a snapshot."
+autowrap_mode = 3
+
+[node name="Files" type="HBoxContainer" parent="Panel/Margin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+
+
+[node name="Import" type="Button" parent="Panel/Margin/Content/Files"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Import snapshot…"
+
+[node name="Export" type="Button" parent="Panel/Margin/Content/Files"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Export session…"
+
+[node name="ExportRaw" type="Button" parent="Panel/Margin/Content/Files"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Export raw snapshot…"
+
+[node name="Pause" type="Button" parent="Panel/Margin/Content/Files"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Pause"
+
+[node name="StepRow" type="HBoxContainer" parent="Panel/Margin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+
+
+[node name="Actions" type="OptionButton" parent="Panel/Margin/Content/StepRow"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+accessibility_name = "Single step human action"
+
+[node name="Step" type="Button" parent="Panel/Margin/Content/StepRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Step one action"
+
+[node name="AdvanceRow" type="HBoxContainer" parent="Panel/Margin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+
+
+[node name="LimitLabel" type="Label" parent="Panel/Margin/Content/AdvanceRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Action cap"
+
+[node name="Limit" type="SpinBox" parent="Panel/Margin/Content/AdvanceRow"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 1.0
+max_value = 10000.0
+value = 100.0
+accessibility_name = "Maximum accepted actions"
+
+[node name="ToHuman" type="Button" parent="Panel/Margin/Content/AdvanceRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "To human decision"
+
+[node name="ToTurn" type="Button" parent="Panel/Margin/Content/AdvanceRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "To turn"
+
+[node name="Turn" type="SpinBox" parent="Panel/Margin/Content/AdvanceRow"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 1.0
+max_value = 10000.0
+value = 2.0
+accessibility_name = "Target turn"
+
+[node name="ToOutcome" type="Button" parent="Panel/Margin/Content/AdvanceRow"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "To outcome or cap"
+
+[node name="Reveal" type="CheckButton" parent="Panel/Margin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Reveal private card inspector"
+
+[node name="Inspector" type="TextEdit" parent="Panel/Margin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+visible = false
+size_flags_vertical = 3
+editable = false
+accessibility_name = "Private developer card inspector"
+
+[node name="Spacer" type="Control" parent="Panel/Margin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+
+[node name="Close" type="Button" parent="Panel/Margin/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Close · Esc"

@@ -39,3 +39,6 @@ illustrations, card faces, or card metadata are included in this directory.
 These glyphs ship with the UI and work offline, independently of the optional
 local card-art cache. Symbols without a released glyph retain their plain text
 labels. The rest of the repository's license does not replace this asset license.
+
+`settings.svg` is an original UI cog drawn for this project, covered by the
+repository license. It is not a Null Signal game symbol.

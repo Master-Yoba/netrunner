@@ -258,11 +258,12 @@ public partial class Main
 
 	private void SubmitAction(DecisionViewModel decision, LegalActionViewModel action)
 	{
+		if (SessionModalVisible) return;
 		if (_spatialSubmission is not null && !_spatialBatchSubmitting) return;
 		if (SubmitInteractionLab(decision, action)) return;
 		if (_fullMatchResumePaused)
 		{
-			_status.Text = "Recovered match is paused · press Continue before choosing an action.";
+			_status.Text = "Match is paused · press Continue before choosing an action.";
 			return;
 		}
 		if (_useCardTable && _coordinator?.CurrentSnapshot is { } latest
@@ -290,9 +291,12 @@ public partial class Main
 
 	private async Task SubmitActionAsync(ActionSubmission submission)
 	{
+		MatchCoordinator coordinator = _coordinator!;
+		long generation = _sessionGeneration;
 		try
 		{
-			MatchSubmissionResult result = await _coordinator!.SubmitActionAsync(submission);
+			MatchSubmissionResult result = await coordinator.SubmitActionAsync(submission);
+			if (!IsCurrentSession(coordinator, generation)) return;
 			if (!result.Accepted && _spatialSubmission is not null)
 			{
 				_spatialSubmission = null;
@@ -308,6 +312,7 @@ public partial class Main
 		}
 		catch (Exception exception)
 		{
+			if (!IsCurrentSession(coordinator, generation)) return;
 			_spatialSubmission = null;
 			CloseSpatialActions();
 			RecordFullMatchException(exception, "submit");
@@ -320,7 +325,7 @@ public partial class Main
 		}
 		finally
 		{
-			if (Interlocked.Exchange(ref _submissionInFlight, 0) != 0)
+			if (IsCurrentSession(coordinator, generation) && Interlocked.Exchange(ref _submissionInFlight, 0) != 0)
 			{
 				// The coordinator publishes the accepted snapshot before this
 				// await resumes, so a frame can render the next decision while

@@ -4,6 +4,7 @@ set -euo pipefail
 verify_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$verify_root/scripts/env.sh"
 bash "$verify_root/scripts/test-env.sh"
+python3 "$verify_root/scripts/check-m5-spec.py"
 
 m4_gate=0
 if [[ "${1:-}" == "--m4" && $# == 1 ]]; then
@@ -104,11 +105,15 @@ elif ((card_data_present == 3)) && [[ -f "$card_data_cards" && -f "$card_data_ma
   # CLI's official-content tests against an explicitly provisioned test output.
   dotnet test "$verify_root/tests/Netrunner.Cli.Tests/Netrunner.Cli.Tests.csproj" \
     --no-restore --nologo -m:1 \
-    --filter FullyQualifiedName~FullMatchCommand \
+    --filter 'FullyQualifiedName~FullMatchCommand|FullyQualifiedName~AiTacticsCommandTests' \
     "${official_content_properties[@]}"
   dotnet test "$verify_root/tests/Netrunner.Cards.Tests/Netrunner.Cards.Tests.csproj" \
     --no-restore --nologo -m:1 \
-    --filter FullyQualifiedName~OfficialPresetRevalidationTests \
+    --filter 'FullyQualifiedName~OfficialPresetRevalidationTests|FullyQualifiedName~GatewayEvaluationCatalogTests|FullyQualifiedName~GatewayBatch1LifecycleTests' \
+    "${official_content_properties[@]}"
+  dotnet test "$verify_root/tests/Netrunner.Match.Tests/Netrunner.Match.Tests.csproj" \
+    --no-restore --nologo -m:1 \
+    --filter FullyQualifiedName~Tactical \
     "${official_content_properties[@]}"
   card_data_content_enabled=1
 else

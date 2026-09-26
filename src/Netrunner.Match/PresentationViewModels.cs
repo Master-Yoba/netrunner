@@ -328,6 +328,8 @@ public sealed record CardViewModel(
     int? MemoryCost = null,
     int? AdvancementRequirement = null)
 {
+    /// <summary>Current owner-visible hand condition, projected by Core independently of affordability.</summary>
+    public HandConditionViewModel? HandCondition { get; init; }
     /// <summary>
     /// Physical host card, when Core exposed one. Host relationships are
     /// carried by instance IDs so a client can nest a child under its host
@@ -799,6 +801,9 @@ public static class ObservationViewMapper
             observation.Viewer == PlayerSide.Runner
                 ? ReadCards(privateState, "stack", metadataResolver, abilityCue)
                 : Array.Empty<CardViewModel>());
+
+        corpHand = corpHand with { VisibleCards = corpHand.VisibleCards.Select(card => HandConditionPresenter.Apply(card, presentationContext.HandConditions)).ToArray() };
+        runnerHand = runnerHand with { VisibleCards = runnerHand.VisibleCards.Select(card => HandConditionPresenter.Apply(card, presentationContext.HandConditions)).ToArray() };
 
         IReadOnlyList<IcePositionViewModel> icePositions = MapIcePositions(publicState);
         IReadOnlyList<ServerViewModel> servers = ReadList(publicState, "servers")

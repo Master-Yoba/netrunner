@@ -540,6 +540,12 @@ public sealed class CatalogTriggerRuntimeTests
         TriggerChoiceParameters choice = Assert.IsType<TriggerChoiceParameters>(
             Assert.Single(decision.LegalActions, action => action.Kind == ActionKind.UseTrigger).Parameters);
         Assert.Equal(checkpoint.TriggerQueue[0].Id, choice.TriggerId);
+        Observation owned = ObservationBuilder.Build(prompt, PlayerSide.Corp, catalog);
+        using JsonDocument contexts = JsonDocument.Parse(EngineJson.Serialize(owned.PrivateState["triggers"]));
+        JsonElement offered = Assert.Single(contexts.RootElement.EnumerateArray());
+        Assert.Equal(choice.TriggerId.Value, offered.GetProperty("id").GetString());
+        Assert.Equal(corpSourceId.Value, offered.GetProperty("source").GetProperty("id").GetString());
+        Assert.DoesNotContain("triggers", ObservationBuilder.Build(prompt, PlayerSide.Runner, catalog).PrivateState.Keys);
     }
 
     [Fact]
@@ -666,6 +672,9 @@ public sealed class CatalogTriggerRuntimeTests
         Assert.Single(checkpoint.TriggerQueue);
         Assert.Equal(activeSourceId, checkpoint.TriggerQueue[0].SourceCardId);
         Assert.Equal(DecisionKind.TriggerChoice, prompt.PendingDecision?.Kind);
+        string privateContext = EngineJson.Serialize(ObservationBuilder.Build(prompt, PlayerSide.Runner, catalog).PrivateState["triggers"]);
+        Assert.Contains(activeSourceId.Value, privateContext, StringComparison.Ordinal);
+        Assert.DoesNotContain(hiddenSourceId.Value, privateContext, StringComparison.Ordinal);
 
         GameState restored = EngineJson.DeserializeState(EngineJson.Serialize(prompt), catalog);
         ApplyResult used = ApplyCurrentTriggerChoice(restored, catalog);

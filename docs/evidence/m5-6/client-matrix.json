@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "kind": "m5-native-client-evidence",
+  "date": "2026-09-23",
+  "content": "official",
+  "cases": 5,
+  "processPhases": 10,
+  "checks": [
+    "setup_profile_seed",
+    "manual_save",
+    "animation_boundary",
+    "failed_save_and_quit",
+    "corrupt_entry",
+    "verified_backup",
+    "escape_focus",
+    "cancelled_load",
+    "stale_publication",
+    "hand_hover_reset",
+    "paused_save_continue",
+    "process_restart",
+    "terminal_history",
+    "new_game"
+  ],
+  "games": [
+    {
+      "id": "corp-basic-standard",
+      "humanSide": "corp",
+      "difficulty": "standard",
+      "seed": 56142,
+      "buildVersion": "0.1.0-dev+8f5bc77a3aed03e3449c529fcc20068a5b421645",
+      "corpPreset": "system-gateway-basic-corp",
+      "runnerPreset": "system-gateway-basic-runner",
+      "resolution": "2560x1440",
+      "saveActionCount": 53,
+      "savedNonterminal": true,
+      "terminalActionCount": 129,
+      "engineHashAtSave": "4e00b2b65890a14a4c094731f735ddb3d7a006ec9e186191b4882594270dce4e",
+      "policyHashAtSave": "a8387aedbdef63de884a117286dc3203aaf949295c136667dc29ad11aed1193c",
+      "logSha256": {
+        "save": "9ac923883880f34fbd2d4cc8b56465c514fd9e7e085adc6ca6c1c05b8e18485a",
+        "resume": "5e4fb22090cfcacec3a8896bb41e7a7f8ad5eb52737a0e4b1466d19d41a83a89"
+      }
+    },
+    {
+      "id": "corp-expanded-standard",
+      "humanSide": "corp",
+      "difficulty": "standard",
+      "seed": 56142,
+      "buildVersion": "0.1.0-dev+8f5bc77a3aed03e3449c529fcc20068a5b421645",
+      "corpPreset": "system-gateway-expanded-corp",
+      "runnerPreset": "system-gateway-expanded-runner",
+      "resolution": "2560x1440",
+      "saveActionCount": 15,
+      "savedNonterminal": true,
+      "terminalActionCount": 1347,
+      "engineHashAtSave": "c385b0796dc788ca0bba23e884e0aff29a04369d5a260f6f708723c758cc1679",
+      "policyHashAtSave": "f3bf3088a7605690dd131a638e623b6a4e6b22f20b39ff2274c76e2a7dcbee27",
+      "logSha256": {
+        "save": "27730f251378d34d46e17c6e93fbc48ab3434309a396acfa0022aea364e1e7ea",
+        "resume": "c03f5534cb91bb02f565593bd6ccb54e8b421d33b74bb0e8b13200a023b744cb"
+      }
+    },
+    {
+      "id": "runner-basic-standard",
+      "humanSide": "runner",
+      "difficulty": "standard",
+      "seed": 56142,
+      "buildVersion": "0.1.0-dev+8f5bc77a3aed03e3449c529fcc20068a5b421645",
+      "corpPreset": "system-gateway-basic-corp",
+      "runnerPreset": "system-gateway-basic-runner",
+      "resolution": "1920x1080",
+      "saveActionCount": 32,
+      "savedNonterminal": true,
+      "terminalActionCount": 659,
+      "engineHashAtSave": "2ec2173f76d4de2bdaceae4cba39f43c561a4f79cd7f84169de89c2c90481c68",
+      "policyHashAtSave": "fcea0d275ee34eb2524d485cdb92578379422cdfe7806c614965d38abe2b2bc7",
+      "logSha256": {
+        "save": "a9f40240a3839b0ad536ef70c831ff6530c448b2700071861be4485bca4d71e9",
+        "resume": "d13d7b1c64f6e8d66056be505ff901b76282f2fa64f8b60fb4553418fb22a27c"
+      }
+    },
+    {
+      "id": "runner-expanded-easy",
+      "humanSide": "runner",
+      "difficulty": "easy",
+      "seed": 56142,
+      "buildVersion": "0.1.0-dev+8f5bc77a3aed03e3449c529fcc20068a5b421645",
+      "corpPreset": "system-gateway-expanded-corp",
+      "runnerPreset": "system-gateway-expanded-runner",
+      "resolution": "1920x1080",
+      "saveActionCount": 32,
+      "savedNonterminal": true,
+      "terminalActionCount": 1406,
+      "engineHashAtSave": "040f54740a5527178ae17de04dfdbad8ea863137d83fb5704a6ed32c03da97a9",
+      "policyHashAtSave": "2bad306d2c87e6700c419daf1bcbf4991bf67ff98c9c3c35ff5d68ab9ee239ba",
+      "logSha256": {
+        "save": "3b895a83920fe7563f2329fcb01a11b7c6b0363b7cd2a6576e7d5a2c7558a88f",
+        "resume": "85e25b3ba76d594b5ca6b8f389fe05d5124e0fda9eac54c05b36c1013c2e1d8c"
+      }
+    },
+    {
+      "id": "runner-expanded-standard",
+      "humanSide": "runner",
+      "difficulty": "standard",
+      "seed": 56142,
+      "buildVersion": "0.1.0-dev+8f5bc77a3aed03e3449c529fcc20068a5b421645",
+      "corpPreset": "system-gateway-expanded-corp",
+      "runnerPreset": "system-gateway-expanded-runner",
+      "resolution": "1920x1080",
+      "saveActionCount": 32,
+      "savedNonterminal": true,
+      "terminalActionCount": 1760,
+      "engineHashAtSave": "040f54740a5527178ae17de04dfdbad8ea863137d83fb5704a6ed32c03da97a9",
+      "policyHashAtSave": "f15d180b25098f383f4e673e8273dc667bbda389ac8833adccc6ffab8299f84e",
+      "logSha256": {
+        "save": "b8e0147bc3ecab49a0d6b1a0ef91ab29cc34302c0cb3bac206df67d41a3ffe65",
+        "resume": "fc02ad681d5d4ea4ad7ab73477505fa3cbbcb45ad9ad38aa3803b108d11dd681"
+      }
+    }
+  ],
+  "note": "Scripted integration evidence; not human playtesting. Private saves and traces remain outside repository sources."
+}

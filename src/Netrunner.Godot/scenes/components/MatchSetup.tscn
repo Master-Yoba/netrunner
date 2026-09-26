@@ -41,7 +41,7 @@ layout_mode = 2
 size_flags_horizontal = 3
 theme_override_colors/font_color = Color(0.65, 0.74, 0.8, 1)
 theme_override_font_sizes/font_size = 14
-text = "Choose your side and decks to play against the contract agent. Basic decks introduce the game; expanded decks add the booster cards."
+text = "Choose your side and decks to play against an offline bot. Basic decks introduce the game; expanded decks add the booster cards."
 autowrap_mode = 3
 
 [node name="PresetHeading" type="Label" parent="SetupContent"]
@@ -94,6 +94,21 @@ popup/item_0/id = 1
 popup/item_1/text = "Play Corp"
 popup/item_1/id = 0
 
+[node name="Opponent" type="Label" parent="SetupContent"]
+layout_mode = 2
+text = "Opponent · Offline bot"
+
+[node name="Difficulty" type="OptionButton" parent="SetupContent"]
+unique_name_in_owner = true
+layout_mode = 2
+accessibility_name = "Offline bot difficulty"
+selected = 0
+item_count = 2
+popup/item_0/text = "Standard"
+popup/item_0/id = 0
+popup/item_1/text = "Easy"
+popup/item_1/id = 1
+
 [node name="SeedLabel" type="Label" parent="SetupContent"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.65, 0.74, 0.8, 1)
@@ -109,12 +124,22 @@ theme_override_font_sizes/font_size = 14
 text = "42"
 placeholder_text = "42"
 
+[node name="GenerateSeed" type="Button" parent="SetupContent"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Generate seed"
+
 [node name="StartMatch" type="Button" parent="SetupContent"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(240, 42)
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 text = "Start selected official match"
+
+[node name="Resume" type="Button" parent="SetupContent"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Resume saved game"
 
 [node name="OpenGallery" type="Button" parent="SetupContent"]
 unique_name_in_owner = true

@@ -4,6 +4,51 @@ namespace Netrunner.Core.Tests;
 
 public sealed class HiddenSearchSemanticsTests
 {
+    [Theory]
+    [InlineData(PlayerSide.Corp)]
+    [InlineData(PlayerSide.Runner)]
+    public void PrivateChoiceDefinitionsExposeOnlyEligibleCardsWithoutDeckOrder(PlayerSide side)
+    {
+        var source = new CardInstanceId("card:search-source");
+        var sourceDefinition = new CardDefinitionId("test:search-source");
+        var candidate = new CardDefinitionId("test:search-candidate");
+        var excluded = new CardDefinitionId("test:search-excluded");
+        BehaviorZone deck = side == PlayerSide.Corp ? BehaviorZone.Deck : BehaviorZone.Stack;
+        ZoneKind deckZone = side == PlayerSide.Corp ? ZoneKind.CorpDeck : ZoneKind.RunnerStack;
+        ZoneKind handZone = side == PlayerSide.Corp ? ZoneKind.CorpHand : ZoneKind.RunnerGrip;
+        var filter = new BehaviorCardFilter(definitionId: candidate, ownerSide: side);
+        BehaviorCatalog catalog = new BehaviorCatalogBuilder("test:choice-projection")
+            .Add(new CardBehaviorDefinition(sourceDefinition, side, instructions:
+                [new BehaviorInstruction(BehaviorInstructionKind.Search, argument: "search", sourceZone: deck,
+                    filter: filter, target: BehaviorTarget.CardInZone(deck, filter))]))
+            .Add(new CardBehaviorDefinition(candidate, side))
+            .Add(new CardBehaviorDefinition(excluded, side)).Build();
+        var a = new CardInstanceId("card:eligible-a");
+        var b = new CardInstanceId("card:eligible-b");
+        var hidden = new CardInstanceId("card:ineligible");
+        GameState First(bool reverse) => CreateState(catalog,
+            (source, sourceDefinition, handZone, side),
+            (reverse ? b : a, candidate, deckZone, side),
+            (hidden, excluded, deckZone, side),
+            (reverse ? a : b, candidate, deckZone, side));
+        GameState Begin(GameState state) => GameEngine.BeginBehaviorForTesting(state,
+            new BehaviorInvocationContext(source, state.Players.Single(player => player.Side == side).Id), catalog);
+        GameState first = Begin(First(false));
+        GameState second = Begin(First(true));
+        string privateCards = EngineJson.Serialize(ObservationBuilder.Build(first, side).PrivateState["choiceCards"]);
+        Assert.Equal(privateCards, EngineJson.Serialize(ObservationBuilder.Build(second, side).PrivateState["choiceCards"]));
+        Assert.Contains(candidate.Value, privateCards, StringComparison.Ordinal);
+        Assert.DoesNotContain(excluded.Value, privateCards, StringComparison.Ordinal);
+        Assert.DoesNotContain(hidden.Value, privateCards, StringComparison.Ordinal);
+        Assert.False(ObservationBuilder.Build(first, side == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp)
+            .PrivateState.ContainsKey("choiceCards"));
+        Assert.False(ObservationBuilder.Build(First(false), side).PrivateState.ContainsKey("choiceCards"));
+        LegalAction decline = first.PendingDecision!.LegalActions.Single(action => IsCardSelection(action, "search", []));
+        ApplyResult declined = Apply(first, catalog, decline);
+        Assert.True(declined.Accepted);
+        Assert.False(ObservationBuilder.Build(declined.State, side).PrivateState.ContainsKey("choiceCards"));
+    }
+
     [Fact]
     public void FoundCardConditionIsParameterlessStrictSerializableAndFingerprinted()
     {

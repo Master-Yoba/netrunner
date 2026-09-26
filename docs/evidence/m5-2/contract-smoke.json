@@ -1,0 +1,231 @@
+{
+  "schemaVersion": 1,
+  "suiteId": "contract-smoke-v1",
+  "manifestHash": "d1a7a97c1af63b18f161a7b1f32061ba86db0dac2c89fd1e6ba74a0204afcfa7",
+  "pins": {
+    "rulesVersion": "26.03",
+    "stateSchemaVersion": 17,
+    "cardDataVersion": "236140cf84491c23995b028bc791281837520b97",
+    "cardDataSha256": "a190e6e63a6d58734d915258ebb6b5659ffef0e253fc4c5128776256ee3d699b",
+    "behaviorVersion": "gateway-m4-4.7",
+    "behaviorFingerprint": "dcbfdac91abe3d308c6f690495abc1b0dd4703a8bb86a82e9b188db26f83b22b",
+    "runtimeVersion": "gateway-runtime-v1-236140cf84491c23995b028bc791281837520b97",
+    "runtimeFingerprint": "5d46992f09746b4129938f7acfa02e7b6cb9a6047a1b92626dbc1558eaafe017",
+    "evaluationVersion": "gateway-evaluation-v1",
+    "evaluationFingerprint": "3a6cdc4a9a6b44895783794d1ee2a3f57d2ecfdb06feee908226671557a7fabb",
+    "presetSha256": "1cca3597bc1897935f1ba11e04fd2af20fe7b25912dfa5ce209944b59bdcd5af"
+  },
+  "buildRevision": "0.1.0-dev+a242f0b451e452492edd70518751c8de37531085",
+  "assemblyHashes": {
+    "netrunner.AI": "5502add839fad216ea406bf9b3d8ae367fe2b39f112de5d2630d1d8af2197d82",
+    "netrunner.Cards": "08130aa8bb2c55d97c043e030f9c7caba02e04cf416c85805ace39ba367b796b",
+    "netrunner.Cli": "f76ca2b0fefe5fcfd47af59e696f43742c09d19a603e1ce384e24d253ae6f876",
+    "netrunner.Core": "81241c59db62b089b646ea11463401640eb267b368d352dcdb2293bfd2b2ac90",
+    "netrunner.Match": "d68dcf80bd17d904a6fb0a01eeb9f4e1fd08865e73fbf33fc4d1d19047f876a6"
+  },
+  "runtime": ".NET 8.0.30",
+  "operatingSystem": "Darwin 27.0.0 Darwin Kernel Version 27.0.0: Tue Aug 11 21:02:59 PDT 2026; root:xnu-13432.1.9~1/RELEASE_ARM64_T8142",
+  "architecture": "Arm64",
+  "workers": 4,
+  "deterministicDigest": "ef38f82bf5021e0e7e059b9086f8ad4ad6a18a37c6696a05414105b8c6b53e77",
+  "aggregate": {
+    "games": 20,
+    "terminal": 20,
+    "turnCaps": 0,
+    "failures": 0,
+    "corpWins": 6,
+    "runnerWins": 14,
+    "terminations": {
+      "terminal": 20
+    }
+  },
+  "strata": [
+    {
+      "comparisonGroup": "baseline",
+      "corpPreset": "system-gateway-basic-corp",
+      "runnerPreset": "system-gateway-basic-runner",
+      "aggregate": {
+        "games": 5,
+        "terminal": 5,
+        "turnCaps": 0,
+        "failures": 0,
+        "corpWins": 2,
+        "runnerWins": 3,
+        "terminations": {
+          "terminal": 5
+        }
+      },
+      "actions": 3362,
+      "completedTurnPairs": 93,
+      "corp": {
+        "decisions": 1677,
+        "creditsGained": 355,
+        "creditsSpent": 228,
+        "installs": 109,
+        "replacementInstalls": 32,
+        "runs": 0,
+        "successfulRuns": 0,
+        "pumps": 0,
+        "wastedPumps": 0,
+        "fallbacks": null,
+        "finalCredits": 152,
+        "finalAgendaPoints": 19
+      },
+      "runner": {
+        "decisions": 1685,
+        "creditsGained": 139,
+        "creditsSpent": 15,
+        "installs": 9,
+        "replacementInstalls": 0,
+        "runs": 14,
+        "successfulRuns": 10,
+        "pumps": 0,
+        "wastedPumps": 0,
+        "fallbacks": null,
+        "finalCredits": 149,
+        "finalAgendaPoints": 4
+      }
+    },
+    {
+      "comparisonGroup": "baseline",
+      "corpPreset": "system-gateway-basic-corp",
+      "runnerPreset": "system-gateway-expanded-runner",
+      "aggregate": {
+        "games": 5,
+        "terminal": 5,
+        "turnCaps": 0,
+        "failures": 0,
+        "corpWins": 2,
+        "runnerWins": 3,
+        "terminations": {
+          "terminal": 5
+        }
+      },
+      "actions": 3241,
+      "completedTurnPairs": 78,
+      "corp": {
+        "decisions": 1486,
+        "creditsGained": 296,
+        "creditsSpent": 204,
+        "installs": 91,
+        "replacementInstalls": 27,
+        "runs": 0,
+        "successfulRuns": 0,
+        "pumps": 0,
+        "wastedPumps": 0,
+        "fallbacks": null,
+        "finalCredits": 117,
+        "finalAgendaPoints": 17
+      },
+      "runner": {
+        "decisions": 1755,
+        "creditsGained": 80,
+        "creditsSpent": 33,
+        "installs": 11,
+        "replacementInstalls": 0,
+        "runs": 34,
+        "successfulRuns": 31,
+        "pumps": 1,
+        "wastedPumps": 1,
+        "fallbacks": null,
+        "finalCredits": 72,
+        "finalAgendaPoints": 12
+      }
+    },
+    {
+      "comparisonGroup": "baseline",
+      "corpPreset": "system-gateway-expanded-corp",
+      "runnerPreset": "system-gateway-basic-runner",
+      "aggregate": {
+        "games": 5,
+        "terminal": 5,
+        "turnCaps": 0,
+        "failures": 0,
+        "corpWins": 1,
+        "runnerWins": 4,
+        "terminations": {
+          "terminal": 5
+        }
+      },
+      "actions": 4160,
+      "completedTurnPairs": 66,
+      "corp": {
+        "decisions": 1610,
+        "creditsGained": 170,
+        "creditsSpent": 142,
+        "installs": 72,
+        "replacementInstalls": 24,
+        "runs": 0,
+        "successfulRuns": 0,
+        "pumps": 0,
+        "wastedPumps": 0,
+        "fallbacks": null,
+        "finalCredits": 53,
+        "finalAgendaPoints": 12
+      },
+      "runner": {
+        "decisions": 2550,
+        "creditsGained": 91,
+        "creditsSpent": 63,
+        "installs": 10,
+        "replacementInstalls": 0,
+        "runs": 101,
+        "successfulRuns": 101,
+        "pumps": 0,
+        "wastedPumps": 0,
+        "fallbacks": null,
+        "finalCredits": 53,
+        "finalAgendaPoints": 30
+      }
+    },
+    {
+      "comparisonGroup": "baseline",
+      "corpPreset": "system-gateway-expanded-corp",
+      "runnerPreset": "system-gateway-expanded-runner",
+      "aggregate": {
+        "games": 5,
+        "terminal": 5,
+        "turnCaps": 0,
+        "failures": 0,
+        "corpWins": 1,
+        "runnerWins": 4,
+        "terminations": {
+          "terminal": 5
+        }
+      },
+      "actions": 3845,
+      "completedTurnPairs": 60,
+      "corp": {
+        "decisions": 1458,
+        "creditsGained": 116,
+        "creditsSpent": 125,
+        "installs": 67,
+        "replacementInstalls": 20,
+        "runs": 0,
+        "successfulRuns": 0,
+        "pumps": 0,
+        "wastedPumps": 0,
+        "fallbacks": null,
+        "finalCredits": 16,
+        "finalAgendaPoints": 9
+      },
+      "runner": {
+        "decisions": 2387,
+        "creditsGained": 49,
+        "creditsSpent": 72,
+        "installs": 12,
+        "replacementInstalls": 0,
+        "runs": 89,
+        "successfulRuns": 84,
+        "pumps": 37,
+        "wastedPumps": 35,
+        "fallbacks": null,
+        "finalCredits": 2,
+        "finalAgendaPoints": 30
+      }
+    }
+  ],
+  "kind": "m5-ai-benchmark-summary",
+  "verifiedReplays": 20,
+  "nonterminalAttempts": []
+}

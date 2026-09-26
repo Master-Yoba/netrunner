@@ -86,7 +86,7 @@ public partial class Main
 				if (!_tableActionButtons.TryGetValue(basicRun.Id, out Button? runButton))
 					throw new InvalidOperationException("Selecting a server did not offer its issued run action.");
 				await ClickTableButton(runButton);
-				await _coordinator!.GetObservationAsync(PlayerSide.Runner);
+				await _coordinator!.GetReadyObservationAsync(PlayerSide.Runner);
 				await TableFrames(3);
 				if (_currentSnapshot.View.Run is null) throw new InvalidOperationException("Contextual run action did not start its run.");
 				bool sawAccess = false;
@@ -123,14 +123,14 @@ public partial class Main
 					}
 					await ClickTableButton(_tableActionButtons[next.Id]);
 				}
-				await _coordinator.GetObservationAsync(PlayerSide.Runner);
+				await _coordinator.GetReadyObservationAsync(PlayerSide.Runner);
 				await TableFrames(3);
 				if (!sawAccess || _currentSnapshot.View.Run is not null || _tableAccessPanel.Visible)
 					throw new InvalidOperationException("R&D access did not finish and clear its panel.");
 				GD.Print("M49_RD_ACCESS PASS seed=47042 visible_card=true named_history=true cleared=true");
 				GD.Print("M49_CONTEXT PASS event_from_hand=true run_from_server=true");
 				await AssertHoverStable("live-1920");
-				_coordinator!.SnapshotPublished -= QueueSnapshot;
+				DetachCoordinatorPublications();
 				_coordinator.Dispose();
 				_coordinator = null;
 				CloseFullMatchDiagnostics("m4-9-official-complete");
@@ -418,7 +418,7 @@ public partial class Main
 
 	private async Task<Observation> SettledTableObservationAsync()
 	{
-		Observation observation = await _coordinator!.GetObservationAsync(PlayerSide.Runner)
+		Observation observation = await _coordinator!.GetReadyObservationAsync(PlayerSide.Runner)
 			.WaitAsync(TimeSpan.FromSeconds(10));
 		for (int frame = 0; frame < 180; frame++)
 		{
@@ -516,17 +516,17 @@ public partial class Main
 		float? iceTop = null;
 		foreach (HBoxContainer root in roots)
 		{
-			ScrollContainer iceScroll = root.GetParent().GetNode<ScrollContainer>("IceScroll");
+			VBoxContainer iceCards = root.GetParent().GetNode<VBoxContainer>("IceCards");
 			rootTop ??= root.GlobalPosition.Y;
-			iceTop ??= iceScroll.GlobalPosition.Y;
-			if (Mathf.Abs(root.GlobalPosition.Y - rootTop.Value) > 1 || Mathf.Abs(iceScroll.GlobalPosition.Y - iceTop.Value) > 1)
+			iceTop ??= iceCards.GlobalPosition.Y;
+			if (Mathf.Abs(root.GlobalPosition.Y - rootTop.Value) > 1 || Mathf.Abs(iceCards.GlobalPosition.Y - iceTop.Value) > 1)
 				throw new InvalidOperationException("Server root/ICE rows shifted between lanes.");
 			Rect2[] cards = root.GetChildren().OfType<TableCardControl>().Where(card => card.Visible)
 				.Select(card => card.GetGlobalRect()).ToArray();
 			float center = root.GetGlobalRect().GetCenter().X;
 			if (cards.Length > 0 && Mathf.Abs((cards.Min(rect => rect.Position.X) + cards.Max(rect => rect.End.X)) / 2 - center) > 1)
 				throw new InvalidOperationException("Server root cards are off the lane centerline.");
-			foreach (TableCardControl ice in FindDescendants<TableCardControl>(iceScroll).Where(card => card.IsIce))
+			foreach (TableCardControl ice in FindDescendants<TableCardControl>(iceCards).Where(card => card.IsIce))
 				if (Mathf.Abs(ice.GetGlobalRect().GetCenter().X - center) > 1)
 					throw new InvalidOperationException($"ICE is off the root centerline: {ice.GetGlobalRect().GetCenter().X} vs {center}.");
 		}

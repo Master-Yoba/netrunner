@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Netrunner.Core;
 
 using Xunit;
@@ -271,6 +273,50 @@ public sealed class GatewayBatch5RuntimeTests
         RoundTrip(fixture, advanced.State);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    [Trait("GatewayCard", "30065")]
+    [Trait("GatewayCard", "30022")]
+    public void RetributionLosingMemoryOpensRunnerCleanupThenResumesCorpPlayAndReplays(bool optimizer)
+    {
+        CardDefinitionId provider = optimizer ? GatewayBatch3CardCodes.DzmzOptimizer : Hardware;
+        Fixture fixture = Create(PlayerSide.Corp,
+            [new Placement(GatewayBatch5CardCodes.Retribution, ZoneKind.CorpHand),
+             new Placement(provider, ZoneKind.RunnerRig),
+             .. Enumerable.Repeat(new Placement(Program, ZoneKind.RunnerRig), 5)], tags: 1);
+        GameState state = OpenAction(fixture);
+        GameSnapshot root = state.CreateSnapshot(fixture.Behavior, fixture.Runtime);
+        var actions = new List<ReplayAction>();
+        ApplyResult played = Play(fixture, state, GatewayBatch5CardCodes.Retribution);
+        actions.Add(ReplayAction.From(played.AcceptedAction!));
+        state = played.State;
+        CardInstanceId hardware = Card(state, provider);
+        ApplyResult targeted = Apply(fixture, state, state.PendingDecision!.LegalActions.Single(action =>
+            action.Parameters is BehaviorChoiceParameters choice && choice.CardIds.Contains(hardware)));
+        actions.Add(ReplayAction.From(targeted.AcceptedAction!));
+        state = RoundTrip(fixture, targeted.State);
+        Assert.Equal(DecisionKind.MemoryCleanup, state.PendingDecision!.Kind);
+        Assert.Equal(state.GetPlayerBySide(PlayerSide.Runner).Id, state.PendingDecision.Owner);
+        Assert.Equal(5, state.PendingDecision.LegalActions.Count);
+        Assert.Contains(hardware, state.GetZone(ZoneKind.RunnerHeap).CardIds);
+        Assert.All(state.PendingDecision.LegalActions, action => Assert.Equal(ActionKind.TrashProgram, action.Kind));
+        JsonNode forged = JsonNode.Parse(EngineJson.Serialize(state))!;
+        JsonArray frames = forged["resolutionStack"]!.AsArray();
+        frames[frames.Count - 2]!["controller"] = state.GetPlayerBySide(PlayerSide.Runner).Id.Value;
+        Assert.Throws<JsonException>(() => EngineJson.DeserializeState(forged.ToJsonString(), fixture.Behavior, fixture.Runtime));
+        ApplyResult cleanup = Apply(fixture, state, state.PendingDecision.LegalActions[0]);
+        actions.Add(ReplayAction.From(cleanup.AcceptedAction!));
+        state = RoundTrip(fixture, cleanup.State);
+        Assert.Equal(4, state.RulesState!.Players.Single(player => player.PlayerId == state.GetPlayerBySide(PlayerSide.Runner).Id).UsedMemory);
+        Assert.Equal(2, state.GetZone(ZoneKind.RunnerHeap).CardIds.Count);
+        Assert.DoesNotContain(state.ResolutionStack, frame => frame is MemoryCleanupFrame);
+        Assert.Equal(state.GetPlayerBySide(PlayerSide.Corp).Id, state.PendingDecision!.Owner);
+        Assert.Contains(Card(state, GatewayBatch5CardCodes.Retribution), state.GetZone(ZoneKind.CorpDiscard).CardIds);
+        var replay = new ReplayArtifact(root, state.InitialSeed, actions, expectedFinalStateHash: DeterministicHash.ForState(state));
+        Assert.True(ReplayVerifier.Verify(replay, fixture.Behavior, fixture.Runtime).Success);
+    }
+
     private static RuntimeCardCatalog Runtime() => new RuntimeCardCatalogBuilder("runtime:batch5")
         .Add(new CardRuntimeSpec(GatewayBatch5CardCodes.UrticaCipher, PlayerSide.Corp, RuntimeCardClass.Asset, rezCost: 0, trashCost: 2))
         .Add(new CardRuntimeSpec(GatewayBatch5CardCodes.Clearinghouse, PlayerSide.Corp, RuntimeCardClass.Asset, rezCost: 0, trashCost: 3))
@@ -281,6 +327,7 @@ public sealed class GatewayBatch5RuntimeTests
         .Add(new CardRuntimeSpec(Agenda, PlayerSide.Corp, RuntimeCardClass.Agenda, agendaPoints: 2, advancementRequirement: 4))
         .Add(new CardRuntimeSpec(Program, PlayerSide.Runner, RuntimeCardClass.Program, installCost: 3, memoryUnits: 1))
         .Add(new CardRuntimeSpec(Hardware, PlayerSide.Runner, RuntimeCardClass.Hardware, installCost: 2))
+        .Add(new CardRuntimeSpec(GatewayBatch3CardCodes.DzmzOptimizer, PlayerSide.Runner, RuntimeCardClass.Hardware, installCost: 2))
         .Add(new CardRuntimeSpec(Resource, PlayerSide.Runner, RuntimeCardClass.Resource, installCost: 1))
         .Add(new CardRuntimeSpec(Filler, PlayerSide.Runner, RuntimeCardClass.Event, playCost: 0))
         .Add(new CardRuntimeSpec(CorpFiller, PlayerSide.Corp, RuntimeCardClass.Operation, playCost: 0))

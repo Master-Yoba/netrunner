@@ -42,6 +42,21 @@ public static partial class CliCommands
         ArgumentNullException.ThrowIfNull(output);
         ArgumentNullException.ThrowIfNull(error);
 
+        if (args.Length > 0 && args[0] == "ai-tactics")
+        {
+            return RunAiTactics(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "ai-benchmark")
+        {
+            return RunAiBenchmark(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "ai-performance")
+        {
+            return RunPolicyPerformance(args, output, error);
+        }
+
         if (args.Length > 0 && args[0] == "card-art")
         {
             return RunCardArtwork(args, output, error);
@@ -50,6 +65,16 @@ public static partial class CliCommands
         if (args.Length > 0 && args[0] == "session-recover")
         {
             return RunSessionRecover(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "save-validate")
+        {
+            return RunSaveValidate(args, output, error);
+        }
+
+        if (args.Length > 0 && args[0] == "snapshot")
+        {
+            return RunSnapshot(args, output, error);
         }
 
         if (args.Length > 0 && args[0] is "full-match" or "simulate")
@@ -136,8 +161,15 @@ public static partial class CliCommands
             "Usage: Netrunner.Cli doctor [--json] | self-test --seed <unsigned-integer> | "
             + "scenario <file> [--json] | replay <file> [--json] | "
             + "session-recover <directory> [--at-action <sequence>] [--replay-out <file>] [--snapshot-out <file>] [--json] | "
+            + "save-validate <file> [--json] | "
+            + "snapshot <file> [--synthetic] [--side corp|runner] [--output <file>] [--raw] [--step [--action <id>] | --until human|outcome|turn:N] [--max-actions 1..10000] [--json] | "
             + "full-match [--preset basic|expanded] [--seed <unsigned-integer>] [--json] [--replay-out <file>] | "
             + "simulate <fixture-file> [--json] [--replay-out <file>] | "
+            + "ai-benchmark <manifest> --output <new directory> [--workers 1..64] [--policy-diagnostics] [--json] | "
+            + "ai-performance <manifest> --output <new directory> --hardware <description> [--json] | "
+            + "ai-benchmark init smoke|full|developer [--corp-profile standard|easy] [--runner-profile standard|easy] --output <new manifest> [--json] | "
+            + "ai-tactics init [--corp-profile standard|easy | --runner-profile standard|easy] --output <new manifest> [--json] | "
+            + "ai-tactics <manifest> --output <new directory> [--workers 1..64] [--verify-fixtures] [--json] | "
             + "card-data normalize --upstream <file> --copyright <file> --commit <40-hex-sha> "
             + "--retrieval-date YYYY-MM-DD --output-dir <directory> [--json] | "
             + "card-data validate [--root <directory>] [--json] | "

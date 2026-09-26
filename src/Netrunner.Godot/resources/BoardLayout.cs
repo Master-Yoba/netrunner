@@ -25,7 +25,7 @@ public partial class BoardLayout : Resource
 	private Vector2 _hostedCardOffset = new(33.0f, 27.0f);
 	private Vector2 _hostedCardStep = new(20.0f, 11.0f);
 	private float _serverFieldMinimumHeight = 150.0f;
-	private float _runnerFieldMinimumHeight = 200.0f;
+	private float _runnerFieldMinimumHeight = 178.0f;
 
 	[ExportGroup("Board regions")]
 	[Export(PropertyHint.Range, "180,640,1")]

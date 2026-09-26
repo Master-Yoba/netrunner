@@ -1,4 +1,4 @@
-.PHONY: bootstrap restore build test watch-core watch-cards format cli doctor godot-import event-smoke templates package-linux package-macos secrets benchmark-m0 verify m4-gate play
+.PHONY: bootstrap restore build test watch-core watch-cards format cli doctor godot-import event-smoke templates package-linux package-macos secrets benchmark-m0 verify m4-gate play m5-client-smoke
 
 bootstrap:
 	./scripts/bootstrap.sh
@@ -48,6 +48,27 @@ secrets:
 benchmark-m0:
 	./scripts/benchmark-m0.sh
 
+.PHONY: m5-spec
+m5-spec:
+	python3 scripts/check-m5-spec.py
+
+.PHONY: ai-benchmark ai-benchmark-smoke ai-benchmark-developer
+ai-benchmark:
+	bash scripts/ai-benchmark.sh full $(BENCHMARK_ARGS)
+
+ai-benchmark-smoke:
+	bash scripts/ai-benchmark.sh smoke $(BENCHMARK_ARGS)
+
+ai-benchmark-developer:
+	bash scripts/ai-benchmark.sh developer $(BENCHMARK_ARGS)
+
+.PHONY: ai-tactics ai-tactics-verify
+ai-tactics:
+	bash scripts/ai-tactics.sh $(TACTICAL_ARGS)
+
+ai-tactics-verify:
+	bash scripts/ai-tactics.sh --verify-fixtures $(TACTICAL_ARGS)
+
 verify:
 	./scripts/verify.sh
 
@@ -64,3 +85,23 @@ interaction-lab:
 .PHONY: card-art-fetch card-art-validate card-art-pack card-art-unpack
 card-art-fetch card-art-validate card-art-pack card-art-unpack:
 	@./scripts/card-art.sh $(patsubst card-art-%,%,$@) $(ART_ARGS)
+
+m5-client-smoke:
+	bash scripts/m5-client-smoke.sh
+
+.PHONY: play-dev m5-developer-smoke
+play-dev:
+	bash scripts/play.sh --developer
+
+m5-developer-smoke:
+	bash scripts/m5-developer-smoke.sh
+
+.PHONY: m5-gate m5-quick m5-offline-proof
+m5-gate:
+	bash scripts/m5-gate.sh
+
+m5-quick:
+	bash scripts/m5-gate.sh --quick
+
+m5-offline-proof:
+	python3 scripts/m5-offline-proof.py --art-cache "$(ART_CACHE)" $(OFFLINE_ARGS)
