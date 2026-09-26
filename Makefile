@@ -70,9 +70,16 @@ ui-capture:
 ai-ladder:
 	bash scripts/ai-ladder.sh $(LADDER_ARGS)
 
-.PHONY: fuzz fuzz-developer
+.PHONY: fuzz fuzz-developer fuzz-nightly
 fuzz:
 	bash scripts/fuzz.sh official $(FUZZ_ARGS)
+
+# Local nightly rules fuzzing (not CI, to save Actions minutes): 1,000 official
+# games with every action also checked in Simulation mode. Each run uses a new
+# seed from the date unless FUZZ_SEED is set.
+fuzz-nightly:
+	bash scripts/fuzz.sh official --games 1000 --differential --workers $$(nproc 2>/dev/null || sysctl -n hw.ncpu) \
+		--seed $(or $(FUZZ_SEED),$(shell date -u +%Y%m%d)) $(FUZZ_ARGS)
 
 fuzz-developer:
 	bash scripts/fuzz.sh developer $(FUZZ_ARGS)
