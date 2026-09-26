@@ -14,8 +14,8 @@ records, audits and reviews (M0 to M5) are kept unchanged in
   - [Engine and architecture plan](ENGINE_ARCHITECTURE_PLAN.md) (E*)
   - [AI opponent plan](AI_OPPONENT_PLAN.md) (A*)
   - [UI/UX redesign plan](UI_UX_REDESIGN_PLAN.md) (U*)
-- [Wave 0 progress](WAVE_0_PROGRESS.md): the latest completed wave and its
-  gate evidence
+- [Wave 1 progress](WAVE_1_PROGRESS.md): the latest wave and its gate evidence
+- [Wave 0 progress](WAVE_0_PROGRESS.md)
 
 ## Reference and how-to
 

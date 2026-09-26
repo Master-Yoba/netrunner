@@ -143,6 +143,13 @@ other side's, and the Runner's rating against the frozen Corp improves
 noticeably. The target is Standard self-play with the Runner winning 40–60%,
 after checking the preset matchups themselves aren't lopsided.
 
+*Wave 1 outcome* ([record](WAVE_1_PROGRESS.md)): Runner v2 gained +102 Elo
+[66, 145] over the M5 Runner, mostly from seeing public advancement counters
+on face-down cards, which the observation hadn't exposed at all. Corp v3's
+breaker-coverage and agenda-safety terms didn't measurably change Corp
+strength, so the Corp's next gains are expected from A3. Card memory for
+hidden cards wasn't possible: they have no ID in the observation.
+
 ### A3. Turn planner (L) — needs engine E1 and E5
 
 The main structural upgrade for turn-action decisions:

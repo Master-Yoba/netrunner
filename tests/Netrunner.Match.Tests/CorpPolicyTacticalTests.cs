@@ -16,7 +16,7 @@ public sealed class CorpPolicyTacticalTests
     {
         TacticalFixture fixture = new GatewayTacticalCatalog(CardDataResource.LoadEmbedded()).Build(id);
         var evaluation = new GatewayEvaluationCatalog(fixture.Board.Runtime, fixture.Board.Behavior);
-        OfflineAgent Create() => new(CorpPolicyProfiles.Create("standard", 5301), new CorpHeuristicPolicy(), evaluation, captureDiagnostics: true);
+        OfflineAgent Create() => new(CorpPolicyProfiles.Create("standard", 5301, CorpHeuristicPolicy.V2), new CorpHeuristicPolicy(CorpHeuristicPolicy.V2), evaluation, captureDiagnostics: true);
         TacticalArtifacts artifacts = await TacticalExecution.RunAsync(fixture, Create(), twinFactory: Create);
         Assert.True(artifacts.Result.Passed, artifacts.Result.Error);
         Assert.True(artifacts.Result.ReplayVerified);
@@ -28,7 +28,7 @@ public sealed class CorpPolicyTacticalTests
     {
         TacticalFixture fixture = new GatewayTacticalCatalog(CardDataResource.LoadEmbedded()).Build(id);
         var evaluation = new GatewayEvaluationCatalog(fixture.Board.Runtime, fixture.Board.Behavior);
-        OfflineAgent Create() => new(CorpPolicyProfiles.Create("standard", 5301), new CorpHeuristicPolicy(), evaluation, captureDiagnostics: true);
+        OfflineAgent Create() => new(CorpPolicyProfiles.Create("standard", 5301, CorpHeuristicPolicy.V2), new CorpHeuristicPolicy(CorpHeuristicPolicy.V2), evaluation, captureDiagnostics: true);
         TacticalArtifacts artifacts = await TacticalExecution.RunAsync(fixture, Create(), twinFactory: Create);
         if (fixture.Metadata.Critical) Assert.True(artifacts.Result.Passed, $"{id}: {artifacts.Result.Error}; actions={string.Join(',', artifacts.Result.SemanticActions)}; evaluations={EngineJson.Serialize(artifacts.Evaluations)}");
         Assert.True(artifacts.Result.ReplayVerified);
@@ -41,7 +41,7 @@ public sealed class CorpPolicyTacticalTests
     public async Task FinalFrozenSuiteRetainsCriticalHeldOutAndTwinChecksAcrossWorkerCounts(string profile)
     {
         var runner = new TacticalBenchmarkRunner(CardDataResource.LoadEmbedded());
-        TacticalBenchmarkManifest manifest = BenchmarkSuites.WithCorpProfile(runner.CreateContractManifest(), profile);
+        TacticalBenchmarkManifest manifest = BenchmarkSuites.WithCorpProfile(runner.CreateContractManifest(), profile, CorpHeuristicPolicy.V2);
         string directory = Path.Combine(Path.GetTempPath(), "netrunner-corp-policy-" + Guid.NewGuid().ToString("N"));
         try
         {
@@ -74,7 +74,7 @@ public sealed class CorpPolicyTacticalTests
         {
             TacticalFixture fixture = catalog.Build(id);
             var evaluation = new GatewayEvaluationCatalog(fixture.Board.Runtime, fixture.Board.Behavior);
-            OfflineAgent Create() => new(CorpPolicyProfiles.Create(profile, 5301), new CorpHeuristicPolicy(), evaluation, captureDiagnostics: true);
+            OfflineAgent Create() => new(CorpPolicyProfiles.Create(profile, 5301, CorpHeuristicPolicy.V2), new CorpHeuristicPolicy(CorpHeuristicPolicy.V2), evaluation, captureDiagnostics: true);
             results.Add((await TacticalExecution.RunAsync(fixture, Create(), twinFactory: Create)).Result);
         }
         string failures = string.Join("; ", results.Where(result => !result.Passed).Select(result => result.Id + ": " + result.Error));

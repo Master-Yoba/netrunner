@@ -93,6 +93,12 @@ sizes are relative: S is a few days, M is one to two weeks, L is several weeks.
 
 ### E1. Tiered `Apply` for simulation (M) — prerequisite for AI phases A3 and A4
 
+*Done in Wave 1* ([record](WAVE_1_PROGRESS.md)): `ApplyMode.Simulation` is about
+14× faster than authoritative mode, simulated states can't be serialized,
+hashed, snapshotted or applied authoritatively, and `fuzz --differential`
+matched both modes on 200 official games. `WorkingState` copying was not yet
+optimized.
+
 Introduce an explicit reduction mode:
 
 ```csharp

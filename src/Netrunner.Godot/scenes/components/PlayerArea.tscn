@@ -122,10 +122,11 @@ theme_override_font_sizes/font_size = 10
 text = "Score pile · 0"
 text_overrun_behavior = 3
 
-[node name="Scored" parent="Content/Summary/Content" instance=ExtResource("1_pile")]
+[node name="Scored" parent="Content/Summary/Content" instance=ExtResource("deck")]
 layout_mode = 2
-text = "Scored"
-tooltip_text = "Browse Runner score area"
+size_flags_horizontal = 0
+text = "Score\n—"
+tooltip_text = "Runner score area · stolen agendas"
 
 [node name="Identity" type="PanelContainer" parent="Content"]
 custom_minimum_size = Vector2(96, 150)

@@ -61,6 +61,8 @@ public partial class GameTableControl : Control
 	private Label _runnerScoreLabel = null!;
 	private Button _runnerDeckPile = null!;
 	private Button _runnerHeapPile = null!;
+	private BoardActionButton? _corpScoredPile;
+	private BoardActionButton? _runnerScoredPile;
 	private string? _selection;
 	private string? _selectedServer;
 	private IReadOnlySet<string> _targets = new HashSet<string>(StringComparer.Ordinal);
@@ -352,15 +354,14 @@ public partial class GameTableControl : Control
 		heap.MouseExited += () => HoverPileFace(heap, false);
 		heap.FocusEntered += () => HoverPileFace(heap, true);
 		heap.FocusExited += () => HoverPileFace(heap, false);
-		Button? corpScored = GetNodeOrNull<Button>("Surface/Margins/Layout/ServerField/Content/Summary/Content/CorpScored");
-		Button? runnerScored = GetNodeOrNull<Button>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/Scored");
-		if (corpScored is not null)
+		_corpScoredPile = GetNodeOrNull<BoardActionButton>("Surface/Margins/Layout/ServerField/Content/Summary/Content/CorpScored");
+		_runnerScoredPile = GetNodeOrNull<BoardActionButton>("Surface/Margins/Layout/RunnerField/Content/Summary/Content/Scored");
+		foreach ((BoardActionButton? pile, string zone) in new[] { (_corpScoredPile, "zone:corp-score"), (_runnerScoredPile, "zone:runner-score") })
 		{
-			corpScored.Pressed += () => ServerSelected?.Invoke("zone:corp-score");
-		}
-		if (runnerScored is not null)
-		{
-			runnerScored.Pressed += () => ServerSelected?.Invoke("zone:runner-score");
+			if (pile is null) continue;
+			pile.Pressed += () => ServerSelected?.Invoke(zone);
+			pile.MouseEntered += () => HoverPileFace(pile, true);
+			pile.MouseExited += () => HoverPileFace(pile, false);
 		}
 	}
 
@@ -642,6 +643,9 @@ public partial class GameTableControl : Control
 			view.RunnerHeap.Count > 0 ? view.RunnerHeap[^1] : null, view.RunnerHeap.Count, "Heap", PlayerSide.Runner, nextVisibleCards);
 		UpdatePileTooltip(_runnerHeapPile, $"Runner Heap · {view.RunnerHeap.Count} public cards",
 			view.RunnerHeap.Count > 0 && view.RunnerHeap[^1].IsKnown);
+
+		RenderScorePile("zone:corp-score", _corpScoredPile, view.CorpScore, PlayerSide.Corp, nextVisibleCards);
+		RenderScorePile("zone:runner-score", _runnerScoredPile, view.RunnerScore, PlayerSide.Runner, nextVisibleCards);
 
 		RenderIdentity("runner-identity", _runnerIdentitySlot, view.RunnerIdentity, false, nextVisibleCards);
 		// The upper strip carries the opponent HQ count and the local hand is

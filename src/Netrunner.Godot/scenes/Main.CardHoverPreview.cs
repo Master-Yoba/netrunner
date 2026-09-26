@@ -213,6 +213,16 @@ public partial class Main
 			position.X = sourceLocal.X - desired.X - _cardHoverPreview.SourceGap;
 		}
 
+		// A hand card's neighbours are the other cards being compared, so
+		// open above the hand fan instead of beside the card and over them.
+		if (_gameTable?.Hand is { } hand && hand.IsAncestorOf(source))
+		{
+			float handTop = hand.GetGlobalRect().Position.Y - viewportRect.Position.Y;
+			position = new Vector2(
+				sourceLocal.X + (sourceRect.Size.X - desired.X) / 2,
+				handTop - desired.Y - _cardHoverPreview.SourceGap);
+		}
+
 		position.X = Mathf.Clamp(position.X, _cardHoverPreview.ViewportMargin, Mathf.Max(_cardHoverPreview.ViewportMargin, viewportRect.Size.X - desired.X - _cardHoverPreview.ViewportMargin));
 		position.Y = Mathf.Clamp(position.Y, _cardHoverPreview.ViewportMargin, Mathf.Max(_cardHoverPreview.ViewportMargin, viewportRect.Size.Y - desired.Y - _cardHoverPreview.ViewportMargin));
 		_cardHoverPreview.Position = position;

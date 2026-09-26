@@ -25,6 +25,7 @@ public partial class MatchHistoryPanel : PanelContainer
 	private const int MaxRailMarkers = 24;
 	private const float DefaultRailWidth = 60.0f;
 	private const float DefaultExpandedWidth = 320.0f;
+	public const int ExpandedZIndex = 40;
 
 	private readonly List<MatchHistoryEntry> _entries = new();
 	private readonly HashSet<string> _entryKeys = new(StringComparer.Ordinal);
@@ -503,6 +504,9 @@ public partial class MatchHistoryPanel : PanelContainer
 		}
 
 		_expanded = expanded;
+		// The hand fan raises cards to ZIndex 30 on hover; an expanded panel
+		// must stay above it (modals and motion ghosts use 70 and up).
+		ZIndex = expanded ? ExpandedZIndex : 0;
 		if (changed && expanded && !_pagePositionIntentional)
 		{
 			_pageStart = LastPageStart();
