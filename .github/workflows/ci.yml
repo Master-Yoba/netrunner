@@ -11,12 +11,15 @@ permissions:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         content: [synthetic, official]
     env:
+      # Hosted runners are slower than the reference hardware the smoke
+      # wall-time limits are tuned to; see the README.
+      NETRUNNER_TIMEOUT_SCALE: 3
       DOTNET_CLI_TELEMETRY_OPTOUT: 1
       DOTNET_NOLOGO: 1
       NUGET_XMLDOC_MODE: skip
