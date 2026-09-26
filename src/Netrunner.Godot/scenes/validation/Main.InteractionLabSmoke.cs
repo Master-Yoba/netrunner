@@ -163,6 +163,14 @@ public partial class Main
 		Vector2 drop = destination.Kind == BoardInteractionDestinationKind.GeneralPlay
 			? _gameTable.GetDropRect("RunnerRig", null)!.Value.GetCenter() : rect!.Value.GetCenter();
 		await LabPointer(drop); LabButton(drop, false);
+		// U2: a single-action drop waits where it was dropped instead of bouncing back to the hand.
+		bool held = _boardDrag.HasPendingDrop;
 		await TableFrames(4);
+		for (int frame = 0; frame < 120 && (_gameTable.ActiveMotionCount > 0 || _boardDrag.HasPendingDrop); frame++)
+			await TableFrames(1);
+		RequireInteraction(destination.Actions.Count != 1 || held, "A single-action drop bounced back before the engine answered.");
+		RequireInteraction(!_boardDrag.HasPendingDrop, "A drop stayed pending after the engine answered.");
+		RequireInteraction(!_gameTable.VisibleCards.TryGetValue(source.CardId, out TableCardControl? settled) || settled.Modulate.A > 0.99f,
+			$"{source.CardId} settled invisible after its drop.");
 	}
 }
