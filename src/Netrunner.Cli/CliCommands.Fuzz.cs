@@ -10,7 +10,8 @@ public static partial class CliCommands
 {
     /// <summary>
     /// fuzz [--games N] [--seed S] [--content developer|official] [--action-cap N]
-    /// [--workers 1..64] [--output new-dir] [--json]. Exit 0 means no defects,
+    /// [--workers 1..64] [--differential] [--output new-dir] [--json]. --differential
+    /// also checks Simulation-mode Apply against every authoritative action. Exit 0 means no defects,
     /// 1 means at least one defect, 2 means invalid arguments.
     /// </summary>
     private static int RunFuzz(string[] args, TextWriter output, TextWriter error)
@@ -21,6 +22,7 @@ public static partial class CliCommands
         string content = "developer";
         int actionCap = RulesFuzzRunner.DefaultActionCap;
         int workers = 1;
+        bool differential = false;
         string? destination = null;
         try
         {
@@ -32,6 +34,7 @@ public static partial class CliCommands
                 switch (args[index])
                 {
                     case "--json": break;
+                    case "--differential": differential = true; break;
                     case "--games" when index + 1 < args.Length:
                         if (!int.TryParse(args[++index], NumberStyles.None, CultureInfo.InvariantCulture, out games) || games is < 1 or > 100_000)
                             throw new ArgumentException("--games requires an integer from 1 to 100000.");
@@ -81,7 +84,7 @@ public static partial class CliCommands
         var results = new ConcurrentDictionary<string, FuzzGameResult>(StringComparer.Ordinal);
         Parallel.ForEachAsync(cases, new ParallelOptions { MaxDegreeOfParallelism = workers },
             async (fuzzCase, cancellation) =>
-                results[fuzzCase.Id] = await RulesFuzzRunner.RunAsync(fuzzCase, actionCap, cancellation).ConfigureAwait(false))
+                results[fuzzCase.Id] = await RulesFuzzRunner.RunAsync(fuzzCase, actionCap, differential, cancellation).ConfigureAwait(false))
             .GetAwaiter().GetResult();
 
         FuzzGameResult[] ordered = cases.Select(fuzzCase => results[fuzzCase.Id]).ToArray();

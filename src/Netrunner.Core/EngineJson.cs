@@ -20,11 +20,23 @@ public static class EngineJson
 
     public static JsonSerializerOptions CreateOptions() => new(SerializationOptions);
 
-    public static string Serialize<T>(T value) =>
-        JsonSerializer.Serialize(value, SerializationOptions);
+    public static string Serialize<T>(T value)
+    {
+        ThrowIfSimulated(value);
+        return JsonSerializer.Serialize(value, SerializationOptions);
+    }
 
-    public static byte[] SerializeUtf8<T>(T value) =>
-        JsonSerializer.SerializeToUtf8Bytes(value, SerializationOptions);
+    public static byte[] SerializeUtf8<T>(T value)
+    {
+        ThrowIfSimulated(value);
+        return JsonSerializer.SerializeToUtf8Bytes(value, SerializationOptions);
+    }
+
+    /// <summary>Simulated states never reach saves, replays or hashes.</summary>
+    private static void ThrowIfSimulated<T>(T value)
+    {
+        if (value is GameState state) GameEngine.ThrowIfSimulated(state);
+    }
 
     public static T Deserialize<T>(string json)
     {

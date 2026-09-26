@@ -1,5 +1,15 @@
 namespace Netrunner.Core;
 
+/// <summary>How <see cref="GameEngine.Apply(GameState, ActionSubmission?, IBehaviorCatalog, IRuntimeCardCatalog, ApplyMode)"/> treats an action.</summary>
+public enum ApplyMode
+{
+    /// <summary>Full invariant validation and hashing; the only mode for play, saves and replays.</summary>
+    Authoritative,
+
+    /// <summary>For search: no validation or hashing, and the result is marked simulated.</summary>
+    Simulation,
+}
+
 /// <summary>
 /// Deterministic reducer boundary for the M1 engine primitives. The reducer
 /// never mutates the supplied state: a working copy owns all lists, the ID
@@ -9,6 +19,82 @@ namespace Netrunner.Core;
 public static partial class GameEngine
 {
     public const int DefaultResolutionStepBudget = 128;
+
+    internal static void ThrowIfSimulated(GameState state)
+    {
+        if (state.IsSimulated)
+        {
+            throw new InvalidOperationException(
+                "A simulated state skipped invariant validation and can't be saved, hashed, snapshotted or replayed.");
+        }
+    }
+
+    /// <summary>
+    /// Applies an action in the given mode. <see cref="ApplyMode.Simulation"/>
+    /// skips invariant validation and state/event hashing for search; its
+    /// result is marked simulated and carries no accepted-action record.
+    /// </summary>
+    public static ApplyResult Apply(
+        GameState state,
+        ActionSubmission? submission,
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog runtimeCardCatalog,
+        ApplyMode mode)
+    {
+        if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
+        return ApplyCore(
+            state,
+            submission,
+            behaviorCatalog,
+            runtimeCardCatalog,
+            enforceCatalogCompatibility: true,
+            maxResolutionSteps: DefaultResolutionStepBudget,
+            mode);
+    }
+
+    /// <summary>
+    /// Applies <paramref name="submission"/> in both modes from the same
+    /// authoritative state and compares the resulting states and events. Used
+    /// by differential tests and fuzzing; returns null when they match, or a
+    /// description of the first difference. The simulated result never leaves
+    /// this method.
+    /// </summary>
+    public static string? VerifySimulationEquivalence(
+        GameState state,
+        ActionSubmission submission,
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog runtimeCardCatalog)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ApplyResult authoritative = Apply(state, submission, behaviorCatalog, runtimeCardCatalog, ApplyMode.Authoritative);
+        ApplyResult simulated = Apply(state, submission, behaviorCatalog, runtimeCardCatalog, ApplyMode.Simulation);
+        if (authoritative.Accepted != simulated.Accepted)
+        {
+            return $"Authoritative accepted={authoritative.Accepted} but simulation accepted={simulated.Accepted}.";
+        }
+
+        if (!authoritative.Accepted)
+        {
+            return authoritative.Rejection?.Code == simulated.Rejection?.Code
+                ? null
+                : $"Rejection codes differ: {authoritative.Rejection?.Code} vs {simulated.Rejection?.Code}.";
+        }
+
+        simulated.State.IsSimulated = false;
+        try
+        {
+            string expected = DeterministicHash.ForState(authoritative.State);
+            string actual = DeterministicHash.ForState(simulated.State);
+            if (expected != actual) return $"State hash differs: {expected} vs {actual}.";
+            string expectedEvents = DeterministicHash.ForEvents(authoritative.Events);
+            string actualEvents = DeterministicHash.ForEvents(simulated.Events);
+            return expectedEvents == actualEvents ? null : $"Event hash differs: {expectedEvents} vs {actualEvents}.";
+        }
+        finally
+        {
+            simulated.State.IsSimulated = true;
+        }
+    }
 
     /// <summary>
     /// The turn-start boundary result.  Turn setup emits its opening click
@@ -54,7 +140,8 @@ public static partial class GameEngine
             behaviorCatalog,
             runtimeCardCatalog: null,
             enforceCatalogCompatibility: true,
-            maxResolutionSteps: DefaultResolutionStepBudget);
+            maxResolutionSteps: DefaultResolutionStepBudget,
+            ApplyMode.Authoritative);
     }
 
     /// <summary>Parameter-order adapter for composition callers.</summary>
@@ -89,10 +176,19 @@ public static partial class GameEngine
         IBehaviorCatalog behaviorCatalog,
         IRuntimeCardCatalog? runtimeCardCatalog,
         bool enforceCatalogCompatibility,
-        int maxResolutionSteps)
+        int maxResolutionSteps,
+        ApplyMode mode = ApplyMode.Authoritative)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(behaviorCatalog);
+        bool simulation = mode == ApplyMode.Simulation;
+        if (state.IsSimulated && !simulation)
+        {
+            return ApplyResult.Reject(
+                state,
+                ApplyRejectionCode.InvalidInputState,
+                "A simulated state can't be applied authoritatively.");
+        }
 
         if (submission is null)
         {
@@ -120,7 +216,7 @@ public static partial class GameEngine
                 runtimeMismatch!);
         }
 
-        if (!StateInvariantValidator.TryValidate(
+        if (!simulation && !StateInvariantValidator.TryValidate(
                 state,
                 enforceCatalogCompatibility ? behaviorCatalog : null,
                 runtimeCardCatalog,
@@ -199,11 +295,16 @@ public static partial class GameEngine
             working.ActionSequence = NextSequence(working.ActionSequence, "action");
 
             GameState next = working.Build(state);
+            IReadOnlyList<EngineEvent> events = FreezeEvents(working.Events);
+            if (simulation)
+            {
+                return ApplyResult.AcceptSimulated(next.MarkSimulated(), events);
+            }
+
             StateInvariantValidator.Validate(
                 next,
                 enforceCatalogCompatibility ? behaviorCatalog : null,
                 runtimeCardCatalog);
-            IReadOnlyList<EngineEvent> events = FreezeEvents(working.Events);
             var acceptedAction = new AcceptedActionRecord(
                 working.ActionSequence,
                 submission,

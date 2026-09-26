@@ -1701,6 +1701,10 @@ public sealed class ApplyResult
         AcceptedActionRecord acceptedAction) =>
         new(ApplyStatus.Accepted, state, null, events, acceptedAction);
 
+    /// <summary>An accepted simulation step: no record, because its state is never replayed.</summary>
+    internal static ApplyResult AcceptSimulated(GameState state, IReadOnlyList<EngineEvent> events) =>
+        new(ApplyStatus.Accepted, state, null, events, null);
+
     internal static ApplyResult Reject(GameState state, ApplyRejectionCode code, string message) =>
         new(ApplyStatus.Rejected, state, new ApplyRejection(code, message), EmptyEvents, null);
 }

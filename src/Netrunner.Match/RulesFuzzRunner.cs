@@ -26,6 +26,8 @@ public enum FuzzGameStatus
     AgentException,
     SerializationFailure,
     ReplayFailure,
+    /// <summary>Simulation-mode Apply produced a different state or events than authoritative Apply.</summary>
+    SimulationMismatch,
 }
 
 /// <summary>One deterministic fuzz game: content, seed and the agent kind in each seat.</summary>
@@ -122,12 +124,17 @@ public static class RulesFuzzRunner
 
     public static Task<FuzzGameResult> RunAsync(FuzzGameCase fuzzCase, int actionCap = DefaultActionCap,
         CancellationToken cancellationToken = default) =>
-        RunAsync(fuzzCase, actionCap, CreateAgent, cancellationToken);
+        RunAsync(fuzzCase, actionCap, CreateAgent, differential: false, cancellationToken);
+
+    /// <summary>As <see cref="RunAsync(FuzzGameCase, int, CancellationToken)"/>, optionally checking Simulation mode against every action.</summary>
+    public static Task<FuzzGameResult> RunAsync(FuzzGameCase fuzzCase, int actionCap, bool differential,
+        CancellationToken cancellationToken = default) =>
+        RunAsync(fuzzCase, actionCap, CreateAgent, differential, cancellationToken);
 
     /// <summary>Test seam: substitutes the agent for a seat, for example one that returns an unissued action.</summary>
     internal static async Task<FuzzGameResult> RunAsync(FuzzGameCase fuzzCase, int actionCap,
         Func<FuzzAgentKind, PlayerSide, FullMatchDefinition, IGameAgent> agentFactory,
-        CancellationToken cancellationToken = default)
+        bool differential = false, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(fuzzCase);
         ArgumentNullException.ThrowIfNull(agentFactory);
@@ -182,6 +189,24 @@ public static class RulesFuzzRunner
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
                 return Fail(FuzzGameStatus.SerializationFailure, Describe(exception), submission, kind, null);
+            }
+
+            if (differential)
+            {
+                string? mismatch;
+                try
+                {
+                    mismatch = GameEngine.VerifySimulationEquivalence(restored, submission, definition.Behavior, definition.Runtime);
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    mismatch = Describe(exception);
+                }
+
+                if (mismatch is not null)
+                {
+                    return Fail(FuzzGameStatus.SimulationMismatch, mismatch, submission, kind, null);
+                }
             }
 
             ApplyResult applied;

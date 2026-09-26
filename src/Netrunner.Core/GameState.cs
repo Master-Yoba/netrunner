@@ -594,6 +594,20 @@ public sealed class GameState
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public RulesState? RulesState { get; private set; }
 
+    /// <summary>
+    /// True for a state produced by <see cref="ApplyMode.Simulation"/>. Such a
+    /// state skipped invariant validation, so it can't be serialized, hashed,
+    /// snapshotted or applied authoritatively. Not part of the saved form.
+    /// </summary>
+    [JsonIgnore]
+    public bool IsSimulated { get; internal set; }
+
+    internal GameState MarkSimulated()
+    {
+        IsSimulated = true;
+        return this;
+    }
+
     public GameSnapshot CreateSnapshot() => GameSnapshot.From(this);
 
     public GameSnapshot CreateSnapshot(IBehaviorCatalog behaviorCatalog) =>
@@ -937,6 +951,7 @@ public sealed class GameSnapshot
         IRuntimeCardCatalog? runtimeCardCatalog)
     {
         ArgumentNullException.ThrowIfNull(state);
+        GameEngine.ThrowIfSimulated(state);
         StateInvariantValidator.Validate(state, behaviorCatalog, runtimeCardCatalog);
         return new GameSnapshot(
             state.SchemaVersion,
