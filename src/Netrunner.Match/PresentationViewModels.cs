@@ -33,6 +33,8 @@ public sealed record MatchViewModel(
     public IReadOnlyList<CardViewModel> RunnerHeap { get; init; } = Array.Empty<CardViewModel>();
     /// <summary>Public cards currently resolving: a played Operation or Event.</summary>
     public IReadOnlyList<CardViewModel> PlayArea { get; init; } = Array.Empty<CardViewModel>();
+    /// <summary>Cards revealed by the latest action, mapped to the tracked key they had while face-down.</summary>
+    public IReadOnlyDictionary<string, string> RevealedFrom { get; init; } = new Dictionary<string, string>();
     public IReadOnlyList<CardPositionViewModel> CardPositions { get; init; } = [];
     public IReadOnlyList<CardViewModel> ChoiceCards { get; init; } = [];
     public CardSelectionViewModel? CardSelection { get; init; }
@@ -307,6 +309,15 @@ public sealed record ServerViewModel(
     /// <summary>Viewer-safe positions for hidden or hosted ICE.</summary>
     public IReadOnlyList<IcePositionViewModel> IcePositions { get; init; } =
         Array.Empty<IcePositionViewModel>();
+
+    /// <summary>
+    /// Presentation keys parallel to <see cref="Ice"/> and <see cref="Root"/>:
+    /// a visible card's ID, or a stable <c>tracked:N</c> handle for a face-down
+    /// card (see <see cref="CardKeyTracker"/>). Empty for views built without a tracker.
+    /// </summary>
+    public IReadOnlyList<string?> IceKeys { get; init; } = [];
+
+    public IReadOnlyList<string?> RootKeys { get; init; } = [];
 
     public IReadOnlyList<IcePositionViewModel> PublicIcePositions => IcePositions;
 }

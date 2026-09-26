@@ -127,9 +127,15 @@ public partial class Main
 			// Every frame services triggers first. Submissions run in the
 			// background because the coordinator completes them only after the
 			// opponent has responded, which is exactly what a burst must see.
+			// Motion contract (U2): a card is never on screen twice, as a flight
+			// stand-in and the real card at once. Sample it on every frame.
+			var duplicates = new SortedSet<string>(StringComparer.Ordinal);
+			int motionFrames = 0;
 			while (bursts.Count < options.Bursts && actions < options.MaxActions)
 			{
 				await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+				if (_gameTable.ActiveMotionCount > 0) motionFrames++;
+				foreach (string duplicate in _gameTable.DuplicateMotionKeys()) duplicates.Add($"{duplicate}@{actions}");
 				if (triggers.TryDequeue(out string? kind))
 				{
 					bursts.Add(await CaptureBurstAsync(options, bursts.Count + 1, kind, actions));
@@ -168,9 +174,13 @@ public partial class Main
 				preset = options.Preset,
 				eventKinds = options.EventKinds.Order(StringComparer.Ordinal),
 				localActions = actions,
+				motionFrames,
+				duplicates,
 				bursts,
 			}, CaptureJson));
-			GD.Print($"UI_CAPTURE PASS bursts={bursts.Count} local_actions={actions} output={options.Output}");
+			if (duplicates.Count > 0)
+				throw new InvalidOperationException($"{duplicates.Count} card(s) were on screen twice during motion: {string.Join(", ", duplicates.Take(8))}.");
+			GD.Print($"UI_CAPTURE PASS bursts={bursts.Count} local_actions={actions} motion_frames={motionFrames} duplicates=0 output={options.Output}");
 			GetTree().Quit(0);
 		}
 		catch (Exception exception)

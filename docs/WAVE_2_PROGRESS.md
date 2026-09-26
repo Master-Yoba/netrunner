@@ -11,6 +11,7 @@ Stacked in order on `dev`:
 |---|---|
 | E4b event completeness | `feat/e4b-event-completeness` |
 | E5 determinization | `feat/e5-determinization` |
+| U2 persistent board | `feat/u2-persistent-board` |
 
 ## E4b: event completeness
 
@@ -105,3 +106,47 @@ Verification (developer and official content, random-legal games):
 - **The opponent's card multiset** is preserved, and hidden cards really
   change.
 - **Samples can be played forward** in Simulation mode.
+
+## U2: persistent board
+
+The table already reused card nodes by identity; the glitches came from
+three places, now fixed:
+
+- **Re-keyed hidden cards.** A face-down card was keyed by its position
+  (`server:X:ice:0`), so installing ICE in front of it re-keyed it and it
+  animated as if it had moved or arrived. Views now carry per-position
+  presentation keys (`ServerViewModel.IceKeys`, `RootKeys`) from E4b's
+  tracker, and a face-down card keeps its node for as long as it stays
+  hidden. A rezzed or otherwise revealed card keeps its node too
+  (`MatchViewModel.RevealedFrom`), so it flips in place instead of flying in
+  from HQ. Positional handles remain as aliases for targeting.
+- **Duplicate cards during motion.** A flight stand-in flew while the real
+  card already sat at its destination. The real card (or the destination
+  pile's face) is now held invisible until the stand-in lands, so a card is
+  never on screen twice.
+- **Bounce-back on drop.** A dropped card returned to the hand until the
+  engine answered, then flew out again. A single-action drop now waits at the
+  drop point, dimmed, with the hand card hidden; on accept it flies from the
+  drop point to its slot, and on rejection it animates back to the hand.
+
+Credit totals count between values instead of jumping; a card whose
+presentation changes in place (a new counter, a rez) pulses, as before, and
+the reduced-motion path still pulses without flights.
+
+**Deliberate scope choice.** Cards still live in their layout containers,
+with flights drawn by a stand-in while the real node is held, rather than
+moving every card onto a free overlay layer. That keeps the existing layout
+and its smoke tests, and meets the gate's visible contract. The pure,
+headless layout function the plan suggests is not done; it becomes worth
+doing with U4's layout redesign.
+
+**Evidence.** The capture harness samples every frame for a card visible
+twice (a stand-in and the real card at once) and fails on any.
+- A Runner capture (seed 42, 33 local actions, 170 frames with motion in
+  flight) had **zero duplicates**.
+- The same run with the hold disabled failed with 9 duplicates, including
+  two face-down cards, so the check is real.
+- `make m4-gate` passes (coverage 77/77).
+- A coordinator test checks that every server position is keyed (tracked
+  exactly when face-down) and that reveals map to the tracked key they had.
+  It caught an ICE ordering bug during development.

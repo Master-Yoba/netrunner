@@ -825,6 +825,19 @@ public static partial class ObservationBuilder
     /// Draw decks are hidden from both players. Ownership does not grant
     /// visibility; only the Runner's active access permission reveals R&D.
     /// </summary>
+    /// <summary>
+    /// Every card whose identity <paramref name="viewer"/>'s observation shows:
+    /// the same boundary <see cref="Build(GameState, PlayerSide)"/> applies.
+    /// </summary>
+    public static IReadOnlySet<CardInstanceId> VisibleCardIds(GameState state, PlayerSide viewer)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        HashSet<CardInstanceId> accessVisible = BuildAccessVisibleSet(state);
+        Dictionary<ZoneId, ZoneState> zones = state.Zones.ToDictionary(zone => zone.Id);
+        return state.Cards.Where(card => zones.TryGetValue(card.ZoneId, out ZoneState? zone) && IsVisibleTo(card, zone, viewer, accessVisible))
+            .Select(card => card.Id).ToHashSet();
+    }
+
     internal static bool IsVisibleTo(CardInstanceState card, ZoneState zone, PlayerSide viewer, IReadOnlySet<CardInstanceId> accessVisible)
     {
         if (zone.Kind is ZoneKind.CorpDeck or ZoneKind.RunnerStack)

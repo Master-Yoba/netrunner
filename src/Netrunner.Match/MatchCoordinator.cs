@@ -804,12 +804,14 @@ public sealed partial class MatchCoordinator : IAsyncDisposable, IDisposable
         }
 
         Observation observation = ObservationBuilder.Build(state, _options.HumanSide, _behaviorCatalog);
+        IReadOnlyDictionary<CardInstanceId, string> cardKeys = _cardKeys.Update(state, _options.HumanSide);
         MatchViewModel view = ObservationViewMapper.Build(
             observation,
             _metadataResolver,
             _behaviorCatalog,
             handSizeProjection: null,
             presentationContext: MatchPresentationProjector.Build(state, _options.HumanSide, _behaviorCatalog, _runtimeCardCatalog));
+        view = WithCardKeys(view, state, cardKeys, _currentCardKeys);
         // Engine events are authoritative diagnostics, but this publication is
         // the Runner-facing boundary. Never forward a physical Corp card ID
         // while that card is still hidden; omission is intentional for typed
@@ -824,7 +826,6 @@ public sealed partial class MatchCoordinator : IAsyncDisposable, IDisposable
             history = _historyProjector.Project(context.Before, view, state, events, context.Actor, context.Action);
             _historyContext = null;
         }
-        IReadOnlyDictionary<CardInstanceId, string> cardKeys = _cardKeys.Update(state, _options.HumanSide);
         IReadOnlyList<PresentationEvent> presentation = _presentationBefore is { } previous && events.Count > 0
             ? PresentationEventProjector.Project(previous, state, events, _options.HumanSide, _currentCardKeys, cardKeys, _behaviorCatalog)
             : Array.Empty<PresentationEvent>();
@@ -953,6 +954,33 @@ public sealed partial class MatchCoordinator : IAsyncDisposable, IDisposable
         if (!applied.Accepted && actor?.Side != _options.HumanSide)
             AgentLifecycleHost.Discard(_corpAgent);
         return applied;
+    }
+
+    /// <summary>Adds presentation keys per server position and the tracked keys of newly revealed cards.</summary>
+    private static MatchViewModel WithCardKeys(MatchViewModel view, GameState state,
+        IReadOnlyDictionary<CardInstanceId, string> keys, IReadOnlyDictionary<CardInstanceId, string> previous)
+    {
+        string? Key(CardInstanceId id) => keys.TryGetValue(id, out string? key) ? key : null;
+        Dictionary<string, ServerState> servers = state.Servers.ToDictionary(server => server.Id.Value, StringComparer.Ordinal);
+        var revealed = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach ((CardInstanceId id, string key) in keys)
+        {
+            if (key == id.Value && previous.TryGetValue(id, out string? before)
+                && before.StartsWith(CardKeyTracker.TrackedPrefix, StringComparison.Ordinal))
+                revealed[key] = before;
+        }
+        return view with
+        {
+            Servers = [.. view.Servers.Select(server => servers.TryGetValue(server.Id, out ServerState? authoritative)
+                ? server with
+                {
+                    // The view orders ICE outermost first; Core stores it innermost first.
+                    IceKeys = [.. state.GetZone(authoritative.IceZoneId).CardIds.Select(Key).Reverse()],
+                    RootKeys = [.. state.GetZone(authoritative.RootZoneId).CardIds.Select(Key)],
+                }
+                : server)],
+            RevealedFrom = revealed,
+        };
     }
 
     private static ServerId ResolveServer(GameState state, string reference)

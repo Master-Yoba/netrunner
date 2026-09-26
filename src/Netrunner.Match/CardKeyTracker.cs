@@ -25,9 +25,10 @@ public sealed class CardKeyTracker
         var keys = new Dictionary<CardInstanceId, string>();
         var tracked = new Dictionary<CardInstanceId, string>();
         Dictionary<ZoneId, ZoneState> zones = state.Zones.ToDictionary(zone => zone.Id);
+        IReadOnlySet<CardInstanceId> visible = ObservationBuilder.VisibleCardIds(state, viewer);
         foreach (CardInstanceState card in state.Cards)
         {
-            if (IsVisible(state, card, zones, viewer))
+            if (visible.Contains(card.Id))
             {
                 keys[card.Id] = card.Id.Value;
             }
@@ -40,21 +41,5 @@ public sealed class CardKeyTracker
         }
         _tracked = tracked;
         return keys;
-    }
-
-    /// <summary>
-    /// The same boundary the published observation and event filters apply:
-    /// a card is visible when the viewer owns it or it is public.
-    /// </summary>
-    internal static bool IsVisible(GameState state, CardInstanceState card, IReadOnlyDictionary<ZoneId, ZoneState> zones,
-        PlayerSide viewer)
-    {
-        if (!zones.TryGetValue(card.ZoneId, out ZoneState? zone)) return false;
-        bool chosenForAccess = state.RunState?.ChosenAccessCards.Contains(card.Id) == true;
-        if (zone.Kind is ZoneKind.RunnerStack or ZoneKind.CorpDeck)
-            return viewer == PlayerSide.Runner && chosenForAccess;
-        if (viewer == PlayerSide.Runner)
-            return card.OwnerSide == PlayerSide.Runner || card.FaceUp || card.Rezzed || chosenForAccess;
-        return card.OwnerSide == PlayerSide.Corp || card.FaceUp;
     }
 }

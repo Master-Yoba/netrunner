@@ -297,6 +297,7 @@ public partial class Main
 		{
 			MatchSubmissionResult result = await coordinator.SubmitActionAsync(submission);
 			if (!IsCurrentSession(coordinator, generation)) return;
+			if (!result.Accepted) _boardDrag?.ReturnPendingDrop();
 			if (!result.Accepted && _spatialSubmission is not null)
 			{
 				_spatialSubmission = null;
@@ -313,6 +314,7 @@ public partial class Main
 		catch (Exception exception)
 		{
 			if (!IsCurrentSession(coordinator, generation)) return;
+			_boardDrag?.ReturnPendingDrop();
 			_spatialSubmission = null;
 			CloseSpatialActions();
 			RecordFullMatchException(exception, "submit");

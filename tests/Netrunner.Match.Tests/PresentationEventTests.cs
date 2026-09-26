@@ -71,16 +71,55 @@ public sealed class PresentationEventTests
         Assert.Equal(history.Count, history.Values.Distinct().Count());
     }
 
+    [Fact]
+    public async Task PublishedViewsKeyEveryServerPositionAndMapReveals()
+    {
+        FullMatchDefinition definition = RulesFuzzRunner.CreateDefinition(
+            Official ? RulesFuzzRunner.OfficialContentIds[0] : RulesFuzzRunner.DeveloperContentId, 41);
+        await using var coordinator = new MatchCoordinator(definition, new RandomLegalAgent(41),
+            new MatchCoordinatorOptions { HumanSide = PlayerSide.Runner });
+        var snapshots = new System.Collections.Concurrent.ConcurrentQueue<MatchSnapshot>();
+        coordinator.SnapshotPublished += snapshots.Enqueue;
+        await coordinator.StartAsync();
+        var human = new RandomLegalAgent(42);
+        for (int count = 0; count < 250; count++)
+        {
+            Observation observation = await coordinator.GetReadyObservationAsync(PlayerSide.Runner).WaitAsync(TimeSpan.FromSeconds(10));
+            if (coordinator.CurrentSnapshot is { IsTerminal: true }) break;
+            Assert.True((await coordinator.SubmitHumanActionAsync(await human.ChooseActionAsync(observation))).Accepted);
+        }
+
+        bool tracked = false, revealed = false;
+        foreach (MatchSnapshot snapshot in snapshots)
+        {
+            foreach (ServerViewModel server in snapshot.View.Servers)
+            {
+                Assert.Equal(server.Ice.Count, server.IceKeys.Count);
+                Assert.Equal(server.Root.Count, server.RootKeys.Count);
+                foreach ((CardViewModel? card, string? key) in server.Ice.Zip(server.IceKeys).Concat(server.Root.Zip(server.RootKeys)))
+                {
+                    if (card is null) Assert.StartsWith(CardKeyTracker.TrackedPrefix, key);
+                    else Assert.Equal(card.Id, key);
+                    tracked |= card is null;
+                }
+            }
+            foreach ((string id, string previous) in snapshot.View.RevealedFrom)
+            {
+                Assert.StartsWith(CardKeyTracker.TrackedPrefix, previous);
+                Assert.Contains(snapshot.View.Servers, server => server.IceKeys.Concat(server.RootKeys).Contains(id));
+                revealed = true;
+            }
+        }
+        Assert.True(tracked && revealed, $"tracked={tracked} revealed={revealed}");
+    }
+
     private sealed record Step(GameState Before, GameState After, IReadOnlyList<PresentationEvent> Events,
         IReadOnlyDictionary<CardInstanceId, string> KeysBefore, IReadOnlyDictionary<CardInstanceId, string> KeysAfter);
 
     private static bool Official => CardDataResource.EmbeddedMode == CardDataResource.OfficialMode;
 
-    private static bool Visible(GameState state, string id)
-    {
-        CardInstanceState? card = state.Cards.FirstOrDefault(value => value.Id.Value == id);
-        return card is not null && CardKeyTracker.IsVisible(state, card, state.Zones.ToDictionary(zone => zone.Id), PlayerSide.Runner);
-    }
+    private static bool Visible(GameState state, string id) =>
+        ObservationBuilder.VisibleCardIds(state, PlayerSide.Runner).Contains(new CardInstanceId(id));
 
     private static async Task<IReadOnlyList<Step>> PlayAsync(ulong seed, PlayerSide viewer)
     {

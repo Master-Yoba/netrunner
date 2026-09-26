@@ -232,7 +232,7 @@ public partial class GameTableControl
 		foreach (var server in _pendingView?.Servers ?? [])
 		{
 			var position = server.IcePositions.FirstOrDefault(p => p.CardId == targetId);
-			if (position is not null && _visibleCards.TryGetValue($"server:{server.Id}:ice:{position.Index}", out var positional))
+			if (position is not null && _slotAliases.TryGetValue($"server:{server.Id}:ice:{position.Index}", out var positional))
 			{
 				card = positional;
 				return IsVisibleCard(card);
@@ -241,7 +241,7 @@ public partial class GameTableControl
 		foreach (var position in _pendingView?.CardPositions ?? [])
 		{
 			string region = position.Zone == Netrunner.Core.ZoneKind.ServerIce ? "ice" : "root";
-			if (position.CardId == targetId && _visibleCards.TryGetValue($"server:{position.ServerId}:{region}:{position.Index}", out var positional))
+			if (position.CardId == targetId && _slotAliases.TryGetValue($"server:{position.ServerId}:{region}:{position.Index}", out var positional))
 			{ card = positional; return IsVisibleCard(card); }
 		}
 		card = null;
