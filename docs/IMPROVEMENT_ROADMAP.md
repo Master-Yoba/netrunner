@@ -194,15 +194,15 @@ game" at the end of Wave 3.
 | U3 full catalog | Extends the proven slice to every event in the catalog, and adds pacing and auto-pass settings. |
 | U4 layout and interaction redesign | Needs U2 (persistent nodes) and U3 (overlays tied to beats). This is where the dock and the boxed columns go. |
 | A3 turn planner | E1 and E5 are ready, and A2 provides the evaluation features. It's the largest single strength gain. |
-| E2 validator split | By now E3 has built a corpus of known-bad states to prove the split loses no detection. This is also when validation cost starts to matter in bot search. |
+| E2 validator split | By now E3 has built a corpus of known-bad states to prove authoritative commits still reject everything they did. Bot search already avoids validation through Simulation mode (E1), so this is about keeping authoritative play fast and the validator from becoming a second rules engine. |
 
 **Gate:**
 - A full game in each seat can be played without opening "All legal
   actions…".
 - The capture review at 1920 and 2560 passes.
 - A3 shows a clear ladder gain in both seats within the latency budget.
-- Validator share is under 5% of benchmark time, with no loss in fuzz
-  detection.
+- Authoritative `Apply` rejects everything it did on the known-bad corpus, and
+  validator time on the benchmark profile is measurably lower.
 
 ### Wave 4 — polish, and the bot searches runs
 

@@ -3,7 +3,7 @@
 Status: M5.0–5.8 implemented and [audited](M5_COMPLETION_AUDIT.md); the user
 accepted the result for publication on 25 September 2026. Results and the scope
 of that feedback are tracked in [progress](M5_PROGRESS.md) and
-[the gate report](M5_GATE.md#human-acceptance).
+[the gate report](../M5_GATE.md#human-acceptance).
 
 Baseline: 22 September 2026, repository commit `8f27bac`.
 
@@ -12,8 +12,8 @@ Scope: System Gateway, the repository's pinned rules/content versions, both seat
 Estimate: 32–41 engineering days, approximately 6–9 weeks for one engineer,
 plus player review and any newly discovered rules defects.
 
-This expands [M5 in the roadmap](IMPLEMENTATION_PLAN.md#m5--complete-offline-solo-experience).
-Requirements come from [PRD v0.2](netrunner_solo_prd_v0.2.md). The implementation
+This expands [M5 in the roadmap](../IMPLEMENTATION_PLAN.md#m5--complete-offline-solo-experience).
+Requirements come from [PRD v0.2](../netrunner_solo_prd_v0.2.md). The implementation
 must preserve the completed board interactions, condition/cost feedback, local
 artwork support, and paced opponent playback.
 
@@ -74,28 +74,28 @@ clear opponent feedback belong here.
 
 Primary integration points:
 
-- [Agent contract](../src/Netrunner.Core/Domain.cs),
-  [observation projection](../src/Netrunner.Core/ObservationBuilder.cs),
-  [typed actions](../src/Netrunner.Core/ActionContracts.cs).
-- [Contract agent](../src/Netrunner.AI/FullGameContractAgent.cs),
-  [runtime card metadata](../src/Netrunner.Core/RuntimeCardCatalog.cs).
-- [Coordinator](../src/Netrunner.Match/MatchCoordinator.cs),
-  [factory](../src/Netrunner.Match/FullMatchFactory.cs),
-  [match runner](../src/Netrunner.Match/FullMatchRunner.cs),
-  [session trace](../src/Netrunner.Match/SessionTrace.cs).
-- [Simulation fixtures](../src/Netrunner.Match/SimulationFixtureContracts.cs),
-  [CLI full matches](../src/Netrunner.Cli/CliCommands.FullMatch.cs),
-  [recovery workflow](SESSION_DIAGNOSTICS.md).
-- [Setup scene](../src/Netrunner.Godot/scenes/components/MatchSetup.tscn),
-  [settings scene](../src/Netrunner.Godot/scenes/components/SettingsMenu.tscn),
-  [client playback](../src/Netrunner.Godot/scenes/Main.CardTable.cs).
+- [Agent contract](../../src/Netrunner.Core/Domain.cs),
+  [observation projection](../../src/Netrunner.Core/ObservationBuilder.cs),
+  [typed actions](../../src/Netrunner.Core/ActionContracts.cs).
+- [Contract agent](../../src/Netrunner.AI/FullGameContractAgent.cs),
+  [runtime card metadata](../../src/Netrunner.Core/RuntimeCardCatalog.cs).
+- [Coordinator](../../src/Netrunner.Match/MatchCoordinator.cs),
+  [factory](../../src/Netrunner.Match/FullMatchFactory.cs),
+  [match runner](../../src/Netrunner.Match/FullMatchRunner.cs),
+  [session trace](../../src/Netrunner.Match/SessionTrace.cs).
+- [Simulation fixtures](../../src/Netrunner.Match/SimulationFixtureContracts.cs),
+  [CLI full matches](../../src/Netrunner.Cli/CliCommands.FullMatch.cs),
+  [recovery workflow](../SESSION_DIAGNOSTICS.md).
+- [Setup scene](../../src/Netrunner.Godot/scenes/components/MatchSetup.tscn),
+  [settings scene](../../src/Netrunner.Godot/scenes/components/SettingsMenu.tscn),
+  [client playback](../../src/Netrunner.Godot/scenes/Main.CardTable.cs).
 
 Existing full-match serialization proves that Core can resume nested decisions.
 It does not prove that a user save includes the correct bot memory/configuration,
 survives an interrupted write, or restores the client without stale controls.
 Similarly, completing contract-agent games is not evidence of useful AI strength.
 
-For artwork, follow the implemented [local-cache workflow](CARD_ARTWORK.md),
+For artwork, follow the implemented [local-cache workflow](../CARD_ARTWORK.md),
 which supersedes the original roadmap's text-only assumption. M5 preserves
 optional cache fetch/pack/unpack as explicit tools; starting or resuming a game
 never downloads anything.

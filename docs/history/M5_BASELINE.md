@@ -6,10 +6,10 @@ The new capture utility was being added locally; the report records its exact
 assembly hash as well as Core/Cards/AI/Match hashes. No production policy,
 engine, card or UI code changed to obtain these results.
 
-Inputs: [contract-baseline-v1](../data/m5/benchmarks/contract-baseline-v1.json).
-Evidence: [complete per-attempt JSON report](evidence/m5-0/contract-baseline-v1.json).
+Inputs: [contract-baseline-v1](../../data/m5/benchmarks/contract-baseline-v1.json).
+Evidence: [complete per-attempt JSON report](../evidence/m5-0/contract-baseline-v1.json).
 Full private replays remain in ignored `artifacts/m5-0/capture-final/` and can
-be regenerated with [the capture instructions](../data/m5/benchmarks/README.md).
+be regenerated with [the capture instructions](../../data/m5/benchmarks/README.md).
 
 ## Measured result
 
@@ -73,20 +73,20 @@ capture overhead; it is not an isolated AI latency benchmark.
 
 Source evidence:
 
-- [Contract selection and payment keys](../src/Netrunner.AI/FullGameContractAgent.cs):
+- [Contract selection and payment keys](../../src/Netrunner.AI/FullGameContractAgent.cs):
   `DefaultTurnActionOrder`, `SelectTurnAction`, `IsBoundedAbility`, `SemanticKey`,
   `SelectTriggerChoice`, `SelectInterruptChoice`, and Setup dispatch.
-- [Leech's typed counter-paid ability](../src/Netrunner.Cards/GatewayBatch3BehaviorSpecs.cs).
-- [Nico history proof](../tests/Netrunner.Match.Tests/MatchHistoryTests.cs):
+- [Leech's typed counter-paid ability](../../src/Netrunner.Cards/GatewayBatch3BehaviorSpecs.cs).
+- [Nico history proof](../../tests/Netrunner.Match.Tests/MatchHistoryTests.cs):
   `OfficialNicoOpeningExplainsTwoReplacementsWithoutNamingHiddenInstall`.
-- [Contract-agent tests](../tests/Netrunner.AI.Tests/FullGameContractAgentTests.cs):
+- [Contract-agent tests](../../tests/Netrunner.AI.Tests/FullGameContractAgentTests.cs):
   `UnlimitedNonclickAbilityIsIgnoredInFavorOfSupportedFallback`,
   `TurnActionDispatchUsesTypedGainAndDrawPriorityAndNeverEndsTurn`, and
   `TriggerChoicePrefersUseAndIsNeutralToActionOrderAndJson`.
 
 M5.0 does not change these policies or re-label contractual tests as tactical
 successes. The new heuristic will be measured separately against the unchanged
-baseline. The [80-position specification](../data/m5/benchmarks/tactical-v1.json)
+baseline. The [80-position specification](../../data/m5/benchmarks/tactical-v1.json)
 also covers known wins/losses, information twins, compound choices, conditional
 cost expiry and absent decision families. Executable builders and exact bounded
 expectations remain M5.2 work.

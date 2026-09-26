@@ -8,7 +8,7 @@ action boundary.
 The product definition is in [the PRD](docs/netrunner_solo_prd_v0.2.md). The
 dependency-ordered engineering roadmap is in
 [the implementation plan](docs/IMPLEMENTATION_PLAN.md).
-The next offline-solo milestone is detailed in [the M5 plan](docs/M5_PLAN.md),
+The next offline-solo milestone is detailed in [the M5 plan](docs/history/M5_PLAN.md),
 covering heuristic opponents, benchmarks, save/resume and developer tooling.
 
 ## Current state
@@ -18,8 +18,8 @@ All 77 System Gateway designs have complete behavior and registered tests in
 content provisioned, the desktop client plays official basic and expanded
 teaching presets as either side against the deterministic contract agent,
 including setup, mulligan, seed selection and a new-match flow. See
-[the M4 progress record](docs/M4_PROGRESS.md) for the final gate evidence and
-[preset revalidation](docs/M4_PRESET_REVALIDATION.md) for exact deck provenance.
+[the M4 progress record](docs/history/M4_PROGRESS.md) for the final gate evidence and
+[preset revalidation](docs/history/M4_PRESET_REVALIDATION.md) for exact deck provenance.
 Support is scoped to System Gateway:
 
 - `Netrunner.Core`: typed state, deterministic RNG, atomic legal actions,
@@ -38,8 +38,8 @@ The verified M2 proof covers deterministic save/load and replay, public run
 event lifecycle, Archives disclosure, per-activation breaker limits,
 wallet/hosted-credit payment choices, and exact breach-access timing traces.
 
-See [the M1 completion record](docs/M1_COMPLETION.md) for the reviewed contracts
-and gate evidence, and [the M2 progress record](docs/M2_PROGRESS.md) for the
+See [the M1 completion record](docs/history/M1_COMPLETION.md) for the reviewed contracts
+and gate evidence, and [the M2 progress record](docs/history/M2_PROGRESS.md) for the
 M2 contract, the curated proof, and the independent-review rework log.
 
 ## Linux development setup
@@ -127,8 +127,8 @@ Legacy `user://card-art/<card-code>.png` illustrations remain supported.
 The developer view remains available through
 `./scripts/play.sh --diagnostic-ui`.
 
-See [the M4.9 UI plan](docs/M4_9_UI_PLAN.md) and
-[implementation evidence](docs/M4_9_UI_PROGRESS.md).
+See [the M4.9 UI plan](docs/history/M4_9_UI_PLAN.md) and
+[implementation evidence](docs/history/M4_9_UI_PROGRESS.md).
 
 After `make m4-gate` has built the official content, run a preset directly:
 
@@ -157,7 +157,7 @@ make package-linux
 
 The one-shot test host has noticeable startup cost on the M0 reference laptop.
 Use `make watch-core` or `make watch-cards` while iterating so the compiler/test
-process stays warm. See [the measured M0 spike](docs/spikes/godot-dotnet-loop.md).
+process stays warm. See [the measured M0 spike](docs/history/spikes/godot-dotnet-loop.md).
 
 The bootstrap currently supports Linux x86_64. The projects themselves are
 cross-platform; the macOS development setup is documented in

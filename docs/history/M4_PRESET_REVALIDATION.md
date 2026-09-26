@@ -4,7 +4,7 @@ Revalidated: 2026-09-05
 
 Authenticated metadata: `236140cf84491c23995b028bc791281837520b97`
 
-Revalidation artifact: [`data/m4/preset-revalidation.json`](../data/m4/preset-revalidation.json)
+Revalidation artifact: [`data/m4/preset-revalidation.json`](../../data/m4/preset-revalidation.json)
 
 Artifact SHA-256: `8b134eb3e828f9388eab1228576e4c1ba282a151606636b73e979bfaf11656bf`
 
@@ -18,7 +18,7 @@ the 10-card advanced booster for each side. The Learn to Play guides state the
 44-card Corp sizes after adding the booster cards. The published material does
 not define an official 50-card teaching preset.
 
-The code-only runtime payload remains [`data/m4/presets.json`](../data/m4/presets.json).
+The code-only runtime payload remains [`data/m4/presets.json`](../../data/m4/presets.json).
 The revalidation artifact is the reviewable name-to-code bridge: names and
 quantities are transcribed from the published lists, while each stable code is
 resolved against the authenticated 77-card snapshot. Runtime card text and

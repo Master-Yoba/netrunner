@@ -4442,7 +4442,7 @@ errors; runtime action expansion and full verification remain pending.
   import, Slice 4.3–4.6 client smokes, responsiveness, both full-match seats,
   M3 smoke, and secret scanning.
 - Native UI-407 smoke passed all seven checks; root visually reviewed the
-  [client screenshot](evidence/slice46/slice46-ui-smoke.png). Capture is explicit
+  [client screenshot](../evidence/slice46/slice46-ui-smoke.png). Capture is explicit
   and runs with a native renderer; headless CI does not rewrite evidence.
 - Final behavior fingerprint:
   `4cb1ffce96ebf89ecdb8769115a844e6cc7d85b48da1e321ed84ea66d5d45e1d`.
@@ -4544,7 +4544,7 @@ errors; runtime action expansion and full verification remain pending.
 - AGT-402 advances the agent and policy to v6 (policy schema stays 5). Review
   added hosted-install continuation handling and exact Botulus subroutine
   semantics, with deterministic selection across reordered issued actions.
-- [SCN-403](../data/m4/scenarios/scn-403-official-presets.json) drives actual
+- [SCN-403](../../data/m4/scenarios/scn-403-official-presets.json) drives actual
   official preset setup, keep/mulligan decisions, complete games, save/load at
   every yield and replay verification. Seed 47042 ends basic after 922 actions
   with Runner deck-out victory, and expanded after 111 actions with Corp
@@ -4562,7 +4562,7 @@ errors; runtime action expansion and full verification remain pending.
   authenticated content/gallery, generated 77/77 coverage, all Godot smokes,
   responsiveness and secret scanning. Both client seats prove setup, mulligan,
   full turns, identities and terminal presentation. The eight-check UI-408
-  smoke also passed natively; its [screenshot](evidence/slice47/slice47-ui-smoke.png)
+  smoke also passed natively; its [screenshot](../evidence/slice47/slice47-ui-smoke.png)
   is a detached presentation fixture, separate from the official game proofs.
 
 ### 2026-09-05 — PR #12 feedback
@@ -4663,10 +4663,10 @@ errors; runtime action expansion and full verification remain pending.
   77 cards. Both 1920×1080 and 2560×1440 pass forward/reverse keyboard traversal,
   scroll reachability and layout containment, with zoom focus restoration,
   reduced motion, text escaping and non-color state cues also verified.
-- Native Godot evidence is recorded in [setup at 1920×1080](evidence/slice48/setup-1920x1080.png),
-  [board at 1920×1080](evidence/slice48/board-1920x1080.png),
-  [setup at 2560×1440](evidence/slice48/setup-2560x1440.png) and
-  [board at 2560×1440](evidence/slice48/board-2560x1440.png).
+- Native Godot evidence is recorded in [setup at 1920×1080](../evidence/slice48/setup-1920x1080.png),
+  [board at 1920×1080](../evidence/slice48/board-1920x1080.png),
+  [setup at 2560×1440](../evidence/slice48/setup-2560x1440.png) and
+  [board at 2560×1440](../evidence/slice48/board-2560x1440.png).
   UX board screenshots use presentation fixtures with official metadata; the
   separate full-game smoke matrix exercises real engine actions and reloads.
 - No M4 scope remains deferred. M5 difficulty tuning, user save/resume, LLM

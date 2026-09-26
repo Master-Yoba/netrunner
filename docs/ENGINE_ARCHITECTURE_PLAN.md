@@ -148,18 +148,29 @@ Plan:
 
 - Categorize every `Validate*` method into these three tiers and record the
   inventory in a table in this document.
-- Run the structural tier on every authoritative `Apply` and the rules tier at
-  checkpoints: save, load, the end of each turn, and in all tests, benchmarks
-  and fuzzing. Keep a `NETRUNNER_FULL_INVARIANTS=1` switch that forces the
-  rules tier on every action for debugging.
+- Keep commit-time validation on every authoritative `Apply` for every
+  invariant whose violation should reject the action. Deferring rules checks
+  to checkpoints would let an invalid run stack, memory state or frame
+  relationship be accepted and published, and later actions would build on
+  it; that breaks the atomic-commit contract in normal play, where fuzzing
+  doesn't run. Performance comes instead from Simulation mode (E1), which is
+  never authoritative, and from making the authoritative checks cheaper:
+  validate only what an action could have touched, and make illegal states
+  unrepresentable (next bullet) so their checks can be deleted.
+- Only checks that are pure consistency audits, which can't be violated by a
+  single action given the engine's types, may move to checkpoints (save,
+  load, turn end) and to tests, benchmarks and fuzzing. Each such move needs a
+  written argument in the inventory table.
 - For each card- or frame-specific exception, prefer changing the engine type
   so the illegal state can't be represented. Examples: typed frame-controller
   relationships, or a memory cleanup frame that owns its own precondition. If
   that isn't possible, move the check next to the behavior that creates the
   state, so it's reviewed with it.
-- Gate: validator share under 5% of benchmark busy time, with no reduction in
-  what fuzzing (E3) detects on a seeded corpus of known-bad states. Build that
-  corpus from the existing regression tests that assert violations.
+- Gate: no reduction in what authoritative `Apply` rejects on a seeded corpus
+  of known-bad states (built from the existing regression tests that assert
+  violations), and a measured reduction in validator time on the benchmark
+  profile. There is no fixed percentage target, because correctness at commit
+  comes first.
 
 ### E3. Random-legal rules fuzzing (S → M)
 
@@ -256,9 +267,14 @@ public static GameState ObservationSampler.Sample(
     OpponentCardPool pool, DeterministicRandom rng);
 ```
 
-- Hidden zones (HQ, R&D, grip, stack, face-down installs and face-down
-  Archives cards) are filled from `pool` minus every card the viewer has seen
-  or can infer.
+- Every zone hidden from the viewer (HQ, R&D, grip, stack, face-down installs
+  and face-down Archives cards, including the viewer's own deck order) is
+  filled from `pool` minus the cards the viewer knows to be somewhere else
+  right now. Knowing a card's identity from the past is not enough to exclude
+  it: an agenda accessed from R&D and left there, or a card shuffled back into
+  a deck, stays a candidate for that zone. The sampler tracks each known
+  instance's current possible locations, not just which definitions were
+  seen.
 - `OpponentCardPool` is an explicit policy input:
   - `GatewayPool`: any card legal for the opponent's faction
   - `PublicDecklist`: the opponent's preset list

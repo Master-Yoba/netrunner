@@ -3,7 +3,7 @@
 Baseline: `8f27bac` production code, full-game contract policy v6.
 This is an evaluation-work inventory, not a claim of missing card rules.
 All 77 designs already have full behavior and registered rules tests in
-[the generated coverage report](generated/gateway-coverage.md).
+[the generated coverage report](../generated/gateway-coverage.md).
 
 ## Observation and metadata seams for M5.1
 
@@ -25,11 +25,11 @@ All 77 designs already have full behavior and registered rules tests in
 | Difficulty/randomness | Current policy is deterministic, stateless and not difficulty-parameterized | New policy configuration and serialized separate RNG; retain v6 unchanged |
 | Saveable policy state | Current contract agent has none; session manifest records agent identity/version | Versioned policy checkpoint/lifecycle in M5.1 and durable session integration in M5.5 |
 
-Sources: [Core observations](../src/Netrunner.Core/ObservationBuilder.cs),
-[agent contract](../src/Netrunner.Core/Domain.cs),
-[runtime metadata](../src/Netrunner.Core/RuntimeCardCatalog.cs),
-[typed actions](../src/Netrunner.Core/ActionContracts.cs),
-[contract policy](../src/Netrunner.AI/FullGameContractAgent.cs).
+Sources: [Core observations](../../src/Netrunner.Core/ObservationBuilder.cs),
+[agent contract](../../src/Netrunner.Core/Domain.cs),
+[runtime metadata](../../src/Netrunner.Core/RuntimeCardCatalog.cs),
+[typed actions](../../src/Netrunner.Core/ActionContracts.cs),
+[contract policy](../../src/Netrunner.AI/FullGameContractAgent.cs).
 
 Do not extend the observation merely to copy all authoritative state. First
 identify the missing value and test paired hidden-state observations. Printed

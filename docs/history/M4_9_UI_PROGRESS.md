@@ -118,18 +118,18 @@ Focused tests cover legacy omission, initial 0/4, and an active modifier.
 
 ## Visual evidence
 
-- [Native check output](evidence/m4-9/native-ui-smoke.txt)
+- [Native check output](../evidence/m4-9/native-ui-smoke.txt)
 - User reference: local-only `chiriboga.png`; source links are in the plan.
-- [Nico opening table](evidence/m4-9/nico-table.png)
-- [Nico history](evidence/m4-9/nico-history.png)
-- [Dense Runner table, 1080p](evidence/m4-9/dense-runner-1920.png)
-- [Dense Corp table, 1080p](evidence/m4-9/dense-corp-1920.png)
-- [Dense Runner table, 1440p](evidence/m4-9/dense-runner-2560.png)
-- [Dense Corp table, 1440p](evidence/m4-9/dense-corp-2560.png)
-- [Encounter presentation](evidence/m4-9/active-run-runner-1920.png)
-- [Expanded history](evidence/m4-9/history-runner-1920.png)
-- [Archives browser](evidence/m4-9/archives-browser-1920.png)
-- [Outcome presentation](evidence/m4-9/outcome-runner-1920.png)
+- [Nico opening table](../evidence/m4-9/nico-table.png)
+- [Nico history](../evidence/m4-9/nico-history.png)
+- [Dense Runner table, 1080p](../evidence/m4-9/dense-runner-1920.png)
+- [Dense Corp table, 1080p](../evidence/m4-9/dense-corp-1920.png)
+- [Dense Runner table, 1440p](../evidence/m4-9/dense-runner-2560.png)
+- [Dense Corp table, 1440p](../evidence/m4-9/dense-corp-2560.png)
+- [Encounter presentation](../evidence/m4-9/active-run-runner-1920.png)
+- [Expanded history](../evidence/m4-9/history-runner-1920.png)
+- [Archives browser](../evidence/m4-9/archives-browser-1920.png)
+- [Outcome presentation](../evidence/m4-9/outcome-runner-1920.png)
 
 These are native screenshots of scripted real-game/fixture sessions. They are
 not evidence that a human completed or accepted a manual game.

@@ -9,8 +9,8 @@ are complete. The user responded to the playtest request with “it seems to wor
 fine, can push to GH”, accepting the result and authorizing publication. This
 supersedes the earlier local-only workflow and pending-acceptance statements
 below, which describe the history as of 23 September. Individual manual matrix
-details were not supplied or inferred. See the [acceptance record](evidence/m5-8/acceptance.json)
-and [gate report](M5_GATE.md#human-acceptance).
+details were not supplied or inferred. See the [acceptance record](../evidence/m5-8/acceptance.json)
+and [gate report](../M5_GATE.md#human-acceptance).
 
 ## Scope authorization and acceptance reconciliation
 
@@ -45,17 +45,17 @@ Status: complete, 22 September 2026. Main checkpoint: `9045fc0`.
 
 Delivered:
 
-- [Pinned 20-game manifest](../data/m5/benchmarks/contract-baseline-v1.json), all
+- [Pinned 20-game manifest](../../data/m5/benchmarks/contract-baseline-v1.json), all
   four basic/expanded deck pairings and five seeds, each run twice.
 - [Measured baseline and named findings](M5_BASELINE.md), with the
-  [per-attempt JSON evidence](evidence/m5-0/contract-baseline-v1.json).
+  [per-attempt JSON evidence](../evidence/m5-0/contract-baseline-v1.json).
 - [Capability inventory](M5_CAPABILITY_INVENTORY.md): all 77 designs, all 15
   decision kinds, current observation/metadata seams and M5 ownership of gaps.
-- [80 independent tactical case specifications](../data/m5/benchmarks/tactical-v1.json),
+- [80 independent tactical case specifications](../../data/m5/benchmarks/tactical-v1.json),
   40 per side; 24 tuning / 16 held-out per side; criticality, preconditions and
   semantic acceptance recorded. These are not executable or scored yet.
-- [Reproducible capture utility](../tools/Netrunner.M5Baseline/Program.cs) and
-  [launcher](../scripts/capture-m5-baseline.sh), reusing `FullMatchRunner` and
+- [Reproducible capture utility](../../tools/Netrunner.M5Baseline/Program.cs) and
+  [launcher](../../scripts/capture-m5-baseline.sh), reusing `FullMatchRunner` and
   the unchanged contract policy. Full private replay files stay ignored.
 - `make m5-spec` plus the normal verification integration, checking case IDs,
   deck/seed matrix, report binding, all card IDs and complete decision inventory
@@ -133,7 +133,7 @@ classify termination/failure causes, enforce independent agent instances and
 produce deterministic sorted reports with separate timing and comparison/preset
 totals. Frozen contract manifests cover the official 20-game smoke and balanced
 1,000-game schedule; a separate 20-game developer suite remains synthetic.
-See [commands, report semantics and limitations](M5_BENCHMARKS.md).
+See [commands, report semantics and limitations](../M5_BENCHMARKS.md).
 
 Initial verification: all 281 Match and 112 CLI tests pass, including 19 Match
 benchmark tests and eight CLI tests. The official 20-game smoke completes with
@@ -301,14 +301,14 @@ animation, failed Save and quit, corrupt entries, verified-backup loading,
 Escape/focus, canceled loads and stale publications, terminal reload, New game,
 and saving an already paused game. All five restart checkpoints are nonterminal;
 the subsequent games finish at 129–1,760 accepted actions. The allowlisted
-[case summaries and log hashes](evidence/m5-6/client-matrix.json) retain the actual
+[case summaries and log hashes](../evidence/m5-6/client-matrix.json) retain the actual
 seeds, profiles, resolutions and engine/policy hashes. One Corp/basic fixture won before its original
 save point; the shared checkpoint was moved earlier to guarantee a genuine
 midgame restart. A smoke-only lookup was also corrected to tolerate Godot's
 renaming of dynamically recreated outcome panels. The final notification polish additionally passes the native save flow and
 formatting check. No human acceptance is inferred from these scripted games.
 
-[Client guide](M5_CLIENT.md) and [native no-art screenshots](evidence/m5-6/README.md)
+[Client guide](M5_CLIENT.md) and [native no-art screenshots](../evidence/m5-6/README.md)
 record the visible flow. M5.6 meets its automated slice exit criteria; M5.7
 developer workflow follows on a separate branch. M5's human acceptance and final
 offline/performance/benchmark gates remain outstanding.
@@ -327,7 +327,7 @@ real Core snapshots, validate matching catalogs and replay, and preserve nested
 resolution states. Portable developer exports retain exact committed policy
 state; raw imports create a labeled new scenario replay root and fresh policy
 knowledge. Imported scenarios remain separate from player saves and auto-save.
-Invalid imports preserve the current session. See [the guide](M5_DEVELOPER.md).
+Invalid imports preserve the current session. See [the guide](../M5_DEVELOPER.md).
 
 Implementation checkpoint: `f2348c0`. Verification includes all 2,039 official
 solution tests (Core 819, Cards 329, AI 95, CLI 139, Match 657), all 80 official
@@ -339,7 +339,7 @@ seats at 1080p/1440p, including overrides, caps, reveal isolation, corrupt
 imports, pause and Escape/focus. A normal launch and the actual exported macOS
 release both exclude the controls. The CLI allowlist refinement additionally
 passes all eight focused command tests. Renderer capture, log hashes and the
-release-guard record are in [the evidence folder](evidence/m5-7/README.md).
+release-guard record are in [the evidence folder](../evidence/m5-7/README.md).
 
 M5.8 follows on its own branch. An exploratory Standard 1,000-game run completed
 999 games with zero turn caps and one preserved resolution failure: Retribution
@@ -354,7 +354,7 @@ Branch: `feat/m5-8-final-gate`. Local checkpoints: `90457ea` repairs mandatory
 memory cleanup after Retribution removes a memory provider; `6c40688` freezes
 profiles/manifests and adds the measured headless gate; `a6f9300` adds the exported
 offline proof and ships generic card backs. No strategic policy weights change.
-Full results, commands, limitations and hashes are in [M5_GATE.md](M5_GATE.md).
+Full results, commands, limitations and hashes are in [M5_GATE.md](../M5_GATE.md).
 
 The frozen Standard suite completes **1,000/1,000 actual terminal games**, all
 replays verified, zero caps or failures, balanced 250 per preset pairing. Easy
@@ -405,7 +405,7 @@ report digests; all 13,828 exported records match their decision/configuration
 and accepted replay. The repeated full M5 gate passes all twelve cases, with
 every deterministic digest equal to the earlier passing attempt. The complete
 provisioned M4 gate passes again, including all four native save/reload games.
-The [separate audit evidence](evidence/m5-8/audit/validation.json) records exact
+The [separate audit evidence](../evidence/m5-8/audit/validation.json) records exact
 build scope and verification hashes. Human acceptance is still unreported.
 
 ## Acceptance and publication — 25 September 2026

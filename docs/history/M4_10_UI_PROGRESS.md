@@ -4,7 +4,7 @@ Status: implementation delivered on `feat/m4-10-editor-ui`; the independent
 user authoring exercise and manual playtest acceptance remain pending.
 
 Specification: [editor-friendly UI plan](M4_10_EDITOR_FRIENDLY_UI_PLAN.md).
-Authoring instructions: [UI editor guide](UI_EDITOR_GUIDE.md).
+Authoring instructions: [UI editor guide](../UI_EDITOR_GUIDE.md).
 
 ## Checkpoints
 
@@ -85,15 +85,15 @@ Using the pinned Godot 4.7.2 .NET editor, without rebuilding between edits:
 
 ## Visual evidence
 
-- [Card preview before](evidence/m4-10/card-preview-before.png) and
-  [after](evidence/m4-10/card-preview-after.png) temporary glow/font edits.
-- [Setup](evidence/m4-10/setup-1920.png),
-  [Corp dense board](evidence/m4-10/dense-corp-1920.png),
-  [Runner dense board](evidence/m4-10/dense-runner-2560.png),
-  [history](evidence/m4-10/history-corp-2560.png),
-  [hover](evidence/m4-10/hover-live-1920.png),
-  [R&D access](evidence/m4-10/rd-access.png) and
-  [public pile browser](evidence/m4-10/archives-browser-1920.png).
+- [Card preview before](../evidence/m4-10/card-preview-before.png) and
+  [after](../evidence/m4-10/card-preview-after.png) temporary glow/font edits.
+- [Setup](../evidence/m4-10/setup-1920.png),
+  [Corp dense board](../evidence/m4-10/dense-corp-1920.png),
+  [Runner dense board](../evidence/m4-10/dense-runner-2560.png),
+  [history](../evidence/m4-10/history-corp-2560.png),
+  [hover](../evidence/m4-10/hover-live-1920.png),
+  [R&D access](../evidence/m4-10/rd-access.png) and
+  [public pile browser](../evidence/m4-10/archives-browser-1920.png).
 
 ## Outstanding acceptance
 
@@ -119,8 +119,8 @@ badges and labels. The outer shadow and Inspector controls remain intact.
 Reviewed Luna Max's implementation, corrected arc endpoints, and batched the
 gradient submission. Compared portrait and ICE cards at 3× scale and inspected
 zero/wide glow, sharp/rounded corners and selected/target color samples.
-[Before](evidence/m4-10/card-corners-before.png) and
-[after](evidence/m4-10/card-corners-after.png) show the rendering correction.
+[Before](../evidence/m4-10/card-corners-before.png) and
+[after](../evidence/m4-10/card-corners-after.png) show the rendering correction.
 
 Godot build (zero warnings/errors), `UiEditorSmoke`, native M4.9 UI regression
 for both seats/resolutions, and formatting verification passed. The user's
@@ -139,7 +139,7 @@ geometry changes trigger redraws; no per-frame polling or cross-card z-order
 changes were introduced. Corrected subscription reentry and converted label
 coordinates into card space during review.
 
-[Updated enlarged preview](evidence/m4-10/status-glow-after.png).
+[Updated enlarged preview](../evidence/m4-10/status-glow-after.png).
 Build, editor smoke (including status-style replacement/reentry), native UI
 checks for both seats/resolutions, and formatting passed. Local user theme and
 project edits were preserved.

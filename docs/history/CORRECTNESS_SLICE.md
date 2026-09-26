@@ -68,8 +68,8 @@ developer/standard separation, CLI replay, last-card bounce/discard, and self-tr
 in initiation/approach/encounter/movement paid windows. Existing install replacement
 tests retain the destination when its last previous contents are trashed.
 
-Native client captures: [Corp setup](evidence/correctness/corp-setup.png) and
-[Runner setup](evidence/correctness/runner-setup.png). Both native and headless smoke
+Native client captures: [Corp setup](../evidence/correctness/corp-setup.png) and
+[Runner setup](../evidence/correctness/runner-setup.png). Both native and headless smoke
 paths prove setup, mulligan, identity display, a turn pair, and terminal outcome.
 
 Bootstrap-fix CI: [33958195017](https://github.com/Master-Yoba/netrunner/actions/runs/33958195017)
