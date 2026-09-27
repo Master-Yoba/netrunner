@@ -820,9 +820,9 @@ public partial class MatchHistoryPanel : PanelContainer
 		}
 
 		int first = Math.Max(0, _entries.Count - MaxRailMarkers);
-		for (int index = first; index < _entries.Count; index++)
+		for (int index = _entries.Count - 1; index >= first; index--)
 		{
-			HistoryRailEntry marker = index == first
+			HistoryRailEntry marker = index == _entries.Count - 1
 				? template
 				: RailEntryScene!.Instantiate<HistoryRailEntry>();
 			MatchHistoryEntry entry = _entries[index];
@@ -867,16 +867,18 @@ public partial class MatchHistoryPanel : PanelContainer
 			return;
 		}
 
-		for (int index = _pageStart; index < pageEnd; index++)
+		// Newest first: a page's rows run from its newest entry down, and a turn's
+		// header sits above that turn's newest entry.
+		for (int index = pageEnd - 1; index >= _pageStart; index--)
 		{
-			HistoryEntry row = index == _pageStart
+			HistoryEntry row = index == pageEnd - 1
 				? template
 				: EntryScene!.Instantiate<HistoryEntry>();
 			MatchHistoryEntry entry = _entries[index];
 			_pageRows.AddChild(row);
 			row.Bind(
 				entry,
-				index == 0 || entry.TurnNumber != _entries[index - 1].TurnNumber,
+				index == _entries.Count - 1 || entry.TurnNumber != _entries[index + 1].TurnNumber,
 				_expandedKeys.Contains(entry.Key),
 				ToggleEntry,
 				NotifyInspectCard,
@@ -905,9 +907,7 @@ public partial class MatchHistoryPanel : PanelContainer
 				return;
 			}
 
-			pageScroll.ScrollVertical = followNewest
-				? (int)Math.Max(0, pageScroll.GetVScrollBar().MaxValue)
-				: preservedScroll;
+			pageScroll.ScrollVertical = followNewest ? 0 : preservedScroll;
 			if (!string.IsNullOrWhiteSpace(restoreFocusKey))
 			{
 				foreach (Node child in _pageRows.GetChildren())
@@ -1011,8 +1011,8 @@ public partial class MatchHistoryPanel : PanelContainer
 			return !_pagePositionIntentional;
 		}
 
-		return _pageScroll.ScrollVertical
-			>= _pageScroll.GetVScrollBar().MaxValue - 1;
+		// The newest entry is at the top of the page.
+		return _pageScroll.ScrollVertical <= 1;
 	}
 
 	private int LastPageStart()

@@ -76,6 +76,8 @@ public partial class Main
 			if (_currentSnapshot is { } snapshot) RenderCardTableActions(snapshot);
 		};
 		_tableAccessPanel = _tableViewport.GetNode<PanelContainer>("AccessPanel");
+		// Above card frames, highlights and pulses (at most 30), below card flights (70).
+		_tableAccessPanel.ZIndex = 60;
 		_tableAccessCard = _tableAccessPanel.GetNode<TableCardControl>("%Card");
 		_tableAccessCard.UseHoverPreview = true;
 		_tableAccessTitle = _tableAccessPanel.GetNode<Label>("%Title");
