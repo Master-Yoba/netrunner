@@ -560,13 +560,14 @@ public partial class GameTableControl : Control
 		CacheServerDisplayNames(view.Servers);
 		_turnLabel.Text = FormatTurn(view);
 		_runLabel.Text = FormatRun(view);
-		_corpResources.SymbolText = $"[click] {view.Corp.Clicks} · [agenda point] {view.Corp.AgendaPoints}";
+		_corpResources.SymbolText = $"[click] {ClickPips(view.Corp.Clicks, 3)} · [agenda point] {view.Corp.AgendaPoints}";
 		ShowCount(_corpCredits, view.Corp.Credits);
 		ShowCount(_runnerCredits, view.Runner.Credits);
-		_runnerResources.SymbolText = $"[click] {view.Runner.Clicks} · [agenda point] {view.Runner.AgendaPoints} · [tag] {view.Runner.Tags?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—"}";
+		_runnerResources.SymbolText = $"[click] {ClickPips(view.Runner.Clicks, 4)} · [agenda point] {view.Runner.AgendaPoints}\n"
+			+ $"[tag] {view.Runner.Tags?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—"}";
 		_corpScoreLabel.Text = $"Score {view.Corp.AgendaPoints}";
 		if (view.Runner.UsedMemory is { } used && view.Runner.MemoryLimit is { } limit)
-			_runnerResources.SymbolText += $"\n[MU] {used}/{limit}";
+			_runnerResources.SymbolText += $" · [MU] {used}/{limit}";
 		_runnerScoreLabel.Text = $"Score pile · {view.RunnerScore.Count} · {view.Runner.AgendaPoints} agenda point(s)";
 		string boardFingerprint = BuildBoardFingerprint(view);
 		if (string.Equals(_lastBoardFingerprint, boardFingerprint, StringComparison.Ordinal))
@@ -694,15 +695,9 @@ public partial class GameTableControl : Control
 				lane.RunMarker.TooltipText = $"Strength {encounter.EffectiveStrength ?? encounter.Ice?.Strength}\n"
 					+ string.Join("\n", encounter.Subroutines.Select(sub => $"Subroutine {sub.Ordinal + 1}: {(sub.Broken ? "broken" : sub.Resolved ? "resolved" : "unbroken")}"));
 			}
-			lane.RootCaption.Text = server.Kind == ServerKind.Remote
-				? "ROOT · remote content"
-				: server.Kind == ServerKind.Archives
-					? $"Archives · {view.CorpDiscardCount} cards"
-					: server.Kind == ServerKind.RAndD
-						? $"R&D DECK · {view.CorpDeck.Count} cards"
-							: $"ROOT · HQ · {view.CorpHand.Count} cards in hand";
-			lane.RootCaption.Visible = true;
-			lane.IceCaption.Visible = true;
+			// Servers are defined by their cards (U4): no root or ICE captions.
+			lane.RootCaption.Visible = false;
+			lane.IceCaption.Visible = false;
 
 			ClearNonCardChildren(lane.RootCards);
 			ApplyLaneLayout(lane);
@@ -743,6 +738,10 @@ public partial class GameTableControl : Control
 		}
 		ApplyServerSelection();
 	}
+
+	/// <summary>Clicks as pips: filled for those left, hollow for those spent this turn.</summary>
+	private static string ClickPips(int clicks, int allotment) =>
+		new string('●', Math.Max(0, clicks)) + new string('○', Math.Max(0, allotment - clicks));
 
 	/// <summary>
 	/// A face-down card keeps its tracked key for as long as it stays hidden,
@@ -858,6 +857,54 @@ public partial class GameTableControl : Control
 		{
 			slot.Visible = _activeRigSlots.Contains(key);
 		}
+		GroupRigByType(cards);
+	}
+
+	private readonly Control[] _rigGaps = new Control[3];
+
+	/// <summary>
+	/// Orders the rig as programs, hardware, resources, then anything else (U4),
+	/// keeping install order within a group and a small gap between groups.
+	/// </summary>
+	private void GroupRigByType(IReadOnlyList<CardViewModel> cards)
+	{
+		static int Group(CardViewModel card) => card.Type switch
+		{
+			"Program" => 0,
+			"Hardware" => 1,
+			"Resource" => 2,
+			_ => 3,
+		};
+		var groups = cards.Where(card => string.IsNullOrEmpty(card.HostCardId) && _rigSlots.ContainsKey(card.Id))
+			.Select((card, order) => (Card: card, Group: Group(card), Order: order))
+			.OrderBy(entry => entry.Group).ThenBy(entry => entry.Order).ToArray();
+		int index = 0;
+		int? previous = null;
+		foreach ((CardViewModel card, int group, int _) in groups)
+		{
+			if (previous is { } last && last != group) PlaceRigGap(Math.Min(last, 2), ref index);
+			previous = group;
+			_runnerRigRow.MoveChild(_rigSlots[card.Id], index++);
+		}
+		for (int gap = 0; gap < _rigGaps.Length; gap++)
+			if (_rigGaps[gap] is { } unused && unused.GetIndex() >= index) unused.Visible = false;
+	}
+
+	private void PlaceRigGap(int gap, ref int index)
+	{
+		Control spacer = _rigGaps[gap] ??= new Control
+		{
+			Name = $"RigGroupGap{gap}",
+			CustomMinimumSize = new Vector2(18, 0),
+			MouseFilter = MouseFilterEnum.Ignore,
+		};
+		if (spacer.GetParent() != _runnerRigRow)
+		{
+			spacer.GetParent()?.RemoveChild(spacer);
+			_runnerRigRow.AddChild(spacer);
+		}
+		spacer.Visible = true;
+		_runnerRigRow.MoveChild(spacer, index++);
 	}
 
 	private Control EnsureRigSlot(string key)
@@ -940,8 +987,8 @@ public partial class GameTableControl : Control
 		int handCount = corpLocal ? view.CorpHand.Count : view.RunnerHand.Count;
 		cards = cards.Where(card => !selected.Contains(card.Id)).ToArray();
 		string zone = corpLocal ? "corp-hand" : "runner-hand";
-		_localHandCaption.Text = corpLocal
-			? "HQ · YOUR HAND" : "GRIP · YOUR HAND";
+		// The hand needs no label; it says something only when a discard is being chosen.
+		_localHandCaption.Text = string.Empty;
 		HashSet<string> activeHandIds = cards.Select(card => card.Id).ToHashSet(StringComparer.Ordinal);
 		foreach (TableCardControl existing in _localHandRow.GetChildren().OfType<TableCardControl>().ToArray())
 		{
@@ -964,7 +1011,7 @@ public partial class GameTableControl : Control
 		}
 		_localHandRow.SetCards(handControls, MotionEnabled);
 		_localHandRow.GetNode<Label>("Count").Text = handCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
-		if (selected.Count > 0) _localHandCaption.Text += $" · {selected.Count} selected for discard";
+		if (selected.Count > 0) _localHandCaption.Text = $"{selected.Count} selected for discard";
 	}
 
 	private void RenderIdentity(

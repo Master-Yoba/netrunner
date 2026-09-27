@@ -497,7 +497,7 @@ public partial class Main
 		if (_gameTable.GetServerDisplayName(hq.Id) != "HQ"
 			|| _gameTable.VisibleCards.Keys.Any(key => key.StartsWith($"slot:pile:{hq.Id}:", StringComparison.Ordinal)))
 			throw new InvalidOperationException("HQ has a remote label or decorative hand backs.");
-		if (!FindDescendants<Label>(_gameTable).Any(label => label.Text == $"ROOT · HQ · {view.CorpHand.Count} cards in hand"))
+		if (!FindDescendants<Label>(_gameTable).Any(label => label.IsVisibleInTree() && label.Text == $"HQ · {view.CorpHand.Count} cards"))
 			throw new InvalidOperationException("HQ public hand count is missing.");
 	}
 
