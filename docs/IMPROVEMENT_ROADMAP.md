@@ -120,7 +120,7 @@ seeds to hide an unfavorable result.
 | 1 | U1, E1, A2, A6a, E3 (nightly), E6 (renames) | 3–5 weeks | First visible wins; the engine gets fast; distinct difficulty |
 | 2 | U2, E4b, U3 slice, E5 | 5–7 weeks | The board comes alive for one run and one score |
 | 3 | U3 full, U4, E2 | 7–10 weeks | Real game feel |
-| 4 | C1, U5, U6, A1b, A4a, A5, A3, A4 | 8–11 weeks | Real decks; polish, and the bot plans turns and searches runs |
+| 4 | C1, U7, U5, U6, A1b, A4a, A5, A3, A4 | 8–11 weeks | Real decks; polish, and the bot plans turns and searches runs |
 | 5 | A6 (compute tiers, personalities), hardening, decision point | 2–4 weeks | Difficulty, release readiness |
 
 In total that's roughly 28–42 weeks. The UI track alone reaches "feels like a
@@ -207,6 +207,7 @@ game" at the end of Wave 3.
 | Item | Why now |
 |---|---|
 | C1 Gateway sample decks | First: the seven System Gateway-only sample decks from Null Signal Games use only cards we already implement, and tuning the bots further on the tutorial decks would fit them to two teaching decks. Every later bot item is measured on these decks. See below. |
+| U7 main menu | With C1: the start screen is a developer scaffold (seed box, preset drop-downs, a metadata gallery button). C1's Tutorial and Gateway areas need a real menu to live in. See below. |
 | A1b ladder over a deck pool | With C1: a fixed game budget sampled over deck pairings, sequential stopping, and per-deck warnings, so ladder time stays flat as decks are added ([plan](AI_OPPONENT_PLAN.md#a1b-ladder-over-a-deck-pool-m--with-c1-in-wave-4)). |
 | U5 art direction, feel and audio | It only pays off once the layout (U4) is stable. |
 | U6 onboarding and playtest loop | It needs the final interaction model from U4. |
@@ -238,7 +239,7 @@ card set.
    alongside `starter` and `expanded`. `OfficialPresetCatalog` validates each
    list against the Gateway card counts and deck-building rules (minimum
    size, influence, agenda points).
-2. **Main menu.** Two areas. **Tutorial**: the Catalyst and Syndicate
+2. **Deck choice in the menu (built in U7).** Two areas. **Tutorial**: the Catalyst and Syndicate
    starter and expanded decks, as today, for learning the game. **Gateway**:
    pick your seat's sample deck and the opponent's (or random), with each
    deck's identity, faction and a one-line description. The CLI, the saves
@@ -256,6 +257,31 @@ card set.
 5. **Benchmarks stay frozen.** The tutorial decks remain the frozen
    `make m5-gate` suite and its anchors, so existing baselines stay
    comparable. The ladder moves to the Gateway pool (A1b).
+
+**U7 main menu (M).** Replace the setup scaffold with a game menu:
+
+- **Title screen**: the game's name over a board backdrop, with **Continue**
+  (the latest save, one click back into the game), **New game**, **Load
+  game** (the save browser), **Settings** and **Quit**.
+- **New game** leads to **Tutorial** (the Catalyst and Syndicate decks, with
+  a line on what each teaches) or **Gateway** (C1's sample decks). Pick a
+  seat, your deck and the opponent's (or random) as cards showing identity
+  art, faction and a one-line pitch, and the opponent's difficulty. Then
+  **Start**.
+- **Settings** is the existing in-game menu (speed, fast opponent,
+  auto-pass, reduced motion, accessibility), reachable before a game too.
+- **Developer tools** (the seed, the metadata gallery, the interaction lab,
+  session exports) move behind a Developer entry that release builds hide;
+  a seed stays available there for reproducing a game.
+- Missing official content gets one clear screen that explains how to
+  provision it, instead of disabled drop-downs.
+- Keyboard and controller focus order, and a layout that works at 1920 and
+  2560, checked by the existing capture and accessibility smokes.
+
+The saves, CLI and smokes keep their launch arguments; only the human path
+through the menu changes. U7 gate: a new player reaches a Tutorial game, a
+Gateway game and a resumed save without the developer entry, and the
+capture review at both resolutions passes.
 
 C1 gate: every Gateway pairing plays through the official fuzz and headless
 full games cleanly; the main menu offers both areas and a human plays one
