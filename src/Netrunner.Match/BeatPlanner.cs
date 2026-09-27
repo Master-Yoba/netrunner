@@ -33,6 +33,9 @@ public sealed record Beat(PresentationEventKind Kind, string Caption, double Sec
 /// </summary>
 public static class BeatPlanner
 {
+    // Base seconds before the speed setting: long enough to read a caption.
+    private const double Low = 0.7, Normal = 1.0, High = 1.3, Result = 1.6;
+
     public static IReadOnlyList<Beat> Plan(IReadOnlyList<PresentationEvent> events, MatchViewModel before, MatchViewModel after,
         Func<string, string> serverName)
     {
@@ -41,31 +44,35 @@ public static class BeatPlanner
         ArgumentNullException.ThrowIfNull(after);
         ArgumentNullException.ThrowIfNull(serverName);
         var beats = new List<Beat>();
-        foreach (PresentationEvent value in events)
+        for (int index = 0; index < events.Count; index++)
         {
+            PresentationEvent value = events[index];
+            // One action often both approaches and encounters, or reaches the
+            // server and succeeds: show only the step that matters.
+            if (Superseded(value, events.Skip(index + 1))) continue;
             string card = Name(value.CardKey, before, after);
             string server = value.ServerId is { } id ? serverName(id) : "a server";
             Beat? beat = value.Kind switch
             {
-                PresentationEventKind.TurnStarted => new(value.Kind, $"{value.Side} turn {value.Amount}", 0.5, BeatEmphasis.Normal),
-                PresentationEventKind.RunStarted => new(value.Kind, $"{value.Side} runs {server}", 0.45, BeatEmphasis.Normal),
-                PresentationEventKind.IceApproached => new(value.Kind, $"Approaching {card}", 0.3, BeatEmphasis.Low),
-                PresentationEventKind.CardRezzed => new(value.Kind, $"Corp rezzes {card}", 0.4, BeatEmphasis.Normal),
+                PresentationEventKind.TurnStarted => new(value.Kind, $"{value.Side} turn {value.Amount}", Normal, BeatEmphasis.Normal),
+                PresentationEventKind.RunStarted => new(value.Kind, $"{value.Side} runs {server}", Normal, BeatEmphasis.Normal),
+                PresentationEventKind.IceApproached => new(value.Kind, $"Approaching {card}", Low, BeatEmphasis.Low),
+                PresentationEventKind.CardRezzed => new(value.Kind, $"Corp rezzes {card}", Normal, BeatEmphasis.Normal),
                 PresentationEventKind.EncounterStarted => new(value.Kind,
-                    $"Encountering {card} · {Count(value.Total ?? 0, "subroutine")}", 0.45, BeatEmphasis.Normal),
+                    $"Encountering {card} · {Count(value.Total ?? 0, "subroutine")}", Normal, BeatEmphasis.Normal),
                 PresentationEventKind.SubroutinesBroken => new(value.Kind,
-                    $"Runner breaks {Count(value.Amount ?? 0, "subroutine")} on {card}", 0.4, BeatEmphasis.Normal),
+                    $"Runner breaks {Count(value.Amount ?? 0, "subroutine")} on {card}", Normal, BeatEmphasis.Normal),
                 PresentationEventKind.SubroutineFired => new(value.Kind,
-                    $"{Capitalize(card)}: subroutine {(value.Ordinal ?? 0) + 1} fires", 0.45, BeatEmphasis.High),
-                PresentationEventKind.ServerApproached => new(value.Kind, $"Runner reaches {server}", 0.3, BeatEmphasis.Low),
-                PresentationEventKind.RunSuccessful => new(value.Kind, $"Run on {server} is successful", 0.4, BeatEmphasis.Normal),
-                PresentationEventKind.CardAccessed => new(value.Kind, $"Runner accesses {card}", 0.35, BeatEmphasis.Normal),
-                PresentationEventKind.RunEnded => new(value.Kind, RunEnded(value), 0.6, BeatEmphasis.High) { Hold = true },
+                    $"{Capitalize(card)}: subroutine {(value.Ordinal ?? 0) + 1} fires", High, BeatEmphasis.High),
+                PresentationEventKind.ServerApproached => new(value.Kind, $"Runner reaches {server}", Low, BeatEmphasis.Low),
+                PresentationEventKind.RunSuccessful => new(value.Kind, $"Run on {server} is successful", Normal, BeatEmphasis.Normal),
+                PresentationEventKind.CardAccessed => new(value.Kind, $"Runner accesses {card}", Normal, BeatEmphasis.Normal),
+                PresentationEventKind.RunEnded => new(value.Kind, RunEnded(value), High, BeatEmphasis.High) { Hold = true },
                 PresentationEventKind.CardAdvanced => new(value.Kind,
-                    $"Corp advances {card} · {Count(value.Total ?? 0, "counter")}", 0.45, BeatEmphasis.Normal),
-                PresentationEventKind.AgendaScored => new(value.Kind, $"Corp scores {card} · +{value.Amount}", 0.9, BeatEmphasis.High)
+                    $"Corp advances {card} · {Count(value.Total ?? 0, "counter")}", Normal, BeatEmphasis.Normal),
+                PresentationEventKind.AgendaScored => new(value.Kind, $"Corp scores {card} · +{value.Amount}", Result, BeatEmphasis.High)
                 { Hold = true },
-                PresentationEventKind.AgendaStolen => new(value.Kind, $"Runner steals {card} · +{value.Amount}", 0.9, BeatEmphasis.High)
+                PresentationEventKind.AgendaStolen => new(value.Kind, $"Runner steals {card} · +{value.Amount}", Result, BeatEmphasis.High)
                 { Hold = true },
                 _ => null,
             };
@@ -81,6 +88,14 @@ public static class BeatPlanner
         }
         return beats;
     }
+
+    private static bool Superseded(PresentationEvent value, IEnumerable<PresentationEvent> later) => value.Kind switch
+    {
+        PresentationEventKind.IceApproached => later.Any(next => next.Kind == PresentationEventKind.EncounterStarted
+            && next.CardKey == value.CardKey),
+        PresentationEventKind.ServerApproached => later.Any(next => next.Kind == PresentationEventKind.RunSuccessful),
+        _ => false,
+    };
 
     private static string RunEnded(PresentationEvent value) => value.Successful == true
         ? "Run successful"
