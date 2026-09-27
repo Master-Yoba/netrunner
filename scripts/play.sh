@@ -27,9 +27,12 @@ set +e
   if (( play_build_status != 0 )); then
     exit "$play_build_status"
   fi
+  # NETRUNNER_GODOT_ARGS passes engine options, for example --resolution 2560x1440.
+  read -r -a play_godot_args <<< "${NETRUNNER_GODOT_ARGS:-}"
   XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" "$GODOT4" \
     --path "$play_root/src/Netrunner.Godot" \
     --log-file "$godot_log_file" \
+    "${play_godot_args[@]}" \
     -- "$@"
 } 2>&1 | tee "$play_output_log"
 play_status="${PIPESTATUS[0]}"

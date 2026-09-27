@@ -12,6 +12,8 @@ Stacked in order on `dev`:
 |---|---|
 | U3 full catalog | `feat/u3-full-catalog` |
 | E2 validator split | `feat/e2-validator-split` |
+| A3 turn planner | `feat/a3-turn-planner` |
+| U4 layout and interaction | `feat/u4-layout` |
 
 ## U3: event timeline, full catalog
 
@@ -168,6 +170,85 @@ before any optimization; the test requires the same result for every case.
 - Building the corpus found a crash: a run cursor past the end of its ICE
   zone was reported and then indexed, so Apply threw instead of rejecting.
   It now rejects.
+
+## A3: turn planner
+
+**How the bot plans.** At a turn action with a click left, Corp v5 and Runner
+v3 (their Standard profiles) take the heuristic's three best actions. Each is
+tried on three states sampled from the bot's observation: it is applied in
+Simulation mode, the rest of the turn is played out by both sides'
+heuristics, and the position at the end of the turn is scored from the bot's
+own observation (`PositionEvaluation`: the score race, money, cards, the
+Corp's ICE and advancing agendas, the Runner's rig, tags and damage). A
+planned action keeps its heuristic score and gains or loses its rollouts'
+difference from the heuristic's own first choice, so planning corrects the
+heuristic rather than replacing what the end-of-turn score can't see (run
+pressure, information). Easy never plans.
+
+**Information boundary.** A host that holds the state attaches an
+`ObservationDeterminizer` to the observation it gives the agent. Its only
+capability is dealing samples through the E5 sampler, which never reads a
+hidden identity. Unseen opponent cards may be any Gateway card of their side,
+since the bot doesn't know the opponent's deck. Planning draws from the
+agent's checkpointed random stream. Tests: hidden-state twins (swapped cards
+in the opponent's hand or deck) get the same planned action in both seats on
+both content lanes, planning repeats from the same checkpoint, and without a
+determinizer the planner doesn't run.
+
+**Cost.** A single legal action in a rollout is taken without building an
+observation, which cut planning time by about 40% with identical decisions.
+Planned turn actions, measured in self-play on a loaded machine: Corp median
+30 ms, p95 102 ms; Runner median 60 ms, p95 237 ms (4 samples by 4 actions,
+before the cut to 3 by 3). Other decisions are unchanged (p95 under 2 ms).
+
+**Strength so far** (`ai-ladder --entrants standard-w2,standard`, official,
+256 games; `standard-w2` is the last policy that doesn't plan):
+
+| Version | Corp | Runner |
+|---|---:|---:|
+| Rollout value only | −20 [−107, 53] | −41 [−111, 52] |
+| Blended with the heuristic | +42 [−31, 123] | +10 [−69, 87] |
+| Blended, 640 games | +0 [−44, 57] | +13 [−42, 69] |
+
+The planner does change decisions: in three self-play games it overrode the
+heuristic on 25% of the Corp's planned turn actions and 43% of the Runner's.
+That it changes this much without changing strength means the end-of-turn
+evaluation can't tell better turns from worse ones; more samples or a
+different blend won't fix that. Planned turn actions then cost Corp median
+21 ms, p95 87 ms and Runner median 28 ms, p95 107 ms (3 samples by 3
+actions, on a machine running other jobs), against 50 ms for ordinary
+decisions.
+
+**Decision: the planner ships off.** New games keep Corp v4 and Runner v2.
+The planner stays as Corp v5 and Runner v3 and the `standard-plan` ladder
+entrant, with its tests, so the next attempt starts from working
+infrastructure. The A3 gate is not met; see the gate table.
+
+## U4: layout and interaction
+
+- **No boxes or scaffolding.** Server lanes are a faint floor with no border
+  and no root or ICE captions; the fields lose their borders; the duplicate
+  turn and run line under the header is gone; the hand has no label except
+  while choosing discards; the lane's run marker says "Run in progress"
+  instead of engine step names.
+- **Compact HUD.** Clicks show as pips (●●○), and the Runner's line splits
+  over two short lines instead of wrapping.
+- **Rig by type.** Programs, then hardware, then resources, with a gap
+  between groups.
+- **Contextual actions.** Selecting a card or server shows its actions as
+  chips beside it. The dock keeps the one-line instruction and the actions
+  that belong to no card. "All legal actions…" stays as a quiet dock button
+  and F2, as an accessibility and debug fallback.
+- **Encounter overlay.** The encountered ICE lists its subroutines beside
+  it, each marked broken, fired or "will fire unless broken".
+- **Access overlay.** The accessed card opens at the centre of the board,
+  with how many accesses have happened.
+
+Evidence: captures at 1920×1080 and 2560×1440 (`NETRUNNER_GODOT_ARGS` now
+passes `--resolution` through `play.sh`) of runs, encounters, accesses and a
+score, with zero duplicates and zero snap mismatches; `make verify` passes
+on the whole stack. The plan's playtest gate (a full game in each seat
+without opening "All legal actions…") needs a person.
 
 ## Gate status
 
