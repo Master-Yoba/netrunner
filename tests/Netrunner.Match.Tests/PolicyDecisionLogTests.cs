@@ -51,7 +51,9 @@ public sealed class PolicyDecisionLogTests : IDisposable
                 Assert.True(DeterministicHash.IsSha256Hex(record.Evaluation.ObservationDigest));
                 Assert.True(DeterministicHash.IsSha256Hex(record.Evaluation.CheckpointDigest));
                 Assert.True(double.IsFinite(record.AgentCallMilliseconds) && record.AgentCallMilliseconds >= 0);
-                Assert.True(record.Evaluation.WorkUsed > 0);
+                // The encounter planner scores whole encounters without metering work.
+                Assert.True(record.Evaluation.WorkUsed > 0
+                    || record.Evaluation.Candidates.All(candidate => candidate.Utility.Reason.StartsWith("encounter/", StringComparison.Ordinal)));
                 record.Configuration.Validate();
                 Assert.Equal(record.Side, record.Configuration.Side);
                 Assert.Equal(EngineJson.Serialize(record.Side == PlayerSide.Corp ? game.Game.Corp.Configuration : game.Game.Runner.Configuration),
