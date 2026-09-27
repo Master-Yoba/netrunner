@@ -405,6 +405,9 @@ public partial class Main
 		_boardChoicePanel.GetNode<ScrollContainer>("Content/OptionsScroll").CustomMinimumSize = new Vector2(0, 52);
 
 		List<LegalActionViewModel> visibleButtons = BoardChoiceButtonActions(actions);
+		// A choice that must be resolved never shows an empty panel: when every
+		// option is a board click, list them as buttons too (playtest, 27 September).
+		if (visibleButtons.Count == 0 && !_boardChoiceIsInitialStage && !_boardChoiceRunSelection) visibleButtons = [.. actions];
 		if (visibleButtons.Count == 0)
 		{
 			Label hint = MakeWrappedLabel(
