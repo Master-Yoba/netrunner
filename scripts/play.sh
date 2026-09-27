@@ -28,11 +28,15 @@ set +e
     exit "$play_build_status"
   fi
   # NETRUNNER_GODOT_ARGS passes engine options, for example --resolution 2560x1440.
-  read -r -a play_godot_args <<< "${NETRUNNER_GODOT_ARGS:-}"
+  # The ${array[@]+...} form keeps an empty array safe under set -u in macOS bash 3.2.
+  play_godot_args=()
+  if [[ -n "${NETRUNNER_GODOT_ARGS:-}" ]]; then
+    read -r -a play_godot_args <<< "$NETRUNNER_GODOT_ARGS"
+  fi
   XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" "$GODOT4" \
     --path "$play_root/src/Netrunner.Godot" \
     --log-file "$godot_log_file" \
-    "${play_godot_args[@]}" \
+    ${play_godot_args[@]+"${play_godot_args[@]}"} \
     -- "$@"
 } 2>&1 | tee "$play_output_log"
 play_status="${PIPESTATUS[0]}"
