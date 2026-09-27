@@ -1,4 +1,5 @@
 using Godot;
+using Netrunner.Core;
 
 namespace Netrunner.GodotClient;
 
@@ -57,6 +58,52 @@ public partial class GameTableControl
 	{
 		if (key is not null && _visibleCards.TryGetValue(key, out TableCardControl? card) && card.IsVisibleInTree())
 			PulseCard(card.GetGlobalRect());
+	}
+
+	/// <summary>Flashes a public pile or score area a beat moved a card into or out of.</summary>
+	public void PulseZone(ZoneKind? zone)
+	{
+		Control? target = zone switch
+		{
+			ZoneKind.CorpDeck => _zonePiles.GetValueOrDefault("zone:corp-deck"),
+			ZoneKind.CorpDiscard => _zonePiles.GetValueOrDefault("zone:corp-archives"),
+			ZoneKind.RunnerStack => _runnerDeckPile,
+			ZoneKind.RunnerHeap => _runnerHeapPile,
+			ZoneKind.CorpScore => _corpScoredPile,
+			ZoneKind.RunnerScore => _runnerScoredPile,
+			_ => null,
+		};
+		Pulse(target);
+	}
+
+	/// <summary>Flashes a side's credit pool.</summary>
+	public void PulseCredits(PlayerSide? side) => Pulse(side == PlayerSide.Corp ? _corpCredits : _runnerCredits);
+
+	/// <summary>Flashes a side's clicks, points and tags line, for a new turn or a tag.</summary>
+	public void PulseStats(PlayerSide? side) => Pulse(side == PlayerSide.Corp ? _corpResources : _runnerResources);
+
+	/// <summary>A red wash over the board for damage; reduced motion keeps the tint and drops the fade-in.</summary>
+	public void FlashDamage()
+	{
+		var wash = new ColorRect
+		{
+			MouseFilter = MouseFilterEnum.Ignore,
+			Color = new Color(0.85f, 0.1f, 0.12f, 0.22f),
+			ZIndex = 25,
+			Size = Size,
+		};
+		AddChild(wash);
+		_motionCards.Add(wash);
+		Tween tween = CreateTween();
+		_motionTweens.Add(tween);
+		if (MotionEnabled && !Hand.ReducedMotion) tween.TweenProperty(wash, "color:a", 0.32, 0.12);
+		tween.TweenProperty(wash, "color:a", 0.0, 0.5);
+		tween.TweenCallback(Callable.From(() => { _motionTweens.Remove(tween); _motionCards.Remove(wash); wash.QueueFree(); }));
+	}
+
+	private void Pulse(Control? target)
+	{
+		if (target is not null && IsInstanceValid(target) && target.IsVisibleInTree()) PulseCard(target.GetGlobalRect());
 	}
 
 	/// <summary>A render rebuilds poses; keep the current focus and emphasis.</summary>

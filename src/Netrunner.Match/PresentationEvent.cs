@@ -24,10 +24,24 @@ public enum PresentationEventKind
     RunSuccessful,
     CardAccessed,
     RunEnded,
-    /// <summary>An installed card left its server (scored, stolen, trashed or returned).</summary>
-    CardLeftPlay,
+    /// <summary>
+    /// A card changed zones. Every physical move gets one, so zone counts and
+    /// the installed cards can be followed; draws, installs, plays, scores and
+    /// steals also get their own event.
+    /// </summary>
+    CardMoved,
     /// <summary>An installed card was revealed or concealed without another event saying so.</summary>
     CardKeyChanged,
+    /// <summary>An Operation or Event was played.</summary>
+    CardPlayed,
+    ClicksChanged,
+    DamageDealt,
+    TagsChanged,
+    GameEnded,
+    /// <summary>The Runner raised a breaker's strength.</summary>
+    BreakerPumped,
+    /// <summary>The Corp purged virus counters.</summary>
+    VirusPurged,
 }
 
 /// <summary>
@@ -56,4 +70,12 @@ public sealed record PresentationEvent(PresentationEventKind Kind, PlayerSide? S
 
     public RunEndReason? RunEndReason { get; init; }
     public bool? Successful { get; init; }
+
+    /// <summary>What caused the change, when known: the breaker, the paid card, the damage source.</summary>
+    public string? SourceCardKey { get; init; }
+
+    public ZoneKind? FromZone { get; init; }
+    public ZoneKind? ToZone { get; init; }
+    public DamageKind? Damage { get; init; }
+    public GameWinReason? WinReason { get; init; }
 }

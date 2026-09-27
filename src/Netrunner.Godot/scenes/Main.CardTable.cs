@@ -459,9 +459,10 @@ public partial class Main
 	private void PlayBeats(MatchViewModel? before, MatchSnapshot next, bool animate)
 	{
 		if (before is null || next.PresentationEvents.Count == 0) return;
-		_beats.ReducedMotion = _reducedMotion.ButtonPressed;
+		_beats.Pacing = new BeatPacing(_speed.Value, _fastOpponent.ButtonPressed, _reducedMotion.ButtonPressed);
+		_beats.Viewer = next.View.Viewer;
 		IReadOnlyList<Beat> beats = BeatPlanner.Plan(next.PresentationEvents, before, next.View, _gameTable.GetServerDisplayName);
-		double seconds = _beats.Play(beats, _speed.Value);
+		double seconds = _beats.Play(beats);
 		if (animate) _tablePlaybackWait = Math.Max(_tablePlaybackWait, seconds);
 		BoardDisplayState shown = next.PresentationEvents.Aggregate(BoardDisplayState.From(before), (state, value) => state.Apply(value));
 		IReadOnlyList<string> differences = shown.Differences(BoardDisplayState.From(next.View));

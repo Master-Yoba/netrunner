@@ -13,8 +13,11 @@ namespace Netrunner.GodotClient;
 /// normal card-table presentation while the contract agent plays the local
 /// seat. Whenever a published (viewer-filtered) event batch contains one of
 /// the configured event kinds, a burst of viewport frames is saved together
-/// with a contact sheet. Frames can contain official card art and must stay
-/// local; they are review evidence, not repository fixtures.
+/// with a contact sheet. With --capture-catalog, a burst instead starts the
+/// first time each beat of the U3 catalog plays, the game runs to its end, and
+/// capture.json lists any catalog beat that never showed. Frames can contain
+/// official card art and must stay local; they are review evidence, not
+/// repository fixtures.
 /// </summary>
 public partial class Main
 {
@@ -35,7 +38,8 @@ public partial class Main
 		int Frames,
 		double Interval,
 		int MaxActions,
-		double Pace);
+		double Pace,
+		bool Catalog);
 
 	private sealed record CaptureBurst(int Index, string EventKind, int ActionCount, int? Turn, string ContactSheet, string[] Frames);
 
@@ -67,7 +71,8 @@ public partial class Main
 				Bounded("--capture-frames", 12, 1, 120),
 				Bounded("--capture-interval-ms", 150, 16, 5000) / 1000.0,
 				Bounded("--capture-max-actions", 800, 1, 10_000),
-				Bounded("--capture-pace-ms", 500, 0, 10_000) / 1000.0);
+				Bounded("--capture-pace-ms", 500, 0, 10_000) / 1000.0,
+				arguments.Contains("--capture-catalog"));
 			if (Directory.Exists(options.Output) || File.Exists(options.Output))
 				throw new ArgumentException("--capture-output must name a new directory.");
 			return true;
@@ -110,13 +115,24 @@ public partial class Main
 			// Trigger on what the player sees: playback renders a published
 			// snapshot only after earlier beats have been shown.
 			var triggers = new ConcurrentQueue<string>();
-			_snapshotRendered = snapshot =>
+			var catalogShown = new HashSet<PresentationEventKind>();
+			if (options.Catalog)
 			{
-				foreach (EngineEvent published in snapshot.Events)
+				_beats.BeatStarted += beat =>
 				{
-					if (options.EventKinds.Contains(published.Kind)) triggers.Enqueue(published.Kind);
-				}
-			};
+					if (PresentationAudit.Catalog.Contains(beat.Kind) && catalogShown.Add(beat.Kind)) triggers.Enqueue($"beat-{beat.Kind}");
+				};
+			}
+			else
+			{
+				_snapshotRendered = snapshot =>
+				{
+					foreach (EngineEvent published in snapshot.Events)
+					{
+						if (options.EventKinds.Contains(published.Kind)) triggers.Enqueue(published.Kind);
+					}
+				};
+			}
 
 			var agent = new FullGameContractAgent(new FullGameContractPolicy(options.Side), _runtimeCardCatalog);
 			var bursts = new List<CaptureBurst>();
@@ -131,7 +147,7 @@ public partial class Main
 			// stand-in and the real card at once. Sample it on every frame.
 			var duplicates = new SortedSet<string>(StringComparer.Ordinal);
 			int motionFrames = 0;
-			while (bursts.Count < options.Bursts && actions < options.MaxActions)
+			while ((options.Catalog || bursts.Count < options.Bursts) && actions < options.MaxActions)
 			{
 				await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 				if (_gameTable.ActiveMotionCount > 0) motionFrames++;
@@ -151,7 +167,10 @@ public partial class Main
 					actions++;
 				}
 
-				if (coordinator.CurrentSnapshot is { IsTerminal: true }) break;
+				// A catalog capture waits until the client has rendered the end of the game and played its beats.
+				if (coordinator.CurrentSnapshot is { IsTerminal: true }
+					&& (!options.Catalog || _currentSnapshot is { IsTerminal: true } && !_beats.IsPlaying && triggers.IsEmpty)) break;
+				if (coordinator.CurrentSnapshot is { IsTerminal: true }) continue;
 				ready ??= coordinator.GetReadyObservationAsync(options.Side);
 				if (!ready.IsCompleted) continue;
 				if (actAfter == 0) actAfter = Time.GetTicksMsec() + (ulong)(options.Pace * 1000);
@@ -179,7 +198,10 @@ public partial class Main
 				snapMismatches = _snapMismatches,
 				beats = _beats.Played.GroupBy(beat => beat.Kind).OrderBy(group => group.Key)
 					.ToDictionary(group => group.Key.ToString(), group => group.Count()),
-				beatCaptions = _beats.Played.Select(beat => beat.Caption).Distinct().Take(80),
+				beatCaptions = _beats.Played.Select(beat => beat.Caption).Distinct().Take(options.Catalog ? 400 : 80),
+				catalogMissing = options.Catalog
+					? PresentationAudit.Catalog.Where(kind => !catalogShown.Contains(kind)).Select(kind => kind.ToString()).ToArray()
+					: null,
 				bursts,
 			}, CaptureJson));
 			if (duplicates.Count > 0)

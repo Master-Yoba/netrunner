@@ -86,6 +86,13 @@ text = "New game"
 layout_mode = 2
 text = "Skip animation"
 
+[node name="StopAtWindow" type="Button" parent="Margin/Layout/Header"]
+layout_mode = 2
+toggle_mode = true
+text = "Stop"
+tooltip_text = "Stop at the next optional window instead of passing it."
+accessibility_name = "Stop at the next optional window"
+
 [node name="Settings" type="Button" parent="Margin/Layout/Header"]
 layout_mode = 2
 custom_minimum_size = Vector2(36, 36)

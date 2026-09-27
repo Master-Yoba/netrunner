@@ -4,7 +4,7 @@
 #   scripts/ui-capture.sh [--capture-seed 42] [--capture-side runner|corp]
 #     [--capture-preset basic|expanded] [--capture-events run-initiated,agenda-scored]
 #     [--capture-bursts 4] [--capture-frames 12] [--capture-interval-ms 150]
-#     [--capture-max-actions 800] [--capture-pace-ms 500] [--capture-output <new dir>]
+#     [--capture-max-actions 800] [--capture-pace-ms 500] [--capture-catalog] [--capture-output <new dir>]
 # Needs a display. On a headless Linux box, run it under Xvfb (for example
 # `xvfb-run -s "-screen 0 1920x1080x24" scripts/ui-capture.sh`); Godot's
 # --headless mode renders nothing and cannot capture frames.

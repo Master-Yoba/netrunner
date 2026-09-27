@@ -26,25 +26,25 @@ public static class PresentationEventProjector
     public static IReadOnlyDictionary<Type, PresentationEventRule> Rules { get; } = new Dictionary<Type, PresentationEventRule>
     {
         [typeof(CreditsAdjustedEventPayload)] = PresentationEventRule.Projected,
-        [typeof(ClicksAdjustedEventPayload)] = PresentationEventRule.ViewOnly,
-        [typeof(DamageDealtEventPayload)] = PresentationEventRule.ViewOnly,
-        [typeof(TagsAdjustedEventPayload)] = PresentationEventRule.ViewOnly,
+        [typeof(ClicksAdjustedEventPayload)] = PresentationEventRule.Projected,
+        [typeof(DamageDealtEventPayload)] = PresentationEventRule.Projected,
+        [typeof(TagsAdjustedEventPayload)] = PresentationEventRule.Projected,
         [typeof(MemoryAdjustedEventPayload)] = PresentationEventRule.ViewOnly,
         [typeof(ProgramTrashedForMemoryEventPayload)] = PresentationEventRule.ViewOnly,
         [typeof(CounterAdjustedEventPayload)] = PresentationEventRule.ViewOnly,
         [typeof(HostedCreditPoolChangedEventPayload)] = PresentationEventRule.ViewOnly,
-        [typeof(VirusPurgedEventPayload)] = PresentationEventRule.ViewOnly,
+        [typeof(VirusPurgedEventPayload)] = PresentationEventRule.Projected,
         [typeof(LingeringEffectAddedEventPayload)] = PresentationEventRule.Bookkeeping,
         [typeof(LingeringEffectRemovedEventPayload)] = PresentationEventRule.Bookkeeping,
         [typeof(LingeringEffectExpiredEventPayload)] = PresentationEventRule.Bookkeeping,
         [typeof(TurnStartedEventPayload)] = PresentationEventRule.Projected,
         [typeof(TurnEndedEventPayload)] = PresentationEventRule.Bookkeeping,
-        [typeof(TurnClicksAllottedEventPayload)] = PresentationEventRule.ViewOnly,
+        [typeof(TurnClicksAllottedEventPayload)] = PresentationEventRule.Projected,
         [typeof(TurnTimingWindowOpenedEventPayload)] = PresentationEventRule.Bookkeeping,
         [typeof(TurnPriorityPassedEventPayload)] = PresentationEventRule.Bookkeeping,
         [typeof(TurnPhaseStartedEventPayload)] = PresentationEventRule.Bookkeeping,
         [typeof(TurnPhaseEndedEventPayload)] = PresentationEventRule.Bookkeeping,
-        [typeof(TurnClicksLostEventPayload)] = PresentationEventRule.ViewOnly,
+        [typeof(TurnClicksLostEventPayload)] = PresentationEventRule.Projected,
         [typeof(TurnCardDiscardedEventPayload)] = PresentationEventRule.ViewOnly,
         [typeof(ClickSpentEventPayload)] = PresentationEventRule.Projected,
         [typeof(IceSwappedEventPayload)] = PresentationEventRule.ViewOnly,
@@ -53,7 +53,7 @@ public static class PresentationEventProjector
         [typeof(CardDrawnEventPayload)] = PresentationEventRule.Projected,
         [typeof(CardInstalledEventPayload)] = PresentationEventRule.Projected,
         [typeof(CardRezzedEventPayload)] = PresentationEventRule.Projected,
-        [typeof(CardPlayStartedEventPayload)] = PresentationEventRule.ViewOnly,
+        [typeof(CardPlayStartedEventPayload)] = PresentationEventRule.Projected,
         [typeof(CardPlayCompletedEventPayload)] = PresentationEventRule.ViewOnly,
         [typeof(BehaviorCardRevealedEventPayload)] = PresentationEventRule.ViewOnly,
         [typeof(BehaviorCardsShuffledEventPayload)] = PresentationEventRule.ViewOnly,
@@ -61,7 +61,7 @@ public static class PresentationEventProjector
         [typeof(AgendaAdvancedEventPayload)] = PresentationEventRule.Projected,
         [typeof(AgendaScoredEventPayload)] = PresentationEventRule.Projected,
         [typeof(AgendaStolenEventPayload)] = PresentationEventRule.Projected,
-        [typeof(GameWonEventPayload)] = PresentationEventRule.ViewOnly,
+        [typeof(GameWonEventPayload)] = PresentationEventRule.Projected,
         [typeof(RunInitiatedEventPayload)] = PresentationEventRule.Projected,
         [typeof(RunEventPlayedEventPayload)] = PresentationEventRule.ViewOnly,
         [typeof(RunCreditsAdjustedEventPayload)] = PresentationEventRule.ViewOnly,
@@ -73,7 +73,7 @@ public static class PresentationEventProjector
         [typeof(SubroutinesBrokenEventPayload)] = PresentationEventRule.Projected,
         [typeof(IceSubroutineJackOutEventPayload)] = PresentationEventRule.ViewOnly,
         [typeof(BioroidAbilityUsedEventPayload)] = PresentationEventRule.ViewOnly,
-        [typeof(BreakerPumpedEventPayload)] = PresentationEventRule.ViewOnly,
+        [typeof(BreakerPumpedEventPayload)] = PresentationEventRule.Projected,
         [typeof(EncounterInitializedEventPayload)] = PresentationEventRule.Projected,
         [typeof(EncounterCompletedEventPayload)] = PresentationEventRule.Projected,
         [typeof(RunMovedEventPayload)] = PresentationEventRule.ViewOnly,
@@ -97,8 +97,17 @@ public static class PresentationEventProjector
         var projected = new List<PresentationEvent>();
         // Subroutines fired by this action precede their effects and the end of the encounter.
         projected.AddRange(FiredSubroutines(before, after, events, keysBefore, keysAfter, behavior));
+        // Core moves a card silently in a few places (a search sets cards aside);
+        // follow each card's zone so every leg of its journey is reported.
+        Dictionary<CardInstanceId, ZoneId> zones = before.Cards.ToDictionary(card => card.Id, card => card.ZoneId);
         foreach (EngineEvent entry in events)
         {
+            if (entry.Payload is CardMovedEventPayload journey)
+            {
+                if (zones.TryGetValue(journey.CardId, out ZoneId current) && current != journey.FromZoneId)
+                    projected.Add(Moved(journey.CardId, current, journey.FromZoneId));
+                zones[journey.CardId] = journey.ToZoneId;
+            }
             PresentationEvent? value = entry.Payload switch
             {
                 TurnStartedEventPayload turn => new(PresentationEventKind.TurnStarted, turn.ActiveSide)
@@ -111,6 +120,7 @@ public static class PresentationEventProjector
                 {
                     CardKey = Key(keysAfter, installed.CardId),
                     ServerId = ServerOf(after, installed.ToZoneId),
+                    Amount = installed.Cost,
                 },
                 CardRezzedEventPayload rez => Revealed(PresentationEventKind.CardRezzed, rez.CardId) with { Amount = rez.CreditCost },
                 IceRezzedEventPayload rez => Revealed(PresentationEventKind.CardRezzed, rez.IceId),
@@ -132,6 +142,7 @@ public static class PresentationEventProjector
                 {
                     CardKey = before.RunState?.Encounter?.IceId is { } ice ? Key(keysAfter, ice) ?? Key(keysBefore, ice) : null,
                     Amount = broken.BrokenCount,
+                    SourceCardKey = Key(keysAfter, broken.BreakerId) ?? Key(keysBefore, broken.BreakerId),
                 },
                 EncounterCompletedEventPayload => new(PresentationEventKind.EncounterEnded, PlayerSide.Runner),
                 ServerApproachedEventPayload approached => new(PresentationEventKind.ServerApproached, PlayerSide.Runner)
@@ -143,14 +154,38 @@ public static class PresentationEventProjector
                 { Side = PlayerSide.Runner, ServerId = accessed.ServerId.Value },
                 RunEndedEventPayload ended => new(PresentationEventKind.RunEnded, ended.InitiatingSide)
                 { RunEndReason = ended.Reason, Successful = ended.Successful },
-                CardMovedEventPayload moved when Installed(before, moved.FromZoneId) && !Installed(after, moved.ToZoneId)
-                    => new(PresentationEventKind.CardLeftPlay, before.Cards.FirstOrDefault(card => card.Id == moved.CardId)?.OwnerSide)
-                    { CardKey = Key(keysBefore, moved.CardId), ServerId = ServerOf(before, moved.FromZoneId) },
+                CardMovedEventPayload moved => Moved(moved.CardId, moved.FromZoneId, moved.ToZoneId),
+                CardPlayStartedEventPayload played => new(PresentationEventKind.CardPlayed, played.Side)
+                { CardKey = Key(keysAfter, played.CardId) ?? Key(keysBefore, played.CardId), Amount = played.Cost },
+                ClicksAdjustedEventPayload clicks => new(PresentationEventKind.ClicksChanged, after.GetPlayer(clicks.Target).Side)
+                { Amount = clicks.Delta, Total = clicks.ClicksAfter },
+                // A turn ends by losing every click left, and starts with its allotment.
+                TurnClicksLostEventPayload lost => new(PresentationEventKind.ClicksChanged, lost.Side)
+                { Amount = -lost.ClicksLost, Total = 0 },
+                TurnClicksAllottedEventPayload allotted => new(PresentationEventKind.ClicksChanged, allotted.Side)
+                { Total = allotted.Clicks },
+                DamageDealtEventPayload damage => new(PresentationEventKind.DamageDealt, after.GetPlayer(damage.Target).Side)
+                {
+                    Damage = damage.Kind,
+                    Amount = damage.Amount,
+                    Total = damage.CardsTrashed,
+                    SourceCardKey = damage.SourceCardId is { } source ? Key(keysAfter, source) ?? Key(keysBefore, source) : null,
+                },
+                TagsAdjustedEventPayload tags => new(PresentationEventKind.TagsChanged, after.GetPlayer(tags.Target).Side)
+                { Amount = tags.Delta, Total = tags.TagsAfter },
+                BreakerPumpedEventPayload pumped => new(PresentationEventKind.BreakerPumped, PlayerSide.Runner)
+                { CardKey = Key(keysAfter, pumped.BreakerId) ?? Key(keysBefore, pumped.BreakerId) },
+                VirusPurgedEventPayload purged => new(PresentationEventKind.VirusPurged, PlayerSide.Corp) { Amount = purged.CountersRemoved },
+                GameWonEventPayload won => new(PresentationEventKind.GameEnded, won.Winner) { WinReason = won.Reason },
                 _ => null,
             };
             // The run already showed as over when its end reason appeared; don't end it twice.
             if (value is { Kind: PresentationEventKind.RunEnded } && before.RunState?.EndReason is not null) continue;
             if (value is not null) projected.Add(value);
+        }
+        foreach (CardInstanceState card in after.Cards)
+        {
+            if (zones.TryGetValue(card.Id, out ZoneId last) && last != card.ZoneId) projected.Add(Moved(card.Id, last, card.ZoneId));
         }
         // A breach can complete (for example on a steal) before Core emits RunEnded
         // in a later action; the run is over on the board as soon as it has an end reason.
@@ -172,7 +207,25 @@ public static class PresentationEventProjector
                 && after.Cards.FirstOrDefault(card => card.Id == id) is { } card && Installed(after, card.ZoneId))
                 projected.Add(new(PresentationEventKind.CardKeyChanged, card.OwnerSide) { CardKey = now, PreviousCardKey = previous });
         }
-        return projected;
+        return AttributeCredits(projected);
+
+        PresentationEvent Moved(CardInstanceId id, ZoneId fromZoneId, ZoneId toZoneId)
+        {
+            ZoneState? from = ZoneOf(before, fromZoneId) ?? ZoneOf(after, fromZoneId);
+            ZoneState? to = ZoneOf(after, toZoneId) ?? ZoneOf(before, toZoneId);
+            string? now = Key(keysAfter, id);
+            string? previous = Key(keysBefore, id);
+            CardInstanceState? card = after.Cards.FirstOrDefault(value => value.Id == id)
+                ?? before.Cards.FirstOrDefault(value => value.Id == id);
+            return new(PresentationEventKind.CardMoved, card?.OwnerSide)
+            {
+                CardKey = now ?? previous,
+                PreviousCardKey = now is not null && previous is not null && previous != now ? previous : null,
+                FromZone = from?.Kind,
+                ToZone = to?.Kind,
+                ServerId = from?.ServerId?.Value ?? to?.ServerId?.Value,
+            };
+        }
 
         PresentationEvent Revealed(PresentationEventKind kind, CardInstanceId id)
         {
@@ -229,8 +282,45 @@ public static class PresentationEventProjector
             yield return new PresentationEvent(PresentationEventKind.SubroutineFired, PlayerSide.Corp) { CardKey = iceKey, Ordinal = ordinal };
     }
 
+    /// <summary>
+    /// Names the card that paid for or produced each credit change in the same
+    /// action. A payment goes to the install, rez or play whose cost matches,
+    /// else to a pumped or breaking breaker, an advanced card or a card trashed
+    /// from a server or R&amp;D; a gain goes to the played card.
+    /// </summary>
+    private static List<PresentationEvent> AttributeCredits(List<PresentationEvent> projected)
+    {
+        for (int index = 0; index < projected.Count; index++)
+        {
+            if (projected[index] is not { Kind: PresentationEventKind.CreditsChanged, Amount: { } delta } credits) continue;
+            string? source = delta < 0
+                ? projected.FirstOrDefault(value => value.Kind is PresentationEventKind.CardInstalled or PresentationEventKind.CardRezzed
+                    or PresentationEventKind.CardPlayed && value.Side == credits.Side && value.Amount == -delta && value.CardKey is not null)?.CardKey
+                    ?? projected.Select(value => Paid(value, credits.Side)).FirstOrDefault(key => key is not null)
+                : projected.LastOrDefault(value => value.Kind == PresentationEventKind.CardPlayed && value.Side == credits.Side
+                    && value.CardKey is not null)?.CardKey;
+            if (source is not null) projected[index] = credits with { SourceCardKey = source };
+        }
+        return projected;
+
+        // The Runner pays to trash a Corp card, so a trash matches either side's payment.
+        static string? Paid(PresentationEvent value, PlayerSide? payer) => value switch
+        {
+            { Kind: PresentationEventKind.BreakerPumped } when payer == PlayerSide.Runner => value.CardKey,
+            { Kind: PresentationEventKind.SubroutinesBroken } when payer == PlayerSide.Runner => value.SourceCardKey,
+            { Kind: PresentationEventKind.CardAdvanced } when payer == PlayerSide.Corp => value.CardKey,
+            {
+                Kind: PresentationEventKind.CardMoved, ToZone: ZoneKind.CorpDiscard, FromZone: ZoneKind.ServerRoot or ZoneKind.ServerIce
+                or ZoneKind.CorpDeck or ZoneKind.CorpHand
+            } when payer == PlayerSide.Runner => value.CardKey,
+            _ => null,
+        };
+    }
+
     private static bool Installed(GameState state, ZoneId zoneId) =>
         state.Zones.FirstOrDefault(zone => zone.Id == zoneId)?.Kind is ZoneKind.ServerRoot or ZoneKind.ServerIce;
+
+    private static ZoneState? ZoneOf(GameState state, ZoneId zoneId) => state.Zones.FirstOrDefault(zone => zone.Id == zoneId);
 
     private static string? Key(IReadOnlyDictionary<CardInstanceId, string> keys, CardInstanceId id) =>
         keys.TryGetValue(id, out string? key) ? key : null;
