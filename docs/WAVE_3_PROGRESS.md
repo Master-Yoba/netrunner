@@ -222,7 +222,8 @@ decisions.
 **Decision: the planner ships off.** New games keep Corp v4 and Runner v2.
 The planner stays as Corp v5 and Runner v3 and the `standard-plan` ladder
 entrant, with its tests, so the next attempt starts from working
-infrastructure. The A3 gate is not met; see the gate table.
+infrastructure. A3 moved to Wave 4 alongside A5, since it needs a new
+evaluation rather than more tuning.
 
 ## U4: layout and interaction
 

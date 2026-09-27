@@ -119,8 +119,8 @@ seeds to hide an unfavorable result.
 | 0 | U0, E4a, E3 (CI part), A1 | 3–5 weeks | Tooling, safety nets and measurement |
 | 1 | U1, E1, A2, A6a, E3 (nightly), E6 (renames) | 3–5 weeks | First visible wins; the engine gets fast; distinct difficulty |
 | 2 | U2, E4b, U3 slice, E5 | 5–7 weeks | The board comes alive for one run and one score |
-| 3 | U3 full, U4, A3, E2 | 7–10 weeks | Real game feel; the bot plans turns |
-| 4 | U5, U6, A4, A5 | 6–9 weeks | Polish, and the bot searches runs |
+| 3 | U3 full, U4, E2 | 7–10 weeks | Real game feel |
+| 4 | U5, U6, A3, A4, A5 | 6–9 weeks | Polish, and the bot plans turns and searches runs |
 | 5 | A6 (compute tiers, personalities), hardening, decision point | 2–4 weeks | Difficulty, release readiness |
 
 In total that's roughly 26–40 weeks. The UI track alone reaches "feels like a
@@ -193,14 +193,12 @@ game" at the end of Wave 3.
 |---|---|
 | U3 full catalog | Extends the proven slice to every event in the catalog, and adds pacing and auto-pass settings. |
 | U4 layout and interaction redesign | Needs U2 (persistent nodes) and U3 (overlays tied to beats). This is where the dock and the boxed columns go. |
-| A3 turn planner | E1 and E5 are ready, and A2 provides the evaluation features. It's the largest single strength gain. |
 | E2 validator split | By now E3 has built a corpus of known-bad states to prove authoritative commits still reject everything they did. Bot search already avoids validation through Simulation mode (E1), so this is about keeping authoritative play fast and the validator from becoming a second rules engine. |
 
 **Gate:**
 - A full game in each seat can be played without opening "All legal
   actions…".
 - The capture review at 1920 and 2560 passes.
-- A3 shows a clear ladder gain in both seats within the latency budget.
 - Authoritative `Apply` rejects everything it did on the known-bad corpus, and
   validator time on the benchmark profile is measurably lower.
 
@@ -210,6 +208,7 @@ game" at the end of Wave 3.
 |---|---|
 | U5 art direction, feel and audio | It only pays off once the layout (U4) is stable. |
 | U6 onboarding and playtest loop | It needs the final interaction model from U4. |
+| A3 turn planner | Moved from Wave 3 ([record](WAVE_3_PROGRESS.md#a3-turn-planner)): the planning infrastructure works, but its end-of-turn evaluation didn't pick better turns, so it needs a new evaluation, which overlaps A5. |
 | A4 run search | It builds on the A3 infrastructure, and adds the most for the Runner. |
 | A5 weight tuning | The ladder is fast and the weights are named, so tuning won't be undone by later structural changes. |
 
@@ -217,6 +216,7 @@ game" at the end of Wave 3.
 - The M5 frame-time gate still passes with the new effects and audio.
 - Playtest metrics (time per turn, rejected drops, "All legal actions…" use)
   improve against a Wave 0 recording.
+- A3 shows a clear ladder gain in both seats within the latency budget.
 - A4 and A5 show ladder gains, and hidden-state twins still pass.
 
 ### Wave 5 — difficulty, hardening and the next decision
