@@ -11,12 +11,18 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     public const string V2 = "runner-heuristic-v2";
     /// <summary>V2 choices, with turn actions planned by rollouts over sampled states (A3).</summary>
     public const string V3 = "runner-heuristic-v3";
+    /// <summary>
+    /// V2 choices with playtest repairs: credits placed on a card that already
+    /// holds a stockpile it pays out slowly (Smartware Distributor) are valued
+    /// at what they return, not face value.
+    /// </summary>
+    public const string V4 = "runner-heuristic-v4";
     /// <summary>The version new games and new manifests use.</summary>
-    /// <summary>V3 plans but has not shown a ladder gain yet (Wave 3), so new games keep V2.</summary>
-    public const string PolicyVersion = V2;
+    /// <summary>V3 plans but has not shown a ladder gain yet (Wave 3), so new games use V4, which doesn't plan.</summary>
+    public const string PolicyVersion = V4;
     /// <summary>The latest version that never plans: the planner's model of the Runner.</summary>
-    public const string LatestHeuristic = V2;
-    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3];
+    public const string LatestHeuristic = V4;
+    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4];
 
     public RunnerHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -24,9 +30,13 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Runner policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version == V1 ? 1 : 2;
+        Generation = version switch { V1 => 1, V4 => 3, _ => 2 };
         Plans = version == V3;
+        Repairs = version == V4;
     }
+
+    /// <summary>Whether this version has the playtest repairs (V4).</summary>
+    private bool Repairs { get; }
 
     private bool Plans { get; }
 
