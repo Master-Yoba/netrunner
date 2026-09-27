@@ -79,6 +79,64 @@ public sealed class RatingLadderTests
     }
 
     [Fact]
+    public void DealPlansRotateThePoolAndPairEveryEntrantOnEachDeal()
+    {
+        string[] pool = ["a~x", "b~x", "c~y"];
+        IReadOnlyList<LadderGame> games = RatingLadder.PlanDeals(["easy", "standard"], 7, 5, pool);
+
+        // A1b: the budget is deals, not pairings × seeds; each deal is played by all four seat pairings.
+        Assert.Equal(7 * 4, games.Count);
+        Assert.Equal(games.Count, games.Select(game => game.Id).Distinct().Count());
+        foreach (IGrouping<int, LadderGame> deal in games.GroupBy(game => game.Deal))
+        {
+            Assert.Equal(4, deal.Count());
+            Assert.Single(deal.Select(game => (game.ContentId, game.GameSeed)).Distinct());
+            Assert.Equal(pool[deal.Key % pool.Length], deal.First().ContentId);
+        }
+        // A later batch continues the same deal sequence.
+        Assert.Equal(games.Where(game => game.Deal >= 4), RatingLadder.PlanDeals(["easy", "standard"], 3, 5, pool, firstDeal: 4));
+    }
+
+    [Fact]
+    public void DeckComparisonFindsTheDeckWhereTheCandidateIsWorse()
+    {
+        // On content "good" the candidate Corp wins every game and the baseline loses
+        // them all; on content "bad" it is the other way round.
+        var results = new List<LadderGameResult>();
+        for (int deal = 0; deal < 40; deal++)
+        {
+            string content = deal % 2 == 0 ? "good" : "bad";
+            foreach (string corp in new[] { "easy", "standard" })
+                foreach (string runner in new[] { "easy", "standard" })
+                {
+                    double score = corp == "standard" ? content == "good" ? 1 : 0 : content == "good" ? 0 : 1;
+                    results.Add(new LadderGameResult(new LadderGame($"{corp}-{runner}-{deal}", content, (ulong)deal, corp, runner, deal),
+                        score, false, 100, null));
+                }
+        }
+
+        IReadOnlyList<LadderDeckComparison> decks = RatingLadder.CompareByDeck(results, "easy", "standard", bootstrap: 100);
+
+        LadderDeckComparison bad = decks.Single(deck => deck.ContentId == "bad" && deck.Side == PlayerSide.Corp);
+        LadderDeckComparison good = decks.Single(deck => deck.ContentId == "good" && deck.Side == PlayerSide.Corp);
+        Assert.Equal(-1, bad.ScoreDifference, 6);
+        Assert.True(bad.Warning);
+        Assert.Equal(1, good.ScoreDifference, 6);
+        Assert.False(good.Warning);
+        Assert.Equal(20, bad.Deals);
+    }
+
+    [Fact]
+    public void StoppingNeedsEveryDifferenceClearOfZero()
+    {
+        var clear = new LadderReport([], [new(PlayerSide.Corp, "easy", "standard", 90, 20, 160), new(PlayerSide.Runner, "easy", "standard", -80, -150, -10)],
+            [], 10, 0, 0);
+        var open = clear with { Differences = [.. clear.Differences.Take(1), new(PlayerSide.Runner, "easy", "standard", 5, -40, 50)] };
+        Assert.True(RatingLadder.IsClear(clear));
+        Assert.False(RatingLadder.IsClear(open));
+    }
+
+    [Fact]
     public async Task DeveloperLadderGameFinishes()
     {
         LadderGame game = RatingLadder.Plan(["random", "contract"], 1, 2, [RulesFuzzRunner.DeveloperContentId])

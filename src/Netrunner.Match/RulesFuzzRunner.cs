@@ -96,6 +96,18 @@ public static class RulesFuzzRunner
         _ => throw new ArgumentException($"Unknown content '{content}'; expected developer, official or gateway.", nameof(content)),
     };
 
+    /// <summary>
+    /// The version of a <c>--content</c> deck pool (A1b). Ratings are compared only
+    /// within one pool version; a deck joins the pool at a version bump.
+    /// </summary>
+    public static string PoolVersion(string content) => content switch
+    {
+        "developer" => "developer",
+        "official" => "expanded-v1",
+        "gateway" => "gateway-v1",
+        _ => throw new ArgumentException($"Unknown content '{content}'; expected developer, official or gateway.", nameof(content)),
+    };
+
     /// <summary>Every official preset pairing, in the benchmark's corp/runner order (the frozen M5 suites).</summary>
     public static IReadOnlyList<string> AllOfficialContentIds { get; } =
         ["basic-basic", "basic-expanded", "expanded-basic", "expanded-expanded"];

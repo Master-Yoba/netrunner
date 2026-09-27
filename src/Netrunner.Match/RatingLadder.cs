@@ -4,7 +4,8 @@ using Netrunner.Core;
 namespace Netrunner.Match;
 
 /// <summary>One scheduled ladder game: a Corp entrant against a Runner entrant on fixed content and seed.</summary>
-public sealed record LadderGame(string Id, string ContentId, ulong GameSeed, string Corp, string Runner);
+/// <remarks><paramref name="Deal"/> numbers a seed-and-pairing deal that every entrant pairing plays (A1b); −1 for seed-per-pairing plans.</remarks>
+public sealed record LadderGame(string Id, string ContentId, ulong GameSeed, string Corp, string Runner, int Deal = -1);
 
 /// <summary>Corp score is 1 for a Corp win, 0 for a Runner win and 0.5 for a capped game.</summary>
 public sealed record LadderGameResult(LadderGame Game, double CorpScore, bool Capped, int Actions, string? Error);
@@ -32,7 +33,7 @@ public sealed record LadderReport(IReadOnlyList<LadderRating> Ratings, IReadOnly
 /// zero; comparing separate rating intervals would be too strict because
 /// ratings fitted from the same games are correlated.
 /// </summary>
-public static class RatingLadder
+public static partial class RatingLadder
 {
     public const int DefaultActionCap = 3000;
 
@@ -126,8 +127,12 @@ public static class RatingLadder
         }
     }
 
-    public static LadderReport Rate(IReadOnlyList<LadderGameResult> results, int bootstrap = 200, ulong bootstrapSeed = 1)
+    public static LadderReport Rate(IReadOnlyList<LadderGameResult> results, int bootstrap = 200, ulong bootstrapSeed = 1,
+        double confidence = 0.95)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(confidence, 0);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(confidence, 1);
+        double tail = (1 - confidence) / 2;
         ArgumentNullException.ThrowIfNull(results);
         ArgumentOutOfRangeException.ThrowIfNegative(bootstrap);
         LadderGameResult[] scored = results.Where(result => result.Error is null).ToArray();
@@ -156,8 +161,8 @@ public static class RatingLadder
             LadderGameResult[] played = scored.Where(result => (side == PlayerSide.Corp ? result.Game.Corp : result.Game.Runner) == entrant).ToArray();
             double sideScore = played.Average(result => side == PlayerSide.Corp ? result.CorpScore : 1 - result.CorpScore);
             return new LadderRating(side, entrant, point[key],
-                values.Count == 0 ? point[key] : Percentile(values, 0.025),
-                values.Count == 0 ? point[key] : Percentile(values, 0.975),
+                values.Count == 0 ? point[key] : Percentile(values, tail),
+                values.Count == 0 ? point[key] : Percentile(values, 1 - tail),
                 played.Length, sideScore);
         }).OrderBy(rating => rating.Side).ThenBy(rating => Rank(rating.Entrant)).ToArray();
 
@@ -173,7 +178,7 @@ public static class RatingLadder
                 List<double> gaps = draws.Select(draw => draw[strongerKey] - draw[weakerKey]).Order().ToList();
                 double gap = point[strongerKey] - point[weakerKey];
                 differences.Add(new LadderDifference(side, weaker.Entrant, stronger.Entrant, gap,
-                    gaps.Count == 0 ? gap : Percentile(gaps, 0.025), gaps.Count == 0 ? gap : Percentile(gaps, 0.975)));
+                    gaps.Count == 0 ? gap : Percentile(gaps, tail), gaps.Count == 0 ? gap : Percentile(gaps, 1 - tail)));
             }
             separations.Add(new LadderSeparation(side, ordered.Select(rating => rating.Entrant).ToArray(),
                 differences.Where(difference => difference.Side == side).All(difference => difference.Separated)));
