@@ -11,6 +11,10 @@
                       LogicalName="Netrunner.Cards.Data.m4.presets.json" />
     <EmbeddedResource Include="../../data/m4/developer/decks.json"
                       LogicalName="Netrunner.Cards.Data.m4.developer.decks.json" />
+    <!-- Wave 4 C1: the System Gateway-only sample decks, kept apart from
+         presets.json so the frozen M5 manifests' preset pin is unchanged. -->
+    <EmbeddedResource Include="../../data/decks/gateway-sample-decks.json"
+                      LogicalName="Netrunner.Cards.Data.decks.gateway-sample-decks.json" />
   </ItemGroup>
 
   <!--

@@ -420,9 +420,12 @@ public partial class Main : Control
 			bool enabled = preset.Playable;
 			string state = enabled ? "READY" : "LOCKED · coverage pending";
 			string kindLabel = preset.Kind == "starter" ? "BASIC (STARTER)" : preset.Kind.ToUpperInvariant();
-			button.AddItem(
-				$"{kindLabel} · {preset.PresetId} · {preset.CardCount} cards · {state}",
+			// Gateway sample decks show their name; the menu rework (U7) gives them their own area.
+			button.AddItem(preset.Name is { } name
+				? $"GATEWAY · {name} · {preset.CardCount} cards · {state}"
+				: $"{kindLabel} · {preset.PresetId} · {preset.CardCount} cards · {state}",
 				index);
+			if (preset.Summary is { } summary) button.SetItemTooltip(index, summary);
 			ids[index] = preset.PresetId;
 			button.SetItemDisabled(index, !enabled);
 			// Expanded is the default: it is what gets played and tested (playtest, 27 September).
