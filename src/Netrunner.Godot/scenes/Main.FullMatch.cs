@@ -397,10 +397,19 @@ public partial class Main
 				}
 				mulligan |= redraw is not null;
 				// Use the same submission handler as the rendered action buttons.
-				if (_useCardTable)
+				if (_useCardTable && _turnWindow is not null && action.Kind == ActionKind.PassPriority)
 				{
+					// An invisible window has no pass button: a player with clicks takes
+					// a turn action instead. Pass through the same handler.
+					SubmitAction(snapshot.View.Decision!, action);
+				}
+				else if (_useCardTable)
+				{
+					// Press the control the player sees; an invisible window shows the
+					// previewed turn decision, with the window's rez and score.
+					MatchSnapshot displayed = _currentSnapshot ?? snapshot;
 					_tableAllActions = true;
-					RenderCardTableActions(snapshot);
+					RenderCardTableActions(displayed);
 					if (!_tableActionButtons.TryGetValue(action.Id, out Button? actionButton))
 						throw new InvalidOperationException("Issued action is unreachable in the table controls.");
 					actionButton.EmitSignal(BaseButton.SignalName.Pressed);

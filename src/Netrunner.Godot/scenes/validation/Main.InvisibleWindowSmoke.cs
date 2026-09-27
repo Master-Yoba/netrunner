@@ -34,8 +34,22 @@ public partial class Main
 				MatchSnapshot snapshot = _currentSnapshot!;
 				if (snapshot.IsTerminal) throw new InvalidOperationException("The match ended before an own-turn rez window.");
 				DecisionViewModel decision = snapshot.View.Decision!;
-				if (snapshot.TurnPreview is not null && decision.Kind == DecisionKind.TurnTiming)
+				if (snapshot.TurnPreview is not null && _turnWindow is not null)
 				{
+					if (decision.Kind != DecisionKind.TurnAction)
+						throw new InvalidOperationException("An invisible window doesn't show the turn decision.");
+					if (!BoardInteractionProjector.Project(snapshot.View).Sources.Any())
+						throw new InvalidOperationException("Hand cards can't be dragged during an invisible window.");
+					LegalActionViewModel? install = snapshot.View.LegalActions.FirstOrDefault(action => action.Parameters is InstallCardParameters);
+					if (install is not null && OS.GetCmdlineUserArgs().Contains("--invisible-window-screenshots"))
+					{
+						SelectTableCard(((InstallCardParameters)install.Parameters).CardId.Value);
+						await TableFrames(4);
+						await SaveInteractionEvidence("invisible-window-selected");
+						DismissBoardChoices();
+						ClearTableSelection();
+						await TableFrames(4);
+					}
 					if (snapshot.View.LegalActions.Any(action => action.Kind == ActionKind.PassPriority)
 						|| FindDescendants<Button>(_tableActions).Any(button => button.Text.Contains("without", StringComparison.Ordinal)
 							|| button.Text.Contains("Pass", StringComparison.Ordinal)))
@@ -61,6 +75,17 @@ public partial class Main
 					}
 					throw new InvalidOperationException("Taking a turn action from the window did not apply.");
 				}
+				if (decision.Kind == DecisionKind.TurnAction && !_turnSawNormal && OS.GetCmdlineUserArgs().Contains("--invisible-window-screenshots")
+					&& snapshot.View.LegalActions.FirstOrDefault(action => action.Parameters is InstallCardParameters) is { } normalInstall)
+				{
+					_turnSawNormal = true;
+					SelectTableCard(((InstallCardParameters)normalInstall.Parameters).CardId.Value);
+					await TableFrames(4);
+					await SaveInteractionEvidence("turn-action-selected");
+					DismissBoardChoices();
+					ClearTableSelection();
+					await TableFrames(4);
+				}
 				LegalActionViewModel next = snapshot.View.LegalActions.FirstOrDefault(action => action.Parameters is InstallCardParameters install
 						&& install.ServerId is null
 						&& snapshot.View.CorpHand.VisibleCards.Any(card => card.Id == install.CardId.Value && card.Type is "Asset" or "Upgrade"))
@@ -80,13 +105,15 @@ public partial class Main
 		}
 	}
 
+	private bool _turnSawNormal;
+
 	private async Task SettledSideObservationAsync(PlayerSide side)
 	{
 		Observation observation = await _coordinator!.GetReadyObservationAsync(side).WaitAsync(WallTimeLimits.Seconds(20));
 		for (int frame = 0; frame < 600; frame++)
 		{
 			await TableFrames(1);
-			if (_currentSnapshot?.View.Decision?.Id == observation.Decision?.Id.Value
+			if ((_turnWindow ?? _currentSnapshot?.View.Decision)?.Id == observation.Decision?.Id.Value
 				&& _tablePublications.Count == 0 && Volatile.Read(ref _submissionInFlight) == 0 && _turnIntent is null)
 				return;
 		}

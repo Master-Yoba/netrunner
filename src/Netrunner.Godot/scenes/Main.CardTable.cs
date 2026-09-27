@@ -195,7 +195,7 @@ public partial class Main
 				: snapshot.IsTerminal ? "Match complete."
 				: _fullMatchResumePaused ? $"Paused at action {snapshot.ActionCount}. Continue when ready."
 				: decision is null ? "Waiting for the next decision…"
-				: $"{decision.OwnerSide}: {TablePrompt(_turnPreview?.Decision ?? decision, snapshot.View)}";
+				: $"{decision.OwnerSide}: {TablePrompt(decision, snapshot.View)}";
 			_tablePrompt.TooltipText = decision is null ? string.Empty : $"Engine prompt: {decision.Prompt}";
 			if (snapshot.View.Run is { } run)
 				_tablePrompt.Text = DecisionPromptPresenter.RunContext(run, _gameTable.GetServerDisplayName) + " · " + _tablePrompt.Text;

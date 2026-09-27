@@ -307,6 +307,16 @@ the real next decision, and a Godot smoke (`--invisible-window-smoke`, in
 If the real decision has no matching action the player sees it and chooses
 again, so a wrong preview can't submit anything the engine didn't issue.
 
+A fourth playtest (Corp, on invisible windows) found:
+
+| Report | Cause | Change |
+|---|---|---|
+| After the first turn, cards couldn't be dragged onto the board | Each drag failed during an invisible window: the table still showed the window's timing decision, and drag play only runs on a turn action | The table shows the previewed turn decision itself; only the submission is routed through the window |
+| Clicking an installable card put install buttons all over the board and hand | The same cause: the timing decision sent card selection down the fallback path | Selecting a card during a window gives the same contextual choices as on a turn action |
+
+The window smoke now also checks that hand cards can be dragged during a
+window, and the full-match smokes press the controls the player sees.
+
 Runner v4 against v2 on the ladder (official, 640 games, the Corp at v6):
 **+30 [−25, 84]**, so not weaker.
 

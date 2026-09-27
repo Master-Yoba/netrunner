@@ -1000,6 +1000,7 @@ public partial class Main : Control
 
 	private void RenderSnapshot(MatchSnapshot snapshot)
 	{
+		MatchSnapshot issued = snapshot;
 		if (_useCardTable) snapshot = WithTurnPreview(snapshot);
 		ApplyAutoPassSetting();
 		RefreshInspectedCard(snapshot.View);
@@ -1008,7 +1009,7 @@ public partial class Main : Control
 			|| !SameDecision(previous.View.Decision, snapshot.View.Decision);
 		_currentSnapshot = snapshot;
 		_fullMatchResumePaused = snapshot.IsPaused;
-		RecordFullMatchDisplayedSnapshot(snapshot);
+		RecordFullMatchDisplayedSnapshot(issued);
 		_smokeRunEndedObserved |= _smokeTest
 			&& snapshot.Events.Any(value => value.Kind == EngineEventKinds.RunEnded);
 		if (decisionChanged)
