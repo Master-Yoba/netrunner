@@ -135,6 +135,8 @@ public static partial class StateInvariantValidator
         IRuntimeCardCatalog? runtimeCardCatalog)
     {
         ArgumentNullException.ThrowIfNull(state);
+        if (IsCertified(state, behaviorCatalog, runtimeCardCatalog)) return [];
+        IBehaviorCatalog? requestedCatalog = behaviorCatalog;
         bool enforceCatalogCompatibility = behaviorCatalog is not null;
         behaviorCatalog ??= BehaviorCatalog.Empty;
 
@@ -159,6 +161,7 @@ public static partial class StateInvariantValidator
             runtimeCardCatalog,
             enforceCatalogCompatibility,
             violations);
+        if (violations.Count == 0) Certify(state, requestedCatalog, runtimeCardCatalog);
         return violations.AsReadOnly();
     }
 

@@ -45,6 +45,17 @@ public sealed class KnownBadStateCorpusTests
             $"only {results.Values.Count(value => value.Rejected)} of {results.Count} known-bad states were rejected");
     }
 
+    [Fact]
+    public void ACertifiedStateStillRejectsItsCorruptedCopies()
+    {
+        CorpusCase value = BuildCorpus().First(entry => entry.Id.EndsWith("/card-negative-advancement", StringComparison.Ordinal));
+        Assert.True(StateInvariantValidator.TryValidate(value.Valid, value.Definition.Behavior, value.Definition.Runtime, out _));
+        Assert.True(StateInvariantValidator.IsCertified(value.Valid, value.Definition.Behavior, value.Definition.Runtime));
+
+        Assert.False(StateInvariantValidator.IsCertified(value.Bad, value.Definition.Behavior, value.Definition.Runtime));
+        Assert.True(Evaluate(value).Rejected);
+    }
+
     private static CorpusResult Evaluate(CorpusCase value)
     {
         PendingDecision? pending = value.Valid.PendingDecision;
