@@ -1604,7 +1604,8 @@ public static partial class StateInvariantValidator
                     Add(violations, "run.unexpected-current-ice", $"{path}.currentIceId", "A run at the server must not have a current ICE ID.");
                 }
             }
-            else if (!removedEncounterCursor && !destroyedCursor
+            // An index already reported as out of range can't be compared with the zone.
+            else if (!removedEncounterCursor && !destroyedCursor && run.CurrentIceIndex < iceZone.CardIds.Count
                 && (!run.CurrentIceId.HasValue || iceZone.CardIds[run.CurrentIceIndex] != run.CurrentIceId.Value))
             {
                 Add(violations, "run.ice-position-mismatch", $"{path}.currentIceId", "Current ICE ID must match the ordered ICE zone position.");
