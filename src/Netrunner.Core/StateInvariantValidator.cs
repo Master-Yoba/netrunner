@@ -7704,16 +7704,7 @@ public static partial class StateInvariantValidator
                     ParentFrameIdentity: not null,
                 } behaviorInstall
                 && ParentIdentityMatches(child, behaviorInstall.ParentFrameIdentity))
-            && !(index + 3 == state.ResolutionStack.Count - 1
-                && child.Stage == BehaviorResolutionStage.Execute
-                && state.ResolutionStack[index + 2] is EffectResolutionFrame
-                {
-                    Stage: EffectResolutionStage.AwaitingMemoryCleanup,
-                    Costs.Instructions.Count: 0,
-                    Effects.Instructions.Count: 0,
-                } memoryEffect
-                && memoryEffect.Controller == child.Controller
-                && state.ResolutionStack[index + 3] is MemoryCleanupFrame))
+            && !GameEngine.IsSuspendedForMemoryLoss(state.ResolutionStack, index + 1))
         {
             Add(
                 violations,
