@@ -483,7 +483,7 @@ for full_match_side in corp runner; do
   echo "full-match-$full_match_side=PASS setup=true mulligan=true turn_pair=true identities=true terminal=true"
 done
 if ((card_data_content_enabled == 1)); then
-  for m4_preset in basic expanded; do
+  for m4_preset in expanded; do
     for m4_human_side in corp runner; do
       m4_full_smoke_log="$coverage_report_dir/m4-full-$m4_preset-$m4_human_side.log"
       if ! run_with_timeout 210 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \

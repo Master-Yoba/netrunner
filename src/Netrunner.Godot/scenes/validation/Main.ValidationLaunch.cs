@@ -24,7 +24,7 @@ public partial class Main
 	private bool _fullMatchSmoke;
 	private bool _m4FullMatchSmoke;
 	private PlayerSide _fullMatchSmokeSide = PlayerSide.Runner;
-	private string _fullMatchSmokePreset = "basic";
+	private string _fullMatchSmokePreset = "expanded";
 	private ulong _fullMatchSmokeSeed = 47042;
 	private bool _gallerySmokePassed;
 	private int _smokeStarted;

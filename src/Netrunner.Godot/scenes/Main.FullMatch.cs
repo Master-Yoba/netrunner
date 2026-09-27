@@ -14,7 +14,7 @@ public partial class Main
 		out ulong seed,
 		out string? error)
 	{
-		preset = "basic";
+		preset = "expanded";
 		seed = 47042;
 		error = null;
 		if (!TryReadOption(arguments, "--preset", out string? presetValue, out error))

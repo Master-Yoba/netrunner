@@ -12,7 +12,7 @@ public sealed class RatingLadderTests
     {
         IReadOnlyList<LadderGame> games = RatingLadder.Plan(["random", "standard"], 3, 9, RulesFuzzRunner.OfficialContentIds);
 
-        Assert.Equal(2 * 2 * 3 * 4, games.Count);
+        Assert.Equal(2 * 2 * 3 * RulesFuzzRunner.OfficialContentIds.Count, games.Count);
         Assert.Equal(games.Count, games.Select(game => game.Id).Distinct().Count());
         Assert.Equal(games, RatingLadder.Plan(["random", "standard"], 3, 9, RulesFuzzRunner.OfficialContentIds));
         // Common random numbers: every pairing sees the same seeds.

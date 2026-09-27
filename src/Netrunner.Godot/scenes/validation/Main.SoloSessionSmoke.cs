@@ -36,7 +36,7 @@ public partial class Main
 			TryReadOption(arguments, "--preset", out string? preset, out _);
 			TryReadOption(arguments, "--difficulty", out string? difficulty, out _);
 			PlayerSide side = sideText == "corp" ? PlayerSide.Corp : PlayerSide.Runner;
-			preset ??= "basic";
+			preset ??= "expanded";
 			difficulty ??= "standard";
 			if (_soloSmokeReloadPending)
 			{

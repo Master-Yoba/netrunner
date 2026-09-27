@@ -56,7 +56,7 @@ public partial class Main
 		try
 		{
 			string side = Value("--capture-side") ?? "runner";
-			string preset = Value("--capture-preset") ?? "basic";
+			string preset = Value("--capture-preset") ?? "expanded";
 			if (side is not ("corp" or "runner")) throw new ArgumentException("--capture-side requires corp or runner.");
 			if (preset is not ("basic" or "expanded")) throw new ArgumentException("--capture-preset requires basic or expanded.");
 			string events = Value("--capture-events") ?? string.Join(',',

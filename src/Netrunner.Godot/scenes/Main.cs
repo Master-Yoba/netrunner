@@ -425,7 +425,8 @@ public partial class Main : Control
 				index);
 			ids[index] = preset.PresetId;
 			button.SetItemDisabled(index, !enabled);
-			if (enabled && firstPlayable < 0)
+			// Expanded is the default: it is what gets played and tested (playtest, 27 September).
+			if (enabled && (firstPlayable < 0 || preset.Kind == "expanded" && presets[firstPlayable].Kind != "expanded"))
 			{
 				firstPlayable = index;
 			}
