@@ -4,7 +4,7 @@ namespace Netrunner.AI;
 
 public sealed partial class CorpHeuristicPolicy
 {
-    private static AgentUtility Install(HeuristicContext context, InstallCardParameters install)
+    private static AgentUtility Install(HeuristicContext context, InstallCardParameters install, bool repairs = false)
     {
         AgentCard? card = context.Card(install.CardId);
         CardEvaluationDescriptor? definition = context.Definition(card);
@@ -18,6 +18,9 @@ public sealed partial class CorpHeuristicPolicy
         }
         AgentServer? server = context.Server(install.ServerId);
         int lost = install.RequiredReplacementCardIds.Sum(id => context.CardValue(context.Card(id), installed: true));
+        // v6: a remote's root holds one agenda or asset, so installing another
+        // there trashes it; an agenda thrown away costs far more than its card value.
+        if (repairs) lost = Math.Max(lost, DisplacedRootValue(context, server, definition));
         int score;
         if (definition.Ice is { } ice)
         {
@@ -82,7 +85,37 @@ public sealed partial class CorpHeuristicPolicy
     private static AgentUtility Score(HeuristicContext context, ScoreAgendaParameters score) =>
         new(context.Self.AgendaPoints + score.AgendaPoints >= 7 ? 100 : 30, score.AgendaPoints * 100, "score/available-points");
 
-    private static AgentUtility Advance(HeuristicContext context, AdvanceCardParameters advance)
+    /// <summary>What installing an agenda or asset into a remote root would trash: its agenda or asset, advancement included.</summary>
+    private static int DisplacedRootValue(HeuristicContext context, AgentServer? server, CardEvaluationDescriptor installing)
+    {
+        if (server is not { Kind: ServerKind.Remote }
+            || installing.Printed.CardClass is not (RuntimeCardClass.Agenda or RuntimeCardClass.Asset)) return 0;
+        return server.Root.Sum(card =>
+        {
+            CardEvaluationDescriptor? existing = context.Definition(card);
+            if (card is null || existing?.Printed.CardClass is not (RuntimeCardClass.Agenda or RuntimeCardClass.Asset)) return 0;
+            int advanced = card.AdvancementCounters ?? 0;
+            return existing.Agenda is not null
+                ? 1000 + existing.Printed.AgendaPoints * 300 + advanced * 150
+                : context.CardValue(card, installed: true) + advanced * 100;
+        });
+    }
+
+    /// <summary>
+    /// v6: the credits needed to rez the ICE that protects what the Corp is
+    /// building: the dearest unrezzed ICE on a server holding an agenda, or the
+    /// cheapest on a central server when no agenda is installed.
+    /// </summary>
+    private static int ProtectionReserve(HeuristicContext context, AgentServer? agendaServer = null)
+    {
+        IEnumerable<AgentServer> agendaServers = agendaServer is not null ? [agendaServer]
+            : context.Features.Board.Servers.Where(server => server.Root.Any(card => context.Definition(card)?.Agenda is not null));
+        int protecting = agendaServers.SelectMany(server => server.Ice).Where(card => card is { Rezzed: false })
+            .Select(card => context.Definition(card)?.Printed.RezCost ?? 0).DefaultIfEmpty(0).Max();
+        return Math.Max(protecting, context.RezReserve);
+    }
+
+    private static AgentUtility Advance(HeuristicContext context, AdvanceCardParameters advance, bool repairs = false)
     {
         AgentCard? card = context.Card(advance.CardId);
         CardEvaluationDescriptor? definition = context.Definition(card);
@@ -96,11 +129,13 @@ public sealed partial class CorpHeuristicPolicy
         if (!finish && context.Generation >= 3 && ice > 0 && remaining - 1 <= 3)
             score = 180 + definition.Printed.AgendaPoints * 40;
         if (!finish && context.Self.Credits <= context.RezReserve) score -= 200;
+        // v6: advancing spends a credit; don't spend the one that rezzes this agenda's ICE.
+        if (repairs && !finish && context.Self.Credits - 1 < ProtectionReserve(context, context.ServerOf(card.Id))) score -= 250;
         return new(finish ? 10 : 0, score, finish ? "score/finish-this-turn" : "score/future-window",
             Approximate: !finish, Objective: new("score", null, null, card.Id));
     }
 
-    private static AgentUtility Rez(HeuristicContext context, CardInstanceId id, int cost)
+    private static AgentUtility Rez(HeuristicContext context, CardInstanceId id, int cost, bool repairs = false)
     {
         CardEvaluationDescriptor? definition = context.Definition(id);
         AgentCard? card = context.Card(id);
@@ -111,6 +146,11 @@ public sealed partial class CorpHeuristicPolicy
             int force = ice.Subroutines.Any(subroutine => subroutine is EndRunSubroutineSpec) ? 240 : 90;
             return Value(force + context.ServerValue(server) - cost * 30, "rez/relevant-protection", approximate: true);
         }
+        // v6: an upgrade in the server being run on works now or never, so it
+        // isn't held back for ICE the Runner has already passed or chosen not to face.
+        bool attacked = context.Features.Board.Run?.AttackedServer is { } attackedServer && attackedServer == server?.Id;
+        if (repairs && attacked && definition?.Printed.CardClass == RuntimeCardClass.Upgrade && cost <= context.Self.Credits)
+            return Value(Math.Max(120, context.ServerValue(server) / 2) - cost * 30, "rez/upgrade-in-attacked-server", approximate: true);
         if (context.Self.Credits - cost < context.RezReserve) return Value(-300, "rez/preserve-ice-budget");
         if (definition?.Printed.CardClass == RuntimeCardClass.Asset)
         {

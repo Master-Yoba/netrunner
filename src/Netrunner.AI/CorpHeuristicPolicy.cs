@@ -17,12 +17,19 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     public const string V4 = "corp-heuristic-v4";
     /// <summary>V4 choices, with turn actions planned by rollouts over sampled states (A3).</summary>
     public const string V5 = "corp-heuristic-v5";
+    /// <summary>
+    /// V4 choices with playtest repairs: an install that must replace a remote's
+    /// agenda or asset pays for what it trashes, an upgrade in the attacked
+    /// server is rezzed when it matters, and advancing keeps enough credits to
+    /// rez the ICE protecting that agenda.
+    /// </summary>
+    public const string V6 = "corp-heuristic-v6";
     /// <summary>The version new games and new manifests use.</summary>
-    /// <summary>V5 plans but has not shown a ladder gain yet (Wave 3), so new games keep V4.</summary>
-    public const string PolicyVersion = V4;
+    /// <summary>V5 plans but has not shown a ladder gain yet (Wave 3), so new games use V6, which doesn't plan.</summary>
+    public const string PolicyVersion = V6;
     /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>
-    public const string LatestHeuristic = V4;
-    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5];
+    public const string LatestHeuristic = V6;
+    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6];
 
     public CorpHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -32,7 +39,11 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
         Version = version;
         Generation = version switch { V2 => 1, V3 => 2, _ => 3 };
         Plans = version == V5;
+        Repairs = version == V6;
     }
+
+    /// <summary>Whether this version has the playtest repairs (V6).</summary>
+    private bool Repairs { get; }
 
     private bool Plans { get; }
 
@@ -85,14 +96,15 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
         var context = new HeuristicContext(features, catalog, configuration, Generation);
         return action.Kind switch
         {
-            ActionKind.GainCredit => Value(context.CreditValue + (context.Self.Credits < context.RezReserve ? 150 : 0), "economy/basic-credit-and-rez-reserve"),
+            ActionKind.GainCredit => Value(context.CreditValue + (context.Self.Credits < (Repairs ? ProtectionReserve(context) : context.RezReserve) ? 150 : 0),
+                "economy/basic-credit-and-rez-reserve"),
             ActionKind.DrawCard => Value(features.Board.HiddenZoneCounts.CorpDeck > 1 ? context.DrawValue : -10000, "economy/draw-reserve"),
             ActionKind.PlayCard => Play(context, Require<PlayCardParameters>(action)),
-            ActionKind.InstallCard => Install(context, Require<InstallCardParameters>(action)),
-            ActionKind.RezCard => Rez(context, Require<RezCardParameters>(action).CardId, Require<RezCardParameters>(action).CreditCost),
+            ActionKind.InstallCard => Install(context, Require<InstallCardParameters>(action), Repairs),
+            ActionKind.RezCard => Rez(context, Require<RezCardParameters>(action).CardId, Require<RezCardParameters>(action).CreditCost, Repairs),
             ActionKind.RezIce => Rez(context, Require<RunIceParameters>(action).IceId, Require<RunIceParameters>(action).CostQuote?.EffectiveCost
-                ?? context.Definition(Require<RunIceParameters>(action).IceId)?.Ice?.RezCost ?? 0),
-            ActionKind.AdvanceAgenda or ActionKind.AdvanceCard => Advance(context, Require<AdvanceCardParameters>(action)),
+                ?? context.Definition(Require<RunIceParameters>(action).IceId)?.Ice?.RezCost ?? 0, Repairs),
+            ActionKind.AdvanceAgenda or ActionKind.AdvanceCard => Advance(context, Require<AdvanceCardParameters>(action), Repairs),
             ActionKind.ScoreAgenda => Score(context, Require<ScoreAgendaParameters>(action)),
             ActionKind.TrashTaggedResource => Value(context.CardValue(context.Card(Require<TrashTaggedResourceParameters>(action).CardId), installed: true)
                 - Require<TrashTaggedResourceParameters>(action).CreditCost * context.CreditValue, "pressure/trash-tagged-resource"),
