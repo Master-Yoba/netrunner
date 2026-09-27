@@ -29,21 +29,24 @@ public sealed class CorpPlaytestRepairTests
     }
 
     [Fact]
-    public void V6RezzesTheUpgradeInTheServerBeingRun()
+    public void V6RezzesTheUpgradeInTheServerBeingRunOncePastItsIce()
     {
         if (!Official) return;
         // Actions 215–226: the Corp had 1 credit during a run on the remote holding
-        // AMAZE Amusements (rez cost 1) and passed every window; it should rez it.
-        bool rezzed = false;
+        // AMAZE Amusements (rez cost 1) and v4 passed every window. V6 waits while ICE
+        // can still stop the run, then rezzes once the Runner is past it.
+        bool rezzedPastIce = false;
         foreach (long sequence in new long[] { 215, 217, 221, 223, 226 })
         {
             (FullMatchDefinition definition, GameState state) = At(sequence);
             if (!state.PendingDecision!.LegalActions.Any(action => action.Kind == ActionKind.RezCard)) continue;
             Assert.Equal(ActionKind.PassPriority, Kind(state, Choose(definition, state, CorpHeuristicPolicy.V4)));
-            rezzed = Kind(state, Choose(definition, state, CorpHeuristicPolicy.V6)) == ActionKind.RezCard;
-            break;
+            bool rezzes = Kind(state, Choose(definition, state, CorpHeuristicPolicy.V6)) == ActionKind.RezCard;
+            bool pastIce = state.RunState!.CurrentIceIndex < 0;
+            Assert.Equal(pastIce, rezzes);
+            rezzedPastIce |= rezzes;
         }
-        Assert.True(rezzed, "V6 passed the window where it could rez the upgrade in the attacked server.");
+        Assert.True(rezzedPastIce, "V6 never rezzed the upgrade once the Runner was past the ICE.");
     }
 
     [Fact]
@@ -55,6 +58,33 @@ public sealed class CorpPlaytestRepairTests
         (FullMatchDefinition definition, GameState state) = At(180);
         Assert.Equal(ActionKind.AdvanceCard, Kind(state, Choose(definition, state, CorpHeuristicPolicy.V4)));
         Assert.NotEqual(ActionKind.AdvanceCard, Kind(state, Choose(definition, state, CorpHeuristicPolicy.V6)));
+    }
+
+    [Fact]
+    public async Task V6AdvancesAnAgendaThatNeedsMoreThanOneTurn()
+    {
+        if (!Official) return;
+        // Second playtest: Send a Message (five advancements) sat unadvanced in Remote 1
+        // from turn 5, although the Corp had 9–19 credits and full turns from turn 9.
+        FullMatchDefinition definition = RulesFuzzRunner.CreateDefinition("expanded-expanded", 1606944638175488647);
+        ReplayArtifact replay = EngineJson.Deserialize<ReplayArtifact>(File.ReadAllText(Path.Combine(AppContext.BaseDirectory,
+            "..", "..", "..", "Fixtures", "playtest-corp-advance-replay.json")), definition.Behavior, definition.Runtime);
+        GameState state = replay.InitialSnapshot.ToState();
+        int v4Advances = 0, v6Advances = 0;
+        foreach (ReplayAction action in replay.Actions)
+        {
+            PendingDecision pending = state.PendingDecision!;
+            if (state.Turn.TurnNumber >= 9 && pending.Kind == DecisionKind.TurnAction
+                && state.GetPlayer(pending.Owner).Side == PlayerSide.Corp
+                && pending.LegalActions.Any(legal => legal.Kind == ActionKind.AdvanceCard))
+            {
+                if (Kind(state, await ChooseAsync(definition, state, CorpHeuristicPolicy.V4)) == ActionKind.AdvanceCard) v4Advances++;
+                if (Kind(state, await ChooseAsync(definition, state, CorpHeuristicPolicy.V6)) == ActionKind.AdvanceCard) v6Advances++;
+            }
+            state = GameEngine.Apply(state, action.Submission, definition.Behavior, definition.Runtime).State;
+        }
+        Assert.Equal(0, v4Advances);
+        Assert.True(v6Advances > 0, "V6 never advanced the five-advancement agenda.");
     }
 
     private static ReplayArtifact? _replay;
@@ -84,6 +114,9 @@ public sealed class CorpPlaytestRepairTests
     }
 
     private static ActionKind Kind(GameState state, ActionId id) => state.PendingDecision!.LegalActions.Single(action => action.Id == id).Kind;
+
+    private static async Task<ActionId> ChooseAsync(FullMatchDefinition definition, GameState state, string version) =>
+        await Task.Run(() => Choose(definition, state, version));
 
     /// <summary>A fresh Standard Corp of <paramref name="version"/> that has observed <paramref name="state"/>.</summary>
     private static ActionId Choose(FullMatchDefinition definition, GameState state, string version)

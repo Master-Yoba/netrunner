@@ -125,8 +125,10 @@ public sealed partial class CorpHeuristicPolicy
         int ice = context.ServerOf(card.Id)?.Ice.Length ?? 0;
         int score = finish ? 600 + definition.Printed.AgendaPoints * 50 : 30 + ice * 35;
         // v4: an agenda too large to finish in one turn is advanced now so that
-        // a full next turn finishes it, but only behind ICE.
-        if (!finish && context.Generation >= 3 && ice > 0 && remaining - 1 <= 3)
+        // a full next turn finishes it, but only behind ICE. v6: counting every
+        // click left this turn, so a five-advancement agenda also gets there.
+        if (!finish && context.Generation >= 3 && ice > 0
+            && (repairs ? remaining - context.Self.Clicks <= 3 : remaining - 1 <= 3))
             score = 180 + definition.Printed.AgendaPoints * 40;
         if (!finish && context.Self.Credits <= context.RezReserve) score -= 200;
         // v6: advancing spends a credit; don't spend the one that rezzes this agenda's ICE.
@@ -148,9 +150,12 @@ public sealed partial class CorpHeuristicPolicy
         }
         // v6: an upgrade in the server being run on works now or never, so it
         // isn't held back for ICE the Runner has already passed or chosen not to face.
+        // It waits until the Runner is past the server's ICE, which may still stop the run.
         bool attacked = context.Features.Board.Run?.AttackedServer is { } attackedServer && attackedServer == server?.Id;
         if (repairs && attacked && definition?.Printed.CardClass == RuntimeCardClass.Upgrade && cost <= context.Self.Credits)
-            return Value(Math.Max(120, context.ServerValue(server) / 2) - cost * 30, "rez/upgrade-in-attacked-server", approximate: true);
+            return context.Features.Board.Run!.CurrentIceIndex < 0
+                ? Value(Math.Max(120, context.ServerValue(server) / 2) - cost * 30, "rez/upgrade-in-attacked-server", approximate: true)
+                : Value(-10, "rez/upgrade-wait-for-server");
         if (context.Self.Credits - cost < context.RezReserve) return Value(-300, "rez/preserve-ice-budget");
         if (definition?.Printed.CardClass == RuntimeCardClass.Asset)
         {

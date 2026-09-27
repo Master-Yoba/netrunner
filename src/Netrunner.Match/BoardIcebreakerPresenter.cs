@@ -24,6 +24,10 @@ public static class BoardIcebreakerPresenter
         EncounterViewModel encounter = view.Run!.Encounter!;
         LegalActionViewModel[] actions = EncounterActions(view, view.LegalActions).Where(action => Source(action) == cardId).ToArray();
         EncounterBreakerViewModel? strength = encounter.Breakers.FirstOrDefault(breaker => breaker.CardId == cardId);
+        // Pumped strength lasts only this encounter, so once the breaker matches
+        // the ICE a pump only wastes credits; it stays in the full action list.
+        if (strength is not null && encounter.EffectiveStrength is { } ice && strength.EffectiveStrength >= ice)
+            actions = [.. actions.Where(action => action.Kind != ActionKind.PumpBreaker)];
         return actions.Length == 0 && strength?.CanInterfaceEncounter != true ? null : new(encounter.Id, card, encounter, strength, actions);
     }
 

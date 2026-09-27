@@ -20,8 +20,9 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// <summary>
     /// V4 choices with playtest repairs: an install that must replace a remote's
     /// agenda or asset pays for what it trashes, an upgrade in the attacked
-    /// server is rezzed when it matters, and advancing keeps enough credits to
-    /// rez the ICE protecting that agenda.
+    /// server is rezzed once the Runner is past its ICE, advancing keeps enough
+    /// credits to rez the ICE protecting that agenda, and an agenda that needs
+    /// more than a turn is advanced toward finishing next turn.
     /// </summary>
     public const string V6 = "corp-heuristic-v6";
     /// <summary>The version new games and new manifests use.</summary>
