@@ -46,13 +46,15 @@ public sealed class TurnPlannerTests
     {
         foreach (PlayerSide side in new[] { PlayerSide.Corp, PlayerSide.Runner })
         {
-            OfflineAgentConfiguration easy = OfflinePolicies.Configure(side, "easy", 1);
+            OfflineAgentConfiguration easy = OfflinePolicies.Configure(side, "easy", 1, Planning(side));
             Assert.Equal(0, easy.Parameters["plan-samples"]);
-            Assert.True(OfflinePolicies.Configure(side, "standard", 1).Parameters["plan-samples"] > 0);
+            Assert.True(OfflinePolicies.Configure(side, "standard", 1, Planning(side)).Parameters["plan-samples"] > 0);
         }
     }
 
     private const int TurnPlannerPriority = 1_000_000;
+
+    private static string Planning(PlayerSide side) => side == PlayerSide.Corp ? CorpHeuristicPolicy.V5 : RunnerHeuristicPolicy.V3;
 
     private static bool Official => CardDataResource.EmbeddedMode == CardDataResource.OfficialMode;
 
@@ -66,7 +68,8 @@ public sealed class TurnPlannerTests
     /// <summary>A fresh Standard agent that has observed <paramref name="state"/> as its first position.</summary>
     private static OfflineAgent AgentAt(FullMatchDefinition definition, GameState state, PlayerSide side)
     {
-        OfflineAgent fresh = OfflineMatchFactory.CreateOpponent(definition, side == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp);
+        OfflineAgent fresh = OfflineMatchFactory.CreateOpponent(definition, side == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp,
+            "standard", Planning(side));
         OfflineAgentCheckpoint checkpoint = state.ActionSequence == 0 ? fresh.Checkpoint
             : fresh.Checkpoint with { ObservationCursor = state.ActionSequence - 1, ObservationDigest = "position" };
         var agent = new OfflineAgent(fresh.Configuration, OfflinePolicies.Create(fresh.Configuration),

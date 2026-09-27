@@ -18,7 +18,8 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// <summary>V4 choices, with turn actions planned by rollouts over sampled states (A3).</summary>
     public const string V5 = "corp-heuristic-v5";
     /// <summary>The version new games and new manifests use.</summary>
-    public const string PolicyVersion = V5;
+    /// <summary>V5 plans but has not shown a ladder gain yet (Wave 3), so new games keep V4.</summary>
+    public const string PolicyVersion = V4;
     /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>
     public const string LatestHeuristic = V4;
     public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5];

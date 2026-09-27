@@ -41,10 +41,11 @@ public static class RatingLadder
     /// "standard" are the latest policy versions; the "-m5" entrants are the
     /// frozen M5 policies (Runner v1, Corp v2), "standard-w1" the Wave 1
     /// policies (Runner v2, Corp v3) and "standard-w2" the last policies that
-    /// don't plan (Runner v2, Corp v4), for before/after comparisons.
+    /// don't plan (Runner v2, Corp v4), for before/after comparisons;
+    /// "standard-plan" is the A3 turn planner (Runner v3, Corp v5).
     /// </summary>
     public static IReadOnlyList<string> EntrantOrder { get; } =
-        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard"];
+        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard", "standard-plan"];
 
     private const double EloScale = 400 / 2.302585092994046;
     private const double Ridge = 0.01;
@@ -92,6 +93,8 @@ public static class RatingLadder
             "standard-w1" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V3 : RunnerHeuristicPolicy.V2),
             "standard-w2" => OfflineMatchFactory.CreateOpponent(definition, other, "standard", OfflinePolicies.LatestHeuristic(side)),
+            "standard-plan" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
+                side == PlayerSide.Corp ? CorpHeuristicPolicy.V5 : RunnerHeuristicPolicy.V3),
             _ => throw new ArgumentException($"Unknown ladder entrant '{entrant}'.", nameof(entrant)),
         };
     }

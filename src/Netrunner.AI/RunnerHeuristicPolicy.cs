@@ -12,7 +12,8 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// <summary>V2 choices, with turn actions planned by rollouts over sampled states (A3).</summary>
     public const string V3 = "runner-heuristic-v3";
     /// <summary>The version new games and new manifests use.</summary>
-    public const string PolicyVersion = V3;
+    /// <summary>V3 plans but has not shown a ladder gain yet (Wave 3), so new games keep V2.</summary>
+    public const string PolicyVersion = V2;
     /// <summary>The latest version that never plans: the planner's model of the Runner.</summary>
     public const string LatestHeuristic = V2;
     public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3];
