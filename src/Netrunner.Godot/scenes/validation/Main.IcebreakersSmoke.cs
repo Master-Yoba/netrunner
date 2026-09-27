@@ -42,7 +42,9 @@ public partial class Main
 				"Boost did not pay the selected hosted credit exactly once and refresh the selected breaker.");
 			SubmitBoardIcebreaker(oldDecision, oldPump);
 			RequireInteraction(_labSubmissionCount == 1, "A stale boost submitted again.");
-			RequireInteraction(_boardBreakerButtons.Count == 1 && _boardChooseBreak?.Disabled == false, "Break selection did not become available after boosting.");
+			// At the ICE's strength a further boost only wastes credits, so the panel offers none.
+			RequireInteraction(_boardBreakerButtons.Count == 0 && _boardChooseBreak?.Disabled == false,
+				"Break selection did not become available after boosting, or a wasted boost was still offered.");
 
 			await ClickBreaker("lab-decoder");
 			RequireInteraction(_boardBreakerId is null && !_icebreakerPanel.Visible && _boardBreakerButtons.Count == 0 && _labSubmissionCount == 1,
