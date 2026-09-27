@@ -317,6 +317,27 @@ A fourth playtest (Corp, on invisible windows) found:
 The window smoke now also checks that hand cards can be dragged during a
 window, and the full-match smokes press the controls the player sees.
 
+A fifth playtest found:
+
+| Report | Cause | Change |
+|---|---|---|
+| The Runner went through an unrezzed Diviner on R&D without the Corp getting to rez it | Since the rez-usability change, auto-pass treated the ICE's approach window like any other rez window: before the Runner is past the ICE, it passed | A rez of ICE protecting the attacked server always stops the player; a regression test replays the playtest and checks every such window |
+| Clicking a hand card still put buttons over the hand | The contextual chips sit beside the selected card, which in the hand covers its neighbours | A hand card's actions stay in the dock, and a card with several install destinations lights them on the board, as a drag does |
+
+A rez-window audit then replayed 120 Standard self-play games and checked
+every Corp window offering a rez. No ICE rez was passed. Upgrades in the
+attacked server stop once the Runner is past the ICE, including servers with
+no ICE, where that's the start of the run. The only window where the bot
+rezzed but auto-pass passes was Nico Campaign during a run on another server,
+which can wait for the stop before the Corp's turn. Urtica Cipher works
+unrezzed. A lighter version (24 games) is now a regression test.
+
+The expanded decks are now the default in the menu, and the only decks that
+fuzzing, the ladder, the tests and the client smokes play. The basic decks
+are a subset of their cards. The frozen `make m5-gate` suite keeps every
+pairing: it plays a fixed number of games either way, and changing it would
+mean re-freezing its baselines.
+
 Runner v4 against v2 on the ladder (official, 640 games, the Corp at v6):
 **+30 [−25, 84]**, so not weaker.
 
