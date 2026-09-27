@@ -57,6 +57,11 @@ public static partial class CliCommands
             return RunFuzz(args, output, error);
         }
 
+        if (args.Length > 0 && args[0] == "presentation-audit")
+        {
+            return RunPresentationAudit(args, output, error);
+        }
+
         if (args.Length > 0 && args[0] == "fuzz-repro")
         {
             return RunFuzzRepro(args, output, error);
