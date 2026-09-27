@@ -372,3 +372,9 @@ Runner v4 against v2 on the ladder (official, 640 games, the Corp at v6):
 
 Gates ran with `NETRUNNER_TIMEOUT_SCALE=4`, on a 6-core Linux box with other
 jobs finished.
+
+After the playtest follow-ups (invisible windows, Runner v5, expanded decks
+only), `make verify`, `make m4-gate`, `make m5-client-smoke` and
+`make m5-gate` passed again before the merge, with frozen results unchanged
+(`strategic_policy_changed=false`). The performance run wasn't repeated: it
+times the frozen manifest's pinned policies, and no engine code changed since.
