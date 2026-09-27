@@ -23,7 +23,17 @@ public partial class BeatPresenter : Control
 	private double _remaining;
 
 	public GameTableControl Board { get; set; } = null!;
-	public bool ReducedMotion { get; set; }
+
+	/// <summary>Speed, fast opponent and reduced motion, from the settings.</summary>
+	public BeatPacing Pacing { get; set; } = new();
+
+	/// <summary>The local seat: its own low-emphasis beats play briefly.</summary>
+	public PlayerSide Viewer { get; set; } = PlayerSide.Runner;
+
+	private bool ReducedMotion => Pacing.ReducedMotion;
+
+	/// <summary>Raised as each beat starts to play, for capture evidence.</summary>
+	public event Action<Beat>? BeatStarted;
 
 	/// <summary>Beats shown since the session started, for capture evidence.</summary>
 	public List<(PresentationEventKind Kind, string Caption)> Played { get; } = [];
@@ -55,21 +65,18 @@ public partial class BeatPresenter : Control
 		AddChild(_banner);
 	}
 
-	/// <summary>Queues beats and returns their total length at <paramref name="speed"/>, in seconds.</summary>
-	public double Play(IReadOnlyList<Beat> beats, double speed)
+	/// <summary>Queues beats and returns their total length at the current <see cref="Pacing"/>, in seconds.</summary>
+	public double Play(IReadOnlyList<Beat> beats)
 	{
 		double total = 0;
 		foreach (Beat beat in beats)
 		{
 			_queue.Enqueue(beat);
-			total += Length(beat, speed);
+			total += Pacing.Seconds(beat, Viewer);
 		}
-		_speed = speed;
 		if (_remaining <= 0) Next();
 		return total;
 	}
-
-	private double _speed = 1;
 
 	/// <summary>Drops every queued beat and clears the board's beat effects (skip, new game).</summary>
 	public void Stop()
@@ -98,23 +105,20 @@ public partial class BeatPresenter : Control
 		if (_linger <= 0) _banner.Visible = false;
 	}
 
-	// Reduced motion removes movement, not reading time.
-	private double Length(Beat beat, double speed) =>
-		(beat.Seconds + (beat.Hold && !ReducedMotion ? 0.6 : 0)) / Math.Max(0.1, speed);
-
 	private void Next()
 	{
 		if (!_queue.TryDequeue(out Beat? beat))
 		{
 			_remaining = 0;
-			_linger = LingerSeconds / Math.Max(0.1, _speed);
+			_linger = LingerSeconds / Math.Max(0.1, Pacing.Speed);
 			return;
 		}
 		_linger = 0;
-		_remaining = Length(beat, _speed);
+		_remaining = Pacing.Seconds(beat, Viewer);
 		Played.Add((beat.Kind, beat.Caption));
 		Show(beat);
 		Direct(beat);
+		BeatStarted?.Invoke(beat);
 	}
 
 	private void Show(Beat beat)
@@ -138,6 +142,15 @@ public partial class BeatPresenter : Control
 	{
 		switch (beat.Kind)
 		{
+			case PresentationEventKind.TurnStarted:
+				Board.PulseStats(beat.Side);
+				break;
+			case PresentationEventKind.CardDrawn:
+				Board.PulseZone(beat.Side == PlayerSide.Corp ? ZoneKind.CorpDeck : ZoneKind.RunnerStack);
+				break;
+			case PresentationEventKind.CreditsChanged:
+				Board.PulseCredits(beat.Side);
+				break;
 			case PresentationEventKind.RunStarted:
 				Board.FocusServer(beat.ServerId);
 				break;
@@ -145,19 +158,39 @@ public partial class BeatPresenter : Control
 			case PresentationEventKind.EncounterStarted:
 				Board.EmphasizeCard(beat.CardKey, true);
 				break;
-			case PresentationEventKind.SubroutineFired:
 			case PresentationEventKind.SubroutinesBroken:
-			case PresentationEventKind.CardAdvanced:
-			case PresentationEventKind.CardRezzed:
+				Board.PulseCardKey(beat.CardKey);
+				Board.PulseCardKey(beat.SourceCardKey);
+				break;
 			case PresentationEventKind.AgendaScored:
 			case PresentationEventKind.AgendaStolen:
-			case PresentationEventKind.CardAccessed:
 				Board.PulseCardKey(beat.CardKey);
+				Board.PulseZone(beat.Kind == PresentationEventKind.AgendaScored ? ZoneKind.CorpScore : ZoneKind.RunnerScore);
+				break;
+			case PresentationEventKind.SubroutineFired:
+			case PresentationEventKind.CardAdvanced:
+			case PresentationEventKind.CardRezzed:
+			case PresentationEventKind.CardAccessed:
+			case PresentationEventKind.CardInstalled:
+			case PresentationEventKind.CardPlayed:
+			case PresentationEventKind.BreakerPumped:
+				Board.PulseCardKey(beat.CardKey);
+				break;
+			case PresentationEventKind.CardMoved:
+				Board.PulseZone(beat.ToZone);
+				break;
+			case PresentationEventKind.DamageDealt:
+				Board.FlashDamage();
+				Board.PulseZone(ZoneKind.RunnerHeap);
+				break;
+			case PresentationEventKind.TagsChanged:
+				Board.PulseStats(PlayerSide.Runner);
 				break;
 			case PresentationEventKind.ServerApproached:
 				Board.ReleaseEmphasis();
 				break;
 			case PresentationEventKind.RunEnded:
+			case PresentationEventKind.GameEnded:
 				Board.ClearBeatEffects();
 				break;
 		}

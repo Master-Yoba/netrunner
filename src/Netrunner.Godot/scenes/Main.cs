@@ -83,6 +83,9 @@ public partial class Main : Control
 	private GameSymbolLabel _zoomText = null!;
 	private HSlider _speed = null!;
 	private CheckButton _reducedMotion = null!;
+	private CheckButton _fastOpponent = null!;
+	private CheckButton _autoPass = null!;
+	private Button _stopAtWindow = null!;
 	private Button _skipAnimations = null!;
 	private PlayerSide? _lastFullMatchSetupOwner;
 	private bool _animationRunning;
@@ -988,6 +991,7 @@ public partial class Main : Control
 
 	private void RenderSnapshot(MatchSnapshot snapshot)
 	{
+		ApplyAutoPassSetting();
 		RefreshInspectedCard(snapshot.View);
 		MatchSnapshot? previous = _currentSnapshot;
 		bool decisionChanged = previous is null

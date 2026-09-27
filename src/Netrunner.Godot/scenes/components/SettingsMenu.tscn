@@ -40,7 +40,7 @@ anchor_right = 1.0
 offset_left = -366.0
 offset_right = -14.0
 offset_top = 54.0
-offset_bottom = 370.0
+offset_bottom = 470.0
 grow_horizontal = 0
 mouse_filter = 0
 theme_override_styles/panel = SubResource("panel")
@@ -82,6 +82,19 @@ max_value = 3.0
 step = 0.5
 value = 1.0
 accessibility_name = "Playback speed"
+
+[node name="FastOpponent" type="CheckButton" parent="Panel/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Fast opponent"
+tooltip_text = "Shorten the opponent's draws, credits and installs; runs, scores and damage keep their time."
+
+[node name="AutoPass" type="CheckButton" parent="Panel/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Auto-pass optional windows"
+button_pressed = true
+tooltip_text = "Pass priority windows where you have only paid abilities to use. Use Stop in the header to act in the next one."
 
 [node name="ScaleRow" type="HBoxContainer" parent="Panel/Content"]
 layout_mode = 2

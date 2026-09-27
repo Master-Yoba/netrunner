@@ -12,7 +12,10 @@ public static partial class CliCommands
     /// [--action-cap N] [--workers 1..64] [--captions N] [--output new-file] [--json]. Plays the
     /// fuzz plan's games through the coordinator from both seats and checks snap
     /// mismatches, caption leaks and, on official content, beat catalog coverage (UI plan U3); --captions
-    /// prints the first game's first N captions from each seat for review. Exit 0
+    /// prints the first game's first N captions from each seat for review.
+    /// --game-seeds A-B --preset basic|expanded [--side corp|runner] [--local contract]
+    /// instead plays those literal seeds of one preset pairing against the
+    /// Standard bot, as the client does, to choose a seed for a capture. Exit 0
     /// means clean, 1 means a defect, 2 means invalid arguments.
     /// </summary>
     private static int RunPresentationAudit(string[] args, TextWriter output, TextWriter error)
@@ -25,6 +28,10 @@ public static partial class CliCommands
         int workers = 1;
         int captions = 0;
         string? destination = null;
+        (ulong From, ulong To)? gameSeeds = null;
+        string? preset = null;
+        PlayerSide[]? seats = null;
+        bool contractLocal = false;
         try
         {
             var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -60,6 +67,33 @@ public static partial class CliCommands
                         if (!int.TryParse(args[++index], NumberStyles.None, CultureInfo.InvariantCulture, out captions) || captions is < 1 or > 400)
                             throw new ArgumentException("--captions requires an integer from 1 to 400.");
                         break;
+                    case "--game-seeds" when index + 1 < args.Length:
+                        string[] range = args[++index].Split('-');
+                        if (range.Length != 2 || !ulong.TryParse(range[0], NumberStyles.None, CultureInfo.InvariantCulture, out ulong from)
+                            || !ulong.TryParse(range[1], NumberStyles.None, CultureInfo.InvariantCulture, out ulong to) || to < from || to - from >= 10_000)
+                            throw new ArgumentException("--game-seeds requires FROM-TO with at most 10000 seeds.");
+                        gameSeeds = (from, to);
+                        break;
+                    case "--preset" when index + 1 < args.Length:
+                        preset = args[++index];
+                        if (preset is not ("basic" or "expanded")) throw new ArgumentException("--preset requires basic or expanded.");
+                        break;
+                    case "--side" when index + 1 < args.Length:
+                        seats = args[++index] switch
+                        {
+                            "corp" => [PlayerSide.Corp],
+                            "runner" => [PlayerSide.Runner],
+                            _ => throw new ArgumentException("--side requires corp or runner."),
+                        };
+                        break;
+                    case "--local" when index + 1 < args.Length:
+                        contractLocal = args[++index] switch
+                        {
+                            "contract" => true,
+                            "random" => false,
+                            _ => throw new ArgumentException("--local requires contract or random."),
+                        };
+                        break;
                     case "--output" when index + 1 < args.Length:
                         destination = args[++index];
                         if (File.Exists(destination) || Directory.Exists(destination))
@@ -68,6 +102,7 @@ public static partial class CliCommands
                     default: throw new ArgumentException($"Unsupported presentation-audit argument '{args[index]}'.");
                 }
             }
+            if ((gameSeeds is null) != (preset is null)) throw new ArgumentException("--game-seeds and --preset go together.");
             if (content == "official" && CardDataResource.EmbeddedMode != CardDataResource.OfficialMode)
                 throw new ArgumentException("An official audit needs previously provisioned official content embedded at build time.");
         }
@@ -78,9 +113,14 @@ public static partial class CliCommands
             return 2;
         }
 
-        IReadOnlyList<FuzzGameCase> cases = RulesFuzzRunner.Plan(games, seed,
-            content == "developer" ? [RulesFuzzRunner.DeveloperContentId] : RulesFuzzRunner.OfficialContentIds);
-        IReadOnlyList<PresentationAuditGame> results = PresentationAudit.RunAsync(cases, workers, actionCap).GetAwaiter().GetResult();
+        IReadOnlyList<FuzzGameCase> cases = gameSeeds is { } literal
+            ? [.. Enumerable.Range(0, (int)(literal.To - literal.From + 1)).Select(offset => literal.From + (ulong)offset)
+                .Select(value => new FuzzGameCase($"{preset}-{value}", content == "developer" ? RulesFuzzRunner.DeveloperContentId
+                    : $"{preset}-{preset}", value, FuzzAgentKind.Heuristic, FuzzAgentKind.Heuristic))]
+            : RulesFuzzRunner.Plan(games, seed,
+                content == "developer" ? [RulesFuzzRunner.DeveloperContentId] : RulesFuzzRunner.OfficialContentIds);
+        IReadOnlyList<PresentationAuditGame> results = PresentationAudit.RunAsync(cases, workers, actionCap, seats, contractLocal)
+            .GetAwaiter().GetResult();
         var kinds = new SortedDictionary<PresentationEventKind, int>();
         foreach (PresentationAuditGame game in results)
             foreach ((PresentationEventKind kind, int count) in game.BeatKinds) kinds[kind] = kinds.GetValueOrDefault(kind) + count;
@@ -131,6 +171,10 @@ public static partial class CliCommands
             output.WriteLine("beat-kinds " + string.Join(" ", kinds.Select(pair => $"{pair.Key}={pair.Value}")));
             foreach (PresentationAuditGame game in results.Take(2))
                 foreach (string caption in game.Captions.Take(captions)) output.WriteLine($"caption {game.Viewer}: {caption}");
+            if (gameSeeds is not null)
+                foreach (PresentationAuditGame game in results)
+                    output.WriteLine($"seed {game.Case.GameSeed} {game.Viewer} terminal={game.Terminal} missing="
+                        + string.Join(",", PresentationAudit.Catalog.Where(kind => !game.BeatKinds.ContainsKey(kind))));
             if (missing.Length > 0) (content == "developer" ? output : error).WriteLine("missing catalog beats: " + string.Join(", ", missing));
             foreach (PresentationAuditGame game in results.Where(game => game.Failure is not null))
                 error.WriteLine($"failure {game.Case.Id} {game.Viewer}: {game.Failure}");

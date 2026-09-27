@@ -26,6 +26,12 @@ public partial class Main
 		header.GetNode<Button>("NewGame").Pressed += () => GetTree().ReloadCurrentScene();
 		_reducedMotion = _settingsMenu.GetNode<CheckButton>("%ReducedMotion");
 		_reducedMotion.Toggled += reduced => { if (reduced) { _tablePlaybackWait = 0; _gameTable.StopMotion(); } };
+		_fastOpponent = _settingsMenu.GetNode<CheckButton>("%FastOpponent");
+		_autoPass = _settingsMenu.GetNode<CheckButton>("%AutoPass");
+		_autoPass.Toggled += _ => ApplyAutoPassSetting();
+		_stopAtWindow = header.GetNode<Button>("StopAtWindow");
+		_stopAtWindow.Toggled += stop => _coordinator?.StopAtNextWindow(stop);
+		_stopAtWindow.Visible = false;
 		_speed = _settingsMenu.GetNode<HSlider>("%Speed");
 		_speed.ValueChanged += value => _settingsMenu.GetNode<Label>("%SpeedLabel").Text = $"Playback speed · {value:0.#}×";
 		_settingsMenu.GetNode<OptionButton>("%Scale").ItemSelected += index =>
@@ -41,6 +47,21 @@ public partial class Main
 		_settingsMenu.GetNode<Button>("%SaveGame").Pressed += () => ShowSaveGame(false);
 		_settingsMenu.GetNode<Button>("%LoadGame").Pressed += ShowSaveBrowser;
 		_settingsMenu.GetNode<Button>("%SaveAndQuit").Pressed += () => ShowSaveGame(true);
+	}
+
+	/// <summary>
+	/// Passes the player's optional windows when the setting is on (U3 auto-pass).
+	/// Scripted smoke, gate and capture runs keep every window, as they always have.
+	/// </summary>
+	private void ApplyAutoPassSetting()
+	{
+		if (_autoPass is null || _stopAtWindow is null) return;
+		bool scripted = OS.GetCmdlineUserArgs().Any(arg => arg.Contains("smoke", StringComparison.Ordinal)
+			|| arg.Contains("capture", StringComparison.Ordinal) || arg.Contains("gate", StringComparison.Ordinal));
+		bool on = _autoPass.ButtonPressed && !scripted && !_interactionLab && _coordinator is not null;
+		if (_coordinator is { } coordinator && coordinator.AutoPassWindows != on) coordinator.AutoPassWindows = on;
+		_stopAtWindow.Visible = on;
+		_stopAtWindow.SetPressedNoSignal(on && _coordinator!.StopAtNextWindowRequested);
 	}
 
 	private void SetSettingsVisible(bool visible)

@@ -31,6 +31,7 @@ given. It contains:
 | `--capture-interval-ms` | 150 | Time between frames |
 | `--capture-max-actions` | 800 | Stop after this many local actions |
 | `--capture-pace-ms` | 500 | Wait before each local action |
+| `--capture-catalog` | off | Burst on the first play of each U3 catalog beat instead of on engine events, play to the end of the game, and list missing catalog beats in `capture.json` (`catalogMissing`) |
 
 The command prints `UI_CAPTURE PASS ...` and exits 0, or prints
 `UI_CAPTURE FAIL ...` and exits nonzero.

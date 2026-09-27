@@ -43,21 +43,28 @@ public static class PresentationAudit
 
     private const int CaptionSample = 400;
 
+    /// <summary>
+    /// Audits every case from the given seats. <paramref name="contractLocal"/>
+    /// plays the local seat with the scripted contract agent the capture
+    /// harness uses, so a seed can be chosen for a capture headlessly.
+    /// </summary>
     public static async Task<IReadOnlyList<PresentationAuditGame>> RunAsync(IReadOnlyList<FuzzGameCase> cases, int workers,
-        int actionCap, CancellationToken cancellationToken = default)
+        int actionCap, IReadOnlyList<PlayerSide>? seats = null, bool contractLocal = false,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(cases);
-        var work = cases.SelectMany(fuzzCase => new[] { (fuzzCase, PlayerSide.Corp), (fuzzCase, PlayerSide.Runner) }).ToArray();
+        seats ??= [PlayerSide.Corp, PlayerSide.Runner];
+        var work = cases.SelectMany(fuzzCase => seats.Select(seat => (fuzzCase, seat))).ToArray();
         var results = new ConcurrentDictionary<int, PresentationAuditGame>();
         await Parallel.ForEachAsync(Enumerable.Range(0, work.Length),
             new ParallelOptions { MaxDegreeOfParallelism = workers, CancellationToken = cancellationToken },
-            async (index, cancellation) => results[index] = await AuditAsync(work[index].fuzzCase, work[index].Item2, actionCap,
-                cancellation).ConfigureAwait(false)).ConfigureAwait(false);
+            async (index, cancellation) => results[index] = await AuditAsync(work[index].fuzzCase, work[index].seat, actionCap,
+                contractLocal, cancellation).ConfigureAwait(false)).ConfigureAwait(false);
         return [.. Enumerable.Range(0, work.Length).Select(index => results[index])];
     }
 
     public static async Task<PresentationAuditGame> AuditAsync(FuzzGameCase fuzzCase, PlayerSide viewer, int actionCap,
-        CancellationToken cancellationToken = default)
+        bool contractLocal = false, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(fuzzCase);
         FullMatchDefinition definition = RulesFuzzRunner.CreateDefinition(fuzzCase.ContentId, fuzzCase.GameSeed);
@@ -66,7 +73,9 @@ public static class PresentationAudit
         IGameAgent bot = opponentKind == FuzzAgentKind.Heuristic
             ? OfflineMatchFactory.CreateOpponent(definition, viewer)
             : new RandomLegalAgent(AgentLifecycleHost.DerivePolicySeed(fuzzCase.GameSeed, opponent));
-        var local = new RandomLegalAgent(AgentLifecycleHost.DerivePolicySeed(fuzzCase.GameSeed, viewer));
+        IGameAgent local = contractLocal
+            ? new FullGameContractAgent(new FullGameContractPolicy(viewer), definition.Runtime)
+            : new RandomLegalAgent(AgentLifecycleHost.DerivePolicySeed(fuzzCase.GameSeed, viewer));
         var snapshots = new ConcurrentQueue<MatchSnapshot>();
         string? failure = null;
         await using (var coordinator = new MatchCoordinator(definition, bot, new MatchCoordinatorOptions { HumanSide = viewer }))
