@@ -1565,6 +1565,9 @@ public static partial class GameEngine
                 }
 
                 TrashCard(working, target, rig, GetZone(working, ZoneKind.RunnerHeap));
+                // The trash may end run effects on the card (a pumped breaker's boost);
+                // keep this cursor's run in step so they aren't written back.
+                run = working.RunState ?? run;
                 break;
             case IceSubroutineChoiceKind.PayCredits:
                 if (specification is not PayCreditsOrTagSubroutineSpec paySpec
@@ -2424,7 +2427,11 @@ public static partial class GameEngine
                 GetCard(working, card.Id).AdvancementCounters));
         }
         Emit(working, EngineEventKinds.AccessedCardTrashed, new AccessedCardTrashedEventPayload(run.Id, accessed, spec.TrashCost));
-        AdvanceBreachAfterAccess(working, run);
+        // As with a steal: when a trigger waits on the trash (René "Loup" Arcemont),
+        // the next breach decision is yielded only after that trigger resolves;
+        // yielding it now left the occurrence frame stranded beneath the prompt.
+        bool hasTrashTrigger = HasActiveCatalogTrigger(working, OccurrenceKind.AccessedCardTrashed);
+        AdvanceBreachAfterAccess(working, run, yieldDecision: !hasTrashTrigger);
         QueueIdentityOccurrence(working, OccurrenceKind.AccessedCardTrashed, PlayerSide.Runner, accessed);
     }
 

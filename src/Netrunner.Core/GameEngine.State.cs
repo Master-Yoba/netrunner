@@ -71,6 +71,10 @@ public static partial class GameEngine
         {
             ClearCardCounters(working, card.Id);
         }
+        if (leavesInstalledZone)
+        {
+            ClearRunValueAdjustments(working, card.Id);
+        }
 
         if (emit)
         {
@@ -127,6 +131,19 @@ public static partial class GameEngine
 
         MoveCard(working, card, source, destination, emit, cleanupCounters, emitMemoryAdjustment);
         RecordTurnTrash(working, card.Id);
+    }
+
+    /// <summary>
+    /// A run strength adjustment on a card ends when that card leaves play: a
+    /// breaker trashed mid-encounter (Ansel 1.0 trashing a pumped Unity, Wave 4
+    /// C1) keeps no boost, and nothing else may point at a card no longer installed.
+    /// </summary>
+    private static void ClearRunValueAdjustments(WorkingState working, CardInstanceId cardId)
+    {
+        if (working.RunState is not { } run
+            || !run.LingeringEffects.Any(effect => effect.ValueAdjustment?.TargetCardId == cardId)) return;
+        working.RunState = run.WithLingeringEffects(run.LingeringEffects
+            .Where(effect => effect.ValueAdjustment?.TargetCardId != cardId).ToArray());
     }
 
     private static bool IsInstalledZone(ZoneKind kind) =>
