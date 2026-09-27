@@ -36,6 +36,10 @@ given. It contains:
 The command prints `UI_CAPTURE PASS ...` and exits 0, or prints
 `UI_CAPTURE FAIL ...` and exits nonzero.
 
+Set `NETRUNNER_GODOT_ARGS` to pass engine options, for example
+`NETRUNNER_GODOT_ARGS="--resolution 2560x1440"` for a 2560 capture on a display
+that size.
+
 ## Displays
 
 The harness needs a real renderer; Godot's `--headless` mode draws nothing.

@@ -24,7 +24,7 @@ public partial class Main
 	private bool _fullMatchSmoke;
 	private bool _m4FullMatchSmoke;
 	private PlayerSide _fullMatchSmokeSide = PlayerSide.Runner;
-	private string _fullMatchSmokePreset = "basic";
+	private string _fullMatchSmokePreset = "expanded";
 	private ulong _fullMatchSmokeSeed = 47042;
 	private bool _gallerySmokePassed;
 	private int _smokeStarted;
@@ -113,6 +113,10 @@ public partial class Main
 		else if (arguments.Contains("--interaction-lab", StringComparer.Ordinal))
 		{
 			OpenInteractionLab();
+		}
+		else if (arguments.Contains("--invisible-window-smoke", StringComparer.Ordinal))
+		{
+			_ = RunInvisibleWindowSmokeAsync();
 		}
 		else if (arguments.Contains("--m4-9-ui-smoke", StringComparer.Ordinal))
 		{

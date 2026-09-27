@@ -27,10 +27,9 @@ public sealed partial class MatchCoordinator
         var completion = new TaskCompletionSource<MatchSnapshot>(TaskCreationOptions.RunContinuationsAsynchronously);
         void Observe(MatchSnapshot snapshot)
         {
-            bool inRun = snapshot.View.Run is { EndReason: null };
             if (snapshot.IsPaused || snapshot.IsTerminal || snapshot.Feedback?.IsError == true
                 || snapshot.AwaitingHumanDecision && !AutoPasses(snapshot.Observation.DecisionId, snapshot.Observation.LegalActions,
-                    inRun, inRun && snapshot.View.Run!.Encounter is { Status: RunEncounterStatus.Initialized }))
+                    PriorityWindow.From(snapshot.View, _behaviorCatalog)))
                 completion.TrySetResult(snapshot);
         }
         SnapshotPublished += Observe;
@@ -73,10 +72,10 @@ public sealed partial class MatchCoordinator
     /// <summary>Holds the next optional window open for the player instead of passing it; calling again cancels.</summary>
     public void StopAtNextWindow(bool stop = true) => _stopAtNextWindow = stop;
 
-    private bool AutoPasses(string decisionId, IReadOnlyList<LegalAction> actions, bool inRun, bool encountering) =>
+    private bool AutoPasses(string decisionId, IReadOnlyList<LegalAction> actions, PriorityWindow window) =>
         _options.AutoPassPriority && (AutoPassPolicy.OnlyPass(actions)
             || _autoPassWindows && !_stopAtNextWindow && _heldWindow != decisionId
-                && AutoPassPolicy.OptionalWindow(actions, inRun, encountering));
+                && AutoPassPolicy.OptionalWindow(actions, window));
 
     private void PauseAtBoundary()
     {
@@ -125,16 +124,15 @@ public sealed partial class MatchCoordinator
         }
         else if (side == _options.HumanSide)
         {
-            bool inRun = state.RunState is { EndReason: null };
-            bool encountering = inRun && state.RunState!.Encounter is { Status: RunEncounterStatus.Initialized };
+            PriorityWindow window = PriorityWindow.From(state, side, _behaviorCatalog);
             // A stop request holds the next window the player would otherwise skip.
             if (_stopAtNextWindow && _options.AutoPassPriority && _autoPassWindows && !AutoPassPolicy.OnlyPass(pending.LegalActions)
-                && AutoPassPolicy.OptionalWindow(pending.LegalActions, inRun, encountering))
+                && AutoPassPolicy.OptionalWindow(pending.LegalActions, window))
             {
                 _heldWindow = pending.Id.Value;
                 _stopAtNextWindow = false;
             }
-            if (!AutoPasses(pending.Id.Value, pending.LegalActions, inRun, encountering)) return;
+            if (!AutoPasses(pending.Id.Value, pending.LegalActions, window)) return;
             CommitPumpAction(new(pending.Owner, pending.Id, pending.Revision, AutoPassPolicy.PassAction(pending.LegalActions)));
             return;
         }

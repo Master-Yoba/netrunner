@@ -35,6 +35,9 @@ public partial class Main
 			{
 				_seedInput.Text = "47042";
 				_humanSide.Select(0);
+				// This scripted game is the basic decks' (the menu defaults to expanded).
+				SelectPresetById(_corpPreset, _corpPresetIds, "system-gateway-basic-corp");
+				SelectPresetById(_runnerPreset, _runnerPresetIds, "system-gateway-basic-runner");
 				_startButton.EmitSignal(BaseButton.SignalName.Pressed);
 				_reducedMotion.ButtonPressed = true;
 				for (int choice = 0; choice < 12; choice++)
@@ -78,6 +81,9 @@ public partial class Main
 				RenderCardTableActions(_currentSnapshot);
 				SelectTableCard(((PlayCardParameters)eventPlay.Parameters).CardId.Value);
 				if (!_tableActionButtons.ContainsKey(eventPlay.Id)) throw new InvalidOperationException("Selecting a hand event did not offer its issued play action.");
+				// A hand card with several destinations lights them on the board; Esc returns to the table.
+				DismissBoardChoices();
+				ClearTableSelection();
 				string rdId = _currentSnapshot.View.Servers.Single(server => server.Kind == ServerKind.RAndD).Id;
 				LegalActionViewModel basicRun = _currentSnapshot.View.LegalActions.First(action => action.Parameters is RunServerParameters target && target.ServerId.Value == rdId);
 				string laneName = _gameTable.GetServerDisplayName(((RunServerParameters)basicRun.Parameters).ServerId.Value);
@@ -106,7 +112,7 @@ public partial class Main
 					{
 						CardViewModel? accessed = _currentSnapshot.View.Run.Access.Accessed[^1];
 						if (accessed is not { IsKnown: true } || !_tableAccessPanel.Visible
-							|| _tableAccessCard.Card?.Id != accessed.Id || _tableAccessTitle.Text != accessed.Title
+							|| _tableAccessCard.Card?.Id != accessed.Id || !_tableAccessTitle.Text.StartsWith(accessed.Title, StringComparison.Ordinal)
 							|| !_tableHistory.Entries.Any(entry => entry.Summary.Contains($"accesses {accessed.Title}", StringComparison.Ordinal)))
 							throw new InvalidOperationException("R&D access card or named history missing from the table.");
 						if (!_accessActionButtons.TryGetValue(next.Id, out Button? accessButton)
@@ -497,7 +503,7 @@ public partial class Main
 		if (_gameTable.GetServerDisplayName(hq.Id) != "HQ"
 			|| _gameTable.VisibleCards.Keys.Any(key => key.StartsWith($"slot:pile:{hq.Id}:", StringComparison.Ordinal)))
 			throw new InvalidOperationException("HQ has a remote label or decorative hand backs.");
-		if (!FindDescendants<Label>(_gameTable).Any(label => label.Text == $"ROOT · HQ · {view.CorpHand.Count} cards in hand"))
+		if (!FindDescendants<Label>(_gameTable).Any(label => label.IsVisibleInTree() && label.Text == $"HQ · {view.CorpHand.Count} cards"))
 			throw new InvalidOperationException("HQ public hand count is missing.");
 	}
 

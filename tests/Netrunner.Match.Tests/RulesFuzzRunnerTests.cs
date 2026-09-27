@@ -9,15 +9,15 @@ public sealed class RulesFuzzRunnerTests
     [Fact]
     public void PlanIsDeterministicAndCyclesContentAndPairings()
     {
-        IReadOnlyList<FuzzGameCase> first = RulesFuzzRunner.Plan(12, 5, RulesFuzzRunner.OfficialContentIds);
-        IReadOnlyList<FuzzGameCase> second = RulesFuzzRunner.Plan(12, 5, RulesFuzzRunner.OfficialContentIds);
+        IReadOnlyList<FuzzGameCase> first = RulesFuzzRunner.Plan(12, 5, RulesFuzzRunner.AllOfficialContentIds);
+        IReadOnlyList<FuzzGameCase> second = RulesFuzzRunner.Plan(12, 5, RulesFuzzRunner.AllOfficialContentIds);
 
         Assert.Equal(first, second);
         Assert.Equal(12, first.Select(fuzzCase => fuzzCase.GameSeed).Distinct().Count());
-        Assert.Equal(RulesFuzzRunner.OfficialContentIds, first.Take(4).Select(fuzzCase => fuzzCase.ContentId));
+        Assert.Equal(RulesFuzzRunner.AllOfficialContentIds, first.Take(4).Select(fuzzCase => fuzzCase.ContentId));
         Assert.Equal(RulesFuzzRunner.Pairings,
             first.Where((_, index) => index % 4 == 0).Select(fuzzCase => (fuzzCase.Corp, fuzzCase.Runner)));
-        Assert.NotEqual(first[0].GameSeed, RulesFuzzRunner.Plan(1, 6, RulesFuzzRunner.OfficialContentIds)[0].GameSeed);
+        Assert.NotEqual(first[0].GameSeed, RulesFuzzRunner.Plan(1, 6, RulesFuzzRunner.AllOfficialContentIds)[0].GameSeed);
     }
 
     [Fact]

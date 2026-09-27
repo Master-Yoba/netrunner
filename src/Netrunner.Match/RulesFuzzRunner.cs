@@ -67,8 +67,15 @@ public static class RulesFuzzRunner
     public const string DeveloperContentId = "developer";
     public const int DefaultActionCap = 3000;
 
-    /// <summary>Official preset pairings, in the benchmark's corp/runner order.</summary>
-    public static IReadOnlyList<string> OfficialContentIds { get; } =
+    /// <summary>
+    /// Official preset pairings that fuzzing, the ladder and the tests play: the
+    /// expanded decks only. The basic decks are a subset of their cards and aren't
+    /// what anyone plays, so they only cost time (27 September).
+    /// </summary>
+    public static IReadOnlyList<string> OfficialContentIds { get; } = ["expanded-expanded"];
+
+    /// <summary>Every official preset pairing, in the benchmark's corp/runner order (the frozen M5 suites).</summary>
+    public static IReadOnlyList<string> AllOfficialContentIds { get; } =
         ["basic-basic", "basic-expanded", "expanded-basic", "expanded-expanded"];
 
     /// <summary>Seat pairings cycled across games: random-random, random-heuristic and heuristic-random.</summary>

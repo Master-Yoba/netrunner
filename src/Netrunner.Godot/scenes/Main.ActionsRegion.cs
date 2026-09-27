@@ -266,6 +266,7 @@ public partial class Main
 			_status.Text = "Match is paused · press Continue before choosing an action.";
 			return;
 		}
+		if (_useCardTable && SubmitThroughWindow(decision, action)) return;
 		if (_useCardTable && _coordinator?.CurrentSnapshot is { } latest
 			&& (!SameDecision(decision, latest.View.Decision)
 				|| !latest.View.LegalActions.Any(candidate => candidate.Id == action.Id)))
@@ -298,6 +299,7 @@ public partial class Main
 			MatchSubmissionResult result = await coordinator.SubmitActionAsync(submission);
 			if (!IsCurrentSession(coordinator, generation)) return;
 			if (!result.Accepted) _boardDrag?.ReturnPendingDrop();
+			if (!result.Accepted) _turnIntent = null;
 			if (!result.Accepted && _spatialSubmission is not null)
 			{
 				_spatialSubmission = null;

@@ -76,6 +76,8 @@ public partial class Main
 			if (_currentSnapshot is { } snapshot) RenderCardTableActions(snapshot);
 		};
 		_tableAccessPanel = _tableViewport.GetNode<PanelContainer>("AccessPanel");
+		// Above card frames, highlights and pulses (at most 30), below card flights (70).
+		_tableAccessPanel.ZIndex = 60;
 		_tableAccessCard = _tableAccessPanel.GetNode<TableCardControl>("%Card");
 		_tableAccessCard.UseHoverPreview = true;
 		_tableAccessTitle = _tableAccessPanel.GetNode<Label>("%Title");
@@ -107,6 +109,8 @@ public partial class Main
 		_tableViewport.AddChild(_beats);
 		BuildBoardDrag();
 		BuildSettingsMenu();
+		BuildActionChips();
+		BuildEncounterOverlay();
 	}
 
 	private void SelectTableCard(string id)
@@ -122,8 +126,22 @@ public partial class Main
 		_tableAllActions = false;
 		_gameTable.SetSelection(id);
 		_gameTable.SetSelectedServer(null);
-		if (_currentSnapshot is { } snapshot) RenderCardTableActions(snapshot);
+		if (_currentSnapshot is not { } snapshot) return;
+		RenderCardTableActions(snapshot);
+		// A hand card with several install destinations lights them on the board, as
+		// a drag does, instead of listing them over the hand (playtest, 27 September).
+		// Events with several targets keep their labelled buttons in the dock.
+		if (snapshot.View.Decision is { } decision && decision.OwnerSide == snapshot.View.Viewer && InViewerHand(snapshot.View, id))
+		{
+			LegalActionViewModel[] candidates = snapshot.View.LegalActions
+				.Where(action => TableActionCardId(action.Parameters) == id).ToArray();
+			if (candidates.Length > 1 && candidates.All(action => action.Kind == ActionKind.InstallCard && IsBoardPlayInstallCandidate(action)))
+				StageBoardPlayChoices(decision, candidates);
+		}
 	}
+
+	private static bool InViewerHand(MatchViewModel view, string? cardId) => cardId is not null
+		&& (view.Viewer == PlayerSide.Corp ? view.CorpHand : view.RunnerHand).VisibleCards.Any(card => card.Id == cardId);
 
 	private void ClearTableSelection()
 	{
@@ -159,7 +177,8 @@ public partial class Main
 		CardViewModel? accessed = AccessActionsPresenter.Card(snapshot.View);
 		_tableAccessCard.SetCard(accessed);
 		_tableAccessPanel.Visible = accessed is { IsKnown: true };
-		_tableAccessTitle.Text = accessed?.Title ?? "";
+		_tableAccessTitle.Text = AccessTitle(accessed, snapshot.View);
+		RefreshRunOverlays(snapshot);
 		_gameTable.SetSelectedServer(_tableSelectedServer);
 		_gameTable.SetSelection(_tableSelectedCard);
 		if (snapshot.History.Count > 0) _tableLastAction.Text = snapshot.History[^1].Summary;
@@ -182,6 +201,7 @@ public partial class Main
 		try
 		{
 			ClearChildren(_tableActions);
+			ClearActionChips();
 			_tableActionButtons.Clear();
 			RefreshAccessActions(snapshot);
 			DecisionViewModel? decision = snapshot.View.Decision;
@@ -232,6 +252,8 @@ public partial class Main
 				return;
 			}
 			bool ordinary = decision.Kind is DecisionKind.TurnAction or DecisionKind.TurnTiming;
+			// A selected card's or server's own actions go beside it (U4).
+			bool contextual = false;
 			bool encounter = decision.Kind == DecisionKind.RunTiming && snapshot.View.Viewer == PlayerSide.Runner
 				&& snapshot.View.Run is { Step: RunTimingStep.EncounterPaidWindow, Encounter: not null };
 			IEnumerable<LegalActionViewModel> displayed = all;
@@ -256,8 +278,11 @@ public partial class Main
 					? TableActionCardId(a.Parameters) == _tableSelectedCard
 					: _tableSelectedServer is not null
 						? TableActionServerId(a.Parameters) == _tableSelectedServer
-						: a.Kind is ActionKind.PassPriority
+						: a.Kind is ActionKind.PassPriority or ActionKind.ScoreAgenda
 							or ActionKind.EndTurn or ActionKind.RemoveTag or ActionKind.PurgeVirusCounters);
+				// Hand cards keep their actions in the dock, so nothing covers the hand.
+				contextual = _tableSelectedCard is not null && !InViewerHand(snapshot.View, _tableSelectedCard)
+					|| _tableSelectedServer is not null;
 				if (_tableSelectedCard is not null || _tableSelectedServer is not null)
 					_tablePrompt.Text += " · Esc clears selection";
 				AddButton("All legal actions…", () => { _tableAllActions = true; RenderCardTableActions(snapshot); });
@@ -275,10 +300,25 @@ public partial class Main
 				HashSet<ActionId> spatialIds = spatial.Select(action => action.Action.Id).ToHashSet();
 				displayed = displayed.Where(action => !spatialIds.Contains(action.Id) && !_accessActionButtons.ContainsKey(action.Id));
 			}
-			foreach (LegalActionViewModel action in displayed)
+			AddAccessAllButton(snapshot, AddButton);
+			Container actionTarget = ActionContainerFor(contextual && displayed.Any());
+			// A score leads, and continuing past one asks twice (a misclicked pass lost an agenda).
+			bool scoreAvailable = all.Any(action => action.Kind == ActionKind.ScoreAgenda);
+			foreach (LegalActionViewModel action in displayed.OrderByDescending(action => action.Kind == ActionKind.ScoreAgenda))
 			{
-				Button button = AddButton(TableActionLabel(action), () =>
+				bool guarded = scoreAvailable && action.Kind == ActionKind.PassPriority;
+				string label = guarded
+					? SameDecision(_skipScoreDecision, decision) ? "Confirm: continue without scoring" : "Continue without scoring"
+					: TableActionLabel(action);
+				Button button = AddButtonTo(actionTarget, label, () =>
 				{
+					if (guarded && !SameDecision(_skipScoreDecision, decision))
+					{
+						_skipScoreDecision = decision;
+						RenderCardTableActions(snapshot);
+						return;
+					}
+					_skipScoreDecision = null;
 					if (ActionsRegionPresenter.IsTargetedAction(action)) StageTargetAction(decision, action);
 					else SubmitAction(decision, action);
 				});
@@ -286,12 +326,14 @@ public partial class Main
 				button.Disabled = _tableAwaitingSettlement || Volatile.Read(ref _submissionInFlight) != 0;
 				_tableActionButtons[action.Id] = button;
 			}
-			Button AddButton(string text, Action callback)
+			Button AddButton(string text, Action callback) => AddButtonTo(_tableActions, text, callback);
+			Button AddButtonTo(Container container, string text, Action callback)
 			{
 				Button button = CreateTableActionButton(text);
 				button.Disabled = _tableAwaitingSettlement;
 				button.Pressed += callback;
-				_tableActions.AddChild(button);
+				QuietFallback(button);
+				container.AddChild(button);
 				return button;
 			}
 		}
@@ -303,6 +345,8 @@ public partial class Main
 			RefreshBoardIcebreaker(snapshot);
 		}
 	}
+
+	private DecisionViewModel? _skipScoreDecision;
 
 	private static Button CreateTableActionButton(string text)
 	{
@@ -401,6 +445,9 @@ public partial class Main
 			text = text.Replace(id, control.Card?.Title ?? "face-down card", StringComparison.Ordinal);
 		text = Regex.Replace(text, @"server:\d+", match => _gameTable.GetServerDisplayName(match.Value));
 		text = Regex.Replace(text, @"card:\d+", "face-down card");
+		// Rules citations belong in the developer tooltip, not the play screen.
+		text = Regex.Replace(text, @"\bCR [\d.]+[a-z]?:\s*", "");
+		if (text.Length > 0) text = char.ToUpperInvariant(text[0]) + text[1..];
 		return text.Replace("Core", "the game", StringComparison.Ordinal);
 	}
 

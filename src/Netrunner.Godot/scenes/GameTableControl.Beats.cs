@@ -60,6 +60,10 @@ public partial class GameTableControl
 			PulseCard(card.GetGlobalRect());
 	}
 
+	/// <summary>Where a server's name sits on screen, for anchoring its action chips.</summary>
+	public Rect2? GetServerHeaderRect(string serverId) =>
+		_serverLanes.TryGetValue(serverId, out ServerLaneParts? lane) && lane.Header.IsVisibleInTree() ? lane.Header.GetGlobalRect() : null;
+
 	/// <summary>Flashes a public pile or score area a beat moved a card into or out of.</summary>
 	public void PulseZone(ZoneKind? zone)
 	{

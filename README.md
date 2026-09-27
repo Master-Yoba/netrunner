@@ -137,7 +137,7 @@ See [the M4.9 UI plan](docs/history/M4_9_UI_PLAN.md) and
 After `make m4-gate` has built the official content, run a preset directly:
 
 ```bash
-dotnet run --project src/Netrunner.Cli --no-build -- full-match --preset basic --seed 47042 --json
+dotnet run --project src/Netrunner.Cli --no-build -- full-match --preset expanded --seed 47042 --json
 dotnet run --project src/Netrunner.Cli --no-build -- full-match --preset expanded --seed 47042 --json
 ```
 

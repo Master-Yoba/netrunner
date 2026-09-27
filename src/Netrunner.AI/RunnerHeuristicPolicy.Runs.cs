@@ -13,12 +13,18 @@ public sealed partial class RunnerHeuristicPolicy
         int funds = context.Self.Credits - upfrontCost + extraRunCredits;
         if (blocked || damage > context.Features.Hand.Length || cost > funds - loss)
             return Value(-1000, "run/known-unaffordable-or-lethal", true);
+        // V5: the run itself spends a click, and what's left must pay a known approach toll.
+        (bool tollBlocked, int tollCredits, int tollClicks) = context.Generation >= 4
+            ? ApproachToll(context, server, context.Self.Credits - upfrontCost - Math.Max(0, cost - extraRunCredits) - loss, context.Self.Clicks - 1)
+            : (false, 0, 0);
+        if (tollBlocked) return Value(-1000, "run/known-approach-toll-unaffordable", true);
         int rewards = SuccessRewards(context, server);
         int repeated = context.Features.Board.TurnFacts?.Runner.ThisTurn?.AttemptedRunServerIds.Count(id => id == server.Id) ?? 0;
         int risk = unknown * (context.Self.Credits < 3 || context.Features.Hand.Length < 2 ? 450 : 260) * context.Parameter("risk-scale", 100) / 100;
         int score = RunnerValues.Server(context, server) + rewards + extraValue
             - (upfrontCost + Math.Max(0, cost - extraRunCredits) + loss) * context.CreditValue
-            - damage * 160 - risk - repeated * 180 - (funds - cost - loss < reserve ? 220 : 0);
+            - damage * 160 - risk - repeated * 180 - (funds - cost - loss - tollCredits < reserve ? 220 : 0)
+            - (tollCredits + tollClicks * ClickCredits) * context.CreditValue;
         bool win = unknown == 0 && RunnerValues.Winning(context, server);
         return new(win ? 100 : 0, score, "run/public-value-protection-and-access-reserve", true, new("run", null, null, null));
     }
@@ -36,10 +42,54 @@ public sealed partial class RunnerHeuristicPolicy
         (int cost, int loss, int damage, bool blocked, int unknown) = Protection(context, server, lastIce);
         if (damage > context.Features.Hand.Length || blocked || cost > context.Self.Credits + run.RunCredits - loss)
             return Value(-1000, "run/jack-out-before-unaffordable-threat", true);
+        (bool tollBlocked, int tollCredits, int tollClicks) = context.Generation >= 4
+            ? ApproachToll(context, server, context.Self.Credits - Math.Max(0, cost - run.RunCredits) - loss, context.Self.Clicks)
+            : (false, 0, 0);
+        if (tollBlocked) return Value(-1000, "run/jack-out-before-unaffordable-toll", true);
         return new(unknown == 0 && RunnerValues.Winning(context, server) ? 100 : 0,
             Math.Max(250, RunnerValues.Server(context, server)) + SuccessRewards(context, server)
-            - (Math.Max(0, cost - run.RunCredits) + loss) * context.CreditValue - damage * 160 - unknown * 220,
+            - (Math.Max(0, cost - run.RunCredits) + loss + tollCredits + tollClicks * ClickCredits) * context.CreditValue
+            - damage * 160 - unknown * 220,
             "run/continue-visible-affordable-line", true);
+    }
+
+    /// <summary>What a click is worth in credits when paying a toll.</summary>
+    private const int ClickCredits = 2;
+
+    /// <summary>
+    /// A rezzed card in the server's root that, on approach, makes the Runner
+    /// choose a cost or the run ends (Manegarm Skunkworks). Returns the cheapest
+    /// payable option from what's left after the ICE, or blocked if none is.
+    /// </summary>
+    private static (bool Blocked, int Credits, int Clicks) ApproachToll(HeuristicContext context, AgentServer server, int credits, int clicks)
+    {
+        int tollCredits = 0, tollClicks = 0;
+        foreach (AgentCard? card in server.Root)
+        {
+            if (card is not { Rezzed: true } || context.Definition(card)?.Behavior is not { } behavior) continue;
+            foreach (BehaviorTrigger trigger in behavior.Triggers.Where(trigger => trigger.Occurrence == OccurrenceKind.ServerApproached))
+                foreach (BehaviorChoiceSpec choice in trigger.Instructions.Select(instruction => instruction.Choice).OfType<BehaviorChoiceSpec>())
+                {
+                    if (choice.Chooser != BehaviorChooser.ActingPlayer
+                        || !choice.Options.Any(option => option.Semantic == BehaviorChoiceOptionSemantic.Fallback
+                            && option.Instructions.Any(instruction => instruction.Kind == BehaviorInstructionKind.EndRun))) continue;
+                    (int Credits, int Clicks)? best = null;
+                    foreach (BehaviorChoiceOption option in choice.Options.Where(option => option.Semantic != BehaviorChoiceOptionSemantic.Fallback))
+                    {
+                        IReadOnlyList<BehaviorCost> costs = option.Costs ?? [];
+                        if (costs.Any(cost => cost.Kind is not (BehaviorCostKind.Credits or BehaviorCostKind.Clicks))) continue;
+                        int optionCredits = costs.Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount);
+                        int optionClicks = costs.Where(cost => cost.Kind == BehaviorCostKind.Clicks).Sum(cost => cost.Amount);
+                        if (credits - tollCredits < optionCredits || clicks - tollClicks < optionClicks) continue;
+                        if (best is not { } current || optionCredits + optionClicks * ClickCredits < current.Credits + current.Clicks * ClickCredits)
+                            best = (optionCredits, optionClicks);
+                    }
+                    if (best is not { } paid) return (true, tollCredits, tollClicks);
+                    tollCredits += paid.Credits;
+                    tollClicks += paid.Clicks;
+                }
+        }
+        return (false, tollCredits, tollClicks);
     }
 
     private static (int Cost, int Loss, int Damage, bool Blocked, int Unknown) Protection(HeuristicContext context, AgentServer server, int lastIndex,

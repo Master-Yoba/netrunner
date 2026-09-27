@@ -29,6 +29,8 @@ public sealed class BoardIcebreakerPresenterTests
         Assert.Equal(hosted - 2, view.Run!.RunCredits);
         Assert.Equal(4, board.Strength!.EffectiveStrength);
         Assert.DoesNotContain(board.Actions, action => action.Id == pump.Id);
+        // At the ICE's strength a pump only wastes credits, so the board no longer offers one.
+        Assert.DoesNotContain(board.Actions, action => action.Kind == ActionKind.PumpBreaker);
         LegalActionViewModel broken = board.Actions.First(action => action.Parameters is RunBreakParameters { Quantity: 1, HostedCredits: 1 });
         IReadOnlyList<int> targets = BoardIcebreakerPresenter.BrokenOrdinals(board.Encounter, broken);
         state = Apply(state, catalog, broken.Id);
@@ -133,8 +135,10 @@ public sealed class BoardIcebreakerPresenterTests
         {
             string before = EngineJson.Serialize(state);
             MatchViewModel view = View(state, catalog);
-            BoardIcebreakerViewModel breaker = BoardIcebreakerPresenter.Present(view, "card:5")!;
-            LegalActionViewModel boost = Assert.Single(breaker.Actions, action => action.Kind == ActionKind.PumpBreaker);
+            // Boosts past the ICE's strength leave the board panel, so take them from the
+            // full encounter list, which applies the same payment preference.
+            LegalActionViewModel boost = Assert.Single(BoardIcebreakerPresenter.EncounterActions(view, view.LegalActions),
+                action => action.Kind == ActionKind.PumpBreaker && BoardIcebreakerPresenter.Source(action) == "card:5");
             Assert.Equal(expectedHosted, Assert.IsType<RunBreakerParameters>(boost.Parameters).HostedCredits);
             Assert.Same(view.LegalActions.Single(action => action.Id == boost.Id), boost);
             Assert.Equal(before, EngineJson.Serialize(state));

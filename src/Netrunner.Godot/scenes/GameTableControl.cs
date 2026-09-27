@@ -560,13 +560,14 @@ public partial class GameTableControl : Control
 		CacheServerDisplayNames(view.Servers);
 		_turnLabel.Text = FormatTurn(view);
 		_runLabel.Text = FormatRun(view);
-		_corpResources.SymbolText = $"[click] {view.Corp.Clicks} · [agenda point] {view.Corp.AgendaPoints}";
+		_corpResources.SymbolText = $"[click] {ClickPips(view.Corp.Clicks, 3)} · [agenda point] {view.Corp.AgendaPoints}";
 		ShowCount(_corpCredits, view.Corp.Credits);
 		ShowCount(_runnerCredits, view.Runner.Credits);
-		_runnerResources.SymbolText = $"[click] {view.Runner.Clicks} · [agenda point] {view.Runner.AgendaPoints} · [tag] {view.Runner.Tags?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—"}";
+		_runnerResources.SymbolText = $"[click] {ClickPips(view.Runner.Clicks, 4)} · [agenda point] {view.Runner.AgendaPoints}\n"
+			+ $"[tag] {view.Runner.Tags?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—"}";
 		_corpScoreLabel.Text = $"Score {view.Corp.AgendaPoints}";
 		if (view.Runner.UsedMemory is { } used && view.Runner.MemoryLimit is { } limit)
-			_runnerResources.SymbolText += $"\n[MU] {used}/{limit}";
+			_runnerResources.SymbolText += $" · [MU] {used}/{limit}";
 		_runnerScoreLabel.Text = $"Score pile · {view.RunnerScore.Count} · {view.Runner.AgendaPoints} agenda point(s)";
 		string boardFingerprint = BuildBoardFingerprint(view);
 		if (string.Equals(_lastBoardFingerprint, boardFingerprint, StringComparison.Ordinal))
@@ -684,7 +685,7 @@ public partial class GameTableControl : Control
 			lane.Header.TooltipText = $"Select {_serverDisplayNames[server.Id]} for contextual actions.";
 			lane.RunMarker.Text = view.Run is { } run
 				&& string.Equals(run.AttackedServerId, server.Id, StringComparison.Ordinal)
-				? $"ACTIVE RUN · {run.FocusLabel}"
+				? "▶ Run in progress"
 				: string.Empty;
 			// Keep this row in every lane so entering a run never moves its cards.
 			lane.RunMarker.TooltipText = string.Empty;
@@ -694,15 +695,9 @@ public partial class GameTableControl : Control
 				lane.RunMarker.TooltipText = $"Strength {encounter.EffectiveStrength ?? encounter.Ice?.Strength}\n"
 					+ string.Join("\n", encounter.Subroutines.Select(sub => $"Subroutine {sub.Ordinal + 1}: {(sub.Broken ? "broken" : sub.Resolved ? "resolved" : "unbroken")}"));
 			}
-			lane.RootCaption.Text = server.Kind == ServerKind.Remote
-				? "ROOT · remote content"
-				: server.Kind == ServerKind.Archives
-					? $"Archives · {view.CorpDiscardCount} cards"
-					: server.Kind == ServerKind.RAndD
-						? $"R&D DECK · {view.CorpDeck.Count} cards"
-							: $"ROOT · HQ · {view.CorpHand.Count} cards in hand";
-			lane.RootCaption.Visible = true;
-			lane.IceCaption.Visible = true;
+			// Servers are defined by their cards (U4): no root or ICE captions.
+			lane.RootCaption.Visible = false;
+			lane.IceCaption.Visible = false;
 
 			ClearNonCardChildren(lane.RootCards);
 			ApplyLaneLayout(lane);
@@ -743,6 +738,10 @@ public partial class GameTableControl : Control
 		}
 		ApplyServerSelection();
 	}
+
+	/// <summary>Clicks as pips: filled for those left, hollow for those spent this turn.</summary>
+	private static string ClickPips(int clicks, int allotment) =>
+		new string('●', Math.Max(0, clicks)) + new string('○', Math.Max(0, allotment - clicks));
 
 	/// <summary>
 	/// A face-down card keeps its tracked key for as long as it stays hidden,
@@ -840,7 +839,7 @@ public partial class GameTableControl : Control
 			.ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.Ordinal);
 		foreach (CardViewModel card in cards.Where(card => string.IsNullOrEmpty(card.HostCardId)))
 		{
-			Control slot = EnsureRigSlot(card.Id);
+			Control slot = EnsureRigSlot(card.Id, RigArea(card));
 			_activeRigSlots.Add(card.Id);
 			ClearRigSlot(slot);
 			RenderHostedSlot(slot, card, hosted.GetValueOrDefault(card.Id) ?? Array.Empty<CardViewModel>(), nextVisibleCards);
@@ -850,7 +849,7 @@ public partial class GameTableControl : Control
 			&& !view.Servers.SelectMany(server => server.IcePositions).Any(host => host.CardId == card.HostCardId)))
 		{
 			_activeRigSlots.Add($"orphan:{card.Id}");
-			Control slot = EnsureRigSlot($"orphan:{card.Id}");
+			Control slot = EnsureRigSlot($"orphan:{card.Id}", RigArea(card));
 			ClearRigSlot(slot);
 			RenderHostedSlot(slot, card, Array.Empty<CardViewModel>(), nextVisibleCards);
 		}
@@ -858,10 +857,78 @@ public partial class GameTableControl : Control
 		{
 			slot.Visible = _activeRigSlots.Contains(key);
 		}
+		OrderRigAreas(cards);
 	}
 
-	private Control EnsureRigSlot(string key)
+	/// <summary>The rig's areas (U4): programs, hardware and resources, each with its own cards and label.</summary>
+	private static readonly string[] RigAreaNames = ["Programs", "Hardware", "Resources"];
+	private readonly (PanelContainer Panel, HBoxContainer Cards, Label Caption)[] _rigAreas = new (PanelContainer, HBoxContainer, Label)[3];
+
+	private static int RigArea(CardViewModel card) => card.Type switch
 	{
+		"Program" => 0,
+		"Hardware" => 1,
+		_ => 2,
+	};
+
+	private HBoxContainer EnsureRigArea(int index)
+	{
+		if (_rigAreas[index].Panel is { } existing && IsInstanceValid(existing)) return _rigAreas[index].Cards;
+		// No top margin, so card tops stay level with the identity; the label sits below the cards.
+		var panel = new PanelContainer { Name = $"Rig{RigAreaNames[index]}", MouseFilter = MouseFilterEnum.Ignore };
+		panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+		{
+			BgColor = new Color(0.43f, 0.94f, 0.72f, 0.05f),
+			CornerRadiusTopLeft = 6,
+			CornerRadiusTopRight = 6,
+			CornerRadiusBottomLeft = 6,
+			CornerRadiusBottomRight = 6,
+			ContentMarginLeft = 4,
+			ContentMarginRight = 4,
+			ContentMarginTop = 0,
+			ContentMarginBottom = 2,
+		});
+		var column = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
+		column.AddThemeConstantOverride("separation", 2);
+		var row = new HBoxContainer { Name = "Cards", MouseFilter = MouseFilterEnum.Ignore };
+		var caption = new Label
+		{
+			Name = "Caption",
+			Text = RigAreaNames[index],
+			HorizontalAlignment = HorizontalAlignment.Center,
+			MouseFilter = MouseFilterEnum.Ignore,
+		};
+		caption.AddThemeFontSizeOverride("font_size", 10);
+		caption.AddThemeColorOverride("font_color", new Color(0.62f, 0.76f, 0.75f, 0.8f));
+		column.AddChild(row);
+		column.AddChild(caption);
+		panel.AddChild(column);
+		_runnerRigRow.AddChild(panel);
+		_rigAreas[index] = (panel, row, caption);
+		return row;
+	}
+
+	/// <summary>Keeps the areas in type order and each area's cards in install order; an empty area stays as a narrow label.</summary>
+	private void OrderRigAreas(IReadOnlyList<CardViewModel> cards)
+	{
+		for (int area = 0; area < _rigAreas.Length; area++)
+		{
+			HBoxContainer row = EnsureRigArea(area);
+			_runnerRigRow.MoveChild(_rigAreas[area].Panel, area);
+			row.AddThemeConstantOverride("separation", _runnerRigRow.GetThemeConstant("separation"));
+			int index = 0;
+			foreach (CardViewModel card in cards.Where(card => string.IsNullOrEmpty(card.HostCardId) && RigArea(card) == area
+				&& _rigSlots.TryGetValue(card.Id, out Control? slot) && slot.GetParent() == row))
+				row.MoveChild(_rigSlots[card.Id], index++);
+			bool empty = !row.GetChildren().OfType<Control>().Any(child => child.Visible);
+			_rigAreas[area].Panel.CustomMinimumSize = empty ? new Vector2(76, 0) : Vector2.Zero;
+			_rigAreas[area].Caption.Modulate = new Color(1, 1, 1, empty ? 0.55f : 1);
+		}
+	}
+
+	private Control EnsureRigSlot(string key, int area)
+	{
+		HBoxContainer parent = EnsureRigArea(area);
 		if (!_rigSlots.TryGetValue(key, out Control? slot))
 		{
 			slot = new Control
@@ -872,13 +939,13 @@ public partial class GameTableControl : Control
 			_rigSlots[key] = slot;
 		}
 
-		if (slot.GetParent() != _runnerRigRow)
+		if (slot.GetParent() != parent)
 		{
 			if (slot.GetParent() is Node oldParent)
 			{
 				oldParent.RemoveChild(slot);
 			}
-			_runnerRigRow.AddChild(slot);
+			parent.AddChild(slot);
 		}
 		return slot;
 	}
@@ -940,8 +1007,8 @@ public partial class GameTableControl : Control
 		int handCount = corpLocal ? view.CorpHand.Count : view.RunnerHand.Count;
 		cards = cards.Where(card => !selected.Contains(card.Id)).ToArray();
 		string zone = corpLocal ? "corp-hand" : "runner-hand";
-		_localHandCaption.Text = corpLocal
-			? "HQ · YOUR HAND" : "GRIP · YOUR HAND";
+		// The hand needs no label; it says something only when a discard is being chosen.
+		_localHandCaption.Text = string.Empty;
 		HashSet<string> activeHandIds = cards.Select(card => card.Id).ToHashSet(StringComparer.Ordinal);
 		foreach (TableCardControl existing in _localHandRow.GetChildren().OfType<TableCardControl>().ToArray())
 		{
@@ -964,7 +1031,7 @@ public partial class GameTableControl : Control
 		}
 		_localHandRow.SetCards(handControls, MotionEnabled);
 		_localHandRow.GetNode<Label>("Count").Text = handCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
-		if (selected.Count > 0) _localHandCaption.Text += $" · {selected.Count} selected for discard";
+		if (selected.Count > 0) _localHandCaption.Text = $"{selected.Count} selected for discard";
 	}
 
 	private void RenderIdentity(
@@ -1041,6 +1108,10 @@ public partial class GameTableControl : Control
 		}
 		control.SetIce(isIce);
 		control.SetBackSide(backSide ?? BackSideForSlot(slot));
+		// The Corp sees its own installed cards face-up; say which aren't rezzed yet.
+		control.SetUnrezzed(_pendingView?.Viewer == PlayerSide.Corp && model is { IsKnown: true, Rezzed: false }
+			&& model.Type is not "Identity" && (parent.Name.ToString() is "RootCards" or "IceCards"
+				|| parent.GetParent()?.Name.ToString() is "RootCards" or "IceCards"));
 		if (!retainHandPose)
 		{
 			control.Scale = Vector2.One;

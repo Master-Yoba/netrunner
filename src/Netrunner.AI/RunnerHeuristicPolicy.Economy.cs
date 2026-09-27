@@ -66,7 +66,11 @@ public sealed partial class RunnerHeuristicPolicy
                 case BehaviorInstructionKind.LoseClicks: total -= sign * amount * 100; break;
                 case BehaviorInstructionKind.Draw: total += sign * amount * context.DrawValue; break;
                 case BehaviorInstructionKind.LoadHostedCredits:
-                case BehaviorInstructionKind.PlaceHostedCredits: total += sign * amount * 50; break;
+                case BehaviorInstructionKind.PlaceHostedCredits:
+                    // v4: a card that already holds a stockpile pays it out slowly (Smartware
+                    // Distributor gives 1 a turn), so topping it up is worth far less than face value.
+                    total += sign * amount * (context.Generation >= 3 && HeuristicContext.Hosted(source) >= amount ? 12 : 50);
+                    break;
                 case BehaviorInstructionKind.TakeHostedCredits:
                 case BehaviorInstructionKind.TakeUpToHostedCredits: total += sign * Math.Min(amount, HeuristicContext.Hosted(source)) * context.CreditValue; break;
                 case BehaviorInstructionKind.TakeAllHostedCredits: total += sign * HeuristicContext.Hosted(source) * context.CreditValue; break;

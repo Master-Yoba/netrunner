@@ -119,11 +119,11 @@ seeds to hide an unfavorable result.
 | 0 | U0, E4a, E3 (CI part), A1 | 3–5 weeks | Tooling, safety nets and measurement |
 | 1 | U1, E1, A2, A6a, E3 (nightly), E6 (renames) | 3–5 weeks | First visible wins; the engine gets fast; distinct difficulty |
 | 2 | U2, E4b, U3 slice, E5 | 5–7 weeks | The board comes alive for one run and one score |
-| 3 | U3 full, U4, A3, E2 | 7–10 weeks | Real game feel; the bot plans turns |
-| 4 | U5, U6, A4, A5 | 6–9 weeks | Polish, and the bot searches runs |
+| 3 | U3 full, U4, E2 | 7–10 weeks | Real game feel |
+| 4 | C1, U7, U5, U6, A1b, A4a, A5, A3, A4 | 8–11 weeks | Real decks; polish, and the bot plans turns and searches runs |
 | 5 | A6 (compute tiers, personalities), hardening, decision point | 2–4 weeks | Difficulty, release readiness |
 
-In total that's roughly 26–40 weeks. The UI track alone reaches "feels like a
+In total that's roughly 28–42 weeks. The UI track alone reaches "feels like a
 game" at the end of Wave 3.
 
 ### Wave 0 — tooling, safety nets and measurement
@@ -187,36 +187,115 @@ game" at the end of Wave 3.
 - The sampler's self-consistency test (observation of the sample equals the
   input) passes, and so do the hidden-state twin tests.
 
-### Wave 3 — real game feel; the bot plans turns
+### Wave 3 — real game feel
 
 | Item | Why now |
 |---|---|
 | U3 full catalog | Extends the proven slice to every event in the catalog, and adds pacing and auto-pass settings. |
 | U4 layout and interaction redesign | Needs U2 (persistent nodes) and U3 (overlays tied to beats). This is where the dock and the boxed columns go. |
-| A3 turn planner | E1 and E5 are ready, and A2 provides the evaluation features. It's the largest single strength gain. |
 | E2 validator split | By now E3 has built a corpus of known-bad states to prove authoritative commits still reject everything they did. Bot search already avoids validation through Simulation mode (E1), so this is about keeping authoritative play fast and the validator from becoming a second rules engine. |
 
 **Gate:**
 - A full game in each seat can be played without opening "All legal
   actions…".
 - The capture review at 1920 and 2560 passes.
-- A3 shows a clear ladder gain in both seats within the latency budget.
 - Authoritative `Apply` rejects everything it did on the known-bad corpus, and
   validator time on the benchmark profile is measurably lower.
 
-### Wave 4 — polish, and the bot searches runs
+### Wave 4 — polish, and the bot plans turns and searches runs
 
 | Item | Why now |
 |---|---|
+| C1 Gateway sample decks | First: the seven System Gateway-only sample decks from Null Signal Games use only cards we already implement, and tuning the bots further on the tutorial decks would fit them to two teaching decks. Every later bot item is measured on these decks. See below. |
+| U7 main menu | With C1: the start screen is a developer scaffold (seed box, preset drop-downs, a metadata gallery button). C1's Tutorial and Gateway areas need a real menu to live in. See below. |
+| A1b ladder over a deck pool | With C1: a fixed game budget sampled over deck pairings, sequential stopping, and per-deck warnings, so ladder time stays flat as decks are added ([plan](AI_OPPONENT_PLAN.md#a1b-ladder-over-a-deck-pool-m--with-c1-in-wave-4)). |
 | U5 art direction, feel and audio | It only pays off once the layout (U4) is stable. |
 | U6 onboarding and playtest loop | It needs the final interaction model from U4. |
-| A4 run search | It builds on the A3 infrastructure, and adds the most for the Runner. |
-| A5 weight tuning | The ladder is fast and the weights are named, so tuning won't be undone by later structural changes. |
+| A4a whole-run model | First: per-server cost to get in and potential are the evaluation terms A3 lacked, and A4 builds on the same model. Inspired by chiriboga's run calculator (clean-room; it is GPL-3.0). |
+| A5 fitted evaluation | Fit the evaluation to self-play outcomes over the A4a and A2 features, instead of hand-tuning. |
+| A3 turn planner | Moved from Wave 3 ([record](WAVE_3_PROGRESS.md#a3-turn-planner)): the planning infrastructure works, but its end-of-turn evaluation didn't pick better turns. It returns on A4a and A5. |
+| A4 run search | It builds on the A3 infrastructure and the A4a model, and adds the most for the Runner. |
+
+**C1 Gateway sample decks (M).** Null Signal Games publishes
+[sample decklists](https://nullsignal.games/players/getting-started-sample-decklists/);
+seven are built from System Gateway alone:
+
+| Side | Deck | Identity |
+|---|---|---|
+| Runner | Party Hard | René "Loup" Arcemont: Party Animal (Anarch) |
+| Runner | Stolen Goods | Zahya Sadeghi: Versatile Smuggler (Criminal) |
+| Runner | Planning Ahead | Tāo Salonga: Telepresence Magician (Shaper) |
+| Corp | Discretion Advised | Haas-Bioroid: Precision Design |
+| Corp | Advanced Yomi | Jinteki: Restoring Humanity |
+| Corp | Hyper Velocity | NBN: Reality Plus |
+| Corp | Quick and Dirty | Weyland Consortium: Built to Last |
+
+All 77 Gateway cards, including these identities, are implemented. The
+other 23 lists on that page need Elevation cards, so they wait for the next
+card set.
+
+1. **Data.** Commit the lists as card codes next to the existing presets
+   (the card data stays local-only), under a new preset kind, `gateway`,
+   alongside `starter` and `expanded`. `OfficialPresetCatalog` validates each
+   list against the Gateway card counts and deck-building rules (minimum
+   size, influence, agenda points).
+2. **Deck choice in the menu (built in U7).** Two areas. **Tutorial**: the Catalyst and Syndicate
+   starter and expanded decks, as today, for learning the game. **Gateway**:
+   pick your seat's sample deck and the opponent's (or random), with each
+   deck's identity, faction and a one-line description. The CLI, the saves
+   and the ladder take the same deck IDs. Older saves keep their preset.
+3. **Rules hardening.** The fuzz corpus covers every card, but not whole
+   games of real faction decks: Jinteki net damage, NBN tag pressure, Tāo's
+   ICE swaps, Loup's trash economy. Run the official fuzz and headless full
+   games over all twelve pairings with zero invariant failures, caps or snap
+   mismatches before a playtest.
+4. **First bot audit.** Some policy logic is card-specific and was only
+   tuned in Catalyst against Syndicate games. Play each faction, list the
+   worst misplays, and fix them as policy repairs (new policy versions, as
+   with Corp v6 and Runner v4). The deeper work (A4a, A5, A3) then happens
+   on the deck pool.
+5. **Benchmarks stay frozen.** The tutorial decks remain the frozen
+   `make m5-gate` suite and its anchors, so existing baselines stay
+   comparable. The ladder moves to the Gateway pool (A1b).
+
+**U7 main menu (M).** Replace the setup scaffold with a game menu:
+
+- **Title screen**: the game's name over a board backdrop, with **Continue**
+  (the latest save, one click back into the game), **New game**, **Load
+  game** (the save browser), **Settings** and **Quit**.
+- **New game** leads to **Tutorial** (the Catalyst and Syndicate decks, with
+  a line on what each teaches) or **Gateway** (C1's sample decks). Pick a
+  seat, your deck and the opponent's (or random) as cards showing identity
+  art, faction and a one-line pitch, and the opponent's difficulty. Then
+  **Start**.
+- **Settings** is the existing in-game menu (speed, fast opponent,
+  auto-pass, reduced motion, accessibility), reachable before a game too.
+- **Developer tools** (the seed, the metadata gallery, the interaction lab,
+  session exports) move behind a Developer entry that release builds hide;
+  a seed stays available there for reproducing a game.
+- Missing official content gets one clear screen that explains how to
+  provision it, instead of disabled drop-downs.
+- Keyboard and controller focus order, and a layout that works at 1920 and
+  2560, checked by the existing capture and accessibility smokes.
+
+The saves, CLI and smokes keep their launch arguments; only the human path
+through the menu changes. U7 gate: a new player reaches a Tutorial game, a
+Gateway game and a resumed save without the developer entry, and the
+capture review at both resolutions passes.
+
+C1 gate: every Gateway pairing plays through the official fuzz and headless
+full games cleanly; the main menu offers both areas and a human plays one
+Gateway game in each seat; the per-faction audit's fixes don't regress the
+ladder.
 
 **Gate:**
 - The M5 frame-time gate still passes with the new effects and audio.
 - Playtest metrics (time per turn, rejected drops, "All legal actions…" use)
   improve against a Wave 0 recording.
+- A4a's run model matches the engine: its predicted cost and outcome of a
+  run agree with the run played out in Simulation mode on a corpus of
+  positions.
+- A3 shows a clear ladder gain in both seats within the latency budget.
 - A4 and A5 show ladder gains, and hidden-state twins still pass.
 
 ### Wave 5 — difficulty, hardening and the next decision

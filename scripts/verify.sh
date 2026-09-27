@@ -381,6 +381,22 @@ if ! grep -Eq "M49_UI PASS .*dense=true history=true" "$m49_ui_smoke_log" \
 fi
 cat "$m49_ui_smoke_log"
 echo "m4-9-ui-smoke=PASS"
+invisible_window_log="$coverage_report_dir/invisible-window-smoke.log"
+if ! run_with_timeout 120 env "${m49_ui_content_env[@]}" XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
+  "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \
+  -- --invisible-window-smoke >"$invisible_window_log" 2>&1; then
+  echo "Invisible window smoke failed or timed out; see $invisible_window_log." >&2
+  cat "$invisible_window_log" >&2
+  exit 1
+fi
+if ! grep -Eq "INVISIBLE_WINDOW (PASS|SKIP)" "$invisible_window_log" \
+  || grep -Eq "INVISIBLE_WINDOW FAIL|SCRIPT ERROR|ERROR:" "$invisible_window_log"; then
+  echo "Invisible window smoke did not pass; see $invisible_window_log." >&2
+  cat "$invisible_window_log" >&2
+  exit 1
+fi
+grep -E "INVISIBLE_WINDOW" "$invisible_window_log"
+echo "invisible-window-smoke=PASS"
 m410_ui_smoke_log="$coverage_report_dir/m410-editor-ui-smoke.log"
 if ! run_with_timeout 60 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
   "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \
@@ -467,7 +483,7 @@ for full_match_side in corp runner; do
   echo "full-match-$full_match_side=PASS setup=true mulligan=true turn_pair=true identities=true terminal=true"
 done
 if ((card_data_content_enabled == 1)); then
-  for m4_preset in basic expanded; do
+  for m4_preset in expanded; do
     for m4_human_side in corp runner; do
       m4_full_smoke_log="$coverage_report_dir/m4-full-$m4_preset-$m4_human_side.log"
       if ! run_with_timeout 210 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \

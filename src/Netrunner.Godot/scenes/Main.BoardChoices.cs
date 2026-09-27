@@ -405,6 +405,9 @@ public partial class Main
 		_boardChoicePanel.GetNode<ScrollContainer>("Content/OptionsScroll").CustomMinimumSize = new Vector2(0, 52);
 
 		List<LegalActionViewModel> visibleButtons = BoardChoiceButtonActions(actions);
+		// A choice that must be resolved never shows an empty panel: when every
+		// option is a board click, list them as buttons too (playtest, 27 September).
+		if (visibleButtons.Count == 0 && !_boardChoiceIsInitialStage && !_boardChoiceRunSelection) visibleButtons = [.. actions];
 		if (visibleButtons.Count == 0)
 		{
 			Label hint = MakeWrappedLabel(
@@ -550,7 +553,15 @@ public partial class Main
 		var result = new List<LegalActionViewModel>();
 		foreach (LegalActionViewModel action in actions)
 		{
-			IReadOnlyList<string> cards = BoardCardTargetIds(action, actions);
+			// The card being played or installed is where the choice came from, not
+			// something to click, so it doesn't count as a board handle for it.
+			string? source = action.Parameters switch
+			{
+				InstallCardParameters install => install.CardId.Value,
+				PlayCardParameters play => play.CardId.Value,
+				_ => null,
+			};
+			IReadOnlyList<string> cards = [.. BoardCardTargetIds(action, actions).Where(id => id != source)];
 			string? server = BoardServerTargetId(action);
 			bool visibleCardTarget = _gameTable is not null
 				&& cards.Any(id => _gameTable.VisibleCards.ContainsKey(id));

@@ -25,9 +25,10 @@ def scaled(seconds):
     return seconds * (scale if 1 <= scale <= 20 else 1.0)
 
 root, output, godot, mode = sys.argv[1:]
-matrix = [("runner", "basic", "standard"), ("corp", "expanded", "standard")]
+# Expanded decks only: the basic ones are a subset of their cards (27 September).
+matrix = [("runner", "expanded", "standard"), ("corp", "expanded", "standard")]
 if mode != "--quick":
-    matrix += [("corp", "basic", "standard"), ("runner", "expanded", "standard"), ("runner", "expanded", "easy")]
+    matrix += [("runner", "expanded", "easy")]
 def run_case(row):
     side, preset, difficulty = row
     case = f"{side}-{preset}-{difficulty}"

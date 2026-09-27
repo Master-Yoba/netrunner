@@ -112,6 +112,54 @@ Sizes: S is a few days, M is one to two weeks, L is several weeks.
 Gate: the ladder separates the current Standard from Easy, and each from
 random-legal, with non-overlapping intervals per seat.
 
+### A1b. Ladder over a deck pool (M) — with C1 in Wave 4
+
+The ladder today plays every entrant pairing on four preset combinations
+(tutorial starter and expanded, each seat) with the same seeds for every
+entrant: 640 games for two entrants at 40 seeds, about eight minutes on six
+workers, and intervals of about ±50 Elo. Crossing the pairings with twelve
+Gateway deck pairings at the same seeds would triple that, and every later
+card set would multiply it again. A deck matrix doesn't scale, so:
+
+- **A fixed game budget, not seeds per pairing.** How precisely a rating is
+  known depends on the number of games, not on how many decks they're spread
+  over. Plan a budget (say 1,280 games) and assign deck pairings to seeds
+  round-robin, so each pairing gets an equal share and the rating is the
+  average over the pool. Adding decks then costs no time; it only spreads
+  the same games more thinly.
+- **Common deals.** Every entrant plays each seed with the same deck pairing
+  and the same shuffles, as today, and differences use the paired
+  bootstrap. This cancels most of the deal and deck variance.
+- **Sequential stopping.** Implement the SPRT-style stopping planned in A1:
+  test "the candidate is at least as strong as the baseline" in batches and
+  stop once the result is clear. Most broken changes fail within a few
+  hundred games; only close calls use the full budget.
+- **Tiers.** A *screen* (a small budget with sequential stopping) for every
+  experiment, a *gate* (the full budget, fixed seeds) before a policy
+  version ships, and *targeted* runs for card-specific changes, limited to
+  decks containing that card, plus a small run over the whole pool to check
+  for regressions.
+- **Per-deck warnings, not per-deck gates.** Report each deck's result
+  (from the games that deck appeared in) and flag any deck where the
+  candidate is worse by a wide margin (for example, more than 100 Elo with
+  the interval clear of zero). With many decks, precise per-deck ratings
+  would need the full matrix again, so they are diagnostics only.
+- **A versioned pool.** The ladder's deck pool is versioned like a policy.
+  A new deck joins at a pool version bump, and ratings are only compared
+  within one pool version. The tutorial decks stay the frozen M5 benchmark.
+- **Faster games.** Wall time is per game. Profile a full ladder game before
+  any bigger pool (validator, observation and view building are the
+  candidates), and keep games single-threaded so the workers scale with
+  cores.
+
+When more cards arrive (Elevation, then Startup), the pool can grow to
+dozens of decks at the same budget. At that size, add deck strength to the
+rating model (a Bradley–Terry model with deck terms), so a strong deck's
+wins aren't credited to its pilot, and sample the pool weighted by how often
+decks are played rather than uniformly. Decklist sampling for hidden cards
+(A3) already assumes the bot knows which list its opponent plays; with a
+pool, the host passes the chosen list, as with presets.
+
 ### A2. Fix the heuristics without search (M)
 
 These are cheap and independently measurable. Each is a policy version bump
@@ -178,6 +226,76 @@ The main structural upgrade for turn-action decisions:
 Gate: the ladder shows a clear gain in both seats over A2, and the new
 turn-sequencing tactical positions pass.
 
+*Wave 3 outcome* ([record](WAVE_3_PROGRESS.md#a3-turn-planner)): the
+planning infrastructure works (a determinizer attached to the observation,
+twin-safe deterministic rollouts, Corp v5 and Runner v3, the
+`standard-plan` ladder entrant), but over 640 ladder games it was level with
+the non-planning Standard in both seats. It changed a quarter to two fifths
+of turn actions, so the end-of-turn evaluation couldn't tell better turns
+from worse ones. It ships off and moves to Wave 4, where it is rebuilt on the
+run model below (A4a) and a fitted evaluation (A5).
+
+**Wave 4 revision.** Score the end of a planned turn with terms the run model
+supplies instead of card counts:
+- per server, the Runner's cheapest cost to get in (clicks and credits) and
+  whether it can get in at all this turn or next;
+- per server, its potential: known or inferred agendas, advancement, trash
+  targets, and for R&D and HQ the agenda density and how much is already
+  known;
+- the score race, money after reserves (rez reserve for the Corp, break
+  reserve for the Runner) and hand quality.
+
+The heuristic blend from Wave 3 stays, so planning corrects the heuristic
+rather than replacing it.
+
+**Deal hidden cards from the opponent's decklist.** In solo play the
+opponent always plays a known preset, so sample its unseen cards with
+`OpponentCardPool.Decklist` (the preset list minus every copy already seen)
+instead of `AnyOf` over every Gateway card of its side. `AnyOf` gives, for
+example, an R&D far richer in agendas than any real deck, which skews run
+values. Using the decklist is an information choice, not a rules one: a human
+facing a preset can know its list too. Record it in the profile
+(`opponent-pool`: `decklist` or `any`) so it's part of the configuration
+digest, and let difficulty set it: Standard and Hard use the decklist; Easy
+uses `any` or no sampling at all. A host passes the preset's list with the
+determinizer; the agent never reads it from the authoritative state.
+
+### A4a. Whole-run model (M) — first in Wave 4
+
+The Runner's encounter planner handles one encounter at a time. A run is a
+path through every piece of ICE, so plan it as one:
+- Enumerate how to get through a server's ICE, outermost to innermost, with
+  the clicks and credits available: which breaker handles each piece, pumps
+  and breaks, which subroutines to let fire, and where jacking out is the best
+  exit. Take the cheapest complete path; a path that fires a serious
+  subroutine (end the run, trash a program, install more ICE) is avoided when
+  there is another.
+- Describe each subroutine's effect in a small typed vocabulary (net damage,
+  tag, end the run, lose credits, pay credits, a minor, moderate or serious
+  effect) derived from the behavior catalog, not from card text.
+- Unknown ICE uses a prior over the ICE the Corp could have, with the Corp's
+  credits as the rez budget.
+- Cache the result per server for the decision, and invalidate it when the
+  board, credits or clicks change.
+
+The same model serves both sides: the Runner uses it to pick runs and
+installs, and the Corp uses it from the Runner's point of view (public
+information only) to judge where an agenda is safe, replacing the A2
+breaker-coverage estimate.
+
+Also from this pass:
+- **HQ and R&D knowledge.** Track how much of HQ and the top of R&D is known
+  from accesses, reveals and draws since, and let it lower the value of
+  running a server the Runner already knows.
+- **Cards worth keeping.** One ranking of hand cards by current need
+  (missing breaker types, economy, the next install) for discard, mulligan
+  and trash choices.
+
+Design note: [chiriboga](https://github.com/drbo6/chiriboga) (a JavaScript
+Netrunner solo bot) inspired this pass, particularly its run calculator, its
+per-server cost and potential caches and its HQ knowledge estimate. It is
+GPL-3.0, so this is a clean-room design from its ideas; no code is copied.
+
 ### A4. Determinized search for runs and responses (L) — needs E1 and E5
 
 - **Run decisions** (whether to run, where, when to jack out, what to break,
@@ -202,10 +320,20 @@ latency is within budget.
 - With named weights (A2) and a fast ladder (A1), tune the static evaluation by
   self-play: CMA-ES or coordinate descent over the weight vector against the
   anchor pool, per side. Check against a held-out seed set.
-- Optional later step: fit the static evaluation to game outcomes from
-  simulated play (logistic regression on features). Keep it small, linear or
-  shallow, and deterministic, with weights stored as a versioned JSON file
-  under `data/`.
+- Fit the static evaluation to game outcomes from self-play (logistic
+  regression on the A4a and A2 features), rather than leaving it hand-tuned;
+  this is what A3's planner needs. Self-play is cheap with Simulation mode and
+  the ladder, and every game is fully observed. Keep the model small, linear
+  or shallow, and deterministic, with weights stored as a versioned JSON file
+  under `data/`. Hold out seeds, and check the fitted evaluation against the
+  hand weights on the ladder.
+- **Expert iteration.** Once A3 or A4 search beats the heuristic on the
+  ladder, use its choices and its search values as training targets: they
+  carry more signal per position than a game's final outcome. Each round
+  refits the evaluation on self-play of the current best version, then must
+  beat the previous round on held-out seeds before it replaces it; a round
+  that doesn't is discarded. Keep the targets, the seeds and each round's
+  weights under `data/` so every round can be reproduced.
 
 Gate: the tuned weights beat the hand weights on held-out seeds.
 
@@ -221,12 +349,17 @@ below still depend on A3.
   uses `GatewayPool`. An optional Hard level uses more samples and the planner
   on every decision. Noise from near-ties stays small and only picks among
   genuinely equal options.
-- **Personalities** as weight presets on top of difficulty:
+- **Personalities** as presets on the fitted evaluation (A5), after it
+  exists, rather than on the heuristics' literal weights:
   - Corp: "glacier" (taxing ICE, slow scoring), "rush" (early agendas) and
     "asset spam".
   - Runner: "aggressive" (runs early and often) and "rig-builder".
-  Each is validated on the ladder so it stays within one rating band of its
-  difficulty.
+  A personality shifts a few named evaluation terms (score-race urgency,
+  protection margin, run pressure, economy) from the fitted values, so its
+  style comes from what it values, and the planner and search keep playing
+  it well. Each is validated on the ladder so it stays within one rating band
+  of its difficulty, and a style check confirms it plays differently (for
+  example "rush" scores its first agenda earlier than Standard).
 - **Human-facing pacing is a UI concern** (see the
   [UI plan](UI_UX_REDESIGN_PLAN.md) phase U3). The bot still decides
   instantly, and the presentation shows its actions at readable speed.
@@ -234,12 +367,26 @@ below still depend on A3.
 Gate: human playtest notes confirm Easy, Standard and Hard feel ordered, and
 the ladder shows the same order.
 
+### Human game data (deferred)
+
+Jinteki.net has a replay format but no public replay source, games there are
+almost all Standard (a few Startup), and only games whose every card we
+implement can be replayed in our engine. Donated replays wouldn't reach a
+useful volume. So human data from Jinteki waits until at least Startup
+content is implemented. Until then the local, opt-in human corpus (A1) is for
+review, and self-play (A5) is for fitting. If this is picked up later, ask
+the Jinteki maintainers first rather than scraping spectator sessions:
+spectators don't see hidden information, and the players haven't agreed to
+having their games collected.
+
 ## 5. Sequencing
 
 ```text
 A1 ladder + human corpus ──> gates everything below
+C1 Gateway decks + A1b deck-pool ladder ──> first in Wave 4; the rest is measured on the pool
 A2 heuristic fixes ────────> A5 tuning
-E1 + E5 (engine) ──> A3 turn planner ──> A4 run search
+E1 + E5 (engine) ──> A3 infrastructure (Wave 3)
+Wave 4: A4a run model ──> A5 fitted evaluation ──> A3 planner on A4a + A5 ──> A4 run search
 A6 difficulty/personality after A3 (needs compute knobs)
 ```
 

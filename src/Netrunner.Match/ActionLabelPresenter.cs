@@ -130,7 +130,7 @@ public static class ActionLabelPresenter
         {
             ActionKind.GainCredit => "Gain 1 credit · 1 click",
             ActionKind.DrawCard => "Draw a card · 1 click",
-            ActionKind.PassPriority => "Pass priority",
+            ActionKind.PassPriority => "Continue",
             ActionKind.NoAccessAction => "Continue access",
             ActionKind.EndTurn => "End turn",
             _ => action.Description,

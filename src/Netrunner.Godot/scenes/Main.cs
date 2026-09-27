@@ -157,6 +157,10 @@ public partial class Main : Control
 		{
 			PollCardTable(delta);
 			UpdateBoardChoiceGeometry();
+			PlaceActionChips();
+			ContinueAccessAll();
+			ContinueTurnIntent();
+			PlaceRunOverlays();
 			UpdateSpatialGeometry();
 			UpdateAccessControls();
 		}
@@ -246,6 +250,11 @@ public partial class Main : Control
 		if (SettingsVisible)
 		{
 			if (escape) { SetSettingsVisible(false); GetViewport().SetInputAsHandled(); }
+			return;
+		}
+		if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F2 } && ToggleAllLegalActions())
+		{
+			GetViewport().SetInputAsHandled();
 			return;
 		}
 		if (_zoomOverlay.Visible)
@@ -416,7 +425,8 @@ public partial class Main : Control
 				index);
 			ids[index] = preset.PresetId;
 			button.SetItemDisabled(index, !enabled);
-			if (enabled && firstPlayable < 0)
+			// Expanded is the default: it is what gets played and tested (playtest, 27 September).
+			if (enabled && (firstPlayable < 0 || preset.Kind == "expanded" && presets[firstPlayable].Kind != "expanded"))
 			{
 				firstPlayable = index;
 			}
@@ -991,6 +1001,8 @@ public partial class Main : Control
 
 	private void RenderSnapshot(MatchSnapshot snapshot)
 	{
+		MatchSnapshot issued = snapshot;
+		if (_useCardTable) snapshot = WithTurnPreview(snapshot);
 		ApplyAutoPassSetting();
 		RefreshInspectedCard(snapshot.View);
 		MatchSnapshot? previous = _currentSnapshot;
@@ -998,7 +1010,7 @@ public partial class Main : Control
 			|| !SameDecision(previous.View.Decision, snapshot.View.Decision);
 		_currentSnapshot = snapshot;
 		_fullMatchResumePaused = snapshot.IsPaused;
-		RecordFullMatchDisplayedSnapshot(snapshot);
+		RecordFullMatchDisplayedSnapshot(issued);
 		_smokeRunEndedObserved |= _smokeTest
 			&& snapshot.Events.Any(value => value.Kind == EngineEventKinds.RunEnded);
 		if (decisionChanged)
