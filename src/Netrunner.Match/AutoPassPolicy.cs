@@ -5,10 +5,11 @@ namespace Netrunner.Match;
 /// <summary>
 /// Which of a player's priority windows the client passes for them (UI plan U3).
 /// About 70% of all decisions are passes, so a player who opts in only stops
-/// where passing is a real choice: an encounter (breaking, bioroid clicks), an
-/// ICE rez, or a rez during a run, for example an upgrade in the attacked
-/// server. Paid abilities, pumps outside an encounter and rezzes outside a run
-/// pass; the player can still stop at the next window on request.
+/// where passing is a real choice: an encounter (breaking, bioroid clicks) or
+/// any rez. Rez windows are where the Corp rezzes its assets and upgrades, so
+/// passing them for the player would leave it unable to rez at all (playtest,
+/// 27 September). Paid abilities and pumps outside an encounter pass; the
+/// player can still stop at the next window on request.
 /// </summary>
 public static class AutoPassPolicy
 {
@@ -28,7 +29,6 @@ public static class AutoPassPolicy
             {
                 ActionKind.PassPriority or ActionKind.UseAbility => true,
                 ActionKind.PumpBreaker => !encountering,
-                ActionKind.RezCard => !inRun,
                 _ => false,
             });
     }

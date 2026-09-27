@@ -8,7 +8,7 @@ namespace Netrunner.Match.Tests;
 public sealed class AutoPassWindowTests
 {
     [Theory]
-    [InlineData(false, false, true, ActionKind.PassPriority, ActionKind.RezCard)]
+    [InlineData(false, false, false, ActionKind.PassPriority, ActionKind.RezCard)]
     [InlineData(true, false, false, ActionKind.PassPriority, ActionKind.RezCard)]
     [InlineData(true, false, true, ActionKind.PassPriority, ActionKind.PumpBreaker, ActionKind.UseAbility)]
     [InlineData(true, true, false, ActionKind.PassPriority, ActionKind.PumpBreaker)]
