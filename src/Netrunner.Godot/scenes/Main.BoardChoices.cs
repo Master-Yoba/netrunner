@@ -553,7 +553,15 @@ public partial class Main
 		var result = new List<LegalActionViewModel>();
 		foreach (LegalActionViewModel action in actions)
 		{
-			IReadOnlyList<string> cards = BoardCardTargetIds(action, actions);
+			// The card being played or installed is where the choice came from, not
+			// something to click, so it doesn't count as a board handle for it.
+			string? source = action.Parameters switch
+			{
+				InstallCardParameters install => install.CardId.Value,
+				PlayCardParameters play => play.CardId.Value,
+				_ => null,
+			};
+			IReadOnlyList<string> cards = [.. BoardCardTargetIds(action, actions).Where(id => id != source)];
 			string? server = BoardServerTargetId(action);
 			bool visibleCardTarget = _gameTable is not null
 				&& cards.Any(id => _gameTable.VisibleCards.ContainsKey(id));
