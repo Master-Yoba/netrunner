@@ -126,8 +126,22 @@ public partial class Main
 		_tableAllActions = false;
 		_gameTable.SetSelection(id);
 		_gameTable.SetSelectedServer(null);
-		if (_currentSnapshot is { } snapshot) RenderCardTableActions(snapshot);
+		if (_currentSnapshot is not { } snapshot) return;
+		RenderCardTableActions(snapshot);
+		// A hand card with several install destinations lights them on the board, as
+		// a drag does, instead of listing them over the hand (playtest, 27 September).
+		// Events with several targets keep their labelled buttons in the dock.
+		if (snapshot.View.Decision is { } decision && decision.OwnerSide == snapshot.View.Viewer && InViewerHand(snapshot.View, id))
+		{
+			LegalActionViewModel[] candidates = snapshot.View.LegalActions
+				.Where(action => TableActionCardId(action.Parameters) == id).ToArray();
+			if (candidates.Length > 1 && candidates.All(action => action.Kind == ActionKind.InstallCard && IsBoardPlayInstallCandidate(action)))
+				StageBoardPlayChoices(decision, candidates);
+		}
 	}
+
+	private static bool InViewerHand(MatchViewModel view, string? cardId) => cardId is not null
+		&& (view.Viewer == PlayerSide.Corp ? view.CorpHand : view.RunnerHand).VisibleCards.Any(card => card.Id == cardId);
 
 	private void ClearTableSelection()
 	{
@@ -266,8 +280,10 @@ public partial class Main
 						? TableActionServerId(a.Parameters) == _tableSelectedServer
 						: a.Kind is ActionKind.PassPriority or ActionKind.ScoreAgenda
 							or ActionKind.EndTurn or ActionKind.RemoveTag or ActionKind.PurgeVirusCounters);
-				contextual = _tableSelectedCard is not null || _tableSelectedServer is not null;
-				if (contextual)
+				// Hand cards keep their actions in the dock, so nothing covers the hand.
+				contextual = _tableSelectedCard is not null && !InViewerHand(snapshot.View, _tableSelectedCard)
+					|| _tableSelectedServer is not null;
+				if (_tableSelectedCard is not null || _tableSelectedServer is not null)
 					_tablePrompt.Text += " · Esc clears selection";
 				AddButton("All legal actions…", () => { _tableAllActions = true; RenderCardTableActions(snapshot); });
 			}

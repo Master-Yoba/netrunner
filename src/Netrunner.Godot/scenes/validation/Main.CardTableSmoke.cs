@@ -35,6 +35,9 @@ public partial class Main
 			{
 				_seedInput.Text = "47042";
 				_humanSide.Select(0);
+				// This scripted game is the basic decks' (the menu defaults to expanded).
+				SelectPresetById(_corpPreset, _corpPresetIds, "system-gateway-basic-corp");
+				SelectPresetById(_runnerPreset, _runnerPresetIds, "system-gateway-basic-runner");
 				_startButton.EmitSignal(BaseButton.SignalName.Pressed);
 				_reducedMotion.ButtonPressed = true;
 				for (int choice = 0; choice < 12; choice++)
@@ -78,6 +81,9 @@ public partial class Main
 				RenderCardTableActions(_currentSnapshot);
 				SelectTableCard(((PlayCardParameters)eventPlay.Parameters).CardId.Value);
 				if (!_tableActionButtons.ContainsKey(eventPlay.Id)) throw new InvalidOperationException("Selecting a hand event did not offer its issued play action.");
+				// A hand card with several destinations lights them on the board; Esc returns to the table.
+				DismissBoardChoices();
+				ClearTableSelection();
 				string rdId = _currentSnapshot.View.Servers.Single(server => server.Kind == ServerKind.RAndD).Id;
 				LegalActionViewModel basicRun = _currentSnapshot.View.LegalActions.First(action => action.Parameters is RunServerParameters target && target.ServerId.Value == rdId);
 				string laneName = _gameTable.GetServerDisplayName(((RunServerParameters)basicRun.Parameters).ServerId.Value);
