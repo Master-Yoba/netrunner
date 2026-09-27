@@ -839,7 +839,7 @@ public partial class GameTableControl : Control
 			.ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.Ordinal);
 		foreach (CardViewModel card in cards.Where(card => string.IsNullOrEmpty(card.HostCardId)))
 		{
-			Control slot = EnsureRigSlot(card.Id);
+			Control slot = EnsureRigSlot(card.Id, RigArea(card));
 			_activeRigSlots.Add(card.Id);
 			ClearRigSlot(slot);
 			RenderHostedSlot(slot, card, hosted.GetValueOrDefault(card.Id) ?? Array.Empty<CardViewModel>(), nextVisibleCards);
@@ -849,7 +849,7 @@ public partial class GameTableControl : Control
 			&& !view.Servers.SelectMany(server => server.IcePositions).Any(host => host.CardId == card.HostCardId)))
 		{
 			_activeRigSlots.Add($"orphan:{card.Id}");
-			Control slot = EnsureRigSlot($"orphan:{card.Id}");
+			Control slot = EnsureRigSlot($"orphan:{card.Id}", RigArea(card));
 			ClearRigSlot(slot);
 			RenderHostedSlot(slot, card, Array.Empty<CardViewModel>(), nextVisibleCards);
 		}
@@ -857,58 +857,78 @@ public partial class GameTableControl : Control
 		{
 			slot.Visible = _activeRigSlots.Contains(key);
 		}
-		GroupRigByType(cards);
+		OrderRigAreas(cards);
 	}
 
-	private readonly Control[] _rigGaps = new Control[3];
+	/// <summary>The rig's areas (U4): programs, hardware and resources, each with its own cards and label.</summary>
+	private static readonly string[] RigAreaNames = ["Programs", "Hardware", "Resources"];
+	private readonly (PanelContainer Panel, HBoxContainer Cards, Label Caption)[] _rigAreas = new (PanelContainer, HBoxContainer, Label)[3];
 
-	/// <summary>
-	/// Orders the rig as programs, hardware, resources, then anything else (U4),
-	/// keeping install order within a group and a small gap between groups.
-	/// </summary>
-	private void GroupRigByType(IReadOnlyList<CardViewModel> cards)
+	private static int RigArea(CardViewModel card) => card.Type switch
 	{
-		static int Group(CardViewModel card) => card.Type switch
-		{
-			"Program" => 0,
-			"Hardware" => 1,
-			"Resource" => 2,
-			_ => 3,
-		};
-		var groups = cards.Where(card => string.IsNullOrEmpty(card.HostCardId) && _rigSlots.ContainsKey(card.Id))
-			.Select((card, order) => (Card: card, Group: Group(card), Order: order))
-			.OrderBy(entry => entry.Group).ThenBy(entry => entry.Order).ToArray();
-		int index = 0;
-		int? previous = null;
-		foreach ((CardViewModel card, int group, int _) in groups)
-		{
-			if (previous is { } last && last != group) PlaceRigGap(Math.Min(last, 2), ref index);
-			previous = group;
-			_runnerRigRow.MoveChild(_rigSlots[card.Id], index++);
-		}
-		for (int gap = 0; gap < _rigGaps.Length; gap++)
-			if (_rigGaps[gap] is { } unused && unused.GetIndex() >= index) unused.Visible = false;
-	}
+		"Program" => 0,
+		"Hardware" => 1,
+		_ => 2,
+	};
 
-	private void PlaceRigGap(int gap, ref int index)
+	private HBoxContainer EnsureRigArea(int index)
 	{
-		Control spacer = _rigGaps[gap] ??= new Control
+		if (_rigAreas[index].Panel is { } existing && IsInstanceValid(existing)) return _rigAreas[index].Cards;
+		// No top margin, so card tops stay level with the identity; the label sits below the cards.
+		var panel = new PanelContainer { Name = $"Rig{RigAreaNames[index]}", MouseFilter = MouseFilterEnum.Ignore };
+		panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
 		{
-			Name = $"RigGroupGap{gap}",
-			CustomMinimumSize = new Vector2(18, 0),
+			BgColor = new Color(0.43f, 0.94f, 0.72f, 0.05f),
+			CornerRadiusTopLeft = 6,
+			CornerRadiusTopRight = 6,
+			CornerRadiusBottomLeft = 6,
+			CornerRadiusBottomRight = 6,
+			ContentMarginLeft = 4,
+			ContentMarginRight = 4,
+			ContentMarginTop = 0,
+			ContentMarginBottom = 2,
+		});
+		var column = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
+		column.AddThemeConstantOverride("separation", 2);
+		var row = new HBoxContainer { Name = "Cards", MouseFilter = MouseFilterEnum.Ignore };
+		var caption = new Label
+		{
+			Name = "Caption",
+			Text = RigAreaNames[index],
+			HorizontalAlignment = HorizontalAlignment.Center,
 			MouseFilter = MouseFilterEnum.Ignore,
 		};
-		if (spacer.GetParent() != _runnerRigRow)
-		{
-			spacer.GetParent()?.RemoveChild(spacer);
-			_runnerRigRow.AddChild(spacer);
-		}
-		spacer.Visible = true;
-		_runnerRigRow.MoveChild(spacer, index++);
+		caption.AddThemeFontSizeOverride("font_size", 10);
+		caption.AddThemeColorOverride("font_color", new Color(0.62f, 0.76f, 0.75f, 0.8f));
+		column.AddChild(row);
+		column.AddChild(caption);
+		panel.AddChild(column);
+		_runnerRigRow.AddChild(panel);
+		_rigAreas[index] = (panel, row, caption);
+		return row;
 	}
 
-	private Control EnsureRigSlot(string key)
+	/// <summary>Keeps the areas in type order and each area's cards in install order; an empty area stays as a narrow label.</summary>
+	private void OrderRigAreas(IReadOnlyList<CardViewModel> cards)
 	{
+		for (int area = 0; area < _rigAreas.Length; area++)
+		{
+			HBoxContainer row = EnsureRigArea(area);
+			_runnerRigRow.MoveChild(_rigAreas[area].Panel, area);
+			row.AddThemeConstantOverride("separation", _runnerRigRow.GetThemeConstant("separation"));
+			int index = 0;
+			foreach (CardViewModel card in cards.Where(card => string.IsNullOrEmpty(card.HostCardId) && RigArea(card) == area
+				&& _rigSlots.TryGetValue(card.Id, out Control? slot) && slot.GetParent() == row))
+				row.MoveChild(_rigSlots[card.Id], index++);
+			bool empty = !row.GetChildren().OfType<Control>().Any(child => child.Visible);
+			_rigAreas[area].Panel.CustomMinimumSize = empty ? new Vector2(76, 0) : Vector2.Zero;
+			_rigAreas[area].Caption.Modulate = new Color(1, 1, 1, empty ? 0.55f : 1);
+		}
+	}
+
+	private Control EnsureRigSlot(string key, int area)
+	{
+		HBoxContainer parent = EnsureRigArea(area);
 		if (!_rigSlots.TryGetValue(key, out Control? slot))
 		{
 			slot = new Control
@@ -919,13 +939,13 @@ public partial class GameTableControl : Control
 			_rigSlots[key] = slot;
 		}
 
-		if (slot.GetParent() != _runnerRigRow)
+		if (slot.GetParent() != parent)
 		{
 			if (slot.GetParent() is Node oldParent)
 			{
 				oldParent.RemoveChild(slot);
 			}
-			_runnerRigRow.AddChild(slot);
+			parent.AddChild(slot);
 		}
 		return slot;
 	}
