@@ -112,6 +112,54 @@ Sizes: S is a few days, M is one to two weeks, L is several weeks.
 Gate: the ladder separates the current Standard from Easy, and each from
 random-legal, with non-overlapping intervals per seat.
 
+### A1b. Ladder over a deck pool (M) — with C1 in Wave 4
+
+The ladder today plays every entrant pairing on four preset combinations
+(tutorial starter and expanded, each seat) with the same seeds for every
+entrant: 640 games for two entrants at 40 seeds, about eight minutes on six
+workers, and intervals of about ±50 Elo. Crossing the pairings with twelve
+Gateway deck pairings at the same seeds would triple that, and every later
+card set would multiply it again. A deck matrix doesn't scale, so:
+
+- **A fixed game budget, not seeds per pairing.** How precisely a rating is
+  known depends on the number of games, not on how many decks they're spread
+  over. Plan a budget (say 1,280 games) and assign deck pairings to seeds
+  round-robin, so each pairing gets an equal share and the rating is the
+  average over the pool. Adding decks then costs no time; it only spreads
+  the same games more thinly.
+- **Common deals.** Every entrant plays each seed with the same deck pairing
+  and the same shuffles, as today, and differences use the paired
+  bootstrap. This cancels most of the deal and deck variance.
+- **Sequential stopping.** Implement the SPRT-style stopping planned in A1:
+  test "the candidate is at least as strong as the baseline" in batches and
+  stop once the result is clear. Most broken changes fail within a few
+  hundred games; only close calls use the full budget.
+- **Tiers.** A *screen* (a small budget with sequential stopping) for every
+  experiment, a *gate* (the full budget, fixed seeds) before a policy
+  version ships, and *targeted* runs for card-specific changes, limited to
+  decks containing that card, plus a small run over the whole pool to check
+  for regressions.
+- **Per-deck warnings, not per-deck gates.** Report each deck's result
+  (from the games that deck appeared in) and flag any deck where the
+  candidate is worse by a wide margin (for example, more than 100 Elo with
+  the interval clear of zero). With many decks, precise per-deck ratings
+  would need the full matrix again, so they are diagnostics only.
+- **A versioned pool.** The ladder's deck pool is versioned like a policy.
+  A new deck joins at a pool version bump, and ratings are only compared
+  within one pool version. The tutorial decks stay the frozen M5 benchmark.
+- **Faster games.** Wall time is per game. Profile a full ladder game before
+  any bigger pool (validator, observation and view building are the
+  candidates), and keep games single-threaded so the workers scale with
+  cores.
+
+When more cards arrive (Elevation, then Startup), the pool can grow to
+dozens of decks at the same budget. At that size, add deck strength to the
+rating model (a Bradley–Terry model with deck terms), so a strong deck's
+wins aren't credited to its pilot, and sample the pool weighted by how often
+decks are played rather than uniformly. Decklist sampling for hidden cards
+(A3) already assumes the bot knows which list its opponent plays; with a
+pool, the host passes the chosen list, as with presets.
+
 ### A2. Fix the heuristics without search (M)
 
 These are cheap and independently measurable. Each is a policy version bump
@@ -335,6 +383,7 @@ having their games collected.
 
 ```text
 A1 ladder + human corpus ──> gates everything below
+C1 Gateway decks + A1b deck-pool ladder ──> first in Wave 4; the rest is measured on the pool
 A2 heuristic fixes ────────> A5 tuning
 E1 + E5 (engine) ──> A3 infrastructure (Wave 3)
 Wave 4: A4a run model ──> A5 fitted evaluation ──> A3 planner on A4a + A5 ──> A4 run search
