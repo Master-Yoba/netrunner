@@ -115,7 +115,7 @@ internal static class TacticalExecution
                 }
                 else
                 {
-                    Observation observation = ObservationBuilder.Build(trace.State, side, board.Behavior);
+                    Observation observation = ObservationBuilder.Build(trace.State, side, board.Behavior, board.Runtime);
                     Task<ActionId> choose = Task.Run(async () => await agent!.ChooseActionAsync(observation, linked.Token).ConfigureAwait(false), CancellationToken.None);
                     ActionId id = await Await(choose).ConfigureAwait(false);
                     action = pending.LegalActions.SingleOrDefault(candidate => candidate.Id == id)

@@ -28,6 +28,10 @@ public static class OfflinePolicies
             : new RunnerHeuristicPolicy(configuration.PolicyVersion);
     }
 
+    /// <summary>The latest version for a side that never plans.</summary>
+    public static string LatestHeuristic(PlayerSide side) =>
+        side == PlayerSide.Corp ? CorpHeuristicPolicy.LatestHeuristic : RunnerHeuristicPolicy.LatestHeuristic;
+
     /// <summary>Creates the configuration for a profile of a given side and version.</summary>
     public static OfflineAgentConfiguration Configure(PlayerSide side, string profileId, ulong policySeed, string? policyVersion = null) =>
         side == PlayerSide.Corp

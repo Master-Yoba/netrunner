@@ -17,7 +17,23 @@ public interface IOfflinePolicy
         features.Actions.Select(action => new AgentCandidate(action.Id,
             budget.TrySpend() ? Evaluate(features, action, knowledge, objective, configuration, catalog, budget)
                 : Fallback(features, action) with { UsedFallback = true })).ToImmutableArray();
+
+    /// <summary>
+    /// As the overload above, when the host lets the agent plan. A policy that
+    /// doesn't plan ignores <paramref name="planning"/>, so its decisions and
+    /// its use of the random stream are unchanged.
+    /// </summary>
+    ImmutableArray<AgentCandidate> EvaluateDecision(AgentFeatures features, AgentKnowledge knowledge, AgentObjective? objective,
+        OfflineAgentConfiguration configuration, ICardEvaluationCatalog catalog, AgentWorkBudget budget, PlanningContext? planning) =>
+        EvaluateDecision(features, knowledge, objective, configuration, catalog, budget);
 }
+
+/// <summary>
+/// What a planning policy may use beyond its observation (AI plan A3): samples
+/// of the hidden state consistent with that observation, and the agent's own
+/// checkpointed random stream, so planning stays deterministic and resumable.
+/// </summary>
+public sealed record PlanningContext(ObservationDeterminizer Determinizer, DeterministicRandom Random);
 
 public sealed record AgentUtility(int Priority, int Score, string Reason, bool Approximate = false, AgentObjective? Objective = null, bool UsedFallback = false);
 public sealed record AgentCandidate(ActionId ActionId, AgentUtility Utility);
@@ -117,8 +133,12 @@ public sealed class OfflineAgent : IAgentLifecycle
             if (_pending is { } retry && retry.Digest == digest) return ValueTask.FromResult(retry.Action);
             var budget = new AgentWorkBudget(Configuration.WorkBudget, cancellationToken);
             foreach (AgentAction action in features.Actions) _policy.ValidateAction(features, action);
+            // Planning draws from the same checkpointed stream as tie-breaking, before it.
+            var random = DeterministicRandom.Restore(_checkpoint.RandomState);
+            PlanningContext? planning = observation.Determinizer is { } determinizer && determinizer.Viewer == ControlledSide
+                ? new PlanningContext(determinizer, random) : null;
             ImmutableArray<AgentCandidate> candidates = _policy.EvaluateDecision(features, _checkpoint.Knowledge,
-                _checkpoint.Objective, Configuration, _catalog, budget);
+                _checkpoint.Objective, Configuration, _catalog, budget, planning);
             if (candidates.IsDefault || candidates.Length != features.Actions.Length || candidates.Any(candidate => candidate?.Utility is null)
                 || !candidates.Select(candidate => candidate.ActionId).OrderBy(id => id.Value, StringComparer.Ordinal)
                     .SequenceEqual(features.Actions.Select(action => action.Id).OrderBy(id => id.Value, StringComparer.Ordinal)))
@@ -128,7 +148,6 @@ public sealed class OfflineAgent : IAgentLifecycle
             int best = candidates.Where(candidate => candidate.Utility.Priority == priority).Max(candidate => candidate.Utility.Score);
             AgentCandidate[] nearTies = candidates.Where(candidate => candidate.Utility.Priority == priority
                 && (long)best - candidate.Utility.Score <= Configuration.NearTieTolerance).ToArray();
-            var random = DeterministicRandom.Restore(_checkpoint.RandomState);
             AgentCandidate chosen = nearTies.Length == 1 ? nearTies[0] : nearTies[random.NextInt(nearTies.Length)];
             cancellationToken.ThrowIfCancellationRequested();
             LastEvaluation = _captureDiagnostics

@@ -31,7 +31,7 @@ public static class FullMatchRunner
             cancellationToken.ThrowIfCancellationRequested();
             PendingDecision pending = state.PendingDecision ?? throw Stall("Full match stalled without a decision.");
             PlayerSide side = state.GetPlayer(pending.Owner).Side;
-            Observation observation = ObservationBuilder.Build(state, side, definition.Behavior);
+            Observation observation = ObservationBuilder.Build(state, side, definition.Behavior, definition.Runtime);
             IGameAgent activeAgent = side == PlayerSide.Corp ? corpAgent : runnerAgent;
             ActionId action;
             try

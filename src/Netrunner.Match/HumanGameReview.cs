@@ -59,7 +59,7 @@ public static partial class HumanGameReview
                 ?? throw new InvalidOperationException($"Replay action {recorded.Sequence} has no pending decision.");
             if (state.GetPlayer(pending.Owner).Side == reviewedSide)
             {
-                Observation observation = ObservationBuilder.Build(state, reviewedSide, behavior);
+                Observation observation = ObservationBuilder.Build(state, reviewedSide, behavior, runtime);
                 // Names come from the reviewed side's own view, so hidden cards stay unnamed.
                 Func<LegalAction?, string?> describe = Describer(ObservationViewMapper.Build(observation, metadata, behavior));
                 ActionId bot = await agent.ChooseActionAsync(observation, cancellationToken).ConfigureAwait(false);
