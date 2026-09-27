@@ -178,6 +178,42 @@ Plan:
   profile. There is no fixed percentage target, because correctness at commit
   comes first.
 
+**Inventory (Wave 3).** Share is the stage's part of validator time on the
+official engine benchmark before E2 (10 random-legal games, 4,137 positions).
+Every stage stays at commit time.
+
+| Stage | Tier | Share | What it checks | Why it stays at commit |
+|---|---|---:|---|---|
+| `ValidateMetadata` | Structural | 3% | Schema and version pins, catalog fingerprints | Cheap, and a mismatched catalog must never be applied |
+| `ValidatePlayers` | Structural | <1% | One Corp and one Runner, counters not negative | Cheap |
+| `ValidateZonesAndCards` (with `ValidateZoneSemantics`, `ValidateRequiredZones`) | Structural | 16% | Unique IDs, each card in exactly one zone, zone references, owners, face-up public zones, rezzed implies face-up | Every move could break it |
+| `ValidateHosting` | Structural | 5% | Hosts exist and are installed, no cycles | Every install and trash could break it |
+| `ValidateServers` (with `ValidateServerZone`, `ValidateServerLifecycle`) | Structural | 4% | Server topology, remote lifecycle | Installs and trashes change remotes |
+| `ValidateSetupAndIdentities` | Structural | 1% | Identities, setup completion | Cheap |
+| `ValidateRuntimeCardActivity` | Rules consistency | 7% | Printed-card metadata matches installed and active cards | Rez and install change activity |
+| `ValidateTurnAndOutcome` (with `ValidateTurnFacts`, `ValidateTurnFactCardOccurrences`) | Rules consistency | 6% | Turn frame and step, outcome, turn facts ("first X" uses, runs this turn) | Every action updates turn facts |
+| `ValidateRunState` (with `ValidateRunStackTopology`, `ValidateRunEncounter`, `ValidateResolvedSubroutineLedger`, `ValidateRunPriority`, `ValidateRunRestrictions`, `ValidateRunRandomAccessLimit`, `ValidateRunRezCostModifiers`, `ValidateCatalogEncounterStrengthAdjustment`) | Rules consistency | 3% | Run cursor against the attacked server's ICE, encounter and ledger, run-scoped modifiers and their provenance | A run step can leave a cursor that no longer matches the board |
+| `ValidatePersistentRuns` (with `ValidatePersistentContext`) | Rules consistency | <1% | Facts that outlive a run | Cheap |
+| `ValidateRulesState` (with `ValidateAllocatorPosition`) | Rules consistency | 19% | Memory against installed programs, lingering effects, ID allocator | A trash or install can change memory; an invalid memory state must not be published |
+| `ValidateResolutionAndDecision` (frame checks: card play, installs, abilities, turn boundary, basic draw, behavior continuations and choices, trigger sources) | Rules consistency | 35% | Every resolution frame against the state it points at, and the pending decision | Frames are what the next action resumes |
+| `ValidatePendingDecision` (inside the above: turn, timing, run, install, ability, checkpoint, memory-cleanup and discard action sets) | Rules consistency | (included above) | The issued legal actions equal what the engine's own materializers give for the state | The engine issues actions with the same materializers, so this catches a decision issued before a later change to the state; that is a real defect and must reject |
+
+The only card- or frame-specific exception was the M5.8 allowance that lets a
+played card's behavior suspend beneath a memory-cleanup continuation (DZMZ
+trashed by Retribution). Its frame shape is now
+`GameEngine.IsSuspendedForMemoryLoss`, beside the transfer that pushes it.
+The catalog provenance checks above (`ValidateCatalog*`,
+`ValidateInstalledCatalogTriggerSources`) are generic: they check behaviors
+against their catalog declarations, not named cards.
+
+No stage is a pure audit that a single action can't violate, so none moved to
+checkpoints. The cost came down instead by not validating the same state
+twice: authoritative Apply validated its input in full, and the input is
+almost always the output it validated one action earlier. `GameState` is
+immutable, so a state that passed against the built-in catalog types is
+remembered by reference (`StateInvariantValidator.IsCertified`) and skipped.
+That halves the validator's work per action.
+
 ### E3. Random-legal rules fuzzing (S → M)
 
 The DZMZ Optimizer and Retribution failure surfaced at game 999 of 1,000
