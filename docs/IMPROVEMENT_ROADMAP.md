@@ -208,14 +208,18 @@ game" at the end of Wave 3.
 |---|---|
 | U5 art direction, feel and audio | It only pays off once the layout (U4) is stable. |
 | U6 onboarding and playtest loop | It needs the final interaction model from U4. |
-| A3 turn planner | Moved from Wave 3 ([record](WAVE_3_PROGRESS.md#a3-turn-planner)): the planning infrastructure works, but its end-of-turn evaluation didn't pick better turns, so it needs a new evaluation, which overlaps A5. |
-| A4 run search | It builds on the A3 infrastructure, and adds the most for the Runner. |
-| A5 weight tuning | The ladder is fast and the weights are named, so tuning won't be undone by later structural changes. |
+| A4a whole-run model | First: per-server cost to get in and potential are the evaluation terms A3 lacked, and A4 builds on the same model. Inspired by chiriboga's run calculator (clean-room; it is GPL-3.0). |
+| A5 fitted evaluation | Fit the evaluation to self-play outcomes over the A4a and A2 features, instead of hand-tuning. |
+| A3 turn planner | Moved from Wave 3 ([record](WAVE_3_PROGRESS.md#a3-turn-planner)): the planning infrastructure works, but its end-of-turn evaluation didn't pick better turns. It returns on A4a and A5. |
+| A4 run search | It builds on the A3 infrastructure and the A4a model, and adds the most for the Runner. |
 
 **Gate:**
 - The M5 frame-time gate still passes with the new effects and audio.
 - Playtest metrics (time per turn, rejected drops, "All legal actions…" use)
   improve against a Wave 0 recording.
+- A4a's run model matches the engine: its predicted cost and outcome of a
+  run agree with the run played out in Simulation mode on a corpus of
+  positions.
 - A3 shows a clear ladder gain in both seats within the latency budget.
 - A4 and A5 show ladder gains, and hidden-state twins still pass.
 

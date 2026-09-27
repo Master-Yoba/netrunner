@@ -178,6 +178,64 @@ The main structural upgrade for turn-action decisions:
 Gate: the ladder shows a clear gain in both seats over A2, and the new
 turn-sequencing tactical positions pass.
 
+*Wave 3 outcome* ([record](WAVE_3_PROGRESS.md#a3-turn-planner)): the
+planning infrastructure works (a determinizer attached to the observation,
+twin-safe deterministic rollouts, Corp v5 and Runner v3, the
+`standard-plan` ladder entrant), but over 640 ladder games it was level with
+the non-planning Standard in both seats. It changed a quarter to two fifths
+of turn actions, so the end-of-turn evaluation couldn't tell better turns
+from worse ones. It ships off and moves to Wave 4, where it is rebuilt on the
+run model below (A4a) and a fitted evaluation (A5).
+
+**Wave 4 revision.** Score the end of a planned turn with terms the run model
+supplies instead of card counts:
+- per server, the Runner's cheapest cost to get in (clicks and credits) and
+  whether it can get in at all this turn or next;
+- per server, its potential: known or inferred agendas, advancement, trash
+  targets, and for R&D and HQ the agenda density and how much is already
+  known;
+- the score race, money after reserves (rez reserve for the Corp, break
+  reserve for the Runner) and hand quality.
+
+The heuristic blend from Wave 3 stays, so planning corrects the heuristic
+rather than replacing it.
+
+### A4a. Whole-run model (M) — first in Wave 4
+
+The Runner's encounter planner handles one encounter at a time. A run is a
+path through every piece of ICE, so plan it as one:
+- Enumerate how to get through a server's ICE, outermost to innermost, with
+  the clicks and credits available: which breaker handles each piece, pumps
+  and breaks, which subroutines to let fire, and where jacking out is the best
+  exit. Take the cheapest complete path; a path that fires a serious
+  subroutine (end the run, trash a program, install more ICE) is avoided when
+  there is another.
+- Describe each subroutine's effect in a small typed vocabulary (net damage,
+  tag, end the run, lose credits, pay credits, a minor, moderate or serious
+  effect) derived from the behavior catalog, not from card text.
+- Unknown ICE uses a prior over the ICE the Corp could have, with the Corp's
+  credits as the rez budget.
+- Cache the result per server for the decision, and invalidate it when the
+  board, credits or clicks change.
+
+The same model serves both sides: the Runner uses it to pick runs and
+installs, and the Corp uses it from the Runner's point of view (public
+information only) to judge where an agenda is safe, replacing the A2
+breaker-coverage estimate.
+
+Also from this pass:
+- **HQ and R&D knowledge.** Track how much of HQ and the top of R&D is known
+  from accesses, reveals and draws since, and let it lower the value of
+  running a server the Runner already knows.
+- **Cards worth keeping.** One ranking of hand cards by current need
+  (missing breaker types, economy, the next install) for discard, mulligan
+  and trash choices.
+
+Design note: [chiriboga](https://github.com/drbo6/chiriboga) (a JavaScript
+Netrunner solo bot) inspired this pass, particularly its run calculator, its
+per-server cost and potential caches and its HQ knowledge estimate. It is
+GPL-3.0, so this is a clean-room design from its ideas; no code is copied.
+
 ### A4. Determinized search for runs and responses (L) — needs E1 and E5
 
 - **Run decisions** (whether to run, where, when to jack out, what to break,
@@ -202,10 +260,16 @@ latency is within budget.
 - With named weights (A2) and a fast ladder (A1), tune the static evaluation by
   self-play: CMA-ES or coordinate descent over the weight vector against the
   anchor pool, per side. Check against a held-out seed set.
-- Optional later step: fit the static evaluation to game outcomes from
-  simulated play (logistic regression on features). Keep it small, linear or
-  shallow, and deterministic, with weights stored as a versioned JSON file
-  under `data/`.
+- Fit the static evaluation to game outcomes from self-play (logistic
+  regression on the A4a and A2 features), rather than leaving it hand-tuned;
+  this is what A3's planner needs. Self-play is cheap with Simulation mode and
+  the ladder, and every game is fully observed. Keep the model small, linear
+  or shallow, and deterministic, with weights stored as a versioned JSON file
+  under `data/`. Hold out seeds, and check the fitted evaluation against the
+  hand weights on the ladder.
+- Later, iterate: planner or search results become better training targets
+  than raw outcomes (expert iteration), as long as each round is accepted on
+  ladder evidence.
 
 Gate: the tuned weights beat the hand weights on held-out seeds.
 
@@ -234,12 +298,25 @@ below still depend on A3.
 Gate: human playtest notes confirm Easy, Standard and Hard feel ordered, and
 the ladder shows the same order.
 
+### Human game data (deferred)
+
+Jinteki.net has a replay format but no public replay source, games there are
+almost all Standard (a few Startup), and only games whose every card we
+implement can be replayed in our engine. Donated replays wouldn't reach a
+useful volume. So human data from Jinteki waits until at least Startup
+content is implemented. Until then the local, opt-in human corpus (A1) is for
+review, and self-play (A5) is for fitting. If this is picked up later, ask
+the Jinteki maintainers first rather than scraping spectator sessions:
+spectators don't see hidden information, and the players haven't agreed to
+having their games collected.
+
 ## 5. Sequencing
 
 ```text
 A1 ladder + human corpus ──> gates everything below
 A2 heuristic fixes ────────> A5 tuning
-E1 + E5 (engine) ──> A3 turn planner ──> A4 run search
+E1 + E5 (engine) ──> A3 infrastructure (Wave 3)
+Wave 4: A4a run model ──> A5 fitted evaluation ──> A3 planner on A4a + A5 ──> A4 run search
 A6 difficulty/personality after A3 (needs compute knobs)
 ```
 
