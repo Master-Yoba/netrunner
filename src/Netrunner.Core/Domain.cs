@@ -29,6 +29,14 @@ public sealed record Observation(
     /// </summary>
     [JsonIgnore]
     public ObservationDecision? Decision { get; init; }
+
+    /// <summary>
+    /// Lets a search agent deal simulation states consistent with this
+    /// observation, when the host attached one. Like <see cref="Decision"/> it
+    /// is not serialized and not part of any observation digest.
+    /// </summary>
+    [JsonIgnore]
+    public ObservationDeterminizer? Determinizer { get; init; }
 }
 
 /// <summary>Viewer-owned metadata for the currently issued decision.</summary>

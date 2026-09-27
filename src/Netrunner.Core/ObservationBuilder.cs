@@ -32,6 +32,24 @@ public static partial class ObservationBuilder
     }
 
     /// <summary>
+    /// As <see cref="Build(GameState, PlayerSide, IBehaviorCatalog)"/>, with an
+    /// <see cref="ObservationDeterminizer"/> attached for a search agent. Hosts
+    /// that hold the authoritative state use this when an agent may plan.
+    /// </summary>
+    public static Observation Build(
+        GameState state,
+        PlayerSide viewer,
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog runtimeCardCatalog)
+    {
+        ArgumentNullException.ThrowIfNull(runtimeCardCatalog);
+        Observation observation = Build(state, viewer, behaviorCatalog);
+        // A simulated state is already a sample; it is never sampled again.
+        return state.IsSimulated ? observation
+            : observation with { Determinizer = new ObservationDeterminizer(state, viewer, behaviorCatalog, runtimeCardCatalog) };
+    }
+
+    /// <summary>
     /// Builds the same viewer-scoped observation using the immutable behavior
     /// catalog composed by the match. This keeps effective static projections
     /// (including maximum hand size) derived without mutating base rules.
