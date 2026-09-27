@@ -29,7 +29,7 @@ public sealed partial class MatchCoordinator
         {
             if (snapshot.IsPaused || snapshot.IsTerminal || snapshot.Feedback?.IsError == true
                 || snapshot.AwaitingHumanDecision && !AutoPasses(snapshot.Observation.DecisionId, snapshot.Observation.LegalActions,
-                    PriorityWindow.From(snapshot.View)))
+                    PriorityWindow.From(snapshot.View, _behaviorCatalog)))
                 completion.TrySetResult(snapshot);
         }
         SnapshotPublished += Observe;
@@ -124,7 +124,7 @@ public sealed partial class MatchCoordinator
         }
         else if (side == _options.HumanSide)
         {
-            PriorityWindow window = PriorityWindow.From(state, side);
+            PriorityWindow window = PriorityWindow.From(state, side, _behaviorCatalog);
             // A stop request holds the next window the player would otherwise skip.
             if (_stopAtNextWindow && _options.AutoPassPriority && _autoPassWindows && !AutoPassPolicy.OnlyPass(pending.LegalActions)
                 && AutoPassPolicy.OptionalWindow(pending.LegalActions, window))

@@ -62,7 +62,7 @@ public sealed class AutoPassWindowTests
                     && state.Zones.Any(zone => zone.ServerId == run.AttackedServer && zone.Kind == ZoneKind.ServerIce && zone.CardIds.Contains(rez.CardId))))
             {
                 iceWindows++;
-                Assert.False(AutoPassPolicy.OptionalWindow(decision.LegalActions, PriorityWindow.From(state, PlayerSide.Corp)));
+                Assert.False(AutoPassPolicy.OptionalWindow(decision.LegalActions, PriorityWindow.From(state, PlayerSide.Corp, definition.Behavior)));
             }
             ApplyResult applied = GameEngine.Apply(state, action.Submission, definition.Behavior, definition.Runtime);
             Assert.True(applied.Accepted, applied.Rejection?.Message);
@@ -96,7 +96,7 @@ public sealed class AutoPassWindowTests
                 if (state.GetPlayer(decision.Owner).Side == PlayerSide.Corp
                     && decision.LegalActions.Single(candidate => candidate.Id == action.Submission.ActionId).Parameters is RezCardParameters rez)
                 {
-                    PriorityWindow window = PriorityWindow.From(state, PlayerSide.Corp);
+                    PriorityWindow window = PriorityWindow.From(state, PlayerSide.Corp, definition.Behavior);
                     bool elsewhere = window.InRun && !window.AttackedServerCards.Contains(rez.CardId.Value);
                     if (AutoPassPolicy.OptionalWindow(decision.LegalActions, window) && !elsewhere)
                         missed.Add($"{rez.CardId} at action {action.Sequence} ({state.Turn.ActiveSide} {state.Turn.Step}, run step {state.RunState?.Step})");
@@ -105,6 +105,41 @@ public sealed class AutoPassWindowTests
             }
         }
         Assert.Empty(missed);
+    }
+
+    [Theory]
+    [InlineData("30058", RezTiming.RunOnServer)] // AMAZE Amusements: a run on its server ends
+    [InlineData("30042", RezTiming.RunOnServer)] // Manegarm Skunkworks: its server is approached
+    [InlineData("30050", RezTiming.RunOnServer)] // Anoetic Void: its server is approached
+    [InlineData("30045", RezTiming.Never)] // Urtica Cipher: works unrezzed
+    [InlineData("30037", RezTiming.Anytime)] // Nico Campaign: when your turn begins
+    [InlineData("30061", RezTiming.Anytime)] // Clearinghouse: when your turn begins
+    [InlineData("30071", RezTiming.Anytime)] // Regolith Mining License
+    [InlineData("30053", RezTiming.Anytime)] // Spin Doctor
+    [InlineData("30066", RezTiming.Anytime)] // Malapert Data Vault: when you score
+    public void RezTimingFollowsWhatTheCardDoes(string code, RezTiming expected)
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        FullMatchDefinition definition = RulesFuzzRunner.CreateDefinition(RulesFuzzRunner.OfficialContentIds[0], 1);
+        Assert.Equal(expected, RezTimingClassifier.Classify(definition.Behavior, new CardDefinitionId(code)));
+    }
+
+    [Fact]
+    public void ARunOnlyRezStopsOnlyDuringARunOnItsServer()
+    {
+        LegalAction[] rez = [Action(ActionKind.PassPriority, 0),
+            new(new ActionId("action:rez"), ActionKind.RezCard, "Rez", new RezCardParameters(new CardInstanceId("card:7"), 1))];
+        var runOnly = new Dictionary<string, RezTiming> { ["card:7"] = RezTiming.RunOnServer };
+        var never = new Dictionary<string, RezTiming> { ["card:7"] = RezTiming.Never };
+        // Not in the Corp's own turn or before it (playtest, 27 September: the AMAZE nag).
+        Assert.True(AutoPassPolicy.OptionalWindow(rez, new PriorityWindow(false, false) { OwnActionPhase = true, RezTimings = runOnly }));
+        Assert.True(AutoPassPolicy.OptionalWindow(rez, new PriorityWindow(false, false) { BeforeOwnTurn = true, RezTimings = runOnly }));
+        // During a run on its server, once past the ICE: stop.
+        var run = new PriorityWindow(true, false) { PastIce = true, AttackedServerCards = new HashSet<string>(["card:7"]), RezTimings = runOnly };
+        Assert.False(AutoPassPolicy.OptionalWindow(rez, run));
+        // A card that works unrezzed never stops.
+        Assert.True(AutoPassPolicy.OptionalWindow(rez, run with { RezTimings = never }));
+        Assert.True(AutoPassPolicy.OptionalWindow(rez, new PriorityWindow(false, false) { OwnActionPhase = true, RezTimings = never }));
     }
 
     [Fact]

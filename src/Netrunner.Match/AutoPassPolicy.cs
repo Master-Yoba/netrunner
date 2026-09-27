@@ -23,9 +23,16 @@ public sealed record PriorityWindow(bool InRun, bool Encountering)
     /// <summary>ICE protecting the attacked server, by instance ID. Its rez on approach always matters.</summary>
     public IReadOnlySet<string> AttackedServerIce { get; init; } = new HashSet<string>(StringComparer.Ordinal);
 
-    public static PriorityWindow From(GameState state, PlayerSide owner)
+    /// <summary>When the offered rezzes can matter, by card instance ID; a card not listed is <see cref="RezTiming.Anytime"/>.</summary>
+    public IReadOnlyDictionary<string, RezTiming> RezTimings { get; init; } = new Dictionary<string, RezTiming>(StringComparer.Ordinal);
+
+    public static PriorityWindow From(GameState state, PlayerSide owner, IBehaviorCatalog? behavior = null)
     {
         ArgumentNullException.ThrowIfNull(state);
+        var timings = new Dictionary<string, RezTiming>(StringComparer.Ordinal);
+        if (behavior is not null)
+            foreach (RezCardParameters rez in (state.PendingDecision?.LegalActions ?? []).Select(action => action.Parameters).OfType<RezCardParameters>())
+                timings[rez.CardId.Value] = RezTimingClassifier.Classify(behavior, state.GetCard(rez.CardId).DefinitionId);
         bool inRun = state.RunState is { EndReason: null };
         RunState? run = inRun ? state.RunState : null;
         return new(inRun, run?.Encounter is { Status: RunEncounterStatus.Initialized })
@@ -39,12 +46,22 @@ public sealed record PriorityWindow(bool InRun, bool Encountering)
             AttackedServerIce = run is null ? new HashSet<string>(StringComparer.Ordinal)
                 : state.Zones.Where(zone => zone.ServerId == run.AttackedServer && zone.Kind == ZoneKind.ServerIce)
                     .SelectMany(zone => zone.CardIds).Select(id => id.Value).ToHashSet(StringComparer.Ordinal),
+            RezTimings = timings,
         };
     }
 
-    public static PriorityWindow From(MatchViewModel view)
+    public static PriorityWindow From(MatchViewModel view, IBehaviorCatalog? behavior = null)
     {
         ArgumentNullException.ThrowIfNull(view);
+        var timings = new Dictionary<string, RezTiming>(StringComparer.Ordinal);
+        if (behavior is not null)
+        {
+            Dictionary<string, CardViewModel> installed = view.Servers.SelectMany(server => server.Root.Concat(server.Ice))
+                .OfType<CardViewModel>().GroupBy(card => card.Id, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+            foreach (RezCardParameters rez in view.LegalActions.Select(action => action.Parameters).OfType<RezCardParameters>())
+                if (installed.TryGetValue(rez.CardId.Value, out CardViewModel? card) && card.DefinitionId is { } definition)
+                    timings[rez.CardId.Value] = RezTimingClassifier.Classify(behavior, new CardDefinitionId(definition));
+        }
         RunFocusViewModel? run = view.Run is { EndReason: null } active ? active : null;
         return new(run is not null, run?.Encounter is { Status: RunEncounterStatus.Initialized })
         {
@@ -57,6 +74,7 @@ public sealed record PriorityWindow(bool InRun, bool Encountering)
             AttackedServerIce = view.Servers.Where(server => server.Id == run?.AttackedServerId)
                 .SelectMany(server => server.Ice).OfType<CardViewModel>().Select(card => card.Id)
                 .ToHashSet(StringComparer.Ordinal),
+            RezTimings = timings,
         };
     }
 
@@ -102,15 +120,55 @@ public static class AutoPassPolicy
             });
     }
 
-    private static bool RezMatters(LegalAction action, PriorityWindow window) =>
-        window.BeforeOwnTurn || window.OwnActionPhase
-        || window.InRun && action.Parameters is RezCardParameters rez
-            && (window.AttackedServerIce.Contains(rez.CardId.Value)
-                || window.PastIce && window.AttackedServerCards.Contains(rez.CardId.Value));
+    private static bool RezMatters(LegalAction action, PriorityWindow window)
+    {
+        if (action.Parameters is not RezCardParameters rez) return window.BeforeOwnTurn || window.OwnActionPhase;
+        string id = rez.CardId.Value;
+        bool pastIceOnItsServer = window.InRun && window.PastIce && window.AttackedServerCards.Contains(id);
+        if (window.InRun && window.AttackedServerIce.Contains(id)) return true;
+        return window.RezTimings.GetValueOrDefault(id, RezTiming.Anytime) switch
+        {
+            RezTiming.Never => false,
+            RezTiming.RunOnServer => pastIceOnItsServer,
+            _ => window.BeforeOwnTurn || window.OwnActionPhase || pastIceOnItsServer,
+        };
+    }
 
     public static ActionId PassAction(IReadOnlyList<LegalAction> actions)
     {
         ArgumentNullException.ThrowIfNull(actions);
         return actions.First(action => action.Kind == ActionKind.PassPriority).Id;
+    }
+}
+
+/// <summary>When rezzing a card can matter to the player.</summary>
+public enum RezTiming
+{
+    /// <summary>Its abilities are useful at any time: rez windows stop as usual.</summary>
+    Anytime,
+    /// <summary>It acts only during a run on its own server: stop only there, once past the ICE.</summary>
+    RunOnServer,
+    /// <summary>It works unrezzed: never stop for its rez.</summary>
+    Never,
+}
+
+/// <summary>Reads a card's rez timing from its behavior definition.</summary>
+public static class RezTimingClassifier
+{
+    private static readonly HashSet<OccurrenceKind> RunOccurrences =
+    [
+        OccurrenceKind.ServerApproached, OccurrenceKind.RunEnded, OccurrenceKind.RunSuccessful,
+        OccurrenceKind.CardAccessed, OccurrenceKind.IceEncountered, OccurrenceKind.AccessedCardTrashed,
+    ];
+
+    public static RezTiming Classify(IBehaviorCatalog behavior, CardDefinitionId definitionId)
+    {
+        ArgumentNullException.ThrowIfNull(behavior);
+        if (!behavior.TryGet(definitionId, out CardBehaviorDefinition spec) || spec.Triggers.Count == 0
+            || spec.PaidAbilities.Count > 0 || spec.StaticModifiers.Count > 0 || spec.Instructions.Count > 0)
+            return RezTiming.Anytime;
+        if (spec.Triggers.All(trigger => trigger.ActiveWhileUnrezzed)) return RezTiming.Never;
+        return spec.Triggers.All(trigger => RunOccurrences.Contains(trigger.Occurrence) && trigger.RequireSourceOnAttackedServer)
+            ? RezTiming.RunOnServer : RezTiming.Anytime;
     }
 }
