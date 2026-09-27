@@ -187,7 +187,7 @@ game" at the end of Wave 3.
 - The sampler's self-consistency test (observation of the sample equals the
   input) passes, and so do the hidden-state twin tests.
 
-### Wave 3 — real game feel; the bot plans turns
+### Wave 3 — real game feel
 
 | Item | Why now |
 |---|---|
@@ -202,7 +202,7 @@ game" at the end of Wave 3.
 - Authoritative `Apply` rejects everything it did on the known-bad corpus, and
   validator time on the benchmark profile is measurably lower.
 
-### Wave 4 — polish, and the bot searches runs
+### Wave 4 — polish, and the bot plans turns and searches runs
 
 | Item | Why now |
 |---|---|
