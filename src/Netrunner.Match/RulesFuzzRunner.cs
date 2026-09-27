@@ -74,6 +74,28 @@ public static class RulesFuzzRunner
     /// </summary>
     public static IReadOnlyList<string> OfficialContentIds { get; } = ["expanded-expanded"];
 
+    /// <summary>
+    /// Every pairing of the System Gateway sample decks (Wave 4 C1), named
+    /// <c>corpPresetId~runnerPresetId</c>: four Corp decks against three Runner decks.
+    /// </summary>
+    public static IReadOnlyList<string> GatewayContentIds { get; } =
+        OfficialPresetCatalog.Embedded().Gateway.Where(preset => preset.Side == PlayerSide.Corp)
+            .SelectMany(corp => OfficialPresetCatalog.Embedded().Gateway.Where(preset => preset.Side == PlayerSide.Runner)
+                .Select(runner => $"{corp.PresetId}{PairSeparator}{runner.PresetId}"))
+            .ToArray();
+
+    /// <summary>Separates the Corp and Runner preset IDs in a named-preset content ID.</summary>
+    public const char PairSeparator = '~';
+
+    /// <summary>The content IDs a <c>--content</c> option names: developer, official (expanded) or gateway.</summary>
+    public static IReadOnlyList<string> ContentIds(string content) => content switch
+    {
+        "developer" => [DeveloperContentId],
+        "official" => OfficialContentIds,
+        "gateway" => GatewayContentIds,
+        _ => throw new ArgumentException($"Unknown content '{content}'; expected developer, official or gateway.", nameof(content)),
+    };
+
     /// <summary>Every official preset pairing, in the benchmark's corp/runner order (the frozen M5 suites).</summary>
     public static IReadOnlyList<string> AllOfficialContentIds { get; } =
         ["basic-basic", "basic-expanded", "expanded-basic", "expanded-expanded"];
@@ -116,17 +138,32 @@ public static class RulesFuzzRunner
     {
         ArgumentNullException.ThrowIfNull(contentId);
         if (contentId == DeveloperContentId) return FullMatchDefinition.Developer(seed);
-        string[] parts = contentId.Split('-');
-        if (parts.Length != 2 || parts.Any(part => part is not ("basic" or "expanded")))
-            throw new ArgumentException($"Unknown fuzz content '{contentId}'.", nameof(contentId));
+        (string corpPreset, string runnerPreset) = PresetIds(contentId);
         if (!string.Equals(CardDataResource.EmbeddedMode, CardDataResource.OfficialMode, StringComparison.Ordinal))
             throw new InvalidOperationException("Official fuzz content requires the embedded official card snapshot.");
         CardDataSet data = CardDataResource.LoadEmbedded();
         BehaviorCatalog behavior = GatewayBehaviorCatalog.Create();
         MatchRequest request = MatchRequestComposer.ComposeOfficial(
-            $"system-gateway-{parts[0]}-corp", $"system-gateway-{parts[1]}-runner", data, seed,
-            OfficialPresetCatalog.Embedded(), behaviorCatalog: behavior);
+            corpPreset, runnerPreset, data, seed, OfficialPresetCatalog.Embedded(), behaviorCatalog: behavior);
         return FullMatchDefinition.FromRequest(request, data, behavior);
+    }
+
+    /// <summary>The Corp and Runner preset IDs a content ID names: <c>basic-expanded</c> style, or <c>corpId~runnerId</c>.</summary>
+    public static (string Corp, string Runner) PresetIds(string contentId)
+    {
+        ArgumentNullException.ThrowIfNull(contentId);
+        if (contentId.Split(PairSeparator) is [string corp, string runner])
+        {
+            OfficialPresetCatalog catalog = OfficialPresetCatalog.Embedded();
+            if (!catalog.TryGet(corp, out OfficialPreset corpPreset) || corpPreset.Side != PlayerSide.Corp
+                || !catalog.TryGet(runner, out OfficialPreset runnerPreset) || runnerPreset.Side != PlayerSide.Runner)
+                throw new ArgumentException($"Unknown fuzz content '{contentId}'.", nameof(contentId));
+            return (corp, runner);
+        }
+        string[] parts = contentId.Split('-');
+        if (parts.Length != 2 || parts.Any(part => part is not ("basic" or "expanded")))
+            throw new ArgumentException($"Unknown fuzz content '{contentId}'.", nameof(contentId));
+        return ($"system-gateway-{parts[0]}-corp", $"system-gateway-{parts[1]}-runner");
     }
 
     public static Task<FuzzGameResult> RunAsync(FuzzGameCase fuzzCase, int actionCap = DefaultActionCap,

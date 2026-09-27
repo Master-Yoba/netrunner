@@ -9,7 +9,7 @@ namespace Netrunner.Cli;
 public static partial class CliCommands
 {
     /// <summary>
-    /// ai-ladder [--content developer|official] [--entrants random,contract,easy-m5,standard-m5,easy,standard]
+    /// ai-ladder [--content developer|official|gateway] [--entrants random,contract,easy-m5,standard-m5,easy,standard]
     /// [--seeds-per-pairing N] [--seed S] [--bootstrap N] [--action-cap N] [--workers 1..64]
     /// [--output new-dir] [--json]. Exit 0 when every seat separates in the expected
     /// order, 1 when it does not or a game failed, 2 for invalid arguments.
@@ -37,8 +37,8 @@ public static partial class CliCommands
                     case "--json": break;
                     case "--content" when index + 1 < args.Length:
                         content = args[++index];
-                        if (content is not ("developer" or "official"))
-                            throw new ArgumentException("--content requires 'developer' or 'official'.");
+                        if (content is not ("developer" or "official" or "gateway"))
+                            throw new ArgumentException("--content requires 'developer', 'official' or 'gateway'.");
                         break;
                     case "--entrants" when index + 1 < args.Length:
                         entrants = args[++index].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -69,7 +69,7 @@ public static partial class CliCommands
                 }
             }
 
-            if (content == "official" && CardDataResource.EmbeddedMode != CardDataResource.OfficialMode)
+            if (content != "developer" && CardDataResource.EmbeddedMode != CardDataResource.OfficialMode)
                 throw new ArgumentException("The official ladder needs previously provisioned official content embedded at build time.");
             if (destination is not null)
             {
@@ -86,7 +86,7 @@ public static partial class CliCommands
         }
 
         IReadOnlyList<LadderGame> games = RatingLadder.Plan(entrants, seedsPerPairing, seed,
-            content == "developer" ? [RulesFuzzRunner.DeveloperContentId] : RulesFuzzRunner.OfficialContentIds);
+            RulesFuzzRunner.ContentIds(content));
         var results = new ConcurrentDictionary<string, LadderGameResult>(StringComparer.Ordinal);
         Parallel.ForEachAsync(games, new ParallelOptions { MaxDegreeOfParallelism = workers },
             async (game, cancellation) =>

@@ -45,8 +45,8 @@ public static partial class CliCommands
                         break;
                     case "--content" when index + 1 < args.Length:
                         content = args[++index];
-                        if (content is not ("developer" or "official"))
-                            throw new ArgumentException("--content requires 'developer' or 'official'.");
+                        if (content is not ("developer" or "official" or "gateway"))
+                            throw new ArgumentException("--content requires 'developer', 'official' or 'gateway'.");
                         break;
                     case "--action-cap" when index + 1 < args.Length:
                         if (!int.TryParse(args[++index], NumberStyles.None, CultureInfo.InvariantCulture, out actionCap)
@@ -64,7 +64,7 @@ public static partial class CliCommands
                 }
             }
 
-            if (content == "official" && CardDataResource.EmbeddedMode != CardDataResource.OfficialMode)
+            if (content != "developer" && CardDataResource.EmbeddedMode != CardDataResource.OfficialMode)
                 throw new ArgumentException("Official fuzzing needs previously provisioned official content embedded at build time.");
             if (destination is not null)
             {
@@ -80,7 +80,7 @@ public static partial class CliCommands
         }
 
         IReadOnlyList<FuzzGameCase> cases = RulesFuzzRunner.Plan(games, seed,
-            content == "developer" ? [RulesFuzzRunner.DeveloperContentId] : RulesFuzzRunner.OfficialContentIds);
+            RulesFuzzRunner.ContentIds(content));
         var results = new ConcurrentDictionary<string, FuzzGameResult>(StringComparer.Ordinal);
         Parallel.ForEachAsync(cases, new ParallelOptions { MaxDegreeOfParallelism = workers },
             async (fuzzCase, cancellation) =>
