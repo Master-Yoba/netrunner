@@ -135,6 +135,8 @@ public static partial class StateInvariantValidator
         IRuntimeCardCatalog? runtimeCardCatalog)
     {
         ArgumentNullException.ThrowIfNull(state);
+        if (IsCertified(state, behaviorCatalog, runtimeCardCatalog)) return [];
+        IBehaviorCatalog? requestedCatalog = behaviorCatalog;
         bool enforceCatalogCompatibility = behaviorCatalog is not null;
         behaviorCatalog ??= BehaviorCatalog.Empty;
 
@@ -159,6 +161,7 @@ public static partial class StateInvariantValidator
             runtimeCardCatalog,
             enforceCatalogCompatibility,
             violations);
+        if (violations.Count == 0) Certify(state, requestedCatalog, runtimeCardCatalog);
         return violations.AsReadOnly();
     }
 
@@ -1604,7 +1607,8 @@ public static partial class StateInvariantValidator
                     Add(violations, "run.unexpected-current-ice", $"{path}.currentIceId", "A run at the server must not have a current ICE ID.");
                 }
             }
-            else if (!removedEncounterCursor && !destroyedCursor
+            // An index already reported as out of range can't be compared with the zone.
+            else if (!removedEncounterCursor && !destroyedCursor && run.CurrentIceIndex < iceZone.CardIds.Count
                 && (!run.CurrentIceId.HasValue || iceZone.CardIds[run.CurrentIceIndex] != run.CurrentIceId.Value))
             {
                 Add(violations, "run.ice-position-mismatch", $"{path}.currentIceId", "Current ICE ID must match the ordered ICE zone position.");
@@ -7700,16 +7704,7 @@ public static partial class StateInvariantValidator
                     ParentFrameIdentity: not null,
                 } behaviorInstall
                 && ParentIdentityMatches(child, behaviorInstall.ParentFrameIdentity))
-            && !(index + 3 == state.ResolutionStack.Count - 1
-                && child.Stage == BehaviorResolutionStage.Execute
-                && state.ResolutionStack[index + 2] is EffectResolutionFrame
-                {
-                    Stage: EffectResolutionStage.AwaitingMemoryCleanup,
-                    Costs.Instructions.Count: 0,
-                    Effects.Instructions.Count: 0,
-                } memoryEffect
-                && memoryEffect.Controller == child.Controller
-                && state.ResolutionStack[index + 3] is MemoryCleanupFrame))
+            && !GameEngine.IsSuspendedForMemoryLoss(state.ResolutionStack, index + 1))
         {
             Add(
                 violations,

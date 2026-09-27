@@ -3700,9 +3700,30 @@ public static partial class GameEngine
         // Retribution trashing DZMZ). Suspend the already-advanced behavior
         // cursor under the normal effect cleanup lifecycle before another
         // instruction or the parent action can issue a decision.
+        // IsSuspendedForMemoryLoss describes the resulting stack for the validator.
         if (leftRunnerRig && working.RulesState?.Players.Any(player => player.UsedMemory > EffectiveMemoryLimit(working, player.PlayerId)) == true)
             working.ResolutionStack.Add(new EffectResolutionFrame(frame.Controller, new CostBundle(), new EffectBundle()));
     }
+
+    /// <summary>
+    /// Whether the behavior frame at <paramref name="childIndex"/> is suspended
+    /// by the memory-loss continuation above: an empty effect frame of the same
+    /// controller awaiting memory cleanup, with the cleanup frame on top. This
+    /// is the only frame shape that may sit above a played card's executing
+    /// behavior other than its own install, and it is kept next to the code
+    /// that creates it so both are reviewed together (engine plan E2).
+    /// </summary>
+    internal static bool IsSuspendedForMemoryLoss(IReadOnlyList<ResolutionFrame> stack, int childIndex) =>
+        childIndex + 2 == stack.Count - 1
+        && stack[childIndex] is BehaviorResolutionFrame { Stage: BehaviorResolutionStage.Execute } child
+        && stack[childIndex + 1] is EffectResolutionFrame
+        {
+            Stage: EffectResolutionStage.AwaitingMemoryCleanup,
+            Costs.Instructions.Count: 0,
+            Effects.Instructions.Count: 0,
+        } memoryEffect
+        && memoryEffect.Controller == child.Controller
+        && stack[childIndex + 2] is MemoryCleanupFrame;
 
     private static void ResolveProvenEmptySelectionShuffle(
         WorkingState working,

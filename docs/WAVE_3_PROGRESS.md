@@ -11,6 +11,7 @@ Stacked in order on `dev`:
 | Item | Branch |
 |---|---|
 | U3 full catalog | `feat/u3-full-catalog` |
+| E2 validator split | `feat/e2-validator-split` |
 
 ## U3: event timeline, full catalog
 
@@ -109,6 +110,64 @@ card name, and on official content it requires every catalog beat to appear.
   asked to stop, and a stop request held the next one.
 - **Pacing:** `BeatPacing` tests cover the player's own brief beats, Fast
   opponent, holds, reduced motion and speed.
+
+## E2: validator split
+
+The inventory of every validator stage, by tier, with its share of validator
+time and why it stays at commit, is in the
+[engine plan](ENGINE_ARCHITECTURE_PLAN.md#e2-split-the-invariant-validator-m).
+Findings:
+
+- **Validation dominated authoritative Apply.** On the official engine
+  benchmark, authoritative Apply took about 810 µs per action against 47 µs in
+  Simulation mode, and about 650 µs of that was the validator, which ran
+  twice: on the input state and on the output.
+- **No stage is a pure audit.** Each can be broken by some single action, so
+  none moved to checkpoints. The legal-action checks call the same
+  materializers the engine uses to issue actions, but they still catch a
+  decision issued before a later change to the state, so they stay.
+- **One card-specific exception** (the M5.8 memory-loss suspension for DZMZ
+  and Retribution) now lives beside the engine code that creates the frame
+  shape, as `GameEngine.IsSuspendedForMemoryLoss`.
+
+**Change: no second validation of the same state.** Authoritative Apply's
+input is almost always the output it validated one action earlier. A
+`GameState` is immutable and validation depends only on the state and the
+catalogs, so a state that passed against the built-in catalog types is
+remembered by reference and not validated again
+(`StateInvariantValidator.IsCertified`). Other catalog implementations are
+always validated in full, and a state built any other way (a forged or
+deserialized one) is a new object, so it is always validated.
+
+**Measured** with `engine-bench --content official --games 10 --seed 3`
+(4,137 positions, Release, three alternating runs on a quiet machine):
+
+| Build | Authoritative Apply per action | Simulation |
+|---|---:|---:|
+| Before (U3 branch) | 702, 642, 719 µs (mean 688) | 42 µs |
+| E2 | 515, 539, 485 µs (mean 513) | 39 µs |
+
+Authoritative Apply is 25% faster, and the validator runs half as often
+(10,734 of 21,480 validations were already-certified inputs). What is left
+is the output's validation and the state and event hashing.
+
+**Known-bad corpus.** `KnownBadStateCorpusTests` corrupts real positions from
+ten random-legal developer games, one mutation at a time: duplicated IDs,
+cards in no zone or two zones, broken zone references, negative counters,
+rezzed face-down cards, face-down heap cards, negative credits and clicks,
+missing, duplicated or wrongly owned legal actions, dropped or duplicated
+resolution frames, a removed run and a won game still awaiting a decision.
+The committed manifest records, for each of the 1,487 cases, whether
+authoritative Apply rejected it and with which violation codes, as measured
+before any optimization; the test requires the same result for every case.
+
+- 1,404 cases are rejected. The 83 accepted are resolution stacks with a
+  duplicated top frame (64) or a dropped bottom frame (19): the validator
+  doesn't check those shapes today. They are recorded, not fixed here, since
+  tightening them could reject legitimate stacks and needs its own review.
+- Building the corpus found a crash: a run cursor past the end of its ICE
+  zone was reported and then indexed, so Apply threw instead of rejecting.
+  It now rejects.
 
 ## Gate status
 
