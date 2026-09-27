@@ -338,6 +338,18 @@ are a subset of their cards. The frozen `make m5-gate` suite keeps every
 pairing: it plays a fixed number of games either way, and changing it would
 mean re-freezing its baselines.
 
+A sixth playtest (Corp) found:
+
+| Report | Cause | Change |
+|---|---|---|
+| The Runner ran the remote, was stopped, and ran it again at once; later it ran the remote without the credits for its ICE and the Manegarm Skunkworks toll, both face up | Runner v4 costed a run by its ICE only. At the second run it had 1 click and 0 credits; on turns 8 and 9 it spent its 3 credits on Palisade and reached Manegarm (2 clicks or 5 credits) with neither | Runner v5 (v4 plus this repair) also counts a rezzed root card's approach toll, read from the card's behavior (a Runner choice of costs whose fallback ends the run), and doesn't run or continue when it can't pay. It is the new default; older saves keep v4 |
+| Rez windows for AMAZE Amusements (and Urtica Cipher) come up outside runs, when rezzing them does nothing | Every rez stopped in the Corp's own turn and before it | A card's rez timing is read from its behavior. Cards whose triggers all act during a run on their own server (AMAZE, Manegarm, Anoetic Void) stop only then, once the Runner is past the ICE; cards that work unrezzed (Urtica) never stop; everything else is unchanged |
+
+Runner v5 against v4 on the ladder (official expanded, 640 games, the Corp at
+v6): **0 [−40, 45]**, the same score. The Corp bot rezzes Manegarm only when
+the Runner approaches, so the toll is rarely known when a bot Runner chooses a
+run; the repair matters against a Corp that rezzes early, as a human does.
+
 Runner v4 against v2 on the ladder (official, 640 games, the Corp at v6):
 **+30 [−25, 84]**, so not weaker.
 
