@@ -65,21 +65,29 @@ internal sealed class TurnPlanner
             foreach (AgentCandidate candidate in planned)
                 totals[candidate.ActionId] += Rollout(state, candidate.ActionId, features.Side, knowledge, planning.Determinizer);
         }
+        // The heuristic knows things the end-of-turn score doesn't (pressure,
+        // information, tempo), so a planned action keeps its heuristic score and
+        // gains or loses what its rollouts show against the heuristic's own choice.
+        long baseline = totals[planned[0].ActionId];
         return [.. heuristic.Select(candidate => totals.TryGetValue(candidate.ActionId, out long total)
             ? candidate with
             {
                 Utility = candidate.Utility with
                 {
-                    Priority = PlannedPriority,
-                    Score = (int)Math.Clamp(total / Samples, int.MinValue / 2, int.MaxValue / 2),
+                    Priority = PlannedPriority + Math.Clamp(candidate.Utility.Priority, -PlannedPriority / 2, PlannedPriority / 2),
+                    Score = (int)Math.Clamp(candidate.Utility.Score + (total - baseline) / Samples * Weight / 100,
+                        int.MinValue / 2, int.MaxValue / 2),
                     Reason = $"plan/turn-rollout ({candidate.Utility.Reason})",
                 },
             }
             : candidate)];
     }
 
-    /// <summary>Above every heuristic priority, so a planned action is always preferred to an unplanned one.</summary>
+    /// <summary>Added to every planned action's priority, so a planned action is always preferred to an unplanned one.</summary>
     public const int PlannedPriority = 1_000_000;
+
+    /// <summary>How much the rollouts count against the heuristic's score, in percent.</summary>
+    public int Weight => _configuration.Parameters.GetValueOrDefault("plan-weight", 100);
 
     private long Rollout(GameState sample, ActionId first, PlayerSide side, AgentKnowledge knowledge, ObservationDeterminizer determinizer)
     {

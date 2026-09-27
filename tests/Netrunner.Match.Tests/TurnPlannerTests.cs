@@ -38,7 +38,7 @@ public sealed class TurnPlannerTests
 
         await agent.ChooseActionAsync(ObservationBuilder.Build(state, side, definition.Behavior));
 
-        Assert.DoesNotContain(agent.LastEvaluation!.Candidates, candidate => candidate.Utility.Priority == TurnPlannerPriority);
+        Assert.DoesNotContain(agent.LastEvaluation!.Candidates, candidate => candidate.Utility.Priority >= TurnPlannerPriority / 2);
     }
 
     [Fact]
@@ -60,7 +60,7 @@ public sealed class TurnPlannerTests
     {
         OfflineAgent agent = AgentAt(definition, state, side);
         ActionId action = await agent.ChooseActionAsync(ObservationBuilder.Build(state, side, definition.Behavior, definition.Runtime));
-        return (action, agent.LastEvaluation!.Candidates.Any(candidate => candidate.Utility.Priority == TurnPlannerPriority));
+        return (action, agent.LastEvaluation!.Candidates.Any(candidate => candidate.Utility.Priority >= TurnPlannerPriority / 2));
     }
 
     /// <summary>A fresh Standard agent that has observed <paramref name="state"/> as its first position.</summary>
