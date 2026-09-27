@@ -253,4 +253,20 @@ without opening "All legal actions…") needs a person.
 
 ## Gate status
 
-To be filled in at the end of the wave.
+| Criterion | Result |
+|---|---|
+| U3: the capture harness shows every catalog beat for a full scripted game in both seats | Pass: Runner seed 120 and Corp seed 7 (expanded) showed every catalog beat, with zero duplicates and zero snap mismatches |
+| U3: zero snap mismatches on the official fuzz corpus, headlessly | Pass: 200 official seat-games, 32,392 beats, zero mismatches and zero caption leaks |
+| U4: a full game in each seat without opening "All legal actions…" | **Needs a human playtest.** The fallback is now a quiet dock button and F2 |
+| U4: capture review at 1920 and 2560 | Pass in captures (runs, encounters, accesses, a score); sheets with card art are shared privately |
+| A3: a clear ladder gain in both seats within the latency budget | **Moved to Wave 4.** Level with the non-planning Standard over 640 games; the planner ships off |
+| E2: authoritative Apply rejects everything it did on the known-bad corpus | Pass: all 1,487 cases match the manifest recorded before the change |
+| E2: validator time lower on the benchmark profile | Pass: half the validations per action; authoritative Apply 25% faster |
+| `make verify` | Pass on every branch of the stack |
+| `make m4-gate` | Pass |
+| `make m5-client-smoke` | Pass |
+| `make m5-gate` | Pass; frozen results unchanged (`strategic_policy_changed=false`) |
+| Policy performance run (engine code changed) | Pass: p95 at most 2.1 ms in every group (budgets 50 and 200 ms), 13,828 decisions |
+
+Gates ran with `NETRUNNER_TIMEOUT_SCALE=4`, on a 6-core Linux box with other
+jobs finished.
