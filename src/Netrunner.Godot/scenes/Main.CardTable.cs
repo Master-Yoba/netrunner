@@ -264,7 +264,7 @@ public partial class Main
 					? TableActionCardId(a.Parameters) == _tableSelectedCard
 					: _tableSelectedServer is not null
 						? TableActionServerId(a.Parameters) == _tableSelectedServer
-						: a.Kind is ActionKind.PassPriority
+						: a.Kind is ActionKind.PassPriority or ActionKind.ScoreAgenda
 							or ActionKind.EndTurn or ActionKind.RemoveTag or ActionKind.PurgeVirusCounters);
 				contextual = _tableSelectedCard is not null || _tableSelectedServer is not null;
 				if (contextual)
@@ -286,10 +286,23 @@ public partial class Main
 			}
 			AddAccessAllButton(snapshot, AddButton);
 			Container actionTarget = ActionContainerFor(contextual && displayed.Any());
-			foreach (LegalActionViewModel action in displayed)
+			// A score leads, and continuing past one asks twice (a misclicked pass lost an agenda).
+			bool scoreAvailable = all.Any(action => action.Kind == ActionKind.ScoreAgenda);
+			foreach (LegalActionViewModel action in displayed.OrderByDescending(action => action.Kind == ActionKind.ScoreAgenda))
 			{
-				Button button = AddButtonTo(actionTarget, TableActionLabel(action), () =>
+				bool guarded = scoreAvailable && action.Kind == ActionKind.PassPriority;
+				string label = guarded
+					? SameDecision(_skipScoreDecision, decision) ? "Confirm: continue without scoring" : "Continue without scoring"
+					: TableActionLabel(action);
+				Button button = AddButtonTo(actionTarget, label, () =>
 				{
+					if (guarded && !SameDecision(_skipScoreDecision, decision))
+					{
+						_skipScoreDecision = decision;
+						RenderCardTableActions(snapshot);
+						return;
+					}
+					_skipScoreDecision = null;
 					if (ActionsRegionPresenter.IsTargetedAction(action)) StageTargetAction(decision, action);
 					else SubmitAction(decision, action);
 				});
@@ -316,6 +329,8 @@ public partial class Main
 			RefreshBoardIcebreaker(snapshot);
 		}
 	}
+
+	private DecisionViewModel? _skipScoreDecision;
 
 	private static Button CreateTableActionButton(string text)
 	{
