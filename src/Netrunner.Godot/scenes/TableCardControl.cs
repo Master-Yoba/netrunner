@@ -598,6 +598,20 @@ public partial class TableCardControl : Control
 	/// <summary>Current strength supplied by the public encounter projection, separate from printed stats.</summary>
 	public int? EncounterStrength { get; private set; }
 
+	/// <summary>
+	/// The Corp's own installed card that isn't rezzed yet (U4): its art is dimmed
+	/// and it always says so, since the Corp sees its own cards face-up.
+	/// </summary>
+	public bool Unrezzed { get; private set; }
+
+	public void SetUnrezzed(bool unrezzed)
+	{
+		if (Unrezzed == unrezzed) return;
+		Unrezzed = unrezzed;
+		RefreshDynamicPresentation();
+		QueueRedraw();
+	}
+
 	public void SetEncounterStrength(int? strength)
 	{
 		int? visible = _card?.IsKnown == true ? strength : null;
@@ -616,9 +630,14 @@ public partial class TableCardControl : Control
 	}
 
 	/// <summary>Marks this card as a legal target in the current decision.</summary>
+	/// <summary>A target draws above overlapping neighbours, so its frame isn't hidden; hover and focus rise higher.</summary>
+	private int RestZIndex => _targetCandidate ? 5 : 0;
+
 	public void SetTargetCandidate(bool candidate)
 	{
 		_targetCandidate = candidate;
+		// Leave hover, focus and beat emphasis (10 and above) alone.
+		if (ZIndex < 10) ZIndex = RestZIndex;
 		if (!candidate)
 		{
 			_selected = false;
@@ -749,6 +768,7 @@ public partial class TableCardControl : Control
 		if (HasFullCardArtwork)
 		{
 			DrawCardFace(InsetRect(frameRect, Mathf.Max(1, frameWidth)));
+			if (Unrezzed) DrawRect(InsetRect(frameRect, Mathf.Max(1, frameWidth)), new Color(0.02f, 0.03f, 0.04f, 0.5f));
 			DrawAuthoredStatusBadge();
 			DrawStatusBadge(accent, cardSize);
 			if (_actionableSource || HasMetHandCondition)
@@ -804,7 +824,7 @@ public partial class TableCardControl : Control
 		Rect2 motifRect = ResolveMotifRect(cardSize, appearance);
 		if (_artwork is not null)
 		{
-			DrawTextureRect(_artwork, motifRect, false, new Color(1, 1, 1, appearance.ArtworkOpacity));
+			DrawTextureRect(_artwork, motifRect, false, new Color(1, 1, 1, appearance.ArtworkOpacity * (Unrezzed ? 0.45f : 1)));
 		}
 
 		DrawMotif(
@@ -928,7 +948,7 @@ public partial class TableCardControl : Control
 		_title!.Visible = showText && !HasFullCardArtwork;
 		_type!.Visible = showText && !HasFullCardArtwork;
 		_stats!.Visible = showText && !HasFullCardArtwork;
-		_status!.Visible = showText && (!HasFullCardArtwork || EncounterStrength is not null || _card is { Rezzed: true }
+		_status!.Visible = showText && (!HasFullCardArtwork || Unrezzed || EncounterStrength is not null || _card is { Rezzed: true }
 			|| _card is { IsAbilityUsed: true } || _card is { IsFirstXUsedThisTurn: true });
 		bool compact = IsCompactPortrait;
 		_title!.Text = known ? compact ? CompactTitle(_card!.Title) : _card!.Title : "FACE-DOWN";
@@ -941,7 +961,7 @@ public partial class TableCardControl : Control
 		_rulesCue!.Text = known
 			? BuildRulesCue(_card!.RulesText, _isIce ? 38 : compact ? 20 : 30)
 			: "NO PUBLIC DETAILS";
-		_status!.Text = known ? FormatStatus(_card!, compact) : "FACE-DOWN";
+		_status!.Text = known ? Unrezzed ? UnrezzedLabel(_card!) : FormatStatus(_card!, compact) : "FACE-DOWN";
 		if (known && EncounterStrength is { } strength) _status.Text = $"STR {strength} · {_status.Text}";
 		_counters!.Text = known ? FormatCounters(_card!, compact) : string.Empty;
 		_counters!.Visible = _counters!.Text.Length > 0;
@@ -998,7 +1018,7 @@ public partial class TableCardControl : Control
 	private void HandleMouseExited()
 	{
 		_hovered = false;
-		ZIndex = HasFocus(ignoreHiddenFocus: true) ? 10 : 0;
+		ZIndex = HasFocus(ignoreHiddenFocus: true) ? 10 : RestZIndex;
 		QueueRedraw();
 		UpdateInteractionState();
 	}
@@ -1013,7 +1033,7 @@ public partial class TableCardControl : Control
 
 	private void HandleFocusExited()
 	{
-		ZIndex = _hovered ? 10 : 0;
+		ZIndex = _hovered ? 10 : RestZIndex;
 		QueueRedraw();
 		UpdateInteractionState();
 	}
@@ -1482,6 +1502,10 @@ public partial class TableCardControl : Control
 
 		return string.Join(" · ", values);
 	}
+
+	/// <summary>Agendas are never rezzed; they stay face-down until scored.</summary>
+	private static string UnrezzedLabel(CardViewModel card) =>
+		string.Equals(card.Type, "Agenda", StringComparison.OrdinalIgnoreCase) ? "FACE-DOWN" : "UNREZZED";
 
 	private static string FormatCounters(CardViewModel card, bool compact = false)
 	{

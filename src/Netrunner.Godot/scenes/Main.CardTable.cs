@@ -284,6 +284,7 @@ public partial class Main
 				HashSet<ActionId> spatialIds = spatial.Select(action => action.Action.Id).ToHashSet();
 				displayed = displayed.Where(action => !spatialIds.Contains(action.Id) && !_accessActionButtons.ContainsKey(action.Id));
 			}
+			AddAccessAllButton(snapshot, AddButton);
 			Container actionTarget = ActionContainerFor(contextual && displayed.Any());
 			foreach (LegalActionViewModel action in displayed)
 			{
@@ -413,6 +414,9 @@ public partial class Main
 			text = text.Replace(id, control.Card?.Title ?? "face-down card", StringComparison.Ordinal);
 		text = Regex.Replace(text, @"server:\d+", match => _gameTable.GetServerDisplayName(match.Value));
 		text = Regex.Replace(text, @"card:\d+", "face-down card");
+		// Rules citations belong in the developer tooltip, not the play screen.
+		text = Regex.Replace(text, @"\bCR [\d.]+[a-z]?:\s*", "");
+		if (text.Length > 0) text = char.ToUpperInvariant(text[0]) + text[1..];
 		return text.Replace("Core", "the game", StringComparison.Ordinal);
 	}
 

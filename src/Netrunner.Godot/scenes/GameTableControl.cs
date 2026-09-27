@@ -1108,6 +1108,10 @@ public partial class GameTableControl : Control
 		}
 		control.SetIce(isIce);
 		control.SetBackSide(backSide ?? BackSideForSlot(slot));
+		// The Corp sees its own installed cards face-up; say which aren't rezzed yet.
+		control.SetUnrezzed(_pendingView?.Viewer == PlayerSide.Corp && model is { IsKnown: true, Rezzed: false }
+			&& model.Type is not "Identity" && (parent.Name.ToString() is "RootCards" or "IceCards"
+				|| parent.GetParent()?.Name.ToString() is "RootCards" or "IceCards"));
 		if (!retainHandPose)
 		{
 			control.Scale = Vector2.One;

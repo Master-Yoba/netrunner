@@ -158,6 +158,7 @@ public partial class Main : Control
 			PollCardTable(delta);
 			UpdateBoardChoiceGeometry();
 			PlaceActionChips();
+			ContinueAccessAll();
 			PlaceRunOverlays();
 			UpdateSpatialGeometry();
 			UpdateAccessControls();
