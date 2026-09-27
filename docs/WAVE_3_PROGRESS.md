@@ -251,6 +251,25 @@ score, with zero duplicates and zero snap mismatches; `make verify` passes
 on the whole stack. The plan's playtest gate (a full game in each seat
 without opening "All legal actions…") needs a person.
 
+## Playtest follow-up (27 September)
+
+A human playtest on the Wave 3 stack (Runner, expanded presets) found:
+
+| Report | Cause | Change |
+|---|---|---|
+| Face-down ICE and the green target frame drew through the access panel | The access panel had no z-index | It draws above cards and highlights, below card flights |
+| Dragging a program onto a rig with another program showed a panel with no options | Not reproduced: the interaction lab's identical case shows its button | A choice that must be resolved never shows an empty panel; its options are listed as buttons too |
+| Stole an agenda from a remote with AMAZE Amusements and got no tags | AMAZE was never rezzed, so no tags was correct; but the Corp had the 1 credit to rez it and passed five windows, because its ICE rez reserve was checked before upgrade relevance | Corp v6 rezzes an affordable upgrade in the attacked server |
+| The Corp was always short of credits and couldn't rez ICE | Its reserve was the cheapest unrezzed ICE anywhere, so it advanced down to credits that couldn't rez the agenda's own ICE | Corp v6 keeps the credits for the dearest unrezzed ICE protecting an agenda |
+| The Corp installed a card over its own agenda | Installing a second Superconducting Hub into the root holding the first forced the first into Archives; the replacement cost only the agenda's card value | Corp v6 charges a displaced agenda or asset in full |
+| History should show newest events first | | Newest first, with each turn's header above that turn's newest entry |
+
+Corp v6 (v4 plus these repairs) is the new default; older saves keep v4.
+Regression tests replay the playtest to the three positions and check v6's
+choice. On the ladder (640 official games against v4) the Corp scored
+**+39 Elo [−9, 86]**: the repairs help, though not yet by a separated
+margin, and nothing regressed. The Runner is unchanged.
+
 ## Gate status
 
 | Criterion | Result |
