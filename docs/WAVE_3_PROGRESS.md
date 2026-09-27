@@ -73,10 +73,10 @@ red wash for damage.
 
 **Auto-pass.** About 70% of decisions are passes. `AutoPassPolicy` decides
 which of the player's windows to pass when **Auto-pass optional windows** is
-on (the default): windows whose only options are paid abilities, pumps
-outside an encounter, or rezzes outside a run. It always stops for an
-encounter (breaking, bioroid clicks), an ICE rez, or a rez during a run (for
-example an upgrade in the attacked server). **Stop** in the header holds the
+on (the default): windows whose only options are paid abilities or pumps
+outside an encounter. It always stops for an encounter (breaking, bioroid
+clicks) and for any rez. (It first also passed rezzes outside a run, which
+left a human Corp unable to rez its assets; see the playtest follow-up.) **Stop** in the header holds the
 next optional window open. Scripted smoke, gate and capture runs keep every
 window, as before.
 
@@ -264,11 +264,33 @@ A human playtest on the Wave 3 stack (Runner, expanded presets) found:
 | The Corp installed a card over its own agenda | Installing a second Superconducting Hub into the root holding the first forced the first into Archives; the replacement cost only the agenda's card value | Corp v6 charges a displaced agenda or asset in full |
 | History should show newest events first | | Newest first, with each turn's header above that turn's newest entry |
 
+A second playtest (Runner, then a first try as the Corp) found:
+
+| Report | Cause | Change |
+|---|---|---|
+| As the Corp, nothing could be rezzed | Auto-pass passed every window offering a rez outside a run, and those are the Corp's rez windows | A window offering a rez is never auto-passed |
+| As the Corp, unclear which cards are rezzed | The Corp sees its own cards face-up, all marked KNOWN | Unrezzed installed Corp cards show UNREZZED (agendas FACE-DOWN) with dimmed art |
+| A targeted card's frame hid under an overlapping root card | Targets drew at the same z-order as their neighbours | Targets draw above them |
+| A choice panel's title began "CR 7.5.4:" | The prompt's rules citation wasn't stripped | Citations are stripped from player text |
+| Accessing Archives one card at a time is tiring | | Access all remaining submits the issued choices one by one and stops at any real choice |
+| The pump button stayed after the breaker was strong enough | | The breaker panel drops pumps once the breaker matches the ICE's strength |
+| The Corp left Send a Message (five advancements) unadvanced for turns | Pre-advancing only reached agendas finishable after one advance this turn | Corp v6 works on a five-advancement agenda across turns when two or more ICE protect it and it can afford to rez them after finishing |
+| The Corp rezzed both upgrades as soon as the run started | V6 rezzed an attacked server's upgrade at the first window | V6 waits until the Runner is past the server's ICE |
+
 Corp v6 (v4 plus these repairs) is the new default; older saves keep v4.
-Regression tests replay the playtest to the three positions and check v6's
-choice. On the ladder (640 official games against v4) the Corp scored
-**+39 Elo [−9, 86]**: the repairs help, though not yet by a separated
-margin, and nothing regressed. The Runner is unchanged.
+Regression tests replay both playtests to the positions above and check
+v6's choice. On the ladder against v4 (official, the Runner unchanged):
+
+| Corp v6 variant | Games | Corp Elo |
+|---|---:|---:|
+| First repairs | 640 | +39 [−9, 86] |
+| Plus eager multi-turn advancing | 640 | −29 [−83, 25] |
+| Without it | 384 | +21 [−30, 88] |
+| **Shipped:** multi-turn advancing only behind two or more affordable ICE | 640 | **+35 [−14, 92]** |
+
+Advancing an agenda in the open shows the Runner where to run, which is why
+the eager version lost. The repairs help, though not yet by a separated
+margin, and nothing regressed.
 
 ## Gate status
 

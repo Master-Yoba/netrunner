@@ -125,10 +125,16 @@ public sealed partial class CorpHeuristicPolicy
         int ice = context.ServerOf(card.Id)?.Ice.Length ?? 0;
         int score = finish ? 600 + definition.Printed.AgendaPoints * 50 : 30 + ice * 35;
         // v4: an agenda too large to finish in one turn is advanced now so that
-        // a full next turn finishes it, but only behind ICE. v6: counting every
-        // click left this turn, so a five-advancement agenda also gets there.
-        if (!finish && context.Generation >= 3 && ice > 0
-            && (repairs ? remaining - context.Self.Clicks <= 3 : remaining - 1 <= 3))
+        // a full next turn finishes it, but only behind ICE. v6: a longer agenda
+        // (five advancements) is also worked on across turns, but only behind two
+        // or more ICE the Corp can afford to rez after finishing it; advancing it
+        // in the open shows the Runner where to run (an eager version lost on the ladder).
+        AgentServer? home = context.ServerOf(card.Id);
+        int unrezzedCost = home?.Ice.Where(value => value is { Rezzed: false })
+            .Sum(value => context.Definition(value)?.Printed.RezCost ?? 0) ?? 0;
+        bool longAgenda = repairs && remaining - 1 > 3 && remaining - context.Self.Clicks <= 3 && ice >= 2
+            && context.Self.Credits - remaining >= unrezzedCost;
+        if (!finish && context.Generation >= 3 && ice > 0 && (remaining - 1 <= 3 || longAgenda))
             score = 180 + definition.Printed.AgendaPoints * 40;
         if (!finish && context.Self.Credits <= context.RezReserve) score -= 200;
         // v6: advancing spends a credit; don't spend the one that rezzes this agenda's ICE.
