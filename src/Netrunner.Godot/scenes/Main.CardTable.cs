@@ -107,6 +107,8 @@ public partial class Main
 		_tableViewport.AddChild(_beats);
 		BuildBoardDrag();
 		BuildSettingsMenu();
+		BuildActionChips();
+		BuildEncounterOverlay();
 	}
 
 	private void SelectTableCard(string id)
@@ -159,7 +161,8 @@ public partial class Main
 		CardViewModel? accessed = AccessActionsPresenter.Card(snapshot.View);
 		_tableAccessCard.SetCard(accessed);
 		_tableAccessPanel.Visible = accessed is { IsKnown: true };
-		_tableAccessTitle.Text = accessed?.Title ?? "";
+		_tableAccessTitle.Text = AccessTitle(accessed, snapshot.View);
+		RefreshRunOverlays(snapshot);
 		_gameTable.SetSelectedServer(_tableSelectedServer);
 		_gameTable.SetSelection(_tableSelectedCard);
 		if (snapshot.History.Count > 0) _tableLastAction.Text = snapshot.History[^1].Summary;
@@ -182,6 +185,7 @@ public partial class Main
 		try
 		{
 			ClearChildren(_tableActions);
+			ClearActionChips();
 			_tableActionButtons.Clear();
 			RefreshAccessActions(snapshot);
 			DecisionViewModel? decision = snapshot.View.Decision;
@@ -232,6 +236,8 @@ public partial class Main
 				return;
 			}
 			bool ordinary = decision.Kind is DecisionKind.TurnAction or DecisionKind.TurnTiming;
+			// A selected card's or server's own actions go beside it (U4).
+			bool contextual = false;
 			bool encounter = decision.Kind == DecisionKind.RunTiming && snapshot.View.Viewer == PlayerSide.Runner
 				&& snapshot.View.Run is { Step: RunTimingStep.EncounterPaidWindow, Encounter: not null };
 			IEnumerable<LegalActionViewModel> displayed = all;
@@ -258,7 +264,8 @@ public partial class Main
 						? TableActionServerId(a.Parameters) == _tableSelectedServer
 						: a.Kind is ActionKind.PassPriority
 							or ActionKind.EndTurn or ActionKind.RemoveTag or ActionKind.PurgeVirusCounters);
-				if (_tableSelectedCard is not null || _tableSelectedServer is not null)
+				contextual = _tableSelectedCard is not null || _tableSelectedServer is not null;
+				if (contextual)
 					_tablePrompt.Text += " · Esc clears selection";
 				AddButton("All legal actions…", () => { _tableAllActions = true; RenderCardTableActions(snapshot); });
 			}
@@ -275,9 +282,10 @@ public partial class Main
 				HashSet<ActionId> spatialIds = spatial.Select(action => action.Action.Id).ToHashSet();
 				displayed = displayed.Where(action => !spatialIds.Contains(action.Id) && !_accessActionButtons.ContainsKey(action.Id));
 			}
+			Container actionTarget = ActionContainerFor(contextual && displayed.Any());
 			foreach (LegalActionViewModel action in displayed)
 			{
-				Button button = AddButton(TableActionLabel(action), () =>
+				Button button = AddButtonTo(actionTarget, TableActionLabel(action), () =>
 				{
 					if (ActionsRegionPresenter.IsTargetedAction(action)) StageTargetAction(decision, action);
 					else SubmitAction(decision, action);
@@ -286,12 +294,14 @@ public partial class Main
 				button.Disabled = _tableAwaitingSettlement || Volatile.Read(ref _submissionInFlight) != 0;
 				_tableActionButtons[action.Id] = button;
 			}
-			Button AddButton(string text, Action callback)
+			Button AddButton(string text, Action callback) => AddButtonTo(_tableActions, text, callback);
+			Button AddButtonTo(Container container, string text, Action callback)
 			{
 				Button button = CreateTableActionButton(text);
 				button.Disabled = _tableAwaitingSettlement;
 				button.Pressed += callback;
-				_tableActions.AddChild(button);
+				QuietFallback(button);
+				container.AddChild(button);
 				return button;
 			}
 		}

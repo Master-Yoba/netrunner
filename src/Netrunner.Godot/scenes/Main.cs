@@ -157,6 +157,8 @@ public partial class Main : Control
 		{
 			PollCardTable(delta);
 			UpdateBoardChoiceGeometry();
+			PlaceActionChips();
+			PlaceRunOverlays();
 			UpdateSpatialGeometry();
 			UpdateAccessControls();
 		}
@@ -246,6 +248,11 @@ public partial class Main : Control
 		if (SettingsVisible)
 		{
 			if (escape) { SetSettingsVisible(false); GetViewport().SetInputAsHandled(); }
+			return;
+		}
+		if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F2 } && ToggleAllLegalActions())
+		{
+			GetViewport().SetInputAsHandled();
 			return;
 		}
 		if (_zoomOverlay.Visible)

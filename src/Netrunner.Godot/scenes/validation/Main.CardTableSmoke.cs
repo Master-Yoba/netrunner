@@ -106,7 +106,7 @@ public partial class Main
 					{
 						CardViewModel? accessed = _currentSnapshot.View.Run.Access.Accessed[^1];
 						if (accessed is not { IsKnown: true } || !_tableAccessPanel.Visible
-							|| _tableAccessCard.Card?.Id != accessed.Id || _tableAccessTitle.Text != accessed.Title
+							|| _tableAccessCard.Card?.Id != accessed.Id || !_tableAccessTitle.Text.StartsWith(accessed.Title, StringComparison.Ordinal)
 							|| !_tableHistory.Entries.Any(entry => entry.Summary.Contains($"accesses {accessed.Title}", StringComparison.Ordinal)))
 							throw new InvalidOperationException("R&D access card or named history missing from the table.");
 						if (!_accessActionButtons.TryGetValue(next.Id, out Button? accessButton)

@@ -685,7 +685,7 @@ public partial class GameTableControl : Control
 			lane.Header.TooltipText = $"Select {_serverDisplayNames[server.Id]} for contextual actions.";
 			lane.RunMarker.Text = view.Run is { } run
 				&& string.Equals(run.AttackedServerId, server.Id, StringComparison.Ordinal)
-				? $"ACTIVE RUN · {run.FocusLabel}"
+				? "▶ Run in progress"
 				: string.Empty;
 			// Keep this row in every lane so entering a run never moves its cards.
 			lane.RunMarker.TooltipText = string.Empty;
