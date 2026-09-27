@@ -200,6 +200,18 @@ supplies instead of card counts:
 The heuristic blend from Wave 3 stays, so planning corrects the heuristic
 rather than replacing it.
 
+**Deal hidden cards from the opponent's decklist.** In solo play the
+opponent always plays a known preset, so sample its unseen cards with
+`OpponentCardPool.Decklist` (the preset list minus every copy already seen)
+instead of `AnyOf` over every Gateway card of its side. `AnyOf` gives, for
+example, an R&D far richer in agendas than any real deck, which skews run
+values. Using the decklist is an information choice, not a rules one: a human
+facing a preset can know its list too. Record it in the profile
+(`opponent-pool`: `decklist` or `any`) so it's part of the configuration
+digest, and let difficulty set it: Standard and Hard use the decklist; Easy
+uses `any` or no sampling at all. A host passes the preset's list with the
+determinizer; the agent never reads it from the authoritative state.
+
 ### A4a. Whole-run model (M) — first in Wave 4
 
 The Runner's encounter planner handles one encounter at a time. A run is a
@@ -267,9 +279,13 @@ latency is within budget.
   or shallow, and deterministic, with weights stored as a versioned JSON file
   under `data/`. Hold out seeds, and check the fitted evaluation against the
   hand weights on the ladder.
-- Later, iterate: planner or search results become better training targets
-  than raw outcomes (expert iteration), as long as each round is accepted on
-  ladder evidence.
+- **Expert iteration.** Once A3 or A4 search beats the heuristic on the
+  ladder, use its choices and its search values as training targets: they
+  carry more signal per position than a game's final outcome. Each round
+  refits the evaluation on self-play of the current best version, then must
+  beat the previous round on held-out seeds before it replaces it; a round
+  that doesn't is discarded. Keep the targets, the seeds and each round's
+  weights under `data/` so every round can be reproduced.
 
 Gate: the tuned weights beat the hand weights on held-out seeds.
 
@@ -285,12 +301,17 @@ below still depend on A3.
   uses `GatewayPool`. An optional Hard level uses more samples and the planner
   on every decision. Noise from near-ties stays small and only picks among
   genuinely equal options.
-- **Personalities** as weight presets on top of difficulty:
+- **Personalities** as presets on the fitted evaluation (A5), after it
+  exists, rather than on the heuristics' literal weights:
   - Corp: "glacier" (taxing ICE, slow scoring), "rush" (early agendas) and
     "asset spam".
   - Runner: "aggressive" (runs early and often) and "rig-builder".
-  Each is validated on the ladder so it stays within one rating band of its
-  difficulty.
+  A personality shifts a few named evaluation terms (score-race urgency,
+  protection margin, run pressure, economy) from the fitted values, so its
+  style comes from what it values, and the planner and search keep playing
+  it well. Each is validated on the ladder so it stays within one rating band
+  of its difficulty, and a style check confirms it plays differently (for
+  example "rush" scores its first agenda earlier than Standard).
 - **Human-facing pacing is a UI concern** (see the
   [UI plan](UI_UX_REDESIGN_PLAN.md) phase U3). The bot still decides
   instantly, and the presentation shows its actions at readable speed.
