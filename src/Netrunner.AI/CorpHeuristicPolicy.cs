@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Netrunner.Core;
 
 namespace Netrunner.AI;
@@ -14,9 +15,13 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// agendas it can finish next turn, and keeps a working hand (playtest fixes).
     /// </summary>
     public const string V4 = "corp-heuristic-v4";
+    /// <summary>V4 choices, with turn actions planned by rollouts over sampled states (A3).</summary>
+    public const string V5 = "corp-heuristic-v5";
     /// <summary>The version new games and new manifests use.</summary>
-    public const string PolicyVersion = V4;
-    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4];
+    public const string PolicyVersion = V5;
+    /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>
+    public const string LatestHeuristic = V4;
+    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5];
 
     public CorpHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -25,6 +30,19 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Corp policy version '{version}'.", nameof(version));
         Version = version;
         Generation = version switch { V2 => 1, V3 => 2, _ => 3 };
+        Plans = version == V5;
+    }
+
+    private bool Plans { get; }
+
+    public ImmutableArray<AgentCandidate> EvaluateDecision(AgentFeatures features, AgentKnowledge knowledge, AgentObjective? objective,
+        OfflineAgentConfiguration configuration, ICardEvaluationCatalog catalog, AgentWorkBudget budget, PlanningContext? planning)
+    {
+        ImmutableArray<AgentCandidate> heuristic = ((IOfflinePolicy)this).EvaluateDecision(features, knowledge, objective,
+            configuration, catalog, budget);
+        if (!Plans || planning is null) return heuristic;
+        var planner = new TurnPlanner(this, configuration, catalog);
+        return planner.Applies(features) ? planner.Plan(features, heuristic, knowledge, planning) : heuristic;
     }
 
     public string Version { get; }

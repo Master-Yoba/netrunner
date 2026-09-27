@@ -143,7 +143,10 @@ public sealed partial class MatchCoordinator
             (_corpAgent as OfflineAgent)?.Checkpoint,
             CancellationTokenSource.CreateLinkedTokenSource(_cancellation.Token, _developerAdvance?.Cancellation ?? default));
         _evaluation = work;
-        Observation observation = ObservationBuilder.Build(state, side, _behaviorCatalog);
+        // A planning bot may sample the hidden state through its observation (AI plan A3).
+        Observation observation = _runtimeCardCatalog is { } runtime
+            ? ObservationBuilder.Build(state, side, _behaviorCatalog, runtime)
+            : ObservationBuilder.Build(state, side, _behaviorCatalog);
         Publish([], null, thinking: true);
         // Even synchronous policies run off the caller/render thread. Only this
         // evaluation touches tentative policy state; the worker commits it later.
