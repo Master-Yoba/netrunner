@@ -52,6 +52,9 @@ public sealed record MatchSnapshot(
     /// <summary>Viewer-safe board changes made by the accepted action, in order (engine plan E4b).</summary>
     public IReadOnlyList<PresentationEvent> PresentationEvents { get; init; } = Array.Empty<PresentationEvent>();
 
+    /// <summary>The player's next turn action if they pass the own-turn window they hold (invisible windows).</summary>
+    public TurnPreview? TurnPreview { get; init; }
+
     public bool IsTerminal => View.Outcome.IsTerminal;
 
     public bool IsPaused { get; init; }
@@ -844,6 +847,7 @@ public sealed partial class MatchCoordinator : IAsyncDisposable, IDisposable
             IsPaused = _recoveredPaused,
             History = history,
             PresentationEvents = presentation,
+            TurnPreview = thinking ? null : PreviewNextTurnAction(state),
             SetupDecisionOwnerSide = state.PendingDecision is { Kind: DecisionKind.Setup } pending
                 ? state.GetPlayer(pending.Owner).Side
                 : null,

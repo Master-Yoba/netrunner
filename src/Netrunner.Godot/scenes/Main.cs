@@ -159,6 +159,7 @@ public partial class Main : Control
 			UpdateBoardChoiceGeometry();
 			PlaceActionChips();
 			ContinueAccessAll();
+			ContinueTurnIntent();
 			PlaceRunOverlays();
 			UpdateSpatialGeometry();
 			UpdateAccessControls();
@@ -999,6 +1000,7 @@ public partial class Main : Control
 
 	private void RenderSnapshot(MatchSnapshot snapshot)
 	{
+		if (_useCardTable) snapshot = WithTurnPreview(snapshot);
 		ApplyAutoPassSetting();
 		RefreshInspectedCard(snapshot.View);
 		MatchSnapshot? previous = _currentSnapshot;

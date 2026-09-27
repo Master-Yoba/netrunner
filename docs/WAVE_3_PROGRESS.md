@@ -292,6 +292,24 @@ Advancing an agenda in the open shows the Runner where to run, which is why
 the eager version lost. The repairs help, though not yet by a separated
 margin, and nothing regressed.
 
+A third playtest (Corp against the Runner bot) found:
+
+| Report | Cause | Change |
+|---|---|---|
+| The Runner bot spent many clicks putting credits on Smartware Distributor | Runner v2 valued hosting credits without checking what was already hosted | Runner v4 (v2 plus this repair) stops topping up a Distributor that holds enough; it is the new default and older saves keep v2 |
+| A misclicked "Pass priority" lost a score | The score and the pass sat side by side | The score leads the dock, and continuing past it asks for a second click |
+| The constant "Pass priority" nag as the Corp | After every action the Corp holds a timing window, shown as its own step | Invisible windows, after chiriboga: during your own turn, a window offering a rez or a score shows your next turn actions instead of a pass. Rez and score chips stay live on the cards; taking a turn action passes the window first, then submits the matching issued action. Outside your turn, auto-pass stops only where a rez matters (before your turn, or past the ICE of the attacked server) |
+
+The coordinator previews the next turn decision by passing in Simulation mode
+(`MatchCoordinator.TurnPreview.cs`); a Match test checks the preview against
+the real next decision, and a Godot smoke (`--invisible-window-smoke`, in
+`make verify`) plays the Corp into such a window and gains a credit from it.
+If the real decision has no matching action the player sees it and chooses
+again, so a wrong preview can't submit anything the engine didn't issue.
+
+Runner v4 against v2 on the ladder (official, 640 games, the Corp at v6):
+**+30 [−25, 84]**, so not weaker.
+
 ## Gate status
 
 | Criterion | Result |

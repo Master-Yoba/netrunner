@@ -114,6 +114,10 @@ public partial class Main
 		{
 			OpenInteractionLab();
 		}
+		else if (arguments.Contains("--invisible-window-smoke", StringComparer.Ordinal))
+		{
+			_ = RunInvisibleWindowSmokeAsync();
+		}
 		else if (arguments.Contains("--m4-9-ui-smoke", StringComparer.Ordinal))
 		{
 			_ = RunCardTableSmokeAsync();

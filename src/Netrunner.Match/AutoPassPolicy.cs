@@ -11,6 +11,12 @@ public sealed record PriorityWindow(bool InRun, bool Encountering)
     /// <summary>The last windows before the window owner's own turn: the other side's discard step, or the owner's draw step.</summary>
     public bool BeforeOwnTurn { get; init; }
 
+    /// <summary>
+    /// The window owner's own action phase. Its rez windows stay open for the
+    /// player, because the client shows them as part of the turn (invisible windows).
+    /// </summary>
+    public bool OwnActionPhase { get; init; }
+
     /// <summary>Cards installed in the attacked server, by instance ID.</summary>
     public IReadOnlySet<string> AttackedServerCards { get; init; } = new HashSet<string>(StringComparer.Ordinal);
 
@@ -23,6 +29,7 @@ public sealed record PriorityWindow(bool InRun, bool Encountering)
         {
             PastIce = run?.CurrentIceIndex < 0,
             BeforeOwnTurn = BeforeTurn(owner, state.Turn.ActiveSide, state.Turn.Step),
+            OwnActionPhase = state.Turn.ActiveSide == owner && state.Turn.Step is TurnStep.CorpAction or TurnStep.RunnerAction,
             AttackedServerCards = run is null ? new HashSet<string>(StringComparer.Ordinal)
                 : state.Zones.Where(zone => zone.ServerId == run.AttackedServer).SelectMany(zone => zone.CardIds)
                     .Select(id => id.Value).ToHashSet(StringComparer.Ordinal),
@@ -37,6 +44,7 @@ public sealed record PriorityWindow(bool InRun, bool Encountering)
         {
             PastIce = run?.CurrentIceIndex < 0,
             BeforeOwnTurn = view.Turn.ActiveSide is { } side && view.Turn.Step is { } step && BeforeTurn(view.Viewer, side, step),
+            OwnActionPhase = view.Turn.ActiveSide == view.Viewer && view.Turn.Step is TurnStep.CorpAction or TurnStep.RunnerAction,
             AttackedServerCards = view.Servers.Where(server => server.Id == run?.AttackedServerId)
                 .SelectMany(server => server.Root.Concat(server.Ice)).OfType<CardViewModel>().Select(card => card.Id)
                 .ToHashSet(StringComparer.Ordinal),
@@ -53,9 +61,10 @@ public sealed record PriorityWindow(bool InRun, bool Encountering)
 /// About 70% of all decisions are passes, so a player who opts in only stops
 /// where passing is a real choice: an encounter (breaking, bioroid clicks), an
 /// ICE rez, a score, or a rez at a moment that matters. After chiriboga's
-/// usability rule, a rez matters in the last windows before the player's own
-/// turn (when assets are usually rezzed) and during a run once the Runner is
-/// past the ICE, for a card in the attacked server. Other rez windows, paid
+/// usability rule, a rez matters in the player's own action phase (the client
+/// shows those windows as part of the turn), in the last windows before their
+/// own turn (when assets are usually rezzed) and during a run once the Runner
+/// is past the ICE, for a card in the attacked server. Other rez windows, paid
 /// abilities and pumps outside an encounter pass; the player can still stop at
 /// the next window on request (playtests, 27 September).
 /// </summary>
@@ -84,7 +93,7 @@ public static class AutoPassPolicy
     }
 
     private static bool RezMatters(LegalAction action, PriorityWindow window) =>
-        window.BeforeOwnTurn
+        window.BeforeOwnTurn || window.OwnActionPhase
         || window.InRun && window.PastIce && action.Parameters is RezCardParameters rez
             && window.AttackedServerCards.Contains(rez.CardId.Value);
 

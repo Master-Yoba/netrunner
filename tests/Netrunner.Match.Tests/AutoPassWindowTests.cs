@@ -29,6 +29,8 @@ public sealed class AutoPassWindowTests
 
         // Between the Runner's actions or the Corp's own: pass.
         Assert.True(AutoPassPolicy.OptionalWindow(rez, new PriorityWindow(false, false)));
+        // The Corp's own action phase, shown as part of its turn: stop.
+        Assert.False(AutoPassPolicy.OptionalWindow(rez, new PriorityWindow(false, false) { OwnActionPhase = true }));
         // The last windows before the Corp's turn, when assets are usually rezzed: stop.
         Assert.False(AutoPassPolicy.OptionalWindow(rez, new PriorityWindow(false, false) { BeforeOwnTurn = true }));
         // A run on its server, before the ICE is passed: pass; once past it: stop.
