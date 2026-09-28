@@ -65,6 +65,15 @@ public sealed partial class CorpHeuristicPolicy
                 bool unprotected = install.CreateNewRemote || (server?.Ice.Length ?? 0) == 0;
                 if (scoreableNow) score += 150 * weight / 100;
                 else if (unprotected) score -= 350 * weight / 100;
+                if (context.Generation >= 7)
+                {
+                    // v12: when an agenda may go in depends on the deck's plan.
+                    CorpArchetypeProfile profile = context.CorpProfile;
+                    int protecting = install.CreateNewRemote ? 0 : server?.Ice.Length ?? 0;
+                    if (!scoreableNow)
+                        score -= (int)(Math.Max(0, profile.MinIceForAgenda - protecting) * 180 + profile.HoldAgendas * 300);
+                    if (protecting >= 1 && context.Features.Board.Turn.TurnNumber <= 8) score += (int)(profile.RushBonus * 120);
+                }
             }
         }
         else if (definition.Printed.CardClass == RuntimeCardClass.Asset)
@@ -73,6 +82,8 @@ public sealed partial class CorpHeuristicPolicy
             score = 180 - existingEconomy * 60 - lost;
             if (server?.Root.Any(value => context.Definition(value)?.Printed.CardClass == RuntimeCardClass.Upgrade) == true) score -= 80;
             if (context.Self.Credits < (definition.Printed.RezCost ?? 0)) score -= 150;
+            if (context.Generation >= 7)
+                score += (int)(context.CorpProfile.AssetBonus * 120 + (ScalesWithCounters(definition) ? (context.CorpProfile.TrapWeight - 1) * 150 : 0));
         }
         else
         {
@@ -149,7 +160,9 @@ public sealed partial class CorpHeuristicPolicy
             // counter, and an advanced card reads as an agenda to the Runner (Wave 4 C1).
             if (context.Self.Credits - 1 < context.RezReserve) return Value(-40, "advance/trap-keeps-ice-budget", approximate: true);
             int counters = card!.AdvancementCounters ?? 0;
-            return Value(counters >= 4 ? 40 : 130 - counters * 15, "advance/trap", approximate: true);
+            int bait = counters >= 4 ? 40 : 130 - counters * 15;
+            if (context.Generation >= 7) bait = (int)(bait * context.CorpProfile.TrapWeight);
+            return Value(bait, "advance/trap", approximate: true);
         }
         if (context.Generation >= 6 && definition?.Ice is not null && definition.Behavior?.CanBeAdvanced == true)
             return AdvanceIceV11(context, card!, definition);
@@ -173,6 +186,8 @@ public sealed partial class CorpHeuristicPolicy
         if (!finish && context.Self.Credits <= context.RezReserve) score -= 200;
         // v6: advancing spends a credit; don't spend the one that rezzes this agenda's ICE.
         if (repairs && !finish && context.Self.Credits - 1 < ProtectionReserve(context, context.ServerOf(card.Id))) score -= 250;
+        // v12: a shell game leaves agendas unadvanced until the turn they score, so they look like its traps.
+        if (context.Generation >= 7 && !finish) score -= (int)(context.CorpProfile.NeverAdvance * 120);
         // v11: an identity that pays for a card's first advancement (Built to Last) makes starting one cheaper.
         if (context.Generation >= 6 && (card.AdvancementCounters ?? 0) == 0) score += FirstAdvanceGain(context) * context.CreditValue;
         return new(finish ? 10 : 0, score, finish ? "score/finish-this-turn" : "score/future-window",
@@ -191,12 +206,22 @@ public sealed partial class CorpHeuristicPolicy
         bool rootCandidate = context.Features.Hand.Any(card => context.Definition(card)?.Printed.CardClass
             is RuntimeCardClass.Agenda or RuntimeCardClass.Asset);
         bool openSlot = context.Features.Board.Servers.Any(value => value.Kind == ServerKind.Remote && value.Ice.Length > 0 && value.Root.Length == 0);
-        if (newRemote) return rootCandidate && !openSlot ? score : -150;
+        CorpArchetypeProfile profile = context.CorpProfile;
+        bool archetypes = context.Generation >= 7;
+        int occupied = context.Features.Board.Servers.Count(value => value.Kind == ServerKind.Remote && value.Root.Length > 0);
+        if (newRemote) return rootCandidate && !openSlot && (!archetypes || occupied < profile.MaxRemotes) ? score : -150;
         if (server is null) return score;
         int ice = server.Ice.Length;
-        if (server.Kind == ServerKind.Remote && server.Root.Length == 0) return rootCandidate ? score - 60 : -100;
+        // v12: a glacier stacks its scoring remote before the agenda goes in.
+        bool agendaHere = server.Kind == ServerKind.Remote && server.Root.Any(card => context.Definition(card)?.Agenda is not null);
+        double stack = archetypes && server.Kind == ServerKind.Remote && ice < profile.ScoringIceTarget
+            && (agendaHere || server.Root.Length == 0 && context.AgendaCount > 0) ? (profile.ScoringIceTarget - ice) * 140 : 0;
+        if (server.Kind == ServerKind.Remote && server.Root.Length == 0) return (rootCandidate ? score - 60 : -100) + (int)stack;
+        score += (int)stack;
         if (server.Kind is ServerKind.Headquarters or ServerKind.RAndD)
-            score += (int)((ice == 0 ? 260 : ice == 1 ? 130 : ice == 2 ? 30 : 0) * context.OpponentScorePressure);
+            score += (int)((archetypes
+                ? Math.Max(0, profile.CentralIceTarget - ice) * 130 + (ice == 0 ? 130 : 0)
+                : ice == 0 ? 260 : ice == 1 ? 130 : ice == 2 ? 30 : 0) * context.OpponentScorePressure);
         if (server.Kind == ServerKind.Archives && ice == 0) score += Math.Min(200, SuccessfulRunsOn(context, server) * 70);
         return score;
     }
@@ -280,6 +305,8 @@ public sealed partial class CorpHeuristicPolicy
         {
             if (context.Features.Board.Run?.CurrentIce?.Id != id.Value) return Value(-10, "rez/wait-for-approach");
             int force = ice.Subroutines.Any(subroutine => subroutine is EndRunSubroutineSpec) ? 240 : 90;
+            if (context.Generation >= 7 && ice.Subroutines.Any(subroutine => subroutine is GiveTagsSubroutineSpec))
+                force += (int)((context.CorpProfile.TagWeight - 1) * 150);
             if (context.Generation >= 6)
                 return Value(force + context.ServerValue(server) + RunDenialValue(context, server) - cost * 30,
                     "rez/relevant-protection-and-denial", approximate: true);

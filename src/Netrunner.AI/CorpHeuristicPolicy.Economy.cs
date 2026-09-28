@@ -62,14 +62,17 @@ public sealed partial class CorpHeuristicPolicy
                         { Kind: BehaviorDamageAmountKind.SourceAdvancementCounters } damageOperand => damageOperand.BaseAmount + (source?.AdvancementCounters ?? 0),
                         _ => amount,
                     };
-                    total += amount > context.Features.Board.HiddenZoneCounts.RunnerGrip ? 10000 : amount * 100;
+                    total += amount > context.Features.Board.HiddenZoneCounts.RunnerGrip ? 10000
+                        : (int)(amount * 100 * (context.Generation >= 7 ? context.CorpProfile.DamageWeight : 1));
                     break;
                 case BehaviorInstructionKind.AddTags when context.Generation >= 4:
                     // v7: clearing a tag costs the Runner a click and 2 credits, and
                     // while tagged its resources can be trashed (Wave 4 C1 audit).
-                    total += amount * (250 + context.Features.Board.RunnerRig
+                    // v12: a tag deck's punishments make each tag worth more.
+                    total += (int)(amount * (250 + context.Features.Board.RunnerRig
                         .Where(card => context.Definition(card)?.Printed.CardClass == RuntimeCardClass.Resource)
-                        .Select(card => context.CardValue(card, installed: true)).DefaultIfEmpty(0).Max() / 2);
+                        .Select(card => context.CardValue(card, installed: true)).DefaultIfEmpty(0).Max() / 2)
+                        * (context.Generation >= 7 ? context.CorpProfile.TagWeight : 1));
                     break;
                 case BehaviorInstructionKind.AddTags:
                     total += context.Features.Board.RunnerRig.Where(card => context.Definition(card)?.Printed.CardClass == RuntimeCardClass.Resource)

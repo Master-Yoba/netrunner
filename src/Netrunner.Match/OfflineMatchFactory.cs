@@ -52,7 +52,28 @@ public static class OfflineMatchFactory
         };
         ulong seed = AgentLifecycleHost.DerivePolicySeed(definition.Request.Seed, side);
         OfflineAgentConfiguration configuration = OfflinePolicies.Configure(side, difficulty, seed, policyVersion);
-        return new(configuration, OfflinePolicies.Create(configuration),
-            new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior));
+        var catalog = new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior);
+        if (side == PlayerSide.Corp && CorpPolicyProfiles.SupportsArchetypes(configuration.PolicyVersion))
+        {
+            (CorpArchetype primary, CorpArchetype secondary) = CorpDeckArchetypes(definition.Request.CorpDeck, catalog);
+            configuration = CorpPolicyProfiles.WithArchetypes(configuration, primary, secondary);
+        }
+        return new(configuration, OfflinePolicies.Create(configuration), catalog);
+    }
+
+    /// <summary>
+    /// The Corp deck's archetypes (A8): its preset's declaration when it has one,
+    /// otherwise inferred from its cards. The bot knows its own deck.
+    /// </summary>
+    public static (CorpArchetype Primary, CorpArchetype Secondary) CorpDeckArchetypes(DeckRequest deck, ICardEvaluationCatalog catalog)
+    {
+        ArgumentNullException.ThrowIfNull(deck);
+        ArgumentNullException.ThrowIfNull(catalog);
+        if (deck.PresetId is { } id && OfficialPresetCatalog.Embedded().TryGet(id, out OfficialPreset preset) && preset.Archetypes.Count > 0)
+            return (CorpArchetypes.Keys[preset.Archetypes[0]],
+                preset.Archetypes.Count > 1 ? CorpArchetypes.Keys[preset.Archetypes[1]] : CorpArchetype.Generic);
+        return CorpArchetypes.Infer(deck.Cards
+            .Select(entry => (Found: catalog.TryGet(new CardDefinitionId(entry.Code), out CardEvaluationDescriptor card), Card: card, entry.Quantity))
+            .Where(entry => entry.Found).Select(entry => (entry.Card, entry.Quantity)));
     }
 }

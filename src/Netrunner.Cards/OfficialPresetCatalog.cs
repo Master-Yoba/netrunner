@@ -33,7 +33,8 @@ public sealed class OfficialPreset
         IReadOnlyList<DeckCardEntry> cards,
         string? name = null,
         string? summary = null,
-        string? sourceUrl = null)
+        string? sourceUrl = null,
+        IReadOnlyList<string>? archetypes = null)
     {
         PresetId = presetId;
         Side = side;
@@ -44,7 +45,21 @@ public sealed class OfficialPreset
         Name = name;
         Summary = summary;
         SourceUrl = sourceUrl;
+        Archetypes = new ReadOnlyCollection<string>((archetypes ?? []).ToArray());
     }
+
+    /// <summary>
+    /// The deck's declared archetypes (AI plan A8), primary first: how the bot
+    /// playing this deck plans to win. Empty when the bot should infer them.
+    /// </summary>
+    public IReadOnlyList<string> Archetypes { get; }
+
+    /// <summary>The archetype keys a Runner deck may declare (filled in with the Runner archetypes).</summary>
+    public static IReadOnlySet<string> RunnerArchetypeKeys { get; } = new HashSet<string>(StringComparer.Ordinal);
+
+    /// <summary>The archetype keys a Corp deck may declare.</summary>
+    public static IReadOnlySet<string> CorpArchetypeKeys { get; } = new HashSet<string>(
+        ["glacier", "rush", "fast-advance", "shell-game", "kill", "tag-punish", "horizontal"], StringComparer.Ordinal);
 
     /// <summary>The published deck name (Gateway sample decks); null for the teaching decks.</summary>
     public string? Name { get; }
@@ -592,7 +607,7 @@ public sealed class OfficialPresetCatalog
         ["schemaVersion", "retrievedDate", "publishedSourceUrl", "metadataCommitSha", "provenanceNote", "decks"], StringComparer.Ordinal);
 
     private static readonly IReadOnlySet<string> GatewayDeckProperties = new HashSet<string>(
-        ["presetId", "name", "summary", "side", "identityCode", "sourceUrl", "cards"], StringComparer.Ordinal);
+        ["presetId", "name", "summary", "side", "identityCode", "sourceUrl", "cards", "archetypes"], StringComparer.Ordinal);
 
     /// <summary>Parses the Gateway sample-deck document (schema 1) into presets of kind <see cref="GatewayKind"/>.</summary>
     public static IReadOnlyList<OfficialPreset> ParseGatewayDecks(string json)
@@ -620,9 +635,22 @@ public sealed class OfficialPresetCatalog
                 EnsureObjectShape(card, CardProperties, $"{path}.cards");
                 cards.Add(new DeckCardEntry(RequiredString(card, "code", path), RequiredInt(card, "quantity", path)));
             }
+            var archetypes = new List<string>();
+            if (element.TryGetProperty("archetypes", out JsonElement declared))
+            {
+                IReadOnlySet<string> known = side == PlayerSide.Corp ? OfficialPreset.CorpArchetypeKeys : OfficialPreset.RunnerArchetypeKeys;
+                foreach (JsonElement value in declared.EnumerateArray())
+                {
+                    string key = value.GetString() ?? throw Invalid($"{path}.archetypes: expected strings.");
+                    if (!known.Contains(key)) throw Invalid($"{path}.archetypes: '{key}' isn't a {side} archetype.");
+                    archetypes.Add(key);
+                }
+                if (archetypes.Count is 0 or > 2 || archetypes.Distinct().Count() != archetypes.Count)
+                    throw Invalid($"{path}.archetypes: expected one or two distinct archetypes.");
+            }
             decks.Add(new OfficialPreset(RequiredString(element, "presetId", path), side, RequiredString(element, "identityCode", path),
                 GatewayKind, playable: true, cards, RequiredString(element, "name", path), RequiredString(element, "summary", path),
-                RequiredString(element, "sourceUrl", path)));
+                RequiredString(element, "sourceUrl", path), archetypes));
         }
         return decks;
     }

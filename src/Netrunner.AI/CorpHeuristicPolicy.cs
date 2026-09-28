@@ -53,6 +53,13 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// advanced, and the planner scores with the refitted evaluation (feature set 2).
     /// </summary>
     public const string V11 = "corp-heuristic-v11";
+    /// <summary>
+    /// V11 playing to its deck's archetype (A8): glacier, rush, fast advance,
+    /// shell game, kill, tag punishment or horizontal set how many remotes it
+    /// builds and how tall, when agendas go in, and how much tags, traps and
+    /// damage are worth.
+    /// </summary>
+    public const string V12 = "corp-heuristic-v12";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V11 repairs V9's playtest faults (28 September) and is level with it on
@@ -62,7 +69,7 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     public const string PolicyVersion = V11;
     /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>
     public const string LatestHeuristic = V8;
-    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11];
+    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12];
 
     public CorpHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -70,9 +77,9 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Corp policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version switch { V2 => 1, V3 => 2, V7 => 4, V8 or V9 or V10 => 5, V11 => 6, _ => 3 };
-        Plans = version is V5 or V9 or V10 or V11;
-        Repairs = version is V6 or V7 or V8 or V9 or V10 or V11;
+        Generation = version switch { V2 => 1, V3 => 2, V7 => 4, V8 or V9 or V10 => 5, V11 => 6, V12 => 7, _ => 3 };
+        Plans = version is V5 or V9 or V10 or V11 or V12;
+        Repairs = version is V6 or V7 or V8 or V9 or V10 or V11 or V12;
     }
 
     /// <summary>Whether this version has the playtest repairs (V6).</summary>
