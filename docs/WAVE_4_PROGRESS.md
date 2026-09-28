@@ -11,6 +11,7 @@ Evidence date: 28 September 2026, on the Linux x86_64 development box.
 | C1 Gateway sample decks | `feat/c1-gateway-decks` |
 | A1b ladder over a deck pool | `feat/a1b-deck-pool-ladder` (on C1) |
 | U7 main menu | `feat/u7-main-menu` (on A1b) |
+| A4a whole-run model | `feat/a4a-run-model` (on U7) |
 
 ## C1: Gateway sample decks
 
@@ -166,3 +167,50 @@ save and smoke that sets decks, side, difficulty or seed still works.
 `--main-menu-smoke` (in `make verify`) clicks through the title screen and
 both New game areas at 1920 and 2560, and starts Stolen Goods against
 Advanced Yomi from the menu, checking the match uses those decks.
+
+## A4a: whole-run model
+
+`RunModel` (in `Netrunner.AI`) plans a run as one path through every piece of
+ICE, outermost to innermost, with the credits and clicks available. After
+chiriboga's run calculator, as a clean-room design.
+
+- **Subroutine vocabulary.** Each subroutine's effect is read from its typed
+  spec: ends the run (or does if the Runner has at most N credits), damage,
+  tags, credits lost, pay or take a tag, trash a card (or end the run if
+  there's nothing to trash), install ICE, a run restriction, Corp gains. Each
+  has a severity: minor, moderate or serious.
+- **Crossing a piece of ICE.** Every choice of which subroutines to break is
+  priced: a hosted Trojan's counters first, then one matching breaker (pumps
+  and breaks) or a bioroid's lost clicks. The rest fire, priced in
+  credit-equivalents. The cheapest choice that doesn't end the run or flatline
+  the Runner wins; with none, the path is blocked.
+- **The path** carries the budget from one piece of ICE to the next, and ends
+  with the server's approach toll. Unrezzed ICE is counted, not priced.
+- **From the Corp's side**, the same model runs on public information about
+  the Runner, with the Corp's own ICE counted as rezzed while its credits last.
+
+**Gate: the model agrees with the engine.** Over 24 Gateway self-play games,
+278 runs had every piece of ICE visible when the Runner chose them and a
+forecast that it could get in: 263 succeeded (95%), with a mean credit error
+of 0.16 on the successful ones. Only 2 runs the model called blocked were made.
+`RunModelValidationTests` keeps this at 85% or more.
+
+**Policies.** Runner v7 costs runs and continuations with the model, and
+Corp v8 judges where an agenda is safe with it, in place of counting ICE and
+breaker types. Against C1's versions (`standard-c1`: Corp v7, Runner v6), 480
+deals each (1,920 games), no deck warnings:
+
+| Pool | Corp v8 | Runner v7 |
+|---|---:|---:|
+| Gateway | −5 [−34, 23] | +8 [−21, 34] |
+| Expanded tutorial | +10 [−27, 39] | +17 [−18, 47] |
+
+A Runner-only run (Runner v7 against v6, the Corp at v7) read +16 [−13, 45] on
+Gateway. The Runner gain is small and consistent, and the Corp is level: the
+model is the foundation, and A5's fitted evaluation is where its terms get
+their weights. Both ship as the defaults; older saves keep their versions.
+
+Still to do in A4a: HQ and R&D knowledge (lower the value of a server whose
+cards the Runner has already seen) and one ranking of cards worth keeping for
+discard, mulligan and trash choices. Both need new tracked state in the
+agent's features.
