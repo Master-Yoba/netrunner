@@ -20,7 +20,7 @@ public static partial class CliCommands
     private static int RunAiFitEvaluation(string[] args, TextWriter output, TextWriter error)
     {
         string content = "both";
-        int games = 400, holdoutGames = 120, workers = 1;
+        int games = 400, holdoutGames = 120, workers = 1, featureVersion = 1;
         ulong seed = 1;
         string? destination = null;
         try
@@ -38,6 +38,10 @@ public static partial class CliCommands
                     case "--seed" when index + 1 < args.Length: seed = ulong.Parse(args[++index], CultureInfo.InvariantCulture); break;
                     case "--workers" when index + 1 < args.Length: workers = Math.Clamp(int.Parse(args[++index], CultureInfo.InvariantCulture), 1, 64); break;
                     case "--output" when index + 1 < args.Length: destination = args[++index]; break;
+                    case "--feature-version" when index + 1 < args.Length:
+                        featureVersion = int.Parse(args[++index], CultureInfo.InvariantCulture);
+                        if (featureVersion is not (1 or 2)) throw new ArgumentException("--feature-version requires 1 or 2.");
+                        break;
                     default: throw new ArgumentException($"Unsupported ai-fit-evaluation argument '{args[index]}'.");
                 }
             }
@@ -58,8 +62,8 @@ public static partial class CliCommands
             _ => [.. RulesFuzzRunner.OfficialContentIds, .. RulesFuzzRunner.GatewayContentIds],
         };
         // Held-out seeds come from a separate base seed, so no training game repeats.
-        Samples training = Collect(pool, games, seed, workers);
-        Samples holdout = Collect(pool, holdoutGames, seed + 1_000_003, workers);
+        Samples training = Collect(pool, games, seed, workers, featureVersion);
+        Samples holdout = Collect(pool, holdoutGames, seed + 1_000_003, workers, featureVersion);
         var models = new Dictionary<PlayerSide, LogisticSideModel>();
         var report = new List<object>();
         bool better = true;
@@ -81,12 +85,12 @@ public static partial class CliCommands
                 $"{side,-6} train={x.Count} holdout={hx.Count} logloss fitted={fittedLoss:F4} hand={handLoss:F4} base-rate={baseLoss:F4} accuracy={accuracy:P1}"));
             report.Add(new { side = side.ToString().ToLowerInvariant(), train = x.Count, holdout = hx.Count, fittedLoss, handLoss, baseLoss, accuracy });
         }
-        var document = new FittedEvaluationDocument(1, "evaluation-v1", EvaluationFeatures.Names, models[PlayerSide.Corp], models[PlayerSide.Runner],
+        var document = new FittedEvaluationDocument(1, $"evaluation-v{featureVersion}", EvaluationFeatures.NamesFor(featureVersion), models[PlayerSide.Corp], models[PlayerSide.Runner],
             string.Create(CultureInfo.InvariantCulture,
-                $"Fitted by ai-fit-evaluation on {games} Standard self-play games (content {content}, seed {seed}); held out {holdoutGames} games on another seed."));
+                $"Fitted by ai-fit-evaluation (feature set {featureVersion}) on {games} Standard self-play games (content {content}, seed {seed}); held out {holdoutGames} games on another seed."));
         File.WriteAllText(destination, JsonSerializer.Serialize(document, FitJsonOptions) + "\n");
         File.WriteAllText(Path.ChangeExtension(destination, ".report.json"),
-            JsonSerializer.Serialize(new { schemaVersion = 1, content, games, holdoutGames, seed, sides = report }, FitJsonOptions) + "\n");
+            JsonSerializer.Serialize(new { schemaVersion = 1, featureVersion, content, games, holdoutGames, seed, sides = report }, FitJsonOptions) + "\n");
         output.WriteLine($"ai-fit-evaluation {(better ? "better" : "not-better")} output={destination}");
         return better ? 0 : 1;
     }
@@ -105,7 +109,7 @@ public static partial class CliCommands
     }
 
     /// <summary>Standard self-play; each side's view at the first action of every turn, labelled with whether that side won.</summary>
-    private static Samples Collect(IReadOnlyList<string> pool, int games, ulong baseSeed, int workers)
+    private static Samples Collect(IReadOnlyList<string> pool, int games, ulong baseSeed, int workers, int featureVersion)
     {
         var samples = new Samples();
         Parallel.For(0, games, new ParallelOptions { MaxDegreeOfParallelism = workers }, game =>
@@ -136,7 +140,7 @@ public static partial class CliCommands
                         AgentFeatures features = ObservationReader.Read(ObservationBuilder.Build(state, side, definition.Behavior),
                             AgentFeatures.VersionWithHiddenAdvancements);
                         double hand = EvaluationFeatures.HandScore(features, catalog) / 1000.0;
-                        samples.Rows.Add((side, game, order++, EvaluationFeatures.Extract(features, catalog), hand, winner == side ? 1 : 0));
+                        samples.Rows.Add((side, game, order++, EvaluationFeatures.Extract(features, catalog, featureVersion), hand, winner == side ? 1 : 0));
                     }
                 }
                 state = GameEngine.Apply(state, action.Submission, definition.Behavior, definition.Runtime, ApplyMode.Simulation).State;

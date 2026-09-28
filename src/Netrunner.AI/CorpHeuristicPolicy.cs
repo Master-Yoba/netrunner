@@ -46,6 +46,13 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// Turn actions aren't planned.
     /// </summary>
     public const string V10 = "corp-heuristic-v10";
+    /// <summary>
+    /// Playtest repairs on V9 (28 September): ICE goes where it protects
+    /// something (no empty remotes, HQ and R&amp;D first), upgrades go where they
+    /// work, approached ICE is rezzed for the runs it denies, advanceable ICE is
+    /// advanced, and the planner scores with the refitted evaluation (feature set 2).
+    /// </summary>
+    public const string V11 = "corp-heuristic-v11";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V9 plans turn actions with the fitted evaluation and gains on the Gateway
@@ -54,7 +61,7 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     public const string PolicyVersion = V9;
     /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>
     public const string LatestHeuristic = V8;
-    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10];
+    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11];
 
     public CorpHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -62,9 +69,9 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Corp policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version switch { V2 => 1, V3 => 2, V7 => 4, V8 or V9 or V10 => 5, _ => 3 };
-        Plans = version is V5 or V9 or V10;
-        Repairs = version is V6 or V7 or V8 or V9 or V10;
+        Generation = version switch { V2 => 1, V3 => 2, V7 => 4, V8 or V9 or V10 => 5, V11 => 6, _ => 3 };
+        Plans = version is V5 or V9 or V10 or V11;
+        Repairs = version is V6 or V7 or V8 or V9 or V10 or V11;
     }
 
     /// <summary>Whether this version has the playtest repairs (V6).</summary>
@@ -118,7 +125,10 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     {
         ValidateAction(features, action);
         if (!budget.TrySpend(8 + features.VisibleCards().Count() * 2)) return Fallback(features, action) with { UsedFallback = true };
-        var context = new HeuristicContext(features, catalog, configuration, Generation);
+        var context = new HeuristicContext(features, catalog, configuration, Generation)
+        {
+            Knowledge = Generation >= 6 ? knowledge : null,
+        };
         return action.Kind switch
         {
             ActionKind.GainCredit => Value(context.CreditValue + (context.Self.Credits < (Repairs ? ProtectionReserve(context) : context.RezReserve) ? 150 : 0),

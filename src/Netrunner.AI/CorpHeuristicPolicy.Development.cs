@@ -27,6 +27,7 @@ public sealed partial class CorpHeuristicPolicy
             bool hasScoringRemote = context.Features.Board.Servers.Any(value => value.Kind == ServerKind.Remote && value.Ice.Length > 0);
             score = install.CreateNewRemote ? context.AgendaCount > 0 && !hasScoringRemote ? 350 : 20
                 : context.ServerValue(server) / ((server?.Ice.Length ?? 0) + 1);
+            if (context.Generation >= 6) score = IcePlacementV11(context, server, install.CreateNewRemote, score);
             if (context.Generation >= 2)
             {
                 // A2: ICE the Runner can't break yet taxes every future run,
@@ -74,8 +75,12 @@ public sealed partial class CorpHeuristicPolicy
             if (context.Self.Credits < (definition.Printed.RezCost ?? 0)) score -= 150;
         }
         else
+        {
             score = 70 + (server?.Root.Length ?? 0) * 60 + (server?.Ice.Length ?? 0) * 40 - lost
                 + (server?.Root.Count(value => value is { Rezzed: true } && context.Definition(value)?.Printed.CardClass == RuntimeCardClass.Upgrade) ?? 0) * 60;
+            if (context.Generation >= 6 && definition.Printed.CardClass == RuntimeCardClass.Upgrade)
+                score = UpgradePlacementV11(context, definition, server, install, score);
+        }
         return Value(score, "development/destination-minus-replacement-value", approximate: true, objective: new("install", null, null, install.CardId.Value));
     }
 
@@ -146,6 +151,8 @@ public sealed partial class CorpHeuristicPolicy
             int counters = card!.AdvancementCounters ?? 0;
             return Value(counters >= 4 ? 40 : 130 - counters * 15, "advance/trap", approximate: true);
         }
+        if (context.Generation >= 6 && definition?.Ice is not null && definition.Behavior?.CanBeAdvanced == true)
+            return AdvanceIceV11(context, card!, definition);
         if (definition?.Agenda is null) return Value(-20, "advance/nonagenda-opportunity", approximate: true);
         int remaining = definition.Printed.AdvancementRequirement - (card!.AdvancementCounters ?? 0);
         bool finish = remaining > 0 && remaining <= Math.Min(context.Self.Clicks, context.Self.Credits);
@@ -166,9 +173,97 @@ public sealed partial class CorpHeuristicPolicy
         if (!finish && context.Self.Credits <= context.RezReserve) score -= 200;
         // v6: advancing spends a credit; don't spend the one that rezzes this agenda's ICE.
         if (repairs && !finish && context.Self.Credits - 1 < ProtectionReserve(context, context.ServerOf(card.Id))) score -= 250;
+        // v11: an identity that pays for a card's first advancement (Built to Last) makes starting one cheaper.
+        if (context.Generation >= 6 && (card.AdvancementCounters ?? 0) == 0) score += FirstAdvanceGain(context) * context.CreditValue;
         return new(finish ? 10 : 0, score, finish ? "score/finish-this-turn" : "score/future-window",
             Approximate: !finish, Objective: new("score", null, null, card.Id));
     }
+
+    /// <summary>
+    /// v11 (playtest, 28 September): ICE goes where it protects something. A new
+    /// remote is worth ICE only while the Corp holds an agenda or asset to put
+    /// there and no ICE'd remote stands empty for it; an empty remote gains little
+    /// from more ICE; and HQ and R&amp;D are worth protecting until each has two
+    /// pieces. Decks with many assets still go wide, since each asset wants a home.
+    /// </summary>
+    private static int IcePlacementV11(HeuristicContext context, AgentServer? server, bool newRemote, int score)
+    {
+        bool rootCandidate = context.Features.Hand.Any(card => context.Definition(card)?.Printed.CardClass
+            is RuntimeCardClass.Agenda or RuntimeCardClass.Asset);
+        bool openSlot = context.Features.Board.Servers.Any(value => value.Kind == ServerKind.Remote && value.Ice.Length > 0 && value.Root.Length == 0);
+        if (newRemote) return rootCandidate && !openSlot ? score : -150;
+        if (server is null) return score;
+        int ice = server.Ice.Length;
+        if (server.Kind == ServerKind.Remote && server.Root.Length == 0) return rootCandidate ? score - 60 : -100;
+        if (server.Kind is ServerKind.Headquarters or ServerKind.RAndD)
+            score += (int)((ice == 0 ? 260 : ice == 1 ? 130 : ice == 2 ? 30 : 0) * context.OpponentScorePressure);
+        if (server.Kind == ServerKind.Archives && ice == 0) score += Math.Min(200, SuccessfulRunsOn(context, server) * 70);
+        return score;
+    }
+
+    /// <summary>
+    /// v11: an upgrade goes where it works. One that pays off when an agenda is
+    /// scored from its own root (Malapert Data Vault) belongs in a remote that
+    /// holds or will hold an agenda, and a unique upgrade never replaces its own copy.
+    /// </summary>
+    private static int UpgradePlacementV11(HeuristicContext context, CardEvaluationDescriptor definition, AgentServer? server,
+        InstallCardParameters install, int score)
+    {
+        bool copyInstalled = definition.Printed.Unique && context.Features.Board.Servers.SelectMany(value => value.Root)
+            .Any(card => card is not null && card.DefinitionId == definition.Printed.DefinitionId.Value);
+        if (copyInstalled) return -1000;
+        bool scoringUpgrade = definition.Behavior?.Triggers.Any(trigger => trigger.Occurrence == OccurrenceKind.AgendaScoredOrStolen
+            && trigger.RequireSourceOnAttackedServer) == true;
+        if (!scoringUpgrade) return score;
+        if (install.CreateNewRemote || server?.Kind is not ServerKind.Remote) return -400;
+        bool agendaHere = server.Root.Any(card => card is null || context.Definition(card)?.Agenda is not null);
+        return agendaHere || context.AgendaCount > 0 ? score + 120 : score - 120;
+    }
+
+    /// <summary>
+    /// v11: advanceable ICE (Pharos) grows once its counters reach the threshold,
+    /// and stays grown, so it is advanced toward it on a server worth protecting.
+    /// </summary>
+    private static AgentUtility AdvanceIceV11(HeuristicContext context, AgentCard card, CardEvaluationDescriptor definition)
+    {
+        int counters = card.AdvancementCounters ?? 0;
+        int threshold = definition.Ice!.ValueModifiers?.Where(modifier => modifier.Source == BehaviorValueSourceKind.CounterThreshold
+            && modifier.CounterName == "advancement").Select(modifier => modifier.Threshold ?? 0).DefaultIfEmpty(0).Max() ?? 0;
+        if (threshold <= 0 || counters >= threshold) return Value(-30, "advance/ice-already-grown", approximate: true);
+        if (context.Self.Credits - 1 < context.RezReserve) return Value(-40, "advance/ice-keeps-rez-budget", approximate: true);
+        AgentServer? server = context.ServerOf(card.Id);
+        bool important = server?.Kind is ServerKind.Headquarters or ServerKind.RAndD || server?.Root.Length > 0;
+        int score = 40 + (important ? 70 : 0) + (card.Rezzed == true ? 30 : 0) + counters * 25
+            + (counters == 0 ? FirstAdvanceGain(context) * context.CreditValue : 0);
+        return Value(score, "advance/grow-ice", approximate: true);
+    }
+
+    /// <summary>Credits the Corp's identity pays for a card's first advancement counter (Built to Last).</summary>
+    private static int FirstAdvanceGain(HeuristicContext context) => context.Features.Board.CorpIdentity
+        .SelectMany(card => context.Definition(card)?.Behavior?.Triggers ?? [])
+        .Where(trigger => trigger.Occurrence == OccurrenceKind.CardAdvancedFromZero)
+        .SelectMany(trigger => trigger.Instructions).Where(instruction => instruction.Kind == BehaviorInstructionKind.GainCredits)
+        .Sum(instruction => instruction.Amount);
+
+    /// <summary>
+    /// v11: what rezzing ICE on approach denies beyond this server's contents: the
+    /// Runner's visible rewards for a successful run, and every later run it
+    /// taxes, judged by how often the Runner has run this server successfully.
+    /// </summary>
+    private static int RunDenialValue(HeuristicContext context, AgentServer? server)
+    {
+        int rewards = context.Features.Board.RunnerRig.Concat(context.Features.Board.RunnerIdentity)
+            .SelectMany(card => context.Definition(card)?.Behavior?.Triggers ?? [])
+            .Where(trigger => trigger.Occurrence == OccurrenceKind.RunSuccessful
+                && (trigger.ServerKindRequirement is null || trigger.ServerKindRequirement == server?.Kind))
+            .SelectMany(trigger => trigger.Instructions).Where(instruction => instruction.Kind == BehaviorInstructionKind.GainCredits)
+            .Sum(instruction => instruction.Amount) * 70;
+        return 60 + rewards + Math.Min(240, SuccessfulRunsOn(context, server) * 80);
+    }
+
+    /// <summary>Successful runs the Corp has seen on a server, from its own remembered history.</summary>
+    private static int SuccessfulRunsOn(HeuristicContext context, AgentServer? server) => server is null ? 0
+        : context.Knowledge?.History.Count(entry => entry.Kind == "successful-run" && entry.ServerId == server.Id) ?? 0;
 
     /// <summary>A card whose damage grows with its advancement counters (an advanceable trap).</summary>
     private static bool ScalesWithCounters(CardEvaluationDescriptor? definition) =>
@@ -185,6 +280,9 @@ public sealed partial class CorpHeuristicPolicy
         {
             if (context.Features.Board.Run?.CurrentIce?.Id != id.Value) return Value(-10, "rez/wait-for-approach");
             int force = ice.Subroutines.Any(subroutine => subroutine is EndRunSubroutineSpec) ? 240 : 90;
+            if (context.Generation >= 6)
+                return Value(force + context.ServerValue(server) + RunDenialValue(context, server) - cost * 30,
+                    "rez/relevant-protection-and-denial", approximate: true);
             return Value(force + context.ServerValue(server) - cost * 30, "rez/relevant-protection", approximate: true);
         }
         // v6: an upgrade in the server being run on works now or never, so it

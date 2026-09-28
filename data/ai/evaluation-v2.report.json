@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "featureVersion": 2,
+  "content": "gateway",
+  "games": 400,
+  "holdoutGames": 120,
+  "seed": 11,
+  "sides": [
+    {
+      "side": "corp",
+      "train": 9453,
+      "holdout": 2846,
+      "fittedLoss": 0.6000670801299137,
+      "handLoss": 0.6401873861111234,
+      "baseLoss": 0.6810632927989746,
+      "accuracy": 0.6806043569922698
+    },
+    {
+      "side": "runner",
+      "train": 9453,
+      "holdout": 2846,
+      "fittedLoss": 0.6058384419273349,
+      "handLoss": 0.6297351852518205,
+      "baseLoss": 0.6810632927989746,
+      "accuracy": 0.674279690794097
+    }
+  ]
+}

@@ -21,6 +21,33 @@ public static class EvaluationFeatures
         "corp-deck", "runner-stack", "turn", "observer-active",
     ];
 
+    /// <summary>
+    /// Feature set 2 (playtest, 28 September): v1's plain count of remotes let
+    /// the planner learn that spawning remotes wins, so v2 counts remotes with
+    /// something in their root apart from empty ones.
+    /// </summary>
+    public static IReadOnlyList<string> NamesV2 { get; } =
+        [.. Names.Select(name => name == "remotes" ? "occupied-remotes" : name), "empty-remotes"];
+
+    public static IReadOnlyList<string> NamesFor(int version) => version switch
+    {
+        1 => Names,
+        2 => NamesV2,
+        _ => throw new ArgumentOutOfRangeException(nameof(version), "Unknown evaluation feature set."),
+    };
+
+    public static double[] Extract(AgentFeatures features, ICardEvaluationCatalog catalog, int version)
+    {
+        double[] v1 = Extract(features, catalog);
+        if (version == 1) return v1;
+        if (version != 2) throw new ArgumentOutOfRangeException(nameof(version), "Unknown evaluation feature set.");
+        AgentServer[] remotes = [.. features.Board.Servers.Where(server => server.Kind == ServerKind.Remote)];
+        int occupied = remotes.Count(server => server.Root.Length > 0);
+        double[] v2 = [.. v1, remotes.Length - occupied];
+        v2[Names.ToList().IndexOf("remotes")] = occupied;
+        return v2;
+    }
+
     public static double[] Extract(AgentFeatures features, ICardEvaluationCatalog catalog)
     {
         ArgumentNullException.ThrowIfNull(features);

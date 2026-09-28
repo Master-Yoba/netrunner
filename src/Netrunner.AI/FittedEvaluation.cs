@@ -92,24 +92,33 @@ public sealed record FittedEvaluationDocument(
 /// </summary>
 public static class FittedEvaluation
 {
-    private const string ResourceName = "Netrunner.AI.Data.ai.evaluation-v1.json";
-    private static readonly Lazy<FittedEvaluationDocument> Embedded = new(Load);
+    private static readonly Lazy<FittedEvaluationDocument> V1 = new(() => Load(1));
+    private static readonly Lazy<FittedEvaluationDocument> V2 = new(() => Load(2));
 
-    public static FittedEvaluationDocument Document => Embedded.Value;
+    /// <summary>The first fitted evaluation (A5), which Corp v9 and Runner v8 plan with.</summary>
+    public static FittedEvaluationDocument Document => V1.Value;
 
-    public static double WinProbability(AgentFeatures features, ICardEvaluationCatalog catalog)
+    public static FittedEvaluationDocument DocumentFor(int version) => version switch
+    {
+        1 => V1.Value,
+        2 => V2.Value,
+        _ => throw new ArgumentOutOfRangeException(nameof(version), "Unknown fitted evaluation."),
+    };
+
+    public static double WinProbability(AgentFeatures features, ICardEvaluationCatalog catalog, int version = 1)
     {
         ArgumentNullException.ThrowIfNull(features);
         AgentOutcome outcome = features.Board.Outcome;
         if (outcome.Kind != GameOutcomeKind.Ongoing) return outcome.Winner == features.Side ? 1 : 0;
-        LogisticSideModel model = features.Side == PlayerSide.Corp ? Document.Corp : Document.Runner;
-        return model.Probability(EvaluationFeatures.Extract(features, catalog));
+        FittedEvaluationDocument document = DocumentFor(version);
+        LogisticSideModel model = features.Side == PlayerSide.Corp ? document.Corp : document.Runner;
+        return model.Probability(EvaluationFeatures.Extract(features, catalog, version));
     }
 
     /// <summary>The win probability as a planner score: log-odds in thousandths, with wins and losses at the extremes.</summary>
-    public static long Score(AgentFeatures features, ICardEvaluationCatalog catalog)
+    public static long Score(AgentFeatures features, ICardEvaluationCatalog catalog, int version = 1)
     {
-        double probability = Math.Clamp(WinProbability(features, catalog), 1e-6, 1 - 1e-6);
+        double probability = Math.Clamp(WinProbability(features, catalog, version), 1e-6, 1 - 1e-6);
         return (long)Math.Round(Math.Log(probability / (1 - probability)) * 1000);
     }
 
@@ -119,13 +128,14 @@ public static class FittedEvaluation
         JsonSerializer.Deserialize<FittedEvaluationDocument>(json, ReadOptions)
         ?? throw new InvalidOperationException("The fitted evaluation document is empty.");
 
-    private static FittedEvaluationDocument Load()
+    private static FittedEvaluationDocument Load(int version)
     {
-        using Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(ResourceName)
-            ?? throw new InvalidOperationException($"The fitted evaluation resource '{ResourceName}' is missing.");
+        string resource = $"Netrunner.AI.Data.ai.evaluation-v{version}.json";
+        using Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resource)
+            ?? throw new InvalidOperationException($"The fitted evaluation resource '{resource}' is missing.");
         using var reader = new StreamReader(stream);
         FittedEvaluationDocument document = Parse(reader.ReadToEnd());
-        if (!document.FeatureNames.SequenceEqual(EvaluationFeatures.Names))
+        if (!document.FeatureNames.SequenceEqual(EvaluationFeatures.NamesFor(version)))
             throw new InvalidOperationException("The fitted evaluation's features don't match the feature extractor; refit it.");
         return document;
     }

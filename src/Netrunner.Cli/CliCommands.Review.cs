@@ -8,7 +8,7 @@ namespace Netrunner.Cli;
 public static partial class CliCommands
 {
     /// <summary>
-    /// ai-review &lt;session-directory&gt; [--profile standard|easy] [--all] [--output file] [--json].
+    /// ai-review &lt;session-directory&gt; [--profile standard|easy] [--side corp|runner] [--all] [--output file] [--json].
     /// Replays a recorded client session and compares every local-player
     /// decision with the offline bot's choice for the same position. The
     /// output is private: it names the local player's own cards.
@@ -23,12 +23,21 @@ public static partial class CliCommands
             string profile = "standard";
             string? destination = null;
             bool all = false;
+            PlayerSide? side = null;
             for (int index = 2; index < args.Length; index++)
             {
                 switch (args[index])
                 {
                     case "--json": break;
                     case "--all": all = true; break;
+                    case "--side" when index + 1 < args.Length:
+                        side = args[++index] switch
+                        {
+                            "corp" => PlayerSide.Corp,
+                            "runner" => PlayerSide.Runner,
+                            _ => throw new ArgumentException("--side requires corp or runner."),
+                        };
+                        break;
                     case "--profile" when index + 1 < args.Length:
                         profile = args[++index];
                         if (profile is not ("standard" or "easy")) throw new ArgumentException("--profile requires standard or easy.");
@@ -53,7 +62,7 @@ public static partial class CliCommands
             IRuntimeCardCatalog runtime = GatewayRuntimeCardCatalog.CreateEmbedded();
             SessionRecoveryResult recovered = SessionTrace.Recover(sessionDirectory, behavior, runtime);
             IReadOnlyList<ReviewedDecision> decisions = HumanGameReview.ReviewAsync(
-                recovered.Replay, manifest.HumanSide, behavior, runtime,
+                recovered.Replay, side ?? manifest.HumanSide, behavior, runtime,
                 new CardCatalogMetadataResolver(CardDataResource.LoadEmbedded()), profile).GetAwaiter().GetResult();
 
             // Single-option decisions are forced; they say nothing about play.
@@ -65,7 +74,7 @@ public static partial class CliCommands
                 kind = "ai-human-review",
                 privacy = "private: contains the reviewed player's own hidden cards",
                 session = manifest.TraceId,
-                reviewedSide = manifest.HumanSide.ToString(),
+                reviewedSide = (side ?? manifest.HumanSide).ToString(),
                 profile,
                 decisions = decisions.Count,
                 choices = choices.Length,
@@ -82,7 +91,7 @@ public static partial class CliCommands
             else
             {
                 output.WriteLine(string.Create(CultureInfo.InvariantCulture,
-                    $"ai-review side={manifest.HumanSide} profile={profile} choices={choices.Length} agreements={choices.Length - disagreements.Length}"));
+                    $"ai-review side={side ?? manifest.HumanSide} profile={profile} choices={choices.Length} agreements={choices.Length - disagreements.Length}"));
                 foreach (ReviewedDecision decision in all ? choices : disagreements)
                 {
                     output.WriteLine($"#{decision.Sequence} turn {decision.Turn} {decision.DecisionKind}: "

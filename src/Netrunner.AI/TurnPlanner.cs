@@ -160,8 +160,9 @@ internal sealed class TurnPlanner
         AgentFeatures features = ObservationReader.Read(ObservationBuilder.Build(state, side, determinizer.Behavior),
             _configuration.FeatureVersion);
         // A5: planning versions score rollouts by the fitted win probability (as log-odds).
-        return _configuration.Parameters.GetValueOrDefault("plan-evaluation") == 1
-            ? FittedEvaluation.Score(features, _catalog)
+        // plan-evaluation 2: the refitted evaluation (feature set 2) Corp v11 plans with.
+        return _configuration.Parameters.GetValueOrDefault("plan-evaluation") is int version and (1 or 2)
+            ? FittedEvaluation.Score(features, _catalog, version)
             : PositionEvaluation.Score(features, _catalog, _configuration);
     }
 
