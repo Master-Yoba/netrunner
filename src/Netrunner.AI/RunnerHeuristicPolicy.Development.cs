@@ -39,6 +39,15 @@ public sealed partial class RunnerHeuristicPolicy
             if (definition.Printed.Console) value += 180;
             if (context.Self.UsedMemory >= context.Self.MemoryLimit && definition.Printed.CardClass == RuntimeCardClass.Hardware) value += 170;
         }
+        if (context.Generation >= 8)
+        {
+            // v11: a setup deck builds its rig first; a virus deck values every virus.
+            RunnerArchetypeProfile profile = context.RunnerProfile;
+            bool rigPiece = definition.Icebreaker is not null || definition.Printed.CardClass is RuntimeCardClass.Hardware or RuntimeCardClass.Resource;
+            if (rigPiece && !context.RigComplete) value += (int)(profile.SetupWeight * 150);
+            if (definition.Printed.Subtypes.Any(subtype => string.Equals(subtype, "virus", StringComparison.OrdinalIgnoreCase)))
+                value += (int)(profile.VirusWeight * 180);
+        }
         int replacement = install.RequiredReplacementCardIds.Sum(id => RunnerValues.Card(context, context.Card(id)));
         return new(0, value - install.CreditCost * context.CreditValue - replacement, "rig/coverage-minus-issued-cost-and-replacement", true,
             new("install", null, null, install.CardId.Value));
@@ -49,7 +58,9 @@ public sealed partial class RunnerHeuristicPolicy
         AgentCard? card = context.Card(payment.CardId);
         int cost = context.Definition(card)?.Printed.TrashCost ?? context.Self.Credits;
         int personal = Math.Max(0, cost - payment.RunCredits);
-        int value = RunnerValues.Trash(context, card) - personal * context.CreditValue - payment.RunCredits * 15;
+        int impact = RunnerValues.Trash(context, card);
+        if (context.Generation >= 8) impact = (int)(impact * context.RunnerProfile.TrashWeight);
+        int value = impact - personal * context.CreditValue - payment.RunCredits * 15;
         return Value(value, "access/trash-value-and-reserve", true);
     }
 

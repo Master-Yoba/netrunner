@@ -43,6 +43,12 @@ public sealed partial class RunnerHeuristicPolicy
             - (upfrontCost + Math.Max(0, cost - extraRunCredits) + loss) * context.CreditValue
             - damage * 160 - risk - repeated * 180 - (funds - cost - loss - tollCredits < reserve ? 220 : 0)
             - (tollCredits + tollClicks * ClickCredits) * context.CreditValue - trapRisk - tagCost;
+        // v11: an aggressive deck runs whenever it can afford to; a big rig holds back until its rig covers every ICE type.
+        if (context.Generation >= 8)
+        {
+            double aggression = context.RunnerProfile.Aggression;
+            if (aggression > 0 || !context.RigComplete) score += (int)(aggression * 100);
+        }
         bool win = unknown == 0 && RunnerValues.Winning(context, server);
         return new(win ? 100 : 0, score, "run/public-value-protection-and-access-reserve", true, new("run", null, null, null));
     }

@@ -8,6 +8,7 @@ public static class RunnerPolicyProfiles
     private static readonly string[] V2ParameterKeys = ["credit-scale", "risk-scale", "draw-scale", "inference-scale"];
     private static readonly string[] V3ParameterKeys = [.. V2ParameterKeys, "plan-samples", "plan-width"];
     private static readonly string[] V8ParameterKeys = [.. V3ParameterKeys, "plan-evaluation"];
+    private static readonly string[] V11ParameterKeys = [.. V2ParameterKeys, "archetype-primary", "archetype-secondary"];
     private static readonly string[] V9ParameterKeys = [.. V8ParameterKeys, "run-samples", "run-width"];
 
     /// <summary>Creates a profile for the latest policy version.</summary>
@@ -57,10 +58,36 @@ public static class RunnerPolicyProfiles
             parameters: [.. Parameters(90, 120, 100), new("inference-scale", 0), .. CorpPolicyProfiles.Planning(0, 0), new("plan-evaluation", 1),
                 new("run-samples", 0), new("run-width", 0)],
             featureVersion: AgentFeatures.VersionWithHiddenAdvancements),
+        // A8: V10 playing to its deck's archetype, set per match by WithArchetypes (generic until then).
+        (RunnerHeuristicPolicy.V11, "standard") => OfflineAgentConfiguration.Create(PlayerSide.Runner, policyVersion, profileId, policySeed,
+            workBudget: 40000, nearTieTolerance: 0,
+            parameters: [.. Parameters(100, 100, 100), new("inference-scale", 100), new("archetype-primary", 0), new("archetype-secondary", 0)],
+            featureVersion: AgentFeatures.VersionWithHiddenAdvancements),
+        (RunnerHeuristicPolicy.V11, "easy") => OfflineAgentConfiguration.Create(PlayerSide.Runner, policyVersion, profileId, policySeed,
+            workBudget: 20000, nearTieTolerance: EasyNearTieTolerance,
+            parameters: [.. Parameters(90, 120, 100), new("inference-scale", 0), new("archetype-primary", 0), new("archetype-secondary", 0)],
+            featureVersion: AgentFeatures.VersionWithHiddenAdvancements),
         _ => throw new ArgumentException("Unknown Runner profile or policy version.", nameof(profileId)),
     };
 
     public const int EasyNearTieTolerance = 150;
+
+    /// <summary>Whether a version plays to a deck archetype (A8).</summary>
+    public static bool SupportsArchetypes(string policyVersion) => policyVersion == RunnerHeuristicPolicy.V11;
+
+    /// <summary>Sets the deck's archetypes on a configuration of a version that supports them.</summary>
+    public static OfflineAgentConfiguration WithArchetypes(OfflineAgentConfiguration configuration, RunnerArchetype primary, RunnerArchetype secondary)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        if (!SupportsArchetypes(configuration.PolicyVersion)) return configuration;
+        OfflineAgentConfiguration updated = OfflineAgentConfiguration.Create(configuration.Side, configuration.PolicyVersion, configuration.ProfileId,
+            configuration.PolicySeed, configuration.WorkBudget, configuration.NearTieTolerance,
+            [.. configuration.Parameters.Where(pair => pair.Key is not ("archetype-primary" or "archetype-secondary")),
+                new("archetype-primary", (int)primary), new("archetype-secondary", (int)secondary)],
+            configuration.FeatureVersion);
+        Validate(updated);
+        return updated;
+    }
     public const int PlanSamples = 3;
     public const int PlanWidth = 3;
     public const int RunSamples = 4;
@@ -76,6 +103,7 @@ public static class RunnerPolicyProfiles
             RunnerHeuristicPolicy.V3 => V3ParameterKeys,
             RunnerHeuristicPolicy.V8 => V8ParameterKeys,
             RunnerHeuristicPolicy.V9 => V9ParameterKeys,
+            RunnerHeuristicPolicy.V11 => V11ParameterKeys,
             _ => null,
         };
         if (configuration.Side != PlayerSide.Runner || keys is null
@@ -85,6 +113,7 @@ public static class RunnerPolicyProfiles
             {
                 "inference-scale" => pair.Value is < 0 or > 200,
                 "plan-samples" or "plan-width" or "run-samples" or "run-width" => pair.Value is < 0 or > 16,
+                "archetype-primary" or "archetype-secondary" => !Enum.IsDefined((RunnerArchetype)pair.Value),
                 "plan-evaluation" => pair.Value is < 0 or > 1,
                 _ => pair.Value is < 25 or > 200,
             })

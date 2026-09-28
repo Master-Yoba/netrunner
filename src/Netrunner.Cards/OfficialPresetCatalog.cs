@@ -54,8 +54,9 @@ public sealed class OfficialPreset
     /// </summary>
     public IReadOnlyList<string> Archetypes { get; }
 
-    /// <summary>The archetype keys a Runner deck may declare (filled in with the Runner archetypes).</summary>
-    public static IReadOnlySet<string> RunnerArchetypeKeys { get; } = new HashSet<string>(StringComparer.Ordinal);
+    /// <summary>The archetype keys a Runner deck may declare.</summary>
+    public static IReadOnlySet<string> RunnerArchetypeKeys { get; } = new HashSet<string>(
+        ["big-rig", "aggro", "central-pressure", "econ-denial", "virus"], StringComparer.Ordinal);
 
     /// <summary>The archetype keys a Corp deck may declare.</summary>
     public static IReadOnlySet<string> CorpArchetypeKeys { get; } = new HashSet<string>(

@@ -52,6 +52,31 @@ public sealed class CorpArchetypeTests
     }
 
     [Fact]
+    public void TheGatewayRunnerDecksPlayTheirArchetypes()
+    {
+        if (!Official) return;
+        var expected = new Dictionary<string, (RunnerArchetype, RunnerArchetype)>
+        {
+            ["gateway-party-hard"] = (RunnerArchetype.Virus, RunnerArchetype.BigRig),
+            ["gateway-stolen-goods"] = (RunnerArchetype.Aggro, RunnerArchetype.CentralPressure),
+            ["gateway-planning-ahead"] = (RunnerArchetype.BigRig, RunnerArchetype.CentralPressure),
+        };
+        foreach ((string runner, (RunnerArchetype primary, RunnerArchetype secondary)) in expected)
+        {
+            FullMatchDefinition definition = RulesFuzzRunner.CreateDefinition($"gateway-hyper-velocity~{runner}", 7);
+            OfflineAgent agent = OfflineMatchFactory.CreateOpponent(definition, PlayerSide.Corp, "standard", RunnerHeuristicPolicy.V11);
+            Assert.Equal((int)primary, agent.Configuration.Parameters["archetype-primary"]);
+            Assert.Equal((int)secondary, agent.Configuration.Parameters["archetype-secondary"]);
+            // Inferred from the cards alone, the deck gets a real archetype too.
+            DeckRequest deck = definition.Request.RunnerDeck;
+            (RunnerArchetype inferred, _) = OfflineMatchFactory.RunnerDeckArchetypes(
+                new DeckRequest(DeckRequest.CurrentSchemaVersion, PlayerSide.Runner, deck.IdentityCode, deck.Cards),
+                new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior));
+            Assert.NotEqual(RunnerArchetype.Generic, inferred);
+        }
+    }
+
+    [Fact]
     public void AnUnknownArchetypeIsRejected()
     {
         string json = """{"schemaVersion":1,"retrievedDate":"x","publishedSourceUrl":"x","metadataCommitSha":"x","provenanceNote":"x","decks":[{"presetId":"p","name":"n","summary":"s","archetypes":["turtle"],"side":"corp","identityCode":"30035","sourceUrl":"u","cards":[]}]}""";

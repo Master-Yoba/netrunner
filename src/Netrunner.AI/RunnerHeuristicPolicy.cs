@@ -50,6 +50,13 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// Corp has drawn since the last access.
     /// </summary>
     public const string V10 = "runner-heuristic-v10";
+    /// <summary>
+    /// V10 playing to its deck's archetype (A8): big rig, aggro, central
+    /// pressure, econ denial or virus set how eagerly it runs, how much it
+    /// values setting up, which centrals it presses, and what trashing and
+    /// viruses are worth.
+    /// </summary>
+    public const string V11 = "runner-heuristic-v11";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V10 remembers what it has seen of R&amp;D and HQ and gains on the Gateway
@@ -61,7 +68,7 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// with, so the shipped Corp planner plays as it did.
     /// </summary>
     public const string LatestHeuristic = V7;
-    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10];
+    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11];
 
     public RunnerHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -69,9 +76,9 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Runner policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 or V8 or V9 => 6, V10 => 7, _ => 2 };
+        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 or V8 or V9 => 6, V10 => 7, V11 => 8, _ => 2 };
         Plans = version is V3 or V8 or V9;
-        Repairs = version is V4 or V5 or V6 or V7 or V8 or V9 or V10;
+        Repairs = version is V4 or V5 or V6 or V7 or V8 or V9 or V10 or V11;
     }
 
     /// <summary>Whether this version has the playtest repairs (V4).</summary>

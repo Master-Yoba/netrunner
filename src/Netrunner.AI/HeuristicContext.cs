@@ -34,6 +34,23 @@ internal sealed class HeuristicContext
     public CardEvaluationDescriptor? Definition(CardInstanceId id) => Definition(Card(id));
     public AgentServer? Server(ServerId? id) => id is { } server ? Features.Board.Servers.FirstOrDefault(value => value.Id == server.Value) : null;
     public AgentServer? ServerOf(string cardId) => Features.Board.Servers.FirstOrDefault(server => server.Root.Concat(server.Ice).Any(card => card?.Id == cardId));
+    private RunnerArchetypeProfile? _runnerProfile;
+
+    /// <summary>The Runner's archetype profile (A8, Runner v11); generic for earlier versions.</summary>
+    public RunnerArchetypeProfile RunnerProfile => _runnerProfile ??= Features.Side == PlayerSide.Runner && Generation >= 8
+        ? RunnerArchetypes.Profile((RunnerArchetype)Parameter("archetype-primary", 0), (RunnerArchetype)Parameter("archetype-secondary", 0))
+        : RunnerArchetypeProfile.Generic;
+
+    /// <summary>Whether the Runner's installed breakers cover barriers, code gates and sentries.</summary>
+    public bool RigComplete
+    {
+        get
+        {
+            IceType?[] types = [.. Features.Board.RunnerRig.Select(card => Definition(card)?.Icebreaker?.InterfaceType).Distinct()];
+            return types.Contains(IceType.Any) || types.Count(type => type is not null) >= 3;
+        }
+    }
+
     private CorpArchetypeProfile? _corpProfile;
 
     /// <summary>The Corp's archetype profile (A8, Corp v12); generic for earlier versions and undeclared decks.</summary>

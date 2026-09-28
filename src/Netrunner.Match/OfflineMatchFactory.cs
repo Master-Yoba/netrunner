@@ -58,7 +58,25 @@ public static class OfflineMatchFactory
             (CorpArchetype primary, CorpArchetype secondary) = CorpDeckArchetypes(definition.Request.CorpDeck, catalog);
             configuration = CorpPolicyProfiles.WithArchetypes(configuration, primary, secondary);
         }
+        if (side == PlayerSide.Runner && RunnerPolicyProfiles.SupportsArchetypes(configuration.PolicyVersion))
+        {
+            (RunnerArchetype primary, RunnerArchetype secondary) = RunnerDeckArchetypes(definition.Request.RunnerDeck, catalog);
+            configuration = RunnerPolicyProfiles.WithArchetypes(configuration, primary, secondary);
+        }
         return new(configuration, OfflinePolicies.Create(configuration), catalog);
+    }
+
+    /// <summary>The Runner deck's archetypes (A8): declared by its preset, otherwise inferred from its cards.</summary>
+    public static (RunnerArchetype Primary, RunnerArchetype Secondary) RunnerDeckArchetypes(DeckRequest deck, ICardEvaluationCatalog catalog)
+    {
+        ArgumentNullException.ThrowIfNull(deck);
+        ArgumentNullException.ThrowIfNull(catalog);
+        if (deck.PresetId is { } id && OfficialPresetCatalog.Embedded().TryGet(id, out OfficialPreset preset) && preset.Archetypes.Count > 0)
+            return (RunnerArchetypes.Keys[preset.Archetypes[0]],
+                preset.Archetypes.Count > 1 ? RunnerArchetypes.Keys[preset.Archetypes[1]] : RunnerArchetype.Generic);
+        return RunnerArchetypes.Infer(deck.Cards
+            .Select(entry => (Found: catalog.TryGet(new CardDefinitionId(entry.Code), out CardEvaluationDescriptor card), Card: card, entry.Quantity))
+            .Where(entry => entry.Found).Select(entry => (entry.Card, entry.Quantity)));
     }
 
     /// <summary>

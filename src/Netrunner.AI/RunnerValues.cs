@@ -70,6 +70,13 @@ internal static class RunnerValues
             _ => 0,
         };
         if (context.Generation >= 7) central = (int)(central * CentralFreshness(context, server.Kind));
+        if (context.Generation >= 8)
+            central = (int)(central * server.Kind switch
+            {
+                ServerKind.RAndD => context.RunnerProfile.RdFocus,
+                ServerKind.Headquarters => context.RunnerProfile.HqFocus,
+                _ => 1,
+            });
         bool contested = server.Kind is ServerKind.Headquarters or ServerKind.RAndD
             || Enumerable.Range(0, server.Root.Length).Any(index => context.HiddenAdvancement(server.Id, "root", index) > 0);
         double pressure = contested ? context.OpponentScorePressure : 1.0;
