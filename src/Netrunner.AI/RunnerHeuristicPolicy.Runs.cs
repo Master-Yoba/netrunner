@@ -43,6 +43,19 @@ public sealed partial class RunnerHeuristicPolicy
         int rewards = SuccessRewards(context, server);
         int repeated = context.Features.Board.TurnFacts?.Runner.ThisTurn?.AttemptedRunServerIds.Count(id => id == server.Id) ?? 0;
         int risk = unknown * (context.Self.Credits < 3 || context.Features.Hand.Length < 2 ? 450 : 260) * context.Parameter("risk-scale", 100) / 100;
+        if (context.Generation >= 8 && unknown > 0)
+        {
+            // v11 (self-play review, 28 September): a flat fear of unrezzed ICE made the Runner stop
+            // running, so the Corp never rezzed and nothing became known. The fear shrinks with what the
+            // Corp can pay to rez and with the ICE types the Runner's breakers cover, and a run that makes
+            // the Corp rez or reveal central ICE is worth something in itself.
+            double budget = Math.Clamp(context.Opponent.Credits / 8.0, 0.3, 1);
+            int covered = context.Features.Board.RunnerRig.Select(card => context.Definition(card)?.Icebreaker?.InterfaceType)
+                .OfType<IceType>().Distinct().Count();
+            double coverage = context.RigComplete ? 0.4 : Math.Max(0.4, 1 - 0.2 * covered);
+            risk = (int)(risk * budget * coverage);
+            if (server.Kind is ServerKind.Headquarters or ServerKind.RAndD && context.Self.Credits >= 4) risk -= unknown * 60;
+        }
         int score = RunnerValues.Server(context, server) + rewards + extraValue
             - (upfrontCost + Math.Max(0, cost - extraRunCredits) + loss) * context.CreditValue
             - damage * 160 - risk - repeated * 180 - (funds - cost - loss - tollCredits < reserve ? 220 : 0)
