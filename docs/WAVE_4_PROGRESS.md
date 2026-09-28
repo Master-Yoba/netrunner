@@ -402,9 +402,14 @@ never leaves a stale animation; reduced motion keeps it still.
 
 Still to do in U5: the visual identity (palette, type and table surface,
 which want a playtest screenshot review), idle life on the active identity,
-and music. The hover tilt toward the cursor was left out on purpose: the
-hovered hand card straightens and holds still under the pointer, which the
-board-actions smoke asserts.
+and music.
+
+Hover tilt (experimental, for the playtest): the hovered hand card leans up
+to 5° toward the pointer, following the pointer's position over the card's
+resting footprint, so it holds still under a still pointer. Settings has
+"Tilt hovered cards (experimental)", on by default for players; scripted
+runs keep it off, so the smokes' straight-card checks still hold, and the
+board-actions smoke checks the lean, its stillness and turning it off.
 
 ## Gate status
 
@@ -418,7 +423,7 @@ board-actions smoke asserts.
 | A3 turn planner on A4a and A5 | **Corp ships** (v9: +50 and +44 on two seeds, p95 30 ms); Runner v8 level, off |
 | A4 run search | **Doesn't ship**: Runner v9 −66 (weaker), Corp v10 +16 (level); kept as ladder entrants |
 | U6 onboarding and playtest loop | Done: hints, intent cues, `playtest-summary`; placement **needs the playtest** |
-| U5 art direction, feel and audio | Partly: synthesized sound, rez flip, damage shake, lane glow. The visual identity **needs a playtest screenshot review**; music and identity idle life are open |
+| U5 art direction, feel and audio | Partly: synthesized sound, rez flip, damage shake, lane glow, experimental hover tilt. The visual identity **needs a playtest screenshot review**; music and identity idle life are open |
 | A4a extras (HQ and R&D knowledge, one keep ranking) | Open: they need new tracked agent state in the checkpoint |
 
 Default bots after Wave 4: Corp v9 (plans turn actions) and Runner v7 on the

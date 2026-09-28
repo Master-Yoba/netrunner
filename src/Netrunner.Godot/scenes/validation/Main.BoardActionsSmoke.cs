@@ -103,6 +103,17 @@ public partial class Main
 				await HandAnimationTime(0.3);
 				RequireInteraction(_gameTable.Hand.HoveredCardId == hand.CardId && hand.Position.Y < resting.Y - 20
 					&& hand.Scale.X > 1.04f && Mathf.Abs(hand.Rotation) < 0.01f, "Hand hover did not lift and straighten, or oscillated under a stationary pointer.");
+				// Experimental tilt (U5): with the pointer near the right edge the card leans right and holds still.
+				_gameTable.Hand.HoverTilt = true;
+				await LabPointer(hand.GetGlobalTransform() * new Vector2(hand.Size.X - 16, 45));
+				await HandAnimationTime(0.3);
+				float leaning = hand.Rotation;
+				await HandAnimationTime(0.2);
+				RequireInteraction(_gameTable.Hand.HoveredCardId == hand.CardId && leaning is > 0.03f and < 0.1f
+					&& Mathf.Abs(hand.Rotation - leaning) < 0.002f, $"Hover tilt didn't lean toward the pointer and hold still ({leaning:0.000} then {hand.Rotation:0.000}).");
+				_gameTable.Hand.HoverTilt = false;
+				await HandAnimationTime(0.3);
+				RequireInteraction(Mathf.Abs(hand.Rotation) < 0.01f, "Turning tilt off didn't straighten the hovered card.");
 				if (OS.GetCmdlineUserArgs().Contains("--m4-12-screenshots")) await SaveRefinementEvidence($"hand-{side.ToString().ToLowerInvariant()}-{size.X}");
 				await LabPointer(new Vector2(20, 20));
 				await HandAnimationTime(0.4);
