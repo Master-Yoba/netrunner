@@ -29,8 +29,10 @@ public sealed partial class CorpHeuristicPolicy
     private static int Effects(HeuristicContext context, IEnumerable<BehaviorInstruction> instructions, AgentCard? source, PlayerSide controller)
     {
         int total = 0;
+        BehaviorTarget? chosenTarget = null;
         foreach (BehaviorInstruction instruction in instructions)
         {
+            if (instruction.Kind == BehaviorInstructionKind.Choose && instruction.Choice?.Target is { } target) chosenTarget = target;
             bool self = controller == context.Features.Side;
             int sign = self ? 1 : -1;
             int amount = instruction.Amount;
@@ -62,12 +64,33 @@ public sealed partial class CorpHeuristicPolicy
                     };
                     total += amount > context.Features.Board.HiddenZoneCounts.RunnerGrip ? 10000 : amount * 100;
                     break;
+                case BehaviorInstructionKind.AddTags when context.Generation >= 4:
+                    // v7: clearing a tag costs the Runner a click and 2 credits, and
+                    // while tagged its resources can be trashed (Wave 4 C1 audit).
+                    total += amount * (250 + context.Features.Board.RunnerRig
+                        .Where(card => context.Definition(card)?.Printed.CardClass == RuntimeCardClass.Resource)
+                        .Select(card => context.CardValue(card, installed: true)).DefaultIfEmpty(0).Max() / 2);
+                    break;
                 case BehaviorInstructionKind.AddTags:
                     total += context.Features.Board.RunnerRig.Where(card => context.Definition(card)?.Printed.CardClass == RuntimeCardClass.Resource)
                         .Select(card => context.CardValue(card, installed: true)).DefaultIfEmpty(0).Max() / 3;
                     break;
+                case BehaviorInstructionKind.TrashCard when context.Generation >= 4 && self
+                    && instruction.Target is { Kind: BehaviorTargetKind.ChosenCard }:
+                    // v7: a trash effect is worth its best legal Runner target (Retribution).
+                    total += context.Features.Board.RunnerRig.Where(card => MatchesTarget(context, card, chosenTarget))
+                        .Select(card => context.CardValue(card, installed: true)).DefaultIfEmpty(0).Max();
+                    break;
                 case BehaviorInstructionKind.Choose when context.Generation >= 3 && instruction.Choice is { Options.Count: 0 }:
                     break; // A card-target choice; the following instructions value the best target.
+                case BehaviorInstructionKind.Choose when context.Generation >= 4
+                    && instruction.Choice is { Options.Count: > 0 } runnerChoice
+                    && ChooserSide(runnerChoice.Chooser, controller) != context.Features.Side:
+                    // v7: the opponent picks the option least good for us, and the
+                    // credits it pays are ours to value (Public Trail: a tag or 8 credits).
+                    total += runnerChoice.Options.Min(option => Effects(context, option.Instructions, source, controller)
+                        + (option.Costs ?? []).Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount) * 100);
+                    break;
                 case BehaviorInstructionKind.Choose:
                     if (instruction.Choice is { Options.Count: > 0 } choice)
                         total += choice.Options.Max(option => Effects(context, option.Instructions, source, controller)
@@ -105,6 +128,31 @@ public sealed partial class CorpHeuristicPolicy
             }
         }
         return total;
+    }
+
+    /// <summary>Which side makes a behavior choice.</summary>
+    private static PlayerSide ChooserSide(BehaviorChooser chooser, PlayerSide controller) => chooser switch
+    {
+        BehaviorChooser.Corp => PlayerSide.Corp,
+        BehaviorChooser.Runner => PlayerSide.Runner,
+        BehaviorChooser.Opponent => controller == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp,
+        _ => controller,
+    };
+
+    /// <summary>Whether an installed Runner card fits a behavior target's card filter.</summary>
+    private static bool MatchesTarget(HeuristicContext context, AgentCard card, BehaviorTarget? target)
+    {
+        if (target?.Filter is not { } filter) return true;
+        RuntimeCardClass? cardClass = context.Definition(card)?.Printed.CardClass;
+        return filter.CardType switch
+        {
+            BehaviorCardType.Any => true,
+            BehaviorCardType.Hardware => cardClass == RuntimeCardClass.Hardware,
+            BehaviorCardType.Resource => cardClass == RuntimeCardClass.Resource,
+            BehaviorCardType.Icebreaker => context.Definition(card)?.Icebreaker is not null,
+            BehaviorCardType.ProgramOrHardware => cardClass is RuntimeCardClass.Program or RuntimeCardClass.Hardware,
+            _ => cardClass == RuntimeCardClass.Program,
+        };
     }
 
     /// <summary>Installed Corp cards an effect can advance: installed before this turn.</summary>

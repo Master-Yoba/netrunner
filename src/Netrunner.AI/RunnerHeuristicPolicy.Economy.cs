@@ -10,8 +10,13 @@ public sealed partial class RunnerHeuristicPolicy
         CardEvaluationDescriptor? definition = context.Definition(card);
         if (definition?.RunEvent is { } runEvent)
         {
+            // v6: raising ICE rez costs is worth the unrezzed ICE it keeps down (Tread Lightly).
+            int rezDelta = context.Generation >= 5 ? (runEvent.RezCostModifiers ?? []).Sum(modifier => modifier.Delta) : 0;
+            int kept = rezDelta <= 0 ? 0 : context.Server(play.TargetServerId)?.Ice
+                .Count(ice => ice is { Rezzed: not true }) is int unrezzed and > 0
+                    ? unrezzed * (context.Opponent.Credits < rezDelta + 4 ? 450 : context.Opponent.Credits < rezDelta + 7 ? 250 : 120) : 0;
             AgentUtility utility = Run(context, context.Server(play.TargetServerId), runEvent.HostedCredits,
-                (runEvent.BreachAccessModifier?.Delta ?? 0) * 140 + (runEvent.SuccessDraw?.DrawCount ?? 0) * context.DrawValue,
+                (runEvent.BreachAccessModifier?.Delta ?? 0) * 140 + (runEvent.SuccessDraw?.DrawCount ?? 0) * context.DrawValue + kept,
                 upfrontCost: play.CreditCost);
             return utility with { Reason = "run/event-benefit-and-issued-cost" };
         }

@@ -33,6 +33,9 @@ public sealed partial class RunnerHeuristicPolicy
             int income = definition.Behavior?.Triggers.SelectMany(trigger => HeuristicContext.Flatten(trigger.Instructions))
                 .Where(instruction => instruction.Kind == BehaviorInstructionKind.LoadHostedCredits).Sum(instruction => instruction.Amount) ?? 0;
             value = 180 + income * 45;
+            // v6: a better basic draw pays off over the coming turns (Verbal Plasticity).
+            if (context.Generation >= 5)
+                value += (definition.Behavior?.FirstBasicDrawReplacements ?? []).Sum(replacement => (replacement.DrawCount - 1) * context.DrawValue * 3);
             if (definition.Printed.Console) value += 180;
             if (context.Self.UsedMemory >= context.Self.MemoryLimit && definition.Printed.CardClass == RuntimeCardClass.Hardware) value += 170;
         }

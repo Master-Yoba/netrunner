@@ -81,6 +81,9 @@ internal static class RunnerValues
         if (definition is null) return 70;
         int income = HeuristicContext.Hosted(card);
         if (income > 0) return 160 + income * 90;
+        // v6: an advanced trap would deal its counters as damage (Clearinghouse).
+        if (context.Generation >= 5 && definition.Behavior is { CanBeAdvanced: true } && (card?.AdvancementCounters ?? 0) > 0)
+            return 180 + (card!.AdvancementCounters ?? 0) * 200;
         if (definition.Printed.CardClass == RuntimeCardClass.Upgrade)
         {
             bool protection = definition.Behavior?.Triggers.Any(trigger => trigger.Occurrence == OccurrenceKind.ServerApproached) == true;

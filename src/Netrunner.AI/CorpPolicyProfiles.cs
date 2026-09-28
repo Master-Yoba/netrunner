@@ -14,10 +14,10 @@ public static class CorpPolicyProfiles
 
     public static OfflineAgentConfiguration Create(string profileId, ulong policySeed, string policyVersion) => (policyVersion, profileId) switch
     {
-        (CorpHeuristicPolicy.V3 or CorpHeuristicPolicy.V4 or CorpHeuristicPolicy.V6, "standard") => OfflineAgentConfiguration.Create(PlayerSide.Corp, policyVersion, profileId, policySeed,
+        (CorpHeuristicPolicy.V3 or CorpHeuristicPolicy.V4 or CorpHeuristicPolicy.V6 or CorpHeuristicPolicy.V7, "standard") => OfflineAgentConfiguration.Create(PlayerSide.Corp, policyVersion, profileId, policySeed,
             workBudget: 20000, nearTieTolerance: 0, parameters: [.. Parameters(100, 100, 100), new("coverage-scale", 100)]),
         // Easy (A6a): a wide near-tie band and no breaker-coverage reasoning.
-        (CorpHeuristicPolicy.V3 or CorpHeuristicPolicy.V4 or CorpHeuristicPolicy.V6, "easy") => OfflineAgentConfiguration.Create(PlayerSide.Corp, policyVersion, profileId, policySeed,
+        (CorpHeuristicPolicy.V3 or CorpHeuristicPolicy.V4 or CorpHeuristicPolicy.V6 or CorpHeuristicPolicy.V7, "easy") => OfflineAgentConfiguration.Create(PlayerSide.Corp, policyVersion, profileId, policySeed,
             workBudget: 12000, nearTieTolerance: EasyNearTieTolerance, parameters: [.. Parameters(90, 80, 100), new("coverage-scale", 0)]),
         // A3: Standard plans turn actions; Easy keeps V4 choices (compute tiers are A6).
         (CorpHeuristicPolicy.V5, "standard") => OfflineAgentConfiguration.Create(PlayerSide.Corp, policyVersion, profileId, policySeed,
@@ -52,7 +52,7 @@ public static class CorpPolicyProfiles
         string[]? keys = configuration.PolicyVersion switch
         {
             CorpHeuristicPolicy.V2 => ParameterKeys,
-            CorpHeuristicPolicy.V3 or CorpHeuristicPolicy.V4 or CorpHeuristicPolicy.V6 => V3ParameterKeys,
+            CorpHeuristicPolicy.V3 or CorpHeuristicPolicy.V4 or CorpHeuristicPolicy.V6 or CorpHeuristicPolicy.V7 => V3ParameterKeys,
             CorpHeuristicPolicy.V5 => V5ParameterKeys,
             _ => null,
         };

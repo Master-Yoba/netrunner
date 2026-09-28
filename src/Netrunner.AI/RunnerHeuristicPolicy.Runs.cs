@@ -18,13 +18,23 @@ public sealed partial class RunnerHeuristicPolicy
             ? ApproachToll(context, server, context.Self.Credits - upfrontCost - Math.Max(0, cost - extraRunCredits) - loss, context.Self.Clicks - 1)
             : (false, 0, 0);
         if (tollBlocked) return Value(-1000, "run/known-approach-toll-unaffordable", true);
+        // v6: an advanced card the Runner can't identify may be a trap dealing 2 plus
+        // its counters on access (Urtica Cipher); with too few cards in the grip that's a flatline.
+        int trapRisk = 0;
+        if (context.Generation >= 5)
+            foreach (AgentCard? root in server.Root)
+            {
+                if (root is not { AdvancementCounters: > 0 } advanced || context.Definition(advanced) is not null) continue;
+                int trapDamage = 2 + (advanced.AdvancementCounters ?? 0);
+                trapRisk += trapDamage >= context.Features.Hand.Length ? 700 : trapDamage * 40;
+            }
         int rewards = SuccessRewards(context, server);
         int repeated = context.Features.Board.TurnFacts?.Runner.ThisTurn?.AttemptedRunServerIds.Count(id => id == server.Id) ?? 0;
         int risk = unknown * (context.Self.Credits < 3 || context.Features.Hand.Length < 2 ? 450 : 260) * context.Parameter("risk-scale", 100) / 100;
         int score = RunnerValues.Server(context, server) + rewards + extraValue
             - (upfrontCost + Math.Max(0, cost - extraRunCredits) + loss) * context.CreditValue
             - damage * 160 - risk - repeated * 180 - (funds - cost - loss - tollCredits < reserve ? 220 : 0)
-            - (tollCredits + tollClicks * ClickCredits) * context.CreditValue;
+            - (tollCredits + tollClicks * ClickCredits) * context.CreditValue - trapRisk;
         bool win = unknown == 0 && RunnerValues.Winning(context, server);
         return new(win ? 100 : 0, score, "run/public-value-protection-and-access-reserve", true, new("run", null, null, null));
     }

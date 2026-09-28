@@ -119,6 +119,14 @@ public sealed partial class CorpHeuristicPolicy
     {
         AgentCard? card = context.Card(advance.CardId);
         CardEvaluationDescriptor? definition = context.Definition(card);
+        if (definition?.Agenda is null && context.Generation >= 4 && ScalesWithCounters(definition))
+        {
+            // v7: an advanceable trap (Urtica Cipher, Clearinghouse) grows with every
+            // counter, and an advanced card reads as an agenda to the Runner (Wave 4 C1).
+            if (context.Self.Credits - 1 < context.RezReserve) return Value(-40, "advance/trap-keeps-ice-budget", approximate: true);
+            int counters = card!.AdvancementCounters ?? 0;
+            return Value(counters >= 4 ? 40 : 130 - counters * 15, "advance/trap", approximate: true);
+        }
         if (definition?.Agenda is null) return Value(-20, "advance/nonagenda-opportunity", approximate: true);
         int remaining = definition.Printed.AdvancementRequirement - (card!.AdvancementCounters ?? 0);
         bool finish = remaining > 0 && remaining <= Math.Min(context.Self.Clicks, context.Self.Credits);
@@ -142,6 +150,12 @@ public sealed partial class CorpHeuristicPolicy
         return new(finish ? 10 : 0, score, finish ? "score/finish-this-turn" : "score/future-window",
             Approximate: !finish, Objective: new("score", null, null, card.Id));
     }
+
+    /// <summary>A card whose damage grows with its advancement counters (an advanceable trap).</summary>
+    private static bool ScalesWithCounters(CardEvaluationDescriptor? definition) =>
+        definition?.Behavior is { CanBeAdvanced: true } behavior
+        && behavior.Triggers.SelectMany(trigger => HeuristicContext.Flatten(trigger.Instructions))
+            .Any(instruction => instruction.DamageAmountOperand?.Kind == BehaviorDamageAmountKind.SourceAdvancementCounters);
 
     private static AgentUtility Rez(HeuristicContext context, CardInstanceId id, int cost, bool repairs = false)
     {
@@ -169,6 +183,12 @@ public sealed partial class CorpHeuristicPolicy
                 .Where(instruction => instruction.Kind == BehaviorInstructionKind.LoadHostedCredits).Sum(instruction => instruction.Amount) ?? 0;
             int immediateDraw = definition.Behavior?.Triggers.Where(trigger => trigger.Occurrence == OccurrenceKind.CardRezzed)
                 .SelectMany(trigger => trigger.Instructions).Where(instruction => instruction.Kind == BehaviorInstructionKind.Draw).Sum(instruction => instruction.Amount) ?? 0;
+            // v7: a trap that fires when the Corp's turn begins (Clearinghouse) must be
+            // rezzed first; it pays off by its counters. Traps that work unrezzed aren't.
+            if (context.Generation >= 4 && futureIncome == 0 && immediateDraw == 0 && ScalesWithCounters(definition)
+                && definition.Behavior?.Triggers.Any(trigger => trigger.Occurrence == OccurrenceKind.TurnBegin && !trigger.ActiveWhileUnrezzed) == true
+                && (card?.AdvancementCounters ?? 0) > 0)
+                return Value((card!.AdvancementCounters ?? 0) * 150 - cost * context.CreditValue, "rez/trap-before-turn", approximate: true);
             if (futureIncome == 0 && immediateDraw == 0) return Value(-10, "rez/no-current-payoff", approximate: true);
             if (immediateDraw >= context.Features.Board.HiddenZoneCounts.CorpDeck) return Value(-10000, "rez/avoid-deck-out");
             return Value(futureIncome * 45 + immediateDraw * context.DrawValue - cost * context.CreditValue, "rez/economy-payback", approximate: true);

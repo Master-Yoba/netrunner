@@ -25,12 +25,19 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// more than a turn is advanced toward finishing next turn.
     /// </summary>
     public const string V6 = "corp-heuristic-v6";
+    /// <summary>
+    /// V6 with repairs from the first Gateway-deck audit (Wave 4 C1): a choice the
+    /// Runner makes is valued as the Runner's best option, a tag is worth what it
+    /// costs the Runner to clear plus the trash threat it opens, a trash effect is
+    /// worth its best target, and an advanceable trap is advanced and rezzed.
+    /// </summary>
+    public const string V7 = "corp-heuristic-v7";
     /// <summary>The version new games and new manifests use.</summary>
     /// <summary>V5 plans but has not shown a ladder gain yet (Wave 3), so new games use V6, which doesn't plan.</summary>
-    public const string PolicyVersion = V6;
+    public const string PolicyVersion = V7;
     /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>
-    public const string LatestHeuristic = V6;
-    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6];
+    public const string LatestHeuristic = V7;
+    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7];
 
     public CorpHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -38,9 +45,9 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Corp policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version switch { V2 => 1, V3 => 2, _ => 3 };
+        Generation = version switch { V2 => 1, V3 => 2, V7 => 4, _ => 3 };
         Plans = version == V5;
-        Repairs = version == V6;
+        Repairs = version is V6 or V7;
     }
 
     /// <summary>Whether this version has the playtest repairs (V6).</summary>

@@ -23,12 +23,20 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// counts when judging whether a run can get in.
     /// </summary>
     public const string V5 = "runner-heuristic-v5";
+    /// <summary>
+    /// V5 with repairs from the first Gateway-deck audit (Wave 4 C1): a run event
+    /// that raises ICE rez costs is worth the unrezzed ICE it neutralizes, a card
+    /// that improves the basic draw is worth its future draws, a run into an
+    /// advanced unknown card weighs its possible trap damage against the grip, and
+    /// trashing an advanced trap is worth the damage it would deal.
+    /// </summary>
+    public const string V6 = "runner-heuristic-v6";
     /// <summary>The version new games and new manifests use.</summary>
     /// <summary>V3 plans but has not shown a ladder gain yet (Wave 3), so new games use V4, which doesn't plan.</summary>
-    public const string PolicyVersion = V5;
+    public const string PolicyVersion = V6;
     /// <summary>The latest version that never plans: the planner's model of the Runner.</summary>
-    public const string LatestHeuristic = V5;
-    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5];
+    public const string LatestHeuristic = V6;
+    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6];
 
     public RunnerHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -36,9 +44,9 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Runner policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, _ => 2 };
+        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, _ => 2 };
         Plans = version == V3;
-        Repairs = version is V4 or V5;
+        Repairs = version is V4 or V5 or V6;
     }
 
     /// <summary>Whether this version has the playtest repairs (V4).</summary>
