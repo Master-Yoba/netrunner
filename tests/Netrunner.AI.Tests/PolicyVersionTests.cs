@@ -27,7 +27,7 @@ public sealed class PolicyVersionTests
     [Fact]
     public void LatestVersionsAreTheDefaultsAndUnknownVersionsFail()
     {
-        Assert.Equal(RunnerHeuristicPolicy.V7, OfflinePolicies.Configure(PlayerSide.Runner, "standard", 1).PolicyVersion);
+        Assert.Equal(RunnerHeuristicPolicy.V10, OfflinePolicies.Configure(PlayerSide.Runner, "standard", 1).PolicyVersion);
         Assert.Equal(CorpHeuristicPolicy.V9, OfflinePolicies.Configure(PlayerSide.Corp, "standard", 1).PolicyVersion);
         Assert.Throws<ArgumentException>(() => new RunnerHeuristicPolicy("runner-heuristic-v11"));
         Assert.Throws<ArgumentException>(() => OfflinePolicies.Configure(PlayerSide.Corp, "standard", 1, "corp-heuristic-v1"));

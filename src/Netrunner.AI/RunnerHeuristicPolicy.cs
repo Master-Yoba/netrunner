@@ -51,9 +51,15 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// </summary>
     public const string V10 = "runner-heuristic-v10";
     /// <summary>The version new games and new manifests use.</summary>
-    /// <remarks>V3 plans but has not shown a ladder gain yet (Wave 3), so new games use V4, which doesn't plan.</remarks>
-    public const string PolicyVersion = V7;
-    /// <summary>The latest version that never plans: the planner's model of the Runner.</summary>
+    /// <remarks>
+    /// V10 remembers what it has seen of R&amp;D and HQ and gains on the Gateway
+    /// ladder (+47 and +53 over V7 on two seeds, Wave 4), so new games use it.
+    /// </remarks>
+    public const string PolicyVersion = V10;
+    /// <summary>
+    /// The planner's model of the Runner. It stays V7, which Corp v9 was measured
+    /// with, so the shipped Corp planner plays as it did.
+    /// </summary>
     public const string LatestHeuristic = V7;
     public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10];
 

@@ -14,7 +14,7 @@ Evidence date: 28 September 2026, on the Linux x86_64 development box.
 | A4a whole-run model | `feat/a4a-run-model` (on U7) |
 | A5 fitted evaluation (and A3 on it) | `feat/a5-fitted-evaluation` (on A4a) |
 | A4 run search | `feat/a4-run-search` (on A5) |
-| U6 onboarding and playtest loop, U5 sound and motion | `feat/u6-onboarding` (on A4) |
+| U6 onboarding and playtest loop, U5 sound and motion, A4a extras | `feat/u6-onboarding` (on A4) |
 
 ## C1: Gateway sample decks
 
@@ -338,6 +338,30 @@ run's rollouts later than the run's end (at the end of the Corp's next turn)
 and sample the Corp's hidden cards from a deck-like mix; Corp v9's planning
 and v10's rez search could then be combined.
 
+## A4a extras: central memory and the keep ranking
+
+**Central memory.** The agent's knowledge now records the Corp's public deck
+and hand sizes when a successful R&D or HQ run ends (for R&D only when the
+access left the top card in place). Runner v10 is v7 plus that memory: R&D
+is worth 30% while its top card is one already seen (the Corp hasn't drawn
+since), and HQ is worth the share of it the Corp has drawn since the last
+access (at least 30%). The memory is an optional field, so older
+checkpoints still load.
+
+**Gate: a clear ladder gain.** Gateway pool, 480 deals against the default
+Standard (Corp v9 on both sides): Runner v10 **+47** [19, 77] on seed 5 and
+**+53** [24, 83] on seed 6, no deck warnings. The decision cost is v7's.
+
+**Decision: Runner v10 ships.** New Gateway games use Corp v9 and Runner v10.
+The planner's model of the Runner in Corp v9's rollouts stays v7, so the
+shipped Corp plays as measured. `standard-w4a` keeps the earlier defaults
+(Corp v9, Runner v7) as a ladder entrant.
+
+**One keep ranking.** Already in place for discards and forced trashes:
+both sides rank those by the same card-value function (`CardValue` for the
+Corp, `RunnerValues.Card` for the Runner). Only the mulligan keeps its own
+rule (economy plus ICE, or economy plus a breaker); no change was made.
+
 ## U6: onboarding and playtest loop
 
 **First-game hints.** `OnboardingHints` (Match) picks at most one hint for
@@ -424,7 +448,7 @@ board-actions smoke checks the lean, its stillness and turning it off.
 | A4 run search | **Doesn't ship**: Runner v9 −66 (weaker), Corp v10 +16 (level); kept as ladder entrants |
 | U6 onboarding and playtest loop | Done: hints, intent cues, `playtest-summary`; placement **needs the playtest** |
 | U5 art direction, feel and audio | Partly: synthesized sound, rez flip, damage shake, lane glow, experimental hover tilt. The visual identity **needs a playtest screenshot review**; music and identity idle life are open |
-| A4a extras (HQ and R&D knowledge, one keep ranking) | Open: they need new tracked agent state in the checkpoint |
+| A4a extras (HQ and R&D knowledge, one keep ranking) | **Runner v10 ships** (central memory: +47 and +53 on two seeds); the keep ranking already exists for discards and trashes |
 
-Default bots after Wave 4: Corp v9 (plans turn actions) and Runner v7 on the
-legal decks; the tutorial decks keep the frozen C1 bot (Corp v7, Runner v6).
+Default bots after Wave 4: Corp v9 (plans turn actions) and Runner v10
+(central memory) on the legal decks; the tutorial decks keep the frozen C1 bot (Corp v7, Runner v6).
