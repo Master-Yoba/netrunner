@@ -10,6 +10,7 @@ Evidence date: 28 September 2026, on the Linux x86_64 development box.
 |---|---|
 | C1 Gateway sample decks | `feat/c1-gateway-decks` |
 | A1b ladder over a deck pool | `feat/a1b-deck-pool-ladder` (on C1) |
+| U7 main menu | `feat/u7-main-menu` (on A1b) |
 
 ## C1: Gateway sample decks
 
@@ -141,3 +142,27 @@ than adding games.
 A 48-deal smoke over the Gateway pool (192 games) ran end to end. On a shared
 deal the two versions often play identical games, so many decks show no
 difference at all; that's the pairing working, not missing data.
+
+## U7: main menu
+
+The setup scaffold (preset drop-downs, a seed box and developer buttons) is now
+the backing form of a game menu (`Main.MainMenu.cs`), so every launch path,
+save and smoke that sets decks, side, difficulty or seed still works.
+
+- **Title screen:** Continue (the latest unfinished save, named by side, decks
+  and turn), New game, Load game, Settings, Practice board and Quit;
+  Developer only with `--developer`. Without the official card data, the
+  title explains how to provision it and only the practice board is enabled.
+- **New game:** a Gateway decks area (the seven sample decks, with Random
+  for the opponent) and a Tutorial area (the Catalyst and Syndicate decks,
+  expanded by default). Each deck is a tile with its identity card, name,
+  identity and one-line pitch. Then the seat, the opponent's difficulty, and
+  Start game, which uses a fresh random seed.
+- **Developer:** the original form, for a fixed seed or any preset pairing,
+  the metadata gallery and the interaction lab.
+- The in-game header controls (new game, skip animation, status) are hidden
+  on the menu.
+
+`--main-menu-smoke` (in `make verify`) clicks through the title screen and
+both New game areas at 1920 and 2560, and starts Stolen Goods against
+Advanced Yomi from the menu, checking the match uses those decks.
