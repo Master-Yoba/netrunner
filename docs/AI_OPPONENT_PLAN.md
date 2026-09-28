@@ -395,7 +395,10 @@ is data:
   `evaluation-startup-2026-03.json`. Formats rotate, so the key is a format
   snapshot (the roadmap's C2: its legal sets, bans and rules as of a date).
   A game loads the file for its snapshot (the ladder's pool version, A1b)
-  and falls back to the nearest snapshot's fit, or a fit on all pools. The frozen tutorial bot is the first case of a pinned setup for one
+  and falls back to the nearest snapshot's fit, or a fit on all pools.
+  Balance rules are optional for players (C2), but fitting and the ladder use
+  each snapshot's decks as the format defines them; a casual game with banned
+  cards uses the same snapshot's fit. The frozen tutorial bot is the first case of a pinned setup for one
   pool.
 - **Split only where the data says so.** Formats are mostly nested (Gateway
   within Startup within Standard). When a pool is added, fit once on all

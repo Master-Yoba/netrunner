@@ -336,14 +336,22 @@ player who picks "Startup" chooses any snapshot we implement ("Startup 2026",
   legal in; for example, several Gateway sample decks are not legal in 2026
   Startup, since Hyper Velocity is built on Reality Plus and some Runner
   decks play Cleaver.
+- **Balance rules are optional.** This is a solo game, not a tournament, so
+  a snapshot's card pool (its legal sets) is always applied, while its
+  balance rules (bans, restrictions and deck-building limits) are a per-game
+  option: on by default, and off for a casual game with banned cards. With
+  them off, validation still reports what the snapshot would reject, as
+  information, and decks tagged as breaking only balance rules stay
+  selectable. The choice is recorded with the game.
 - **Only implemented snapshots are offered.** A snapshot is selectable when
   every card in its sets is implemented; the others are listed as not yet
   available, like presets locked on coverage today.
 - **The menu (U7)** gains a format step before the decks: choose a format,
-  then one of its implemented snapshots (the newest by default), then the
-  decks legal in it.
-- **Saves and replays record the snapshot**, so a game resumes and verifies
-  under the rules it started with, even after a newer snapshot is added.
+  then one of its implemented snapshots (the newest by default) and whether
+  its balance rules apply, then the decks legal in it.
+- **Saves and replays record the snapshot** and whether its balance rules
+  applied, so a game resumes and verifies under the rules it started with,
+  even after a newer snapshot is added.
 - **The bot's tuned data follows the snapshot** (AI plan A7): the deck pool
   for fitting and the ladder is a snapshot's legal decks, and a snapshot
   without its own fit falls back to the nearest one or a general fit.
