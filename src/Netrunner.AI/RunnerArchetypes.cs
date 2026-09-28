@@ -53,8 +53,9 @@ public static class RunnerArchetypes
     {
         // Aggression: a flat bonus (+) or penalty (-) per affordable run, in hundreds; setup: extra value for rig pieces while the rig is incomplete.
         RunnerArchetype.BigRig => RunnerArchetypeProfile.Generic with { Aggression = -0.8, SetupWeight = 1 },
-        RunnerArchetype.Aggro => RunnerArchetypeProfile.Generic with { Aggression = 1, HqFocus = 1.15 },
-        RunnerArchetype.CentralPressure => RunnerArchetypeProfile.Generic with { RdFocus = 1.4, HqFocus = 1.2 },
+        // Gateway Corps score from remotes, so central focus stays mild: a strong one let the Corp score out of its remote.
+        RunnerArchetype.Aggro => RunnerArchetypeProfile.Generic with { Aggression = 1 },
+        RunnerArchetype.CentralPressure => RunnerArchetypeProfile.Generic with { RdFocus = 1.15, HqFocus = 1.1 },
         RunnerArchetype.EconDenial => RunnerArchetypeProfile.Generic with { TrashWeight = 1.5, Aggression = 0.4 },
         RunnerArchetype.Virus => RunnerArchetypeProfile.Generic with { VirusWeight = 1, SetupWeight = 0.5 },
         _ => RunnerArchetypeProfile.Generic,

@@ -30,7 +30,13 @@ public sealed partial class RunnerHeuristicPolicy
         // its counters on access (Urtica Cipher); with too few cards in the grip that's a flatline.
         int trapRisk = 0;
         if (context.Generation >= 8)
-            trapRisk = UnknownAdvancedRoots(context, server).Sum(counters => 2 + counters >= context.Features.Hand.Length ? 700 : (2 + counters) * 40);
+        {
+            // An advanced unknown card is more often an agenda; it's a trap in proportion to how
+            // likely this Corp is to play them, which rises once the Runner has seen one.
+            double trap = SeenTrap(context) ? 0.6 : 0.15;
+            trapRisk = UnknownAdvancedRoots(context, server).Sum(counters => (int)(trap
+                * (2 + counters > context.Features.Hand.Length ? 6000 : (2 + counters) * 100)));
+        }
         else if (context.Generation >= 5)
             foreach (AgentCard? root in server.Root)
             {
@@ -48,13 +54,13 @@ public sealed partial class RunnerHeuristicPolicy
             // v11 (self-play review, 28 September): a flat fear of unrezzed ICE made the Runner stop
             // running, so the Corp never rezzed and nothing became known. The fear shrinks with what the
             // Corp can pay to rez and with the ICE types the Runner's breakers cover, and a run that makes
-            // the Corp rez or reveal central ICE is worth something in itself.
+            // the Corp rez or reveal its ICE is worth something in itself.
             double budget = Math.Clamp(context.Opponent.Credits / 8.0, 0.3, 1);
             int covered = context.Features.Board.RunnerRig.Select(card => context.Definition(card)?.Icebreaker?.InterfaceType)
                 .OfType<IceType>().Distinct().Count();
             double coverage = context.RigComplete ? 0.4 : Math.Max(0.4, 1 - 0.2 * covered);
             risk = (int)(risk * budget * coverage);
-            if (server.Kind is ServerKind.Headquarters or ServerKind.RAndD && context.Self.Credits >= 4) risk -= unknown * 60;
+            if (context.Self.Credits >= 4) risk -= unknown * 60;
         }
         int score = RunnerValues.Server(context, server) + rewards + extraValue
             - (upfrontCost + Math.Max(0, cost - extraRunCredits) + loss) * context.CreditValue
@@ -219,10 +225,18 @@ public sealed partial class RunnerHeuristicPolicy
 
     /// <summary>
     /// Whether the server's root holds an advanced card the Runner can't identify
-    /// whose trap damage, 2 plus its counters (Urtica Cipher), would exceed the grip.
+    /// whose trap damage, 2 plus its counters (Urtica Cipher), would exceed the grip,
+    /// against a Corp the Runner has seen play such traps.
     /// </summary>
-    private static bool LethalTrap(HeuristicContext context, AgentServer server) =>
-        UnknownAdvancedRoots(context, server).Any(counters => 2 + counters > context.Features.Hand.Length);
+    private static bool LethalTrap(HeuristicContext context, AgentServer server) => SeenTrap(context)
+        && UnknownAdvancedRoots(context, server).Any(counters => 2 + counters > context.Features.Hand.Length);
+
+    /// <summary>Whether the Runner has seen this Corp play a trap that grows with its counters (Urtica Cipher, Clearinghouse).</summary>
+    private static bool SeenTrap(HeuristicContext context) => context.Knowledge?.Reveals.Any(reveal =>
+        context.Catalog.TryGet(new CardDefinitionId(reveal.DefinitionId), out CardEvaluationDescriptor card)
+        && card.Printed.Side == PlayerSide.Corp && card.Ice is null && card.Agenda is null && card.Behavior?.CanBeAdvanced == true
+        && card.Behavior.Triggers.SelectMany(trigger => HeuristicContext.Flatten(trigger.Instructions))
+            .Any(instruction => instruction.DamageAmountOperand?.Kind == BehaviorDamageAmountKind.SourceAdvancementCounters)) == true;
 
     /// <summary>
     /// The advancement counters on root cards the Runner can't identify. A
