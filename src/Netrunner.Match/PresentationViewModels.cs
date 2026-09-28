@@ -1038,9 +1038,13 @@ public static class ObservationViewMapper
 
         IReadOnlyDictionary<string, object?> turnFacts = RequiredMap(rawFacts, "turnFacts");
         var uses = new List<FirstXUseViewModel>();
-        var keys = new HashSet<(string SourceCardId, string Key)>();
+        // A use can appear in both players' current-turn facts: a Runner card used during
+        // the Corp's turn (DZMZ Optimizer on a Pantograph install). Each side's list must
+        // be unique; across sides the same use is shown once.
+        var shown = new Dictionary<(string SourceCardId, string Key), int>();
         foreach (string side in new[] { "corp", "runner" })
         {
+            var keys = new HashSet<(string SourceCardId, string Key)>();
             if (!turnFacts.TryGetValue(side, out object? rawSideFacts)
                 || rawSideFacts is null
                 || rawSideFacts is JsonElement { ValueKind: JsonValueKind.Null })
@@ -1096,7 +1100,13 @@ public static class ObservationViewMapper
                         $"Observation field 'turnFacts.{side}.thisTurn.firstXUseKeys' contains duplicate use '{sourceCardId}/{key}'.");
                 }
 
-                uses.Add(new FirstXUseViewModel(sourceCardId, key, count));
+                if (shown.TryGetValue((sourceCardId, key), out int index))
+                    uses[index] = uses[index] with { Count = Math.Max(uses[index].Count, count) };
+                else
+                {
+                    shown[(sourceCardId, key)] = uses.Count;
+                    uses.Add(new FirstXUseViewModel(sourceCardId, key, count));
+                }
             }
         }
 
