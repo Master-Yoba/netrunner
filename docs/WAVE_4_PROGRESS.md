@@ -405,3 +405,21 @@ which want a playtest screenshot review), idle life on the active identity,
 and music. The hover tilt toward the cursor was left out on purpose: the
 hovered hand card straightens and holds still under the pointer, which the
 board-actions smoke asserts.
+
+## Gate status
+
+| Item | Result |
+|---|---|
+| C1 Gateway sample decks | Done: seven legal decks, fuzz-clean on the Gateway pool, playable from the menu |
+| A1b ladder over a deck pool | Done: a fixed deal budget over the pool, sequential stopping and per-deck warnings |
+| U7 main menu | Done: title, New game with Tutorial and Gateway areas, Load, Settings; `--main-menu-smoke` |
+| A4a whole-run model | Done: 92% of fully visible forecast runs got in; Corp v8 and Runner v7 ship |
+| A5 fitted evaluation | Done: beats the hand weights on held-out games in both seats |
+| A3 turn planner on A4a and A5 | **Corp ships** (v9: +50 and +44 on two seeds, p95 30 ms); Runner v8 level, off |
+| A4 run search | **Doesn't ship**: Runner v9 −66 (weaker), Corp v10 +16 (level); kept as ladder entrants |
+| U6 onboarding and playtest loop | Done: hints, intent cues, `playtest-summary`; placement **needs the playtest** |
+| U5 art direction, feel and audio | Partly: synthesized sound, rez flip, damage shake, lane glow. The visual identity **needs a playtest screenshot review**; music and identity idle life are open |
+| A4a extras (HQ and R&D knowledge, one keep ranking) | Open: they need new tracked agent state in the checkpoint |
+
+Default bots after Wave 4: Corp v9 (plans turn actions) and Runner v7 on the
+legal decks; the tutorial decks keep the frozen C1 bot (Corp v7, Runner v6).
