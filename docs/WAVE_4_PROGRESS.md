@@ -9,6 +9,7 @@ Evidence date: 28 September 2026, on the Linux x86_64 development box.
 | Item | Branch |
 |---|---|
 | C1 Gateway sample decks | `feat/c1-gateway-decks` |
+| A1b ladder over a deck pool | `feat/a1b-deck-pool-ladder` (on C1) |
 
 ## C1: Gateway sample decks
 
@@ -117,3 +118,26 @@ defaults; older saves keep their versions.
 
 `scripts/ai-ladder.sh` now passes `--content` through instead of always
 adding `--content official`.
+
+## A1b: ladder over a deck pool
+
+`ai-ladder --deals N` plays a fixed budget of deals instead of seeds per
+pairing: deal *i* is a seed on the pool's content ID *i* mod the pool size,
+and every Corp entrant meets every Runner entrant on every deal, so the
+comparison stays paired. A larger pool spreads the same deals thinner rather
+than adding games.
+
+- `--batch-deals B --stop-when-clear` plays in batches and stops once every
+  seat's adjacent difference is clear of zero at 99% (a wider interval than
+  the reported 95%, because each look adds a chance to stop wrongly).
+- A two-entrant run reports each deck pairing's paired score difference per
+  seat, with a bootstrap interval over its deals, and flags a **warning**
+  where the candidate is worse by 14 points or more (about 100 Elo near an
+  even score) with the interval below zero. Warnings are diagnostics, not a
+  gate.
+- Reports carry the pool version (`expanded-v1`, `gateway-v1`); ratings are
+  compared only within one.
+
+A 48-deal smoke over the Gateway pool (192 games) ran end to end. On a shared
+deal the two versions often play identical games, so many decks show no
+difference at all; that's the pairing working, not missing data.
