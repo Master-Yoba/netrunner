@@ -40,6 +40,12 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     public const string V8 = "corp-heuristic-v8";
     /// <summary>V8 choices with turn actions planned by rollouts (A3), scored by the fitted evaluation (A5).</summary>
     public const string V9 = "corp-heuristic-v9";
+    /// <summary>
+    /// V8 choices with run search (A4): whether to rez a card during a run (the approached
+    /// ICE, an upgrade or an asset) is chosen by rollouts to the run's end, scored by the fitted evaluation.
+    /// Turn actions aren't planned.
+    /// </summary>
+    public const string V10 = "corp-heuristic-v10";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V9 plans turn actions with the fitted evaluation and gains on the Gateway
@@ -48,7 +54,7 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     public const string PolicyVersion = V9;
     /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>
     public const string LatestHeuristic = V8;
-    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9];
+    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10];
 
     public CorpHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -56,9 +62,9 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Corp policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version switch { V2 => 1, V3 => 2, V7 => 4, V8 or V9 => 5, _ => 3 };
-        Plans = version is V5 or V9;
-        Repairs = version is V6 or V7 or V8 or V9;
+        Generation = version switch { V2 => 1, V3 => 2, V7 => 4, V8 or V9 or V10 => 5, _ => 3 };
+        Plans = version is V5 or V9 or V10;
+        Repairs = version is V6 or V7 or V8 or V9 or V10;
     }
 
     /// <summary>Whether this version has the playtest repairs (V6).</summary>

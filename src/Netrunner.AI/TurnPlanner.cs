@@ -54,11 +54,17 @@ internal sealed class TurnPlanner
     private bool AppliesToTurn(AgentFeatures features) => Samples > 0 && Width > 1
         && features.Decision?.Kind == DecisionKind.TurnAction && features.Self.Clicks > 0 && features.Actions.Length > 1;
 
-    /// <summary>A4: the Runner's choice during its own run between continuing and jacking out, or trashing an accessed card or not.</summary>
+    /// <summary>
+    /// A4: during a run, the Runner's choice between continuing and jacking out
+    /// or trashing an accessed card or not, and the Corp's choice to rez a card
+    /// (the approached ICE, or an upgrade or asset) or not.
+    /// </summary>
     private bool AppliesToRun(AgentFeatures features) => RunSamples > 0 && RunWidth > 1
-        && features.Side == PlayerSide.Runner && features.Board.Run is not null && features.Actions.Length > 1
+        && features.Board.Run is not null && features.Actions.Length > 1
         && features.Decision?.Kind != DecisionKind.TurnAction
-        && features.Actions.Any(action => action.Kind is ActionKind.JackOut or ActionKind.TrashAccessedCard);
+        && features.Actions.Any(action => features.Side == PlayerSide.Runner
+            ? action.Kind is ActionKind.JackOut or ActionKind.TrashAccessedCard
+            : action.Kind is ActionKind.RezCard or ActionKind.RezIce);
 
     /// <summary>
     /// Re-scores the heuristic's candidates: the planned ones get the plan's

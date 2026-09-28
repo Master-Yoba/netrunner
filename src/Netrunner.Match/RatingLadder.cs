@@ -46,7 +46,7 @@ public static partial class RatingLadder
     /// "standard-plan" is the A3 turn planner (Runner v3, Corp v5).
     /// </summary>
     public static IReadOnlyList<string> EntrantOrder { get; } =
-        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard", "standard-plan", "standard-plan-fit", "standard-run"];
+        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez"];
 
     private const double EloScale = 400 / 2.302585092994046;
     private const double Ridge = 0.01;
@@ -106,9 +106,12 @@ public static partial class RatingLadder
             // A3 on A4a and A5: the planners, scoring rollouts by the fitted evaluation.
             "standard-plan-fit" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V9 : RunnerHeuristicPolicy.V8),
-            // A4: the Runner searches its run choices; the Corp is the current default.
+            // A4, measured against Corp v8 and Runner v7: the Runner searches its run choices.
             "standard-run" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
-                side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.V9),
+                side == PlayerSide.Corp ? CorpHeuristicPolicy.V8 : RunnerHeuristicPolicy.V9),
+            // A4, measured against Corp v8 and Runner v7: the Corp searches its rezzes during runs.
+            "standard-rez" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
+                side == PlayerSide.Corp ? CorpHeuristicPolicy.V10 : RunnerHeuristicPolicy.V7),
             _ => throw new ArgumentException($"Unknown ladder entrant '{entrant}'.", nameof(entrant)),
         };
     }
