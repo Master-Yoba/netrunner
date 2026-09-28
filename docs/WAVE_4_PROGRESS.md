@@ -190,25 +190,37 @@ chiriboga's run calculator, as a clean-room design.
   the Runner, with the Corp's own ICE counted as rezzed while its credits last.
 
 **Gate: the model agrees with the engine.** Over 24 Gateway self-play games,
-278 runs had every piece of ICE visible when the Runner chose them and a
-forecast that it could get in: 263 succeeded (95%), with a mean credit error
-of 0.16 on the successful ones. Only 2 runs the model called blocked were made.
+280 runs had every piece of ICE visible when the Runner chose them and a
+forecast that it could get in: 258 succeeded (92%), with a mean credit error
+of 0.15 on the successful ones; 5 runs the model called blocked were made.
 `RunModelValidationTests` keeps this at 85% or more.
 
 **Policies.** Runner v7 costs runs and continuations with the model, and
 Corp v8 judges where an agenda is safe with it, in place of counting ICE and
-breaker types. Against C1's versions (`standard-c1`: Corp v7, Runner v6), 480
-deals each (1,920 games), no deck warnings:
+breaker types. The ladder, against C1's versions (`standard-c1`: Corp v7,
+Runner v6), 480 Gateway deals each (1,920 games), found two things worth
+recording:
 
-| Pool | Corp v8 | Runner v7 |
+- **Ballista.** Its subroutine is "trash 1 program or end the run", and the
+  Corp chooses. The first vocabulary read it as a trash the Runner could let
+  through, so Runner v7 kept making runs the Corp simply ended, and the
+  per-deck report flagged the Runner decks against Quick and Dirty (Weyland).
+  It now counts as ending the run, and Diviner's "the run ends if the
+  trashed card's cost is odd" as a penalty.
+- **Damage that empties the grip** is treated as lethal. An A/B on the same
+  seed showed this rule wasn't what moved the results (−17 either way); the
+  early +8 to +16 readings were seed variation, which is what the per-deck
+  warnings and a second seed caught.
+
+| Gateway, seed 5, after both fixes | Corp v8 | Runner v7 |
 |---|---:|---:|
-| Gateway | −5 [−34, 23] | +8 [−21, 34] |
-| Expanded tutorial | +10 [−27, 39] | +17 [−18, 47] |
+| Elo against `standard-c1` | +13 [−16, 39] | −4 [−29, 24] |
 
-A Runner-only run (Runner v7 against v6, the Corp at v7) read +16 [−13, 45] on
-Gateway. The Runner gain is small and consistent, and the Corp is level: the
-model is the foundation, and A5's fitted evaluation is where its terms get
-their weights. Both ship as the defaults; older saves keep their versions.
+No deck warnings. Corp v8 read +12 to +14 on three seeds; Runner v7 is level.
+Neither is weaker, so both ship as the defaults: the model's value is as the
+foundation that A5's fitted evaluation and the planner build on, not a
+heuristic gain on its own. Older saves keep their versions, and the tutorial
+decks keep the frozen C1 bot.
 
 Still to do in A4a: HQ and R&D knowledge (lower the value of a server whose
 cards the Runner has already seen) and one ranking of cards worth keeping for

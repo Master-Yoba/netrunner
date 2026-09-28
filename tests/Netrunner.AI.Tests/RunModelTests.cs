@@ -17,7 +17,12 @@ public sealed class RunModelTests
         Assert.True(SubroutineEffect.Of(new EndRunIfCreditsAtMostSubroutineSpec(PlayerSide.Runner, 6))
             is { EndsRunIfCreditsAtMost: 6, Severity: SubroutineSeverity.Serious });
         Assert.True(SubroutineEffect.Of(new PayCreditsOrTagSubroutineSpec(2)) is { PayOrTagCredits: 2, PayOrTagTags: 1 });
+        // Ballista: the Corp chooses between trashing a program and ending the run, so it can always end it.
         Assert.True(SubroutineEffect.Of(new TrashInstalledRunnerCardSubroutineSpec(RuntimeCardClass.Program, endRunAlternative: true))
-            is { TrashesCard: true, TrashClass: RuntimeCardClass.Program, EndsRunWithoutTarget: true, Severity: SubroutineSeverity.Serious });
+            is { EndsRun: true, TrashesCard: true, TrashClass: RuntimeCardClass.Program, Severity: SubroutineSeverity.Serious });
+        Assert.True(SubroutineEffect.Of(new TrashInstalledRunnerCardSubroutineSpec(RuntimeCardClass.Program)) is { EndsRun: false, TrashesCard: true });
+        // Diviner: net damage, then the run ends if the trashed card's cost is odd.
+        Assert.True(SubroutineEffect.Of(new DamageSubroutineSpec(DamageKind.Net, 1, DamageSubroutineFollowUp.EndRunIfTrashedCostOdd))
+            is { Damage: 1, MayEndRun: true, EndsRun: false, Severity: SubroutineSeverity.Serious });
     }
 }

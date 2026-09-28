@@ -16,12 +16,13 @@ public enum SubroutineSeverity
 /// the behavior catalog rather than card text (A4a).
 /// </summary>
 /// <remarks><paramref name="TrashClass"/> limits what a trash subroutine can hit; <paramref name="EndsRunWithoutTarget"/>
-/// means it ends the run instead when the Runner has nothing it can trash.</remarks>
+/// means it ends the run instead when the Runner has nothing it can trash; <paramref name="MayEndRun"/>
+/// means it may end the run by chance (Diviner: when the trashed card's cost is odd).</remarks>
 public sealed record SubroutineEffect(bool EndsRun, int? EndsRunIfCreditsAtMost, int Damage, int Tags, int CreditsLost,
     int PayOrTagCredits, int PayOrTagTags, bool TrashesCard, bool InstallsIce, bool Restricts, int CorpGains,
-    RuntimeCardClass? TrashClass = null, bool EndsRunWithoutTarget = false)
+    RuntimeCardClass? TrashClass = null, bool EndsRunWithoutTarget = false, bool MayEndRun = false)
 {
-    public SubroutineSeverity Severity => EndsRun || EndsRunIfCreditsAtMost is not null || TrashesCard || Restricts ? SubroutineSeverity.Serious
+    public SubroutineSeverity Severity => EndsRun || EndsRunIfCreditsAtMost is not null || TrashesCard || Restricts || MayEndRun ? SubroutineSeverity.Serious
         : Damage > 0 || Tags > 0 || InstallsIce || CreditsLost >= 3 || PayOrTagTags > 0 ? SubroutineSeverity.Moderate
         : SubroutineSeverity.Minor;
 
@@ -35,11 +36,17 @@ public sealed record SubroutineEffect(bool EndsRun, int? EndsRunIfCreditsAtMost,
             EndRunIfCreditsAtMostSubroutineSpec conditional when conditional.Target == PlayerSide.Runner
                 => none with { EndsRunIfCreditsAtMost = conditional.CreditLimit },
             LoseCreditsSubroutineSpec loss when loss.Target == PlayerSide.Runner => none with { CreditsLost = loss.Amount },
-            DamageSubroutineSpec damage => none with { Damage = damage.Amount },
+            DamageSubroutineSpec damage => none with
+            {
+                Damage = damage.Amount,
+                MayEndRun = damage.FollowUp == DamageSubroutineFollowUp.EndRunIfTrashedCostOdd,
+            },
             GiveTagsSubroutineSpec tags => none with { Tags = tags.Amount },
             PayCreditsOrTagSubroutineSpec pay => none with { PayOrTagCredits = pay.CreditAmount, PayOrTagTags = pay.TagAmount },
+            // With an end-the-run alternative the Corp chooses, so it can always end the run (Ballista).
             TrashInstalledRunnerCardSubroutineSpec trash => none with
             {
+                EndsRun = trash.EndRunAlternative,
                 TrashesCard = true,
                 TrashClass = trash.RequiredCardClass,
                 EndsRunWithoutTarget = trash.EndRunAlternative,
@@ -81,6 +88,7 @@ public static class RunModel
     private const int ClickPenalty = 2;
     private const int InstallIcePenalty = 3;
     private const int RestrictionPenalty = 2;
+    private const int MayEndRunPenalty = 4;
 
     /// <summary>Forecasts a run on <paramref name="serverId"/> from an observation (validation and tests).</summary>
     public static RunForecast Forecast(Observation observation, ICardEvaluationCatalog catalog, string serverId, int? clicksAfterStart = null)
@@ -216,6 +224,7 @@ public static class RunModel
                         penalty += Math.Min(6, targets.Select(rig => RunnerValues.Card(context, rig)).DefaultIfEmpty(0).Max() / 100);
                     }
                     if (effect.InstallsIce) penalty += InstallIcePenalty;
+                    if (effect.MayEndRun) penalty += MayEndRunPenalty;
                     if (effect.Restricts) penalty += RestrictionPenalty;
                 }
                 // Damage that empties the grip is treated as lethal: the Runner flatlines
