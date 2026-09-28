@@ -306,7 +306,9 @@ ladder.
   before any new card set), the full `make m5-gate`, and packaging.
 - **Decision point**, recorded in `IMPLEMENTATION_PLAN.md`:
   - M6 (LLM/hybrid mode), or
-  - the next card set, which requires the E6 Core-growth budget to be set, or
+  - the next card set, which requires the E6 Core-growth budget to be set,
+    and brings the AI plan's A7: per-format tuned data (one bot, each pool's
+    fitted weights and priors) and deck-aware evaluation features, or
   - an RC.
 
 ## 4. Where M6 fits

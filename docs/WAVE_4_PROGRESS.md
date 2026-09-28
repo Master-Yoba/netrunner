@@ -214,3 +214,13 @@ Still to do in A4a: HQ and R&D knowledge (lower the value of a server whose
 cards the Runner has already seen) and one ranking of cards worth keeping for
 discard, mulligan and trash choices. Both need new tracked state in the
 agent's features.
+
+## Tutorial bot frozen
+
+A decision during A4a: the bot on the tutorial decks is frozen at C1's
+versions (Corp v7, Runner v6), which the tutorial decks' ladder (+112 for
+Corp v7) and playtests stand behind; later bot versions play only the legal
+decks. `OfflineMatchFactory.CreatePlayerOpponent` picks the frozen versions
+when both decks are teaching decks, and the client uses it for new games.
+From here on, ladder gates for bot changes are judged on the Gateway pool,
+which `scripts/ai-ladder.sh` now uses by default.
