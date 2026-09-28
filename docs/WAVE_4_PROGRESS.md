@@ -276,3 +276,30 @@ are fitted on the legal decks only.)
 The largest weights make sense: agenda points and the opponent near 7, the
 number of remotes (for the Corp), money, breaker coverage (for the Runner),
 and what a run into R&D or the remote would cost.
+
+## A3 on A4a and A5: the turn planner returns
+
+The Wave 3 planner (A3) is back with the fitted evaluation scoring its
+rollouts: Corp v9 and Runner v8 keep v8's and v7's choices and plan turn
+actions (3 samples by 3 candidates), blended with the heuristic as before.
+
+**Gate: a clear ladder gain within the latency budget.** Gateway pool, 480
+deals (960 games per seat) against the default Standard, on two seeds:
+
+| Seed | Corp v9 | Runner v8 |
+|---|---:|---:|
+| 5 | **+50** [21, 78] | +22 [−10, 53] |
+| 6 | **+44** [14, 72] | +5 [−25, 34] |
+
+No deck pairing warns; on seed 5 the Corp's gain is largest with Advanced
+Yomi against Party Hard (+0.20). In 8 Gateway games the Corp's ordinary
+decisions (turn actions, timing and setup) had a p95 of 30 ms against the
+50 ms budget (median 0.4 ms, slowest 128 ms), on a machine running a ladder;
+run decisions are unchanged (p95 1.5 ms). Runner v8's planned turn actions
+cost a median of about 100 ms.
+
+**Decision: Corp v9 ships; the Runner keeps v7.** New Gateway games use Corp
+v9, which plans. The Runner planner isn't a separated gain on either seed and
+costs more, so it stays a ladder entrant (`standard-plan-fit`). The planner's
+model of the Corp in rollouts stays v8, which doesn't plan. The tutorial
+decks keep the frozen C1 bot.

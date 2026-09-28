@@ -41,8 +41,11 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// <summary>V8 choices with turn actions planned by rollouts (A3), scored by the fitted evaluation (A5).</summary>
     public const string V9 = "corp-heuristic-v9";
     /// <summary>The version new games and new manifests use.</summary>
-    /// <summary>V5 plans but has not shown a ladder gain yet (Wave 3), so new games use V6, which doesn't plan.</summary>
-    public const string PolicyVersion = V8;
+    /// <remarks>
+    /// V9 plans turn actions with the fitted evaluation and gains on the Gateway
+    /// ladder (+50 and +44 over V8 on two seeds, Wave 4 A5), so new games use it.
+    /// </remarks>
+    public const string PolicyVersion = V9;
     /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>
     public const string LatestHeuristic = V8;
     public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9];
