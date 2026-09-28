@@ -362,6 +362,49 @@ both sides rank those by the same card-value function (`CardValue` for the
 Corp, `RunnerValues.Card` for the Runner). Only the mulligan keeps its own
 rule (economy plus ICE, or economy plus a breaker); no change was made.
 
+## Playtest repairs: Corp v11 (28 September)
+
+A Runner playtest against Quick and Dirty (Weyland) found Corp v9 spawning
+remotes with one ICE and nothing behind them, installing Malapert Data
+Vault in HQ (the second copy replacing the first), leaving HQ behind a lone
+Tithe, never rezzing Archives' Funhouse while the Runner ran Archives for
+money, and never advancing Pharos. `ai-review --side corp` (new) replayed
+the bot's own decisions and showed the causes:
+
+- The planner's fitted evaluation (v1) gave the plain number of remotes one
+  of its largest Corp weights: winning Corps have more remotes, so the
+  planner learned that spawning them wins. **Evaluation v2** (feature set 2)
+  counts occupied and empty remotes separately; refitted on 400 Gateway
+  games it weighs occupied remotes +0.46 and empty ones −0.02 (v1: +0.32 for
+  any remote), and beats the hand weights on held-out games (Corp log loss
+  0.600 against 0.640, Runner 0.606 against 0.630).
+- ICE on a new remote scored the same with or without anything to protect,
+  and central ICE had no thinness bonus. **v11:** ICE goes into a new or
+  empty remote only while an agenda or asset in hand needs a home (so
+  asset-heavy decks still go wide), and HQ and R&D are worth protecting
+  until each has two pieces.
+- Upgrades had no notion of where they work. **v11:** an upgrade that pays
+  off when an agenda is scored from its own root goes only into a remote,
+  and a unique upgrade never replaces its own copy.
+- An approached ICE's rez was judged by the server's contents alone, as a
+  one-off. **v11:** it also counts the runs it denies: the Runner's visible
+  success rewards and how often it has run that server successfully.
+- Advancing anything but an agenda or trap scored −20. **v11:** advanceable
+  ICE is advanced toward its strength threshold on a server worth
+  protecting, and an identity that pays for a card's first advancement
+  (Built to Last) makes starting one cheaper.
+
+`CorpPlaytestV11Tests` replays the playtest (fixture
+`playtest-weyland-remotes-replay.json`) and asks v11 at the six positions
+where v9 went wrong; all six fail on v9.
+
+**Ladder:** v11 against v9 on the Gateway pool, 480 deals: −17 [−47, 12] on
+seed 5 and +13 [−15, 42] on seed 6, no deck warnings. Level, as expected:
+the bot Runner doesn't farm Archives or punish thin centrals, so self-play
+can't reward these repairs. **Decision: Corp v11 ships** (not weaker, and it
+fixes plays a human exploits); `standard-w4b` keeps Corp v9 with Runner v10
+as a ladder entrant.
+
 ## U6: onboarding and playtest loop
 
 **First-game hints.** `OnboardingHints` (Match) picks at most one hint for
@@ -450,5 +493,5 @@ board-actions smoke checks the lean, its stillness and turning it off.
 | U5 art direction, feel and audio | Partly: synthesized sound, rez flip, damage shake, lane glow, experimental hover tilt. The visual identity **needs a playtest screenshot review**; music and identity idle life are open |
 | A4a extras (HQ and R&D knowledge, one keep ranking) | **Runner v10 ships** (central memory: +47 and +53 on two seeds); the keep ranking already exists for discards and trashes |
 
-Default bots after Wave 4: Corp v9 (plans turn actions) and Runner v10
-(central memory) on the legal decks; the tutorial decks keep the frozen C1 bot (Corp v7, Runner v6).
+Default bots after Wave 4: Corp v11 (plans turn actions, with the playtest
+repairs) and Runner v10 (central memory) on the legal decks; the tutorial decks keep the frozen C1 bot (Corp v7, Runner v6).

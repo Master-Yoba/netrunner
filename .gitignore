@@ -39,3 +39,6 @@ Thumbs.db
 # Local reference video contains third-party card artwork.
 /reference hand.mov
 __pycache__/
+
+# Client session exports from playtests stay local.
+session-*.zip
