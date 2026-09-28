@@ -340,6 +340,12 @@ public sealed partial class CorpHeuristicPolicy
                 && (card?.AdvancementCounters ?? 0) > 0)
                 return Value((card!.AdvancementCounters ?? 0) * 150 - cost * context.CreditValue, "rez/trap-before-turn", approximate: true);
             if (futureIncome == 0 && immediateDraw == 0) return Value(-10, "rez/no-current-payoff", approximate: true);
+            // v12 (self-play review, 28 September): an economy asset rezzed mid-way through the Runner's
+            // turn shows it to a Runner who can still run and trash it; it waits for the last windows
+            // before the Corp's turn, where auto-pass also stops a human.
+            if (context.Generation >= 7 && context.Features.Board.Turn.ActiveSide == PlayerSide.Runner
+                && context.Features.Board.Turn.Step is not (TurnStep.RunnerDiscard or TurnStep.CorpDiscard))
+                return Value(-10, "rez/economy-waits-for-its-turn", approximate: true);
             if (immediateDraw >= context.Features.Board.HiddenZoneCounts.CorpDeck) return Value(-10000, "rez/avoid-deck-out");
             return Value(futureIncome * 45 + immediateDraw * context.DrawValue - cost * context.CreditValue, "rez/economy-payback", approximate: true);
         }

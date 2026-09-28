@@ -57,18 +57,26 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// viruses are worth.
     /// </summary>
     public const string V11 = "runner-heuristic-v11";
+    /// <summary>
+    /// V10 with the self-play review fixes that came with V11 (28 September), and
+    /// no archetype profile: trap risk weighed by how likely the Corp plays traps,
+    /// with a hard stop only after one was seen; the fear of unrezzed ICE scaled by
+    /// what the Corp can rez and the ICE types covered. V11's archetype knobs were
+    /// weaker on the ladder (-32 on two seeds), these fixes alone are not (+29).
+    /// </summary>
+    public const string V12 = "runner-heuristic-v12";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
-    /// V10 remembers what it has seen of R&amp;D and HQ and gains on the Gateway
-    /// ladder (+47 and +53 over V7 on two seeds, Wave 4), so new games use it.
+    /// V12 is level with V10 on the Gateway ladder (+29 [-13, 75]) and fixes plays
+    /// a human notices (running lethal traps, never running against unrezzed ICE).
     /// </remarks>
-    public const string PolicyVersion = V10;
+    public const string PolicyVersion = V12;
     /// <summary>
     /// The planner's model of the Runner. It stays V7, which Corp v9 was measured
     /// with, so the shipped Corp planner plays as it did.
     /// </summary>
     public const string LatestHeuristic = V7;
-    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11];
+    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12];
 
     public RunnerHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -76,9 +84,9 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Runner policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 or V8 or V9 => 6, V10 => 7, V11 => 8, _ => 2 };
+        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 or V8 or V9 => 6, V10 => 7, V11 or V12 => 8, _ => 2 };
         Plans = version is V3 or V8 or V9;
-        Repairs = version is V4 or V5 or V6 or V7 or V8 or V9 or V10 or V11;
+        Repairs = version is V4 or V5 or V6 or V7 or V8 or V9 or V10 or V11 or V12;
     }
 
     /// <summary>Whether this version has the playtest repairs (V4).</summary>

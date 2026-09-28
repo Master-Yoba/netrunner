@@ -122,7 +122,7 @@ public static partial class RatingLadder
             // A8, measured against Corp v11: the Corp plays to its deck's archetype (v12) with the default Runner.
             "standard-arch" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V12 : RunnerHeuristicPolicy.PolicyVersion),
-            // Wave 4's defaults before the Corp archetypes (Corp v11, Runner v10).
+            // Wave 4's defaults before the archetype Corp and the fixed Runner (Corp v11, Runner v10).
             "standard-w4c" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V11 : RunnerHeuristicPolicy.V10),
             // Runner v11's fixes without its archetype knobs (every deck generic), with the default Corp.

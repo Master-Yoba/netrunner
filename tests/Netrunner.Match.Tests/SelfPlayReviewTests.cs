@@ -19,7 +19,7 @@ public sealed class SelfPlayReviewTests
     public async Task TheRunnerDoesNotRunAPossibleLethalTrap(string game, string content, ulong seed, long sequence)
     {
         if (!Official) return;
-        (LegalAction chosen, GameState state) = await ChooseAtAsync(game, content, seed, sequence, PlayerSide.Runner, RunnerHeuristicPolicy.V11);
+        (LegalAction chosen, GameState state) = await ChooseAtAsync(game, content, seed, sequence, PlayerSide.Runner, RunnerHeuristicPolicy.V12);
         if (chosen.Parameters is RunServerParameters run)
             Assert.DoesNotContain(state.Zones.Where(zone => zone.ServerId == run.ServerId && zone.Kind == ZoneKind.ServerRoot)
                 .SelectMany(zone => zone.CardIds), id => state.GetCard(id).AdvancementCounters > 0 && state.GetCard(id).AdvancementCounters + 2 > state.GetZone(ZoneKind.RunnerGrip).CardIds.Count);
