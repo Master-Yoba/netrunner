@@ -22,6 +22,7 @@ public sealed partial class CorpHeuristicPolicy
         // there trashes it; an agenda thrown away costs far more than its card value.
         if (repairs) lost = Math.Max(lost, DisplacedRootValue(context, server, definition));
         int score;
+        bool nakedAgenda = false;
         if (definition.Ice is { } ice)
         {
             bool hasScoringRemote = context.Features.Board.Servers.Any(value => value.Kind == ServerKind.Remote && value.Ice.Length > 0);
@@ -73,6 +74,9 @@ public sealed partial class CorpHeuristicPolicy
                     if (!scoreableNow)
                         score -= (int)(Math.Max(0, profile.MinIceForAgenda - protecting) * 180 + profile.HoldAgendas * 300);
                     if (protecting >= 1 && context.Features.Board.Turn.TurnNumber <= 8) score += (int)(profile.RushBonus * 120);
+                    // Self-play review, 28 September: the planner's turn-end horizon can't see the
+                    // steal, so an agenda that can't score this turn never goes in without ICE.
+                    nakedAgenda = !scoreableNow && protecting == 0;
                 }
             }
         }
@@ -92,6 +96,8 @@ public sealed partial class CorpHeuristicPolicy
             if (context.Generation >= 6 && definition.Printed.CardClass == RuntimeCardClass.Upgrade)
                 score = UpgradePlacementV11(context, definition, server, install, score);
         }
+        if (nakedAgenda)
+            return new(-100, score, "development/agenda-never-unprotected", true, new("install", null, null, install.CardId.Value));
         return Value(score, "development/destination-minus-replacement-value", approximate: true, objective: new("install", null, null, install.CardId.Value));
     }
 

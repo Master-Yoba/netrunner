@@ -82,6 +82,11 @@ public static partial class CliCommands
             return RunAiLadder(args, output, error);
         }
 
+        if (args.Length > 0 && args[0] == "ai-selfplay")
+        {
+            return RunAiSelfPlay(args, output, error);
+        }
+
         if (args.Length > 0 && args[0] == "playtest-summary")
         {
             return RunPlaytestSummary(args, output, error);
@@ -217,6 +222,7 @@ public static partial class CliCommands
             + "ai-ladder [--content developer|official] [--entrants random,contract,easy,standard] [--seeds-per-pairing N] "
             + "[--seed <unsigned-integer>] [--bootstrap N] [--action-cap N] [--workers 1..64] [--output <new directory>] [--json] | "
             + "playtest-summary <session-directory|zip> | "
+            + "ai-selfplay --content <corp~runner> --seed <n> [--corp <entrant>] [--runner <entrant>] --output <new dir> | "
             + "ai-review <session-directory> [--profile standard|easy] [--side corp|runner] [--all] [--output <new file>] [--json] | "
             + "card-data normalize --upstream <file> --copyright <file> --commit <40-hex-sha> "
             + "--retrieval-date YYYY-MM-DD --output-dir <directory> [--json] | "
