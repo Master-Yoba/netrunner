@@ -15,6 +15,7 @@ Evidence date: 28 September 2026, on the Linux x86_64 development box.
 | A5 fitted evaluation (and A3 on it) | `feat/a5-fitted-evaluation` (on A4a) |
 | A4 run search | `feat/a4-run-search` (on A5) |
 | U6 onboarding and playtest loop, U5 sound and motion, A4a extras | `feat/u6-onboarding` (on A4) |
+| A8 archetypes and the self-play review | `feat/a8-corp-archetypes` (on U6) |
 
 ## C1: Gateway sample decks
 
@@ -405,6 +406,102 @@ can't reward these repairs. **Decision: Corp v11 ships** (not weaker, and it
 fixes plays a human exploits); `standard-w4b` keeps Corp v9 with Runner v10
 as a ladder entrant.
 
+## A8: archetypes (Corp v12, Runner v11)
+
+Instead of one policy for every deck, each bot plays to its deck's
+**archetype**: a profile of plan-level knobs read by the same heuristic,
+with a primary and an optional secondary archetype blended 70/30.
+
+| Side | Archetype | What the profile changes |
+|---|---|---|
+| Corp | Glacier | At most two remotes; three ICE on the scoring remote before an agenda goes in unless it scores this turn |
+| Corp | Rush | One ICE is enough for an agenda; early agenda installs behind ICE are worth more |
+| Corp | Fast advance | Agendas go in only when they score this turn |
+| Corp | Shell game | Up to three remotes; traps are worth more to install and advance as bait; agendas stay unadvanced until the turn they score |
+| Corp | Kill | Damage is worth more |
+| Corp | Tag punishment | Tags and damage are worth more, and so is rezzing ICE that tags |
+| Corp | Horizontal | Up to four remotes; assets are worth more |
+| Runner | Big rig | Rig pieces are worth more while its breakers don't cover every ICE type, and it runs less until they do |
+| Runner | Aggro | Every affordable run is worth more |
+| Runner | Central pressure | R&D and HQ are worth a little more (1.15, 1.1): Gateway Corps score from remotes, and a stronger focus let them |
+| Runner | Econ denial | Trashing is worth more |
+| Runner | Virus | Viruses are worth more to install |
+
+The Gateway decks declare theirs in `gateway-sample-decks.json`
+(`archetypes`), following the roadmap's mapping and the deck authors' notes
+on NetrunnerDB: Discretion Advised glacier and fast advance, Advanced Yomi
+shell game and horizontal, Hyper Velocity tag punishment and rush, Quick and
+Dirty rush and tag punishment; Party Hard virus and big rig, Stolen Goods
+aggro and central pressure, Planning Ahead big rig and central pressure. A
+deck without a declaration gets its archetypes inferred from its cards
+(traps, tag sources and punishments, damage, assets, fast-advance cards,
+taxing upgrades, the cost of its ICE, viruses, run events and run payoffs,
+multi-access); from their cards alone the HB deck reads as a glacier, the
+Jinteki deck as a shell game and the NBN deck as tag punishment
+(`CorpArchetypeTests`). The match factory sets the bot's archetypes from its
+own deck, which it knows.
+
+**Ladder** (Gateway pool, 480 deals against the previous default, seeds 5
+and 6):
+
+| Version | Seed 5 | Seed 6 |
+|---|---:|---:|
+| Corp v12 (archetypes) vs v11 | **+36** [8, 65] | **+48** [18, 79] |
+| Runner v11 (archetypes and the review fixes) vs v10 | −32 [−62, −3] | −32 [−58, −4] |
+| Runner v11's fixes alone, no archetypes (v12) vs v10 | +29 [−13, 75] | |
+
+No Corp deck warns; ten of twelve Corp pairings gain on seed 5. The Runner
+archetypes lose most against the rush and tag decks (Hyper Velocity, Quick
+and Dirty), where a big rig that sets up and an aggro deck that runs into
+tags are punished; making the big rig drop its restraint once the Corp has
+points didn't help in a 16-game check. The review fixes alone are level,
+with two pairings warning (Stolen Goods against Hyper Velocity −0.25,
+Planning Ahead against Quick and Dirty −0.23).
+
+**Decision: Corp v12 and Runner v12 ship.** New Gateway games use the
+archetype Corp and the Runner with the review fixes and no archetype
+profile; Runner v11 (`standard-rarch`) stays a ladder entrant for tuning
+the Runner archetypes. After its ladder, Corp v12 also holds an economy
+asset's rez until the last windows before its turn (a rez mid-way through
+the Runner's turn showed the asset to a Runner who could still trash it, and
+auto-pass skipped that window for a human); the asset pays out the same, so
+the ladder wasn't rerun.
+
+### Self-play review
+
+`ai-selfplay` (new) plays one bot-versus-bot game and writes its replay and
+a readable log of every real choice on both sides with a board summary at
+each turn's start. Reviewing ten such games of the archetype bots found:
+
+- **The Runner ran possible lethal traps.** Two games ended in flatlines
+  when the Runner, with two cards in its grip, ran a naked remote holding
+  an advanced Urtica Cipher. The trap checks since Runner v6 read only
+  visible root cards; a face-down card is a null entry whose counters are
+  published separately, so they never fired. v11 reads them, and weighs the
+  risk by how likely a trap is (15%, or 60% once the Runner has seen this
+  Corp play one), with a flatline weighed as a lost game and a hard stop
+  after a trap was seen. A first version that treated every advanced card
+  as a trap stopped the Runner contesting advanced remotes; against Weyland
+  and NBN, whose Gateway decks have no such traps, it won 3 of 16 quick
+  games where v10 won 8.
+- **The Corp's planner exposed an agenda.** The NBN Corp installed an
+  agenda it couldn't score into a new remote without ICE; the planner's
+  turn-end horizon can't see the steal. v12's heuristic vetoes it.
+- **The Runner stopped running against unrezzed ICE.** Party Hard ran once
+  in 25 turns against Hyper Velocity: each unrezzed ICE cost a flat 260 of
+  risk, so the Runner never ran and the Corp never rezzed. v11 scales that
+  risk by what the Corp can pay to rez and the ICE types its breakers cover,
+  and values a run that makes the Corp rez or reveal ICE (19 runs in the
+  same game).
+- **A client-facing crash.** A Runner program installed with Pantograph
+  during the Corp's turn used DZMZ Optimizer's first-install discount, so
+  the use sat in both players' turn facts; the view mapper took that for a
+  duplicate and threw, which would have stopped the client. Fixed in the
+  mapper, with a regression test on the recorded game.
+
+`SelfPlayReviewTests` and `FirstXUsePresentationTests` replay the games at
+those positions.
+
 ## U6: onboarding and playtest loop
 
 **First-game hints.** `OnboardingHints` (Match) picks at most one hint for
@@ -492,7 +589,8 @@ board-actions smoke checks the lean, its stillness and turning it off.
 | U6 onboarding and playtest loop | Done: hints, intent cues, `playtest-summary`; placement **needs the playtest** |
 | U5 art direction, feel and audio | Partly: synthesized sound, rez flip, damage shake, lane glow, experimental hover tilt. The visual identity **needs a playtest screenshot review**; music and identity idle life are open |
 | A4a extras (HQ and R&D knowledge, one keep ranking) | **Runner v10 ships** (central memory: +47 and +53 on two seeds); the keep ranking already exists for discards and trashes |
-| A8 Corp archetypes | Open: planned in the roadmap (28 September); the Corp v11 playtest repairs are its first step |
+| A8 archetypes | **Corp v12 ships** (+36 and +48); Runner archetypes (v11) weaker (−32), kept as an entrant; Runner v12 ships the review fixes alone (+29) |
 
-Default bots after Wave 4: Corp v11 (plans turn actions, with the playtest
-repairs) and Runner v10 (central memory) on the legal decks; the tutorial decks keep the frozen C1 bot (Corp v7, Runner v6).
+Default bots after Wave 4: Corp v12 (plans turn actions, plays to its deck's
+archetype) and Runner v12 (central memory and the self-play review fixes)
+on the legal decks; the tutorial decks keep the frozen C1 bot (Corp v7, Runner v6).
