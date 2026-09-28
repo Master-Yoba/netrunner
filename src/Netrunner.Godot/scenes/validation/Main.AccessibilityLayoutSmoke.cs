@@ -344,12 +344,21 @@ public partial class Main
 		}
 	}
 
+	/// <summary>
+	/// U7: in the production shell the menu's title screen fronts the setup form,
+	/// which backs it; the legacy diagnostic shell still shows the form itself.
+	/// </summary>
+	private bool HasSetupMenuSurface() => _menuTitleView is null
+		? SceneTreeContainsText(_startPanel, "MATCH SETUP") && SceneTreeContainsText(_startPanel, "OFFICIAL PRESETS")
+		: _menuTitleView.Visible
+			&& SceneTreeContainsText(_menuTitleView, "NETRUNNER")
+			&& FindDescendants<Button>(_menuTitleView).Any(button => button.Visible && button.Text == "New game");
+
 	private bool HasSlice48SetupSurface()
 	{
 		bool presets = HasPresetKinds(_corpPreset) && HasPresetKinds(_runnerPreset)
 			|| PresetUnavailable(_corpPreset) && PresetUnavailable(_runnerPreset);
-		return SceneTreeContainsText(_startPanel, "MATCH SETUP")
-			&& SceneTreeContainsText(_startPanel, "OFFICIAL PRESETS")
+		return HasSetupMenuSurface()
 			&& presets
 			&& _humanSide.ItemCount == 2
 			&& _startButton.FocusMode != Control.FocusModeEnum.None;
@@ -653,8 +662,7 @@ public partial class Main
 		await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 		layout &= setupPanel is not null
 			&& IsFullyInsideViewport(setupPanel)
-			&& SceneTreeContainsText(_startPanel, "MATCH SETUP")
-			&& SceneTreeContainsText(_startPanel, "OFFICIAL PRESETS")
+			&& HasSetupMenuSurface()
 			&& AreVisibleLabelsLegible(_startPanel);
 		bool setupFocusOrder = setupPanel is not null
 			&& await CheckSlice48FocusOrderAsync(_startPanel);
