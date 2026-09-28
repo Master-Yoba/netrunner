@@ -12,6 +12,7 @@ Evidence date: 28 September 2026, on the Linux x86_64 development box.
 | A1b ladder over a deck pool | `feat/a1b-deck-pool-ladder` (on C1) |
 | U7 main menu | `feat/u7-main-menu` (on A1b) |
 | A4a whole-run model | `feat/a4a-run-model` (on U7) |
+| A5 fitted evaluation (and A3 on it) | `feat/a5-fitted-evaluation` (on A4a) |
 
 ## C1: Gateway sample decks
 
@@ -236,3 +237,42 @@ decks. `OfflineMatchFactory.CreatePlayerOpponent` picks the frozen versions
 when both decks are teaching decks, and the client uses it for new games.
 From here on, ladder gates for bot changes are judged on the Gateway pool,
 which `scripts/ai-ladder.sh` now uses by default.
+
+## A5: fitted evaluation
+
+The position evaluation is now fitted to self-play outcomes instead of hand
+weights. `EvaluationFeatures` reads 27 features from the observing side's
+own view: the score race (and whether either side is within two points),
+money on a log scale, cards in hand, installed and rezzed ICE, remotes,
+advancement on the board and the Corp's own agenda progress, the Runner's
+breaker coverage and rig, tags and core damage, deck sizes, the turn, whose
+turn it is, and the whole-run model's view of HQ, R&D and the most advanced
+remote (open or not, and what getting in costs). A Corp view prices runs with
+its own ICE counted as rezzed while its credits last; a Runner view doesn't
+see unrezzed ICE.
+
+`ai-fit-evaluation` plays Standard self-play over the Gateway deck pool, takes each
+side's view at the start of every turn, labels it with whether that side
+won, and fits one ridge-regularized logistic model per side by deterministic
+batch gradient descent. The weights live in `data/ai/evaluation-v1.json`
+(embedded in `Netrunner.AI`, checked against the feature list on load), with
+its report beside it.
+
+**Gate: the fitted weights beat the hand weights on held-out seeds.** 400
+training games (9,611 positions per side) and 120 held-out games on a
+separate seed (2,973 positions per side), all on the Gateway pool, with the
+run model's grip and Ballista fixes in. The hand evaluation was calibrated
+to a probability by a one-feature fit on the same training games:
+
+| Side | Log loss, fitted | Log loss, hand | Base rate only | Accuracy, fitted |
+|---|---:|---:|---:|---:|
+| Corp | **0.587** | 0.638 | 0.696 | 69.5% |
+| Runner | **0.589** | 0.619 | 0.696 | 69.3% |
+
+(An earlier fit over both pools read 0.534 against 0.587; the tutorial decks
+are more predictable, and the tutorial bot is frozen, so the shipped weights
+are fitted on the legal decks only.)
+
+The largest weights make sense: agenda points and the opponent near 7, the
+number of remotes (for the Corp), money, breaker coverage (for the Runner),
+and what a run into R&D or the remote would cost.

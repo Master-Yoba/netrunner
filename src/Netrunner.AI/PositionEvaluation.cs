@@ -35,6 +35,12 @@ internal static class PositionEvaluation
         return score + (features.Side == PlayerSide.Corp ? Corp(features, context) : Runner(features, context));
     }
 
+    /// <summary>The hand evaluation for A5's comparison, with the default Standard profile of the observing side.</summary>
+    public static long ScoreForFitting(AgentFeatures features, ICardEvaluationCatalog catalog) =>
+        Score(features, catalog, features.Side == PlayerSide.Corp
+            ? CorpPolicyProfiles.Create("standard", 0, CorpHeuristicPolicy.LatestHeuristic)
+            : RunnerPolicyProfiles.Create("standard", 0, RunnerHeuristicPolicy.LatestHeuristic));
+
     /// <summary>Credits are worth less the more there are.</summary>
     private static long Money(int credits)
     {

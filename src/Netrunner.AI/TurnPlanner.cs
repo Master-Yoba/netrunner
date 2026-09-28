@@ -134,7 +134,10 @@ internal sealed class TurnPlanner
     {
         AgentFeatures features = ObservationReader.Read(ObservationBuilder.Build(state, side, determinizer.Behavior),
             _configuration.FeatureVersion);
-        return PositionEvaluation.Score(features, _catalog, _configuration);
+        // A5: planning versions score rollouts by the fitted win probability (as log-odds).
+        return _configuration.Parameters.GetValueOrDefault("plan-evaluation") == 1
+            ? FittedEvaluation.Score(features, _catalog)
+            : PositionEvaluation.Score(features, _catalog, _configuration);
     }
 
     private readonly Dictionary<PlayerSide, OpponentCardPool> _pools = [];

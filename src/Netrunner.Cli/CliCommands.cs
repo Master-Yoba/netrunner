@@ -72,6 +72,11 @@ public static partial class CliCommands
             return RunEngineBench(args, output, error);
         }
 
+        if (args.Length > 0 && args[0] == "ai-fit-evaluation")
+        {
+            return RunAiFitEvaluation(args, output, error);
+        }
+
         if (args.Length > 0 && args[0] == "ai-ladder")
         {
             return RunAiLadder(args, output, error);

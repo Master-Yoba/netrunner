@@ -7,6 +7,7 @@ public static class CorpPolicyProfiles
     private static readonly string[] ParameterKeys = ["credit-scale", "protection-scale", "draw-scale"];
     private static readonly string[] V3ParameterKeys = ["credit-scale", "protection-scale", "draw-scale", "coverage-scale"];
     private static readonly string[] V5ParameterKeys = [.. V3ParameterKeys, "plan-samples", "plan-width"];
+    private static readonly string[] V9ParameterKeys = [.. V5ParameterKeys, "plan-evaluation"];
 
     /// <summary>Creates a profile for the latest policy version.</summary>
     public static OfflineAgentConfiguration Create(string profileId, ulong policySeed) =>
@@ -26,6 +27,13 @@ public static class CorpPolicyProfiles
         (CorpHeuristicPolicy.V5, "easy") => OfflineAgentConfiguration.Create(PlayerSide.Corp, policyVersion, profileId, policySeed,
             workBudget: 12000, nearTieTolerance: EasyNearTieTolerance,
             parameters: [.. Parameters(90, 80, 100), new("coverage-scale", 0), .. Planning(0, 0)]),
+        // A3 on A4a and A5: V8 choices, planned, with rollouts scored by the fitted evaluation.
+        (CorpHeuristicPolicy.V9, "standard") => OfflineAgentConfiguration.Create(PlayerSide.Corp, policyVersion, profileId, policySeed,
+            workBudget: 20000, nearTieTolerance: 0,
+            parameters: [.. Parameters(100, 100, 100), new("coverage-scale", 100), .. Planning(PlanSamples, PlanWidth), new("plan-evaluation", 1)]),
+        (CorpHeuristicPolicy.V9, "easy") => OfflineAgentConfiguration.Create(PlayerSide.Corp, policyVersion, profileId, policySeed,
+            workBudget: 12000, nearTieTolerance: EasyNearTieTolerance,
+            parameters: [.. Parameters(90, 80, 100), new("coverage-scale", 0), .. Planning(0, 0), new("plan-evaluation", 1)]),
         (CorpHeuristicPolicy.V2, _) => CreateV2(profileId, policySeed),
         _ => throw new ArgumentException("Unknown Corp profile or policy version.", nameof(profileId)),
     };
@@ -54,6 +62,7 @@ public static class CorpPolicyProfiles
             CorpHeuristicPolicy.V2 => ParameterKeys,
             CorpHeuristicPolicy.V3 or CorpHeuristicPolicy.V4 or CorpHeuristicPolicy.V6 or CorpHeuristicPolicy.V7 or CorpHeuristicPolicy.V8 => V3ParameterKeys,
             CorpHeuristicPolicy.V5 => V5ParameterKeys,
+            CorpHeuristicPolicy.V9 => V9ParameterKeys,
             _ => null,
         };
         if (configuration.Side != PlayerSide.Corp || keys is null
@@ -63,6 +72,7 @@ public static class CorpPolicyProfiles
             {
                 "coverage-scale" => pair.Value is < 0 or > 200,
                 "plan-samples" or "plan-width" => pair.Value is < 0 or > 16,
+                "plan-evaluation" => pair.Value is < 0 or > 1,
                 _ => pair.Value is < 25 or > 200,
             })
             || configuration.FeatureVersion != AgentFeatures.Version)
