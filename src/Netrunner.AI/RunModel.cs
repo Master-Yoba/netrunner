@@ -218,8 +218,10 @@ public static class RunModel
                     if (effect.InstallsIce) penalty += InstallIcePenalty;
                     if (effect.Restricts) penalty += RestrictionPenalty;
                 }
-                // The Runner flatlines when damage exceeds the cards in the grip.
-                if (ends || damage > grip) continue;
+                // Damage that empties the grip is treated as lethal: the Runner flatlines
+                // only past the grip, but an empty grip loses to the next point of damage
+                // (keeping this caution tested better on the ladder than taking the hit).
+                if (ends || damage > 0 && damage >= grip) continue;
                 int score = creditCost + clickCost * ClickPenalty + lost + damage * DamagePenalty + tags * TagPenalty + penalty;
                 if (score < bestScore)
                 {
