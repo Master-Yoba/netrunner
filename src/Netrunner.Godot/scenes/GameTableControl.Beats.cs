@@ -25,6 +25,37 @@ public partial class GameTableControl
 			{
 				A = _focusedServer is null || string.Equals(id, _focusedServer, StringComparison.Ordinal) ? 1 : UnfocusedLaneAlpha,
 			};
+		BreatheLane(_focusedServer is { } focused && _serverLanes.TryGetValue(focused, out ServerLaneParts? parts) ? parts.Panel : null);
+	}
+
+	private Control? _breathingLane;
+	private double _breathSeconds;
+
+	/// <summary>
+	/// Idle life (U5): the attacked server's lane glows slowly while its run
+	/// lasts. Only the panel's own background brightens, not its cards; reduced
+	/// motion keeps the lane still. <see cref="Breathe"/> drives it each frame.
+	/// </summary>
+	private void BreatheLane(Control? lane)
+	{
+		if (ReferenceEquals(lane, _breathingLane)) return;
+		if (_breathingLane is not null && IsInstanceValid(_breathingLane)) _breathingLane.SelfModulate = Colors.White;
+		_breathingLane = lane;
+		_breathSeconds = 0;
+	}
+
+	private void Breathe(double delta)
+	{
+		if (_breathingLane is null) return;
+		if (!IsInstanceValid(_breathingLane)) { _breathingLane = null; return; }
+		if (!MotionEnabled || Hand.ReducedMotion)
+		{
+			_breathingLane.SelfModulate = Colors.White;
+			return;
+		}
+		_breathSeconds += delta;
+		float glow = 1 + 0.15f * (1 - Mathf.Cos((float)(_breathSeconds * Math.PI / 1.2)));
+		_breathingLane.SelfModulate = new Color(glow, glow, glow);
 	}
 
 	/// <summary>Grows a card in place (an encountered ICE) until released; reduced motion only raises it.</summary>

@@ -295,6 +295,7 @@ public partial class GameTableControl : Control
 
 	public override void _Process(double delta)
 	{
+		Breathe(delta);
 		if (Engine.IsEditorHint() && _previewDirty && _shellBuilt)
 		{
 			RefreshEditorPreview();

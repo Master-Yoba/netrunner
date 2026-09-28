@@ -337,6 +337,7 @@ measured against (Corp v8, Runner v7). A next attempt should score the
 run's rollouts later than the run's end (at the end of the Corp's next turn)
 and sample the Corp's hidden cards from a deck-like mix; Corp v9's planning
 and v10's rez search could then be combined.
+
 ## U6: onboarding and playtest loop
 
 **First-game hints.** `OnboardingHints` (Match) picks at most one hint for
@@ -395,6 +396,12 @@ with a slight overshoot), and damage shakes the table briefly on top of the
 existing red wash, harder for more damage. Both are skipped with reduced
 motion, and stopping motion mid-beat puts the card and table back.
 
+Idle life: during a run, the attacked server's lane glows slowly (only the
+lane's own background, not its cards), driven per frame so a rebuilt lane
+never leaves a stale animation; reduced motion keeps it still.
+
 Still to do in U5: the visual identity (palette, type and table surface,
-which want a playtest screenshot review), a hover tilt toward the cursor,
-idle life, and music.
+which want a playtest screenshot review), idle life on the active identity,
+and music. The hover tilt toward the cursor was left out on purpose: the
+hovered hand card straightens and holds still under the pointer, which the
+board-actions smoke asserts.
