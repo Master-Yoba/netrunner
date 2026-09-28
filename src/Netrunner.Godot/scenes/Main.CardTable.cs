@@ -110,6 +110,7 @@ public partial class Main
 		BuildBoardDrag();
 		BuildSettingsMenu();
 		BuildOnboarding();
+		BuildSound();
 		BuildActionChips();
 		BuildEncounterOverlay();
 	}

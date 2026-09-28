@@ -25,6 +25,9 @@ public sealed record Beat(PresentationEventKind Kind, string Caption, double Sec
     public int? Amount { get; init; }
     public int? Total { get; init; }
 
+    /// <summary>Whether a run that ended was successful.</summary>
+    public bool? Successful { get; init; }
+
     /// <summary>The card that caused the beat: the breaker, the damage source.</summary>
     public string? SourceCardKey { get; init; }
 
@@ -130,6 +133,7 @@ public static class BeatPlanner
                 Ordinal = value.Ordinal,
                 Amount = beat.Amount ?? value.Amount,
                 Total = value.Total,
+                Successful = value.Successful,
                 SourceCardKey = beat.SourceCardKey ?? value.SourceCardKey,
                 FromZone = value.FromZone,
                 ToZone = value.ToZone,

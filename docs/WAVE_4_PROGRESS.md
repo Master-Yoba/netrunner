@@ -372,3 +372,21 @@ the Corp, keeps the opening hand, and checks that the basics hint appears at
 the first action window inside the viewport, that "Got it" records it and
 moves on to the ICE hint, and that "Hide hints" turns hints off and clears
 the Settings toggle.
+
+## U5: sound (first part)
+
+Every beat the table plays now has a sound. `SoundCues` (Match) maps a beat
+to one of 20 cues: click, credit, card slide, place and flip, rez hum,
+advance, score and steal stingers heard from the viewer's side (rising when
+the points are the viewer's, falling when they are the opponent's), run
+start, encounter, break, subroutine fire, run success and failure, damage,
+tag, "your turn", and win and loss. `SoundBank` (Godot) synthesizes every cue
+at startup from tones, sweeps and filtered noise, so the game ships no audio
+files and needs no license notice. Six voices play at once, and a cue
+repeated within 40 ms is dropped. Settings has a Sound toggle and an effects
+volume, saved with the other preferences. There is no music yet.
+
+The onboarding smoke checks that every cue is synthesized, lasts under two
+seconds and doesn't clip, and that a played action's beats reach the sound
+bank. The visual identity, motion vocabulary and idle life parts of U5 are
+still to do.

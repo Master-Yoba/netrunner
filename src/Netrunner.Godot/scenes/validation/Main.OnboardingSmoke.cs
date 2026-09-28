@@ -57,7 +57,21 @@ public partial class Main
 				_hintsToggle!.ButtonPressed = false;
 			RequireInteraction(!_hintsEnabled && !_hintPanel.Visible && !_hintsToggle!.ButtonPressed,
 				"Hiding hints doesn't turn them off and clear the Settings toggle.");
-			GD.Print($"ONBOARDING PASS first=basics next={next ?? "none"} hidden=true");
+			// U5 sound: every cue is synthesized, ends within two seconds, and doesn't clip.
+			SoundCue[] cues = [.. Enum.GetValues<SoundCue>().Where(cue => cue != SoundCue.None)];
+			RequireInteraction(_sound!.CueCount == cues.Length, "The sound bank lacks a cue.");
+			foreach (SoundCue cue in cues)
+			{
+				float[] samples = SoundBank.Synthesize(cue);
+				float peak = samples.Length == 0 ? 0 : samples.Max(Math.Abs);
+				RequireInteraction(samples.Length is > 0 and < 44100 && peak is > 0.05f and < 1f, $"The {cue} cue is empty, too long or clips (peak {peak:0.00}).");
+			}
+			// Gain a credit: its click and credit beats reach the sound bank.
+			MatchSnapshot current = _currentSnapshot!;
+			SubmitAction(current.View.Decision!, current.View.LegalActions.First(action => action.Kind == Netrunner.Core.ActionKind.GainCredit));
+			for (int frame = 0; frame < 600 && _sound.Requested == 0; frame++) await TableFrames(1);
+			RequireInteraction(_sound.Requested > 0, "The table's beats don't reach the sound bank.");
+			GD.Print($"ONBOARDING PASS sound_cues={cues.Length} sounds_requested={_sound.Requested} first=basics next={next ?? "none"} hidden=true");
 			QuitCleanly();
 		}
 		catch (Exception exception)
