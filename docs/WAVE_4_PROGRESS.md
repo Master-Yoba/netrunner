@@ -303,3 +303,35 @@ v9, which plans. The Runner planner isn't a separated gain on either seed and
 costs more, so it stays a ladder entrant (`standard-plan-fit`). The planner's
 model of the Corp in rollouts stays v8, which doesn't plan. The tutorial
 decks keep the frozen C1 bot.
+## A4: run search
+
+The planner's rollouts (A3) now also search choices inside a run. Each
+candidate is tried on states sampled from the agent's observation, played out
+by both heuristics until the run ends, and scored there with the fitted
+evaluation (A5); the result adjusts the heuristic's score the same way turn
+planning does. Two new versions keep their heuristic's choices otherwise and
+plan no turn actions, so a ladder against the default measures the search
+alone:
+
+- **Runner v9** (v7 plus search): continue or jack out, and trash an
+  accessed card or not. 4 samples, the heuristic's best 3 candidates;
+  about 50 ms per searched decision.
+- **Corp v10** (v8 plus search): rez a card during a run or not (the
+  approached ICE, an upgrade or an asset). 4 samples, 2 candidates.
+
+**Gate: Runner v9 is weaker.** Gateway pool, seed 5, 480 deals against the
+default Standard: Runner v9 −66 [−96, −32], with per-deck warnings on four
+pairings (Party Hard and Planning Ahead against Hyper Velocity and Quick and
+Dirty, Stolen Goods against Advanced Yomi). Scoring at the end of the run
+undervalues what a run earns later (the Corp's next turn, pressure on the
+remote), and the sampled Corp cards come uniformly from every Corp card
+rather than a deck's agenda density, so continuing looks worse than it is.
+Runner v9 stays a ladder entrant (`standard-run`) and doesn't ship.
+
+**Corp v10 is level.** Same pool and seed: Corp v10 +16 [−13, 44] against
+v8, no deck warnings. Not a separated gain, so it doesn't ship either; it
+stays the `standard-rez` entrant. Both entrants pin the versions they were
+measured against (Corp v8, Runner v7). A next attempt should score the
+run's rollouts later than the run's end (at the end of the Corp's next turn)
+and sample the Corp's hidden cards from a deck-like mix; Corp v9's planning
+and v10's rez search could then be combined.
