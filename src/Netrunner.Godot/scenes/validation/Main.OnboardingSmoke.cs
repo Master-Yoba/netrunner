@@ -66,10 +66,17 @@ public partial class Main
 				float peak = samples.Length == 0 ? 0 : samples.Max(Math.Abs);
 				RequireInteraction(samples.Length is > 0 and < 44100 && peak is > 0.05f and < 1f, $"The {cue} cue is empty, too long or clips (peak {peak:0.00}).");
 			}
-			// Gain a credit: its click and credit beats reach the sound bank.
-			MatchSnapshot current = _currentSnapshot!;
-			SubmitAction(current.View.Decision!, current.View.LegalActions.First(action => action.Kind == Netrunner.Core.ActionKind.GainCredit));
-			for (int frame = 0; frame < 600 && _sound.Requested == 0; frame++) await TableFrames(1);
+			// Play on (gaining credits where offered) until a beat reaches the sound bank.
+			long played = -1;
+			for (int frame = 0; frame < 1200 && _sound.Requested == 0; frame++)
+			{
+				await TableFrames(1);
+				if (_currentSnapshot is not { View.Decision: { } decision } snapshot || decision.OwnerSide != snapshot.View.Viewer
+					|| decision.Revision == played || snapshot.View.LegalActions.Count == 0) continue;
+				played = decision.Revision;
+				SubmitAction(decision, snapshot.View.LegalActions.FirstOrDefault(action => action.Kind == Netrunner.Core.ActionKind.GainCredit)
+					?? snapshot.View.LegalActions[0]);
+			}
 			RequireInteraction(_sound.Requested > 0, "The table's beats don't reach the sound bank.");
 			GD.Print($"ONBOARDING PASS sound_cues={cues.Length} sounds_requested={_sound.Requested} first=basics next={next ?? "none"} hidden=true");
 			QuitCleanly();
