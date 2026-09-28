@@ -308,7 +308,7 @@ public partial class Main
 				$"M4_SLICE48_UX_SCREENSHOT requested={FormatSlice48Bool(screenshotRequested)} "
 				+ $"saved={FormatSlice48Bool(screenshotSaved)} "
 				+ "path=docs/evidence/slice48/slice48-ui-smoke.png");
-			GetTree().Quit(passed ? 0 : 1);
+			QuitCleanly(passed ? 0 : 1);
 		}
 		catch (Exception exception)
 		{
@@ -340,7 +340,7 @@ public partial class Main
 				+ $"layout_2560x1440={FormatSlice48Bool(layout2560x1440)} "
 				+ $"screenshot={FormatSlice48Bool(screenshotSaved)} "
 				+ $"error={exception.Message.Replace('\n', ' ').Replace('\r', ' ')}");
-			GetTree().Quit(1);
+			QuitCleanly(1);
 		}
 	}
 

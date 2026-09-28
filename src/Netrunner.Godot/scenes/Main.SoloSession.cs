@@ -223,7 +223,7 @@ public partial class Main
 			if (revision == _saveDialogRevision)
 			{
 				_saveDialog.SetBusy(false, message);
-				if (quit) { exiting = true; GetTree().Quit(); return; }
+				if (quit) { exiting = true; QuitCleanly(); return; }
 				CloseSaveDialog();
 			}
 		}

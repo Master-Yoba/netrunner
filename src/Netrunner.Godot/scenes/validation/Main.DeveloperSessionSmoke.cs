@@ -19,7 +19,7 @@ public partial class Main
 				RequireInteraction(!_galleryButton.Visible && !FindDescendants<Button>(_settingsMenu!).Any(button => button.Name == "DeveloperTools"),
 					"A developer entry point remains visible.");
 				GD.Print("M5_DEVELOPER PASS disabled=true controls_absent=true saved_setting_ignored=true");
-				GetTree().Quit();
+				QuitCleanly();
 				return;
 			}
 			RequireInteraction(DeveloperToolsEnabled && _developerDialog is not null, "A developer build and --developer are required.");
@@ -87,12 +87,12 @@ public partial class Main
 			SetSettingsVisible(false);
 			RequireInteraction(!DeveloperDialogVisible && _currentSnapshot!.IsPaused, "Closing tools must retain paused board.");
 			GD.Print($"M5_DEVELOPER PASS side={side} step=true cap=true reveal_isolated=true roundtrip=true raw_root=true corrupt_preserved=true pause=true");
-			GetTree().Quit();
+			QuitCleanly();
 		}
 		catch (Exception exception)
 		{
 			GD.PrintErr($"M5_DEVELOPER FAIL {exception}");
-			GetTree().Quit(1);
+			QuitCleanly(1);
 		}
 	}
 

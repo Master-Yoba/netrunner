@@ -157,7 +157,7 @@ public partial class Main
 				$"M4_SLICE46_UI_SCREENSHOT requested={FormatSlice46Bool(screenshotRequested)} "
 				+ $"saved={FormatSlice46Bool(screenshotSaved)} "
 				+ "path=docs/evidence/slice46/slice46-ui-smoke.png");
-			GetTree().Quit(passed ? 0 : 1);
+			QuitCleanly(passed ? 0 : 1);
 		}
 		catch (Exception exception)
 		{
@@ -173,7 +173,7 @@ public partial class Main
 				+ $"jack_out_after_damage={FormatSlice46Bool(jackOutAfterDamage)} "
 				+ $"screenshot={FormatSlice46Bool(screenshotSaved)} "
 				+ $"error={error}");
-			GetTree().Quit(1);
+			QuitCleanly(1);
 		}
 	}
 

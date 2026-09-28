@@ -121,7 +121,7 @@ public partial class Main
 				+ $"rfg_removed={FormatSlice43Bool(rfgRemoved)}");
 			cardControl.QueueFree();
 			abilityButton.QueueFree();
-			GetTree().Quit(passed ? 0 : 1);
+			QuitCleanly(passed ? 0 : 1);
 		}
 		catch (Exception exception)
 		{
@@ -145,7 +145,7 @@ public partial class Main
 				abilityButton.QueueFree();
 			}
 
-			GetTree().Quit(1);
+			QuitCleanly(1);
 		}
 	}
 

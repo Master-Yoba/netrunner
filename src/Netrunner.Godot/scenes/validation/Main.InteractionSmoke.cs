@@ -166,13 +166,13 @@ public partial class Main
 			await CheckDiscardMotion();
 			await CheckReviewInteractionGuards();
 			GD.Print("M411_INTERACTION PASS scenarios=15 resolutions=2 drag=true cancel=true stale=true choices=true menu_fallback=true hidden_host=true focus_loss=true invalid_drop=true centered=true smooth_follow=true");
-			GetTree().Quit();
+			QuitCleanly();
 		}
 		catch (Exception error)
 		{
 			if (OS.GetCmdlineUserArgs().Contains("--m4-12-screenshots")) await SaveRefinementEvidence("failure");
 			GD.PrintErr($"M411_INTERACTION FAIL {error}");
-			GetTree().Quit(1);
+			QuitCleanly(1);
 		}
 	}
 

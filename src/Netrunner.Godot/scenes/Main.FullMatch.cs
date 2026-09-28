@@ -106,7 +106,7 @@ public partial class Main
 			if (matches.Length != 1 || button.IsItemDisabled(matches[0]))
 			{
 				GD.Print($"M4_FULL_SMOKE FAIL preset_selector={requested} unavailable=true");
-				GetTree().Quit(1);
+				QuitCleanly(1);
 				return false;
 			}
 			button.Select(matches[0]);
@@ -187,7 +187,7 @@ public partial class Main
 			if (_m4FullMatchSmoke)
 			{
 				GD.Print($"M4_FULL_SMOKE FAIL side={_fullMatchSmokeSide} preset={_fullMatchSmokePreset} seed={_fullMatchSmokeSeed} error={exception.Message}");
-				GetTree().Quit(1);
+				QuitCleanly(1);
 			}
 		}
 	}
@@ -248,14 +248,14 @@ public partial class Main
 			}
 
 			GD.Print($"M4_FULL_SMOKE PASS side={_fullMatchSmokeSide} preset={_fullMatchSmokePreset} seed={_fullMatchSmokeSeed} setup_order=corp,runner setup=true mulligan=true turn_pair=true identities=true terminal=true reload=true fresh_setup=true");
-			GetTree().Quit();
+			QuitCleanly();
 		}
 		catch (Exception exception)
 		{
 			RecordFullMatchException(exception, "full-match-smoke");
 			GD.PushError(exception.ToString());
 			GD.Print($"M4_FULL_SMOKE FAIL side={_fullMatchSmokeSide} preset={_fullMatchSmokePreset} seed={_fullMatchSmokeSeed} reload=true error={exception.Message}");
-			GetTree().Quit(1);
+			QuitCleanly(1);
 		}
 	}
 
@@ -370,7 +370,7 @@ public partial class Main
 
 					string marker = "FULL_MATCH_SMOKE";
 					GD.Print($"{marker} PASS side={side} setup=true mulligan=true turn_pair=true identities=true terminal=true action_count={snapshot.ActionCount}");
-					GetTree().Quit();
+					QuitCleanly();
 					return;
 				}
 				if (!snapshot.AwaitingHumanDecision || observation.Decision is null)
@@ -448,7 +448,7 @@ public partial class Main
 				? $" preset={_fullMatchSmokePreset} seed={_fullMatchSmokeSeed} setup_order={string.Join(',', setupOrder)} action_count={diagnosticSnapshot?.ActionCount ?? 0}"
 				: string.Empty;
 			GD.Print($"{marker} FAIL side={side}{details} setup={setup} mulligan={mulligan} turn_pair={turnPair} identities={identities} error={exception.Message}");
-			GetTree().Quit(1);
+			QuitCleanly(1);
 		}
 	}
 

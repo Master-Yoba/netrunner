@@ -92,7 +92,7 @@ public partial class Main
 		{
 			_status.Text = $"Resume setup failed: {_fullMatchResumeError}";
 			GD.PrintErr($"SESSION_RESUME FAIL error={_fullMatchResumeError}");
-			if (_sessionRecoverySmoke) GetTree().Quit(1);
+			if (_sessionRecoverySmoke) QuitCleanly(1);
 			return;
 		}
 
@@ -415,7 +415,7 @@ public partial class Main
 			GD.PrintErr($"SESSION_RESUME FAIL error={exception.Message}");
 			if (_sessionRecoverySmoke)
 			{
-				GetTree().Quit(1);
+				QuitCleanly(1);
 			}
 		}
 	}
@@ -504,7 +504,7 @@ public partial class Main
 			}
 
 			CloseFullMatchDiagnostics("recovery-smoke-exit");
-			GetTree().Quit(passed ? 0 : 1);
+			QuitCleanly(passed ? 0 : 1);
 		}
 	}
 

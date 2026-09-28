@@ -61,7 +61,7 @@ public partial class Main
 				&& !TryReadFullMatchSmokeOptions(arguments, out _fullMatchSmokePreset, out _fullMatchSmokeSeed, out string? smokeError))
 			{
 				GD.PrintErr($"M4_FULL_SMOKE FAIL {smokeError}");
-				GetTree().Quit(1);
+				QuitCleanly(1);
 				return false;
 			}
 		}
@@ -82,7 +82,7 @@ public partial class Main
 			if (captureError is not null || capture is null)
 			{
 				GD.PrintErr($"UI_CAPTURE FAIL {captureError}");
-				GetTree().Quit(2);
+				QuitCleanly(2);
 			}
 			else
 			{

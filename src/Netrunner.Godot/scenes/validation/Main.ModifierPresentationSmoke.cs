@@ -180,7 +180,7 @@ public partial class Main
 				+ $"breach_note={FormatSlice44Bool(breachNote)}");
 			cardControl.QueueFree();
 			actionButton.QueueFree();
-			GetTree().Quit(passed ? 0 : 1);
+			QuitCleanly(passed ? 0 : 1);
 		}
 		catch (Exception exception)
 		{
@@ -201,7 +201,7 @@ public partial class Main
 				actionButton.QueueFree();
 			}
 
-			GetTree().Quit(1);
+			QuitCleanly(1);
 		}
 	}
 

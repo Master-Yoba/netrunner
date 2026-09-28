@@ -208,12 +208,12 @@ public partial class Main
 				throw new InvalidOperationException($"{duplicates.Count} card(s) were on screen twice during motion: {string.Join(", ", duplicates.Take(8))}.");
 			GD.Print($"UI_CAPTURE PASS bursts={bursts.Count} local_actions={actions} motion_frames={motionFrames} duplicates=0 "
 				+ $"beats={_beats.Played.Count} beat_kinds={_beats.Played.Select(beat => beat.Kind).Distinct().Count()} snap_mismatches={_snapMismatches} output={options.Output}");
-			GetTree().Quit(0);
+			QuitCleanly(0);
 		}
 		catch (Exception exception)
 		{
 			GD.PrintErr($"UI_CAPTURE FAIL {exception.Message}");
-			GetTree().Quit(1);
+			QuitCleanly(1);
 		}
 	}
 

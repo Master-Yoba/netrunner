@@ -374,13 +374,13 @@ public partial class Main
 			GD.Print($"M49_PERF frames=120 median_ms={frameTimes[60]:F2} p95_ms={frameTimes[114]:F2} renderer={RenderingServer.GetVideoAdapterName()}");
 			GD.Print($"M410_ALLOC frames=120 allocated_bytes={idleAllocatedBytes} bytes_per_frame={idleAllocatedBytes / 120.0:F2}");
 			GD.Print($"M49_UI PASS official={_metadataSnapshot.IsOfficial} dense=true history=true");
-			GetTree().Quit();
+			QuitCleanly();
 		}
 		catch (Exception exception)
 		{
 			GD.PushError(exception.ToString());
 			GD.Print("M49_UI FAIL " + exception.Message);
-			GetTree().Quit(1);
+			QuitCleanly(1);
 		}
 	}
 
