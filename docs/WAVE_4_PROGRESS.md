@@ -388,5 +388,13 @@ volume, saved with the other preferences. There is no music yet.
 
 The onboarding smoke checks that every cue is synthesized, lasts under two
 seconds and doesn't clip, and that a played action's beats reach the sound
-bank. The visual identity, motion vocabulary and idle life parts of U5 are
-still to do.
+bank.
+
+Motion: a rezzed card now turns over (it narrows to its edge and opens again
+with a slight overshoot), and damage shakes the table briefly on top of the
+existing red wash, harder for more damage. Both are skipped with reduced
+motion, and stopping motion mid-beat puts the card and table back.
+
+Still to do in U5: the visual identity (palette, type and table surface,
+which want a playtest screenshot review), a hover tilt toward the cursor,
+idle life, and music.

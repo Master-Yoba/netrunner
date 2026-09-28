@@ -167,9 +167,12 @@ public partial class BeatPresenter : Control
 				Board.PulseCardKey(beat.CardKey);
 				Board.PulseZone(beat.Kind == PresentationEventKind.AgendaScored ? ZoneKind.CorpScore : ZoneKind.RunnerScore);
 				break;
+			case PresentationEventKind.CardRezzed:
+				Board.FlipCard(beat.CardKey);
+				Board.PulseCardKey(beat.CardKey);
+				break;
 			case PresentationEventKind.SubroutineFired:
 			case PresentationEventKind.CardAdvanced:
-			case PresentationEventKind.CardRezzed:
 			case PresentationEventKind.CardAccessed:
 			case PresentationEventKind.CardInstalled:
 			case PresentationEventKind.CardPlayed:
@@ -181,6 +184,7 @@ public partial class BeatPresenter : Control
 				break;
 			case PresentationEventKind.DamageDealt:
 				Board.FlashDamage();
+				Board.Shake(Math.Clamp(4f + 2f * (beat.Amount ?? 1), 4f, 12f));
 				Board.PulseZone(ZoneKind.RunnerHeap);
 				break;
 			case PresentationEventKind.TagsChanged:

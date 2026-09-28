@@ -26,6 +26,7 @@ public partial class GameTableControl
 		_motionRevision++;
 		foreach (Tween tween in _motionTweens) if (tween.IsValid()) tween.Kill();
 		_motionTweens.Clear();
+		RestoreBeatMotion();
 		foreach (Control ghost in _motionCards)
 			if (IsInstanceValid(ghost)) ghost.QueueFree();
 		_motionCards.Clear();
