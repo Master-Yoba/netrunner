@@ -103,6 +103,7 @@ public static class RunModel
     internal static RunForecast Plan(HeuristicContext context, AgentServer server, int lastIndex, int credits, int clicks, int upfrontCost = 0,
         int? grip = null, int? corpRezBudget = null)
     {
+        clicks = Math.Max(0, clicks);
         int gripSize = grip ?? context.Features.Hand.Length;
         int rezBudget = corpRezBudget ?? 0;
         int spent = 0, clicksSpent = 0, lost = 0, damage = 0, tags = 0, unknown = 0;
@@ -217,7 +218,8 @@ public static class RunModel
                     if (effect.InstallsIce) penalty += InstallIcePenalty;
                     if (effect.Restricts) penalty += RestrictionPenalty;
                 }
-                if (ends || damage >= grip) continue;
+                // The Runner flatlines when damage exceeds the cards in the grip.
+                if (ends || damage > grip) continue;
                 int score = creditCost + clickCost * ClickPenalty + lost + damage * DamagePenalty + tags * TagPenalty + penalty;
                 if (score < bestScore)
                 {
