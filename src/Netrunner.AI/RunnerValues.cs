@@ -69,10 +69,31 @@ internal static class RunnerValues
                 + Math.Max(0, (context.Features.Board.ZoneCounts?.CorpDiscard ?? 0) - context.Features.Board.CorpDiscard.Length) * 70,
             _ => 0,
         };
+        if (context.Generation >= 7) central = (int)(central * CentralFreshness(context, server.Kind));
         bool contested = server.Kind is ServerKind.Headquarters or ServerKind.RAndD
             || Enumerable.Range(0, server.Root.Length).Any(index => context.HiddenAdvancement(server.Id, "root", index) > 0);
         double pressure = contested ? context.OpponentScorePressure : 1.0;
         return (int)((root + central) * pressure);
+    }
+
+    /// <summary>
+    /// Runner v10 (A4a): how much of R&amp;D or HQ is new since the last access.
+    /// R&amp;D's top card is known while the Corp hasn't drawn since; HQ is new in
+    /// proportion to the cards the Corp has drawn since, against its hand now.
+    /// </summary>
+    internal static double CentralFreshness(HeuristicContext context, ServerKind kind)
+    {
+        const double Seen = 0.3;
+        AgentCentralMemory? memory = context.Knowledge?.Centrals;
+        int deck = context.Features.Board.HiddenZoneCounts.CorpDeck;
+        int hand = context.Features.Board.HiddenZoneCounts.CorpHand;
+        return kind switch
+        {
+            ServerKind.RAndD when memory?.DeckAfterRdAccess == deck => Seen,
+            ServerKind.Headquarters when memory is { HandAfterHqAccess: not null, DeckAfterHqAccess: { } before } =>
+                Math.Clamp((double)Math.Max(0, before - deck) / Math.Max(1, hand), Seen, 1),
+            _ => 1,
+        };
     }
 
     public static int Trash(HeuristicContext context, AgentCard? card)

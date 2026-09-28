@@ -29,7 +29,7 @@ public sealed class PolicyVersionTests
     {
         Assert.Equal(RunnerHeuristicPolicy.V7, OfflinePolicies.Configure(PlayerSide.Runner, "standard", 1).PolicyVersion);
         Assert.Equal(CorpHeuristicPolicy.V9, OfflinePolicies.Configure(PlayerSide.Corp, "standard", 1).PolicyVersion);
-        Assert.Throws<ArgumentException>(() => new RunnerHeuristicPolicy("runner-heuristic-v10"));
+        Assert.Throws<ArgumentException>(() => new RunnerHeuristicPolicy("runner-heuristic-v11"));
         Assert.Throws<ArgumentException>(() => OfflinePolicies.Configure(PlayerSide.Corp, "standard", 1, "corp-heuristic-v1"));
         // A v1 Runner profile can't claim the v3 features it doesn't read.
         OfflineAgentConfiguration v1 = RunnerPolicyProfiles.Create("standard", 1, RunnerHeuristicPolicy.V1);

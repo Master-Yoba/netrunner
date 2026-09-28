@@ -44,12 +44,18 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// run's end, scored by the fitted evaluation. Turn actions aren't planned.
     /// </summary>
     public const string V9 = "runner-heuristic-v9";
+    /// <summary>
+    /// V7 with central memory (A4a): R&amp;D is worth less while its top card is one
+    /// the Runner has already seen, and HQ in proportion to how much of it the
+    /// Corp has drawn since the last access.
+    /// </summary>
+    public const string V10 = "runner-heuristic-v10";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>V3 plans but has not shown a ladder gain yet (Wave 3), so new games use V4, which doesn't plan.</remarks>
     public const string PolicyVersion = V7;
     /// <summary>The latest version that never plans: the planner's model of the Runner.</summary>
     public const string LatestHeuristic = V7;
-    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9];
+    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10];
 
     public RunnerHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -57,9 +63,9 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Runner policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 or V8 or V9 => 6, _ => 2 };
+        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 or V8 or V9 => 6, V10 => 7, _ => 2 };
         Plans = version is V3 or V8 or V9;
-        Repairs = version is V4 or V5 or V6 or V7 or V8 or V9;
+        Repairs = version is V4 or V5 or V6 or V7 or V8 or V9 or V10;
     }
 
     /// <summary>Whether this version has the playtest repairs (V4).</summary>
@@ -114,7 +120,10 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     {
         AgentAction[] preferred = IssuedRunPaymentPreference.Select(features.Actions, action => (action.Id, action.Kind, action.Parameters)).ToArray();
         var preferredIds = preferred.Select(action => action.Id).ToHashSet();
-        var context = new HeuristicContext(features with { Actions = preferred.ToImmutableArray() }, catalog, configuration, Generation);
+        var context = new HeuristicContext(features with { Actions = preferred.ToImmutableArray() }, catalog, configuration, Generation)
+        {
+            Knowledge = Generation >= 7 ? knowledge : null,
+        };
         IReadOnlyDictionary<ActionId, AgentUtility> encounter = RunnerEncounterPlanner.Evaluate(context, budget);
         return features.Actions.Select(action => new AgentCandidate(action.Id,
             !preferredIds.Contains(action.Id) ? new(int.MinValue, 0, "payment/prefer-expiring-run-credits")

@@ -19,6 +19,9 @@ internal sealed class HeuristicContext
     }
 
     public AgentFeatures Features { get; }
+
+    /// <summary>The agent's memory, for versions that read it (Runner v10's central memory); null otherwise.</summary>
+    public AgentKnowledge? Knowledge { get; init; }
     public ICardEvaluationCatalog Catalog { get; }
     public OfflineAgentConfiguration Configuration { get; }
 
