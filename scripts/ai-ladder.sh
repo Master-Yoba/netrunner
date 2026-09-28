@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Head-to-head AI rating ladder on official content. Usage:
-#   scripts/ai-ladder.sh [--content official|gateway] [--entrants random,contract,easy,standard] [--seeds-per-pairing N]
+# Head-to-head AI rating ladder on official content; the Gateway deck pool
+# unless --content says otherwise (bot tuning targets the legal decks). Usage:
+#   scripts/ai-ladder.sh [--content gateway|official] [--entrants random,contract,easy,standard] [--seeds-per-pairing N]
 #     [--seed S] [--bootstrap N] [--workers N] [--output <new dir>] [--json]
 # Needs the provisioned System Gateway snapshot and never downloads it.
 set -euo pipefail
@@ -21,7 +22,7 @@ for ladder_argument in "$@"; do
 done
 ladder_arguments=()
 if ((ladder_has_content == 0)); then
-  ladder_arguments+=(--content official)
+  ladder_arguments+=(--content gateway)
 fi
 if ((ladder_has_output == 0)); then
   ladder_arguments+=(--output "$ladder_root/artifacts/ai-ladder/$(date -u +%Y%m%dT%H%M%SZ)-$$")
