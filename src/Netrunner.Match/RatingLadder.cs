@@ -1,4 +1,5 @@
 using Netrunner.AI;
+using Netrunner.Cards;
 using Netrunner.Core;
 
 namespace Netrunner.Match;
@@ -46,7 +47,7 @@ public static partial class RatingLadder
     /// "standard-plan" is the A3 turn planner (Runner v3, Corp v5).
     /// </summary>
     public static IReadOnlyList<string> EntrantOrder { get; } =
-        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch"];
+        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen"];
 
     private const double EloScale = 400 / 2.302585092994046;
     private const double Ridge = 0.01;
@@ -121,11 +122,20 @@ public static partial class RatingLadder
             // A8: the Corp plays to its deck's archetype (v12) with the default Runner.
             "standard-arch" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V12 : RunnerHeuristicPolicy.PolicyVersion),
+            // Runner v11's fixes without its archetype knobs (every deck generic), with the default Corp.
+            "standard-rgen" => GenericRunner(OfflineMatchFactory.CreateOpponent(definition, other, "standard", RunnerHeuristicPolicy.V11), definition),
             // A8: the Runner plays to its deck's archetype (v11) with the default Corp.
             "standard-rarch" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.V11),
             _ => throw new ArgumentException($"Unknown ladder entrant '{entrant}'.", nameof(entrant)),
         };
+    }
+
+    /// <summary>The same agent with a generic archetype profile.</summary>
+    private static OfflineAgent GenericRunner(OfflineAgent agent, FullMatchDefinition definition)
+    {
+        OfflineAgentConfiguration configuration = RunnerPolicyProfiles.WithArchetypes(agent.Configuration, RunnerArchetype.Generic, RunnerArchetype.Generic);
+        return new OfflineAgent(configuration, OfflinePolicies.Create(configuration), new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior));
     }
 
     public static async Task<LadderGameResult> PlayAsync(LadderGame game, int actionCap = DefaultActionCap,
