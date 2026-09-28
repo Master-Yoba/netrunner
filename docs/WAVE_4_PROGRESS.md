@@ -13,6 +13,8 @@ Evidence date: 28 September 2026, on the Linux x86_64 development box.
 | U7 main menu | `feat/u7-main-menu` (on A1b) |
 | A4a whole-run model | `feat/a4a-run-model` (on U7) |
 | A5 fitted evaluation (and A3 on it) | `feat/a5-fitted-evaluation` (on A4a) |
+| A4 run search | `feat/a4-run-search` (on A5) |
+| U6 onboarding and playtest loop, U5 sound and motion | `feat/u6-onboarding` (on A4) |
 
 ## C1: Gateway sample decks
 
