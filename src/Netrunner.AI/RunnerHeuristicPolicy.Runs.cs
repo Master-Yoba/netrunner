@@ -9,15 +9,23 @@ public sealed partial class RunnerHeuristicPolicy
     {
         if (server is null) return Value(-1000, "run/unknown-server", true, true);
         (int cost, int loss, int damage, bool blocked, int unknown) = Protection(context, server, server.Ice.Length - 1, upfrontCost);
+        // v7: the whole-run model (A4a) costs the run as one path, tolls included.
+        RunForecast? forecast = context.Generation >= 6
+            ? RunModel.Plan(context, server, server.Ice.Length - 1, context.Self.Credits + extraRunCredits, context.Self.Clicks - 1, upfrontCost)
+            : null;
+        if (forecast is not null)
+            (cost, loss, damage, blocked, unknown) = (forecast.Credits, forecast.CreditsLost, forecast.Damage, !forecast.CanGetIn, forecast.UnknownIce);
         int reserve = server.Root.Where(card => RunnerValues.Trash(context, card) >= 350).Select(card => context.Definition(card)?.Printed.TrashCost ?? 0).DefaultIfEmpty(0).Min();
         int funds = context.Self.Credits - upfrontCost + extraRunCredits;
         if (blocked || damage > context.Features.Hand.Length || cost > funds - loss)
             return Value(-1000, "run/known-unaffordable-or-lethal", true);
         // V5: the run itself spends a click, and what's left must pay a known approach toll.
-        (bool tollBlocked, int tollCredits, int tollClicks) = context.Generation >= 4
+        (bool tollBlocked, int tollCredits, int tollClicks) = forecast is not null ? (false, 0, forecast.Clicks)
+            : context.Generation >= 4
             ? ApproachToll(context, server, context.Self.Credits - upfrontCost - Math.Max(0, cost - extraRunCredits) - loss, context.Self.Clicks - 1)
             : (false, 0, 0);
         if (tollBlocked) return Value(-1000, "run/known-approach-toll-unaffordable", true);
+        int tagCost = (forecast?.Tags ?? 0) * 300;
         // v6: an advanced card the Runner can't identify may be a trap dealing 2 plus
         // its counters on access (Urtica Cipher); with too few cards in the grip that's a flatline.
         int trapRisk = 0;
@@ -34,7 +42,7 @@ public sealed partial class RunnerHeuristicPolicy
         int score = RunnerValues.Server(context, server) + rewards + extraValue
             - (upfrontCost + Math.Max(0, cost - extraRunCredits) + loss) * context.CreditValue
             - damage * 160 - risk - repeated * 180 - (funds - cost - loss - tollCredits < reserve ? 220 : 0)
-            - (tollCredits + tollClicks * ClickCredits) * context.CreditValue - trapRisk;
+            - (tollCredits + tollClicks * ClickCredits) * context.CreditValue - trapRisk - tagCost;
         bool win = unknown == 0 && RunnerValues.Winning(context, server);
         return new(win ? 100 : 0, score, "run/public-value-protection-and-access-reserve", true, new("run", null, null, null));
     }
@@ -50,16 +58,22 @@ public sealed partial class RunnerHeuristicPolicy
         int lastIce = run.Encounter is { Status: RunEncounterStatus.Complete } encounter
             && encounter.Ice?.Id == run.CurrentIce?.Id ? run.CurrentIceIndex - 1 : run.CurrentIceIndex;
         (int cost, int loss, int damage, bool blocked, int unknown) = Protection(context, server, lastIce);
+        RunForecast? forecast = context.Generation >= 6
+            ? RunModel.Plan(context, server, lastIce, context.Self.Credits + run.RunCredits, context.Self.Clicks)
+            : null;
+        if (forecast is not null)
+            (cost, loss, damage, blocked, unknown) = (forecast.Credits, forecast.CreditsLost, forecast.Damage, !forecast.CanGetIn, forecast.UnknownIce);
         if (damage > context.Features.Hand.Length || blocked || cost > context.Self.Credits + run.RunCredits - loss)
             return Value(-1000, "run/jack-out-before-unaffordable-threat", true);
-        (bool tollBlocked, int tollCredits, int tollClicks) = context.Generation >= 4
+        (bool tollBlocked, int tollCredits, int tollClicks) = forecast is not null ? (false, 0, forecast.Clicks)
+            : context.Generation >= 4
             ? ApproachToll(context, server, context.Self.Credits - Math.Max(0, cost - run.RunCredits) - loss, context.Self.Clicks)
             : (false, 0, 0);
         if (tollBlocked) return Value(-1000, "run/jack-out-before-unaffordable-toll", true);
         return new(unknown == 0 && RunnerValues.Winning(context, server) ? 100 : 0,
             Math.Max(250, RunnerValues.Server(context, server)) + SuccessRewards(context, server)
             - (Math.Max(0, cost - run.RunCredits) + loss + tollCredits + tollClicks * ClickCredits) * context.CreditValue
-            - damage * 160 - unknown * 220,
+            - damage * 160 - unknown * 220 - (forecast?.Tags ?? 0) * 300,
             "run/continue-visible-affordable-line", true);
     }
 
@@ -71,7 +85,7 @@ public sealed partial class RunnerHeuristicPolicy
     /// choose a cost or the run ends (Manegarm Skunkworks). Returns the cheapest
     /// payable option from what's left after the ICE, or blocked if none is.
     /// </summary>
-    private static (bool Blocked, int Credits, int Clicks) ApproachToll(HeuristicContext context, AgentServer server, int credits, int clicks)
+    internal static (bool Blocked, int Credits, int Clicks) ApproachToll(HeuristicContext context, AgentServer server, int credits, int clicks)
     {
         int tollCredits = 0, tollClicks = 0;
         foreach (AgentCard? card in server.Root)

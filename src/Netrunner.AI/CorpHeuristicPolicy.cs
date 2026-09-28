@@ -32,12 +32,18 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// worth its best target, and an advanceable trap is advanced and rezzed.
     /// </summary>
     public const string V7 = "corp-heuristic-v7";
+    /// <summary>
+    /// V7 judging where an agenda is safe with the whole-run model (A4a), run from
+    /// the Runner's side on public information with the Corp's own ICE known,
+    /// instead of counting ICE and breaker types.
+    /// </summary>
+    public const string V8 = "corp-heuristic-v8";
     /// <summary>The version new games and new manifests use.</summary>
     /// <summary>V5 plans but has not shown a ladder gain yet (Wave 3), so new games use V6, which doesn't plan.</summary>
-    public const string PolicyVersion = V7;
+    public const string PolicyVersion = V8;
     /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>
-    public const string LatestHeuristic = V7;
-    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7];
+    public const string LatestHeuristic = V8;
+    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8];
 
     public CorpHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -45,9 +51,9 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Corp policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version switch { V2 => 1, V3 => 2, V7 => 4, _ => 3 };
+        Generation = version switch { V2 => 1, V3 => 2, V7 => 4, V8 => 5, _ => 3 };
         Plans = version == V5;
-        Repairs = version is V6 or V7;
+        Repairs = version is V6 or V7 or V8;
     }
 
     /// <summary>Whether this version has the playtest repairs (V6).</summary>

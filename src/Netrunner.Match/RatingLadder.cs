@@ -46,7 +46,7 @@ public static partial class RatingLadder
     /// "standard-plan" is the A3 turn planner (Runner v3, Corp v5).
     /// </summary>
     public static IReadOnlyList<string> EntrantOrder { get; } =
-        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard", "standard-plan"];
+        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard", "standard-plan"];
 
     private const double EloScale = 400 / 2.302585092994046;
     private const double Ridge = 0.01;
@@ -98,6 +98,9 @@ public static partial class RatingLadder
             // Wave 3's playtest defaults before the Runner toll repair (Runner v5).
             "standard-w3" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V6 : RunnerHeuristicPolicy.V4),
+            // C1's shipped versions, before the whole-run model (Runner v7).
+            "standard-c1" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
+                side == PlayerSide.Corp ? CorpHeuristicPolicy.V7 : RunnerHeuristicPolicy.V6),
             "standard-plan" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V5 : RunnerHeuristicPolicy.V3),
             _ => throw new ArgumentException($"Unknown ladder entrant '{entrant}'.", nameof(entrant)),

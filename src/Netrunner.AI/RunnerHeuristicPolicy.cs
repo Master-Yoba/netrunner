@@ -31,12 +31,17 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// trashing an advanced trap is worth the damage it would deal.
     /// </summary>
     public const string V6 = "runner-heuristic-v6";
+    /// <summary>
+    /// V6 with the whole-run model (A4a): a run is costed as one path through every
+    /// piece of ICE, choosing per piece what to break and what to let fire.
+    /// </summary>
+    public const string V7 = "runner-heuristic-v7";
     /// <summary>The version new games and new manifests use.</summary>
     /// <summary>V3 plans but has not shown a ladder gain yet (Wave 3), so new games use V4, which doesn't plan.</summary>
-    public const string PolicyVersion = V6;
+    public const string PolicyVersion = V7;
     /// <summary>The latest version that never plans: the planner's model of the Runner.</summary>
-    public const string LatestHeuristic = V6;
-    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6];
+    public const string LatestHeuristic = V7;
+    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7];
 
     public RunnerHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -44,9 +49,9 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Runner policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, _ => 2 };
+        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 => 6, _ => 2 };
         Plans = version == V3;
-        Repairs = version is V4 or V5 or V6;
+        Repairs = version is V4 or V5 or V6 or V7;
     }
 
     /// <summary>Whether this version has the playtest repairs (V4).</summary>

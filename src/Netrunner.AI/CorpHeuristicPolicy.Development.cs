@@ -40,7 +40,9 @@ public sealed partial class CorpHeuristicPolicy
         else if (definition.Agenda is not null)
         {
             int protection = (server?.Ice.Length ?? 0) * 110 + (server?.Root.Where(value => context.Definition(value)?.Printed.CardClass == RuntimeCardClass.Upgrade).Count() ?? 0) * 170;
-            if (context.Generation >= 2 && server is not null)
+            if (context.Generation >= 5)
+                protection = ModelledProtection(context, server, install.CreditCost + definition.Printed.AdvancementRequirement);
+            else if (context.Generation >= 2 && server is not null)
             {
                 // A2: ICE the Runner's breakers already cover protects less.
                 int coverage = context.Parameter("coverage-scale", 100);
@@ -75,6 +77,23 @@ public sealed partial class CorpHeuristicPolicy
             score = 70 + (server?.Root.Length ?? 0) * 60 + (server?.Ice.Length ?? 0) * 40 - lost
                 + (server?.Root.Count(value => value is { Rezzed: true } && context.Definition(value)?.Printed.CardClass == RuntimeCardClass.Upgrade) ?? 0) * 60;
         return Value(score, "development/destination-minus-replacement-value", approximate: true, objective: new("install", null, null, install.CardId.Value));
+    }
+
+    /// <summary>
+    /// v8: how well a server protects an agenda, from the whole-run model (A4a) run
+    /// from the Runner's side: its credits, a full next turn's clicks and its grip
+    /// are public, and the Corp's own ICE counts as rezzed while the Corp can pay
+    /// for it after <paramref name="committed"/> credits. A server the Runner can't
+    /// get into is worth most; otherwise what getting in costs the Runner.
+    /// </summary>
+    private static int ModelledProtection(HeuristicContext context, AgentServer? server, int committed)
+    {
+        if (server is null) return 0;
+        RunForecast forecast = RunModel.Plan(context, server, server.Ice.Length - 1, context.Opponent.Credits + 2, clicks: 3,
+            grip: context.Features.Board.HiddenZoneCounts.RunnerGrip, corpRezBudget: Math.Max(0, context.Self.Credits - committed));
+        if (!forecast.CanGetIn) return 650;
+        int cost = forecast.Credits + forecast.CreditsLost + forecast.Clicks * 2 + forecast.Tags * 2 + forecast.Damage * 2;
+        return Math.Min(550, cost * 60) + forecast.UnknownIce * 80;
     }
 
     /// <summary>True when an installed Runner breaker can interface with ICE of this type.</summary>
