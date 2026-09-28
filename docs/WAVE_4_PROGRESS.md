@@ -337,3 +337,38 @@ measured against (Corp v8, Runner v7). A next attempt should score the
 run's rollouts later than the run's end (at the end of the Corp's next turn)
 and sample the Corp's hidden cards from a deck-like mix; Corp v9's planning
 and v10's rez search could then be combined.
+## U6: onboarding and playtest loop
+
+**First-game hints.** `OnboardingHints` (Match) picks at most one hint for
+the viewer's own live decision, the first time it offers what the hint
+explains: the basics of clicks at the first action window, protecting
+servers with ICE, advancing and scoring, rezzing on approach, making a run,
+breaking ICE, and accessing cards. The client shows it as a small card in the
+table's free top-right corner with "Got it" and "Hide hints". Each hint shows
+once; after the first finished game hints turn themselves off, and Settings
+has a "First-game hints" toggle to bring them back (with a fresh set).
+
+**Opponent intent cues (optional).** `OpponentIntentCues` reads only the
+public board: which of the Corp's remotes carry advancement counters, and an
+opponent within two points of winning. They show above the hint, and
+Settings can turn them off.
+
+**Preferences.** Hints seen, the hint and cue toggles, and whether a game has
+been finished live in `user://preferences.cfg`. Scripted smoke, capture and
+gate runs never read or write it.
+
+**Playtest protocol.** The client now logs "All legal actions…", Skip
+animation, Stop at next window, and hints shown, dismissed and turned off to
+`ui-diagnostics.jsonl`. `netrunner-cli playtest-summary <session dir or zip>`
+reads a session and prints the protocol's numbers: time per turn of the local
+player, submissions and rejections, drops and invalid drops, card
+inspections, and those controls. On the 27 September playtest (Corp,
+expanded decks): 13 turns, median 28 s, longest 63 s, 3 invalid drops of 17,
+no rejected submissions.
+
+**Verification.** `OnboardingHintsTests` and `PlaytestSummaryTests`; a new
+`--onboarding-smoke` in `make verify` starts a Gateway game from the menu as
+the Corp, keeps the opening hand, and checks that the basics hint appears at
+the first action window inside the viewport, that "Got it" records it and
+moves on to the ICE hint, and that "Hide hints" turns hints off and clears
+the Settings toggle.

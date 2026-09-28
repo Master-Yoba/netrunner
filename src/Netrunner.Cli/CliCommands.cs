@@ -82,6 +82,11 @@ public static partial class CliCommands
             return RunAiLadder(args, output, error);
         }
 
+        if (args.Length > 0 && args[0] == "playtest-summary")
+        {
+            return RunPlaytestSummary(args, output, error);
+        }
+
         if (args.Length > 0 && args[0] == "ai-review")
         {
             return RunAiReview(args, output, error);
@@ -211,6 +216,7 @@ public static partial class CliCommands
             + "engine-bench [--content developer|official] [--games N] [--seed <unsigned-integer>] [--json] | "
             + "ai-ladder [--content developer|official] [--entrants random,contract,easy,standard] [--seeds-per-pairing N] "
             + "[--seed <unsigned-integer>] [--bootstrap N] [--action-cap N] [--workers 1..64] [--output <new directory>] [--json] | "
+            + "playtest-summary <session-directory|zip> | "
             + "ai-review <session-directory> [--profile standard|easy] [--all] [--output <new file>] [--json] | "
             + "card-data normalize --upstream <file> --copyright <file> --commit <40-hex-sha> "
             + "--retrieval-date YYYY-MM-DD --output-dir <directory> [--json] | "

@@ -101,6 +101,7 @@ public partial class Main
 		if (_layout?.GetNodeOrNull<Control>("Header") is not { } header) return;
 		foreach (string name in new[] { "NewGame", "SkipAnimation", "Status", "Phase" })
 			if (header.GetNodeOrNull<Control>(name) is { } control) control.Visible = !menu;
+		if (menu && _onboardingColumn is not null) _onboardingColumn.Visible = false;
 	}
 
 	private VBoxContainer BuildMenuTitleView()

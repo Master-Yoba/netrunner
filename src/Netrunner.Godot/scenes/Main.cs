@@ -1047,6 +1047,7 @@ public partial class Main : Control
 		if (_useCardTable)
 		{
 			RenderCardTable(snapshot, decisionChanged);
+			RenderOnboarding(snapshot);
 			return;
 		}
 		_board.Visible = true;

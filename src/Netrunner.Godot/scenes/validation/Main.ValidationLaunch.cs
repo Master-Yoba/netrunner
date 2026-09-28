@@ -118,6 +118,10 @@ public partial class Main
 		{
 			_ = RunMainMenuSmokeAsync();
 		}
+		else if (arguments.Contains("--onboarding-smoke", StringComparer.Ordinal))
+		{
+			_ = RunOnboardingSmokeAsync();
+		}
 		else if (arguments.Contains("--invisible-window-smoke", StringComparer.Ordinal))
 		{
 			_ = RunInvisibleWindowSmokeAsync();

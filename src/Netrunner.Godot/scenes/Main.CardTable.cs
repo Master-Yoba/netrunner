@@ -109,6 +109,7 @@ public partial class Main
 		_tableViewport.AddChild(_beats);
 		BuildBoardDrag();
 		BuildSettingsMenu();
+		BuildOnboarding();
 		BuildActionChips();
 		BuildEncounterOverlay();
 	}
@@ -263,12 +264,12 @@ public partial class Main
 				_tablePrompt.Text += all.Any(action => action.Parameters is RunBreakParameters { SubroutineId: not null })
 					? " · Click an available icebreaker or hosted card"
 					: " · Click a matching icebreaker to boost or break";
-				AddButton("All legal actions…", () => { _tableAllActions = true; RenderCardTableActions(snapshot); });
+				AddButton("All legal actions…", () => { _tableAllActions = true; RecordFullMatchSelection("ui-control", "all-legal-actions"); RenderCardTableActions(snapshot); });
 			}
 			else if (decision.Kind == DecisionKind.TurnDiscard && !_tableAllActions)
 			{
 				displayed = [];
-				AddButton("All legal actions…", () => { _tableAllActions = true; RenderCardTableActions(snapshot); });
+				AddButton("All legal actions…", () => { _tableAllActions = true; RecordFullMatchSelection("ui-control", "all-legal-actions"); RenderCardTableActions(snapshot); });
 			}
 			else if (ordinary && !_tableAllActions)
 			{
@@ -285,7 +286,7 @@ public partial class Main
 					|| _tableSelectedServer is not null;
 				if (_tableSelectedCard is not null || _tableSelectedServer is not null)
 					_tablePrompt.Text += " · Esc clears selection";
-				AddButton("All legal actions…", () => { _tableAllActions = true; RenderCardTableActions(snapshot); });
+				AddButton("All legal actions…", () => { _tableAllActions = true; RecordFullMatchSelection("ui-control", "all-legal-actions"); RenderCardTableActions(snapshot); });
 			}
 			else if (_tableAllActions)
 				AddButton("Back to table", () => { _tableAllActions = false; RenderCardTableActions(snapshot); });
@@ -296,7 +297,7 @@ public partial class Main
 					if (_gameTable.GetDropRect("HostCard", source) is null && _tableAccessCard.CardId != source)
 						AddButton(ActionCardName(source) + " · card actions…", () => TrySelectSpatialCard(source));
 				if (spatial.Count > 0 && !ordinary && !encounter && decision.Kind != DecisionKind.TurnDiscard)
-					AddButton("All legal actions…", () => { _tableAllActions = true; RenderCardTableActions(snapshot); });
+					AddButton("All legal actions…", () => { _tableAllActions = true; RecordFullMatchSelection("ui-control", "all-legal-actions"); RenderCardTableActions(snapshot); });
 				HashSet<ActionId> spatialIds = spatial.Select(action => action.Action.Id).ToHashSet();
 				displayed = displayed.Where(action => !spatialIds.Contains(action.Id) && !_accessActionButtons.ContainsKey(action.Id));
 			}
