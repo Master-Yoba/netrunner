@@ -114,6 +114,10 @@ public partial class Main
 		{
 			OpenInteractionLab();
 		}
+		else if (arguments.Contains("--main-menu-smoke", StringComparer.Ordinal))
+		{
+			_ = RunMainMenuSmokeAsync();
+		}
 		else if (arguments.Contains("--invisible-window-smoke", StringComparer.Ordinal))
 		{
 			_ = RunInvisibleWindowSmokeAsync();

@@ -1043,6 +1043,7 @@ public partial class Main : Control
 		{
 			startPanel.Visible = false;
 		}
+		SetMenuHeader(false);
 		if (_useCardTable)
 		{
 			RenderCardTable(snapshot, decisionChanged);
