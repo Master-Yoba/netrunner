@@ -492,6 +492,7 @@ board-actions smoke checks the lean, its stillness and turning it off.
 | U6 onboarding and playtest loop | Done: hints, intent cues, `playtest-summary`; placement **needs the playtest** |
 | U5 art direction, feel and audio | Partly: synthesized sound, rez flip, damage shake, lane glow, experimental hover tilt. The visual identity **needs a playtest screenshot review**; music and identity idle life are open |
 | A4a extras (HQ and R&D knowledge, one keep ranking) | **Runner v10 ships** (central memory: +47 and +53 on two seeds); the keep ranking already exists for discards and trashes |
+| A8 Corp archetypes | Open: planned in the roadmap (28 September); the Corp v11 playtest repairs are its first step |
 
 Default bots after Wave 4: Corp v11 (plans turn actions, with the playtest
 repairs) and Runner v10 (central memory) on the legal decks; the tutorial decks keep the frozen C1 bot (Corp v7, Runner v6).
