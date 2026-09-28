@@ -307,9 +307,46 @@ ladder.
 - **Decision point**, recorded in `IMPLEMENTATION_PLAN.md`:
   - M6 (LLM/hybrid mode), or
   - the next card set, which requires the E6 Core-growth budget to be set,
-    and brings the AI plan's A7: per-format tuned data (one bot, each pool's
-    fitted weights and priors) and deck-aware evaluation features, or
+    and brings C2 (format snapshots, below) and the AI plan's A7: per-format
+    tuned data (one bot, each pool's fitted weights and priors) and
+    deck-aware evaluation features, or
   - an RC.
+
+### C2. Format snapshots (with the next card set)
+
+Formats rotate. Startup in 2026 is System Gateway, Elevation and Vantage
+Point, after the Liberation cycle rotated out; in 2025 it was System
+Gateway, Elevation and the Liberation cycle
+([Null Signal Games, Startup balance update 26.03](https://nullsignal.games/blog/startup-balance-update-26-03/)).
+A rotation also changes the ban list and deck-building rules: from 2 March
+2026, Startup bans NBN: Reality Plus, Let Them Dream, Seamless Launch,
+Mercia B4LL4RD and Cleaver, unbans Pharos, and allows at most 3 agendas worth
+3 or more points. So a format is a series of dated **snapshots**, and a
+player who picks "Startup" chooses any snapshot we implement ("Startup 2026",
+"Startup 2025").
+
+- **A snapshot is data.** A versioned file per snapshot: its legal sets, its
+  banned and restricted cards, its deck-building rules and its effective
+  date, alongside the card data (for example `data/formats/startup-2026-03.json`).
+  Gateway-only is a snapshot too, and the tutorial decks are their own.
+- **Deck validation per snapshot.** `DeckValidator` takes the snapshot and
+  checks legality against it, with a clear reason for each failure (a card
+  outside the snapshot's sets, a banned card, a rule such as the agenda
+  limit). Sample and preset decks are tagged with the snapshots they are
+  legal in; for example, several Gateway sample decks are not legal in 2026
+  Startup, since Hyper Velocity is built on Reality Plus and some Runner
+  decks play Cleaver.
+- **Only implemented snapshots are offered.** A snapshot is selectable when
+  every card in its sets is implemented; the others are listed as not yet
+  available, like presets locked on coverage today.
+- **The menu (U7)** gains a format step before the decks: choose a format,
+  then one of its implemented snapshots (the newest by default), then the
+  decks legal in it.
+- **Saves and replays record the snapshot**, so a game resumes and verifies
+  under the rules it started with, even after a newer snapshot is added.
+- **The bot's tuned data follows the snapshot** (AI plan A7): the deck pool
+  for fitting and the ladder is a snapshot's legal decks, and a snapshot
+  without its own fit falls back to the nearest one or a general fit.
 
 ## 4. Where M6 fits
 

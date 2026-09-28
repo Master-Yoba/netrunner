@@ -392,9 +392,10 @@ is data:
   heuristics' named scales and the hidden-card priors (what an unrezzed
   piece of ICE or an advanced card probably is) are fitted per deck pool and
   versioned with it: for example `data/ai/evaluation-gateway-v1.json`,
-  `evaluation-startup-v1.json`. A game loads the file for its format (the
-  ladder's pool version, A1b) and falls back to a fit on all pools when none
-  exists. The frozen tutorial bot is the first case of a pinned setup for one
+  `evaluation-startup-2026-03.json`. Formats rotate, so the key is a format
+  snapshot (the roadmap's C2: its legal sets, bans and rules as of a date).
+  A game loads the file for its snapshot (the ladder's pool version, A1b)
+  and falls back to the nearest snapshot's fit, or a fit on all pools. The frozen tutorial bot is the first case of a pinned setup for one
   pool.
 - **Split only where the data says so.** Formats are mostly nested (Gateway
   within Startup within Standard). When a pool is added, fit once on all
