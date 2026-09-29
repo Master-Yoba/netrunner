@@ -110,6 +110,10 @@ public partial class Main
 		{
 			_ = RunInteractionSmokeAsync();
 		}
+		else if (arguments.Contains("--run-hud-soak", StringComparer.Ordinal))
+		{
+			_ = RunRunHudSoakAsync(arguments);
+		}
 		else if (arguments.Contains("--run-hud-smoke", StringComparer.Ordinal))
 		{
 			_ = RunRunHudSmokeAsync();

@@ -62,6 +62,10 @@ ai-benchmark-smoke:
 ai-benchmark-developer:
 	bash scripts/ai-benchmark.sh developer $(BENCHMARK_ARGS)
 
+.PHONY: run-hud-soak
+run-hud-soak:
+	bash scripts/run-hud-soak.sh $(SOAK_ARGS)
+
 .PHONY: ui-capture
 ui-capture:
 	bash scripts/ui-capture.sh $(CAPTURE_ARGS)

@@ -730,6 +730,30 @@ Evidence (synthetic lab decks, no card art):
 [passed ICE derezzed](evidence/u8/run-hud-passed-ice.png),
 [Corp seat](evidence/u8/run-hud-corp.png).
 
+### Run HUD soak
+
+Playtests kept finding HUD glitches that hand-built smoke positions missed. `make run-hud-soak`
+(`scripts/run-hud-soak.sh [--games N] [--jobs N] [--seed S] [--max-actions N]`) plays whole
+Gateway games through the headless client with the HUD on. It alternates seats, each game in its
+own launch and several at once. The local seat is played by a seeded, run-happy chooser: it runs
+and installs often, picks boosts, breaks, Break all, accesses and the occasional jack out at
+random, and presses the HUD's own buttons. On every frame of every run it checks that the HUD:
+
+- stays visible for the whole run (except while Archives' Access all runs);
+- changes height at most once at one position of the run, and never goes back;
+- never grows wider than 480 px;
+- stays inside the table and clear of the history panel.
+
+It also checks that the player's run decision always shows an enabled control once the table
+settles, and that pressing a HUD button submits. Violations go to each game's `soak.json` with the
+seat, snapshot and action count. The HUD also writes its visibility and height changes to the UI
+log, so a playtest zip shows the same.
+
+The soak's first runs caught the height flicker the playtests reported: every frame the HUD asked
+for less than its content's minimum size, and Godot enforced the minimum, so it flipped between
+two sizes. It also caught wrapped labels that fed their last layout's width back into the HUD's
+height. Both are fixed.
+
 ## Trigger automation audit
 
 The client resolves the player's trigger decisions that can only help them.

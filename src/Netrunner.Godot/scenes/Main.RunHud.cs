@@ -17,6 +17,8 @@ namespace Netrunner.GodotClient;
 public partial class Main
 {
 	private const float RunHudWidth = 480;
+	/// <summary>The width inside the HUD's margins.</summary>
+	private const float RunHudInnerWidth = RunHudWidth - 36;
 	/// <summary>
 	/// The HUD's standing height (playtest, 29 September: sizing it to its content made it
 	/// jump as snapshots came in). Tall enough for most steps; only an unusually long one
@@ -31,7 +33,7 @@ public partial class Main
 	private Label? _runHudTitle;
 	private Label? _runHudStep;
 	private Label? _runHudCredits;
-	private HBoxContainer? _runHudFooter;
+	private HFlowContainer? _runHudFooter;
 	private CheckButton? _runHudSetting;
 	private string? _runHudServerId;
 	private MatchViewModel? _runHudView;
@@ -48,7 +50,8 @@ public partial class Main
 		get
 		{
 			IReadOnlyList<string> arguments = OS.GetCmdlineUserArgs();
-			if (arguments.Contains("--run-hud-smoke", StringComparer.Ordinal) || arguments.Contains("--run-hud", StringComparer.Ordinal)) return true;
+			if (arguments.Contains("--run-hud-smoke", StringComparer.Ordinal) || arguments.Contains("--run-hud-soak", StringComparer.Ordinal)
+				|| arguments.Contains("--run-hud", StringComparer.Ordinal)) return true;
 			bool scripted = arguments.Any(arg => arg.Contains("smoke", StringComparison.Ordinal)
 				|| arg.Contains("capture", StringComparison.Ordinal) || arg.Contains("gate", StringComparison.Ordinal));
 			return !scripted && !_interactionLab && _runHudSetting?.ButtonPressed != false;
@@ -88,8 +91,10 @@ public partial class Main
 		content.AddThemeConstantOverride("separation", 12);
 		_runHud.AddChild(content);
 
-		HBoxContainer header = new() { Name = "Header", MouseFilter = Control.MouseFilterEnum.Ignore };
-		header.AddThemeConstantOverride("separation", 12);
+		// Wraps onto a second line for a long server name or credit line rather than widen the panel.
+		HFlowContainer header = new() { Name = "Header", MouseFilter = Control.MouseFilterEnum.Ignore };
+		header.AddThemeConstantOverride("h_separation", 12);
+		header.AddThemeConstantOverride("v_separation", 2);
 		_runHudTitle = new Label { Name = "Title", ThemeTypeVariation = "DisplayLabel", MouseFilter = Control.MouseFilterEnum.Ignore };
 		_runHudTitle.AddThemeFontSizeOverride("font_size", 26);
 		_runHudStep = new Label
@@ -120,8 +125,9 @@ public partial class Main
 		content.AddChild(_runHudBody);
 
 		content.AddChild(new HSeparator { MouseFilter = Control.MouseFilterEnum.Ignore });
-		_runHudFooter = new HBoxContainer { Name = "Footer", Alignment = BoxContainer.AlignmentMode.End, MouseFilter = Control.MouseFilterEnum.Ignore };
-		_runHudFooter.AddThemeConstantOverride("separation", 10);
+		_runHudFooter = new HFlowContainer { Name = "Footer", Alignment = FlowContainer.AlignmentMode.End, MouseFilter = Control.MouseFilterEnum.Ignore };
+		_runHudFooter.AddThemeConstantOverride("h_separation", 10);
+		_runHudFooter.AddThemeConstantOverride("v_separation", 8);
 		content.AddChild(_runHudFooter);
 		_tableViewport.AddChild(_runHud);
 	}
@@ -203,7 +209,7 @@ public partial class Main
 		else if (!encounterShown && AccessActionsPresenter.Card(view) is { IsKnown: true } accessed)
 			BuildAccessSection(view, accessed, issued);
 		else if (!encounterShown)
-			_runHudBody!.AddChild(MakeWrappedLabel(RunHudWaitingText(view, run, mine,
+			_runHudBody!.AddChild(HudText(RunHudWaitingText(view, run, mine,
 				view.LegalActions.Any(action => !RunHudTakes(action, view))), 13, Muted));
 
 		// The run's own controls: everything issued that isn't a breaker's, in the footer.
@@ -220,13 +226,33 @@ public partial class Main
 			Button button = RunHudButton(label, action.Kind == ActionKind.JackOut ? RunHudTone.Quiet
 				: action.Kind == ActionKind.PassPriority && unbroken && !corpSeat ? RunHudTone.Danger : RunHudTone.Normal);
 			button.Pressed += () => SubmitRunHudAction(action);
-			_runHudFooter!.AddChild(button);
+			// A long label (a bioroid ability) goes full width above the footer rather than widen it.
+			if (label.Length > 24)
+			{
+				button.QueueFree();
+				button = RunHudWideButton(label, RunHudTone.Normal);
+				button.Pressed += () => SubmitRunHudAction(action);
+				_runHudBody!.AddChild(button);
+			}
+			else _runHudFooter!.AddChild(button);
 			_runHudButtons[action.Id] = button;
 		}
 		_runHudFooter!.Visible = _runHudFooter.GetChildCount() > 0;
 		if (!_runHud!.Visible) WriteFullMatchDiagnostic("run-hud", new { visible = true, sequence = snapshot.Sequence, step = run.Step.ToString() });
 		_runHud.Visible = true;
 		UpdateRunHudButtons(snapshot);
+	}
+
+	/// <summary>
+	/// Wrapped HUD text at a fixed width, so its height never depends on the previous
+	/// layout (the run HUD soak caught wrapped labels making the panel flip between heights).
+	/// </summary>
+	private static Label HudText(string text, int size, Color colour, float width = RunHudInnerWidth)
+	{
+		Label label = MakeLabel(text, size, colour);
+		label.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		label.CustomMinimumSize = new Vector2(width, 0);
+		return label;
 	}
 
 	/// <summary>Removes children at once, so a rebuild in the same frame keeps its node names.</summary>
@@ -284,15 +310,15 @@ public partial class Main
 		HashSet<ActionId> offered = [.. issued.Select(action => action.Id)];
 		foreach (LegalActionViewModel action in AccessActionsPresenter.Actions(view).Where(action => offered.Contains(action.Id)))
 		{
-			Button button = RunHudButton(FriendlyText(AccessActionsPresenter.Label(action, card)),
-				action.Kind is ActionKind.StealAgenda or ActionKind.TrashAccessedCard ? RunHudTone.Primary : RunHudTone.Normal);
+			Button button = RunHudWideButton(FriendlyText(AccessActionsPresenter.Label(action, card)),
+				action.Kind is ActionKind.StealAgenda or ActionKind.TrashAccessedCard ? RunHudTone.Primary : RunHudTone.Normal, RunHudInnerWidth - 134);
 			button.TooltipText = action.CostSummary ?? button.Text;
 			button.Pressed += () => SubmitRunHudAction(action);
 			side.AddChild(button);
 			_runHudButtons[action.Id] = button;
 		}
 		if (view.Run!.RunCredits > 0 && offered.Count > 0)
-			side.AddChild(MakeWrappedLabel($"{view.Run.RunCredits} run credits available · spent first, gone at run end.", 12, Muted));
+			side.AddChild(HudText($"{view.Run.RunCredits} run credits available · spent first, gone at run end.", 12, Muted, RunHudInnerWidth - 190));
 		row.AddChild(side);
 		body.AddChild(row);
 	}
@@ -309,7 +335,7 @@ public partial class Main
 		if (_accessAllRunId is null && IsArchivesBreachChoice(snapshot.View))
 		{
 			int remaining = issued.Count(action => action.Kind == ActionKind.ChooseBreachCandidate);
-			Button all = RunHudButton($"ACCESS ALL · {remaining}", RunHudTone.Primary);
+			Button all = RunHudWideButton($"ACCESS ALL · {remaining}", RunHudTone.Primary);
 			all.Name = "AccessAll";
 			all.Pressed += () => StartAccessAll(snapshot, remaining);
 			body.AddChild(all);
@@ -323,7 +349,7 @@ public partial class Main
 				BreachCandidateParameters { Source: BreachHiddenCandidateSource.CorpDeck } => "Access the top card of R&D",
 				_ => TableActionLabel(candidate),
 			};
-			Button button = RunHudButton(label, RunHudTone.Normal);
+			Button button = RunHudWideButton(label, RunHudTone.Normal);
 			button.Pressed += () => SubmitRunHudAction(candidate);
 			body.AddChild(button);
 			_runHudButtons[candidate.Id] = button;
@@ -341,14 +367,14 @@ public partial class Main
 		{
 			string where = run.CurrentIce is { } ice ? (ice.IsKnown ? ice.Title : "your face-down ICE")
 				: run.CurrentIceIndex < 0 ? "the server" : "your ICE";
-			body.AddChild(MakeWrappedLabel(mine ? $"The Runner is at {where}." : "The Runner has priority.", 14, Colors.White));
+			body.AddChild(HudText(mine ? $"The Runner is at {where}." : "The Runner has priority.", 14, Colors.White));
 		}
 		foreach (LegalActionViewModel rez in issued.Where(action => action.Kind is ActionKind.RezIce or ActionKind.RezCard))
 		{
 			string? cardId = rez.Parameters switch { RezCardParameters card => card.CardId.Value, RunIceParameters ice => ice.IceId.Value, _ => null };
 			int? cost = rez.CostQuote?.EffectiveCost ?? (rez.Parameters as RezCardParameters)?.CreditCost;
 			string title = cardId is null ? "card" : ActionCardName(cardId);
-			Button button = RunHudButton($"REZ {title.ToUpperInvariant()}{(cost is { } credits ? $" · {credits} ¢" : string.Empty)}", RunHudTone.Primary);
+			Button button = RunHudWideButton($"REZ {title.ToUpperInvariant()}{(cost is { } credits ? $" · {credits} ¢" : string.Empty)}", RunHudTone.Primary);
 			button.Name = "Rez";
 			button.Disabled = cost is { } price && price > view.Corp.Credits;
 			button.Pressed += () => SubmitRunHudAction(rez);
@@ -362,7 +388,7 @@ public partial class Main
 		body.AddChild(new Label { Text = fromScore ? "SCORE AREA · USABLE NOW" : "ABILITIES", ThemeTypeVariation = "MonoLabel", MouseFilter = Control.MouseFilterEnum.Ignore });
 		foreach (LegalActionViewModel ability in abilities)
 		{
-			Button button = RunHudButton(TableActionLabel(ability), RunHudTone.Normal);
+			Button button = RunHudWideButton(TableActionLabel(ability), RunHudTone.Normal);
 			button.Pressed += () => SubmitRunHudAction(ability);
 			body.AddChild(button);
 			_runHudButtons[ability.Id] = button;
@@ -437,7 +463,7 @@ public partial class Main
 			body.AddChild(BreakerRow(snapshot, encounter, source, ActionCardName(source), null, issued));
 		foreach (LegalActionViewModel ability in issued.Where(action => action.Kind == ActionKind.UseAbility))
 		{
-			Button button = RunHudButton(TableActionLabel(ability), RunHudTone.Normal);
+			Button button = RunHudWideButton(TableActionLabel(ability), RunHudTone.Normal);
 			button.Pressed += () => SubmitRunHudAction(ability);
 			body.AddChild(button);
 			_runHudButtons[ability.Id] = button;
@@ -463,6 +489,9 @@ public partial class Main
 		ordinal.AddThemeColorOverride("font_color", color);
 		GameSymbolLabel body = new()
 		{
+			// A fixed width: wrapped text measured at the last layout's width fed back into the HUD's
+			// size and made it flip between heights (found by the run HUD soak).
+			CustomMinimumSize = new Vector2(RunHudInnerWidth - 150, 0),
 			SymbolText = text,
 			FitContent = true,
 			ScrollActive = false,
@@ -527,8 +556,10 @@ public partial class Main
 		row.AddChild(column);
 		if (!matching) return row;
 
-		HBoxContainer controls = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
-		controls.AddThemeConstantOverride("separation", 8);
+		// A flow wraps a long row of breaker buttons instead of widening the panel.
+		HFlowContainer controls = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
+		controls.AddThemeConstantOverride("h_separation", 8);
+		controls.AddThemeConstantOverride("v_separation", 8);
 		LegalActionViewModel[] own = BoardIcebreakerPresenter.EncounterActions(snapshot.View, issued)
 			.Where(action => BoardIcebreakerPresenter.Source(action) == id).ToArray();
 		bool atStrength = breaker is null || encounter.EffectiveStrength is not { } required || breaker.EffectiveStrength >= required;
@@ -579,6 +610,18 @@ public partial class Main
 	}
 
 	private enum RunHudTone { Normal, Primary, Danger, Quiet }
+
+	/// <summary>
+	/// A full-width HUD button whose text wraps at a fixed width, so a long label (a card's
+	/// ability, a long card name) never widens the panel (found by the run HUD soak).
+	/// </summary>
+	private Button RunHudWideButton(string text, RunHudTone tone, float width = RunHudInnerWidth)
+	{
+		Button button = RunHudButton(text, tone);
+		button.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+		button.CustomMinimumSize = new Vector2(width, button.CustomMinimumSize.Y);
+		return button;
+	}
 
 	private Button RunHudButton(string text, RunHudTone tone)
 	{
@@ -707,7 +750,11 @@ public partial class Main
 		float needed = Math.Max(RunHudHeight, hud.GetCombinedMinimumSize().Y);
 		_runHudGrowFrames = needed > _runHudHeight + 1 ? _runHudGrowFrames + 1 : 0;
 		if (needed < _runHudHeight || _runHudGrowFrames >= RunHudGrowFrames) _runHudHeight = needed;
-		Vector2 wanted = new(RunHudWidth, Math.Min(_runHudHeight, _tableViewport.Size.Y - 24));
+		// Never ask for less than the content needs: Godot enforces the minimum, and asking again
+		// every frame made the panel flip between two sizes (found by the run HUD soak).
+		Vector2 minimum = hud.GetCombinedMinimumSize();
+		Vector2 wanted = new(Math.Max(RunHudWidth, minimum.X),
+			Math.Max(minimum.Y, Math.Min(_runHudHeight, _tableViewport.Size.Y - 24)));
 		if (!hud.Size.IsEqualApprox(wanted))
 		{
 			hud.Size = wanted;
