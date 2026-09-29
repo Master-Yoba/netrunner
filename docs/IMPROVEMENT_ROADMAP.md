@@ -438,6 +438,26 @@ actions in the same place once the run succeeds. The dock keeps only the
 turn's own actions. Gate: a scripted run from start to access touches only
 the HUD, and a human playtest finds it faster than today's run.
 
+**U5 direction (chosen 29 September).** Mockups of the run HUD (U8) in three
+looks were compared on a Claude Design canvas; **"Corp chrome against Runner
+neon"** was chosen: the Corp's half of the table in brushed steel tinted to
+its faction, with light faction decor (Weyland girders and hazard strips),
+the Runner's half dark with its faction's neon and a faint circuit grid, a
+faction emblem on each identity plate, and the run drawn as a connection
+from the Runner's rig straight through the ICE to the root: passed ICE
+split where the line went through it, the encountered ICE lit at the
+contact point, the rest dim. Faction colours: Criminal blue, Shaper acid
+green, Anarch magenta (cyan as a neutral Runner); Jinteki red, Haas-Bioroid
+violet, NBN yellow, Weyland green. The emblems in the mockup are
+placeholders; official faction symbols only if their licence allows. Type:
+Rajdhani display, IBM Plex Sans body, IBM Plex Mono for numbers and state
+(Google Fonts, open licence).
+
+**Future experiment: a terminal client.** One mockup direction drew the run
+as a terminal session (`trace remote-1`, every choice a command). Not a
+current goal, but worth trying later: a client that looks and plays like a
+real terminal, even over SSH, on the same engine and match coordinator.
+
 ### Wave 5 — difficulty, hardening and the next decision
 
 - A6 compute-based difficulty tiers and personalities, validated by the ladder
