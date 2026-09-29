@@ -147,6 +147,7 @@ public partial class Main : Control
 		if (arguments.Contains("--card-art-smoke", StringComparer.Ordinal)) PrepareCardArtworkSmoke();
 		if (arguments.Contains("--m5-developer-smoke", StringComparer.Ordinal)) ProjectSettings.SetSetting("developer/enabled", true);
 		BuildShell();
+		AddChild(new UiMotion { Name = "UiMotion", Reduced = () => _reducedMotion.ButtonPressed || _skipAnimation });
 		StartLaunchMode(arguments, fullSmokeReload);
 	}
 
