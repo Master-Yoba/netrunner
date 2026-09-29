@@ -23,6 +23,9 @@ public partial class Main
 	/// grows it. No scrolling in the game UI.
 	/// </summary>
 	private const float RunHudHeight = 640;
+	private const int RunHudGrowFrames = 4;
+	private float _runHudHeight = RunHudHeight;
+	private int _runHudGrowFrames;
 	private PanelContainer? _runHud;
 	private VBoxContainer? _runHudBody;
 	private Label? _runHudTitle;
@@ -148,7 +151,17 @@ public partial class Main
 		RunHudActive = show;
 		if (!show)
 		{
-			_runHud!.Visible = false;
+			if (_runHud!.Visible)
+				WriteFullMatchDiagnostic("run-hud", new
+				{
+					visible = false,
+					sequence = snapshot.Sequence,
+					runActive = view.Run is not null,
+					endReason = view.Run?.EndReason?.ToString(),
+					accessAll = _accessAllRunId is not null,
+					terminal = snapshot.IsTerminal
+				});
+			_runHud.Visible = false;
 			StopBreakAll();
 			_runHudView = null;
 			return;
@@ -211,7 +224,8 @@ public partial class Main
 			_runHudButtons[action.Id] = button;
 		}
 		_runHudFooter!.Visible = _runHudFooter.GetChildCount() > 0;
-		_runHud!.Visible = true;
+		if (!_runHud!.Visible) WriteFullMatchDiagnostic("run-hud", new { visible = true, sequence = snapshot.Sequence, step = run.Step.ToString() });
+		_runHud.Visible = true;
 		UpdateRunHudButtons(snapshot);
 	}
 
@@ -252,6 +266,8 @@ public partial class Main
 			Text = AccessTitle(card, view),
 			ThemeTypeVariation = "DisplayLabel",
 			AutowrapMode = TextServer.AutowrapMode.WordSmart,
+			// Wrapped labels get their real width up front, so they never measure as a thin, tall column.
+			CustomMinimumSize = new Vector2(RunHudWidth - 190, 0),
 			MouseFilter = Control.MouseFilterEnum.Ignore
 		};
 		title.AddThemeFontSizeOverride("font_size", 20);
@@ -262,6 +278,7 @@ public partial class Main
 			Text = kind,
 			ThemeTypeVariation = "MonoLabel",
 			AutowrapMode = TextServer.AutowrapMode.WordSmart,
+			CustomMinimumSize = new Vector2(RunHudWidth - 190, 0),
 			MouseFilter = Control.MouseFilterEnum.Ignore
 		});
 		HashSet<ActionId> offered = [.. issued.Select(action => action.Id)];
@@ -684,15 +701,27 @@ public partial class Main
 		// zero width first (ResetSize) rewrapped every label each frame and made
 		// the panel's height jump between tall and short.
 		// The standing height, or the content's if a step needs more; never taller than the table.
+		// Growth waits a few frames: freshly built wrapped text first measures at almost no width,
+		// which once made the panel flash very tall for a frame (playtest, 29 September).
 		hud.CustomMinimumSize = new Vector2(RunHudWidth, 0);
-		float height = Math.Max(RunHudHeight, hud.GetCombinedMinimumSize().Y);
-		Vector2 wanted = new(RunHudWidth, Math.Min(height, _tableViewport.Size.Y - 24));
-		if (!hud.Size.IsEqualApprox(wanted)) hud.Size = wanted;
+		float needed = Math.Max(RunHudHeight, hud.GetCombinedMinimumSize().Y);
+		_runHudGrowFrames = needed > _runHudHeight + 1 ? _runHudGrowFrames + 1 : 0;
+		if (needed < _runHudHeight || _runHudGrowFrames >= RunHudGrowFrames) _runHudHeight = needed;
+		Vector2 wanted = new(RunHudWidth, Math.Min(_runHudHeight, _tableViewport.Size.Y - 24));
+		if (!hud.Size.IsEqualApprox(wanted))
+		{
+			hud.Size = wanted;
+			WriteFullMatchDiagnostic("run-hud", new { visible = true, height = wanted.Y });
+		}
 		Rect2? lane = _runHudServerId is { } server ? _gameTable.GetServerLaneRect(server) : null;
 		Vector2 size = hud.Size;
 		float scale = _tableViewport.GetGlobalTransform().Scale.X;
-		// The table's right edge, clear of centred choice panels; beside the lane if the lane is there.
-		float x = _tableViewport.Size.X - size.X - 24;
+		// The table's right edge, clear of centred choice panels and of the history panel;
+		// beside the lane if the lane is there.
+		float right = _tableViewport.Size.X - 12;
+		if (_matchHistory.IsVisibleInTree())
+			right = Math.Min(right, (toLocal * _matchHistory.GetGlobalRect().Position).X - 12);
+		float x = right - size.X;
 		float y = 12;
 		if (lane is { } rect)
 		{
@@ -701,7 +730,7 @@ public partial class Main
 			y = local.Y;
 			if (laneRight > x) x = local.X - size.X - 16;
 		}
-		hud.Position = new Vector2(Math.Clamp(x, 12, Math.Max(12, _tableViewport.Size.X - size.X - 12)),
+		hud.Position = new Vector2(Math.Clamp(x, 12, Math.Max(12, right - size.X)),
 			Math.Clamp(y, 12, Math.Max(12, _tableViewport.Size.Y - size.Y - 12)));
 		if (_tableAccessPanel is { Visible: true } access && !RunHudActive)
 		{

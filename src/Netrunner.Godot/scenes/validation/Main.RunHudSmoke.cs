@@ -239,6 +239,14 @@ public partial class Main
 					"Run controls remain in the dock beside the HUD.");
 				RequireInteraction(_tableViewport.GetGlobalRect().Encloses(_runHud!.GetGlobalRect()),
 					$"Run HUD {_runHud.GetGlobalRect()} escaped the table {_tableViewport.GetGlobalRect()}.");
+				// Playtest, 29 September: the HUD covered the history panel.
+				foreach (bool expanded in new[] { false, true, false })
+				{
+					_matchHistory.SetExpanded(expanded);
+					await TableFrames(3);
+					RequireInteraction(!_runHud.GetGlobalRect().Intersects(_matchHistory.GetGlobalRect()),
+						$"Run HUD {_runHud.GetGlobalRect()} overlaps the history panel {_matchHistory.GetGlobalRect()} (expanded={expanded}).");
+				}
 				Control? matching = _runHud.FindChild("Breaker-lab-fracter", true, false) as Control;
 				Control? incompatible = _runHud.FindChild("Breaker-lab-decoder", true, false) as Control;
 				RequireInteraction(matching is not null && incompatible is not null, "The HUD does not list both breakers.");
@@ -265,7 +273,7 @@ public partial class Main
 				await TableFrames(3);
 				RequireInteraction(_runHud.Visible == false && !RunHudActive, "The HUD stayed open after the run moved on.");
 			}
-			GD.Print("RUN_HUD PASS resolutions=2 replaces_panels=true breakers=true break_all=true quoted=true footer=true closes=true corp_rez=true passed_ice=true jack_out_after_settling=true breach_choices=true steady_height=true priority_flips=true access=true");
+			GD.Print("RUN_HUD PASS resolutions=2 replaces_panels=true breakers=true break_all=true quoted=true footer=true closes=true corp_rez=true passed_ice=true jack_out_after_settling=true breach_choices=true steady_height=true priority_flips=true access=true clear_of_history=true");
 			QuitCleanly();
 		}
 		catch (Exception error)
