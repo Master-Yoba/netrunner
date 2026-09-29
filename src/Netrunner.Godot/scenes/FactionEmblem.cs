@@ -53,31 +53,22 @@ public partial class FactionEmblem : Control
 		QueueRedraw();
 	}
 
-	/// <summary>The bundled glyph for a faction, or null for the neutral factions.</summary>
-	public static Texture2D? GlyphFor(string? faction)
+	/// <summary>The bundled glyph for a faction on its own side, or null for the neutral factions.</summary>
+	public static Texture2D? GlyphFor(string? faction, PlayerSide side)
 	{
 		string key = (faction ?? string.Empty).Trim().ToLowerInvariant();
-		string? file = key switch
-		{
-			_ when key.Contains("criminal", StringComparison.Ordinal) => "criminal",
-			_ when key.Contains("shaper", StringComparison.Ordinal) => "shaper",
-			_ when key.Contains("anarch", StringComparison.Ordinal) => "anarch",
-			_ when key.Contains("adam", StringComparison.Ordinal) => "adam",
-			_ when key.Contains("apex", StringComparison.Ordinal) => "apex",
-			_ when key.Contains("sunny", StringComparison.Ordinal) => "sunny-lebeau",
-			_ when key.Contains("weyland", StringComparison.Ordinal) => "weyland-consortium",
-			_ when key.Contains("jinteki", StringComparison.Ordinal) => "jinteki",
-			_ when key.Contains("haas", StringComparison.Ordinal) || key.Contains("bioroid", StringComparison.Ordinal) => "haas-bioroid",
-			_ when key.Contains("nbn", StringComparison.Ordinal) => "nbn",
-			_ => null,
-		};
+		string[] names = side == PlayerSide.Runner
+			? ["criminal", "shaper", "anarch", "adam", "apex", "sunny-lebeau"]
+			: ["weyland-consortium", "jinteki", "haas-bioroid", "nbn"];
+		string? file = names.FirstOrDefault(name => key.Contains(name.Split('-')[0], StringComparison.Ordinal)
+			|| (name == "haas-bioroid" && key.Contains("bioroid", StringComparison.Ordinal)));
 		string path = $"res://icons/factions/{file}.svg";
 		return file is not null && ResourceLoader.Exists(path) ? GD.Load<Texture2D>(path) : null;
 	}
 
 	public override void _Draw()
 	{
-		if (GlyphFor(_faction) is { } glyph)
+		if (GlyphFor(_faction, _side) is { } glyph)
 		{
 			Vector2 textureSize = glyph.GetSize();
 			float scale = Mathf.Min(Size.X / textureSize.X, Size.Y / textureSize.Y);

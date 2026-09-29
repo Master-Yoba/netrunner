@@ -487,6 +487,20 @@ if ! grep -Fq "M411_INTERACTION PASS" "$m411_ui_smoke_log" \
 fi
 cat "$m411_ui_smoke_log"
 echo "m4-11-interaction-smoke=PASS"
+run_hud_smoke_log="$coverage_report_dir/run-hud-smoke.log"
+if ! run_with_timeout 90 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
+  "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \
+  -- --run-hud-smoke >"$run_hud_smoke_log" 2>&1; then
+  echo "Run HUD smoke failed; see $run_hud_smoke_log." >&2
+  cat "$run_hud_smoke_log" >&2
+  exit 1
+fi
+if ! grep -Fq "RUN_HUD PASS" "$run_hud_smoke_log" \
+  || grep -Eq "RUN_HUD FAIL|SCRIPT ERROR|ERROR:" "$run_hud_smoke_log"; then
+  cat "$run_hud_smoke_log" >&2
+  exit 1
+fi
+echo "run-hud-smoke=PASS"
 echo "m4-12-board-actions-smoke=PASS"
 latency_smoke_log="$coverage_report_dir/latency-smoke.log"
 if ! run_with_timeout 45 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \

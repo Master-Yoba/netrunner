@@ -96,6 +96,13 @@ text = "Auto-pass optional windows"
 button_pressed = true
 tooltip_text = "Pass priority windows where you have only paid abilities to use. Use Stop in the header to act in the next one."
 
+[node name="RunHud" type="CheckButton" parent="Panel/Content"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Run HUD"
+button_pressed = true
+tooltip_text = "Show a run's ICE, breakers, Break all, continue and jack out in one panel beside the attacked server."
+
 [node name="ScaleRow" type="HBoxContainer" parent="Panel/Content"]
 layout_mode = 2
 

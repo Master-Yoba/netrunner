@@ -162,6 +162,7 @@ public partial class Main : Control
 			ContinueAccessAll();
 			ContinueTurnIntent();
 			PlaceRunOverlays();
+			PlaceRunHud();
 			UpdateSpatialGeometry();
 			UpdateAccessControls();
 		}

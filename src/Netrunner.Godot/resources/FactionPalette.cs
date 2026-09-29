@@ -41,13 +41,18 @@ public static class FactionPalette
 	public static FactionColors For(string? faction, PlayerSide side)
 	{
 		string key = (faction ?? string.Empty).Trim().ToLowerInvariant();
-		if (key.Contains("criminal", StringComparison.Ordinal)) return Criminal;
-		if (key.Contains("shaper", StringComparison.Ordinal)) return Shaper;
-		if (key.Contains("anarch", StringComparison.Ordinal)) return Anarch;
+		// A faction only colours its own side; anything else falls back to that side's neutral.
+		if (side == PlayerSide.Runner)
+		{
+			if (key.Contains("criminal", StringComparison.Ordinal)) return Criminal;
+			if (key.Contains("shaper", StringComparison.Ordinal)) return Shaper;
+			if (key.Contains("anarch", StringComparison.Ordinal)) return Anarch;
+			return NeutralRunner;
+		}
 		if (key.Contains("weyland", StringComparison.Ordinal)) return Weyland;
 		if (key.Contains("jinteki", StringComparison.Ordinal)) return Jinteki;
 		if (key.Contains("haas", StringComparison.Ordinal) || key.Contains("bioroid", StringComparison.Ordinal)) return HaasBioroid;
 		if (key.Contains("nbn", StringComparison.Ordinal)) return Nbn;
-		return side == PlayerSide.Corp ? NeutralCorp : NeutralRunner;
+		return NeutralCorp;
 	}
 }

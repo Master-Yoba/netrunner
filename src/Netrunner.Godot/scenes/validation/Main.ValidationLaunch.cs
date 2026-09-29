@@ -110,6 +110,10 @@ public partial class Main
 		{
 			_ = RunInteractionSmokeAsync();
 		}
+		else if (arguments.Contains("--run-hud-smoke", StringComparer.Ordinal))
+		{
+			_ = RunRunHudSmokeAsync();
+		}
 		else if (arguments.Contains("--interaction-lab", StringComparer.Ordinal))
 		{
 			OpenInteractionLab();

@@ -184,6 +184,7 @@ public partial class Main
 		_tableAccessPanel.Visible = accessed is { IsKnown: true } && _accessAllRunId is null;
 		_tableAccessTitle.Text = AccessTitle(accessed, snapshot.View);
 		RefreshRunOverlays(snapshot);
+		if (RunHudOwns(snapshot) && _encounterOverlay is not null) _encounterOverlay.Visible = false;
 		_gameTable.SetSelectedServer(_tableSelectedServer);
 		_gameTable.SetSelection(_tableSelectedCard);
 		if (snapshot.History.Count > 0) _tableLastAction.Text = snapshot.History[^1].Summary;
@@ -263,7 +264,14 @@ public partial class Main
 			bool encounter = decision.Kind == DecisionKind.RunTiming && snapshot.View.Viewer == PlayerSide.Runner
 				&& snapshot.View.Run is { Step: RunTimingStep.EncounterPaidWindow, Encounter: not null };
 			IEnumerable<LegalActionViewModel> displayed = all;
-			if (encounter && !_tableAllActions)
+			if (RunHudOwns(snapshot) && decision.Kind == DecisionKind.RunTiming && !_tableAllActions)
+			{
+				// The run HUD holds the run's own controls; anything else (a breach choice) stays here.
+				displayed = all.Where(action => !RunHudTakes(action, snapshot.View));
+				if (!displayed.Any()) _tablePrompt.Text += " · Use the run panel";
+				AddButton("All legal actions…", () => { _tableAllActions = true; RecordFullMatchSelection("ui-control", "all-legal-actions"); RenderCardTableActions(snapshot); });
+			}
+			else if (encounter && !_tableAllActions)
 			{
 				displayed = all.Where(action => BoardIcebreakerPresenter.Source(action) is null);
 				_tablePrompt.Text += all.Any(action => action.Parameters is RunBreakParameters { SubroutineId: not null })
@@ -349,6 +357,7 @@ public partial class Main
 			RefreshSpatialActions(snapshot);
 			RefreshBasicBoardActions(snapshot);
 			RefreshBoardIcebreaker(snapshot);
+			RefreshRunHud(snapshot);
 		}
 	}
 

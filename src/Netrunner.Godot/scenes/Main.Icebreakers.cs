@@ -20,7 +20,7 @@ public partial class Main
 
 	private bool TrySelectBoardIcebreaker(string id)
 	{
-		if (_currentSnapshot is not { } snapshot || !CanUseBoardActions(snapshot)
+		if (_currentSnapshot is not { } snapshot || !CanUseBoardActions(snapshot) || RunHudOwns(snapshot)
 			|| BoardIcebreakerPresenter.Present(snapshot.View, id) is not { } breaker) return false;
 		CancelBoardBreakTargets();
 		_boardBreakerId = id;

@@ -297,6 +297,7 @@ public partial class GameTableControl : Control
 	{
 		Breathe(delta);
 		UpdateBackdropSplit();
+		UpdateRunConnection(delta);
 		if (Engine.IsEditorHint() && _previewDirty && _shellBuilt)
 		{
 			RefreshEditorPreview();

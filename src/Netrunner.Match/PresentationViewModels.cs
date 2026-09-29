@@ -619,6 +619,18 @@ public sealed record EncounterBreakerViewModel(
     public StrengthBreakdownViewModel? StrengthBreakdown { get; init; }
 
     public string? StrengthSummary => StrengthBreakdown?.Summary;
+
+    /// <summary>Printed credits per boost, from the breaker's behaviour spec.</summary>
+    public int PumpCost { get; init; }
+
+    /// <summary>Printed strength per boost; null when it depends on the board (a dynamic pump).</summary>
+    public int? PumpStrength { get; init; }
+
+    /// <summary>Printed credits per break.</summary>
+    public int BreakCost { get; init; }
+
+    /// <summary>Subroutines one break can break; 0 means any number.</summary>
+    public int BreakLimit { get; init; }
 }
 
 public sealed record SubroutineViewModel(
@@ -1643,6 +1655,10 @@ public static class ObservationViewMapper
                 CanInterfaceEncounter = iceSpec is not null && IceInterfaceMatcher.Matches(iceSpec, spec),
                 StrengthQuote = quote,
                 StrengthBreakdown = StrengthBreakdownViewModel.From(quote),
+                PumpCost = spec.PumpCost,
+                PumpStrength = spec.DynamicPump is null ? spec.PumpStrength : null,
+                BreakCost = spec.BreakCost,
+                BreakLimit = spec.BreakLimit,
             });
         }
 

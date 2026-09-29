@@ -46,6 +46,10 @@ public partial class GameTableControl
 		}
 	}
 
+	/// <summary>The global rectangle of a server's lane, for panels anchored beside it.</summary>
+	public Rect2? GetServerLaneRect(string serverId) =>
+		_serverLanes.TryGetValue(serverId, out ServerLaneParts? lane) && lane.Panel.IsVisibleInTree() ? lane.Panel.GetGlobalRect() : null;
+
 	/// <summary>Central servers carry the Null Signal server icon in their header.</summary>
 	private static void ApplyLaneIcon(Button header, ServerKind kind)
 	{
