@@ -209,7 +209,31 @@ public partial class Main
 		_fullMatchSessionDirectory = $"{SessionDiagnosticsRoot}/{directoryName}";
 		_fullMatchSessionGlobalDirectory = directory;
 		_fullMatchDiagnosticsParentDirectory = root;
+		OpenUiTrace(directory);
+		WriteFullMatchDiagnostic("startup", new
+		{
+			appVersion = GetApplicationVersion(),
+			engineVersion = GetEngineVersion(),
+			os = OS.GetName(),
+			osVersion = OS.GetVersion(),
+			viewport = ViewportSize(),
+			window = WindowSize(),
+			seed = request.Seed,
+			corpPreset = request.CorpDeck.PresetId,
+			runnerPreset = request.RunnerDeck.PresetId,
+			humanSide,
+			resumedFrom = resumeSource,
+		});
+	}
 
+	/// <summary>
+	/// Opens <c>ui-diagnostics.jsonl</c> in a session's trace folder: a new game's
+	/// <c>session-…</c> folder, or a loaded save's <c>saved-…</c> folder, so both
+	/// kinds of Open logs zip carry the UI log.
+	/// </summary>
+	private void OpenUiTrace(string directory)
+	{
+		Directory.CreateDirectory(directory);
 		_fullMatchUiTraceStream = new FileStream(
 			Path.Combine(directory, "ui-diagnostics.jsonl"),
 			System.IO.FileMode.Append,
@@ -231,20 +255,6 @@ public partial class Main
 			_sessionLogsButton.TooltipText = $"Open logs: {directory}";
 		}
 		GD.Print($"SESSION_TRACE directory={directory} ui_log={Path.Combine(directory, "ui-diagnostics.jsonl")}");
-		WriteFullMatchDiagnostic("startup", new
-		{
-			appVersion = GetApplicationVersion(),
-			engineVersion = GetEngineVersion(),
-			os = OS.GetName(),
-			osVersion = OS.GetVersion(),
-			viewport = ViewportSize(),
-			window = WindowSize(),
-			seed = request.Seed,
-			corpPreset = request.CorpDeck.PresetId,
-			runnerPreset = request.RunnerDeck.PresetId,
-			humanSide,
-			resumedFrom = resumeSource,
-		});
 	}
 
 	private static string GetApplicationVersion() =>

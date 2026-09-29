@@ -298,7 +298,23 @@ public partial class Main
 			_matchHistory.ReportHeader = $"Netrunner · saved seed {preview.Seed} · {preview.HumanSide} · {preview.Difficulty} · {preview.CorpDeck} / {preview.RunnerDeck}";
 			_fullMatchSessionGlobalDirectory = trace;
 			_fullMatchDiagnosticsParentDirectory = trace;
-			if (_sessionLogsButton is not null) _sessionLogsButton.Disabled = false;
+			OpenUiTrace(trace);
+			WriteFullMatchDiagnostic("startup", new
+			{
+				appVersion = GetApplicationVersion(),
+				engineVersion = GetEngineVersion(),
+				os = OS.GetName(),
+				osVersion = OS.GetVersion(),
+				viewport = ViewportSize(),
+				window = WindowSize(),
+				seed = preview.Seed,
+				corpPreset = preview.CorpDeck,
+				runnerPreset = preview.RunnerDeck,
+				humanSide = preview.HumanSide,
+				resumedFrom = $"save:{id}",
+				saveName = preview.Name,
+				turn = preview.Turn,
+			});
 			QueueSnapshot(_coordinator.CurrentSnapshot!);
 			SettleSavedBoard();
 			CloseSaveDialog();

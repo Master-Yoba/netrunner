@@ -145,6 +145,10 @@ public partial class Main
 			ShowSaveBrowser();
 			await LoadSavedMatchAsync(checkpoint.Preview.SaveId, false);
 			RequireInteraction(!ReferenceEquals(previous, _coordinator) && _coordinator!.CurrentSnapshot!.IsPaused, "Load did not replace the session paused.");
+			string loadedUiLog = Path.Combine(_fullMatchSessionGlobalDirectory!, "ui-diagnostics.jsonl");
+			RequireInteraction(Path.GetFileName(_fullMatchSessionGlobalDirectory!).StartsWith("saved-", StringComparison.Ordinal)
+				&& File.Exists(loadedUiLog) && File.ReadAllText(loadedUiLog).Contains("\"startup\"", StringComparison.Ordinal),
+				"A loaded save's log folder has no UI diagnostics.");
 			obsoletePublication(obsoleteSnapshot with { Sequence = long.MaxValue });
 			_pendingSnapshots.Enqueue(new(obsoleteGeneration, obsoleteSnapshot with { Sequence = long.MaxValue }));
 			await TableFrames(3);
