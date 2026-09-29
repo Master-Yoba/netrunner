@@ -780,6 +780,20 @@ Two tests keep this current as cards arrive:
   the fixture (`.actual`) for review. Accepting it means reading each changed
   line, then replacing the fixture.
 
+## Corp v14: economy assets rezzed at the end of the Runner's turn
+
+Playtest, 29 September (Discretion Advised against Stolen Goods): Corp v13
+rezzed Nico Campaign in its own action phase. Nico then sat rezzed, a known
+target, through the Runner's whole turn, although it only pays when the Corp's
+turn begins. v12 already held such assets back during the Runner's turn until
+its last windows. Corp v14 also holds them back in the Corp's own turn. A rez
+that pays at once, such as a draw, still goes ahead.
+
+`CorpPlaytestV14Tests` asks both versions at that position of the recorded
+game: v13 rezzes, v14 waits. On the Gateway ladder v14 is level with v13
+(+11 Elo on both seeds, 240 games each, intervals about ±80), so it is the
+default.
+
 ## Gate status
 
 | Item | Result |
@@ -797,6 +811,6 @@ Two tests keep this current as cards arrive:
 | A8 archetypes | **Corp v12 ships** (+36 and +48); Runner archetypes (v11) weaker (−32), kept as an entrant; Runner v12 ships the review fixes alone (+29) |
 | U8 run HUD | Done: one panel per run at both seats, Break all over issued actions, the run drawn through the ICE; `--run-hud-smoke` in `make verify`. **Needs the playtest** to judge speed against the old panels |
 
-Default bots after Wave 4: Corp v13 (plans turn actions, plays to its deck's
-archetype, with the 29 September repairs) and Runner v12 (central memory and the self-play review fixes)
+Default bots after Wave 4: Corp v14 (plans turn actions, plays to its deck's
+archetype, with the 29 September repairs and the economy-asset rez timing) and Runner v12 (central memory and the self-play review fixes)
 on the legal decks; the tutorial decks keep the frozen C1 bot (Corp v7, Runner v6).

@@ -398,6 +398,12 @@ public sealed partial class CorpHeuristicPolicy
             if (context.Generation >= 7 && context.Features.Board.Turn.ActiveSide == PlayerSide.Runner
                 && context.Features.Board.Turn.Step is not (TurnStep.RunnerDiscard or TurnStep.CorpDiscard))
                 return Value(-10, "rez/economy-waits-for-its-turn", approximate: true);
+            // v14 (playtest, 29 September): nor in the Corp's own turn. An asset whose money comes when
+            // the Corp's turn begins earns the same rezzed at the end of the Runner's turn, and isn't
+            // shown to the Runner for a whole turn first (Nico Campaign). A rez that pays now (a draw) goes.
+            if (context.Generation >= 9 && context.Features.Board.Turn.ActiveSide == PlayerSide.Corp && immediateDraw == 0
+                && definition.Behavior?.Triggers.Any(trigger => trigger.Occurrence == OccurrenceKind.TurnBegin) == true)
+                return Value(-10, "rez/economy-waits-for-the-runner-turn-end", approximate: true);
             if (immediateDraw >= context.Features.Board.HiddenZoneCounts.CorpDeck) return Value(-10000, "rez/avoid-deck-out");
             return Value(futureIncome * 45 + immediateDraw * context.DrawValue - cost * context.CreditValue, "rez/economy-payback", approximate: true);
         }
