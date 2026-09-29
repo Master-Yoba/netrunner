@@ -428,6 +428,16 @@ carries over to M6.
   actions, and their reviews produce at least one confirmed new fault or a
   recorded "none found".
 
+**U8 Run HUD (M), proposed from the 29 September playtest.** A run spreads
+over four places: the icebreaker panel, the access panel, the dock
+(continue, jack out) and the server or card that starts it. U8 gathers them
+into one HUD anchored at the attacked server: the current ICE with its
+subroutines, the Runner's matching breakers with their break and boost
+buttons inline, continue and jack out beside them, and the accessed card's
+actions in the same place once the run succeeds. The dock keeps only the
+turn's own actions. Gate: a scripted run from start to access touches only
+the HUD, and a human playtest finds it faster than today's run.
+
 ### Wave 5 — difficulty, hardening and the next decision
 
 - A6 compute-based difficulty tiers and personalities, validated by the ladder

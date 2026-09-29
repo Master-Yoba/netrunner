@@ -502,6 +502,67 @@ each turn's start. Reviewing ten such games of the archetype bots found:
 `SelfPlayReviewTests` and `FirstXUsePresentationTests` replay the games at
 those positions.
 
+## Playtest follow-up (29 September)
+
+Two Runner games (Stolen Goods against Quick and Dirty and Hyper Velocity)
+with written feedback. `ai-review --side corp` on both sessions showed the
+causes of the Corp's faults.
+
+**UI and sound:**
+- Access all of Archives runs without per-card playback, behind a progress
+  bar in the dock ("Accessing Archives… 3/7"); it flashed the dock and
+  cards before.
+- The access panel's Read card button is gone; clicking the card opens it.
+- The draw and install sounds are silent until replaced; the rest stay as
+  placeholders.
+- The icebreaker panel closes once every subroutine is broken, and
+  auto-pass continues an encounter with nothing left to break, which saves
+  two of the run's clicks.
+- The card hover preview draws above the run panels (it was under the
+  icebreaker panel).
+- **Beneficial effects resolve on their own:** an optional trigger that
+  only gains credits, counters, clicks or cards for the player, with
+  nothing to pay, target or choose (Pennyshaver, Conduit, Zahya), is used
+  for the player, and a group of only such triggers is ordered for them.
+  Triggers with a cost, a target, a choice or a downside still ask. Settings
+  has "Resolve beneficial effects automatically" (on), and scripted runs
+  keep every decision.
+- The hover tilt in the hand is gone; instead a dragged card leans into its
+  motion (a tilting copy over the untransformed ghost).
+- Damage's red wash, shake and sound play when the cards leave the hand,
+  not after the beats queued before them.
+
+**Corp v13** (V12 plus repairs; `CorpPlaytestV13Tests` asks it at the
+recorded positions, and all four cases fail on v12):
+- Malapert Data Vault was rezzed during a run as "an upgrade in the
+  attacked server"; it only pays off when the Corp scores from its server,
+  so such upgrades are rezzed in the Corp's turn before a score.
+- Public Trail was played with the last click, so the tag was cleared
+  before it could be punished; a tag counts for its punishment only when
+  the Corp can still punish it this turn (a click and credits to trash a
+  resource, or a punishing card it can afford).
+- Archives got ICE only on turn 8 while the Runner farmed it; ICE there is
+  worth 150 per successful Archives run the Corp has seen (up to 450) plus
+  60 per visible run payoff (Pennyshaver, Red Team, Zahya).
+- A tagged Runner's resources were never trashed: they were valued as the
+  Corp's own cards, which never beat a click and two credits. They're now
+  valued by what they earn the Runner (install cost, hosted credits, run
+  payoffs, abilities), weighted by the tag archetype.
+- The Runner could bait the Corp into rezzing ICE on a server that didn't
+  matter and then run the agenda's server; an ICE rez elsewhere now keeps
+  the credits to rez the ICE protecting installed agendas.
+- Agendas went in as soon as they were drawn, so HQ never held any; an
+  agenda that can't score this turn waits in HQ until its server's ICE can
+  be rezzed and the agenda finished next turn, unless HQ is flooded (two or
+  more agendas or a full hand).
+
+**Ladder:** v13 against v12, Gateway pool: −3 [−35, 25] on seed 5, no deck
+warnings; level, as expected, since the bot Runner doesn't bait or farm.
+
+**The run UI** needs more than these fixes: a run still spreads over the
+breaker panel, the access panel, the dock and the server. The roadmap's U8
+proposes one run HUD at the attacked server.
+
 ## U6: onboarding and playtest loop
 
 **First-game hints.** `OnboardingHints` (Match) picks at most one hint for
