@@ -191,6 +191,7 @@ public partial class Main
 		_intentCuesEnabled = (bool)config.GetValue("onboarding", "intent_cues", true);
 		_soundEnabled = (bool)config.GetValue("audio", "sound", true);
 		_tiltEnabled = (bool)config.GetValue("motion", "hover_tilt", true);
+		_autoBenefitsEnabled = (bool)config.GetValue("play", "auto_benefits", true);
 		_effectsLevel = Math.Clamp((float)config.GetValue("audio", "effects_volume", 0.7f), 0f, 1f);
 		foreach (string id in ((string)config.GetValue("onboarding", "seen_hints", "")).Split(',', StringSplitOptions.RemoveEmptyEntries))
 			_seenHints.Add(id);
@@ -206,6 +207,7 @@ public partial class Main
 		config.SetValue("onboarding", "seen_hints", string.Join(',', _seenHints.Order(StringComparer.Ordinal)));
 		config.SetValue("audio", "sound", _soundEnabled);
 		config.SetValue("motion", "hover_tilt", _tiltEnabled);
+		config.SetValue("play", "auto_benefits", _autoBenefitsEnabled);
 		config.SetValue("audio", "effects_volume", _effectsLevel);
 		Error result = config.Save(PreferencesPath);
 		if (result != Error.Ok) GD.PushWarning($"Could not save preferences: {result}");

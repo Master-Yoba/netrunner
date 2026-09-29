@@ -47,7 +47,7 @@ public static partial class RatingLadder
     /// "standard-plan" is the A3 turn planner (Runner v3, Corp v5).
     /// </summary>
     public static IReadOnlyList<string> EntrantOrder { get; } =
-        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c"];
+        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13"];
 
     private const double EloScale = 400 / 2.302585092994046;
     private const double Ridge = 0.01;
@@ -125,6 +125,9 @@ public static partial class RatingLadder
             // Wave 4's defaults before the archetype Corp and the fixed Runner (Corp v11, Runner v10).
             "standard-w4c" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V11 : RunnerHeuristicPolicy.V10),
+            // The Corp's 29 September playtest repairs (v13) with the default Runner.
+            "standard-c13" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
+                side == PlayerSide.Corp ? CorpHeuristicPolicy.V13 : RunnerHeuristicPolicy.PolicyVersion),
             // Runner v11's fixes without its archetype knobs (every deck generic), with the default Corp.
             "standard-rgen" => GenericRunner(OfflineMatchFactory.CreateOpponent(definition, other, "standard", RunnerHeuristicPolicy.V11), definition),
             // A8: the Runner plays to its deck's archetype (v11) with the default Corp.

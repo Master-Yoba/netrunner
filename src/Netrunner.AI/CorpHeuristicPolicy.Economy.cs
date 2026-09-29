@@ -69,6 +69,13 @@ public sealed partial class CorpHeuristicPolicy
                     // v7: clearing a tag costs the Runner a click and 2 credits, and
                     // while tagged its resources can be trashed (Wave 4 C1 audit).
                     // v12: a tag deck's punishments make each tag worth more.
+                    // v13 (playtest, 29 September): a tag the Corp can't punish this turn is cleared by the
+                    // Runner next turn, so it's worth only the click and two credits that costs.
+                    if (context.Generation >= 8 && context.Features.Side == PlayerSide.Corp && !CanPunishTagThisTurn(context))
+                    {
+                        total += amount * 150;
+                        break;
+                    }
                     total += (int)(amount * (250 + context.Features.Board.RunnerRig
                         .Where(card => context.Definition(card)?.Printed.CardClass == RuntimeCardClass.Resource)
                         .Select(card => context.CardValue(card, installed: true)).DefaultIfEmpty(0).Max() / 2)
@@ -131,6 +138,22 @@ public sealed partial class CorpHeuristicPolicy
             }
         }
         return total;
+    }
+
+    /// <summary>
+    /// Whether the Corp could still punish a tag this turn after spending a click on landing it: a click
+    /// and two credits left to trash a Runner resource, or a punishing card in hand it can afford.
+    /// </summary>
+    private static bool CanPunishTagThisTurn(HeuristicContext context)
+    {
+        if (context.Features.Board.Turn.ActiveSide != PlayerSide.Corp || context.Self.Clicks < 2) return false;
+        bool resource = context.Features.Board.RunnerRig.Any(card => context.Definition(card)?.Printed.CardClass == RuntimeCardClass.Resource)
+            && context.Self.Credits >= 2 + 1;
+        bool punisher = context.Features.Hand.Any(card => context.Definition(card)?.Behavior is { } behavior
+            && HeuristicContext.Flatten(behavior.Instructions.Concat(behavior.Triggers.SelectMany(trigger => trigger.Instructions)))
+                .Any(instruction => instruction.Kind == BehaviorInstructionKind.Branch && instruction.Branch?.Condition.Kind == BehaviorConditionKind.Tagged)
+            && (context.Definition(card)!.Printed.PlayCost ?? 0) <= context.Self.Credits);
+        return resource || punisher;
     }
 
     /// <summary>Which side makes a behavior choice.</summary>

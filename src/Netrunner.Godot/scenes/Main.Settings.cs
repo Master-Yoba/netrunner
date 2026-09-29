@@ -60,6 +60,8 @@ public partial class Main
 			|| arg.Contains("capture", StringComparison.Ordinal) || arg.Contains("gate", StringComparison.Ordinal));
 		bool on = _autoPass.ButtonPressed && !scripted && !_interactionLab && _coordinator is not null;
 		if (_coordinator is { } coordinator && coordinator.AutoPassWindows != on) coordinator.AutoPassWindows = on;
+		bool benefits = _autoBenefitsEnabled && !scripted && !_interactionLab && _coordinator is not null;
+		if (_coordinator is { } resolving && resolving.AutoResolveBenefits != benefits) resolving.AutoResolveBenefits = benefits;
 		_stopAtWindow.Visible = on;
 		_stopAtWindow.SetPressedNoSignal(on && _coordinator!.StopAtNextWindowRequested);
 	}

@@ -42,8 +42,9 @@ public static class SoundCues
         {
             PresentationEventKind.ClickSpent => SoundCue.Click,
             PresentationEventKind.CreditsChanged => beat.Amount > 0 ? SoundCue.Credit : SoundCue.None,
-            PresentationEventKind.CardDrawn => SoundCue.CardSlide,
-            PresentationEventKind.CardInstalled => SoundCue.CardPlace,
+            // Playtest, 29 September: the draw and install sounds grated; silent until they're replaced.
+            PresentationEventKind.CardDrawn => SoundCue.None,
+            PresentationEventKind.CardInstalled => SoundCue.None,
             PresentationEventKind.CardPlayed => SoundCue.CardFlip,
             PresentationEventKind.CardRezzed => SoundCue.Rez,
             PresentationEventKind.CardAdvanced => SoundCue.Advance,

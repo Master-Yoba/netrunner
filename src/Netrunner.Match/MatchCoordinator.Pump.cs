@@ -1,4 +1,5 @@
 using Netrunner.AI;
+using Netrunner.Cards;
 using Netrunner.Core;
 
 namespace Netrunner.Match;
@@ -66,6 +67,30 @@ public sealed partial class MatchCoordinator
         set => _autoPassWindows = value;
     }
 
+    private volatile bool _autoResolveBenefits;
+    private GatewayEvaluationCatalog? _benefitCatalog;
+
+    /// <summary>
+    /// Resolve the player's purely beneficial triggers for them (see <see cref="BeneficialTriggers"/>).
+    /// Needs <see cref="MatchCoordinatorOptions.AutoPassPriority"/> and applies from the next decision.
+    /// </summary>
+    public bool AutoResolveBenefits
+    {
+        get => _autoResolveBenefits;
+        set => _autoResolveBenefits = value;
+    }
+
+    /// <summary>The action a beneficial-trigger decision resolves to for the player, or null.</summary>
+    private ActionId? AutoBenefit(GameState state, PendingDecision pending, PlayerSide side)
+    {
+        if (!_autoResolveBenefits || !_options.AutoPassPriority || _runtimeCardCatalog is not { } runtime
+            || pending.Kind is not (DecisionKind.TriggerChoice or DecisionKind.TriggerOrdering)) return null;
+        _benefitCatalog ??= new GatewayEvaluationCatalog(runtime, _behaviorCatalog);
+        AgentFeatures features = ObservationReader.Read(ObservationBuilder.Build(state, side, _behaviorCatalog, runtime),
+            AgentFeatures.VersionWithHiddenAdvancements);
+        return BeneficialTriggers.AutoAction(pending, features, _benefitCatalog);
+    }
+
     /// <summary>Whether the player asked to stop at the next optional window.</summary>
     public bool StopAtNextWindowRequested => _stopAtNextWindow;
 
@@ -131,6 +156,11 @@ public sealed partial class MatchCoordinator
             {
                 _heldWindow = pending.Id.Value;
                 _stopAtNextWindow = false;
+            }
+            if (AutoBenefit(state, pending, side) is { } benefit)
+            {
+                CommitPumpAction(new(pending.Owner, pending.Id, pending.Revision, benefit));
+                return;
             }
             if (!AutoPasses(pending.Id.Value, pending.LegalActions, window)) return;
             CommitPumpAction(new(pending.Owner, pending.Id, pending.Revision, AutoPassPolicy.PassAction(pending.LegalActions)));

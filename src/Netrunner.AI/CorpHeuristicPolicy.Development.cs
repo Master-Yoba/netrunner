@@ -77,6 +77,18 @@ public sealed partial class CorpHeuristicPolicy
                     // Self-play review, 28 September: the planner's turn-end horizon can't see the
                     // steal, so an agenda that can't score this turn never goes in without ICE.
                     nakedAgenda = !scoreableNow && protecting == 0;
+                    if (context.Generation >= 8 && !scoreableNow && !install.CreateNewRemote && server is not null)
+                    {
+                        // v13 (playtest, 29 September): an agenda that goes in as soon as it's drawn shows the
+                        // Runner where to run and leaves HQ empty of them. It waits in HQ until its server can
+                        // hold it: the Corp can rez that server's ICE and still finish the agenda next turn.
+                        int unrezzed = server.Ice.Where(value => value is { Rezzed: false })
+                            .Sum(value => context.Definition(value)?.Printed.RezCost ?? 0);
+                        int remaining = definition.Printed.AdvancementRequirement;
+                        int ready = context.Self.Credits - install.CreditCost - unrezzed - remaining;
+                        bool flooded = context.AgendaCount >= 2 || context.Features.Hand.Length >= (context.Self.MaximumHandSize ?? 5);
+                        if (ready < 0 && !flooded) score -= 250 + Math.Min(250, -ready * 40);
+                    }
                 }
             }
         }
@@ -228,7 +240,11 @@ public sealed partial class CorpHeuristicPolicy
             score += (int)((archetypes
                 ? Math.Max(0, profile.CentralIceTarget - ice) * 130 + (ice == 0 ? 130 : 0)
                 : ice == 0 ? 260 : ice == 1 ? 130 : ice == 2 ? 30 : 0) * context.OpponentScorePressure);
-        if (server.Kind == ServerKind.Archives && ice == 0) score += Math.Min(200, SuccessfulRunsOn(context, server) * 70);
+        if (server.Kind == ServerKind.Archives && ice == 0)
+            score += context.Generation >= 8
+                // v13 (playtest, 29 September): a Runner farming Archives for money is worth a wall.
+                ? Math.Min(450, SuccessfulRunsOn(context, server) * 150) + RunnerSuccessPayoffs(context) * 60
+                : Math.Min(200, SuccessfulRunsOn(context, server) * 70);
         return score;
     }
 
@@ -296,6 +312,23 @@ public sealed partial class CorpHeuristicPolicy
     private static int SuccessfulRunsOn(HeuristicContext context, AgentServer? server) => server is null ? 0
         : context.Knowledge?.History.Count(entry => entry.Kind == "successful-run" && entry.ServerId == server.Id) ?? 0;
 
+    /// <summary>Whether an upgrade does anything during a run: on approach, when the run ends, or on a steal.</summary>
+    private static bool RunRelevant(CardEvaluationDescriptor definition) => definition.Behavior?.Triggers.Any(trigger =>
+        trigger.Occurrence is OccurrenceKind.ServerApproached or OccurrenceKind.RunEnded or OccurrenceKind.IceEncountered
+            or OccurrenceKind.RunSuccessful || trigger.RequireAgendaStolenDuringRun) == true
+        || definition.Behavior?.PaidAbilities.Count > 0;
+
+    /// <summary>What rezzing the unrezzed ICE protecting the Corp's installed agendas costs.</summary>
+    private static int AgendaIceReserve(HeuristicContext context) => context.Features.Board.Servers
+        .Where(server => server.Root.Any(card => context.Definition(card)?.Agenda is not null))
+        .SelectMany(server => server.Ice).Where(card => card is { Rezzed: false })
+        .Sum(card => context.Definition(card)?.Printed.RezCost ?? 0);
+
+    /// <summary>The Runner's visible cards that pay it for successful runs (Pennyshaver, Red Team, Zahya).</summary>
+    private static int RunnerSuccessPayoffs(HeuristicContext context) => context.Features.Board.RunnerRig
+        .Concat(context.Features.Board.RunnerIdentity)
+        .Count(card => context.Definition(card)?.Behavior?.Triggers.Any(trigger => trigger.Occurrence == OccurrenceKind.RunSuccessful) == true);
+
     /// <summary>A card whose damage grows with its advancement counters (an advanceable trap).</summary>
     private static bool ScalesWithCounters(CardEvaluationDescriptor? definition) =>
         definition?.Behavior is { CanBeAdvanced: true } behavior
@@ -313,6 +346,11 @@ public sealed partial class CorpHeuristicPolicy
             int force = ice.Subroutines.Any(subroutine => subroutine is EndRunSubroutineSpec) ? 240 : 90;
             if (context.Generation >= 7 && ice.Subroutines.Any(subroutine => subroutine is GiveTagsSubroutineSpec))
                 force += (int)((context.CorpProfile.TagWeight - 1) * 150);
+            // v13 (playtest, 29 September): rezzing ICE on a server that doesn't hold an agenda mustn't leave
+            // too little to rez the ICE that protects one; the Runner baits the Corp's money that way.
+            if (context.Generation >= 8 && server?.Root.Any(card => context.Definition(card)?.Agenda is not null) != true
+                && context.Self.Credits - cost < AgendaIceReserve(context))
+                return Value(-200, "rez/keep-credits-for-the-agenda-ice", approximate: true);
             if (context.Generation >= 6)
                 return Value(force + context.ServerValue(server) + RunDenialValue(context, server) - cost * 30,
                     "rez/relevant-protection-and-denial", approximate: true);
@@ -322,6 +360,20 @@ public sealed partial class CorpHeuristicPolicy
         // isn't held back for ICE the Runner has already passed or chosen not to face.
         // It waits until the Runner is past the server's ICE, which may still stop the run.
         bool attacked = context.Features.Board.Run?.AttackedServer is { } attackedServer && attackedServer == server?.Id;
+        // v13 (playtest, 29 September): an upgrade that only pays off when the Corp scores from its
+        // server (Malapert Data Vault) does nothing during a run; it is rezzed in the Corp's own turn,
+        // once an agenda in its root can be scored.
+        if (context.Generation >= 8 && definition?.Printed.CardClass == RuntimeCardClass.Upgrade && !RunRelevant(definition))
+        {
+            bool scoring = context.Features.Board.Turn.ActiveSide == PlayerSide.Corp && context.Features.Board.Run is null
+                && server?.Root.Any(card => context.Definition(card)?.Agenda is { } agenda
+                    && agenda.AgendaPoints > 0
+                    && context.Definition(card)!.Printed.AdvancementRequirement - (card!.AdvancementCounters ?? 0)
+                        <= Math.Min(context.Self.Clicks, context.Self.Credits - cost)) == true;
+            return scoring && cost <= context.Self.Credits
+                ? Value(150 - cost * 30, "rez/scoring-upgrade-before-score", approximate: true)
+                : Value(-20, "rez/scoring-upgrade-waits-for-score");
+        }
         if (repairs && attacked && definition?.Printed.CardClass == RuntimeCardClass.Upgrade && cost <= context.Self.Credits)
             return context.Features.Board.Run!.CurrentIceIndex < 0
                 ? Value(Math.Max(120, context.ServerValue(server) / 2) - cost * 30, "rez/upgrade-in-attacked-server", approximate: true)
@@ -351,6 +403,21 @@ public sealed partial class CorpHeuristicPolicy
         }
         bool relevant = context.Features.Board.Run?.AttackedServer == server?.Id;
         return Value(relevant ? context.ServerValue(server) / 2 - cost * 60 : -10, "rez/upgrade-relevance", approximate: true);
+    }
+
+    /// <summary>
+    /// v13 (playtest, 29 September): a tagged Runner's resource is worth trashing for what it earns the
+    /// Runner (hosted credits, run payoffs, its install cost), not the Corp's own card value, which
+    /// never beat the click and two credits the trash costs.
+    /// </summary>
+    private static AgentUtility TrashTagged(HeuristicContext context, TrashTaggedResourceParameters trash)
+    {
+        AgentCard? card = context.Card(trash.CardId);
+        CardEvaluationDescriptor? definition = context.Definition(card);
+        int worth = 200 + Math.Max(0, definition?.Printed.InstallCost ?? 0) * 60 + HeuristicContext.Hosted(card) * 90
+            + (definition?.Behavior?.Triggers.Any(trigger => trigger.Occurrence == OccurrenceKind.RunSuccessful) == true ? 250 : 0)
+            + (definition?.Behavior?.PaidAbilities.Count > 0 ? 120 : 0);
+        return Value((int)(worth * context.CorpProfile.TagWeight) - trash.CreditCost * context.CreditValue, "pressure/trash-tagged-resource-by-runner-loss");
     }
 
     private static AgentUtility Purge(HeuristicContext context, PurgeVirusCountersParameters purge)

@@ -40,6 +40,9 @@ public partial class Main
 	{
 		GetWindow().FocusExited += HideCardHoverPreview;
 		_cardHoverPreview = viewport.GetNode<CardPreviewLayout>("CardHoverPreview");
+		// Playtest, 29 September: the preview drew under the icebreaker panel (120) during encounters.
+		// It ignores the mouse, so above every table panel it never blocks a click.
+		_cardHoverPreview.ZIndex = 150;
 		_cardHoverPreviewFace = _cardHoverPreview.GetNode<TableCardControl>("%Card");
 		_cardHoverPreviewFace.UseHoverPreview = true;
 		_cardHoverPreviewFace.MouseFilter = MouseFilterEnum.Ignore;

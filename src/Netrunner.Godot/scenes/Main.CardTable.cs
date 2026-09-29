@@ -82,6 +82,8 @@ public partial class Main
 		_tableAccessCard.UseHoverPreview = true;
 		_tableAccessTitle = _tableAccessPanel.GetNode<Label>("%Title");
 		Button inspectAccess = _tableAccessPanel.GetNode<Button>("%Inspect");
+		// Playtest, 29 September: clicking the accessed card already opens it, so the button only took room.
+		inspectAccess.Visible = false;
 		inspectAccess.Pressed += () =>
 		{
 			if (_tableAccessCard.Card is { IsKnown: true } card)
@@ -112,6 +114,7 @@ public partial class Main
 		BuildOnboarding();
 		BuildSound();
 		BuildTilt();
+		BuildAutoBenefits();
 		BuildActionChips();
 		BuildEncounterOverlay();
 	}
@@ -179,7 +182,7 @@ public partial class Main
 		_gameTable.Render(snapshot.View);
 		CardViewModel? accessed = AccessActionsPresenter.Card(snapshot.View);
 		_tableAccessCard.SetCard(accessed);
-		_tableAccessPanel.Visible = accessed is { IsKnown: true };
+		_tableAccessPanel.Visible = accessed is { IsKnown: true } && _accessAllRunId is null;
 		_tableAccessTitle.Text = AccessTitle(accessed, snapshot.View);
 		RefreshRunOverlays(snapshot);
 		_gameTable.SetSelectedServer(_tableSelectedServer);
@@ -216,6 +219,7 @@ public partial class Main
 			_tablePrompt.TooltipText = decision is null ? string.Empty : $"Engine prompt: {decision.Prompt}";
 			if (snapshot.View.Run is { } run)
 				_tablePrompt.Text = DecisionPromptPresenter.RunContext(run, _gameTable.GetServerDisplayName) + " · " + _tablePrompt.Text;
+			if (RenderAccessAllProgress()) return;
 			_gameTable.SetTargets(new HashSet<string>(StringComparer.Ordinal));
 			_gameTable.SetActionableSources(new HashSet<string>(StringComparer.Ordinal));
 			if (_fullMatchResumePaused && !snapshot.IsTerminal)

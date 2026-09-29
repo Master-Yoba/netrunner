@@ -16,6 +16,33 @@ public partial class Main
 	private bool _soundEnabled = true;
 	private float _effectsLevel = 0.7f;
 
+	private CheckButton? _autoBenefitsToggle;
+	private bool _autoBenefitsEnabled = true;
+
+	/// <summary>
+	/// Playtest, 29 September: on-success effects that only benefit the player (Pennyshaver, Conduit,
+	/// Zahya) stacked up as buttons in the dock; they resolve by themselves unless this is turned off.
+	/// </summary>
+	private void BuildAutoBenefits()
+	{
+		if (_settingsMenu?.GetNode<VBoxContainer>("Panel/Content") is not { } settings) return;
+		_autoBenefitsToggle = new CheckButton
+		{
+			Name = "AutoBenefits",
+			Text = "Resolve beneficial effects automatically",
+			ButtonPressed = _autoBenefitsEnabled,
+			TooltipText = "Effects that only gain you credits, counters or cards, with nothing to choose, resolve on their own.",
+		};
+		_autoBenefitsToggle.Toggled += enabled =>
+		{
+			_autoBenefitsEnabled = enabled;
+			SavePreferences();
+			ApplyAutoPassSetting();
+		};
+		settings.AddChild(_autoBenefitsToggle);
+		settings.MoveChild(_autoBenefitsToggle, settings.GetNode("AutoPass").GetIndex() + 1);
+	}
+
 	private CheckButton? _tiltToggle;
 	private bool _tiltEnabled = true;
 
