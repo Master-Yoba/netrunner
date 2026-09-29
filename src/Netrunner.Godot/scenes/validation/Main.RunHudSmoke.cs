@@ -67,6 +67,39 @@ public partial class Main
 		RequireInteraction(_labSubmissionCount == submissions + 1, "Rez from the Corp HUD did not submit exactly once.");
 	}
 
+	/// <summary>
+	/// Playtest, 29 September: a jack-out decision that arrived while the table was
+	/// still settling left the HUD with no buttons. It must build them disabled and
+	/// enable them once board actions are usable.
+	/// </summary>
+	private async Task CheckJackOutWhileSettling()
+	{
+		MatchViewModel view = _currentSnapshot!.View;
+		MatchViewModel decision = view with
+		{
+			// As in the saved game: after the ICE, the Runner-only decision has no priority window.
+			Run = view.Run! with { Step = RunTimingStep.JackOutDecision, Encounter = null, Priority = null },
+			Decision = InteractionLabSamples.Decision(PlayerSide.Runner, _labRevision, DecisionKind.RunTiming, "Jack out or continue"),
+			LegalActions =
+			[
+				InteractionLabSamples.Action("jack-out", ActionKind.JackOut, new NoActionParameters(), _labRevision),
+				InteractionLabSamples.Action("continue-run", ActionKind.ContinueRun, new NoActionParameters(), _labRevision),
+			],
+		};
+		// Any moment board actions are briefly unusable (settling, a submission in flight) stands in for the motion.
+		Volatile.Write(ref _submissionInFlight, 1);
+		PublishLabView(decision);
+		await TableFrames(3);
+		Button[] footer = FindDescendants<Button>(_runHud!.GetNode("Content/Footer"));
+		RequireInteraction(footer.Length == 2 && footer.All(button => button.Disabled),
+			$"A jack-out decision during settling built {footer.Length} footer buttons ({string.Join(", ", footer.Select(button => $"{button.Text}:{button.Disabled}"))}), or enabled them early; usable={CanUseBoardActions(_currentSnapshot!)}.");
+		Volatile.Write(ref _submissionInFlight, 0);
+		await TableFrames(3);
+		footer = FindDescendants<Button>(_runHud.GetNode("Content/Footer"));
+		RequireInteraction(footer.Length == 2 && footer.All(button => !button.Disabled),
+			"Jack out and Continue stayed disabled after the table settled.");
+	}
+
 	private async Task RunRunHudSmokeAsync()
 	{
 		try
@@ -84,6 +117,9 @@ public partial class Main
 				_gameTable.StopMotion();
 				await CheckPassedIceConnection(size);
 				await CheckCorpRunHud(size);
+				ResetInteractionLab();
+				await TableFrames(6);
+				await CheckJackOutWhileSettling();
 				ResetInteractionLab();
 				await TableFrames(6);
 				_gameTable.StopMotion();
@@ -120,7 +156,7 @@ public partial class Main
 				await TableFrames(3);
 				RequireInteraction(_runHud.Visible == false && !RunHudActive, "The HUD stayed open after the run moved on.");
 			}
-			GD.Print("RUN_HUD PASS resolutions=2 replaces_panels=true breakers=true break_all=true quoted=true footer=true closes=true corp_rez=true passed_ice=true");
+			GD.Print("RUN_HUD PASS resolutions=2 replaces_panels=true breakers=true break_all=true quoted=true footer=true closes=true corp_rez=true passed_ice=true jack_out_after_settling=true");
 			QuitCleanly();
 		}
 		catch (Exception error)

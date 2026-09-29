@@ -163,8 +163,10 @@ public partial class Main
 		_runHudButtons.Clear();
 
 		bool mine = view.Decision is { Kind: DecisionKind.RunTiming } decision && decision.OwnerSide == view.Viewer;
-		bool ours = mine && CanUseBoardActions(snapshot);
-		IReadOnlyList<LegalActionViewModel> issued = ours ? view.LegalActions.Where(action => RunHudTakes(action, view)).ToArray() : [];
+		// Build every issued control even while the table is still settling; UpdateRunHudButtons
+		// enables them once board actions are usable (a jack-out decision arriving mid-motion once
+		// left the HUD with no buttons at all).
+		IReadOnlyList<LegalActionViewModel> issued = mine ? view.LegalActions.Where(action => RunHudTakes(action, view)).ToArray() : [];
 		bool encounterShown = run.Encounter is { Status: RunEncounterStatus.Initialized, Ice.IsKnown: true };
 		if (encounterShown) BuildEncounterSection(snapshot, run.Encounter!, corpSeat ? [] : issued);
 		if (corpSeat)
@@ -194,7 +196,7 @@ public partial class Main
 		}
 		_runHudFooter!.Visible = _runHudFooter.GetChildCount() > 0;
 		_runHud!.Visible = true;
-		ContinueBreakAll(snapshot);
+		UpdateRunHudButtons(snapshot);
 	}
 
 	/// <summary>Removes children at once, so a rebuild in the same frame keeps its node names.</summary>
@@ -571,6 +573,7 @@ public partial class Main
 	private void PlaceRunHud()
 	{
 		if (_runHud is not { Visible: true } hud) return;
+		if (_currentSnapshot is { } current) UpdateRunHudButtons(current);
 		Rect2 bounds = _tableViewport.GetGlobalRect();
 		Transform2D toLocal = _tableViewport.GetGlobalTransform().AffineInverse();
 		hud.Size = new Vector2(RunHudWidth, 0);

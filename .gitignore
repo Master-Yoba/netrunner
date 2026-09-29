@@ -43,3 +43,4 @@ __pycache__/
 # Client session exports from playtests stay local.
 session-*.zip
 /VISUAL_ASSETS/
+saved-*.zip
