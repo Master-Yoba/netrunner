@@ -258,6 +258,13 @@ public partial class Main
 				SizeFlagsVertical = Control.SizeFlags.ShrinkBegin,
 				MouseFilter = Control.MouseFilterEnum.Ignore,
 			};
+			// A card made in code turns clickable and selectable in its _Ready; the tile's card is a
+			// picture, so the whole tile stays one button (it showed a selection border when clicked).
+			card.Ready += () =>
+			{
+				card.MouseFilter = Control.MouseFilterEnum.Ignore;
+				card.FocusMode = Control.FocusModeEnum.None;
+			};
 			row.AddChild(card);
 			card.SetCard(new CardViewModel("menu-" + identityCode, identityCode, metadata.Title, metadata.Type, true, false, 0,
 				null, null, null, null, metadata.Subtypes, metadata.RulesText, metadata.Faction, null));
