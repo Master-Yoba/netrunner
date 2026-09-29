@@ -19,14 +19,14 @@ public partial class FactionEmblem : Control
 	public string Faction
 	{
 		get => _faction;
-		set { _faction = value ?? string.Empty; QueueRedraw(); }
+		set { _faction = value ?? string.Empty; if (IsInsideTree()) UpdateGlyph(); }
 	}
 
 	[Export]
 	public PlayerSide Side
 	{
 		get => _side;
-		set { _side = value; QueueRedraw(); }
+		set { _side = value; if (IsInsideTree()) UpdateGlyph(); }
 	}
 
 	[Export]
@@ -36,6 +36,8 @@ public partial class FactionEmblem : Control
 		set { _color = value; QueueRedraw(); }
 	}
 
+	private TextureRect? _glyph;
+
 	public override void _Ready()
 	{
 		MouseFilter = MouseFilterEnum.Ignore;
@@ -43,6 +45,31 @@ public partial class FactionEmblem : Control
 		{
 			CustomMinimumSize = new Vector2(30, 30);
 		}
+		UpdateGlyph();
+	}
+
+	/// <summary>The official glyph shows in its own TextureRect; the line art is drawn only without one.</summary>
+	private void UpdateGlyph()
+	{
+		Texture2D? texture = GlyphFor(_faction, _side);
+		if (_glyph is null && texture is not null)
+		{
+			_glyph = new TextureRect
+			{
+				Name = "Glyph",
+				MouseFilter = MouseFilterEnum.Ignore,
+				ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+				StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+			};
+			AddChild(_glyph);
+			_glyph.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
+		}
+		if (_glyph is not null)
+		{
+			_glyph.Texture = texture;
+			_glyph.Visible = texture is not null;
+		}
+		QueueRedraw();
 	}
 
 	public void SetFaction(string? faction, PlayerSide side)
@@ -50,7 +77,7 @@ public partial class FactionEmblem : Control
 		_faction = faction ?? string.Empty;
 		_side = side;
 		_color = FactionPalette.For(_faction, side).Accent;
-		QueueRedraw();
+		if (IsInsideTree()) UpdateGlyph();
 	}
 
 	/// <summary>The bundled glyph for a faction on its own side, or null for the neutral factions.</summary>
@@ -68,14 +95,7 @@ public partial class FactionEmblem : Control
 
 	public override void _Draw()
 	{
-		if (GlyphFor(_faction, _side) is { } glyph)
-		{
-			Vector2 textureSize = glyph.GetSize();
-			float scale = Mathf.Min(Size.X / textureSize.X, Size.Y / textureSize.Y);
-			Vector2 drawn = textureSize * scale;
-			DrawTextureRect(glyph, new Rect2((Size - drawn) / 2f, drawn), false);
-			return;
-		}
+		if (_glyph is { Visible: true }) return;
 
 		// Author in a 40×40 box and scale to the control's square.
 		float extent = Mathf.Min(Size.X, Size.Y);

@@ -672,8 +672,63 @@ Evidence (synthetic tutorial decks, no card art):
 [Corp seat](evidence/u5/corp-seat-reversed-board.png),
 [opponent's played card](evidence/u5/opponent-play-reveal.png).
 
-Still to do: the run HUD (U8) with the connection drawn through the ICE,
-derezzed broken ICE and the bypass preview; counter shapes on cards; music.
+Still to do: the bypass preview and music (the run HUD, the connection
+through the ICE, derezzed ICE and counter shapes landed with U8, below).
+
+## U8: run HUD
+
+A run now lives in one panel beside the attacked server, at both seats
+(Settings has a Run HUD toggle, on by default; scripted smokes keep the older
+panels so their checks hold, and `--run-hud` forces it on for captures).
+
+- **Runner seat:**
+  - **Header and ICE:** the header names the server and where the run is
+    (`ICE 2 OF 3 · ENCOUNTER`). The encountered ICE lists its subroutines
+    with printed text and status (unbroken, broken, fired).
+  - **Breakers:** each breaker appears with its strength against the ICE.
+    Matching breakers get their boost and single-subroutine breaks inline.
+    Incompatible ones are greyed out with the reason ("can't break
+    barriers").
+  - **Break all:** it shows a printed-cost quote (`BREAK ALL · 3 ¢`) and
+    boosts and breaks one issued action at a time. `BreakAllPresenter` (Match)
+    re-plans after every snapshot and stops as soon as no step is issued. Its
+    Match test checks that the quote equals what the engine charges.
+  - **Footer and access:** the footer holds Continue (or Let it fire while
+    subroutines are unbroken) and Jack out. The access panel docks under the
+    HUD. Breach choices stay on the board.
+- **Corp seat:** the HUD offers Rez for the approached ICE or another card,
+  with its cost and Leave unrezzed. It also lists abilities usable now, for
+  example a scored agenda's ("Score area · usable now").
+- **Board:** the run is drawn as a neon connection from the Runner's edge of
+  the attacked server straight through the ICE it has passed to the contact
+  point on the current ICE (lit in the Corp's colour), with dim dashes to the
+  root. Passed rezzed ICE derezzes: the frame keeps its shape but splits into
+  magenta and cyan, with scanlines, slices knocked out of line (they shift now
+  and then unless motion is reduced), a burnt aperture the connection runs
+  through, pixel shards and a SEVERED tag. Passed unrezzed ICE stays whole,
+  marked PASSED. It is drawn the right way up at the Corp seat.
+- **Counters:** counters on cards are shape badges: an amber diamond for
+  advancement, an acid-green hexagon for virus counters, a gold coin for hosted
+  credits and a steel disc for any other counter. The text chips remain in
+  tooltips and inspection.
+
+`--run-hud-smoke` (in `make verify`) covers:
+- the HUD replacing the panels and the dock's run controls;
+- both breakers;
+- Break all spending exactly its 3 ¢ quote over three issued actions;
+- Continue, and the HUD closing;
+- a passed rezzed ICE drawing the connection;
+- the Corp seat's Rez and Leave unrezzed.
+
+Not done yet from the mockups: the bypass preview (a card like Fransofia Ward
+still offers its bypass through the existing trigger controls), and a warning
+chip on the Runner's header for a Corp agenda that can fire during the run.
+
+Evidence (synthetic lab decks, no card art):
+[encounter](evidence/u8/run-hud-encounter.png),
+[after Break all](evidence/u8/run-hud-broken.png),
+[passed ICE derezzed](evidence/u8/run-hud-passed-ice.png),
+[Corp seat](evidence/u8/run-hud-corp.png).
 
 ## Gate status
 
@@ -690,6 +745,7 @@ derezzed broken ICE and the bypass preview; counter shapes on cards; music.
 | U5 art direction, feel and audio | Partly: synthesized sound, rez flip, damage shake, lane glow, experimental hover tilt; chrome and neon look, faction glyphs, opponent hand fan, reversed Corp seat, UI motion. The run HUD (U8), music and identity idle life are open |
 | A4a extras (HQ and R&D knowledge, one keep ranking) | **Runner v10 ships** (central memory: +47 and +53 on two seeds); the keep ranking already exists for discards and trashes |
 | A8 archetypes | **Corp v12 ships** (+36 and +48); Runner archetypes (v11) weaker (−32), kept as an entrant; Runner v12 ships the review fixes alone (+29) |
+| U8 run HUD | Done: one panel per run at both seats, Break all over issued actions, the run drawn through the ICE; `--run-hud-smoke` in `make verify`. **Needs the playtest** to judge speed against the old panels |
 
 Default bots after Wave 4: Corp v13 (plans turn actions, plays to its deck's
 archetype, with the 29 September repairs) and Runner v12 (central memory and the self-play review fixes)
