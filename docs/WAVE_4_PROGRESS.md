@@ -638,6 +638,43 @@ resting footprint, so it holds still under a still pointer. Settings has
 runs keep it off, so the smokes' straight-card checks still hold, and the
 board-actions smoke checks the lean, its stillness and turning it off.
 
+## U5: chrome and neon (visual identity)
+
+The look chosen on the 29 September mockups
+([roadmap](IMPROVEMENT_ROADMAP.md#wave-4--polish-and-the-bot-plans-turns-and-searches-runs))
+is in the client, in three slices:
+
+- **U5a, foundations.** Rajdhani (display), IBM Plex Sans (body) and IBM
+  Plex Mono (numbers and state) are bundled under the OFL and set in the
+  theme. `FactionPalette` holds the chosen colours per faction. A
+  `TableBackdrop` draws the halves behind the board: the Corp's brushed
+  steel tinted to its faction, with a double rule, ruler ticks and a faint
+  wordmark along the edge facing the Runner; the Runner's near-black with a
+  dot grid and a neon edge. Identity plates show the official Null Signal
+  faction glyph (CC BY-ND, `icons/SOURCE.md`) and the faction name; server
+  lanes are steel slabs with corner brackets in the Corp's colour, and the
+  centrals carry the Null Signal HQ, R&D and Archives icons.
+- **U5b, the opponent's hand and the Corp seat.** The opponent's hand is a
+  face-down fan peeking from the top edge, a quarter of each card showing,
+  driven by the public hand size only. Draws fly into it; installs and
+  discards leave from it; a card the opponent plays flies from it to the
+  middle of the table, holds face up for half a second, then goes to the
+  discard pile, with any cards it draws following. At the Corp seat the
+  board is reversed: the server field sits on the Corp's (bottom) edge and
+  each server builds upward toward the Runner, root nearest the Corp and
+  the server name on the Corp's edge.
+- **U5c, interaction motion.** Every button brightens on hover and dips
+  when pressed, and pop-up panels ease in. Hovering never changes geometry,
+  so hit targets stay put. Reduced motion and Skip animation turn it off.
+
+Evidence (synthetic tutorial decks, no card art):
+[Runner seat](evidence/u5/runner-seat-chrome-neon.png),
+[Corp seat](evidence/u5/corp-seat-reversed-board.png),
+[opponent's played card](evidence/u5/opponent-play-reveal.png).
+
+Still to do: the run HUD (U8) with the connection drawn through the ICE,
+derezzed broken ICE and the bypass preview; counter shapes on cards; music.
+
 ## Gate status
 
 | Item | Result |
@@ -650,7 +687,7 @@ board-actions smoke checks the lean, its stillness and turning it off.
 | A3 turn planner on A4a and A5 | **Corp ships** (v9: +50 and +44 on two seeds, p95 30 ms); Runner v8 level, off |
 | A4 run search | **Doesn't ship**: Runner v9 −66 (weaker), Corp v10 +16 (level); kept as ladder entrants |
 | U6 onboarding and playtest loop | Done: hints, intent cues, `playtest-summary`; placement **needs the playtest** |
-| U5 art direction, feel and audio | Partly: synthesized sound, rez flip, damage shake, lane glow, experimental hover tilt. The visual identity **needs a playtest screenshot review**; music and identity idle life are open |
+| U5 art direction, feel and audio | Partly: synthesized sound, rez flip, damage shake, lane glow, experimental hover tilt; chrome and neon look, faction glyphs, opponent hand fan, reversed Corp seat, UI motion. The run HUD (U8), music and identity idle life are open |
 | A4a extras (HQ and R&D knowledge, one keep ranking) | **Runner v10 ships** (central memory: +47 and +53 on two seeds); the keep ranking already exists for discards and trashes |
 | A8 archetypes | **Corp v12 ships** (+36 and +48); Runner archetypes (v11) weaker (−32), kept as an entrant; Runner v12 ships the review fixes alone (+29) |
 
