@@ -307,7 +307,8 @@ public partial class Main
 			if (!_tableAllActions)
 			{
 				IReadOnlyList<BoardSpatialAction> spatial = BoardSpatialActions.Project(snapshot.View);
-				foreach (string source in spatial.Select(action => action.SourceId).OfType<string>().Distinct(StringComparer.Ordinal))
+				foreach (string source in spatial.Where(action => !hudRun || !RunHudTakes(action.Action, snapshot.View))
+					.Select(action => action.SourceId).OfType<string>().Distinct(StringComparer.Ordinal))
 					if (_gameTable.GetDropRect("HostCard", source) is null && _tableAccessCard.CardId != source)
 						AddButton(ActionCardName(source) + " · card actions…", () => TrySelectSpatialCard(source));
 				if (spatial.Count > 0 && !ordinary && !encounter && !hudRun && decision.Kind != DecisionKind.TurnDiscard)
@@ -315,7 +316,7 @@ public partial class Main
 				HashSet<ActionId> spatialIds = spatial.Select(action => action.Action.Id).ToHashSet();
 				displayed = displayed.Where(action => !spatialIds.Contains(action.Id) && !_accessActionButtons.ContainsKey(action.Id));
 			}
-			AddAccessAllButton(snapshot, AddButton);
+			if (!hudRun) AddAccessAllButton(snapshot, AddButton);
 			Container actionTarget = ActionContainerFor(contextual && displayed.Any());
 			// A score leads, and continuing past one asks twice (a misclicked pass lost an agenda).
 			bool scoreAvailable = all.Any(action => action.Kind == ActionKind.ScoreAgenda);

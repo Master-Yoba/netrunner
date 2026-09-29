@@ -49,7 +49,14 @@ public partial class Main
 	private void BuildRunHud()
 	{
 		_runHudSetting = _settingsMenu?.GetNodeOrNull<CheckButton>("%RunHud");
-		_runHud = new PanelContainer { Name = "RunHud", Visible = false, ZIndex = 110, MouseFilter = Control.MouseFilterEnum.Stop };
+		_runHud = new PanelContainer
+		{
+			Name = "RunHud",
+			Visible = false,
+			ZIndex = 110,
+			MouseFilter = Control.MouseFilterEnum.Stop,
+			CustomMinimumSize = new Vector2(RunHudWidth, 0)
+		};
 		_runHud.AddThemeStyleboxOverride("panel", new StyleBoxFlat
 		{
 			BgColor = new Color(0.039f, 0.059f, 0.078f, 0.97f),
@@ -120,7 +127,8 @@ public partial class Main
 		: action.Kind switch
 		{
 			ActionKind.PumpBreaker or ActionKind.BreakSubroutines => BoardIcebreakerPresenter.Source(action) is not null,
-			ActionKind.PassPriority or ActionKind.JackOut or ActionKind.ContinueRun or ActionKind.UseBioroidAbility => true,
+			ActionKind.PassPriority or ActionKind.JackOut or ActionKind.ContinueRun or ActionKind.UseBioroidAbility
+			or ActionKind.ChooseBreachCandidate => true,
 			ActionKind.UseAbility => view.Run?.Encounter is { Status: RunEncounterStatus.Initialized },
 			_ => false,
 		};
@@ -171,6 +179,8 @@ public partial class Main
 		if (encounterShown) BuildEncounterSection(snapshot, run.Encounter!, corpSeat ? [] : issued);
 		if (corpSeat)
 			BuildCorpSection(view, run, issued, mine);
+		else if (!encounterShown && issued.Any(action => action.Kind == ActionKind.ChooseBreachCandidate))
+			BuildBreachSection(snapshot, issued);
 		else if (!encounterShown && AccessActionsPresenter.Card(view) is { IsKnown: true })
 			_runHudBody!.AddChild(MakeWrappedLabel("Accessing. Choose what to do with the card below.", 13, Muted));
 		else if (!encounterShown)
@@ -206,6 +216,39 @@ public partial class Main
 		{
 			parent.RemoveChild(child);
 			child.QueueFree();
+		}
+	}
+
+	/// <summary>
+	/// Breach choices (U8): each issued candidate is a button, and Archives with
+	/// several cards left gets Access all. The board's server and card targets
+	/// still work too.
+	/// </summary>
+	private void BuildBreachSection(MatchSnapshot snapshot, IReadOnlyList<LegalActionViewModel> issued)
+	{
+		VBoxContainer body = _runHudBody!;
+		body.AddChild(new Label { Text = "CHOOSE WHAT TO ACCESS", ThemeTypeVariation = "MonoLabel", MouseFilter = Control.MouseFilterEnum.Ignore });
+		if (_accessAllRunId is null && IsArchivesBreachChoice(snapshot.View))
+		{
+			int remaining = issued.Count(action => action.Kind == ActionKind.ChooseBreachCandidate);
+			Button all = RunHudButton($"ACCESS ALL · {remaining}", RunHudTone.Primary);
+			all.Name = "AccessAll";
+			all.Pressed += () => StartAccessAll(snapshot, remaining);
+			body.AddChild(all);
+		}
+		foreach (LegalActionViewModel candidate in issued.Where(action => action.Kind == ActionKind.ChooseBreachCandidate))
+		{
+			string label = candidate.Parameters switch
+			{
+				BreachCandidateParameters { CardId: { } card } => $"Access {ActionCardName(card.Value)}",
+				BreachCandidateParameters { Source: BreachHiddenCandidateSource.CorpHand } => "Access a random card from HQ",
+				BreachCandidateParameters { Source: BreachHiddenCandidateSource.CorpDeck } => "Access the top card of R&D",
+				_ => TableActionLabel(candidate),
+			};
+			Button button = RunHudButton(label, RunHudTone.Normal);
+			button.Pressed += () => SubmitRunHudAction(candidate);
+			body.AddChild(button);
+			_runHudButtons[candidate.Id] = button;
 		}
 	}
 
@@ -576,9 +619,11 @@ public partial class Main
 		if (_currentSnapshot is { } current) UpdateRunHudButtons(current);
 		Rect2 bounds = _tableViewport.GetGlobalRect();
 		Transform2D toLocal = _tableViewport.GetGlobalTransform().AffineInverse();
-		hud.Size = new Vector2(RunHudWidth, 0);
-		hud.ResetSize();
-		hud.Size = new Vector2(RunHudWidth, hud.Size.Y);
+		// Keep the width fixed and follow only the content's height. Shrinking to
+		// zero width first (ResetSize) rewrapped every label each frame and made
+		// the panel's height jump between tall and short.
+		Vector2 wanted = new(RunHudWidth, hud.GetCombinedMinimumSize().Y);
+		if (!hud.Size.IsEqualApprox(wanted)) hud.Size = wanted;
 		Rect2? lane = _runHudServerId is { } server ? _gameTable.GetServerLaneRect(server) : null;
 		Vector2 size = hud.Size;
 		float scale = _tableViewport.GetGlobalTransform().Scale.X;

@@ -100,6 +100,44 @@ public partial class Main
 			"Jack out and Continue stayed disabled after the table settled.");
 	}
 
+	/// <summary>Playtest, 29 September: breaching HQ took a server click and the dock; the HUD offers the choices.</summary>
+	private async Task CheckBreachChoicesInHud()
+	{
+		MatchViewModel view = _currentSnapshot!.View;
+		string root = view.Servers.SelectMany(server => server.Root).OfType<CardViewModel>().First(card => card.IsKnown).Id;
+		MatchViewModel breach = view with
+		{
+			Run = view.Run! with
+			{
+				Step = RunTimingStep.Success,
+				Encounter = null,
+				CurrentIceIndex = -1,
+				CurrentIce = null,
+				Priority = null,
+				Access = view.Run.Access with { State = RunAccessState.InProgress }
+			},
+			Decision = InteractionLabSamples.Decision(PlayerSide.Runner, _labRevision, DecisionKind.RunTiming, "Choose a breach candidate"),
+			LegalActions =
+			[
+				InteractionLabSamples.Action("breach-root", ActionKind.ChooseBreachCandidate, new BreachCandidateParameters(new(root), null), _labRevision),
+				InteractionLabSamples.Action("breach-hq", ActionKind.ChooseBreachCandidate, new BreachCandidateParameters(null, BreachHiddenCandidateSource.CorpHand), _labRevision),
+			],
+		};
+		PublishLabView(breach);
+		await TableFrames(4);
+		Button[] choices = FindDescendants<Button>(_runHud!.GetNode("Content/Body"));
+		RequireInteraction(choices.Length == 2 && choices.Any(button => button.Text == "Access a random card from HQ")
+			&& choices.All(button => !button.Disabled), $"The HUD's breach choices are wrong: {string.Join(", ", choices.Select(button => button.Text))}.");
+		RequireInteraction(!_tableActionButtons.Keys.Any(id => breach.LegalActions.Any(action => action.Id == id)),
+			"Breach choices remain in the dock beside the HUD.");
+		float height = _runHud.Size.Y;
+		await TableFrames(6);
+		RequireInteraction(Mathf.IsEqualApprox(height, _runHud.Size.Y), $"The HUD's height changed from {height} to {_runHud.Size.Y} with nothing new.");
+		int submissions = _labSubmissionCount;
+		await ClickTableButton(choices.First(button => button.Text == "Access a random card from HQ"));
+		RequireInteraction(_labSubmissionCount == submissions + 1, "A breach choice from the HUD did not submit exactly once.");
+	}
+
 	private async Task RunRunHudSmokeAsync()
 	{
 		try
@@ -120,6 +158,9 @@ public partial class Main
 				ResetInteractionLab();
 				await TableFrames(6);
 				await CheckJackOutWhileSettling();
+				ResetInteractionLab();
+				await TableFrames(6);
+				await CheckBreachChoicesInHud();
 				ResetInteractionLab();
 				await TableFrames(6);
 				_gameTable.StopMotion();
@@ -156,7 +197,7 @@ public partial class Main
 				await TableFrames(3);
 				RequireInteraction(_runHud.Visible == false && !RunHudActive, "The HUD stayed open after the run moved on.");
 			}
-			GD.Print("RUN_HUD PASS resolutions=2 replaces_panels=true breakers=true break_all=true quoted=true footer=true closes=true corp_rez=true passed_ice=true jack_out_after_settling=true");
+			GD.Print("RUN_HUD PASS resolutions=2 replaces_panels=true breakers=true break_all=true quoted=true footer=true closes=true corp_rez=true passed_ice=true jack_out_after_settling=true breach_choices=true steady_height=true");
 			QuitCleanly();
 		}
 		catch (Exception error)

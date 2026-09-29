@@ -17,7 +17,7 @@ public sealed class BeneficialTriggersTests
             "..", "..", "..", "Fixtures", "playtest-weyland-archives-replay.json")), definition.Behavior, definition.Runtime);
         var catalog = new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior);
         GameState state = replay.InitialSnapshot.ToState();
-        int offered = 0, automated = 0;
+        int offered = 0, automated = 0, zahya = 0;
         foreach (ReplayAction action in replay.Actions)
         {
             PendingDecision pending = state.PendingDecision!;
@@ -39,9 +39,18 @@ public sealed class BeneficialTriggersTests
                     };
                     Assert.True(BeneficialTriggers.IsBeneficial(trigger, features, catalog));
                 }
+                // Zahya resolves on her own after a run with accesses, and waits for the player otherwise.
+                foreach (LegalAction use in pending.LegalActions.Where(candidate => candidate.Parameters is TriggerChoiceParameters parameters
+                    && features.PrivateCards.Triggers.Any(trigger => trigger.Id == parameters.TriggerId.Value && trigger.Key == "zahya-run-end")))
+                {
+                    bool accessed = features.Board.RunEnd is { AccessOccurrenceCount: > 0 };
+                    Assert.Equal(accessed, BeneficialTriggers.IsBeneficial(((TriggerChoiceParameters)use.Parameters).TriggerId.Value, features, catalog));
+                    if (accessed) zahya++;
+                }
             }
             state = GameEngine.Apply(state, action.Submission, definition.Behavior, definition.Runtime).State;
         }
         Assert.True(automated > 0, $"None of {offered} trigger decisions resolved on their own.");
+        Assert.True(zahya > 0, "The fixture never offered Zahya after a run with accesses.");
     }
 }

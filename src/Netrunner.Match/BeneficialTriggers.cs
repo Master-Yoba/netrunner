@@ -50,7 +50,10 @@ public static class BeneficialTriggers
         BehaviorTrigger? declaration = card.Behavior?.Triggers.FirstOrDefault(trigger => trigger.Key == offered.Key);
         if (declaration is null || declaration.Instructions.Count == 0) return false;
         // Every step gains something for the player or its own card; nothing goes to the opponent.
-        return declaration.Instructions.All(instruction => Benefits.Contains(instruction.Kind)
+        // A per-access gain (Zahya) counts only after a run that accessed something: at zero it
+        // would spend a once-per-turn use for nothing (playtest, 29 September).
+        return declaration.Instructions.All(instruction => (Benefits.Contains(instruction.Kind)
+                || instruction.Kind == BehaviorInstructionKind.GainCreditsPerAccess && features.Board.RunEnd is { AccessOccurrenceCount: > 0 })
             && instruction.Choice is null && instruction.Branch is null
             && (instruction.Target is null || instruction.Target.Kind is BehaviorTargetKind.Self or BehaviorTargetKind.Controller));
     }

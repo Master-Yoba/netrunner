@@ -30,14 +30,16 @@ public partial class Main
 	{
 		if (_accessAllRunId is not null || !IsArchivesBreachChoice(snapshot.View)) return;
 		int remaining = snapshot.View.LegalActions.Count(action => action.Kind == ActionKind.ChooseBreachCandidate);
-		addButton($"Access all remaining ({remaining})", () =>
-		{
-			_accessAllRunId = snapshot.View.Run!.Id;
-			_accessAllTotal = remaining;
-			_accessAllDone = 0;
-			RenderCardTableActions(snapshot);
-			ContinueAccessAll();
-		});
+		addButton($"Access all remaining ({remaining})", () => StartAccessAll(snapshot, remaining));
+	}
+
+	private void StartAccessAll(MatchSnapshot snapshot, int remaining)
+	{
+		_accessAllRunId = snapshot.View.Run!.Id;
+		_accessAllTotal = remaining;
+		_accessAllDone = 0;
+		RenderCardTableActions(snapshot);
+		ContinueAccessAll();
 	}
 
 	/// <summary>Called every frame; submits the next issued choice while access-all is on.</summary>
