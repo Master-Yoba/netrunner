@@ -44,3 +44,4 @@ __pycache__/
 session-*.zip
 /VISUAL_ASSETS/
 saved-*.zip
+tests/**/Fixtures/*.actual

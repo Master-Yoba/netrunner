@@ -730,6 +730,32 @@ Evidence (synthetic lab decks, no card art):
 [passed ICE derezzed](evidence/u8/run-hud-passed-ice.png),
 [Corp seat](evidence/u8/run-hud-corp.png).
 
+## Trigger automation audit
+
+The client resolves the player's trigger decisions that can only help them.
+It uses an optional trigger that gains something and asks nothing, and it
+orders triggers when none of them can hurt. That decision is made per
+**effect kind**, not per card. `BeneficialTriggers.Verdicts` classifies every
+`BehaviorInstructionKind` as one of:
+
+- a gain;
+- a gain only in some situations: Zahya's per-access credits need an access,
+  and a Corp draw must leave R&D a card;
+- harmless, or harmless only in a mandatory trigger (an emptied card trashing
+  itself);
+- the player's decision.
+
+Two tests keep this current as cards arrive:
+
+- **`EveryEffectKindIsClassified`** fails when a new effect kind has no
+  verdict, so a new card's effect can never slip silently into "ask" or
+  "automatic".
+- **`EveryCardTriggerHasAReviewedVerdict`** compares every card trigger's
+  verdict with `tests/Netrunner.Match.Tests/Fixtures/trigger-automation-audit.txt`.
+  It fails on any new, changed or removed line and writes the new list next to
+  the fixture (`.actual`) for review. Accepting it means reading each changed
+  line, then replacing the fixture.
+
 ## Gate status
 
 | Item | Result |
