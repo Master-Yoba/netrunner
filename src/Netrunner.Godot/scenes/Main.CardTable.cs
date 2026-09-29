@@ -515,6 +515,14 @@ public partial class Main
 		_beats.Pacing = new BeatPacing(_speed.Value, _fastOpponent.ButtonPressed, _reducedMotion.ButtonPressed);
 		_beats.Viewer = next.View.Viewer;
 		IReadOnlyList<Beat> beats = BeatPlanner.Plan(next.PresentationEvents, before, next.View, _gameTable.GetServerDisplayName);
+		// Damage shows when its cards leave the hand, which the board renders now, not after the beats before it.
+		foreach (Beat damage in beats.Where(beat => beat.Kind == PresentationEventKind.DamageDealt))
+		{
+			_gameTable.FlashDamage();
+			_gameTable.Shake(Math.Clamp(4f + 2f * (damage.Amount ?? 1), 4f, 12f));
+			_sound?.Play(SoundCues.For(damage, next.View.Viewer));
+			_beats.DamageShownEarly++;
+		}
 		double seconds = _beats.Play(beats);
 		if (animate) _tablePlaybackWait = Math.Max(_tablePlaybackWait, seconds);
 		BoardDisplayState shown = next.PresentationEvents.Aggregate(BoardDisplayState.From(before), (state, value) => state.Apply(value));

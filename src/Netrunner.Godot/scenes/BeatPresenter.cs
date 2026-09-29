@@ -35,6 +35,15 @@ public partial class BeatPresenter : Control
 	/// <summary>Raised as each beat starts to play, for capture evidence.</summary>
 	public event Action<Beat>? BeatStarted;
 
+	/// <summary>
+	/// Damage beats whose wash, shake and sound already played when their publication arrived,
+	/// with the cards leaving the hand (playtest, 29 September); their beats only pulse the heap.
+	/// </summary>
+	public int DamageShownEarly { get; set; }
+
+	/// <summary>Whether the beat just started was a damage beat already shown at its publication.</summary>
+	public bool LastBeatShownEarly { get; private set; }
+
 	/// <summary>Beats shown since the session started, for capture evidence.</summary>
 	public List<(PresentationEventKind Kind, string Caption)> Played { get; } = [];
 
@@ -82,6 +91,7 @@ public partial class BeatPresenter : Control
 	public void Stop()
 	{
 		_queue.Clear();
+		DamageShownEarly = 0;
 		_remaining = 0;
 		_linger = 0;
 		if (_banner is not null) _banner.Visible = false;
@@ -140,6 +150,7 @@ public partial class BeatPresenter : Control
 	/// <summary>Points the board at what the beat is about.</summary>
 	private void Direct(Beat beat)
 	{
+		LastBeatShownEarly = false;
 		switch (beat.Kind)
 		{
 			case PresentationEventKind.TurnStarted:
@@ -183,8 +194,16 @@ public partial class BeatPresenter : Control
 				Board.PulseZone(beat.ToZone);
 				break;
 			case PresentationEventKind.DamageDealt:
-				Board.FlashDamage();
-				Board.Shake(Math.Clamp(4f + 2f * (beat.Amount ?? 1), 4f, 12f));
+				if (DamageShownEarly > 0)
+				{
+					DamageShownEarly--;
+					LastBeatShownEarly = true;
+				}
+				else
+				{
+					Board.FlashDamage();
+					Board.Shake(Math.Clamp(4f + 2f * (beat.Amount ?? 1), 4f, 12f));
+				}
 				Board.PulseZone(ZoneKind.RunnerHeap);
 				break;
 			case PresentationEventKind.TagsChanged:

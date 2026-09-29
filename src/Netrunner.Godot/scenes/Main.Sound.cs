@@ -47,7 +47,10 @@ public partial class Main
 	{
 		_sound = new SoundBank { Name = "SoundBank", Muted = !_soundEnabled, Volume = _effectsLevel };
 		AddChild(_sound);
-		_beats.BeatStarted += beat => _sound.Play(SoundCues.For(beat, _beats.Viewer));
+		_beats.BeatStarted += beat =>
+		{
+			if (!_beats.LastBeatShownEarly) _sound.Play(SoundCues.For(beat, _beats.Viewer));
+		};
 		if (_settingsMenu?.GetNode<VBoxContainer>("Panel/Content") is not { } settings) return;
 		_soundToggle = new CheckButton { Name = "Sound", Text = "Sound", ButtonPressed = _soundEnabled };
 		_soundToggle.Toggled += enabled =>
