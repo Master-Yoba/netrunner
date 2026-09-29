@@ -59,6 +59,11 @@ make card-art-fetch
 make play
 ```
 
+On Linux, `make play` and `make interaction-lab` run the game with its own
+`XDG_DATA_HOME` (under `.tools/godot-data`), which .NET would otherwise use to
+find the cache, so they set the variable to the CLI's default first when it is
+unset. A variable you set yourself always wins.
+
 CLI `--cache-dir <directory>` takes precedence over that variable. If used,
 point the game at the same directory using the variable. Restart the game after
 changing cache contents; textures and missing-image results are shared for the

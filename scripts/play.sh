@@ -33,6 +33,7 @@ set +e
   if [[ -n "${NETRUNNER_GODOT_ARGS:-}" ]]; then
     read -r -a play_godot_args <<< "$NETRUNNER_GODOT_ARGS"
   fi
+  netrunner_pin_card_art_directory
   XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" "$GODOT4" \
     --path "$play_root/src/Netrunner.Godot" \
     --log-file "$godot_log_file" \

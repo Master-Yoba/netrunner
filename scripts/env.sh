@@ -13,6 +13,15 @@ export DOTNET_NOLOGO=1
 export NUGET_XMLDOC_MODE=skip
 export NETRUNNER_GODOT_DATA="$netrunner_root/.tools/godot-data"
 
+# The game runs with XDG_DATA_HOME set to NETRUNNER_GODOT_DATA, and on Linux
+# .NET derives its default card-art cache from XDG_DATA_HOME. Launchers call
+# this first so the game reads the cache the card-art CLI wrote.
+netrunner_pin_card_art_directory() {
+  if [[ -z "${NETRUNNER_CARD_ART_DIRECTORY:-}" && "$(uname -s)" == "Linux" ]]; then
+    export NETRUNNER_CARD_ART_DIRECTORY="${XDG_DATA_HOME:-$HOME/.local/share}/NetrunnerSolo/card-art"
+  fi
+}
+
 if [[ -d "$netrunner_dotnet" ]]; then
   export DOTNET_ROOT="$netrunner_dotnet"
   export PATH="$DOTNET_ROOT:$PATH"
