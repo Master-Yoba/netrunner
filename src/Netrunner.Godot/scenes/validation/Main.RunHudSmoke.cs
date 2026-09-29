@@ -28,6 +28,45 @@ public partial class Main
 		if (OS.GetCmdlineUserArgs().Contains("--run-hud-screenshots")) await SaveInteractionEvidence($"run-hud-passed-ice-{size.X}");
 	}
 
+	/// <summary>At the Corp seat the HUD offers the rez of the approached ICE and leaving it unrezzed.</summary>
+	private async Task CheckCorpRunHud(Vector2I size)
+	{
+		MatchViewModel runner = _currentSnapshot!.View;
+		CardViewModel ice = runner.Run!.CurrentIce! with { Rezzed = false };
+		MatchViewModel corp = runner with
+		{
+			Viewer = PlayerSide.Corp,
+			Corp = runner.Corp with { Credits = 9 },
+			Servers = runner.Servers.Select(server => server.Kind == ServerKind.Headquarters ? server with { Ice = [ice] } : server).ToArray(),
+			Run = runner.Run with
+			{
+				Step = RunTimingStep.ApproachPaidWindow,
+				Encounter = null,
+				CurrentIce = ice,
+				Priority = runner.Run.Priority! with { Window = RunPriorityWindowKind.ApproachPaid, Holder = PlayerSide.Corp, CorpMayRezApproachedIce = true }
+			},
+			Decision = InteractionLabSamples.Decision(PlayerSide.Corp, _labRevision, DecisionKind.RunTiming, "Approach paid window"),
+			LegalActions =
+			[
+				InteractionLabSamples.Action("rez-approached", ActionKind.RezIce, new RunIceParameters(new(ice.Id)), _labRevision),
+				InteractionLabSamples.Action("corp-pass", ActionKind.PassPriority, new NoActionParameters(), _labRevision),
+			],
+		};
+		PublishLabView(corp);
+		await TableFrames(4);
+		RequireInteraction(_runHud?.Visible == true && RunHudActive, "The run HUD did not open at the Corp seat.");
+		Button? rez = _runHud!.FindChild("Rez", true, false) as Button;
+		Button? leave = FindDescendants<Button>(_runHud.GetNode("Content/Footer")).FirstOrDefault(button => button.Text == "Leave unrezzed");
+		RequireInteraction(rez is { Disabled: false } && rez.Text.StartsWith("REZ", StringComparison.Ordinal) && leave is not null,
+			$"The Corp HUD lacks Rez ('{rez?.Text}') or Leave unrezzed.");
+		RequireInteraction(!_tableActionButtons.Keys.Any(id => corp.LegalActions.Any(action => action.Id == id)),
+			"The Corp's run controls remain in the dock beside the HUD.");
+		if (OS.GetCmdlineUserArgs().Contains("--run-hud-screenshots")) await SaveInteractionEvidence($"run-hud-corp-{size.X}");
+		int submissions = _labSubmissionCount;
+		await ClickTableButton(rez!);
+		RequireInteraction(_labSubmissionCount == submissions + 1, "Rez from the Corp HUD did not submit exactly once.");
+	}
+
 	private async Task RunRunHudSmokeAsync()
 	{
 		try
@@ -44,6 +83,7 @@ public partial class Main
 				await TableFrames(6);
 				_gameTable.StopMotion();
 				await CheckPassedIceConnection(size);
+				await CheckCorpRunHud(size);
 				ResetInteractionLab();
 				await TableFrames(6);
 				_gameTable.StopMotion();
@@ -80,7 +120,7 @@ public partial class Main
 				await TableFrames(3);
 				RequireInteraction(_runHud.Visible == false && !RunHudActive, "The HUD stayed open after the run moved on.");
 			}
-			GD.Print("RUN_HUD PASS resolutions=2 replaces_panels=true breakers=true break_all=true quoted=true footer=true closes=true");
+			GD.Print("RUN_HUD PASS resolutions=2 replaces_panels=true breakers=true break_all=true quoted=true footer=true closes=true corp_rez=true passed_ice=true");
 			QuitCleanly();
 		}
 		catch (Exception error)

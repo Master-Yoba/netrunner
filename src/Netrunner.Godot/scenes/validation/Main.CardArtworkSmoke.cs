@@ -80,7 +80,7 @@ public partial class Main
 				await TableFrames(3);
 				RequireInteraction(!FindDescendants<Label>(portrait).Any(label => label.IsVisibleInTree() && label.Text == card.Title),
 					"Printed artwork is covered by a duplicate title.");
-				RequireInteraction(FindDescendants<Label>(portrait).Any(label => label.IsVisibleInTree() && label.Text.Contains("ADV", StringComparison.Ordinal)),
+				RequireInteraction(portrait.AdvancementBadgeCount == card.AdvancementCounters && card.AdvancementCounters > 0,
 					"Artwork hid advancement counters.");
 				if (OS.GetCmdlineUserArgs().Contains("--card-art-screenshots")) await SaveArtworkEvidence($"faces-{size.X}", liveCache);
 				_inspectedCard = ice.Card;

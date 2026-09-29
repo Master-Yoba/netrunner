@@ -264,7 +264,8 @@ public partial class Main
 			bool encounter = decision.Kind == DecisionKind.RunTiming && snapshot.View.Viewer == PlayerSide.Runner
 				&& snapshot.View.Run is { Step: RunTimingStep.EncounterPaidWindow, Encounter: not null };
 			IEnumerable<LegalActionViewModel> displayed = all;
-			if (RunHudOwns(snapshot) && decision.Kind == DecisionKind.RunTiming && !_tableAllActions)
+			bool hudRun = RunHudOwns(snapshot) && decision.Kind == DecisionKind.RunTiming && !_tableAllActions;
+			if (hudRun)
 			{
 				// The run HUD holds the run's own controls; anything else (a breach choice) stays here.
 				displayed = all.Where(action => !RunHudTakes(action, snapshot.View));
@@ -309,7 +310,7 @@ public partial class Main
 				foreach (string source in spatial.Select(action => action.SourceId).OfType<string>().Distinct(StringComparer.Ordinal))
 					if (_gameTable.GetDropRect("HostCard", source) is null && _tableAccessCard.CardId != source)
 						AddButton(ActionCardName(source) + " · card actions…", () => TrySelectSpatialCard(source));
-				if (spatial.Count > 0 && !ordinary && !encounter && decision.Kind != DecisionKind.TurnDiscard)
+				if (spatial.Count > 0 && !ordinary && !encounter && !hudRun && decision.Kind != DecisionKind.TurnDiscard)
 					AddButton("All legal actions…", () => { _tableAllActions = true; RecordFullMatchSelection("ui-control", "all-legal-actions"); RenderCardTableActions(snapshot); });
 				HashSet<ActionId> spatialIds = spatial.Select(action => action.Action.Id).ToHashSet();
 				displayed = displayed.Where(action => !spatialIds.Contains(action.Id) && !_accessActionButtons.ContainsKey(action.Id));

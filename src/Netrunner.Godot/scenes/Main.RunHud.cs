@@ -112,16 +112,18 @@ public partial class Main
 
 	/// <summary>True when the HUD owns this snapshot's run controls.</summary>
 	private bool RunHudOwns(MatchSnapshot snapshot) => RunHudEnabled && !snapshot.IsTerminal
-		&& snapshot.View.Viewer == PlayerSide.Runner && snapshot.View.Run is { EndReason: null } && _accessAllRunId is null;
+		&& snapshot.View.Run is { EndReason: null } && _accessAllRunId is null;
 
 	/// <summary>The issued actions the HUD shows: breaker boosts and breaks, encounter abilities, and continue or jack out.</summary>
-	private static bool RunHudTakes(LegalActionViewModel action, MatchViewModel view) => action.Kind switch
-	{
-		ActionKind.PumpBreaker or ActionKind.BreakSubroutines => BoardIcebreakerPresenter.Source(action) is not null,
-		ActionKind.PassPriority or ActionKind.JackOut or ActionKind.ContinueRun or ActionKind.UseBioroidAbility => true,
-		ActionKind.UseAbility => view.Run?.Encounter is { Status: RunEncounterStatus.Initialized },
-		_ => false,
-	};
+	private static bool RunHudTakes(LegalActionViewModel action, MatchViewModel view) => view.Viewer == PlayerSide.Corp
+		? action.Kind is ActionKind.RezIce or ActionKind.RezCard or ActionKind.UseAbility or ActionKind.PassPriority
+		: action.Kind switch
+		{
+			ActionKind.PumpBreaker or ActionKind.BreakSubroutines => BoardIcebreakerPresenter.Source(action) is not null,
+			ActionKind.PassPriority or ActionKind.JackOut or ActionKind.ContinueRun or ActionKind.UseBioroidAbility => true,
+			ActionKind.UseAbility => view.Run?.Encounter is { Status: RunEncounterStatus.Initialized },
+			_ => false,
+		};
 
 	/// <summary>Shows or hides the HUD for this snapshot, and rebuilds it when the snapshot changed.</summary>
 	private void RefreshRunHud(MatchSnapshot snapshot)
@@ -148,11 +150,14 @@ public partial class Main
 		}
 		_runHudView = view;
 		ApplyRunHudFaction();
-		_runHudTitle!.Text = $"RUN · {_gameTable.GetServerDisplayName(run.AttackedServerId).ToUpperInvariant()}";
+		bool corpSeat = view.Viewer == PlayerSide.Corp;
+		string server = _gameTable.GetServerDisplayName(run.AttackedServerId).ToUpperInvariant();
+		_runHudTitle!.Text = corpSeat ? $"RUN ON {server}" : $"RUN · {server}";
 		_runHudStep!.Text = RunHudStepText(view, run);
-		_runHudCredits!.Text = run.RunCredits > 0
-			? $"{view.Runner.Credits} ¢ + {run.RunCredits} run ¢ · {view.Runner.Clicks} clicks"
-			: $"{view.Runner.Credits} ¢ · {view.Runner.Clicks} clicks";
+		_runHudCredits!.Text = corpSeat ? $"{view.Corp.Credits} ¢ · Runner {view.Runner.Credits} ¢"
+			: run.RunCredits > 0
+				? $"{view.Runner.Credits} ¢ + {run.RunCredits} run ¢ · {view.Runner.Clicks} clicks"
+				: $"{view.Runner.Credits} ¢ · {view.Runner.Clicks} clicks";
 		DetachChildren(_runHudBody!);
 		DetachChildren(_runHudFooter!);
 		_runHudButtons.Clear();
@@ -160,11 +165,13 @@ public partial class Main
 		bool mine = view.Decision is { Kind: DecisionKind.RunTiming } decision && decision.OwnerSide == view.Viewer;
 		bool ours = mine && CanUseBoardActions(snapshot);
 		IReadOnlyList<LegalActionViewModel> issued = ours ? view.LegalActions.Where(action => RunHudTakes(action, view)).ToArray() : [];
-		if (run.Encounter is { Status: RunEncounterStatus.Initialized, Ice: { IsKnown: true } } encounter)
-			BuildEncounterSection(snapshot, encounter, issued);
-		else if (AccessActionsPresenter.Card(view) is { IsKnown: true })
+		bool encounterShown = run.Encounter is { Status: RunEncounterStatus.Initialized, Ice.IsKnown: true };
+		if (encounterShown) BuildEncounterSection(snapshot, run.Encounter!, corpSeat ? [] : issued);
+		if (corpSeat)
+			BuildCorpSection(view, run, issued, mine);
+		else if (!encounterShown && AccessActionsPresenter.Card(view) is { IsKnown: true })
 			_runHudBody!.AddChild(MakeWrappedLabel("Accessing. Choose what to do with the card below.", 13, Muted));
-		else
+		else if (!encounterShown)
 			_runHudBody!.AddChild(MakeWrappedLabel(RunHudWaitingText(view, run, mine,
 				view.LegalActions.Any(action => !RunHudTakes(action, view))), 13, Muted));
 
@@ -174,11 +181,13 @@ public partial class Main
 			&& action.Kind is ActionKind.PassPriority or ActionKind.JackOut or ActionKind.ContinueRun or ActionKind.UseBioroidAbility))
 		{
 			bool unbroken = run.Encounter is { Status: RunEncounterStatus.Initialized } open && open.RemainingSubroutines > 0;
-			string label = action.Kind == ActionKind.PassPriority && unbroken ? "Let it fire"
+			bool rezOffered = corpSeat && issued.Any(candidate => candidate.Kind == ActionKind.RezIce);
+			string label = action.Kind == ActionKind.PassPriority && rezOffered ? "Leave unrezzed"
+				: action.Kind == ActionKind.PassPriority && unbroken && !corpSeat ? "Let it fire"
 				: action.Kind == ActionKind.PassPriority ? "Continue"
 				: TableActionLabel(action);
 			Button button = RunHudButton(label, action.Kind == ActionKind.JackOut ? RunHudTone.Quiet
-				: action.Kind == ActionKind.PassPriority && unbroken ? RunHudTone.Danger : RunHudTone.Normal);
+				: action.Kind == ActionKind.PassPriority && unbroken && !corpSeat ? RunHudTone.Danger : RunHudTone.Normal);
 			button.Pressed += () => SubmitRunHudAction(action);
 			_runHudFooter!.AddChild(button);
 			_runHudButtons[action.Id] = button;
@@ -195,6 +204,45 @@ public partial class Main
 		{
 			parent.RemoveChild(child);
 			child.QueueFree();
+		}
+	}
+
+	/// <summary>
+	/// The Corp's run decisions: rez the approached ICE or another card, and
+	/// abilities usable now, such as an agenda in the score area.
+	/// </summary>
+	private void BuildCorpSection(MatchViewModel view, RunFocusViewModel run, IReadOnlyList<LegalActionViewModel> issued, bool mine)
+	{
+		VBoxContainer body = _runHudBody!;
+		if (run.Encounter is not { Status: RunEncounterStatus.Initialized })
+		{
+			string where = run.CurrentIce is { } ice ? (ice.IsKnown ? ice.Title : "your face-down ICE")
+				: run.CurrentIceIndex < 0 ? "the server" : "your ICE";
+			body.AddChild(MakeWrappedLabel(mine ? $"The Runner is at {where}." : "The Runner has priority.", 14, Colors.White));
+		}
+		foreach (LegalActionViewModel rez in issued.Where(action => action.Kind is ActionKind.RezIce or ActionKind.RezCard))
+		{
+			string? cardId = rez.Parameters switch { RezCardParameters card => card.CardId.Value, RunIceParameters ice => ice.IceId.Value, _ => null };
+			int? cost = rez.CostQuote?.EffectiveCost ?? (rez.Parameters as RezCardParameters)?.CreditCost;
+			string title = cardId is null ? "card" : ActionCardName(cardId);
+			Button button = RunHudButton($"REZ {title.ToUpperInvariant()}{(cost is { } credits ? $" · {credits} ¢" : string.Empty)}", RunHudTone.Primary);
+			button.Name = "Rez";
+			button.Disabled = cost is { } price && price > view.Corp.Credits;
+			button.Pressed += () => SubmitRunHudAction(rez);
+			body.AddChild(button);
+			_runHudButtons[rez.Id] = button;
+		}
+		LegalActionViewModel[] abilities = [.. issued.Where(action => action.Kind == ActionKind.UseAbility)];
+		if (abilities.Length == 0) return;
+		HashSet<string> scored = view.CorpScore.Select(card => card.Id).ToHashSet(StringComparer.Ordinal);
+		bool fromScore = abilities.Any(action => action.Parameters is AbilityActionParameters ability && scored.Contains(ability.SourceCardId.Value));
+		body.AddChild(new Label { Text = fromScore ? "SCORE AREA · USABLE NOW" : "ABILITIES", ThemeTypeVariation = "MonoLabel", MouseFilter = Control.MouseFilterEnum.Ignore });
+		foreach (LegalActionViewModel ability in abilities)
+		{
+			Button button = RunHudButton(TableActionLabel(ability), RunHudTone.Normal);
+			button.Pressed += () => SubmitRunHudAction(ability);
+			body.AddChild(button);
+			_runHudButtons[ability.Id] = button;
 		}
 	}
 
@@ -252,7 +300,7 @@ public partial class Main
 			body.AddChild(SubroutineRow(subroutine.Ordinal + 1, text, mark, color));
 		}
 
-		Label breakersHeading = new() { Text = "YOUR BREAKERS", ThemeTypeVariation = "MonoLabel", MouseFilter = Control.MouseFilterEnum.Ignore };
+		Label breakersHeading = new() { Text = snapshot.View.Viewer == PlayerSide.Corp ? "RUNNER'S BREAKERS" : "YOUR BREAKERS", ThemeTypeVariation = "MonoLabel", MouseFilter = Control.MouseFilterEnum.Ignore };
 		body.AddChild(breakersHeading);
 		IEnumerable<EncounterBreakerViewModel> breakers = encounter.Breakers.OrderByDescending(breaker => breaker.CanInterfaceEncounter);
 		HashSet<string> shown = new(StringComparer.Ordinal);
@@ -415,7 +463,7 @@ public partial class Main
 		button.CustomMinimumSize = new Vector2(0, tone == RunHudTone.Primary ? 46 : 40);
 		if (tone == RunHudTone.Primary)
 		{
-			Color accent = _gameTable.RunnerFaction.Accent;
+			Color accent = RunHudFaction.Accent;
 			button.ThemeTypeVariation = "PrimaryAction";
 			button.AddThemeStyleboxOverride("normal", new StyleBoxFlat
 			{
@@ -451,13 +499,16 @@ public partial class Main
 		return button;
 	}
 
+	/// <summary>The seat's own faction colours: the HUD is the local player's panel.</summary>
+	private FactionColors RunHudFaction => _currentSnapshot?.View.Viewer == PlayerSide.Corp ? _gameTable.CorpFaction : _gameTable.RunnerFaction;
+
 	private void ApplyRunHudFaction()
 	{
 		if (_runHud?.GetThemeStylebox("panel") is not StyleBoxFlat style) return;
-		Color accent = _gameTable.RunnerFaction.Accent;
+		Color accent = RunHudFaction.Accent;
 		style.BorderColor = accent;
 		style.ShadowColor = accent with { A = 0.2f };
-		_runHudStep?.AddThemeColorOverride("font_color", _gameTable.RunnerFaction.Text);
+		_runHudStep?.AddThemeColorOverride("font_color", RunHudFaction.Text);
 	}
 
 	private void SubmitRunHudAction(LegalActionViewModel action)
