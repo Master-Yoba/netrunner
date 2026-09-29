@@ -69,10 +69,10 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     public const string V13 = "corp-heuristic-v13";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
-    /// V12 plays to its deck's archetype (A8) and gains on the Gateway ladder over
-    /// V11 (+36 and +48 on two seeds), so new games use it.
+    /// V13 repairs V12's faults from the 29 September playtest and is level with it on the
+    /// Gateway ladder (-3 and +18 on two seeds), so new games use it.
     /// </remarks>
-    public const string PolicyVersion = V12;
+    public const string PolicyVersion = V13;
     /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>
     public const string LatestHeuristic = V8;
     public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13];

@@ -556,8 +556,10 @@ recorded positions, and all four cases fail on v12):
   be rezzed and the agenda finished next turn, unless HQ is flooded (two or
   more agendas or a full hand).
 
-**Ladder:** v13 against v12, Gateway pool: −3 [−35, 25] on seed 5, no deck
-warnings; level, as expected, since the bot Runner doesn't bait or farm.
+**Ladder:** v13 against v12, Gateway pool: −3 [−35, 25] on seed 5 and +18
+[−9, 49] on seed 6, no deck warnings; level, as expected, since the bot
+Runner doesn't bait or farm. **Corp v13 ships** as the default;
+`standard-w4d` keeps Corp v12 with Runner v12.
 
 **The run UI** needs more than these fixes: a run still spreads over the
 breaker panel, the access panel, the dock and the server. The roadmap's U8
@@ -652,6 +654,6 @@ board-actions smoke checks the lean, its stillness and turning it off.
 | A4a extras (HQ and R&D knowledge, one keep ranking) | **Runner v10 ships** (central memory: +47 and +53 on two seeds); the keep ranking already exists for discards and trashes |
 | A8 archetypes | **Corp v12 ships** (+36 and +48); Runner archetypes (v11) weaker (−32), kept as an entrant; Runner v12 ships the review fixes alone (+29) |
 
-Default bots after Wave 4: Corp v12 (plans turn actions, plays to its deck's
-archetype) and Runner v12 (central memory and the self-play review fixes)
+Default bots after Wave 4: Corp v13 (plans turn actions, plays to its deck's
+archetype, with the 29 September repairs) and Runner v12 (central memory and the self-play review fixes)
 on the legal decks; the tutorial decks keep the frozen C1 bot (Corp v7, Runner v6).
