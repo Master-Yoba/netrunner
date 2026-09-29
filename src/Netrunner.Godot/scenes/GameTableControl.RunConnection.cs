@@ -26,7 +26,9 @@ public partial class GameTableControl
 	private void EnsureRunConnection()
 	{
 		if (_runConnection is not null) return;
-		_runConnection = new Control { Name = "RunConnection", MouseFilter = MouseFilterEnum.Ignore, ZIndex = 24 };
+		// Above emphasized cards (the encountered ICE is raised to 30), below the hand (35):
+		// the line goes through the ICE, and a passed ICE's derez shows over it.
+		_runConnection = new Control { Name = "RunConnection", MouseFilter = MouseFilterEnum.Ignore, ZIndex = 32 };
 		AddChild(_runConnection);
 		_runConnection.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
 		_runConnection.Draw += DrawRunConnection;

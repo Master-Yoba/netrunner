@@ -165,6 +165,41 @@ public partial class Main
 		}
 	}
 
+	/// <summary>
+	/// Playtest, 29 September: accessing Tithe from HQ left an empty HUD, its Leave card button
+	/// hidden in the old access panel behind it. The accessed card and its actions are in the HUD.
+	/// </summary>
+	private async Task CheckAccessInHud(Vector2I size)
+	{
+		MatchViewModel view = _currentSnapshot!.View;
+		CardViewModel tithe = UiPreviewSamples.Known("lab-accessed", "ICE", "Practice Tithe") with { Subtypes = ["Sentry"] };
+		MatchViewModel access = view with
+		{
+			Run = view.Run! with
+			{
+				Step = RunTimingStep.BreachAccessAbility,
+				Encounter = null,
+				CurrentIceIndex = -1,
+				CurrentIce = null,
+				Priority = null,
+				Access = view.Run.Access with { State = RunAccessState.InProgress, Accessed = [tithe] }
+			},
+			Decision = InteractionLabSamples.Decision(PlayerSide.Runner, _labRevision, DecisionKind.RunTiming, "Mid-access ability or no action"),
+			LegalActions = [InteractionLabSamples.Action("leave", ActionKind.NoAccessAction, new NoActionParameters(), _labRevision)],
+		};
+		PublishLabView(access);
+		await TableFrames(4);
+		Button? leave = FindDescendants<Button>(_runHud!.GetNode("Content/Body")).FirstOrDefault(button => button.Text == "Leave card");
+		RequireInteraction(_runHud.FindChild("AccessedCard", true, false) is TableCardControl && leave is { Disabled: false },
+			"The HUD does not show the accessed card with its Leave card action.");
+		RequireInteraction(!_tableAccessPanel.Visible, "The old access panel still shows beside the HUD.");
+		RequireInteraction(_tableViewport.GetGlobalRect().Encloses(_runHud.GetGlobalRect()), "The HUD escaped the table while accessing.");
+		if (OS.GetCmdlineUserArgs().Contains("--run-hud-screenshots")) await SaveInteractionEvidence($"run-hud-access-{size.X}");
+		int submissions = _labSubmissionCount;
+		await ClickTableButton(leave!);
+		RequireInteraction(_labSubmissionCount == submissions + 1, "Leave card from the HUD did not submit exactly once.");
+	}
+
 	private async Task RunRunHudSmokeAsync()
 	{
 		try
@@ -191,6 +226,9 @@ public partial class Main
 				ResetInteractionLab();
 				await TableFrames(6);
 				await CheckHeightAcrossPriority();
+				ResetInteractionLab();
+				await TableFrames(6);
+				await CheckAccessInHud(size);
 				ResetInteractionLab();
 				await TableFrames(6);
 				_gameTable.StopMotion();
@@ -227,7 +265,7 @@ public partial class Main
 				await TableFrames(3);
 				RequireInteraction(_runHud.Visible == false && !RunHudActive, "The HUD stayed open after the run moved on.");
 			}
-			GD.Print("RUN_HUD PASS resolutions=2 replaces_panels=true breakers=true break_all=true quoted=true footer=true closes=true corp_rez=true passed_ice=true jack_out_after_settling=true breach_choices=true steady_height=true priority_flips=true");
+			GD.Print("RUN_HUD PASS resolutions=2 replaces_panels=true breakers=true break_all=true quoted=true footer=true closes=true corp_rez=true passed_ice=true jack_out_after_settling=true breach_choices=true steady_height=true priority_flips=true access=true");
 			QuitCleanly();
 		}
 		catch (Exception error)

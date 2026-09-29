@@ -181,7 +181,8 @@ public partial class Main
 		_gameTable.Render(snapshot.View);
 		CardViewModel? accessed = AccessActionsPresenter.Card(snapshot.View);
 		_tableAccessCard.SetCard(accessed);
-		_tableAccessPanel.Visible = accessed is { IsKnown: true } && _accessAllRunId is null;
+		// The run HUD shows the accessed card itself; the separate panel is for scripted runs.
+		_tableAccessPanel.Visible = accessed is { IsKnown: true } && _accessAllRunId is null && !RunHudOwns(snapshot);
 		_tableAccessTitle.Text = AccessTitle(accessed, snapshot.View);
 		RefreshRunOverlays(snapshot);
 		if (RunHudOwns(snapshot) && _encounterOverlay is not null) _encounterOverlay.Visible = false;

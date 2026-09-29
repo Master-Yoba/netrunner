@@ -17,6 +17,12 @@ namespace Netrunner.GodotClient;
 public partial class Main
 {
 	private const float RunHudWidth = 480;
+	/// <summary>
+	/// The HUD's standing height (playtest, 29 September: sizing it to its content made it
+	/// jump as snapshots came in). Tall enough for most steps; only an unusually long one
+	/// grows it. No scrolling in the game UI.
+	/// </summary>
+	private const float RunHudHeight = 640;
 	private PanelContainer? _runHud;
 	private VBoxContainer? _runHudBody;
 	private Label? _runHudTitle;
@@ -26,8 +32,6 @@ public partial class Main
 	private CheckButton? _runHudSetting;
 	private string? _runHudServerId;
 	private MatchViewModel? _runHudView;
-	private string? _runHudHeightKey;
-	private float _runHudHeight;
 	private string? _breakAllBreaker;
 	private string? _breakAllEncounter;
 	private long _breakAllSubmittedSequence = -1;
@@ -57,7 +61,6 @@ public partial class Main
 			Visible = false,
 			ZIndex = 110,
 			MouseFilter = Control.MouseFilterEnum.Stop,
-			CustomMinimumSize = new Vector2(RunHudWidth, 0)
 		};
 		_runHud.AddThemeStyleboxOverride("panel", new StyleBoxFlat
 		{
@@ -108,7 +111,8 @@ public partial class Main
 		header.AddChild(_runHudCredits);
 		content.AddChild(header);
 
-		_runHudBody = new VBoxContainer { Name = "Body", MouseFilter = Control.MouseFilterEnum.Ignore };
+		// The body takes the spare height, so the footer stays pinned at the bottom.
+		_runHudBody = new VBoxContainer { Name = "Body", SizeFlagsVertical = Control.SizeFlags.ExpandFill, MouseFilter = Control.MouseFilterEnum.Ignore };
 		_runHudBody.AddThemeConstantOverride("separation", 8);
 		content.AddChild(_runHudBody);
 
@@ -130,7 +134,7 @@ public partial class Main
 		{
 			ActionKind.PumpBreaker or ActionKind.BreakSubroutines => BoardIcebreakerPresenter.Source(action) is not null,
 			ActionKind.PassPriority or ActionKind.JackOut or ActionKind.ContinueRun or ActionKind.UseBioroidAbility
-			or ActionKind.ChooseBreachCandidate => true,
+			or ActionKind.ChooseBreachCandidate or ActionKind.StealAgenda or ActionKind.TrashAccessedCard or ActionKind.NoAccessAction => true,
 			ActionKind.UseAbility => view.Run?.Encounter is { Status: RunEncounterStatus.Initialized },
 			_ => false,
 		};
@@ -183,8 +187,8 @@ public partial class Main
 			BuildCorpSection(view, run, issued, mine);
 		else if (!encounterShown && issued.Any(action => action.Kind == ActionKind.ChooseBreachCandidate))
 			BuildBreachSection(snapshot, issued);
-		else if (!encounterShown && AccessActionsPresenter.Card(view) is { IsKnown: true })
-			_runHudBody!.AddChild(MakeWrappedLabel("Accessing. Choose what to do with the card below.", 13, Muted));
+		else if (!encounterShown && AccessActionsPresenter.Card(view) is { IsKnown: true } accessed)
+			BuildAccessSection(view, accessed, issued);
 		else if (!encounterShown)
 			_runHudBody!.AddChild(MakeWrappedLabel(RunHudWaitingText(view, run, mine,
 				view.LegalActions.Any(action => !RunHudTakes(action, view))), 13, Muted));
@@ -219,6 +223,61 @@ public partial class Main
 			parent.RemoveChild(child);
 			child.QueueFree();
 		}
+	}
+
+	/// <summary>
+	/// The card being accessed (U8), shown in the HUD with its steal, trash or leave
+	/// actions. The separate access panel stays hidden while the HUD owns the run
+	/// (playtest, 29 September: docked under a tall HUD it slid behind it).
+	/// </summary>
+	private void BuildAccessSection(MatchViewModel view, CardViewModel card, IReadOnlyList<LegalActionViewModel> issued)
+	{
+		VBoxContainer body = _runHudBody!;
+		body.AddChild(new Label { Text = "ACCESSING", ThemeTypeVariation = "MonoLabel", MouseFilter = Control.MouseFilterEnum.Ignore });
+		HBoxContainer row = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
+		row.AddThemeConstantOverride("separation", 14);
+		TableCardControl face = TableCardControl.Create();
+		face.Name = "AccessedCard";
+		face.MouseFilter = Control.MouseFilterEnum.Ignore;
+		face.FocusMode = Control.FocusModeEnum.None;
+		row.AddChild(face);
+		face.SetCard(card);
+		face.SetBackSide(PlayerSide.Corp);
+		face.SetDisplaySize(TableCardControl.PortraitCardSize * 0.8f);
+		face.CustomMinimumSize = TableCardControl.PortraitCardSize * 0.8f;
+		VBoxContainer side = new() { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, MouseFilter = Control.MouseFilterEnum.Ignore };
+		side.AddThemeConstantOverride("separation", 8);
+		Label title = new()
+		{
+			Text = AccessTitle(card, view),
+			ThemeTypeVariation = "DisplayLabel",
+			AutowrapMode = TextServer.AutowrapMode.WordSmart,
+			MouseFilter = Control.MouseFilterEnum.Ignore
+		};
+		title.AddThemeFontSizeOverride("font_size", 20);
+		side.AddChild(title);
+		string kind = string.Join(" · ", new[] { card.Type }.Concat(card.Subtypes)).ToUpperInvariant();
+		side.AddChild(new Label
+		{
+			Text = kind,
+			ThemeTypeVariation = "MonoLabel",
+			AutowrapMode = TextServer.AutowrapMode.WordSmart,
+			MouseFilter = Control.MouseFilterEnum.Ignore
+		});
+		HashSet<ActionId> offered = [.. issued.Select(action => action.Id)];
+		foreach (LegalActionViewModel action in AccessActionsPresenter.Actions(view).Where(action => offered.Contains(action.Id)))
+		{
+			Button button = RunHudButton(FriendlyText(AccessActionsPresenter.Label(action, card)),
+				action.Kind is ActionKind.StealAgenda or ActionKind.TrashAccessedCard ? RunHudTone.Primary : RunHudTone.Normal);
+			button.TooltipText = action.CostSummary ?? button.Text;
+			button.Pressed += () => SubmitRunHudAction(action);
+			side.AddChild(button);
+			_runHudButtons[action.Id] = button;
+		}
+		if (view.Run!.RunCredits > 0 && offered.Count > 0)
+			side.AddChild(MakeWrappedLabel($"{view.Run.RunCredits} run credits available · spent first, gone at run end.", 12, Muted));
+		row.AddChild(side);
+		body.AddChild(row);
 	}
 
 	/// <summary>
@@ -624,18 +683,10 @@ public partial class Main
 		// Keep the width fixed and follow only the content's height. Shrinking to
 		// zero width first (ResetSize) rewrapped every label each frame and made
 		// the panel's height jump between tall and short.
-		// Snapshots alternate between the opponent's priority (no buttons) and the
-		// player's decision (buttons) at the same point of the run; hold the tallest
-		// height for that point so the panel doesn't jump between them.
-		string heightKey = _currentSnapshot?.View.Run is { } run
-			? $"{run.Id}:{run.CurrentIceIndex}:{run.Step}:{run.Encounter?.Id}:{run.Access.State}:{run.Access.Accessed.Count}" : string.Empty;
-		if (heightKey != _runHudHeightKey)
-		{
-			_runHudHeightKey = heightKey;
-			_runHudHeight = 0;
-		}
-		_runHudHeight = Math.Max(_runHudHeight, hud.GetCombinedMinimumSize().Y);
-		Vector2 wanted = new(RunHudWidth, _runHudHeight);
+		// The standing height, or the content's if a step needs more; never taller than the table.
+		hud.CustomMinimumSize = new Vector2(RunHudWidth, 0);
+		float height = Math.Max(RunHudHeight, hud.GetCombinedMinimumSize().Y);
+		Vector2 wanted = new(RunHudWidth, Math.Min(height, _tableViewport.Size.Y - 24));
 		if (!hud.Size.IsEqualApprox(wanted)) hud.Size = wanted;
 		Rect2? lane = _runHudServerId is { } server ? _gameTable.GetServerLaneRect(server) : null;
 		Vector2 size = hud.Size;
@@ -652,7 +703,7 @@ public partial class Main
 		}
 		hud.Position = new Vector2(Math.Clamp(x, 12, Math.Max(12, _tableViewport.Size.X - size.X - 12)),
 			Math.Clamp(y, 12, Math.Max(12, _tableViewport.Size.Y - size.Y - 12)));
-		if (_tableAccessPanel is { Visible: true } access)
+		if (_tableAccessPanel is { Visible: true } access && !RunHudActive)
 		{
 			access.ResetSize();
 			Rect2 hudRect = hud.GetGlobalRect();
