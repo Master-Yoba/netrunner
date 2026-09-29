@@ -560,6 +560,8 @@ public partial class GameTableControl : Control
 	private void RenderView(MatchViewModel view)
 	{
 		ApplyFactionChrome(view);
+		ApplySeatOrientation(view.Viewer);
+		UpdateOpponentHand(view);
 		CacheServerDisplayNames(view.Servers);
 		_turnLabel.Text = FormatTurn(view);
 		_runLabel.Text = FormatRun(view);
@@ -785,8 +787,9 @@ public partial class GameTableControl : Control
 		VBoxContainer iceCards,
 		Dictionary<string, TableCardControl> nextVisibleCards)
 	{
-		// Match supplies outer-to-inner; the table puts inner ICE at the top
-		// nearest the root and the outermost ICE at the bottom near the Runner.
+		// Match supplies outer-to-inner; the table puts inner ICE nearest the
+		// root and the outermost ICE nearest the Runner (see OrderIceRows).
+		List<Control> innerFirst = new();
 		for (int displayIndex = server.OrderedIce.Count - 1; displayIndex >= 0; displayIndex--)
 		{
 			CardViewModel? card = server.OrderedIce[displayIndex];
@@ -798,6 +801,7 @@ public partial class GameTableControl : Control
 				TableCardControl ice = EnsureCard(slot, iceCards, card, isIce: true, nextVisibleCards);
 				ice.HiddenAdvancement = HiddenAdvancement(server.IceKeys, displayIndex);
 				_slotAliases[$"server:{server.Id}:ice:{displayIndex}"] = ice;
+				innerFirst.Add(ice);
 			}
 			else
 			{
@@ -808,6 +812,7 @@ public partial class GameTableControl : Control
 					MouseFilter = MouseFilterEnum.Ignore,
 				};
 				iceCards.AddChild(stack);
+				innerFirst.Add(stack);
 				TableCardControl host = EnsureCard(slot, stack, card, true, nextVisibleCards);
 				_slotAliases[$"server:{server.Id}:ice:{displayIndex}"] = host;
 				Vector2 hostOffset = new((stack.CustomMinimumSize.X - host.DisplaySize.X) * 0.5f, 0);
@@ -828,6 +833,7 @@ public partial class GameTableControl : Control
 				}
 			}
 		}
+		OrderIceRows(iceCards, innerFirst);
 	}
 
 	private void RenderRunnerRig(
@@ -1277,6 +1283,7 @@ public partial class GameTableControl : Control
 		_serverLaneRow.AddChild(panel);
 		ServerLaneParts lane = new(panel, header, runMarker, rootCaption, rootCards, iceCaption, iceCards);
 		ApplyLaneLayout(lane);
+		ApplyLaneOrientation(lane);
 		return lane;
 	}
 

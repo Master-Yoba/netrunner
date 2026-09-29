@@ -15,6 +15,9 @@ public partial class TableBackdrop : Control
 	private FactionColors _corp = FactionPalette.NeutralCorp;
 	private FactionColors _runner = FactionPalette.NeutralRunner;
 	private float _split = -1;
+
+	/// <summary>Left inset of the wordmark, clear of the Corp's identity plate.</summary>
+	private const float WordmarkInset = 240;
 	private bool _corpOnTop = true;
 
 	/// <summary>Y of the boundary between the halves, in this control's coordinates; negative means the middle.</summary>
@@ -91,7 +94,7 @@ public partial class TableBackdrop : Control
 		float baseline = _corpOnTop ? edge - 18 : edge + 30;
 		if (display is not null)
 		{
-			DrawString(display, new Vector2(area.Position.X + 24, baseline), $"{_corp.Name} · SECURE NETWORK",
+			DrawString(display, new Vector2(area.Position.X + WordmarkInset, baseline), $"{_corp.Name} · SECURE NETWORK",
 				HorizontalAlignment.Left, -1, 14, accent with { A = 0.22f });
 		}
 

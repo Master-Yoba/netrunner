@@ -15,6 +15,7 @@
 [ext_resource type="PackedScene" path="res://scenes/components/HandView.tscn" id="hand"]
 [ext_resource type="Script" path="res://scenes/TableBackdrop.cs" id="backdrop"]
 [ext_resource type="Script" path="res://scenes/FactionEmblem.cs" id="emblem"]
+[ext_resource type="Script" path="res://scenes/OpponentHandFan.cs" id="opponent_hand"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_board"]
 content_margin_left = 8.0
@@ -84,6 +85,7 @@ script = ExtResource("backdrop")
 layout_mode = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_top = 30.0
 offset_bottom = -196.0
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_board")
@@ -260,3 +262,11 @@ offset_right = -8.0
 grow_horizontal = 0
 grow_vertical = 0
 z_index = 35
+
+[node name="OpponentHand" type="Control" parent="."]
+layout_mode = 0
+anchor_right = 1.0
+offset_bottom = 30.0
+mouse_filter = 2
+z_index = 30
+script = ExtResource("opponent_hand")

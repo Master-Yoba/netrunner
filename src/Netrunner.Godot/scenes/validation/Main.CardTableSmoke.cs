@@ -519,13 +519,17 @@ public partial class Main
 		HBoxContainer[] roots = _gameTable.FindChildren("RootCards", "HBoxContainer", true, false)
 			.Cast<HBoxContainer>().Where(row => row.IsVisibleInTree()).ToArray();
 		float? rootTop = null;
-		float? iceTop = null;
+		float? iceEdge = null;
+		// Runner seat: ICE hangs below the roots, so its top edge lines up. Corp
+		// seat: servers build upward from the Corp's edge, so its bottom edge does.
+		bool corpSeat = _gameTable.CorpSeatLayout;
 		foreach (HBoxContainer root in roots)
 		{
 			VBoxContainer iceCards = root.GetParent().GetNode<VBoxContainer>("IceCards");
+			float edge = corpSeat ? iceCards.GetGlobalRect().End.Y : iceCards.GlobalPosition.Y;
 			rootTop ??= root.GlobalPosition.Y;
-			iceTop ??= iceCards.GlobalPosition.Y;
-			if (Mathf.Abs(root.GlobalPosition.Y - rootTop.Value) > 1 || Mathf.Abs(iceCards.GlobalPosition.Y - iceTop.Value) > 1)
+			iceEdge ??= edge;
+			if (Mathf.Abs(root.GlobalPosition.Y - rootTop.Value) > 1 || Mathf.Abs(edge - iceEdge.Value) > 1)
 				throw new InvalidOperationException("Server root/ICE rows shifted between lanes.");
 			Rect2[] cards = root.GetChildren().OfType<TableCardControl>().Where(card => card.Visible)
 				.Select(card => card.GetGlobalRect()).ToArray();
