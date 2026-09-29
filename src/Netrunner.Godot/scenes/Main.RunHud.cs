@@ -26,6 +26,8 @@ public partial class Main
 	private CheckButton? _runHudSetting;
 	private string? _runHudServerId;
 	private MatchViewModel? _runHudView;
+	private string? _runHudHeightKey;
+	private float _runHudHeight;
 	private string? _breakAllBreaker;
 	private string? _breakAllEncounter;
 	private long _breakAllSubmittedSequence = -1;
@@ -622,7 +624,18 @@ public partial class Main
 		// Keep the width fixed and follow only the content's height. Shrinking to
 		// zero width first (ResetSize) rewrapped every label each frame and made
 		// the panel's height jump between tall and short.
-		Vector2 wanted = new(RunHudWidth, hud.GetCombinedMinimumSize().Y);
+		// Snapshots alternate between the opponent's priority (no buttons) and the
+		// player's decision (buttons) at the same point of the run; hold the tallest
+		// height for that point so the panel doesn't jump between them.
+		string heightKey = _currentSnapshot?.View.Run is { } run
+			? $"{run.Id}:{run.CurrentIceIndex}:{run.Step}:{run.Encounter?.Id}:{run.Access.State}:{run.Access.Accessed.Count}" : string.Empty;
+		if (heightKey != _runHudHeightKey)
+		{
+			_runHudHeightKey = heightKey;
+			_runHudHeight = 0;
+		}
+		_runHudHeight = Math.Max(_runHudHeight, hud.GetCombinedMinimumSize().Y);
+		Vector2 wanted = new(RunHudWidth, _runHudHeight);
 		if (!hud.Size.IsEqualApprox(wanted)) hud.Size = wanted;
 		Rect2? lane = _runHudServerId is { } server ? _gameTable.GetServerLaneRect(server) : null;
 		Vector2 size = hud.Size;

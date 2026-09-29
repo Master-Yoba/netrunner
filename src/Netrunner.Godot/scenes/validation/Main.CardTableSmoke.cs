@@ -192,6 +192,16 @@ public partial class Main
 			if (_matchHistory.PageStart != Math.Max(0, _matchHistory.EntryCount - _matchHistory.PageSize)
 				|| _matchHistory.NewEntryCount != 0)
 				throw new InvalidOperationException("History did not follow the newest page or clear unread entries.");
+			// Playtest, 29 September: pressing an entry with details rebuilt the list and freed the
+			// pressed row inside its own click, crashing the game. Expand and collapse one for real.
+			for (int press = 0; press < 2; press++)
+			{
+				HistoryEntry pressed = FindDescendants<HistoryEntry>(_matchHistory).First(entry => entry.IsVisibleInTree());
+				await ClickTableButton(pressed.GetNode<Button>("Row/Content/Summary"));
+				await TableFrames(2);
+			}
+			if (FindDescendants<HistoryEntry>(_matchHistory).Length == 0)
+				throw new InvalidOperationException("History rows vanished after expanding and collapsing an entry.");
 			foreach (Vector2I size in new[] { new Vector2I(1920, 1080), new Vector2I(2560, 1440) })
 			{
 				GetWindow().Size = size;

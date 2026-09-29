@@ -1044,7 +1044,8 @@ public partial class MatchHistoryPanel : PanelContainer
 		foreach (Node child in container.GetChildren().ToArray())
 		{
 			container.RemoveChild(child);
-			child.Free();
+			// Deferred: a row's own button may still be emitting the click that rebuilt the list.
+			child.QueueFree();
 		}
 	}
 

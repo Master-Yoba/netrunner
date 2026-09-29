@@ -53,4 +53,34 @@ public sealed class BeneficialTriggersTests
         Assert.True(automated > 0, $"None of {offered} trigger decisions resolved on their own.");
         Assert.True(zahya > 0, "The fixture never offered Zahya after a run with accesses.");
     }
+
+    [Fact]
+    public void ZahyaAndRedTeamAfterAnHqRunNeedNoOrderingFromThePlayer()
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        // Playtest, 29 September: after an HQ run the player was asked to order Zahya and Red Team.
+        FullMatchDefinition definition = RulesFuzzRunner.CreateDefinition("gateway-advanced-yomi~gateway-stolen-goods", 12450155976749535184);
+        ReplayArtifact replay = EngineJson.Deserialize<ReplayArtifact>(File.ReadAllText(Path.Combine(AppContext.BaseDirectory,
+            "..", "..", "..", "Fixtures", "playtest-zahya-red-team-replay.json")), definition.Behavior, definition.Runtime);
+        var catalog = new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior);
+        GameState state = replay.InitialSnapshot.ToState();
+        int orderings = 0;
+        foreach (ReplayAction action in replay.Actions)
+        {
+            PendingDecision pending = state.PendingDecision!;
+            if (pending.Kind == DecisionKind.TriggerOrdering && state.GetPlayer(pending.Owner).Side == PlayerSide.Runner)
+            {
+                AgentFeatures features = ObservationReader.Read(ObservationBuilder.Build(state, PlayerSide.Runner, definition.Behavior, definition.Runtime),
+                    AgentFeatures.VersionWithHiddenAdvancements);
+                string[] keys = [.. features.PrivateCards.Triggers.Select(trigger => trigger.Key)];
+                if (keys.Contains("zahya-run-end") && keys.Contains("red-team-successful-run") && features.Board.RunEnd is { AccessOccurrenceCount: > 0 })
+                {
+                    orderings++;
+                    Assert.NotNull(BeneficialTriggers.AutoAction(pending, features, catalog));
+                }
+            }
+            state = GameEngine.Apply(state, action.Submission, definition.Behavior, definition.Runtime).State;
+        }
+        Assert.True(orderings > 0, "The fixture has no Zahya and Red Team ordering after a run with accesses.");
+    }
 }

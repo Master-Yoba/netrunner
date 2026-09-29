@@ -138,6 +138,33 @@ public partial class Main
 		RequireInteraction(_labSubmissionCount == submissions + 1, "A breach choice from the HUD did not submit exactly once.");
 	}
 
+	/// <summary>
+	/// Playtest, 29 September: snapshots alternating between the Corp's priority and the
+	/// player's decision at the same point made the HUD jump in height.
+	/// </summary>
+	private async Task CheckHeightAcrossPriority()
+	{
+		MatchViewModel mine = _currentSnapshot!.View;
+		MatchViewModel theirs = mine with
+		{
+			Decision = InteractionLabSamples.Decision(PlayerSide.Corp, _labRevision, DecisionKind.RunTiming, "Corp priority"),
+			LegalActions = [],
+		};
+		PublishLabView(mine);
+		await TableFrames(4);
+		float tall = _runHud!.Size.Y;
+		for (int flip = 0; flip < 3; flip++)
+		{
+			PublishLabView(theirs);
+			await TableFrames(2);
+			RequireInteraction(Mathf.IsEqualApprox(_runHud.Size.Y, tall),
+				$"The HUD's height went from {tall} to {_runHud.Size.Y} when the Corp took priority.");
+			PublishLabView(mine);
+			await TableFrames(2);
+			RequireInteraction(Mathf.IsEqualApprox(_runHud.Size.Y, tall), $"The HUD's height changed to {_runHud.Size.Y} back at the player's decision.");
+		}
+	}
+
 	private async Task RunRunHudSmokeAsync()
 	{
 		try
@@ -161,6 +188,9 @@ public partial class Main
 				ResetInteractionLab();
 				await TableFrames(6);
 				await CheckBreachChoicesInHud();
+				ResetInteractionLab();
+				await TableFrames(6);
+				await CheckHeightAcrossPriority();
 				ResetInteractionLab();
 				await TableFrames(6);
 				_gameTable.StopMotion();
@@ -197,7 +227,7 @@ public partial class Main
 				await TableFrames(3);
 				RequireInteraction(_runHud.Visible == false && !RunHudActive, "The HUD stayed open after the run moved on.");
 			}
-			GD.Print("RUN_HUD PASS resolutions=2 replaces_panels=true breakers=true break_all=true quoted=true footer=true closes=true corp_rez=true passed_ice=true jack_out_after_settling=true breach_choices=true steady_height=true");
+			GD.Print("RUN_HUD PASS resolutions=2 replaces_panels=true breakers=true break_all=true quoted=true footer=true closes=true corp_rez=true passed_ice=true jack_out_after_settling=true breach_choices=true steady_height=true priority_flips=true");
 			QuitCleanly();
 		}
 		catch (Exception error)

@@ -18,6 +18,8 @@ public static class BeneficialTriggers
     [
         BehaviorInstructionKind.GainCredits, BehaviorInstructionKind.GainClicks, BehaviorInstructionKind.AddCounter,
         BehaviorInstructionKind.PlaceHostedCredits, BehaviorInstructionKind.LoadHostedCredits, BehaviorInstructionKind.Draw,
+        // Credits taken from the player's own card (Red Team) are a pure gain.
+        BehaviorInstructionKind.TakeHostedCredits,
     ];
 
     /// <summary>The action to take for the player, or null when the decision is theirs to make.</summary>
