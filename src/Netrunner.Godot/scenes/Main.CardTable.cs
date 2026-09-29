@@ -113,7 +113,6 @@ public partial class Main
 		BuildSettingsMenu();
 		BuildOnboarding();
 		BuildSound();
-		BuildTilt();
 		BuildAutoBenefits();
 		BuildActionChips();
 		BuildEncounterOverlay();

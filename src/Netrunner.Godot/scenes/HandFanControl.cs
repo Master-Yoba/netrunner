@@ -17,10 +17,6 @@ public partial class HandFanControl : Control
 	[Export(PropertyHint.Range, "0,2,0.01")] public float DrawSeconds { get; set; } = 0.55f;
 	[Export(PropertyHint.Range, "0,180,1")] public float DrawArcHeight { get; set; } = 64;
 	[Export(PropertyHint.Range, "0,0.3,0.01")] public float DrawStaggerSeconds { get; set; } = 0.08f;
-	/// <summary>Experimental (U5): the hovered card leans toward the pointer, up to this many degrees; 0 keeps it straight.</summary>
-	[Export(PropertyHint.Range, "0,12,0.5")] public float HoverTiltDegrees { get; set; } = 5;
-	/// <summary>Whether the hovered card tilts toward the pointer (a Settings toggle; scripted runs keep it off).</summary>
-	public bool HoverTilt { get; set; }
 	public bool ReducedMotion { get; set; }
 	public bool DragActive { get; set; }
 	private readonly List<HandEntry> _entries = new();
@@ -105,32 +101,14 @@ public partial class HandFanControl : Control
 			bool hovered = ReferenceEquals(_hovered, card) && card.Card?.IsKnown == true;
 			card.PivotOffset = pivot;
 			card.Position = card.Position.Lerp(home - new Vector2(0, hovered ? HoverLift : 0), weight);
-			card.Rotation = Mathf.LerpAngle(card.Rotation, hovered ? Tilt(entry) : angle, weight);
+			card.Rotation = Mathf.LerpAngle(card.Rotation, hovered ? 0 : angle, weight);
 			card.Scale = card.Scale.Lerp(Vector2.One * (hovered ? HoverScale : 1), weight);
 			card.ZIndex = hovered ? 30 : i;
 		}
 	}
 
-	/// <summary>
-	/// The hovered card's lean: the pointer's side-to-side position over the
-	/// card's resting footprint, so the lean doesn't feed back into itself and
-	/// holds still under a still pointer.
-	/// </summary>
-	private float Tilt(HandEntry entry)
-	{
-		if (!HoverTilt || ReducedMotion || HoverTiltDegrees <= 0 || Engine.IsEditorHint()) return 0;
-		if (_pointer is not { } pointer) return 0;
-		Vector2 local = entry.Home.AffineInverse() * (GetGlobalTransform().AffineInverse() * pointer);
-		float across = Mathf.Clamp(local.X / Mathf.Max(1, entry.Card.Size.X) * 2 - 1, -1, 1);
-		return Mathf.DegToRad(HoverTiltDegrees * across);
-	}
-
-	/// <summary>The last pointer position a hit test saw, in global coordinates: the input the tilt follows.</summary>
-	private Vector2? _pointer;
-
 	private TableCardControl? CardAt(Vector2 global)
 	{
-		_pointer = global;
 		Vector2 point = GetGlobalTransform().AffineInverse() * global;
 		for (int i = _entries.Count - 1; i >= 0; i--)
 		{

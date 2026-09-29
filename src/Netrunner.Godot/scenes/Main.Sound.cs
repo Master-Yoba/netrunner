@@ -43,32 +43,6 @@ public partial class Main
 		settings.MoveChild(_autoBenefitsToggle, settings.GetNode("AutoPass").GetIndex() + 1);
 	}
 
-	private CheckButton? _tiltToggle;
-	private bool _tiltEnabled = true;
-
-	/// <summary>Experimental (U5): the hovered hand card leans toward the pointer. Scripted runs keep it off.</summary>
-	private void BuildTilt()
-	{
-		if (!_preferencesPersist) _tiltEnabled = false;
-		_gameTable.Hand.HoverTilt = _tiltEnabled;
-		if (_settingsMenu?.GetNode<VBoxContainer>("Panel/Content") is not { } settings) return;
-		_tiltToggle = new CheckButton
-		{
-			Name = "HoverTilt",
-			Text = "Tilt hovered cards (experimental)",
-			ButtonPressed = _tiltEnabled,
-			TooltipText = "The card under the pointer leans toward it. Reduced motion keeps it straight.",
-		};
-		_tiltToggle.Toggled += enabled =>
-		{
-			_tiltEnabled = enabled;
-			_gameTable.Hand.HoverTilt = enabled;
-			SavePreferences();
-		};
-		settings.AddChild(_tiltToggle);
-		settings.MoveChild(_tiltToggle, settings.GetNode("ReducedMotion").GetIndex() + 1);
-	}
-
 	private void BuildSound()
 	{
 		_sound = new SoundBank { Name = "SoundBank", Muted = !_soundEnabled, Volume = _effectsLevel };

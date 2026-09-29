@@ -21,6 +21,9 @@ public partial class BoardDragController : Control
 	private BoardInteractionSource? _source;
 	private TableCardControl? _sourceControl;
 	private TableCardControl? _preview;
+	/// <summary>What the player sees while dragging: a copy of the ghost that tilts. The ghost itself
+	/// stays untransformed and invisible, so its geometry is exactly where the card follows.</summary>
+	private TableCardControl? _tiltVisual;
 	private Vector2 _pressedAt;
 	private Vector2 _pointer;
 	private Color _sourceModulate;
@@ -113,6 +116,31 @@ public partial class BoardDragController : Control
 		}
 	}
 
+	/// <summary>
+	/// Playtest, 29 September: the dragged card leans into its motion, like a card held in the hand:
+	/// it rolls against horizontal speed and narrows as if turning, then settles when it stops.
+	/// Reduced motion keeps it flat.
+	/// </summary>
+	private void TiltPreview(Vector2 before, double delta)
+	{
+		if (_preview is null || _tiltVisual is null) return;
+		_tiltVisual.GlobalPosition = _preview.GlobalPosition;
+		_tiltVisual.PivotOffset = _tiltVisual.Size * 0.5f;
+		if (ReducedMotion || delta <= 0)
+		{
+			_tiltVisual.Rotation = 0;
+			_tiltVisual.Scale = Vector2.One;
+			return;
+		}
+		Vector2 velocity = (_preview.GlobalPosition - before) / (float)delta;
+		float lean = Mathf.Clamp(velocity.X * 0.00022f, -0.2f, 0.2f);
+		float turn = 1 - Mathf.Clamp(Mathf.Abs(velocity.X) * 0.00006f, 0, 0.12f);
+		float pitch = 1 - Mathf.Clamp(Mathf.Abs(velocity.Y) * 0.00004f, 0, 0.08f);
+		float settle = 1 - Mathf.Exp(-(float)delta / 0.08f);
+		_tiltVisual.Rotation = Mathf.Lerp(_tiltVisual.Rotation, lean, settle);
+		_tiltVisual.Scale = _tiltVisual.Scale.Lerp(new Vector2(turn, pitch), settle);
+	}
+
 	private void BeginDrag()
 	{
 		if (_sourceControl?.Card is not { IsKnown: true } card || _source is null) return;
@@ -125,6 +153,14 @@ public partial class BoardDragController : Control
 		_preview.MouseFilter = MouseFilterEnum.Ignore;
 		_preview.FocusMode = FocusModeEnum.None;
 		AddChild(_preview);
+		_tiltVisual = TableCardControl.Create();
+		_tiltVisual.Name = "DragTilt";
+		_tiltVisual.SetCard(card);
+		_tiltVisual.SetDisplaySize(_sourceControl.Size * Appearance.PreviewScale);
+		_tiltVisual.MouseFilter = MouseFilterEnum.Ignore;
+		_tiltVisual.FocusMode = FocusModeEnum.None;
+		AddChild(_tiltVisual);
+		_preview.Modulate = new Color(1, 1, 1, 0);
 		_sourceControl.Modulate = new Color(1, 1, 1, 0.3f);
 		Board.SetNewRemoteDropVisible(_source.Destinations.Any(d => d.Kind.ToString() == "NewRemote"));
 		foreach (var destination in _source.Destinations)
@@ -139,6 +175,7 @@ public partial class BoardDragController : Control
 				_zones.Add((destination, panel, geometry));
 			}
 		_preview.MoveToFront();
+		_tiltVisual.MoveToFront();
 		_hint.MoveToFront();
 		_hint.Show();
 		RefreshGeometry();
@@ -162,9 +199,11 @@ public partial class BoardDragController : Control
 		// centered immediately; only subsequent pointer movement is smoothed.
 		float weight = ReducedMotion || Appearance.FollowSmoothing <= 0 || delta <= 0
 			? 1f : 1f - Mathf.Exp(-(float)delta / Appearance.FollowSmoothing);
+		Vector2 before = _preview.GlobalPosition;
 		_preview.GlobalPosition = _preview.GlobalPosition.Lerp(target, weight);
 		if (_preview.GlobalPosition.DistanceSquaredTo(target) < 0.01f)
 			_preview.GlobalPosition = target;
+		TiltPreview(before, delta);
 		var hovered = HitDestination(pointer);
 		foreach (var (destination, panel, geometry) in _zones)
 		{
@@ -279,6 +318,7 @@ public partial class BoardDragController : Control
 		if (_source is null) return;
 		GestureEnded?.Invoke(reason, _source.CardId);
 		TableCardControl? returning = _preview;
+		if (returning is not null) returning.Modulate = Colors.White;
 		Vector2? target = IsInstanceValid(_sourceControl) ? _sourceControl!.GlobalPosition : null;
 		_preview = null;
 		ClearGesture();
@@ -305,6 +345,8 @@ public partial class BoardDragController : Control
 		_source = null;
 		_preview?.QueueFree();
 		_preview = null;
+		_tiltVisual?.QueueFree();
+		_tiltVisual = null;
 		foreach (var (_, panel, _) in _zones) { RemoveChild(panel); panel.QueueFree(); }
 		_zones.Clear();
 		if (IsInstanceValid(Board))
