@@ -12,6 +12,9 @@ files and lock/restore artifacts.
 | xUnit.net and assertions | 2.9.3 | Apache-2.0 | Tests |
 | xUnit Visual Studio runner | 3.1.5 | Apache-2.0 | Test discovery/execution |
 | Newtonsoft.Json | 13.0.3 | MIT | Transitive test-platform dependency |
+| Rajdhani (Indian Type Foundry) | Google Fonts, retrieved 2026-09-29 | SIL OFL 1.1 | UI display type, `src/Netrunner.Godot/fonts/rajdhani` |
+| IBM Plex Sans and IBM Plex Mono (IBM) | Google Fonts, retrieved 2026-09-29 | SIL OFL 1.1 | UI body and number type, `src/Netrunner.Godot/fonts/ibm-plex-*` |
+| Null Signal Games game symbols and faction glyphs | NSG Visual Assets | CC BY-ND 4.0 | UI icons and identity emblems; see `src/Netrunner.Godot/icons/SOURCE.md` |
 
 The installed NuGet package metadata is the authority for exact transitive
 versions and license expressions. Run:

@@ -35,6 +35,31 @@ illustrations, card faces, or card metadata are included in this directory.
 | `rez.svg` | `NSG_REZ_COST.svg` |
 | `tag.svg` | `NSG_TAG.svg` |
 | `virus-counter.svg` | `NSG_VIRUS_COUNTER.svg` |
+| `server-hq.svg` | `NSG_HQ_Icon.svg` |
+| `server-rd.svg` | `NSG_RD_Icon.svg` |
+| `server-archives.svg` | `NSG_Archives_Icon.svg` |
+
+## Faction glyphs
+
+The faction glyphs in `factions/` come from `SVG/Faction Glyphs` in the same
+Null Signal Games visual-assets pack, under the same licence (CC BY-ND 4.0),
+supplied by the project owner on 2026-09-29. They keep their original colours,
+paths and view boxes; the only changes are a 128-pixel import size and the
+removal of XML/DTD declarations. The UI shows them unchanged on the identity
+plates (roadmap U5).
+
+| File | Original file |
+| --- | --- |
+| `factions/anarch.svg` | `NSG_ANARCH.svg` |
+| `factions/criminal.svg` | `NSG_CRIMINAL.svg` |
+| `factions/shaper.svg` | `NSG_SHAPER.svg` |
+| `factions/adam.svg` | `NSG_ADAM.svg` |
+| `factions/apex.svg` | `NSG_APEX.svg` |
+| `factions/sunny-lebeau.svg` | `NSG_SUNNY.svg` |
+| `factions/haas-bioroid.svg` | `NSG_HB.svg` |
+| `factions/jinteki.svg` | `NSG_JINTEKI.svg` |
+| `factions/nbn.svg` | `NSG_NBN.svg` |
+| `factions/weyland-consortium.svg` | `NSG_WEYLAND.svg` |
 
 These glyphs ship with the UI and work offline, independently of the optional
 local card-art cache. Symbols without a released glyph retain their plain text

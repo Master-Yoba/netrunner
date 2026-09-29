@@ -296,6 +296,7 @@ public partial class GameTableControl : Control
 	public override void _Process(double delta)
 	{
 		Breathe(delta);
+		UpdateBackdropSplit();
 		if (Engine.IsEditorHint() && _previewDirty && _shellBuilt)
 		{
 			RefreshEditorPreview();
@@ -558,6 +559,7 @@ public partial class GameTableControl : Control
 
 	private void RenderView(MatchViewModel view)
 	{
+		ApplyFactionChrome(view);
 		CacheServerDisplayNames(view.Servers);
 		_turnLabel.Text = FormatTurn(view);
 		_runLabel.Text = FormatRun(view);
@@ -683,6 +685,7 @@ public partial class GameTableControl : Control
 
 			lane.Panel.Visible = true;
 			lane.Header.Text = _serverDisplayNames[server.Id];
+			ApplyLaneIcon(lane.Header, server.Kind);
 			lane.Header.TooltipText = $"Select {_serverDisplayNames[server.Id]} for contextual actions.";
 			lane.RunMarker.Text = view.Run is { } run
 				&& string.Equals(run.AttackedServerId, server.Id, StringComparison.Ordinal)
@@ -1270,6 +1273,7 @@ public partial class GameTableControl : Control
 		Label iceCaption = panel.GetNode<Label>("Content/IceCaption");
 		VBoxContainer iceCards = panel.GetNode<VBoxContainer>("Content/IceCards");
 		header.Pressed += () => ServerSelected?.Invoke(serverId);
+		panel.Draw += () => DrawLaneBrackets(panel);
 		_serverLaneRow.AddChild(panel);
 		ServerLaneParts lane = new(panel, header, runMarker, rootCaption, rootCards, iceCaption, iceCards);
 		ApplyLaneLayout(lane);

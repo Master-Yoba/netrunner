@@ -13,13 +13,15 @@
 [ext_resource type="PackedScene" path="res://scenes/components/CreditIndicator.tscn" id="credits"]
 
 [ext_resource type="PackedScene" path="res://scenes/components/HandView.tscn" id="hand"]
+[ext_resource type="Script" path="res://scenes/TableBackdrop.cs" id="backdrop"]
+[ext_resource type="Script" path="res://scenes/FactionEmblem.cs" id="emblem"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_board"]
 content_margin_left = 8.0
 content_margin_top = 6.0
 content_margin_right = 8.0
 content_margin_bottom = 6.0
-bg_color = Color(0.018, 0.083, 0.074, 1)
+bg_color = Color(0, 0, 0, 0)
 corner_radius_top_left = 10
 corner_radius_top_right = 10
 corner_radius_bottom_right = 10
@@ -36,6 +38,28 @@ corner_radius_top_right = 8
 corner_radius_bottom_right = 8
 corner_radius_bottom_left = 8
 
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_field"]
+content_margin_left = 8.0
+content_margin_top = 6.0
+content_margin_right = 8.0
+content_margin_bottom = 6.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_corp_plate"]
+content_margin_left = 8.0
+content_margin_top = 5.0
+content_margin_right = 8.0
+content_margin_bottom = 5.0
+bg_color = Color(1, 1, 1, 0.035)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.24, 0.27, 0.26, 1)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_right = 2
+corner_radius_bottom_left = 2
+
 [node name="GameTableControl" type="Control"]
 custom_minimum_size = Vector2(760, 0)
 layout_mode = 0
@@ -49,12 +73,12 @@ BoardLayout = ExtResource("2_board_layout")
 PreviewMode = 2
 PreviewSeat = 1
 
-[node name="Background" type="ColorRect" parent="."]
+[node name="Background" type="Control" parent="."]
 layout_mode = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
 mouse_filter = 2
-color = Color(0.025, 0.045, 0.05, 1)
+script = ExtResource("backdrop")
 
 [node name="Surface" type="PanelContainer" parent="."]
 layout_mode = 0
@@ -78,7 +102,7 @@ custom_minimum_size = Vector2(0, 150)
 layout_mode = 2
 size_flags_vertical = 3
 mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBoxFlat_surface")
+theme_override_styles/panel = SubResource("StyleBoxEmpty_field")
 
 [node name="Content" type="HBoxContainer" parent="Surface/Margins/Layout/ServerField"]
 layout_mode = 2
@@ -90,7 +114,7 @@ custom_minimum_size = Vector2(174, 0)
 layout_mode = 2
 size_flags_vertical = 0
 mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBoxFlat_surface")
+theme_override_styles/panel = SubResource("StyleBoxFlat_corp_plate")
 
 [node name="Content" type="VBoxContainer" parent="Surface/Margins/Layout/ServerField/Content/Summary"]
 layout_mode = 2
@@ -98,12 +122,25 @@ size_flags_horizontal = 3
 mouse_filter = 2
 theme_override_constants/separation = 3
 
-[node name="Side" type="Label" parent="Surface/Margins/Layout/ServerField/Content/Summary/Content"]
-custom_minimum_size = Vector2(48, 0)
+[node name="Plate" type="HBoxContainer" parent="Surface/Margins/Layout/ServerField/Content/Summary/Content"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.82, 0.47, 0.62, 1)
-theme_override_font_sizes/font_size = 11
+theme_override_constants/separation = 6
+
+[node name="Emblem" type="Control" parent="Surface/Margins/Layout/ServerField/Content/Summary/Content/Plate"]
+custom_minimum_size = Vector2(22, 22)
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("emblem")
+
+[node name="Side" type="Label" parent="Surface/Margins/Layout/ServerField/Content/Summary/Content/Plate"]
+custom_minimum_size = Vector2(48, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_type_variation = &"DisplayLabel"
+theme_override_colors/font_color = Color(0.62, 0.71, 0.78, 1)
+theme_override_font_sizes/font_size = 15
 text = "CORP"
 vertical_alignment = 1
 text_overrun_behavior = 3
