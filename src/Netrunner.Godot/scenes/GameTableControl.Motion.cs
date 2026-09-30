@@ -26,6 +26,7 @@ public partial class GameTableControl
 		_motionRevision++;
 		foreach (Tween tween in _motionTweens) if (tween.IsValid()) tween.Kill();
 		_motionTweens.Clear();
+		RestoreBeatMotion();
 		foreach (Control ghost in _motionCards)
 			if (IsInstanceValid(ghost)) ghost.QueueFree();
 		_motionCards.Clear();
@@ -118,7 +119,7 @@ public partial class GameTableControl
 						PulseCard(current.GetGlobalRect());
 				return;
 			}
-			PresentOpponentMotion(previousView, view);
+			PresentOpponentMotion(previousView, view, previous.Keys.ToHashSet(StringComparer.Ordinal));
 			foreach (string id in incoming)
 				if (previous.TryGetValue(id, out MotionCard? source)) PresentDiscardMotion(id, source, view.Viewer);
 			foreach ((string id, var old) in previous)
@@ -157,9 +158,11 @@ public partial class GameTableControl
 				if (IsDiscardPileFace(current) || IsScorePileFace(current) || !current.IsVisibleInTree()) continue;
 				// A new face-down slot receives a neutral back, never a card
 				// recovered from an authoritative action or hidden instance ID.
-				Vector2 source = view.RunnerRig.Any(card => card.Id == id)
-					? view.Viewer == Netrunner.Core.PlayerSide.Runner ? _localHandRow.GlobalPosition : _runnerHandCaption.GlobalPosition
-					: _corpHandCaption.GlobalPosition;
+				bool runnerCard = view.RunnerRig.Any(card => card.Id == id);
+				bool localCard = runnerCard == (view.Viewer == Netrunner.Core.PlayerSide.Runner);
+				Vector2 source = localCard
+					? _localHandRow.GlobalPosition + new Vector2(_localHandRow.Size.X / 2 - rect.Size.X / 2, 0)
+					: OpponentLaunchRect((runnerCard ? view.RunnerHand : view.CorpHand).Count, rect.Size).Position;
 				AnimateCard(current.Card, new Rect2(source, rect.Size), rect.Position - GlobalPosition, current.IsIce, current.BackSide,
 					arrival: current, key: id);
 			}
@@ -193,7 +196,7 @@ public partial class GameTableControl
 	/// card is ever on screen.
 	/// </summary>
 	private void AnimateCard(CardViewModel? model, Rect2 source, Vector2 destination, bool ice, Netrunner.Core.PlayerSide side = Netrunner.Core.PlayerSide.Corp,
-		Vector2? destinationSize = null, TableCardControl? arrival = null, string? key = null)
+		Vector2? destinationSize = null, TableCardControl? arrival = null, string? key = null, Action? landed = null, double delay = 0)
 	{
 		if (arrival is not null && !_heldArrivals.ContainsKey(arrival))
 		{
@@ -217,19 +220,28 @@ public partial class GameTableControl
 		Tween tween = CreateTween();
 		_motionTweens.Add(tween);
 		tween.SetParallel();
-		tween.TweenProperty(ghost, "position", destination, MotionDuration).SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.InOut);
+		// A queued flight waits out of sight so it never sits on its source pile.
+		if (delay > 0)
+		{
+			ghost.Modulate = ghost.Modulate with { A = 0 };
+			tween.TweenProperty(ghost, "modulate:a", 1.0, 0.01).SetDelay(delay);
+		}
+		tween.TweenProperty(ghost, "position", destination, MotionDuration).SetDelay(delay)
+			.SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.InOut);
 		// Land at the destination's size, e.g. a mini score-pile card, not the source's.
 		if (destinationSize is { X: > 0, Y: > 0 } size && source.Size is { X: > 0, Y: > 0 })
-			tween.TweenProperty(ghost, "scale", size / source.Size, MotionDuration).SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.InOut);
+			tween.TweenProperty(ghost, "scale", size / source.Size, MotionDuration).SetDelay(delay)
+				.SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.InOut);
 		// A departing card fades on its way out; an arriving one lands and hands over to the real card.
-		if (arrival is null)
-			tween.TweenProperty(ghost, "modulate:a", 0.0, MotionDuration).SetDelay(MotionDuration * 0.2);
+		if (arrival is null && landed is null)
+			tween.TweenProperty(ghost, "modulate:a", 0.0, MotionDuration).SetDelay(delay + MotionDuration * 0.2);
 		tween.Chain().TweenCallback(Callable.From(() =>
 		{
 			_motionTweens.Remove(tween);
 			_motionCards.Remove(ghost);
 			ghost.QueueFree();
 			if (arrival is not null) ReleaseArrival(arrival);
+			landed?.Invoke();
 		}));
 	}
 }

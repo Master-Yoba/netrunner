@@ -28,12 +28,12 @@ public partial class Main
 				RequireInteraction(_labSubmissionCount == 1, "Demonstration drop did not execute.");
 			}
 			GD.Print("M411_DEMO PASS hosted_install=true new_remote=true");
-			GetTree().Quit();
+			QuitCleanly();
 		}
 		catch (Exception error)
 		{
 			GD.PrintErr($"M411_DEMO FAIL {error}");
-			GetTree().Quit(1);
+			QuitCleanly(1);
 		}
 	}
 }

@@ -82,6 +82,8 @@ public partial class Main
 		_tableAccessCard.UseHoverPreview = true;
 		_tableAccessTitle = _tableAccessPanel.GetNode<Label>("%Title");
 		Button inspectAccess = _tableAccessPanel.GetNode<Button>("%Inspect");
+		// Playtest, 29 September: clicking the accessed card already opens it, so the button only took room.
+		inspectAccess.Visible = false;
 		inspectAccess.Pressed += () =>
 		{
 			if (_tableAccessCard.Card is { IsKnown: true } card)
@@ -109,6 +111,9 @@ public partial class Main
 		_tableViewport.AddChild(_beats);
 		BuildBoardDrag();
 		BuildSettingsMenu();
+		BuildOnboarding();
+		BuildSound();
+		BuildAutoBenefits();
 		BuildActionChips();
 		BuildEncounterOverlay();
 	}
@@ -176,9 +181,11 @@ public partial class Main
 		_gameTable.Render(snapshot.View);
 		CardViewModel? accessed = AccessActionsPresenter.Card(snapshot.View);
 		_tableAccessCard.SetCard(accessed);
-		_tableAccessPanel.Visible = accessed is { IsKnown: true };
+		// The run HUD shows the accessed card itself; the separate panel is for scripted runs.
+		_tableAccessPanel.Visible = accessed is { IsKnown: true } && _accessAllRunId is null && !RunHudOwns(snapshot);
 		_tableAccessTitle.Text = AccessTitle(accessed, snapshot.View);
 		RefreshRunOverlays(snapshot);
+		if (RunHudOwns(snapshot) && _encounterOverlay is not null) _encounterOverlay.Visible = false;
 		_gameTable.SetSelectedServer(_tableSelectedServer);
 		_gameTable.SetSelection(_tableSelectedCard);
 		if (snapshot.History.Count > 0) _tableLastAction.Text = snapshot.History[^1].Summary;
@@ -213,6 +220,7 @@ public partial class Main
 			_tablePrompt.TooltipText = decision is null ? string.Empty : $"Engine prompt: {decision.Prompt}";
 			if (snapshot.View.Run is { } run)
 				_tablePrompt.Text = DecisionPromptPresenter.RunContext(run, _gameTable.GetServerDisplayName) + " · " + _tablePrompt.Text;
+			if (RenderAccessAllProgress()) return;
 			_gameTable.SetTargets(new HashSet<string>(StringComparer.Ordinal));
 			_gameTable.SetActionableSources(new HashSet<string>(StringComparer.Ordinal));
 			if (_fullMatchResumePaused && !snapshot.IsTerminal)
@@ -257,18 +265,26 @@ public partial class Main
 			bool encounter = decision.Kind == DecisionKind.RunTiming && snapshot.View.Viewer == PlayerSide.Runner
 				&& snapshot.View.Run is { Step: RunTimingStep.EncounterPaidWindow, Encounter: not null };
 			IEnumerable<LegalActionViewModel> displayed = all;
-			if (encounter && !_tableAllActions)
+			bool hudRun = RunHudOwns(snapshot) && decision.Kind == DecisionKind.RunTiming && !_tableAllActions;
+			if (hudRun)
+			{
+				// The run HUD holds the run's own controls; anything else (a breach choice) stays here.
+				displayed = all.Where(action => !RunHudTakes(action, snapshot.View));
+				if (!displayed.Any()) _tablePrompt.Text += " · Use the run panel";
+				AddButton("All legal actions…", () => { _tableAllActions = true; RecordFullMatchSelection("ui-control", "all-legal-actions"); RenderCardTableActions(snapshot); });
+			}
+			else if (encounter && !_tableAllActions)
 			{
 				displayed = all.Where(action => BoardIcebreakerPresenter.Source(action) is null);
 				_tablePrompt.Text += all.Any(action => action.Parameters is RunBreakParameters { SubroutineId: not null })
 					? " · Click an available icebreaker or hosted card"
 					: " · Click a matching icebreaker to boost or break";
-				AddButton("All legal actions…", () => { _tableAllActions = true; RenderCardTableActions(snapshot); });
+				AddButton("All legal actions…", () => { _tableAllActions = true; RecordFullMatchSelection("ui-control", "all-legal-actions"); RenderCardTableActions(snapshot); });
 			}
 			else if (decision.Kind == DecisionKind.TurnDiscard && !_tableAllActions)
 			{
 				displayed = [];
-				AddButton("All legal actions…", () => { _tableAllActions = true; RenderCardTableActions(snapshot); });
+				AddButton("All legal actions…", () => { _tableAllActions = true; RecordFullMatchSelection("ui-control", "all-legal-actions"); RenderCardTableActions(snapshot); });
 			}
 			else if (ordinary && !_tableAllActions)
 			{
@@ -285,22 +301,23 @@ public partial class Main
 					|| _tableSelectedServer is not null;
 				if (_tableSelectedCard is not null || _tableSelectedServer is not null)
 					_tablePrompt.Text += " · Esc clears selection";
-				AddButton("All legal actions…", () => { _tableAllActions = true; RenderCardTableActions(snapshot); });
+				AddButton("All legal actions…", () => { _tableAllActions = true; RecordFullMatchSelection("ui-control", "all-legal-actions"); RenderCardTableActions(snapshot); });
 			}
 			else if (_tableAllActions)
 				AddButton("Back to table", () => { _tableAllActions = false; RenderCardTableActions(snapshot); });
 			if (!_tableAllActions)
 			{
 				IReadOnlyList<BoardSpatialAction> spatial = BoardSpatialActions.Project(snapshot.View);
-				foreach (string source in spatial.Select(action => action.SourceId).OfType<string>().Distinct(StringComparer.Ordinal))
+				foreach (string source in spatial.Where(action => !hudRun || !RunHudTakes(action.Action, snapshot.View))
+					.Select(action => action.SourceId).OfType<string>().Distinct(StringComparer.Ordinal))
 					if (_gameTable.GetDropRect("HostCard", source) is null && _tableAccessCard.CardId != source)
 						AddButton(ActionCardName(source) + " · card actions…", () => TrySelectSpatialCard(source));
-				if (spatial.Count > 0 && !ordinary && !encounter && decision.Kind != DecisionKind.TurnDiscard)
-					AddButton("All legal actions…", () => { _tableAllActions = true; RenderCardTableActions(snapshot); });
+				if (spatial.Count > 0 && !ordinary && !encounter && !hudRun && decision.Kind != DecisionKind.TurnDiscard)
+					AddButton("All legal actions…", () => { _tableAllActions = true; RecordFullMatchSelection("ui-control", "all-legal-actions"); RenderCardTableActions(snapshot); });
 				HashSet<ActionId> spatialIds = spatial.Select(action => action.Action.Id).ToHashSet();
 				displayed = displayed.Where(action => !spatialIds.Contains(action.Id) && !_accessActionButtons.ContainsKey(action.Id));
 			}
-			AddAccessAllButton(snapshot, AddButton);
+			if (!hudRun) AddAccessAllButton(snapshot, AddButton);
 			Container actionTarget = ActionContainerFor(contextual && displayed.Any());
 			// A score leads, and continuing past one asks twice (a misclicked pass lost an agenda).
 			bool scoreAvailable = all.Any(action => action.Kind == ActionKind.ScoreAgenda);
@@ -343,6 +360,7 @@ public partial class Main
 			RefreshSpatialActions(snapshot);
 			RefreshBasicBoardActions(snapshot);
 			RefreshBoardIcebreaker(snapshot);
+			RefreshRunHud(snapshot);
 		}
 	}
 
@@ -509,6 +527,14 @@ public partial class Main
 		_beats.Pacing = new BeatPacing(_speed.Value, _fastOpponent.ButtonPressed, _reducedMotion.ButtonPressed);
 		_beats.Viewer = next.View.Viewer;
 		IReadOnlyList<Beat> beats = BeatPlanner.Plan(next.PresentationEvents, before, next.View, _gameTable.GetServerDisplayName);
+		// Damage shows when its cards leave the hand, which the board renders now, not after the beats before it.
+		foreach (Beat damage in beats.Where(beat => beat.Kind == PresentationEventKind.DamageDealt))
+		{
+			_gameTable.FlashDamage();
+			_gameTable.Shake(Math.Clamp(4f + 2f * (damage.Amount ?? 1), 4f, 12f));
+			_sound?.Play(SoundCues.For(damage, next.View.Viewer));
+			_beats.DamageShownEarly++;
+		}
 		double seconds = _beats.Play(beats);
 		if (animate) _tablePlaybackWait = Math.Max(_tablePlaybackWait, seconds);
 		BoardDisplayState shown = next.PresentationEvents.Aggregate(BoardDisplayState.From(before), (state, value) => state.Apply(value));

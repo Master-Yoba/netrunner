@@ -18,7 +18,7 @@ public partial class Main
 			if (!_metadataSnapshot.IsOfficial)
 			{
 				GD.Print("INVISIBLE_WINDOW SKIP official=false");
-				GetTree().Quit();
+				QuitCleanly();
 				return;
 			}
 			GetWindow().Size = new Vector2I(1920, 1080);
@@ -69,7 +69,7 @@ public partial class Main
 						if (_currentSnapshot!.View.Corp.Credits == credits + 1 && _currentSnapshot.View.Corp.Clicks == clicks - 1)
 						{
 							GD.Print($"INVISIBLE_WINDOW PASS step={step} credits={credits + 1} clicks={clicks - 1}");
-							GetTree().Quit();
+							QuitCleanly();
 							return;
 						}
 					}
@@ -101,7 +101,7 @@ public partial class Main
 		{
 			GD.PushError(exception.ToString());
 			GD.Print("INVISIBLE_WINDOW FAIL " + exception.Message);
-			GetTree().Quit(1);
+			QuitCleanly(1);
 		}
 	}
 

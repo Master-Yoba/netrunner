@@ -12,14 +12,15 @@ public sealed class DeckValidationTests
 
         catalog.Validate();
         Assert.Equal(CardDataValidator.OfficialCommitSha, catalog.Provenance.MetadataCommitSha);
-        Assert.Equal(4, catalog.Presets.Count);
+        Assert.Equal(4, catalog.Teaching.Count);
+        Assert.Equal(7, catalog.Gateway.Count);
         Assert.Equal(30, catalog.Get("system-gateway-basic-runner").CardCount);
         Assert.Equal(40, catalog.Get("system-gateway-expanded-runner").CardCount);
         Assert.Equal(34, catalog.Get("system-gateway-basic-corp").CardCount);
         Assert.Equal(44, catalog.Get("system-gateway-expanded-corp").CardCount);
         Assert.All(catalog.Presets, preset => Assert.True(preset.Playable));
         BehaviorCatalog behavior = GatewayBehaviorCatalog.Create();
-        foreach (OfficialPreset preset in catalog.Presets)
+        foreach (OfficialPreset preset in catalog.Teaching)
         {
             DeckValidationResult result = DeckValidator.ValidateWithBehaviorCatalog(
                 preset.ToDeckRequest(cardDataVersion: "fixture"), TestMetadata(), behavior, catalog);
@@ -43,7 +44,7 @@ public sealed class DeckValidationTests
         CardMetadataCatalog metadata = TestMetadata();
         OfficialPresetCatalog presets = OfficialPresetCatalog.Embedded();
 
-        foreach (OfficialPreset preset in presets.Presets)
+        foreach (OfficialPreset preset in presets.Teaching)
         {
             DeckValidationResult result = DeckValidator.Validate(
                 preset.ToDeckRequest(cardDataVersion: "fixture"),
@@ -52,6 +53,27 @@ public sealed class DeckValidationTests
 
             Assert.True(result.IsValid, string.Join("\n", result.Diagnostics));
             Assert.True(result.ExactTutorialPreset);
+        }
+    }
+
+    [Fact]
+    public void GatewaySampleDecksAreLegalAgainstOfficialMetadata()
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        // Wave 4 C1: the seven System Gateway-only sample decks (Null Signal Games).
+        CardDataSet data = CardDataResource.LoadEmbedded();
+        OfficialPresetCatalog catalog = OfficialPresetCatalog.Embedded();
+        catalog.Validate(data);
+        Assert.Equal(["gateway-party-hard", "gateway-stolen-goods", "gateway-planning-ahead", "gateway-discretion-advised",
+            "gateway-advanced-yomi", "gateway-hyper-velocity", "gateway-quick-and-dirty"], catalog.Gateway.Select(preset => preset.PresetId));
+        BehaviorCatalog behavior = GatewayBehaviorCatalog.Create();
+        foreach (OfficialPreset preset in catalog.Gateway)
+        {
+            Assert.Equal(OfficialPresetCatalog.GatewayKind, preset.Kind);
+            Assert.False(string.IsNullOrWhiteSpace(preset.Name));
+            DeckValidationResult result = DeckValidator.ValidateWithBehaviorCatalog(preset.ToDeckRequest(), data, behavior, catalog);
+            Assert.True(result.IsValid, $"{preset.PresetId}: {string.Join("\n", result.Diagnostics)}");
+            Assert.False(result.ExactTutorialPreset);
         }
     }
 

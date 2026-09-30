@@ -619,6 +619,18 @@ public sealed record EncounterBreakerViewModel(
     public StrengthBreakdownViewModel? StrengthBreakdown { get; init; }
 
     public string? StrengthSummary => StrengthBreakdown?.Summary;
+
+    /// <summary>Printed credits per boost, from the breaker's behaviour spec.</summary>
+    public int PumpCost { get; init; }
+
+    /// <summary>Printed strength per boost; null when it depends on the board (a dynamic pump).</summary>
+    public int? PumpStrength { get; init; }
+
+    /// <summary>Printed credits per break.</summary>
+    public int BreakCost { get; init; }
+
+    /// <summary>Subroutines one break can break; 0 means any number.</summary>
+    public int BreakLimit { get; init; }
 }
 
 public sealed record SubroutineViewModel(
@@ -1038,9 +1050,13 @@ public static class ObservationViewMapper
 
         IReadOnlyDictionary<string, object?> turnFacts = RequiredMap(rawFacts, "turnFacts");
         var uses = new List<FirstXUseViewModel>();
-        var keys = new HashSet<(string SourceCardId, string Key)>();
+        // A use can appear in both players' current-turn facts: a Runner card used during
+        // the Corp's turn (DZMZ Optimizer on a Pantograph install). Each side's list must
+        // be unique; across sides the same use is shown once.
+        var shown = new Dictionary<(string SourceCardId, string Key), int>();
         foreach (string side in new[] { "corp", "runner" })
         {
+            var keys = new HashSet<(string SourceCardId, string Key)>();
             if (!turnFacts.TryGetValue(side, out object? rawSideFacts)
                 || rawSideFacts is null
                 || rawSideFacts is JsonElement { ValueKind: JsonValueKind.Null })
@@ -1096,7 +1112,13 @@ public static class ObservationViewMapper
                         $"Observation field 'turnFacts.{side}.thisTurn.firstXUseKeys' contains duplicate use '{sourceCardId}/{key}'.");
                 }
 
-                uses.Add(new FirstXUseViewModel(sourceCardId, key, count));
+                if (shown.TryGetValue((sourceCardId, key), out int index))
+                    uses[index] = uses[index] with { Count = Math.Max(uses[index].Count, count) };
+                else
+                {
+                    shown[(sourceCardId, key)] = uses.Count;
+                    uses.Add(new FirstXUseViewModel(sourceCardId, key, count));
+                }
             }
         }
 
@@ -1633,6 +1655,10 @@ public static class ObservationViewMapper
                 CanInterfaceEncounter = iceSpec is not null && IceInterfaceMatcher.Matches(iceSpec, spec),
                 StrengthQuote = quote,
                 StrengthBreakdown = StrengthBreakdownViewModel.From(quote),
+                PumpCost = spec.PumpCost,
+                PumpStrength = spec.DynamicPump is null ? spec.PumpStrength : null,
+                BreakCost = spec.BreakCost,
+                BreakLimit = spec.BreakLimit,
             });
         }
 

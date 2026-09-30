@@ -30,7 +30,11 @@ public sealed class OfficialPreset
         string identityCode,
         string kind,
         bool playable,
-        IReadOnlyList<DeckCardEntry> cards)
+        IReadOnlyList<DeckCardEntry> cards,
+        string? name = null,
+        string? summary = null,
+        string? sourceUrl = null,
+        IReadOnlyList<string>? archetypes = null)
     {
         PresetId = presetId;
         Side = side;
@@ -38,7 +42,34 @@ public sealed class OfficialPreset
         Kind = kind;
         Playable = playable;
         Cards = new ReadOnlyCollection<DeckCardEntry>(cards.ToArray());
+        Name = name;
+        Summary = summary;
+        SourceUrl = sourceUrl;
+        Archetypes = new ReadOnlyCollection<string>((archetypes ?? []).ToArray());
     }
+
+    /// <summary>
+    /// The deck's declared archetypes (AI plan A8), primary first: how the bot
+    /// playing this deck plans to win. Empty when the bot should infer them.
+    /// </summary>
+    public IReadOnlyList<string> Archetypes { get; }
+
+    /// <summary>The archetype keys a Runner deck may declare.</summary>
+    public static IReadOnlySet<string> RunnerArchetypeKeys { get; } = new HashSet<string>(
+        ["big-rig", "aggro", "central-pressure", "econ-denial", "virus"], StringComparer.Ordinal);
+
+    /// <summary>The archetype keys a Corp deck may declare.</summary>
+    public static IReadOnlySet<string> CorpArchetypeKeys { get; } = new HashSet<string>(
+        ["glacier", "rush", "fast-advance", "shell-game", "kill", "tag-punish", "horizontal"], StringComparer.Ordinal);
+
+    /// <summary>The published deck name (Gateway sample decks); null for the teaching decks.</summary>
+    public string? Name { get; }
+
+    /// <summary>A one-line description of how the deck plays (Gateway sample decks).</summary>
+    public string? Summary { get; }
+
+    /// <summary>Where the list was published (Gateway sample decks).</summary>
+    public string? SourceUrl { get; }
 
     public string PresetId { get; }
 
@@ -49,7 +80,7 @@ public sealed class OfficialPreset
 
     public string IdentityCode { get; }
 
-    /// <summary>Either <c>starter</c> or <c>expanded</c>.</summary>
+    /// <summary><c>starter</c> or <c>expanded</c> (the teaching decks), or <c>gateway</c> (the sample decks).</summary>
     public string Kind { get; }
 
     /// <summary>
@@ -161,13 +192,24 @@ public sealed class OfficialPresetCatalog
             ["system-gateway-expanded-corp"] = (PlayerSide.Corp, "30077", "expanded", 44),
         };
 
+    public const string GatewayKind = "gateway";
+
     private OfficialPresetCatalog(
         OfficialPresetProvenance provenance,
-        IReadOnlyList<OfficialPreset> presets)
+        IReadOnlyList<OfficialPreset> presets,
+        IReadOnlyList<OfficialPreset>? gateway = null)
     {
         Provenance = provenance;
-        Presets = new ReadOnlyCollection<OfficialPreset>(presets.ToArray());
+        Teaching = new ReadOnlyCollection<OfficialPreset>(presets.ToArray());
+        Gateway = new ReadOnlyCollection<OfficialPreset>((gateway ?? []).ToArray());
+        Presets = new ReadOnlyCollection<OfficialPreset>(Teaching.Concat(Gateway).ToArray());
     }
+
+    /// <summary>The System Gateway teaching decks from presets.json (starter and expanded).</summary>
+    public IReadOnlyList<OfficialPreset> Teaching { get; }
+
+    /// <summary>The System Gateway-only sample decks (Wave 4 C1).</summary>
+    public IReadOnlyList<OfficialPreset> Gateway { get; }
 
     public OfficialPresetProvenance Provenance { get; }
 
@@ -231,6 +273,7 @@ public sealed class OfficialPresetCatalog
         if (data is not null)
         {
             AddMetadataProblems(problems, data);
+            AddGatewayLegalityProblems(problems, data);
         }
 
         return new ReadOnlyCollection<string>(problems);
@@ -271,9 +314,9 @@ public sealed class OfficialPresetCatalog
         RequireNonblank(problems, Provenance.ProvenanceNote, "provenanceNote");
 
         var seenPresetIds = new HashSet<string>(StringComparer.Ordinal);
-        for (int presetIndex = 0; presetIndex < Presets.Count; presetIndex++)
+        for (int presetIndex = 0; presetIndex < Teaching.Count; presetIndex++)
         {
-            OfficialPreset? preset = Presets[presetIndex];
+            OfficialPreset? preset = Teaching[presetIndex];
             string path = $"presets[{presetIndex}]";
             if (preset is null)
             {
@@ -363,13 +406,14 @@ public sealed class OfficialPresetCatalog
             }
         }
 
-        if (Presets.Count != ExpectedPresets.Count)
+        if (Teaching.Count != ExpectedPresets.Count)
         {
             problems.Add(
-                $"presets: expected {ExpectedPresets.Count} official presets, found {Presets.Count}.");
+                $"presets: expected {ExpectedPresets.Count} official presets, found {Teaching.Count}.");
         }
 
         AddExpandedSubsetProblems(problems);
+        AddGatewayStructureProblems(problems);
     }
 
     private void AddExpandedSubsetProblems(List<string> problems)
@@ -499,6 +543,119 @@ public sealed class OfficialPresetCatalog
         }
     }
 
+    private void AddGatewayStructureProblems(List<string> problems)
+    {
+        var seen = new HashSet<string>(Teaching.Select(preset => preset.PresetId), StringComparer.Ordinal);
+        for (int index = 0; index < Gateway.Count; index++)
+        {
+            OfficialPreset preset = Gateway[index];
+            string path = $"gateway.decks[{index}]";
+            if (!IsStableIdentifier(preset.PresetId) || !seen.Add(preset.PresetId))
+                problems.Add($"{path}.presetId: '{preset.PresetId}' must be a unique stable identifier.");
+            if (preset.Kind != GatewayKind) problems.Add($"{path}.kind: expected '{GatewayKind}'.");
+            if (string.IsNullOrWhiteSpace(preset.Name) || string.IsNullOrWhiteSpace(preset.Summary) || string.IsNullOrWhiteSpace(preset.SourceUrl))
+                problems.Add($"{path}: a sample deck needs a name, a summary and a source URL.");
+            if (preset.CardCount != (preset.Side == PlayerSide.Corp ? 44 : 40))
+                problems.Add($"{path}.cards: contains {preset.CardCount} cards; a Gateway sample deck has {(preset.Side == PlayerSide.Corp ? 44 : 40)}.");
+            var codes = new HashSet<string>(StringComparer.Ordinal);
+            foreach (DeckCardEntry card in preset.Cards)
+            {
+                if (!IsStableCardCode(card.Code) || !codes.Add(card.Code)) problems.Add($"{path}.cards: code '{card.Code}' is invalid or repeated.");
+                if (card.Quantity <= 0) problems.Add($"{path}.cards: code '{card.Code}' has quantity {card.Quantity}.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Deck-building rules for the sample decks, against authenticated metadata:
+    /// the identity's minimum deck size and influence limit, no out-of-faction
+    /// agendas, and a Corp deck's agenda points (2 per 5 cards plus 2, or one more).
+    /// </summary>
+    private void AddGatewayLegalityProblems(List<string> problems, CardDataSet data)
+    {
+        var byCode = data.Cards.ToDictionary(static card => card.Code, StringComparer.Ordinal);
+        for (int index = 0; index < Gateway.Count; index++)
+        {
+            OfficialPreset preset = Gateway[index];
+            string path = $"gateway.decks[{index}]";
+            if (!byCode.TryGetValue(preset.IdentityCode, out NormalizedCardDefinition? identity)) continue;
+            int size = preset.CardCount;
+            if (identity.MinimumDeckSize is { } minimum && size < minimum)
+                problems.Add($"{path}: {size} cards is below the identity's minimum of {minimum}.");
+            int influence = 0, points = 0;
+            foreach (DeckCardEntry card in preset.Cards)
+            {
+                if (!byCode.TryGetValue(card.Code, out NormalizedCardDefinition? definition)) continue;
+                bool outOfFaction = definition.Faction != identity.Faction && !definition.Faction.StartsWith("neutral", StringComparison.Ordinal);
+                if (outOfFaction) influence += (definition.InfluenceCost ?? 0) * card.Quantity;
+                if (outOfFaction && definition.Type == "agenda") problems.Add($"{path}: agenda '{card.Code}' is out of faction.");
+                points += (definition.AgendaPoints ?? 0) * card.Quantity;
+            }
+            if (identity.InfluenceLimit is { } limit && influence > limit)
+                problems.Add($"{path}: {influence} influence exceeds the identity's limit of {limit}.");
+            if (preset.Side == PlayerSide.Corp)
+            {
+                int required = size / 5 * 2 + 2;
+                if (points != required && points != required + 1)
+                    problems.Add($"{path}: {points} agenda points; a {size}-card deck needs {required} or {required + 1}.");
+            }
+        }
+    }
+
+    private const string GatewayResourceName = "Netrunner.Cards.Data.decks.gateway-sample-decks.json";
+
+    private static readonly IReadOnlySet<string> GatewayRootProperties = new HashSet<string>(
+        ["schemaVersion", "retrievedDate", "publishedSourceUrl", "metadataCommitSha", "provenanceNote", "decks"], StringComparer.Ordinal);
+
+    private static readonly IReadOnlySet<string> GatewayDeckProperties = new HashSet<string>(
+        ["presetId", "name", "summary", "side", "identityCode", "sourceUrl", "cards", "archetypes"], StringComparer.Ordinal);
+
+    /// <summary>Parses the Gateway sample-deck document (schema 1) into presets of kind <see cref="GatewayKind"/>.</summary>
+    public static IReadOnlyList<OfficialPreset> ParseGatewayDecks(string json)
+    {
+        ArgumentNullException.ThrowIfNull(json);
+        using JsonDocument document = JsonDocument.Parse(json);
+        JsonElement root = document.RootElement;
+        EnsureObjectShape(root, GatewayRootProperties, "gateway document");
+        if (RequiredInt(root, "schemaVersion", "gateway document") != 1) throw Invalid("gateway document.schemaVersion: expected 1.");
+        var decks = new List<OfficialPreset>();
+        int index = 0;
+        foreach (JsonElement element in RequiredProperty(root, "decks", "gateway document").EnumerateArray())
+        {
+            string path = $"gateway.decks[{index++}]";
+            EnsureObjectShape(element, GatewayDeckProperties, path);
+            PlayerSide side = RequiredString(element, "side", path) switch
+            {
+                "corp" => PlayerSide.Corp,
+                "runner" => PlayerSide.Runner,
+                string other => throw Invalid($"{path}.side: '{other}' must be 'corp' or 'runner'."),
+            };
+            var cards = new List<DeckCardEntry>();
+            foreach (JsonElement card in RequiredProperty(element, "cards", path).EnumerateArray())
+            {
+                EnsureObjectShape(card, CardProperties, $"{path}.cards");
+                cards.Add(new DeckCardEntry(RequiredString(card, "code", path), RequiredInt(card, "quantity", path)));
+            }
+            var archetypes = new List<string>();
+            if (element.TryGetProperty("archetypes", out JsonElement declared))
+            {
+                IReadOnlySet<string> known = side == PlayerSide.Corp ? OfficialPreset.CorpArchetypeKeys : OfficialPreset.RunnerArchetypeKeys;
+                foreach (JsonElement value in declared.EnumerateArray())
+                {
+                    string key = value.GetString() ?? throw Invalid($"{path}.archetypes: expected strings.");
+                    if (!known.Contains(key)) throw Invalid($"{path}.archetypes: '{key}' isn't a {side} archetype.");
+                    archetypes.Add(key);
+                }
+                if (archetypes.Count is 0 or > 2 || archetypes.Distinct().Count() != archetypes.Count)
+                    throw Invalid($"{path}.archetypes: expected one or two distinct archetypes.");
+            }
+            decks.Add(new OfficialPreset(RequiredString(element, "presetId", path), side, RequiredString(element, "identityCode", path),
+                GatewayKind, playable: true, cards, RequiredString(element, "name", path), RequiredString(element, "summary", path),
+                RequiredString(element, "sourceUrl", path), archetypes));
+        }
+        return decks;
+    }
+
     private static OfficialPresetCatalog LoadEmbeddedCore()
     {
         Assembly assembly = typeof(OfficialPresetCatalog).Assembly;
@@ -511,7 +668,14 @@ public sealed class OfficialPresetCatalog
 
         using var memory = new MemoryStream();
         stream.CopyTo(memory);
-        return Parse(memory.ToArray());
+        OfficialPresetCatalog teaching = Parse(memory.ToArray());
+        using Stream? gatewayStream = assembly.GetManifestResourceStream(GatewayResourceName);
+        if (gatewayStream is null)
+            throw new PresetDataValidationException([$"preset resource: embedded resource '{GatewayResourceName}' was not found."]);
+        using var reader = new StreamReader(gatewayStream, Encoding.UTF8);
+        var catalog = new OfficialPresetCatalog(teaching.Provenance, teaching.Teaching, ParseGatewayDecks(reader.ReadToEnd()));
+        catalog.Validate();
+        return catalog;
     }
 
     public static OfficialPresetCatalog Parse(string json)

@@ -120,7 +120,8 @@ seeds to hide an unfavorable result.
 | 1 | U1, E1, A2, A6a, E3 (nightly), E6 (renames) | 3–5 weeks | First visible wins; the engine gets fast; distinct difficulty |
 | 2 | U2, E4b, U3 slice, E5 | 5–7 weeks | The board comes alive for one run and one score |
 | 3 | U3 full, U4, E2 | 7–10 weeks | Real game feel |
-| 4 | C1, U7, U5, U6, A1b, A4a, A5, A3, A4 | 8–11 weeks | Real decks; polish, and the bot plans turns and searches runs |
+| 4 | C1, U7, U5, U6, A1b, A4a, A5, A3, A4, A8 | 9–13 weeks | Real decks; polish, and the bot plans turns and searches runs |
+| 4.5 | P1, P2, P3 | 3–5 weeks | Automated playtesting: lints and a local LLM find the bot's oddities |
 | 5 | A6 (compute tiers, personalities), hardening, decision point | 2–4 weeks | Difficulty, release readiness |
 
 In total that's roughly 28–42 weeks. The UI track alone reaches "feels like a
@@ -215,6 +216,7 @@ game" at the end of Wave 3.
 | A5 fitted evaluation | Fit the evaluation to self-play outcomes over the A4a and A2 features, instead of hand-tuning. |
 | A3 turn planner | Moved from Wave 3 ([record](WAVE_3_PROGRESS.md#a3-turn-planner)): the planning infrastructure works, but its end-of-turn evaluation didn't pick better turns. It returns on A4a and A5. |
 | A4 run search | It builds on the A3 infrastructure and the A4a model, and adds the most for the Runner. |
+| A8 Corp archetypes | Last: one policy that fits every deck plays each deck's plan badly (playtest, 28 September). The Corp plays to its deck's archetype instead. See below. |
 
 **C1 Gateway sample decks (M).** Null Signal Games publishes
 [sample decklists](https://nullsignal.games/players/getting-started-sample-decklists/);
@@ -288,6 +290,70 @@ full games cleanly; the main menu offers both areas and a human plays one
 Gateway game in each seat; the per-faction audit's fixes don't regress the
 ladder.
 
+**A8 Corp archetypes (M–L).** A single Corp policy plays every deck the
+same way: it spreads ICE, builds whatever remote scores highest, and treats
+tags, traps and damage as side effects. Real Corp decks follow a plan, and
+the right play depends on it: a glacier deck builds one expensive remote, a
+trap deck wants the Runner to run into the wrong card, a tag deck lands a
+tag and then cashes it in. A8 makes the Corp play to an **archetype**,
+starting with the Corp (the Runner follows once this works).
+
+The archetypes, placed on two axes (how it scores: fast or slow, and
+horizontal or vertical; how it punishes):
+
+| Archetype | Plan | The bot must learn to |
+|---|---|---|
+| Glacier / taxing | One or two remotes behind expensive, click-taxing ICE; score safely | Build tall: ICE the scoring remote to 3+ pieces before installing agendas there; rez for tax, not only for ETR |
+| Rush | Score early behind cheap ICE before the Runner sets up | Install and advance agendas early behind one or two ICE; spend on scoring, not on board |
+| Fast advance | Score without leaving an agenda exposed for a Runner turn | Hold agendas until they can be scored in one turn (Seamless Launch, Sprint for cards, credits banked) |
+| Trap / shell game (never-advance) | Keep the Runner unsure what a remote holds | Install traps and agendas alike, advance traps as bait, leave agendas unadvanced, rez traps at the right moment |
+| Kill / flatline | Win by damage | Track the kill threshold (grip, tags) and play the damage when it wins |
+| Tag-and-bag / tag punishment | Land tags, then cash them in | Value tag sources (Public Trail, Funhouse), then punish: trash resources, Retribution, Orbital Superiority |
+| Horizontal / asset spam | Many cheap remotes with assets | Go wide with assets, protect only what pays, let the Runner waste credits trashing |
+| Prison | Restrict the Runner's credits, cards or clicks | (No Gateway deck plays it; later card sets) |
+
+The Gateway Corp decks map onto them (to confirm in playtests):
+
+| Deck | Identity | Primary | Secondary |
+|---|---|---|---|
+| Discretion Advised | Haas-Bioroid: Precision Design | Glacier (Manegarm Skunkworks, Brân, Ansel) | Fast advance (Seamless Launch), traps (Urtica Cipher) |
+| Advanced Yomi | Jinteki: Restoring Humanity | Trap / shell game (Urtica Cipher, Clearinghouse, Anoetic Void) | Horizontal assets (Regolith Mining License, Spin Doctor), net damage |
+| Hyper Velocity | NBN: Reality Plus | Tag punishment (Public Trail, Funhouse, AMAZE Amusements) | Rush behind cheap ICE, kill (Neurospike, Orbital Superiority) |
+| Quick and Dirty | Weyland: Built to Last | Rush with money | Tag-and-bag (Public Trail, Retribution, Orbital Superiority), big ICE (Pharos, Ballista) |
+
+**How it works:**
+1. **Archetype profiles.** Each archetype is a named profile of the Corp
+   policy's plan-level parameters, not a separate bot: the target number of
+   remotes and ICE per remote, the central ICE target, when agendas may be
+   installed (behind how much protection, and whether only when scorable this
+   turn), how much tags, traps and damage are worth, how rez decisions weigh
+   tax against stopping the run, and the economy reserve. A deck has a primary
+   and optionally a secondary archetype, blended by weight.
+2. **Which archetype a deck plays.** A deck declares it in its preset
+   (`archetypes` in `data/decks/gateway-sample-decks.json`); a deck without
+   one gets it inferred from its composition (counts of traps, tag sources,
+   damage cards, assets, fast-advance cards, and the ICE cost profile), which
+   is also what A7's deck-aware features need.
+3. **Plans the heuristic already lacks.** Tag-and-bag needs the policy to
+   value landing a tag and then to play the punishment in the same or next
+   turn; the shell game needs bluffing (advancing a trap, not advancing an
+   agenda); glacier needs "don't install the agenda yet". These become
+   explicit heuristic terms keyed on the profile.
+4. **The planner and evaluation stay shared.** The fitted evaluation gains
+   the archetype as features only if per-archetype fits prove necessary (A7
+   covers per-format data; per-archetype data is the same mechanism).
+
+**Gate:**
+- Each Gateway Corp deck, playing its archetype, is not weaker on the ladder
+  than the generic Corp in its own pairings, and at least two decks gain
+  clearly (A1b's per-deck scores).
+- The behavior differs as intended, measured by P1-style lints on self-play:
+  a glacier deck builds at most two remotes and scores behind three or more
+  ICE; a rush deck scores its first agenda earlier than the generic Corp; the
+  trap deck advances traps as bait; the tag decks play punishment cards after
+  landing tags.
+- A human playtest of at least two decks recognizes the archetype.
+
 **Gate:**
 - The M5 frame-time gate still passes with the new effects and audio.
 - Playtest metrics (time per turn, rejected drops, "All legal actions…" use)
@@ -298,6 +364,100 @@ ladder.
 - A3 shows a clear ladder gain in both seats within the latency budget.
 - A4 and A5 show ladder gains, and hidden-state twins still pass.
 
+### Wave 4.5 — automated playtesting
+
+Why now: bot work is bottlenecked on human playtests. A 45-minute session
+finds a handful of faults (the 28 September session: empty remotes, an
+upgrade in the wrong server, an Archives farmed for free, advanceable ICE
+never advanced), and the ladder can't see such faults: it only measures
+wins, and both seats run the same heuristic, so a weakness only a different
+player would exploit never costs a game. This wave brings forward the part
+of M6 that serves development (an LLM reading and playing games headlessly)
+and leaves the player-facing M6 (settings, consent, failure UX in the
+client) for later. Everything runs locally: the model is a local server
+with an OpenAI-compatible API (llama.cpp, Ollama, vLLM or LM Studio), so
+game logs never leave the machine.
+
+**P1 Oddity lints (S).** Deterministic detectors over self-play games,
+reported per deck pairing: ICE installed on a remote with nothing to
+protect; an upgrade in a server where its trigger can never fire; a unique
+card replacing its own copy; approached ICE left unrezzed while the Runner
+profits from repeated runs on that server; advanceable ICE never advanced;
+a central server left without ICE while remotes multiply; the Runner
+re-running R&D with its top card already seen. An `ai-lint` command runs
+them over a ladder's games; counts per version are recorded, so a repaired
+fault stays repaired. Lints catch the faults we know about.
+
+**P2 LLM game reviewer (M).** The LLM reads one bot's decisions from a
+self-play game (what `ai-review --side --all` prints: each choice with the
+alternatives and the heuristic's reasons) and reports plays that look
+wrong, as structured findings: sequence number, side, category, claim, and
+the rule numbers and card texts it relied on. The model can't be assumed
+to know Netrunner, so it gets tools instead of a long prompt:
+- `rules_lookup(query or rule number)`: searches the vendored
+  comprehensive rules (`data/vendor/rules`, indexed by rule number and
+  section) and returns the matching rule texts with their numbers.
+- `card_text(title or code)`: the printed text, type, costs and subtypes.
+- `position(sequence)`: the board at that point in the game (both sides;
+  the review is offline, so nothing needs to stay hidden).
+- `decision(sequence)`: the legal options and the bot's scores and reasons.
+
+A finding that cites no rule or card text is kept only as "unverified".
+Findings from many games are grouped by category and card, a person
+triages them, and each confirmed one becomes a deterministic regression
+test (a replay fixture and the position, as `CorpPlaytestV11Tests` does).
+LLM runs never gate a bot version; the tests they lead to do.
+
+**P3 LLM opponent (M–L).** A headless match agent that makes the strategic
+choices (where to run, what to install and where, when to advance and
+score, whether to continue a run) through the same tools plus
+`legal_actions`, while the heuristic handles breaking, paying and priority
+windows. Its purpose is behavior the heuristic never shows, which is what
+exposed the Archives farm; its games feed P1 and P2. It builds M6's
+observation and legal-action schema and strict response validation
+(LLM-602, LLM-603) on the existing `Netrunner.LLM` contracts, so that work
+carries over to M6.
+
+**Gate:**
+- P1: on a corpus of Corp v9 games the lints find the playtest's faults,
+  and on Corp v11 they find none of the repaired ones.
+- P2: on the same v9 corpus the reviewer re-finds at least three of the five
+  playtest faults, with citations, and a triage of 30 findings is recorded
+  (confirmed, wrong, duplicate), so its precision is known.
+- P3: 50 headless games against the bot finish without stalls or invalid
+  actions, and their reviews produce at least one confirmed new fault or a
+  recorded "none found".
+
+**U8 Run HUD (M), proposed from the 29 September playtest.** A run spreads
+over four places: the icebreaker panel, the access panel, the dock
+(continue, jack out) and the server or card that starts it. U8 gathers them
+into one HUD anchored at the attacked server: the current ICE with its
+subroutines, the Runner's matching breakers with their break and boost
+buttons inline, continue and jack out beside them, and the accessed card's
+actions in the same place once the run succeeds. The dock keeps only the
+turn's own actions. Gate: a scripted run from start to access touches only
+the HUD, and a human playtest finds it faster than today's run.
+
+**U5 direction (chosen 29 September).** Mockups of the run HUD (U8) in three
+looks were compared on a Claude Design canvas; **"Corp chrome against Runner
+neon"** was chosen: the Corp's half of the table in brushed steel tinted to
+its faction, with light faction decor (Weyland girders and hazard strips),
+the Runner's half dark with its faction's neon and a faint circuit grid, a
+faction emblem on each identity plate, and the run drawn as a connection
+from the Runner's rig straight through the ICE to the root: passed ICE
+split where the line went through it, the encountered ICE lit at the
+contact point, the rest dim. Faction colours: Criminal blue, Shaper acid
+green, Anarch magenta (cyan as a neutral Runner); Jinteki red, Haas-Bioroid
+violet, NBN yellow, Weyland green. The emblems in the mockup are
+placeholders; official faction symbols only if their licence allows. Type:
+Rajdhani display, IBM Plex Sans body, IBM Plex Mono for numbers and state
+(Google Fonts, open licence).
+
+**Future experiment: a terminal client.** One mockup direction drew the run
+as a terminal session (`trace remote-1`, every choice a command). Not a
+current goal, but worth trying later: a client that looks and plays like a
+real terminal, even over SSH, on the same engine and match coordinator.
+
 ### Wave 5 — difficulty, hardening and the next decision
 
 - A6 compute-based difficulty tiers and personalities, validated by the ladder
@@ -306,12 +466,61 @@ ladder.
   before any new card set), the full `make m5-gate`, and packaging.
 - **Decision point**, recorded in `IMPLEMENTATION_PLAN.md`:
   - M6 (LLM/hybrid mode), or
-  - the next card set, which requires the E6 Core-growth budget to be set, or
+  - the next card set, which requires the E6 Core-growth budget to be set,
+    and brings C2 (format snapshots, below) and the AI plan's A7: per-format
+    tuned data (one bot, each pool's fitted weights and priors) and
+    deck-aware evaluation features, or
   - an RC.
+
+### C2. Format snapshots (with the next card set)
+
+Formats rotate. Startup in 2026 is System Gateway, Elevation and Vantage
+Point, after the Liberation cycle rotated out; in 2025 it was System
+Gateway, Elevation and the Liberation cycle
+([Null Signal Games, Startup balance update 26.03](https://nullsignal.games/blog/startup-balance-update-26-03/)).
+A rotation also changes the ban list and deck-building rules: from 2 March
+2026, Startup bans NBN: Reality Plus, Let Them Dream, Seamless Launch,
+Mercia B4LL4RD and Cleaver, unbans Pharos, and allows at most 3 agendas worth
+3 or more points. So a format is a series of dated **snapshots**, and a
+player who picks "Startup" chooses any snapshot we implement ("Startup 2026",
+"Startup 2025").
+
+- **A snapshot is data.** A versioned file per snapshot: its legal sets, its
+  banned and restricted cards, its deck-building rules and its effective
+  date, alongside the card data (for example `data/formats/startup-2026-03.json`).
+  Gateway-only is a snapshot too, and the tutorial decks are their own.
+- **Deck validation per snapshot.** `DeckValidator` takes the snapshot and
+  checks legality against it, with a clear reason for each failure (a card
+  outside the snapshot's sets, a banned card, a rule such as the agenda
+  limit). Sample and preset decks are tagged with the snapshots they are
+  legal in; for example, several Gateway sample decks are not legal in 2026
+  Startup, since Hyper Velocity is built on Reality Plus and some Runner
+  decks play Cleaver.
+- **Balance rules are optional.** This is a solo game, not a tournament, so
+  a snapshot's card pool (its legal sets) is always applied, while its
+  balance rules (bans, restrictions and deck-building limits) are a per-game
+  option: on by default, and off for a casual game with banned cards. With
+  them off, validation still reports what the snapshot would reject, as
+  information, and decks tagged as breaking only balance rules stay
+  selectable. The choice is recorded with the game.
+- **Only implemented snapshots are offered.** A snapshot is selectable when
+  every card in its sets is implemented; the others are listed as not yet
+  available, like presets locked on coverage today.
+- **The menu (U7)** gains a format step before the decks: choose a format,
+  then one of its implemented snapshots (the newest by default) and whether
+  its balance rules apply, then the decks legal in it.
+- **Saves and replays record the snapshot** and whether its balance rules
+  applied, so a game resumes and verifies under the rules it started with,
+  even after a newer snapshot is added.
+- **The bot's tuned data follows the snapshot** (AI plan A7): the deck pool
+  for fitting and the ladder is a snapshot's legal decks, and a snapshot
+  without its own fit falls back to the nearest one or a general fit.
 
 ## 4. Where M6 fits
 
-M6 (safe LLM/hybrid mode) is independent of most of this work, but it gets
+Wave 4.5 brings the development side of M6 forward (the LLM reads and plays
+games headlessly, on a local model); the player-facing M6 below follows
+later. M6 (safe LLM/hybrid mode) is independent of most of this work, but it gets
 much easier after two items:
 - E4a: typed prompts are what an LLM intent layer would consume.
 - A1: the rating ladder is how hybrid play would be evaluated.

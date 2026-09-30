@@ -308,7 +308,7 @@ public partial class Main
 				$"M4_SLICE48_UX_SCREENSHOT requested={FormatSlice48Bool(screenshotRequested)} "
 				+ $"saved={FormatSlice48Bool(screenshotSaved)} "
 				+ "path=docs/evidence/slice48/slice48-ui-smoke.png");
-			GetTree().Quit(passed ? 0 : 1);
+			QuitCleanly(passed ? 0 : 1);
 		}
 		catch (Exception exception)
 		{
@@ -340,16 +340,25 @@ public partial class Main
 				+ $"layout_2560x1440={FormatSlice48Bool(layout2560x1440)} "
 				+ $"screenshot={FormatSlice48Bool(screenshotSaved)} "
 				+ $"error={exception.Message.Replace('\n', ' ').Replace('\r', ' ')}");
-			GetTree().Quit(1);
+			QuitCleanly(1);
 		}
 	}
+
+	/// <summary>
+	/// U7: in the production shell the menu's title screen fronts the setup form,
+	/// which backs it; the legacy diagnostic shell still shows the form itself.
+	/// </summary>
+	private bool HasSetupMenuSurface() => _menuTitleView is null
+		? SceneTreeContainsText(_startPanel, "MATCH SETUP") && SceneTreeContainsText(_startPanel, "OFFICIAL PRESETS")
+		: _menuTitleView.Visible
+			&& SceneTreeContainsText(_menuTitleView, "NETRUNNER")
+			&& FindDescendants<Button>(_menuTitleView).Any(button => button.Visible && button.Text == "New game");
 
 	private bool HasSlice48SetupSurface()
 	{
 		bool presets = HasPresetKinds(_corpPreset) && HasPresetKinds(_runnerPreset)
 			|| PresetUnavailable(_corpPreset) && PresetUnavailable(_runnerPreset);
-		return SceneTreeContainsText(_startPanel, "MATCH SETUP")
-			&& SceneTreeContainsText(_startPanel, "OFFICIAL PRESETS")
+		return HasSetupMenuSurface()
 			&& presets
 			&& _humanSide.ItemCount == 2
 			&& _startButton.FocusMode != Control.FocusModeEnum.None;
@@ -653,8 +662,7 @@ public partial class Main
 		await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
 		layout &= setupPanel is not null
 			&& IsFullyInsideViewport(setupPanel)
-			&& SceneTreeContainsText(_startPanel, "MATCH SETUP")
-			&& SceneTreeContainsText(_startPanel, "OFFICIAL PRESETS")
+			&& HasSetupMenuSurface()
 			&& AreVisibleLabelsLegible(_startPanel);
 		bool setupFocusOrder = setupPanel is not null
 			&& await CheckSlice48FocusOrderAsync(_startPanel);

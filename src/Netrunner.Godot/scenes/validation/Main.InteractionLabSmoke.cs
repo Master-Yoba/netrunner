@@ -127,8 +127,10 @@ public partial class Main
 					&& after.Runner == original.Runner && after.Run.RunCredits == original.Run!.RunCredits,
 					"Hosted-virus break spent credits, failed to consume exactly one counter, or broke the wrong subroutine.");
 				Label counterChip = _gameTable.VisibleCards[virus.Id].GetNode<Label>("LayoutHost/CompactLayout/Counters");
-				RequireInteraction(counterChip.Text == (remaining > 0 ? $"VIR×{remaining}" : "") && counterChip.Visible == (remaining > 0),
-					"The hosted card's displayed counter chip did not follow counter depletion.");
+				TableCardControl hostedCard = _gameTable.VisibleCards[virus.Id];
+				RequireInteraction(counterChip.Text == (remaining > 0 ? $"VIR×{remaining}" : "")
+					&& hostedCard.VirusBadgeCount == remaining,
+					"The hosted card's counter badge did not follow counter depletion.");
 			}
 			SubmitInteractionLab(original.Decision!, original.LegalActions[0]);
 			RequireInteraction(_labSubmissionCount == 2 && _currentSnapshot!.View.LegalActions.All(action => action.Kind != ActionKind.BreakSubroutines)

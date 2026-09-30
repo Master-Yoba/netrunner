@@ -25,6 +25,37 @@ public partial class GameTableControl
 			{
 				A = _focusedServer is null || string.Equals(id, _focusedServer, StringComparison.Ordinal) ? 1 : UnfocusedLaneAlpha,
 			};
+		BreatheLane(_focusedServer is { } focused && _serverLanes.TryGetValue(focused, out ServerLaneParts? parts) ? parts.Panel : null);
+	}
+
+	private Control? _breathingLane;
+	private double _breathSeconds;
+
+	/// <summary>
+	/// Idle life (U5): the attacked server's lane glows slowly while its run
+	/// lasts. Only the panel's own background brightens, not its cards; reduced
+	/// motion keeps the lane still. <see cref="Breathe"/> drives it each frame.
+	/// </summary>
+	private void BreatheLane(Control? lane)
+	{
+		if (ReferenceEquals(lane, _breathingLane)) return;
+		if (_breathingLane is not null && IsInstanceValid(_breathingLane)) _breathingLane.SelfModulate = Colors.White;
+		_breathingLane = lane;
+		_breathSeconds = 0;
+	}
+
+	private void Breathe(double delta)
+	{
+		if (_breathingLane is null) return;
+		if (!IsInstanceValid(_breathingLane)) { _breathingLane = null; return; }
+		if (!MotionEnabled || Hand.ReducedMotion)
+		{
+			_breathingLane.SelfModulate = Colors.White;
+			return;
+		}
+		_breathSeconds += delta;
+		float glow = 1 + 0.15f * (1 - Mathf.Cos((float)(_breathSeconds * Math.PI / 1.2)));
+		_breathingLane.SelfModulate = new Color(glow, glow, glow);
 	}
 
 	/// <summary>Grows a card in place (an encountered ICE) until released; reduced motion only raises it.</summary>
@@ -103,6 +134,52 @@ public partial class GameTableControl
 		if (MotionEnabled && !Hand.ReducedMotion) tween.TweenProperty(wash, "color:a", 0.32, 0.12);
 		tween.TweenProperty(wash, "color:a", 0.0, 0.5);
 		tween.TweenCallback(Callable.From(() => { _motionTweens.Remove(tween); _motionCards.Remove(wash); wash.QueueFree(); }));
+	}
+
+	/// <summary>A rez turns the card over: it narrows to its edge and opens again (U5). Reduced motion keeps the pulse only.</summary>
+	public void FlipCard(string? key)
+	{
+		if (!MotionEnabled || Hand.ReducedMotion || key is null || !_visibleCards.TryGetValue(key, out TableCardControl? card)
+			|| !card.IsVisibleInTree()) return;
+		float width = _flipping.TryGetValue(card, out float flipping) ? flipping : card.Scale.X;
+		_flipping[card] = width;
+		card.PivotOffset = card.Size * 0.5f;
+		Tween tween = CreateTween();
+		_motionTweens.Add(tween);
+		tween.TweenProperty(card, "scale:x", 0.0, 0.1).SetEase(Tween.EaseType.In).SetTrans(Tween.TransitionType.Sine);
+		tween.TweenProperty(card, "scale:x", width, 0.16).SetEase(Tween.EaseType.Out).SetTrans(Tween.TransitionType.Back);
+		tween.TweenCallback(Callable.From(() => { _motionTweens.Remove(tween); _flipping.Remove(card); if (IsInstanceValid(card)) card.Scale = card.Scale with { X = width }; }));
+	}
+
+	/// <summary>A brief shake of the table for damage (U5); none with reduced motion.</summary>
+	public void Shake(float strength)
+	{
+		if (!MotionEnabled || Hand.ReducedMotion || _shaking) return;
+		_shaking = true;
+		Vector2 home = Position;
+		_shakeHome = home;
+		Tween tween = CreateTween();
+		_motionTweens.Add(tween);
+		float[] offsets = [1f, -0.8f, 0.6f, -0.4f, 0.2f];
+		for (int index = 0; index < offsets.Length; index++)
+			tween.TweenProperty(this, "position", home + new Vector2(offsets[index] * strength, (index % 2 == 0 ? 0.5f : -0.5f) * strength), 0.035);
+		tween.TweenProperty(this, "position", home, 0.04);
+		tween.TweenCallback(Callable.From(() => { _motionTweens.Remove(tween); Position = home; _shaking = false; _shakeHome = null; }));
+	}
+
+	private bool _shaking;
+	private Vector2? _shakeHome;
+	private readonly Dictionary<TableCardControl, float> _flipping = [];
+
+	/// <summary>After motion is stopped mid-beat, put a flipped card and a shaken table back.</summary>
+	private void RestoreBeatMotion()
+	{
+		foreach ((TableCardControl card, float width) in _flipping)
+			if (IsInstanceValid(card)) card.Scale = card.Scale with { X = width };
+		_flipping.Clear();
+		if (_shakeHome is { } home) Position = home;
+		_shakeHome = null;
+		_shaking = false;
 	}
 
 	private void Pulse(Control? target)

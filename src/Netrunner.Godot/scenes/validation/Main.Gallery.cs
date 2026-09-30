@@ -18,7 +18,7 @@ public partial class Main
 
 	private void FinishGallerySmoke()
 	{
-		GetTree().Quit(_gallerySmokePassed ? 0 : 1);
+		QuitCleanly(_gallerySmokePassed ? 0 : 1);
 	}
 
 	private void ShowCardGallery()

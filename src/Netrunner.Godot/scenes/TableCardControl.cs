@@ -761,7 +761,7 @@ public partial class TableCardControl : Control
 		if (_card is not { IsKnown: true })
 		{
 			DrawNeutralBack(cardRect, border);
-			DrawHiddenAdvancement(cardRect);
+			DrawCounterBadges(cardRect);
 			return;
 		}
 
@@ -774,6 +774,7 @@ public partial class TableCardControl : Control
 			if (_actionableSource || HasMetHandCondition)
 				DrawActionGlow(border, InsetRect(frameRect, frameWidth), appearance.CornerRadius);
 			DrawStateBadge(accent, cardSize);
+			DrawCounterBadges(cardRect);
 			return;
 		}
 
@@ -832,6 +833,7 @@ public partial class TableCardControl : Control
 			accent,
 			_artwork is not null ? appearance.MotifOpacityWithArtwork : appearance.MotifOpacityWithoutArtwork);
 		DrawStateBadge(accent, cardSize);
+		DrawCounterBadges(cardRect);
 	}
 
 	private Rect2 ResolveMotifRect(Vector2 cardSize, CardAppearance appearance)
@@ -964,7 +966,8 @@ public partial class TableCardControl : Control
 		_status!.Text = known ? Unrezzed ? UnrezzedLabel(_card!) : FormatStatus(_card!, compact) : "FACE-DOWN";
 		if (known && EncounterStrength is { } strength) _status.Text = $"STR {strength} · {_status.Text}";
 		_counters!.Text = known ? FormatCounters(_card!, compact) : string.Empty;
-		_counters!.Visible = _counters!.Text.Length > 0;
+		// Counters are drawn as shape badges; the text stays for the tooltip and inspection.
+		_counters!.Visible = false;
 		_rulesCue!.Visible = known && !_isIce && !compact && !HasFullCardArtwork;
 		RefreshTooltip();
 	}
@@ -1268,18 +1271,6 @@ public partial class TableCardControl : Control
 			_hiddenAdvancement = value;
 			QueueRedraw();
 		}
-	}
-
-	private void DrawHiddenAdvancement(Rect2 cardRect)
-	{
-		if (_hiddenAdvancement <= 0) return;
-		Font font = ThemeDB.FallbackFont;
-		int fontSize = IsCompactPortrait || _isIce ? 13 : 15;
-		string text = $"ADV×{_hiddenAdvancement}";
-		Vector2 size = font.GetStringSize(text, HorizontalAlignment.Left, -1, fontSize) + new Vector2(10, 4);
-		Rect2 badge = new(new Vector2(cardRect.GetCenter().X - size.X / 2, cardRect.Position.Y + 6), size);
-		DrawRect(badge, new Color(0.98f, 0.76f, 0.37f, 0.92f));
-		DrawString(font, badge.Position + new Vector2(5, size.Y - 5), text, HorizontalAlignment.Left, -1, fontSize, new Color(0.06f, 0.08f, 0.1f));
 	}
 
 	private void DrawNeutralBack(Rect2 cardRect, Color border)

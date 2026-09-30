@@ -8,6 +8,9 @@ public sealed record PriorityWindow(bool InRun, bool Encountering)
     /// <summary>The Runner is past every piece of ICE protecting the attacked server.</summary>
     public bool PastIce { get; init; }
 
+    /// <summary>An encounter whose subroutines are all broken or resolved: pumping or breaking more changes nothing.</summary>
+    public bool NothingToBreak { get; init; }
+
     /// <summary>The last windows before the window owner's own turn: the other side's discard step, or the owner's draw step.</summary>
     public bool BeforeOwnTurn { get; init; }
 
@@ -38,6 +41,8 @@ public sealed record PriorityWindow(bool InRun, bool Encountering)
         return new(inRun, run?.Encounter is { Status: RunEncounterStatus.Initialized })
         {
             PastIce = run?.CurrentIceIndex < 0,
+            NothingToBreak = run?.Encounter is { Status: RunEncounterStatus.Initialized } encounter
+                && encounter.Subroutines.All(subroutine => subroutine.Broken || subroutine.Resolved),
             BeforeOwnTurn = BeforeTurn(owner, state.Turn.ActiveSide, state.Turn.Step),
             OwnActionPhase = state.Turn.ActiveSide == owner && state.Turn.Step is TurnStep.CorpAction or TurnStep.RunnerAction,
             AttackedServerCards = run is null ? new HashSet<string>(StringComparer.Ordinal)
@@ -66,6 +71,7 @@ public sealed record PriorityWindow(bool InRun, bool Encountering)
         return new(run is not null, run?.Encounter is { Status: RunEncounterStatus.Initialized })
         {
             PastIce = run?.CurrentIceIndex < 0,
+            NothingToBreak = run?.Encounter is { Status: RunEncounterStatus.Initialized } encounter && encounter.RemainingSubroutines == 0,
             BeforeOwnTurn = view.Turn.ActiveSide is { } side && view.Turn.Step is { } step && BeforeTurn(view.Viewer, side, step),
             OwnActionPhase = view.Turn.ActiveSide == view.Viewer && view.Turn.Step is TurnStep.CorpAction or TurnStep.RunnerAction,
             AttackedServerCards = view.Servers.Where(server => server.Id == run?.AttackedServerId)
@@ -114,7 +120,8 @@ public static class AutoPassPolicy
             && actions.All(action => action.Kind switch
             {
                 ActionKind.PassPriority or ActionKind.UseAbility => true,
-                ActionKind.PumpBreaker => !window.Encountering,
+                // Playtest, 29 September: once every subroutine is broken, the encounter has nothing left to decide.
+                ActionKind.PumpBreaker or ActionKind.BreakSubroutines or ActionKind.UseBioroidAbility => !window.Encountering || window.NothingToBreak,
                 ActionKind.RezCard => !RezMatters(action, window),
                 _ => false,
             });

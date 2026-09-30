@@ -20,7 +20,7 @@ public partial class Main
 
 	private bool TrySelectBoardIcebreaker(string id)
 	{
-		if (_currentSnapshot is not { } snapshot || !CanUseBoardActions(snapshot)
+		if (_currentSnapshot is not { } snapshot || !CanUseBoardActions(snapshot) || RunHudOwns(snapshot)
 			|| BoardIcebreakerPresenter.Present(snapshot.View, id) is not { } breaker) return false;
 		CancelBoardBreakTargets();
 		_boardBreakerId = id;
@@ -50,10 +50,13 @@ public partial class Main
 	private void RefreshBoardIcebreaker(MatchSnapshot snapshot)
 	{
 		if (_boardBreakerId is not { } id) return;
+		// Playtest, 29 September: once every subroutine is broken the panel has nothing left to offer.
 		if (snapshot.IsTerminal || snapshot.View.Run?.Encounter?.Id != _boardBreakerEncounter
+			|| snapshot.View.Run?.Encounter is { RemainingSubroutines: 0 }
 			|| !snapshot.View.RunnerRig.Any(card => card.Id == id && card.IsKnown))
 		{
 			CloseBoardIcebreaker();
+			if (_tableSelectedCard == id) _tableSelectedCard = null;
 			return;
 		}
 		if (!CanUseBoardActions(snapshot) || _tableAllActions

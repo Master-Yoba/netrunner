@@ -22,15 +22,74 @@ public sealed partial class CorpHeuristicPolicy
         if (declaration is null) return Value(-50, "ability/unmodelled", approximate: true, fallback: true);
         int benefit = Effects(context, declaration.Instructions, card, context.Features.Side);
         int costs = ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount) * context.CreditValue;
-        costs += ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.TrashSelf).Sum(_ => context.CardValue(card, installed: true));
+        costs += ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.TrashSelf
+            || (context.Generation >= 10 && cost.Kind == BehaviorCostKind.RemoveSelfFromGame)).Sum(_ => context.CardValue(card, installed: true));
         return Value(benefit - costs, "ability/payoff-minus-cost", approximate: true);
     }
+
+    /// <summary>
+    /// v15 (playtest, 30 September): shuffling up to <paramref name="count"/> cards from Archives into
+    /// R&amp;D (Spin Doctor) is worth the best cards there to get back (v14 spent it with Archives empty):
+    /// - an agenda, out of the Runner's reach in Archives and back where the Corp can draw it
+    ///   (an agenda trashed from a server about to be broken into, then recovered);
+    /// - an upgrade the Runner trashed;
+    /// - an economy card while the Corp is short of money;
+    /// - a face-down card, kept hidden from an Archives run;
+    /// - anything, when R&amp;D is running low.
+    /// It is spent once, so it normally waits for a use worth more than keeping it. Two moments
+    /// don't wait (after Chiriboga's Corp AI): the Runner past the last ICE of Archives, when its
+    /// agendas would be stolen, and past the last ICE of the card's own server, when it is used
+    /// now or trashed.
+    /// </summary>
+    private static int ArchivesShuffleValue(HeuristicContext context, int count, AgentCard? source)
+    {
+        AgentBoard board = context.Features.Board;
+        AgentServer? reached = board.Run is { EndReason: null, Successful: false, CurrentIceIndex: < 0 } run
+            ? board.Servers.FirstOrDefault(server => server.Id == run.AttackedServer) : null;
+        bool archivesReached = reached?.Kind == ServerKind.Archives;
+        bool ownServerReached = source is not null && reached?.Root.Any(card => card?.Id == source.Id) == true;
+        bool deckLow = board.HiddenZoneCounts.CorpDeck < 10;
+        bool poor = context.Self.Credits < 5;
+        int Worth(AgentCard card, bool faceDown)
+        {
+            CardEvaluationDescriptor? definition = context.Definition(card);
+            int worth = definition switch
+            {
+                // About to be stolen: worth the points the Runner would score.
+                { Agenda: { } agenda } when archivesReached => 250 + agenda.AgendaPoints * 300,
+                { Agenda: not null } => 250,
+                { Printed.CardClass: RuntimeCardClass.Upgrade } => 160,
+                _ when IsEconomy(definition) => poor ? 160 : 40,
+                _ => faceDown ? 40 : 20,
+            };
+            return deckLow ? Math.Max(worth, 100) : worth;
+        }
+        int keepForLater = archivesReached || ownServerReached ? 0 : 100;
+        return board.CorpDiscard.Select(card => Worth(card, faceDown: false))
+            .Concat(context.Features.PrivateCards.FaceDownArchives.Select(card => Worth(card, faceDown: true)))
+            .OrderDescending().Take(count).Sum() - keepForLater;
+    }
+
+    /// <summary>A card that makes the Corp money: when played, when its turn begins, or by its abilities.</summary>
+    private static bool IsEconomy(CardEvaluationDescriptor? definition) =>
+        definition?.Behavior is { } behavior
+        && behavior.Instructions.Concat(behavior.Triggers.SelectMany(trigger => trigger.Instructions))
+            .Concat(behavior.PaidAbilities.SelectMany(ability => ability.Instructions))
+            .Any(instruction => instruction.Kind is BehaviorInstructionKind.GainCredits or BehaviorInstructionKind.LoadHostedCredits
+                or BehaviorInstructionKind.PlaceHostedCredits);
 
     private static int Effects(HeuristicContext context, IEnumerable<BehaviorInstruction> instructions, AgentCard? source, PlayerSide controller)
     {
         int total = 0;
+        BehaviorTarget? chosenTarget = null;
+        int chosenCount = 1;
         foreach (BehaviorInstruction instruction in instructions)
         {
+            if (instruction.Kind == BehaviorInstructionKind.Choose && instruction.Choice?.Target is { } target)
+            {
+                chosenTarget = target;
+                chosenCount = instruction.Choice.Cardinality.Count ?? int.MaxValue;
+            }
             bool self = controller == context.Features.Side;
             int sign = self ? 1 : -1;
             int amount = instruction.Amount;
@@ -60,14 +119,45 @@ public sealed partial class CorpHeuristicPolicy
                         { Kind: BehaviorDamageAmountKind.SourceAdvancementCounters } damageOperand => damageOperand.BaseAmount + (source?.AdvancementCounters ?? 0),
                         _ => amount,
                     };
-                    total += amount > context.Features.Board.HiddenZoneCounts.RunnerGrip ? 10000 : amount * 100;
+                    total += amount > context.Features.Board.HiddenZoneCounts.RunnerGrip ? 10000
+                        : (int)(amount * 100 * (context.Generation >= 7 ? context.CorpProfile.DamageWeight : 1));
+                    break;
+                case BehaviorInstructionKind.AddTags when context.Generation >= 4:
+                    // v7: clearing a tag costs the Runner a click and 2 credits, and
+                    // while tagged its resources can be trashed (Wave 4 C1 audit).
+                    // v12: a tag deck's punishments make each tag worth more.
+                    // v13 (playtest, 29 September): a tag the Corp can't punish this turn is cleared by the
+                    // Runner next turn, so it's worth only the click and two credits that costs.
+                    if (context.Generation >= 8 && context.Features.Side == PlayerSide.Corp && !CanPunishTagThisTurn(context))
+                    {
+                        total += amount * 150;
+                        break;
+                    }
+                    total += (int)(amount * (250 + context.Features.Board.RunnerRig
+                        .Where(card => context.Definition(card)?.Printed.CardClass == RuntimeCardClass.Resource)
+                        .Select(card => context.CardValue(card, installed: true)).DefaultIfEmpty(0).Max() / 2)
+                        * (context.Generation >= 7 ? context.CorpProfile.TagWeight : 1));
                     break;
                 case BehaviorInstructionKind.AddTags:
                     total += context.Features.Board.RunnerRig.Where(card => context.Definition(card)?.Printed.CardClass == RuntimeCardClass.Resource)
                         .Select(card => context.CardValue(card, installed: true)).DefaultIfEmpty(0).Max() / 3;
                     break;
+                case BehaviorInstructionKind.TrashCard when context.Generation >= 4 && self
+                    && instruction.Target is { Kind: BehaviorTargetKind.ChosenCard }:
+                    // v7: a trash effect is worth its best legal Runner target (Retribution).
+                    total += context.Features.Board.RunnerRig.Where(card => MatchesTarget(context, card, chosenTarget))
+                        .Select(card => context.CardValue(card, installed: true)).DefaultIfEmpty(0).Max();
+                    break;
                 case BehaviorInstructionKind.Choose when context.Generation >= 3 && instruction.Choice is { Options.Count: 0 }:
                     break; // A card-target choice; the following instructions value the best target.
+                case BehaviorInstructionKind.Choose when context.Generation >= 4
+                    && instruction.Choice is { Options.Count: > 0 } runnerChoice
+                    && ChooserSide(runnerChoice.Chooser, controller) != context.Features.Side:
+                    // v7: the opponent picks the option least good for us, and the
+                    // credits it pays are ours to value (Public Trail: a tag or 8 credits).
+                    total += runnerChoice.Options.Min(option => Effects(context, option.Instructions, source, controller)
+                        + (option.Costs ?? []).Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount) * 100);
+                    break;
                 case BehaviorInstructionKind.Choose:
                     if (instruction.Choice is { Options.Count: > 0 } choice)
                         total += choice.Options.Max(option => Effects(context, option.Instructions, source, controller)
@@ -101,10 +191,55 @@ public sealed partial class CorpHeuristicPolicy
                 case BehaviorInstructionKind.AdvanceCard: total += amount * 110; break;
                 case BehaviorInstructionKind.RezIgnoringCosts: total += 300; break;
                 case BehaviorInstructionKind.Search: total += 180; break;
+                case BehaviorInstructionKind.ShuffleIntoDeck when context.Generation >= 10 && self
+                    && instruction.SourceZone == BehaviorZone.Archives:
+                    total += ArchivesShuffleValue(context, chosenCount, source);
+                    break;
                 case BehaviorInstructionKind.TrashSelf: total -= context.CardValue(source, installed: true); break;
             }
         }
         return total;
+    }
+
+    /// <summary>
+    /// Whether the Corp could still punish a tag this turn after spending a click on landing it: a click
+    /// and two credits left to trash a Runner resource, or a punishing card in hand it can afford.
+    /// </summary>
+    private static bool CanPunishTagThisTurn(HeuristicContext context)
+    {
+        if (context.Features.Board.Turn.ActiveSide != PlayerSide.Corp || context.Self.Clicks < 2) return false;
+        bool resource = context.Features.Board.RunnerRig.Any(card => context.Definition(card)?.Printed.CardClass == RuntimeCardClass.Resource)
+            && context.Self.Credits >= 2 + 1;
+        bool punisher = context.Features.Hand.Any(card => context.Definition(card)?.Behavior is { } behavior
+            && HeuristicContext.Flatten(behavior.Instructions.Concat(behavior.Triggers.SelectMany(trigger => trigger.Instructions)))
+                .Any(instruction => instruction.Kind == BehaviorInstructionKind.Branch && instruction.Branch?.Condition.Kind == BehaviorConditionKind.Tagged)
+            && (context.Definition(card)!.Printed.PlayCost ?? 0) <= context.Self.Credits);
+        return resource || punisher;
+    }
+
+    /// <summary>Which side makes a behavior choice.</summary>
+    private static PlayerSide ChooserSide(BehaviorChooser chooser, PlayerSide controller) => chooser switch
+    {
+        BehaviorChooser.Corp => PlayerSide.Corp,
+        BehaviorChooser.Runner => PlayerSide.Runner,
+        BehaviorChooser.Opponent => controller == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp,
+        _ => controller,
+    };
+
+    /// <summary>Whether an installed Runner card fits a behavior target's card filter.</summary>
+    private static bool MatchesTarget(HeuristicContext context, AgentCard card, BehaviorTarget? target)
+    {
+        if (target?.Filter is not { } filter) return true;
+        RuntimeCardClass? cardClass = context.Definition(card)?.Printed.CardClass;
+        return filter.CardType switch
+        {
+            BehaviorCardType.Any => true,
+            BehaviorCardType.Hardware => cardClass == RuntimeCardClass.Hardware,
+            BehaviorCardType.Resource => cardClass == RuntimeCardClass.Resource,
+            BehaviorCardType.Icebreaker => context.Definition(card)?.Icebreaker is not null,
+            BehaviorCardType.ProgramOrHardware => cardClass is RuntimeCardClass.Program or RuntimeCardClass.Hardware,
+            _ => cardClass == RuntimeCardClass.Program,
+        };
     }
 
     /// <summary>Installed Corp cards an effect can advance: installed before this turn.</summary>

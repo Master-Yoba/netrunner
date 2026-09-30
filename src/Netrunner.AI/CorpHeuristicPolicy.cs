@@ -25,12 +25,76 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// more than a turn is advanced toward finishing next turn.
     /// </summary>
     public const string V6 = "corp-heuristic-v6";
+    /// <summary>
+    /// V6 with repairs from the first Gateway-deck audit (Wave 4 C1): a choice the
+    /// Runner makes is valued as the Runner's best option, a tag is worth what it
+    /// costs the Runner to clear plus the trash threat it opens, a trash effect is
+    /// worth its best target, and an advanceable trap is advanced and rezzed.
+    /// </summary>
+    public const string V7 = "corp-heuristic-v7";
+    /// <summary>
+    /// V7 judging where an agenda is safe with the whole-run model (A4a), run from
+    /// the Runner's side on public information with the Corp's own ICE known,
+    /// instead of counting ICE and breaker types.
+    /// </summary>
+    public const string V8 = "corp-heuristic-v8";
+    /// <summary>V8 choices with turn actions planned by rollouts (A3), scored by the fitted evaluation (A5).</summary>
+    public const string V9 = "corp-heuristic-v9";
+    /// <summary>
+    /// V8 choices with run search (A4): whether to rez a card during a run (the approached
+    /// ICE, an upgrade or an asset) is chosen by rollouts to the run's end, scored by the fitted evaluation.
+    /// Turn actions aren't planned.
+    /// </summary>
+    public const string V10 = "corp-heuristic-v10";
+    /// <summary>
+    /// Playtest repairs on V9 (28 September): ICE goes where it protects
+    /// something (no empty remotes, HQ and R&amp;D first), upgrades go where they
+    /// work, approached ICE is rezzed for the runs it denies, advanceable ICE is
+    /// advanced, and the planner scores with the refitted evaluation (feature set 2).
+    /// </summary>
+    public const string V11 = "corp-heuristic-v11";
+    /// <summary>
+    /// V11 playing to its deck's archetype (A8): glacier, rush, fast advance,
+    /// shell game, kill, tag punishment or horizontal set how many remotes it
+    /// builds and how tall, when agendas go in, and how much tags, traps and
+    /// damage are worth.
+    /// </summary>
+    public const string V12 = "corp-heuristic-v12";
+    /// <summary>
+    /// Playtest repairs on V12 (29 September): scoring upgrades aren't rezzed during runs, ICE rezzes
+    /// keep money for the agenda's ICE, Archives is walled against a money farm, tagged Runner resources
+    /// are trashed for what they're worth to the Runner, a tag is played only when it can be punished
+    /// this turn, and agendas wait in HQ until their server and money are ready.
+    /// </summary>
+    public const string V13 = "corp-heuristic-v13";
+    /// <summary>
+    /// V13 with the rez timing of economy assets from the 29 September playtest: an asset whose
+    /// money comes when the Corp's turn begins (Nico Campaign) isn't rezzed in the Corp's own turn,
+    /// where it sat rezzed through the Runner's whole turn; it waits for the last windows before the
+    /// Corp's turn, as V12 already did for the Runner's turn.
+    /// </summary>
+    public const string V14 = "corp-heuristic-v14";
+    /// <summary>
+    /// V14 with the 30 September playtest's fix: an ability that removes or trashes its own card
+    /// counts the card as a cost, and shuffling Archives into R&amp;D is worth only the cards
+    /// there to shuffle (Spin Doctor was spent with Archives empty).
+    /// </summary>
+    public const string V15 = "corp-heuristic-v15";
+    /// <summary>
+    /// V15 with the other half of the playtester's Spin Doctor trick: an agenda the Runner can
+    /// reach before it can be scored is trashed by installing over it when an installed card can
+    /// shuffle it back from Archives into R&amp;D.
+    /// </summary>
+    public const string V16 = "corp-heuristic-v16";
     /// <summary>The version new games and new manifests use.</summary>
-    /// <summary>V5 plans but has not shown a ladder gain yet (Wave 3), so new games use V6, which doesn't plan.</summary>
-    public const string PolicyVersion = V6;
+    /// <remarks>
+    /// V16 adds the playtester's agenda-hiding trick for Spin Doctor to V15 and is level with it on
+    /// the Gateway ladder (0 and -12 on two seeds; the trick is rare), so new games use it.
+    /// </remarks>
+    public const string PolicyVersion = V16;
     /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>
-    public const string LatestHeuristic = V6;
-    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6];
+    public const string LatestHeuristic = V8;
+    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16];
 
     public CorpHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -38,9 +102,9 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Corp policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version switch { V2 => 1, V3 => 2, _ => 3 };
-        Plans = version == V5;
-        Repairs = version == V6;
+        Generation = version switch { V2 => 1, V3 => 2, V7 => 4, V8 or V9 or V10 => 5, V11 => 6, V12 => 7, V13 => 8, V14 => 9, V15 => 10, V16 => 11, _ => 3 };
+        Plans = version is V5 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16;
+        Repairs = version is V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16;
     }
 
     /// <summary>Whether this version has the playtest repairs (V6).</summary>
@@ -94,7 +158,10 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     {
         ValidateAction(features, action);
         if (!budget.TrySpend(8 + features.VisibleCards().Count() * 2)) return Fallback(features, action) with { UsedFallback = true };
-        var context = new HeuristicContext(features, catalog, configuration, Generation);
+        var context = new HeuristicContext(features, catalog, configuration, Generation)
+        {
+            Knowledge = Generation >= 6 ? knowledge : null,
+        };
         return action.Kind switch
         {
             ActionKind.GainCredit => Value(context.CreditValue + (context.Self.Credits < (Repairs ? ProtectionReserve(context) : context.RezReserve) ? 150 : 0),
@@ -107,8 +174,10 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
                 ?? context.Definition(Require<RunIceParameters>(action).IceId)?.Ice?.RezCost ?? 0, Repairs),
             ActionKind.AdvanceAgenda or ActionKind.AdvanceCard => Advance(context, Require<AdvanceCardParameters>(action), Repairs),
             ActionKind.ScoreAgenda => Score(context, Require<ScoreAgendaParameters>(action)),
-            ActionKind.TrashTaggedResource => Value(context.CardValue(context.Card(Require<TrashTaggedResourceParameters>(action).CardId), installed: true)
-                - Require<TrashTaggedResourceParameters>(action).CreditCost * context.CreditValue, "pressure/trash-tagged-resource"),
+            ActionKind.TrashTaggedResource => Generation >= 8
+                ? TrashTagged(context, Require<TrashTaggedResourceParameters>(action))
+                : Value(context.CardValue(context.Card(Require<TrashTaggedResourceParameters>(action).CardId), installed: true)
+                    - Require<TrashTaggedResourceParameters>(action).CreditCost * context.CreditValue, "pressure/trash-tagged-resource"),
             ActionKind.PurgeVirusCounters => Purge(context, Require<PurgeVirusCountersParameters>(action)),
             ActionKind.UseAbility => Ability(context, Require<AbilityActionParameters>(action)),
             ActionKind.ChooseBehavior => ChooseBehavior(context, Require<BehaviorChoiceParameters>(action)),

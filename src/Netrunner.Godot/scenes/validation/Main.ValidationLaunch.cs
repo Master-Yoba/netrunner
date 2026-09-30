@@ -61,7 +61,7 @@ public partial class Main
 				&& !TryReadFullMatchSmokeOptions(arguments, out _fullMatchSmokePreset, out _fullMatchSmokeSeed, out string? smokeError))
 			{
 				GD.PrintErr($"M4_FULL_SMOKE FAIL {smokeError}");
-				GetTree().Quit(1);
+				QuitCleanly(1);
 				return false;
 			}
 		}
@@ -82,7 +82,7 @@ public partial class Main
 			if (captureError is not null || capture is null)
 			{
 				GD.PrintErr($"UI_CAPTURE FAIL {captureError}");
-				GetTree().Quit(2);
+				QuitCleanly(2);
 			}
 			else
 			{
@@ -110,9 +110,25 @@ public partial class Main
 		{
 			_ = RunInteractionSmokeAsync();
 		}
+		else if (arguments.Contains("--run-hud-soak", StringComparer.Ordinal))
+		{
+			_ = RunRunHudSoakAsync(arguments);
+		}
+		else if (arguments.Contains("--run-hud-smoke", StringComparer.Ordinal))
+		{
+			_ = RunRunHudSmokeAsync();
+		}
 		else if (arguments.Contains("--interaction-lab", StringComparer.Ordinal))
 		{
 			OpenInteractionLab();
+		}
+		else if (arguments.Contains("--main-menu-smoke", StringComparer.Ordinal))
+		{
+			_ = RunMainMenuSmokeAsync();
+		}
+		else if (arguments.Contains("--onboarding-smoke", StringComparer.Ordinal))
+		{
+			_ = RunOnboardingSmokeAsync();
 		}
 		else if (arguments.Contains("--invisible-window-smoke", StringComparer.Ordinal))
 		{

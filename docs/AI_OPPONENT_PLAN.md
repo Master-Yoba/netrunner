@@ -112,6 +112,18 @@ Sizes: S is a few days, M is one to two weeks, L is several weeks.
 Gate: the ladder separates the current Standard from Easy, and each from
 random-legal, with non-overlapping intervals per seat.
 
+### Tutorial bot frozen (Wave 4 decision)
+
+The tutorial decks (the Catalyst and Syndicate, basic and expanded) are for
+learning the game: the bot there has to be playable and beatable, not ever
+stronger. So their opponent is frozen at C1's versions (Corp v7, Runner v6),
+whatever the current defaults are (`OfflineMatchFactory.CreatePlayerOpponent`),
+and saves keep their recorded version as always. Bot tuning targets the legal
+decks: the ladder defaults to the Gateway pool, and ladder gates for bot
+changes are judged there. The tutorial decks stay a regression check (games
+finish, the frozen bot and saves work) and the frozen M5 suites keep their
+own pinned versions.
+
 ### A1b. Ladder over a deck pool (M) — with C1 in Wave 4
 
 The ladder today plays every entrant pairing on four preset combinations
@@ -367,6 +379,48 @@ below still depend on A3.
 Gate: human playtest notes confirm Easy, Standard and Hard feel ordered, and
 the ladder shows the same order.
 
+### A7. Formats and deck-aware play (with the next card set)
+
+One bot for every format, with each format's tuned data kept separate. The
+policies reason from each card's behavior definition, so a new card is
+understood once its behavior exists; the heuristics, the whole-run model
+(A4a) and the planner (A3) stay one codebase. Separate bots per format would
+multiply every repair and drift apart. What does change with the card pool
+is data:
+
+- **Per-format parameters and weights.** The fitted evaluation (A5), the
+  heuristics' named scales and the hidden-card priors (what an unrezzed
+  piece of ICE or an advanced card probably is) are fitted per deck pool and
+  versioned with it: for example `data/ai/evaluation-gateway-v1.json`,
+  `evaluation-startup-2026-03.json`. Formats rotate, so the key is a format
+  snapshot (the roadmap's C2: its legal sets, bans and rules as of a date).
+  A game loads the file for its snapshot (the ladder's pool version, A1b)
+  and falls back to the nearest snapshot's fit, or a fit on all pools.
+  Balance rules are optional for players (C2), but fitting and the ladder use
+  each snapshot's decks as the format defines them; a casual game with banned
+  cards uses the same snapshot's fit. The frozen tutorial bot is the first case of a pinned setup for one
+  pool.
+- **Split only where the data says so.** Formats are mostly nested (Gateway
+  within Startup within Standard). When a pool is added, fit once on all
+  pools and once per pool, and compare them on held-out games of each; keep
+  a per-pool fit only where it is clearly better. `ai-fit-evaluation` and the
+  deck-pool ladder make this a routine check, and each refit is an ordinary A5
+  round (it must beat the previous weights on held-out seeds).
+- **Deck-aware features.** Within any format, decks want different plans: a
+  Jinteki trap deck bluffs with advanced cards, an NBN deck advances fast
+  and punishes tags, a Criminal deck pressures HQ with run events. Rather
+  than a bot per deck, give the evaluation features that describe the bot's
+  own deck and the opponent's known list: its archetype or a few measured
+  traits (share of traps, tag punishment, ICE density, agenda sizes, economy
+  type), taken from the decklist the bot already knows (A3's decklist
+  sampling). The fit then learns how each plan values the board, the
+  heuristics can read the same traits, and A6's personalities stay a
+  separate, deliberate layer on top.
+
+Gate: on held-out games of each pool, the chosen per-format and deck-aware
+fits predict outcomes at least as well as one general fit, and the ladder on
+each pool shows no deck warning against the previous version.
+
 ### Human game data (deferred)
 
 Jinteki.net has a replay format but no public replay source, games there are
@@ -388,6 +442,7 @@ A2 heuristic fixes ────────> A5 tuning
 E1 + E5 (engine) ──> A3 infrastructure (Wave 3)
 Wave 4: A4a run model ──> A5 fitted evaluation ──> A3 planner on A4a + A5 ──> A4 run search
 A6 difficulty/personality after A3 (needs compute knobs)
+A7 per-format data and deck-aware features with the next card set (needs A1b pools and A5 fitting)
 ```
 
 A1 and A2 need no engine work and can start immediately. A3 is the largest

@@ -4177,6 +4177,14 @@ public static partial class StateInvariantValidator
                                         behaviorFrame.InstructionCursor,
                                         instruction => instruction.Kind == BehaviorInstructionKind.DealDamage
                                             && instruction.DamageAmountOperand?.TrashSourceAsCost == true);
+                                // The trigger's own install may replace its source (a second
+                                // Pantograph trashes the first); the ability still finishes.
+                                catalogTriggerSelfTrashReached |= trigger is not null
+                                    && BehaviorInstructionPath.HasReached(
+                                        trigger.Instructions,
+                                        behaviorFrame.Continuation,
+                                        behaviorFrame.InstructionCursor,
+                                        BehaviorInstructionKind.InstallCard);
                             }
 
                             bool catalogTriggerDetachedSource = behaviorFrame.TriggerKey is not null
@@ -7704,6 +7712,14 @@ public static partial class StateInvariantValidator
                     ParentFrameIdentity: not null,
                 } behaviorInstall
                 && ParentIdentityMatches(child, behaviorInstall.ParentFrameIdentity))
+            // An executing behavior may suspend beneath the effect pipeline its own
+            // instruction opened, while that effect's checkpoint resolves a trigger
+            // (Public Trail's tag firing NBN: Reality Plus, Wave 4 C1). The effect
+            // and checkpoint validators prove the nested suffix.
+            && !(child.Stage == BehaviorResolutionStage.Execute
+                && state.ResolutionStack[index + 2] is EffectResolutionFrame nestedEffect
+                && nestedEffect.Controller == frame.Owner
+                && nestedEffect.Stage != EffectResolutionStage.AwaitingMemoryCleanup)
             && !GameEngine.IsSuspendedForMemoryLoss(state.ResolutionStack, index + 1))
         {
             Add(
@@ -12590,6 +12606,20 @@ public static partial class StateInvariantValidator
                 || incoming.CardClass is not (RuntimeCardClass.Program
                     or RuntimeCardClass.Hardware
                     or RuntimeCardClass.Resource))
+            {
+                return false;
+            }
+
+            // A card that installs only hosted on ICE (a Trojan such as
+            // Tranquilizer) is a behavior-install option only while some ICE is
+            // installed to host it, as in the engine's deferred host choice.
+            if (behaviorCatalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? incomingBehavior)
+                && incomingBehavior.Hosting is not null
+                && !state.Cards.Any(host => host is not null
+                    && host.OwnerSide == PlayerSide.Corp
+                    && state.Zones.Any(zone => zone?.Id == host.ZoneId && zone.Kind == ZoneKind.ServerIce)
+                    && runtimeCardCatalog.TryGet(host.DefinitionId, out CardRuntimeSpec? hostSpec)
+                    && hostSpec.CardClass == RuntimeCardClass.Ice))
             {
                 return false;
             }

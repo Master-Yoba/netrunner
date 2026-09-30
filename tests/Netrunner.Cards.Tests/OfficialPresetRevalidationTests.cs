@@ -132,11 +132,12 @@ public sealed class OfficialPresetRevalidationTests
     private static void AssertCatalogEqual(OfficialPresetCatalog expected, OfficialPresetCatalog actual)
     {
         Assert.Equal(expected.Provenance, actual.Provenance);
-        Assert.Equal(expected.Presets.Count, actual.Presets.Count);
-        for (int index = 0; index < expected.Presets.Count; index++)
+        // presets.json holds the teaching decks; the embedded catalog adds the Gateway sample decks after them.
+        Assert.Equal(expected.Teaching.Count, actual.Teaching.Count);
+        for (int index = 0; index < expected.Teaching.Count; index++)
         {
-            OfficialPreset expectedPreset = expected.Presets[index];
-            OfficialPreset actualPreset = actual.Presets[index];
+            OfficialPreset expectedPreset = expected.Teaching[index];
+            OfficialPreset actualPreset = actual.Teaching[index];
             Assert.Equal(expectedPreset.PresetId, actualPreset.PresetId);
             Assert.Equal(expectedPreset.Side, actualPreset.Side);
             Assert.Equal(expectedPreset.IdentityCode, actualPreset.IdentityCode);

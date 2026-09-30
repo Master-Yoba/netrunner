@@ -147,6 +147,7 @@ public partial class Main : Control
 		if (arguments.Contains("--card-art-smoke", StringComparer.Ordinal)) PrepareCardArtworkSmoke();
 		if (arguments.Contains("--m5-developer-smoke", StringComparer.Ordinal)) ProjectSettings.SetSetting("developer/enabled", true);
 		BuildShell();
+		AddChild(new UiMotion { Name = "UiMotion", Reduced = () => _reducedMotion.ButtonPressed || _skipAnimation });
 		StartLaunchMode(arguments, fullSmokeReload);
 	}
 
@@ -161,6 +162,7 @@ public partial class Main : Control
 			ContinueAccessAll();
 			ContinueTurnIntent();
 			PlaceRunOverlays();
+			PlaceRunHud();
 			UpdateSpatialGeometry();
 			UpdateAccessControls();
 		}
@@ -420,9 +422,12 @@ public partial class Main : Control
 			bool enabled = preset.Playable;
 			string state = enabled ? "READY" : "LOCKED · coverage pending";
 			string kindLabel = preset.Kind == "starter" ? "BASIC (STARTER)" : preset.Kind.ToUpperInvariant();
-			button.AddItem(
-				$"{kindLabel} · {preset.PresetId} · {preset.CardCount} cards · {state}",
+			// Gateway sample decks show their name; the menu rework (U7) gives them their own area.
+			button.AddItem(preset.Name is { } name
+				? $"GATEWAY · {name} · {preset.CardCount} cards · {state}"
+				: $"{kindLabel} · {preset.PresetId} · {preset.CardCount} cards · {state}",
 				index);
+			if (preset.Summary is { } summary) button.SetItemTooltip(index, summary);
 			ids[index] = preset.PresetId;
 			button.SetItemDisabled(index, !enabled);
 			// Expanded is the default: it is what gets played and tested (playtest, 27 September).
@@ -719,7 +724,7 @@ public partial class Main : Control
 				+ $"target_stage_cancel={targetStageCancelPreserved} target_cues={targetCues} "
 				+ $"target_controls={targetControls}");
 			await _coordinator.DisposeAsync();
-			GetTree().Quit(passed ? 0 : 1);
+			QuitCleanly(passed ? 0 : 1);
 		}
 		catch (Exception exception)
 		{
@@ -738,8 +743,25 @@ public partial class Main : Control
 				await _coordinator.DisposeAsync();
 			}
 
-			GetTree().Quit(1);
+			QuitCleanly(1);
 		}
+	}
+
+	/// <summary>
+	/// Quits once queued input and deferred work have drained and unreferenced C#
+	/// wrappers are released: quitting with them alive intermittently aborts
+	/// Godot's .NET shutdown (rc_owner, script bindings), failing a smoke that passed.
+	/// </summary>
+	private void QuitCleanly(int exitCode = 0) => _ = QuitCleanlyAsync(exitCode);
+
+	private async Task QuitCleanlyAsync(int exitCode)
+	{
+		for (int frame = 0; frame < 5; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+		GC.Collect();
+		GC.WaitForPendingFinalizers();
+		GC.Collect();
+		for (int frame = 0; frame < 2; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+		GetTree().Quit(exitCode);
 	}
 
 	private async Task<bool> AwaitRenderedSequenceAsync(long sequence, int maxFrames)
@@ -910,7 +932,7 @@ public partial class Main : Control
 				+ $"zoom_in_viewport={zoomVisible} layout_1920x1080={layoutAt1920x1080} "
 				+ $"layout_2560x1440={layoutAt2560x1440}");
 			await _coordinator.DisposeAsync();
-			GetTree().Quit(passed ? 0 : 1);
+			QuitCleanly(passed ? 0 : 1);
 		}
 		catch (Exception exception)
 		{
@@ -927,7 +949,7 @@ public partial class Main : Control
 				await _coordinator.DisposeAsync();
 			}
 
-			GetTree().Quit(1);
+			QuitCleanly(1);
 		}
 	}
 
@@ -1023,9 +1045,11 @@ public partial class Main : Control
 		{
 			startPanel.Visible = false;
 		}
+		SetMenuHeader(false);
 		if (_useCardTable)
 		{
 			RenderCardTable(snapshot, decisionChanged);
+			RenderOnboarding(snapshot);
 			return;
 		}
 		_board.Visible = true;

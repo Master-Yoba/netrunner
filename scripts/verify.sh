@@ -397,6 +397,40 @@ if ! grep -Eq "INVISIBLE_WINDOW (PASS|SKIP)" "$invisible_window_log" \
 fi
 grep -E "INVISIBLE_WINDOW" "$invisible_window_log"
 echo "invisible-window-smoke=PASS"
+main_menu_log="$coverage_report_dir/main-menu-smoke.log"
+if ! run_with_timeout 120 env "${m49_ui_content_env[@]}" XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
+  NETRUNNER_SAVE_DIRECTORY="$coverage_report_dir/main-menu-saves" \
+  "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \
+  -- --main-menu-smoke >"$main_menu_log" 2>&1; then
+  echo "Main menu smoke failed or timed out; see $main_menu_log." >&2
+  cat "$main_menu_log" >&2
+  exit 1
+fi
+if ! grep -Eq "MAIN_MENU PASS" "$main_menu_log" \
+  || grep -Eq "MAIN_MENU FAIL|SCRIPT ERROR|ERROR:" "$main_menu_log"; then
+  echo "Main menu smoke did not pass; see $main_menu_log." >&2
+  cat "$main_menu_log" >&2
+  exit 1
+fi
+grep -E "MAIN_MENU" "$main_menu_log"
+echo "main-menu-smoke=PASS"
+onboarding_log="$coverage_report_dir/onboarding-smoke.log"
+if ! run_with_timeout 180 env "${m49_ui_content_env[@]}" XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
+  NETRUNNER_SAVE_DIRECTORY="$coverage_report_dir/onboarding-saves" \
+  "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \
+  -- --onboarding-smoke >"$onboarding_log" 2>&1; then
+  echo "Onboarding smoke failed or timed out; see $onboarding_log." >&2
+  cat "$onboarding_log" >&2
+  exit 1
+fi
+if ! grep -Eq "ONBOARDING PASS" "$onboarding_log" \
+  || grep -Eq "ONBOARDING FAIL|SCRIPT ERROR|ERROR:" "$onboarding_log"; then
+  echo "Onboarding smoke did not pass; see $onboarding_log." >&2
+  cat "$onboarding_log" >&2
+  exit 1
+fi
+grep -E "ONBOARDING" "$onboarding_log"
+echo "onboarding-smoke=PASS"
 m410_ui_smoke_log="$coverage_report_dir/m410-editor-ui-smoke.log"
 if ! run_with_timeout 60 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
   "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \
@@ -453,6 +487,20 @@ if ! grep -Fq "M411_INTERACTION PASS" "$m411_ui_smoke_log" \
 fi
 cat "$m411_ui_smoke_log"
 echo "m4-11-interaction-smoke=PASS"
+run_hud_smoke_log="$coverage_report_dir/run-hud-smoke.log"
+if ! run_with_timeout 90 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
+  "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \
+  -- --run-hud-smoke >"$run_hud_smoke_log" 2>&1; then
+  echo "Run HUD smoke failed; see $run_hud_smoke_log." >&2
+  cat "$run_hud_smoke_log" >&2
+  exit 1
+fi
+if ! grep -Fq "RUN_HUD PASS" "$run_hud_smoke_log" \
+  || grep -Eq "RUN_HUD FAIL|SCRIPT ERROR|ERROR:" "$run_hud_smoke_log"; then
+  cat "$run_hud_smoke_log" >&2
+  exit 1
+fi
+echo "run-hud-smoke=PASS"
 echo "m4-12-board-actions-smoke=PASS"
 latency_smoke_log="$coverage_report_dir/latency-smoke.log"
 if ! run_with_timeout 45 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \

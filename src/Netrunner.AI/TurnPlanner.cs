@@ -15,6 +15,11 @@ namespace Netrunner.AI;
 /// Samples depend only on the observation and the agent's checkpointed random
 /// stream, and every simulated choice is deterministic, so hidden-state twins
 /// get the same plan and a resumed agent repeats it.
+///
+/// Run search (A4) uses the same rollouts for the Runner's key choices inside
+/// a run: whether to continue or jack out, and whether to pay to trash an
+/// accessed card. Each candidate is played out by both heuristics until the
+/// run ends, and the position is scored there.
 /// </summary>
 internal sealed class TurnPlanner
 {
@@ -40,10 +45,26 @@ internal sealed class TurnPlanner
 
     public int Samples => _configuration.Parameters.GetValueOrDefault("plan-samples");
     public int Width => _configuration.Parameters.GetValueOrDefault("plan-width");
+    public int RunSamples => _configuration.Parameters.GetValueOrDefault("run-samples");
+    public int RunWidth => _configuration.Parameters.GetValueOrDefault("run-width");
 
-    /// <summary>Whether a decision is one the planner handles: a turn action with a click left and a real choice.</summary>
-    public bool Applies(AgentFeatures features) => Samples > 0 && Width > 1
+    /// <summary>Whether a decision is one the planner handles: a turn action with a click left, or a searched run choice.</summary>
+    public bool Applies(AgentFeatures features) => AppliesToTurn(features) || AppliesToRun(features);
+
+    private bool AppliesToTurn(AgentFeatures features) => Samples > 0 && Width > 1
         && features.Decision?.Kind == DecisionKind.TurnAction && features.Self.Clicks > 0 && features.Actions.Length > 1;
+
+    /// <summary>
+    /// A4: during a run, the Runner's choice between continuing and jacking out
+    /// or trashing an accessed card or not, and the Corp's choice to rez a card
+    /// (the approached ICE, or an upgrade or asset) or not.
+    /// </summary>
+    private bool AppliesToRun(AgentFeatures features) => RunSamples > 0 && RunWidth > 1
+        && features.Board.Run is not null && features.Actions.Length > 1
+        && features.Decision?.Kind != DecisionKind.TurnAction
+        && features.Actions.Any(action => features.Side == PlayerSide.Runner
+            ? action.Kind is ActionKind.JackOut or ActionKind.TrashAccessedCard
+            : action.Kind is ActionKind.RezCard or ActionKind.RezIce);
 
     /// <summary>
     /// Re-scores the heuristic's candidates: the planned ones get the plan's
@@ -52,18 +73,20 @@ internal sealed class TurnPlanner
     public ImmutableArray<AgentCandidate> Plan(AgentFeatures features, ImmutableArray<AgentCandidate> heuristic,
         AgentKnowledge knowledge, PlanningContext planning)
     {
+        bool run = !AppliesToTurn(features);
+        int samples = run ? RunSamples : Samples;
         AgentCandidate[] planned = [.. heuristic
             .OrderByDescending(candidate => candidate.Utility.Priority)
             .ThenByDescending(candidate => candidate.Utility.Score)
             .ThenBy(candidate => candidate.ActionId.Value, StringComparer.Ordinal)
-            .Take(Width)];
+            .Take(run ? RunWidth : Width)];
         var totals = planned.ToDictionary(candidate => candidate.ActionId, _ => 0L);
         OpponentCardPool pool = OpponentPool(features.Side);
-        for (int sample = 0; sample < Samples; sample++)
+        for (int sample = 0; sample < samples; sample++)
         {
             GameState state = planning.Determinizer.Sample(SamplerKnowledge.None, pool, planning.Random);
             foreach (AgentCandidate candidate in planned)
-                totals[candidate.ActionId] += Rollout(state, candidate.ActionId, features.Side, knowledge, planning.Determinizer);
+                totals[candidate.ActionId] += Rollout(state, candidate.ActionId, features.Side, knowledge, planning.Determinizer, run);
         }
         // The heuristic knows things the end-of-turn score doesn't (pressure,
         // information, tempo), so a planned action keeps its heuristic score and
@@ -75,9 +98,9 @@ internal sealed class TurnPlanner
                 Utility = candidate.Utility with
                 {
                     Priority = PlannedPriority + Math.Clamp(candidate.Utility.Priority, -PlannedPriority / 2, PlannedPriority / 2),
-                    Score = (int)Math.Clamp(candidate.Utility.Score + (total - baseline) / Samples * Weight / 100,
+                    Score = (int)Math.Clamp(candidate.Utility.Score + (total - baseline) / samples * Weight / 100,
                         int.MinValue / 2, int.MaxValue / 2),
-                    Reason = $"plan/turn-rollout ({candidate.Utility.Reason})",
+                    Reason = $"plan/{(run ? "run-search" : "turn-rollout")} ({candidate.Utility.Reason})",
                 },
             }
             : candidate)];
@@ -89,7 +112,8 @@ internal sealed class TurnPlanner
     /// <summary>How much the rollouts count against the heuristic's score, in percent.</summary>
     public int Weight => _configuration.Parameters.GetValueOrDefault("plan-weight", 100);
 
-    private long Rollout(GameState sample, ActionId first, PlayerSide side, AgentKnowledge knowledge, ObservationDeterminizer determinizer)
+    private long Rollout(GameState sample, ActionId first, PlayerSide side, AgentKnowledge knowledge, ObservationDeterminizer determinizer,
+        bool untilRunEnds)
     {
         int turn = sample.Turn.TurnNumber;
         GameState state = sample;
@@ -102,7 +126,8 @@ internal sealed class TurnPlanner
             if (!applied.Accepted) return step == 0 ? int.MinValue / 4 : Score(state, side, determinizer);
             state = applied.State;
             if (state.Outcome.Kind != GameOutcomeKind.Ongoing || state.PendingDecision is null
-                || state.Turn.TurnNumber != turn || state.Turn.ActiveSide != side)
+                || state.Turn.TurnNumber != turn || state.Turn.ActiveSide != side
+                || untilRunEnds && state.RunState is null)
                 break;
             next = Choose(state, knowledge, determinizer, side);
         }
@@ -134,7 +159,11 @@ internal sealed class TurnPlanner
     {
         AgentFeatures features = ObservationReader.Read(ObservationBuilder.Build(state, side, determinizer.Behavior),
             _configuration.FeatureVersion);
-        return PositionEvaluation.Score(features, _catalog, _configuration);
+        // A5: planning versions score rollouts by the fitted win probability (as log-odds).
+        // plan-evaluation 2: the refitted evaluation (feature set 2) Corp v11 plans with.
+        return _configuration.Parameters.GetValueOrDefault("plan-evaluation") is int version and (1 or 2)
+            ? FittedEvaluation.Score(features, _catalog, version)
+            : PositionEvaluation.Score(features, _catalog, _configuration);
     }
 
     private readonly Dictionary<PlayerSide, OpponentCardPool> _pools = [];

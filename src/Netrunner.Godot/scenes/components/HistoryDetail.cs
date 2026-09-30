@@ -126,7 +126,7 @@ public partial class HistoryDetail : HBoxContainer
 		foreach (Node child in _cardHost.GetChildren().ToArray())
 		{
 			_cardHost.RemoveChild(child);
-			child.Free();
+			child.QueueFree();
 		}
 
 		TableCardControl view = TableCardControl.Create();

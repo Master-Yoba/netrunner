@@ -99,6 +99,12 @@ public partial class Main
 			return;
 		}
 		BoardSpatialAction[] all = BoardSpatialActions.Project(snapshot.View).ToArray();
+		// The run HUD offers these itself (breach choices); don't cover the board with the same choice.
+		if (RunHudOwns(snapshot) && all.Length > 0 && all.All(action => RunHudTakes(action.Action, snapshot.View)))
+		{
+			CloseSpatialActions();
+			return;
+		}
 		BoardSpatialAction[] automatic = all.Where(action => action.Automatic).ToArray();
 		if (_spatialSource is null && automatic.Length > 0)
 		{

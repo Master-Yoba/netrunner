@@ -9,22 +9,69 @@ public sealed partial class RunnerHeuristicPolicy
     {
         if (server is null) return Value(-1000, "run/unknown-server", true, true);
         (int cost, int loss, int damage, bool blocked, int unknown) = Protection(context, server, server.Ice.Length - 1, upfrontCost);
+        // v7: the whole-run model (A4a) costs the run as one path, tolls included.
+        RunForecast? forecast = context.Generation >= 6
+            ? RunModel.Plan(context, server, server.Ice.Length - 1, context.Self.Credits + extraRunCredits, context.Self.Clicks - 1, upfrontCost)
+            : null;
+        if (forecast is not null)
+            (cost, loss, damage, blocked, unknown) = (forecast.Credits, forecast.CreditsLost, forecast.Damage, !forecast.CanGetIn, forecast.UnknownIce);
         int reserve = server.Root.Where(card => RunnerValues.Trash(context, card) >= 350).Select(card => context.Definition(card)?.Printed.TrashCost ?? 0).DefaultIfEmpty(0).Min();
         int funds = context.Self.Credits - upfrontCost + extraRunCredits;
         if (blocked || damage > context.Features.Hand.Length || cost > funds - loss)
             return Value(-1000, "run/known-unaffordable-or-lethal", true);
         // V5: the run itself spends a click, and what's left must pay a known approach toll.
-        (bool tollBlocked, int tollCredits, int tollClicks) = context.Generation >= 4
+        (bool tollBlocked, int tollCredits, int tollClicks) = forecast is not null ? (false, 0, forecast.Clicks)
+            : context.Generation >= 4
             ? ApproachToll(context, server, context.Self.Credits - upfrontCost - Math.Max(0, cost - extraRunCredits) - loss, context.Self.Clicks - 1)
             : (false, 0, 0);
         if (tollBlocked) return Value(-1000, "run/known-approach-toll-unaffordable", true);
+        int tagCost = (forecast?.Tags ?? 0) * 300;
+        // v6: an advanced card the Runner can't identify may be a trap dealing 2 plus
+        // its counters on access (Urtica Cipher); with too few cards in the grip that's a flatline.
+        int trapRisk = 0;
+        if (context.Generation >= 8)
+        {
+            // An advanced unknown card is more often an agenda; it's a trap in proportion to how
+            // likely this Corp is to play them, which rises once the Runner has seen one.
+            double trap = SeenTrap(context) ? 0.6 : 0.15;
+            trapRisk = UnknownAdvancedRoots(context, server).Sum(counters => (int)(trap
+                * (2 + counters > context.Features.Hand.Length ? 6000 : (2 + counters) * 100)));
+        }
+        else if (context.Generation >= 5)
+            foreach (AgentCard? root in server.Root)
+            {
+                if (root is not { AdvancementCounters: > 0 } advanced || context.Definition(advanced) is not null) continue;
+                int trapDamage = 2 + (advanced.AdvancementCounters ?? 0);
+                trapRisk += trapDamage >= context.Features.Hand.Length ? 700 : trapDamage * 40;
+            }
+        // v11 (self-play review, 28 September): a possible trap that would flatline the Runner isn't worth the access.
+        if (context.Generation >= 8 && LethalTrap(context, server)) return Value(-1000, "run/possible-lethal-trap", true);
         int rewards = SuccessRewards(context, server);
         int repeated = context.Features.Board.TurnFacts?.Runner.ThisTurn?.AttemptedRunServerIds.Count(id => id == server.Id) ?? 0;
         int risk = unknown * (context.Self.Credits < 3 || context.Features.Hand.Length < 2 ? 450 : 260) * context.Parameter("risk-scale", 100) / 100;
+        if (context.Generation >= 8 && unknown > 0)
+        {
+            // v11 (self-play review, 28 September): a flat fear of unrezzed ICE made the Runner stop
+            // running, so the Corp never rezzed and nothing became known. The fear shrinks with what the
+            // Corp can pay to rez and with the ICE types the Runner's breakers cover, and a run that makes
+            // the Corp rez or reveal its ICE is worth something in itself.
+            double budget = Math.Clamp(context.Opponent.Credits / 8.0, 0.3, 1);
+            int covered = context.Features.Board.RunnerRig.Select(card => context.Definition(card)?.Icebreaker?.InterfaceType)
+                .OfType<IceType>().Distinct().Count();
+            double coverage = context.RigComplete ? 0.4 : Math.Max(0.4, 1 - 0.2 * covered);
+            risk = (int)(risk * budget * coverage);
+            if (context.Self.Credits >= 4) risk -= unknown * 60;
+        }
         int score = RunnerValues.Server(context, server) + rewards + extraValue
             - (upfrontCost + Math.Max(0, cost - extraRunCredits) + loss) * context.CreditValue
             - damage * 160 - risk - repeated * 180 - (funds - cost - loss - tollCredits < reserve ? 220 : 0)
-            - (tollCredits + tollClicks * ClickCredits) * context.CreditValue;
+            - (tollCredits + tollClicks * ClickCredits) * context.CreditValue - trapRisk - tagCost;
+        // v11: an aggressive deck runs whenever it can afford to; a big rig holds back until its rig covers every ICE type.
+        if (context.Generation >= 8)
+        {
+            double aggression = context.RunnerProfile.Aggression;
+            if (aggression > 0 || !context.RigComplete) score += (int)(aggression * 100);
+        }
         bool win = unknown == 0 && RunnerValues.Winning(context, server);
         return new(win ? 100 : 0, score, "run/public-value-protection-and-access-reserve", true, new("run", null, null, null));
     }
@@ -40,16 +87,23 @@ public sealed partial class RunnerHeuristicPolicy
         int lastIce = run.Encounter is { Status: RunEncounterStatus.Complete } encounter
             && encounter.Ice?.Id == run.CurrentIce?.Id ? run.CurrentIceIndex - 1 : run.CurrentIceIndex;
         (int cost, int loss, int damage, bool blocked, int unknown) = Protection(context, server, lastIce);
+        RunForecast? forecast = context.Generation >= 6
+            ? RunModel.Plan(context, server, lastIce, context.Self.Credits + run.RunCredits, context.Self.Clicks)
+            : null;
+        if (forecast is not null)
+            (cost, loss, damage, blocked, unknown) = (forecast.Credits, forecast.CreditsLost, forecast.Damage, !forecast.CanGetIn, forecast.UnknownIce);
         if (damage > context.Features.Hand.Length || blocked || cost > context.Self.Credits + run.RunCredits - loss)
             return Value(-1000, "run/jack-out-before-unaffordable-threat", true);
-        (bool tollBlocked, int tollCredits, int tollClicks) = context.Generation >= 4
+        (bool tollBlocked, int tollCredits, int tollClicks) = forecast is not null ? (false, 0, forecast.Clicks)
+            : context.Generation >= 4
             ? ApproachToll(context, server, context.Self.Credits - Math.Max(0, cost - run.RunCredits) - loss, context.Self.Clicks)
             : (false, 0, 0);
         if (tollBlocked) return Value(-1000, "run/jack-out-before-unaffordable-toll", true);
+        if (context.Generation >= 8 && LethalTrap(context, server)) return Value(-1000, "run/jack-out-before-possible-lethal-trap", true);
         return new(unknown == 0 && RunnerValues.Winning(context, server) ? 100 : 0,
             Math.Max(250, RunnerValues.Server(context, server)) + SuccessRewards(context, server)
             - (Math.Max(0, cost - run.RunCredits) + loss + tollCredits + tollClicks * ClickCredits) * context.CreditValue
-            - damage * 160 - unknown * 220,
+            - damage * 160 - unknown * 220 - (forecast?.Tags ?? 0) * 300,
             "run/continue-visible-affordable-line", true);
     }
 
@@ -61,7 +115,7 @@ public sealed partial class RunnerHeuristicPolicy
     /// choose a cost or the run ends (Manegarm Skunkworks). Returns the cheapest
     /// payable option from what's left after the ICE, or blocked if none is.
     /// </summary>
-    private static (bool Blocked, int Credits, int Clicks) ApproachToll(HeuristicContext context, AgentServer server, int credits, int clicks)
+    internal static (bool Blocked, int Credits, int Clicks) ApproachToll(HeuristicContext context, AgentServer server, int credits, int clicks)
     {
         int tollCredits = 0, tollClicks = 0;
         foreach (AgentCard? card in server.Root)
@@ -167,6 +221,37 @@ public sealed partial class RunnerHeuristicPolicy
             }
         }
         return (total, creditLoss, damage, false, unknown);
+    }
+
+    /// <summary>
+    /// Whether the server's root holds an advanced card the Runner can't identify
+    /// whose trap damage, 2 plus its counters (Urtica Cipher), would exceed the grip,
+    /// against a Corp the Runner has seen play such traps.
+    /// </summary>
+    private static bool LethalTrap(HeuristicContext context, AgentServer server) => SeenTrap(context)
+        && UnknownAdvancedRoots(context, server).Any(counters => 2 + counters > context.Features.Hand.Length);
+
+    /// <summary>Whether the Runner has seen this Corp play a trap that grows with its counters (Urtica Cipher, Clearinghouse).</summary>
+    private static bool SeenTrap(HeuristicContext context) => context.Knowledge?.Reveals.Any(reveal =>
+        context.Catalog.TryGet(new CardDefinitionId(reveal.DefinitionId), out CardEvaluationDescriptor card)
+        && card.Printed.Side == PlayerSide.Corp && card.Ice is null && card.Agenda is null && card.Behavior?.CanBeAdvanced == true
+        && card.Behavior.Triggers.SelectMany(trigger => HeuristicContext.Flatten(trigger.Instructions))
+            .Any(instruction => instruction.DamageAmountOperand?.Kind == BehaviorDamageAmountKind.SourceAdvancementCounters)) == true;
+
+    /// <summary>
+    /// The advancement counters on root cards the Runner can't identify. A
+    /// face-down card is a null entry whose public counters come separately
+    /// (earlier versions read only visible cards, so they missed face-down traps).
+    /// </summary>
+    private static IEnumerable<int> UnknownAdvancedRoots(HeuristicContext context, AgentServer server)
+    {
+        for (int index = 0; index < server.Root.Length; index++)
+        {
+            AgentCard? root = server.Root[index];
+            int counters = root is null ? context.HiddenAdvancement(server.Id, "root", index)
+                : context.Definition(root) is null ? root.AdvancementCounters ?? 0 : 0;
+            if (counters > 0) yield return counters;
+        }
     }
 
     private static int SuccessRewards(HeuristicContext context, AgentServer server)

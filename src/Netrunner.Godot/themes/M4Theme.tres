@@ -1,102 +1,174 @@
 [gd_resource type="Theme" format=3 uid="uid://chrlx0twk2fi1"]
 
+[ext_resource type="FontFile" path="res://fonts/rajdhani/Rajdhani-Bold.ttf" id="display_bold"]
+[ext_resource type="FontFile" path="res://fonts/rajdhani/Rajdhani-SemiBold.ttf" id="display_semibold"]
+[ext_resource type="FontFile" path="res://fonts/ibm-plex-sans/IBMPlexSans-Variable.ttf" id="body"]
+[ext_resource type="FontFile" path="res://fonts/ibm-plex-mono/IBMPlexMono-Regular.ttf" id="mono"]
+[ext_resource type="FontFile" path="res://fonts/ibm-plex-mono/IBMPlexMono-Medium.ttf" id="mono_medium"]
+
+[sub_resource type="FontVariation" id="Font_body"]
+base_font = ExtResource("body")
+variation_opentype = {
+2003265652: 400
+}
+
+[sub_resource type="FontVariation" id="Font_body_medium"]
+base_font = ExtResource("body")
+variation_opentype = {
+2003265652: 500
+}
+
+[sub_resource type="FontVariation" id="Font_display_wide"]
+base_font = ExtResource("display_bold")
+spacing_glyph = 1
+
 [sub_resource type="StyleBoxFlat" id="StyleBox_button_disabled"]
 content_margin_left = 12.0
 content_margin_top = 8.0
 content_margin_right = 12.0
 content_margin_bottom = 8.0
-bg_color = Color(0.06, 0.1, 0.12, 1)
+bg_color = Color(0.05, 0.063, 0.078, 1)
 border_width_left = 1
 border_width_top = 1
 border_width_right = 1
 border_width_bottom = 1
-border_color = Color(0.14, 0.22, 0.26, 1)
-corner_radius_top_left = 5
-corner_radius_top_right = 5
-corner_radius_bottom_right = 5
-corner_radius_bottom_left = 5
+border_color = Color(0.13, 0.16, 0.19, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
 
 [sub_resource type="StyleBoxFlat" id="StyleBox_button_focus"]
 content_margin_left = 11.0
 content_margin_top = 7.0
 content_margin_right = 11.0
 content_margin_bottom = 7.0
-bg_color = Color(0.1, 0.18, 0.2, 1)
+bg_color = Color(0.075, 0.12, 0.15, 1)
 border_width_left = 2
 border_width_top = 2
 border_width_right = 2
 border_width_bottom = 2
-border_color = Color(0.36, 0.9, 0.74, 1)
-corner_radius_top_left = 5
-corner_radius_top_right = 5
-corner_radius_bottom_right = 5
-corner_radius_bottom_left = 5
+border_color = Color(0.56, 0.95, 0.91, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+shadow_color = Color(0.22, 0.9, 0.83, 0.18)
+shadow_size = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_button_hover"]
+content_margin_left = 11.0
+content_margin_top = 7.0
+content_margin_right = 11.0
+content_margin_bottom = 7.0
+bg_color = Color(0.075, 0.11, 0.14, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.68, 0.73, 0.77, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
+[sub_resource type="StyleBoxFlat" id="StyleBox_button_pressed"]
+content_margin_left = 11.0
+content_margin_top = 8.0
+content_margin_right = 11.0
+content_margin_bottom = 6.0
+bg_color = Color(0.04, 0.07, 0.09, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.56, 0.95, 0.91, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
 
 [sub_resource type="StyleBoxFlat" id="StyleBox_button"]
 content_margin_left = 12.0
 content_margin_top = 8.0
 content_margin_right = 12.0
 content_margin_bottom = 8.0
-bg_color = Color(0.08, 0.13, 0.16, 1)
+bg_color = Color(0.06, 0.08, 0.1, 1)
 border_width_left = 1
 border_width_top = 1
 border_width_right = 1
 border_width_bottom = 1
-border_color = Color(0.24, 0.38, 0.44, 1)
-corner_radius_top_left = 5
-corner_radius_top_right = 5
-corner_radius_bottom_right = 5
-corner_radius_bottom_left = 5
+border_color = Color(0.29, 0.34, 0.39, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
 
 [sub_resource type="StyleBoxFlat" id="StyleBox_panel"]
 content_margin_left = 10.0
 content_margin_top = 8.0
 content_margin_right = 10.0
 content_margin_bottom = 8.0
-bg_color = Color(0.055, 0.08, 0.105, 1)
+bg_color = Color(0.039, 0.059, 0.078, 1)
 border_width_left = 1
 border_width_top = 1
 border_width_right = 1
 border_width_bottom = 1
-border_color = Color(0.17, 0.28, 0.34, 1)
-corner_radius_top_left = 7
-corner_radius_top_right = 7
-corner_radius_bottom_right = 7
-corner_radius_bottom_left = 7
+border_color = Color(0.17, 0.2, 0.24, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
 
 [resource]
+default_font = SubResource("Font_body")
 default_font_size = 14
 AppStatus/base_type = &"Label"
-AppStatus/colors/font_color = Color(0.65, 0.74, 0.8, 1)
+AppStatus/colors/font_color = Color(0.68, 0.73, 0.77, 1)
 AppStatus/font_sizes/font_size = 15
 AppTitle/base_type = &"Label"
-AppTitle/colors/font_color = Color(0.36, 0.9, 0.74, 1)
-AppTitle/font_sizes/font_size = 22
-Button/colors/font_color = Color(0.94, 0.98, 1, 1)
+AppTitle/colors/font_color = Color(0.56, 0.95, 0.91, 1)
+AppTitle/font_sizes/font_size = 26
+AppTitle/fonts/font = SubResource("Font_display_wide")
+Button/colors/font_color = Color(0.91, 0.93, 0.95, 1)
 Button/colors/font_focus_color = Color(1, 1, 1, 1)
-Button/colors/font_hover_color = Color(0.36, 0.9, 0.74, 1)
-Button/colors/font_pressed_color = Color(1, 1, 1, 1)
+Button/colors/font_hover_color = Color(1, 1, 1, 1)
+Button/colors/font_pressed_color = Color(0.56, 0.95, 0.91, 1)
+Button/fonts/font = SubResource("Font_body_medium")
 Button/styles/disabled = SubResource("StyleBox_button_disabled")
 Button/styles/focus = SubResource("StyleBox_button_focus")
-Button/styles/hover = SubResource("StyleBox_button_focus")
+Button/styles/hover = SubResource("StyleBox_button_hover")
 Button/styles/normal = SubResource("StyleBox_button")
-Button/styles/pressed = SubResource("StyleBox_button_focus")
-CheckButton/colors/font_color = Color(0.65, 0.74, 0.8, 1)
+Button/styles/pressed = SubResource("StyleBox_button_pressed")
+CheckButton/colors/font_color = Color(0.68, 0.73, 0.77, 1)
+DisplayLabel/base_type = &"Label"
+DisplayLabel/colors/font_color = Color(0.91, 0.93, 0.95, 1)
+DisplayLabel/font_sizes/font_size = 18
+DisplayLabel/fonts/font = ExtResource("display_bold")
 HistoryControl/base_type = &"Button"
 HistoryControl/font_sizes/font_size = 11
-Label/colors/font_color = Color(0.94, 0.98, 1, 1)
-Label/colors/font_uneditable_color = Color(0.65, 0.74, 0.8, 1)
+HistoryControl/fonts/font = ExtResource("mono")
+Label/colors/font_color = Color(0.91, 0.93, 0.95, 1)
+Label/colors/font_uneditable_color = Color(0.68, 0.73, 0.77, 1)
 LaneHeading/base_type = &"Label"
-LaneHeading/colors/font_color = Color(0.36, 0.9, 0.74, 1)
-LaneHeading/font_sizes/font_size = 14
+LaneHeading/colors/font_color = Color(0.79, 0.83, 0.8, 1)
+LaneHeading/font_sizes/font_size = 17
+LaneHeading/fonts/font = ExtResource("display_semibold")
+MonoLabel/base_type = &"Label"
+MonoLabel/colors/font_color = Color(0.68, 0.73, 0.77, 1)
+MonoLabel/font_sizes/font_size = 11
+MonoLabel/fonts/font = ExtResource("mono")
 PanelContainer/styles/panel = SubResource("StyleBox_panel")
 PhaseLabel/base_type = &"Label"
-PhaseLabel/colors/font_color = Color(0.98, 0.74, 0.28, 1)
-PhaseLabel/font_sizes/font_size = 14
+PhaseLabel/colors/font_color = Color(1, 0.81, 0.43, 1)
+PhaseLabel/font_sizes/font_size = 13
+PhaseLabel/fonts/font = ExtResource("mono_medium")
 PrimaryAction/base_type = &"Button"
-PrimaryAction/font_sizes/font_size = 14
+PrimaryAction/font_sizes/font_size = 17
+PrimaryAction/fonts/font = ExtResource("display_bold")
 SecondaryAction/base_type = &"Button"
 SecondaryAction/font_sizes/font_size = 12
 TableStatus/base_type = &"Label"
-TableStatus/colors/font_color = Color(0.36, 0.9, 0.74, 1)
-TableStatus/font_sizes/font_size = 14
+TableStatus/colors/font_color = Color(0.56, 0.95, 0.91, 1)
+TableStatus/font_sizes/font_size = 13
+TableStatus/fonts/font = ExtResource("mono")

@@ -45,7 +45,7 @@ public partial class Main
 					"New game did not restore clean default setup.");
 				RequireInteraction(ReferenceEquals(_soloSmokeExpectedService, GetSoloSessionService()), "New game replaced the app's serialized save writer.");
 				GD.Print($"M5_CLIENT PASS phase=resume side={side} preset={preset} difficulty={difficulty} restart=true paused=true terminal=true history=true new_game=true");
-				GetTree().Quit();
+				QuitCleanly();
 				return;
 			}
 			GetWindow().Size = side == PlayerSide.Corp ? new(2560, 1440) : new(1920, 1080);
@@ -166,7 +166,7 @@ public partial class Main
 		catch (Exception exception)
 		{
 			GD.PrintErr($"M5_CLIENT FAIL {exception}");
-			GetTree().Quit(1);
+			QuitCleanly(1);
 		}
 	}
 

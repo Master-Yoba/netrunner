@@ -16,6 +16,31 @@ public static class OfflineMatchFactory
     }
 
     /// <summary>Creates the opponent; <paramref name="policyVersion"/> defaults to the latest version for that seat.</summary>
+    /// <summary>
+    /// The tutorial bot is frozen (Wave 4): with the Catalyst and Syndicate teaching
+    /// decks the opponent plays C1's versions, which are playable and beatable, and
+    /// bot tuning targets the legal decks instead.
+    /// </summary>
+    public const string TutorialCorpVersion = CorpHeuristicPolicy.V7;
+
+    /// <inheritdoc cref="TutorialCorpVersion"/>
+    public const string TutorialRunnerVersion = RunnerHeuristicPolicy.V6;
+
+    /// <summary>Whether both decks are the teaching decks (basic or expanded), so the tutorial bot plays.</summary>
+    public static bool IsTutorial(FullMatchDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        OfficialPresetCatalog catalog = OfficialPresetCatalog.Embedded();
+        return new[] { definition.Request.CorpDeck.PresetId, definition.Request.RunnerDeck.PresetId }
+            .All(id => id is not null && catalog.Teaching.Any(preset => preset.PresetId == id));
+    }
+
+    /// <summary>A new opponent for a player's game: the frozen tutorial bot on the teaching decks, the latest bot otherwise.</summary>
+    public static OfflineAgent CreatePlayerOpponent(FullMatchDefinition definition, PlayerSide humanSide, string difficulty = "standard") =>
+        CreateOpponent(definition, humanSide, difficulty, IsTutorial(definition)
+            ? humanSide == PlayerSide.Corp ? TutorialRunnerVersion : TutorialCorpVersion
+            : null);
+
     public static OfflineAgent CreateOpponent(FullMatchDefinition definition, PlayerSide humanSide, string difficulty = "standard",
         string? policyVersion = null)
     {
@@ -27,7 +52,46 @@ public static class OfflineMatchFactory
         };
         ulong seed = AgentLifecycleHost.DerivePolicySeed(definition.Request.Seed, side);
         OfflineAgentConfiguration configuration = OfflinePolicies.Configure(side, difficulty, seed, policyVersion);
-        return new(configuration, OfflinePolicies.Create(configuration),
-            new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior));
+        var catalog = new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior);
+        if (side == PlayerSide.Corp && CorpPolicyProfiles.SupportsArchetypes(configuration.PolicyVersion))
+        {
+            (CorpArchetype primary, CorpArchetype secondary) = CorpDeckArchetypes(definition.Request.CorpDeck, catalog);
+            configuration = CorpPolicyProfiles.WithArchetypes(configuration, primary, secondary);
+        }
+        if (side == PlayerSide.Runner && RunnerPolicyProfiles.SupportsArchetypes(configuration.PolicyVersion))
+        {
+            (RunnerArchetype primary, RunnerArchetype secondary) = RunnerDeckArchetypes(definition.Request.RunnerDeck, catalog);
+            configuration = RunnerPolicyProfiles.WithArchetypes(configuration, primary, secondary);
+        }
+        return new(configuration, OfflinePolicies.Create(configuration), catalog);
+    }
+
+    /// <summary>The Runner deck's archetypes (A8): declared by its preset, otherwise inferred from its cards.</summary>
+    public static (RunnerArchetype Primary, RunnerArchetype Secondary) RunnerDeckArchetypes(DeckRequest deck, ICardEvaluationCatalog catalog)
+    {
+        ArgumentNullException.ThrowIfNull(deck);
+        ArgumentNullException.ThrowIfNull(catalog);
+        if (deck.PresetId is { } id && OfficialPresetCatalog.Embedded().TryGet(id, out OfficialPreset preset) && preset.Archetypes.Count > 0)
+            return (RunnerArchetypes.Keys[preset.Archetypes[0]],
+                preset.Archetypes.Count > 1 ? RunnerArchetypes.Keys[preset.Archetypes[1]] : RunnerArchetype.Generic);
+        return RunnerArchetypes.Infer(deck.Cards
+            .Select(entry => (Found: catalog.TryGet(new CardDefinitionId(entry.Code), out CardEvaluationDescriptor card), Card: card, entry.Quantity))
+            .Where(entry => entry.Found).Select(entry => (entry.Card, entry.Quantity)));
+    }
+
+    /// <summary>
+    /// The Corp deck's archetypes (A8): its preset's declaration when it has one,
+    /// otherwise inferred from its cards. The bot knows its own deck.
+    /// </summary>
+    public static (CorpArchetype Primary, CorpArchetype Secondary) CorpDeckArchetypes(DeckRequest deck, ICardEvaluationCatalog catalog)
+    {
+        ArgumentNullException.ThrowIfNull(deck);
+        ArgumentNullException.ThrowIfNull(catalog);
+        if (deck.PresetId is { } id && OfficialPresetCatalog.Embedded().TryGet(id, out OfficialPreset preset) && preset.Archetypes.Count > 0)
+            return (CorpArchetypes.Keys[preset.Archetypes[0]],
+                preset.Archetypes.Count > 1 ? CorpArchetypes.Keys[preset.Archetypes[1]] : CorpArchetype.Generic);
+        return CorpArchetypes.Infer(deck.Cards
+            .Select(entry => (Found: catalog.TryGet(new CardDefinitionId(entry.Code), out CardEvaluationDescriptor card), Card: card, entry.Quantity))
+            .Where(entry => entry.Found).Select(entry => (entry.Card, entry.Quantity)));
     }
 }

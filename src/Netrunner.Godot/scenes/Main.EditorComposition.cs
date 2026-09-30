@@ -37,6 +37,7 @@ public partial class Main
 		BuildCardTable();
 		BuildCardZoomOverlay();
 		BindOfflineSetup(setup);
+		BuildMainMenu();
 		ApplyAccessibilityFocusOrder(_startPanel);
 		ApplyAccessibilityFocusOrder(_board);
 	}

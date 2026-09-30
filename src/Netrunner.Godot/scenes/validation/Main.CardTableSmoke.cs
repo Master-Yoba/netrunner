@@ -192,6 +192,16 @@ public partial class Main
 			if (_matchHistory.PageStart != Math.Max(0, _matchHistory.EntryCount - _matchHistory.PageSize)
 				|| _matchHistory.NewEntryCount != 0)
 				throw new InvalidOperationException("History did not follow the newest page or clear unread entries.");
+			// Playtest, 29 September: pressing an entry with details rebuilt the list and freed the
+			// pressed row inside its own click, crashing the game. Expand and collapse one for real.
+			for (int press = 0; press < 2; press++)
+			{
+				HistoryEntry pressed = FindDescendants<HistoryEntry>(_matchHistory).First(entry => entry.IsVisibleInTree());
+				await ClickTableButton(pressed.GetNode<Button>("Row/Content/Summary"));
+				await TableFrames(2);
+			}
+			if (FindDescendants<HistoryEntry>(_matchHistory).Length == 0)
+				throw new InvalidOperationException("History rows vanished after expanding and collapsing an entry.");
 			foreach (Vector2I size in new[] { new Vector2I(1920, 1080), new Vector2I(2560, 1440) })
 			{
 				GetWindow().Size = size;
@@ -374,13 +384,13 @@ public partial class Main
 			GD.Print($"M49_PERF frames=120 median_ms={frameTimes[60]:F2} p95_ms={frameTimes[114]:F2} renderer={RenderingServer.GetVideoAdapterName()}");
 			GD.Print($"M410_ALLOC frames=120 allocated_bytes={idleAllocatedBytes} bytes_per_frame={idleAllocatedBytes / 120.0:F2}");
 			GD.Print($"M49_UI PASS official={_metadataSnapshot.IsOfficial} dense=true history=true");
-			GetTree().Quit();
+			QuitCleanly();
 		}
 		catch (Exception exception)
 		{
 			GD.PushError(exception.ToString());
 			GD.Print("M49_UI FAIL " + exception.Message);
-			GetTree().Quit(1);
+			QuitCleanly(1);
 		}
 	}
 
@@ -519,13 +529,17 @@ public partial class Main
 		HBoxContainer[] roots = _gameTable.FindChildren("RootCards", "HBoxContainer", true, false)
 			.Cast<HBoxContainer>().Where(row => row.IsVisibleInTree()).ToArray();
 		float? rootTop = null;
-		float? iceTop = null;
+		float? iceEdge = null;
+		// Runner seat: ICE hangs below the roots, so its top edge lines up. Corp
+		// seat: servers build upward from the Corp's edge, so its bottom edge does.
+		bool corpSeat = _gameTable.CorpSeatLayout;
 		foreach (HBoxContainer root in roots)
 		{
 			VBoxContainer iceCards = root.GetParent().GetNode<VBoxContainer>("IceCards");
+			float edge = corpSeat ? iceCards.GetGlobalRect().End.Y : iceCards.GlobalPosition.Y;
 			rootTop ??= root.GlobalPosition.Y;
-			iceTop ??= iceCards.GlobalPosition.Y;
-			if (Mathf.Abs(root.GlobalPosition.Y - rootTop.Value) > 1 || Mathf.Abs(iceCards.GlobalPosition.Y - iceTop.Value) > 1)
+			iceEdge ??= edge;
+			if (Mathf.Abs(root.GlobalPosition.Y - rootTop.Value) > 1 || Mathf.Abs(edge - iceEdge.Value) > 1)
 				throw new InvalidOperationException("Server root/ICE rows shifted between lanes.");
 			Rect2[] cards = root.GetChildren().OfType<TableCardControl>().Where(card => card.Visible)
 				.Select(card => card.GetGlobalRect()).ToArray();

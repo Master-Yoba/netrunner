@@ -7,13 +7,14 @@
 
 [ext_resource type="PackedScene" path="res://scenes/components/CreditIndicator.tscn" id="credits"]
 [ext_resource type="PackedScene" path="res://scenes/components/BoardPile.tscn" id="deck"]
+[ext_resource type="Script" path="res://scenes/FactionEmblem.cs" id="emblem"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_area"]
 content_margin_left = 8.0
-content_margin_top = 6.0
+content_margin_top = 10.0
 content_margin_right = 8.0
 content_margin_bottom = 6.0
-bg_color = Color(0.035, 0.12, 0.12, 0.35)
+bg_color = Color(0, 0, 0, 0)
 corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_right = 8
@@ -24,7 +25,12 @@ content_margin_left = 8.0
 content_margin_top = 6.0
 content_margin_right = 8.0
 content_margin_bottom = 6.0
-bg_color = Color(0.02, 0.08, 0.08, 0.68)
+bg_color = Color(0.03, 0.045, 0.06, 0.82)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.17, 0.24, 0.31, 1)
 corner_radius_top_left = 6
 corner_radius_top_right = 6
 corner_radius_bottom_right = 6
@@ -68,12 +74,27 @@ size_flags_vertical = 3
 mouse_filter = 2
 theme_override_constants/separation = 2
 
-[node name="Side" type="Label" parent="Content/Summary/Content"]
+[node name="Plate" type="HBoxContainer" parent="Content/Summary/Content"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_colors/font_color = Color(0.34, 0.73, 0.96, 1)
-theme_override_font_sizes/font_size = 11
+theme_override_constants/separation = 6
+
+[node name="Emblem" type="Control" parent="Content/Summary/Content/Plate"]
+custom_minimum_size = Vector2(22, 22)
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("emblem")
+Side = 1
+
+[node name="Side" type="Label" parent="Content/Summary/Content/Plate"]
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_type_variation = &"DisplayLabel"
+theme_override_colors/font_color = Color(0.56, 0.95, 0.91, 1)
+theme_override_font_sizes/font_size = 15
 text = "RUNNER"
+vertical_alignment = 1
 text_overrun_behavior = 3
 
 [node name="Credits" parent="Content/Summary/Content" instance=ExtResource("credits")]

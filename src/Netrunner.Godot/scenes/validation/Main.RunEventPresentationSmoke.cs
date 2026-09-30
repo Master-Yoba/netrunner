@@ -132,7 +132,7 @@ public partial class Main
 				+ $"active_restriction={FormatSlice45Bool(activeRestriction)} "
 				+ $"legal_bioroid={FormatSlice45Bool(legalBioroid)} "
 				+ $"armed_mayfly={FormatSlice45Bool(armedMayfly)}");
-			GetTree().Quit(passed ? 0 : 1);
+			QuitCleanly(passed ? 0 : 1);
 		}
 		catch (Exception exception)
 		{
@@ -148,7 +148,7 @@ public partial class Main
 				+ $"active_restriction={FormatSlice45Bool(activeRestriction)} "
 				+ $"legal_bioroid={FormatSlice45Bool(legalBioroid)} "
 				+ $"armed_mayfly={FormatSlice45Bool(armedMayfly)} error={error}");
-			GetTree().Quit(1);
+			QuitCleanly(1);
 		}
 	}
 

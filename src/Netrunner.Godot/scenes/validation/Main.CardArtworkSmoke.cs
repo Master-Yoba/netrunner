@@ -80,7 +80,7 @@ public partial class Main
 				await TableFrames(3);
 				RequireInteraction(!FindDescendants<Label>(portrait).Any(label => label.IsVisibleInTree() && label.Text == card.Title),
 					"Printed artwork is covered by a duplicate title.");
-				RequireInteraction(FindDescendants<Label>(portrait).Any(label => label.IsVisibleInTree() && label.Text.Contains("ADV", StringComparison.Ordinal)),
+				RequireInteraction(portrait.AdvancementBadgeCount == card.AdvancementCounters && card.AdvancementCounters > 0,
 					"Artwork hid advancement counters.");
 				if (OS.GetCmdlineUserArgs().Contains("--card-art-screenshots")) await SaveArtworkEvidence($"faces-{size.X}", liveCache);
 				_inspectedCard = ice.Card;
@@ -109,18 +109,12 @@ public partial class Main
 			await CheckModalLayersAndEscapeAsync(liveCache);
 			await CheckClickedCardHoverAsync(liveCache);
 			GD.Print($"CARD_ART_SMOKE PASS live_cache={liveCache} cards=77 resolutions=2 portrait=true ice=true inspection=true hover=true single_hover=true hover_details=true hover_dismissal=true game_symbols=true modal_layers=true escape_selection=true overlays=true hidden_safe=true reuse=true fallback=true lab_scenarios=19 lab_draw=true");
-			// Let the queued smoke input drain and release its C# wrappers before quitting:
-			// quitting with them alive intermittently aborts Godot's shutdown (rc_owner).
-			await TableFrames(5);
-			GC.Collect();
-			GC.WaitForPendingFinalizers();
-			await TableFrames(2);
-			GetTree().Quit();
+			QuitCleanly();
 		}
 		catch (Exception error)
 		{
 			GD.PrintErr($"CARD_ART_SMOKE FAIL {error}");
-			GetTree().Quit(1);
+			QuitCleanly(1);
 		}
 		finally
 		{

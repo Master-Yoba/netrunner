@@ -23,12 +23,60 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// counts when judging whether a run can get in.
     /// </summary>
     public const string V5 = "runner-heuristic-v5";
+    /// <summary>
+    /// V5 with repairs from the first Gateway-deck audit (Wave 4 C1): a run event
+    /// that raises ICE rez costs is worth the unrezzed ICE it neutralizes, a card
+    /// that improves the basic draw is worth its future draws, a run into an
+    /// advanced unknown card weighs its possible trap damage against the grip, and
+    /// trashing an advanced trap is worth the damage it would deal.
+    /// </summary>
+    public const string V6 = "runner-heuristic-v6";
+    /// <summary>
+    /// V6 with the whole-run model (A4a): a run is costed as one path through every
+    /// piece of ICE, choosing per piece what to break and what to let fire.
+    /// </summary>
+    public const string V7 = "runner-heuristic-v7";
+    /// <summary>V7 choices with turn actions planned by rollouts (A3), scored by the fitted evaluation (A5).</summary>
+    public const string V8 = "runner-heuristic-v8";
+    /// <summary>
+    /// V7 choices with run search (A4): inside its own run, continuing or jacking
+    /// out and trashing an accessed card or not are chosen by rollouts to the
+    /// run's end, scored by the fitted evaluation. Turn actions aren't planned.
+    /// </summary>
+    public const string V9 = "runner-heuristic-v9";
+    /// <summary>
+    /// V7 with central memory (A4a): R&amp;D is worth less while its top card is one
+    /// the Runner has already seen, and HQ in proportion to how much of it the
+    /// Corp has drawn since the last access.
+    /// </summary>
+    public const string V10 = "runner-heuristic-v10";
+    /// <summary>
+    /// V10 playing to its deck's archetype (A8): big rig, aggro, central
+    /// pressure, econ denial or virus set how eagerly it runs, how much it
+    /// values setting up, which centrals it presses, and what trashing and
+    /// viruses are worth.
+    /// </summary>
+    public const string V11 = "runner-heuristic-v11";
+    /// <summary>
+    /// V10 with the self-play review fixes that came with V11 (28 September), and
+    /// no archetype profile: trap risk weighed by how likely the Corp plays traps,
+    /// with a hard stop only after one was seen; the fear of unrezzed ICE scaled by
+    /// what the Corp can rez and the ICE types covered. V11's archetype knobs were
+    /// weaker on the ladder (-32 on two seeds), these fixes alone are not (+29).
+    /// </summary>
+    public const string V12 = "runner-heuristic-v12";
     /// <summary>The version new games and new manifests use.</summary>
-    /// <summary>V3 plans but has not shown a ladder gain yet (Wave 3), so new games use V4, which doesn't plan.</summary>
-    public const string PolicyVersion = V5;
-    /// <summary>The latest version that never plans: the planner's model of the Runner.</summary>
-    public const string LatestHeuristic = V5;
-    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5];
+    /// <remarks>
+    /// V12 is level with V10 on the Gateway ladder (+29 [-13, 75]) and fixes plays
+    /// a human notices (running lethal traps, never running against unrezzed ICE).
+    /// </remarks>
+    public const string PolicyVersion = V12;
+    /// <summary>
+    /// The planner's model of the Runner. It stays V7, which Corp v9 was measured
+    /// with, so the shipped Corp planner plays as it did.
+    /// </summary>
+    public const string LatestHeuristic = V7;
+    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12];
 
     public RunnerHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -36,9 +84,9 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Runner policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, _ => 2 };
-        Plans = version == V3;
-        Repairs = version is V4 or V5;
+        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 or V8 or V9 => 6, V10 => 7, V11 or V12 => 8, _ => 2 };
+        Plans = version is V3 or V8 or V9;
+        Repairs = version is V4 or V5 or V6 or V7 or V8 or V9 or V10 or V11 or V12;
     }
 
     /// <summary>Whether this version has the playtest repairs (V4).</summary>
@@ -93,7 +141,10 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     {
         AgentAction[] preferred = IssuedRunPaymentPreference.Select(features.Actions, action => (action.Id, action.Kind, action.Parameters)).ToArray();
         var preferredIds = preferred.Select(action => action.Id).ToHashSet();
-        var context = new HeuristicContext(features with { Actions = preferred.ToImmutableArray() }, catalog, configuration, Generation);
+        var context = new HeuristicContext(features with { Actions = preferred.ToImmutableArray() }, catalog, configuration, Generation)
+        {
+            Knowledge = Generation >= 7 ? knowledge : null,
+        };
         IReadOnlyDictionary<ActionId, AgentUtility> encounter = RunnerEncounterPlanner.Evaluate(context, budget);
         return features.Actions.Select(action => new AgentCandidate(action.Id,
             !preferredIds.Contains(action.Id) ? new(int.MinValue, 0, "payment/prefer-expiring-run-credits")

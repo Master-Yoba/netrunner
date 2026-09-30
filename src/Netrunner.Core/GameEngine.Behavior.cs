@@ -1260,7 +1260,15 @@ public static partial class GameEngine
                 && GetBehaviorInstructions(working, frame).Take(frame.InstructionCursor)
                     .Any(instruction => instruction.Kind == BehaviorInstructionKind.DealDamage
                         && instruction.DamageAmountOperand?.TrashSourceAsCost == true);
-            bool catalogTriggerLifecycleZone = (catalogTriggerSelfTrashReached || damageSelfTrashReached)
+            // The trigger's own install may replace its source (a second Pantograph
+            // trashes the first, Wave 4 C1); an ability that began resolving finishes.
+            bool installReplacedSource = frame.TriggerKey is not null
+                && BehaviorInstructionPath.HasReached(
+                    rootInstructions,
+                    frame.Continuation,
+                    frame.InstructionCursor,
+                    BehaviorInstructionKind.InstallCard);
+            bool catalogTriggerLifecycleZone = (catalogTriggerSelfTrashReached || damageSelfTrashReached || installReplacedSource)
                 && IsAbilityTrashZone(currentSourceZone, source);
             bool catalogTriggerDetachedSource = frame.TriggerKey is not null
                 && frame.CatalogTriggerSourceMovedBeforeStart;
@@ -2234,7 +2242,9 @@ public static partial class GameEngine
                 foreach (CardInstanceId candidate in choice.CandidateCardIds
                     .Where(candidate => !choice.SelectedCardIds.Contains(candidate)))
                 {
-                    if (choice.CardinalityKind == BehaviorChoiceCardinalityKind.Exactly
+                    // Both an exact count and an "up to" limit cap further picks
+                    // (Spin Doctor, Longevity Serum: Wave 4 C1).
+                    if (choice.CardinalityKind is BehaviorChoiceCardinalityKind.Exactly or BehaviorChoiceCardinalityKind.UpTo
                         && choice.SelectedCardIds.Count >= choice.CardinalityCount)
                     {
                         break;
