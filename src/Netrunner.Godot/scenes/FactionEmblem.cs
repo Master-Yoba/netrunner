@@ -81,7 +81,11 @@ public partial class FactionEmblem : Control
 	}
 
 	/// <summary>The bundled glyph for a faction on its own side, or null for the neutral factions.</summary>
-	public static Texture2D? GlyphFor(string? faction, PlayerSide side)
+	public static Texture2D? GlyphFor(string? faction, PlayerSide side) =>
+		GlyphPath(faction, side) is { } path && ResourceLoader.Exists(path) ? GD.Load<Texture2D>(path) : null;
+
+	/// <summary>The resource path of a faction's bundled glyph, or null for the neutral factions.</summary>
+	public static string? GlyphPath(string? faction, PlayerSide side)
 	{
 		string key = (faction ?? string.Empty).Trim().ToLowerInvariant();
 		string[] names = side == PlayerSide.Runner
@@ -89,8 +93,39 @@ public partial class FactionEmblem : Control
 			: ["weyland-consortium", "jinteki", "haas-bioroid", "nbn"];
 		string? file = names.FirstOrDefault(name => key.Contains(name.Split('-')[0], StringComparison.Ordinal)
 			|| (name == "haas-bioroid" && key.Contains("bioroid", StringComparison.Ordinal)));
-		string path = $"res://icons/factions/{file}.svg";
-		return file is not null && ResourceLoader.Exists(path) ? GD.Load<Texture2D>(path) : null;
+		return file is null ? null : $"res://icons/factions/{file}.svg";
+	}
+
+	private static readonly Dictionary<string, Texture2D?> Silhouettes = new(StringComparer.Ordinal);
+
+	/// <summary>
+	/// A large one-colour silhouette of a faction's glyph for the table's background decor: the
+	/// SVG rendered at <paramref name="pixels"/> when its source is at hand, or the imported
+	/// texture, with every pixel white and its alpha kept, so a tint colours it evenly.
+	/// </summary>
+	public static Texture2D? SilhouetteFor(string? faction, PlayerSide side, int pixels = 512)
+	{
+		if (GlyphPath(faction, side) is not { } path) return null;
+		string key = $"{path}@{pixels}";
+		if (Silhouettes.TryGetValue(key, out Texture2D? cached)) return cached;
+		Image? image = null;
+		if (Godot.FileAccess.FileExists(path))
+		{
+			var rendered = new Image();
+			if (rendered.LoadSvgFromString(Godot.FileAccess.GetFileAsString(path), pixels / 128f) == Error.Ok) image = rendered;
+		}
+		image ??= GlyphFor(faction, side)?.GetImage();
+		Texture2D? texture = null;
+		if (image is not null)
+		{
+			image.Convert(Image.Format.Rgba8);
+			for (int y = 0; y < image.GetHeight(); y++)
+				for (int x = 0; x < image.GetWidth(); x++)
+					image.SetPixel(x, y, new Color(1, 1, 1, image.GetPixel(x, y).A));
+			texture = ImageTexture.CreateFromImage(image);
+		}
+		Silhouettes[key] = texture;
+		return texture;
 	}
 
 	public override void _Draw()

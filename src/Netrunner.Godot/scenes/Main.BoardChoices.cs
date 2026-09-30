@@ -180,7 +180,7 @@ public partial class Main
 				decision,
 				refreshed,
 				_boardChoiceRunSelection ? "Choose a server to run" : "Choose a play or install destination",
-				_boardChoiceRunSelection ? "Click a highlighted server to start the run immediately · 1 click. Cancel or Esc returns to the board." : BoardChoiceInitialPrompt(refreshed));
+				_boardChoiceRunSelection ? RunSelectionPrompt : BoardChoiceInitialPrompt(refreshed));
 			return;
 		}
 
@@ -282,8 +282,11 @@ public partial class Main
 			decision,
 			_boardChoiceActions,
 			runSelection ? "Choose a server to run" : "Choose a play or install destination",
-			runSelection ? "Click a highlighted server to start the run immediately · 1 click. Cancel or Esc returns to the board." : BoardChoiceInitialPrompt(_boardChoiceActions));
+			runSelection ? RunSelectionPrompt : BoardChoiceInitialPrompt(_boardChoiceActions));
 	}
+
+	/// <summary>The run-selection prompt; the hint below the options says how to cancel (playtest, 30 September: both said it).</summary>
+	private const string RunSelectionPrompt = "Click a highlighted server to start the run immediately · 1 click.";
 
 	/// <summary>Dismisses only the local contextual surface; it never rolls back Core.</summary>
 	public void DismissBoardChoices()

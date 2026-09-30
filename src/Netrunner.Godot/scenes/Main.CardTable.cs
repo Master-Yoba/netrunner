@@ -65,8 +65,6 @@ public partial class Main
 			if (TrySelectSpatialServer(id)) return;
 			CloseBoardIcebreaker();
 			if (TrySelectBoardChoiceServer(id)) return;
-			if (_currentSnapshot?.View.Servers.Any(server => server.Id == id && server.Kind == ServerKind.Archives) == true
-				&& ShowTablePile("zone:corp-archives")) return;
 			RecordFullMatchSelection("server", id);
 			if (ShowTablePile(id)) return;
 			_tableSelectedServer = id;
@@ -107,7 +105,9 @@ public partial class Main
 		_tableInspect.Pressed += ShowInspectedCardZoom;
 		_tableActions = dock.GetNode<HFlowContainer>("%Actions");
 		_focusPresentation = dock.GetNode<VBoxContainer>("%FocusPresentation");
-		_beats = new BeatPresenter { Name = "BeatPresenter", Board = _gameTable };
+		// Above the run's connection line (32) and the hand (35), below the panels (playtest,
+		// 30 September: the line ran through the caption of a run on HQ, in the middle of the table).
+		_beats = new BeatPresenter { Name = "BeatPresenter", Board = _gameTable, ZIndex = 45 };
 		_tableViewport.AddChild(_beats);
 		BuildBoardDrag();
 		BuildSettingsMenu();
@@ -265,7 +265,8 @@ public partial class Main
 			bool encounter = decision.Kind == DecisionKind.RunTiming && snapshot.View.Viewer == PlayerSide.Runner
 				&& snapshot.View.Run is { Step: RunTimingStep.EncounterPaidWindow, Encounter: not null };
 			IEnumerable<LegalActionViewModel> displayed = all;
-			bool hudRun = RunHudOwns(snapshot) && decision.Kind == DecisionKind.RunTiming && !_tableAllActions;
+			bool hudRun = RunHudOwns(snapshot) && !_tableAllActions && (decision.Kind == DecisionKind.RunTiming
+				|| snapshot.View.LegalActions.Any(action => IsInstallSubroutineChoice(action, snapshot.View)));
 			if (hudRun)
 			{
 				// The run HUD holds the run's own controls; anything else (a breach choice) stays here.

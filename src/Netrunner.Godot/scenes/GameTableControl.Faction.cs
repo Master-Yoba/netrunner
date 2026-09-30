@@ -25,6 +25,7 @@ public partial class GameTableControl
 		_corpFaction = corp;
 		_runnerFaction = runner;
 		Backdrop?.SetFactions(corp, runner);
+		Backdrop?.SetGlyphs(view.CorpIdentity?.Faction, view.RunnerIdentity?.Faction);
 		ApplyPlate("Surface/Margins/Layout/ServerField/Content/Summary/Content/Plate", view.CorpIdentity?.Faction, PlayerSide.Corp, corp);
 		ApplyPlate("Surface/Margins/Layout/RunnerField/Content/Summary/Content/Plate", view.RunnerIdentity?.Faction, PlayerSide.Runner, runner);
 		if (!changed) return;
@@ -65,11 +66,48 @@ public partial class GameTableControl
 		header.AddThemeColorOverride("icon_normal_color", new Color(0.79f, 0.83f, 0.8f));
 	}
 
-	/// <summary>Draws the Corp-coloured corner brackets over a server lane's steel slab.</summary>
+	private readonly HashSet<string> _targetedServers = new(StringComparer.Ordinal);
+	private double _targetGlowClock;
+
+	/// <summary>
+	/// Servers the player can pick now (a run target, an install destination). Their own lane border
+	/// glows in the local player's colour (playtest, 30 September: a second border drawn over the
+	/// lane's own looked pasted on).
+	/// </summary>
+	public void SetTargetedServers(IEnumerable<string> serverIds)
+	{
+		string[] ids = serverIds.ToArray();
+		if (_targetedServers.SetEquals(ids)) return;
+		_targetedServers.Clear();
+		_targetedServers.UnionWith(ids);
+		foreach (ServerLaneParts lane in _serverLanes.Values) lane.Panel.QueueRedraw();
+	}
+
+	public bool IsServerTargeted(string serverId) => _targetedServers.Contains(serverId);
+
+	/// <summary>Pulses the targeted lanes' glow unless motion is reduced.</summary>
+	private void UpdateTargetGlow(double delta)
+	{
+		if (_targetedServers.Count == 0 || Hand.ReducedMotion || !MotionEnabled) return;
+		_targetGlowClock += delta;
+		foreach (string id in _targetedServers)
+			if (_serverLanes.TryGetValue(id, out ServerLaneParts? lane)) lane.Panel.QueueRedraw();
+	}
+
+	/// <summary>Draws the Corp-coloured corner brackets over a server lane's steel slab, and its glow when targeted.</summary>
 	private void DrawLaneBrackets(PanelContainer panel)
 	{
 		Vector2 size = panel.Size;
 		if (size.X <= 0 || size.Y <= 0) return;
+		if (_serverLanes.FirstOrDefault(pair => pair.Value.Panel == panel).Key is { } serverId && _targetedServers.Contains(serverId))
+		{
+			Color glow = CorpSeatLayout ? _corpFaction.Accent : _runnerFaction.Accent;
+			float pulse = Hand.ReducedMotion || !MotionEnabled ? 1 : 0.75f + 0.25f * Mathf.Sin((float)_targetGlowClock * 4);
+			var frame = new Rect2(Vector2.Zero, size);
+			for (int ring = 4; ring >= 1; ring--)
+				panel.DrawRect(frame.Grow(ring * 2), glow with { A = 0.07f * pulse * (5 - ring) }, false, 2);
+			panel.DrawRect(frame.Grow(-0.5f), glow with { A = 0.9f * pulse }, false, 1.5f);
+		}
 		Color accent = _corpFaction.Accent;
 		const float width = 2;
 		float length = Mathf.Min(LaneBracketLength, Mathf.Min(size.X, size.Y) / 3);

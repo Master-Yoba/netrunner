@@ -137,6 +137,7 @@ tooltip_text = "Runner score area · stolen agendas"
 [node name="Identity" type="PanelContainer" parent="Content"]
 custom_minimum_size = Vector2(96, 150)
 layout_mode = 2
+size_flags_vertical = 4
 tooltip_text = "Runner identity"
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_identity")
@@ -145,6 +146,7 @@ theme_override_styles/panel = SubResource("StyleBoxFlat_identity")
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 1
+alignment = 1
 
 [node name="Caption" type="Label" parent="Content/Identity/Content"]
 visible = false
@@ -186,6 +188,7 @@ size_flags_horizontal = 3
 size_flags_vertical = 3
 mouse_filter = 2
 theme_override_constants/separation = 1
+alignment = 1
 
 [node name="Caption" type="Label" parent="Content/Rig/Content"]
 visible = false
@@ -200,7 +203,7 @@ text_overrun_behavior = 3
 [node name="Scroll" type="ScrollContainer" parent="Content/Rig/Content"]
 layout_mode = 2
 size_flags_horizontal = 3
-size_flags_vertical = 3
+size_flags_vertical = 4
 mouse_filter = 2
 follow_focus = true
 vertical_scroll_mode = 0

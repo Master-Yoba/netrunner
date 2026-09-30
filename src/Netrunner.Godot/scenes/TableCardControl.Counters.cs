@@ -7,14 +7,18 @@ namespace Netrunner.GodotClient;
 /// <summary>
 /// Counters as shapes (roadmap U5): each kind keeps one shape whatever the
 /// faction colour, so the shape carries the meaning. Advancement is an amber
-/// diamond, a virus counter an acid-green hexagon, a hosted credit a gold coin,
-/// and any other counter a steel disc. The count sits inside the shape.
+/// diamond, a virus counter an acid-green hexagon, a hosted credit a credit chip
+/// (a dark chip with clipped corners and a neon edge; playtest, 30 September: a
+/// gold coin looked out of place), and any other counter a steel disc. The count
+/// sits inside the shape.
 /// </summary>
 public partial class TableCardControl
 {
-	private enum CounterShape { Diamond, Hexagon, Coin, Disc }
+	private enum CounterShape { Diamond, Hexagon, Chip, Disc }
 
-	private static readonly Color CoinColor = new("f4c542");
+	/// <summary>Credit chips glow the table's neutral neon, whoever's card hosts them.</summary>
+	private static readonly Color ChipColor = new("39e6d4");
+	private static readonly Color ChipGround = new("0a1519");
 	private static readonly Color DiscColor = new("9fb4c7");
 	private static readonly Color BadgeInk = new(0.04f, 0.05f, 0.06f);
 
@@ -39,7 +43,7 @@ public partial class TableCardControl
 			badges.Add(counter.Purpose switch
 			{
 				CardCounterPurpose.Virus => (CounterShape.Hexagon, counter.Count, FactionPalette.Virus),
-				CardCounterPurpose.HostedCredit => (CounterShape.Coin, counter.Count, CoinColor),
+				CardCounterPurpose.HostedCredit => (CounterShape.Chip, counter.Count, ChipColor),
 				_ => (CounterShape.Disc, counter.Count, DiscColor),
 			});
 		}
@@ -63,7 +67,8 @@ public partial class TableCardControl
 			string text = count.ToString(System.Globalization.CultureInfo.InvariantCulture);
 			Vector2 textSize = font.GetStringSize(text, HorizontalAlignment.Left, -1, fontSize);
 			Vector2 baseline = centre + new Vector2(-textSize.X / 2, font.GetAscent(fontSize) / 2 - 1);
-			DrawString(font, baseline, text, HorizontalAlignment.Left, -1, fontSize, BadgeInk);
+			// A chip is dark, so its count is lit in the chip's neon.
+			DrawString(font, baseline, text, HorizontalAlignment.Left, -1, fontSize, shape == CounterShape.Chip ? color : BadgeInk);
 		}
 	}
 
@@ -75,14 +80,38 @@ public partial class TableCardControl
 			CounterShape.Hexagon => [.. Enumerable.Range(0, 6).Select(corner => centre + Vector2.FromAngle(Mathf.Pi / 3 * corner) * radius)],
 			_ => [],
 		};
+		if (shape == CounterShape.Chip)
+		{
+			DrawCreditChip(centre, radius, color);
+			return;
+		}
 		if (points.Length == 0)
 		{
 			DrawCircle(centre, radius, color);
 			DrawArc(centre, radius, 0, Mathf.Tau, 24, BadgeInk with { A = 0.6f }, 1.5f, true);
-			if (shape == CounterShape.Coin) DrawArc(centre, radius * 0.72f, 0, Mathf.Tau, 20, BadgeInk with { A = 0.35f }, 1, true);
 			return;
 		}
 		DrawColoredPolygon(points, color);
 		DrawPolyline([.. points, points[0]], BadgeInk with { A = 0.6f }, 1.5f, true);
+	}
+
+	/// <summary>A credit chip: a slightly wide dark plate with two clipped corners, a neon edge and contact ticks.</summary>
+	private void DrawCreditChip(Vector2 centre, float radius, Color neon)
+	{
+		float halfWidth = radius * 1.15f, halfHeight = radius * 0.85f, clip = radius * 0.4f;
+		Vector2[] plate =
+		[
+			centre + new Vector2(-halfWidth + clip, -halfHeight), centre + new Vector2(halfWidth, -halfHeight),
+			centre + new Vector2(halfWidth, halfHeight - clip), centre + new Vector2(halfWidth - clip, halfHeight),
+			centre + new Vector2(-halfWidth, halfHeight), centre + new Vector2(-halfWidth, -halfHeight + clip),
+		];
+		DrawColoredPolygon(plate, ChipGround);
+		DrawPolyline([.. plate, plate[0]], neon with { A = 0.35f }, 4, true);
+		DrawPolyline([.. plate, plate[0]], neon, 1.5f, true);
+		for (int tick = -1; tick <= 1; tick++)
+		{
+			float x = centre.X + tick * halfWidth * 0.45f;
+			DrawLine(new Vector2(x, centre.Y + halfHeight), new Vector2(x, centre.Y + halfHeight + 2.5f), neon with { A = 0.8f }, 1);
+		}
 	}
 }

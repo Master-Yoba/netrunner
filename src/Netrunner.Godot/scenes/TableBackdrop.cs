@@ -35,12 +35,38 @@ public partial class TableBackdrop : Control
 		Resized += QueueRedraw;
 	}
 
+	private Texture2D? _corpGlyph;
+	private Texture2D? _runnerGlyph;
+
 	public void SetFactions(FactionColors corp, FactionColors runner)
 	{
 		if (corp == _corp && runner == _runner) return;
 		_corp = corp;
 		_runner = runner;
 		QueueRedraw();
+	}
+
+	/// <summary>
+	/// The factions' glyphs, drawn large and faint in each half as decor (playtest, 30 September:
+	/// the plates' small emblems were easy to miss).
+	/// </summary>
+	public void SetGlyphs(string? corpFaction, string? runnerFaction)
+	{
+		Texture2D? corp = FactionEmblem.SilhouetteFor(corpFaction, Netrunner.Core.PlayerSide.Corp);
+		Texture2D? runner = FactionEmblem.SilhouetteFor(runnerFaction, Netrunner.Core.PlayerSide.Runner);
+		if (corp == _corpGlyph && runner == _runnerGlyph) return;
+		_corpGlyph = corp;
+		_runnerGlyph = runner;
+		QueueRedraw();
+	}
+
+	/// <summary>A glyph filling most of a half's height, towards its right end, in the faction's colour.</summary>
+	private void DrawGlyphDecor(Texture2D? glyph, Rect2 area, Color accent, float alpha)
+	{
+		if (glyph is null || area.Size.Y < 40) return;
+		float size = Mathf.Min(area.Size.Y * 0.82f, 560);
+		var rect = new Rect2(area.End.X - size - area.Size.X * 0.06f, area.Position.Y + (area.Size.Y - size) / 2, size, size);
+		DrawTextureRect(glyph, rect, false, accent with { A = alpha });
 	}
 
 	/// <summary>Places the boundary between the halves; redraws only when it moved.</summary>
@@ -62,6 +88,8 @@ public partial class TableBackdrop : Control
 		Rect2 runnerRect = _corpOnTop ? new Rect2(0, split, width, height - split) : new Rect2(0, 0, width, split);
 		DrawCorpHalf(corpRect);
 		DrawRunnerHalf(runnerRect);
+		DrawGlyphDecor(_corpGlyph, corpRect, _corp.Accent, 0.07f);
+		DrawGlyphDecor(_runnerGlyph, runnerRect, _runner.Accent, 0.08f);
 	}
 
 	private void DrawCorpHalf(Rect2 area)

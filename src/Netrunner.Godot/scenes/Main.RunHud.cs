@@ -150,7 +150,8 @@ public partial class Main
 		&& snapshot.View.Run is { EndReason: null } && _accessAllRunId is null;
 
 	/// <summary>The issued actions the HUD shows: breaker boosts and breaks, encounter abilities, and continue or jack out.</summary>
-	private static bool RunHudTakes(LegalActionViewModel action, MatchViewModel view) => view.Viewer == PlayerSide.Corp
+	private static bool RunHudTakes(LegalActionViewModel action, MatchViewModel view) => IsInstallSubroutineChoice(action, view)
+		|| (view.Viewer == PlayerSide.Corp
 		? action.Kind is ActionKind.RezIce or ActionKind.RezCard or ActionKind.UseAbility or ActionKind.PassPriority
 		: action.Kind switch
 		{
@@ -159,7 +160,13 @@ public partial class Main
 			or ActionKind.ChooseBreachCandidate or ActionKind.StealAgenda or ActionKind.TrashAccessedCard or ActionKind.NoAccessAction => true,
 			ActionKind.UseAbility => view.Run?.Encounter is { Status: RunEncounterStatus.Initialized },
 			_ => false,
-		};
+		});
+
+	/// <summary>An install-from-a-subroutine decision (Brân 1.0): each ICE to install, or decline.</summary>
+	private static bool IsInstallSubroutineChoice(LegalActionViewModel action, MatchViewModel view) =>
+		action.Kind == ActionKind.ResolveIceSubroutine && view.Decision?.Kind == DecisionKind.IceSubroutineChoice
+		&& view.LegalActions.Any(candidate => candidate.Parameters is IceSubroutineChoiceParameters { Choice: IceSubroutineChoiceKind.InstallCard })
+		&& action.Parameters is IceSubroutineChoiceParameters { Choice: IceSubroutineChoiceKind.InstallCard or IceSubroutineChoiceKind.Decline };
 
 	/// <summary>Shows or hides the HUD for this snapshot, and rebuilds it when the snapshot changed.</summary>
 	private void RefreshRunHud(MatchSnapshot snapshot)
@@ -208,22 +215,30 @@ public partial class Main
 		DetachChildren(_runHudFooter!);
 		_runHudButtons.Clear();
 
-		bool mine = view.Decision is { Kind: DecisionKind.RunTiming } decision && decision.OwnerSide == view.Viewer;
+		// An ICE's install subroutine (Brân 1.0) is chosen in the HUD too (playtest, 30 September: picking the
+		// ICE in the hand, under the HUD, then asked for its only destination).
+		bool mine = view.Decision is { Kind: DecisionKind.RunTiming or DecisionKind.IceSubroutineChoice } decision
+			&& decision.OwnerSide == view.Viewer;
 		// Build every issued control even while the table is still settling; UpdateRunHudButtons
 		// enables them once board actions are usable (a jack-out decision arriving mid-motion once
 		// left the HUD with no buttons at all).
 		IReadOnlyList<LegalActionViewModel> issued = mine ? view.LegalActions.Where(action => RunHudTakes(action, view)).ToArray() : [];
 		bool encounterShown = run.Encounter is { Status: RunEncounterStatus.Initialized, Ice.IsKnown: true };
-		if (encounterShown) BuildEncounterSection(snapshot, run.Encounter!, corpSeat ? [] : issued);
-		if (corpSeat)
-			BuildCorpSection(view, run, issued, mine);
-		else if (!encounterShown && issued.Any(action => action.Kind == ActionKind.ChooseBreachCandidate))
-			BuildBreachSection(snapshot, issued);
-		else if (!encounterShown && AccessActionsPresenter.Card(view) is { IsKnown: true } accessed)
-			BuildAccessSection(view, accessed, issued);
-		else if (!encounterShown)
-			_runHudBody!.AddChild(HudText(RunHudWaitingText(view, run, mine,
-				view.LegalActions.Any(action => !RunHudTakes(action, view))), 13, Muted));
+		if (issued.Any(action => IsInstallSubroutineChoice(action, view)))
+			BuildInstallSubroutineSection(view, issued);
+		else
+		{
+			if (encounterShown) BuildEncounterSection(snapshot, run.Encounter!, corpSeat ? [] : issued);
+			if (corpSeat)
+				BuildCorpSection(view, run, issued, mine);
+			else if (!encounterShown && issued.Any(action => action.Kind == ActionKind.ChooseBreachCandidate))
+				BuildBreachSection(snapshot, issued);
+			else if (!encounterShown && AccessActionsPresenter.Card(view) is { IsKnown: true } accessed)
+				BuildAccessSection(view, accessed, issued);
+			else if (!encounterShown)
+				_runHudBody!.AddChild(HudText(RunHudWaitingText(view, run, mine,
+					view.LegalActions.Any(action => !RunHudTakes(action, view))), 13, Muted));
+		}
 
 		// The run's own controls: everything issued that isn't a breaker's, in the footer.
 		HashSet<ActionId> placed = [.. _runHudButtons.Keys];
@@ -344,6 +359,9 @@ public partial class Main
 	{
 		VBoxContainer body = _runHudBody!;
 		body.AddChild(new Label { Text = "CHOOSE WHAT TO ACCESS", ThemeTypeVariation = "MonoLabel", MouseFilter = Control.MouseFilterEnum.Ignore });
+		// Playtest, 30 September: naming face-down Archives cards read as a leak; the rules turn them over first.
+		if (IsArchivesBreachChoice(snapshot.View))
+			body.AddChild(HudText("Breaching Archives turns every card in it face up (CR 7.5.2); you access them all, in any order.", 12, Muted));
 		if (_accessAllRunId is null && IsArchivesBreachChoice(snapshot.View))
 		{
 			int remaining = issued.Count(action => action.Kind == ActionKind.ChooseBreachCandidate);
@@ -381,12 +399,28 @@ public partial class Main
 				: run.CurrentIceIndex < 0 ? "the server" : "your ICE";
 			body.AddChild(HudText(mine ? $"The Runner is at {where}." : "The Runner has priority.", 14, Colors.White));
 		}
-		foreach (LegalActionViewModel rez in issued.Where(action => action.Kind is ActionKind.RezIce or ActionKind.RezCard))
+		// The attacked server's cards come first and stand out; rezzes elsewhere follow, plainer
+		// (playtest, 30 September: they were mixed in the order the engine issued them).
+		ServerViewModel? attacked = view.Servers.FirstOrDefault(server => server.Id == run.AttackedServerId);
+		HashSet<string> here = attacked is null ? [] : [.. attacked.Root.Concat(attacked.OrderedIce).OfType<CardViewModel>().Select(card => card.Id)];
+		static string? RezCardId(LegalActionViewModel action) =>
+			action.Parameters switch { RezCardParameters card => card.CardId.Value, RunIceParameters ice => ice.IceId.Value, _ => null };
+		LegalActionViewModel[] rezzes = [.. issued.Where(action => action.Kind is ActionKind.RezIce or ActionKind.RezCard)];
+		LegalActionViewModel[] local = [.. rezzes.Where(action => action.Kind == ActionKind.RezIce || RezCardId(action) is { } id && here.Contains(id))];
+		LegalActionViewModel[] elsewhere = [.. rezzes.Except(local)];
+		if (local.Length > 0 && elsewhere.Length > 0)
+			body.AddChild(new Label { Text = $"IN {_gameTable.GetServerDisplayName(run.AttackedServerId).ToUpperInvariant()}", ThemeTypeVariation = "MonoLabel", MouseFilter = Control.MouseFilterEnum.Ignore });
+		foreach (LegalActionViewModel rez in local) AddRezButton(rez, RunHudTone.Primary);
+		if (elsewhere.Length > 0)
+			body.AddChild(new Label { Text = "ELSEWHERE", ThemeTypeVariation = "MonoLabel", MouseFilter = Control.MouseFilterEnum.Ignore });
+		foreach (LegalActionViewModel rez in elsewhere) AddRezButton(rez, RunHudTone.Normal);
+
+		void AddRezButton(LegalActionViewModel rez, RunHudTone tone)
 		{
-			string? cardId = rez.Parameters switch { RezCardParameters card => card.CardId.Value, RunIceParameters ice => ice.IceId.Value, _ => null };
+			string? cardId = RezCardId(rez);
 			int? cost = rez.CostQuote?.EffectiveCost ?? (rez.Parameters as RezCardParameters)?.CreditCost;
 			string title = cardId is null ? "card" : ActionCardName(cardId);
-			Button button = RunHudWideButton($"REZ {title.ToUpperInvariant()}{(cost is { } credits ? $" · {credits} ¢" : string.Empty)}", RunHudTone.Primary);
+			Button button = RunHudWideButton($"REZ {title.ToUpperInvariant()}{(cost is { } credits ? $" · {credits} ¢" : string.Empty)}", tone);
 			button.Name = "Rez";
 			button.Disabled = cost is { } price && price > view.Corp.Credits;
 			button.Pressed += () => SubmitRunHudAction(rez);
@@ -404,6 +438,38 @@ public partial class Main
 			button.Pressed += () => SubmitRunHudAction(ability);
 			body.AddChild(button);
 			_runHudButtons[ability.Id] = button;
+		}
+	}
+
+	/// <summary>
+	/// An ICE subroutine installing a card (Brân 1.0: an ICE from HQ or Archives, directly inward):
+	/// one button per card, its destination named only when a card has more than one.
+	/// </summary>
+	private void BuildInstallSubroutineSection(MatchViewModel view, IReadOnlyList<LegalActionViewModel> issued)
+	{
+		VBoxContainer body = _runHudBody!;
+		string source = view.Run?.Encounter?.Ice is { IsKnown: true } ice ? ice.Title.ToUpperInvariant() : "THE SUBROUTINE";
+		body.AddChild(new Label { Text = $"{source} · INSTALL AN ICE", ThemeTypeVariation = "MonoLabel", MouseFilter = Control.MouseFilterEnum.Ignore });
+		LegalActionViewModel[] installs = [.. issued.Where(action => action.Parameters is IceSubroutineChoiceParameters { Choice: IceSubroutineChoiceKind.InstallCard })];
+		foreach (LegalActionViewModel install in installs)
+		{
+			var parameters = (IceSubroutineChoiceParameters)install.Parameters;
+			string title = parameters.CardId is { } card ? ActionCardName(card.Value) : "ICE";
+			bool several = installs.Count(other => ((IceSubroutineChoiceParameters)other.Parameters).CardId == parameters.CardId) > 1;
+			string where = !several ? " · INWARD"
+				: parameters.CreateNewRemote ? " · NEW REMOTE"
+				: parameters.ServerId is { } server ? $" · {_gameTable.GetServerDisplayName(server.Value).ToUpperInvariant()}" : string.Empty;
+			Button button = RunHudWideButton($"INSTALL {title.ToUpperInvariant()}{where}", RunHudTone.Primary);
+			button.Pressed += () => SubmitRunHudAction(install);
+			body.AddChild(button);
+			_runHudButtons[install.Id] = button;
+		}
+		foreach (LegalActionViewModel decline in issued.Where(action => action.Parameters is IceSubroutineChoiceParameters { Choice: IceSubroutineChoiceKind.Decline }))
+		{
+			Button button = RunHudWideButton("DON'T INSTALL", RunHudTone.Quiet);
+			button.Pressed += () => SubmitRunHudAction(decline);
+			body.AddChild(button);
+			_runHudButtons[decline.Id] = button;
 		}
 	}
 

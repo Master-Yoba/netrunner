@@ -13,6 +13,7 @@ public partial class Main
 			cue.QueueFree();
 		}
 		_boardChoiceServerCues.Clear();
+		_gameTable.SetTargetedServers([]);
 	}
 
 	private void RenderBoardServerCues(IReadOnlyList<LegalActionViewModel> actions)
@@ -24,6 +25,7 @@ public partial class Main
 			string caption = choices.Length == 1 ? BoardChoiceActionLabel(choices[0]) : "Choose an option for " + _gameTable.GetServerDisplayName(server);
 			AddBoardChoiceCue("ServerTarget", server, caption, () => TrySelectBoardChoiceServer(server));
 		}
+		_gameTable.SetTargetedServers(actions.Select(BoardServerTargetId).OfType<string>());
 		foreach (string card in actions.SelectMany(a => BoardCardTargetIds(a, actions)).Distinct(StringComparer.Ordinal))
 			if (!_gameTable.VisibleCards.ContainsKey(card))
 				AddBoardChoiceCue("HostCard", card, "Choose face-down ICE", () => TrySelectBoardChoiceCard(card));
@@ -44,6 +46,8 @@ public partial class Main
 			cue.GlobalPosition = area.Position;
 			cue.Size = area.Size;
 		}
+		// A server's own lane border glows instead (SetTargetedServers); the cue keeps the click and its caption.
+		if (kind == "ServerTarget") cue.AddThemeStyleboxOverride("panel", new StyleBoxEmpty());
 		Label label = cue.GetNode<Label>("%Caption");
 		label.Text = caption;
 		label.AutowrapMode = TextServer.AutowrapMode.WordSmart;

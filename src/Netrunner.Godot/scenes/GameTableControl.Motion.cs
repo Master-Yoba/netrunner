@@ -203,6 +203,12 @@ public partial class GameTableControl
 			_heldArrivals[arrival] = arrival.Modulate;
 			arrival.Modulate = arrival.Modulate with { A = 0 };
 		}
+		// A portrait card becoming sideways ICE flies upright and flips into place, rather than squash.
+		if (ice && destinationSize is { X: > 0, Y: > 0 } iceSize && iceSize.X > iceSize.Y && source.Size.Y > source.Size.X)
+		{
+			AnimateIceFlip(model, source, destination, iceSize, side, arrival, key, landed, delay);
+			return;
+		}
 		TableCardControl ghost = TableCardControl.Create();
 		ghost.MouseFilter = MouseFilterEnum.Ignore;
 		ghost.FocusMode = FocusModeEnum.None;
@@ -235,6 +241,63 @@ public partial class GameTableControl
 		// A departing card fades on its way out; an arriving one lands and hands over to the real card.
 		if (arrival is null && landed is null)
 			tween.TweenProperty(ghost, "modulate:a", 0.0, MotionDuration).SetDelay(delay + MotionDuration * 0.2);
+		tween.Chain().TweenCallback(Callable.From(() =>
+		{
+			_motionTweens.Remove(tween);
+			_motionCards.Remove(ghost);
+			ghost.QueueFree();
+			if (arrival is not null) ReleaseArrival(arrival);
+			landed?.Invoke();
+		}));
+	}
+
+	/// <summary>
+	/// An ICE install (playtest, 30 September: scaling a portrait card straight to the sideways
+	/// slot looked like a squash). The card flies upright at an even scale to the slot's centre,
+	/// turns edge-on, and opens out sideways at the slot's size.
+	/// </summary>
+	private void AnimateIceFlip(CardViewModel? model, Rect2 source, Vector2 destination, Vector2 iceSize,
+		Netrunner.Core.PlayerSide side, TableCardControl? arrival, string? key, Action? landed, double delay)
+	{
+		TableCardControl ghost = TableCardControl.Create();
+		ghost.MouseFilter = MouseFilterEnum.Ignore;
+		ghost.FocusMode = FocusModeEnum.None;
+		ghost.ZIndex = 20;
+		AddChild(ghost);
+		ghost.SetCard(model);
+		ghost.SetBackSide(side);
+		ghost.SetIce(false);
+		ghost.SetDisplaySize(source.Size);
+		ghost.PivotOffset = source.Size / 2;
+		ghost.Position = source.Position - GlobalPosition;
+		if (key is not null) ghost.SetMeta(MotionKeyMeta, key);
+		_motionCards.Add(ghost);
+		// Upright, the card's width becomes the slot's height once it lies sideways.
+		float scale = iceSize.Y / source.Size.X;
+		Vector2 centre = destination + iceSize / 2;
+		double flight = MotionDuration * 0.75, turn = MotionDuration * 0.14;
+		Tween tween = CreateTween();
+		_motionTweens.Add(tween);
+		tween.SetParallel();
+		if (delay > 0)
+		{
+			ghost.Modulate = ghost.Modulate with { A = 0 };
+			tween.TweenProperty(ghost, "modulate:a", 1.0, 0.01).SetDelay(delay);
+		}
+		tween.TweenProperty(ghost, "position", centre - source.Size / 2, flight).SetDelay(delay)
+			.SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.InOut);
+		tween.TweenProperty(ghost, "scale", Vector2.One * scale, flight).SetDelay(delay)
+			.SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.InOut);
+		tween.Chain().TweenProperty(ghost, "scale:x", 0.0, turn).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.In);
+		tween.Chain().TweenCallback(Callable.From(() =>
+		{
+			ghost.SetIce(true);
+			ghost.SetDisplaySize(iceSize);
+			ghost.PivotOffset = iceSize / 2;
+			ghost.Position = destination;
+			ghost.Scale = new Vector2(0, 1);
+		}));
+		tween.Chain().TweenProperty(ghost, "scale:x", 1.0, turn).SetTrans(Tween.TransitionType.Sine).SetEase(Tween.EaseType.Out);
 		tween.Chain().TweenCallback(Callable.From(() =>
 		{
 			_motionTweens.Remove(tween);

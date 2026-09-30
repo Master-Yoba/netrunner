@@ -116,29 +116,49 @@ public partial class BoardDragController : Control
 		}
 	}
 
+	private ShaderMaterial? _tiltMaterial;
+	private Vector2 _tiltAngles;
+
 	/// <summary>
-	/// Playtest, 29 September: the dragged card leans into its motion, like a card held in the hand:
-	/// it rolls against horizontal speed and narrows as if turning, then settles when it stops.
-	/// Reduced motion keeps it flat.
+	/// The dragged card leans into its motion like a card held in the hand (playtest, 29 September),
+	/// now turned in perspective by a shader (30 September: the flat lean and squash felt cheap): it
+	/// swings about its vertical axis with horizontal speed and its horizontal axis with vertical
+	/// speed, with a slight roll, then settles when it stops. Reduced motion keeps it flat.
 	/// </summary>
 	private void TiltPreview(Vector2 before, double delta)
 	{
 		if (_preview is null || _tiltVisual is null) return;
 		_tiltVisual.GlobalPosition = _preview.GlobalPosition;
 		_tiltVisual.PivotOffset = _tiltVisual.Size * 0.5f;
-		if (ReducedMotion || delta <= 0)
+		Vector2 target = Vector2.Zero;
+		float roll = 0;
+		if (!ReducedMotion && delta > 0)
 		{
-			_tiltVisual.Rotation = 0;
-			_tiltVisual.Scale = Vector2.One;
-			return;
+			Vector2 velocity = (_preview.GlobalPosition - before) / (float)delta;
+			target = new Vector2(Mathf.Clamp(velocity.X * 0.00045f, -0.42f, 0.42f), Mathf.Clamp(-velocity.Y * 0.00035f, -0.32f, 0.32f));
+			roll = Mathf.Clamp(velocity.X * 0.00006f, -0.06f, 0.06f);
 		}
-		Vector2 velocity = (_preview.GlobalPosition - before) / (float)delta;
-		float lean = Mathf.Clamp(velocity.X * 0.00022f, -0.2f, 0.2f);
-		float turn = 1 - Mathf.Clamp(Mathf.Abs(velocity.X) * 0.00006f, 0, 0.12f);
-		float pitch = 1 - Mathf.Clamp(Mathf.Abs(velocity.Y) * 0.00004f, 0, 0.08f);
-		float settle = 1 - Mathf.Exp(-(float)delta / 0.08f);
-		_tiltVisual.Rotation = Mathf.Lerp(_tiltVisual.Rotation, lean, settle);
-		_tiltVisual.Scale = _tiltVisual.Scale.Lerp(new Vector2(turn, pitch), settle);
+		float settle = delta > 0 ? 1 - Mathf.Exp(-(float)delta / 0.09f) : 1;
+		_tiltAngles = _tiltAngles.Lerp(target, settle);
+		_tiltVisual.Rotation = Mathf.Lerp(_tiltVisual.Rotation, roll, settle);
+		_tiltVisual.Scale = Vector2.One;
+		if (_tiltMaterial is null) return;
+		_tiltMaterial.SetShaderParameter("card_size", _tiltVisual.Size);
+		_tiltMaterial.SetShaderParameter("yaw", _tiltAngles.X);
+		_tiltMaterial.SetShaderParameter("pitch", _tiltAngles.Y);
+		_tiltMaterial.SetShaderParameter("sheen", Mathf.Clamp((Mathf.Abs(_tiltAngles.X) + Mathf.Abs(_tiltAngles.Y)) * 2.2f, 0, 1));
+	}
+
+	/// <summary>The tilt shader on the dragged card and everything drawn inside it.</summary>
+	private void ApplyTiltMaterial(TableCardControl card)
+	{
+		_tiltAngles = Vector2.Zero;
+		_tiltMaterial = ResourceLoader.Exists("res://shaders/card_tilt.gdshader")
+			? new ShaderMaterial { Shader = GD.Load<Shader>("res://shaders/card_tilt.gdshader") }
+			: null;
+		card.Material = _tiltMaterial;
+		foreach (Node child in card.FindChildren("*", "CanvasItem", true, false))
+			if (child is CanvasItem item) item.UseParentMaterial = true;
 	}
 
 	private void BeginDrag()
@@ -160,6 +180,7 @@ public partial class BoardDragController : Control
 		_tiltVisual.MouseFilter = MouseFilterEnum.Ignore;
 		_tiltVisual.FocusMode = FocusModeEnum.None;
 		AddChild(_tiltVisual);
+		ApplyTiltMaterial(_tiltVisual);
 		_preview.Modulate = new Color(1, 1, 1, 0);
 		_sourceControl.Modulate = new Color(1, 1, 1, 0.3f);
 		Board.SetNewRemoteDropVisible(_source.Destinations.Any(d => d.Kind.ToString() == "NewRemote"));
