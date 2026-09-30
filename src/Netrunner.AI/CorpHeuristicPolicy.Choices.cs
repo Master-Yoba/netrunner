@@ -90,7 +90,13 @@ public sealed partial class CorpHeuristicPolicy
         BehaviorInstructionKind intent = plan.Intent ?? plan.Consumers.FirstOrDefault(instruction => instruction.Kind is BehaviorInstructionKind.TrashCard
             or BehaviorInstructionKind.AdvanceCard or BehaviorInstructionKind.RezIgnoringCosts or BehaviorInstructionKind.AddToHand
             or BehaviorInstructionKind.ShuffleIntoDeck)?.Kind ?? BehaviorInstructionKind.AddToHand;
-        int score = choice.CardIds.Sum(id => TargetValue(context, id, intent));
+        // v18 (playtest, 30 September): counters from an effect are worth what they are worth when the card
+        // is played (AdvanceTargetValue), not 10 on anything that isn't an agenda; Seamless Launch put its
+        // two counters on Palisade over an Urtica Cipher they would have armed.
+        int amount = plan.Consumers.FirstOrDefault(instruction => instruction.Kind == BehaviorInstructionKind.AdvanceCard)?.Amount ?? 1;
+        int score = context.Generation >= 13 && intent == BehaviorInstructionKind.AdvanceCard
+            ? choice.CardIds.Sum(id => AdvanceTargetValue(context, context.Card(id), Math.Max(1, amount), context.Self.Clicks))
+            : choice.CardIds.Sum(id => TargetValue(context, id, intent));
         return Value(score + (choice.FinalizeSelection ? 1 : 0), "choice/target-value-and-confirmation", approximate: true);
     }
 

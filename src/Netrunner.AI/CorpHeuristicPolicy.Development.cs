@@ -268,6 +268,12 @@ public sealed partial class CorpHeuristicPolicy
             && (agendaHere || server.Root.Length == 0 && context.AgendaCount > 0) ? (profile.ScoringIceTarget - ice) * 140 : 0;
         if (server.Kind == ServerKind.Remote && server.Root.Length == 0) return (rootCandidate ? score - 60 : -100) + (int)stack;
         score += (int)stack;
+        // v18 (playtest, 30 September): agendas waiting in HQ make its ICE worth more. The planner's
+        // fitted evaluation can't see the Corp's hand and put the first ICE on R&D over two agendas in
+        // an open HQ; the bonus is only on HQ's ICE, so it never pushes an agenda out of HQ.
+        if (context.Generation >= 13 && server.Kind == ServerKind.Headquarters && ice < 2)
+            score += context.Features.Hand.Sum(card => context.Definition(card)?.Agenda is { } agenda ? agenda.AgendaPoints : 0)
+                * (ice == 0 ? 110 : 40);
         if (server.Kind is ServerKind.Headquarters or ServerKind.RAndD)
             score += (int)((archetypes
                 ? Math.Max(0, profile.CentralIceTarget - ice) * 130 + (ice == 0 ? 130 : 0)

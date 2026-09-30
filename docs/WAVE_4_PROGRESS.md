@@ -953,6 +953,26 @@ Runner, with a click left, took the agenda from Archives.
 - A known ICE shows a wide crop of its artwork with its type and name along the bottom, instead
   of its sideways printed text.
 
+## Playtest follow-up (30 September, fourth round)
+
+A Runner game (Stolen Goods) against Discretion Advised, and Corp v18.
+
+- **Palisade "advanced" twice.** The Corp played Seamless Launch, which places counters on any
+  installed card, including ICE; advancing is a different action, and the engine never offered it
+  for Palisade.
+  - **The bot's mistake:** it played the card for the counters' value on Urtica Cipher, then scored
+    every non-agenda target at 10 and took Palisade on the tie.
+  - **v18:** the target choice uses the same valuation as the decision to play the card.
+- **First ICE on R&D while two agendas waited in an open HQ.** The heuristic preferred HQ, but the
+  planner's fitted evaluation can't see the Corp's hand, and its rollouts put R&D ahead.
+  - **v18:** ICE on an HQ with fewer than two pieces gets a bonus per agenda point in hand.
+  - **Why here:** a first try that counted the hand's agendas in the planner's end-of-turn score
+    also rewarded moving agendas out of HQ, and it was slightly weaker (0, −22, −43 and −11 Elo).
+    The bonus only touches where ICE goes.
+- **Tests:** `CorpPlaytestV18Tests` asks at both recorded positions.
+- **Ladder:** v18 is level with v17 on the Gateway ladder (0, +21, +11 and 0 Elo on four seeds,
+  240 games each), so it is the default.
+
 ## Gate status
 
 | Item | Result |
@@ -970,6 +990,6 @@ Runner, with a click left, took the agenda from Archives.
 | A8 archetypes | **Corp v12 ships** (+36 and +48); Runner archetypes (v11) weaker (−32), kept as an entrant; Runner v12 ships the review fixes alone (+29) |
 | U8 run HUD | Done: one panel per run at both seats, Break all over issued actions, the run drawn through the ICE; `--run-hud-smoke` in `make verify`. **Needs the playtest** to judge speed against the old panels |
 
-Default bots after Wave 4: Corp v17 (plans turn actions, plays to its deck's
-archetype, with the 29 September repairs, the economy-asset rez timing, Spin Doctor's use, agenda hiding and costed subroutine installs) and Runner v13 (central memory, the self-play review fixes, and memory of accessed remote cards)
+Default bots after Wave 4: Corp v18 (plans turn actions, plays to its deck's
+archetype, with the 29 September repairs, the economy-asset rez timing, Spin Doctor's use, agenda hiding, costed subroutine installs, and HQ's ICE with agendas in hand) and Runner v13 (central memory, the self-play review fixes, and memory of accessed remote cards)
 on the legal decks; the tutorial decks keep the frozen C1 bot (Corp v7, Runner v6).
