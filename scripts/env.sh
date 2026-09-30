@@ -13,6 +13,27 @@ export DOTNET_NOLOGO=1
 export NUGET_XMLDOC_MODE=skip
 export NETRUNNER_GODOT_DATA="$netrunner_root/.tools/godot-data"
 
+# The game runs with XDG_DATA_HOME set to NETRUNNER_GODOT_DATA, and on Linux
+# .NET derives its default card-art cache from XDG_DATA_HOME. Launchers call
+# this first so the game reads the cache the card-art CLI wrote.
+netrunner_pin_card_art_directory() {
+  if [[ -z "${NETRUNNER_CARD_ART_DIRECTORY:-}" && "$(uname -s)" == "Linux" ]]; then
+    export NETRUNNER_CARD_ART_DIRECTORY="${XDG_DATA_HOME:-$HOME/.local/share}/NetrunnerSolo/card-art"
+  fi
+}
+
+# A plain launch only reads Godot's import cache (.godot/imported) and never
+# imports, so fonts and icons added since the last editor import fail to load
+# and the table falls back to default fonts and line art. Launchers call this
+# after building; it takes a couple of seconds when nothing changed.
+# Usage: netrunner_import_godot_assets <project dir> <log file>
+netrunner_import_godot_assets() {
+  if ! "$GODOT4" --headless --path "$1" --import > "$2" 2>&1; then
+    echo "Godot asset import failed; see $2" >&2
+    return 1
+  fi
+}
+
 if [[ -d "$netrunner_dotnet" ]]; then
   export DOTNET_ROOT="$netrunner_dotnet"
   export PATH="$DOTNET_ROOT:$PATH"
