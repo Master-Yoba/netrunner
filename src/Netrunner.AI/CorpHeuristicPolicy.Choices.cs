@@ -25,11 +25,51 @@ public sealed partial class CorpHeuristicPolicy
             bool exposingWinningHq = context.Opponent.AgendaPoints >= 5 && context.AgendaCount > 0
                 && context.Features.Board.Run?.AttackedServer == context.Features.Board.Servers.Single(value => value.Kind == ServerKind.Headquarters).Id
                 && definition?.Ice is { } ice && ice.RezCost > context.Self.Credits;
+            if (context.Generation >= 12 && definition is { Ice: null })
+                return Value(RootInstallBySubroutine(context, server, definition) - choice.CreditCost * context.CreditValue,
+                    "subroutine/root-install-minus-displaced", approximate: true);
             int value = exposingWinningHq ? -1000 : context.ServerValue(server) / ((server?.Ice.Length ?? 0) + 1)
                 - choice.CreditCost * context.CreditValue - Math.Max(0, (definition?.Printed.RezCost ?? 0) - context.Self.Credits) * 100;
             return Value(value, "subroutine/install-protection-and-reserve", approximate: true);
         }
         return Value(0, "subroutine/issued-continuation", approximate: true);
+    }
+
+    /// <summary>
+    /// v17 (playtest, 30 September): a card installed by an ICE subroutine into a server's root
+    /// (Ansel 1.0) trashes the agenda or asset already there, and earlier versions valued it like ICE
+    /// protecting that server, so the Corp trashed its own agenda in a remote the Runner was running.
+    /// That trash is worth it only to deny a steal the Runner can't make from Archives this turn (no
+    /// click left, or Archives' ICE beyond their credits), or to hide the agenda for a recovery card (v16).
+    /// </summary>
+    private static int RootInstallBySubroutine(HeuristicContext context, AgentServer? server, CardEvaluationDescriptor definition)
+    {
+        // An agenda goes in only behind ICE; in a new or open remote the Runner simply takes it.
+        int gain = definition.Agenda is not null ? ((server?.Ice.Length ?? 0) > 0 ? 200 : -400)
+            : definition.Printed.CardClass == RuntimeCardClass.Asset ? 160 : 100;
+        if (server is not { Kind: ServerKind.Remote }) return gain;
+        int displaced = DisplacedRootValue(context, server, definition);
+        bool stealDenied = context.Features.Board.Run?.AttackedServer == server.Id && !RunnerCanReachArchivesThisTurn(context)
+            && server.Root.Any(card => context.Definition(card)?.Agenda is not null);
+        if (stealDenied)
+            displaced = server.Root.Sum(card => context.Definition(card)?.Agenda is { } agenda ? 100 - agenda.AgendaPoints * 250 : 0);
+        return gain - displaced;
+    }
+
+    /// <summary>
+    /// Whether the Runner could still take a trashed agenda from Archives this turn: a click left for
+    /// the run, and the credits to get through Archives' ICE as the run model sees it, with the Corp
+    /// rezzing what it can pay for (the playtester: trashing the agenda also pays when Archives holds
+    /// and the Runner is short of money, even with a click left).
+    /// </summary>
+    private static bool RunnerCanReachArchivesThisTurn(HeuristicContext context)
+    {
+        if (context.Opponent.Clicks < 1) return false;
+        AgentServer? archives = context.Features.Board.Servers.FirstOrDefault(server => server.Kind == ServerKind.Archives);
+        if (archives is null) return true;
+        RunForecast forecast = RunModel.Plan(context, archives, archives.Ice.Length - 1, context.Opponent.Credits, context.Opponent.Clicks - 1,
+            grip: context.Features.Board.HiddenZoneCounts.RunnerGrip, corpRezBudget: context.Self.Credits);
+        return forecast.CanGetIn;
     }
 
     private static AgentUtility ChooseBehavior(HeuristicContext context, BehaviorChoiceParameters choice)
@@ -50,7 +90,13 @@ public sealed partial class CorpHeuristicPolicy
         BehaviorInstructionKind intent = plan.Intent ?? plan.Consumers.FirstOrDefault(instruction => instruction.Kind is BehaviorInstructionKind.TrashCard
             or BehaviorInstructionKind.AdvanceCard or BehaviorInstructionKind.RezIgnoringCosts or BehaviorInstructionKind.AddToHand
             or BehaviorInstructionKind.ShuffleIntoDeck)?.Kind ?? BehaviorInstructionKind.AddToHand;
-        int score = choice.CardIds.Sum(id => TargetValue(context, id, intent));
+        // v18 (playtest, 30 September): counters from an effect are worth what they are worth when the card
+        // is played (AdvanceTargetValue), not 10 on anything that isn't an agenda; Seamless Launch put its
+        // two counters on Palisade over an Urtica Cipher they would have armed.
+        int amount = plan.Consumers.FirstOrDefault(instruction => instruction.Kind == BehaviorInstructionKind.AdvanceCard)?.Amount ?? 1;
+        int score = context.Generation >= 13 && intent == BehaviorInstructionKind.AdvanceCard
+            ? choice.CardIds.Sum(id => AdvanceTargetValue(context, context.Card(id), Math.Max(1, amount), context.Self.Clicks))
+            : choice.CardIds.Sum(id => TargetValue(context, id, intent));
         return Value(score + (choice.FinalizeSelection ? 1 : 0), "choice/target-value-and-confirmation", approximate: true);
     }
 

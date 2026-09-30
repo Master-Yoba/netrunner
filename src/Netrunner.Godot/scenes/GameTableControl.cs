@@ -298,6 +298,8 @@ public partial class GameTableControl : Control
 		Breathe(delta);
 		UpdateBackdropSplit();
 		UpdateRunConnection(delta);
+		UpdateTargetGlow(delta);
+		BalanceRigSpacers();
 		if (Engine.IsEditorHint() && _previewDirty && _shellBuilt)
 		{
 			RefreshEditorPreview();
@@ -885,7 +887,7 @@ public partial class GameTableControl : Control
 	private HBoxContainer EnsureRigArea(int index)
 	{
 		if (_rigAreas[index].Panel is { } existing && IsInstanceValid(existing)) return _rigAreas[index].Cards;
-		// No top margin, so card tops stay level with the identity; the label sits below the cards.
+		// Even margins, so the cards stay centred like the identity beside them; the label sits below the cards.
 		var panel = new PanelContainer { Name = $"Rig{RigAreaNames[index]}", MouseFilter = MouseFilterEnum.Ignore };
 		panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
 		{
@@ -896,10 +898,10 @@ public partial class GameTableControl : Control
 			CornerRadiusBottomRight = 6,
 			ContentMarginLeft = 4,
 			ContentMarginRight = 4,
-			ContentMarginTop = 0,
+			ContentMarginTop = 2,
 			ContentMarginBottom = 2,
 		});
-		var column = new VBoxContainer { MouseFilter = MouseFilterEnum.Ignore };
+		var column = new VBoxContainer { Name = "Column", MouseFilter = MouseFilterEnum.Ignore };
 		column.AddThemeConstantOverride("separation", 2);
 		var row = new HBoxContainer { Name = "Cards", MouseFilter = MouseFilterEnum.Ignore };
 		var caption = new Label
@@ -911,12 +913,38 @@ public partial class GameTableControl : Control
 		};
 		caption.AddThemeFontSizeOverride("font_size", 10);
 		caption.AddThemeColorOverride("font_color", new Color(0.62f, 0.76f, 0.75f, 0.8f));
+		// An empty line as tall as the caption below the cards, so the cards sit in the middle of the
+		// column and line up with the identity and the stack and heap, all centred in the row
+		// (playtest, 30 September: the rig's cards sat at the row's top).
+		var spacer = new Label { Name = "Spacer", Text = " ", MouseFilter = MouseFilterEnum.Ignore };
+		spacer.AddThemeFontSizeOverride("font_size", 10);
+		column.AddChild(spacer);
 		column.AddChild(row);
 		column.AddChild(caption);
 		panel.AddChild(column);
 		_runnerRigRow.AddChild(panel);
 		_rigAreas[index] = (panel, row, caption);
 		return row;
+	}
+
+	/// <summary>
+	/// Keeps the rig's cards centred in the row, level with the stack and heap (playtest, 30 September):
+	/// whatever sits under the cards (the caption, hosted cards hanging below their host, the scroll
+	/// bar) is matched by the spacer above them.
+	/// </summary>
+	private void BalanceRigSpacers()
+	{
+		if (_runnerRigRow.GetParent() is not ScrollContainer scroll || !scroll.IsVisibleInTree()) return;
+		float scrollBar = Mathf.Max(0, Mathf.Round(scroll.Size.Y - _runnerRigRow.Size.Y));
+		float cardHeight = RigSlotMinimumSize().Y;
+		foreach ((PanelContainer panel, HBoxContainer row, Label caption) in _rigAreas)
+		{
+			if (panel is null || !IsInstanceValid(panel) || panel.GetNodeOrNull<Label>("Column/Spacer") is not { } spacer) continue;
+			float hosted = row.GetChildren().OfType<Control>().Where(child => child.Visible)
+				.Select(child => child.CustomMinimumSize.Y - cardHeight).DefaultIfEmpty(0).Max();
+			float wanted = Mathf.Max(0, hosted) + scrollBar + caption.GetMinimumSize().Y;
+			if (!Mathf.IsEqualApprox(spacer.CustomMinimumSize.Y, wanted)) spacer.CustomMinimumSize = new Vector2(0, wanted);
+		}
 	}
 
 	/// <summary>Keeps the areas in type order and each area's cards in install order; an empty area stays as a narrow label.</summary>
@@ -934,6 +962,7 @@ public partial class GameTableControl : Control
 			bool empty = !row.GetChildren().OfType<Control>().Any(child => child.Visible);
 			_rigAreas[area].Panel.CustomMinimumSize = empty ? new Vector2(76, 0) : Vector2.Zero;
 			_rigAreas[area].Caption.Modulate = new Color(1, 1, 1, empty ? 0.55f : 1);
+
 		}
 	}
 

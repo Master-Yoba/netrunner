@@ -19,9 +19,11 @@ public partial class Main
 			CardViewModel installCard = UiPreviewSamples.Known("review-install", "Program", "Confirm this install");
 			LegalActionViewModel install = InteractionLabSamples.Action("confirm-install", ActionKind.InstallCard,
 				new InstallCardParameters(new(installCard.Id), InstallDestinationKind.RunnerRig, null, false, 3), _labRevision);
+			// An empty rig: the first install's drop area must still be the whole rig box (playtest, 30 September).
 			PublishLabView(turn with
 			{
 				RunnerHand = turn.RunnerHand with { Count = 2, VisibleCards = [.. turn.RunnerHand.VisibleCards, installCard] },
+				RunnerRig = [],
 				LegalActions = [.. turn.LegalActions, install],
 			});
 			await TableFrames(4);
@@ -29,7 +31,11 @@ public partial class Main
 			await ClickTableButton(_tableActionButtons[install.Id]);
 			RequireInteraction(_stagedAction?.Id == install.Id, "The native menu did not stage the install confirmation.");
 			Vector2 start = _gameTable.VisibleCards["lab-hand"].GetGlobalRect().GetCenter();
-			Vector2 drop = _gameTable.GetDropRect("RunnerRig", null)!.Value.GetCenter();
+			Rect2 rig = _gameTable.GetDropRect("RunnerRig", null)!.Value;
+			// Playtest, 30 September: with the rig empty the drop area shrank to a sliver.
+			RequireInteraction(rig.Size.Y >= _gameTable.VisibleCards["lab-hand"].Size.Y * 0.8f,
+				$"The rig's drop area {rig} is smaller than a card.");
+			Vector2 drop = rig.GetCenter();
 			await LabPointer(start); LabButton(start, true); await LabPointer(drop);
 			LabButton(drop, false);
 			await TableFrames(2);

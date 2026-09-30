@@ -1679,6 +1679,27 @@ public static partial class GameEngine
         if (pendingTags > 0) QueueRunTagEffect(working, pendingTags);
     }
 
+    /// <summary>
+    /// The credit cost to trash an accessed Corp card (CR 7.2.2): its registered trash spec, or
+    /// for any other Corp card that isn't an agenda or ICE (an upgrade), its printed trash cost.
+    /// Playtest, 30 September: Manegarm Skunkworks has no trash spec, so it was never trashable.
+    /// The printed cost is read from the runtime card catalog, so no catalog fingerprint changes.
+    /// </summary>
+    public static int? AccessTrashCost(
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog,
+        CardDefinitionId definitionId)
+    {
+        ArgumentNullException.ThrowIfNull(behaviorCatalog);
+        if (behaviorCatalog.TryGetAsset(definitionId, out AssetBehaviorSpec? asset)) return asset.TrashCost;
+        if (behaviorCatalog.TryGetAgenda(definitionId, out _)
+            || runtimeCardCatalog?.TryGet(definitionId, out CardRuntimeSpec? spec) != true
+            || spec.Side != PlayerSide.Corp
+            || spec.CardClass != RuntimeCardClass.Upgrade)
+            return null;
+        return spec.TrashCost;
+    }
+
     private static void StepMoveInward(WorkingState working, RunState run)
     {
         if (run.CurrentIceIndex < 0)
@@ -2389,9 +2410,9 @@ public static partial class GameEngine
                 $"The accessed card '{accessed}' is no longer in the authoritative source zone.");
         }
 
-        if (!working.BehaviorCatalog.TryGetAsset(card.DefinitionId, out AssetBehaviorSpec? spec))
+        if (AccessTrashCost(working.BehaviorCatalog, working.RuntimeCardCatalog, card.DefinitionId) is not { } trashCost)
         {
-            throw new ResolutionFailureException($"The accessed card '{accessed}' has no registered asset behavior spec.");
+            throw new ResolutionFailureException($"The accessed card '{accessed}' has no trash cost.");
         }
 
         ZoneState discardZone = GetZone(working, ZoneKind.CorpDiscard);
@@ -2401,14 +2422,14 @@ public static partial class GameEngine
         }
 
         PlayerState runner = GetPlayer(working, PlayerSide.Runner);
-        if (!CanAffordRunCredits(runner, run, spec.TrashCost))
+        if (!CanAffordRunCredits(runner, run, trashCost))
         {
             throw new ResolutionFailureException(
-                $"The Runner cannot pay the {spec.TrashCost} credit trash cost of '{accessed}' "
+                $"The Runner cannot pay the {trashCost} credit trash cost of '{accessed}' "
                 + $"from {runner.Credits} wallet and {run.RunCredits} run credits.");
         }
 
-        run = PayRunnerRunCredits(working, run, spec.TrashCost, hostedCredits);
+        run = PayRunnerRunCredits(working, run, trashCost, hostedCredits);
         run = RetainAccessTrashedAbilities(working, run, card);
         working.RunState = run;
         TrashCard(working, card, working.Zones.Single(zone => zone.Id == card.ZoneId), discardZone);
@@ -2426,7 +2447,7 @@ public static partial class GameEngine
                 false,
                 GetCard(working, card.Id).AdvancementCounters));
         }
-        Emit(working, EngineEventKinds.AccessedCardTrashed, new AccessedCardTrashedEventPayload(run.Id, accessed, spec.TrashCost));
+        Emit(working, EngineEventKinds.AccessedCardTrashed, new AccessedCardTrashedEventPayload(run.Id, accessed, trashCost));
         // As with a steal: when a trigger waits on the trash (René "Loup" Arcemont),
         // the next breach decision is yielded only after that trigger resolves;
         // yielding it now left the occurrence frame stranded beneath the prompt.
@@ -3730,17 +3751,17 @@ public static partial class GameEngine
             && !HasRunRestriction(run, RunRestrictionKind.CannotStealOrTrashCorpCards)
             && accessedCard is not null
             && !working.BehaviorCatalog.TryGetAgenda(accessedCard.DefinitionId, out _)
-            && working.BehaviorCatalog.TryGetAsset(accessedCard.DefinitionId, out AssetBehaviorSpec? assetSpec)
-            && CanAffordRunCredits(GetPlayer(working, PlayerSide.Runner), run, assetSpec.TrashCost))
+            && AccessTrashCost(working.BehaviorCatalog, working.RuntimeCardCatalog, accessedCard.DefinitionId) is { } trashCost
+            && CanAffordRunCredits(GetPlayer(working, PlayerSide.Runner), run, trashCost))
         {
             PlayerState runner = GetPlayer(working, PlayerSide.Runner);
-            foreach (int hostedCredits in LegalHostedCreditSplits(runner, run, assetSpec.TrashCost))
+            foreach (int hostedCredits in LegalHostedCreditSplits(runner, run, trashCost))
             {
                 actions.Add(new LegalAction(
                     working.Allocator.NextActionId(),
                     ActionKind.TrashAccessedCard,
-                    $"Trash {accessed} for {assetSpec.TrashCost} credits "
-                    + $"({FormatPaymentSplit(assetSpec.TrashCost, hostedCredits)})",
+                    $"Trash {accessed} for {trashCost} credits "
+                    + $"({FormatPaymentSplit(trashCost, hostedCredits)})",
                     new RunCardPaymentParameters(accessed, hostedCredits)));
             }
         }

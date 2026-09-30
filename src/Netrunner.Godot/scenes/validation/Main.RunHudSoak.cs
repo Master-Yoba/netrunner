@@ -393,9 +393,15 @@ public partial class Main
 		}
 		if (hud.Size.X > RunHudWidth + 0.5f) Violation("widened", $"content widened the HUD to {hud.Size.X:0} at {run.Step}");
 		Rect2 rect = hud.GetGlobalRect();
-		if (!_tableViewport.GetGlobalRect().Grow(1).Encloses(rect)) Violation("outside-table", $"{rect} outside {_tableViewport.GetGlobalRect()}");
+		if (!_tableViewport.GetGlobalRect().Grow(1).Encloses(rect))
+			Violation("outside-table", $"{rect} outside {_tableViewport.GetGlobalRect()}; {RunHudOutline()}");
 		if (_matchHistory.IsVisibleInTree() && rect.Intersects(_matchHistory.GetGlobalRect())) Violation("covers-history", $"{rect} over {_matchHistory.GetGlobalRect()}");
 	}
+
+	/// <summary>What the HUD holds, each part with its height, so an overflow names its cause.</summary>
+	private string RunHudOutline() => _runHud?.GetNodeOrNull<Control>("Content") is not { } content ? "no content"
+		: string.Join(" | ", content.GetChildren().OfType<Control>().Where(part => part.Visible).Select(part =>
+			$"{part.Name}:{part.Size.Y:0}[{string.Join(", ", part.GetChildren().OfType<Control>().Where(child => child.Visible).Select(child => $"{child.GetType().Name}:{child.Size.Y:0}:{(child is Button button ? button.Text : child is Label label ? label.Text : child.Name.ToString()).Replace("\n", " ")[..Math.Min(40, (child is Button b ? b.Text : child is Label l ? l.Text : child.Name.ToString()).Length)]}"))}]"));
 
 	private static int ReadSoakInt(IReadOnlyList<string> arguments, string name, int fallback) =>
 		ReadSoakOption(arguments, name) is { } text ? int.Parse(text, NumberStyles.None, CultureInfo.InvariantCulture) : fallback;

@@ -117,6 +117,16 @@ internal sealed class HeuristicContext
         .Select(card => Definition(card)?.Printed.RezCost ?? 0).DefaultIfEmpty(0).Min();
 
     /// <summary>Public advancement counters on a hidden installed card, or 0 when none are visible.</summary>
+    /// <summary>
+    /// Runner v13: a face-down root card the Runner has accessed, as a card with its remembered
+    /// identity and current public counters; null when nothing is remembered there.
+    /// </summary>
+    public AgentCard? RememberedRoot(AgentServer server, int index) =>
+        Generation >= 9 && Features.Side == PlayerSide.Runner && index < server.Root.Length && server.Root[index] is null
+        && Knowledge?.Roots?.FirstOrDefault(memory => memory.ServerId == server.Id && memory.Index == index) is { } memory
+            ? new AgentCard { Id = $"remembered/{server.Id}/{index}", DefinitionId = memory.DefinitionId, AdvancementCounters = HiddenAdvancement(server.Id, "root", index) }
+            : null;
+
     public int HiddenAdvancement(string serverId, string zone, int index) =>
         Features.Board.HiddenAdvancements?.FirstOrDefault(entry => entry.ServerId == serverId && entry.Zone == zone && entry.Index == index)
             ?.AdvancementCounters ?? 0;

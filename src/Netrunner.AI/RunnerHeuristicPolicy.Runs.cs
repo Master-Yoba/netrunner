@@ -46,6 +46,13 @@ public sealed partial class RunnerHeuristicPolicy
             }
         // v11 (self-play review, 28 September): a possible trap that would flatline the Runner isn't worth the access.
         if (context.Generation >= 8 && LethalTrap(context, server)) return Value(-1000, "run/possible-lethal-trap", true);
+        // v13 (playtest, 30 September): a known trap's damage is certain (the Runner kept running a known Urtica Cipher).
+        if (context.Generation >= 9)
+        {
+            int trap = KnownAccessDamage(context, server);
+            if (trap > context.Features.Hand.Length) return Value(-1000, "run/known-lethal-access", true);
+            damage += trap;
+        }
         int rewards = SuccessRewards(context, server);
         int repeated = context.Features.Board.TurnFacts?.Runner.ThisTurn?.AttemptedRunServerIds.Count(id => id == server.Id) ?? 0;
         int risk = unknown * (context.Self.Credits < 3 || context.Features.Hand.Length < 2 ? 450 : 260) * context.Parameter("risk-scale", 100) / 100;
@@ -243,10 +250,30 @@ public sealed partial class RunnerHeuristicPolicy
     /// face-down card is a null entry whose public counters come separately
     /// (earlier versions read only visible cards, so they missed face-down traps).
     /// </summary>
+    /// <summary>
+    /// v13: net damage from accessing the root cards the Runner knows, face up or remembered: an
+    /// access trigger's damage, plus the card's counters when it scales with them (Urtica Cipher).
+    /// </summary>
+    private static int KnownAccessDamage(HeuristicContext context, AgentServer server)
+    {
+        int total = 0;
+        for (int index = 0; index < server.Root.Length; index++)
+        {
+            AgentCard? card = server.Root[index] ?? context.RememberedRoot(server, index);
+            if (context.Definition(card)?.Behavior is not { } behavior) continue;
+            foreach (BehaviorInstruction instruction in behavior.Triggers.Where(trigger => trigger.Occurrence == OccurrenceKind.CardAccessed)
+                .SelectMany(trigger => HeuristicContext.Flatten(trigger.Instructions)).Where(instruction => instruction.Kind == BehaviorInstructionKind.DealDamage))
+                total += instruction.DamageAmountOperand is { Kind: BehaviorDamageAmountKind.SourceAdvancementCounters } operand
+                    ? operand.BaseAmount + (card!.AdvancementCounters ?? 0) : instruction.Amount;
+        }
+        return total;
+    }
+
     private static IEnumerable<int> UnknownAdvancedRoots(HeuristicContext context, AgentServer server)
     {
         for (int index = 0; index < server.Root.Length; index++)
         {
+            if (context.RememberedRoot(server, index) is not null) continue;
             AgentCard? root = server.Root[index];
             int counters = root is null ? context.HiddenAdvancement(server.Id, "root", index)
                 : context.Definition(root) is null ? root.AdvancementCounters ?? 0 : 0;

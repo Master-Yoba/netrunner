@@ -8544,6 +8544,9 @@ public static partial class StateInvariantValidator
         }
 
         var expected = new List<(ActionKind Kind, CardInstanceId? Target, int Quantity, int HostedCredits, string Targets)>();
+        // Without the runtime card catalog an upgrade's printed trash cost is unknown, so its basic
+        // trash may or may not be offered (GameEngine.AccessTrashCost).
+        CardInstanceId? unknownTrashCost = null;
         // Pre-targeting saved decisions have no ordinal lists and retain their quantity-only envelope.
         bool exactTargets = pending.LegalActions.Any(action => action?.Parameters is RunBreakParameters { SubroutineOrdinals: not null });
         IReadOnlyList<RezCardParameters> expectedRuntimeRezes = [];
@@ -8827,15 +8830,19 @@ public static partial class StateInvariantValidator
                         && run.RunRestrictions?.Any(restriction =>
                             restriction.Kind == RunRestrictionKind.CannotStealOrTrashCorpCards) != true)
                     {
-                        if (behaviorCatalog.TryGetAsset(accessedCard!.DefinitionId, out AssetBehaviorSpec? assetSpec))
+                        if (runtimeCardCatalog is null && !behaviorCatalog.TryGetAsset(accessedCard!.DefinitionId, out _))
+                        {
+                            unknownTrashCost = accessedCardId;
+                        }
+                        else if (GameEngine.AccessTrashCost(behaviorCatalog, runtimeCardCatalog, accessedCard!.DefinitionId) is { } trashCost)
                         {
                             PlayerState? trashRunner = state.Players.FirstOrDefault(player => player?.Side == PlayerSide.Runner);
-                            if (trashRunner is not null && (long)trashRunner.Credits + run.RunCredits >= assetSpec.TrashCost)
+                            if (trashRunner is not null && (long)trashRunner.Credits + run.RunCredits >= trashCost)
                             {
                                 foreach (int hostedCredits in LegalHostedCreditSplits(
                                     trashRunner,
                                     run,
-                                    assetSpec.TrashCost))
+                                    trashCost))
                                 {
                                     expected.Add((
                                         ActionKind.TrashAccessedCard,
@@ -8965,6 +8972,11 @@ public static partial class StateInvariantValidator
                     actual.Add((action.Kind, trash.CardId, 0, trash.HostedCredits, ""));
                     break;
             }
+        }
+
+        if (unknownTrashCost is { } unknownTarget)
+        {
+            actual.RemoveAll(value => value.Kind == ActionKind.TrashAccessedCard && value.Target == unknownTarget);
         }
 
         var expectedCounts = expected.GroupBy(value => value).ToDictionary(group => group.Key, group => group.Count());

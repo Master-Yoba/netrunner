@@ -739,18 +739,22 @@ public partial class TableCardControl : Control
 
 		int frameWidth = ToPixel(_selected || _targetCandidate ? appearance.EmphasisFrameWidth : appearance.FrameWidth);
 		Rect2 frameRect = new(Vector2.One, cardSize - new Vector2(2, 2));
+		// A full scan paints its own face and border (below); the frame keeps only its shadow, on the same corners.
+		bool fullFace = _card is { IsKnown: true } && HasFullCardArtwork;
+		int frameRadius = fullFace ? Mathf.RoundToInt(FullArtRadius(frameRect, appearance)) : ToPixel(appearance.CornerRadius);
+		int frameBorder = fullFace ? 0 : frameWidth;
 		using var frame = new StyleBoxFlat
 		{
-			BgColor = surface,
+			BgColor = fullFace ? Colors.Transparent : surface,
 			BorderColor = border,
-			BorderWidthLeft = frameWidth,
-			BorderWidthTop = frameWidth,
-			BorderWidthRight = frameWidth,
-			BorderWidthBottom = frameWidth,
-			CornerRadiusTopLeft = ToPixel(appearance.CornerRadius),
-			CornerRadiusTopRight = ToPixel(appearance.CornerRadius),
-			CornerRadiusBottomLeft = ToPixel(appearance.CornerRadius),
-			CornerRadiusBottomRight = ToPixel(appearance.CornerRadius),
+			BorderWidthLeft = frameBorder,
+			BorderWidthTop = frameBorder,
+			BorderWidthRight = frameBorder,
+			BorderWidthBottom = frameBorder,
+			CornerRadiusTopLeft = frameRadius,
+			CornerRadiusTopRight = frameRadius,
+			CornerRadiusBottomLeft = frameRadius,
+			CornerRadiusBottomRight = frameRadius,
 			ShadowColor = _actionableSource || HasMetHandCondition
 				? WithAlpha(border, appearance.GlowOpacity)
 				: new Color(0, 0, 0, appearance.FrameShadowOpacity),
@@ -767,8 +771,15 @@ public partial class TableCardControl : Control
 
 		if (HasFullCardArtwork)
 		{
-			DrawCardFace(InsetRect(frameRect, Mathf.Max(1, frameWidth)));
-			if (Unrezzed) DrawRect(InsetRect(frameRect, Mathf.Max(1, frameWidth)), new Color(0.02f, 0.03f, 0.04f, 0.5f));
+			// The scan fills the whole card, clipped to its rounded outline, and the border is drawn
+			// over its edge (playtest, 30 September: a square scan inside the rounded frame showed
+			// the frame's corners around it).
+			float radius = FullArtRadius(frameRect, appearance);
+			Vector2[] outline = RoundedRectPath(frameRect, radius, 12);
+			if (_isIce) DrawIceArtStrip(frameRect, outline);
+			else DrawCardFace(frameRect, outline);
+			if (Unrezzed) DrawColoredPolygon(outline, new Color(0.02f, 0.03f, 0.04f, 0.5f));
+			DrawPolyline([.. outline, outline[0]], border, Mathf.Max(1, frameWidth), true);
 			DrawAuthoredStatusBadge();
 			DrawStatusBadge(accent, cardSize);
 			if (_actionableSource || HasMetHandCondition)
@@ -848,14 +859,74 @@ public partial class TableCardControl : Control
 			Mathf.Max(1.0f, cardSize.Y * normalized.Size.Y));
 	}
 
-	private void DrawCardFace(Rect2 rectangle)
+	/// <summary>Where the artwork sits on an NSG ICE scan: the lower half, between the strength strip and the credits strip.</summary>
+	private static readonly Rect2 IceArtRegion = new(0.14f, 0.52f, 0.78f, 0.43f);
+
+	/// <summary>
+	/// ICE lies sideways, and its printed text turned sideways was unreadable at table size (playtest,
+	/// 30 September). It shows a wide crop of its artwork instead, with its type and name along the
+	/// bottom; the full card is a hover away.
+	/// </summary>
+	private void DrawIceArtStrip(Rect2 rect, Vector2[] outline)
+	{
+		Vector2 image = _artwork!.GetSize();
+		// The widest band of the artwork with the slot's shape, centred in the art.
+		Vector2 art = new(IceArtRegion.Size.X * image.X, IceArtRegion.Size.Y * image.Y);
+		Vector2 band = art.X / art.Y > rect.Size.X / rect.Size.Y
+			? new Vector2(art.Y * rect.Size.X / rect.Size.Y, art.Y)
+			: new Vector2(art.X, art.X * rect.Size.Y / rect.Size.X);
+		Vector2 origin = new Vector2(IceArtRegion.Position.X * image.X, IceArtRegion.Position.Y * image.Y) + (art - band) / 2;
+		var uvs = new Vector2[outline.Length];
+		for (int index = 0; index < outline.Length; index++)
+			uvs[index] = (origin + (outline[index] - rect.Position) / rect.Size * band) / image;
+		DrawPolygon(outline, new[] { Colors.White }, uvs, _artwork);
+
+		// A dark gradient along the bottom for the name to sit on.
+		float shade = rect.Size.Y * 0.55f;
+		Color clear = new(0.02f, 0.03f, 0.04f, 0), dark = new(0.02f, 0.03f, 0.04f, 0.85f);
+		float inset = FullArtRadius(rect, Appearance) * 0.3f;
+		DrawPolygon(
+			[new Vector2(rect.Position.X + inset, rect.End.Y - shade), new Vector2(rect.End.X - inset, rect.End.Y - shade),
+				new Vector2(rect.End.X - inset, rect.End.Y - inset), new Vector2(rect.Position.X + inset, rect.End.Y - inset)],
+			[clear, clear, dark, dark]);
+		if (_card is not { } card) return;
+		float nameSize = Mathf.Clamp(rect.Size.Y * 0.2f, 11, 22);
+		float typeSize = Mathf.Clamp(rect.Size.Y * 0.11f, 8, 12);
+		float left = rect.Position.X + Mathf.Max(8, rect.Size.Y * 0.12f);
+		float right = rect.End.X - Mathf.Max(8, rect.Size.Y * 0.12f) - 30;
+		if (TableFonts.Display is { } display)
+			DrawString(display, new Vector2(left, rect.End.Y - rect.Size.Y * 0.12f), card.Title.ToUpperInvariant(),
+				HorizontalAlignment.Left, right - left, (int)nameSize, Colors.White);
+		string kind = string.Join(" · ", card.Subtypes.Where(subtype => subtype is "Barrier" or "Code Gate" or "Sentry" or "Trap" or "Bioroid" or "AP"))
+			.ToUpperInvariant();
+		if (kind.Length > 0 && TableFonts.Mono is { } mono)
+			DrawString(mono, new Vector2(left, rect.End.Y - rect.Size.Y * 0.12f - nameSize * 0.95f), kind,
+				HorizontalAlignment.Left, right - left, (int)typeSize, new Color(0.75f, 0.85f, 0.92f, 0.9f));
+	}
+
+	/// <summary>A printed card's corner radius, about 5% of its short side, and never less than the frame's.</summary>
+	private static float FullArtRadius(Rect2 rect, CardAppearance appearance) =>
+		Mathf.Max(ToPixel(appearance.CornerRadius), Mathf.Min(rect.Size.X, rect.Size.Y) * 0.05f);
+
+	/// <summary>
+	/// Draws the scan over the outline, covering it (a sliver of the scan's edge may be cropped
+	/// to fill the card). ICE lies sideways, so its portrait scan is turned a quarter.
+	/// </summary>
+	private void DrawCardFace(Rect2 rectangle, Vector2[] outline)
 	{
 		Vector2 available = _isIce ? new Vector2(rectangle.Size.Y, rectangle.Size.X) : rectangle.Size;
 		Vector2 imageSize = _artwork!.GetSize();
-		Vector2 size = imageSize * Mathf.Min(available.X / imageSize.X, available.Y / imageSize.Y);
-		DrawSetTransform(rectangle.GetCenter(), _isIce ? Mathf.Pi / 2 : 0);
-		DrawTextureRect(_artwork, new Rect2(-size / 2, size), false);
-		DrawSetTransform(Vector2.Zero);
+		Vector2 covered = imageSize * Mathf.Max(available.X / imageSize.X, available.Y / imageSize.Y);
+		Vector2 centre = rectangle.GetCenter();
+		var uvs = new Vector2[outline.Length];
+		for (int index = 0; index < outline.Length; index++)
+		{
+			Vector2 offset = outline[index] - centre;
+			// The inverse of turning the scan a quarter clockwise onto the sideways card.
+			if (_isIce) offset = new Vector2(offset.Y, -offset.X);
+			uvs[index] = offset / covered + new Vector2(0.5f, 0.5f);
+		}
+		DrawPolygon(outline, new[] { Colors.White }, uvs, _artwork);
 	}
 
 	/// <summary>Optional stable pointer geometry supplied by an animated hand.</summary>

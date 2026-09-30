@@ -59,8 +59,10 @@ public sealed class RunnerPlaytestRepairTests
             {
                 PendingDecision pending = state.PendingDecision!;
                 LegalAction recorded = pending.LegalActions.Single(legal => legal.Id == action.Submission.ActionId);
+                // The recorded run is v4's own choice. The replay was re-recorded after the Carmen fix
+                // (playtest, 30 September: Mutual Favor installed it from the stack at full price at
+                // action 31), which leaves the Runner 2 credits richer from then on, so v4 isn't asked again.
                 Assert.Equal(ActionKind.StartRun, recorded.Kind);
-                Assert.Equal(ActionKind.StartRun, Kind(pending, await ChooseAsync(definition, state, RunnerHeuristicPolicy.V4)));
                 ActionId v5Choice = await ChooseAsync(definition, state, RunnerHeuristicPolicy.V5);
                 LegalAction v5 = pending.LegalActions.Single(legal => legal.Id == v5Choice);
                 Assert.False(v5.Kind == ActionKind.StartRun && v5.Parameters is RunServerParameters run
@@ -71,8 +73,6 @@ public sealed class RunnerPlaytestRepairTests
         }
         Assert.Equal(positions.Length, checkedPositions);
     }
-
-    private static ActionKind Kind(PendingDecision pending, ActionId id) => pending.LegalActions.Single(legal => legal.Id == id).Kind;
 
     /// <summary>A Smartware Distributor top-up while the card already hosts at least what it would place.</summary>
     private static bool IsStockedTopUp(GameState state, LegalAction action) =>

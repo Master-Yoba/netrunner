@@ -100,6 +100,76 @@ public partial class Main
 			"Jack out and Continue stayed disabled after the table settled.");
 	}
 
+	/// <summary>
+	/// Playtest, 30 September: Brân 1.0's install subroutine was chosen by picking the ICE in the hand,
+	/// under the HUD, and then its only destination. The HUD offers each ICE and Decline.
+	/// </summary>
+	private async Task CheckInstallSubroutineInHud()
+	{
+		MatchViewModel runner = _currentSnapshot!.View;
+		CardViewModel ice = runner.Run!.CurrentIce!;
+		CardViewModel inHand = ice with { Id = "lab-bran-install", Title = "Practice Wall" };
+		MatchViewModel corp = runner with
+		{
+			Viewer = PlayerSide.Corp,
+			CorpHand = new(ZoneKind.CorpHand, 1, [inHand]),
+			Decision = InteractionLabSamples.Decision(PlayerSide.Corp, _labRevision, DecisionKind.IceSubroutineChoice, "Install an ICE inward"),
+			LegalActions =
+			[
+				InteractionLabSamples.Action("bran-install", ActionKind.ResolveIceSubroutine, new IceSubroutineChoiceParameters("lab-frame",
+					IceSubroutineChoiceKind.InstallCard, new(inHand.Id), InstallDestinationKind.ServerIce, new(runner.Run.AttackedServerId)), _labRevision),
+				InteractionLabSamples.Action("bran-decline", ActionKind.ResolveIceSubroutine,
+					new IceSubroutineChoiceParameters("lab-frame", IceSubroutineChoiceKind.Decline), _labRevision),
+			],
+		};
+		PublishLabView(corp);
+		await TableFrames(4);
+		Button[] choices = FindDescendants<Button>(_runHud!.GetNode("Content/Body"));
+		RequireInteraction(_runHud.Visible && choices.Length == 2 && choices[0].Text == "INSTALL PRACTICE WALL · INWARD"
+			&& choices[1].Text == "DON'T INSTALL" && choices.All(button => !button.Disabled),
+			$"The HUD's install subroutine choices are wrong: {string.Join(", ", choices.Select(button => button.Text))}.");
+		RequireInteraction(!_tableActionButtons.Keys.Any(id => corp.LegalActions.Any(action => action.Id == id)),
+			"The install subroutine's choices remain in the dock beside the HUD.");
+		int submissions = _labSubmissionCount;
+		await ClickTableButton(choices[0]);
+		RequireInteraction(_labSubmissionCount == submissions + 1, "Installing from the HUD did not submit exactly once.");
+
+		// Ansel 1.0: any card, into any server. The card comes first, then its destination (the run HUD
+		// soak, 30 September: one button per card and server grew the HUD past the table).
+		CardViewModel asset = inHand with { Id = "lab-ansel-asset", Title = "Practice Asset", Type = "Asset" };
+		MatchViewModel ansel = corp with
+		{
+			CorpHand = new(ZoneKind.CorpHand, 2, [inHand, asset]),
+			LegalActions =
+			[
+				InteractionLabSamples.Action("ansel-ice", ActionKind.ResolveIceSubroutine, new IceSubroutineChoiceParameters("lab-frame",
+					IceSubroutineChoiceKind.InstallCard, new(inHand.Id), InstallDestinationKind.ServerIce, new(runner.Run.AttackedServerId)), _labRevision),
+				InteractionLabSamples.Action("ansel-asset-new", ActionKind.ResolveIceSubroutine, new IceSubroutineChoiceParameters("lab-frame",
+					IceSubroutineChoiceKind.InstallCard, new(asset.Id), InstallDestinationKind.ServerRoot, createNewRemote: true), _labRevision),
+				InteractionLabSamples.Action("ansel-asset-here", ActionKind.ResolveIceSubroutine, new IceSubroutineChoiceParameters("lab-frame",
+					IceSubroutineChoiceKind.InstallCard, new(asset.Id), InstallDestinationKind.ServerRoot, new(runner.Run.AttackedServerId)), _labRevision),
+				InteractionLabSamples.Action("ansel-decline", ActionKind.ResolveIceSubroutine,
+					new IceSubroutineChoiceParameters("lab-frame", IceSubroutineChoiceKind.Decline), _labRevision),
+			],
+		};
+		PublishLabView(ansel);
+		await TableFrames(4);
+		choices = FindDescendants<Button>(_runHud!.GetNode("Content/Body"));
+		Button? pick = choices.FirstOrDefault(button => button.Text == "PRACTICE ASSET ›");
+		RequireInteraction(choices.Length == 3 && pick is not null && choices.Any(button => button.Text.StartsWith("INSTALL PRACTICE WALL · ", StringComparison.Ordinal)),
+			$"The HUD's install choices for several cards are wrong: {string.Join(", ", choices.Select(button => button.Text))}.");
+		submissions = _labSubmissionCount;
+		await ClickTableButton(pick!);
+		await TableFrames(2);
+		choices = FindDescendants<Button>(_runHud.GetNode("Content/Body"));
+		RequireInteraction(_labSubmissionCount == submissions && choices.Any(button => button.Text == "NEW REMOTE") && choices.Any(button => button.Text == "BACK"),
+			$"Picking a card didn't offer its destinations: {string.Join(", ", choices.Select(button => button.Text))}.");
+		await ClickTableButton(choices.Single(button => button.Text == "BACK"));
+		await TableFrames(2);
+		RequireInteraction(FindDescendants<Button>(_runHud.GetNode("Content/Body")).Any(button => button.Text == "PRACTICE ASSET ›"),
+			"Back didn't return to the cards.");
+	}
+
 	/// <summary>Playtest, 29 September: breaching HQ took a server click and the dock; the HUD offers the choices.</summary>
 	private async Task CheckBreachChoicesInHud()
 	{
@@ -229,6 +299,9 @@ public partial class Main
 				await CheckBreachChoicesInHud();
 				ResetInteractionLab();
 				await TableFrames(6);
+				await CheckInstallSubroutineInHud();
+				ResetInteractionLab();
+				await TableFrames(6);
 				await CheckHeightAcrossPriority();
 				ResetInteractionLab();
 				await TableFrames(6);
@@ -277,7 +350,7 @@ public partial class Main
 				await TableFrames(3);
 				RequireInteraction(_runHud.Visible == false && !RunHudActive, "The HUD stayed open after the run moved on.");
 			}
-			GD.Print("RUN_HUD PASS resolutions=2 replaces_panels=true breakers=true break_all=true quoted=true footer=true closes=true corp_rez=true passed_ice=true jack_out_after_settling=true breach_choices=true steady_height=true priority_flips=true steady_footer=true access=true clear_of_history=true");
+			GD.Print("RUN_HUD PASS resolutions=2 replaces_panels=true breakers=true break_all=true quoted=true footer=true closes=true corp_rez=true passed_ice=true jack_out_after_settling=true breach_choices=true install_subroutine=true steady_height=true priority_flips=true steady_footer=true access=true clear_of_history=true");
 			QuitCleanly();
 		}
 		catch (Exception error)

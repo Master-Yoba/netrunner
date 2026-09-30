@@ -465,12 +465,15 @@ public static partial class GameEngine
             ArgumentNullException.ThrowIfNull(source);
             ArgumentOutOfRangeException.ThrowIfNegative(baseCost);
 
-            // The existing self-cost path is deliberately limited to a card
-            // being played from Grip. First-program discounts are a separate
-            // installed-source projection and may apply to a behavior install
-            // whose card is selected from Stack.
+            // A card's own install discount (Carmen) applies wherever it is
+            // installed from: Grip, or Stack and Heap through a behavior install
+            // (playtest, 30 September: Mutual Favor installed Carmen from Stack
+            // at full price). First-program discounts are a separate
+            // installed-source projection.
             List<CostAdjustment> adjustments = [];
-            if (IsInZone(working, source, ZoneKind.RunnerGrip)
+            if ((IsInZone(working, source, ZoneKind.RunnerGrip)
+                    || IsInZone(working, source, ZoneKind.RunnerStack)
+                    || IsInZone(working, source, ZoneKind.RunnerHeap))
                 && ForSource(
                     working,
                     source,
