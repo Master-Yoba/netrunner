@@ -8,6 +8,7 @@
     <ProjectReference Include="../Netrunner.Core/Netrunner.Core.csproj" />
     <ProjectReference Include="../Netrunner.Cards/Netrunner.Cards.csproj" />
     <ProjectReference Include="../Netrunner.AI/Netrunner.AI.csproj" />
+    <ProjectReference Include="../Netrunner.LLM/Netrunner.LLM.csproj" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="../../data/m5/benchmarks/tactical-v1.json"

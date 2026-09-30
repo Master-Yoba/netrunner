@@ -92,6 +92,11 @@ public static partial class CliCommands
             return RunPlaytestSummary(args, output, error);
         }
 
+        if (args.Length > 0 && args[0] == "ai-llm-review")
+        {
+            return RunAiLlmReview(args, output, error);
+        }
+
         if (args.Length > 0 && args[0] == "ai-lint")
         {
             return RunAiLint(args, output, error);
@@ -225,6 +230,7 @@ public static partial class CliCommands
             + "fuzz-repro <failure-directory> [--json] | "
             + "engine-bench [--content developer|official] [--games N] [--seed <unsigned-integer>] [--json] | "
             + "ai-lint <games-dir> [--workers N] [--examples N] [--output file] [--json] | "
+            + "ai-llm-review <games-dir> --side corp|runner --output new-dir [--entrant NAME] [--game ID]... [--games N] [--skip N] [--temperature T] [--reasoning low|medium|high] | "
             + "ai-ladder [--content developer|official] [--entrants random,contract,easy,standard] [--seeds-per-pairing N] "
             + "[--seed <unsigned-integer>] [--bootstrap N] [--action-cap N] [--workers 1..64] [--output <new directory>] [--json] | "
             + "playtest-summary <session-directory|zip> | "
