@@ -990,6 +990,6 @@ A Runner game (Stolen Goods) against Discretion Advised, and Corp v18.
 | A8 archetypes | **Corp v12 ships** (+36 and +48); Runner archetypes (v11) weaker (−32), kept as an entrant; Runner v12 ships the review fixes alone (+29) |
 | U8 run HUD | Done: one panel per run at both seats, Break all over issued actions, the run drawn through the ICE; `--run-hud-smoke` in `make verify`. **Needs the playtest** to judge speed against the old panels |
 
-Default bots after Wave 4: Corp v18 (plans turn actions, plays to its deck's
-archetype, with the 29 September repairs, the economy-asset rez timing, Spin Doctor's use, agenda hiding, costed subroutine installs, and HQ's ICE with agendas in hand) and Runner v13 (central memory, the self-play review fixes, and memory of accessed remote cards)
+Default bots after Wave 4: Corp v19 (plans turn actions, plays to its deck's
+archetype, with the 29 September repairs, the economy-asset rez timing, Spin Doctor's use, agenda hiding, costed subroutine installs, HQ's ICE with agendas in hand, and the corrected planning evaluation) and Runner v13 (central memory, the self-play review fixes, and memory of accessed remote cards)
 on the legal decks; the tutorial decks keep the frozen C1 bot (Corp v7, Runner v6).

@@ -101,7 +101,8 @@ public static class FittedEvaluation
     public static FittedEvaluationDocument DocumentFor(int version) => version switch
     {
         1 => V1.Value,
-        2 => V2.Value,
+        // Set 3 corrects one feature of set 2 and keeps its fitted weights.
+        2 or 3 => V2.Value,
         _ => throw new ArgumentOutOfRangeException(nameof(version), "Unknown fitted evaluation."),
     };
 

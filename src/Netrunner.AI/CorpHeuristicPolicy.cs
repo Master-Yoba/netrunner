@@ -99,15 +99,23 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// counters from an effect (Seamless Launch) go where they count, never on ICE that ignores them.
     /// </summary>
     public const string V18 = "corp-heuristic-v18";
+    /// <summary>
+    /// V18 planning with the corrected evaluation (feature set 3): board advancement counts only
+    /// counters on agendas and advanceable cards. The oddity lints (Wave 4.5, P1) found V18 playing
+    /// Seamless Launch onto Nico Campaign or ICE when no agenda was installed: the planner's
+    /// evaluation counted any counter in a remote as progress.
+    /// </summary>
+    public const string V19 = "corp-heuristic-v19";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
-    /// V18 fixes V17's central ICE and Seamless Launch targets from the 30 September playtest and is
-    /// level with it on the Gateway ladder (0, +21, +11 and 0 on four seeds), so new games use it.
+    /// V19 fixes V18's faults the oddity lints found (Seamless Launch onto inert cards, an agenda installed
+    /// into the server being run) and is level with it on the Gateway ladder (-11, +21, 0 and 0 on four
+    /// seeds), so new games use it.
     /// </remarks>
-    public const string PolicyVersion = V18;
+    public const string PolicyVersion = V19;
     /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>
     public const string LatestHeuristic = V8;
-    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18];
+    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19];
 
     public CorpHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -115,9 +123,9 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Corp policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version switch { V2 => 1, V3 => 2, V7 => 4, V8 or V9 or V10 => 5, V11 => 6, V12 => 7, V13 => 8, V14 => 9, V15 => 10, V16 => 11, V17 => 12, V18 => 13, _ => 3 };
-        Plans = version is V5 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18;
-        Repairs = version is V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18;
+        Generation = version switch { V2 => 1, V3 => 2, V7 => 4, V8 or V9 or V10 => 5, V11 => 6, V12 => 7, V13 => 8, V14 => 9, V15 => 10, V16 => 11, V17 => 12, V18 => 13, V19 => 14, _ => 3 };
+        Plans = version is V5 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19;
+        Repairs = version is V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19;
     }
 
     /// <summary>Whether this version has the playtest repairs (V6).</summary>

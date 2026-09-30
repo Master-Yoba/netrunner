@@ -47,7 +47,7 @@ public static partial class RatingLadder
     /// "standard-plan" is the A3 turn planner (Runner v3, Corp v5).
     /// </summary>
     public static IReadOnlyList<string> EntrantOrder { get; } =
-        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18"];
+        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19"];
 
     private const double EloScale = 400 / 2.302585092994046;
     private const double Ridge = 0.01;
@@ -137,6 +137,9 @@ public static partial class RatingLadder
             // The Corp's self-removing abilities costed (v15) with the default Runner.
             "standard-c15" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V15 : RunnerHeuristicPolicy.PolicyVersion),
+            // The Corp planning with the corrected evaluation (v19) with the default Runner.
+            "standard-c19" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
+                side == PlayerSide.Corp ? CorpHeuristicPolicy.V19 : RunnerHeuristicPolicy.PolicyVersion),
             // The Corp protecting HQ's agendas and aiming its counters (v18) with the default Runner.
             "standard-c18" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V18 : RunnerHeuristicPolicy.PolicyVersion),
@@ -165,7 +168,11 @@ public static partial class RatingLadder
         return new OfflineAgent(configuration, OfflinePolicies.Create(configuration), new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior));
     }
 
-    public static async Task<LadderGameResult> PlayAsync(LadderGame game, int actionCap = DefaultActionCap,
+    public static Task<LadderGameResult> PlayAsync(LadderGame game, int actionCap = DefaultActionCap,
+        CancellationToken cancellationToken = default) => PlayAsync(game, actionCap, null, cancellationToken);
+
+    /// <param name="keep">Receives each finished or capped game with its replay (<c>ai-ladder --save-games</c>).</param>
+    public static async Task<LadderGameResult> PlayAsync(LadderGame game, int actionCap, Action<LadderSavedGame>? keep,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(game);
@@ -175,10 +182,13 @@ public static partial class RatingLadder
             FullMatchResult result = await FullMatchRunner.RunAsync(definition, actionCap,
                 CreateAgent(game.Corp, PlayerSide.Corp, definition),
                 CreateAgent(game.Runner, PlayerSide.Runner, definition), cancellationToken).ConfigureAwait(false);
-            return new LadderGameResult(game, result.Outcome.Winner == PlayerSide.Corp ? 1 : 0, false, result.ActionCount, null);
+            double score = result.Outcome.Winner == PlayerSide.Corp ? 1 : 0;
+            keep?.Invoke(new LadderSavedGame(game, score, false, result.Replay));
+            return new LadderGameResult(game, score, false, result.ActionCount, null);
         }
         catch (FullMatchStallException stall)
         {
+            keep?.Invoke(new LadderSavedGame(game, 0.5, true, stall.Replay));
             return new LadderGameResult(game, 0.5, true, stall.Replay.Actions.Count, null);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)

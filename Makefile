@@ -74,6 +74,10 @@ ui-capture:
 ai-ladder:
 	bash scripts/ai-ladder.sh $(LADDER_ARGS)
 
+.PHONY: ai-lint
+ai-lint:
+	bash scripts/ai-lint.sh $(LINT_ARGS)
+
 .PHONY: fuzz fuzz-developer fuzz-nightly
 fuzz:
 	bash scripts/fuzz.sh official $(FUZZ_ARGS)
