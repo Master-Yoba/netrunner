@@ -55,9 +55,12 @@ internal static class RunnerValues
         {
             AgentCard? card = server.Root[index];
             int advancement = context.HiddenAdvancement(server.Id, "root", index);
+            // v13: a card the Runner accessed before is known, face down or not.
+            card ??= context.RememberedRoot(server, index);
             root += card is null
                 ? 190 + (int)(inference * advancement * 200)
-                : context.Definition(card)?.Agenda is { } agenda ? 500 + agenda.AgendaPoints * 180 : Trash(context, card);
+                : context.Definition(card)?.Agenda is { } agenda ? 500 + agenda.AgendaPoints * 180
+                : context.Generation >= 9 ? AffordableTrash(context, card) : Trash(context, card);
         }
 
         double density = 1 + inference * (context.AgendaDensityFactor() - 1);
@@ -103,15 +106,85 @@ internal static class RunnerValues
         };
     }
 
+    /// <summary>
+    /// v13: what a known non-agenda root card is worth to a run, which is only its trash, and only
+    /// if the Runner can pay for it (playtest, 30 September: the Runner kept running a known Nico
+    /// Campaign it couldn't afford to trash).
+    /// </summary>
+    private static int AffordableTrash(HeuristicContext context, AgentCard card)
+    {
+        int cost = context.Definition(card)?.Printed.TrashCost ?? int.MaxValue;
+        if (cost > context.Self.Credits) return 0;
+        return Math.Max(0, Trash(context, card) - cost * context.CreditValue);
+    }
+
+    /// <summary>
+    /// v13: the Runner's own gain from trashing an accessed card: triggers on its cards that fire
+    /// on the trash, such as René "Loup" Arcemont's first trash each turn (a credit and a card).
+    /// </summary>
+    public static int TrashReward(HeuristicContext context)
+    {
+        int reward = 0;
+        foreach (AgentCard card in context.Features.Board.RunnerRig.Concat(context.Features.Board.RunnerIdentity))
+        {
+            if (context.Definition(card)?.Behavior is not { } behavior) continue;
+            foreach (BehaviorTrigger trigger in behavior.Triggers.Where(trigger => trigger.Occurrence == OccurrenceKind.AccessedCardTrashed))
+            {
+                // A once-per-turn reward is spent by the first trash this turn.
+                if (trigger.OncePerTurn && context.Features.Board.TurnFacts?.Runner.ThisTurn?.TrashedCardCount > 0) continue;
+                reward += HeuristicContext.Flatten(trigger.Instructions).Sum(instruction => instruction.Kind switch
+                {
+                    BehaviorInstructionKind.GainCredits => instruction.Amount * context.CreditValue,
+                    BehaviorInstructionKind.Draw => instruction.Amount * context.DrawValue,
+                    _ => 0,
+                });
+            }
+        }
+        return reward;
+    }
+
     public static int Trash(HeuristicContext context, AgentCard? card)
     {
         CardEvaluationDescriptor? definition = context.Definition(card);
         if (definition is null) return 70;
+        if (context.Generation >= 9) return TrashV13(context, card!, definition) + TrashReward(context);
         int income = HeuristicContext.Hosted(card);
         if (income > 0) return 160 + income * 90;
         // v6: an advanced trap would deal its counters as damage (Clearinghouse).
         if (context.Generation >= 5 && definition.Behavior is { CanBeAdvanced: true } && (card?.AdvancementCounters ?? 0) > 0)
             return 180 + (card!.AdvancementCounters ?? 0) * 200;
+        if (definition.Printed.CardClass == RuntimeCardClass.Upgrade)
+        {
+            bool protection = definition.Behavior?.Triggers.Any(trigger => trigger.Occurrence == OccurrenceKind.ServerApproached) == true;
+            return protection ? 430 : 110;
+        }
+        return definition.Printed.CardClass == RuntimeCardClass.Asset ? 180 : 50;
+    }
+
+    /// <summary>
+    /// v13 (playtest, 30 September): an economy asset is worth the money it will still make (an
+    /// unrezzed Nico Campaign loads 9 credits when rezzed); a trap that only hurts on access is
+    /// worth little once known, since the Runner won't come back (trashing Urtica Cipher rarely pays).
+    /// </summary>
+    private static int TrashV13(HeuristicContext context, AgentCard card, CardEvaluationDescriptor definition)
+    {
+        int hosted = HeuristicContext.Hosted(card);
+        if (hosted > 0) return 160 + hosted * 90;
+        if (definition.Behavior is { } behavior)
+        {
+            int load = behavior.Triggers.Where(trigger => trigger.Occurrence == OccurrenceKind.CardRezzed)
+                .SelectMany(trigger => HeuristicContext.Flatten(trigger.Instructions))
+                .Where(instruction => instruction.Kind == BehaviorInstructionKind.LoadHostedCredits).Sum(instruction => instruction.Amount);
+            int perTurn = behavior.Triggers.Where(trigger => trigger.Occurrence == OccurrenceKind.TurnBegin)
+                .SelectMany(trigger => HeuristicContext.Flatten(trigger.Instructions))
+                .Where(instruction => instruction.Kind == BehaviorInstructionKind.GainCredits).Sum(instruction => instruction.Amount);
+            if (card.Rezzed != true && load > 0) return 160 + load * 45;
+            if (perTurn > 0) return 160 + perTurn * 120;
+            bool accessTrap = behavior.Triggers.Any(trigger => trigger.Occurrence == OccurrenceKind.CardAccessed
+                && HeuristicContext.Flatten(trigger.Instructions).Any(instruction => instruction.Kind == BehaviorInstructionKind.DealDamage));
+            if (accessTrap) return 40;
+            if (behavior.CanBeAdvanced && (card.AdvancementCounters ?? 0) > 0) return 180 + (card.AdvancementCounters ?? 0) * 200;
+        }
         if (definition.Printed.CardClass == RuntimeCardClass.Upgrade)
         {
             bool protection = definition.Behavior?.Triggers.Any(trigger => trigger.Occurrence == OccurrenceKind.ServerApproached) == true;

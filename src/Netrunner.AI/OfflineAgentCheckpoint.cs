@@ -28,6 +28,14 @@ public sealed record AgentCentralMemory(int? DeckAfterRdAccess, int? HandAfterHq
     /// <summary>The Corp's deck size seen during the current run, to tell whether the access removed R&amp;D's top card.</summary>
     public int? DeckDuringRun { get; init; }
 }
+/// <summary>
+/// A face-down root card the Runner has accessed (Runner v13, playtest 30 September): known by its
+/// server and position, while that server's root keeps the same number of cards and the card's
+/// public advancement doesn't drop. It was forgotten as soon as it turned face down again, so the
+/// Runner kept running a known Urtica Cipher.
+/// </summary>
+public sealed record AgentRootMemory(string ServerId, int Index, int RootCount, string DefinitionId, int Advancement);
+
 public sealed record AgentKnowledge(ImmutableArray<AgentRememberedCard> VisibleCards,
     ImmutableArray<AgentReveal> Reveals, ImmutableArray<AgentHistoryEvent> History, string? RunId, string? ServerId, bool? RunSuccessful)
 {
@@ -35,6 +43,9 @@ public sealed record AgentKnowledge(ImmutableArray<AgentRememberedCard> VisibleC
 
     /// <summary>The Corp's central servers as last accessed; null until a successful central run ends. Older checkpoints load without it.</summary>
     public AgentCentralMemory? Centrals { get; init; }
+
+    /// <summary>Face-down root cards the Runner has accessed. Older checkpoints load without it.</summary>
+    public ImmutableArray<AgentRootMemory>? Roots { get; init; }
 
     public AgentKnowledge Observe(AgentFeatures features, long sequence)
     {
@@ -83,13 +94,42 @@ public sealed record AgentKnowledge(ImmutableArray<AgentRememberedCard> VisibleC
             };
         }
         if (features.Board.Run is null && centrals?.DeckDuringRun is not null) centrals = centrals with { DeckDuringRun = null };
+        ImmutableArray<AgentRootMemory>? roots = features.Side == PlayerSide.Runner ? RememberRoots(features, Roots) : Roots;
         return new(visible, reveals.Values.OrderByDescending(reveal => reveal.LastSeenSequence)
             .ThenBy(reveal => reveal.DefinitionId, StringComparer.Ordinal).Take(256).ToImmutableArray(),
             history.TakeLast(128).ToImmutableArray(), features.Board.Run?.Id, features.Board.Run?.AttackedServer,
             features.Board.Run?.Successful)
-        { Centrals = centrals };
+        { Centrals = centrals, Roots = roots };
 
         void Add(string kind, AgentRememberedCard card) => history.Add(new(sequence, kind, card.Id, card.DefinitionId, null));
+    }
+
+    /// <summary>
+    /// Keeps what is still true of the remembered root cards and adds every root card visible now
+    /// (an accessed card is visible to the Runner for the rest of its breach).
+    /// </summary>
+    private static ImmutableArray<AgentRootMemory>? RememberRoots(AgentFeatures features, ImmutableArray<AgentRootMemory>? previous)
+    {
+        var kept = new List<AgentRootMemory>();
+        foreach (AgentRootMemory memory in previous ?? [])
+        {
+            AgentServer? server = features.Board.Servers.FirstOrDefault(value => value.Id == memory.ServerId);
+            if (server is null || server.Root.Length != memory.RootCount || memory.Index >= server.Root.Length || server.Root[memory.Index] is not null)
+                continue;
+            int advancement = features.Board.HiddenAdvancements?.FirstOrDefault(entry => entry.ServerId == memory.ServerId
+                && entry.Zone == "root" && entry.Index == memory.Index)?.AdvancementCounters ?? 0;
+            if (advancement < memory.Advancement) continue;
+            kept.Add(memory with { Advancement = advancement });
+        }
+        foreach (AgentServer server in features.Board.Servers)
+            for (int index = 0; index < server.Root.Length; index++)
+                if (server.Root[index] is { } card && !string.IsNullOrEmpty(card.DefinitionId))
+                {
+                    kept.RemoveAll(memory => memory.ServerId == server.Id && memory.Index == index);
+                    kept.Add(new(server.Id, index, server.Root.Length, card.DefinitionId, card.AdvancementCounters ?? 0));
+                }
+        if (kept.Count == 0 && previous is null) return null;
+        return kept.OrderBy(memory => memory.ServerId, StringComparer.Ordinal).ThenBy(memory => memory.Index).Take(64).ToImmutableArray();
     }
 
     private static bool IsInstalled(string location) => location.StartsWith("server/", StringComparison.Ordinal)
