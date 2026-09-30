@@ -22,6 +22,18 @@ netrunner_pin_card_art_directory() {
   fi
 }
 
+# A plain launch only reads Godot's import cache (.godot/imported) and never
+# imports, so fonts and icons added since the last editor import fail to load
+# and the table falls back to default fonts and line art. Launchers call this
+# after building; it takes a couple of seconds when nothing changed.
+# Usage: netrunner_import_godot_assets <project dir> <log file>
+netrunner_import_godot_assets() {
+  if ! "$GODOT4" --headless --path "$1" --import > "$2" 2>&1; then
+    echo "Godot asset import failed; see $2" >&2
+    return 1
+  fi
+}
+
 if [[ -d "$netrunner_dotnet" ]]; then
   export DOTNET_ROOT="$netrunner_dotnet"
   export PATH="$DOTNET_ROOT:$PATH"

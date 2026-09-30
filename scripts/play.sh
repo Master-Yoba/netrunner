@@ -27,6 +27,7 @@ set +e
   if (( play_build_status != 0 )); then
     exit "$play_build_status"
   fi
+  netrunner_import_godot_assets "$play_root/src/Netrunner.Godot" "$play_launch_dir/godot-import.log" || exit 1
   # NETRUNNER_GODOT_ARGS passes engine options, for example --resolution 2560x1440.
   # The ${array[@]+...} form keeps an empty array safe under set -u in macOS bash 3.2.
   play_godot_args=()
