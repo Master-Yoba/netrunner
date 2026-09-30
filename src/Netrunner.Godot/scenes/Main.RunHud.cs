@@ -26,6 +26,9 @@ public partial class Main
 	/// </summary>
 	private const float RunHudHeight = 640;
 	private const int RunHudGrowFrames = 4;
+
+	/// <summary>The footer's standing height: one row of run controls.</summary>
+	private const float RunHudFooterHeight = 40;
 	private float _runHudHeight = RunHudHeight;
 	private int _runHudGrowFrames;
 	private PanelContainer? _runHud;
@@ -34,6 +37,7 @@ public partial class Main
 	private Label? _runHudStep;
 	private Label? _runHudCredits;
 	private HFlowContainer? _runHudFooter;
+	private HSeparator? _runHudSeparator;
 	private CheckButton? _runHudSetting;
 	private string? _runHudServerId;
 	private MatchViewModel? _runHudView;
@@ -124,8 +128,17 @@ public partial class Main
 		_runHudBody.AddThemeConstantOverride("separation", 8);
 		content.AddChild(_runHudBody);
 
-		content.AddChild(new HSeparator { MouseFilter = Control.MouseFilterEnum.Ignore });
-		_runHudFooter = new HFlowContainer { Name = "Footer", Alignment = FlowContainer.AlignmentMode.End, MouseFilter = Control.MouseFilterEnum.Ignore };
+		_runHudSeparator = new HSeparator { Name = "Separator", MouseFilter = Control.MouseFilterEnum.Ignore };
+		content.AddChild(_runHudSeparator);
+		// Always one button row tall, even with no buttons: the separator above it stays put
+		// when the run's controls go away while the other player has priority (playtest, 30 September).
+		_runHudFooter = new HFlowContainer
+		{
+			Name = "Footer",
+			Alignment = FlowContainer.AlignmentMode.End,
+			CustomMinimumSize = new Vector2(0, RunHudFooterHeight),
+			MouseFilter = Control.MouseFilterEnum.Ignore
+		};
 		_runHudFooter.AddThemeConstantOverride("h_separation", 10);
 		_runHudFooter.AddThemeConstantOverride("v_separation", 8);
 		content.AddChild(_runHudFooter);
@@ -237,7 +250,6 @@ public partial class Main
 			else _runHudFooter!.AddChild(button);
 			_runHudButtons[action.Id] = button;
 		}
-		_runHudFooter!.Visible = _runHudFooter.GetChildCount() > 0;
 		if (!_runHud!.Visible) WriteFullMatchDiagnostic("run-hud", new { visible = true, sequence = snapshot.Sequence, step = run.Step.ToString() });
 		_runHud.Visible = true;
 		UpdateRunHudButtons(snapshot);

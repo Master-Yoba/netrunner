@@ -153,12 +153,16 @@ public partial class Main
 		PublishLabView(mine);
 		await TableFrames(4);
 		float tall = _runHud!.Size.Y;
+		float separator = _runHudSeparator!.Position.Y;
 		for (int flip = 0; flip < 3; flip++)
 		{
 			PublishLabView(theirs);
 			await TableFrames(2);
 			RequireInteraction(Mathf.IsEqualApprox(_runHud.Size.Y, tall),
 				$"The HUD's height went from {tall} to {_runHud.Size.Y} when the Corp took priority.");
+			// Playtest, 30 September: the separator jumped when the footer's buttons went away.
+			RequireInteraction(Mathf.IsEqualApprox(_runHudSeparator.Position.Y, separator),
+				$"The HUD's separator moved from {separator} to {_runHudSeparator.Position.Y} when the Corp took priority.");
 			PublishLabView(mine);
 			await TableFrames(2);
 			RequireInteraction(Mathf.IsEqualApprox(_runHud.Size.Y, tall), $"The HUD's height changed to {_runHud.Size.Y} back at the player's decision.");
@@ -273,7 +277,7 @@ public partial class Main
 				await TableFrames(3);
 				RequireInteraction(_runHud.Visible == false && !RunHudActive, "The HUD stayed open after the run moved on.");
 			}
-			GD.Print("RUN_HUD PASS resolutions=2 replaces_panels=true breakers=true break_all=true quoted=true footer=true closes=true corp_rez=true passed_ice=true jack_out_after_settling=true breach_choices=true steady_height=true priority_flips=true access=true clear_of_history=true");
+			GD.Print("RUN_HUD PASS resolutions=2 replaces_panels=true breakers=true break_all=true quoted=true footer=true closes=true corp_rez=true passed_ice=true jack_out_after_settling=true breach_choices=true steady_height=true priority_flips=true steady_footer=true access=true clear_of_history=true");
 			QuitCleanly();
 		}
 		catch (Exception error)

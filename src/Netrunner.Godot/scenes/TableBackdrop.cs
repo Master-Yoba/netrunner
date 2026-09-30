@@ -4,10 +4,10 @@ namespace Netrunner.GodotClient;
 
 /// <summary>
 /// Draws the two halves of the table behind every board control (roadmap U5,
-/// "Corp chrome against Runner neon"). The Corp half is brushed steel tinted to
-/// its faction, with a double rule and ruler ticks along the edge that faces the
-/// Runner and a faint wordmark; the Runner half is near-black with a faint dot
-/// grid and a neon edge line. Presentation only: it never takes input.
+/// "Corp chrome against Runner neon"). The Corp half is brushed steel, with a
+/// double rule and ruler ticks along the edge that faces the Runner and a faint
+/// wordmark, all in its faction's colour; the Runner half is near-black with a
+/// faint dot grid and a neon edge line. Presentation only: it never takes input.
 /// </summary>
 [Tool]
 public partial class TableBackdrop : Control

@@ -6,14 +6,16 @@ namespace Netrunner.GodotClient;
 /// <summary>Faction colours for one side of the table (U5 "chrome and neon").</summary>
 /// <param name="Accent">Neon or trim colour: borders, emblems, the run connection.</param>
 /// <param name="Text">A lighter tint of the accent that stays readable as text.</param>
-/// <param name="Ground">The Corp's tinted steel, or the Runner's near-black.</param>
+/// <param name="Ground">The Corp's steel, or the Runner's near-black.</param>
 /// <param name="Name">Upper-case faction name for identity plates and wordmarks.</param>
 public readonly record struct FactionColors(Color Accent, Color Text, Color Ground, string Name);
 
 /// <summary>
 /// The chosen faction palette (roadmap U5, 29 September): Criminal blue, Shaper
 /// acid green, Anarch magenta, neutral Runner cyan; Weyland green, Jinteki red,
-/// Haas-Bioroid violet, NBN yellow, neutral Corp steel.
+/// Haas-Bioroid violet, NBN yellow, neutral Corp steel. Every Corp stands on the
+/// same steel (playtest, 30 September: a faction-tinted ground read as the table
+/// changing colour from game to game); the faction shows in the trim.
 /// </summary>
 public static class FactionPalette
 {
@@ -21,10 +23,10 @@ public static class FactionPalette
 	public static readonly FactionColors Shaper = new(new Color("a6ff3d"), new Color("c8ff86"), new Color("07090c"), "SHAPER");
 	public static readonly FactionColors Anarch = new(new Color("ff4fd8"), new Color("ff9be8"), new Color("07090c"), "ANARCH");
 	public static readonly FactionColors NeutralRunner = new(new Color("39e6d4"), new Color("8ff3e8"), new Color("07090c"), "RUNNER");
-	public static readonly FactionColors Weyland = new(new Color("5fcf86"), new Color("9fe3b6"), new Color("121814"), "WEYLAND CONSORTIUM");
-	public static readonly FactionColors Jinteki = new(new Color("ff5566"), new Color("ff9aa4"), new Color("1a1213"), "JINTEKI");
-	public static readonly FactionColors HaasBioroid = new(new Color("a98bff"), new Color("cbb9ff"), new Color("151320"), "HAAS-BIOROID");
-	public static readonly FactionColors Nbn = new(new Color("ffd23f"), new Color("ffe38a"), new Color("1a1810"), "NBN");
+	public static readonly FactionColors Weyland = new(new Color("5fcf86"), new Color("9fe3b6"), new Color("121518"), "WEYLAND CONSORTIUM");
+	public static readonly FactionColors Jinteki = new(new Color("ff5566"), new Color("ff9aa4"), new Color("121518"), "JINTEKI");
+	public static readonly FactionColors HaasBioroid = new(new Color("a98bff"), new Color("cbb9ff"), new Color("121518"), "HAAS-BIOROID");
+	public static readonly FactionColors Nbn = new(new Color("ffd23f"), new Color("ffe38a"), new Color("121518"), "NBN");
 	public static readonly FactionColors NeutralCorp = new(new Color("9fb4c7"), new Color("c9d6e2"), new Color("121518"), "CORP");
 
 	/// <summary>Virus counters keep one colour whatever the faction; their hexagon shape carries the meaning.</summary>

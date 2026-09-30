@@ -13,6 +13,7 @@ namespace Netrunner.GodotClient;
 /// and checks the HUD on every frame of every run:
 /// - it stays visible for the whole run (except while Archives' Access all runs);
 /// - at one position of the run its height changes at most once and never goes back;
+/// - at one position of the run the separator above its footer doesn't move back and forth;
 /// - when it is the player's run decision, every action the HUD owns has a button, enabled
 ///   once the table settles;
 /// - it stays inside the table and clear of the history panel.
@@ -39,6 +40,7 @@ public partial class Main
 	{
 		public string? Key;
 		public readonly List<float> Heights = [];
+		public readonly List<float> Footers = [];
 		public bool SeenThisRun;
 		public string? RunId;
 		public int RunsSeen;
@@ -342,6 +344,7 @@ public partial class Main
 		{
 			audit.Key = null;
 			audit.Heights.Clear();
+			audit.Footers.Clear();
 			if (current?.View.Run is null) audit.RunId = null;
 			return;
 		}
@@ -369,6 +372,7 @@ public partial class Main
 		{
 			audit.Key = key;
 			audit.Heights.Clear();
+			audit.Footers.Clear();
 		}
 		float height = hud.Size.Y;
 		if (audit.Heights.Count == 0 || !Mathf.IsEqualApprox(audit.Heights[^1], height))
@@ -378,6 +382,14 @@ public partial class Main
 			else if (audit.Heights.Count >= 2)
 				Violation("height-jumps", $"{string.Join(" → ", audit.Heights.Select(value => value.ToString("0", CultureInfo.InvariantCulture)))} → {height:0} at {run.Step}");
 			audit.Heights.Add(height);
+		}
+		// Measured from the HUD's bottom, so a legitimate growth of the whole HUD doesn't count.
+		float footer = hud.Size.Y - _runHudSeparator!.Position.Y;
+		if (audit.Footers.Count == 0 || !Mathf.IsEqualApprox(audit.Footers[^1], footer))
+		{
+			if (audit.Footers.Any(earlier => Mathf.IsEqualApprox(earlier, footer)))
+				Violation("separator-oscillation", $"{string.Join(" → ", audit.Footers.Select(value => value.ToString("0", CultureInfo.InvariantCulture)))} → {footer:0} at {run.Step}");
+			audit.Footers.Add(footer);
 		}
 		if (hud.Size.X > RunHudWidth + 0.5f) Violation("widened", $"content widened the HUD to {hud.Size.X:0} at {run.Step}");
 		Rect2 rect = hud.GetGlobalRect();
