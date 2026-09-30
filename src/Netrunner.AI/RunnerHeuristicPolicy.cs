@@ -74,10 +74,10 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     public const string V13 = "runner-heuristic-v13";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
-    /// V12 is level with V10 on the Gateway ladder (+29 [-13, 75]) and fixes plays
-    /// a human notices (running lethal traps, never running against unrezzed ICE).
+    /// V13 fixes V12's faults from the 30 September playtest (running a known Urtica Cipher over and
+    /// over, leaving Nico Campaign) and beats it on the Gateway ladder (+69 and +100 on two seeds).
     /// </remarks>
-    public const string PolicyVersion = V12;
+    public const string PolicyVersion = V13;
     /// <summary>
     /// The planner's model of the Runner. It stays V7, which Corp v9 was measured
     /// with, so the shipped Corp planner plays as it did.

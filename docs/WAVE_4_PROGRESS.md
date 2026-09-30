@@ -862,6 +862,68 @@ neither was stolen. v15 never hid one.
 On the Gateway ladder v16 is level with v15 (0 and −12 Elo on two seeds, 240
 games each; the trick is rare), so it is the default.
 
+## Playtest follow-up (30 September, second round)
+
+Two playtests, one at each seat: Runner (Stolen Goods) and Corp (Discretion Advised), both
+against Gateway decks.
+
+### Engine
+
+- **Carmen from the stack.** Mutual Favor installed Carmen from the stack after a successful
+  run, for the full 5 credits. A card's own install discount now applies from the grip, the
+  stack or the heap (`CarmenMutualFavorPlaytestTests`).
+  - The Runner toll replay contained the same install, so it is re-recorded up to action 512.
+- **Trashing upgrades.** Accessing Manegarm Skunkworks with 3 credits offered no trash. The
+  basic trash was offered only for cards with an asset spec, and two upgrades had none.
+  - `GameEngine.AccessTrashCost` gives an upgrade its printed trash cost from the runtime card
+    catalog. No behaviour catalog fingerprint changes, so saves and replays still load.
+  - `GatewayTrashCostCoverageTests` checks every Corp card with a printed trash cost, so a new
+    card can't miss it.
+
+### Runner v13
+
+Runner v12 ran the same unprotected Urtica Cipher remote seven times, taking its damage each
+time. It left an affordable Nico Campaign alone, and it didn't trash Manegarm, which the engine
+never offered (above).
+
+Runner v13 remembers the face-down root cards it accessed, by server and position. It forgets
+one when that server's root changes size or the card's advancement drops.
+- **Known cards:** a known trap's damage is certain, and a lethal one stops the run. A known
+  asset is worth only a trash the Runner can afford.
+- **Trash values:**
+  - an economy asset is worth the money it will still make;
+  - a trap that only hurts on access is worth little (the playtester: trashing an installed
+    Urtica rarely pays);
+  - a trash that rewards the Runner, such as René "Loup" Arcemont's, adds that reward.
+
+`RunnerPlaytestV13Tests` asks both versions at the recorded positions. The replay is
+re-recorded up to action 340 after the upgrade-trash fix.
+
+On the Gateway ladder v13 beats v12 (+69 and +100 Elo on two seeds, 240 games each), so it is
+the default.
+
+### Client
+
+- **Run panel:**
+  - Brân 1.0's install subroutine is chosen in the run panel ("install X · inward", or don't),
+    not by picking the ICE in the hand under the panel and then its only destination.
+  - The Corp's rez buttons list the attacked server's cards first.
+  - A breach on Archives says why its face-down cards are named: CR 7.5.2 turns them face up
+    first.
+- **Table:**
+  - The run line no longer runs through the centre captions.
+  - Clicking the Archives name gives the server's actions, like the other servers; the pile
+    still opens its contents.
+  - A server you can pick glows along its own lane border instead of wearing a second one.
+  - The Runner's identity and rig cards line up with the stack and heap.
+  - Each half of the table carries its faction's glyph, large and faint.
+- **Cards:**
+  - Full card art fills the card, clipped to rounded corners, with the border drawn over its edge.
+  - Hosted credits are a neon credit chip instead of a gold coin.
+  - An ICE install flies upright and flips into its sideways slot instead of squashing.
+  - A dragged card turns in perspective (a canvas shader) instead of a flat lean.
+- **Run selection:** the prompt no longer says twice that Esc cancels.
+
 ## Gate status
 
 | Item | Result |
@@ -880,5 +942,5 @@ games each; the trick is rare), so it is the default.
 | U8 run HUD | Done: one panel per run at both seats, Break all over issued actions, the run drawn through the ICE; `--run-hud-smoke` in `make verify`. **Needs the playtest** to judge speed against the old panels |
 
 Default bots after Wave 4: Corp v16 (plans turn actions, plays to its deck's
-archetype, with the 29 September repairs, the economy-asset rez timing, Spin Doctor's use and agenda hiding) and Runner v12 (central memory and the self-play review fixes)
+archetype, with the 29 September repairs, the economy-asset rez timing, Spin Doctor's use and agenda hiding) and Runner v13 (central memory, the self-play review fixes, and memory of accessed remote cards)
 on the legal decks; the tutorial decks keep the frozen C1 bot (Corp v7, Runner v6).
