@@ -20,7 +20,12 @@ public sealed partial class CorpHeuristicPolicy
         int lost = install.RequiredReplacementCardIds.Sum(id => context.CardValue(context.Card(id), installed: true));
         // v6: a remote's root holds one agenda or asset, so installing another
         // there trashes it; an agenda thrown away costs far more than its card value.
-        if (repairs) lost = Math.Max(lost, DisplacedRootValue(context, server, definition));
+        if (repairs)
+        {
+            int displaced = DisplacedRootValue(context, server, definition);
+            // v16: only a hidden agenda (see HidingPays) costs less than the card it trashes.
+            lost = context.Generation >= 11 && displaced < lost ? displaced : Math.Max(lost, displaced);
+        }
         int score;
         bool nakedAgenda = false;
         if (definition.Ice is { } ice)
@@ -148,11 +153,38 @@ public sealed partial class CorpHeuristicPolicy
             CardEvaluationDescriptor? existing = context.Definition(card);
             if (card is null || existing?.Printed.CardClass is not (RuntimeCardClass.Agenda or RuntimeCardClass.Asset)) return 0;
             int advanced = card.AdvancementCounters ?? 0;
+            // v16: the steal it prevents, less the advancement and tempo thrown away. What goes in over
+            // it is an asset; another agenda would stand in the same weak server.
+            if (existing.Agenda is not null && installing.Agenda is null && context.Generation >= 11
+                && HidingPays(context, server, existing, advanced))
+                return 100 + advanced * 150 - existing.Printed.AgendaPoints * 250;
             return existing.Agenda is not null
                 ? 1000 + existing.Printed.AgendaPoints * 300 + advanced * 150
                 : context.CardValue(card, installed: true) + advanced * 100;
         });
     }
+
+    /// <summary>
+    /// v16 (playtest, 30 September): an agenda the Runner can reach before the Corp can score it is
+    /// safer trashed by installing over it, when an installed card will shuffle it back from Archives
+    /// into R&amp;D (Spin Doctor), which v15 does as soon as an agenda is there.
+    /// </summary>
+    private static bool HidingPays(HeuristicContext context, AgentServer server, CardEvaluationDescriptor agenda, int advanced)
+    {
+        int remaining = Math.Max(0, agenda.Printed.AdvancementRequirement - advanced);
+        // Scorable this turn after the install's click: score it instead.
+        if (context.Self.Clicks - 1 >= remaining && context.Self.Credits >= remaining) return false;
+        return RecoversFromArchives(context) && ModelledProtection(context, server, remaining) < HidingThreshold;
+    }
+
+    /// <summary>Below this modelled protection the Runner is expected to get into the server next turn.</summary>
+    private const int HidingThreshold = 300;
+
+    /// <summary>True when an installed Corp card has an ability that shuffles cards from Archives into R&amp;D.</summary>
+    private static bool RecoversFromArchives(HeuristicContext context) =>
+        context.Features.Board.Servers.SelectMany(server => server.Root).Any(card => context.Definition(card)?.Behavior?.PaidAbilities
+            .Any(ability => ability.Instructions.Any(instruction => instruction.Kind == BehaviorInstructionKind.ShuffleIntoDeck
+                && instruction.SourceZone == BehaviorZone.Archives)) == true);
 
     /// <summary>
     /// v6: the credits needed to rez the ICE that protects what the Corp is

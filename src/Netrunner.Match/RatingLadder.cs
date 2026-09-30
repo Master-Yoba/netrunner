@@ -47,7 +47,7 @@ public static partial class RatingLadder
     /// "standard-plan" is the A3 turn planner (Runner v3, Corp v5).
     /// </summary>
     public static IReadOnlyList<string> EntrantOrder { get; } =
-        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15"];
+        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16"];
 
     private const double EloScale = 400 / 2.302585092994046;
     private const double Ridge = 0.01;
@@ -137,6 +137,9 @@ public static partial class RatingLadder
             // The Corp's self-removing abilities costed (v15) with the default Runner.
             "standard-c15" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V15 : RunnerHeuristicPolicy.PolicyVersion),
+            // The Corp hides a threatened agenda in Archives for Spin Doctor (v16) with the default Runner.
+            "standard-c16" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
+                side == PlayerSide.Corp ? CorpHeuristicPolicy.V16 : RunnerHeuristicPolicy.PolicyVersion),
             // Runner v11's fixes without its archetype knobs (every deck generic), with the default Corp.
             "standard-rgen" => GenericRunner(OfflineMatchFactory.CreateOpponent(definition, other, "standard", RunnerHeuristicPolicy.V11), definition),
             // A8: the Runner plays to its deck's archetype (v11) with the default Corp.

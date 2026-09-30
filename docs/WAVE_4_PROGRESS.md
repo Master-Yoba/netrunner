@@ -833,9 +833,34 @@ reaching Spin Doctor's own server.
 On the Gateway ladder v15 beats v14 (+58 and +69 Elo on two seeds, 240 games
 each), so it is the default.
 
-Not yet modelled: the other half of the trick, where the Corp deliberately
-trashes its own agenda from a server about to be broken into (by installing
-over it) and then recovers it with Spin Doctor.
+## Corp v16: hiding a threatened agenda for Spin Doctor
+
+The playtester's trick: an agenda the Runner is about to steal can be trashed by
+installing over it, then shuffled back into R&D from Archives with Spin Doctor.
+Chiriboga's Corp AI leaves this as a TODO.
+
+Corp v16 prices the trashed agenda at the advancement and tempo lost, minus the
+steal it prevents, when three things hold:
+
+- an installed card can shuffle Archives into R&D;
+- the agenda can't be scored this turn;
+- the run model expects the Runner to get into its remote.
+
+Only an asset going in counts. In self-play, v16 at first installed another
+agenda over the threatened one, which only leaves a new agenda in the same weak
+server. v15's valuation then brings the hidden agenda back the same turn.
+
+In 36 self-play games per version as Hyper Velocity, v16 hid an agenda twice,
+both times under a Spin Doctor. Both agendas were back in R&D that turn, and
+neither was stolen. v15 never hid one.
+
+`CorpAgendaHidingV16Tests` checks one of those games at two points:
+
+- **At the hide:** v15 declines and v16 hides.
+- **Recovery:** the agenda is back in R&D by the end of the turn.
+
+On the Gateway ladder v16 is level with v15 (0 and −12 Elo on two seeds, 240
+games each; the trick is rare), so it is the default.
 
 ## Gate status
 
@@ -854,6 +879,6 @@ over it) and then recovers it with Spin Doctor.
 | A8 archetypes | **Corp v12 ships** (+36 and +48); Runner archetypes (v11) weaker (−32), kept as an entrant; Runner v12 ships the review fixes alone (+29) |
 | U8 run HUD | Done: one panel per run at both seats, Break all over issued actions, the run drawn through the ICE; `--run-hud-smoke` in `make verify`. **Needs the playtest** to judge speed against the old panels |
 
-Default bots after Wave 4: Corp v15 (plans turn actions, plays to its deck's
-archetype, with the 29 September repairs, the economy-asset rez timing and Spin Doctor's use) and Runner v12 (central memory and the self-play review fixes)
+Default bots after Wave 4: Corp v16 (plans turn actions, plays to its deck's
+archetype, with the 29 September repairs, the economy-asset rez timing, Spin Doctor's use and agenda hiding) and Runner v12 (central memory and the self-play review fixes)
 on the legal decks; the tutorial decks keep the frozen C1 bot (Corp v7, Runner v6).
