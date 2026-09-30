@@ -924,6 +924,35 @@ the default.
   - A dragged card turns in perspective (a canvas shader) instead of a flat lean.
 - **Run selection:** the prompt no longer says twice that Esc cancels.
 
+## Playtest follow-up (30 September, third round)
+
+A Runner game (Stolen Goods) against Discretion Advised.
+
+### Corp v17: subroutine installs over its own agendas
+
+The Runner left Ansel 1.0's "install 1 card from HQ or Archives" unbroken. Corp v16 then
+installed Nico Campaign into the remote being run, trashing its own Offworld Office, and the
+Runner, with a click left, took the agenda from Archives.
+
+- **The cause:** a card installed by a subroutine was scored like ICE protecting the server, so a
+  server holding an agenda made trashing that agenda look good.
+- **v17:** such a root install is charged for the card it trashes. Trashing an agenda that way is
+  worth it only to deny a steal the Runner can't make from Archives this turn: no click left, or,
+  as the playtester pointed out, not the credits to get through Archives' ICE by the run model.
+  An agenda installed by a subroutine goes only behind ICE.
+- **Tests:** `CorpPlaytestV17Tests` covers the recorded position (v16 trashes the agenda, v17
+  doesn't) and an edited copy with a rezzed Palisade on Archives and a Runner with no credits
+  (v17 trashes it).
+- **Ladder:** v17 is level with v16 on the Gateway ladder (0, −32, +32 and +11 Elo on four seeds,
+  240 games each), so it is the default.
+
+### Client
+
+- With the rig empty, the first install's drop area was a sliver, because the rig's scroll area
+  shrinks to its cards. It is now the whole rig box.
+- A known ICE shows a wide crop of its artwork with its type and name along the bottom, instead
+  of its sideways printed text.
+
 ## Gate status
 
 | Item | Result |
@@ -941,6 +970,6 @@ the default.
 | A8 archetypes | **Corp v12 ships** (+36 and +48); Runner archetypes (v11) weaker (−32), kept as an entrant; Runner v12 ships the review fixes alone (+29) |
 | U8 run HUD | Done: one panel per run at both seats, Break all over issued actions, the run drawn through the ICE; `--run-hud-smoke` in `make verify`. **Needs the playtest** to judge speed against the old panels |
 
-Default bots after Wave 4: Corp v16 (plans turn actions, plays to its deck's
-archetype, with the 29 September repairs, the economy-asset rez timing, Spin Doctor's use and agenda hiding) and Runner v13 (central memory, the self-play review fixes, and memory of accessed remote cards)
+Default bots after Wave 4: Corp v17 (plans turn actions, plays to its deck's
+archetype, with the 29 September repairs, the economy-asset rez timing, Spin Doctor's use, agenda hiding and costed subroutine installs) and Runner v13 (central memory, the self-play review fixes, and memory of accessed remote cards)
 on the legal decks; the tutorial decks keep the frozen C1 bot (Corp v7, Runner v6).

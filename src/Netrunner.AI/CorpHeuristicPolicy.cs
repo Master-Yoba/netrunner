@@ -86,15 +86,22 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// shuffle it back from Archives into R&amp;D.
     /// </summary>
     public const string V16 = "corp-heuristic-v16";
+    /// <summary>
+    /// V16 with the 30 September playtest's subroutine fix: installing a card through an ICE
+    /// subroutine (Ansel 1.0) into a remote counts the root card it trashes, so the Corp no longer
+    /// trashes its own agenda there by accident; it does so only to deny a steal the Runner can't make
+    /// from Archives this turn (no click left, or not the credits to get through its ICE).
+    /// </summary>
+    public const string V17 = "corp-heuristic-v17";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
-    /// V16 adds the playtester's agenda-hiding trick for Spin Doctor to V15 and is level with it on
-    /// the Gateway ladder (0 and -12 on two seeds; the trick is rare), so new games use it.
+    /// V17 fixes V16's subroutine installs over its own agendas from the 30 September playtest and is
+    /// level with it on the Gateway ladder (0, -32, +32 and +11 on four seeds), so new games use it.
     /// </remarks>
-    public const string PolicyVersion = V16;
+    public const string PolicyVersion = V17;
     /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>
     public const string LatestHeuristic = V8;
-    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16];
+    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17];
 
     public CorpHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -102,9 +109,9 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Corp policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version switch { V2 => 1, V3 => 2, V7 => 4, V8 or V9 or V10 => 5, V11 => 6, V12 => 7, V13 => 8, V14 => 9, V15 => 10, V16 => 11, _ => 3 };
-        Plans = version is V5 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16;
-        Repairs = version is V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16;
+        Generation = version switch { V2 => 1, V3 => 2, V7 => 4, V8 or V9 or V10 => 5, V11 => 6, V12 => 7, V13 => 8, V14 => 9, V15 => 10, V16 => 11, V17 => 12, _ => 3 };
+        Plans = version is V5 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17;
+        Repairs = version is V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17;
     }
 
     /// <summary>Whether this version has the playtest repairs (V6).</summary>
