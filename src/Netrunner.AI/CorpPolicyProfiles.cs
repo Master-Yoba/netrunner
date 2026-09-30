@@ -44,11 +44,11 @@ public static class CorpPolicyProfiles
             workBudget: 12000, nearTieTolerance: EasyNearTieTolerance,
             parameters: [.. Parameters(90, 80, 100), new("coverage-scale", 0), .. Planning(0, 0), new("plan-evaluation", 2)]),
         // A8: V11 playing to its deck's archetype, set per match by WithArchetypes (generic until then).
-        (CorpHeuristicPolicy.V12 or CorpHeuristicPolicy.V13 or CorpHeuristicPolicy.V14, "standard") => OfflineAgentConfiguration.Create(PlayerSide.Corp, policyVersion, profileId, policySeed,
+        (CorpHeuristicPolicy.V12 or CorpHeuristicPolicy.V13 or CorpHeuristicPolicy.V14 or CorpHeuristicPolicy.V15, "standard") => OfflineAgentConfiguration.Create(PlayerSide.Corp, policyVersion, profileId, policySeed,
             workBudget: 20000, nearTieTolerance: 0,
             parameters: [.. Parameters(100, 100, 100), new("coverage-scale", 100), .. Planning(PlanSamples, PlanWidth), new("plan-evaluation", 2),
                 new("archetype-primary", 0), new("archetype-secondary", 0)]),
-        (CorpHeuristicPolicy.V12 or CorpHeuristicPolicy.V13 or CorpHeuristicPolicy.V14, "easy") => OfflineAgentConfiguration.Create(PlayerSide.Corp, policyVersion, profileId, policySeed,
+        (CorpHeuristicPolicy.V12 or CorpHeuristicPolicy.V13 or CorpHeuristicPolicy.V14 or CorpHeuristicPolicy.V15, "easy") => OfflineAgentConfiguration.Create(PlayerSide.Corp, policyVersion, profileId, policySeed,
             workBudget: 12000, nearTieTolerance: EasyNearTieTolerance,
             parameters: [.. Parameters(90, 80, 100), new("coverage-scale", 0), .. Planning(0, 0), new("plan-evaluation", 2),
                 new("archetype-primary", 0), new("archetype-secondary", 0)]),
@@ -68,7 +68,7 @@ public static class CorpPolicyProfiles
     public const int EasyNearTieTolerance = 150;
 
     /// <summary>Whether a version plays to a deck archetype (A8).</summary>
-    public static bool SupportsArchetypes(string policyVersion) => policyVersion is CorpHeuristicPolicy.V12 or CorpHeuristicPolicy.V13 or CorpHeuristicPolicy.V14;
+    public static bool SupportsArchetypes(string policyVersion) => policyVersion is CorpHeuristicPolicy.V12 or CorpHeuristicPolicy.V13 or CorpHeuristicPolicy.V14 or CorpHeuristicPolicy.V15;
 
     /// <summary>Sets the deck's archetypes on a configuration of a version that supports them.</summary>
     public static OfflineAgentConfiguration WithArchetypes(OfflineAgentConfiguration configuration, CorpArchetype primary, CorpArchetype secondary)
@@ -108,7 +108,7 @@ public static class CorpPolicyProfiles
             CorpHeuristicPolicy.V5 => V5ParameterKeys,
             CorpHeuristicPolicy.V9 or CorpHeuristicPolicy.V11 => V9ParameterKeys,
             CorpHeuristicPolicy.V10 => V10ParameterKeys,
-            CorpHeuristicPolicy.V12 or CorpHeuristicPolicy.V13 or CorpHeuristicPolicy.V14 => V12ParameterKeys,
+            CorpHeuristicPolicy.V12 or CorpHeuristicPolicy.V13 or CorpHeuristicPolicy.V14 or CorpHeuristicPolicy.V15 => V12ParameterKeys,
             _ => null,
         };
         if (configuration.Side != PlayerSide.Corp || keys is null

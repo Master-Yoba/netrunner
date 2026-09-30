@@ -22,17 +22,74 @@ public sealed partial class CorpHeuristicPolicy
         if (declaration is null) return Value(-50, "ability/unmodelled", approximate: true, fallback: true);
         int benefit = Effects(context, declaration.Instructions, card, context.Features.Side);
         int costs = ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount) * context.CreditValue;
-        costs += ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.TrashSelf).Sum(_ => context.CardValue(card, installed: true));
+        costs += ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.TrashSelf
+            || (context.Generation >= 10 && cost.Kind == BehaviorCostKind.RemoveSelfFromGame)).Sum(_ => context.CardValue(card, installed: true));
         return Value(benefit - costs, "ability/payoff-minus-cost", approximate: true);
     }
+
+    /// <summary>
+    /// v15 (playtest, 30 September): shuffling up to <paramref name="count"/> cards from Archives into
+    /// R&amp;D (Spin Doctor) is worth the best cards there to get back (v14 spent it with Archives empty):
+    /// - an agenda, out of the Runner's reach in Archives and back where the Corp can draw it
+    ///   (an agenda trashed from a server about to be broken into, then recovered);
+    /// - an upgrade the Runner trashed;
+    /// - an economy card while the Corp is short of money;
+    /// - a face-down card, kept hidden from an Archives run;
+    /// - anything, when R&amp;D is running low.
+    /// It is spent once, so it normally waits for a use worth more than keeping it. Two moments
+    /// don't wait (after Chiriboga's Corp AI): the Runner past the last ICE of Archives, when its
+    /// agendas would be stolen, and past the last ICE of the card's own server, when it is used
+    /// now or trashed.
+    /// </summary>
+    private static int ArchivesShuffleValue(HeuristicContext context, int count, AgentCard? source)
+    {
+        AgentBoard board = context.Features.Board;
+        AgentServer? reached = board.Run is { EndReason: null, Successful: false, CurrentIceIndex: < 0 } run
+            ? board.Servers.FirstOrDefault(server => server.Id == run.AttackedServer) : null;
+        bool archivesReached = reached?.Kind == ServerKind.Archives;
+        bool ownServerReached = source is not null && reached?.Root.Any(card => card?.Id == source.Id) == true;
+        bool deckLow = board.HiddenZoneCounts.CorpDeck < 10;
+        bool poor = context.Self.Credits < 5;
+        int Worth(AgentCard card, bool faceDown)
+        {
+            CardEvaluationDescriptor? definition = context.Definition(card);
+            int worth = definition switch
+            {
+                // About to be stolen: worth the points the Runner would score.
+                { Agenda: { } agenda } when archivesReached => 250 + agenda.AgendaPoints * 300,
+                { Agenda: not null } => 250,
+                { Printed.CardClass: RuntimeCardClass.Upgrade } => 160,
+                _ when IsEconomy(definition) => poor ? 160 : 40,
+                _ => faceDown ? 40 : 20,
+            };
+            return deckLow ? Math.Max(worth, 100) : worth;
+        }
+        int keepForLater = archivesReached || ownServerReached ? 0 : 100;
+        return board.CorpDiscard.Select(card => Worth(card, faceDown: false))
+            .Concat(context.Features.PrivateCards.FaceDownArchives.Select(card => Worth(card, faceDown: true)))
+            .OrderDescending().Take(count).Sum() - keepForLater;
+    }
+
+    /// <summary>A card that makes the Corp money: when played, when its turn begins, or by its abilities.</summary>
+    private static bool IsEconomy(CardEvaluationDescriptor? definition) =>
+        definition?.Behavior is { } behavior
+        && behavior.Instructions.Concat(behavior.Triggers.SelectMany(trigger => trigger.Instructions))
+            .Concat(behavior.PaidAbilities.SelectMany(ability => ability.Instructions))
+            .Any(instruction => instruction.Kind is BehaviorInstructionKind.GainCredits or BehaviorInstructionKind.LoadHostedCredits
+                or BehaviorInstructionKind.PlaceHostedCredits);
 
     private static int Effects(HeuristicContext context, IEnumerable<BehaviorInstruction> instructions, AgentCard? source, PlayerSide controller)
     {
         int total = 0;
         BehaviorTarget? chosenTarget = null;
+        int chosenCount = 1;
         foreach (BehaviorInstruction instruction in instructions)
         {
-            if (instruction.Kind == BehaviorInstructionKind.Choose && instruction.Choice?.Target is { } target) chosenTarget = target;
+            if (instruction.Kind == BehaviorInstructionKind.Choose && instruction.Choice?.Target is { } target)
+            {
+                chosenTarget = target;
+                chosenCount = instruction.Choice.Cardinality.Count ?? int.MaxValue;
+            }
             bool self = controller == context.Features.Side;
             int sign = self ? 1 : -1;
             int amount = instruction.Amount;
@@ -134,6 +191,10 @@ public sealed partial class CorpHeuristicPolicy
                 case BehaviorInstructionKind.AdvanceCard: total += amount * 110; break;
                 case BehaviorInstructionKind.RezIgnoringCosts: total += 300; break;
                 case BehaviorInstructionKind.Search: total += 180; break;
+                case BehaviorInstructionKind.ShuffleIntoDeck when context.Generation >= 10 && self
+                    && instruction.SourceZone == BehaviorZone.Archives:
+                    total += ArchivesShuffleValue(context, chosenCount, source);
+                    break;
                 case BehaviorInstructionKind.TrashSelf: total -= context.CardValue(source, installed: true); break;
             }
         }

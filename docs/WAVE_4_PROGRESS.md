@@ -741,6 +741,8 @@ random, and presses the HUD's own buttons. On every frame of every run it checks
 
 - stays visible for the whole run (except while Archives' Access all runs);
 - changes height at most once at one position of the run, and never goes back;
+- keeps the separator above its footer where it is at one position of the run (playtest,
+  30 September: it jumped when the footer's buttons went away);
 - never grows wider than 480 px;
 - stays inside the table and clear of the history panel.
 
@@ -794,6 +796,47 @@ game: v13 rezzes, v14 waits. On the Gateway ladder v14 is level with v13
 (+11 Elo on both seeds, 240 games each, intervals about ±80), so it is the
 default.
 
+## Corp v15: Spin Doctor spent for something (30 September)
+
+Playtest, 30 September (Hyper Velocity against Stolen Goods): Corp v14 removed Spin
+Doctor from the game to shuffle Archives into R&D while Archives was empty. It
+valued the ability at nothing and the card it gave up at nothing too, so the
+ability tied with passing.
+
+Corp v15 counts the card an ability removes or trashes as a cost. It values the
+shuffle by the best cards in Archives it can get back:
+
+- an agenda, hidden from the Runner and back where the Corp can draw it;
+- an upgrade the Runner trashed;
+- an economy card while the Corp is short of money;
+- a face-down card, kept hidden from an Archives run;
+- anything, when R&D runs low.
+
+The ability is spent only once, so v15 normally holds it for a use worth more
+than keeping it. Following Chiriboga's Corp AI, it doesn't wait at two moments,
+both with the Runner past the last ICE:
+
+- **on Archives:** an agenda there is about to be stolen, so it is worth its points;
+- **on Spin Doctor's own server:** used now, or likely trashed.
+
+`CorpPlaytestV15Tests` covers two sets of positions:
+
+- **The recorded position:** v14 spends it, v15 keeps it.
+- **Five edited copies of it:** v15 recovers an agenda, two Hedge Funds when
+  broke, and an upgrade. It holds when rich and when Archives holds only ICE.
+
+In 24 self-play games per version as Hyper Velocity, v14 used Spin Doctor 42
+times, all but once in its own turn and 3 times with Archives empty. v15 used
+it 32 times and never with Archives empty. Its most common moment was the Runner
+reaching Spin Doctor's own server.
+
+On the Gateway ladder v15 beats v14 (+58 and +69 Elo on two seeds, 240 games
+each), so it is the default.
+
+Not yet modelled: the other half of the trick, where the Corp deliberately
+trashes its own agenda from a server about to be broken into (by installing
+over it) and then recovers it with Spin Doctor.
+
 ## Gate status
 
 | Item | Result |
@@ -811,6 +854,6 @@ default.
 | A8 archetypes | **Corp v12 ships** (+36 and +48); Runner archetypes (v11) weaker (−32), kept as an entrant; Runner v12 ships the review fixes alone (+29) |
 | U8 run HUD | Done: one panel per run at both seats, Break all over issued actions, the run drawn through the ICE; `--run-hud-smoke` in `make verify`. **Needs the playtest** to judge speed against the old panels |
 
-Default bots after Wave 4: Corp v14 (plans turn actions, plays to its deck's
-archetype, with the 29 September repairs and the economy-asset rez timing) and Runner v12 (central memory and the self-play review fixes)
+Default bots after Wave 4: Corp v15 (plans turn actions, plays to its deck's
+archetype, with the 29 September repairs, the economy-asset rez timing and Spin Doctor's use) and Runner v12 (central memory and the self-play review fixes)
 on the legal decks; the tutorial decks keep the frozen C1 bot (Corp v7, Runner v6).
