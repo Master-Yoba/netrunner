@@ -776,7 +776,8 @@ public partial class TableCardControl : Control
 			// the frame's corners around it).
 			float radius = FullArtRadius(frameRect, appearance);
 			Vector2[] outline = RoundedRectPath(frameRect, radius, 12);
-			DrawCardFace(frameRect, outline);
+			if (_isIce) DrawIceArtStrip(frameRect, outline);
+			else DrawCardFace(frameRect, outline);
 			if (Unrezzed) DrawColoredPolygon(outline, new Color(0.02f, 0.03f, 0.04f, 0.5f));
 			DrawPolyline([.. outline, outline[0]], border, Mathf.Max(1, frameWidth), true);
 			DrawAuthoredStatusBadge();
@@ -856,6 +857,51 @@ public partial class TableCardControl : Control
 			cardSize.Y * normalized.Position.Y,
 			Mathf.Max(1.0f, cardSize.X * normalized.Size.X),
 			Mathf.Max(1.0f, cardSize.Y * normalized.Size.Y));
+	}
+
+	/// <summary>Where the artwork sits on an NSG ICE scan: the lower half, between the strength strip and the credits strip.</summary>
+	private static readonly Rect2 IceArtRegion = new(0.14f, 0.52f, 0.78f, 0.43f);
+
+	/// <summary>
+	/// ICE lies sideways, and its printed text turned sideways was unreadable at table size (playtest,
+	/// 30 September). It shows a wide crop of its artwork instead, with its type and name along the
+	/// bottom; the full card is a hover away.
+	/// </summary>
+	private void DrawIceArtStrip(Rect2 rect, Vector2[] outline)
+	{
+		Vector2 image = _artwork!.GetSize();
+		// The widest band of the artwork with the slot's shape, centred in the art.
+		Vector2 art = new(IceArtRegion.Size.X * image.X, IceArtRegion.Size.Y * image.Y);
+		Vector2 band = art.X / art.Y > rect.Size.X / rect.Size.Y
+			? new Vector2(art.Y * rect.Size.X / rect.Size.Y, art.Y)
+			: new Vector2(art.X, art.X * rect.Size.Y / rect.Size.X);
+		Vector2 origin = new Vector2(IceArtRegion.Position.X * image.X, IceArtRegion.Position.Y * image.Y) + (art - band) / 2;
+		var uvs = new Vector2[outline.Length];
+		for (int index = 0; index < outline.Length; index++)
+			uvs[index] = (origin + (outline[index] - rect.Position) / rect.Size * band) / image;
+		DrawPolygon(outline, new[] { Colors.White }, uvs, _artwork);
+
+		// A dark gradient along the bottom for the name to sit on.
+		float shade = rect.Size.Y * 0.55f;
+		Color clear = new(0.02f, 0.03f, 0.04f, 0), dark = new(0.02f, 0.03f, 0.04f, 0.85f);
+		float inset = FullArtRadius(rect, Appearance) * 0.3f;
+		DrawPolygon(
+			[new Vector2(rect.Position.X + inset, rect.End.Y - shade), new Vector2(rect.End.X - inset, rect.End.Y - shade),
+				new Vector2(rect.End.X - inset, rect.End.Y - inset), new Vector2(rect.Position.X + inset, rect.End.Y - inset)],
+			[clear, clear, dark, dark]);
+		if (_card is not { } card) return;
+		float nameSize = Mathf.Clamp(rect.Size.Y * 0.2f, 11, 22);
+		float typeSize = Mathf.Clamp(rect.Size.Y * 0.11f, 8, 12);
+		float left = rect.Position.X + Mathf.Max(8, rect.Size.Y * 0.12f);
+		float right = rect.End.X - Mathf.Max(8, rect.Size.Y * 0.12f) - 30;
+		if (TableFonts.Display is { } display)
+			DrawString(display, new Vector2(left, rect.End.Y - rect.Size.Y * 0.12f), card.Title.ToUpperInvariant(),
+				HorizontalAlignment.Left, right - left, (int)nameSize, Colors.White);
+		string kind = string.Join(" · ", card.Subtypes.Where(subtype => subtype is "Barrier" or "Code Gate" or "Sentry" or "Trap" or "Bioroid" or "AP"))
+			.ToUpperInvariant();
+		if (kind.Length > 0 && TableFonts.Mono is { } mono)
+			DrawString(mono, new Vector2(left, rect.End.Y - rect.Size.Y * 0.12f - nameSize * 0.95f), kind,
+				HorizontalAlignment.Left, right - left, (int)typeSize, new Color(0.75f, 0.85f, 0.92f, 0.9f));
 	}
 
 	/// <summary>A printed card's corner radius, about 5% of its short side, and never less than the frame's.</summary>

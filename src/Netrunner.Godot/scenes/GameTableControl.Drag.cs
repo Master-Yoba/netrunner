@@ -37,7 +37,9 @@ public partial class GameTableControl
 		return kind.Trim() switch
 		{
 			"GeneralPlay" => GetGeneralPlayRect(),
-			"RunnerRig" => GetClippedGlobalRect(_runnerRigScroll),
+			// The whole rig box: its scroll area shrinks to the cards, so an empty rig gave a sliver
+			// to drop on (playtest, 30 September).
+			"RunnerRig" => GetClippedGlobalRect(_runnerRigScroll.GetParentOrNull<Control>()?.GetParentOrNull<Control>() ?? _runnerRigScroll),
 			"HostCard" => GetVisibleCardRect(targetId),
 			"ServerRoot" => GetServerRootRect(targetId),
 			"ServerIce" => GetServerIceRect(targetId),
