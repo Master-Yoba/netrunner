@@ -133,6 +133,41 @@ public partial class Main
 		int submissions = _labSubmissionCount;
 		await ClickTableButton(choices[0]);
 		RequireInteraction(_labSubmissionCount == submissions + 1, "Installing from the HUD did not submit exactly once.");
+
+		// Ansel 1.0: any card, into any server. The card comes first, then its destination (the run HUD
+		// soak, 30 September: one button per card and server grew the HUD past the table).
+		CardViewModel asset = inHand with { Id = "lab-ansel-asset", Title = "Practice Asset", Type = "Asset" };
+		MatchViewModel ansel = corp with
+		{
+			CorpHand = new(ZoneKind.CorpHand, 2, [inHand, asset]),
+			LegalActions =
+			[
+				InteractionLabSamples.Action("ansel-ice", ActionKind.ResolveIceSubroutine, new IceSubroutineChoiceParameters("lab-frame",
+					IceSubroutineChoiceKind.InstallCard, new(inHand.Id), InstallDestinationKind.ServerIce, new(runner.Run.AttackedServerId)), _labRevision),
+				InteractionLabSamples.Action("ansel-asset-new", ActionKind.ResolveIceSubroutine, new IceSubroutineChoiceParameters("lab-frame",
+					IceSubroutineChoiceKind.InstallCard, new(asset.Id), InstallDestinationKind.ServerRoot, createNewRemote: true), _labRevision),
+				InteractionLabSamples.Action("ansel-asset-here", ActionKind.ResolveIceSubroutine, new IceSubroutineChoiceParameters("lab-frame",
+					IceSubroutineChoiceKind.InstallCard, new(asset.Id), InstallDestinationKind.ServerRoot, new(runner.Run.AttackedServerId)), _labRevision),
+				InteractionLabSamples.Action("ansel-decline", ActionKind.ResolveIceSubroutine,
+					new IceSubroutineChoiceParameters("lab-frame", IceSubroutineChoiceKind.Decline), _labRevision),
+			],
+		};
+		PublishLabView(ansel);
+		await TableFrames(4);
+		choices = FindDescendants<Button>(_runHud!.GetNode("Content/Body"));
+		Button? pick = choices.FirstOrDefault(button => button.Text == "PRACTICE ASSET ›");
+		RequireInteraction(choices.Length == 3 && pick is not null && choices.Any(button => button.Text.StartsWith("INSTALL PRACTICE WALL · ", StringComparison.Ordinal)),
+			$"The HUD's install choices for several cards are wrong: {string.Join(", ", choices.Select(button => button.Text))}.");
+		submissions = _labSubmissionCount;
+		await ClickTableButton(pick!);
+		await TableFrames(2);
+		choices = FindDescendants<Button>(_runHud.GetNode("Content/Body"));
+		RequireInteraction(_labSubmissionCount == submissions && choices.Any(button => button.Text == "NEW REMOTE") && choices.Any(button => button.Text == "BACK"),
+			$"Picking a card didn't offer its destinations: {string.Join(", ", choices.Select(button => button.Text))}.");
+		await ClickTableButton(choices.Single(button => button.Text == "BACK"));
+		await TableFrames(2);
+		RequireInteraction(FindDescendants<Button>(_runHud.GetNode("Content/Body")).Any(button => button.Text == "PRACTICE ASSET ›"),
+			"Back didn't return to the cards.");
 	}
 
 	/// <summary>Playtest, 29 September: breaching HQ took a server click and the dock; the HUD offers the choices.</summary>

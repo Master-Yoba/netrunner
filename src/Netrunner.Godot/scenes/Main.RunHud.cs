@@ -27,6 +27,9 @@ public partial class Main
 	private const float RunHudHeight = 640;
 	private const int RunHudGrowFrames = 4;
 
+	/// <summary>The gap between the half-width rez buttons for cards outside the attacked server.</summary>
+	private const int RezGridGap = 8;
+
 	/// <summary>The footer's standing height: one row of run controls.</summary>
 	private const float RunHudFooterHeight = 40;
 	private float _runHudHeight = RunHudHeight;
@@ -410,22 +413,30 @@ public partial class Main
 		LegalActionViewModel[] elsewhere = [.. rezzes.Except(local)];
 		if (local.Length > 0 && elsewhere.Length > 0)
 			body.AddChild(new Label { Text = $"IN {_gameTable.GetServerDisplayName(run.AttackedServerId).ToUpperInvariant()}", ThemeTypeVariation = "MonoLabel", MouseFilter = Control.MouseFilterEnum.Ignore });
-		foreach (LegalActionViewModel rez in local) AddRezButton(rez, RunHudTone.Primary);
+		foreach (LegalActionViewModel rez in local) body.AddChild(RezButton(rez, RunHudTone.Primary, RunHudInnerWidth));
 		if (elsewhere.Length > 0)
+		{
 			body.AddChild(new Label { Text = "ELSEWHERE", ThemeTypeVariation = "MonoLabel", MouseFilter = Control.MouseFilterEnum.Ignore });
-		foreach (LegalActionViewModel rez in elsewhere) AddRezButton(rez, RunHudTone.Normal);
+			// Two to a row, so a board full of rezzable cards doesn't push the HUD past the table (the run HUD
+			// soak, 30 September: 1077 px); the text wraps at half width, so the panel never widens.
+			HFlowContainer grid = new() { Name = "RezElsewhere", MouseFilter = Control.MouseFilterEnum.Ignore };
+			grid.AddThemeConstantOverride("h_separation", RezGridGap);
+			grid.AddThemeConstantOverride("v_separation", RezGridGap);
+			foreach (LegalActionViewModel rez in elsewhere) grid.AddChild(RezButton(rez, RunHudTone.Normal, (RunHudInnerWidth - RezGridGap) / 2));
+			body.AddChild(grid);
+		}
 
-		void AddRezButton(LegalActionViewModel rez, RunHudTone tone)
+		Button RezButton(LegalActionViewModel rez, RunHudTone tone, float width)
 		{
 			string? cardId = RezCardId(rez);
 			int? cost = rez.CostQuote?.EffectiveCost ?? (rez.Parameters as RezCardParameters)?.CreditCost;
 			string title = cardId is null ? "card" : ActionCardName(cardId);
-			Button button = RunHudWideButton($"REZ {title.ToUpperInvariant()}{(cost is { } credits ? $" · {credits} ¢" : string.Empty)}", tone);
+			Button button = RunHudWideButton($"REZ {title.ToUpperInvariant()}{(cost is { } credits ? $" · {credits} ¢" : string.Empty)}", tone, width);
 			button.Name = "Rez";
 			button.Disabled = cost is { } price && price > view.Corp.Credits;
 			button.Pressed += () => SubmitRunHudAction(rez);
-			body.AddChild(button);
 			_runHudButtons[rez.Id] = button;
+			return button;
 		}
 		LegalActionViewModel[] abilities = [.. issued.Where(action => action.Kind == ActionKind.UseAbility)];
 		if (abilities.Length == 0) return;
@@ -441,35 +452,86 @@ public partial class Main
 		}
 	}
 
+	/// <summary>The card picked in a multi-destination install subroutine, and the decision it belongs to.</summary>
+	private (string DecisionId, string CardId)? _runHudInstallCard;
+
 	/// <summary>
-	/// An ICE subroutine installing a card (Brân 1.0: an ICE from HQ or Archives, directly inward):
-	/// one button per card, its destination named only when a card has more than one.
+	/// An ICE subroutine installing a card, in two steps when it must: the card first, two to a row, then
+	/// its destination if it has more than one (Ansel 1.0: any card from HQ or Archives, into any server;
+	/// the run HUD soak, 30 September: one button per card and server grew the HUD past the table). A card
+	/// with one destination (Brân 1.0: an ICE, inward) installs at once.
 	/// </summary>
 	private void BuildInstallSubroutineSection(MatchViewModel view, IReadOnlyList<LegalActionViewModel> issued)
 	{
 		VBoxContainer body = _runHudBody!;
 		string source = view.Run?.Encounter?.Ice is { IsKnown: true } ice ? ice.Title.ToUpperInvariant() : "THE SUBROUTINE";
-		body.AddChild(new Label { Text = $"{source} · INSTALL AN ICE", ThemeTypeVariation = "MonoLabel", MouseFilter = Control.MouseFilterEnum.Ignore });
-		LegalActionViewModel[] installs = [.. issued.Where(action => action.Parameters is IceSubroutineChoiceParameters { Choice: IceSubroutineChoiceKind.InstallCard })];
-		foreach (LegalActionViewModel install in installs)
+		string decision = view.Decision?.Id ?? string.Empty;
+		var byCard = issued.Where(action => action.Parameters is IceSubroutineChoiceParameters { Choice: IceSubroutineChoiceKind.InstallCard, CardId: not null })
+			.GroupBy(action => ((IceSubroutineChoiceParameters)action.Parameters).CardId!.Value.Value).ToArray();
+		float half = (RunHudInnerWidth - RezGridGap) / 2;
+		IGrouping<string, LegalActionViewModel>? picked = _runHudInstallCard is { } selection && selection.DecisionId == decision
+			? byCard.FirstOrDefault(group => group.Key == selection.CardId) : null;
+		HFlowContainer grid = new() { Name = "InstallChoices", MouseFilter = Control.MouseFilterEnum.Ignore };
+		grid.AddThemeConstantOverride("h_separation", RezGridGap);
+		grid.AddThemeConstantOverride("v_separation", RezGridGap);
+		if (picked is not null)
 		{
-			var parameters = (IceSubroutineChoiceParameters)install.Parameters;
-			string title = parameters.CardId is { } card ? ActionCardName(card.Value) : "ICE";
-			bool several = installs.Count(other => ((IceSubroutineChoiceParameters)other.Parameters).CardId == parameters.CardId) > 1;
-			string where = !several ? " · INWARD"
-				: parameters.CreateNewRemote ? " · NEW REMOTE"
-				: parameters.ServerId is { } server ? $" · {_gameTable.GetServerDisplayName(server.Value).ToUpperInvariant()}" : string.Empty;
-			Button button = RunHudWideButton($"INSTALL {title.ToUpperInvariant()}{where}", RunHudTone.Primary);
-			button.Pressed += () => SubmitRunHudAction(install);
-			body.AddChild(button);
-			_runHudButtons[install.Id] = button;
+			body.AddChild(new Label { Text = $"{source} · INSTALL {ActionCardName(picked.Key).ToUpperInvariant()} WHERE?", ThemeTypeVariation = "MonoLabel", MouseFilter = Control.MouseFilterEnum.Ignore });
+			foreach (LegalActionViewModel install in picked)
+			{
+				var parameters = (IceSubroutineChoiceParameters)install.Parameters;
+				string where = parameters.CreateNewRemote ? "NEW REMOTE"
+					: parameters.ServerId is { } server ? _gameTable.GetServerDisplayName(server.Value).ToUpperInvariant() : "INSTALL";
+				Button button = RunHudWideButton(where, RunHudTone.Primary, half);
+				button.Pressed += () => SubmitRunHudAction(install);
+				grid.AddChild(button);
+				_runHudButtons[install.Id] = button;
+			}
+			body.AddChild(grid);
+			Button back = RunHudWideButton("BACK", RunHudTone.Quiet);
+			back.Pressed += () => ChooseInstallCard(null);
+			body.AddChild(back);
+			return;
 		}
+		body.AddChild(new Label { Text = $"{source} · INSTALL A CARD", ThemeTypeVariation = "MonoLabel", MouseFilter = Control.MouseFilterEnum.Ignore });
+		foreach (IGrouping<string, LegalActionViewModel> card in byCard)
+		{
+			LegalActionViewModel[] destinations = [.. card];
+			string title = ActionCardName(card.Key).ToUpperInvariant();
+			if (destinations.Length == 1)
+			{
+				Button once = RunHudWideButton($"INSTALL {title} · {(byCard.Length == 1 ? "INWARD" : DestinationName(destinations[0]))}",
+					RunHudTone.Primary, byCard.Length == 1 ? RunHudInnerWidth : half);
+				once.Pressed += () => SubmitRunHudAction(destinations[0]);
+				grid.AddChild(once);
+				_runHudButtons[destinations[0].Id] = once;
+				continue;
+			}
+			Button pick = RunHudWideButton($"{title} ›", RunHudTone.Normal, half);
+			string cardId = card.Key;
+			pick.Pressed += () => ChooseInstallCard(cardId);
+			grid.AddChild(pick);
+		}
+		body.AddChild(grid);
 		foreach (LegalActionViewModel decline in issued.Where(action => action.Parameters is IceSubroutineChoiceParameters { Choice: IceSubroutineChoiceKind.Decline }))
 		{
 			Button button = RunHudWideButton("DON'T INSTALL", RunHudTone.Quiet);
 			button.Pressed += () => SubmitRunHudAction(decline);
 			body.AddChild(button);
 			_runHudButtons[decline.Id] = button;
+		}
+
+		string DestinationName(LegalActionViewModel install) => install.Parameters is IceSubroutineChoiceParameters parameters
+			? parameters.CreateNewRemote ? "NEW REMOTE"
+			: parameters.ServerId is { } server ? _gameTable.GetServerDisplayName(server.Value).ToUpperInvariant() : "INWARD"
+			: "INWARD";
+
+		void ChooseInstallCard(string? id)
+		{
+			_runHudInstallCard = id is null ? null : (decision, id);
+			// Rebuild the HUD for the same snapshot with the new step.
+			_runHudView = null;
+			if (_currentSnapshot is { } current) RefreshRunHud(current);
 		}
 	}
 
