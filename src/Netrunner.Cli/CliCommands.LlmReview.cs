@@ -13,7 +13,7 @@ public static partial class CliCommands
     /// <summary>
     /// ai-llm-review &lt;games-directory&gt; --side corp|runner [--entrant NAME] [--game ID]... [--games N] [--skip N]
     /// [--temperature T] [--top-p P] [--top-k K] [--seed S] [--reasoning low|medium|high] [--max-tool-calls N]
-    /// [--min-tool-calls N] [--check] [--model NAME] [--rules-root DIR] --output new-dir. The LLM game reviewer (Wave 4.5, P2) over games saved by
+    /// [--min-tool-calls N] [--check] [--model NAME] [--logs-only] [--rules-root DIR] --output new-dir. The LLM game reviewer (Wave 4.5, P2) over games saved by
     /// <c>ai-ladder --save-games</c>, with the model from NETRUNNER_LLM_BASE_URL and NETRUNNER_LLM_MODEL
     /// (and NETRUNNER_LLM_API_KEY). Writes one review per game and a triage sheet. Exit 0 when every
     /// review finished, 1 when one failed, 2 for invalid arguments.
@@ -25,6 +25,7 @@ public static partial class CliCommands
         var only = new HashSet<string>(StringComparer.Ordinal);
         bool check = false;
         string? model = null;
+        bool logsOnly = false;
         string? entrant = null, reasoning = Environment.GetEnvironmentVariable("NETRUNNER_LLM_REASONING_EFFORT") ?? "medium";
         int games = 5, skip = 0, maxToolCalls = 60, minToolCalls = 0;
         double? temperature = 0.6, topP = 0.95;
@@ -55,6 +56,7 @@ public static partial class CliCommands
                     case "--game": only.Add(Next()); break;
                     case "--check": check = true; break;
                     case "--model": model = Next(); break;
+                    case "--logs-only": logsOnly = true; break;
                     case "--games": games = ParseInt(Next(), "--games", 1, 1000); break;
                     case "--skip": skip = ParseInt(Next(), "--skip", 0, 100_000); break;
                     case "--max-tool-calls": maxToolCalls = ParseInt(Next(), "--max-tool-calls", 0, 500); break;
@@ -79,8 +81,10 @@ public static partial class CliCommands
             if (destination.Length == 0) throw new ArgumentException("ai-llm-review requires --output <new directory>.");
             if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode)
                 throw new ArgumentException("ai-llm-review needs previously provisioned official content embedded at build time.");
+            // --logs-only writes the decision logs a review would read, for a person to triage with; no model needed.
             options = OpenAiCompatibleChatClient.FromEnvironment()
-                ?? throw new ArgumentException("Set NETRUNNER_LLM_BASE_URL and NETRUNNER_LLM_MODEL (for example in .env).");
+                ?? (logsOnly ? new OpenAiCompatibleOptions(new Uri("http://localhost/"), "none", null, TimeSpan.FromSeconds(1))
+                    : throw new ArgumentException("Set NETRUNNER_LLM_BASE_URL and NETRUNNER_LLM_MODEL (for example in .env)."));
             if (model is not null) options = options with { Model = model };
             if (!File.Exists(Path.Combine(rulesRoot, "index.json"))) throw new ArgumentException($"No rules index under {rulesRoot}.");
         }
@@ -103,6 +107,12 @@ public static partial class CliCommands
         {
             DateTime started = DateTime.UtcNow;
             GameReviewDossier dossier = GameReviewDossier.BuildAsync(game, definition, side).GetAwaiter().GetResult();
+            if (logsOnly)
+            {
+                File.WriteAllText(Path.Combine(destination, SafeName(game.Game.Id)) + ".decisions.txt", dossier.DecisionLog());
+                output.WriteLine($"ai-llm-review {game.Game.Id} {side}: decision log written");
+                continue;
+            }
             GameReview review = reviewer.ReviewAsync(dossier, calls => error.WriteLine($"  {game.Game.Id}: {calls}"), check).GetAwaiter().GetResult();
             reviews.Add(review);
             string name = Path.Combine(destination, SafeName(game.Game.Id));
@@ -113,6 +123,7 @@ public static partial class CliCommands
             output.WriteLine(FormattableString.Invariant(
                 $"ai-llm-review {game.Game.Id} {side}: {review.Findings.Count} findings ({review.Findings.Count(finding => finding.Verified)} cited, {review.Findings.Count(finding => finding.Check == "refuted")} refuted), {review.ToolCalls} tool calls, {review.PromptTokens}+{review.CompletionTokens} tokens, {(DateTime.UtcNow - started).TotalSeconds:0}s{(review.Failure is null ? "" : $", failed: {review.Failure}")}"));
         }
+        if (logsOnly) return 0;
         File.WriteAllText(Path.Combine(destination, "triage.md"), TriageSheet(reviews, options.Model, sampling));
         output.WriteLine($"ai-llm-review games={reviews.Count} findings={reviews.Sum(review => review.Findings.Count)} failures={reviews.Count(review => review.Failure is not null)} output={Path.GetFullPath(destination)}");
         return reviews.Any(review => review.Failure is not null) ? 1 : 0;
