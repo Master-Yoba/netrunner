@@ -210,6 +210,10 @@ public sealed partial class CorpHeuristicPolicy
             // counter, and an advanced card reads as an agenda to the Runner (Wave 4 C1).
             if (context.Self.Credits - 1 < context.RezReserve) return Value(-40, "advance/trap-keeps-ice-budget", approximate: true);
             int counters = card!.AdvancementCounters ?? 0;
+            // v20 (Codex review, 1 October): past the Runner's grip, another counter adds no threat; Urtica Cipher
+            // took every spare click and credit while the Corp stopped scoring.
+            if (context.Generation >= 15 && 2 + counters > context.Features.Board.HiddenZoneCounts.RunnerGrip + 1)
+                return Value(-30, "advance/trap-already-lethal", approximate: true);
             int bait = counters >= 4 ? 40 : 130 - counters * 15;
             if (context.Generation >= 7) bait = (int)(bait * context.CorpProfile.TrapWeight);
             return Value(bait, "advance/trap", approximate: true);
@@ -386,7 +390,12 @@ public sealed partial class CorpHeuristicPolicy
                 force += (int)((context.CorpProfile.TagWeight - 1) * 150);
             // v13 (playtest, 29 September): rezzing ICE on a server that doesn't hold an agenda mustn't leave
             // too little to rez the ICE that protects one; the Runner baits the Corp's money that way.
-            if (context.Generation >= 8 && server?.Root.Any(card => context.Definition(card)?.Agenda is not null) != true
+            // v20 (Codex review, 1 October): R&D, and HQ while the Corp holds an agenda, are agenda servers too; the
+            // reserve declined Diviner, Ansel 1.0 and Whitespace there and the Runner stole from them.
+            bool agendaServer = server?.Root.Any(card => context.Definition(card)?.Agenda is not null) == true
+                || context.Generation >= 15 && (server?.Kind == ServerKind.RAndD
+                    || server?.Kind == ServerKind.Headquarters && context.Features.Hand.Any(card => context.Definition(card)?.Agenda is not null));
+            if (context.Generation >= 8 && !agendaServer
                 && context.Self.Credits - cost < AgendaIceReserve(context))
                 return Value(-200, "rez/keep-credits-for-the-agenda-ice", approximate: true);
             if (context.Generation >= 6)
