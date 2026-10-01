@@ -261,6 +261,42 @@ games and settings:**
 Neither quant made a wrong finding. Three games are too few to separate the quants: a single review
 varies more from run to run than this.
 
+**Codex as the reviewer (`ai-codex-review`, model gpt-6.1-sol, reasoning medium):** the Codex CLI can't call
+the reviewer's tools. Instead it reads the same material as files in a read-only sandbox: the decision log,
+every decision's options, the board before each decision, the history, every card's text and the rules. Its
+answer is held to the findings schema with `--output-schema`, and it shares the local reviewer's primer and
+parser. Unlike the local model, it sends the game and the card texts to OpenAI.
+
+Round C's eight games (Codex verdicts provisional, pending the user's triage):
+
+| | Qwen 27B IQ4_XS (user's verdicts) | Codex gpt-6.1-sol (provisional) |
+|---|---:|---:|
+| Findings | 12 | 26 |
+| Confirmed | 9 | 22 |
+| Unsure | 0 | 3 |
+| Wrong | 3 | 0 |
+| Duplicate | 0 | 1 |
+| Time per game | about 7 minutes | about 100 s |
+| Tokens per game | 30k to 60k generated | about 280k input (78% cached), 1.8k output |
+
+**What Codex found that Qwen didn't:**
+- **A winning agenda shuffled away:** at 6 points, with 44 credits and a remote behind three ICE, Sprint put
+  Send a Message, the 3 points that would win, back into R&D, where the Runner later stole it.
+- **An agenda behind ICE the Corp couldn't afford to rez:** the Runner passed it unrezzed and stole it.
+- **Built to Last unused:** Weyland gets 2 credits for advancing a card with no counters. Clicking for a
+  credit instead of advancing gives up a free counter, in two games.
+- **Removal aimed at the wrong breaker:** Retribution trashed Cleaver while Buzzsaw was getting through both
+  centrals' code gates; Ballista's subroutine trashed Unity instead of the Cleaver breaking HQ's Palisade.
+- **The tied scoring server:** Orbital Superiority went behind one unrezzed Palisade rather than two rezzed ICE
+  and Malapert, on a tie the heuristic broke at random.
+- **Finding 34 differently:** with three clicks the Corp could have rezzed Malapert and still scored (credit,
+  rez, credit, advance), so the rez wasn't out of reach.
+
+**What it missed:** Qwen's confirmed Sprint finding in one game (Government Subsidy shuffled away).
+
+**Use:** about 2.2 million input tokens and 14k output for the eight reviews, on the user's ChatGPT plan.
+`--model`, `--reasoning` and `--timeout-minutes` set the run.
+
 **Still open:**
 - **The two faults it missed:** Funhouse unrezzed on a farmed Archives, and Pharos never advanced.
   Both are lint findings, and P1 already finds them.
