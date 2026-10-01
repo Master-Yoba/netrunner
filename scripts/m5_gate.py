@@ -3,6 +3,7 @@
 
 import argparse
 import collections
+import concurrent.futures
 import hashlib
 import json
 import os
@@ -168,6 +169,8 @@ def main():
     parser.add_argument("--quick", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--dotnet", default="dotnet")
+    parser.add_argument("--parallel", type=int, default=max(1, (os.cpu_count() or 4) // 4),
+                        help="Cases run at once (each uses 4 workers or fewer); 1 runs them one after another.")
     args = parser.parse_args()
     output = args.output.resolve()
     require(not output.exists(), "Choose a new evidence directory; previous attempts are retained")
@@ -177,35 +180,46 @@ def main():
     shutil.copytree(ROOT / "src/Netrunner.Cli/bin/Debug/net8.0", output / "runner")
     shutil.copytree(MANIFESTS, output / "manifests")
     reports, errors, evidence = {}, [], {}
-    for name, file_name, workers in cases(not args.quick):
+
+    def run_case(name, file_name, workers):
         manifest_path = output / "manifests" / file_name
         manifest = json.loads(manifest_path.read_text())
         tactical = "tactical" in file_name
         command = [args.dotnet, str(output / "runner/Netrunner.Cli.dll"), "ai-tactics" if tactical else "ai-benchmark",
                    str(manifest_path), "--workers", str(workers), "--output", str(output / name)]
-        try:
-            with (output / f"{name}.log").open("w") as log:
-                completed = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=scaled(7200 if name == "standard" else 1800))
-            require(completed.returncode in (0, 1), "Benchmark process failed before producing a complete report")
-            report_path = output / name / "report.json"
-            report = json.loads(report_path.read_text())
-            # Preserve failed-attempt counts as well as successful reports.
-            subprocess.run([sys.executable, str(ROOT / "scripts/summarize-ai-benchmark.py"), str(report_path), str(output / f"{name}-summary.json")], check=True)
-            if tactical:
-                result = validate_tactics(report, manifest, standard="easy" not in name)
-            else:
-                if name in ("smoke", "smoke-repeat", "standard", "easy"):
-                    validate_matrix(manifest, {"standard": 1000, "easy": 100}.get(name, 20), "easy" if name == "easy" else "standard")
-                result = validate_games(report, manifest, minimum_terminal=990 if name == "standard" else None)
-            if reports:
-                require(report["assemblyHashes"] == next(iter(reports.values()))["assemblyHashes"], "Compiled build changed during the gate")
-            reports[name] = report
-            evidence[name] = {**result, "manifestHash": report["manifestHash"], "deterministicDigest": report["deterministicDigest"],
-                              "reportSha256": hashlib.sha256(report_path.read_bytes()).hexdigest(), "workers": workers}
-            print(f"M5_BENCHMARK_CASE PASS case={name}", flush=True)
-        except (ValueError, KeyError, OSError, subprocess.SubprocessError) as error:
-            errors.append(f"{name}: {error}")
-            print(f"M5_BENCHMARK_CASE FAIL case={name} detail={error}", flush=True)
+        with (output / f"{name}.log").open("w") as log:
+            completed = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=scaled(7200 if name == "standard" else 1800))
+        require(completed.returncode in (0, 1), "Benchmark process failed before producing a complete report")
+        report_path = output / name / "report.json"
+        report = json.loads(report_path.read_text())
+        # Preserve failed-attempt counts as well as successful reports.
+        subprocess.run([sys.executable, str(ROOT / "scripts/summarize-ai-benchmark.py"), str(report_path), str(output / f"{name}-summary.json")], check=True)
+        if tactical:
+            result = validate_tactics(report, manifest, standard="easy" not in name)
+        else:
+            if name in ("smoke", "smoke-repeat", "standard", "easy"):
+                validate_matrix(manifest, {"standard": 1000, "easy": 100}.get(name, 20), "easy" if name == "easy" else "standard")
+            result = validate_games(report, manifest, minimum_terminal=990 if name == "standard" else None)
+        return report, {**result, "manifestHash": report["manifestHash"], "deterministicDigest": report["deterministicDigest"],
+                        "reportSha256": hashlib.sha256(report_path.read_bytes()).hexdigest(), "workers": workers}
+
+    # The cases are independent and deterministic, so they run side by side, longest first: each uses its own
+    # worker count (the repeats check that the worker count doesn't change a result), and together they fill the host.
+    planned = sorted(cases(not args.quick), key=lambda case: case[0] != "standard")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=args.parallel) as pool:
+        futures = {pool.submit(run_case, *case): case[0] for case in planned}
+        for future in concurrent.futures.as_completed(futures):
+            name = futures[future]
+            try:
+                reports[name], evidence[name] = future.result()
+                print(f"M5_BENCHMARK_CASE PASS case={name}", flush=True)
+            except (ValueError, KeyError, OSError, subprocess.SubprocessError) as error:
+                errors.append(f"{name}: {error}")
+                print(f"M5_BENCHMARK_CASE FAIL case={name} detail={error}", flush=True)
+    hashes = {json.dumps(report["assemblyHashes"], sort_keys=True) for report in reports.values()}
+    if len(hashes) > 1:
+        errors.append("Compiled build changed during the gate")
+    evidence = {name: evidence[name] for name, _, _ in cases(not args.quick) if name in evidence}
     for name in ("smoke", "corp-tactics", "runner-tactics"):
         try:
             validate_repeat(reports[name], reports[name + "-repeat"])

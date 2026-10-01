@@ -133,5 +133,9 @@ m5-gate:
 m5-quick:
 	bash scripts/m5-gate.sh --quick
 
+.PHONY: bot-check
+bot-check:
+	bash scripts/bot-check.sh
+
 m5-offline-proof:
 	python3 scripts/m5-offline-proof.py --art-cache "$(ART_CACHE)" $(OFFLINE_ARGS)
