@@ -101,10 +101,10 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     public const string V18 = "runner-heuristic-v18";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
-    /// V15 again: V16 was level or better on the Gateway ladder (+22 and +45), but against Codex on the same 12 deals it
-    /// won none of the games where V15 had won 7 of 23 (1 October), so V15 stays the default until a version matches it there.
+    /// V18 is V15 with only the reinstall fix (no install over its own copy or a second console), a fix that can only remove
+    /// wasted installs. V16 and V17, with more changes, lost to Codex on deals V15 won (1 October), so they aren't the default.
     /// </remarks>
-    public const string PolicyVersion = V15;
+    public const string PolicyVersion = V18;
     /// <summary>
     /// The planner's model of the Runner. It stays V7, which Corp v9 was measured
     /// with, so the shipped Corp planner plays as it did.

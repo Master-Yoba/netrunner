@@ -499,3 +499,17 @@ from the deals, batch 3's 24 deals were replayed against both version pairs at o
 default again. A version is now promoted only if it also holds up against Codex on fixed deals. The suspect is v16's
 click-loss rule, which prices "lose a click if any remain" at two clicks for VRcation as well as Creative Commission, and
 may hold back the Runner's draw and economy. Corp v22 plays level with v21 and stays.
+
+**Round four (batch 4's reviews):**
+
+| Version | Fixes | Against Codex on batch 3's deals |
+|---|---|---|
+| Corp v23 | A memory of the cards the Runner has accessed, so a known trap isn't advanced (four games); two agendas stay in a safer HQ (four steals); an asset that pays back at once is rezzed only with a click left (v22 rezzed Regolith with none) | 9 of 23 (39%), against 8 of 36 (22%) for v21 and v22; level with v22 on the bot ladder (−34 and +11) |
+| Runner v17 | v16 without the click-loss rule, and no install or install choice over its own copy or a second console | 2 of 12 |
+| Runner v18 | v15 with only the reinstall fix | 2 of 12 (v15: 13 of 47) |
+
+**The defaults are Corp v23 and Runner v18.**
+- **Runner v18** differs from v15 only by a fix that removes wasted installs, so it took over without a benchmark.
+- **Runner v16 and v17** (2 of 24 against Codex) aren't defaults. What they share beyond v18 is Docklands Pass's install bonus.
+- **Arms of 12 games are too small** to tell versions apart against Codex. A comparison worth making needs about 50 games on
+  fixed deals.
