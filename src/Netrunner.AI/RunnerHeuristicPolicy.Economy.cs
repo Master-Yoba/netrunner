@@ -66,6 +66,10 @@ public sealed partial class RunnerHeuristicPolicy
             switch (instruction.Kind)
             {
                 case BehaviorInstructionKind.GainCredits: total += sign * amount * context.CreditValue; break;
+                // v14 (Codex review, 1 October): Zahya pays a credit a card the ended run accessed; it scored 0 and was declined.
+                case BehaviorInstructionKind.GainCreditsPerAccess when context.Generation >= 10:
+                    total += sign * (context.Features.Board.RunEnd?.AccessOccurrenceCount ?? 0) * context.CreditValue;
+                    break;
                 case BehaviorInstructionKind.LoseCredits: total -= sign * amount * context.CreditValue; break;
                 case BehaviorInstructionKind.GainClicks: total += sign * amount * 100; break;
                 case BehaviorInstructionKind.LoseClicks: total -= sign * amount * 100; break;
