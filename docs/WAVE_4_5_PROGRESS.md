@@ -299,6 +299,55 @@ Round C's eight games (the user agreed with Codex's findings):
 plan. Codex is the reviewer for now; Qwen runs later.
 `--model`, `--reasoning` and `--timeout-minutes` set the run.
 
+### Codex reviews of the current bots (1 October)
+
+A fresh corpus of the current bots (`artifacts/ai-lint/corpus-v19`): Corp v19 against Runner v13, 96 games,
+of which Codex reviewed 8 the Corp lost and 8 the Runner lost, across the decks. It made 22 Corp findings and
+26 Runner findings. The user agreed with Codex's round-C findings; these are Claude's first pass.
+
+**Corp v19, by theme:**
+- **Urtica Cipher over-investment (3 games):** it keeps advancing a trap the Runner has already seen, long
+  after its damage exceeds the Runner's hand, while scoring stalls.
+- **The winning agenda thrown away:**
+  - Sprint shuffles the last agenda back into R&D at 6 points, with a protected remote ready.
+  - At match point it plays economy instead of advancing an installed winning agenda.
+- **The rez reserve blocks a central rez that would end the run (3 games):** "keep credits for the agenda
+  ICE" and "preserve the ICE budget" decline Diviner, Ansel or Whitespace on a central, and the Runner steals
+  from it.
+- **Agendas exposed:**
+  - installed behind ICE the Runner's breakers pass cheaply (4 times in one game);
+  - installed behind ICE the Corp can't afford to rez.
+- **ICE placement:** Archives gets ICE while HQ or R&D is the server under attack (3 games).
+- **Spin Doctor's ability unused (3 games):** a second copy rezzed, an install over it, or a run that trashes
+  it, without first shuffling useful cards back from Archives.
+- **Economy:**
+  - Planogram's draw chosen at 1 credit;
+  - a rezzed Regolith left unused;
+  - expensive ICE installed without the money to rez it.
+- **One-offs:** Anoetic Void used where nothing is worth protecting; Hansei Review forcing an agenda into
+  Archives; AMAZE Amusements against a steal that wins the game.
+
+**Runner v13, by theme:**
+- **Runs that can't succeed (4 games):** into rezzed Diviner or Ansel 1.0 with no breaker for it. Against
+  Ansel the run loses a program each time and can't steal anyway.
+- **Flatline risk ignored (3 games):** runs with one or two cards in grip into a heavily advanced card or past
+  damage ICE; two of them end the game.
+- **Free credits declined (2 games):** Zahya's optional income after an access scores 0 and is refused,
+  repeatedly, while the Runner is broke.
+- **Tags removed one at a time (2 games):** 2 credits and a click per tag, staying tagged.
+- **Runs for nothing:** on an Archives with no agendas or rewards; on a known Regolith it can't afford to
+  trash; on a known Urtica Cipher it saw in R&D.
+- **Economy:**
+  - Smartware Distributors discarded while a duplicate Cleaver is kept;
+  - Fermenter never installed;
+  - Creative Commission played with clicks left;
+  - credits loaded onto Smartware while tagged.
+- **Installs that help nothing:** Buzzsaw against no code gates; a second Cleaver.
+- **Missed pressure:**
+  - Tread Lightly not used to make a remote's ICE unaffordable;
+  - a remote behind one Funhouse never contested;
+  - a Jailbreak abandoned over damage it could take.
+
 **Still open:**
 - **The two faults it missed:** Funhouse unrezzed on a farmed Archives, and Pharos never advanced.
   Both are lint findings, and P1 already finds them.
