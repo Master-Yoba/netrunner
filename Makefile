@@ -133,9 +133,13 @@ m5-gate:
 m5-quick:
 	bash scripts/m5-gate.sh --quick
 
-.PHONY: bot-check
+.PHONY: bot-check gates
 bot-check:
 	bash scripts/bot-check.sh
+
+# The full gates on a commit (REF, default HEAD) in a separate worktree, while work goes on here.
+gates:
+	bash scripts/gate-worktree.sh $(REF)
 
 m5-offline-proof:
 	python3 scripts/m5-offline-proof.py --art-cache "$(ART_CACHE)" $(OFFLINE_ARGS)

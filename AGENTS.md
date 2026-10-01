@@ -27,7 +27,7 @@ Follow `.editorconfig`: UTF-8, LF endings, final newlines, and no trailing white
 
 Tests use xUnit (`[Fact]` and `[Theory]`) and follow `*Tests.cs`/`*Tests` naming. Add focused regression tests in the corresponding test project; Core, Cards, AI, and CLI tests must remain headless. Preserve deterministic seeds and assert serialized/timing contracts when changing engine behavior. No numeric coverage threshold is configured, but generated Gateway coverage reports must remain current.
 
-For bot and Match changes, run `make bot-check` per change (formatting, the quick M5 cases, and the official-data AI, Match and CLI suites in parallel; about 15 minutes) plus the ladder a new policy version needs. Run the full gates (`make verify`, `make m5-gate`, `make ai-tactics-verify TACTICAL_ARGS='--workers 12'`) once per batch of changes, before pushing.
+For bot and Match changes, run `make bot-check` per change (formatting, the quick M5 cases, and the official-data AI, Match and CLI suites in parallel; about 15 minutes) plus the ladder a new policy version needs. Run the full gates (`make verify`, `make m5-gate`, `make ai-tactics-verify TACTICAL_ARGS='--workers 12'`) once per batch of changes, before pushing; `make gates REF=<commit>` runs them all in a separate worktree (`.tools/gate-worktree`), so work can continue in this checkout meanwhile.
 
 ## Commit & Pull Request Guidelines
 
