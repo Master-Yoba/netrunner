@@ -37,6 +37,10 @@ public sealed partial class RunnerHeuristicPolicy
             return new(20, (install.FinalizeSelection ? 1000 : required * 100) - optional, "install/complete-required-selection");
         }
         if (definition is null) return Value(-100, "install/unknown-metadata", true, true);
+        // v16 (reviews of the losses to Codex, 1 October): a unique card over its own copy pays for the same ability again.
+        if (context.Generation >= 12 && definition.Printed.Unique
+            && context.Features.Board.RunnerRig.Any(installed => installed.DefinitionId == card!.DefinitionId))
+            return Value(-500, "rig/unique-already-installed", true);
         int value;
         if (definition.Icebreaker is { } breaker)
         {
@@ -62,6 +66,8 @@ public sealed partial class RunnerHeuristicPolicy
             if (context.Generation >= 5)
                 value += (definition.Behavior?.FirstBasicDrawReplacements ?? []).Sum(replacement => (replacement.DrawCount - 1) * context.DrawValue * 3);
             if (definition.Printed.Console) value += 180;
+            // v16: an extra access on each HQ breach (Docklands Pass) is pressure the Runner kept in its grip.
+            if (context.Generation >= 12) value += (definition.Behavior?.FirstHqBreachAccessModifiers ?? []).Sum(modifier => modifier.Delta * 250);
             if (context.Self.UsedMemory >= context.Self.MemoryLimit && definition.Printed.CardClass == RuntimeCardClass.Hardware) value += 170;
         }
         if (context.Generation >= 8)

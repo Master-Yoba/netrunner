@@ -83,6 +83,12 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// is contested when the Corp is one agenda from winning, the trap's risk notwithstanding unless lethal.
     /// </summary>
     public const string V15 = "runner-heuristic-v15";
+    /// <summary>
+    /// V15 with the fixes from the reviews of its losses to Codex (1 October, batch 3): a unique card isn't installed
+    /// over its own copy (Verbal Plasticity), an event that loses a click left over is played with the last click
+    /// (Creative Commission), and an extra HQ access is worth installing (Docklands Pass).
+    /// </summary>
+    public const string V16 = "runner-heuristic-v16";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V15 fixes V14's faults the reviews of its losses to Codex found (1 October: the match-point remote left
@@ -95,7 +101,7 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// with, so the shipped Corp planner plays as it did.
     /// </summary>
     public const string LatestHeuristic = V7;
-    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15];
+    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16];
 
     public RunnerHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -103,9 +109,9 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Runner policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 or V8 or V9 => 6, V10 => 7, V11 or V12 => 8, V13 => 9, V14 => 10, V15 => 11, _ => 2 };
+        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 or V8 or V9 => 6, V10 => 7, V11 or V12 => 8, V13 => 9, V14 => 10, V15 => 11, V16 => 12, _ => 2 };
         Plans = version is V3 or V8 or V9;
-        Repairs = version is V4 or V5 or V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15;
+        Repairs = version is V4 or V5 or V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16;
     }
 
     /// <summary>Whether this version has the playtest repairs (V4).</summary>

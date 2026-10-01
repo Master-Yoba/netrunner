@@ -72,6 +72,12 @@ public sealed partial class RunnerHeuristicPolicy
                     break;
                 case BehaviorInstructionKind.LoseCredits: total -= sign * amount * context.CreditValue; break;
                 case BehaviorInstructionKind.GainClicks: total += sign * amount * 100; break;
+                // v16 (reviews of the losses to Codex, 1 October): "if you have any clicks remaining, lose one" costs nothing
+                // on the last click and a click before it, so Creative Commission waits for the last click.
+                case BehaviorInstructionKind.LoseClicks when context.Generation >= 12 && self
+                    && instruction.Condition is { Kind: BehaviorConditionKind.ClicksRemainingAtLeast } remaining:
+                    if (context.Self.Clicks - 1 >= (remaining.Value ?? 1)) total -= amount * 200;
+                    break;
                 case BehaviorInstructionKind.LoseClicks: total -= sign * amount * 100; break;
                 case BehaviorInstructionKind.Draw: total += sign * amount * context.DrawValue; break;
                 case BehaviorInstructionKind.LoadHostedCredits:

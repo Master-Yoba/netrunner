@@ -101,7 +101,9 @@ public sealed partial class CorpHeuristicPolicy
                     // which can't see the steal, doesn't bring it back.
                     agendaWaits = context.Generation >= 16 && !scoreableNow && !nakedAgenda && server is not null
                         && RunnerGetsIn(context, server, install.CreditCost + definition.Printed.AdvancementRequirement)
-                        && context.AgendaCount < 2 && context.Features.Hand.Length < (context.Self.MaximumHandSize ?? 5);
+                        && context.AgendaCount < 2
+                        // v22 (reviews of the losses to Codex, 1 October): a full HQ of other cards only means a discard.
+                        && (context.Generation >= 17 || context.Features.Hand.Length < (context.Self.MaximumHandSize ?? 5));
                 }
             }
         }
@@ -452,7 +454,12 @@ public sealed partial class CorpHeuristicPolicy
             return context.Features.Board.Run!.CurrentIceIndex < 0
                 ? Value(Math.Max(120, context.ServerValue(server) / 2) - cost * 30, "rez/upgrade-in-attacked-server", approximate: true)
                 : Value(-10, "rez/upgrade-wait-for-server");
-        if (context.Self.Credits - cost < context.RezReserve) return Value(-300, "rez/preserve-ice-budget");
+        // v22 (reviews of the losses to Codex, 1 October): an asset loading three times its cost or more pays the budget
+        // back at once (Regolith Mining License loads 15 for 2); holding it back left the Corp broke.
+        bool paysBack = context.Generation >= 17 && definition?.Printed.CardClass == RuntimeCardClass.Asset
+            && (definition.Behavior?.Triggers.SelectMany(trigger => trigger.Instructions).Where(instruction => instruction.Kind == BehaviorInstructionKind.LoadHostedCredits)
+                .Sum(instruction => instruction.Amount) ?? 0) >= 3 * Math.Max(1, cost);
+        if (!paysBack && context.Self.Credits - cost < context.RezReserve) return Value(-300, "rez/preserve-ice-budget");
         if (definition?.Printed.CardClass == RuntimeCardClass.Asset)
         {
             int futureIncome = definition.Behavior?.Triggers.SelectMany(trigger => trigger.Instructions)
@@ -504,6 +511,8 @@ public sealed partial class CorpHeuristicPolicy
     {
         int pressure = context.Features.Board.RunnerRig.Sum(card => card.Counters.Where(counter => counter.Purpose == CardCounterPurpose.Virus)
             .Sum(counter => counter.Count * (card.HostCardId is not null ? 95 : 45)));
+        // v22 (reviews of the losses to Codex, 1 October): a broke Corp spent whole turns purging while Botulus grew back.
+        if (context.Generation >= 17 && context.Self.Credits < 3) pressure /= 2;
         return Value(pressure - purge.ClickCost * 100, "pressure/purge-virus-impact", approximate: true);
     }
 }

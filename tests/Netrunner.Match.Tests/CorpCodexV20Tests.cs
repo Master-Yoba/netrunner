@@ -77,6 +77,43 @@ public sealed class CorpCodexV20Tests
         Assert.True(walls == archives, $"{version} chose {chosen.Kind} {chosen.Description}.");
     }
 
+    [Theory]
+    [InlineData(CorpHeuristicPolicy.V21, "codex-corp-full-hq-agenda", 488, true)]
+    [InlineData(CorpHeuristicPolicy.V22, "codex-corp-full-hq-agenda", 488, false)]
+    public async Task AFullHqDoesNotPushAnAgendaIntoABreakableServer(string version, string fixture, long sequence, bool installs)
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        // A game against Codex (1 October, batch 3): Send a Message behind a lone Palisade against Cleaver and 6
+        // credits; v21's rule let a full HQ through. (With two agendas in HQ one still goes out, as v21 allowed.)
+        (LegalAction chosen, GameState state) = await ChooseAtAsync(fixture, version, sequence);
+        bool agenda = chosen.Parameters is InstallCardParameters install && state.GetCard(install.CardId).DefinitionId.Value is var code
+            && CardDataResource.LoadEmbedded().Cards.Single(card => card.Code == code).AgendaPoints is not null;
+        Assert.True(installs == agenda, $"{version} chose {chosen.Kind} {chosen.Description}.");
+    }
+
+    [Theory]
+    [InlineData(CorpHeuristicPolicy.V21, false)]
+    [InlineData(CorpHeuristicPolicy.V22, true)]
+    public async Task AnAssetThatPaysBackAtOnceIsRezzed(string version, bool rezzes)
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        // A game against Codex (1 October, batch 3): Regolith Mining License held back to keep the ICE budget.
+        (LegalAction chosen, GameState state) = await ChooseAtAsync("codex-corp-regolith", version, 51);
+        bool regolith = chosen.Parameters is RezCardParameters rez && Title(state, rez.CardId) == "Regolith Mining License";
+        Assert.True(rezzes == regolith, $"{version} chose {chosen.Kind} {chosen.Description}.");
+    }
+
+    [Theory]
+    [InlineData(CorpHeuristicPolicy.V21, true)]
+    [InlineData(CorpHeuristicPolicy.V22, false)]
+    public async Task ABrokeCorpBuildsMoneyBeforePurging(string version, bool purges)
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        // A game against Codex (1 October, batch 3): three clicks of purging at 0 credits while Botulus grew back.
+        (LegalAction chosen, _) = await ChooseAtAsync("codex-corp-broke-purge", version, 331);
+        Assert.True(purges == (chosen.Kind == ActionKind.PurgeVirusCounters), $"{version} chose {chosen.Kind} {chosen.Description}.");
+    }
+
     private static string Title(GameState state, CardInstanceId id) =>
         CardDataResource.LoadEmbedded().Cards.Single(card => card.Code == state.GetCard(id).DefinitionId.Value).Title;
 
