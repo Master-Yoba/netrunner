@@ -235,6 +235,28 @@ wrong ones:
 
 It looks things up far less than Qwen, and is wrong where it doesn't.
 
+**A larger Qwen quant (Qwen3.8-27B-UD-Q4_K_M, llama.cpp), same three games and settings:**
+
+| | Qwen 27B MTP (round C) | Qwen 27B Q4_K_M |
+|---|---:|---:|
+| Findings | 6 | 5 |
+| Confirmed | 5 | 3 |
+| Unsure | 1 | 1 |
+| Wrong | 0 | 0 |
+| Duplicate | 0 | 1 |
+| Distinct faults confirmed | 5 | 3 |
+| Tool calls | 93 | 67 |
+| Time | 1002 s | 916 s |
+
+**What each quant found:**
+- **Both:** the empty-remote sprawl in two games, and Malapert unrezzed at the score.
+- **Q4_K_M only:** with the sprawl, that R&D was left open on turn one.
+- **The MTP run only:** the second Malapert beside the first, the second Malapert that trashed the first in
+  HQ, and R&D behind one Whitespace all game.
+
+Neither quant made a wrong finding. Three games are too few to separate the quants: a single review
+varies more from run to run than this.
+
 **Still open:**
 - **The two faults it missed:** Funhouse unrezzed on a farmed Archives, and Pharos never advanced.
   Both are lint findings, and P1 already finds them.
