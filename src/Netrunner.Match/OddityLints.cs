@@ -21,7 +21,7 @@ public static class OddityLints
     [
         new("ice-on-empty-remote", PlayerSide.Corp, "ICE installed on a remote that still has nothing in its root when the Corp's turn ends, with no agenda or asset in HQ to put there."),
         new("upgrade-cannot-fire", PlayerSide.Corp, "An upgrade that only works when an agenda is scored from its server, installed in a central server."),
-        new("unique-replaces-own-copy", PlayerSide.Corp, "A unique card installed over its own copy."),
+        new("unique-replaces-own-copy", PlayerSide.Corp, "A unique card installed over its own copy, or a unique upgrade beside its own copy, where only one can be active."),
         new("unrezzed-ice-runner-profits", PlayerSide.Corp, "Approached ICE left unrezzed, though affordable, on a server the Runner has already run successfully twice."),
         new("advanceable-ice-idle", PlayerSide.Corp, "Advanceable ICE installed for three Corp turns or more without a counter."),
         new("archives-farmed", PlayerSide.Corp, "The Runner's third successful run on an Archives the Corp has left without ICE, with ICE in HQ to put there."),
@@ -130,6 +130,11 @@ public static class OddityLints
                 && upgrade.Triggers.All(trigger => trigger.Occurrence == OccurrenceKind.AgendaScoredOrStolen && trigger.RequireSourceOnAttackedServer))
                 Report("upgrade-cannot-fire", PlayerSide.Corp, sequence, turn, $"{Title(before, install.CardId)} installed in {server.Kind}.", once: false);
             IEnumerable<CardInstanceId> replaced = install.RequiredReplacementCardIds.Concat(install.SelectedReplacementCardIds).Distinct();
+            // LLM review (Wave 4.5 P2): a second unique upgrade beside the first gains nothing either (Malapert Data
+            // Vault, Anoetic Void). A unique asset can: Spin Doctor's rez draws, after the first copy's ability is used.
+            if (spec.Unique && spec.CardClass == RuntimeCardClass.Upgrade && before.Zones.Where(zone => zone.Kind is ZoneKind.ServerRoot or ZoneKind.ServerIce).SelectMany(zone => zone.CardIds)
+                    .Any(other => other != install.CardId && !replaced.Contains(other) && before.GetCard(other).DefinitionId == card.DefinitionId))
+                Report("unique-replaces-own-copy", PlayerSide.Corp, sequence, turn, $"{Title(before, install.CardId)} beside its own installed copy.", once: false);
             foreach (CardInstanceId old in replaced)
             {
                 CardInstanceState oldCard = before.GetCard(old);

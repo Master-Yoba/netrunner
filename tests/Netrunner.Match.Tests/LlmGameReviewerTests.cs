@@ -91,6 +91,7 @@ public sealed class LlmGameReviewerTests
         Assert.Contains("No actions", dossier.History(200, 230, "No Such Card"), StringComparison.Ordinal);
 
         var model = new ScriptedModel(
+            new LlmChatMessage("assistant", ""),
             new LlmChatMessage("assistant", """
                 {"findings": [
                   {"sequence": 222, "category": "wasted-card", "confidence": "high", "claim": "No agenda to advance.", "citations": [{"kind": "card", "ref": "Seamless Launch"}]},
@@ -107,6 +108,7 @@ public sealed class LlmGameReviewerTests
         Assert.Equal(("refuted", "No such runs."), (review.Findings[1].Check, review.Findings[1].CheckReason));
         Assert.Equal(1, review.ToolCalls);
         Assert.StartsWith("#2", model.ToolAnswers["h1"], StringComparison.Ordinal);
+        Assert.Contains(review.Transcript, message => message.Content?.StartsWith("Your last message was empty", StringComparison.Ordinal) == true);
     }
 
     /// <summary>A model that answers with the next scripted message and records what the tools returned.</summary>

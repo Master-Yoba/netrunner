@@ -20,7 +20,7 @@ Deterministic detectors over saved self-play games.
 |---|---|---|
 | `ice-on-empty-remote` | Corp | ICE on a remote still empty at the end of the Corp's turn, with no agenda or asset in HQ to put there (a glacier stacks its remote first) |
 | `upgrade-cannot-fire` | Corp | An upgrade that works only when an agenda is scored from its server, installed in a central |
-| `unique-replaces-own-copy` | Corp | A unique card installed over its own copy |
+| `unique-replaces-own-copy` | Corp | A unique card installed over its own copy, or a unique upgrade beside its own copy (added from the P2 review) |
 | `unrezzed-ice-runner-profits` | Corp | Approached ICE left unrezzed, though offered, on a server the Runner has already run successfully twice |
 | `advanceable-ice-idle` | Corp | Advanceable ICE installed for three turns or more without a counter |
 | `archives-farmed` | Corp | The Runner's third successful run on an Archives without ICE, with ICE in HQ to put there |
@@ -54,6 +54,7 @@ per game on each side:
 | Archives farmed | 0.067 | 0.042 before the ICE-in-HQ condition; 1 game with ICE in HQ |
 | Own agenda trashed by an install | 0.225 | 0.017 |
 | Counters on an inert card | 0.067 | 0.025 |
+| A unique upgrade over or beside its own copy (widened in P2) | 0.308 | 0 |
 | R&D re-run, top card seen | 0.242 | 0 |
 | A known trap accessed again | 0.333 | 0 |
 
@@ -88,6 +89,111 @@ at a low rate: 0.067 per game for Corp v19, and 0.008 for v9.
 **Still open:**
 - **`advanceable-ice-idle`:** Pharos left unadvanced (0.05 per game for v19). The heuristic advances it
   only when that leaves its rez reserve intact, so this is left for the LLM reviewer (P2) to judge.
-- **`unique-replaces-own-copy` and `archives-shuffle-empty`:** they found nothing in either corpus.
-  `archives-shuffle-empty` fires on the Spin Doctor playtest game. `unique-replaces-own-copy` has no
-  recorded game to test on yet.
+- **`archives-shuffle-empty`:** it found nothing in either corpus, though it fires on the Spin Doctor
+  playtest game.
+- **`unique-replaces-own-copy`:** it found nothing until the P2 reviewer showed v9 installing a second
+  Malapert Data Vault or Anoetic Void *beside* the first. Widened to that case, it fires 0.308 times
+  per game for v9 and never for v18 or v19 (Corp v11's upgrade placement refuses any second copy).
+  A second unique *asset* isn't flagged: Spin Doctor's rez draws 2 once the first copy's ability is used.
+
+## P2 LLM game reviewer
+
+A local model reads one bot's decisions from a saved self-play game and reports plays that look wrong,
+as findings: the sequence number, a category, a confidence, the claim, and the rules and cards it relied
+on. Game logs stay on the local network: the model is a llama.cpp server with an OpenAI-compatible
+endpoint, configured in the git-ignored `.env` (`NETRUNNER_LLM_BASE_URL`, `NETRUNNER_LLM_MODEL`,
+`NETRUNNER_LLM_API_KEY`).
+
+- **Running it:** `scripts/ai-llm-review.sh <saved games> --side corp|runner --output <new dir>`, with
+  `--entrant`, `--game <id>` (repeatable), `--games N` (default 5), `--temperature`, `--reasoning`
+  (default medium) and `--max-tool-calls` (default 60). It writes, per game, the review, the whole
+  transcript and the decision log the model read, and a `triage.md` sheet with a verdict column.
+- **What the model reads (`GameReviewDossier`):** the bot's decisions with the options it weighed and
+  its scores and reasons. Each turn opens with a line giving the board. The opponent's board-changing
+  actions (runs, accesses, installs, rezzes, steals, trashes) appear in brackets between the decisions.
+  A decision the current bot makes differently is marked, so a fault that is already fixed shows as one.
+- **Its tools:**
+  - `rules_lookup`: the vendored comprehensive rules, by number, sub-point or words.
+  - `card_text`: a card's printed text.
+  - `position`: the whole board before any action.
+  - `decision`: every option at a decision.
+  - `history`: both players' actions in a range, optionally only those naming a card or server.
+- **The prompt:** a short primer on timing (when ICE is rezzed, what a pass is) and on what competent
+  players know, since the model can't be assumed to know Netrunner.
+- **Grounding:** a finding is "cited" when a citation resolves to a real rule or card. A finding on a
+  sequence that isn't one of the bot's decisions is dropped.
+- **An optional second look (`--check`):** each finding goes back to the model in a fresh conversation
+  told to refute it from the game. It is off by default; see below.
+
+### Gate evidence
+
+On the corpus of Corp v9 games (`standard-w4a` in `artifacts/ai-lint/corpus-w4a-vs-now`, the P1
+corpus), with model `qwen3.8-27b-mtp`, temperature 0.6, top-p 0.95, top-k 20, reasoning medium and up
+to 40 tool calls. A game takes 3 to 25 minutes, typically 6 to 10.
+
+**The playtest's faults:** the 28 September playtest found five Corp v9 faults. The reviewer re-found
+three, with citations, each in several games:
+- **ICE on empty remotes:** found in 5 games.
+- **Malapert Data Vault in a central, or a second copy over the first:** found in 5 games.
+- **Centrals left without ICE or behind one weak ICE:** found in 4 games.
+
+It did not report the other two: Funhouse left unrezzed while the Runner farmed Archives, and Pharos
+never advanced.
+
+**Triage of 34 findings** from 24 reviews of 15 games. One review ended with an empty answer; the tool
+loop now asks again (the verdicts and evidence are in
+[`WAVE_4_5_P2_TRIAGE.md`](WAVE_4_5_P2_TRIAGE.md)). The prompt and dossier changed between rounds, as
+the triage showed what the model was missing:
+
+| Round | Configuration | Findings | Confirmed | Unsure | Wrong | Duplicate |
+|---|---|---:|---:|---:|---:|---:|
+| A | decisions only | 5 | 2 | 0 | 3 | 0 |
+| B | + each turn's board, the opponent's actions, the primer | 12 | 6 | 2 | 3 | 1 |
+| C | + `history` | 17 | 10 | 4 | 2 | 1 |
+| All | | 34 | 18 | 6 | 8 | 2 |
+
+Round C's precision is 10 of 16 distinct findings confirmed, with 2 wrong.
+
+**Why findings were wrong:**
+- Runs and accesses that never happened, the main cause in rounds A and B. The board lines and the
+  `history` tool cut it.
+- Card properties the card doesn't have: Ballista called unique.
+- Misread rules: Urtica Cipher's Ambush damage needing a rez; rezzing ICE as an action.
+- A plan the credits couldn't pay for: rezzing Malapert and advancing with 1 credit.
+
+**Faults no playtest had reported:**
+- **A second unique upgrade beside the first (Malapert Data Vault, Anoetic Void).** P1's
+  `unique-replaces-own-copy` now finds it too. Corp v11 and later already refuse it.
+- **An agenda scored from Malapert's server with Malapert unrezzed.** Corp v13 and later already rez it
+  before the score.
+- **Advancing a trap the Runner never runs on, at match point with no agenda installed, instead of
+  drawing for the last agenda.** Still to check against Corp v19.
+
+**The second look doesn't help yet.** In round C it refuted all five findings it checked:
+- one rightly (runs that never happened);
+- three wrongly, all real faults;
+- one arguably.
+
+It catches false facts but calls bad strategy "a judgement call". The wrong refutations rest on its
+own errors: an installed card "entering rezzed", and reading only part of the history. So it stays
+opt-in.
+
+**Temperature:** the server's recommended 1.0 against 0.6, round C, on the same three Quick and Dirty
+games:
+
+| Temperature | Findings | Confirmed | Unsure | Time |
+|---|---:|---:|---:|---:|
+| 0.6 | 6 | 5 | 1 | 1002 s |
+| 1.0 | 6 | 5 | 1 | 1490 s |
+
+Both found the same core faults: empty remotes, the two Malapert copies, Malapert unrezzed at the
+score. At 1.0 the model wrote more and made one factual slip (a score before the upgrade was
+installed), so 0.6 stays the default.
+
+**Still open:**
+- **The two faults it missed:** Funhouse unrezzed on a farmed Archives, and Pharos never advanced.
+  Both are lint findings, and P1 already finds them.
+- **The second look:** it needs to read the whole history and treat strategy as in scope before it can
+  filter findings.
+- **Reviews of the current bots:** reviews of Corp v19 and Runner v13 games, which would find faults
+  P1 doesn't know, come with P3 (its gate counts confirmed new faults).

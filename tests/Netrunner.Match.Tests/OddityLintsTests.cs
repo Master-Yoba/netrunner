@@ -30,6 +30,17 @@ public sealed class OddityLintsTests
     }
 
     [Fact]
+    public void AUniqueUpgradeBesideItsOwnCopyIsFound()
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        // Found by the LLM reviewer (Wave 4.5 P2) in a Corp v9 game: a second Malapert Data Vault beside the first.
+        (LadderSavedGame saved, FullMatchDefinition definition) = Assert.Single(LadderGameArchive.Read(Path.Combine(AppContext.BaseDirectory,
+            "..", "..", "..", "Fixtures", "saved-games", "unique-beside-copy")));
+        OddityFinding finding = Assert.Single(OddityLints.Run(saved, definition), value => value.LintId == "unique-replaces-own-copy");
+        Assert.Equal((296L, "Malapert Data Vault beside its own installed copy."), (finding.Sequence, finding.Detail));
+    }
+
+    [Fact]
     public void ASavedGameReadsBackAndLintsTheSame()
     {
         if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;

@@ -95,8 +95,8 @@ public sealed class LlmGameReviewer(ILlmChatClient client, RulesIndex rules, Llm
     private async Task<Conversation> ConverseAsync(List<LlmChatMessage> messages, GameReviewDossier dossier, int budget,
         Action<string>? progress, CancellationToken cancellationToken)
     {
-        int toolCalls = 0, prompt = 0, completion = 0;
-        for (int round = 0; round <= budget; round++)
+        int toolCalls = 0, prompt = 0, completion = 0, nudges = 0;
+        for (int round = 0; round <= budget + nudges; round++)
         {
             IReadOnlyList<LlmTool> tools = toolCalls < budget ? Tools : [];
             LlmChatResponse response;
@@ -112,7 +112,16 @@ public sealed class LlmGameReviewer(ILlmChatClient client, RulesIndex rules, Llm
             completion += response.Usage?.CompletionTokens ?? 0;
             messages.Add(response.Message);
             if (response.Message.ToolCalls is not { Count: > 0 } calls)
+            {
+                // The model sometimes ends a turn having only thought; ask once or twice for the answer itself.
+                if (string.IsNullOrWhiteSpace(response.Message.Content) && nudges < 2)
+                {
+                    nudges++;
+                    messages.Add(LlmChatMessage.User("Your last message was empty. Give your answer now, as the JSON object asked for."));
+                    continue;
+                }
                 return new Conversation(response.Message.Content, toolCalls, prompt, completion, null);
+            }
             progress?.Invoke(string.Join(", ", calls.Select(call => $"{call.Name} {call.Arguments}")));
             foreach (LlmToolCall call in calls)
             {

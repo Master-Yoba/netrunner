@@ -13,7 +13,7 @@ public static partial class CliCommands
     /// <summary>
     /// ai-llm-review &lt;games-directory&gt; --side corp|runner [--entrant NAME] [--game ID]... [--games N] [--skip N]
     /// [--temperature T] [--top-p P] [--top-k K] [--seed S] [--reasoning low|medium|high] [--max-tool-calls N]
-    /// [--no-check] [--rules-root DIR] --output new-dir. The LLM game reviewer (Wave 4.5, P2) over games saved by
+    /// [--check] [--rules-root DIR] --output new-dir. The LLM game reviewer (Wave 4.5, P2) over games saved by
     /// <c>ai-ladder --save-games</c>, with the model from NETRUNNER_LLM_BASE_URL and NETRUNNER_LLM_MODEL
     /// (and NETRUNNER_LLM_API_KEY). Writes one review per game and a triage sheet. Exit 0 when every
     /// review finished, 1 when one failed, 2 for invalid arguments.
@@ -23,7 +23,7 @@ public static partial class CliCommands
         string directory, destination = "", rulesRoot = Path.Combine("data", "vendor", "rules");
         PlayerSide side = PlayerSide.Corp;
         var only = new HashSet<string>(StringComparer.Ordinal);
-        bool check = true;
+        bool check = false;
         string? entrant = null, reasoning = Environment.GetEnvironmentVariable("NETRUNNER_LLM_REASONING_EFFORT") ?? "medium";
         int games = 5, skip = 0, maxToolCalls = 60;
         double? temperature = 0.6, topP = 0.95;
@@ -52,7 +52,7 @@ public static partial class CliCommands
                         break;
                     case "--entrant": entrant = Next(); break;
                     case "--game": only.Add(Next()); break;
-                    case "--no-check": check = false; break;
+                    case "--check": check = true; break;
                     case "--games": games = ParseInt(Next(), "--games", 1, 1000); break;
                     case "--skip": skip = ParseInt(Next(), "--skip", 0, 100_000); break;
                     case "--max-tool-calls": maxToolCalls = ParseInt(Next(), "--max-tool-calls", 0, 500); break;
