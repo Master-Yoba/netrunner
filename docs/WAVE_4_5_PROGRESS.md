@@ -150,10 +150,11 @@ the triage showed what the model was missing:
 |---|---|---:|---:|---:|---:|---:|
 | A | decisions only | 5 | 2 | 0 | 3 | 0 |
 | B | + each turn's board, the opponent's actions, the primer | 12 | 8 | 0 | 3 | 1 |
-| C | + `history` | 17 | 13 | 0 | 3 | 1 |
-| All | | 34 | 23 | 0 | 9 | 2 |
+| C | + `history` | 17 | 14 | 0 | 2 | 1 |
+| All | | 34 | 24 | 0 | 8 | 2 |
 
-Round C's precision is 13 of 16 distinct findings confirmed, with 3 wrong. The triage also named faults
+Round C's precision is 14 of 16 distinct findings confirmed, with 2 wrong (finding 34 changed after the
+Codex review). The triage also named faults
 beyond the findings (agenda placement, Urtica Cipher, Sprint, budgeting), listed at the end of the triage
 record.
 
@@ -267,14 +268,14 @@ every decision's options, the board before each decision, the history, every car
 answer is held to the findings schema with `--output-schema`, and it shares the local reviewer's primer and
 parser. Unlike the local model, it sends the game and the card texts to OpenAI.
 
-Round C's eight games (Codex verdicts provisional, pending the user's triage):
+Round C's eight games (the user agreed with Codex's findings):
 
-| | Qwen 27B IQ4_XS (user's verdicts) | Codex gpt-6.1-sol (provisional) |
+| | Qwen 27B IQ4_XS | Codex gpt-6.1-sol |
 |---|---:|---:|
 | Findings | 12 | 26 |
-| Confirmed | 9 | 22 |
-| Unsure | 0 | 3 |
-| Wrong | 3 | 0 |
+| Confirmed | 10 | 25 |
+| Unsure | 0 | 0 |
+| Wrong | 2 | 0 |
 | Duplicate | 0 | 1 |
 | Time per game | about 7 minutes | about 100 s |
 | Tokens per game | 30k to 60k generated | about 280k input (78% cached), 1.8k output |
@@ -290,11 +291,12 @@ Round C's eight games (Codex verdicts provisional, pending the user's triage):
 - **The tied scoring server:** Orbital Superiority went behind one unrezzed Palisade rather than two rezzed ICE
   and Malapert, on a tie the heuristic broke at random.
 - **Finding 34 differently:** with three clicks the Corp could have rezzed Malapert and still scored (credit,
-  rez, credit, advance), so the rez wasn't out of reach.
+  rez, credit, advance), so the rez wasn't out of reach; the triage now confirms it.
 
 **What it missed:** Qwen's confirmed Sprint finding in one game (Government Subsidy shuffled away).
 
-**Use:** about 2.2 million input tokens and 14k output for the eight reviews, on the user's ChatGPT plan.
+**Use:** about 2.2 million input tokens and 14k output for the eight reviews, about 1% of the user's ChatGPT
+plan. Codex is the reviewer for now; Qwen runs later.
 `--model`, `--reasoning` and `--timeout-minutes` set the run.
 
 **Still open:**

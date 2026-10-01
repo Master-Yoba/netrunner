@@ -2,8 +2,8 @@
 
 These are the reviewer's findings on Corp v9 games (`standard-w4a`, corpus `corpus-w4a-vs-now`,
 1 October 2026). The verdicts are the user's triage. Claude's first pass checked each finding against the
-decision logs, the board lines and the card data; the user changed findings 6, 15, 17, 21, 24, 26 and 31
-and added the notes on 13 and 34.
+decision logs, the board lines and the card data; the user changed findings 6, 15, 17, 21, 24, 26 and 31,
+added the note on 13, and changed 34 after the Codex review below.
 
 The rounds are configurations (see `WAVE_4_5_PROGRESS.md`):
 - **A:** the decisions only.
@@ -63,7 +63,7 @@ The game names are the Corp deck and the Runner deck, with the game number:
 | 31 | C | QD–PA 1 | 49 | Sprint shuffles Government Subsidy and an agenda away | confirmed (new) | As 26 |
 | 32 | C | QD–PA 3 | 48 | Malapert Data Vault installed in Archives, twice | confirmed (PF2) | |
 | 33 | C | QD–PA 5 | 136 | Malapert Data Vault installed in HQ | confirmed (PF2) | Remote 1 was offered at 110 |
-| 34 | C | QD–SG 1 | 709 | Scored without first rezzing Malapert | wrong | 1 credit couldn't pay for both. The underlying fault is the budget: the Corp should have planned to have the rez ready |
+| 34 | C | QD–SG 1 | 709 | Scored without first rezzing Malapert | confirmed (new) | First judged wrong (1 credit couldn't pay for both). Codex's review showed the turn's three clicks allow it: credit, rez Malapert, credit, advance, so the Corp could have scored with the search. The user agreed |
 
 The second look (`--check`) ran in round C's first five games:
 
@@ -89,3 +89,39 @@ These go beyond the findings themselves, and are candidates to check against Cor
 - **Sprint (26, 31):** it shuffles away an operation the Corp is about to afford. An agenda can stay in
   hand when the scoring remote is ready.
 - **Budget (34):** credits aren't kept for the rez the Corp will need, such as Malapert before scoring.
+
+## Codex review of round C's eight games
+
+`ai-codex-review` (gpt-6.1-sol, reasoning medium) on the same eight games as round C's last run. The verdicts
+are Claude's first pass; the user agreed with Codex's findings.
+
+| Game | Seq | Claim, in short | Verdict |
+|---|---:|---|---|
+| QD–PH 2 | 295 | A second Malapert Data Vault beside the first | confirmed |
+| QD–PH 2 | 339 | ICE on four empty remotes | confirmed |
+| QD–PH 2 | 393 | Orbital Superiority behind one unrezzed Palisade, not the remote with two rezzed ICE and Malapert (a tie broken at random) | confirmed (new) |
+| DA–SG 2 | 269 | Sprint shuffles the only agenda away; repeated at #881 at 6 points with 44 credits and a remote behind three ICE, after which the Runner steals it | confirmed (new) |
+| DA–SG 2 | 647 | Ansel on Archives while R&D sits behind Whitespace and Tithe | confirmed |
+| DA–SG 2 | 963 | Nico Campaign in a new undefended remote, trashed at once | confirmed (new) |
+| DA–SG 2 | 1031 | Seamless Launch's counters on Brân 1.0 | confirmed |
+| QD–PH 1 | 8 | ICE on empty remotes while R&D stays open | confirmed (PF1) |
+| QD–PH 1 | 87 | Whitespace added to an agenda remote Ballista already protects, delaying the score a turn | confirmed (new) |
+| QD–PH 1 | 91 | Ballista on Archives while R&D has one Whitespace; Send a Message stolen from R&D | confirmed (PF3) |
+| QD–PH 3 | 52 | Malapert Data Vault in HQ, then a second copy that trashes the first | confirmed (PF2) |
+| QD–PH 3 | 355 | ICE on more empty remotes | confirmed (PF1) |
+| QD–PH 3 | 500 | Credits taken instead of Pharos on R&D's lone Whitespace | confirmed (PF3) |
+| QD–PH 3 | 683 | Retribution trashes Cleaver, not the Buzzsaw breaking both centrals | confirmed (new) |
+| QD–PA 1 | 8 | The opening ICE on an empty remote, R&D open; Jailbreak steals from R&D | confirmed (PF1) |
+| QD–PA 1 | 74 | Ballista's subroutine trashes Unity, not the Cleaver breaking HQ's Palisade | confirmed (new) |
+| QD–PA 1 | 413 | Three clicks purging virus counters at 0 credits, instead of money to rez R&D's ICE | confirmed (new) |
+| QD–PA 3 | 48 | Malapert Data Vault in Archives, twice | confirmed (PF2) |
+| QD–PA 3 | 225 | Rezzing the second Malapert, which trashes the first | duplicate of 48 |
+| QD–PA 5 | 136 | Malapert Data Vault in HQ | confirmed (PF2) |
+| QD–PA 5 | 206 | ICE on four empty remotes; R&D behind Tithe | confirmed (PF1) |
+| QD–PA 5 | 233 | Clicking for a credit instead of advancing: Built to Last pays 2 for the first advancement | confirmed (new) |
+| QD–SG 1 | 8 | ICE on empty remotes, centrals open | confirmed (PF1) |
+| QD–SG 1 | 207 | As 233 | confirmed (new) |
+| QD–SG 1 | 243 | An agenda behind ICE the Corp can't afford to rez; stolen, and again at #287 | confirmed (new) |
+| QD–SG 1 | 709 | Malapert unrezzed at the score, when the clicks allowed the rez | confirmed (as 34) |
+
+Codex didn't report finding 31's Sprint shuffle in QD–PA 1, which Qwen found.
