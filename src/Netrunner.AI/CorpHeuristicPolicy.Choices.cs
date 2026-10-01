@@ -44,8 +44,10 @@ public sealed partial class CorpHeuristicPolicy
     /// </summary>
     private static int RootInstallBySubroutine(HeuristicContext context, AgentServer? server, CardEvaluationDescriptor definition)
     {
-        // An agenda goes in only behind ICE; in a new or open remote the Runner simply takes it.
-        int gain = definition.Agenda is not null ? ((server?.Ice.Length ?? 0) > 0 ? 200 : -400)
+        // An agenda goes in only behind ICE; in a new or open remote the Runner simply takes it. v19 (oddity
+        // lints, 1 October): nor into the server being run, where the Runner is about to access it.
+        bool beingRun = context.Generation >= 14 && server is not null && context.Features.Board.Run?.AttackedServer == server.Id;
+        int gain = definition.Agenda is not null ? (beingRun ? -600 : (server?.Ice.Length ?? 0) > 0 ? 200 : -400)
             : definition.Printed.CardClass == RuntimeCardClass.Asset ? 160 : 100;
         if (server is not { Kind: ServerKind.Remote }) return gain;
         int displaced = DisplacedRootValue(context, server, definition);

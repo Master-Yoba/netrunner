@@ -32,7 +32,7 @@ public static class EvaluationFeatures
     public static IReadOnlyList<string> NamesFor(int version) => version switch
     {
         1 => Names,
-        2 => NamesV2,
+        2 or 3 => NamesV2,
         _ => throw new ArgumentOutOfRangeException(nameof(version), "Unknown evaluation feature set."),
     };
 
@@ -40,7 +40,15 @@ public static class EvaluationFeatures
     {
         double[] v1 = Extract(features, catalog);
         if (version == 1) return v1;
-        if (version != 2) throw new ArgumentOutOfRangeException(nameof(version), "Unknown evaluation feature set.");
+        if (version is not (2 or 3)) throw new ArgumentOutOfRangeException(nameof(version), "Unknown evaluation feature set.");
+        // Feature set 3 (Oddity lints, 1 October): set 2 with its fitted weights, where board advancement
+        // counts only counters that matter, on agendas and cards that can be advanced. Set 2 counted any
+        // counter in a remote, so the planner played Seamless Launch onto a Nico Campaign.
+        if (version == 3)
+            v1[Names.ToList().IndexOf("board-advancement")] = features.Board.Servers.Where(server => server.Kind == ServerKind.Remote)
+                .SelectMany(server => server.Root).OfType<AgentCard>()
+                .Sum(card => !catalog.TryGet(new CardDefinitionId(card.DefinitionId), out CardEvaluationDescriptor definition)
+                    || definition.Agenda is not null || definition.Behavior?.CanBeAdvanced == true ? card.AdvancementCounters ?? 0 : 0);
         AgentServer[] remotes = [.. features.Board.Servers.Where(server => server.Kind == ServerKind.Remote)];
         int occupied = remotes.Count(server => server.Root.Length > 0);
         double[] v2 = [.. v1, remotes.Length - occupied];

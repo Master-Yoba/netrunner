@@ -30,6 +30,7 @@ public static partial class CliCommands
         int actionCap = RatingLadder.DefaultActionCap;
         int workers = 1;
         string? destination = null;
+        string? saveGames = null;
         try
         {
             var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -77,6 +78,9 @@ public static partial class CliCommands
                     case "--output" when index + 1 < args.Length:
                         destination = args[++index];
                         break;
+                    case "--save-games" when index + 1 < args.Length:
+                        saveGames = args[++index];
+                        break;
                     default: throw new ArgumentException($"Unsupported ai-ladder argument '{args[index]}'.");
                 }
             }
@@ -92,6 +96,12 @@ public static partial class CliCommands
                 if (Directory.Exists(destination) || File.Exists(destination))
                     throw new ArgumentException("--output must name a new directory; existing evidence is never overwritten.");
                 Directory.CreateDirectory(destination);
+            }
+            if (saveGames is not null)
+            {
+                if (Directory.Exists(saveGames) || File.Exists(saveGames))
+                    throw new ArgumentException("--save-games must name a new directory.");
+                Directory.CreateDirectory(saveGames);
             }
         }
         catch (Exception exception) when (IsCommandFailure(exception))
@@ -111,7 +121,8 @@ public static partial class CliCommands
             games.AddRange(batch);
             Parallel.ForEachAsync(batch, new ParallelOptions { MaxDegreeOfParallelism = workers },
                 async (game, cancellation) =>
-                    results[game.Id] = await RatingLadder.PlayAsync(game, actionCap, cancellation).ConfigureAwait(false))
+                    results[game.Id] = await RatingLadder.PlayAsync(game, actionCap,
+                        saveGames is null ? null : saved => LadderGameArchive.Write(saveGames, saved), cancellation).ConfigureAwait(false))
                 .GetAwaiter().GetResult();
         }
         if (deals is not { } budget)
