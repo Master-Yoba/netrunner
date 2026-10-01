@@ -36,6 +36,7 @@ public partial class Main
 	private int _menuDifficulty;
 	private AgentPersonality _menuPersonality;
 	private HBoxContainer? _menuPersonalities;
+	private HBoxContainer? _menuDifficulties;
 	private SoloSavePreview? _latestSave;
 
 	/// <summary>The view the menu shows; the developer view is the original setup form.</summary>
@@ -154,6 +155,7 @@ public partial class Main
 			_menuYourDeck = null;
 			_menuOpponentDeck = null;
 			RefreshMenuDecks();
+			RefreshMenuOpponentOptions();
 		});
 		modes.Name = "Modes";
 		_menuModeDescription = MakeWrappedLabel("", 15, Muted);
@@ -177,11 +179,13 @@ public partial class Main
 		_menuOpponentDecks.AddThemeConstantOverride("v_separation", 12);
 		view.AddChild(_menuOpponentDecks);
 		// A6: the values are the setup form's difficulty items (Standard, Easy, Hard).
-		MenuToggleRow(view, [("Easy opponent", "1"), ("Standard opponent", "0"), ("Hard opponent", "2")], "0",
-			value => _menuDifficulty = int.Parse(value, System.Globalization.CultureInfo.InvariantCulture)).Name = "Difficulty";
+		_menuDifficulties = MenuToggleRow(view, [("Easy opponent", "1"), ("Standard opponent", "0"), ("Hard opponent", "2")], "0",
+			value => _menuDifficulty = int.Parse(value, System.Globalization.CultureInfo.InvariantCulture));
+		_menuDifficulties.Name = "Difficulty";
 		_menuPersonalities = new HBoxContainer { Name = "Personality" };
 		view.AddChild(_menuPersonalities);
 		RefreshMenuPersonalities();
+		RefreshMenuOpponentOptions();
 		var actions = new HBoxContainer { Name = "Actions" };
 		actions.AddThemeConstantOverride("separation", 12);
 		view.AddChild(actions);
@@ -373,6 +377,23 @@ public partial class Main
 			[.. AgentPersonalities.For(opponent).Select(personality => (PersonalityTitle(personality), AgentPersonalities.Key(personality)))],
 			AgentPersonalities.Key(AgentPersonality.Balanced),
 			value => _menuPersonality = AgentPersonalities.Keys[value]).Name = "Personalities";
+	}
+
+	/// <summary>The tutorial bot has no Hard tier or personalities (A6), so Tutorial mode offers neither and plays Standard for Hard.</summary>
+	private void RefreshMenuOpponentOptions()
+	{
+		if (_menuDifficulties is null || _menuPersonalities is null) return;
+		bool gateway = _menuMode == GatewayMode;
+		Button[] buttons = FindDescendants<Button>(_menuDifficulties);
+		Button hard = buttons.Single(button => button.Text == "Hard opponent");
+		hard.Visible = gateway;
+		if (!gateway && hard.ButtonPressed)
+		{
+			buttons.Single(button => button.Text == "Standard opponent").ButtonPressed = true;
+			_menuDifficulty = 0;
+		}
+		_menuPersonalities.Visible = gateway;
+		if (!gateway) RefreshMenuPersonalities();
 	}
 
 	private static string PersonalityTitle(AgentPersonality personality) => personality switch
