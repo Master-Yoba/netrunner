@@ -1,8 +1,8 @@
 # Wave 4.5 P2: LLM review triage
 
 These are the reviewer's findings on Corp v9 games (`standard-w4a`, corpus `corpus-w4a-vs-now`,
-1 October 2026). The verdicts are mine, checked against the decision logs, the board lines and the
-card data. The user spot-checks them.
+1 October 2026). The verdicts are provisional: a first pass by Claude, checked against the decision logs,
+the board lines and the card data. The user's triage, which settles them, is pending.
 
 The rounds are configurations (see `WAVE_4_5_PROGRESS.md`):
 - **A:** the decisions only.

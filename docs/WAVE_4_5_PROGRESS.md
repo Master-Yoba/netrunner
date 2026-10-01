@@ -140,7 +140,7 @@ three, with citations, each in several games:
 It did not report the other two: Funhouse left unrezzed while the Runner farmed Archives, and Pharos
 never advanced.
 
-**Triage of 34 findings** from 24 reviews of 15 games. One review ended with an empty answer; the tool
+**Triage of 34 findings** (provisional, pending the user's triage) from 24 reviews of 15 games. One review ended with an empty answer; the tool
 loop now asks again (the verdicts and evidence are in
 [`WAVE_4_5_P2_TRIAGE.md`](WAVE_4_5_P2_TRIAGE.md)). The prompt and dossier changed between rounds, as
 the triage showed what the model was missing:
