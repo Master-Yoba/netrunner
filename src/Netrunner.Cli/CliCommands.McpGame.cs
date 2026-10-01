@@ -77,7 +77,7 @@ public static partial class CliCommands
         {
             LadderGameResult result = await RatingLadder.PlayAsync(game, RatingLadder.DefaultActionCap, saved => LadderGameArchive.Write(destination, saved),
                 (entrant, seat, definition) => entrant == "codex"
-                    ? agent = LlmOpponentAgent.Create(seat, definition, decider)
+                    ? agent = WithProgressFile(LlmOpponentAgent.Create(seat, definition, decider), Path.Combine(destination, "progress.log"))
                     : RatingLadder.CreateAgent(entrant, seat, definition)).ConfigureAwait(false);
             string winner = result.Error is not null ? "none (error)" : result.Capped ? "none (action cap)" : result.CorpScore == 1 ? "the Corp" : "the Runner";
             final = $"The game is over: {winner} won after {result.Actions} actions{(result.Error is null ? "" : $" ({result.Error})")}. You played the {side}.";
@@ -178,6 +178,14 @@ public static partial class CliCommands
                 ? choice.Request + "\nPlay one with choose(option, reason)."
                 : final ?? "The game is over.";
         }
+    }
+
+    /// <summary>One line a decision in the game's directory, to follow a long game (stdout is the protocol's).</summary>
+    private static LlmOpponentAgent WithProgressFile(LlmOpponentAgent agent, string path)
+    {
+        agent.Decided = decision => File.AppendAllText(path, FormattableString.Invariant(
+            $"{DateTime.UtcNow:HH:mm:ss} turn {decision.Turn}: option {decision.Chosen} of {decision.Options} (heuristic {decision.Advised}), {decision.Outcome}, {decision.Seconds:0}s{(decision.Reason is { Length: > 0 } reason ? $": {reason}" : "")}{Environment.NewLine}"));
+        return agent;
     }
 
     private static JsonObject ToolText(string text, bool isError = false) => new()
