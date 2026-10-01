@@ -95,8 +95,16 @@ public static partial class CliCommands
             string name = Path.Combine(destination, SafeCodexName(game.Game.Id));
             string workspace = Path.GetFullPath(name + ".workspace");
             WriteWorkspace(workspace, dossier, cards, rulesRoot);
-            (string? answer, CodexUsage usage, string? failure) = RunCodex(codex, model, reasoning, workspace, CodexPrompt(dossier),
-                name + ".events.jsonl", TimeSpan.FromMinutes(timeoutMinutes));
+            (string? answer, CodexUsage usage, string? failure) = (null, CodexUsage.None, null);
+            // OpenAI sometimes reports the model at capacity; the review is run again after a minute, up to three times.
+            for (int attempt = 1; attempt <= 3; attempt++)
+            {
+                (answer, usage, failure) = RunCodex(codex, model, reasoning, workspace, CodexPrompt(dossier),
+                    name + ".events.jsonl", TimeSpan.FromMinutes(timeoutMinutes));
+                if (failure is null || !File.ReadAllText(name + ".events.jsonl").Contains("at capacity", StringComparison.Ordinal)) break;
+                error.WriteLine($"ai-codex-review {game.Game.Id}: the model was at capacity (attempt {attempt}); trying again in a minute.");
+                if (attempt < 3) Thread.Sleep(TimeSpan.FromMinutes(1));
+            }
             (IReadOnlyList<ReviewFinding> findings, string? parseFailure) = failure is null
                 ? LlmGameReviewer.ParseFindings(answer, dossier, rules) : ([], null);
             var review = new GameReview(game.Game.Id, side, dossier.Entrant, findings, usage.Commands, (int)Math.Min(usage.InputTokens, int.MaxValue),
