@@ -1,5 +1,4 @@
 using Netrunner.Cards;
-using Netrunner.Core;
 using Netrunner.LLM;
 using Netrunner.Match.Llm;
 using Xunit;
