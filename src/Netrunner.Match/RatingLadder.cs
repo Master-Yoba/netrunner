@@ -49,7 +49,7 @@ public static partial class RatingLadder
     /// in its own seat, and "hard".
     /// </summary>
     public static IReadOnlyList<string> EntrantOrder { get; } =
-        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19", "standard-r14", "standard-c20", "standard-r15", "standard-c21", "standard-r16", "standard-c22", "standard-b3", "standard-c23", "standard-r17", "standard-r18", "standard-c24", "standard-r19", "glacier", "rush", "asset-spam", "aggressive", "rig-builder", "hard"];
+        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19", "standard-r14", "standard-c20", "standard-r15", "standard-c21", "standard-r16", "standard-c22", "standard-b3", "standard-c23", "standard-r17", "standard-r18", "standard-c24", "standard-r19", "glacier", "rush", "asset-spam", "aggressive", "rig-builder", "hard", "hard-wide"];
 
     private const double EloScale = 400 / 2.302585092994046;
     private const double Ridge = 0.01;
@@ -92,6 +92,9 @@ public static partial class RatingLadder
             "random" => new RandomLegalAgent(AgentLifecycleHost.DerivePolicySeed(definition.Request.Seed, side)),
             "contract" => new FullGameContractAgent(new FullGameContractPolicy(side), definition.Runtime),
             "easy" or "standard" or "hard" => OfflineMatchFactory.CreateOpponent(definition, other, entrant),
+            // A6 tuning: Hard with a wider plan (Corp 10 samples of 4 actions, Runner 6 of 4).
+            "hard-wide" => Replanned(OfflineMatchFactory.CreateOpponent(definition, other, "hard"), definition,
+                side == PlayerSide.Corp ? 10 : 6, 4),
             // A6 personalities: Standard with the style in its own seat, plain Standard in the other.
             "glacier" or "rush" or "asset-spam" or "aggressive" or "rig-builder" => OfflineMatchFactory.CreateOpponent(definition, other, "standard", null,
                 AgentPersonalities.Keys[entrant] is var personality && AgentPersonalities.Side(personality) == side ? personality : AgentPersonality.Balanced),
@@ -202,6 +205,22 @@ public static partial class RatingLadder
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.V11),
             _ => throw new ArgumentException($"Unknown ladder entrant '{entrant}'.", nameof(entrant)),
         };
+    }
+
+    /// <summary>The same agent planning a different number of samples and actions.</summary>
+    private static OfflineAgent Replanned(OfflineAgent agent, FullMatchDefinition definition, int samples, int width)
+    {
+        OfflineAgentConfiguration current = agent.Configuration;
+        OfflineAgentConfiguration configuration = OfflineAgentConfiguration.Create(current.Side, current.PolicyVersion, current.ProfileId,
+            current.PolicySeed, current.WorkBudget, current.NearTieTolerance,
+            [.. current.Parameters.Select(pair => pair.Key switch
+            {
+                "plan-samples" => new KeyValuePair<string, int>(pair.Key, samples),
+                "plan-width" => new KeyValuePair<string, int>(pair.Key, width),
+                _ => pair,
+            })],
+            current.FeatureVersion);
+        return new OfflineAgent(configuration, OfflinePolicies.Create(configuration), new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior));
     }
 
     /// <summary>The same agent with a generic archetype profile.</summary>
