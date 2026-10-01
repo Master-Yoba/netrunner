@@ -355,3 +355,61 @@ of which Codex reviewed 8 the Corp lost and 8 the Runner lost, across the decks.
   filter findings.
 - **Reviews of the current bots:** reviews of Corp v19 and Runner v13 games, which would find faults
   P1 doesn't know, come with P3 (its gate counts confirmed new faults).
+
+## P3 LLM opponent
+
+An agent that makes a seat's strategic choices from a model, while the heuristic plays the rest of the seat:
+breaking, paying and the priority windows. The strategic choices are the turn's actions: installs, runs,
+advances, plays, scoring, drawing and credits.
+
+- **What it reads (`LlmOpponentAgent`):** only its own observation, through the same view a player gets, so
+  face-down cards stay unnamed and the other hand is only counted. It gets the board, the text of every card
+  in view, its last few choices, and the numbered legal options with the heuristic's scores and reasons.
+- **What it can play:** only the engine's own actions.
+  - An answer that isn't one of the options plays nothing.
+  - The heuristic's choice stands after a second bad answer, or when the model doesn't answer.
+  - The heuristic is asked every decision, so its memory stays in step.
+- **Who decides (`IStrategicDecider`):**
+  - **A local model over chat (`ModelDecider`, `scripts/ai-llm-play.sh`):** one conversation per decision.
+  - **Codex (`scripts/ai-codex-play.sh`):** it plays a whole game in one session through `ai-mcp-game`, a
+    Model Context Protocol server over stdio.
+    - Its tools are `get_choice`, `choose(option, reason)`, `card_text` and `rules_lookup`.
+    - An option out of range returns an error and plays nothing.
+    - If Codex leaves, the heuristic finishes the game.
+    - Each decision is logged to `progress.log`.
+- **Saved games:** games of both are saved as the ladder saves them, with the decisions and reasons beside
+  them, so `ai-lint`, `ai-llm-review` and `ai-codex-review` read them. Saved games name the seat `llm` or
+  `codex`, which replays with the heuristic, so a review shows where the model's choices differ from it.
+
+### Gate evidence
+
+**Qwen 27B (IQ4_XS, reasoning low):** one game as Corp, which it won. 51 decisions were asked, it chose
+against the heuristic 15 times, and it gave no invalid answers and had no failures. But at about 95 s a
+decision the game took 81 minutes, too slow for 50 games.
+
+**Codex (gpt-6.1-sol, reasoning medium) against Corp v19 and Runner v13:** batch 1, 20 games in 4 parallel
+streams.
+
+| Seat | Games | Codex won | Stalls or errors | Invalid choices |
+|---|---:|---:|---:|---:|
+| Corp | 10 | 9 | 0 | 0 |
+| Runner | 10 | 9 | 0 | 0 |
+
+- **Who chose:** Codex made every strategic choice (about 800), against the heuristic about half the time.
+- **Time:** a game takes 2 to 14 minutes, typically 5.
+- **Cost:** about 1.6 million input tokens a game (over 90% cached) and 3k output.
+- **How it plays:** its reasons read like a player's. It weighs the Runner's breakers against its ICE ("Buzzsaw
+  makes Whitespace porous, so dig for stronger remote ice before exposing another agenda"), baits with an
+  advanced Urtica Cipher against a short grip, and plans scoring windows.
+
+### Bots repaired from the Codex reviews
+
+The Codex reviews of the current bots (above) became two versions, each with saved-game regression tests that
+ask the old and the new version at the recorded decision (`RunnerCodexV14Tests`, `CorpCodexV20Tests`).
+
+| Version | Fixes | Gateway ladder, 240 games a seed |
+|---|---|---|
+| Runner v14 | Zahya's income taken; no run into a Diviner certain to end it (all-odd grip), or past a steal-forbidding Ansel 1.0 | -11 and +32 over v13 |
+| Corp v20 | No advancing a trap already lethal; Sprint keeps its best cards and the winning agenda; R&D, and HQ holding an agenda, are agenda servers for the rez reserve | +22 and +54 over v19 |
+
+Both are level or better, so both are the defaults.
