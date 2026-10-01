@@ -379,6 +379,13 @@ below still depend on A3.
 Gate: human playtest notes confirm Easy, Standard and Hard feel ordered, and
 the ladder shows the same order.
 
+Status (1 October 2026): built in Wave 5 ([progress](WAVE_5_PROGRESS.md)).
+The ladder order holds in both seats. The Runner's Hard is the turn planner,
+about 80 Elo above Standard; the Corp's Hard plans as Standard does, because
+no planner setting measured stronger. All five personalities play measurably
+differently (`ai-style`) within 100 Elo of Standard. The human playtest is
+pending.
+
 ### A7. Formats and deck-aware play (with the next card set)
 
 One bot for every format, with each format's tuned data kept separate. The

@@ -51,7 +51,8 @@ public sealed class CorpHeuristicPolicyTests
         CorpPolicyProfiles.Validate(easy);
         Assert.NotEqual(standard.Digest, easy.Digest);
         Assert.True(easy.WorkBudget < standard.WorkBudget);
-        Assert.Throws<ArgumentException>(() => CorpPolicyProfiles.Create("hard", 53));
+        CorpPolicyProfiles.Validate(CorpPolicyProfiles.Create("hard", 53));
+        Assert.Throws<ArgumentException>(() => CorpPolicyProfiles.Create("nightmare", 53));
         Assert.Throws<ArgumentException>(() => CorpPolicyProfiles.Validate(OfflineAgentConfiguration.Create(PlayerSide.Runner,
             CorpHeuristicPolicy.PolicyVersion, "standard", 53, parameters: standard.Parameters)));
         Assert.Throws<ArgumentException>(() => CorpPolicyProfiles.Validate(OfflineAgentConfiguration.Create(PlayerSide.Corp,
