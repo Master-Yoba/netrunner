@@ -1,8 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using Netrunner.AI;
 using Netrunner.Cards;
 using Netrunner.Core;
@@ -31,37 +29,33 @@ public sealed record LlmOpponentDecision(int Turn, string Prompt, int Options, i
 public sealed class LlmOpponentAgent : IAgentLifecycle
 {
     private readonly OfflineAgent _heuristic;
-    private readonly ILlmChatClient _client;
-    private readonly LlmSampling _sampling;
+    private readonly IStrategicDecider _decider;
     private readonly ICardMetadataResolver _metadata;
     private readonly IBehaviorCatalog _behavior;
-    private readonly RulesIndex? _rules;
-    private readonly int _maxToolCalls;
     private readonly List<(int Turn, string Choice, string Reason)> _recent = [];
     private ActionId? _advice;
 
-    public LlmOpponentAgent(OfflineAgent heuristic, ILlmChatClient client, LlmSampling sampling, ICardMetadataResolver metadata,
-        IBehaviorCatalog behavior, RulesIndex? rules = null, int maxToolCalls = 3)
+    public LlmOpponentAgent(OfflineAgent heuristic, IStrategicDecider decider, ICardMetadataResolver metadata, IBehaviorCatalog behavior)
     {
         _heuristic = heuristic ?? throw new ArgumentNullException(nameof(heuristic));
-        _client = client ?? throw new ArgumentNullException(nameof(client));
-        _sampling = sampling ?? throw new ArgumentNullException(nameof(sampling));
+        _decider = decider ?? throw new ArgumentNullException(nameof(decider));
         _metadata = metadata ?? throw new ArgumentNullException(nameof(metadata));
         _behavior = behavior ?? throw new ArgumentNullException(nameof(behavior));
-        _rules = rules;
-        _maxToolCalls = maxToolCalls;
     }
 
-    /// <summary>The LLM opponent for one seat, around the standard heuristic of that seat (with its scores kept).</summary>
+    /// <summary>The LLM opponent for one seat, asking a model over an OpenAI-compatible chat.</summary>
     public static LlmOpponentAgent Create(PlayerSide side, FullMatchDefinition definition, ILlmChatClient client, LlmSampling sampling,
-        RulesIndex? rules = null, int maxToolCalls = 3)
+        RulesIndex? rules = null, int maxToolCalls = 3) =>
+        Create(side, definition, new ModelDecider(client, sampling, rules, maxToolCalls));
+
+    /// <summary>The opponent for one seat around the standard heuristic of that seat (with its scores kept).</summary>
+    public static LlmOpponentAgent Create(PlayerSide side, FullMatchDefinition definition, IStrategicDecider decider)
     {
         ArgumentNullException.ThrowIfNull(definition);
         var standard = (OfflineAgent)RatingLadder.CreateAgent("standard", side, definition);
         var heuristic = new OfflineAgent(standard.Configuration, OfflinePolicies.Create(standard.Configuration),
             new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior), null, captureDiagnostics: true);
-        return new LlmOpponentAgent(heuristic, client, sampling, new CardCatalogMetadataResolver(CardDataResource.LoadEmbedded()),
-            definition.Behavior, rules, maxToolCalls);
+        return new LlmOpponentAgent(heuristic, decider, new CardCatalogMetadataResolver(CardDataResource.LoadEmbedded()), definition.Behavior);
     }
 
     public PlayerSide ControlledSide => _heuristic.ControlledSide;
@@ -70,14 +64,6 @@ public sealed class LlmOpponentAgent : IAgentLifecycle
 
     /// <summary>Called with each decision as it is made (progress for a long run).</summary>
     public Action<LlmOpponentDecision>? Decided { get; set; }
-
-    public static IReadOnlyList<LlmTool> Tools { get; } =
-    [
-        new("card_text", "The printed text of any card by title: type, costs, strength, points, rules text.",
-            ToolSchema("title", "The card's title.")),
-        new("rules_lookup", "Searches the Netrunner comprehensive rules by rule number or a few words.",
-            ToolSchema("query", "A rule number or a few words.")),
-    ];
 
     public async ValueTask<ActionId> ChooseActionAsync(Observation observation, CancellationToken cancellationToken = default)
     {
@@ -95,19 +81,10 @@ public sealed class LlmOpponentAgent : IAgentLifecycle
         string request = Request(view, options, describe, scores, advised);
 
         var watch = Stopwatch.StartNew();
-        var messages = new List<LlmChatMessage> { LlmChatMessage.System(SystemPrompt(ControlledSide)), LlmChatMessage.User(request) };
-        int toolCalls = 0;
-        (int? choice, string? reason, string? failure) = (null, null, null);
-        for (int attempt = 0; attempt < 2 && choice is null; attempt++)
-        {
-            (string? answer, int used, string? error) = await ConverseAsync(messages, cancellationToken).ConfigureAwait(false);
-            toolCalls += used;
-            if (error is not null) { failure = error; break; }
-            (choice, reason) = Parse(answer, options.Count);
-            if (choice is null)
-                messages.Add(LlmChatMessage.User($"That wasn't a valid answer. Reply with only {{\"option\": <a number from 1 to {options.Count}>, \"reason\": \"...\"}}."));
-        }
+        StrategicVerdict verdict = await _decider.DecideAsync(ControlledSide, request, options.Count, cancellationToken).ConfigureAwait(false);
         watch.Stop();
+        (int? choice, string? reason, string? failure, int toolCalls) = (verdict.Option is >= 1 && verdict.Option <= options.Count ? verdict.Option : null,
+            verdict.Reason, verdict.Failure, verdict.ToolCalls);
 
         string outcome = choice is not null ? "model" : failure is not null ? "failed" : "invalid";
         int chosen = choice ?? advised;
@@ -162,97 +139,10 @@ public sealed class LlmOpponentAgent : IAgentLifecycle
             text.AppendLine(CultureInfo.InvariantCulture, $"{index + 1}. {describe(options[index]) ?? options[index].Description}{score}");
         }
         text.AppendLine();
-        text.AppendLine(CultureInfo.InvariantCulture, $"The heuristic would choose option {advised}. Answer with {{\"option\": <number>, \"reason\": \"one sentence\"}}.");
+        text.AppendLine(CultureInfo.InvariantCulture, $"The heuristic would choose option {advised}.");
         return text.ToString();
     }
 
-    private async Task<(string? Answer, int ToolCalls, string? Failure)> ConverseAsync(List<LlmChatMessage> messages, CancellationToken cancellationToken)
-    {
-        int toolCalls = 0;
-        for (int round = 0; round <= _maxToolCalls; round++)
-        {
-            LlmChatResponse response;
-            try
-            {
-                response = await _client.CompleteAsync(new LlmChatRequest(messages, toolCalls < _maxToolCalls ? Tools : [], _sampling), cancellationToken)
-                    .ConfigureAwait(false);
-            }
-            catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or InvalidDataException)
-            {
-                if (cancellationToken.IsCancellationRequested) throw;
-                return (null, toolCalls, exception.Message);
-            }
-            messages.Add(response.Message);
-            if (response.Message.ToolCalls is not { Count: > 0 } calls) return (response.Message.Content, toolCalls, null);
-            foreach (LlmToolCall call in calls)
-            {
-                toolCalls++;
-                messages.Add(LlmChatMessage.Tool(call.Id, Answer(call)));
-            }
-        }
-        return (null, toolCalls, "The model never answered.");
-    }
-
-    private string Answer(LlmToolCall call)
-    {
-        string argument;
-        try
-        {
-            JsonObject arguments = JsonNode.Parse(string.IsNullOrWhiteSpace(call.Arguments) ? "{}" : call.Arguments)?.AsObject() ?? [];
-            argument = (arguments.FirstOrDefault().Value as JsonValue)?.ToString() ?? "";
-        }
-        catch (JsonException)
-        {
-            return "The arguments weren't valid JSON.";
-        }
-        return call.Name switch
-        {
-            "card_text" => GameReviewDossier.CardText(argument),
-            "rules_lookup" when _rules is not null => _rules.Search(argument) is { Count: > 0 } found
-                ? string.Join("\n\n", found.Select(rule => $"{rule.Number}: {rule.Text}"))
-                : "No rule matched.",
-            _ => $"There is no tool called '{call.Name}'.",
-        };
-    }
-
     /// <summary>Reads {"option": n, "reason": "..."} from an answer; null unless n is one of the options.</summary>
-    public static (int? Option, string? Reason) Parse(string? content, int options)
-    {
-        if (string.IsNullOrWhiteSpace(content)) return (null, null);
-        int start = content.IndexOf('{', StringComparison.Ordinal), end = content.LastIndexOf('}');
-        if (start < 0 || end <= start) return (null, null);
-        try
-        {
-            if (JsonNode.Parse(content[start..(end + 1)]) is not JsonObject answer) return (null, null);
-            int? option = answer["option"] is JsonValue value && value.TryGetValue(out int number) ? number
-                : int.TryParse((string?)answer["option"], NumberStyles.None, CultureInfo.InvariantCulture, out int text) ? text : null;
-            return option is >= 1 && option <= options ? (option, (string?)answer["reason"]) : (null, null);
-        }
-        catch (Exception exception) when (exception is JsonException or InvalidOperationException or FormatException)
-        {
-            return (null, null);
-        }
-    }
-
-    private static string SystemPrompt(PlayerSide side) => $$"""
-        You play Android: Netrunner (Null Signal Games' comprehensive rules) as the {{side}}, against a bot. The Corp
-        wins with 7 agenda points scored, or when the Runner can't take damage; the Runner wins with 7 agenda points
-        stolen, or when R&D is empty when the Corp must draw.
-        Each message shows the board as you see it, the cards in view, and your legal options for the next click.
-        A heuristic bot scored the options; it is a fair baseline that makes known mistakes. Take its choice when it
-        is right, and another option when you see a better plan. Think about the whole turn, not only this click.
-        You may look up cards and rules with the tools.
-        - Corp: protect HQ and R&D early; put agendas only where the Runner can't break in this turn; keep credits
-          to rez the ICE that matters; score when you can; a remote is for an agenda or an asset.
-        - Runner: build economy and breakers; run where agendas are likely and you can get in; don't run into ICE
-          you can't break with the credits you have; trash assets that pay the Corp when it's worth it.
-        Answer with one JSON object and nothing else: {"option": <number>, "reason": "one sentence"}.
-        """;
-
-    private static JsonObject ToolSchema(string name, string description) => new()
-    {
-        ["type"] = "object",
-        ["properties"] = new JsonObject { [name] = new JsonObject { ["type"] = "string", ["description"] = description } },
-        ["required"] = new JsonArray(name),
-    };
+    public static (int? Option, string? Reason) Parse(string? content, int options) => ModelDecider.Parse(content, options);
 }

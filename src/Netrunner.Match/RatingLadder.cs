@@ -90,9 +90,9 @@ public static partial class RatingLadder
             "random" => new RandomLegalAgent(AgentLifecycleHost.DerivePolicySeed(definition.Request.Seed, side)),
             "contract" => new FullGameContractAgent(new FullGameContractPolicy(side), definition.Runtime),
             "easy" or "standard" => OfflineMatchFactory.CreateOpponent(definition, other, entrant),
-            // The LLM opponent (Wave 4.5 P3) needs a model; its saved games replay with the heuristic it wraps,
-            // so a review shows where the model's choices differ from it.
-            "llm" => OfflineMatchFactory.CreateOpponent(definition, other, "standard"),
+            // The LLM opponent (Wave 4.5 P3) needs a model, or Codex through the MCP game server; their saved games
+            // replay with the heuristic they wrap, so a review shows where their choices differ from it.
+            "llm" or "codex" => OfflineMatchFactory.CreateOpponent(definition, other, "standard"),
             "easy-m5" or "standard-m5" => OfflineMatchFactory.CreateOpponent(definition, other, entrant[..^3],
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V2 : RunnerHeuristicPolicy.V1),
             "standard-w1" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
