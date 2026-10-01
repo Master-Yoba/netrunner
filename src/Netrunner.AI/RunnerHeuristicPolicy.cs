@@ -85,11 +85,11 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     public const string V15 = "runner-heuristic-v15";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
-    /// V14 fixes V13's faults the Codex reviews found (1 October: Zahya's income declined, runs into a
-    /// Diviner or Ansel 1.0 that can't succeed) and is level with it on the Gateway ladder (-11 and +32 on
-    /// two seeds).
+    /// V15 fixes V14's faults the reviews of its losses to Codex found (1 October: the match-point remote left
+    /// alone, Fermenter never installed, Archives run for nothing) and is level or better on the Gateway ladder
+    /// (+86 and +44 on two seeds).
     /// </remarks>
-    public const string PolicyVersion = V14;
+    public const string PolicyVersion = V15;
     /// <summary>
     /// The planner's model of the Runner. It stays V7, which Corp v9 was measured
     /// with, so the shipped Corp planner plays as it did.

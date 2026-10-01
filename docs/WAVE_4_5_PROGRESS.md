@@ -416,7 +416,17 @@ ask the old and the new version at the recorded decision (`RunnerCodexV14Tests`,
 | Runner v14 | Zahya's income taken; no run into a Diviner certain to end it (all-odd grip), or past a steal-forbidding Ansel 1.0 | -11 and +32 over v13 |
 | Corp v20 | No advancing a trap already lethal; Sprint keeps its best cards and the winning agenda; R&D, and HQ holding an agenda, are agenda servers for the rez reserve | +22 and +54 over v19 |
 
-Both are level or better, so both are the defaults.
+Both are level or better, so both became the defaults. A second round came from the reviews of the bots'
+losses to Codex (below):
+
+| Version | Fixes | Gateway ladder, 240 games a seed |
+|---|---|---|
+| Runner v15 | Contests the remote at the Corp's match point, a possible trap notwithstanding; installs Fermenter for its growing counters; no Archives run whose only gain is a discount on a redundant card | +86 and +44 over v14 |
+| Corp v21 | An agenda that can't score this turn waits in HQ while the Runner's rig, given a full turn of credits, gets into its server; no ICE on an Archives that protects nothing | 0 and +11 over v20 |
+
+Both are now the defaults. Corp v21's two rules rank below every other play, like the rule against an
+unprotected agenda: as score penalties, the planner's turn-end rollouts, which can't see the steal, brought the
+plays back.
 
 ### Reviews of the games against Codex
 

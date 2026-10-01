@@ -121,11 +121,11 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     public const string V21 = "corp-heuristic-v21";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
-    /// V20 fixes V19's faults the Codex reviews found (1 October: Urtica Cipher advanced past lethal, Sprint
-    /// shuffling away the winning agenda, central ICE left unrezzed to save credits) and is level with it
-    /// on the Gateway ladder (+22 and +54 on two seeds), so new games use it.
+    /// V21 fixes V20's faults the reviews of its losses to Codex found (1 October: agendas behind ICE the
+    /// Runner's rig breaks, ICE on an Archives of spent operations) and is level with it on the Gateway ladder
+    /// (0 and +11 on two seeds), so new games use it.
     /// </remarks>
-    public const string PolicyVersion = V20;
+    public const string PolicyVersion = V21;
     /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>
     public const string LatestHeuristic = V8;
     public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21];
