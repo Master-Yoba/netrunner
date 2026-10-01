@@ -11,6 +11,8 @@ namespace Netrunner.Match.Tests;
 /// - Sprint shuffled the agendas that would have won (at 6 points) back into R&D;
 /// - its reserve for agenda ICE declined Ansel 1.0 on R&D and Diviner on HQ (with an agenda in hand), and
 ///   the Runner stole from both.
+/// Reviews of Corp v20's losses to Codex: agendas behind ICE the Runner's rig broke, and ICE on an Archives of spent
+/// operations.
 /// </summary>
 public sealed class CorpCodexV20Tests
 {
@@ -47,6 +49,32 @@ public sealed class CorpCodexV20Tests
         if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
         (LegalAction chosen, _) = await ChooseAtAsync(fixture, version, sequence);
         Assert.True(rezzes == (chosen.Kind == ActionKind.RezCard), $"{version} chose {chosen.Kind} {chosen.Description}.");
+    }
+
+    [Theory]
+    [InlineData(CorpHeuristicPolicy.V20, true)]
+    [InlineData(CorpHeuristicPolicy.V21, false)]
+    public async Task AnAgendaWaitsWhileTheRunnerSRigBreaksItsServer(string version, bool installs)
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        // A game against Codex (1 October): Orbital Superiority behind a lone Palisade against an installed Cleaver,
+        // stolen that turn.
+        (LegalAction chosen, GameState state) = await ChooseAtAsync("codex-corp-breakable-agenda", version, 223);
+        bool agenda = chosen.Parameters is InstallCardParameters install && Title(state, install.CardId) == "Orbital Superiority";
+        Assert.True(installs == agenda, $"{version} chose {chosen.Kind} {chosen.Description}.");
+    }
+
+    [Theory]
+    [InlineData(CorpHeuristicPolicy.V20, true)]
+    [InlineData(CorpHeuristicPolicy.V21, false)]
+    public async Task ArchivesOfSpentOperationsGetsNoIce(string version, bool walls)
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        // A game against Codex (1 October): Palisade on an Archives of two Predictive Planograms and Retribution.
+        (LegalAction chosen, GameState state) = await ChooseAtAsync("codex-corp-archives-ice", version, 270);
+        bool archives = chosen.Parameters is InstallCardParameters { ServerId: { } server }
+            && state.Servers.Single(value => value.Id == server).Kind == ServerKind.Archives;
+        Assert.True(walls == archives, $"{version} chose {chosen.Kind} {chosen.Description}.");
     }
 
     private static string Title(GameState state, CardInstanceId id) =>
