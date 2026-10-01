@@ -141,7 +141,8 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// <remarks>
     /// V23 fixes V22's faults the reviews of batch 4's losses to Codex found (1 October: known traps advanced, two agendas
     /// pushed out of a safer HQ, Regolith rezzed with no click to use it). On batch 3's deals against Codex it won 6 of 12,
-    /// where V21 and V22 won 8 of 36, so new games use it.
+    /// where V21 and V22 won 8 of 36, so new games use it. V24, level on the bot ladder, won 3 of 12 on the same deals
+    /// where V23 won 10 of 24, so it isn't the default.
     /// </remarks>
     public const string PolicyVersion = V23;
     /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>

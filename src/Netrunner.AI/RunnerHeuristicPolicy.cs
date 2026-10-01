@@ -108,7 +108,8 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V18 is V15 with only the reinstall fix (no install over its own copy or a second console), a fix that can only remove
-    /// wasted installs. V16 and V17, with more changes, lost to Codex on deals V15 won (1 October), so they aren't the default.
+    /// wasted installs. V16 and V17, with more changes, lost to Codex on deals V15 won (1 October), so they aren't the default,
+    /// nor is V19: level on the bot ladder, it won 1 of 12 on batch 3's deals where V18 won 6 of 24.
     /// </remarks>
     public const string PolicyVersion = V18;
     /// <summary>

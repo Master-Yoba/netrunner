@@ -513,3 +513,50 @@ may hold back the Runner's draw and economy. Corp v22 plays level with v21 and s
 - **Runner v16 and v17** (2 of 24 against Codex) aren't defaults. What they share beyond v18 is Docklands Pass's install bonus.
 - **Arms of 12 games are too small** to tell versions apart against Codex. A comparison worth making needs about 50 games on
   fixed deals.
+
+### Round five: fixes that didn't hold up against Codex
+
+| Version | Fixes | Bot ladder vs default (two seeds) | Against Codex on batch 3's deals |
+|---|---|---|---|
+| Corp v24 | Program trashes and Runner-card targets valued by the threat to the Corp's ICE (each Corp ICE the breaker matches adds 150), which also fixes a sign error that made the Corp trash its least useful target; an End the Run choice valued by the attacked server | Corp +32 and 0, Runner 0 and 0 | 3 of 12, where v23 won 10 of 24 (4 of 12 in this replay) |
+| Runner v19 | A wallet ability (Pennyshaver's cash-out, taking all hosted credits) valued like as many basic credits; a tutor counts as breaker coverage when keeping an opening hand | Runner −11 and +33, Corp 0 and 0 | 1 of 12, where v18 won 6 of 24 (4 of 12 in this replay) |
+
+**Neither is the default; both stay ladder entrants** (`standard-c24`, `standard-r19`). Each fix was right in the games
+its review cited, but both versions are level on the ladder and point the wrong way against Codex. The arms are small (12
+games), so neither result proves a regression, but a fix that doesn't show up against the opponent it was made for isn't
+worth the risk to the defaults.
+
+## Wave 4.5 summary (1 October 2026)
+
+**Built:**
+- **P1, the oddity lints:** 12 detectors over saved ladder games (`ai-lint`). Counts per version are recorded, so a
+  repaired fault stays repaired.
+- **P2, the LLM game reviewer:**
+  - A dossier of one side's decisions, with the hand, the opponent's actions and named trigger sources, and tools for
+    rules, card text and history (`ai-llm-review`).
+  - Run against the local Qwen (byteshape Qwen3.8-27B IQ4_XS), and against Codex (gpt-6.1-sol, `ai-codex-review`),
+    which proved the stronger and faster reviewer.
+- **P3, the LLM opponent:**
+  - A wrapped heuristic whose strategic choices a model makes (`ai-llm-play`).
+  - Codex playing the bots through an MCP game server (`ai-codex-play`), which finishes a game with the heuristic if
+    Codex stops.
+- **Gate tooling:** `make bot-check` per change, and `make gates REF=` in a separate worktree, so gates no longer block
+  coding.
+
+**What the bots learned:**
+- **Corp, v20 to v23:** remembers the cards the Runner has accessed; no Archives ICE or agenda advances the planner used
+  to override; safer agenda holding.
+- **Runner, v14 to v18:** no install over its own copy or a second console; no unique card installed twice.
+- **Against Codex**, the bots won 10%, 13%, 30% and 12% of four batches. The best fixed-deal measures are now 42% for
+  Corp v23 (10 of 24) and 25% for Runner v18 (6 of 24).
+
+**Lessons:**
+- **The ladder and Codex disagree.** Self-play can't see a fault only a different player exploits, so a non-trivial
+  version is promoted only if it also holds up against Codex on fixed deals.
+- **Arms of 12 games can't separate versions.** About 50 games on fixed deals are needed.
+
+**Open, carried forward:**
+- **The Corp:** Spin Doctor's ability timing; scoring tempo; the Leech and Archives farming; Tread Lightly on a remote.
+- **The Runner:** money planning for a match-point run; break planning against Ansel 1.0; breakers installed for ICE
+  types the Corp doesn't have; Conduit and multi-access valuation.
+- **Deferred:** the overnight comparison of the two Qwen quants (byteshape IQ4_XS and unsloth UD-Q4_K_M).
