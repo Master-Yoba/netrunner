@@ -29,6 +29,12 @@ public static class RunnerPolicyProfiles
         (RunnerHeuristicPolicy.V2 or RunnerHeuristicPolicy.V4 or RunnerHeuristicPolicy.V5 or RunnerHeuristicPolicy.V6 or RunnerHeuristicPolicy.V7 or RunnerHeuristicPolicy.V10 or RunnerHeuristicPolicy.V12 or RunnerHeuristicPolicy.V13 or RunnerHeuristicPolicy.V14 or RunnerHeuristicPolicy.V15 or RunnerHeuristicPolicy.V16 or RunnerHeuristicPolicy.V17 or RunnerHeuristicPolicy.V18 or RunnerHeuristicPolicy.V19, "easy") => OfflineAgentConfiguration.Create(PlayerSide.Runner, policyVersion, profileId, policySeed,
             workBudget: 20000, nearTieTolerance: EasyNearTieTolerance, parameters: [.. Parameters(90, 120, 100), new("inference-scale", 0)],
             featureVersion: AgentFeatures.VersionWithHiddenAdvancements),
+        // A6 Hard: the same choices with the turn planner, scored by the corrected fitted evaluation (set 3).
+        (RunnerHeuristicPolicy.V18 or RunnerHeuristicPolicy.V19, "hard") => OfflineAgentConfiguration.Create(PlayerSide.Runner, policyVersion, profileId, policySeed,
+            workBudget: 40000, nearTieTolerance: 0,
+            parameters: [.. Parameters(100, 100, 100), new("inference-scale", 100), .. CorpPolicyProfiles.Planning(HardPlanSamples, HardPlanWidth),
+                new("plan-evaluation", 3)],
+            featureVersion: AgentFeatures.VersionWithHiddenAdvancements),
         // A3: Standard plans turn actions; Easy keeps V2 choices (compute tiers are A6).
         (RunnerHeuristicPolicy.V3, "standard") => OfflineAgentConfiguration.Create(PlayerSide.Runner, policyVersion, profileId, policySeed,
             workBudget: 40000, nearTieTolerance: 0,
@@ -92,6 +98,26 @@ public static class RunnerPolicyProfiles
     public const int PlanWidth = 3;
     public const int RunSamples = 4;
     public const int RunWidth = 3;
+    public const int HardPlanSamples = 4;
+    public const int HardPlanWidth = 3;
+
+    /// <summary>Whether a version has the A6 tiers: the Hard profile (which plans) and personalities.</summary>
+    public static bool SupportsTiers(string policyVersion) => policyVersion is RunnerHeuristicPolicy.V18 or RunnerHeuristicPolicy.V19;
+
+    /// <summary>Sets a Runner personality (A6) on a configuration of a version that has them; Balanced removes it.</summary>
+    public static OfflineAgentConfiguration WithPersonality(OfflineAgentConfiguration configuration, AgentPersonality personality)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        if (!SupportsTiers(configuration.PolicyVersion) || !AgentPersonalities.IsValid(PlayerSide.Runner, (int)personality))
+            throw new ArgumentException("The Runner version or personality doesn't support personalities.", nameof(personality));
+        OfflineAgentConfiguration updated = OfflineAgentConfiguration.Create(configuration.Side, configuration.PolicyVersion, configuration.ProfileId,
+            configuration.PolicySeed, configuration.WorkBudget, configuration.NearTieTolerance,
+            [.. configuration.Parameters.Where(pair => pair.Key != AgentPersonalities.ParameterKey),
+                .. personality == AgentPersonality.Balanced ? [] : new KeyValuePair<string, int>[] { new(AgentPersonalities.ParameterKey, (int)personality) }],
+            configuration.FeatureVersion);
+        Validate(updated);
+        return updated;
+    }
 
     public static void Validate(OfflineAgentConfiguration configuration)
     {
@@ -99,6 +125,7 @@ public static class RunnerPolicyProfiles
         string[]? keys = configuration.PolicyVersion switch
         {
             RunnerHeuristicPolicy.V1 => ParameterKeys,
+            RunnerHeuristicPolicy.V18 or RunnerHeuristicPolicy.V19 when configuration.ProfileId == "hard" => V8ParameterKeys,
             RunnerHeuristicPolicy.V2 or RunnerHeuristicPolicy.V4 or RunnerHeuristicPolicy.V5 or RunnerHeuristicPolicy.V6 or RunnerHeuristicPolicy.V7 or RunnerHeuristicPolicy.V10 or RunnerHeuristicPolicy.V12 or RunnerHeuristicPolicy.V13 or RunnerHeuristicPolicy.V14 or RunnerHeuristicPolicy.V15 or RunnerHeuristicPolicy.V16 or RunnerHeuristicPolicy.V17 or RunnerHeuristicPolicy.V18 or RunnerHeuristicPolicy.V19 => V2ParameterKeys,
             RunnerHeuristicPolicy.V3 => V3ParameterKeys,
             RunnerHeuristicPolicy.V8 => V8ParameterKeys,
@@ -106,15 +133,21 @@ public static class RunnerPolicyProfiles
             RunnerHeuristicPolicy.V11 => V11ParameterKeys,
             _ => null,
         };
+        bool tiers = SupportsTiers(configuration.PolicyVersion);
+        bool hard = tiers && configuration.ProfileId == "hard";
+        bool personality = configuration.Parameters.ContainsKey(AgentPersonalities.ParameterKey);
         if (configuration.Side != PlayerSide.Runner || keys is null
-            || configuration.ProfileId is not ("standard" or "easy") || configuration.Parameters.Count != keys.Length
+            || !(configuration.ProfileId is "standard" or "easy" || hard)
+            || personality && !tiers
+            || configuration.Parameters.Count != keys.Length + (personality ? 1 : 0)
             || !keys.All(configuration.Parameters.ContainsKey)
             || configuration.Parameters.Any(pair => pair.Key switch
             {
                 "inference-scale" => pair.Value is < 0 or > 200,
                 "plan-samples" or "plan-width" or "run-samples" or "run-width" => pair.Value is < 0 or > 16,
                 "archetype-primary" or "archetype-secondary" => !Enum.IsDefined((RunnerArchetype)pair.Value),
-                "plan-evaluation" => pair.Value is < 0 or > 1,
+                "plan-evaluation" => pair.Value is < 0 || pair.Value > (hard ? 3 : 1),
+                AgentPersonalities.ParameterKey => pair.Value == 0 || !AgentPersonalities.IsValid(PlayerSide.Runner, pair.Value),
                 _ => pair.Value is < 25 or > 200,
             })
             || configuration.FeatureVersion != (configuration.PolicyVersion == RunnerHeuristicPolicy.V1

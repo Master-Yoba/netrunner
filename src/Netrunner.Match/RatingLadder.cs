@@ -44,10 +44,12 @@ public static partial class RatingLadder
     /// frozen M5 policies (Runner v1, Corp v2), "standard-w1" the Wave 1
     /// policies (Runner v2, Corp v3) and "standard-w2" the last policies that
     /// don't plan (Runner v2, Corp v4), for before/after comparisons;
-    /// "standard-plan" is the A3 turn planner (Runner v3, Corp v5).
+    /// "standard-plan" is the A3 turn planner (Runner v3, Corp v5). The A6
+    /// entrants close the list: the personalities, each Standard with the style
+    /// in its own seat, and "hard".
     /// </summary>
     public static IReadOnlyList<string> EntrantOrder { get; } =
-        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19", "standard-r14", "standard-c20", "standard-r15", "standard-c21", "standard-r16", "standard-c22", "standard-b3", "standard-c23", "standard-r17", "standard-r18", "standard-c24", "standard-r19"];
+        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19", "standard-r14", "standard-c20", "standard-r15", "standard-c21", "standard-r16", "standard-c22", "standard-b3", "standard-c23", "standard-r17", "standard-r18", "standard-c24", "standard-r19", "glacier", "rush", "asset-spam", "aggressive", "rig-builder", "hard"];
 
     private const double EloScale = 400 / 2.302585092994046;
     private const double Ridge = 0.01;
@@ -89,7 +91,10 @@ public static partial class RatingLadder
         {
             "random" => new RandomLegalAgent(AgentLifecycleHost.DerivePolicySeed(definition.Request.Seed, side)),
             "contract" => new FullGameContractAgent(new FullGameContractPolicy(side), definition.Runtime),
-            "easy" or "standard" => OfflineMatchFactory.CreateOpponent(definition, other, entrant),
+            "easy" or "standard" or "hard" => OfflineMatchFactory.CreateOpponent(definition, other, entrant),
+            // A6 personalities: Standard with the style in its own seat, plain Standard in the other.
+            "glacier" or "rush" or "asset-spam" or "aggressive" or "rig-builder" => OfflineMatchFactory.CreateOpponent(definition, other, "standard", null,
+                AgentPersonalities.Keys[entrant] is var personality && AgentPersonalities.Side(personality) == side ? personality : AgentPersonality.Balanced),
             // The LLM opponent (Wave 4.5 P3) needs a model, or Codex through the MCP game server; their saved games
             // replay with the heuristic they wrap, so a review shows where their choices differ from it.
             "llm" or "codex" => OfflineMatchFactory.CreateOpponent(definition, other, "standard"),

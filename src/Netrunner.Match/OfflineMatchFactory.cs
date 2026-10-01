@@ -35,14 +35,22 @@ public static class OfflineMatchFactory
             .All(id => id is not null && catalog.Teaching.Any(preset => preset.PresetId == id));
     }
 
-    /// <summary>A new opponent for a player's game: the frozen tutorial bot on the teaching decks, the latest bot otherwise.</summary>
-    public static OfflineAgent CreatePlayerOpponent(FullMatchDefinition definition, PlayerSide humanSide, string difficulty = "standard") =>
-        CreateOpponent(definition, humanSide, difficulty, IsTutorial(definition)
-            ? humanSide == PlayerSide.Corp ? TutorialRunnerVersion : TutorialCorpVersion
-            : null);
+    /// <summary>
+    /// A new opponent for a player's game: the frozen tutorial bot on the teaching decks, the latest bot otherwise.
+    /// The tutorial bot has no Hard tier or personalities (A6), so it plays Standard for Hard and ignores a personality.
+    /// </summary>
+    public static OfflineAgent CreatePlayerOpponent(FullMatchDefinition definition, PlayerSide humanSide, string difficulty = "standard",
+        AgentPersonality personality = AgentPersonality.Balanced) =>
+        IsTutorial(definition)
+            ? CreateOpponent(definition, humanSide, difficulty == "hard" ? "standard" : difficulty,
+                humanSide == PlayerSide.Corp ? TutorialRunnerVersion : TutorialCorpVersion)
+            : CreateOpponent(definition, humanSide, difficulty, null, personality);
+
+    /// <summary>The difficulties a player can choose (A6), weakest first.</summary>
+    public static IReadOnlyList<string> Difficulties { get; } = ["easy", "standard", "hard"];
 
     public static OfflineAgent CreateOpponent(FullMatchDefinition definition, PlayerSide humanSide, string difficulty = "standard",
-        string? policyVersion = null)
+        string? policyVersion = null, AgentPersonality personality = AgentPersonality.Balanced)
     {
         PlayerSide side = humanSide switch
         {
@@ -63,6 +71,10 @@ public static class OfflineMatchFactory
             (RunnerArchetype primary, RunnerArchetype secondary) = RunnerDeckArchetypes(definition.Request.RunnerDeck, catalog);
             configuration = RunnerPolicyProfiles.WithArchetypes(configuration, primary, secondary);
         }
+        if (personality != AgentPersonality.Balanced)
+            configuration = side == PlayerSide.Corp
+                ? CorpPolicyProfiles.WithPersonality(configuration, personality)
+                : RunnerPolicyProfiles.WithPersonality(configuration, personality);
         return new(configuration, OfflinePolicies.Create(configuration), catalog);
     }
 

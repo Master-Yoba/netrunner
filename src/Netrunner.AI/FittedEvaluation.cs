@@ -123,6 +123,20 @@ public static class FittedEvaluation
         return (long)Math.Round(Math.Log(probability / (1 - probability)) * 1000);
     }
 
+    /// <summary>The planner score with a personality's shift of its named terms (A6); Balanced is the plain score.</summary>
+    public static long Score(AgentFeatures features, ICardEvaluationCatalog catalog, int version, AgentPersonality personality)
+    {
+        ArgumentNullException.ThrowIfNull(features);
+        if (personality == AgentPersonality.Balanced || version == 1 || features.Board.Outcome.Kind != GameOutcomeKind.Ongoing)
+            return Score(features, catalog, version);
+        FittedEvaluationDocument document = DocumentFor(version);
+        LogisticSideModel model = features.Side == PlayerSide.Corp ? document.Corp : document.Runner;
+        double[] values = EvaluationFeatures.Extract(features, catalog, version);
+        double probability = Math.Clamp(model.Probability(values), 1e-6, 1 - 1e-6);
+        return (long)Math.Round(Math.Log(probability / (1 - probability)) * 1000)
+            + AgentPersonalities.Shift(personality, values, EvaluationFeatures.NamesFor(version));
+    }
+
     private static readonly JsonSerializerOptions ReadOptions = new() { PropertyNameCaseInsensitive = true };
 
     public static FittedEvaluationDocument Parse(string json) =>

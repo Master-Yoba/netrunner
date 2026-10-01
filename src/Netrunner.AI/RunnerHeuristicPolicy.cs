@@ -126,7 +126,8 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Runner policy version '{version}'.", nameof(version));
         Version = version;
         Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 or V8 or V9 => 6, V10 => 7, V11 or V12 => 8, V13 => 9, V14 => 10, V15 => 11, V16 => 12, V17 => 13, V18 => 14, V19 => 15, _ => 2 };
-        Plans = version is V3 or V8 or V9;
+        // V18 on: only the Hard profile (A6) has planner parameters, so Standard and Easy play as before.
+        Plans = version is V3 or V8 or V9 || Generation >= 14;
         Repairs = version is V4 or V5 or V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19;
     }
 

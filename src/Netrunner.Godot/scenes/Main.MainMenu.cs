@@ -1,4 +1,5 @@
 using Godot;
+using Netrunner.AI;
 using Netrunner.Cards;
 using Netrunner.Core;
 using Netrunner.Match;
@@ -33,6 +34,8 @@ public partial class Main
 	private string? _menuYourDeck;
 	private string? _menuOpponentDeck;
 	private int _menuDifficulty;
+	private AgentPersonality _menuPersonality;
+	private HBoxContainer? _menuPersonalities;
 	private SoloSavePreview? _latestSave;
 
 	/// <summary>The view the menu shows; the developer view is the original setup form.</summary>
@@ -161,6 +164,7 @@ public partial class Main
 			_menuYourDeck = null;
 			_menuOpponentDeck = null;
 			RefreshMenuDecks();
+			RefreshMenuPersonalities();
 		}).Name = "Seat";
 		view.AddChild(MakeLabel("YOUR DECK", 14, Muted));
 		_menuYourDecks = new HFlowContainer { Name = "YourDecks" };
@@ -172,8 +176,12 @@ public partial class Main
 		_menuOpponentDecks.AddThemeConstantOverride("h_separation", 12);
 		_menuOpponentDecks.AddThemeConstantOverride("v_separation", 12);
 		view.AddChild(_menuOpponentDecks);
-		MenuToggleRow(view, [("Standard opponent", "0"), ("Easy opponent", "1")], "0",
-			value => _menuDifficulty = value == "1" ? 1 : 0).Name = "Difficulty";
+		// A6: the values are the setup form's difficulty items (Standard, Easy, Hard).
+		MenuToggleRow(view, [("Easy opponent", "1"), ("Standard opponent", "0"), ("Hard opponent", "2")], "0",
+			value => _menuDifficulty = int.Parse(value, System.Globalization.CultureInfo.InvariantCulture)).Name = "Difficulty";
+		_menuPersonalities = new HBoxContainer { Name = "Personality" };
+		view.AddChild(_menuPersonalities);
+		RefreshMenuPersonalities();
 		var actions = new HBoxContainer { Name = "Actions" };
 		actions.AddThemeConstantOverride("separation", 12);
 		view.AddChild(actions);
@@ -307,6 +315,7 @@ public partial class Main
 		SelectPresetById(_runnerPreset, _runnerPresetIds, runner);
 		_humanSide.Select(_menuSeat == PlayerSide.Runner ? 0 : 1);
 		_difficulty?.Select(_menuDifficulty);
+		SelectPersonality(_menuPersonality);
 		_seedInput.Text = BitConverter.ToUInt64(System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong)))
 			.ToString(System.Globalization.CultureInfo.InvariantCulture);
 		_startButton.EmitSignal(BaseButton.SignalName.Pressed);
@@ -349,6 +358,33 @@ public partial class Main
 	}
 
 	/// <summary>A row of mutually exclusive toggle buttons.</summary>
+	/// <summary>The opponent's play styles (A6) for the current seat; a seat change resets it to Balanced.</summary>
+	private void RefreshMenuPersonalities()
+	{
+		if (_menuPersonalities is null) return;
+		foreach (Node child in _menuPersonalities.GetChildren())
+		{
+			_menuPersonalities.RemoveChild(child);
+			child.QueueFree();
+		}
+		_menuPersonality = AgentPersonality.Balanced;
+		PlayerSide opponent = _menuSeat == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp;
+		MenuToggleRow(_menuPersonalities,
+			[.. AgentPersonalities.For(opponent).Select(personality => (PersonalityTitle(personality), AgentPersonalities.Key(personality)))],
+			AgentPersonalities.Key(AgentPersonality.Balanced),
+			value => _menuPersonality = AgentPersonalities.Keys[value]).Name = "Personalities";
+	}
+
+	private static string PersonalityTitle(AgentPersonality personality) => personality switch
+	{
+		AgentPersonality.Glacier => "Glacier",
+		AgentPersonality.Rush => "Rush",
+		AgentPersonality.AssetSpam => "Asset spam",
+		AgentPersonality.Aggressive => "Aggressive",
+		AgentPersonality.RigBuilder => "Rig-builder",
+		_ => "Balanced style",
+	};
+
 	private static HBoxContainer MenuToggleRow(Container parent, (string Text, string Value)[] options, string selected, Action<string> choose)
 	{
 		var row = new HBoxContainer();

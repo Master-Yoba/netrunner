@@ -61,6 +61,11 @@ public static class CorpPolicyProfiles
             workBudget: 12000, nearTieTolerance: EasyNearTieTolerance,
             parameters: [.. Parameters(90, 80, 100), new("coverage-scale", 0), .. Planning(0, 0), new("plan-evaluation", 3),
                 new("archetype-primary", 0), new("archetype-secondary", 0)]),
+        // A6 Hard: the same policy planning twice as many samples over a wider beam.
+        (CorpHeuristicPolicy.V19 or CorpHeuristicPolicy.V20 or CorpHeuristicPolicy.V21 or CorpHeuristicPolicy.V22 or CorpHeuristicPolicy.V23 or CorpHeuristicPolicy.V24, "hard") => OfflineAgentConfiguration.Create(PlayerSide.Corp, policyVersion, profileId, policySeed,
+            workBudget: 20000, nearTieTolerance: 0,
+            parameters: [.. Parameters(100, 100, 100), new("coverage-scale", 100), .. Planning(HardPlanSamples, HardPlanWidth), new("plan-evaluation", 3),
+                new("archetype-primary", 0), new("archetype-secondary", 0)]),
         // A4: V8 choices with rez search, scored by the fitted evaluation; turn actions aren't planned.
         (CorpHeuristicPolicy.V10, "standard") => OfflineAgentConfiguration.Create(PlayerSide.Corp, policyVersion, profileId, policySeed,
             workBudget: 20000, nearTieTolerance: 0,
@@ -94,6 +99,26 @@ public static class CorpPolicyProfiles
     }
     public const int PlanSamples = 3;
     public const int PlanWidth = 3;
+    public const int HardPlanSamples = 6;
+    public const int HardPlanWidth = 4;
+
+    /// <summary>Whether a version has the A6 tiers: the Hard profile and personalities.</summary>
+    public static bool SupportsTiers(string policyVersion) => policyVersion is CorpHeuristicPolicy.V19 or CorpHeuristicPolicy.V20 or CorpHeuristicPolicy.V21 or CorpHeuristicPolicy.V22 or CorpHeuristicPolicy.V23 or CorpHeuristicPolicy.V24;
+
+    /// <summary>Sets a Corp personality (A6) on a configuration of a version that has them; Balanced removes it.</summary>
+    public static OfflineAgentConfiguration WithPersonality(OfflineAgentConfiguration configuration, AgentPersonality personality)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+        if (!SupportsTiers(configuration.PolicyVersion) || !AgentPersonalities.IsValid(PlayerSide.Corp, (int)personality))
+            throw new ArgumentException("The Corp version or personality doesn't support personalities.", nameof(personality));
+        OfflineAgentConfiguration updated = OfflineAgentConfiguration.Create(configuration.Side, configuration.PolicyVersion, configuration.ProfileId,
+            configuration.PolicySeed, configuration.WorkBudget, configuration.NearTieTolerance,
+            [.. configuration.Parameters.Where(pair => pair.Key != AgentPersonalities.ParameterKey),
+                .. personality == AgentPersonality.Balanced ? [] : new KeyValuePair<string, int>[] { new(AgentPersonalities.ParameterKey, (int)personality) }],
+            configuration.FeatureVersion);
+        Validate(updated);
+        return updated;
+    }
 
     internal static KeyValuePair<string, int>[] Planning(int samples, int width) =>
         [new("plan-samples", samples), new("plan-width", width)];
@@ -120,8 +145,12 @@ public static class CorpPolicyProfiles
             CorpHeuristicPolicy.V12 or CorpHeuristicPolicy.V13 or CorpHeuristicPolicy.V14 or CorpHeuristicPolicy.V15 or CorpHeuristicPolicy.V16 or CorpHeuristicPolicy.V17 or CorpHeuristicPolicy.V18 or CorpHeuristicPolicy.V19 or CorpHeuristicPolicy.V20 or CorpHeuristicPolicy.V21 or CorpHeuristicPolicy.V22 or CorpHeuristicPolicy.V23 or CorpHeuristicPolicy.V24 => V12ParameterKeys,
             _ => null,
         };
+        bool tiers = SupportsTiers(configuration.PolicyVersion);
+        bool personality = configuration.Parameters.ContainsKey(AgentPersonalities.ParameterKey);
         if (configuration.Side != PlayerSide.Corp || keys is null
-            || configuration.ProfileId is not ("standard" or "easy") || configuration.Parameters.Count != keys.Length
+            || !(configuration.ProfileId is "standard" or "easy" || tiers && configuration.ProfileId == "hard")
+            || personality && !tiers
+            || configuration.Parameters.Count != keys.Length + (personality ? 1 : 0)
             || !keys.All(configuration.Parameters.ContainsKey)
             || configuration.Parameters.Any(pair => pair.Key switch
             {
@@ -129,6 +158,7 @@ public static class CorpPolicyProfiles
                 "plan-samples" or "plan-width" or "run-samples" or "run-width" => pair.Value is < 0 or > 16,
                 "plan-evaluation" => pair.Value is < 0 or > 3,
                 "archetype-primary" or "archetype-secondary" => !Enum.IsDefined((CorpArchetype)pair.Value),
+                AgentPersonalities.ParameterKey => pair.Value == 0 || !AgentPersonalities.IsValid(PlayerSide.Corp, pair.Value),
                 _ => pair.Value is < 25 or > 200,
             })
             || configuration.FeatureVersion != AgentFeatures.Version)

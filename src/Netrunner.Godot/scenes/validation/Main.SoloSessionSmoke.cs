@@ -92,7 +92,7 @@ public partial class Main
 			RequireInteraction(ulong.TryParse(_seedInput.Text, out ulong generated) && generated != 42, "Generate seed did not expose its value.");
 			_seedInput.Text = "56142";
 			_humanSide.Select(side == PlayerSide.Runner ? 0 : 1);
-			_difficulty!.Select(difficulty == "easy" ? 1 : 0);
+			_difficulty!.Select(DifficultyIndex(difficulty));
 			SelectPresetById(_corpPreset, _corpPresetIds, $"system-gateway-{preset}-corp");
 			SelectPresetById(_runnerPreset, _runnerPresetIds, $"system-gateway-{preset}-runner");
 			_startButton.EmitSignal(BaseButton.SignalName.Pressed);

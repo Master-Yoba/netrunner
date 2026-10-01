@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Text.Json.Serialization;
+using Netrunner.AI;
 using Netrunner.Core;
 
 namespace Netrunner.Match;
@@ -88,7 +89,8 @@ public sealed record SoloSaveDocument(int SchemaVersion, string ArtifactKind, So
     public SoloSavePreview Preview => new(Metadata.SaveId, Metadata.Name, Metadata.HumanSide,
         Payload.Request.Seed, Payload.Request.CorpDeck.PresetId ?? "custom", Payload.Request.RunnerDeck.PresetId ?? "custom",
         Payload.Opponent.Configuration?.ProfileId ?? "contract-baseline", Payload.Snapshot.Turn.TurnNumber,
-        Payload.Snapshot.Turn.Phase.ToString(), Metadata.UpdatedUtc, Payload.Snapshot.Outcome.Kind != GameOutcomeKind.Ongoing);
+        Payload.Snapshot.Turn.Phase.ToString(), Metadata.UpdatedUtc, Payload.Snapshot.Outcome.Kind != GameOutcomeKind.Ongoing,
+        Payload.Opponent.Configuration is { } configuration ? AgentPersonalities.Of(configuration) : AgentPersonality.Balanced);
 
     private static string Hash(int schema, string kind, SoloSaveMetadata metadata, SoloSavePayload payload,
         string engineStateHash, string policyStateHash) =>
@@ -96,4 +98,5 @@ public sealed record SoloSaveDocument(int SchemaVersion, string ArtifactKind, So
 }
 
 public sealed record SoloSavePreview(string SaveId, string Name, PlayerSide HumanSide, ulong Seed,
-    string CorpDeck, string RunnerDeck, string Difficulty, int Turn, string Phase, DateTimeOffset UpdatedUtc, bool IsTerminal);
+    string CorpDeck, string RunnerDeck, string Difficulty, int Turn, string Phase, DateTimeOffset UpdatedUtc, bool IsTerminal,
+    AgentPersonality Personality = AgentPersonality.Balanced);

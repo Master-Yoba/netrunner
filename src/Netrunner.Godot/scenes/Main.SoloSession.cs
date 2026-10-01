@@ -1,5 +1,6 @@
 using System.Globalization;
 using Godot;
+using Netrunner.AI;
 using Netrunner.Cards;
 using Netrunner.Match;
 
@@ -10,6 +11,23 @@ public partial class Main
 	// Survives New game/scene reload so an old writer cannot race a new rolling save.
 	private static SoloSessionService? _applicationSoloSession;
 	private OptionButton? _difficulty;
+	private OptionButton? _personality;
+
+	/// <summary>The setup form's difficulty: its items are Standard, Easy and Hard, in that order (A6 added Hard last).</summary>
+	private string SelectedDifficulty => _difficulty?.Selected switch { 1 => "easy", 2 => "hard", _ => "standard" };
+
+	private static int DifficultyIndex(string difficulty) => difficulty switch { "easy" => 1, "hard" => 2, _ => 0 };
+
+	/// <summary>The setup form's personality for a bot on a side; one for the other side plays Balanced.</summary>
+	private AgentPersonality SelectedPersonality(Netrunner.Core.PlayerSide botSide) =>
+		_personality is { } option && option.Selected >= 0
+		&& (AgentPersonality)option.GetItemId(option.Selected) is var personality && AgentPersonalities.Side(personality) == botSide
+			? personality : AgentPersonality.Balanced;
+
+	private void SelectPersonality(AgentPersonality personality)
+	{
+		if (_personality is { } option) option.Select(option.GetItemIndex((int)personality));
+	}
 	private SoloSaveDialog? _saveDialog;
 	private SoloSessionService? _soloSession;
 	private Control? _savePreviousFocus;
@@ -50,6 +68,7 @@ public partial class Main
 	private void BindOfflineSetup(Control setup)
 	{
 		_difficulty = setup.GetNode<OptionButton>("%Difficulty");
+		_personality = setup.GetNode<OptionButton>("%Personality");
 		setup.GetNode<Button>("%GenerateSeed").Pressed += () =>
 			_seedInput.Text = BitConverter.ToUInt64(System.Security.Cryptography.RandomNumberGenerator.GetBytes(sizeof(ulong))).ToString(CultureInfo.InvariantCulture);
 		setup.GetNode<Button>("%Resume").Pressed += ShowSaveBrowser;
@@ -294,8 +313,9 @@ public partial class Main
 			_seedInput.Text = preview.Seed.ToString(CultureInfo.InvariantCulture);
 			if (_corpPresetIds.ContainsValue(preview.CorpDeck)) SelectPresetById(_corpPreset, _corpPresetIds, preview.CorpDeck);
 			if (_runnerPresetIds.ContainsValue(preview.RunnerDeck)) SelectPresetById(_runnerPreset, _runnerPresetIds, preview.RunnerDeck);
-			_difficulty?.Select(preview.Difficulty == "easy" ? 1 : 0);
-			_matchHistory.ReportHeader = $"Netrunner · saved seed {preview.Seed} · {preview.HumanSide} · {preview.Difficulty} · {preview.CorpDeck} / {preview.RunnerDeck}";
+			_difficulty?.Select(DifficultyIndex(preview.Difficulty));
+			SelectPersonality(preview.Personality);
+			_matchHistory.ReportHeader = $"Netrunner · saved seed {preview.Seed} · {preview.HumanSide} · {preview.Difficulty}{(preview.Personality == AgentPersonality.Balanced ? "" : " " + AgentPersonalities.Key(preview.Personality))} · {preview.CorpDeck} / {preview.RunnerDeck}";
 			_fullMatchSessionGlobalDirectory = trace;
 			_fullMatchDiagnosticsParentDirectory = trace;
 			OpenUiTrace(trace);

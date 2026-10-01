@@ -29,8 +29,9 @@ if ((ladder_has_output == 0)); then
 fi
 
 # Build in an isolated directory so the ladder never replaces the solution's
-# content-specific build output.
-ladder_build="$ladder_root/.tools/ladder-cli"
+# content-specific build output. LADDER_BUILD names another directory, so two
+# ladders on different trees don't rebuild each other's binaries.
+ladder_build="${LADDER_BUILD:-$ladder_root/.tools/ladder-cli}"
 dotnet build "$ladder_root/src/Netrunner.Cli" -c Release --artifacts-path "$ladder_build" -m:1 --disable-build-servers \
   "-p:NetrunnerCardDataGeneratedFile=$ladder_build/generated/GeneratedCardData.g.cs" \
   -p:NetrunnerContentEnabled=true -p:NetrunnerCardDataMode=official "-p:NetrunnerCardDataInputRoot=$ladder_data" >&2

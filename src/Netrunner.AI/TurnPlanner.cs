@@ -161,8 +161,9 @@ internal sealed class TurnPlanner
             _configuration.FeatureVersion);
         // A5: planning versions score rollouts by the fitted win probability (as log-odds).
         // plan-evaluation 2: the refitted evaluation (feature set 2) Corp v11 plans with.
+        // A6: a personality shifts named terms of the fitted evaluation.
         return _configuration.Parameters.GetValueOrDefault("plan-evaluation") is int version and (1 or 2 or 3)
-            ? FittedEvaluation.Score(features, _catalog, version)
+            ? FittedEvaluation.Score(features, _catalog, version, AgentPersonalities.Of(_configuration))
             : PositionEvaluation.Score(features, _catalog, _configuration);
     }
 
