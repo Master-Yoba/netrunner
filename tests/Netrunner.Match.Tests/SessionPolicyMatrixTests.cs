@@ -99,7 +99,7 @@ public sealed class SessionPolicyMatrixTests
         PlayerSide side = human == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp;
         OfflineAgentConfiguration config = side == PlayerSide.Corp
             ? CorpPolicyProfiles.Create("standard", 551) : RunnerPolicyProfiles.Create("standard", 551);
-        AgentFeatures features = ObservationReader.Read(ObservationBuilder.Build(trace.State, side, board.Behavior));
+        AgentFeatures features = ObservationReader.Read(ObservationBuilder.Build(trace.State, side, board.Behavior), config.FeatureVersion);
         // A prepared scenario has a new observation-history root at its actual
         // engine action cursor; no fictitious earlier bot decisions are inserted.
         OfflineAgentCheckpoint checkpoint = OfflineAgentCheckpoint.Initial(config) with
