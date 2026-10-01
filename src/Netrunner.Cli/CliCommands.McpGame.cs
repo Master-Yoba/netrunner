@@ -108,6 +108,16 @@ public static partial class CliCommands
             return result;
         });
 
+        // A client that exits may stop its server with SIGTERM: the heuristic then finishes the game and it is saved.
+        using var stopping = System.Runtime.InteropServices.PosixSignalRegistration.Create(System.Runtime.InteropServices.PosixSignal.SIGTERM,
+            signal =>
+            {
+                signal.Cancel = true;
+                decider.Leave();
+                play.Wait(TimeSpan.FromMinutes(2));
+                Environment.Exit(0);
+            });
+
         // The Model Context Protocol over stdio: one JSON-RPC message per line, nothing else on stdout.
         using var stdin = new StreamReader(Console.OpenStandardInput());
         while (stdin.ReadLine() is { } line)

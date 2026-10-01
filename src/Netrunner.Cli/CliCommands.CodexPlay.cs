@@ -80,9 +80,19 @@ public static partial class CliCommands
                 "--rules-root", rulesRoot, "--output", gameDirectory];
             DateTime started = DateTime.UtcNow;
             string workspace = Path.GetFullPath(Path.Combine(destination, $"game-{number:D3}.workspace"));
-            Directory.CreateDirectory(workspace);
-            (string? summary, CodexUsage usage, string? failure) = RunCodexGame(codex, model, reasoning, workspace, host, server,
-                CodexPlayPrompt(side), Path.Combine(destination, $"game-{number:D3}.events.jsonl"), TimeSpan.FromMinutes(timeoutMinutes));
+            string eventsPath = Path.Combine(destination, $"game-{number:D3}.events.jsonl");
+            (string? summary, CodexUsage usage, string? failure) = (null, CodexUsage.None, null);
+            // OpenAI sometimes reports the model at capacity mid-game; the game is played again from the start.
+            for (int attempt = 1; attempt <= 3; attempt++)
+            {
+                if (Directory.Exists(gameDirectory)) Directory.Delete(gameDirectory, recursive: true);
+                Directory.CreateDirectory(workspace);
+                (summary, usage, failure) = RunCodexGame(codex, model, reasoning, workspace, host, server,
+                    CodexPlayPrompt(side), eventsPath, TimeSpan.FromMinutes(timeoutMinutes));
+                if (failure is null || !File.ReadAllText(eventsPath).Contains("at capacity", StringComparison.Ordinal)) break;
+                error.WriteLine($"ai-codex-play game {number:D3}: the model was at capacity (attempt {attempt}); trying again in a minute.");
+                if (attempt < 3) Thread.Sleep(TimeSpan.FromMinutes(1));
+            }
             // The server finishes the game with the heuristic once Codex has gone; give it a moment to write.
             string resultPath = Path.Combine(gameDirectory, "result.json");
             for (int wait = 0; wait < 120 && !File.Exists(resultPath); wait++) Thread.Sleep(500);
