@@ -44,6 +44,7 @@ step() {
     status=1
   fi
 }
+step restore make restore
 step verify make verify
 step m5-gate make m5-gate
 step tactics make ai-tactics-verify "TACTICAL_ARGS=--workers 12"
