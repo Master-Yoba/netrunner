@@ -9,7 +9,7 @@ public sealed class DifficultyTierTests
     [Theory]
     [InlineData(PlayerSide.Corp)]
     [InlineData(PlayerSide.Runner)]
-    public void HardPlansMoreThanStandardAndEasyPlansLeast(PlayerSide side)
+    public void HardPlansAtLeastAsMuchAsStandardAndEasyPlansLeast(PlayerSide side)
     {
         OfflineAgentConfiguration easy = OfflinePolicies.Configure(side, "easy", 1);
         OfflineAgentConfiguration standard = OfflinePolicies.Configure(side, "standard", 1);
@@ -20,7 +20,10 @@ public sealed class DifficultyTierTests
         Assert.Equal(0, hard.NearTieTolerance);
         int Rollouts(OfflineAgentConfiguration configuration) =>
             configuration.Parameters.GetValueOrDefault("plan-samples") * configuration.Parameters.GetValueOrDefault("plan-width");
-        Assert.True(Rollouts(hard) > Rollouts(standard), $"{side} Hard {Rollouts(hard)} rollouts, Standard {Rollouts(standard)}.");
+        // The Runner's Hard plans and its Standard doesn't; the Corp's Hard plans as its Standard does, since no
+        // planner setting measured stronger.
+        if (side == PlayerSide.Runner) Assert.True(Rollouts(hard) > Rollouts(standard), $"Runner Hard {Rollouts(hard)} rollouts, Standard {Rollouts(standard)}.");
+        else Assert.Equal(Rollouts(standard), Rollouts(hard));
         Assert.True(Rollouts(standard) >= Rollouts(easy));
         Assert.Equal(0, Rollouts(easy));
         Assert.Equal(hard.PolicyVersion, OfflinePolicies.Create(hard).Version);

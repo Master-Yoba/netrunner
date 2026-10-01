@@ -92,7 +92,7 @@ public static partial class RatingLadder
             "random" => new RandomLegalAgent(AgentLifecycleHost.DerivePolicySeed(definition.Request.Seed, side)),
             "contract" => new FullGameContractAgent(new FullGameContractPolicy(side), definition.Runtime),
             "easy" or "standard" or "hard" => OfflineMatchFactory.CreateOpponent(definition, other, entrant),
-            // A6 tuning: Hard with a wider plan (Corp 10 samples of 4 actions, Runner 6 of 4).
+            // A6 tuning, kept as entrants (none beat Hard): a wider plan (Corp 10 samples of 4 actions, Runner 6 of 4).
             "hard-wide" => Replanned(OfflineMatchFactory.CreateOpponent(definition, other, "hard"), definition,
                 side == PlayerSide.Corp ? 10 : 6, 4),
             // A6 tuning: Hard counting its rollouts double, adding the rez/run search, or modelling the current opponent.
