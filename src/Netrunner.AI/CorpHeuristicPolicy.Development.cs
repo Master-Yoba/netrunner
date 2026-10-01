@@ -99,9 +99,13 @@ public sealed partial class CorpHeuristicPolicy
                     // (a lone Palisade against Cleaver, Whitespace against Buzzsaw, Funhouse for a Runner who can clear tags).
                     // Like an unprotected agenda, it is ranked below every other option, so the planner's turn-end horizon,
                     // which can't see the steal, doesn't bring it back.
+                    // v23 (reviews of batch 4's losses to Codex, 1 October): two agendas in HQ push one out only when HQ is no
+                    // safer than the remote; it was, and four agendas went out into breakable remotes and were stolen.
                     agendaWaits = context.Generation >= 16 && !scoreableNow && !nakedAgenda && server is not null
                         && RunnerGetsIn(context, server, install.CreditCost + definition.Printed.AdvancementRequirement)
-                        && context.AgendaCount < 2
+                        && (context.AgendaCount < 2 || context.Generation >= 18
+                            && context.Features.Board.Servers.FirstOrDefault(value => value.Kind == ServerKind.Headquarters) is { } hq
+                            && !RunnerGetsIn(context, hq, install.CreditCost))
                         // v22 (reviews of the losses to Codex, 1 October): a full HQ of other cards only means a discard.
                         && (context.Generation >= 17 || context.Features.Hand.Length < (context.Self.MaximumHandSize ?? 5));
                 }
@@ -241,6 +245,10 @@ public sealed partial class CorpHeuristicPolicy
             // took every spare click and credit while the Corp stopped scoring.
             if (context.Generation >= 15 && 2 + counters > context.Features.Board.HiddenZoneCounts.RunnerGrip + 1)
                 return Value(-30, "advance/trap-already-lethal", approximate: true);
+            // v23 (reviews of batch 4's losses to Codex, 1 October): the Runner has accessed this trap and won't run into it
+            // again; every advancement after that was a click and a credit lost (four games).
+            if (context.Generation >= 18 && context.Knowledge?.Exposed?.Contains(card.Id) == true)
+                return Value(-30, "advance/trap-known-to-runner", approximate: true);
             int bait = counters >= 4 ? 40 : 130 - counters * 15;
             if (context.Generation >= 7) bait = (int)(bait * context.CorpProfile.TrapWeight);
             return Value(bait, "advance/trap", approximate: true);
@@ -456,7 +464,9 @@ public sealed partial class CorpHeuristicPolicy
                 : Value(-10, "rez/upgrade-wait-for-server");
         // v22 (reviews of the losses to Codex, 1 October): an asset loading three times its cost or more pays the budget
         // back at once (Regolith Mining License loads 15 for 2); holding it back left the Corp broke.
+        // v23: only with a click left to start taking the credits; rezzed with none, it was trashed before it paid.
         bool paysBack = context.Generation >= 17 && definition?.Printed.CardClass == RuntimeCardClass.Asset
+            && (context.Generation < 18 || context.Features.Board.Turn.ActiveSide == PlayerSide.Corp && context.Self.Clicks > 0)
             && (definition.Behavior?.Triggers.SelectMany(trigger => trigger.Instructions).Where(instruction => instruction.Kind == BehaviorInstructionKind.LoadHostedCredits)
                 .Sum(instruction => instruction.Amount) ?? 0) >= 3 * Math.Max(1, cost);
         if (!paysBack && context.Self.Credits - cost < context.RezReserve) return Value(-300, "rez/preserve-ice-budget");

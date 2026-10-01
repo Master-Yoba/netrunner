@@ -47,6 +47,12 @@ public sealed record AgentKnowledge(ImmutableArray<AgentRememberedCard> VisibleC
     /// <summary>Face-down root cards the Runner has accessed. Older checkpoints load without it.</summary>
     public ImmutableArray<AgentRootMemory>? Roots { get; init; }
 
+    /// <summary>
+    /// The Corp's installed cards the Runner has accessed, by instance: a trap the Runner has seen won't be run into
+    /// again. Kept by the Corp only; older checkpoints load without it.
+    /// </summary>
+    public ImmutableArray<string>? Exposed { get; init; }
+
     public AgentKnowledge Observe(AgentFeatures features, long sequence)
     {
         // Precise identity/location exists only while currently visible. Reveals
@@ -95,11 +101,18 @@ public sealed record AgentKnowledge(ImmutableArray<AgentRememberedCard> VisibleC
         }
         if (features.Board.Run is null && centrals?.DeckDuringRun is not null) centrals = centrals with { DeckDuringRun = null };
         ImmutableArray<AgentRootMemory>? roots = features.Side == PlayerSide.Runner ? RememberRoots(features, Roots) : Roots;
+        ImmutableArray<string>? exposed = Exposed;
+        if (features.Side == PlayerSide.Corp && features.Board.Run?.Breach.Accessed is { Length: > 0 } breached)
+        {
+            string[] installed = [.. breached.OfType<AgentCard>().Where(card => features.Board.Servers.Any(server => server.Root.Any(root => root?.Id == card.Id)))
+                .Select(card => card.Id)];
+            if (installed.Length > 0) exposed = [.. (Exposed ?? []).Union(installed, StringComparer.Ordinal).Order(StringComparer.Ordinal).TakeLast(64)];
+        }
         return new(visible, reveals.Values.OrderByDescending(reveal => reveal.LastSeenSequence)
             .ThenBy(reveal => reveal.DefinitionId, StringComparer.Ordinal).Take(256).ToImmutableArray(),
             history.TakeLast(128).ToImmutableArray(), features.Board.Run?.Id, features.Board.Run?.AttackedServer,
             features.Board.Run?.Successful)
-        { Centrals = centrals, Roots = roots };
+        { Centrals = centrals, Roots = roots, Exposed = exposed };
 
         void Add(string kind, AgentRememberedCard card) => history.Add(new(sequence, kind, card.Id, card.DefinitionId, null));
     }

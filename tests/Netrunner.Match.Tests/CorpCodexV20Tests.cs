@@ -114,6 +114,44 @@ public sealed class CorpCodexV20Tests
         Assert.True(purges == (chosen.Kind == ActionKind.PurgeVirusCounters), $"{version} chose {chosen.Kind} {chosen.Description}.");
     }
 
+    [Theory]
+    [InlineData(CorpHeuristicPolicy.V22, true)]
+    [InlineData(CorpHeuristicPolicy.V23, false)]
+    public async Task ATrapTheRunnerHasAccessedIsNotAdvanced(string version, bool advances)
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        // A game against Codex (1 October, batch 4): an Urtica Cipher the Runner accessed at #62, advanced at #219 with an
+        // agenda ready to score behind ICE.
+        (LegalAction chosen, GameState state) = await ChooseAtAsync("codex-corp-known-trap", version, 219);
+        bool urtica = chosen.Parameters is AdvanceCardParameters advance && Title(state, advance.CardId) == "Urtica Cipher";
+        Assert.True(advances == urtica, $"{version} chose {chosen.Kind} {chosen.Description}.");
+    }
+
+    [Theory]
+    [InlineData(CorpHeuristicPolicy.V22, true)]
+    [InlineData(CorpHeuristicPolicy.V23, false)]
+    public async Task AnAssetWaitsForAClickToUseIt(string version, bool rezzes)
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        // A game against Codex (1 October, batch 4): Regolith Mining License rezzed with no click left; trashed at once.
+        (LegalAction chosen, GameState state) = await ChooseAtAsync("codex-corp-regolith-no-click", version, 440);
+        bool regolith = chosen.Parameters is RezCardParameters rez && Title(state, rez.CardId) == "Regolith Mining License";
+        Assert.True(rezzes == regolith, $"{version} chose {chosen.Kind} {chosen.Description}.");
+    }
+
+    [Theory]
+    [InlineData(CorpHeuristicPolicy.V22, true)]
+    [InlineData(CorpHeuristicPolicy.V23, false)]
+    public async Task TwoAgendasStayInASaferHq(string version, bool installs)
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        // A game against Codex (1 October, batch 4): with Offworld Office and Above the Law in HQ, Offworld Office went
+        // behind a lone Whitespace against Buzzsaw and was stolen.
+        (LegalAction chosen, GameState state) = await ChooseAtAsync("codex-corp-two-agendas", version, 682);
+        bool agenda = chosen.Parameters is InstallCardParameters install && Title(state, install.CardId) is "Offworld Office" or "Above the Law";
+        Assert.True(installs == agenda, $"{version} chose {chosen.Kind} {chosen.Description}.");
+    }
+
     private static string Title(GameState state, CardInstanceId id) =>
         CardDataResource.LoadEmbedded().Cards.Single(card => card.Code == state.GetCard(id).DefinitionId.Value).Title;
 
