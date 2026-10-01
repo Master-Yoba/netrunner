@@ -20,8 +20,8 @@ if [[ ! -f "$review_data/cards.json" ]]; then
   exit 2
 fi
 
-# The lint build directory: the same official build, never a running ladder's.
-review_build="$review_root/.tools/lint-cli"
+# Its own build directory: a long run of LLM games never shares a build with a lint or review run.
+review_build="$review_root/.tools/llm-play-cli"
 dotnet build "$review_root/src/Netrunner.Cli" -c Release --artifacts-path "$review_build" -m:1 --disable-build-servers \
   "-p:NetrunnerCardDataGeneratedFile=$review_build/generated/GeneratedCardData.g.cs" \
   -p:NetrunnerContentEnabled=true -p:NetrunnerCardDataMode=official "-p:NetrunnerCardDataInputRoot=$review_data" >&2
