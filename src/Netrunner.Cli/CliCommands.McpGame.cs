@@ -71,16 +71,26 @@ public static partial class CliCommands
             content, RulesFuzzRunner.DeriveGameSeed(seed, number - 1), corp ? "codex" : opponent, corp ? opponent : "codex");
         var decider = new ExternalDecider();
         LlmOpponentAgent? agent = null;
+        FullMatchDefinition? played = null;
+        string ending = "";
         int invalid = 0;
         string? final = null;
         Task<LadderGameResult> play = Task.Run(async () =>
         {
-            LadderGameResult result = await RatingLadder.PlayAsync(game, RatingLadder.DefaultActionCap, saved => LadderGameArchive.Write(destination, saved),
-                (entrant, seat, definition) => entrant == "codex"
-                    ? agent = WithProgressFile(LlmOpponentAgent.Create(seat, definition, decider), Path.Combine(destination, "progress.log"))
-                    : RatingLadder.CreateAgent(entrant, seat, definition)).ConfigureAwait(false);
+            LadderGameResult result = await RatingLadder.PlayAsync(game, RatingLadder.DefaultActionCap, saved =>
+                {
+                    LadderGameArchive.Write(destination, saved);
+                    if (played is not null) ending = Ending(saved, played);
+                },
+                (entrant, seat, definition) =>
+                {
+                    played = definition;
+                    return entrant == "codex"
+                        ? agent = WithProgressFile(LlmOpponentAgent.Create(seat, definition, decider), Path.Combine(destination, "progress.log"))
+                        : RatingLadder.CreateAgent(entrant, seat, definition);
+                }).ConfigureAwait(false);
             string winner = result.Error is not null ? "none (error)" : result.Capped ? "none (action cap)" : result.CorpScore == 1 ? "the Corp" : "the Runner";
-            final = $"The game is over: {winner} won after {result.Actions} actions{(result.Error is null ? "" : $" ({result.Error})")}. You played the {side}.";
+            final = $"The game is over: {winner} won{ending} after {result.Actions} actions{(result.Error is null ? "" : $" ({result.Error})")}. You played the {side}.";
             File.WriteAllText(Path.Combine(destination, "result.json"), EngineJson.Serialize(new
             {
                 schemaVersion = 1,
@@ -178,6 +188,28 @@ public static partial class CliCommands
                 ? choice.Request + "\nPlay one with choose(option, reason)."
                 : final ?? "The game is over.";
         }
+    }
+
+    /// <summary>How the game ended, replayed from its record: the win's reason, the agenda points and the turn.</summary>
+    private static string Ending(LadderSavedGame saved, FullMatchDefinition definition)
+    {
+        GameState state = saved.Replay.InitialSnapshot.ToState();
+        foreach (ReplayAction recorded in saved.Replay.Actions)
+        {
+            ApplyResult applied = GameEngine.Apply(state, recorded.Submission, definition.Behavior, definition.Runtime);
+            if (!applied.Accepted) break;
+            state = applied.State;
+        }
+        int corp = state.Players.Single(player => player.Side == PlayerSide.Corp).AgendaPoints;
+        int runner = state.Players.Single(player => player.Side == PlayerSide.Runner).AgendaPoints;
+        string reason = state.Outcome.Reason switch
+        {
+            GameWinReason.AgendaPoints => " on agenda points",
+            GameWinReason.DeckOut => " because R&D ran out",
+            GameWinReason.Flatline => " by flatline",
+            _ => "",
+        };
+        return FormattableString.Invariant($"{reason} on turn {state.Turn.TurnNumber} (agenda points: Corp {corp}, Runner {runner})");
     }
 
     /// <summary>One line a decision in the game's directory, to follow a long game (stdout is the protocol's).</summary>
