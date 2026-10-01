@@ -18,6 +18,11 @@ public sealed record ReviewFinding(string GameId, PlayerSide Side, string Entran
     IReadOnlyList<ReviewCitation> Citations, string Confidence = "medium")
 {
     public bool Verified => Citations.Any(citation => citation.Resolved);
+
+    /// <summary>The second look's verdict, "upheld" or "refuted", when one ran; null otherwise.</summary>
+    public string? Check { get; init; }
+
+    public string? CheckReason { get; init; }
 }
 
 /// <summary>What one review produced, and what it cost.</summary>
@@ -47,18 +52,53 @@ public sealed class LlmGameReviewer(ILlmChatClient client, RulesIndex rules, Llm
             Schema(("sequence", "The action's sequence number, as in the decision log."))),
         new("decision", "One of the reviewed bot's decisions in full: every legal option with the bot's priority, score and reason.",
             Schema(("sequence", "The decision's sequence number."))),
+        new("history", "Both players' actions between two sequence numbers (passes left out): runs, accesses, installs, rezzes, steals, trashes. Optionally only those mentioning some text, such as a card title or 'Remote 2'.",
+            Schema(("from", "The first sequence number."), ("to", "The last sequence number."), ("containing", "Optional text the action must mention; empty for all."))),
     ];
 
-    public async Task<GameReview> ReviewAsync(GameReviewDossier dossier, Action<string>? progress = null,
+    /// <summary>
+    /// Reviews one bot's play in a game. With <paramref name="check"/>, each finding then gets a second look in a
+    /// fresh conversation that tries to refute it from the game itself, since the first pass sometimes reports
+    /// runs or cards that weren't there.
+    /// </summary>
+    public async Task<GameReview> ReviewAsync(GameReviewDossier dossier, Action<string>? progress = null, bool check = false,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(dossier);
         var messages = new List<LlmChatMessage> { LlmChatMessage.System(SystemPrompt(dossier)), LlmChatMessage.User(dossier.DecisionLog()) };
-        int toolCalls = 0, prompt = 0, completion = 0;
-        for (int round = 0; round <= maxToolCalls; round++)
+        Conversation review = await ConverseAsync(messages, dossier, maxToolCalls, progress, cancellationToken).ConfigureAwait(false);
+        int toolCalls = review.ToolCalls, prompt = review.PromptTokens, completion = review.CompletionTokens;
+        GameReview Result(IReadOnlyList<ReviewFinding> findings, string? failure) =>
+            new(dossier.Game.Game.Id, dossier.Side, dossier.Entrant, findings, toolCalls, prompt, completion, failure) { Transcript = messages };
+        if (review.Failure is not null) return Result([], review.Failure);
+        (IReadOnlyList<ReviewFinding> found, string? parseFailure) = ParseFindings(review.Answer, dossier);
+        if (!check || parseFailure is not null) return Result(found, parseFailure);
+        var checkedFindings = new List<ReviewFinding>();
+        foreach (ReviewFinding finding in found)
         {
-            // Past the tool budget, the model must answer with what it has.
-            IReadOnlyList<LlmTool> tools = toolCalls < maxToolCalls ? Tools : [];
+            var second = new List<LlmChatMessage> { LlmChatMessage.System(CheckPrompt(dossier)), LlmChatMessage.User(CheckRequest(finding, dossier)) };
+            Conversation look = await ConverseAsync(second, dossier, Math.Max(1, maxToolCalls / 3), progress, cancellationToken).ConfigureAwait(false);
+            toolCalls += look.ToolCalls;
+            prompt += look.PromptTokens;
+            completion += look.CompletionTokens;
+            messages.Add(LlmChatMessage.User($"(Second look at the finding at #{finding.Sequence}.)"));
+            messages.AddRange(second.Skip(1));
+            (string verdict, string reason) = ParseCheck(look.Answer);
+            checkedFindings.Add(finding with { Check = look.Failure is null ? verdict : "unchecked", CheckReason = look.Failure ?? reason });
+        }
+        return Result(checkedFindings, null);
+    }
+
+    private sealed record Conversation(string? Answer, int ToolCalls, int PromptTokens, int CompletionTokens, string? Failure);
+
+    /// <summary>Runs the tool loop until the model answers without a tool call; past the budget it must answer.</summary>
+    private async Task<Conversation> ConverseAsync(List<LlmChatMessage> messages, GameReviewDossier dossier, int budget,
+        Action<string>? progress, CancellationToken cancellationToken)
+    {
+        int toolCalls = 0, prompt = 0, completion = 0;
+        for (int round = 0; round <= budget; round++)
+        {
+            IReadOnlyList<LlmTool> tools = toolCalls < budget ? Tools : [];
             LlmChatResponse response;
             try
             {
@@ -66,18 +106,13 @@ public sealed class LlmGameReviewer(ILlmChatClient client, RulesIndex rules, Llm
             }
             catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or InvalidDataException)
             {
-                return new GameReview(dossier.Game.Game.Id, dossier.Side, dossier.Entrant, [], toolCalls, prompt, completion, exception.Message)
-                { Transcript = messages };
+                return new Conversation(null, toolCalls, prompt, completion, exception.Message);
             }
             prompt += response.Usage?.PromptTokens ?? 0;
             completion += response.Usage?.CompletionTokens ?? 0;
             messages.Add(response.Message);
             if (response.Message.ToolCalls is not { Count: > 0 } calls)
-            {
-                (IReadOnlyList<ReviewFinding> findings, string? failure) = ParseFindings(response.Message.Content, dossier);
-                return new GameReview(dossier.Game.Game.Id, dossier.Side, dossier.Entrant, findings, toolCalls, prompt, completion, failure)
-                { Transcript = messages };
-            }
+                return new Conversation(response.Message.Content, toolCalls, prompt, completion, null);
             progress?.Invoke(string.Join(", ", calls.Select(call => $"{call.Name} {call.Arguments}")));
             foreach (LlmToolCall call in calls)
             {
@@ -85,8 +120,7 @@ public sealed class LlmGameReviewer(ILlmChatClient client, RulesIndex rules, Llm
                 messages.Add(LlmChatMessage.Tool(call.Id, Answer(call, dossier)));
             }
         }
-        return new GameReview(dossier.Game.Game.Id, dossier.Side, dossier.Entrant, [], toolCalls, prompt, completion, "The model never gave its findings.")
-        { Transcript = messages };
+        return new Conversation(null, toolCalls, prompt, completion, "The model never gave its answer.");
     }
 
     /// <summary>Answers one tool call from the dossier, the rules and the card data.</summary>
@@ -103,6 +137,8 @@ public sealed class LlmGameReviewer(ILlmChatClient client, RulesIndex rules, Llm
             return "The arguments weren't valid JSON.";
         }
         string Text(string name) => arguments[name] is JsonValue value ? value.ToString() : "";
+        long Number(string name, long fallback) =>
+            long.TryParse(Text(name).TrimStart('#'), NumberStyles.None, CultureInfo.InvariantCulture, out long number) ? number : fallback;
         long Sequence() => long.TryParse(Text("sequence").TrimStart('#'), NumberStyles.None, CultureInfo.InvariantCulture, out long number) ? number : -1;
         return call.Name switch
         {
@@ -112,6 +148,7 @@ public sealed class LlmGameReviewer(ILlmChatClient client, RulesIndex rules, Llm
             "card_text" => GameReviewDossier.CardText(Text("title")),
             "position" => dossier.Position(Sequence()),
             "decision" => dossier.DecisionDetail(Sequence()),
+            "history" => dossier.History(Number("from", 0), Number("to", long.MaxValue), Text("containing")),
             _ => $"There is no tool called '{call.Name}'.",
         };
     }
@@ -176,6 +213,7 @@ public sealed class LlmGameReviewer(ILlmChatClient client, RulesIndex rules, Llm
         - card_text(title): a card's printed text.
         - position(sequence): the whole board before that action (the review is offline; nothing is hidden).
         - decision(sequence): every option at that decision with the bot's scores and reasons.
+        - history(from, to, containing): both players' actions in a range, such as every run on a server.
 
         Timing basics, since a finding that gets them wrong is wasted:
         - The Corp rezzes ICE only when the Runner approaches it; unrezzed ICE nobody approaches costs nothing, and
@@ -192,7 +230,8 @@ public sealed class LlmGameReviewer(ILlmChatClient client, RulesIndex rules, Llm
         - Runner: build economy and breakers before running into rezzed ICE it can't break; don't run on a server
           whose ICE it can't get through with the money it has; don't access a known trap twice; don't re-run R&D
           for a top card it has already seen; pressure the servers where agendas are likely.
-        These are guidelines, not rules: the board decides. Check the position before you report a finding.
+        These are guidelines, not rules: the board decides. Check the position before you report a finding, and
+        check with history any run or access your claim relies on.
         A fault the bot repeats is one finding, at its first occurrence, with the repetition in the claim.
 
         Answer with one JSON object and nothing else:
@@ -203,11 +242,44 @@ public sealed class LlmGameReviewer(ILlmChatClient client, RulesIndex rules, Llm
         confidence; an empty findings array is a fine answer when you find nothing.
         """;
 
+    private static string CheckPrompt(GameReviewDossier dossier) => $$"""
+        You check one claimed mistake by the {{dossier.Side}} bot in a game of Android: Netrunner (Null Signal Games'
+        comprehensive rules v26.03). Another reviewer made the claim and is sometimes wrong: it reports runs that never
+        happened, cards that had already left play, or card properties the card doesn't have.
+        Check every fact the claim relies on with the tools: history(from, to, containing) for what happened,
+        position(sequence) for the board, decision(sequence) for the options, card_text and rules_lookup.
+        Refute the claim if a fact it relies on is false, or if the play was reasonable in that position.
+        Uphold it only if its facts hold and the play was a real mistake.
+        Answer with one JSON object and nothing else: {"verdict": "upheld" or "refuted", "reason": "one or two sentences"}.
+        """;
+
+    private static string CheckRequest(ReviewFinding finding, GameReviewDossier dossier) =>
+        $"The claim, about decision #{finding.Sequence} ({finding.Category}): {finding.Claim}\n"
+        + $"It cites: {string.Join(", ", finding.Citations.Select(citation => $"{citation.Kind} {citation.Reference}"))}.\n\n"
+        + $"The decision:\n{dossier.DecisionDetail(finding.Sequence)}\nThe board before it:\n{dossier.Position(finding.Sequence)}";
+
+    /// <summary>Reads a second look's verdict; anything but a clear "refuted" is kept as "upheld" for the person to triage.</summary>
+    public static (string Verdict, string Reason) ParseCheck(string? content)
+    {
+        if (string.IsNullOrWhiteSpace(content)) return ("unchecked", "The second look gave no answer.");
+        int start = content.IndexOf('{', StringComparison.Ordinal), end = content.LastIndexOf('}');
+        try
+        {
+            if (start >= 0 && end > start && JsonNode.Parse(content[start..(end + 1)]) is JsonObject answer)
+                return ((string?)answer["verdict"] == "refuted" ? "refuted" : "upheld", (string?)answer["reason"] ?? "");
+        }
+        catch (JsonException)
+        {
+        }
+        return ("unchecked", content.Length > 300 ? content[..300] : content);
+    }
+
     private static JsonObject Schema(params (string Name, string Description)[] properties) => new()
     {
         ["type"] = "object",
         ["properties"] = new JsonObject(properties.Select(property => KeyValuePair.Create(property.Name,
             (JsonNode?)new JsonObject { ["type"] = "string", ["description"] = property.Description }))),
-        ["required"] = new JsonArray([.. properties.Select(property => (JsonNode)property.Name)]),
+        ["required"] = new JsonArray([.. properties.Where(property => !property.Description.StartsWith("Optional", StringComparison.Ordinal))
+            .Select(property => (JsonNode)property.Name)]),
     };
 }

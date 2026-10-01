@@ -13,7 +13,7 @@ public static partial class CliCommands
     /// <summary>
     /// ai-llm-review &lt;games-directory&gt; --side corp|runner [--entrant NAME] [--game ID]... [--games N] [--skip N]
     /// [--temperature T] [--top-p P] [--top-k K] [--seed S] [--reasoning low|medium|high] [--max-tool-calls N]
-    /// [--rules-root DIR] --output new-dir. The LLM game reviewer (Wave 4.5, P2) over games saved by
+    /// [--no-check] [--rules-root DIR] --output new-dir. The LLM game reviewer (Wave 4.5, P2) over games saved by
     /// <c>ai-ladder --save-games</c>, with the model from NETRUNNER_LLM_BASE_URL and NETRUNNER_LLM_MODEL
     /// (and NETRUNNER_LLM_API_KEY). Writes one review per game and a triage sheet. Exit 0 when every
     /// review finished, 1 when one failed, 2 for invalid arguments.
@@ -23,6 +23,7 @@ public static partial class CliCommands
         string directory, destination = "", rulesRoot = Path.Combine("data", "vendor", "rules");
         PlayerSide side = PlayerSide.Corp;
         var only = new HashSet<string>(StringComparer.Ordinal);
+        bool check = true;
         string? entrant = null, reasoning = Environment.GetEnvironmentVariable("NETRUNNER_LLM_REASONING_EFFORT") ?? "medium";
         int games = 5, skip = 0, maxToolCalls = 60;
         double? temperature = 0.6, topP = 0.95;
@@ -51,6 +52,7 @@ public static partial class CliCommands
                         break;
                     case "--entrant": entrant = Next(); break;
                     case "--game": only.Add(Next()); break;
+                    case "--no-check": check = false; break;
                     case "--games": games = ParseInt(Next(), "--games", 1, 1000); break;
                     case "--skip": skip = ParseInt(Next(), "--skip", 0, 100_000); break;
                     case "--max-tool-calls": maxToolCalls = ParseInt(Next(), "--max-tool-calls", 0, 500); break;
@@ -97,7 +99,7 @@ public static partial class CliCommands
         {
             DateTime started = DateTime.UtcNow;
             GameReviewDossier dossier = GameReviewDossier.BuildAsync(game, definition, side).GetAwaiter().GetResult();
-            GameReview review = reviewer.ReviewAsync(dossier, calls => error.WriteLine($"  {game.Game.Id}: {calls}")).GetAwaiter().GetResult();
+            GameReview review = reviewer.ReviewAsync(dossier, calls => error.WriteLine($"  {game.Game.Id}: {calls}"), check).GetAwaiter().GetResult();
             reviews.Add(review);
             string name = Path.Combine(destination, SafeName(game.Game.Id));
             File.WriteAllText(name + ".review.json",
@@ -105,7 +107,7 @@ public static partial class CliCommands
             File.WriteAllText(name + ".transcript.json", EngineJson.Serialize(review.Transcript));
             File.WriteAllText(name + ".decisions.txt", dossier.DecisionLog());
             output.WriteLine(FormattableString.Invariant(
-                $"ai-llm-review {game.Game.Id} {side}: {review.Findings.Count} findings ({review.Findings.Count(finding => finding.Verified)} cited), {review.ToolCalls} tool calls, {review.PromptTokens}+{review.CompletionTokens} tokens, {(DateTime.UtcNow - started).TotalSeconds:0}s{(review.Failure is null ? "" : $", failed: {review.Failure}")}"));
+                $"ai-llm-review {game.Game.Id} {side}: {review.Findings.Count} findings ({review.Findings.Count(finding => finding.Verified)} cited, {review.Findings.Count(finding => finding.Check == "refuted")} refuted), {review.ToolCalls} tool calls, {review.PromptTokens}+{review.CompletionTokens} tokens, {(DateTime.UtcNow - started).TotalSeconds:0}s{(review.Failure is null ? "" : $", failed: {review.Failure}")}"));
         }
         File.WriteAllText(Path.Combine(destination, "triage.md"), TriageSheet(reviews, options.Model, sampling));
         output.WriteLine($"ai-llm-review games={reviews.Count} findings={reviews.Sum(review => review.Findings.Count)} failures={reviews.Count(review => review.Failure is not null)} output={Path.GetFullPath(destination)}");
@@ -131,12 +133,14 @@ public static partial class CliCommands
         text.AppendLine();
         text.AppendLine("Verdicts: confirmed, wrong, duplicate, unsure.");
         text.AppendLine();
-        text.AppendLine("| # | Game | Side | Seq | Confidence | Category | Claim | Cites | Verdict |");
-        text.AppendLine("|---|---|---|---|---|---|---|---|---|");
+        text.AppendLine("A second look tries to refute each finding from the game; refuted ones are listed last.");
+        text.AppendLine();
+        text.AppendLine("| # | Game | Side | Seq | Confidence | Category | Claim | Cites | Second look | Verdict |");
+        text.AppendLine("|---|---|---|---|---|---|---|---|---|---|");
         int number = 0;
-        foreach (ReviewFinding finding in reviews.SelectMany(review => review.Findings))
+        foreach (ReviewFinding finding in reviews.SelectMany(review => review.Findings).OrderBy(finding => finding.Check == "refuted"))
             text.AppendLine(FormattableString.Invariant(
-                $"| {++number} | {finding.GameId} | {finding.Side} | {finding.Sequence} | {finding.Confidence} | {finding.Category} | {finding.Claim.Replace("|", "/", StringComparison.Ordinal)} | {string.Join(", ", finding.Citations.Select(citation => $"{citation.Kind} {citation.Reference}{(citation.Resolved ? "" : " (unresolved)")}"))}{(finding.Verified ? "" : " — unverified")} | |"));
+                $"| {++number} | {finding.GameId} | {finding.Side} | {finding.Sequence} | {finding.Confidence} | {finding.Category} | {finding.Claim.Replace("|", "/", StringComparison.Ordinal)} | {string.Join(", ", finding.Citations.Select(citation => $"{citation.Kind} {citation.Reference}{(citation.Resolved ? "" : " (unresolved)")}"))}{(finding.Verified ? "" : " — unverified")} | {finding.Check ?? "none"}{(finding.CheckReason is { Length: > 0 } reason ? ": " + reason.Replace("|", "/", StringComparison.Ordinal) : "")} | |"));
         return text.ToString();
     }
 }

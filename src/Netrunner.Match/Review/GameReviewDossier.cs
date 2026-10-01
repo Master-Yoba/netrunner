@@ -23,6 +23,7 @@ public sealed class GameReviewDossier
     private readonly Dictionary<long, ReviewDecision> _decisions = [];
     private readonly HashSet<long> _diverged = [];
     private readonly SortedDictionary<long, string> _opponent = [];
+    private readonly SortedDictionary<long, string> _history = [];
 
     /// <summary>The opponent's actions the log shows: what changes the board or the score, not passes and breaks.</summary>
     private static readonly HashSet<ActionKind> OpponentShown =
@@ -66,6 +67,9 @@ public sealed class GameReviewDossier
             dossier._states[recorded.Sequence] = state;
             PendingDecision pending = state.PendingDecision!;
             bool mine = state.GetPlayer(pending.Owner).Side == side;
+            if (pending.LegalActions.FirstOrDefault(action => action.Id == recorded.Submission.ActionId) is { Kind: not ActionKind.PassPriority } taken)
+                dossier._history[recorded.Sequence] = string.Create(CultureInfo.InvariantCulture,
+                    $"#{recorded.Sequence} turn {state.Turn.TurnNumber} {state.GetPlayer(pending.Owner).Side}: {Describe(state, taken)}");
             if (!mine && pending.LegalActions.FirstOrDefault(action => action.Id == recorded.Submission.ActionId) is { } theirs
                 && OpponentShown.Contains(theirs.Kind))
                 dossier._opponent[recorded.Sequence] = Describe(state, theirs);
@@ -131,6 +135,18 @@ public sealed class GameReviewDossier
         while (opponent.TryDequeue(out KeyValuePair<long, string> action))
             text.AppendLine(CultureInfo.InvariantCulture, $"  ({other} #{action.Key}: {action.Value})");
         return text.ToString();
+    }
+
+    /// <summary>
+    /// The <c>history</c> tool: both players' actions from one sequence to another, passes left out,
+    /// optionally only those mentioning some text (a card or a server).
+    /// </summary>
+    public string History(long from, long to, string? containing = null, int limit = 120)
+    {
+        string[] lines = [.. _history.Where(entry => entry.Key >= from && entry.Key <= to).Select(entry => entry.Value)
+            .Where(line => string.IsNullOrWhiteSpace(containing) || line.Contains(containing.Trim(), StringComparison.OrdinalIgnoreCase))];
+        if (lines.Length == 0) return $"No actions from #{from} to #{to}{(string.IsNullOrWhiteSpace(containing) ? "" : $" mentioning '{containing}'")}.";
+        return string.Join("\n", lines.Take(limit)) + (lines.Length > limit ? $"\n({lines.Length - limit} more; narrow the range.)" : "");
     }
 
     /// <summary>The <c>decision</c> tool: the prompt, every option with its score and reason.</summary>

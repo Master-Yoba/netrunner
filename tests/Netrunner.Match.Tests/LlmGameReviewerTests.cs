@@ -78,6 +78,37 @@ public sealed class LlmGameReviewerTests
         Assert.All(review.Findings.Where(finding => finding.Sequence == 223), finding => Assert.False(finding.Verified));
     }
 
+    [Fact]
+    public async Task ASecondLookCanRefuteAFindingFromTheGameHistory()
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        (LadderSavedGame saved, FullMatchDefinition definition) = Assert.Single(LadderGameArchive.Read(Path.Combine(AppContext.BaseDirectory,
+            "..", "..", "..", "Fixtures", "saved-games", "seamless-launch-nothing")));
+        GameReviewDossier dossier = await GameReviewDossier.BuildAsync(saved, definition, PlayerSide.Corp);
+        string history = dossier.History(200, 230, "Seamless Launch");
+        Assert.Contains("#222 turn", history, StringComparison.Ordinal);
+        Assert.Contains("Corp: PlayCard Seamless Launch", history, StringComparison.Ordinal);
+        Assert.Contains("No actions", dossier.History(200, 230, "No Such Card"), StringComparison.Ordinal);
+
+        var model = new ScriptedModel(
+            new LlmChatMessage("assistant", """
+                {"findings": [
+                  {"sequence": 222, "category": "wasted-card", "confidence": "high", "claim": "No agenda to advance.", "citations": [{"kind": "card", "ref": "Seamless Launch"}]},
+                  {"sequence": 223, "category": "made-up", "confidence": "low", "claim": "The Runner ran Remote 1 three times.", "citations": [{"kind": "card", "ref": "Ansel 1.0"}]}
+                ]}
+                """),
+            new LlmChatMessage("assistant", """{"verdict": "upheld", "reason": "Nothing to advance."}"""),
+            new LlmChatMessage("assistant", null, [new("h1", "history", "{\"from\":\"200\",\"to\":\"240\",\"containing\":\"Seamless\"}")]),
+            new LlmChatMessage("assistant", """{"verdict": "refuted", "reason": "No such runs."}"""));
+        GameReview review = await new LlmGameReviewer(model, RulesIndex.Load(RulesRoot), new LlmSampling(0.6)).ReviewAsync(dossier, check: true);
+
+        Assert.Null(review.Failure);
+        Assert.Equal(("upheld", "high"), (review.Findings[0].Check, review.Findings[0].Confidence));
+        Assert.Equal(("refuted", "No such runs."), (review.Findings[1].Check, review.Findings[1].CheckReason));
+        Assert.Equal(1, review.ToolCalls);
+        Assert.StartsWith("#2", model.ToolAnswers["h1"], StringComparison.Ordinal);
+    }
+
     /// <summary>A model that answers with the next scripted message and records what the tools returned.</summary>
     private sealed class ScriptedModel(params LlmChatMessage[] script) : ILlmChatClient
     {
