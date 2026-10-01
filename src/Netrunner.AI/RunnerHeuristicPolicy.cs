@@ -99,6 +99,12 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// deals V15 won (1 of 23 against 11 of 35); what they share beyond that is Docklands Pass's install bonus, left out.
     /// </summary>
     public const string V18 = "runner-heuristic-v18";
+    /// <summary>
+    /// V18 with the economy fixes from the Codex reviews (1 October): an ability that puts credits in the wallet now is worth
+    /// what as many basic credits are (Pennyshaver's cash-out lost to a basic credit), and a tutor counts as breaker coverage
+    /// when keeping an opening hand (it threw back Sure Gamble, Jailbreak and Mutual Favor).
+    /// </summary>
+    public const string V19 = "runner-heuristic-v19";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V18 is V15 with only the reinstall fix (no install over its own copy or a second console), a fix that can only remove
@@ -110,7 +116,7 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// with, so the shipped Corp planner plays as it did.
     /// </summary>
     public const string LatestHeuristic = V7;
-    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18];
+    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19];
 
     public RunnerHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -118,9 +124,9 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Runner policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 or V8 or V9 => 6, V10 => 7, V11 or V12 => 8, V13 => 9, V14 => 10, V15 => 11, V16 => 12, V17 => 13, V18 => 14, _ => 2 };
+        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 or V8 or V9 => 6, V10 => 7, V11 or V12 => 8, V13 => 9, V14 => 10, V15 => 11, V16 => 12, V17 => 13, V18 => 14, V19 => 15, _ => 2 };
         Plans = version is V3 or V8 or V9;
-        Repairs = version is V4 or V5 or V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18;
+        Repairs = version is V4 or V5 or V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19;
     }
 
     /// <summary>Whether this version has the playtest repairs (V4).</summary>
@@ -247,7 +253,10 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
         if (context.Features.Decision?.Kind != DecisionKind.Setup) return Value(-choice.Value, "choice/number", true);
         bool economy = context.Features.Hand.Any(card => context.Definition(card)?.Behavior is { } behavior
             && HeuristicContext.Flatten(behavior.Instructions).Any(instruction => instruction.Kind is BehaviorInstructionKind.GainCredits or BehaviorInstructionKind.LoadHostedCredits));
-        bool coverage = context.Features.Hand.Any(card => context.Definition(card)?.Icebreaker is not null);
+        // v19 (Codex review, 1 October): a tutor (Mutual Favor) finds the breaker the hand lacks.
+        bool coverage = context.Features.Hand.Any(card => context.Definition(card)?.Icebreaker is not null
+            || context.Generation >= 15 && context.Definition(card)?.Behavior is { } behavior
+                && HeuristicContext.Flatten(behavior.Instructions).Any(instruction => instruction.Kind == BehaviorInstructionKind.Search));
         return Value((choice.Value == 0) == (economy && coverage) ? 100 : 0, "opening/economy-and-breaker-foundation");
     }
 }

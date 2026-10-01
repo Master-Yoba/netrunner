@@ -46,6 +46,16 @@ public sealed partial class RunnerHeuristicPolicy
                 upfrontCost: ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount));
         }
         int benefit = Effects(context, declaration.Instructions, card, PlayerSide.Runner);
+        // v19 (Codex review, 1 October): credits the ability puts in the wallet now are worth what as many basic credits are,
+        // saving for a breaker included (Pennyshaver's 2 lost to a basic credit's 1).
+        if (context.Generation >= 15)
+        {
+            IReadOnlyList<BehaviorInstruction> flat = [.. HeuristicContext.Flatten(declaration.Instructions)];
+            int wallet = flat.Where(instruction => instruction.Kind == BehaviorInstructionKind.GainCredits && instruction.AmountOperand is null).Sum(instruction => instruction.Amount)
+                + (flat.Any(instruction => instruction.Kind is BehaviorInstructionKind.TakeHostedCredits or BehaviorInstructionKind.TakeAllHostedCredits)
+                    ? HeuristicContext.Hosted(card) + flat.Where(instruction => instruction.Kind == BehaviorInstructionKind.PlaceHostedCredits).Sum(instruction => instruction.Amount) : 0);
+            if (wallet > 0) benefit = Math.Max(benefit, Credit(context) + (wallet - 1) * context.CreditValue);
+        }
         int cost = ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount) * context.CreditValue;
         cost += ability.AdditionalCostSelectionsOrEmpty.SelectMany(selection => selection.CardIds).Sum(id => RunnerValues.Card(context, context.Card(id)));
         cost += ability.Costs.Where(cost => cost.Kind is BehaviorCostKind.TrashSelf or BehaviorCostKind.RemoveSelfFromGame)

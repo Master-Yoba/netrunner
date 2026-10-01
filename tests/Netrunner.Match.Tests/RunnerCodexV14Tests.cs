@@ -125,6 +125,30 @@ public sealed class RunnerCodexV14Tests
         Assert.True(plays == commission, $"{version} chose {chosen.Kind} {chosen.Description}.");
     }
 
+    [Theory]
+    [InlineData(RunnerHeuristicPolicy.V18, false)]
+    [InlineData(RunnerHeuristicPolicy.V19, true)]
+    public async Task AHandWithEconomyAndATutorIsKept(string version, bool keeps)
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        // A game against Codex (1 October, batch 4): Sure Gamble, Jailbreak, Mutual Favor and Pennyshaver went back for a
+        // missing breaker that Mutual Favor finds.
+        LegalAction chosen = await ChooseAtAsync("codex-runner-economy", version, 2);
+        bool kept = chosen.Parameters is NumberChoiceParameters { Value: 0 };
+        Assert.True(keeps == kept, $"{version} chose {chosen.Kind} {chosen.Description}.");
+    }
+
+    [Theory]
+    [InlineData(RunnerHeuristicPolicy.V18, false)]
+    [InlineData(RunnerHeuristicPolicy.V19, true)]
+    public async Task PennyshaverIsCashedOutOverABasicCredit(string version, bool cashes)
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        // A game against Codex (1 October, batch 4): a basic credit over Pennyshaver's 2.
+        LegalAction chosen = await ChooseAtAsync("codex-runner-economy", version, 219);
+        Assert.True(cashes == (chosen.Kind == ActionKind.UseAbility), $"{version} chose {chosen.Kind} {chosen.Description}.");
+    }
+
     private static async Task<LegalAction> ChooseAtAsync(string fixture, string version, long sequence) =>
         (await ChooseInAsync(fixture, version, sequence)).Chosen;
 
