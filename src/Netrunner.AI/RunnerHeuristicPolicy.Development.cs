@@ -76,7 +76,8 @@ public sealed partial class RunnerHeuristicPolicy
                 value += (definition.Behavior?.FirstBasicDrawReplacements ?? []).Sum(replacement => (replacement.DrawCount - 1) * context.DrawValue * 3);
             if (definition.Printed.Console) value += 180;
             // v16: an extra access on each HQ breach (Docklands Pass) is pressure the Runner kept in its grip.
-            if (context.Generation >= 12) value += (definition.Behavior?.FirstHqBreachAccessModifiers ?? []).Sum(modifier => modifier.Delta * 250);
+            // Only v16 and v17: both lost to Codex where v15 won, and v18 leaves it out.
+            if (context.Generation is 12 or 13) value += (definition.Behavior?.FirstHqBreachAccessModifiers ?? []).Sum(modifier => modifier.Delta * 250);
             if (context.Self.UsedMemory >= context.Self.MemoryLimit && definition.Printed.CardClass == RuntimeCardClass.Hardware) value += 170;
         }
         if (context.Generation >= 8)

@@ -86,6 +86,7 @@ public sealed class RunnerCodexV14Tests
     [InlineData(RunnerHeuristicPolicy.V15, "codex-runner-unique-reinstall", 281, "Verbal Plasticity", true)]
     [InlineData(RunnerHeuristicPolicy.V16, "codex-runner-unique-reinstall", 281, "Verbal Plasticity", false)]
     [InlineData(RunnerHeuristicPolicy.V17, "codex-runner-unique-reinstall", 281, "Verbal Plasticity", false)]
+    [InlineData(RunnerHeuristicPolicy.V18, "codex-runner-unique-reinstall", 281, "Verbal Plasticity", false)]
     [InlineData(RunnerHeuristicPolicy.V15, "codex-runner-docklands", 379, "Docklands Pass", false)]
     [InlineData(RunnerHeuristicPolicy.V16, "codex-runner-docklands", 379, "Docklands Pass", true)]
     public async Task InstallsThatAddSomething(string version, string fixture, long sequence, string title, bool installs)
@@ -105,10 +106,10 @@ public sealed class RunnerCodexV14Tests
         if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
         // A game against Codex (1 October, batch 4): Pantograph's trigger installed a second Pantograph over the first. v16
         // scored it level with DZMZ Optimizer, so its pick was a coin flip; v17 never picks it.
-        (LegalAction chosen, GameState state) = await ChooseInAsync("codex-runner-console-reinstall", RunnerHeuristicPolicy.V17, 488);
+        (LegalAction chosen, GameState state) = await ChooseInAsync("codex-runner-console-reinstall", RunnerHeuristicPolicy.V18, 488);
         bool pantograph = chosen.Parameters is BehaviorChoiceParameters choice && choice.CardIds.Any(id =>
             CardDataResource.LoadEmbedded().Cards.Single(card => card.Code == state.GetCard(id).DefinitionId.Value).Title == "Pantograph");
-        Assert.False(pantograph, $"v17 chose {chosen.Kind} {chosen.Description}.");
+        Assert.False(pantograph, $"v18 chose {chosen.Kind} {chosen.Description}.");
     }
 
     [Theory]

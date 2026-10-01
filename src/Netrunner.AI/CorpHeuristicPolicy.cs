@@ -133,11 +133,11 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     public const string V23 = "corp-heuristic-v23";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
-    /// V22 fixes V21's faults the reviews of batch 3's losses to Codex found (1 October: a full HQ pushing an agenda
-    /// into a breakable server, Regolith Mining License held back, purging while broke) and is level with it on the
-    /// Gateway ladder (+11 and 0 on two seeds), so new games use it.
+    /// V23 fixes V22's faults the reviews of batch 4's losses to Codex found (1 October: known traps advanced, two agendas
+    /// pushed out of a safer HQ, Regolith rezzed with no click to use it). On batch 3's deals against Codex it won 6 of 12,
+    /// where V21 and V22 won 8 of 36, so new games use it.
     /// </remarks>
-    public const string PolicyVersion = V22;
+    public const string PolicyVersion = V23;
     /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>
     public const string LatestHeuristic = V8;
     public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23];
