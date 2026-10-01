@@ -398,6 +398,10 @@ streams.
 - **Who chose:** Codex made every strategic choice (about 800), against the heuristic about half the time.
 - **Time:** a game takes 2 to 14 minutes, typically 5.
 - **Cost:** about 1.6 million input tokens a game (over 90% cached) and 3k output.
+- **Against the repaired bots (batch 2):** 30 games against Corp v20 and Runner v14 on 8 streams. As Corp,
+  Codex won 11 of 15; as Runner, 15 of 15. Runner v14 took four games where v13 had taken one.
+- **The P3 gate's first half:** the 50 games had no stalls, errors, invalid choices or heuristic fallbacks, across
+  2,074 strategic decisions.
 - **How it plays:** its reasons read like a player's. It weighs the Runner's breakers against its ICE ("Buzzsaw
   makes Whitespace porous, so dig for stronger remote ice before exposing another agenda"), baits with an
   advanced Urtica Cipher against a short grip, and plans scoring windows.
@@ -413,3 +417,34 @@ ask the old and the new version at the recorded decision (`RunnerCodexV14Tests`,
 | Corp v20 | No advancing a trap already lethal; Sprint keeps its best cards and the winning agenda; R&D, and HQ holding an agenda, are agenda servers for the rez reserve | +22 and +54 over v19 |
 
 Both are level or better, so both are the defaults.
+
+### Reviews of the games against Codex
+
+`ai-codex-review` on the bot's side of 16 batch-2 games the bot lost: 8 for Corp v20 (20 findings) and 8 for
+Runner v14 (23 findings). That gives the P3 gate's second half: confirmed new faults, which the next versions
+take up.
+
+**Corp v20:**
+- **Agendas behind ICE the Runner's installed breakers beat (6 games):**
+  - a lone Palisade against Cleaver;
+  - Whitespace that Botulus already bypassed, or against Buzzsaw;
+  - Funhouse against a Runner with clicks to clear its tags.
+
+  The bot counts any ICE as protection, without checking the rig.
+- **ICE on Archives** while it holds nothing worth protecting (3 games).
+- **Urtica Cipher advanced after the Runner has seen it,** below v20's lethal cap.
+- **Built to Last unused,** and Pharos advanced to just below its threshold or on the wrong server.
+- **Smaller ones:**
+  - Planogram's draw mode at the wrong time;
+  - Conduit's counters never purged;
+  - Send a Message's free rez on a remote nobody runs;
+  - Spin Doctor discarded over a duplicate unique card.
+
+**Runner v14:**
+- **The scoring remote not contested (5 games):** an advanced agenda in a remote is left alone with the Corp
+  at match point and the money to get in, and in two games that agenda wins the Corp the game.
+- **Fermenter never installed** (2 games, 3 with the v13 reviews).
+- **Runs on an Archives with no agendas or rewards** (2 games, 3 with the v13 reviews).
+- **Duplicate installs:** a second Marjanah, Mutual Favor fetching one, and Verbal Plasticity replacing itself.
+- **Clearinghouse's damage left on the board** when trashing it was cheap.
+- **Smaller ones:** Tāo's ICE swaps, the order of economy plays, and break planning in an encounter.
