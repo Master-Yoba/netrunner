@@ -73,6 +73,17 @@ public static class AgentPersonalities
         _ => null,
     };
 
+    /// <summary>
+    /// The traits a Corp personality leads with: its archetype's, except that asset spam values assets and remotes
+    /// more than a horizontal deck does (with Horizontal's own traits it installed 3.3 assets a game to Standard's 3.2).
+    /// </summary>
+    public static CorpArchetypeProfile? CorpProfileOf(AgentPersonality personality) => CorpArchetypeOf(personality) switch
+    {
+        CorpArchetype.Horizontal => CorpArchetypes.Profile(CorpArchetype.Horizontal) with { AssetBonus = 2.5, MaxRemotes = 5 },
+        { } archetype => CorpArchetypes.Profile(archetype),
+        null => null,
+    };
+
     /// <summary>The archetype whose traits a Runner personality leads with.</summary>
     public static RunnerArchetype? RunnerArchetypeOf(AgentPersonality personality) => personality switch
     {
@@ -96,7 +107,7 @@ public static class AgentPersonalities
             // Score-race urgency: points and progress now are worth more than protection.
             AgentPersonality.Rush => [("agenda-self", 300), ("own-agenda-progress", 300), ("ice-installed", -60)],
             // Economy and board width.
-            AgentPersonality.AssetSpam => [("occupied-remotes", 250), ("money-self", 200)],
+            AgentPersonality.AssetSpam => [("occupied-remotes", 400), ("money-self", 200)],
             // Run pressure: points taken and open servers.
             AgentPersonality.Aggressive => [("agenda-self", 300), ("hq-open", 100), ("rd-open", 100), ("rig-value", -150)],
             // Setup: breaker coverage, rig and money.

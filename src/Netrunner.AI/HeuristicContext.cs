@@ -65,8 +65,8 @@ internal sealed class HeuristicContext
         : CorpArchetypeProfile.Generic;
 
     private CorpArchetypeProfile WithPersonality(CorpArchetypeProfile deck) =>
-        AgentPersonalities.CorpArchetypeOf(AgentPersonalities.Of(Configuration)) is { } archetype
-            ? CorpArchetypeProfile.Blend(CorpArchetypes.Profile(archetype), deck, AgentPersonalities.DeckWeight)
+        AgentPersonalities.CorpProfileOf(AgentPersonalities.Of(Configuration)) is { } personality
+            ? CorpArchetypeProfile.Blend(personality, deck, AgentPersonalities.DeckWeight)
             : deck;
 
     public int Parameter(string key, int fallback) => Configuration.Parameters.TryGetValue(key, out int value) ? value : fallback;
