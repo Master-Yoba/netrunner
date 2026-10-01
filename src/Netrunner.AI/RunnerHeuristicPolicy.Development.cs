@@ -4,6 +4,28 @@ namespace Netrunner.AI;
 
 public sealed partial class RunnerHeuristicPolicy
 {
+    /// <summary>
+    /// The credits a counter-growing card pays when cashed out after two of the Runner's turns: its counters from the
+    /// install and two turn begins, times what its paid ability gains per counter.
+    /// </summary>
+    private static int GrowingIncome(CardEvaluationDescriptor definition)
+    {
+        if (definition.Behavior is not { } behavior) return 0;
+        foreach (BehaviorPaidAbility ability in behavior.PaidAbilities)
+        {
+            foreach (BehaviorInstruction gain in ability.Instructions.Where(instruction => instruction.Kind == BehaviorInstructionKind.GainCredits
+                && instruction.AmountOperand is not null))
+            {
+                string counter = gain.AmountOperand!.SourceCounterName;
+                int counters = behavior.Triggers.Sum(trigger => HeuristicContext.Flatten(trigger.Instructions)
+                    .Where(instruction => instruction.Kind == BehaviorInstructionKind.AddCounter && instruction.Argument == counter)
+                    .Sum(instruction => instruction.Amount * (trigger.Occurrence == OccurrenceKind.TurnBegin ? 2 : 1)));
+                if (counters > 0) return counters * gain.AmountOperand.Multiplier;
+            }
+        }
+        return 0;
+    }
+
     private static AgentUtility Install(HeuristicContext context, InstallCardParameters install)
     {
         AgentCard? card = context.Card(install.CardId);
@@ -32,6 +54,9 @@ public sealed partial class RunnerHeuristicPolicy
         {
             int income = definition.Behavior?.Triggers.SelectMany(trigger => HeuristicContext.Flatten(trigger.Instructions))
                 .Where(instruction => instruction.Kind == BehaviorInstructionKind.LoadHostedCredits).Sum(instruction => instruction.Amount) ?? 0;
+            // v15 (reviews of the losses to Codex, 1 October): a card whose counters grow each turn and cash out for credits
+            // (Fermenter) is income too, about two turns' worth; it was worth less than a click for a credit and never installed.
+            if (context.Generation >= 11) income += GrowingIncome(definition);
             value = 180 + income * 45;
             // v6: a better basic draw pays off over the coming turns (Verbal Plasticity).
             if (context.Generation >= 5)

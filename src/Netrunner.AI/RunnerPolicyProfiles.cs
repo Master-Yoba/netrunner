@@ -21,12 +21,12 @@ public static class RunnerPolicyProfiles
             workBudget: 40000, nearTieTolerance: 0, parameters: Parameters(100, 100, 100)),
         (RunnerHeuristicPolicy.V1, "easy") => OfflineAgentConfiguration.Create(PlayerSide.Runner, policyVersion, profileId, policySeed,
             workBudget: 20000, nearTieTolerance: 15, parameters: Parameters(90, 120, 100)),
-        (RunnerHeuristicPolicy.V2 or RunnerHeuristicPolicy.V4 or RunnerHeuristicPolicy.V5 or RunnerHeuristicPolicy.V6 or RunnerHeuristicPolicy.V7 or RunnerHeuristicPolicy.V10 or RunnerHeuristicPolicy.V12 or RunnerHeuristicPolicy.V13 or RunnerHeuristicPolicy.V14, "standard") => OfflineAgentConfiguration.Create(PlayerSide.Runner, policyVersion, profileId, policySeed,
+        (RunnerHeuristicPolicy.V2 or RunnerHeuristicPolicy.V4 or RunnerHeuristicPolicy.V5 or RunnerHeuristicPolicy.V6 or RunnerHeuristicPolicy.V7 or RunnerHeuristicPolicy.V10 or RunnerHeuristicPolicy.V12 or RunnerHeuristicPolicy.V13 or RunnerHeuristicPolicy.V14 or RunnerHeuristicPolicy.V15, "standard") => OfflineAgentConfiguration.Create(PlayerSide.Runner, policyVersion, profileId, policySeed,
             workBudget: 40000, nearTieTolerance: 0, parameters: [.. Parameters(100, 100, 100), new("inference-scale", 100)],
             featureVersion: AgentFeatures.VersionWithHiddenAdvancements),
         // Easy (A6a): a wide near-tie band picks among clearly different
         // options, and it ignores the public advancement and density cues.
-        (RunnerHeuristicPolicy.V2 or RunnerHeuristicPolicy.V4 or RunnerHeuristicPolicy.V5 or RunnerHeuristicPolicy.V6 or RunnerHeuristicPolicy.V7 or RunnerHeuristicPolicy.V10 or RunnerHeuristicPolicy.V12 or RunnerHeuristicPolicy.V13 or RunnerHeuristicPolicy.V14, "easy") => OfflineAgentConfiguration.Create(PlayerSide.Runner, policyVersion, profileId, policySeed,
+        (RunnerHeuristicPolicy.V2 or RunnerHeuristicPolicy.V4 or RunnerHeuristicPolicy.V5 or RunnerHeuristicPolicy.V6 or RunnerHeuristicPolicy.V7 or RunnerHeuristicPolicy.V10 or RunnerHeuristicPolicy.V12 or RunnerHeuristicPolicy.V13 or RunnerHeuristicPolicy.V14 or RunnerHeuristicPolicy.V15, "easy") => OfflineAgentConfiguration.Create(PlayerSide.Runner, policyVersion, profileId, policySeed,
             workBudget: 20000, nearTieTolerance: EasyNearTieTolerance, parameters: [.. Parameters(90, 120, 100), new("inference-scale", 0)],
             featureVersion: AgentFeatures.VersionWithHiddenAdvancements),
         // A3: Standard plans turn actions; Easy keeps V2 choices (compute tiers are A6).
@@ -99,7 +99,7 @@ public static class RunnerPolicyProfiles
         string[]? keys = configuration.PolicyVersion switch
         {
             RunnerHeuristicPolicy.V1 => ParameterKeys,
-            RunnerHeuristicPolicy.V2 or RunnerHeuristicPolicy.V4 or RunnerHeuristicPolicy.V5 or RunnerHeuristicPolicy.V6 or RunnerHeuristicPolicy.V7 or RunnerHeuristicPolicy.V10 or RunnerHeuristicPolicy.V12 or RunnerHeuristicPolicy.V13 or RunnerHeuristicPolicy.V14 => V2ParameterKeys,
+            RunnerHeuristicPolicy.V2 or RunnerHeuristicPolicy.V4 or RunnerHeuristicPolicy.V5 or RunnerHeuristicPolicy.V6 or RunnerHeuristicPolicy.V7 or RunnerHeuristicPolicy.V10 or RunnerHeuristicPolicy.V12 or RunnerHeuristicPolicy.V13 or RunnerHeuristicPolicy.V14 or RunnerHeuristicPolicy.V15 => V2ParameterKeys,
             RunnerHeuristicPolicy.V3 => V3ParameterKeys,
             RunnerHeuristicPolicy.V8 => V8ParameterKeys,
             RunnerHeuristicPolicy.V9 => V9ParameterKeys,
