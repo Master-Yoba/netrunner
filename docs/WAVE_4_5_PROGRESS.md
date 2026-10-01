@@ -105,8 +105,8 @@ endpoint, configured in the git-ignored `.env` (`NETRUNNER_LLM_BASE_URL`, `NETRU
 `NETRUNNER_LLM_API_KEY`).
 
 - **Running it:** `scripts/ai-llm-review.sh <saved games> --side corp|runner --output <new dir>`, with
-  `--entrant`, `--game <id>` (repeatable), `--games N` (default 5), `--temperature`, `--reasoning`
-  (default medium) and `--max-tool-calls` (default 60). It writes, per game, the review, the whole
+  `--entrant`, `--game <id>` (repeatable), `--games N` (default 5), `--temperature`, `--top-k`,
+  `--reasoning` (default medium), `--max-tool-calls` (default 60), `--min-tool-calls` and `--model`. It writes, per game, the review, the whole
   transcript and the decision log the model read, and a `triage.md` sheet with a verdict column.
 - **What the model reads (`GameReviewDossier`):** the bot's decisions with the options it weighed and
   its scores and reasons. Each turn opens with a line giving the board. The opponent's board-changing
@@ -189,6 +189,29 @@ games:
 Both found the same core faults: empty remotes, the two Malapert copies, Malapert unrezzed at the
 score. At 1.0 the model wrote more and made one factual slip (a score before the upgrade was
 installed), so 0.6 stays the default.
+
+**Another model, gemma-4-26B-A4B (MoE, Q4, 1 October):** run with its model-card sampling (temperature
+1.0, top-p 0.95, top-k 64) on round C's last eight games.
+
+| | Qwen 27B | Gemma 26B-A4B |
+|---|---:|---:|
+| Findings | 13 | 6 |
+| Confirmed | 7 | 0 |
+| Wrong | 2 | 6 |
+| Tool calls | about 230 | 0 |
+| Time | 3421 s | 615 s |
+
+Gemma never got a tool call through, so it guessed card costs and rules. It said agendas score from
+HQ, invented text for Retribution, and read a declined replacement as taken. The cause looks like the
+server, not the model:
+- Its reasoning ends with the call it means to make ("I'll use `card_text`"), and the reply holds only
+  a placeholder answer.
+- A short prompt does get a tool call through.
+- Forcing a tool call (`tool_choice: required`) hung the long requests.
+
+It is about 5.5 times faster, so it is worth another try once this llama.cpp build gets its tool calls
+after thinking through. `--model` names the model in the reviews. `--min-tool-calls N` sends an answer
+back once when it came with fewer tool calls; gemma resubmitted unchanged.
 
 **Still open:**
 - **The two faults it missed:** Funhouse unrezzed on a farmed Archives, and Pharos never advanced.

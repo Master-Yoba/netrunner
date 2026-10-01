@@ -111,6 +111,26 @@ public sealed class LlmGameReviewerTests
         Assert.Contains(review.Transcript, message => message.Content?.StartsWith("Your last message was empty", StringComparison.Ordinal) == true);
     }
 
+    [Fact]
+    public async Task AnAnswerBeforeTheRequiredToolCallsIsSentBackOnce()
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        (LadderSavedGame saved, FullMatchDefinition definition) = Assert.Single(LadderGameArchive.Read(Path.Combine(AppContext.BaseDirectory,
+            "..", "..", "..", "Fixtures", "saved-games", "seamless-launch-nothing")));
+        GameReviewDossier dossier = await GameReviewDossier.BuildAsync(saved, definition, PlayerSide.Corp);
+        var model = new ScriptedModel(
+            new LlmChatMessage("assistant", """{"findings": [{"sequence": 222, "category": "x", "claim": "Unchecked.", "citations": []}]}"""),
+            new LlmChatMessage("assistant", null, [new("t1", "card_text", "{\"title\":\"Seamless Launch\"}")]),
+            new LlmChatMessage("assistant", """{"findings": []}"""));
+        GameReview review = await new LlmGameReviewer(model, RulesIndex.Load(RulesRoot), new LlmSampling(0.6), minToolCalls: 3).ReviewAsync(dossier);
+
+        // Pushed back once, it looks one card up and withdraws the finding; its second answer stands.
+        Assert.Null(review.Failure);
+        Assert.Empty(review.Findings);
+        Assert.Equal(1, review.ToolCalls);
+        Assert.Single(review.Transcript, message => message.Content?.StartsWith("Before you answer, check each finding", StringComparison.Ordinal) == true);
+    }
+
     /// <summary>A model that answers with the next scripted message and records what the tools returned.</summary>
     private sealed class ScriptedModel(params LlmChatMessage[] script) : ILlmChatClient
     {

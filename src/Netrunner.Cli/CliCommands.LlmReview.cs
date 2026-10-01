@@ -13,7 +13,7 @@ public static partial class CliCommands
     /// <summary>
     /// ai-llm-review &lt;games-directory&gt; --side corp|runner [--entrant NAME] [--game ID]... [--games N] [--skip N]
     /// [--temperature T] [--top-p P] [--top-k K] [--seed S] [--reasoning low|medium|high] [--max-tool-calls N]
-    /// [--check] [--rules-root DIR] --output new-dir. The LLM game reviewer (Wave 4.5, P2) over games saved by
+    /// [--min-tool-calls N] [--check] [--model NAME] [--rules-root DIR] --output new-dir. The LLM game reviewer (Wave 4.5, P2) over games saved by
     /// <c>ai-ladder --save-games</c>, with the model from NETRUNNER_LLM_BASE_URL and NETRUNNER_LLM_MODEL
     /// (and NETRUNNER_LLM_API_KEY). Writes one review per game and a triage sheet. Exit 0 when every
     /// review finished, 1 when one failed, 2 for invalid arguments.
@@ -24,8 +24,9 @@ public static partial class CliCommands
         PlayerSide side = PlayerSide.Corp;
         var only = new HashSet<string>(StringComparer.Ordinal);
         bool check = false;
+        string? model = null;
         string? entrant = null, reasoning = Environment.GetEnvironmentVariable("NETRUNNER_LLM_REASONING_EFFORT") ?? "medium";
-        int games = 5, skip = 0, maxToolCalls = 60;
+        int games = 5, skip = 0, maxToolCalls = 60, minToolCalls = 0;
         double? temperature = 0.6, topP = 0.95;
         int? topK = 20, seed = 1;
         OpenAiCompatibleOptions options;
@@ -53,9 +54,11 @@ public static partial class CliCommands
                     case "--entrant": entrant = Next(); break;
                     case "--game": only.Add(Next()); break;
                     case "--check": check = true; break;
+                    case "--model": model = Next(); break;
                     case "--games": games = ParseInt(Next(), "--games", 1, 1000); break;
                     case "--skip": skip = ParseInt(Next(), "--skip", 0, 100_000); break;
                     case "--max-tool-calls": maxToolCalls = ParseInt(Next(), "--max-tool-calls", 0, 500); break;
+                    case "--min-tool-calls": minToolCalls = ParseInt(Next(), "--min-tool-calls", 0, 500); break;
                     case "--temperature": temperature = ParseDouble(Next(), "--temperature", 0, 2); break;
                     case "--top-p": topP = ParseDouble(Next(), "--top-p", 0, 1); break;
                     case "--top-k": topK = ParseInt(Next(), "--top-k", 0, 1000); break;
@@ -78,6 +81,7 @@ public static partial class CliCommands
                 throw new ArgumentException("ai-llm-review needs previously provisioned official content embedded at build time.");
             options = OpenAiCompatibleChatClient.FromEnvironment()
                 ?? throw new ArgumentException("Set NETRUNNER_LLM_BASE_URL and NETRUNNER_LLM_MODEL (for example in .env).");
+            if (model is not null) options = options with { Model = model };
             if (!File.Exists(Path.Combine(rulesRoot, "index.json"))) throw new ArgumentException($"No rules index under {rulesRoot}.");
         }
         catch (Exception exception) when (IsCommandFailure(exception))
@@ -90,7 +94,7 @@ public static partial class CliCommands
         var sampling = new LlmSampling(temperature, topP, topK, seed, reasoning);
         RulesIndex rules = RulesIndex.Load(rulesRoot);
         using var client = new OpenAiCompatibleChatClient(options);
-        var reviewer = new LlmGameReviewer(client, rules, sampling, maxToolCalls);
+        var reviewer = new LlmGameReviewer(client, rules, sampling, maxToolCalls, minToolCalls);
         var reviews = new List<GameReview>();
         foreach ((LadderSavedGame game, FullMatchDefinition definition) in LadderGameArchive.Read(directory)
             .Where(entry => entrant is null || (side == PlayerSide.Corp ? entry.Game.Game.Corp : entry.Game.Game.Runner) == entrant)

@@ -40,7 +40,10 @@ public sealed record GameReview(string GameId, PlayerSide Side, string Entrant, 
 /// long prompt: the comprehensive rules, card texts, the board at any point, and each decision's options
 /// with the bot's scores and reasons. LLM runs never gate a bot version; the tests they lead to do.
 /// </summary>
-public sealed class LlmGameReviewer(ILlmChatClient client, RulesIndex rules, LlmSampling sampling, int maxToolCalls = 60)
+/// <param name="minToolCalls">Tool calls the review should make before it answers: some models judge the log
+/// without looking anything up, and get rules and cards wrong. An earlier answer is sent back once.</param>
+public sealed class LlmGameReviewer(ILlmChatClient client, RulesIndex rules, LlmSampling sampling, int maxToolCalls = 60,
+    int minToolCalls = 0)
 {
     public static IReadOnlyList<LlmTool> Tools { get; } =
     [
@@ -66,7 +69,8 @@ public sealed class LlmGameReviewer(ILlmChatClient client, RulesIndex rules, Llm
     {
         ArgumentNullException.ThrowIfNull(dossier);
         var messages = new List<LlmChatMessage> { LlmChatMessage.System(SystemPrompt(dossier)), LlmChatMessage.User(dossier.DecisionLog()) };
-        Conversation review = await ConverseAsync(messages, dossier, maxToolCalls, progress, cancellationToken).ConfigureAwait(false);
+        Conversation review = await ConverseAsync(messages, dossier, maxToolCalls, progress, cancellationToken, minToolCalls)
+            .ConfigureAwait(false);
         int toolCalls = review.ToolCalls, prompt = review.PromptTokens, completion = review.CompletionTokens;
         GameReview Result(IReadOnlyList<ReviewFinding> findings, string? failure) =>
             new(dossier.Game.Game.Id, dossier.Side, dossier.Entrant, findings, toolCalls, prompt, completion, failure) { Transcript = messages };
@@ -93,9 +97,10 @@ public sealed class LlmGameReviewer(ILlmChatClient client, RulesIndex rules, Llm
 
     /// <summary>Runs the tool loop until the model answers without a tool call; past the budget it must answer.</summary>
     private async Task<Conversation> ConverseAsync(List<LlmChatMessage> messages, GameReviewDossier dossier, int budget,
-        Action<string>? progress, CancellationToken cancellationToken)
+        Action<string>? progress, CancellationToken cancellationToken, int required = 0)
     {
         int toolCalls = 0, prompt = 0, completion = 0, nudges = 0;
+        bool pushedBack = false;
         for (int round = 0; round <= budget + nudges; round++)
         {
             IReadOnlyList<LlmTool> tools = toolCalls < budget ? Tools : [];
@@ -118,6 +123,16 @@ public sealed class LlmGameReviewer(ILlmChatClient client, RulesIndex rules, Llm
                 {
                     nudges++;
                     messages.Add(LlmChatMessage.User("Your last message was empty. Give your answer now, as the JSON object asked for."));
+                    continue;
+                }
+                if (toolCalls < Math.Min(required, budget) && !pushedBack)
+                {
+                    // Tool calls asked for (a model that answers from the log alone); one push back, then its answer stands.
+                    pushedBack = true;
+                    nudges++;
+                    messages.Add(LlmChatMessage.User(
+                        "Before you answer, check each finding with the tools: card_text for every card it names, history or position for "
+                        + "every run, access or board state it relies on, and rules_lookup for every rule. Drop what doesn't hold, then answer again."));
                     continue;
                 }
                 return new Conversation(response.Message.Content, toolCalls, prompt, completion, null);
