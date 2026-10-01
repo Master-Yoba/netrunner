@@ -141,7 +141,7 @@ three, with citations, each in several games:
 It did not report the other two: Funhouse left unrezzed while the Runner farmed Archives, and Pharos
 never advanced.
 
-**Triage of 34 findings** (provisional, pending the user's triage) from 24 reviews of 15 games. One review ended with an empty answer; the tool
+**Triage of 34 findings** (the user's verdicts) from 24 reviews of 15 games. One review ended with an empty answer; the tool
 loop now asks again (the verdicts and evidence are in
 [`WAVE_4_5_P2_TRIAGE.md`](WAVE_4_5_P2_TRIAGE.md)). The prompt and dossier changed between rounds, as
 the triage showed what the model was missing:
@@ -149,11 +149,13 @@ the triage showed what the model was missing:
 | Round | Configuration | Findings | Confirmed | Unsure | Wrong | Duplicate |
 |---|---|---:|---:|---:|---:|---:|
 | A | decisions only | 5 | 2 | 0 | 3 | 0 |
-| B | + each turn's board, the opponent's actions, the primer | 12 | 7 | 2 | 2 | 1 |
-| C | + `history` | 17 | 10 | 4 | 2 | 1 |
-| All | | 34 | 19 | 6 | 7 | 2 |
+| B | + each turn's board, the opponent's actions, the primer | 12 | 8 | 0 | 3 | 1 |
+| C | + `history` | 17 | 13 | 0 | 3 | 1 |
+| All | | 34 | 23 | 0 | 9 | 2 |
 
-Round C's precision is 10 of 16 distinct findings confirmed, with 2 wrong.
+Round C's precision is 13 of 16 distinct findings confirmed, with 3 wrong. The triage also named faults
+beyond the findings (agenda placement, Urtica Cipher, Sprint, budgeting), listed at the end of the triage
+record.
 
 **Why findings were wrong:**
 - Runs and accesses that never happened, the main cause in rounds A and B. The board lines and the
@@ -172,21 +174,19 @@ Round C's precision is 10 of 16 distinct findings confirmed, with 2 wrong.
 - **A poverty loop:** each turn it gains a credit and spends it advancing Urtica Cipher, so a Hedge Fund
   held for 15 turns is never affordable. Still to check against Corp v19.
 
-**The second look doesn't help yet.** In round C it refuted all five findings it checked:
-- one rightly (runs that never happened);
-- three wrongly, all real faults;
-- one arguably.
+**The second look doesn't help yet.** In round C it refuted all five findings it checked: one rightly
+(runs that never happened), and four wrongly, all real faults. It catches false facts but calls bad
+strategy "a judgement call". The wrong refutations rest on its own errors: an installed card "entering
+rezzed", and reading only part of the history. So it stays opt-in.
 
-It catches false facts but calls bad strategy "a judgement call". The wrong refutations rest on its
-own errors: an installed card "entering rezzed", and reading only part of the history. So it stays
-opt-in.
+**Comparison runs:** the runs below are on round C's three Quick and Dirty against Party Hard games. The
+baseline's six findings carry the user's verdicts; the other runs' findings carry Claude's.
 
-**Temperature:** the server's recommended 1.0 against 0.6, round C, on the same three Quick and Dirty
-games:
+**Temperature:** the server's recommended 1.0 against 0.6:
 
 | Temperature | Findings | Confirmed | Unsure | Time |
 |---|---:|---:|---:|---:|
-| 0.6 | 6 | 5 | 1 | 1002 s |
+| 0.6 | 6 | 6 | 0 | 1002 s |
 | 1.0 | 6 | 5 | 1 | 1490 s |
 
 Both found the same core faults: empty remotes, the two Malapert copies, Malapert unrezzed at the
@@ -224,8 +224,8 @@ C's three Quick and Dirty against Party Hard games, with its model-card sampling
 | | Qwen 27B (temperature 0.6) | Gemma 31B |
 |---|---:|---:|
 | Findings | 6 | 5 |
-| Confirmed | 5 | 3 |
-| Unsure | 1 | 0 |
+| Confirmed | 6 | 3 |
+| Unsure | 0 | 0 |
 | Wrong | 0 | 2 |
 | Tool calls | 93 | 17 |
 | Time | 1002 s | 455 s |
@@ -244,11 +244,11 @@ games and settings:**
 | | Qwen 27B IQ4_XS (round C) | Qwen 27B UD-Q4_K_M |
 |---|---:|---:|
 | Findings | 6 | 5 |
-| Confirmed | 5 | 3 |
-| Unsure | 1 | 1 |
+| Confirmed | 6 | 3 |
+| Unsure | 0 | 1 |
 | Wrong | 0 | 0 |
 | Duplicate | 0 | 1 |
-| Distinct faults confirmed | 5 | 3 |
+| Distinct faults confirmed | 6 | 3 |
 | Tool calls | 93 | 67 |
 | Time | 1002 s | 916 s |
 
@@ -256,7 +256,7 @@ games and settings:**
 - **Both:** the empty-remote sprawl in two games, and Malapert unrezzed at the score.
 - **UD-Q4_K_M only:** with the sprawl, that R&D was left open on turn one.
 - **The IQ4_XS run only:** the second Malapert beside the first, the second Malapert that trashed the first in
-  HQ, and R&D behind one Whitespace all game.
+  HQ, R&D behind one Whitespace all game, and the Sprint that shuffled away Government Subsidy.
 
 Neither quant made a wrong finding. Three games are too few to separate the quants: a single review
 varies more from run to run than this.
