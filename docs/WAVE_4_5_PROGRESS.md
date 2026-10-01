@@ -128,7 +128,8 @@ endpoint, configured in the git-ignored `.env` (`NETRUNNER_LLM_BASE_URL`, `NETRU
 ### Gate evidence
 
 On the corpus of Corp v9 games (`standard-w4a` in `artifacts/ai-lint/corpus-w4a-vs-now`, the P1
-corpus), with model `qwen3.8-27b-mtp`, temperature 0.6, top-p 0.95, top-k 20, reasoning medium and up
+corpus), with Qwen3.8-27B as byteshape's IQ4_XS quant (3.84 bits per weight, with MTP; the server
+named it `qwen3.8-27b-mtp`), temperature 0.6, top-p 0.95, top-k 20, reasoning medium and up
 to 40 tool calls. A game takes 3 to 25 minutes, typically 6 to 10.
 
 **The playtest's faults:** the 28 September playtest found five Corp v9 faults. The reviewer re-found
@@ -235,9 +236,10 @@ wrong ones:
 
 It looks things up far less than Qwen, and is wrong where it doesn't.
 
-**A larger Qwen quant (Qwen3.8-27B-UD-Q4_K_M, llama.cpp), same three games and settings:**
+**A larger Qwen quant, unsloth's UD-Q4_K_M (also with MTP), against byteshape's IQ4_XS, same three
+games and settings:**
 
-| | Qwen 27B MTP (round C) | Qwen 27B Q4_K_M |
+| | Qwen 27B IQ4_XS (round C) | Qwen 27B UD-Q4_K_M |
 |---|---:|---:|
 | Findings | 6 | 5 |
 | Confirmed | 5 | 3 |
@@ -250,8 +252,8 @@ It looks things up far less than Qwen, and is wrong where it doesn't.
 
 **What each quant found:**
 - **Both:** the empty-remote sprawl in two games, and Malapert unrezzed at the score.
-- **Q4_K_M only:** with the sprawl, that R&D was left open on turn one.
-- **The MTP run only:** the second Malapert beside the first, the second Malapert that trashed the first in
+- **UD-Q4_K_M only:** with the sprawl, that R&D was left open on turn one.
+- **The IQ4_XS run only:** the second Malapert beside the first, the second Malapert that trashed the first in
   HQ, and R&D behind one Whitespace all game.
 
 Neither quant made a wrong finding. Three games are too few to separate the quants: a single review
