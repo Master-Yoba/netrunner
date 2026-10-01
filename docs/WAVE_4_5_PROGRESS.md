@@ -482,3 +482,20 @@ Both are now the defaults.
 - **Conduit:** multi-access programs aren't valued.
 - **Break planning against Ansel 1.0.**
 - **Tread Lightly against a remote.**
+
+### Batch 4 and the replay: the ladder doesn't measure play against Codex
+
+**Batch 4, 24 games against Corp v22 and Runner v16:** the bots won 3 (12%), against batch 3's 30%. To tell the version
+from the deals, batch 3's 24 deals were replayed against both version pairs at once. On the same deals:
+
+| Bot | Batch 3 | Replay | Combined |
+|---|---|---|---|
+| Runner v15, against Codex as Corp | 5 of 11 | 2 of 12 | 7 of 23 |
+| Runner v16 | | 0 of 12 | 0 of 12 |
+| Corp v21, against Codex as Runner | 2 of 12 | 3 of 12 | 5 of 24 |
+| Corp v22 | | 3 of 12 | 3 of 12 |
+
+**Runner v16 lost every game where v15 won 30%,** though the bot ladder had it +22 and +45 over v15. So Runner v15 is the
+default again. A version is now promoted only if it also holds up against Codex on fixed deals. The suspect is v16's
+click-loss rule, which prices "lose a click if any remain" at two clicks for VRcation as well as Creative Commission, and
+may hold back the Runner's draw and economy. Corp v22 plays level with v21 and stays.

@@ -91,11 +91,10 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     public const string V16 = "runner-heuristic-v16";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
-    /// V16 fixes V15's faults the reviews of batch 3's losses to Codex found (1 October: Verbal Plasticity over its own
-    /// copy, Creative Commission with clicks left, Docklands Pass never installed) and is level or better on the Gateway
-    /// ladder (+22 and +45 on two seeds).
+    /// V15 again: V16 was level or better on the Gateway ladder (+22 and +45), but against Codex on the same 12 deals it
+    /// won none of the games where V15 had won 7 of 23 (1 October), so V15 stays the default until a version matches it there.
     /// </remarks>
-    public const string PolicyVersion = V16;
+    public const string PolicyVersion = V15;
     /// <summary>
     /// The planner's model of the Runner. It stays V7, which Corp v9 was measured
     /// with, so the shipped Corp planner plays as it did.
