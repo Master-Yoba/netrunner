@@ -90,6 +90,9 @@ public static partial class RatingLadder
             "random" => new RandomLegalAgent(AgentLifecycleHost.DerivePolicySeed(definition.Request.Seed, side)),
             "contract" => new FullGameContractAgent(new FullGameContractPolicy(side), definition.Runtime),
             "easy" or "standard" => OfflineMatchFactory.CreateOpponent(definition, other, entrant),
+            // The LLM opponent (Wave 4.5 P3) needs a model; its saved games replay with the heuristic it wraps,
+            // so a review shows where the model's choices differ from it.
+            "llm" => OfflineMatchFactory.CreateOpponent(definition, other, "standard"),
             "easy-m5" or "standard-m5" => OfflineMatchFactory.CreateOpponent(definition, other, entrant[..^3],
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V2 : RunnerHeuristicPolicy.V1),
             "standard-w1" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
@@ -172,16 +175,21 @@ public static partial class RatingLadder
         CancellationToken cancellationToken = default) => PlayAsync(game, actionCap, null, cancellationToken);
 
     /// <param name="keep">Receives each finished or capped game with its replay (<c>ai-ladder --save-games</c>).</param>
+    public static Task<LadderGameResult> PlayAsync(LadderGame game, int actionCap, Action<LadderSavedGame>? keep,
+        CancellationToken cancellationToken = default) => PlayAsync(game, actionCap, keep, CreateAgent, cancellationToken);
+
+    /// <param name="agents">Makes each seat's agent from its entrant name (the LLM opponent's games pass their own).</param>
     public static async Task<LadderGameResult> PlayAsync(LadderGame game, int actionCap, Action<LadderSavedGame>? keep,
-        CancellationToken cancellationToken = default)
+        Func<string, PlayerSide, FullMatchDefinition, IGameAgent> agents, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(game);
+        ArgumentNullException.ThrowIfNull(agents);
         FullMatchDefinition definition = RulesFuzzRunner.CreateDefinition(game.ContentId, game.GameSeed);
         try
         {
             FullMatchResult result = await FullMatchRunner.RunAsync(definition, actionCap,
-                CreateAgent(game.Corp, PlayerSide.Corp, definition),
-                CreateAgent(game.Runner, PlayerSide.Runner, definition), cancellationToken).ConfigureAwait(false);
+                agents(game.Corp, PlayerSide.Corp, definition),
+                agents(game.Runner, PlayerSide.Runner, definition), cancellationToken).ConfigureAwait(false);
             double score = result.Outcome.Winner == PlayerSide.Corp ? 1 : 0;
             keep?.Invoke(new LadderSavedGame(game, score, false, result.Replay));
             return new LadderGameResult(game, score, false, result.ActionCount, null);
