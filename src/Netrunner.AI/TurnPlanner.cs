@@ -38,8 +38,10 @@ internal sealed class TurnPlanner
         _configuration = configuration;
         _catalog = catalog;
         PlayerSide opponent = configuration.Side == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp;
-        // The opponent is modelled by the latest Standard heuristic, which never plans.
-        _opponentConfiguration = OfflinePolicies.Configure(opponent, "standard", 0, OfflinePolicies.LatestHeuristic(opponent));
+        // The opponent is modelled by the latest Standard heuristic, which never plans; plan-model 1 (an A6 Hard
+        // setting) models it by the current Standard version instead.
+        _opponentConfiguration = OfflinePolicies.Configure(opponent, "standard", 0,
+            configuration.Parameters.GetValueOrDefault("plan-model") == 1 ? null : OfflinePolicies.LatestHeuristic(opponent));
         _opponentPolicy = OfflinePolicies.Create(_opponentConfiguration);
     }
 

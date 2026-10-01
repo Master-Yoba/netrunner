@@ -49,7 +49,7 @@ public static partial class RatingLadder
     /// in its own seat, and "hard".
     /// </summary>
     public static IReadOnlyList<string> EntrantOrder { get; } =
-        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19", "standard-r14", "standard-c20", "standard-r15", "standard-c21", "standard-r16", "standard-c22", "standard-b3", "standard-c23", "standard-r17", "standard-r18", "standard-c24", "standard-r19", "glacier", "rush", "asset-spam", "aggressive", "rig-builder", "hard", "hard-wide"];
+        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19", "standard-r14", "standard-c20", "standard-r15", "standard-c21", "standard-r16", "standard-c22", "standard-b3", "standard-c23", "standard-r17", "standard-r18", "standard-c24", "standard-r19", "glacier", "rush", "asset-spam", "aggressive", "rig-builder", "hard", "hard-wide", "hard-weight", "hard-rez", "hard-model"];
 
     private const double EloScale = 400 / 2.302585092994046;
     private const double Ridge = 0.01;
@@ -95,6 +95,11 @@ public static partial class RatingLadder
             // A6 tuning: Hard with a wider plan (Corp 10 samples of 4 actions, Runner 6 of 4).
             "hard-wide" => Replanned(OfflineMatchFactory.CreateOpponent(definition, other, "hard"), definition,
                 side == PlayerSide.Corp ? 10 : 6, 4),
+            // A6 tuning: Hard counting its rollouts double, adding the rez/run search, or modelling the current opponent.
+            "hard-weight" => Tuned(OfflineMatchFactory.CreateOpponent(definition, other, "hard"), definition, ("plan-weight", 200)),
+            "hard-rez" => Tuned(OfflineMatchFactory.CreateOpponent(definition, other, "hard"), definition,
+                ("run-samples", RunnerPolicyProfiles.RunSamples), ("run-width", 2)),
+            "hard-model" => Tuned(OfflineMatchFactory.CreateOpponent(definition, other, "hard"), definition, ("plan-model", 1)),
             // A6 personalities: Standard with the style in its own seat, plain Standard in the other.
             "glacier" or "rush" or "asset-spam" or "aggressive" or "rig-builder" => OfflineMatchFactory.CreateOpponent(definition, other, "standard", null,
                 AgentPersonalities.Keys[entrant] is var personality && AgentPersonalities.Side(personality) == side ? personality : AgentPersonality.Balanced),
@@ -219,6 +224,18 @@ public static partial class RatingLadder
                 "plan-width" => new KeyValuePair<string, int>(pair.Key, width),
                 _ => pair,
             })],
+            current.FeatureVersion);
+        return new OfflineAgent(configuration, OfflinePolicies.Create(configuration), new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior));
+    }
+
+    /// <summary>The same agent with planner settings added or replaced.</summary>
+    private static OfflineAgent Tuned(OfflineAgent agent, FullMatchDefinition definition, params (string Key, int Value)[] settings)
+    {
+        OfflineAgentConfiguration current = agent.Configuration;
+        OfflineAgentConfiguration configuration = OfflineAgentConfiguration.Create(current.Side, current.PolicyVersion, current.ProfileId,
+            current.PolicySeed, current.WorkBudget, current.NearTieTolerance,
+            [.. current.Parameters.Where(pair => settings.All(setting => setting.Key != pair.Key)),
+                .. settings.Select(setting => new KeyValuePair<string, int>(setting.Key, setting.Value))],
             current.FeatureVersion);
         return new OfflineAgent(configuration, OfflinePolicies.Create(configuration), new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior));
     }

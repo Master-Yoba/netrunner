@@ -136,15 +136,18 @@ public static class RunnerPolicyProfiles
         bool tiers = SupportsTiers(configuration.PolicyVersion);
         bool hard = tiers && configuration.ProfileId == "hard";
         bool personality = configuration.Parameters.ContainsKey(AgentPersonalities.ParameterKey);
+        int tuning = hard ? configuration.Parameters.Keys.Count(key => CorpPolicyProfiles.HardTuningKeys.Contains(key) && !keys!.Contains(key)) : 0;
         if (configuration.Side != PlayerSide.Runner || keys is null
             || !(configuration.ProfileId is "standard" or "easy" || hard)
             || personality && !tiers
-            || configuration.Parameters.Count != keys.Length + (personality ? 1 : 0)
+            || configuration.Parameters.Count != keys.Length + (personality ? 1 : 0) + tuning
             || !keys.All(configuration.Parameters.ContainsKey)
             || configuration.Parameters.Any(pair => pair.Key switch
             {
                 "inference-scale" => pair.Value is < 0 or > 200,
                 "plan-samples" or "plan-width" or "run-samples" or "run-width" => pair.Value is < 0 or > 16,
+                "plan-weight" => pair.Value is < 25 or > 400,
+                "plan-model" => pair.Value is < 0 or > 1,
                 "archetype-primary" or "archetype-secondary" => !Enum.IsDefined((RunnerArchetype)pair.Value),
                 "plan-evaluation" => pair.Value is < 0 || pair.Value > (hard ? 3 : 1),
                 AgentPersonalities.ParameterKey => pair.Value == 0 || !AgentPersonalities.IsValid(PlayerSide.Runner, pair.Value),
