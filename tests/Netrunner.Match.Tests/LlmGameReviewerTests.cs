@@ -21,6 +21,8 @@ public sealed class LlmGameReviewerTests
         RulesIndex rules = RulesIndex.Load(RulesRoot);
         Assert.True(rules.Count > 500);
         Assert.Contains("turn all cards in the Corp's discard pile faceup", rules.Rule("7.5.2")!.Text, StringComparison.Ordinal);
+        Assert.Equal("1.17.3", rules.Rule("1.17.3c")?.Number);
+        Assert.Null(rules.Rule("1.17.3z"));
         Assert.Contains(rules.Search("breached server is Archives faceup"), rule => rule.Number == "7.5.2");
     }
 
@@ -49,6 +51,7 @@ public sealed class LlmGameReviewerTests
         Assert.Contains(dossier.Decisions, decision => decision.Sequence == 222 && decision.Diverged);
         Assert.Contains("(the bot now chooses differently)", dossier.DecisionLog(), StringComparison.Ordinal);
         Assert.Contains("== turn 1, Corp active. Corp 5 credits", dossier.DecisionLog(), StringComparison.Ordinal);
+        Assert.Contains("(Runner #", dossier.DecisionLog(), StringComparison.Ordinal);
 
         var model = new ScriptedModel(
             new LlmChatMessage("assistant", null, [new("c1", "decision", "{\"sequence\":\"222\"}"), new("c2", "card_text", "{\"title\":\"Seamless Launch\"}")]),

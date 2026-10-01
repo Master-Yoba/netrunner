@@ -22,6 +22,16 @@ public sealed class GameReviewDossier
     private readonly Dictionary<long, GameState> _states = [];
     private readonly Dictionary<long, ReviewDecision> _decisions = [];
     private readonly HashSet<long> _diverged = [];
+    private readonly SortedDictionary<long, string> _opponent = [];
+
+    /// <summary>The opponent's actions the log shows: what changes the board or the score, not passes and breaks.</summary>
+    private static readonly HashSet<ActionKind> OpponentShown =
+    [
+        ActionKind.StartRun, ActionKind.InstallCard, ActionKind.PlayCard, ActionKind.RezCard, ActionKind.RezIce,
+        ActionKind.AdvanceAgenda, ActionKind.AdvanceCard, ActionKind.ScoreAgenda, ActionKind.StealAgenda, ActionKind.JackOut,
+        ActionKind.TrashAccessedCard, ActionKind.TrashProgram, ActionKind.ChooseBreachCandidate, ActionKind.UseAbility,
+        ActionKind.RemoveTag, ActionKind.TrashTaggedResource,
+    ];
 
     public LadderSavedGame Game { get; }
 
@@ -56,6 +66,9 @@ public sealed class GameReviewDossier
             dossier._states[recorded.Sequence] = state;
             PendingDecision pending = state.PendingDecision!;
             bool mine = state.GetPlayer(pending.Owner).Side == side;
+            if (!mine && pending.LegalActions.FirstOrDefault(action => action.Id == recorded.Submission.ActionId) is { } theirs
+                && OpponentShown.Contains(theirs.Kind))
+                dossier._opponent[recorded.Sequence] = Describe(state, theirs);
             if (mine)
             {
                 // The agent sees every own decision, as in the match it played, so its memory and commits stay in step.
@@ -96,8 +109,12 @@ public sealed class GameReviewDossier
     {
         var text = new StringBuilder();
         int turn = -1;
+        var opponent = new Queue<KeyValuePair<long, string>>(_opponent);
+        PlayerSide other = Side == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp;
         foreach (ReviewDecision decision in Decisions)
         {
+            while (opponent.TryPeek(out KeyValuePair<long, string> action) && action.Key < decision.Sequence)
+                text.AppendLine(CultureInfo.InvariantCulture, $"  ({other} #{opponent.Dequeue().Key}: {action.Value})");
             if (decision.Turn != turn)
             {
                 // Each turn opens with the board, so most decisions read without a position call.
@@ -111,6 +128,8 @@ public sealed class GameReviewDossier
             foreach (ReviewOption option in decision.Options.Take(optionsPerDecision))
                 text.AppendLine(CultureInfo.InvariantCulture, $"    {(option.Chosen ? "*" : "-")} {option.Action}  [{option.Score}: {option.Reason}]");
         }
+        while (opponent.TryDequeue(out KeyValuePair<long, string> action))
+            text.AppendLine(CultureInfo.InvariantCulture, $"  ({other} #{action.Key}: {action.Value})");
         return text.ToString();
     }
 

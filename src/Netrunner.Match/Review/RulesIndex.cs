@@ -43,8 +43,17 @@ public sealed partial class RulesIndex
         return new RulesIndex(rules);
     }
 
-    /// <summary>The rule with that number (such as "7.5.2"), if there is one.</summary>
-    public RuleText? Rule(string number) => _rules.GetValueOrDefault(number.Trim().TrimEnd('.'));
+    /// <summary>
+    /// The rule with that number (such as "7.5.2"), if there is one. A sub-point ("7.5.2a") gives its rule
+    /// when the rule has that sub-point.
+    /// </summary>
+    public RuleText? Rule(string number)
+    {
+        string key = number.Trim().TrimEnd('.');
+        if (_rules.TryGetValue(key, out RuleText? rule)) return rule;
+        if (key.Length < 2 || !char.IsAsciiLetterLower(key[^1]) || !_rules.TryGetValue(key[..^1], out rule)) return null;
+        return rule.Text.Split('\n').Any(line => line.StartsWith($"- {key[^1]}.", StringComparison.Ordinal)) ? rule : null;
+    }
 
     /// <summary>Rules whose number is the query, or which contain most of its words.</summary>
     public IReadOnlyList<RuleText> Search(string query, int limit = 5)

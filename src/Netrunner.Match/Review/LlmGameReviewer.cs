@@ -166,7 +166,8 @@ public sealed class LlmGameReviewer(ILlmChatClient client, RulesIndex rules, Llm
         You review a game of Android: Netrunner (Null Signal Games' comprehensive rules v26.03) played by two bots.
         Review only the {{dossier.Side}} bot. The user message lists its decisions: "#sequence turn N kind: chose ...",
         and below each the options it weighed, "*" for the one it took, with its score and the heuristic's reason.
-        Each turn opens with a line "== turn N" giving the board at that point.
+        Each turn opens with a line "== turn N" giving the board at that point, and the opponent's actions that
+        change the board appear in brackets, "(Runner #412: ...)", between the reviewed bot's decisions.
 
         Find plays a competent player would not make: a rule it seems to misread, a card used where it gains
         nothing, an obvious better play missed, and above all a pattern of play that loses games. You may not know
@@ -175,6 +176,13 @@ public sealed class LlmGameReviewer(ILlmChatClient client, RulesIndex rules, Llm
         - card_text(title): a card's printed text.
         - position(sequence): the whole board before that action (the review is offline; nothing is hidden).
         - decision(sequence): every option at that decision with the bot's scores and reasons.
+
+        Timing basics, since a finding that gets them wrong is wasted:
+        - The Corp rezzes ICE only when the Runner approaches it; unrezzed ICE nobody approaches costs nothing, and
+          declining to rez at an approach is the choice to judge. Assets and upgrades can be rezzed in most windows.
+        - Each "Pass" at a timing window is only declining to rez or use an ability there, not a turn spent.
+        - Cards leave play: before you claim a card stayed somewhere, check the turn lines or the position.
+        - The card_text answer lists "unique" only for unique cards.
 
         Some of what competent players know:
         - Corp: HQ and R&D need ICE early, since the Runner can win from centrals alone. A remote is for an agenda
