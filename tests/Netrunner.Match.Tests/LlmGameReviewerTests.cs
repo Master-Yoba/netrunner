@@ -52,6 +52,9 @@ public sealed class LlmGameReviewerTests
         Assert.Contains("(the bot now chooses differently)", dossier.DecisionLog(), StringComparison.Ordinal);
         Assert.Contains("== turn 1, Corp active. Corp 5 credits", dossier.DecisionLog(), StringComparison.Ordinal);
         Assert.Contains("(Runner #", dossier.DecisionLog(), StringComparison.Ordinal);
+        // A trigger choice names its source card, not just the trigger's catalog id.
+        Assert.Contains(dossier.Decisions, decision => decision.Kind == "TriggerChoice");
+        Assert.DoesNotContain(dossier.Decisions, decision => decision.Kind == "TriggerChoice" && decision.Chosen.StartsWith("UseTrigger (", StringComparison.Ordinal));
 
         var model = new ScriptedModel(
             new LlmChatMessage("assistant", null, [new("c1", "decision", "{\"sequence\":\"222\"}"), new("c2", "card_text", "{\"title\":\"Seamless Launch\"}")]),

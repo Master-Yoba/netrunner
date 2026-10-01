@@ -238,6 +238,8 @@ public sealed class GameReviewDossier
             BreachCandidateParameters { CardId: { } card } => [card],
             RunCardPaymentParameters payment => [payment.CardId],
             IceSubroutineChoiceParameters { CardId: { } card } => [card],
+            TriggerChoiceParameters trigger => TriggerSource(state, trigger.TriggerId),
+            TriggerOrderParameters order => TriggerSource(state, order.TriggerId),
             _ => [],
         };
         string where = action.Parameters switch
@@ -250,6 +252,12 @@ public sealed class GameReviewDossier
         string named = string.Join(", ", cards.Distinct().Select(id => Title(state, id)));
         return $"{action.Kind}{(named.Length > 0 ? $" {named}" : "")}{where} ({description})";
     }
+
+    /// <summary>The card a pending trigger comes from, so "Use trigger" names it (Send a Message's free rez).</summary>
+    private static IEnumerable<CardInstanceId> TriggerSource(GameState state, TriggerId id) =>
+        state.ResolutionStack.Count > 0 && state.ResolutionStack[^1] is EffectCheckpointFrame checkpoint
+            && checkpoint.TriggerQueue.FirstOrDefault(trigger => trigger.Id == id)?.SourceCardId is { } source
+            ? [source] : [];
 
     private static string ServerName(GameState state, ServerId id)
     {

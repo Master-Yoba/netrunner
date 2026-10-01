@@ -213,6 +213,28 @@ It is about 5.5 times faster, so it is worth another try once this llama.cpp bui
 after thinking through. `--model` names the model in the reviews. `--min-tool-calls N` sends an answer
 back once when it came with fewer tool calls; gemma resubmitted unchanged.
 
+The same 26B on LM Studio (a llama.cpp engine too) failed the same way.
+
+**gemma-4-31b (dense, on LM Studio):** this one does make tool calls, several at once. It ran on round
+C's three Quick and Dirty against Party Hard games, with its model-card sampling:
+
+| | Qwen 27B (temperature 0.6) | Gemma 31B |
+|---|---:|---:|
+| Findings | 6 | 5 |
+| Confirmed | 5 | 3 |
+| Unsure | 1 | 0 |
+| Wrong | 0 | 2 |
+| Tool calls | 93 | 17 |
+| Time | 1002 s | 455 s |
+
+Its confirmed findings are faults Qwen also found: the empty remotes, and the second Malapert. Its two
+wrong ones:
+- **"Upgrades can't be rezzed":** from a game where it made no tool calls.
+- **A trigger misread:** the log showed it only by its catalog id. The dossier now names a trigger's
+  source card, Send a Message's free rez.
+
+It looks things up far less than Qwen, and is wrong where it doesn't.
+
 **Still open:**
 - **The two faults it missed:** Funhouse unrezzed on a farmed Archives, and Pharos never advanced.
   Both are lint findings, and P1 already finds them.
