@@ -27,7 +27,7 @@ public sealed partial class CorpHeuristicPolicy
             lost = context.Generation >= 11 && displaced < lost ? displaced : Math.Max(lost, displaced);
         }
         int score;
-        bool nakedAgenda = false;
+        bool nakedAgenda = false, agendaWaits = false;
         if (definition.Ice is { } ice)
         {
             bool hasScoringRemote = context.Features.Board.Servers.Any(value => value.Kind == ServerKind.Remote && value.Ice.Length > 0);
@@ -94,6 +94,14 @@ public sealed partial class CorpHeuristicPolicy
                         bool flooded = context.AgendaCount >= 2 || context.Features.Hand.Length >= (context.Self.MaximumHandSize ?? 5);
                         if (ready < 0 && !flooded) score -= 250 + Math.Min(250, -ready * 40);
                     }
+                    // v21 (reviews of the losses to Codex, 1 October): ICE isn't protection against a rig that breaks it. An
+                    // agenda that can't score this turn waits in HQ while the Runner would get into its server next turn
+                    // (a lone Palisade against Cleaver, Whitespace against Buzzsaw, Funhouse for a Runner who can clear tags).
+                    // Like an unprotected agenda, it is ranked below every other option, so the planner's turn-end horizon,
+                    // which can't see the steal, doesn't bring it back.
+                    agendaWaits = context.Generation >= 16 && !scoreableNow && !nakedAgenda && server is not null
+                        && RunnerGetsIn(context, server, install.CreditCost + definition.Printed.AdvancementRequirement)
+                        && context.AgendaCount < 2 && context.Features.Hand.Length < (context.Self.MaximumHandSize ?? 5);
                 }
             }
         }
@@ -115,6 +123,11 @@ public sealed partial class CorpHeuristicPolicy
         }
         if (nakedAgenda)
             return new(-100, score, "development/agenda-never-unprotected", true, new("install", null, null, install.CardId.Value));
+        if (agendaWaits)
+            return new(-100, score, "development/agenda-waits-for-protection", true, new("install", null, null, install.CardId.Value));
+        // v21: ICE on an Archives that protects nothing ranks below the other plays, whatever the planner's horizon makes of it.
+        if (definition.Ice is not null && server?.Kind == ServerKind.Archives && server.Ice.Length == 0 && !ArchivesWorthIce(context))
+            return new(-1, score, "development/archives-protects-nothing", true, new("install", null, null, install.CardId.Value));
         return Value(score, "development/destination-minus-replacement-value", approximate: true, objective: new("install", null, null, install.CardId.Value));
     }
 
@@ -134,6 +147,18 @@ public sealed partial class CorpHeuristicPolicy
         int cost = forecast.Credits + forecast.CreditsLost + forecast.Clicks * 2 + forecast.Tags * 2 + forecast.Damage * 2;
         return Math.Min(550, cost * 60) + forecast.UnknownIce * 80;
     }
+
+    /// <summary>v21: whether Archives is worth ICE: it holds an agenda, or runs on it pay the Runner. Earlier versions always.</summary>
+    private static bool ArchivesWorthIce(HeuristicContext context) => context.Generation < 16 || RunnerSuccessPayoffs(context) > 0
+        || context.Features.PrivateCards.FaceDownArchives.Concat(context.Features.Board.CorpDiscard).Any(card => context.Definition(card)?.Agenda is not null);
+
+    /// <summary>
+    /// v21: whether the whole-run model, run from the Runner's side, gets the Runner into the server next turn: it can
+    /// spend three of its four clicks on credits and run with the last (a broke Runner still breaks a lone Palisade).
+    /// </summary>
+    private static bool RunnerGetsIn(HeuristicContext context, AgentServer server, int committed) =>
+        RunModel.Plan(context, server, server.Ice.Length - 1, context.Opponent.Credits + 3, clicks: 0,
+            grip: context.Features.Board.HiddenZoneCounts.RunnerGrip, corpRezBudget: Math.Max(0, context.Self.Credits - committed)).CanGetIn;
 
     /// <summary>True when an installed Runner breaker can interface with ICE of this type.</summary>
     private static bool RunnerCovers(HeuristicContext context, IceType iceType) =>
@@ -210,6 +235,10 @@ public sealed partial class CorpHeuristicPolicy
             // counter, and an advanced card reads as an agenda to the Runner (Wave 4 C1).
             if (context.Self.Credits - 1 < context.RezReserve) return Value(-40, "advance/trap-keeps-ice-budget", approximate: true);
             int counters = card!.AdvancementCounters ?? 0;
+            // v20 (Codex review, 1 October): past the Runner's grip, another counter adds no threat; Urtica Cipher
+            // took every spare click and credit while the Corp stopped scoring.
+            if (context.Generation >= 15 && 2 + counters > context.Features.Board.HiddenZoneCounts.RunnerGrip + 1)
+                return Value(-30, "advance/trap-already-lethal", approximate: true);
             int bait = counters >= 4 ? 40 : 130 - counters * 15;
             if (context.Generation >= 7) bait = (int)(bait * context.CorpProfile.TrapWeight);
             return Value(bait, "advance/trap", approximate: true);
@@ -278,7 +307,9 @@ public sealed partial class CorpHeuristicPolicy
             score += (int)((archetypes
                 ? Math.Max(0, profile.CentralIceTarget - ice) * 130 + (ice == 0 ? 130 : 0)
                 : ice == 0 ? 260 : ice == 1 ? 130 : ice == 2 ? 30 : 0) * context.OpponentScorePressure);
-        if (server.Kind == ServerKind.Archives && ice == 0)
+        // v21 (reviews of the losses to Codex, 1 October): an Archives of spent operations isn't worth a wall, however
+        // often it's run; only agendas in it, or runs that pay the Runner, make it so.
+        if (server.Kind == ServerKind.Archives && ice == 0 && ArchivesWorthIce(context))
             score += context.Generation >= 8
                 // v13 (playtest, 29 September): a Runner farming Archives for money is worth a wall.
                 ? Math.Min(450, SuccessfulRunsOn(context, server) * 150) + RunnerSuccessPayoffs(context) * 60
@@ -386,7 +417,12 @@ public sealed partial class CorpHeuristicPolicy
                 force += (int)((context.CorpProfile.TagWeight - 1) * 150);
             // v13 (playtest, 29 September): rezzing ICE on a server that doesn't hold an agenda mustn't leave
             // too little to rez the ICE that protects one; the Runner baits the Corp's money that way.
-            if (context.Generation >= 8 && server?.Root.Any(card => context.Definition(card)?.Agenda is not null) != true
+            // v20 (Codex review, 1 October): R&D, and HQ while the Corp holds an agenda, are agenda servers too; the
+            // reserve declined Diviner, Ansel 1.0 and Whitespace there and the Runner stole from them.
+            bool agendaServer = server?.Root.Any(card => context.Definition(card)?.Agenda is not null) == true
+                || context.Generation >= 15 && (server?.Kind == ServerKind.RAndD
+                    || server?.Kind == ServerKind.Headquarters && context.Features.Hand.Any(card => context.Definition(card)?.Agenda is not null));
+            if (context.Generation >= 8 && !agendaServer
                 && context.Self.Credits - cost < AgendaIceReserve(context))
                 return Value(-200, "rez/keep-credits-for-the-agenda-ice", approximate: true);
             if (context.Generation >= 6)

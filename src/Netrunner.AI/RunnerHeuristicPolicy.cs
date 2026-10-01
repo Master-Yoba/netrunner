@@ -72,18 +72,30 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// that rewards the Runner (René "Loup" Arcemont) that reward.
     /// </summary>
     public const string V13 = "runner-heuristic-v13";
+    /// <summary>
+    /// V13 with the 1 October Codex review fixes: Zahya's income from a run's accesses is taken, not
+    /// declined; Diviner ends the run for certain when every card in the grip has an odd cost; and a run
+    /// whose ICE would forbid stealing and trashing (Ansel 1.0) gains nothing past it.
+    /// </summary>
+    public const string V14 = "runner-heuristic-v14";
+    /// <summary>
+    /// V14 with the fixes from the reviews of its losses to Codex (1 October): an advanced card in a remote
+    /// is contested when the Corp is one agenda from winning, the trap's risk notwithstanding unless lethal.
+    /// </summary>
+    public const string V15 = "runner-heuristic-v15";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
-    /// V13 fixes V12's faults from the 30 September playtest (running a known Urtica Cipher over and
-    /// over, leaving Nico Campaign) and beats it on the Gateway ladder (+69 and +100 on two seeds).
+    /// V15 fixes V14's faults the reviews of its losses to Codex found (1 October: the match-point remote left
+    /// alone, Fermenter never installed, Archives run for nothing) and is level or better on the Gateway ladder
+    /// (+86 and +44 on two seeds).
     /// </remarks>
-    public const string PolicyVersion = V13;
+    public const string PolicyVersion = V15;
     /// <summary>
     /// The planner's model of the Runner. It stays V7, which Corp v9 was measured
     /// with, so the shipped Corp planner plays as it did.
     /// </summary>
     public const string LatestHeuristic = V7;
-    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13];
+    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15];
 
     public RunnerHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -91,9 +103,9 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Runner policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 or V8 or V9 => 6, V10 => 7, V11 or V12 => 8, V13 => 9, _ => 2 };
+        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 or V8 or V9 => 6, V10 => 7, V11 or V12 => 8, V13 => 9, V14 => 10, V15 => 11, _ => 2 };
         Plans = version is V3 or V8 or V9;
-        Repairs = version is V4 or V5 or V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13;
+        Repairs = version is V4 or V5 or V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15;
     }
 
     /// <summary>Whether this version has the playtest repairs (V4).</summary>

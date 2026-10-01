@@ -211,6 +211,15 @@ public sealed class GameReviewDossier
         }
     }
 
+    /// <summary>Every decision in full, one after another (a reviewer reading files instead of calling tools).</summary>
+    public string AllDecisionDetails() => string.Join("\n", Decisions.Select(decision => DecisionDetail(decision.Sequence)));
+
+    /// <summary>The board before each of the reviewed bot's decisions.</summary>
+    public string AllPositions() => string.Join("\n", Decisions.Select(decision => Position(decision.Sequence)));
+
+    /// <summary>Every card's printed text, one per line.</summary>
+    public static string AllCardTexts() => string.Join("\n", CardDataResource.LoadEmbedded().Cards.Select(card => CardText(card.Code)));
+
     /// <summary>The <c>card_text</c> tool: a card's printed text, type, costs and subtypes.</summary>
     public static string CardText(string titleOrCode)
     {

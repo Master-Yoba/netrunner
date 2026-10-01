@@ -182,9 +182,14 @@ public sealed class LlmGameReviewer(ILlmChatClient client, RulesIndex rules, Llm
     /// Each finding must name one of the reviewed bot's decisions; its citations are checked against the
     /// rules index and the card data.
     /// </summary>
-    public (IReadOnlyList<ReviewFinding> Findings, string? Failure) ParseFindings(string? content, GameReviewDossier dossier)
+    public (IReadOnlyList<ReviewFinding> Findings, string? Failure) ParseFindings(string? content, GameReviewDossier dossier) =>
+        ParseFindings(content, dossier, rules);
+
+    /// <summary>Reads a findings answer from any reviewer, with its citations checked against <paramref name="rules"/>.</summary>
+    public static (IReadOnlyList<ReviewFinding> Findings, string? Failure) ParseFindings(string? content, GameReviewDossier dossier, RulesIndex rules)
     {
         ArgumentNullException.ThrowIfNull(dossier);
+        ArgumentNullException.ThrowIfNull(rules);
         if (string.IsNullOrWhiteSpace(content)) return ([], "The model's answer was empty.");
         int start = content.IndexOf('{', StringComparison.Ordinal), end = content.LastIndexOf('}');
         if (start < 0 || end <= start) return ([], "The model's answer held no JSON object.");
@@ -223,22 +228,11 @@ public sealed class LlmGameReviewer(ILlmChatClient client, RulesIndex rules, Llm
         return (findings, null);
     }
 
-    private static string SystemPrompt(GameReviewDossier dossier) => $$"""
-        You review a game of Android: Netrunner (Null Signal Games' comprehensive rules v26.03) played by two bots.
-        Review only the {{dossier.Side}} bot. The user message lists its decisions: "#sequence turn N kind: chose ...",
-        and below each the options it weighed, "*" for the one it took, with its score and the heuristic's reason.
-        Each turn opens with a line "== turn N" giving the board at that point, and the opponent's actions that
-        change the board appear in brackets, "(Runner #412: ...)", between the reviewed bot's decisions.
-
-        Find plays a competent player would not make: a rule it seems to misread, a card used where it gains
-        nothing, an obvious better play missed, and above all a pattern of play that loses games. You may not know
-        every rule or card: look them up with the tools rather than guess.
-        - rules_lookup(query): the comprehensive rules by number or words.
-        - card_text(title): a card's printed text.
-        - position(sequence): the whole board before that action (the review is offline; nothing is hidden).
-        - decision(sequence): every option at that decision with the bot's scores and reasons.
-        - history(from, to, containing): both players' actions in a range, such as every run on a server.
-
+    /// <summary>
+    /// What the reviewer is told about timing and competent play; shared by every reviewer (the local model's
+    /// tools, Codex's files) so their findings compare.
+    /// </summary>
+    public const string Knowledge = """
         Timing basics, since a finding that gets them wrong is wasted:
         - The Corp rezzes ICE only when the Runner approaches it; unrezzed ICE nobody approaches costs nothing, and
           declining to rez at an approach is the choice to judge. Assets and upgrades can be rezzed in most windows.
@@ -257,13 +251,37 @@ public sealed class LlmGameReviewer(ILlmChatClient client, RulesIndex rules, Llm
         These are guidelines, not rules: the board decides. Check the position before you report a finding, and
         check with history any run or access your claim relies on.
         A fault the bot repeats is one finding, at its first occurrence, with the repetition in the claim.
+        """;
 
+    /// <summary>The findings answer, and the rule that every finding cites what it relies on.</summary>
+    public const string AnswerFormat = """
         Answer with one JSON object and nothing else:
         {"findings": [{"sequence": 123, "category": "short-kebab-case", "confidence": "high|medium|low",
           "claim": "what is wrong and why, in one or two sentences",
           "citations": [{"kind": "rule", "ref": "7.5.2"}, {"kind": "card", "ref": "Card Title"}]}]}
         Every finding cites the rules or card texts it relies on. Report what you judge likely wrong, with your
         confidence; an empty findings array is a fine answer when you find nothing.
+        """;
+
+    private static string SystemPrompt(GameReviewDossier dossier) => $$"""
+        You review a game of Android: Netrunner (Null Signal Games' comprehensive rules v26.03) played by two bots.
+        Review only the {{dossier.Side}} bot. The user message lists its decisions: "#sequence turn N kind: chose ...",
+        and below each the options it weighed, "*" for the one it took, with its score and the heuristic's reason.
+        Each turn opens with a line "== turn N" giving the board at that point, and the opponent's actions that
+        change the board appear in brackets, "(Runner #412: ...)", between the reviewed bot's decisions.
+
+        Find plays a competent player would not make: a rule it seems to misread, a card used where it gains
+        nothing, an obvious better play missed, and above all a pattern of play that loses games. You may not know
+        every rule or card: look them up with the tools rather than guess.
+        - rules_lookup(query): the comprehensive rules by number or words.
+        - card_text(title): a card's printed text.
+        - position(sequence): the whole board before that action (the review is offline; nothing is hidden).
+        - decision(sequence): every option at that decision with the bot's scores and reasons.
+        - history(from, to, containing): both players' actions in a range, such as every run on a server.
+
+        {{Knowledge}}
+
+        {{AnswerFormat}}
         """;
 
     private static string CheckPrompt(GameReviewDossier dossier) => $$"""

@@ -47,7 +47,7 @@ public static partial class RatingLadder
     /// "standard-plan" is the A3 turn planner (Runner v3, Corp v5).
     /// </summary>
     public static IReadOnlyList<string> EntrantOrder { get; } =
-        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19"];
+        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19", "standard-r14", "standard-c20", "standard-r15", "standard-c21"];
 
     private const double EloScale = 400 / 2.302585092994046;
     private const double Ridge = 0.01;
@@ -90,6 +90,9 @@ public static partial class RatingLadder
             "random" => new RandomLegalAgent(AgentLifecycleHost.DerivePolicySeed(definition.Request.Seed, side)),
             "contract" => new FullGameContractAgent(new FullGameContractPolicy(side), definition.Runtime),
             "easy" or "standard" => OfflineMatchFactory.CreateOpponent(definition, other, entrant),
+            // The LLM opponent (Wave 4.5 P3) needs a model, or Codex through the MCP game server; their saved games
+            // replay with the heuristic they wrap, so a review shows where their choices differ from it.
+            "llm" or "codex" => OfflineMatchFactory.CreateOpponent(definition, other, "standard"),
             "easy-m5" or "standard-m5" => OfflineMatchFactory.CreateOpponent(definition, other, entrant[..^3],
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V2 : RunnerHeuristicPolicy.V1),
             "standard-w1" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
@@ -138,6 +141,18 @@ public static partial class RatingLadder
             "standard-c15" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V15 : RunnerHeuristicPolicy.PolicyVersion),
             // The Corp planning with the corrected evaluation (v19) with the default Runner.
+            // Corp v21 (reviews of the losses to Codex, 1 October) with the default Runner.
+            "standard-c21" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
+                side == PlayerSide.Corp ? CorpHeuristicPolicy.V21 : RunnerHeuristicPolicy.PolicyVersion),
+            // Corp v20 (Codex reviews, 1 October) with the default Runner.
+            "standard-c20" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
+                side == PlayerSide.Corp ? CorpHeuristicPolicy.V20 : RunnerHeuristicPolicy.PolicyVersion),
+            // Runner v15 (reviews of the losses to Codex, 1 October) with the default Corp.
+            "standard-r15" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
+                side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.V15),
+            // Runner v14 (Codex reviews, 1 October) with the default Corp.
+            "standard-r14" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
+                side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.V14),
             "standard-c19" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V19 : RunnerHeuristicPolicy.PolicyVersion),
             // The Corp protecting HQ's agendas and aiming its counters (v18) with the default Runner.
@@ -172,16 +187,21 @@ public static partial class RatingLadder
         CancellationToken cancellationToken = default) => PlayAsync(game, actionCap, null, cancellationToken);
 
     /// <param name="keep">Receives each finished or capped game with its replay (<c>ai-ladder --save-games</c>).</param>
+    public static Task<LadderGameResult> PlayAsync(LadderGame game, int actionCap, Action<LadderSavedGame>? keep,
+        CancellationToken cancellationToken = default) => PlayAsync(game, actionCap, keep, CreateAgent, cancellationToken);
+
+    /// <param name="agents">Makes each seat's agent from its entrant name (the LLM opponent's games pass their own).</param>
     public static async Task<LadderGameResult> PlayAsync(LadderGame game, int actionCap, Action<LadderSavedGame>? keep,
-        CancellationToken cancellationToken = default)
+        Func<string, PlayerSide, FullMatchDefinition, IGameAgent> agents, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(game);
+        ArgumentNullException.ThrowIfNull(agents);
         FullMatchDefinition definition = RulesFuzzRunner.CreateDefinition(game.ContentId, game.GameSeed);
         try
         {
             FullMatchResult result = await FullMatchRunner.RunAsync(definition, actionCap,
-                CreateAgent(game.Corp, PlayerSide.Corp, definition),
-                CreateAgent(game.Runner, PlayerSide.Runner, definition), cancellationToken).ConfigureAwait(false);
+                agents(game.Corp, PlayerSide.Corp, definition),
+                agents(game.Runner, PlayerSide.Runner, definition), cancellationToken).ConfigureAwait(false);
             double score = result.Outcome.Winner == PlayerSide.Corp ? 1 : 0;
             keep?.Invoke(new LadderSavedGame(game, score, false, result.Replay));
             return new LadderGameResult(game, score, false, result.ActionCount, null);

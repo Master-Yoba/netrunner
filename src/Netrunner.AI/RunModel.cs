@@ -226,6 +226,14 @@ public static class RunModel
                     if (effect.InstallsIce) penalty += InstallIcePenalty;
                     if (effect.MayEndRun) penalty += MayEndRunPenalty;
                     if (effect.Restricts) penalty += RestrictionPenalty;
+                    if (context.Generation >= 10)
+                    {
+                        // Runner v14 (Codex review, 1 October): Diviner's damage trashes a random card from the grip, so
+                        // a grip of odd-cost cards ends the run for certain; and past a subroutine that forbids stealing
+                        // and trashing, the run gains nothing (Ansel 1.0), so neither is a way in.
+                        if (effect.MayEndRun && effect.Damage > 0 && grip > 0 && OddCostShare(context) >= 1) ends = true;
+                        if (effect.Restricts) ends = true;
+                    }
                 }
                 // Damage that empties the grip is treated as lethal: the Runner flatlines
                 // only past the grip, but an empty grip loses to the next point of damage
@@ -241,6 +249,13 @@ public static class RunModel
             if (broken == 0) break;
         }
         return best;
+    }
+
+    /// <summary>The share of the Runner's grip whose printed cost is odd (what Diviner's damage needs to end the run).</summary>
+    private static double OddCostShare(HeuristicContext context)
+    {
+        int[] costs = [.. context.Features.Hand.Select(card => context.Definition(card)?.Printed is { } printed ? printed.PlayCost ?? printed.InstallCost ?? 0 : 0)];
+        return costs.Length == 0 ? 0 : costs.Count(cost => cost % 2 == 1) / (double)costs.Length;
     }
 
     /// <summary>The ICE's strength as the Runner will meet it: the live quote while encountering, else printed plus known modifiers.</summary>

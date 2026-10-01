@@ -44,8 +44,13 @@ public sealed partial class RunnerHeuristicPolicy
                 int trapDamage = 2 + (advanced.AdvancementCounters ?? 0);
                 trapRisk += trapDamage >= context.Features.Hand.Length ? 700 : trapDamage * 40;
             }
+        // v15 (reviews of the losses to Codex, 1 October): with the Corp one agenda from winning, an advanced card in a
+        // remote is most likely that agenda. Leaving it loses if it is one, running loses only if it's a trap, so
+        // neither the trap's risk nor even a possible flatline keeps the Runner out.
+        bool matchPoint = context.Generation >= 11 && server.Kind == ServerKind.Remote && UnknownAdvancedRoots(context, server).Any()
+            && context.Opponent.AgendaPoints >= 4;
         // v11 (self-play review, 28 September): a possible trap that would flatline the Runner isn't worth the access.
-        if (context.Generation >= 8 && LethalTrap(context, server)) return Value(-1000, "run/possible-lethal-trap", true);
+        if (context.Generation >= 8 && !matchPoint && LethalTrap(context, server)) return Value(-1000, "run/possible-lethal-trap", true);
         // v13 (playtest, 30 September): a known trap's damage is certain (the Runner kept running a known Urtica Cipher).
         if (context.Generation >= 9)
         {
@@ -69,12 +74,19 @@ public sealed partial class RunnerHeuristicPolicy
             risk = (int)(risk * budget * coverage);
             if (context.Self.Credits >= 4) risk -= unknown * 60;
         }
+        if (matchPoint)
+        {
+            trapRisk = Math.Min(trapRisk, 200);
+            extraValue += context.Opponent.AgendaPoints >= 5 ? 700 : 400;
+        }
         int score = RunnerValues.Server(context, server) + rewards + extraValue
             - (upfrontCost + Math.Max(0, cost - extraRunCredits) + loss) * context.CreditValue
             - damage * 160 - risk - repeated * 180 - (funds - cost - loss - tollCredits < reserve ? 220 : 0)
             - (tollCredits + tollClicks * ClickCredits) * context.CreditValue - trapRisk - tagCost;
         // v11: an aggressive deck runs whenever it can afford to; a big rig holds back until its rig covers every ICE type.
-        if (context.Generation >= 8)
+        // v15 (reviews of the losses to Codex, 1 October): not on a run that can gain nothing, such as an Archives of
+        // operations the Runner has already seen; aggression sent it there turn after turn.
+        if (context.Generation >= 8 && (context.Generation < 11 || RunnerValues.Server(context, server) + rewards + extraValue > 0))
         {
             double aggression = context.RunnerProfile.Aggression;
             if (aggression > 0 || !context.RigComplete) score += (int)(aggression * 100);
@@ -281,12 +293,24 @@ public sealed partial class RunnerHeuristicPolicy
         }
     }
 
+    /// <summary>v15: a card in the grip that adds nothing installed: a breaker of a type the rig breaks, or a unique card in play.</summary>
+    private static bool Redundant(HeuristicContext context, AgentCard card)
+    {
+        CardEvaluationDescriptor? definition = context.Definition(card);
+        if (definition is null) return false;
+        if (definition.Printed.Unique && context.Features.Board.RunnerRig.Any(installed => installed.DefinitionId == card.DefinitionId)) return true;
+        return definition.Icebreaker is { } breaker && context.Features.Board.RunnerRig.Any(installed =>
+            context.Definition(installed)?.Icebreaker?.InterfaceType == breaker.InterfaceType);
+    }
+
     private static int SuccessRewards(HeuristicContext context, AgentServer server)
     {
         int value = 0;
         bool successful = context.Features.Board.TurnFacts?.Runner.ThisTurn?.SuccessfulRun == true;
+        // v15 (reviews of the losses to Codex, 1 October): only for a card worth installing; the discount on a second
+        // Carmen sent the Runner into an empty Archives turn after turn.
         if (!successful && context.Self.Clicks >= 2)
-            value += context.Features.Hand.Sum(card => context.Definition(card)?.Behavior?.CostModifiers?
+            value += context.Features.Hand.Where(card => context.Generation < 11 || !Redundant(context, card)).Sum(card => context.Definition(card)?.Behavior?.CostModifiers?
                 .Where(modifier => modifier.Kind == BehaviorCostModifierKind.RunnerInstallCreditCost).Sum(modifier => -modifier.Delta * 170) ?? 0);
         foreach (AgentCard card in context.Features.Board.RunnerRig.Concat(context.Features.Board.RunnerIdentity))
         {

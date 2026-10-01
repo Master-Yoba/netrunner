@@ -150,10 +150,11 @@ the triage showed what the model was missing:
 |---|---|---:|---:|---:|---:|---:|
 | A | decisions only | 5 | 2 | 0 | 3 | 0 |
 | B | + each turn's board, the opponent's actions, the primer | 12 | 8 | 0 | 3 | 1 |
-| C | + `history` | 17 | 13 | 0 | 3 | 1 |
-| All | | 34 | 23 | 0 | 9 | 2 |
+| C | + `history` | 17 | 14 | 0 | 2 | 1 |
+| All | | 34 | 24 | 0 | 8 | 2 |
 
-Round C's precision is 13 of 16 distinct findings confirmed, with 3 wrong. The triage also named faults
+Round C's precision is 14 of 16 distinct findings confirmed, with 2 wrong (finding 34 changed after the
+Codex review). The triage also named faults
 beyond the findings (agenda placement, Urtica Cipher, Sprint, budgeting), listed at the end of the triage
 record.
 
@@ -261,6 +262,92 @@ games and settings:**
 Neither quant made a wrong finding. Three games are too few to separate the quants: a single review
 varies more from run to run than this.
 
+**Codex as the reviewer (`ai-codex-review`, model gpt-6.1-sol, reasoning medium):** the Codex CLI can't call
+the reviewer's tools. Instead it reads the same material as files in a read-only sandbox: the decision log,
+every decision's options, the board before each decision, the history, every card's text and the rules. Its
+answer is held to the findings schema with `--output-schema`, and it shares the local reviewer's primer and
+parser. Unlike the local model, it sends the game and the card texts to OpenAI.
+
+Round C's eight games (the user agreed with Codex's findings):
+
+| | Qwen 27B IQ4_XS | Codex gpt-6.1-sol |
+|---|---:|---:|
+| Findings | 12 | 26 |
+| Confirmed | 10 | 25 |
+| Unsure | 0 | 0 |
+| Wrong | 2 | 0 |
+| Duplicate | 0 | 1 |
+| Time per game | about 7 minutes | about 100 s |
+| Tokens per game | 30k to 60k generated | about 280k input (78% cached), 1.8k output |
+
+**What Codex found that Qwen didn't:**
+- **A winning agenda shuffled away:** at 6 points, with 44 credits and a remote behind three ICE, Sprint put
+  Send a Message, the 3 points that would win, back into R&D, where the Runner later stole it.
+- **An agenda behind ICE the Corp couldn't afford to rez:** the Runner passed it unrezzed and stole it.
+- **Built to Last unused:** Weyland gets 2 credits for advancing a card with no counters. Clicking for a
+  credit instead of advancing gives up a free counter, in two games.
+- **Removal aimed at the wrong breaker:** Retribution trashed Cleaver while Buzzsaw was getting through both
+  centrals' code gates; Ballista's subroutine trashed Unity instead of the Cleaver breaking HQ's Palisade.
+- **The tied scoring server:** Orbital Superiority went behind one unrezzed Palisade rather than two rezzed ICE
+  and Malapert, on a tie the heuristic broke at random.
+- **Finding 34 differently:** with three clicks the Corp could have rezzed Malapert and still scored (credit,
+  rez, credit, advance), so the rez wasn't out of reach; the triage now confirms it.
+
+**What it missed:** Qwen's confirmed Sprint finding in one game (Government Subsidy shuffled away).
+
+**Use:** about 2.2 million input tokens and 14k output for the eight reviews, about 1% of the user's ChatGPT
+plan. Codex is the reviewer for now; Qwen runs later.
+`--model`, `--reasoning` and `--timeout-minutes` set the run.
+
+### Codex reviews of the current bots (1 October)
+
+A fresh corpus of the current bots (`artifacts/ai-lint/corpus-v19`): Corp v19 against Runner v13, 96 games,
+of which Codex reviewed 8 the Corp lost and 8 the Runner lost, across the decks. It made 22 Corp findings and
+26 Runner findings. The user agreed with Codex's round-C findings; these are Claude's first pass.
+
+**Corp v19, by theme:**
+- **Urtica Cipher over-investment (3 games):** it keeps advancing a trap the Runner has already seen, long
+  after its damage exceeds the Runner's hand, while scoring stalls.
+- **The winning agenda thrown away:**
+  - Sprint shuffles the last agenda back into R&D at 6 points, with a protected remote ready.
+  - At match point it plays economy instead of advancing an installed winning agenda.
+- **The rez reserve blocks a central rez that would end the run (3 games):** "keep credits for the agenda
+  ICE" and "preserve the ICE budget" decline Diviner, Ansel or Whitespace on a central, and the Runner steals
+  from it.
+- **Agendas exposed:**
+  - installed behind ICE the Runner's breakers pass cheaply (4 times in one game);
+  - installed behind ICE the Corp can't afford to rez.
+- **ICE placement:** Archives gets ICE while HQ or R&D is the server under attack (3 games).
+- **Spin Doctor's ability unused (3 games):** a second copy rezzed, an install over it, or a run that trashes
+  it, without first shuffling useful cards back from Archives.
+- **Economy:**
+  - Planogram's draw chosen at 1 credit;
+  - a rezzed Regolith left unused;
+  - expensive ICE installed without the money to rez it.
+- **One-offs:** Anoetic Void used where nothing is worth protecting; Hansei Review forcing an agenda into
+  Archives; AMAZE Amusements against a steal that wins the game.
+
+**Runner v13, by theme:**
+- **Runs that can't succeed (4 games):** into rezzed Diviner or Ansel 1.0 with no breaker for it. Against
+  Ansel the run loses a program each time and can't steal anyway.
+- **Flatline risk ignored (3 games):** runs with one or two cards in grip into a heavily advanced card or past
+  damage ICE; two of them end the game.
+- **Free credits declined (2 games):** Zahya's optional income after an access scores 0 and is refused,
+  repeatedly, while the Runner is broke.
+- **Tags removed one at a time (2 games):** 2 credits and a click per tag, staying tagged.
+- **Runs for nothing:** on an Archives with no agendas or rewards; on a known Regolith it can't afford to
+  trash; on a known Urtica Cipher it saw in R&D.
+- **Economy:**
+  - Smartware Distributors discarded while a duplicate Cleaver is kept;
+  - Fermenter never installed;
+  - Creative Commission played with clicks left;
+  - credits loaded onto Smartware while tagged.
+- **Installs that help nothing:** Buzzsaw against no code gates; a second Cleaver.
+- **Missed pressure:**
+  - Tread Lightly not used to make a remote's ICE unaffordable;
+  - a remote behind one Funhouse never contested;
+  - a Jailbreak abandoned over damage it could take.
+
 **Still open:**
 - **The two faults it missed:** Funhouse unrezzed on a farmed Archives, and Pharos never advanced.
   Both are lint findings, and P1 already finds them.
@@ -268,3 +355,106 @@ varies more from run to run than this.
   filter findings.
 - **Reviews of the current bots:** reviews of Corp v19 and Runner v13 games, which would find faults
   P1 doesn't know, come with P3 (its gate counts confirmed new faults).
+
+## P3 LLM opponent
+
+An agent that makes a seat's strategic choices from a model, while the heuristic plays the rest of the seat:
+breaking, paying and the priority windows. The strategic choices are the turn's actions: installs, runs,
+advances, plays, scoring, drawing and credits.
+
+- **What it reads (`LlmOpponentAgent`):** only its own observation, through the same view a player gets, so
+  face-down cards stay unnamed and the other hand is only counted. It gets the board, the text of every card
+  in view, its last few choices, and the numbered legal options with the heuristic's scores and reasons.
+- **What it can play:** only the engine's own actions.
+  - An answer that isn't one of the options plays nothing.
+  - The heuristic's choice stands after a second bad answer, or when the model doesn't answer.
+  - The heuristic is asked every decision, so its memory stays in step.
+- **Who decides (`IStrategicDecider`):**
+  - **A local model over chat (`ModelDecider`, `scripts/ai-llm-play.sh`):** one conversation per decision.
+  - **Codex (`scripts/ai-codex-play.sh`):** it plays a whole game in one session through `ai-mcp-game`, a
+    Model Context Protocol server over stdio.
+    - Its tools are `get_choice`, `choose(option, reason)`, `card_text` and `rules_lookup`.
+    - An option out of range returns an error and plays nothing.
+    - If Codex leaves, the heuristic finishes the game.
+    - Each decision is logged to `progress.log`.
+- **Saved games:** games of both are saved as the ladder saves them, with the decisions and reasons beside
+  them, so `ai-lint`, `ai-llm-review` and `ai-codex-review` read them. Saved games name the seat `llm` or
+  `codex`, which replays with the heuristic, so a review shows where the model's choices differ from it.
+
+### Gate evidence
+
+**Qwen 27B (IQ4_XS, reasoning low):** one game as Corp, which it won. 51 decisions were asked, it chose
+against the heuristic 15 times, and it gave no invalid answers and had no failures. But at about 95 s a
+decision the game took 81 minutes, too slow for 50 games.
+
+**Codex (gpt-6.1-sol, reasoning medium) against Corp v19 and Runner v13:** batch 1, 20 games in 4 parallel
+streams.
+
+| Seat | Games | Codex won | Stalls or errors | Invalid choices |
+|---|---:|---:|---:|---:|
+| Corp | 10 | 9 | 0 | 0 |
+| Runner | 10 | 9 | 0 | 0 |
+
+- **Who chose:** Codex made every strategic choice (about 800), against the heuristic about half the time.
+- **Time:** a game takes 2 to 14 minutes, typically 5.
+- **Cost:** about 1.6 million input tokens a game (over 90% cached) and 3k output.
+- **Against the repaired bots (batch 2):** 30 games against Corp v20 and Runner v14 on 8 streams. As Corp,
+  Codex won 11 of 15; as Runner, 15 of 15. Runner v14 took four games where v13 had taken one.
+- **The P3 gate's first half:** the 50 games had no stalls, errors, invalid choices or heuristic fallbacks, across
+  2,074 strategic decisions.
+- **How it plays:** its reasons read like a player's. It weighs the Runner's breakers against its ICE ("Buzzsaw
+  makes Whitespace porous, so dig for stronger remote ice before exposing another agenda"), baits with an
+  advanced Urtica Cipher against a short grip, and plans scoring windows.
+
+### Bots repaired from the Codex reviews
+
+The Codex reviews of the current bots (above) became two versions, each with saved-game regression tests that
+ask the old and the new version at the recorded decision (`RunnerCodexV14Tests`, `CorpCodexV20Tests`).
+
+| Version | Fixes | Gateway ladder, 240 games a seed |
+|---|---|---|
+| Runner v14 | Zahya's income taken; no run into a Diviner certain to end it (all-odd grip), or past a steal-forbidding Ansel 1.0 | -11 and +32 over v13 |
+| Corp v20 | No advancing a trap already lethal; Sprint keeps its best cards and the winning agenda; R&D, and HQ holding an agenda, are agenda servers for the rez reserve | +22 and +54 over v19 |
+
+Both are level or better, so both became the defaults. A second round came from the reviews of the bots'
+losses to Codex (below):
+
+| Version | Fixes | Gateway ladder, 240 games a seed |
+|---|---|---|
+| Runner v15 | Contests the remote at the Corp's match point, a possible trap notwithstanding; installs Fermenter for its growing counters; no Archives run whose only gain is a discount on a redundant card | +86 and +44 over v14 |
+| Corp v21 | An agenda that can't score this turn waits in HQ while the Runner's rig, given a full turn of credits, gets into its server; no ICE on an Archives that protects nothing | 0 and +11 over v20 |
+
+Both are now the defaults. Corp v21's two rules rank below every other play, like the rule against an
+unprotected agenda: as score penalties, the planner's turn-end rollouts, which can't see the steal, brought the
+plays back.
+
+### Reviews of the games against Codex
+
+`ai-codex-review` on the bot's side of 16 batch-2 games the bot lost: 8 for Corp v20 (20 findings) and 8 for
+Runner v14 (23 findings). That gives the P3 gate's second half: confirmed new faults, which the next versions
+take up.
+
+**Corp v20:**
+- **Agendas behind ICE the Runner's installed breakers beat (6 games):**
+  - a lone Palisade against Cleaver;
+  - Whitespace that Botulus already bypassed, or against Buzzsaw;
+  - Funhouse against a Runner with clicks to clear its tags.
+
+  The bot counts any ICE as protection, without checking the rig.
+- **ICE on Archives** while it holds nothing worth protecting (3 games).
+- **Urtica Cipher advanced after the Runner has seen it,** below v20's lethal cap.
+- **Built to Last unused,** and Pharos advanced to just below its threshold or on the wrong server.
+- **Smaller ones:**
+  - Planogram's draw mode at the wrong time;
+  - Conduit's counters never purged;
+  - Send a Message's free rez on a remote nobody runs;
+  - Spin Doctor discarded over a duplicate unique card.
+
+**Runner v14:**
+- **The scoring remote not contested (5 games):** an advanced agenda in a remote is left alone with the Corp
+  at match point and the money to get in, and in two games that agenda wins the Corp the game.
+- **Fermenter never installed** (2 games, 3 with the v13 reviews).
+- **Runs on an Archives with no agendas or rewards** (2 games, 3 with the v13 reviews).
+- **Duplicate installs:** a second Marjanah, Mutual Favor fetching one, and Verbal Plasticity replacing itself.
+- **Clearinghouse's damage left on the board** when trashing it was cheap.
+- **Smaller ones:** Tāo's ICE swaps, the order of economy plays, and break planning in an encounter.

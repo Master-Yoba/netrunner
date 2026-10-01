@@ -96,10 +96,27 @@ public sealed partial class CorpHeuristicPolicy
         // is played (AdvanceTargetValue), not 10 on anything that isn't an agenda; Seamless Launch put its
         // two counters on Palisade over an Urtica Cipher they would have armed.
         int amount = plan.Consumers.FirstOrDefault(instruction => instruction.Kind == BehaviorInstructionKind.AdvanceCard)?.Amount ?? 1;
+        // v20 (Codex review, 1 October): Sprint shuffled its two most valuable cards from HQ, the winning agenda among
+        // them; from HQ, a card shuffled back is a card lost, and an agenda is hidden only when it can't win.
+        bool fromHand = context.Generation >= 15 && intent == BehaviorInstructionKind.ShuffleIntoDeck
+            && plan.Consumers.Any(instruction => instruction.Kind == BehaviorInstructionKind.ShuffleIntoDeck && instruction.SourceZone == BehaviorZone.Headquarters);
         int score = context.Generation >= 13 && intent == BehaviorInstructionKind.AdvanceCard
             ? choice.CardIds.Sum(id => AdvanceTargetValue(context, context.Card(id), Math.Max(1, amount), context.Self.Clicks))
+            : fromHand ? choice.CardIds.Sum(id => ShuffleFromHandValue(context, context.Card(id)))
             : choice.CardIds.Sum(id => TargetValue(context, id, intent));
         return Value(score + (choice.FinalizeSelection ? 1 : 0), "choice/target-value-and-confirmation", approximate: true);
+    }
+
+    /// <summary>
+    /// v20: what shuffling a card from HQ into R&D is worth: an agenda that can't win yet is hidden from HQ runs,
+    /// the agenda that would win stays, and any other card is lost to the Corp.
+    /// </summary>
+    private static int ShuffleFromHandValue(HeuristicContext context, AgentCard? card)
+    {
+        CardEvaluationDescriptor? definition = context.Definition(card);
+        if (definition?.Agenda is { } agenda)
+            return context.Self.AgendaPoints + agenda.AgendaPoints >= 7 ? -600 : 200;
+        return -context.CardValue(card);
     }
 
     private static int TargetValue(HeuristicContext context, CardInstanceId id, BehaviorInstructionKind intent)
