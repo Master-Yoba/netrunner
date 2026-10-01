@@ -91,11 +91,11 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     public const string V16 = "runner-heuristic-v16";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
-    /// V15 fixes V14's faults the reviews of its losses to Codex found (1 October: the match-point remote left
-    /// alone, Fermenter never installed, Archives run for nothing) and is level or better on the Gateway ladder
-    /// (+86 and +44 on two seeds).
+    /// V16 fixes V15's faults the reviews of batch 3's losses to Codex found (1 October: Verbal Plasticity over its own
+    /// copy, Creative Commission with clicks left, Docklands Pass never installed) and is level or better on the Gateway
+    /// ladder (+22 and +45 on two seeds).
     /// </remarks>
-    public const string PolicyVersion = V15;
+    public const string PolicyVersion = V16;
     /// <summary>
     /// The planner's model of the Runner. It stays V7, which Corp v9 was measured
     /// with, so the shipped Corp planner plays as it did.

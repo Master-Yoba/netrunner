@@ -458,3 +458,27 @@ take up.
 - **Duplicate installs:** a second Marjanah, Mutual Favor fetching one, and Verbal Plasticity replacing itself.
 - **Clearinghouse's damage left on the board** when trashing it was cheap.
 - **Smaller ones:** Tāo's ICE swaps, the order of economy plays, and break planning in an encounter.
+
+### Round three: batch 3 and its reviews
+
+**Batch 3, 24 games against Corp v21 and Runner v15:** Codex won 6 of 11 as Corp and 10 of 12 as Runner. The bots
+won 30% of their games against Codex, against 10% and 13% in the first two batches. Runner v15 alone took 5 games.
+One game failed when OpenAI's model was at capacity mid-game. Such a game is now finished by the heuristic and
+replayed, up to three times.
+
+**Codex's reviews** of the 14 games the bots lost (17 Corp and 17 Runner findings) became two more versions:
+
+| Version | Fixes | Gateway ladder, 240 games a seed |
+|---|---|---|
+| Corp v22 | A full HQ no longer pushes an agenda into a server the Runner's rig breaks (v21's rule exempted it, three steals); an asset loading three times its cost is rezzed despite the ICE budget (Regolith Mining License); a broke Corp builds money before purging | +11 and 0 over v21 |
+| Runner v16 | No unique card over its own copy (Verbal Plasticity, three times); Creative Commission waits for the last click; Docklands Pass's extra HQ access is worth installing | +22 and +45 over v15 |
+
+Both are now the defaults.
+
+**Still open from the reviews:**
+- **The Corp's memory of seen traps:** it keeps advancing an Urtica Cipher the Runner has accessed. Remembering
+  that needs a field in the Corp agent's checkpoint.
+- **Money for a match-point run:** the Runner doesn't plan it.
+- **Conduit:** multi-access programs aren't valued.
+- **Break planning against Ansel 1.0.**
+- **Tread Lightly against a remote.**
