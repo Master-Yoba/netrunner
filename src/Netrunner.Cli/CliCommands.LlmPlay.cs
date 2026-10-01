@@ -90,7 +90,7 @@ public static partial class CliCommands
             DateTime started = DateTime.UtcNow;
             LadderGameResult result = RatingLadder.PlayAsync(game, RatingLadder.DefaultActionCap, saved => LadderGameArchive.Write(destination, saved),
                 (entrant, side, definition) => entrant == "llm"
-                    ? agent = LlmOpponentAgent.Create(side, definition, client, sampling, rules, maxToolCalls)
+                    ? agent = WithProgress(LlmOpponentAgent.Create(side, definition, client, sampling, rules, maxToolCalls), game.Id, error)
                     : RatingLadder.CreateAgent(entrant, side, definition)).GetAwaiter().GetResult();
             List<LlmOpponentDecision> decisions = agent?.Decisions ?? [];
             File.WriteAllText(Path.Combine(destination, game.Id.Replace('~', '_') + ".llm.json"),
@@ -108,5 +108,12 @@ public static partial class CliCommands
         output.WriteLine(FormattableString.Invariant(
             $"ai-llm-play games={games} stalls-or-errors={failures} asked={asked} overrode={overrode} invalid={invalid} failed={failed} model-seconds={seconds:0} output={Path.GetFullPath(destination)}"));
         return failures == 0 ? 0 : 1;
+
+        static LlmOpponentAgent WithProgress(LlmOpponentAgent agent, string id, TextWriter error)
+        {
+            agent.Decided = decision => error.WriteLine(FormattableString.Invariant(
+                $"  {id} turn {decision.Turn}: option {decision.Chosen} of {decision.Options} (heuristic {decision.Advised}), {decision.Outcome}, {decision.Seconds:0.0}s{(decision.Reason is { Length: > 0 } reason ? $": {reason}" : "")}"));
+            return agent;
+        }
     }
 }

@@ -68,6 +68,9 @@ public sealed class LlmOpponentAgent : IAgentLifecycle
 
     public List<LlmOpponentDecision> Decisions { get; } = [];
 
+    /// <summary>Called with each decision as it is made (progress for a long run).</summary>
+    public Action<LlmOpponentDecision>? Decided { get; set; }
+
     public static IReadOnlyList<LlmTool> Tools { get; } =
     [
         new("card_text", "The printed text of any card by title: type, costs, strength, points, rules text.",
@@ -108,8 +111,10 @@ public sealed class LlmOpponentAgent : IAgentLifecycle
 
         string outcome = choice is not null ? "model" : failure is not null ? "failed" : "invalid";
         int chosen = choice ?? advised;
-        Decisions.Add(new LlmOpponentDecision(view.Turn.TurnNumber ?? 0, decision.Prompt, options.Count, advised, chosen, outcome,
-            reason ?? failure, toolCalls, watch.Elapsed.TotalSeconds));
+        var made = new LlmOpponentDecision(view.Turn.TurnNumber ?? 0, decision.Prompt, options.Count, advised, chosen, outcome,
+            reason ?? failure, toolCalls, watch.Elapsed.TotalSeconds);
+        Decisions.Add(made);
+        Decided?.Invoke(made);
         if (choice is not null)
         {
             _recent.Add((view.Turn.TurnNumber ?? 0, describe(options[chosen - 1]) ?? options[chosen - 1].Description, reason ?? ""));
