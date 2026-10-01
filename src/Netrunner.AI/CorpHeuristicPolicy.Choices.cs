@@ -17,7 +17,12 @@ public sealed partial class CorpHeuristicPolicy
     {
         if (choice.Choice == IceSubroutineChoiceKind.Decline) return Value(0, "subroutine/decline");
         if (choice.Choice == IceSubroutineChoiceKind.TrashInstalledRunnerCard && choice.CardId is { } target)
-            return Value(context.CardValue(context.Card(target), installed: true), "subroutine/remove-coverage", approximate: true);
+            return Value(context.Generation >= 19 ? RunnerThreat(context, context.Card(target))
+                : context.CardValue(context.Card(target), installed: true), "subroutine/remove-coverage", approximate: true);
+        // v24 (Codex reviews, 1 October): ending the run is worth what the run would reach; Ballista trashed Cleaver instead,
+        // and the Runner went on to steal Offworld Office.
+        if (context.Generation >= 19 && choice.Choice == IceSubroutineChoiceKind.EndRun)
+            return Value(context.ServerValue(context.Features.Board.Servers.FirstOrDefault(server => server.Id == context.Features.Board.Run?.AttackedServer)) + 100, "subroutine/end-run-protects-server", approximate: true);
         if (choice.Choice == IceSubroutineChoiceKind.InstallCard && choice.CardId is { } incoming)
         {
             CardEvaluationDescriptor? definition = context.Definition(incoming);
@@ -119,10 +124,24 @@ public sealed partial class CorpHeuristicPolicy
         return -context.CardValue(card);
     }
 
+    /// <summary>v24: what a Runner card is worth removing: its value, and for a breaker 150 for each installed Corp ICE it can break.</summary>
+    private static int RunnerThreat(HeuristicContext context, AgentCard? card)
+    {
+        int value = context.CardValue(card, installed: true);
+        if (context.Definition(card)?.Icebreaker is { } breaker)
+            value += 150 * context.Features.Board.Servers.SelectMany(server => server.Ice).Count(ice => context.Definition(ice)?.Ice is { } spec
+                && (breaker.InterfaceType == IceType.Any || spec.IceType == breaker.InterfaceType));
+        return value;
+    }
+
     private static int TargetValue(HeuristicContext context, CardInstanceId id, BehaviorInstructionKind intent)
     {
         AgentCard? card = context.Card(id);
         CardEvaluationDescriptor? definition = context.Definition(card);
+        // v24 (Codex reviews, 1 October): trashing the Runner's card is worth its threat; the sign made Retribution pick the
+        // Runner's least useful card.
+        if (context.Generation >= 19 && intent == BehaviorInstructionKind.TrashCard && definition?.Printed.Side == PlayerSide.Runner)
+            return RunnerThreat(context, card);
         return intent switch
         {
             BehaviorInstructionKind.TrashCard => -context.CardValue(card),

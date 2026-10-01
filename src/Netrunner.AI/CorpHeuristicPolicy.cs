@@ -131,6 +131,12 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// click left to start taking its credits.
     /// </summary>
     public const string V23 = "corp-heuristic-v23";
+    /// <summary>
+    /// V23 with the removal fixes from the Codex reviews (1 October): a Runner card to trash is the one that threatens most,
+    /// a breaker by the installed Corp ICE it gets through (Retribution trashed Botulus over the Carmen breaking every
+    /// sentry, and its target score had the wrong sign), and Ballista's end-the-run is worth the server it protects.
+    /// </summary>
+    public const string V24 = "corp-heuristic-v24";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V23 fixes V22's faults the reviews of batch 4's losses to Codex found (1 October: known traps advanced, two agendas
@@ -140,7 +146,7 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     public const string PolicyVersion = V23;
     /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>
     public const string LatestHeuristic = V8;
-    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23];
+    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24];
 
     public CorpHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -148,9 +154,9 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Corp policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version switch { V2 => 1, V3 => 2, V7 => 4, V8 or V9 or V10 => 5, V11 => 6, V12 => 7, V13 => 8, V14 => 9, V15 => 10, V16 => 11, V17 => 12, V18 => 13, V19 => 14, V20 => 15, V21 => 16, V22 => 17, V23 => 18, _ => 3 };
-        Plans = version is V5 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19 or V20 or V21 or V22 or V23;
-        Repairs = version is V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19 or V20 or V21 or V22 or V23;
+        Generation = version switch { V2 => 1, V3 => 2, V7 => 4, V8 or V9 or V10 => 5, V11 => 6, V12 => 7, V13 => 8, V14 => 9, V15 => 10, V16 => 11, V17 => 12, V18 => 13, V19 => 14, V20 => 15, V21 => 16, V22 => 17, V23 => 18, V24 => 19, _ => 3 };
+        Plans = version is V5 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19 or V20 or V21 or V22 or V23 or V24;
+        Repairs = version is V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19 or V20 or V21 or V22 or V23 or V24;
     }
 
     /// <summary>Whether this version has the playtest repairs (V6).</summary>

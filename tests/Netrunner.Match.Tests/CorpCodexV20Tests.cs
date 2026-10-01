@@ -152,6 +152,32 @@ public sealed class CorpCodexV20Tests
         Assert.True(installs == agenda, $"{version} chose {chosen.Kind} {chosen.Description}.");
     }
 
+    [Theory]
+    [InlineData(CorpHeuristicPolicy.V23, "Botulus")]
+    [InlineData(CorpHeuristicPolicy.V24, "Carmen")]
+    public async Task RetributionTrashesTheBreakerThatMatters(string version, string expected)
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        // A game against Codex (1 October, batch 4): Retribution trashed Botulus over the Carmen breaking every sentry on
+        // the board; the target score had the wrong sign for a Runner card.
+        (LegalAction chosen, GameState state) = await ChooseAtAsync("codex-corp-two-agendas", version, 348);
+        string target = chosen.Parameters is BehaviorChoiceParameters choice ? string.Join(", ", choice.CardIds.Select(id => Title(state, id))) : "";
+        Assert.Equal(expected, target);
+    }
+
+    [Theory]
+    [InlineData(CorpHeuristicPolicy.V23, false)]
+    [InlineData(CorpHeuristicPolicy.V24, true)]
+    public async Task BallistaEndsTheRunOnAnAgendaServer(string version, bool ends)
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        // A game against Codex (1 October, batch 4): Ballista trashed Cleaver instead of ending the run on Offworld Office's
+        // server, with the inner Ballista unaffordable; the Runner stole the agenda.
+        (LegalAction chosen, _) = await ChooseAtAsync("codex-corp-ballista-etr", version, 487);
+        bool endRun = chosen.Parameters is IceSubroutineChoiceParameters { Choice: IceSubroutineChoiceKind.EndRun };
+        Assert.True(ends == endRun, $"{version} chose {chosen.Kind} {chosen.Description}.");
+    }
+
     private static string Title(GameState state, CardInstanceId id) =>
         CardDataResource.LoadEmbedded().Cards.Single(card => card.Code == state.GetCard(id).DefinitionId.Value).Title;
 
