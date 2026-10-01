@@ -99,7 +99,20 @@ heuristic and the fit were tuned for.
 
 ## Hardening
 
-<!-- hardening -->
+- **Fuzz, the engine plan's gate before a new card set:** 10,000 official games, zero failures.
+  - All 10,000 ended normally (mean 380 actions, cap 3,000).
+  - Random-legal against random-legal and the heuristic, over the four official preset pairings.
+  - Seed 20261001, 4 workers, 91.5 minutes.
+  - Command: `scripts/fuzz.sh official --games 10000 --workers 4 --seed 20261001`.
+  - Wave 5 doesn't touch the engine or the card data, so the result holds for the final head.
+- **The full M5 gate:** passed in the worktree gates on the Wave 5 head (`make gates`; see the PR for the run).
+- **Packaging:** `make package-linux` builds the Linux x86_64 export and passes its packaged smoke test
+  (`M3_SMOKE PASS`, 38 seconds).
+  - It needs the Godot 4.7.2 .NET export templates. They weren't installed on this box; `make templates` installed them
+    (about 5 minutes).
+- **The client smoke matrix** gains a Hard case (`corp-expanded-hard`: a human Corp against the planning Runner).
+- **The main-menu smoke** checks the three difficulties, the personalities for each seat, Tutorial hiding both, and a
+  Hard Rush game reaching the setup form. Screenshots: `docs/evidence/a6/`.
 
 ## Decision point
 
@@ -112,4 +125,13 @@ batch), adds C2's format snapshots and starts A7.
 
 ## Playtest
 
-<!-- playtest -->
+To play: **New game → Gateway decks**, pick a seat and decks, then **Easy, Standard or Hard opponent** and a style
+(Balanced, or the opponent side's personalities). What to check:
+- **Order:** do Easy, Standard and Hard feel ordered? The expectation is that the Runner bot's Hard is clearly harder,
+  and the Corp bot's Hard plays like its Standard.
+- **Personalities:** does each feel like its name?
+  - Glacier: few remotes, heavy ICE, late scoring.
+  - Rush: early agendas behind thin ICE.
+  - Asset spam: wide, with many assets.
+  - Aggressive: runs from turn 1.
+  - Rig-builder: sets up first.
