@@ -50,7 +50,8 @@ public sealed class LlmGameReviewerTests
         // Saved when "standard" was Corp v18; v19 no longer plays this Seamless Launch, and the dossier says so.
         Assert.Contains(dossier.Decisions, decision => decision.Sequence == 222 && decision.Diverged);
         Assert.Contains("(the bot now chooses differently)", dossier.DecisionLog(), StringComparison.Ordinal);
-        Assert.Contains("== turn 1, Corp active. Corp 5 credits", dossier.DecisionLog(), StringComparison.Ordinal);
+        Assert.Contains("== turn 1, Corp active. Corp 5 credits, 0 points, HQ [", dossier.DecisionLog(), StringComparison.Ordinal);
+        Assert.Contains("grip 5 cards", dossier.DecisionLog(), StringComparison.Ordinal);
         Assert.Contains("(Runner #", dossier.DecisionLog(), StringComparison.Ordinal);
         // A trigger choice names its source card, not just the trigger's catalog id.
         Assert.Contains(dossier.Decisions, decision => decision.Kind == "TriggerChoice");

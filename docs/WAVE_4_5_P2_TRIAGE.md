@@ -40,7 +40,7 @@ The game names are the Corp deck and the Runner deck, with the game number:
 | 14 | B | DA–PH 1 | 514 | ICE installed on new empty remotes over several turns | confirmed (PF1) | |
 | 15 | B | DA–PH 2 | 320 | Offworld Office installed over an Urtica Cipher with 4 counters | unsure | The only other remote had no ICE |
 | 16 | B | DA–SG 2 | 833 | Manegarm Skunkworks left unrezzed while the Runner runs its server | wrong | No run on that server after the install |
-| 17 | B | DA–SG 4 | 513 | Advancing traps while Hedge Fund and Government Subsidy sit unplayed | wrong | Those operations weren't playable at the time |
+| 17 | B | DA–SG 4 | 513 | Advancing traps while Hedge Fund and Government Subsidy sit unplayed | confirmed (new) | A poverty loop: from turn 6 it gains 1 credit and spends it on Urtica advancements, so the Hedge Fund it holds from turn 4 is never affordable. First marked wrong; changed in the user's triage |
 | 18 | C | AY–SG 2 | 1436 | A second Anoetic Void beside the first | confirmed (new) | Unique; now found by `unique-replaces-own-copy` |
 | 19 | C | DA–PH 1 | 350 | As 13 | duplicate of 13 | Also wrong |
 | 20 | C | DA–PH 2 | 8 | Turn-one Palisade on an empty remote, centrals bare | confirmed (PF3) | The Runner ran R&D and HQ that turn |

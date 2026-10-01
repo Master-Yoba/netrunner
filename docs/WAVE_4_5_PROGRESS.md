@@ -149,9 +149,9 @@ the triage showed what the model was missing:
 | Round | Configuration | Findings | Confirmed | Unsure | Wrong | Duplicate |
 |---|---|---:|---:|---:|---:|---:|
 | A | decisions only | 5 | 2 | 0 | 3 | 0 |
-| B | + each turn's board, the opponent's actions, the primer | 12 | 6 | 2 | 3 | 1 |
+| B | + each turn's board, the opponent's actions, the primer | 12 | 7 | 2 | 2 | 1 |
 | C | + `history` | 17 | 10 | 4 | 2 | 1 |
-| All | | 34 | 18 | 6 | 8 | 2 |
+| All | | 34 | 19 | 6 | 7 | 2 |
 
 Round C's precision is 10 of 16 distinct findings confirmed, with 2 wrong.
 
@@ -169,6 +169,8 @@ Round C's precision is 10 of 16 distinct findings confirmed, with 2 wrong.
   before the score.
 - **Advancing a trap the Runner never runs on, at match point with no agenda installed, instead of
   drawing for the last agenda.** Still to check against Corp v19.
+- **A poverty loop:** each turn it gains a credit and spends it advancing Urtica Cipher, so a Hedge Fund
+  held for 15 turns is never affordable. Still to check against Corp v19.
 
 **The second look doesn't help yet.** In round C it refuted all five findings it checked:
 - one rightly (runs that never happened);

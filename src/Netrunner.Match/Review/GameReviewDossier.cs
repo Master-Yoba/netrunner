@@ -124,7 +124,7 @@ public sealed class GameReviewDossier
                 // Each turn opens with the board, so most decisions read without a position call.
                 turn = decision.Turn;
                 GameState state = _states[decision.Sequence];
-                text.AppendLine(CultureInfo.InvariantCulture, $"== turn {turn}, {state.Turn.ActiveSide} active. {Summary(state)}");
+                text.AppendLine(CultureInfo.InvariantCulture, $"== turn {turn}, {state.Turn.ActiveSide} active. {Summary(state, Side)}");
             }
             text.Append(CultureInfo.InvariantCulture, $"#{decision.Sequence} turn {decision.Turn} {decision.Kind}: chose {decision.Chosen}");
             if (decision.Diverged) text.Append(" (the bot now chooses differently)");
@@ -177,14 +177,23 @@ public sealed class GameReviewDossier
         return text.ToString();
     }
 
-    /// <summary>One line of the board: credits, hand sizes, agenda points, and each server's ICE and root.</summary>
-    private static string Summary(GameState state)
+    /// <summary>
+    /// One line of the board: credits, agenda points, each server's ICE and root, and the reviewed side's own
+    /// hand (the bot knew it; the other hand is only counted).
+    /// </summary>
+    private static string Summary(GameState state, PlayerSide side)
     {
         PlayerState corp = state.Players.Single(player => player.Side == PlayerSide.Corp);
         PlayerState runner = state.Players.Single(player => player.Side == PlayerSide.Runner);
         string servers = string.Join("; ", Servers(state).Select(server => $"{server.Name} [{server.Ice}] root [{server.Root}]"));
         return string.Create(CultureInfo.InvariantCulture,
-            $"Corp {corp.Credits} credits, {corp.AgendaPoints} points, HQ {state.GetZone(ZoneKind.CorpHand).CardIds.Count} cards; Runner {runner.Credits} credits, {runner.AgendaPoints} points, rig: {string.Join(", ", state.GetZone(ZoneKind.RunnerRig).CardIds.Select(id => Title(state, id)))}. Servers (ICE outermost first): {servers}.");
+            $"Corp {corp.Credits} credits, {corp.AgendaPoints} points, HQ {Hand(state, ZoneKind.CorpHand, side == PlayerSide.Corp)}; Runner {runner.Credits} credits, {runner.AgendaPoints} points, grip {Hand(state, ZoneKind.RunnerGrip, side == PlayerSide.Runner)}, rig: {string.Join(", ", state.GetZone(ZoneKind.RunnerRig).CardIds.Select(id => Title(state, id)))}. Servers (ICE outermost first): {servers}.");
+    }
+
+    private static string Hand(GameState state, ZoneKind zone, bool named)
+    {
+        IReadOnlyList<CardInstanceId> cards = state.GetZone(zone).CardIds;
+        return named && cards.Count > 0 ? $"[{string.Join(", ", cards.Select(id => Title(state, id)))}]" : $"{cards.Count} cards";
     }
 
     private static IEnumerable<(string Name, string Ice, string Root)> Servers(GameState state)
