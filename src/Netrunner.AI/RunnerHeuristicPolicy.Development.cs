@@ -41,6 +41,15 @@ public sealed partial class RunnerHeuristicPolicy
         if (context.Generation >= 12 && definition.Printed.Unique
             && context.Features.Board.RunnerRig.Any(installed => installed.DefinitionId == card!.DefinitionId))
             return Value(-500, "rig/unique-already-installed", true);
+        // v17 (batch 4's reviews, 1 October): an install that replaces an installed copy of the same card pays for what the
+        // rig already has (Verbal Plasticity, Pantograph, a unique program); one that replaces another card is judged below by
+        // what it gains over what it trashes.
+        if (context.Generation >= 13 && install.RequiredReplacementCardIds.Concat(install.SelectedReplacementCardIds)
+                .Any(id => context.Card(id)?.DefinitionId == card!.DefinitionId))
+            return Value(-500, "rig/replaces-its-own-copy", true);
+        if (context.Generation >= 13 && definition.Printed.Console
+            && context.Features.Board.RunnerRig.Any(installed => context.Definition(installed)?.Printed.Console == true))
+            return Value(-500, "rig/console-already-installed", true);
         int value;
         if (definition.Icebreaker is { } breaker)
         {

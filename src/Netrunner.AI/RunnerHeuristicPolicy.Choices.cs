@@ -30,7 +30,20 @@ public sealed partial class RunnerHeuristicPolicy
             return Value(BestSwap(context, choice.CardIds) + choice.CardIds.Count * 10 + (choice.FinalizeSelection ? 10 : 0), "choice/improve-server-protection-matchup", true);
         bool trash = plan.Consumers.Any(instruction => instruction.Kind == BehaviorInstructionKind.TrashCard);
         int value = choice.CardIds.Sum(id => (trash ? -1 : 1) * RunnerValues.Card(context, context.Card(id)));
+        // v17 (batch 4's reviews, 1 October): an effect that installs a card (Pantograph, Mutual Favor) doesn't pick one that
+        // would replace its own installed copy or a second console.
+        if (context.Generation >= 13 && plan.Consumers.Any(instruction => instruction.Kind == BehaviorInstructionKind.InstallCard))
+            value -= choice.CardIds.Count(id => ReplacesItsOwn(context, context.Card(id))) * 500;
         return Value(value + (choice.FinalizeSelection ? 1 : 0), "choice/target-value-and-confirmation", true);
+    }
+
+    /// <summary>v17: whether installing this card would replace an installed copy of it (unique) or a second console.</summary>
+    private static bool ReplacesItsOwn(HeuristicContext context, AgentCard? card)
+    {
+        CardEvaluationDescriptor? definition = context.Definition(card);
+        if (card is null || definition is null) return false;
+        return definition.Printed.Unique && context.Features.Board.RunnerRig.Any(installed => installed.DefinitionId == card.DefinitionId)
+            || definition.Printed.Console && context.Features.Board.RunnerRig.Any(installed => context.Definition(installed)?.Printed.Console == true);
     }
 
     private static AgentUtility Subroutine(HeuristicContext context, IceSubroutineChoiceParameters choice) => choice.Choice switch

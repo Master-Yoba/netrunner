@@ -89,6 +89,11 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// (Creative Commission), and an extra HQ access is worth installing (Docklands Pass).
     /// </summary>
     public const string V16 = "runner-heuristic-v16";
+    /// <summary>
+    /// V16 without its click-loss rule, the suspect in its losses to Codex, and with a console counted as unique: no
+    /// Pantograph over its own copy (batch 4's reviews, 1 October).
+    /// </summary>
+    public const string V17 = "runner-heuristic-v17";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V15 again: V16 was level or better on the Gateway ladder (+22 and +45), but against Codex on the same 12 deals it
@@ -100,7 +105,7 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// with, so the shipped Corp planner plays as it did.
     /// </summary>
     public const string LatestHeuristic = V7;
-    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16];
+    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17];
 
     public RunnerHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -108,9 +113,9 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Runner policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 or V8 or V9 => 6, V10 => 7, V11 or V12 => 8, V13 => 9, V14 => 10, V15 => 11, V16 => 12, _ => 2 };
+        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 or V8 or V9 => 6, V10 => 7, V11 or V12 => 8, V13 => 9, V14 => 10, V15 => 11, V16 => 12, V17 => 13, _ => 2 };
         Plans = version is V3 or V8 or V9;
-        Repairs = version is V4 or V5 or V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16;
+        Repairs = version is V4 or V5 or V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17;
     }
 
     /// <summary>Whether this version has the playtest repairs (V4).</summary>
