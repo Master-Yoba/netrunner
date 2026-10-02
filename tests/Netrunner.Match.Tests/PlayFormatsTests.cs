@@ -23,6 +23,16 @@ public sealed class PlayFormatsTests
     }
 
     [Fact]
+    public void GatewayElevationGamesPlanWithThePoolsOwnFit()
+    {
+        // A7: the key FittedEvaluation selects by must be the pool's behavior version.
+        Assert.Equal(ElevationBehaviorCatalog.Version, Netrunner.AI.FittedEvaluation.GatewayElevationBehaviorVersion);
+        Assert.Equal("evaluation-gateway-elevation-v2", Netrunner.AI.FittedEvaluation.DocumentFor(4, ElevationBehaviorCatalog.Version).Version);
+        Assert.Equal("evaluation-v2", Netrunner.AI.FittedEvaluation.DocumentFor(4, GatewayBehaviorCatalog.Version).Version);
+        Assert.Equal("evaluation-v1", Netrunner.AI.FittedEvaluation.DocumentFor(1, ElevationBehaviorCatalog.Version).Version);
+    }
+
+    [Fact]
     public void EachFormatOffersOnlyItsOwnDecks()
     {
         if (!ElevationAvailable) return;

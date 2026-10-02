@@ -95,8 +95,23 @@ public static class FittedEvaluation
     private static readonly Lazy<FittedEvaluationDocument> V1 = new(() => Load(1));
     private static readonly Lazy<FittedEvaluationDocument> V2 = new(() => Load(2));
 
+    /// <summary>
+    /// A7: the behavior-registry version of the System Gateway + Elevation pool
+    /// (ElevationBehaviorCatalog.Version), whose games plan with that pool's own fit.
+    /// </summary>
+    public const string GatewayElevationBehaviorVersion = "gateway-elevation-el.1";
+
+    private static readonly Lazy<FittedEvaluationDocument> GatewayElevationV2 = new(() => Load("evaluation-gateway-elevation-v2", 2));
+
     /// <summary>The first fitted evaluation (A5), which Corp v9 and Runner v8 plan with.</summary>
     public static FittedEvaluationDocument Document => V1.Value;
+
+    /// <summary>
+    /// A7: a pool's own fit where it beat the general fit on that pool's held-out games: the Gateway + Elevation
+    /// pool for feature sets 2 to 4 (+0.030 and +0.026 log loss, EL.8). Every other game uses the general fit.
+    /// </summary>
+    public static FittedEvaluationDocument DocumentFor(int version, string? behaviorVersion) =>
+        version is 2 or 3 or 4 && behaviorVersion == GatewayElevationBehaviorVersion ? GatewayElevationV2.Value : DocumentFor(version);
 
     public static FittedEvaluationDocument DocumentFor(int version) => version switch
     {
@@ -106,30 +121,32 @@ public static class FittedEvaluation
         _ => throw new ArgumentOutOfRangeException(nameof(version), "Unknown fitted evaluation."),
     };
 
-    public static double WinProbability(AgentFeatures features, ICardEvaluationCatalog catalog, int version = 1)
+    public static double WinProbability(AgentFeatures features, ICardEvaluationCatalog catalog, int version = 1,
+        string? behaviorVersion = null)
     {
         ArgumentNullException.ThrowIfNull(features);
         AgentOutcome outcome = features.Board.Outcome;
         if (outcome.Kind != GameOutcomeKind.Ongoing) return outcome.Winner == features.Side ? 1 : 0;
-        FittedEvaluationDocument document = DocumentFor(version);
+        FittedEvaluationDocument document = DocumentFor(version, behaviorVersion);
         LogisticSideModel model = features.Side == PlayerSide.Corp ? document.Corp : document.Runner;
         return model.Probability(EvaluationFeatures.Extract(features, catalog, version));
     }
 
     /// <summary>The win probability as a planner score: log-odds in thousandths, with wins and losses at the extremes.</summary>
-    public static long Score(AgentFeatures features, ICardEvaluationCatalog catalog, int version = 1)
+    public static long Score(AgentFeatures features, ICardEvaluationCatalog catalog, int version = 1, string? behaviorVersion = null)
     {
-        double probability = Math.Clamp(WinProbability(features, catalog, version), 1e-6, 1 - 1e-6);
+        double probability = Math.Clamp(WinProbability(features, catalog, version, behaviorVersion), 1e-6, 1 - 1e-6);
         return (long)Math.Round(Math.Log(probability / (1 - probability)) * 1000);
     }
 
     /// <summary>The planner score with a personality's shift of its named terms (A6); Balanced is the plain score.</summary>
-    public static long Score(AgentFeatures features, ICardEvaluationCatalog catalog, int version, AgentPersonality personality)
+    public static long Score(AgentFeatures features, ICardEvaluationCatalog catalog, int version, AgentPersonality personality,
+        string? behaviorVersion = null)
     {
         ArgumentNullException.ThrowIfNull(features);
         if (personality == AgentPersonality.Balanced || version == 1 || features.Board.Outcome.Kind != GameOutcomeKind.Ongoing)
-            return Score(features, catalog, version);
-        FittedEvaluationDocument document = DocumentFor(version);
+            return Score(features, catalog, version, behaviorVersion);
+        FittedEvaluationDocument document = DocumentFor(version, behaviorVersion);
         LogisticSideModel model = features.Side == PlayerSide.Corp ? document.Corp : document.Runner;
         double[] values = EvaluationFeatures.Extract(features, catalog, version);
         double probability = Math.Clamp(model.Probability(values), 1e-6, 1 - 1e-6);
@@ -143,9 +160,11 @@ public static class FittedEvaluation
         JsonSerializer.Deserialize<FittedEvaluationDocument>(json, ReadOptions)
         ?? throw new InvalidOperationException("The fitted evaluation document is empty.");
 
-    private static FittedEvaluationDocument Load(int version)
+    private static FittedEvaluationDocument Load(int version) => Load($"evaluation-v{version}", version);
+
+    private static FittedEvaluationDocument Load(string name, int version)
     {
-        string resource = $"Netrunner.AI.Data.ai.evaluation-v{version}.json";
+        string resource = $"Netrunner.AI.Data.ai.{name}.json";
         using Stream stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resource)
             ?? throw new InvalidOperationException($"The fitted evaluation resource '{resource}' is missing.");
         using var reader = new StreamReader(stream);

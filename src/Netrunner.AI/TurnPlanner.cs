@@ -217,7 +217,7 @@ internal sealed class TurnPlanner
         // plan-evaluation 2: the refitted evaluation (feature set 2) Corp v11 plans with.
         // A6: a personality shifts named terms of the fitted evaluation.
         return _configuration.Parameters.GetValueOrDefault("plan-evaluation") is int version and (1 or 2 or 3 or 4)
-            ? FittedEvaluation.Score(features, _catalog, version, AgentPersonalities.Of(_configuration))
+            ? FittedEvaluation.Score(features, _catalog, version, AgentPersonalities.Of(_configuration), determinizer.Behavior.Version)
             : PositionEvaluation.Score(features, _catalog, _configuration);
     }
 
