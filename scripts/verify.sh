@@ -408,7 +408,7 @@ if ! run_with_timeout 120 env "${m49_ui_content_env[@]}" XDG_DATA_HOME="$NETRUNN
   exit 1
 fi
 if ! grep -Eq "M49_UI PASS .*dense=true history=true" "$m49_ui_smoke_log" \
-  || ! grep -Fq "ELEVATION_TABLE PASS hosted_faceup=true threat=true removed=true" "$m49_ui_smoke_log" \
+  || [[ "$(grep -c "ELEVATION_TABLE PASS hosted_faceup=true threat=true removed=true" "$m49_ui_smoke_log")" -ne 4 ]] \
   || grep -Eq "M49_UI FAIL|SCRIPT ERROR|ERROR:" "$m49_ui_smoke_log"; then
   echo "M4.9 UI smoke did not prove the dense table/history path; see $m49_ui_smoke_log." >&2
   cat "$m49_ui_smoke_log" >&2

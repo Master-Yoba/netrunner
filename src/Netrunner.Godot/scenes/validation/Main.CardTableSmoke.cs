@@ -283,8 +283,9 @@ public partial class Main
 						RenderSnapshot(CreateSlice48Snapshot(view, view.Decision));
 						await TableFrames(3);
 						GD.Print("M49_MOTION PASS replacement=true skip=true");
-						await AssertElevationTableStates(view, screenshots);
 					}
+					// EL.8: the Elevation states at each resolution and seat, inside the viewport and reachable by keyboard.
+					await AssertElevationTableStates(view, side, size, screenshots);
 					_matchHistory.SetExpanded(true);
 					_matchHistory.SetPinned(size.X >= 1800);
 					await TableFrames(2);
@@ -575,7 +576,7 @@ public partial class Main
 	/// sit on their host, the score row names the threat level, and the
 	/// removed-from-game pile is named on the heap.
 	/// </summary>
-	private async Task AssertElevationTableStates(MatchViewModel view, bool screenshots)
+	private async Task AssertElevationTableStates(MatchViewModel view, PlayerSide side, Vector2I size, bool screenshots)
 	{
 		CardViewModel host = view.RunnerRig.First(card => string.IsNullOrEmpty(card.HostCardId) && card.IsKnown);
 		CardViewModel hosted = UiPreviewSamples.Known("table-hosted-faceup", "Program", "Hosted faceup program") with { HostCardId = host.Id };
@@ -588,12 +589,20 @@ public partial class Main
 		bool hostedShown = _gameTable.VisibleCards.Values.Any(control => control.Card?.Id == hosted.Id && control.IsVisibleInTree())
 			&& _gameTable.VisibleCards.Values.Any(control => control.Card?.Id == corpHosted.Id && control.IsVisibleInTree());
 		bool threat = FindDescendants<Label>(_gameTable).Any(label => label.Text.Contains("Threat", StringComparison.Ordinal));
-		bool removedNamed = FindDescendants<Button>(_gameTable).Any(button => button.TooltipText.Contains("Removed from the game: Removed event", StringComparison.Ordinal));
+		Button? removedPile = FindDescendants<Button>(_gameTable).FirstOrDefault(button => button.TooltipText.Contains("Removed from the game: Removed event", StringComparison.Ordinal));
+		bool removedNamed = removedPile is not null;
 		if (!hostedShown || !threat || !removedNamed)
-			throw new InvalidOperationException($"Elevation table states missing: hosted={hostedShown}, threat={threat}, removed={removedNamed}.");
-		if (screenshots) await SaveTableEvidence("elevation-hosted-runner-1920");
+			throw new InvalidOperationException($"Elevation table states missing at {size.X} as the {side}: hosted={hostedShown}, threat={threat}, removed={removedNamed}.");
+		// Accessibility (UX-401) for the new states: the hosted cards sit inside the viewport, and the removed pile takes focus.
+		Rect2 viewport = GetViewport().GetVisibleRect();
+		foreach (TableCardControl control in _gameTable.VisibleCards.Values.Where(control => control.Card?.Id == hosted.Id || control.Card?.Id == corpHosted.Id))
+			if (!viewport.Encloses(control.GetGlobalRect()))
+				throw new InvalidOperationException($"A hosted faceup card escaped the viewport at {size.X} as the {side}.");
+		if (removedPile!.FocusMode == Control.FocusModeEnum.None)
+			throw new InvalidOperationException($"The removed-from-game pile can't take keyboard focus at {size.X} as the {side}.");
+		if (screenshots) await SaveTableEvidence($"elevation-hosted-{side.ToString().ToLowerInvariant()}-{size.X}");
 		RenderSnapshot(CreateSlice48Snapshot(view, view.Decision));
 		await TableFrames(3);
-		GD.Print("ELEVATION_TABLE PASS hosted_faceup=true threat=true removed=true");
+		GD.Print($"ELEVATION_TABLE PASS hosted_faceup=true threat=true removed=true side={side.ToString().ToLowerInvariant()} size={size.X}");
 	}
 }
