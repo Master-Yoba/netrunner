@@ -17,6 +17,8 @@
                       LogicalName="Netrunner.Cards.Data.decks.gateway-sample-decks.json" />
     <EmbeddedResource Include="../../data/decks/elevation-simulation-decks.json"
                       LogicalName="Netrunner.Cards.Data.decks.elevation-simulation-decks.json" />
+    <EmbeddedResource Include="../../data/decks/gateway-elevation-decks.json"
+                      LogicalName="Netrunner.Cards.Data.decks.gateway-elevation-decks.json" />
     <!-- EL.1 C2: versioned format snapshots, validated by CardFormatCatalog. -->
     <EmbeddedResource Include="../../data/formats/gateway.json"
                       LogicalName="Netrunner.Cards.Data.formats.gateway.json" />

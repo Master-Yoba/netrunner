@@ -555,9 +555,9 @@ public sealed class OfficialPresetCatalog
             if (preset.Kind != GatewayKind) problems.Add($"{path}.kind: expected '{GatewayKind}'.");
             if (string.IsNullOrWhiteSpace(preset.Name) || string.IsNullOrWhiteSpace(preset.Summary) || string.IsNullOrWhiteSpace(preset.SourceUrl))
                 problems.Add($"{path}: a sample deck needs a name, a summary and a source URL.");
-            // Our Elevation simulation decks follow their identity's minimum
+            // Our Elevation decks follow their identity's minimum
             // (checked against the metadata below), not the Gateway sample sizes.
-            if (!preset.PresetId.StartsWith(ElevationSimulationPrefix, StringComparison.Ordinal)
+            if (!preset.PresetId.StartsWith(ElevationDeckPrefix, StringComparison.Ordinal)
                 && preset.CardCount != (preset.Side == PlayerSide.Corp ? 44 : 40))
                 problems.Add($"{path}.cards: contains {preset.CardCount} cards; a Gateway sample deck has {(preset.Side == PlayerSide.Corp ? 44 : 40)}.");
             var codes = new HashSet<string>(StringComparer.Ordinal);
@@ -612,8 +612,17 @@ public sealed class OfficialPresetCatalog
     /// <summary>The preset-ID prefix of the Elevation simulation decks.</summary>
     public const string ElevationSimulationPrefix = "elevation-sim-";
 
+    private const string ElevationDecksResourceName = "Netrunner.Cards.Data.decks.gateway-elevation-decks.json";
+
+    /// <summary>The preset-ID prefix of our Elevation decks: the format's decks and the simulation decks.</summary>
+    public const string ElevationDeckPrefix = "elevation-";
+
     private static readonly Lazy<OfficialPresetCatalog> ElevationSimulationCatalog = new(
-        LoadElevationSimulationCore,
+        () => WithEmbeddedDecks(ElevationSimulationResourceName),
+        LazyThreadSafetyMode.ExecutionAndPublication);
+
+    private static readonly Lazy<OfficialPresetCatalog> GatewayElevationCatalog = new(
+        () => WithEmbeddedDecks(ElevationDecksResourceName),
         LazyThreadSafetyMode.ExecutionAndPublication);
 
     /// <summary>
@@ -623,17 +632,35 @@ public sealed class OfficialPresetCatalog
     /// </summary>
     public static OfficialPresetCatalog ElevationSimulation() => ElevationSimulationCatalog.Value;
 
+    /// <summary>
+    /// The embedded catalog plus our System Gateway + Elevation decks (D-EL-4):
+    /// one per Elevation identity, the decks of the Gateway + Elevation format.
+    /// </summary>
+    public static OfficialPresetCatalog GatewayElevation() => GatewayElevationCatalog.Value;
+
     /// <summary>The Elevation simulation decks alone.</summary>
     public IReadOnlyList<OfficialPreset> ElevationSimulationDecks =>
         Gateway.Where(static preset => preset.PresetId.StartsWith(ElevationSimulationPrefix, StringComparison.Ordinal)).ToArray();
 
-    private static OfficialPresetCatalog LoadElevationSimulationCore()
+    /// <summary>The System Gateway + Elevation format's decks alone.</summary>
+    public IReadOnlyList<OfficialPreset> ElevationDecks =>
+        Gateway.Where(static preset => IsElevationDeck(preset.PresetId)).ToArray();
+
+    /// <summary>Whether a preset is one of the System Gateway + Elevation format's decks (not a simulation deck).</summary>
+    public static bool IsElevationDeck(string presetId)
+    {
+        ArgumentNullException.ThrowIfNull(presetId);
+        return presetId.StartsWith(ElevationDeckPrefix, StringComparison.Ordinal)
+            && !presetId.StartsWith(ElevationSimulationPrefix, StringComparison.Ordinal);
+    }
+
+    private static OfficialPresetCatalog WithEmbeddedDecks(string resourceName)
     {
         OfficialPresetCatalog embedded = Embedded();
         Assembly assembly = typeof(OfficialPresetCatalog).Assembly;
-        using Stream? stream = assembly.GetManifestResourceStream(ElevationSimulationResourceName)
+        using Stream? stream = assembly.GetManifestResourceStream(resourceName)
             ?? throw new PresetDataValidationException(
-                [$"preset resource: embedded resource '{ElevationSimulationResourceName}' was not found."]);
+                [$"preset resource: embedded resource '{resourceName}' was not found."]);
         using var reader = new StreamReader(stream, Encoding.UTF8);
         var catalog = new OfficialPresetCatalog(
             embedded.Provenance,

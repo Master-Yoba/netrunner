@@ -129,6 +129,49 @@ public sealed class CardFormatTests
     }
 
     [Fact]
+    public void ElevationFormatDecksAreOnePerElevationIdentityLegalAndFullyBound()
+    {
+        IReadOnlyList<OfficialPreset> decks = OfficialPresetCatalog.GatewayElevation().ElevationDecks;
+        Assert.Equal(8, decks.Count(static deck => deck.Side == PlayerSide.Corp));
+        Assert.Equal(6, decks.Count(static deck => deck.Side == PlayerSide.Runner));
+        Assert.Equal(14, decks.Select(static deck => deck.IdentityCode).Distinct(StringComparer.Ordinal).Count());
+        Assert.All(decks, static deck => Assert.StartsWith("35", deck.IdentityCode, StringComparison.Ordinal));
+        Assert.All(decks, static deck => Assert.NotEmpty(deck.Archetypes));
+        Assert.DoesNotContain(OfficialPresetCatalog.Embedded().Presets,
+            static preset => preset.PresetId.StartsWith(OfficialPresetCatalog.ElevationDeckPrefix, StringComparison.Ordinal));
+        Assert.DoesNotContain(OfficialPresetCatalog.GatewayElevation().Presets,
+            static preset => preset.PresetId.StartsWith(OfficialPresetCatalog.ElevationSimulationPrefix, StringComparison.Ordinal));
+        BehaviorCatalog behavior = ElevationBehaviorCatalog.Create();
+        foreach (OfficialPreset deck in decks)
+        {
+            Assert.All(deck.Cards.Select(static card => card.Code).Append(deck.IdentityCode),
+                code => Assert.True(
+                    behavior.TryGet(new CardDefinitionId(code), out _)
+                    || behavior.TryGetIce(new CardDefinitionId(code), out _)
+                    || behavior.TryGetIcebreaker(new CardDefinitionId(code), out _)
+                    || behavior.TryGetAgenda(new CardDefinitionId(code), out _)
+                    || behavior.TryGetAsset(new CardDefinitionId(code), out _)
+                    || behavior.TryGetRunEvent(new CardDefinitionId(code), out _),
+                    $"{deck.PresetId}: {code} is unbound."));
+        }
+
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode)
+        {
+            return;
+        }
+
+        CardDataSet pool = CardDataResource.LoadEmbeddedPool();
+        OfficialPresetCatalog.GatewayElevation().Validate(pool);
+        CardFormat format = CardFormatCatalog.Embedded().Get(CardFormatIds.GatewayElevation);
+        foreach (OfficialPreset deck in decks)
+        {
+            var request = new DeckRequest(DeckRequest.CurrentSchemaVersion, deck.Side, deck.IdentityCode, deck.Cards);
+            DeckValidationResult result = FormatDeckValidator.Validate(request, format, pool);
+            Assert.True(result.IsValid, $"{deck.PresetId}: {string.Join("; ", result.Diagnostics)}");
+        }
+    }
+
+    [Fact]
     public void GatewayDecksValidateUnderTheGatewayFormatAndIllegalOnesFailPerRule()
     {
         if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode)
