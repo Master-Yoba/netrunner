@@ -1646,7 +1646,13 @@ public static class ObservationViewMapper
             && CardDefinitionId.TryParse(iceDefinition, out CardDefinitionId iceId)
             && behaviorCatalog.TryGetIce(iceId, out IceBehaviorSpec? registeredIce) ? registeredIce : null;
         var breakers = new List<EncounterBreakerViewModel>();
-        foreach (CardViewModel card in ReadCards(publicState, "runnerRig", metadataResolver, abilityCue))
+        CardViewModel[] rigCards = ReadCards(publicState, "runnerRig", metadataResolver, abilityCue);
+        // EL-ICE-GAINS-SUBTYPE: a card installed on the encountered ICE may give it every subtype.
+        bool iceGainsEveryType = encounterIce is not null && rigCards.Any(hosted => hosted.HostCardId == encounterIce.Id
+            && hosted.DefinitionId is { } hostedDefinition
+            && behaviorCatalog.TryGet(new CardDefinitionId(hostedDefinition), out CardBehaviorDefinition? hostedBehavior)
+            && hostedBehavior.Hosting?.HostGainsEveryIceType == true);
+        foreach (CardViewModel card in rigCards)
         {
             if (card.DefinitionId is not { } definitionId
                 || !CardDefinitionId.TryParse(definitionId, out CardDefinitionId parsedDefinition))
@@ -1674,7 +1680,11 @@ public static class ObservationViewMapper
                 spec.BaseStrength,
                 quote.EffectiveValue)
             {
-                CanInterfaceEncounter = iceSpec is not null && IceInterfaceMatcher.Matches(iceSpec, spec),
+                CanInterfaceEncounter = iceSpec is not null && IceInterfaceMatcher.CanInterface(
+                    iceSpec,
+                    iceGainsEveryType,
+                    spec,
+                    card.Subtypes.Select(static subtype => subtype.ToLowerInvariant()).ToArray()),
                 StrengthQuote = quote,
                 StrengthBreakdown = StrengthBreakdownViewModel.From(quote),
                 PumpCost = spec.PumpCost,

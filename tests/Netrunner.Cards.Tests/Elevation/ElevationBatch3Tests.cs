@@ -740,4 +740,41 @@ public sealed class ElevationBatch3Tests
             .Count(cardId => state.Cards.Single(card => card.Id == cardId).DefinitionId.Value == Regolith));
         Assert.Equal(credits - (trashed ? 3 : 0), Player(state, PlayerSide.Runner).Credits);
     }
+
+    [Fact]
+    [Trait("ElevationCard", "35074")]
+    public void BiawakOffersOneForfeitRezPerScoredAgenda()
+    {
+        // Fuzz regression: two forfeit variants of the same rez looked like duplicates.
+        GameState state = new ElevationBoard(PlayerSide.Runner) { CorpCredits = 4, CorpPoints = 4 }
+            .Add("35074", Place.Ice)
+            .Add(CorpFillerAgenda, Place.CorpScore)
+            .Add(CorpFillerAgenda, Place.CorpScore)
+            .Begin();
+        state = RoundTrip(RunTo(state, ElevationBoard.Remote, value => CanRez(value, "35074")));
+
+        Assert.Equal(2, Actions(state).Select(static action => action.Parameters).OfType<RezCardParameters>()
+            .Select(static rez => rez.ForfeitAgendaId).Distinct().Count());
+    }
+
+    [Fact]
+    [Trait("ElevationCard", "35053")]
+    public void MycowebInstallsOnTheAttackedServerWithoutTrashingItsIce()
+    {
+        // Fuzz regression: trashing the encountered ICE to make room broke the run's ICE cursor.
+        const string Flyswatter = "35079";
+        GameState state = new ElevationBoard(PlayerSide.Runner) { GripFiller = 5 }
+            .Add("35053", Place.Ice, server: ElevationBoard.Hq, rezzed: true)
+            .Add(Flyswatter, Place.ArchivesFaceUp)
+            .Begin();
+        state = RunTo(state, ElevationBoard.Hq, InEncounter);
+        state = PassUntil(state, static value => value.PendingDecision?.Kind == DecisionKind.BehaviorInstallChoice);
+        state = RoundTrip(Apply(state, action => action.Parameters is BehaviorInstallChoiceParameters { Choice: { } choice }
+            && choice.CardId == Card(state, Flyswatter) && choice.ServerId == ElevationBoard.ServerId(state, ElevationBoard.Hq)).State);
+
+        Assert.NotEqual(DecisionKind.InstallChoice, state.PendingDecision?.Kind);
+        Assert.Equal(ZoneKind.ServerIce, ZoneOf(state, "35053"));
+        Assert.Equal(ZoneKind.ServerIce, ZoneOf(state, Flyswatter));
+        Assert.Equal(Card(state, "35053"), state.RunState!.CurrentIceId);
+    }
 }

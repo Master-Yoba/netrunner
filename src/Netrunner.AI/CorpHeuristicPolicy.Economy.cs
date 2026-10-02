@@ -114,6 +114,12 @@ public sealed partial class CorpHeuristicPolicy
                 // (BANGUN) punishes its access.
                 case BehaviorInstructionKind.PlayCard: total += 250; break;
                 case BehaviorInstructionKind.TurnFaceUp: total += 40; break;
+                // Elevation (EL.7): runs and ICE. Moving the Runner to Archives or swapping in fresh ICE
+                // stops a run's threat; a cheaper rez is credits; a purge strips the Runner's viruses.
+                case BehaviorInstructionKind.MoveRunnerToServer: total += 200; break;
+                case BehaviorInstructionKind.SwapApproachedIce: total += 150; break;
+                case BehaviorInstructionKind.RezPayingLess: total += amount * context.CreditValue; break;
+                case BehaviorInstructionKind.PurgeVirusCounters: total += 60; break;
                 case BehaviorInstructionKind.AddBreachAccess: total -= amount * 150; break;
                 case BehaviorInstructionKind.RefillRecurringCredits: total += 2 * context.CreditValue; break;
                 case BehaviorInstructionKind.InstallCard when instruction.IsZoneInstall: total += 250; break;

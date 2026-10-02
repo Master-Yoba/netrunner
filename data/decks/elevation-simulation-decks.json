@@ -928,6 +928,414 @@
           "quantity": 2
         }
       ]
+    },
+    {
+      "presetId": "elevation-sim-leo-corp",
+      "name": "LEO Construction simulation",
+      "summary": "LEO Construction with Bumi 1.0, Scatter Field and the Haas-Bioroid bioroids, Biawak, Mitra Aman and Empiricist.",
+      "side": "corp",
+      "identityCode": "35035",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/ELEVATION_PROGRESS.md",
+      "cards": [
+        {
+          "code": "35038",
+          "quantity": 3
+        },
+        {
+          "code": "35037",
+          "quantity": 3
+        },
+        {
+          "code": "30036",
+          "quantity": 1
+        },
+        {
+          "code": "30068",
+          "quantity": 3
+        },
+        {
+          "code": "30070",
+          "quantity": 3
+        },
+        {
+          "code": "35041",
+          "quantity": 3
+        },
+        {
+          "code": "35042",
+          "quantity": 3
+        },
+        {
+          "code": "30038",
+          "quantity": 2
+        },
+        {
+          "code": "30039",
+          "quantity": 2
+        },
+        {
+          "code": "35079",
+          "quantity": 2
+        },
+        {
+          "code": "35064",
+          "quantity": 2
+        },
+        {
+          "code": "35074",
+          "quantity": 1
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "35081",
+          "quantity": 2
+        },
+        {
+          "code": "35039",
+          "quantity": 2
+        },
+        {
+          "code": "35043",
+          "quantity": 2
+        },
+        {
+          "code": "35044",
+          "quantity": 2
+        },
+        {
+          "code": "35056",
+          "quantity": 2
+        },
+        {
+          "code": "35052",
+          "quantity": 1
+        },
+        {
+          "code": "30041",
+          "quantity": 2
+        },
+        {
+          "code": "30037",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "presetId": "elevation-sim-synapse-corp",
+      "name": "Synapse Global simulation",
+      "summary": "Synapse Global with N-Pot, Flyswatter, Semak-samun, Mitra Aman, Mycoweb and Empiricist.",
+      "side": "corp",
+      "identityCode": "35058",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/ELEVATION_PROGRESS.md",
+      "cards": [
+        {
+          "code": "35059",
+          "quantity": 3
+        },
+        {
+          "code": "35060",
+          "quantity": 2
+        },
+        {
+          "code": "30052",
+          "quantity": 1
+        },
+        {
+          "code": "30068",
+          "quantity": 3
+        },
+        {
+          "code": "35064",
+          "quantity": 3
+        },
+        {
+          "code": "35079",
+          "quantity": 3
+        },
+        {
+          "code": "35063",
+          "quantity": 2
+        },
+        {
+          "code": "30054",
+          "quantity": 2
+        },
+        {
+          "code": "30055",
+          "quantity": 2
+        },
+        {
+          "code": "35054",
+          "quantity": 2
+        },
+        {
+          "code": "35056",
+          "quantity": 2
+        },
+        {
+          "code": "35053",
+          "quantity": 1
+        },
+        {
+          "code": "35052",
+          "quantity": 2
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "35062",
+          "quantity": 2
+        },
+        {
+          "code": "35065",
+          "quantity": 2
+        },
+        {
+          "code": "30056",
+          "quantity": 2
+        },
+        {
+          "code": "30053",
+          "quantity": 2
+        },
+        {
+          "code": "35061",
+          "quantity": 2
+        },
+        {
+          "code": "30057",
+          "quantity": 2
+        },
+        {
+          "code": "35081",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "elevation-sim-ryo-runner",
+      "name": "Ryō simulation",
+      "summary": "Ryō \"Phoenix\" Ōno with Shred, Charm Offensive, the anarch breakers, Fransofia Ward and GAMEDRAGON Pro.",
+      "side": "runner",
+      "identityCode": "35001",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/ELEVATION_PROGRESS.md",
+      "cards": [
+        {
+          "code": "35005",
+          "quantity": 3
+        },
+        {
+          "code": "35003",
+          "quantity": 3
+        },
+        {
+          "code": "35009",
+          "quantity": 2
+        },
+        {
+          "code": "30005",
+          "quantity": 2
+        },
+        {
+          "code": "35008",
+          "quantity": 2
+        },
+        {
+          "code": "30004",
+          "quantity": 1
+        },
+        {
+          "code": "30008",
+          "quantity": 2
+        },
+        {
+          "code": "30007",
+          "quantity": 1
+        },
+        {
+          "code": "30003",
+          "quantity": 1
+        },
+        {
+          "code": "30009",
+          "quantity": 1
+        },
+        {
+          "code": "30002",
+          "quantity": 2
+        },
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "30028",
+          "quantity": 2
+        },
+        {
+          "code": "30029",
+          "quantity": 2
+        },
+        {
+          "code": "30033",
+          "quantity": 2
+        },
+        {
+          "code": "30031",
+          "quantity": 1
+        },
+        {
+          "code": "30032",
+          "quantity": 1
+        },
+        {
+          "code": "35034",
+          "quantity": 2
+        },
+        {
+          "code": "35011",
+          "quantity": 2
+        },
+        {
+          "code": "35004",
+          "quantity": 2
+        },
+        {
+          "code": "35006",
+          "quantity": 1
+        },
+        {
+          "code": "35021",
+          "quantity": 2
+        },
+        {
+          "code": "35027",
+          "quantity": 2
+        },
+        {
+          "code": "35007",
+          "quantity": 2
+        },
+        {
+          "code": "35010",
+          "quantity": 1
+        },
+        {
+          "code": "30034",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "presetId": "elevation-sim-barry-runner",
+      "name": "Barry simulation",
+      "summary": "Barry \"Baz\" Wong with Maglectric Rapid, Maintenance Access, Detente, Fransofia Ward and the criminal breakers.",
+      "side": "runner",
+      "identityCode": "35012",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/ELEVATION_PROGRESS.md",
+      "cards": [
+        {
+          "code": "35019",
+          "quantity": 2
+        },
+        {
+          "code": "35016",
+          "quantity": 3
+        },
+        {
+          "code": "35018",
+          "quantity": 2
+        },
+        {
+          "code": "35021",
+          "quantity": 2
+        },
+        {
+          "code": "30015",
+          "quantity": 3
+        },
+        {
+          "code": "30016",
+          "quantity": 3
+        },
+        {
+          "code": "35020",
+          "quantity": 2
+        },
+        {
+          "code": "30013",
+          "quantity": 1
+        },
+        {
+          "code": "30014",
+          "quantity": 1
+        },
+        {
+          "code": "30018",
+          "quantity": 2
+        },
+        {
+          "code": "35022",
+          "quantity": 2
+        },
+        {
+          "code": "30012",
+          "quantity": 2
+        },
+        {
+          "code": "35014",
+          "quantity": 2
+        },
+        {
+          "code": "35015",
+          "quantity": 2
+        },
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "30028",
+          "quantity": 2
+        },
+        {
+          "code": "30029",
+          "quantity": 2
+        },
+        {
+          "code": "30033",
+          "quantity": 2
+        },
+        {
+          "code": "30031",
+          "quantity": 1
+        },
+        {
+          "code": "30032",
+          "quantity": 1
+        },
+        {
+          "code": "30034",
+          "quantity": 1
+        },
+        {
+          "code": "35027",
+          "quantity": 2
+        },
+        {
+          "code": "35017",
+          "quantity": 1
+        },
+        {
+          "code": "30011",
+          "quantity": 1
+        }
+      ]
     }
   ]
 }

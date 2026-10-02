@@ -89,6 +89,12 @@ public sealed partial class RunnerHeuristicPolicy
                 // a nested play is the played card's own value, roughly a good event.
                 case BehaviorInstructionKind.HostFaceUp: total += 100; break;
                 case BehaviorInstructionKind.PlayCard: total += 250; break;
+                // Elevation (EL.7): runs and ICE. A bypass passes the ICE untouched; a derez costs the
+                // Corp its rez; a steal outside a run is worth the agenda; a mod is lasting strength.
+                case BehaviorInstructionKind.BypassEncounteredIce: total += 300; break;
+                case BehaviorInstructionKind.Derez: total += 200; break;
+                case BehaviorInstructionKind.StealAgenda: total += 400; break;
+                case BehaviorInstructionKind.HostSourceOnTarget: total += 80; break;
                 case BehaviorInstructionKind.GainCredits: total += sign * amount * context.CreditValue; break;
                 // v14 (Codex review, 1 October): Zahya pays a credit a card the ended run accessed; it scored 0 and was declined.
                 case BehaviorInstructionKind.GainCreditsPerAccess when context.Generation >= 10:
