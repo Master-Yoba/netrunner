@@ -76,10 +76,12 @@ internal static class ElevationSpec
         int discount = 0,
         BehaviorZone? destination = null,
         string? subtype = null,
-        int top = 0) =>
+        int top = 0,
+        string? key = null) =>
         new(
             BehaviorInstructionKind.InstallCard,
             amount: discount,
+            argument: key,
             target: top > 0
                 ? BehaviorTarget.TopOfZone(zone, top, new BehaviorCardFilter(cardType, subtype: subtype, ownerSide: owner))
                 : BehaviorTarget.CardInZone(zone, new BehaviorCardFilter(cardType, subtype: subtype, ownerSide: owner)),

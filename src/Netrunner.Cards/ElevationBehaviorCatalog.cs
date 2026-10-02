@@ -60,7 +60,14 @@ public static class ElevationBehaviorCatalog
         return builder.Build();
     }
 
+    // Mycoweb resolves a subroutine of another sentry or code gate: its
+    // options are expanded from the ICE of the rest of the pool.
     private static BehaviorCatalogBuilder Compose() =>
+        ComposeWithoutMycoweb()
+            .AddIce([ElevationBatch3Specs.MycowebIce])
+            .Add([ElevationBatch3Specs.MycowebFor(ComposeWithoutMycoweb().Build())]);
+
+    private static BehaviorCatalogBuilder ComposeWithoutMycoweb() =>
         new BehaviorCatalogBuilder(Version, GatewayBehaviorCatalog.Create())
             .AddAsset(ElevationBatch1EconomySpecs.AssetSpecs)
             .AddRunEvent(ElevationBatch1EconomySpecs.RunEventSpecs)
@@ -74,5 +81,9 @@ public static class ElevationBehaviorCatalog
             .Add(ElevationBatch1CorpSpecs.GenericSpecs)
             .AddAsset(ElevationBatch2Specs.AssetSpecs)
             .AddAgenda(ElevationBatch2Specs.AgendaSpecs)
-            .Add(ElevationBatch2Specs.GenericSpecs);
+            .Add(ElevationBatch2Specs.GenericSpecs)
+            .AddIce(ElevationBatch3Specs.IceSpecs)
+            .AddAgenda(ElevationBatch3Specs.AgendaSpecs)
+            .AddRunEvent(ElevationBatch3Specs.RunEventSpecs)
+            .Add(ElevationBatch3Specs.GenericSpecs);
 }
