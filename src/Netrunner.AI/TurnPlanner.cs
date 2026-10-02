@@ -84,12 +84,12 @@ internal sealed class TurnPlanner
             .Take(run ? RunWidth : Width)];
         var totals = planned.ToDictionary(candidate => candidate.ActionId, _ => 0L);
         bool tracked = DealsFromTracker && knowledge.Tracker is not null;
-        OpponentCardPool pool = tracked && knowledge.OpponentList is { } list
+        OpponentCardPool pool = tracked && DealsFromList && knowledge.OpponentList is { } list
             ? new OpponentCardPool.Decklist(list.ToDictionary(entry => new CardDefinitionId(entry.DefinitionId), entry => entry.Quantity))
             : OpponentPool(features.Side);
         for (int sample = 0; sample < samples; sample++)
         {
-            SamplerKnowledge known = tracked ? Pins(knowledge.Tracker!, features.Side, planning) : SamplerKnowledge.None;
+            SamplerKnowledge known = tracked && PinsTracked ? Pins(knowledge.Tracker!, features.Side, planning) : SamplerKnowledge.None;
             GameState state = planning.Determinizer.Sample(known, pool, planning.Random);
             foreach (AgentCandidate candidate in planned)
                 totals[candidate.ActionId] += Rollout(state, candidate.ActionId, features.Side, knowledge, planning.Determinizer, run);
@@ -113,7 +113,12 @@ internal sealed class TurnPlanner
     }
 
     /// <summary>A9d (plan-tracker 1, a Hard setting): samples are dealt from the tracker's beliefs, and from the list when Hard knows it.</summary>
-    public bool DealsFromTracker => _configuration.Parameters.GetValueOrDefault("plan-tracker") == 1;
+    public bool DealsFromTracker => _configuration.Parameters.GetValueOrDefault("plan-tracker") is 1 or 2 or 3;
+
+    /// <summary>plan-tracker 1 pins the tracker's beliefs and deals the rest from the list; 2 only the list; 3 only the pins, the rest from the pool.</summary>
+    private bool PinsTracked => _configuration.Parameters.GetValueOrDefault("plan-tracker") is 1 or 3;
+
+    private bool DealsFromList => _configuration.Parameters.GetValueOrDefault("plan-tracker") is 1 or 2;
 
     /// <summary>
     /// A9d: one sample's pins from the tracker, drawn with its probabilities: a face-down slot is the card it's believed to

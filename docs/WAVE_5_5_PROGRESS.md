@@ -99,3 +99,31 @@ The first two seeds ran before HQ's change was limited to real knowledge.
 The arms cost about $46 at list price. 14 earlier v21 games, on a version since changed, were voided.
 
 **Decision:** Runner v21 is the default. The user skipped the A9b playtest, to work on until the wave is done.
+
+## A9c: copy and unique counting (Corp v26, Runner v22)
+
+`OpponentCounting` counts the opponent's unseen copies:
+- **The source:** the decklist a Hard bot knows, or the pool at three copies, less the copies in public view now.
+- **Recursion:** counting from where copies are now means recursion returns a copy. A card Spin Doctor shuffles out of
+  face-up Archives is unseen again (`CardTrackerTests.CopiesAreCountedFromWhereTheyAreNowSoRecursionReturnsThem`).
+- **Precision:** with the list the counts are exact; with the pool they only bound what's possible, so the uses are Hard's.
+
+**The uses:**
+- **Corp v26, ICE:** ICE of a type no breaker left in the Runner's deck can break (its installed breakers don't cover it,
+  and none are unseen) is worth a second coverage bonus.
+- **Corp v26, the Runner's budget:** the next-turn budget the Corp guards against gains the net of the best burst economy
+  event still unseen, beyond a click of credit. Once the Sure Gambles are spent, the Runner gets no burst.
+- **Corp v26, tracking:** it tracks the Runner's cards too, so the Corp remembers what it sees. Gateway has few reveals
+  from the grip, so this is mostly for later sets.
+- **Runner v22:** HQ and R&D are valued by the unseen agendas per hidden Corp card in the list, against the list's own
+  share, in place of the deck-size estimate.
+- **Unique cards:** the Runner already doesn't install a second copy of a unique card (v16).
+
+**Measured:** Hard against Hard with copy counting (`hard-a9c`), two seeds, 120 games a seat:
+
+| | Seed 1 | Seed 2 |
+|---|---|---|
+| Corp v26 | −16 [−99, 63] | +5 [−74, 78] |
+| Runner v22 | +27 [−49, 118] | −5 [−88, 77] |
+
+Level, as expected of a change that only acts when the list says something is gone.
