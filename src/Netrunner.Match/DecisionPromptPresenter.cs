@@ -25,6 +25,7 @@ public static class DecisionPromptPresenter
             DecisionKind.MemoryCleanup => "Choose programs to trash to free memory.",
             DecisionKind.RunTiming => RunPrompt(decision, view.Run),
             DecisionKind.InstallChoice => "Choose where to install, and any cards to replace.",
+            DecisionKind.BehaviorInstallChoice => "Choose a card to install, and where.",
             DecisionKind.TriggerChoice => "Choose whether to use an optional effect.",
             DecisionKind.TriggerOrdering => "Choose the order of simultaneous effects.",
             DecisionKind.InterruptChoice => "Choose whether to prevent or replace an effect.",

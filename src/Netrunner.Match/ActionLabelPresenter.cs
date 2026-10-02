@@ -35,6 +35,12 @@ public static class ActionLabelPresenter
                 else if (install.FinalizeSelection && install.CandidateReplacementCardIds.Count > 0)
                     label += " · Keep installed cards";
                 return label;
+            case BehaviorInstallChoiceParameters { Choice: null }:
+                return "Install nothing";
+            case BehaviorInstallChoiceParameters { Choice: { } chosen }:
+                return $"Install {Card(chosen.CardId)} → "
+                    + Destination(chosen.DestinationKind, chosen.ServerId, chosen.CreateNewRemote)
+                    + $" · {Count(chosen.CreditCost, "credit")}";
             case CardChoiceParameters choice:
                 string verb = decision == DecisionKind.TurnDiscard ? "Discard"
                     : action.Kind == ActionKind.TrashProgram || decision == DecisionKind.MemoryCleanup ? "Trash to free memory:"
