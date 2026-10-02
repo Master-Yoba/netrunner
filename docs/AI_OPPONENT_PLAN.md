@@ -569,6 +569,13 @@ of the owner's turns also becomes unknown, so nothing sticks forever.
 Each phase is a new policy version per side, gated as section 6 says, with a human playtest at the end of A9b and of
 A9d.
 
+Status (2 October 2026): built ([progress](WAVE_5_5_PROGRESS.md)):
+- The tracker beats its prior.
+- Runner v21's inference is ahead of v20 on the ladder and against Claude Sonnet.
+- The counting acts only with Hard's list and is level.
+- Dealing the planner's samples from the tracker gave Hard nothing measurable, so A9d's gate is not met.
+- The defaults are Corp v26 and Runner v22.
+
 ### Human game data (deferred)
 
 Jinteki.net has a replay format but no public replay source, games there are

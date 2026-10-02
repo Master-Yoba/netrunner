@@ -127,3 +127,66 @@ The arms cost about $46 at list price. 14 earlier v21 games, on a version since 
 | Runner v22 | +27 [−49, 118] | −5 [−88, 77] |
 
 Level, as expected of a change that only acts when the list says something is gone.
+
+## A9d: the planner deals from the tracker
+
+`TurnPlanner` can deal each rollout sample from the tracker (`plan-tracker`, a Hard planner setting):
+- **Pins:** each sample pins the tracker's beliefs with their probabilities:
+  - a face-down slot is the card it's believed to be, at that chance;
+  - a tracked hand card is in the hand at its weight, at a random position;
+  - a known top of the deck is on top.
+- **The rest** is dealt from the opponent's list (Hard) or the pool.
+- **The engine:** `ObservationDeterminizer.ZoneOf` looks up a zone's id by its public structure, so a pin can name where
+  a card is.
+
+**Measured:** against Hard with copy counting (`hard-a9c`), Elo, 120 games a seat:
+
+| Variant | Corp | Runner |
+|---|---|---|
+| Pins, the rest from the list (`plan-tracker 1`) | +5, +5, +26, +26 | −38, −27, −5, −32 |
+| The list only, no pins (`2`) | −5, −21 | −16, −68 [−173, 0] |
+| Pins, the rest from the pool (`3`) | −16, −5 | −5, −5 |
+
+**Two findings:**
+- **Dealing the unseen cards from the exact list hurts the planner,** the Runner's most. The pool's wider deal works
+  better.
+- **The pins help against the list alone** (about +30 on both sides), but never beat the pool.
+
+**Decision:**
+- **Corp Hard (v26) deals with `plan-tracker 1`,** the only variant with no seed below zero. That's within the noise; it
+  gives Corp Hard its first setting beyond Standard's.
+- **Runner Hard keeps the pool.**
+
+**The A9d gate (Hard separated from Standard on the ladder) is not met.** Hard's planner gains nothing measurable from
+the tracker.
+
+## Wave 5.5 summary
+
+**The defaults are Corp v26 and Runner v22.**
+- **A9a, the tracker:** beats its prior on every tier and measure. A confident guess is right about 80% of the time.
+- **A9b, the Runner's inference:** the user's examples are saved-game tests:
+  - a seen Retribution clears a tag;
+  - a seen Urtica isn't run into;
+  - seen face-down ICE is planned as itself.
+- **A9b, measured:** about +22 Elo over four seeds, and against Claude Sonnet 8 wins in 24 where v20 won 6.
+- **A9c, counting:** acts only with Hard's list; level.
+- **A9d, the planner dealing from the tracker:** gave Hard nothing measurable.
+
+**The tiers with the new defaults** (seed 51, 40 deals):
+
+| | Corp | Runner |
+|---|---|---|
+| Standard − Easy | +163 [81, 256] | +165 [93, 234] |
+| Hard − Standard | −6 [−90, 73] | +50 [−27, 126] |
+
+The order holds. Easy's distance from Standard grew for the Runner (+107 and +67 in Wave 5), which fits Easy's tracker
+forgetting on purpose, though this is one seed.
+
+**Open:**
+- **Fixtures:** the seen-upgrade example has no saved-game fixture.
+- **Hard:** still isn't clearly above Standard; the Runner's gains came from heuristic inference, not more search.
+- **The Corp's tracker:** remembers the Runner's cards but has little to infer from in Gateway (few reveals).
+- **The tracker:** loses some accuracy to stale shares of cards drawn from R&D at unknown depths, and could use the
+  Corp's install timing (a card installed the turn it was drawn).
+
+The user skipped the A9b playtest to finish the wave.
