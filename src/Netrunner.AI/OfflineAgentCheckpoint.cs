@@ -34,6 +34,9 @@ public sealed record AgentCentralMemory(int? DeckAfterRdAccess, int? HandAfterHq
 /// public advancement doesn't drop. It was forgotten as soon as it turned face down again, so the
 /// Runner kept running a known Urtica Cipher.
 /// </summary>
+/// <summary>A9: one line of the opponent's decklist.</summary>
+public sealed record AgentListEntry(string DefinitionId, int Quantity);
+
 public sealed record AgentRootMemory(string ServerId, int Index, int RootCount, string DefinitionId, int Advancement);
 
 public sealed record AgentKnowledge(ImmutableArray<AgentRememberedCard> VisibleCards,
@@ -52,6 +55,12 @@ public sealed record AgentKnowledge(ImmutableArray<AgentRememberedCard> VisibleC
     /// again. Kept by the Corp only; older checkpoints load without it.
     /// </summary>
     public ImmutableArray<string>? Exposed { get; init; }
+
+    /// <summary>A9: what the agent believes of the opponent's hidden cards, for versions that track them. Older checkpoints load without it.</summary>
+    public CardTracker? Tracker { get; init; }
+
+    /// <summary>A9: the opponent's decklist, which a Hard bot knows; null when it knows only the card pool.</summary>
+    public ImmutableArray<AgentListEntry>? OpponentList { get; init; }
 
     /// <param name="keepRootsThroughInstalls">
     /// Runner v20: a remembered root card stays known when the Corp installs another card in its root. Installs append, so
@@ -116,7 +125,7 @@ public sealed record AgentKnowledge(ImmutableArray<AgentRememberedCard> VisibleC
             .ThenBy(reveal => reveal.DefinitionId, StringComparer.Ordinal).Take(256).ToImmutableArray(),
             history.TakeLast(128).ToImmutableArray(), features.Board.Run?.Id, features.Board.Run?.AttackedServer,
             features.Board.Run?.Successful)
-        { Centrals = centrals, Roots = roots, Exposed = exposed };
+        { Centrals = centrals, Roots = roots, Exposed = exposed, Tracker = Tracker, OpponentList = OpponentList };
 
         void Add(string kind, AgentRememberedCard card) => history.Add(new(sequence, kind, card.Id, card.DefinitionId, null));
     }

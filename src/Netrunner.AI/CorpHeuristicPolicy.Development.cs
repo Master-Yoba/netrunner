@@ -39,6 +39,9 @@ public sealed partial class CorpHeuristicPolicy
                 // A2: ICE the Runner can't break yet taxes every future run,
                 // and central ICE matters more as the Runner nears 7 points.
                 score += RunnerCovers(context, ice.IceType) ? 0 : 100 * context.Parameter("coverage-scale", 100) / 100;
+                // v26 (A9c): for a Corp that knows the Runner's list, ICE no breaker left in its deck can break taxes it for good.
+                if (context.Generation >= 21 && !RunnerCovers(context, ice.IceType) && OpponentCounting.NoBreakerLeftFor(context, ice.IceType))
+                    score += 100 * context.Parameter("coverage-scale", 100) / 100;
                 if (server?.Kind is ServerKind.Headquarters or ServerKind.RAndD) score = (int)(score * context.OpponentScorePressure);
             }
             score -= install.CreditCost * context.CreditValue;
@@ -147,7 +150,7 @@ public sealed partial class CorpHeuristicPolicy
     private static int ModelledProtection(HeuristicContext context, AgentServer? server, int committed)
     {
         if (server is null) return 0;
-        RunForecast forecast = RunModel.Plan(context, server, server.Ice.Length - 1, context.Opponent.Credits + 2, clicks: 3,
+        RunForecast forecast = RunModel.Plan(context, server, server.Ice.Length - 1, context.Opponent.Credits + 2 + RunnerBurst(context), clicks: 3,
             grip: context.Features.Board.HiddenZoneCounts.RunnerGrip, corpRezBudget: Math.Max(0, context.Self.Credits - committed));
         if (!forecast.CanGetIn) return 650;
         int cost = forecast.Credits + forecast.CreditsLost + forecast.Clicks * 2 + forecast.Tags * 2 + forecast.Damage * 2;
@@ -163,8 +166,15 @@ public sealed partial class CorpHeuristicPolicy
     /// spend three of its four clicks on credits and run with the last (a broke Runner still breaks a lone Palisade).
     /// </summary>
     private static bool RunnerGetsIn(HeuristicContext context, AgentServer server, int committed) =>
-        RunModel.Plan(context, server, server.Ice.Length - 1, context.Opponent.Credits + 3, clicks: 0,
+        RunModel.Plan(context, server, server.Ice.Length - 1, context.Opponent.Credits + 3 + RunnerBurst(context), clicks: 0,
             grip: context.Features.Board.HiddenZoneCounts.RunnerGrip, corpRezBudget: Math.Max(0, context.Self.Credits - committed)).CanGetIn;
+
+    /// <summary>
+    /// v26 (A9c): a Corp that knows the Runner's list counts its burst economy: while an event like Sure Gamble is unseen, the
+    /// Runner can find its net gain beyond a click of credit; once they're all spent, it can't.
+    /// </summary>
+    private static int RunnerBurst(HeuristicContext context) =>
+        context.Generation >= 21 ? Math.Max(0, OpponentCounting.BurstLeft(context) - 1) : 0;
 
     /// <summary>True when an installed Runner breaker can interface with ICE of this type.</summary>
     private static bool RunnerCovers(HeuristicContext context, IceType iceType) =>

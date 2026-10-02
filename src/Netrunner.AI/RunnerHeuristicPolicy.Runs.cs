@@ -10,8 +10,11 @@ public sealed partial class RunnerHeuristicPolicy
         if (server is null) return Value(-1000, "run/unknown-server", true, true);
         (int cost, int loss, int damage, bool blocked, int unknown) = Protection(context, server, server.Ice.Length - 1, upfrontCost);
         // v7: the whole-run model (A4a) costs the run as one path, tolls included.
+        // v21 (A9b): face-down ICE it's confident of from what it saw is planned as that ICE, which the Corp can rez.
+        AgentServer planned = context.Generation >= 17 ? RunnerInference.WithBelievedIce(context, server) : server;
         RunForecast? forecast = context.Generation >= 6
-            ? RunModel.Plan(context, server, server.Ice.Length - 1, context.Self.Credits + extraRunCredits, context.Self.Clicks - 1, upfrontCost)
+            ? RunModel.Plan(context, planned, planned.Ice.Length - 1, context.Self.Credits + extraRunCredits, context.Self.Clicks - 1, upfrontCost,
+                corpRezBudget: ReferenceEquals(planned, server) ? null : context.Opponent.Credits)
             : null;
         if (forecast is not null)
             (cost, loss, damage, blocked, unknown) = (forecast.Credits, forecast.CreditsLost, forecast.Damage, !forecast.CanGetIn, forecast.UnknownIce);
@@ -29,7 +32,14 @@ public sealed partial class RunnerHeuristicPolicy
         // v6: an advanced card the Runner can't identify may be a trap dealing 2 plus
         // its counters on access (Urtica Cipher); with too few cards in the grip that's a flatline.
         int trapRisk = 0;
-        if (context.Generation >= 8)
+        if (context.Generation >= 17)
+        {
+            // v21 (A9b): each face-down root card is a trap as likely as the tracker says (an Urtica Cipher seen in HQ, now in a
+            // naked remote), and the rest as before: an advanced unknown card in proportion to the Corp playing traps (Hard knows
+            // the list).
+            trapRisk = TrackedTrapRisk(context, server);
+        }
+        else if (context.Generation >= 8)
         {
             // An advanced unknown card is more often an agenda; it's a trap in proportion to how
             // likely this Corp is to play them, which rises once the Runner has seen one.
@@ -51,6 +61,7 @@ public sealed partial class RunnerHeuristicPolicy
             && context.Opponent.AgendaPoints >= 4;
         // v11 (self-play review, 28 September): a possible trap that would flatline the Runner isn't worth the access.
         if (context.Generation >= 8 && !matchPoint && LethalTrap(context, server)) return Value(-1000, "run/possible-lethal-trap", true);
+        if (context.Generation >= 17 && !matchPoint && LikelyLethalTrap(context, server)) return Value(-1000, "run/likely-lethal-trap", true);
         // v13 (playtest, 30 September): a known trap's damage is certain (the Runner kept running a known Urtica Cipher).
         if (context.Generation >= 9)
         {
@@ -119,6 +130,7 @@ public sealed partial class RunnerHeuristicPolicy
             : (false, 0, 0);
         if (tollBlocked) return Value(-1000, "run/jack-out-before-unaffordable-toll", true);
         if (context.Generation >= 8 && LethalTrap(context, server)) return Value(-1000, "run/jack-out-before-possible-lethal-trap", true);
+        if (context.Generation >= 17 && LikelyLethalTrap(context, server)) return Value(-1000, "run/jack-out-before-likely-lethal-trap", true);
         return new(unknown == 0 && RunnerValues.Winning(context, server) ? 100 : 0,
             Math.Max(250, RunnerValues.Server(context, server)) + SuccessRewards(context, server)
             - (Math.Max(0, cost - run.RunCredits) + loss + tollCredits + tollClicks * ClickCredits) * context.CreditValue
@@ -249,6 +261,42 @@ public sealed partial class RunnerHeuristicPolicy
     /// </summary>
     private static bool LethalTrap(HeuristicContext context, AgentServer server) => SeenTrap(context)
         && UnknownAdvancedRoots(context, server).Any(counters => 2 + counters > context.Features.Hand.Length);
+
+    /// <summary>v21 (A9b): the trap risk of a server's face-down root cards, from the tracker and the prior over the rest.</summary>
+    private static int TrackedTrapRisk(HeuristicContext context, AgentServer server)
+    {
+        double risk = 0;
+        int grip = context.Features.Hand.Length;
+        for (int index = 0; index < server.Root.Length; index++)
+        {
+            if (server.Root[index] is not null || context.RememberedRoot(server, index) is not null) continue;
+            int counters = context.HiddenAdvancement(server.Id, "root", index);
+            (IReadOnlyList<(int Damage, double Probability)> traps, double residual) = RunnerInference.RootTraps(context, server, index, counters);
+            foreach ((int damage, double probability) in traps)
+                risk += probability * (damage > grip ? 6000 : damage * 100);
+            if (counters > 0)
+            {
+                double share = context.Knowledge?.OpponentList is not null ? RunnerInference.ListTrapShare(context) : SeenTrap(context) ? 0.6 : 0.15;
+                risk += residual * share * (2 + counters > grip ? 6000 : (2 + counters) * 100);
+            }
+        }
+        return (int)risk;
+    }
+
+    /// <summary>v21 (A9b): whether the tracker puts an even chance or more on accessing a trap that would flatline the Runner.</summary>
+    private static bool LikelyLethalTrap(HeuristicContext context, AgentServer server)
+    {
+        int grip = context.Features.Hand.Length;
+        double lethal = 0;
+        for (int index = 0; index < server.Root.Length; index++)
+        {
+            if (server.Root[index] is not null || context.RememberedRoot(server, index) is not null) continue;
+            (IReadOnlyList<(int Damage, double Probability)> traps, _) = RunnerInference.RootTraps(context, server, index,
+                context.HiddenAdvancement(server.Id, "root", index));
+            lethal += traps.Where(trap => trap.Damage > grip).Sum(trap => trap.Probability);
+        }
+        return lethal >= 0.5;
+    }
 
     /// <summary>Whether the Runner has seen this Corp play a trap that grows with its counters (Urtica Cipher, Clearinghouse).</summary>
     private static bool SeenTrap(HeuristicContext context) => context.Knowledge?.Reveals.Any(reveal =>

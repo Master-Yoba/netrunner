@@ -26,6 +26,24 @@ public sealed class ObservationDeterminizer
     public IBehaviorCatalog Behavior { get; }
     public IRuntimeCardCatalog Runtime { get; }
 
+    /// <summary>
+    /// The id of a zone by its public structure (a player's hand or deck, or a server's ICE or root), so a search agent
+    /// can say where a card it knows of is (<see cref="KnownHiddenCard"/>). Zones and servers are public; no card identity is read.
+    /// </summary>
+    public ZoneId? ZoneOf(ZoneKind kind, string? serverId = null)
+    {
+        if (serverId is not null)
+        {
+            ServerState? server = _state.Servers.FirstOrDefault(value => value.Id.Value == serverId && value.Exists);
+            return server is null ? null : kind == ZoneKind.ServerIce ? server.IceZoneId : kind == ZoneKind.ServerRoot ? server.RootZoneId : null;
+        }
+        ZoneState? zone = _state.Zones.FirstOrDefault(value => value.Kind == kind && value.ServerId is null);
+        return zone?.Id;
+    }
+
+    /// <summary>The number of cards in a zone by its public structure.</summary>
+    public int CountOf(ZoneId zone) => _state.GetZone(zone).CardIds.Count;
+
     /// <summary>A simulation state consistent with the viewer's observation, dealt from <paramref name="random"/>.</summary>
     public GameState Sample(SamplerKnowledge knowledge, OpponentCardPool pool, DeterministicRandom random) =>
         ObservationSampler.Sample(_state, Viewer, knowledge, pool, Runtime, random);

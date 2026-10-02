@@ -75,7 +75,12 @@ public static class OfflineMatchFactory
             configuration = side == PlayerSide.Corp
                 ? CorpPolicyProfiles.WithPersonality(configuration, personality)
                 : RunnerPolicyProfiles.WithPersonality(configuration, personality);
-        return new(configuration, OfflinePolicies.Create(configuration), catalog);
+        var agent = new OfflineAgent(configuration, OfflinePolicies.Create(configuration), catalog);
+        // A9: Hard knows the opponent's decklist; Easy and Standard know only the card pool.
+        if (configuration.ProfileId == "hard")
+            agent.KnowOpponentList((side == PlayerSide.Corp ? definition.Request.RunnerDeck : definition.Request.CorpDeck).Cards
+                .Select(entry => (entry.Code, entry.Quantity)));
+        return agent;
     }
 
     /// <summary>The Runner deck's archetypes (A8): declared by its preset, otherwise inferred from its cards.</summary>

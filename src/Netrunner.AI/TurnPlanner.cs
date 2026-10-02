@@ -83,10 +83,14 @@ internal sealed class TurnPlanner
             .ThenBy(candidate => candidate.ActionId.Value, StringComparer.Ordinal)
             .Take(run ? RunWidth : Width)];
         var totals = planned.ToDictionary(candidate => candidate.ActionId, _ => 0L);
-        OpponentCardPool pool = OpponentPool(features.Side);
+        bool tracked = DealsFromTracker && knowledge.Tracker is not null;
+        OpponentCardPool pool = tracked && DealsFromList && knowledge.OpponentList is { } list
+            ? new OpponentCardPool.Decklist(list.ToDictionary(entry => new CardDefinitionId(entry.DefinitionId), entry => entry.Quantity))
+            : OpponentPool(features.Side);
         for (int sample = 0; sample < samples; sample++)
         {
-            GameState state = planning.Determinizer.Sample(SamplerKnowledge.None, pool, planning.Random);
+            SamplerKnowledge known = tracked && PinsTracked ? Pins(knowledge.Tracker!, features.Side, planning) : SamplerKnowledge.None;
+            GameState state = planning.Determinizer.Sample(known, pool, planning.Random);
             foreach (AgentCandidate candidate in planned)
                 totals[candidate.ActionId] += Rollout(state, candidate.ActionId, features.Side, knowledge, planning.Determinizer, run);
         }
@@ -106,6 +110,54 @@ internal sealed class TurnPlanner
                 },
             }
             : candidate)];
+    }
+
+    /// <summary>A9d (plan-tracker 1, a Hard setting): samples are dealt from the tracker's beliefs, and from the list when Hard knows it.</summary>
+    public bool DealsFromTracker => _configuration.Parameters.GetValueOrDefault("plan-tracker") is 1 or 2 or 3;
+
+    /// <summary>plan-tracker 1 pins the tracker's beliefs and deals the rest from the list; 2 only the list; 3 only the pins, the rest from the pool.</summary>
+    private bool PinsTracked => _configuration.Parameters.GetValueOrDefault("plan-tracker") is 1 or 3;
+
+    private bool DealsFromList => _configuration.Parameters.GetValueOrDefault("plan-tracker") is 1 or 2;
+
+    /// <summary>
+    /// A9d: one sample's pins from the tracker, drawn with its probabilities: a face-down slot is the card it's believed to
+    /// be at that chance (or left to the deal); a tracked hand card is in the hand at its weight, at a random position; a
+    /// known top of the deck is on top.
+    /// </summary>
+    private static SamplerKnowledge Pins(CardTracker tracker, PlayerSide side, PlanningContext planning)
+    {
+        ObservationDeterminizer determinizer = planning.Determinizer;
+        DeterministicRandom random = planning.Random;
+        bool corp = side == PlayerSide.Runner;
+        var pins = new List<KnownHiddenCard>();
+        foreach (IGrouping<(string? Server, string? Zone, int Index), TrackedCard> slot in tracker.Cards.Where(card => card.Place == TrackedPlace.Slot)
+            .GroupBy(card => (card.ServerId, card.Zone, card.Index)))
+        {
+            if (determinizer.ZoneOf(slot.Key.Zone == "ice" ? ZoneKind.ServerIce : ZoneKind.ServerRoot, slot.Key.Server) is not { } zone) continue;
+            double draw = random.NextInt(1_000_000) / 1_000_000.0, sum = 0;
+            foreach (TrackedCard card in slot.OrderBy(card => card.DefinitionId, StringComparer.Ordinal))
+            {
+                sum += card.Weight;
+                if (draw < sum) { pins.Add(new(zone, slot.Key.Index, new CardDefinitionId(card.DefinitionId))); break; }
+            }
+        }
+        if (determinizer.ZoneOf(corp ? ZoneKind.CorpHand : ZoneKind.RunnerGrip) is { } hand)
+        {
+            List<int> free = [.. Enumerable.Range(0, determinizer.CountOf(hand))];
+            foreach (TrackedCard card in tracker.Cards.Where(card => card.Place == TrackedPlace.Hand).OrderBy(card => card.DefinitionId, StringComparer.Ordinal))
+            {
+                if (free.Count == 0) break;
+                if (random.NextInt(1_000_000) / 1_000_000.0 >= card.Weight) continue;
+                int at = random.NextInt(free.Count);
+                pins.Add(new(hand, free[at], new CardDefinitionId(card.DefinitionId)));
+                free.RemoveAt(at);
+            }
+        }
+        if (determinizer.ZoneOf(corp ? ZoneKind.CorpDeck : ZoneKind.RunnerStack) is { } deck)
+            foreach (TrackedCard card in tracker.Cards.Where(card => card.Place == TrackedPlace.DeckTop && card.Weight >= 0.5))
+                if (card.Depth < determinizer.CountOf(deck)) pins.Add(new(deck, card.Depth, new CardDefinitionId(card.DefinitionId)));
+        return new SamplerKnowledge(pins);
     }
 
     /// <summary>Added to every planned action's priority, so a planned action is always preferred to an unplanned one.</summary>

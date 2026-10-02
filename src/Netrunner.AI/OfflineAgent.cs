@@ -74,6 +74,42 @@ public sealed class OfflineAgent : IAgentLifecycle
     private OfflineAgentCheckpoint _checkpoint;
     private PendingEvaluation? _pending;
 
+    /// <summary>A9: whether this agent's version tracks the opponent's hidden cards.</summary>
+    private bool TracksOpponent => Configuration.Side == PlayerSide.Runner
+        ? RunnerHeuristicPolicy.UsesTracker(Configuration.PolicyVersion)
+        : CorpHeuristicPolicy.UsesTracker(Configuration.PolicyVersion);
+
+    /// <summary>A9: Easy forgets on purpose; Standard and Hard keep what they've seen.</summary>
+    private TrackerMemory Memory => Configuration.ProfileId == "easy" ? TrackerMemory.Forgetful : TrackerMemory.Full;
+
+    private CardTracker Track(AgentKnowledge knowledge, AgentFeatures features)
+    {
+        PlayerSide opponent = Configuration.Side == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp;
+        Dictionary<string, double> prior = TrackerPrior.Remaining(knowledge.OpponentList is { } list
+            ? TrackerPrior.List(list.Select(entry => (entry.DefinitionId, entry.Quantity)))
+            : TrackerPrior.Pool(_catalog, opponent), features);
+        return (knowledge.Tracker ?? CardTracker.Empty).Observe(features, _catalog,
+            zone => TrackerPrior.Share(prior, definition => TrackerPrior.Fits(_catalog, definition, zone)), Memory);
+    }
+
+    /// <summary>
+    /// A9: a Hard bot knows the opponent's decklist (decided 2 October); Easy and Standard know only the pool. Set once, when
+    /// the bot is created; it's part of the checkpoint, so a resumed game keeps it.
+    /// </summary>
+    public void KnowOpponentList(IEnumerable<(string DefinitionId, int Quantity)> list)
+    {
+        ArgumentNullException.ThrowIfNull(list);
+        if (!TracksOpponent) return;
+        _checkpoint = _checkpoint with
+        {
+            Knowledge = _checkpoint.Knowledge with
+            {
+                OpponentList = [.. list.GroupBy(entry => entry.DefinitionId, StringComparer.Ordinal).OrderBy(group => group.Key, StringComparer.Ordinal)
+                    .Select(group => new AgentListEntry(group.Key, group.Sum(entry => entry.Quantity)))],
+            },
+        };
+    }
+
     public OfflineAgent(OfflineAgentConfiguration configuration, IOfflinePolicy policy, ICardEvaluationCatalog catalog,
         OfflineAgentCheckpoint? checkpoint = null, bool captureDiagnostics = false)
     {
@@ -108,12 +144,14 @@ public sealed class OfflineAgent : IAgentLifecycle
         if (objective is not null && ((objective.RunId is not null && objective.RunId != features.Board.Run?.Id)
             || (objective.EncounterId is not null && objective.EncounterId != features.Board.Run?.Encounter?.Id)
             || (objective.TargetCardId is not null && !features.VisibleCards().Any(pair => pair.Card.Id == objective.TargetCardId)))) objective = null;
+        AgentKnowledge knowledge = _checkpoint.Knowledge.Observe(features, actionSequence,
+            Configuration.Side == PlayerSide.Runner && RunnerHeuristicPolicy.KeepsRootMemoryThroughInstalls(Configuration.PolicyVersion));
+        if (TracksOpponent) knowledge = knowledge with { Tracker = Track(knowledge, features) };
         _checkpoint = _checkpoint with
         {
             ObservationCursor = actionSequence,
             ObservationDigest = digest,
-            Knowledge = _checkpoint.Knowledge.Observe(features, actionSequence,
-                Configuration.Side == PlayerSide.Runner && RunnerHeuristicPolicy.KeepsRootMemoryThroughInstalls(Configuration.PolicyVersion)),
+            Knowledge = knowledge,
             Objective = objective,
         };
         DiscardDecision();

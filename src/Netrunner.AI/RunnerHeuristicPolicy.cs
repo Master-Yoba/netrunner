@@ -114,24 +114,38 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// accessed an Urtica Cipher, forgot it when Manegarm Skunkworks went into the same root, and ran there again to flatline).
     /// </summary>
     public const string V20 = "runner-heuristic-v20";
+    /// <summary>
+    /// V20 with A9b, inference from what it has seen (the A9a tracker): HQ and R&amp;D are valued by the agendas they likely
+    /// hold; the Corp's tag punishers it knows of raise a tag's risk when the Corp can play them; and what a face-down card
+    /// probably is (a trap seen in HQ, an upgrade left there, ICE of a seen type) prices runs.
+    /// </summary>
+    public const string V21 = "runner-heuristic-v21";
+    /// <summary>V21 with A9c, copy counting: a Hard Runner, which knows the Corp's list, values HQ and R&amp;D by the agendas left in it.</summary>
+    public const string V22 = "runner-heuristic-v22";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V18 is V15 with only the reinstall fix (no install over its own copy or a second console), a fix that can only remove
     /// wasted installs. V16 and V17, with more changes, lost to Codex on deals V15 won (1 October), so they aren't the default,
     /// nor is V19: level on the bot ladder, it won 1 of 12 on batch 3's deals where V18 won 6 of 24. V20 (V18 with the Wave 5
     /// playtest's fixes, 2 October) is: -17 and +49 on the bot ladder, and its fixes only remove plays the playtest showed were
-    /// wrong. Its Codex check was cut short when the quota ran out (1 of 6).
+    /// wrong. Its Codex check was cut short when the quota ran out (1 of 6). V21 (A9b, inference from the A9a tracker, 2 October)
+    /// is: +75, -31, +16 and +30 against V20 on the bot ladder, and against Claude Sonnet as Corp on 24 fixed deals it won 8
+    /// where V20 won 6. V22 (A9c, 2 October) is: at Standard and Easy it plays as V21 (its counting needs the Corp's list),
+    /// and at Hard it was level with V21 on the bot ladder.
     /// </remarks>
-    public const string PolicyVersion = V20;
+    public const string PolicyVersion = V22;
     /// <summary>
     /// The planner's model of the Runner. It stays V7, which Corp v9 was measured
     /// with, so the shipped Corp planner plays as it did.
     /// </summary>
     public const string LatestHeuristic = V7;
-    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20];
+    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22];
 
     /// <summary>Whether the version's memory of a face-down root card survives installs in that root (v20).</summary>
-    public static bool KeepsRootMemoryThroughInstalls(string version) => version == V20;
+    public static bool KeepsRootMemoryThroughInstalls(string version) => version is V20 or V21 or V22;
+
+    /// <summary>Whether the version keeps the A9a tracker of the Corp's hidden cards (v21).</summary>
+    public static bool UsesTracker(string version) => version is V21 or V22;
 
     public RunnerHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -139,10 +153,10 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Runner policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 or V8 or V9 => 6, V10 => 7, V11 or V12 => 8, V13 => 9, V14 => 10, V15 => 11, V16 => 12, V17 => 13, V18 => 14, V19 => 15, V20 => 16, _ => 2 };
+        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 or V8 or V9 => 6, V10 => 7, V11 or V12 => 8, V13 => 9, V14 => 10, V15 => 11, V16 => 12, V17 => 13, V18 => 14, V19 => 15, V20 => 16, V21 => 17, V22 => 18, _ => 2 };
         // V18 on: only the Hard profile (A6) has planner parameters, so Standard and Easy play as before.
         Plans = version is V3 or V8 or V9 || Generation >= 14;
-        Repairs = version is V4 or V5 or V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19 or V20;
+        Repairs = version is V4 or V5 or V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19 or V20 or V21 or V22;
     }
 
     /// <summary>Whether this version has the playtest repairs (V4).</summary>

@@ -69,6 +69,18 @@ internal sealed class HeuristicContext
             ? CorpArchetypeProfile.Blend(personality, deck, AgentPersonalities.DeckWeight)
             : deck;
 
+    private Dictionary<string, object>? _memo;
+
+    /// <summary>A value computed once per decision.</summary>
+    public T Memo<T>(string key, Func<T> compute) where T : notnull
+    {
+        _memo ??= new(StringComparer.Ordinal);
+        if (_memo.TryGetValue(key, out object? value)) return (T)value;
+        T computed = compute();
+        _memo[key] = computed;
+        return computed;
+    }
+
     public int Parameter(string key, int fallback) => Configuration.Parameters.TryGetValue(key, out int value) ? value : fallback;
     public static int Hosted(AgentCard? card) => card?.Counters.Where(counter => counter.Purpose == CardCounterPurpose.HostedCredit).Sum(counter => counter.Count) ?? 0;
     public int AgendaCount => Features.Hand.Count(card => Definition(card)?.Agenda is not null);
