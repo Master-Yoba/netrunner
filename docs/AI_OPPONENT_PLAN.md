@@ -428,6 +428,137 @@ Gate: on held-out games of each pool, the chosen per-format and deck-aware
 fits predict outcomes at least as well as one general fit, and the ladder on
 each pool shows no deck warning against the previous version.
 
+### A9. Memory and inference (M → L), Wave 5.5
+
+**Why.** The Wave 5 playtest and the games against Claude Sonnet keep finding faults that come from forgetting or not
+inferring:
+- Runner v20 forgot an accessed Urtica Cipher when another card went into its root, and ran into it again.
+- Tag risk ignores a Retribution the Runner has seen.
+
+**What the bots keep today:**
+- **The Runner:**
+  - R&D's freshness (whether the Corp has drawn since the last access);
+  - how much of HQ is new;
+  - the face-down root cards it accessed;
+  - the definitions it has seen.
+- **The Corp:** the installed cards the Runner has accessed.
+- **The only inference:** the Corp plays advanceable traps.
+
+Remembering what was accessed in every server, and reasoning from it, is basic Netrunner.
+
+**Principles:**
+- **One belief model per bot, the tracker, in the agent's checkpoint.** Serialized, deterministic and bounded, built only
+  from the bot's observations, so it can't see hidden state. The twin suite keeps proving that.
+- **Generic over cards.** A remembered card's location changes on public changes between observations:
+  - hidden-zone counts;
+  - public zones;
+  - cards played and their declared behaviour (draw, shuffle into R&D, search, reveal, add to HQ);
+  - accesses, rezzes, scores, steals and trashes.
+
+  Card-specific code is avoided. A movement the generic rules can't follow makes the card unknown (it's forgotten),
+  never guessed. Sprint and Longevity Serum shuffle cards back, so a seen card is "in R&D, position lost". Malapert
+  Data Vault reveals a card and adds it to HQ, so it's "known in HQ". Later sets bring more such cards.
+- **Feeds both the heuristic and the planner.** The heuristic asks the tracker questions. The planner deals its samples
+  from it (A9d).
+- **New versions opt in.** Older versions remember exactly as before, as Runner v20's root memory did, so frozen
+  benchmarks and saves replay.
+
+**Knowledge and forgetting by tier** (decided 2 October):
+- **Easy:** knows the card pool, forgets deliberately. It holds a few cards at most, and what it knows of HQ and R&D
+  expires after one Corp turn.
+- **Standard:** knows the card pool, with a full tracker.
+- **Hard:** knows the opponent's decklist, with a full tracker. Copy counting is exact.
+
+Both sides remember everything they've seen.
+
+**Decay.** Most of it falls out of the model: a remembered card's certainty drops with every event that blurs its
+location (a shuffle, an install from a hand with several candidates). A belief no public event has confirmed for a few
+of the owner's turns also becomes unknown, so nothing sticks forever.
+
+#### A9a. The tracker, and its accuracy measured (both sides)
+
+- **Per side, a set of remembered cards:**
+  - Each has a definition and a location belief: R&D at a known depth, R&D somewhere, HQ, Archives face down, a
+    face-down install (server and slot), the grip or the stack, or gone.
+  - Each has a confidence.
+  - The counts of unknown cards per hidden zone come alongside.
+- **The transitions:**
+  - A draw takes R&D's top cards to HQ.
+  - A face-down install takes one of HQ's cards to the slot, weighted by which card types can go there: roots take
+    agendas, assets and upgrades; ICE positions take ICE.
+  - A face-down discard sends a card to Archives.
+  - A shuffle loses positions.
+  - Search, reveal and add-to-hand moves follow the played card's behaviour.
+  - Access, rez, score, steal and trash make a card certain, or gone.
+- **First task: check what the observation gives.** It may be enough to read count changes and played cards'
+  behaviour after every accepted action. If it isn't, add a viewer-filtered feed of public events to the observation
+  (an engine change, versioned like the observation itself).
+- **Belief accuracy (`ai-belief`).** Saved ladder games contain the true hidden state. Replay them and score the
+  tracker's predictions against the truth:
+  - the Brier score and log loss of P(this face-down card is X);
+  - P(this card is in HQ);
+  - the share of remembered cards whose location is right.
+
+  The baseline is the plain pool (or list) prior. This measures the model before it changes any play.
+- **Gate:**
+  - the tracker beats the prior on held-out games by a set margin, per tier;
+  - Easy's forgetting shows in its scores;
+  - the twin suite passes;
+  - checkpoints stay within their size budget.
+
+#### A9b. The Runner's inference
+
+- **Central servers by what they hold:**
+  - The expected agendas in HQ and R&D, from the tracker, replace freshness.
+  - It doesn't run HQ again when it knows HQ holds no agenda.
+  - A known non-agenda on top of R&D is worth only the accesses beyond it.
+- **The Corp's next turn:**
+  - Each likely card in HQ, and R&D's top cards the Corp will draw, is weighed by what it would do, times whether the
+    Corp can play it then (clicks, credits, its conditions, such as the Runner being tagged).
+  - It feeds tag risk: a seen Retribution puts the best program or hardware at risk, and Orbital Superiority its meat
+    damage on score.
+  - It also feeds the damage reserve (cards kept in the grip) and what to install or hold.
+- **What a face-down install probably is:**
+  - From HQ as remembered: a card on a naked remote is probably the Urtica Cipher seen on top of R&D.
+  - A newly installed upgrade is probably the one left in HQ.
+  - Face-down ICE probably has the type the Runner saw.
+  - These feed trap risk, run value, and which breakers and money to hold.
+- **Gate:**
+  - saved-game regression tests for the user's four examples and the earlier faults;
+  - new lints (an HQ run while HQ is known to hold no agenda; a run into a likely trap) improve against the previous
+    version;
+  - the ladder is level or better;
+  - against Claude Sonnet on fixed deals, the bots hold up against the previous version (a paired arm, about $0.90 a
+    game).
+
+#### A9c. Copy and unique counting (both bots)
+
+- **Copies left:** for each definition, the limit minus the copies seen (played, in Archives or the heap, installed,
+  scored, trashed).
+  - The limit is the deck-building limit in the pool (3, or 1 for a limited card), or the exact list count for Hard.
+  - Unique cards also count against what can be installed.
+- **What the Corp infers:**
+  - The Runner's breaker types left: it has seen three killers trashed, so it probably has no killer.
+  - Its burst economy left: three Sure Gambles played and a Runner low on money means no quick money, so a scoring
+    window is open. That feeds the Corp's estimate of what the Runner can spend next turn.
+  - What it has shown from its grip.
+- **What the Runner infers:** the Corp's agenda points left in R&D and HQ, and the traps left.
+- **Gate:** as A9b, with Corp saved-game tests.
+
+#### A9d. The planner deals from the tracker
+
+- **Rollout samples:**
+  - Rollouts deal hidden zones consistent with the tracker: known cards where they are believed to be, the rest
+    from what remains of the pool, or the list for Hard.
+  - Today the planner deals from the whole Gateway pool with no sampler knowledge.
+- **Gate:**
+  - Hard is separated from Standard on the ladder in both seats;
+  - Hard is no weaker than Standard against Claude Sonnet on fixed deals;
+  - the planner stays within its time budget.
+
+Each phase is a new policy version per side, gated as section 6 says, with a human playtest at the end of A9b and of
+A9d.
+
 ### Human game data (deferred)
 
 Jinteki.net has a replay format but no public replay source, games there are
@@ -450,6 +581,7 @@ E1 + E5 (engine) ──> A3 infrastructure (Wave 3)
 Wave 4: A4a run model ──> A5 fitted evaluation ──> A3 planner on A4a + A5 ──> A4 run search
 A6 difficulty/personality after A3 (needs compute knobs)
 A7 per-format data and deck-aware features with the next card set (needs A1b pools and A5 fitting)
+A9 memory and inference (Wave 5.5): A9a tracker ──> A9b Runner inference ──> A9c copy counting ──> A9d planner deals from it
 ```
 
 A1 and A2 need no engine work and can start immediately. A3 is the largest

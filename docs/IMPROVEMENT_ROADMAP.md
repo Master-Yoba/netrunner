@@ -123,6 +123,7 @@ seeds to hide an unfavorable result.
 | 4 | C1, U7, U5, U6, A1b, A4a, A5, A3, A4, A8 | 9–13 weeks | Real decks; polish, and the bot plans turns and searches runs |
 | 4.5 | P1, P2, P3 | 3–5 weeks | Automated playtesting: lints and a local LLM find the bot's oddities |
 | 5 | A6 (compute tiers, personalities), hardening, decision point | 2–4 weeks | Difficulty, release readiness |
+| 5.5 | A9 (memory and inference) | 3–5 weeks | The bots remember what they saw and reason from it |
 
 In total that's roughly 28–42 weeks. The UI track alone reaches "feels like a
 game" at the end of Wave 3.
@@ -471,6 +472,19 @@ real terminal, even over SSH, on the same engine and match coordinator.
     tuned data (one bot, each pool's fitted weights and priors) and
     deck-aware evaluation features, or
   - an RC.
+
+### Wave 5.5 — memory and inference (A9)
+
+Why now: the Wave 5 playtest and the games against Claude Sonnet found faults that come from what the bots forget or
+don't infer. A bigger card pool (Elevation, next) only adds more of these. See
+[A9](AI_OPPONENT_PLAN.md#a9-memory-and-inference-m--l-wave-55):
+- **A9a:** a card tracker for both sides, with its accuracy measured against saved games.
+- **A9b:** the Runner's inference: central servers by what they hold, the Corp's next-turn threats, what a face-down
+  install probably is.
+- **A9c:** copy and unique counting for both bots.
+- **A9d:** the planner dealing its samples from the tracker.
+
+Hard knows the opponent's list, Standard and Easy the pool, and Easy forgets on purpose.
 
 ### C2. Format snapshots (with the next card set)
 
