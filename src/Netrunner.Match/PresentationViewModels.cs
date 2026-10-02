@@ -49,6 +49,9 @@ public sealed record MatchViewModel(
         init => _corpDiscardCount = value;
     }
 
+    /// <summary>CR 1.17.1a: the threat level is the higher of the two scores (Elevation's "Threat X").</summary>
+    public int ThreatLevel => Math.Max(Corp.AgendaPoints, Runner.AgendaPoints);
+
     public CardViewModel? CorpIdentity { get; init; }
     public CardViewModel? RunnerIdentity { get; init; }
     /// <summary>
@@ -429,15 +432,22 @@ public sealed record CardCounterViewModel(
         CardCounterPurpose.Virus => "VIRUS",
         CardCounterPurpose.Generic when string.Equals(CounterName, "power", StringComparison.OrdinalIgnoreCase)
             => "POWER",
+        CardCounterPurpose.Generic when string.Equals(CounterName, "agenda", StringComparison.OrdinalIgnoreCase)
+            => "AGENDA",
+        CardCounterPurpose.Generic when string.Equals(CounterName, "flipped", StringComparison.OrdinalIgnoreCase)
+            => "FLIPPED",
         CardCounterPurpose.Generic => "GENERIC",
         _ => "UNKNOWN",
     };
 
     public string ChipText => $"{Label} ×{Count}";
 
-    public string Summary => SpendRestriction is { } restriction
-        ? $"{ChipText} · {restriction.ToString().ToUpperInvariant()}"
-        : ChipText;
+    public string Summary => SpendRestriction switch
+    {
+        HostedCreditSpendRestriction.DeclaredUseOnly => $"{ChipText} · CARD'S OWN USES ONLY",
+        { } restriction => $"{ChipText} · {restriction.ToString().ToUpperInvariant()}",
+        null => ChipText,
+    };
 }
 
 /// <summary>One visible current-turn use of a physical card ability.</summary>

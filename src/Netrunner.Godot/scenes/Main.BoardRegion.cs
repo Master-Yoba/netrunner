@@ -252,6 +252,7 @@ public partial class Main
 
 		string faction = panel.Faction.Length == 0 ? string.Empty : $" · {panel.Faction}";
 		string agenda = panel.AgendaPoints is { } points ? $" · {points} AP" : string.Empty;
+		agenda += panel.IsFlipped ? " · back face" : string.Empty;
 		string rules = string.IsNullOrWhiteSpace(panel.RulesText)
 			? string.Empty
 			: $"\n{CardMarkupFormatter.Format(panel.RulesText)}";
@@ -398,7 +399,7 @@ public partial class Main
 
 		ClearChildren(_scores);
 		_scores.AddChild(MakeLabel(
-			$"Runner score: {board.Runner.AgendaPoints} · Corp score: {board.Corp.AgendaPoints}",
+			$"Runner score: {board.Runner.AgendaPoints} · Corp score: {board.Corp.AgendaPoints} · Threat: {Math.Max(board.Runner.AgendaPoints, board.Corp.AgendaPoints)}",
 			11,
 			Warning));
 		foreach (CardViewModel card in board.RunnerScore)

@@ -573,7 +573,7 @@ public partial class GameTableControl : Control
 		ShowCount(_runnerCredits, view.Runner.Credits);
 		_runnerResources.SymbolText = $"[click] {ClickPips(view.Runner.Clicks, 4)} · [agenda point] {view.Runner.AgendaPoints}\n"
 			+ $"[tag] {view.Runner.Tags?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "—"}";
-		_corpScoreLabel.Text = $"Score {view.Corp.AgendaPoints}";
+		_corpScoreLabel.Text = $"Score {view.Corp.AgendaPoints} · Threat {view.ThreatLevel}";
 		if (view.Runner.UsedMemory is { } used && view.Runner.MemoryLimit is { } limit)
 			_runnerResources.SymbolText += $" · [MU] {used}/{limit}";
 		_runnerScoreLabel.Text = $"Score pile · {view.RunnerScore.Count} · {view.Runner.AgendaPoints} agenda point(s)";
