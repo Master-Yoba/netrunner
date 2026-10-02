@@ -537,7 +537,10 @@ public static partial class GameEngine
                 AdvanceBehaviorCursor(working, frame);
                 return;
             case BehaviorInstructionKind.ProhibitScoringTargetThisTurn:
-                foreach (CardInstanceId prohibited in ResolveBehaviorCards(working, frame, instruction.Target))
+                foreach (CardInstanceId prohibited in instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } prohibitedTarget
+                    && IsProvenEmptyChosenCard(frame, prohibitedTarget)
+                        ? []
+                        : ResolveBehaviorCards(working, frame, instruction.Target))
                 {
                     MarkCardScoreProhibition(working, prohibited);
                 }
@@ -4170,6 +4173,14 @@ public static partial class GameEngine
         // (for example Seamless Launch), not taking an advance action. CR 1.18.2
         // explicitly distinguishes the two: do not emit an advance occurrence
         // or trigger advance-from-zero abilities for this counter placement.
+        if (instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } emptyTarget
+            && IsProvenEmptyChosenCard(frame, emptyTarget))
+        {
+            // An optional or target-less choice chose nothing: nothing to advance.
+            AdvanceBehaviorCursor(working, frame);
+            return;
+        }
+
         IReadOnlyList<CardInstanceId> cardIds = ResolveBehaviorCards(working, frame, instruction.Target);
         if (instruction.Target is { Kind: BehaviorTargetKind.ChosenCard })
         {
