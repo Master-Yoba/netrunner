@@ -152,7 +152,9 @@ Corp v25 is v23 with these fixes (not v24's); Runner v20 is v18 with these (not 
 `standard-w5` (both).
 
 **Ladder (Gateway, two seeds, 240 games each):** Corp v25 +6 [−86, 88] and +70 [−10, 150]; Runner v20 −17 [−96, 71] and
-+49 [−27, 131].
++49 [−27, 131]. After Runner v20's root-memory fix (below), the new defaults against the old ones (two seeds, 360 games
+each): Corp v23 −36 [−109, 42] and −5 [−88, 87] below Corp v25; Runner v18 −42 [−110, 32] and −27 [−112, 56] below
+Runner v20.
 
 **Against Codex:** cut short when the Codex quota ran out. Only games Codex played to the end are counted:
 - `standard-w5`: 9 games. As Corp it won 1 of 3; as Runner, 1 of 6.
@@ -164,3 +166,47 @@ That's far too few to separate versions (about 50 games are needed). The replay 
 removes a play the playtest showed was wrong. The promotion rule asks for a Codex check on fixed deals as well; this time
 it rests on the ladder alone, because the quota ran out. The tier, personality and hardening measurements above were made
 on Corp v23 and Runner v18. The Hard and personality profiles carry over unchanged to the new versions.
+
+### Claude Sonnet 5.5 as the outside opponent
+
+With the Codex quota spent, Claude Sonnet 5.5 played through the same MCP game server (`ai-mcp-game`), driven by the
+`claude` CLI in print mode:
+- **Tools:** no built-in tools, only the game's (`--tools "" --strict-mcp-config`).
+- **Prompt:** the Codex prompt.
+- **Cap:** $10 a game.
+
+The cost was measured before any batch:
+- **The first Corp game:** 27 decisions, 75 seconds, $0.50 at list price.
+- **The first Runner game:** 44 decisions, 142 seconds, $0.98.
+- **37 games over the round:** $33.74, about $0.90 a game, 1 to 3 minutes each (Codex took 4 to 14).
+
+**Sonnet as Corp on batch 3's 12 Corp-side deals,** so the bot plays Runner:
+
+| Bot Runner | Wins against Sonnet |
+|---|---|
+| v18 (the previous default) | 4 of 12 |
+| v20 as first promoted | 2 of 12 |
+| v20 with the root-memory fix (below) | 4 of 12 |
+
+**The fault one of those games showed: Runner v20 forgot a trap it had accessed.**
+- In deal 61 it accessed the Urtica Cipher in remote 1 on turn 1.
+- When Manegarm Skunkworks went into the same root, it forgot the Urtica: the memory of face-down root cards was
+  dropped whenever the root's card count changed.
+- It ran there again with one card in its grip, and the Urtica flatlined it.
+
+Installs append to the root, so v20 now keeps its memory while a root only grows. A shrink still forgets, since a
+removal moves the later cards. Older versions remember exactly as before, so their checkpoints are unchanged. The
+saved-game test is `AnAccessedTrapStaysKnownWhenTheCorpInstallsBesideIt`.
+
+Sonnet also beat the bots' Corp v25 as Runner in its one Runner game. Sonnet is a strong opponent on both sides, and
+much cheaper and faster than Codex for this use.
+
+**Next: a mini-milestone for Runner memory and inference.** What the Runner remembers today:
+- R&D's freshness (whether the Corp has drawn since the last access);
+- how much of HQ is new;
+- the face-down root cards it accessed;
+- the definitions it has seen.
+
+It doesn't remember which cards it saw in HQ or R&D. It infers only that the Corp plays advanceable traps. A seen
+Retribution or Orbital Superiority, for example, doesn't change what it thinks a tag risks. The user is writing what
+each system needs to handle.
