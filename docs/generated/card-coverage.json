@@ -2157,6 +2157,7 @@
       "tests": [
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingDoesNotTriggerOnAPaidInstall",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingHostedEventsArePlayedAsIfFromTheGrip",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingHostedRunEventsArePlayedAsIfFromTheGrip",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingHostsTheTopStackCardFaceupAfterAFreeInstallAndItInstallsAsIfFromTheGrip",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingTrashesItsHostedCardsWhenTheDiscardPhaseEnds",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingWithNothingHostedEndsTheTurnCleanly"
@@ -3202,7 +3203,9 @@
       "reviewer": "architect",
       "registered": true,
       "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.ARunEventsExtraAccessFollowsTheRunnerMovedByProprionegation",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.ProprionegationCannotBeUsedOutsideARun",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.ProprionegationMovesTheRunnerFromAServerWithNoIce",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.ProprionegationMovesTheRunnerToTheOutermostPositionOfArchives"
       ],
       "fullTextComplete": true,

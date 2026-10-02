@@ -323,6 +323,45 @@ public sealed class ElevationBatch3Tests
 
     [Fact]
     [Trait("ElevationCard", "35048")]
+    public void ProprionegationMovesTheRunnerFromAServerWithNoIce()
+    {
+        // EL.8 deck-pool ladder regression: the move left from the server itself (ICE index -1).
+        GameState state = new ElevationBoard(PlayerSide.Runner)
+            .Add("35048", Place.CorpScore, counters: new Dictionary<string, int> { ["agenda"] = 1 })
+            .Add(CorpFillerIce, Place.Ice, server: 2)
+            .Begin();
+        state = RunTo(state, ElevationBoard.Remote, static value => CanUse(value, "proprionegation-move"));
+        Assert.Equal(-1, state.RunState!.CurrentIceIndex);
+        state = RoundTrip(Apply(state, static action => action.Parameters is AbilityActionParameters { AbilityKey: "proprionegation-move" }).State);
+        state = PassUntil(state, static value => value.RunState is null
+            || value.RunState.AttackedServer == ElevationBoard.ServerId(value, 2) && value.RunState.Step == RunTimingStep.ApproachPaidWindow);
+
+        Assert.Equal(ElevationBoard.ServerId(state, 2), state.RunState!.AttackedServer);
+    }
+
+    [Fact]
+    [Trait("ElevationCard", "35048")]
+    public void ARunEventsExtraAccessFollowsTheRunnerMovedByProprionegation()
+    {
+        // EL.8 deck-pool ladder regression: Jailbreak's breach modifier stayed on the old attacked server
+        // and failed validation while the run went on at Archives.
+        const string Jailbreak = "30028";
+        GameState state = new ElevationBoard(PlayerSide.Runner)
+            .Add("35048", Place.CorpScore, counters: new Dictionary<string, int> { ["agenda"] = 1 })
+            .Add(CorpFillerIce, Place.Ice, server: 2)
+            .Add(Jailbreak, Place.Grip)
+            .Begin();
+        state = PassUntil(PlayFirst(state, Jailbreak), static value => value.RunState is null || CanUse(value, "proprionegation-move"));
+        Assert.Single(state.RunState!.BreachAccessModifiers ?? []);
+        state = RoundTrip(Apply(state, static action => action.Parameters is AbilityActionParameters { AbilityKey: "proprionegation-move" }).State);
+
+        ServerId archives = ElevationBoard.ServerId(state, 2);
+        Assert.Equal(archives, state.RunState!.AttackedServer);
+        Assert.Equal(archives, Assert.Single(state.RunState.BreachAccessModifiers ?? []).AttackedServerId);
+    }
+
+    [Fact]
+    [Trait("ElevationCard", "35048")]
     public void ProprionegationCannotBeUsedOutsideARun()
     {
         GameState state = new ElevationBoard(PlayerSide.Runner)
