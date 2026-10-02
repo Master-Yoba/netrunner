@@ -2635,9 +2635,11 @@ public static partial class GameEngine
         // As with a steal: when a trigger waits on the trash (René "Loup" Arcemont),
         // the next breach decision is yielded only after that trigger resolves;
         // yielding it now left the occurrence frame stranded beneath the prompt.
+        // The trash's turn events are recorded first, as a trigger may count them.
+        RecordAccessedCardTrashedTurnEvents(working, installedServer);
         bool hasTrashTrigger = HasActiveCatalogTrigger(working, OccurrenceKind.AccessedCardTrashed, subjectCardId: accessed);
         AdvanceBreachAfterAccess(working, run, yieldDecision: !hasTrashTrigger);
-        QueueAccessedCardTrashedOccurrence(working, accessed, card.Rezzed, installedServer);
+        QueueAccessedCardTrashedOccurrence(working, accessed, card.Rezzed, installedServer, turnEventsRecorded: true);
     }
 
     /// <summary>

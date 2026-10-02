@@ -134,7 +134,8 @@ internal static class ElevationSpec
         PlayerSide? occurrenceController = null,
         BehaviorCondition? requirement = null,
         BehaviorFace? face = null,
-        bool onAttackedServer = false) =>
+        bool onAttackedServer = false,
+        BehaviorTriggerCondition? condition = null) =>
         new(
             key,
             occurrence,
@@ -147,7 +148,8 @@ internal static class ElevationSpec
             occurrenceControllerSide: occurrenceController,
             oncePerTurn: oncePerTurn,
             requirement: requirement,
-            face: face);
+            face: face,
+            condition: condition);
 
     /// <summary>"When you score this agenda" (or, with <paramref name="onSteal"/>, scored or stolen).</summary>
     public static BehaviorTrigger Score(string key, IReadOnlyList<BehaviorInstruction> instructions, bool onSteal = false) =>

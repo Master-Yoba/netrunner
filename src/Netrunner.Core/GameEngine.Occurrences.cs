@@ -90,16 +90,13 @@ public static partial class GameEngine
         WorkingState working,
         CardInstanceId trashed,
         bool wasRezzed,
-        ServerId? installedServer)
+        ServerId? installedServer,
+        bool turnEventsRecorded = false)
     {
         bool tracks = working.BehaviorCatalog.TracksTurnEvents;
-        if (tracks)
+        if (!turnEventsRecorded)
         {
-            RecordActiveTurnEvent(working, TurnEventKind.CorpCardStolenOrTrashed);
-            if (installedServer is not null)
-            {
-                RecordActiveTurnEvent(working, TurnEventKind.InstalledCorpCardTrashed);
-            }
+            RecordAccessedCardTrashedTurnEvents(working, installedServer);
         }
 
         if (!HasActiveCatalogTrigger(working, OccurrenceKind.AccessedCardTrashed, subjectCardId: trashed))
@@ -115,6 +112,25 @@ public static partial class GameEngine
                 trashed,
                 tracks ? installedServer : null,
                 subjectWasRezzed: tracks && wasRezzed ? true : null))));
+    }
+
+    /// <summary>
+    /// The turn events of a trash during access. A trigger that counts them
+    /// (Aggressive Trendsetting's first installed trash) must see them before
+    /// the engine asks whether a trigger waits on the trash.
+    /// </summary>
+    private static void RecordAccessedCardTrashedTurnEvents(WorkingState working, ServerId? installedServer)
+    {
+        if (!working.BehaviorCatalog.TracksTurnEvents)
+        {
+            return;
+        }
+
+        RecordActiveTurnEvent(working, TurnEventKind.CorpCardStolenOrTrashed);
+        if (installedServer is not null)
+        {
+            RecordActiveTurnEvent(working, TurnEventKind.InstalledCorpCardTrashed);
+        }
     }
 
     /// <summary>

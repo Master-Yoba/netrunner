@@ -23,6 +23,7 @@ public static class ElevationBatch1CorpSpecs
     // 35037 — EL-CR-9.1-triggered; EL-CR-1.11-clicks. The first time the
     // Runner trashes an installed Corp card during their turn they may spend
     // a click; if they do not, the Corp gets +1 allotted click next turn.
+    // Only that trash fires it: a later trash from HQ or R&D does not.
     private static readonly CardBehaviorDefinition AggressiveTrendsetting = new(
         ElevationCardCodes.AggressiveTrendsetting,
         PlayerSide.Corp,
@@ -39,7 +40,8 @@ public static class ElevationBatch1CorpSpecs
                         Option("spend-click", [], costs: [Click()]),
                         Option("decline", [new BehaviorInstruction(BehaviorInstructionKind.GainAllottedClicksNextTurn, amount: 1)])),
                 ],
-                requirement: BehaviorCondition.TurnEventCountIs(TurnEventKind.InstalledCorpCardTrashed, 1, PlayerSide.Runner)),
+                requirement: BehaviorCondition.TurnEventCountIs(TurnEventKind.InstalledCorpCardTrashed, 1, PlayerSide.Runner),
+                condition: BehaviorTriggerCondition.TrashedSubjectWasInstalled),
         ]);
 
     // 35057 — EL-CR-9.1-triggered; double-sided identity (EL-FLIP).

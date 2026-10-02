@@ -1206,19 +1206,19 @@ public sealed class FullGameContractAgent : IGameAgent
         // The dedicated bioroid interface is emitted only in the Runner's
         // encounter paid window. Its payload is intentionally narrower than
         // a generic AbilityActionParameters snapshot: one ICE, one exact
-        // subroutine, one stable ability key, and one lost click. Keep this
-        // validation detached from authoritative state; Core owns whether
-        // those IDs still denote the current encountered/unbroken target.
+        // subroutine, one stable ability key, and one lost click or (EL.6,
+        // N-Pot) a positive credit cost. Keep this validation detached from
+        // authoritative state; Core owns whether those IDs still denote the
+        // current encountered/unbroken target.
         return actionClass == FullGameActionClass.RunWindow
             && bioroid is not null
             && HasStableId(bioroid.IceId.Value)
             && HasStableId(bioroid.SubroutineId.Value)
             && bioroid.SubroutineOrdinal >= 0
             && HasStableId(bioroid.AbilityKey)
+            && EncounteredBioroidAbilitySpec.IsSupportedCost(bioroid.Cost)
             && bioroid.Cost is
             {
-                Kind: BehaviorCostKind.LoseClick,
-                Amount: 1,
                 CounterName: null,
                 AdditionalKey: null,
                 AdditionalTarget: null,

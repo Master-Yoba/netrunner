@@ -39,6 +39,11 @@ public static partial class GameEngine
             BehaviorTriggerCondition.SubjectInstalledWithoutCredits => occurrence.SourceCardId is { } installed
                 && facts?.FreeInstallIds?.Contains(installed) == true,
             BehaviorTriggerCondition.SubroutineResolvedThisRun => working.RunState?.ResolvedSubroutineLedger is { Count: > 0 },
+            BehaviorTriggerCondition.TrashedSubjectWasInstalled => occurrence.Effect is GameplayOccurrenceEffect
+            {
+                Kind: OccurrenceKind.AccessedCardTrashed,
+                ServerId: not null,
+            },
             _ => false,
         };
     }

@@ -15,4 +15,10 @@ public enum BehaviorTriggerCondition
 
     /// <summary>EL-SUBROUTINE-RESOLVED-FACT: a subroutine resolved during the live run (Ryō "Phoenix" Ōno).</summary>
     SubroutineResolvedThisRun,
+
+    /// <summary>
+    /// The accessed card the Runner trashed was installed, by last-known
+    /// information: its server is recorded (Aggressive Trendsetting).
+    /// </summary>
+    TrashedSubjectWasInstalled,
 }

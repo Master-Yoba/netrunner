@@ -81,6 +81,68 @@ public sealed class ElevationBatch1CorpTests
 
     [Fact]
     [Trait("ElevationCard", "35037")]
+    public void AggressiveTrendsettingIgnoresALaterTrashOfACardThatWasNotInstalled()
+    {
+        // EL.7 ladder regression: a later trash from HQ fired it again mid-access
+        // and broke the access frame.
+        GameState state = new ElevationBoard(PlayerSide.Runner)
+            .Add("35037", Place.CorpScore)
+            .Add("35062", Place.Root)
+            .Add("35056", Place.Hq)
+            .Begin();
+        state = RunTo(state, ElevationBoard.Remote, static value => value.PendingDecision?.LegalActions.Any(
+            static action => action.Kind == ActionKind.TrashAccessedCard) == true);
+        state = Apply(state, static action => action.Kind == ActionKind.TrashAccessedCard).State;
+        state = PassUntil(state, static value => value.PendingDecision?.Kind == DecisionKind.BehaviorChoice);
+        state = ChooseOption(state, "decline");
+        state = ToAction(state);
+        state = RunTo(state, ElevationBoard.Hq, static value => value.PendingDecision?.LegalActions.Any(
+            static action => action.Kind == ActionKind.TrashAccessedCard) == true);
+        state = Apply(state, static action => action.Kind == ActionKind.TrashAccessedCard).State;
+        state = RoundTrip(ToAction(state));
+
+        Assert.Equal(ZoneKind.CorpDiscard, ZoneOf(state, "35056"));
+        Assert.Equal(1, state.Turn.History!.CorpThisTurn!.NextTurnExtraClicks);
+        Assert.Equal(2, Player(state, PlayerSide.Runner).Clicks);
+    }
+
+    [Fact]
+    [Trait("ElevationCard", "35037")]
+    public void AggressiveTrendsettingFiresOnceWhenARunTrashesTwoInstalledCards()
+    {
+        // EL.7 ladder regression: a second trash in the same breach queued an
+        // occurrence no trigger took, and the access frame lost its prompt.
+        GameState state = new ElevationBoard(PlayerSide.Runner) { RunnerCredits = 9 }
+            .Add("35037", Place.CorpScore)
+            .Add("35062", Place.Root)
+            .Add("35082", Place.Root)
+            .Begin();
+        for (int trashed = 0; trashed < 2; trashed++)
+        {
+            state = trashed == 0
+                ? RunTo(state, ElevationBoard.Remote, static value => value.PendingDecision?.LegalActions.Any(
+                    static action => action.Kind is ActionKind.TrashAccessedCard or ActionKind.ChooseBreachCandidate) == true)
+                : PassUntil(state, static value => value.RunState is null || value.PendingDecision?.LegalActions.Any(
+                    static action => action.Kind is ActionKind.TrashAccessedCard or ActionKind.ChooseBreachCandidate) == true);
+            if (state.PendingDecision!.LegalActions.FirstOrDefault(static action => action.Kind == ActionKind.ChooseBreachCandidate) is { } candidate)
+                state = PassUntil(Apply(state, action => action.Id == candidate.Id).State,
+                    static value => value.PendingDecision?.LegalActions.Any(static action => action.Kind == ActionKind.TrashAccessedCard) == true);
+            state = Apply(state, static action => action.Kind == ActionKind.TrashAccessedCard).State;
+            if (trashed == 0)
+            {
+                state = PassUntil(state, static value => value.PendingDecision?.Kind == DecisionKind.BehaviorChoice);
+                state = ChooseOption(state, "decline");
+            }
+        }
+        state = RoundTrip(ToAction(state));
+
+        Assert.Equal(ZoneKind.CorpDiscard, ZoneOf(state, "35062"));
+        Assert.Equal(ZoneKind.CorpDiscard, ZoneOf(state, "35082"));
+        Assert.Equal(1, state.Turn.History!.CorpThisTurn!.NextTurnExtraClicks);
+    }
+
+    [Fact]
+    [Trait("ElevationCard", "35037")]
     public void AggressiveTrendsettingsExtraClickIsAllottedOnTheCorpsNextTurn()
     {
         // Ladder regression: the turn-facts validator demanded exactly 3 allotted clicks.

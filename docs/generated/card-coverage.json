@@ -2924,6 +2924,8 @@
       "reviewer": "architect",
       "registered": true,
       "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch1CorpTests.AggressiveTrendsettingFiresOnceWhenARunTrashesTwoInstalledCards",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch1CorpTests.AggressiveTrendsettingIgnoresALaterTrashOfACardThatWasNotInstalled",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch1CorpTests.AggressiveTrendsettingMakesTheRunnerSpendAClickOrGivesTheCorpOne",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch1CorpTests.AggressiveTrendsettingsExtraClickIsAllottedOnTheCorpsNextTurn"
       ],
@@ -3326,7 +3328,8 @@
       "reviewer": "architect",
       "registered": true,
       "tests": [
-        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.MycowebInstallsFromArchivesRezzesCheaperAndResolvesASentrySubroutine"
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.MycowebInstallsFromArchivesRezzesCheaperAndResolvesASentrySubroutine",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.MycowebInstallsOnTheAttackedServerWithoutTrashingItsIce"
       ],
       "fullTextComplete": true,
       "partial": false,
@@ -3855,7 +3858,8 @@
       "registered": true,
       "tests": [
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.BiawakCanBeRezzedByForfeitingAnAgendaForTenOfItsCost",
-        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.BiawakEndsTheRunWithItsLastSubroutine"
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.BiawakEndsTheRunWithItsLastSubroutine",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.BiawakOffersOneForfeitRezPerScoredAgenda"
       ],
       "fullTextComplete": true,
       "partial": false,
