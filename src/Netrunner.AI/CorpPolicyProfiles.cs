@@ -102,7 +102,7 @@ public static class CorpPolicyProfiles
     public const int PlanSamples = 3;
     public const int PlanWidth = 3;
     /// <summary>Planner settings a Hard profile may add (A6 tuning): rollout weight, run search and the opponent model.</summary>
-    internal static readonly string[] HardTuningKeys = ["plan-weight", "run-samples", "run-width", "plan-model"];
+    internal static readonly string[] HardTuningKeys = ["plan-weight", "run-samples", "run-width", "plan-model", "plan-tracker"];
 
 
     /// <summary>Whether a version has the A6 tiers: the Hard profile and personalities.</summary>
@@ -162,7 +162,7 @@ public static class CorpPolicyProfiles
                 "coverage-scale" => pair.Value is < 0 or > 200,
                 "plan-samples" or "plan-width" or "run-samples" or "run-width" => pair.Value is < 0 or > 16,
                 "plan-weight" => pair.Value is < 25 or > 400,
-                "plan-model" => pair.Value is < 0 or > 1,
+                "plan-model" or "plan-tracker" => pair.Value is < 0 or > 1,
                 "plan-evaluation" => pair.Value is < 0 or > 4,
                 "archetype-primary" or "archetype-secondary" => !Enum.IsDefined((CorpArchetype)pair.Value),
                 AgentPersonalities.ParameterKey => pair.Value == 0 || !AgentPersonalities.IsValid(PlayerSide.Corp, pair.Value),

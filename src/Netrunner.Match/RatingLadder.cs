@@ -49,7 +49,7 @@ public static partial class RatingLadder
     /// in its own seat, and "hard".
     /// </summary>
     public static IReadOnlyList<string> EntrantOrder { get; } =
-        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19", "standard-r14", "standard-c20", "standard-r15", "standard-c21", "standard-r16", "standard-c22", "standard-b3", "standard-c23", "standard-r17", "standard-r18", "standard-c24", "standard-r19", "standard-w5", "standard-r21", "hard-r21", "hard-a9c", "glacier", "rush", "asset-spam", "aggressive", "rig-builder", "hard", "hard-wide", "hard-weight", "hard-rez", "hard-model"];
+        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19", "standard-r14", "standard-c20", "standard-r15", "standard-c21", "standard-r16", "standard-c22", "standard-b3", "standard-c23", "standard-r17", "standard-r18", "standard-c24", "standard-r19", "standard-w5", "standard-r21", "hard-r21", "hard-a9c", "hard-a9d", "glacier", "rush", "asset-spam", "aggressive", "rig-builder", "hard", "hard-wide", "hard-weight", "hard-rez", "hard-model"];
 
     private const double EloScale = 400 / 2.302585092994046;
     private const double Ridge = 0.01;
@@ -160,6 +160,9 @@ public static partial class RatingLadder
             // A9c (2 October): copy counting, Corp v26 and Runner v22, at Hard (which knows the list, so the counts are exact).
             "hard-a9c" => OfflineMatchFactory.CreateOpponent(definition, other, "hard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V26 : RunnerHeuristicPolicy.V22),
+            // A9d (2 October): hard-a9c whose planner deals its samples from the tracker (and the list).
+            "hard-a9d" => Tuned(OfflineMatchFactory.CreateOpponent(definition, other, "hard",
+                side == PlayerSide.Corp ? CorpHeuristicPolicy.V26 : RunnerHeuristicPolicy.V22), definition, ("plan-tracker", 1)),
             // A9b (2 October): Runner v21, inference from the tracker, with the default Corp; at Standard (the pool) and Hard (the list).
             "standard-r21" or "hard-r21" => OfflineMatchFactory.CreateOpponent(definition, other, entrant[..entrant.IndexOf('-', StringComparison.Ordinal)],
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.V21),
@@ -246,7 +249,10 @@ public static partial class RatingLadder
             [.. current.Parameters.Where(pair => settings.All(setting => setting.Key != pair.Key)),
                 .. settings.Select(setting => new KeyValuePair<string, int>(setting.Key, setting.Value))],
             current.FeatureVersion);
-        return new OfflineAgent(configuration, OfflinePolicies.Create(configuration), new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior));
+        var tuned = new OfflineAgent(configuration, OfflinePolicies.Create(configuration), new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior));
+        // A Hard bot's knowledge of the opponent's list carries over.
+        if (agent.Checkpoint.Knowledge.OpponentList is { } list) tuned.KnowOpponentList(list.Select(entry => (entry.DefinitionId, entry.Quantity)));
+        return tuned;
     }
 
     /// <summary>The same agent with a generic archetype profile.</summary>
