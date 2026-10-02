@@ -85,7 +85,7 @@
       "id": "slice-EL.7",
       "slice": "EL.7",
       "title": "Batch 3: runs, ICE and encounters",
-      "status": "planned",
+      "status": "complete",
       "completionRequired": true,
       "codes": [
         "35001",
@@ -123,9 +123,9 @@
       "faction": "anarch",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-SUBROUTINE-RESOLVED-FACT"
@@ -146,9 +146,9 @@
       "faction": "anarch",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-INSTALLED-THAT-CARD-TRIGGER"
@@ -170,9 +170,9 @@
       "faction": "anarch",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-COPY-OF-ACCESSED"
@@ -216,9 +216,9 @@
       "faction": "anarch",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-PREVENT-END-RUN",
@@ -374,9 +374,9 @@
       "faction": "criminal",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [],
       "citations": [
@@ -463,9 +463,9 @@
       "faction": "criminal",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-CHANGE-ATTACKED-SERVER"
@@ -510,9 +510,9 @@
       "faction": "criminal",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-HOSTED-FACEUP",
@@ -537,9 +537,9 @@
       "faction": "criminal",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-DEREZ"
@@ -582,9 +582,9 @@
       "faction": "criminal",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-BYPASS",
@@ -717,9 +717,9 @@
       "faction": "shaper",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-MOD-HOST",
@@ -787,9 +787,9 @@
       "faction": "shaper",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-ICE-GAINS-SUBTYPE"
@@ -894,9 +894,9 @@
       "faction": "haas-bioroid",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-ATTACKED-SERVER-TRASH-COST"
@@ -1035,9 +1035,9 @@
       "faction": "haas-bioroid",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-REZ-DURING-RUN"
@@ -1059,9 +1059,9 @@
       "faction": "haas-bioroid",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-CONDITIONAL-STRENGTH"
@@ -1124,9 +1124,9 @@
       "faction": "haas-bioroid",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-MOVE-UPGRADE"
@@ -1192,9 +1192,9 @@
       "faction": "jinteki",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-MOVE-RUNNER"
@@ -1287,9 +1287,9 @@
       "faction": "jinteki",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [],
       "citations": [
@@ -1309,9 +1309,9 @@
       "faction": "jinteki",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-INSTALL-FROM-ARCHIVES",
@@ -1333,9 +1333,9 @@
       "faction": "jinteki",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-BREAK-RESTRICTION"
@@ -1379,9 +1379,9 @@
       "faction": "jinteki",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-SWAP-APPROACHED-ICE"
@@ -1570,9 +1570,9 @@
       "faction": "nbn",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-THREAT"
@@ -1807,9 +1807,9 @@
       "faction": "weyland-consortium",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-FORFEIT",
@@ -1922,9 +1922,9 @@
       "faction": "neutral-corp",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-REZ-DURING-RUN"

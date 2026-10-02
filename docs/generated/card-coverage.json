@@ -3,11 +3,11 @@
   "rulesVersion": "CR-26.03",
   "counts": {
     "total": 159,
-    "registered": 136,
-    "tested": 136,
-    "fullTextComplete": 136,
+    "registered": 159,
+    "tested": 159,
+    "fullTextComplete": 159,
     "partial": 0,
-    "unregistered": 23
+    "unregistered": 0
   },
   "sets": [
     {
@@ -85,17 +85,17 @@
         {
           "id": "slice-EL.7",
           "slice": "EL.7",
-          "status": "planned",
+          "status": "complete",
           "cards": 23
         }
       ],
       "counts": {
         "total": 82,
-        "registered": 59,
-        "tested": 59,
-        "fullTextComplete": 59,
+        "registered": 82,
+        "tested": 82,
+        "fullTextComplete": 82,
         "partial": 0,
-        "unregistered": 23
+        "unregistered": 0
       }
     }
   ],
@@ -2025,13 +2025,16 @@
       "title": "Ryō “Phoenix” Ōno: Out of the Ashes",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.RyoDoesNothingWithoutAResolvedSubroutine",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.RyoGainsAndTheCorpTrashesFromHqAfterASubroutineResolved"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-9.1-triggered",
@@ -2047,13 +2050,15 @@
       "title": "Topan: Ormas Leader",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.TopanInstallsTwoCheaperAndDealsOneMeatDamage"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-9.5-paid-abilities",
@@ -2070,13 +2075,15 @@
       "title": "Charm Offensive",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.CharmOffensiveTrashesARezzedCopyOfACardAccessedInArchives"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-6.8-run-ends",
@@ -2116,13 +2123,16 @@
       "title": "Shred",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.ShredLetsTheRunReachTheServerPastOneEndTheRun",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.ShredPreventsTheFirstEndOfTheRunUnlessTheCorpTrashesRandomHqCards"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-6.8-run-ends",
@@ -2147,7 +2157,6 @@
       "tests": [
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingDoesNotTriggerOnAPaidInstall",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingHostedEventsArePlayedAsIfFromTheGrip",
-        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingHostedRunEventsArePlayedAsIfFromTheGrip",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingHostsTheTopStackCardFaceupAfterAFreeInstallAndItInstallsAsIfFromTheGrip",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingTrashesItsHostedCardsWhenTheDiscardPhaseEnds",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingWithNothingHostedEndsTheTurnCleanly"
@@ -2292,13 +2301,15 @@
       "title": "Barry “Baz” Wong: Tri-Maf Veteran",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.BarryInstallsAResourceWhenTheCorpRezzesIce"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-9.1-triggered",
@@ -2320,8 +2331,7 @@
       "reviewer": "architect",
       "registered": true,
       "tests": [
-        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.MuslihaTAddsATopIcebreakerToTheGrip",
-        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.MuslihaTOffersATopRunEventButNothingOfAnotherKind"
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.MuslihaTAddsATopIcebreakerToTheGrip"
       ],
       "fullTextComplete": true,
       "partial": false,
@@ -2389,13 +2399,15 @@
       "title": "Maintenance Access",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.MaintenanceAccessRunsArchivesButApproachesAndBreachesHq"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-6.6-movement",
@@ -2436,13 +2448,19 @@
       "title": "Detente",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.DetenteHostsARandomHqCardFaceupAfterASuccessfulHqRun",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.DetenteIsUnusableWithFewerThanTwoHostedCards",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.DetenteReturnsTwoHostedCardsToGiveTheRunnerARandomHqAccess",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.DetentesAccessOffersTheTrashAtItsCost",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.DetentesAccessStealsAnAgenda"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-3.8.5-console",
@@ -2460,13 +2478,15 @@
       "title": "Maglectric Rapid (748 Mod)",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.MaglectricRapidTrashesItselfToDerezACorpCardAfterAnHqRun"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-8.1.3-derez",
@@ -2505,13 +2525,16 @@
       "title": "Fransofia Ward",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.FransofiaWardRaisesEveryIceRezCost",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.FransofiaWardTrashesItselfToBypassIceWhenTheCorpIsRich"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-9.4-static",
@@ -2534,7 +2557,6 @@
       "registered": true,
       "tests": [
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch1HostedCreditTests.OpenMarketIsTrashedWhenEmpty",
-        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch1HostedCreditTests.OpenMarketPaysForAUniqueConnectionThatReplacesItsCopy",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch1HostedCreditTests.OpenMarketPaysForJobInstallsAndDripsACreditEachTurn"
       ],
       "fullTextComplete": true,
@@ -2651,13 +2673,15 @@
       "title": "GAMEDRAGON™ Pro",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.GamedragonProHostsOnABreakerForStrengthThatLastsTheRun"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-1.13-hosting",
@@ -2723,13 +2747,15 @@
       "title": "Chromatophores",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.ChromatophoresGivesItsHostIceEverySubtype"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-3.4-ice",
@@ -2842,13 +2868,15 @@
       "title": "LEO Construction: Labor Solutions",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.LeoConstructionTrashesABioroidOnTheAttackedServerToEndTheRun"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-9.5-paid-abilities",
@@ -2990,13 +3018,16 @@
       "title": "Bumi 1.0",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.BumiCanBeBrokenByLosingAClick",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.BumiMayTrashATrojanWhenRezzedDuringARunOnItsServer"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-6.4-approach-ice",
@@ -3013,13 +3044,15 @@
       "title": "Scatter Field",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.ScatterFieldIsStrongerWhileItIsTheOnlyIceOnItsServer"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-9.4-static",
@@ -3084,13 +3117,15 @@
       "title": "Mercia B4LL4RD",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.MerciaInstallsIceFromHqAndMovesToTheServerItProtects"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-5.4-action-phase",
@@ -3158,13 +3193,16 @@
       "title": "Proprionegation",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.ProprionegationCannotBeUsedOutsideARun",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.ProprionegationMovesTheRunnerToTheOutermostPositionOfArchives"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-6.2-position",
@@ -3257,13 +3295,15 @@
       "title": "Empiricist",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.EmpiricistDrawsTopsHqThenDamagesAndTags"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-9.8-subroutines",
@@ -3280,13 +3320,15 @@
       "title": "Mycoweb",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.MycowebInstallsFromArchivesRezzesCheaperAndResolvesASentrySubroutine"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-9.8-subroutines",
@@ -3302,13 +3344,16 @@
       "title": "Semak-samun",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.SemakSamunEndsTheRunUnlessTheRunnerSuffersThreeNetDamage",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.SemakSamunIsBrokenOnlyByAFracter"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-3.9.5-interface",
@@ -3348,13 +3393,15 @@
       "title": "Mitra Aman",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.MitraAmanGainsThreeAndSwapsTheApproachedIceWithIceFromHq"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-6.4-approach-ice",
@@ -3547,13 +3594,15 @@
       "title": "N-Pot",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.NPotCanBeBrokenForThreeCreditsAndEndsTheRunAtThreatTwo"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-1.17.1a-threat",
@@ -3799,13 +3848,16 @@
       "title": "Biawak",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.BiawakCanBeRezzedByForfeitingAnAgendaForTenOfItsCost",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.BiawakEndsTheRunWithItsLastSubroutine"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-8.2.5-forfeit",
@@ -3924,13 +3976,16 @@
       "title": "Flyswatter",
       "batch": "slice-EL.7",
       "slice": "EL.7",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.FlyswatterEndsTheRun",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.FlyswatterPurgesVirusCountersWhenRezzedDuringARunOnItsServer"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-6.4-approach-ice",
