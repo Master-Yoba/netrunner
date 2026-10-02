@@ -961,7 +961,16 @@ public sealed record RunState
 
     internal RunState WithPendingBypass(bool bypass) => this with { PendingBypass = bypass };
 
-    internal RunState WithAttackedServer(ServerId serverId) => this with { AttackedServer = serverId };
+    /// <summary>
+    /// EL-MOVE-RUNNER: the attacked server changes. Breach access modifiers ("when you breach
+    /// the attacked server") follow the attacked server.
+    /// </summary>
+    internal RunState WithAttackedServer(ServerId serverId) => this with
+    {
+        AttackedServer = serverId,
+        BreachAccessModifiers = BreachAccessModifiers?.Select(modifier => new RunBreachAccessModifier(
+            modifier.SourceCardId, serverId, modifier.Delta, modifier.ReasonKey, modifier.SourceKind)).ToArray(),
+    };
 
     [JsonConstructor]
     public RunState(

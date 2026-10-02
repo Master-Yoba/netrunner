@@ -2661,6 +2661,17 @@ public static partial class StateInvariantValidator
                         continue;
                     }
 
+                    // EL.8: an access ability's behavior that trashes the accessed
+                    // card (Gourmand) suspends the exact gameplay occurrence
+                    // pipeline above it; the effect and checkpoint validators own
+                    // that pipeline and everything above it.
+                    if (suffix is EffectResolutionFrame abilityOccurrence
+                        && state.ResolutionStack[index - 1] is BehaviorResolutionFrame
+                        && IsExpectedRunGameplayOccurrenceFrame(state, abilityOccurrence, run, withinAccessAbility: true))
+                    {
+                        break;
+                    }
+
                     // EL-BEHAVIOR-INSTALL: a zone install chosen by a paid
                     // ability mid-run (Madani), and its install child.
                     if (suffix is BehaviorInstallChoiceFrame
@@ -2759,7 +2770,8 @@ public static partial class StateInvariantValidator
     private static bool IsExpectedRunGameplayOccurrenceFrame(
         GameState state,
         EffectResolutionFrame frame,
-        RunState run)
+        RunState run,
+        bool withinAccessAbility = false)
     {
         if (frame.Effects.Instructions.Count != 1
             || frame.Effects.Instructions[0] is not GameplayOccurrenceEffect occurrence
@@ -2806,7 +2818,8 @@ public static partial class StateInvariantValidator
                 && run.AccessedCards.Contains(accessed)
                 && occurrence.ServerId == run.AttackedServer,
             OccurrenceKind.AccessedCardTrashed => run.InitiatingSide == PlayerSide.Runner
-                && run.Step is RunTimingStep.BreachCandidateSelection or RunTimingStep.RunEnd
+                && (run.Step is RunTimingStep.BreachCandidateSelection or RunTimingStep.RunEnd
+                    || withinAccessAbility && run.Step == RunTimingStep.BreachAccessAbility)
                 && frame.Controller == run.InitiatingPlayer
                 && occurrence.SubjectCardId is { } trashed
                 && run.ChosenAccessCards.Contains(trashed)

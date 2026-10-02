@@ -2909,7 +2909,12 @@ public static class EngineEventValidator
             case RunMovedEventPayload value:
                 RequireKind(@event, EngineEventKinds.RunMoved, path, violations);
                 RequireId(value.RunId.Value, $"{path}.payload.runId", "run", violations);
-                RequireNumber(value.FromIceIndex, $"{path}.payload.fromIceIndex", "Previous ICE index", violations);
+                // EL-MOVE-RUNNER: a Runner moved to another server may leave from the server itself (-1).
+                if (value.FromIceIndex < -1)
+                {
+                    Add(violations, "event.invalid-index", $"{path}.payload.fromIceIndex", "Previous ICE index must be -1 or nonnegative.");
+                }
+
                 if (value.ToIceIndex < -1)
                 {
                     Add(violations, "event.invalid-index", $"{path}.payload.toIceIndex", "Next ICE index must be -1 or nonnegative.");

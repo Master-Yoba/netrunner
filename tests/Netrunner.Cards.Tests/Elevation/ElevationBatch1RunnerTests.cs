@@ -32,6 +32,28 @@ public sealed class ElevationBatch1RunnerTests
 
     [Fact]
     [Trait("ElevationCard", "35007")]
+    public void GourmandsTrashResolvesATrashTriggerWhileStillAccessing()
+    {
+        // EL.8 deck-pool ladder regression: Gourmand's trash queued Aggressive Trendsetting's
+        // occurrence above its own ability, which the run-stack validator didn't accept.
+        GameState state = new ElevationBoard(PlayerSide.Runner)
+            .Add("35007", Place.Rig)
+            .Add("35037", Place.CorpScore)
+            .Add(ElevationHarness.CorpFillerAsset, Place.Root)
+            .Begin();
+        state = RunTo(state, ElevationBoard.Remote, value => CanUse(value, "35007"));
+        state = Apply(state, action => action.Kind == ActionKind.UseAbility).State;
+        state = PassUntil(state, static value => value.PendingDecision?.Kind == DecisionKind.BehaviorChoice);
+        state = ChooseOption(state, "decline");
+        state = RoundTrip(ToAction(state));
+
+        Assert.Equal(ZoneKind.CorpDiscard, ZoneOf(state, ElevationHarness.CorpFillerAsset));
+        Assert.Equal(1, state.Turn.History!.CorpThisTurn!.NextTurnExtraClicks);
+        Assert.Single(state.GetZone(ZoneKind.RunnerGrip).CardIds);
+    }
+
+    [Fact]
+    [Trait("ElevationCard", "35007")]
     public void GourmandCannotTrashAnAccessedAgenda()
     {
         GameState state = new ElevationBoard(PlayerSide.Runner)
