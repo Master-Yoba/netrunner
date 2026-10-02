@@ -65,7 +65,7 @@ public static partial class CliCommands
         output.WriteLine($"ai-belief directory={directory}");
         foreach (BeliefScore score in scores)
             output.WriteLine(FormattableString.Invariant(
-                $"{score.Tier,-9} slots={score.Slots,5} log-loss={score.SlotLogLoss:0.000} (prior {score.SlotPriorLogLoss:0.000}) top1={score.SlotTop1:P0} (prior {score.SlotPriorTop1:P0}) | hq-agendas error={score.HqAgendaError:0.000} (prior {score.HqPriorAgendaError:0.000}) n={score.HqSamples} | rd-top brier={score.RdTopBrier:0.000} (prior {score.RdTopPriorBrier:0.000}) | tracked-hand precision={score.TrackedHandPrecision:P0}"));
+                $"{score.Tier,-9} slots={score.Slots,5} log-loss={score.SlotLogLoss:0.000} (prior {score.SlotPriorLogLoss:0.000}) top1={score.SlotTop1:P0} (prior {score.SlotPriorTop1:P0}) | hq-agendas error={score.HqAgendaError:0.000} (prior {score.HqPriorAgendaError:0.000}) n={score.HqSamples} | rd-top brier={score.RdTopBrier:0.000} (prior {score.RdTopPriorBrier:0.000}) | tracked-hand precision={score.TrackedHandPrecision:P0} | confident slots={score.ConfidentSlots} right={score.ConfidentPrecision:P0}"));
         return 0;
     }
 }

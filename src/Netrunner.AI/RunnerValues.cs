@@ -76,15 +76,20 @@ internal static class RunnerValues
                 + Math.Max(0, (context.Features.Board.ZoneCounts?.CorpDiscard ?? 0) - context.Features.Board.CorpDiscard.Length) * 70,
             _ => 0,
         };
-        // v21 (A9b): HQ and R&D are worth the agendas they likely hold, from what the Runner has seen, against a fresh deck's.
+        // v21 (A9b): HQ and R&D are worth the agendas they likely hold. The unseen cards keep the deck-size estimate above;
+        // what the Runner has seen moves it, against what it would expect knowing nothing (a known non-agenda on R&D's top,
+        // an HQ it has seen to hold none, or one it knows holds an agenda). This replaces v10's freshness.
         if (context.Generation >= 17 && server.Kind is ServerKind.Headquarters or ServerKind.RAndD
-            && RunnerInference.FreshAgendaShare(context) is > 0 and var fresh)
+            && RunnerInference.AgendaShare(context) is > 0 and var unseen)
         {
-            double held = server.Kind == ServerKind.Headquarters ? RunnerInference.HqAgendaShare(context) : RunnerInference.RdTopAgenda(context);
-            double relative = 1 + inference * (Math.Min(3, held / fresh) - 1);
-            central = server.Kind == ServerKind.Headquarters
-                ? context.Features.Board.HiddenZoneCounts.CorpHand > 0 ? (int)(320 * relative) : 0
-                : context.Features.Board.HiddenZoneCounts.CorpDeck > 0 ? (int)(340 * relative) : 0;
+            // R&D moves only on a top card it knows: an agenda raises it, anything else keeps v10's floor for a seen top,
+            // which a multi-access run (Conduit) still values.
+            double relative = server.Kind == ServerKind.Headquarters
+                ? Math.Min(3, RunnerInference.HqAgendaShare(context) / unseen)
+                : RunnerInference.Tracker(context)?.DeckTopAt(0) is { } top
+                    ? context.Catalog.TryGet(new CardDefinitionId(top), out CardEvaluationDescriptor known) && known.Agenda is not null ? 3 : 0.3
+                    : 1;
+            central = (int)(central * (1 + inference * (relative - 1)));
         }
         else if (context.Generation >= 7) central = (int)(central * CentralFreshness(context, server.Kind));
         if (context.Generation >= 8)

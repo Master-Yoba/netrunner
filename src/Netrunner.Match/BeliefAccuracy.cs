@@ -21,7 +21,7 @@ public sealed record BeliefTier(string Name, bool KnowsList, TrackerMemory Memor
 /// </summary>
 public sealed record BeliefScore(string Tier, int Slots, double SlotLogLoss, double SlotPriorLogLoss, double SlotTop1, double SlotPriorTop1,
     int HqSamples, double HqAgendaError, double HqPriorAgendaError, int RdSamples, double RdTopBrier, double RdTopPriorBrier,
-    double TrackedHandPrecision);
+    double TrackedHandPrecision, int ConfidentSlots, double ConfidentPrecision);
 
 /// <summary>
 /// A9a's accuracy measure: replays saved games, feeds the Runner's own observations to a tracker per tier, and scores
@@ -34,6 +34,7 @@ public static class BeliefAccuracy
         public int Slots, HqSamples, RdSamples;
         public double SlotLogLoss, SlotPriorLogLoss, SlotTop1, SlotPriorTop1, HqError, HqPriorError, RdBrier, RdPriorBrier;
         public double TrackedHand, TrackedHandCorrect;
+        public int Confident, ConfidentCorrect;
     }
 
     public static IReadOnlyList<BeliefScore> Score(IEnumerable<(LadderSavedGame Game, FullMatchDefinition Definition)> games)
@@ -140,6 +141,12 @@ public static class BeliefAccuracy
                         .ThenBy(value => value, StringComparer.Ordinal).FirstOrDefault();
                     string? priorBest = fitting.OrderByDescending(pair => pair.Value).ThenBy(pair => pair.Key, StringComparer.Ordinal).FirstOrDefault().Key;
                     if (best == truth) totals.SlotTop1++;
+                    // A guess the Runner v21 plans with (see RunnerInference.Confident): how often it's right.
+                    if (belief.Count > 0 && belief.Values.Max() >= 0.6)
+                    {
+                        totals.Confident++;
+                        if (belief.OrderByDescending(pair => pair.Value).First().Key == truth) totals.ConfidentCorrect++;
+                    }
                     if (priorBest == truth) totals.SlotPriorTop1++;
                 }
             }
@@ -193,6 +200,7 @@ public static class BeliefAccuracy
         into.SlotLogLoss += add.SlotLogLoss; into.SlotPriorLogLoss += add.SlotPriorLogLoss; into.SlotTop1 += add.SlotTop1; into.SlotPriorTop1 += add.SlotPriorTop1;
         into.HqError += add.HqError; into.HqPriorError += add.HqPriorError; into.RdBrier += add.RdBrier; into.RdPriorBrier += add.RdPriorBrier;
         into.TrackedHand += add.TrackedHand; into.TrackedHandCorrect += add.TrackedHandCorrect;
+        into.Confident += add.Confident; into.ConfidentCorrect += add.ConfidentCorrect;
     }
 
     private static BeliefScore Result(string tier, Totals t)
@@ -200,6 +208,6 @@ public static class BeliefAccuracy
         static double Mean(double sum, int count) => count == 0 ? 0 : Math.Round(sum / count, 4);
         return new(tier, t.Slots, Mean(t.SlotLogLoss, t.Slots), Mean(t.SlotPriorLogLoss, t.Slots), Mean(t.SlotTop1, t.Slots), Mean(t.SlotPriorTop1, t.Slots),
             t.HqSamples, Mean(t.HqError, t.HqSamples), Mean(t.HqPriorError, t.HqSamples), t.RdSamples, Mean(t.RdBrier, t.RdSamples), Mean(t.RdPriorBrier, t.RdSamples),
-            t.TrackedHand <= 0 ? 0 : Math.Round(t.TrackedHandCorrect / t.TrackedHand, 4));
+            t.TrackedHand <= 0 ? 0 : Math.Round(t.TrackedHandCorrect / t.TrackedHand, 4), t.Confident, t.Confident == 0 ? 0 : Math.Round(t.ConfidentCorrect / (double)t.Confident, 4));
     }
 }

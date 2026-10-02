@@ -27,10 +27,6 @@ internal static class RunnerInference
     private static bool IsAgenda(HeuristicContext context, string definition) =>
         context.Catalog.TryGet(new CardDefinitionId(definition), out CardEvaluationDescriptor card) && card.Agenda is not null;
 
-    /// <summary>The agenda share of a fresh deck, what HQ and R&amp;D are worth before anything is known.</summary>
-    public static double FreshAgendaShare(HeuristicContext context) =>
-        context.Memo("fresh-agenda-share", () => TrackerPrior.Share(FullPrior(context), definition => IsAgenda(context, definition)));
-
     /// <summary>The agenda share of the Corp's unseen cards.</summary>
     public static double AgendaShare(HeuristicContext context) =>
         context.Memo("agenda-share", () => TrackerPrior.Share(Prior(context), definition => IsAgenda(context, definition)));
