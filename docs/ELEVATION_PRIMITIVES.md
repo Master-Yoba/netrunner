@@ -65,6 +65,7 @@ may already be expressible.
 | `EL-NESTED-PLAY` | Play an operation from inside another card's ability. | Humanoid Resources |
 | `EL-HOSTED-FACEUP` | Cards hosted face up on hardware without being installed, playable or installable as if from the grip, with end-of-turn cleanup. | Bling, Detente, Madani |
 | `EL-ANY-PLAYER-ABILITY` | A paid ability on a card that any player can use. | Detente |
+| `EL-ACCESS-OUTSIDE-RUN` | Accessing a random HQ card outside a run (moved with Detente to EL.6/EL.7 on 2 October 2026). | Detente |
 | `EL-FACEUP-AGENDA` | Agendas installed face up (inactive), and an access trigger on them. | BANGUN |
 | `EL-MOVE-UPGRADE` | Move an installed upgrade to another server's root. | Mercia B4LL4RD |
 
@@ -125,7 +126,7 @@ involved, and a serializable, replayable frame wherever it can yield, as in M4's
 | 35015 | Lie Low | runner event | EL.3 | existing |
 | 35016 | Maintenance Access | runner event | EL.7 | `EL-CHANGE-ATTACKED-SERVER` |
 | 35017 | Transfer of Wealth | runner event | EL.3 | `EL-AMOUNT` |
-| 35018 | Detente | runner hardware | EL.5 | `EL-HOSTED-FACEUP`, `EL-ANY-PLAYER-ABILITY` |
+| 35018 | Detente | runner hardware | EL.7 | `EL-HOSTED-FACEUP`, `EL-ANY-PLAYER-ABILITY`, `EL-ACCESS-OUTSIDE-RUN` |
 | 35019 | Maglectric Rapid (748 Mod) | runner hardware | EL.7 | `EL-DEREZ` |
 | 35020 | Sang Kancil | runner program | EL.3 | `EL-RUN-EVENT-ACTIVE` |
 | 35021 | Fransofia Ward | runner resource | EL.7 | `EL-BYPASS`, `EL-REZ-COST-MODIFIER` |

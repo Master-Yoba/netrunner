@@ -10,6 +10,8 @@ Registry: `data/elevation/batch-registry.json`. Evidence is from the Linux x86_6
 | EL.1 preparation: card data, coverage, formats, deck rules | `feat/el1-prep` | complete |
 | EL.2 primitives A: values, conditions, counters, timing, identity state | `feat/el2-primitives-a` | complete |
 | EL.3 Batch 1: 43 cards | `feat/el3-batch1` | complete |
+| EL.4 primitives B: card sources, zones and information | `feat/el4-primitives-b` | complete |
+| EL.5 Batch 2: 16 cards | `feat/el5-batch2` | complete |
 
 ## E6 baseline
 
@@ -188,4 +190,86 @@ contract agent answers card-effect install choices and multi-click abilities.
 
 - Synthetic suite green: Core 829, Cards 434, AI 130, CLI 171, Match 582 (+23 skipped).
 - `make gates`: see the PR.
+
+## EL.4 — Primitives B: card sources, zones and information
+
+On `feat/el4-primitives-b`, all in Core, before any Batch 2 card:
+
+| Family | Primitives |
+|---|---|
+| Card sources | Nested play from an ability, Archives or a console (`PlayCard`, a nested `CardPlayFrame`); paid abilities usable from Archives; installs from Archives, the heap, the score area (the agenda's points leave with it) and the top N cards of a deck (`top:N` targets); a keyed install binds the card it installed. |
+| Zones | Cards hosted faceup on a console: two new zones (`RunnerHostedFaceUp`, `CorpHostedFaceUp`), the `HostFaceUp` instruction, `hosted-on-source` targets; a host whose cards play and install as if in the grip (`HostedCardsPlayAsGrip`); installs that spent no credits (`FreeInstallIds`, `SubjectInstalledWithoutCredits`). Faceup installed agendas (`TurnFaceUp`), still advanceable and scorable. |
+| Information | Hand-size discards (`HandSizeDiscardIds`, `hand-size-discards` targets); played-from, source-zone, zone-count and chose-cards conditions; damage-done, HQ-trash and hand-size occurrences; access-time abilities on the card being accessed; rez requirements; an operation's trash cost when accessed (Measured Response's, an EL.2 gap). |
+
+The validator knows every new frame, zone and binding; the observation shows hosted faceup cards to both sides.
+**Deviation:** four EL.4-family primitives move to EL.6, because only EL.7 cards use them: moving an upgrade (Mercia
+B4LL4RD), random HQ trash (Shred), "a copy of a card accessed" (Charm Offensive), and Detente's any-player ability with
+its access outside a run.
+Contract, serialization and fingerprint tests: `ElevationPrimitiveContractTests`. **Deviation:** as in EL.2, the
+behavior tests ship with the cards (EL.5).
+
+The EL.5 batch fuzz found four Core defects; their fixes are on this branch (`fix: EL.4 …`), so the batch itself needs
+no Core change:
+- a zone install's discount ("paying 1 less") must come before the quoted first-program-install discount, or the
+  frozen quote and the install cost disagree (Illumination with DZMZ Optimizer, an EL.3 card pair);
+- a paid-ability zone install inside a live run (Madani mid-run) was outside the run-stack topology;
+- a keyed install's binding (IP Enforcement's agenda) failed the binding-reachability check once suspended;
+- "trash all hosted cards" with none hosted.
+
+## EL.5 — Batch 2
+
+16 cards on `feat/el5-batch2`: Petty Cash, Humanoid Resources, Project Ingatan, Scrounge, Poétrï Luxury Brands,
+MuslihaT, Byte!, Magdalene Keino-Chemutai, BANGUN, AU Co., Peer Review, Touch-ups, IP Enforcement, Plutus, Bling and
+Madani.
+
+- **Specs:** `src/Netrunner.Cards/Elevation/ElevationBatch2Specs.cs`.
+- **Tests:** 29 Batch 2 tests (`ElevationBatch2Tests`), 123 Elevation tests in all, at least one per card, with
+  observation checks for the faceup host (the Corp sees Bling's card) and fuzz regressions (Bling with nothing hosted,
+  Madani installing mid-run, IP Enforcement over an occupied root, Illumination with DZMZ).
+- **Registry and coverage:** EL.5 complete; Elevation 59 of 82 registered, tested and complete.
+- **Detente moves to EL.7:** its "access 1 card in HQ at random" happens outside a run, which needs EL.6's run and
+  access machinery (EL-ACCESS-OUTSIDE-RUN), and its ability is usable by either player (EL-ANY-PLAYER-ABILITY).
+
+### E6
+
+`make core-growth CORE_GROWTH_ARGS='--registry data/m4/batch-registry.json --registry data/elevation/batch-registry.json
+--range slice-EL.5=4862fc8..140fcc7'`:
+
+| Batch | Core lines | New vocabulary | Cards needing no Core change |
+|---|---|---|---|
+| slice-EL.5 | +0/−0 | 0 | **16 of 16 (100%)** |
+
+### Simulation decks and the batch proof
+
+- Five more simulation decks, for the Batch 2 identities and consoles: AU Co., BANGUN and Poétrï (Corp), Magdalene and
+  MuslihaT (Runner); 6 Corp and 4 Runner decks in all, legal under System Gateway + Elevation. The fuzz content is
+  `elevation-simulation-v2`.
+- **Evidence:** `scripts/fuzz.sh elevation --games 120 --seed 5 --workers 8`: first 109 of 120 terminal (the four
+  defects above); after the fixes, 120 of 120.
+LADDER_EVIDENCE
+
+### Bots
+
+The heuristic policies value nested plays (+250), faceup hosting (+100) and faceup agendas (+40); card-effect installs
+from the hosted cards reuse the install valuation. As in EL.3 these paths are reached only by Elevation cards, so the
+policy versions stay as they are.
+
+### Client
+
+The Match view model carries the hosted faceup cards (`HostedFaceUp`, each naming its host) and both removed-from-game
+piles. The table draws hosted faceup cards on their console like hosted programs, tooltip "Hosted faceup on … · not
+installed", and names the removed-from-game pile on the heap and Archives tooltips. The M4.9 UI smoke renders these
+states on the real table (`ELEVATION_TABLE PASS hosted_faceup=true threat=true removed=true`, required by
+`verify.sh`). **Deviation:** the removed-from-game piles have no table pile of their own yet; EL.8 (the client) gives
+them one.
+
+### Rulings and simplifications
+
+| Card | Note |
+|---|---|
+| BANGUN | "Install an agenda faceup" is the Corp choosing, as the agenda is installed, to turn it faceup; it stays inactive and can still be advanced and scored. |
+| Plutus | The additional rez cost is paid by a "when rezzed" ability; the rez is offered only when the Corp can pay one of the alternatives. |
+| IP Enforcement | X is chosen as an option (1 to 3, one per printed agenda value), with "remove X tags" as its cost. |
+| Madani | "Install 1 hosted program" counts the console's hosted cards through the hosted zone, which holds one console's cards at a time (Limit 1 console). |
+| Bling | "Without spending credits" is an install whose final cost was 0, recurring and declared-use credits included. |
 
