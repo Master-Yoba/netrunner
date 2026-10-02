@@ -246,7 +246,12 @@ Madani.
   `elevation-simulation-v2`.
 - **Evidence:** `scripts/fuzz.sh elevation --games 120 --seed 5 --workers 8`: first 109 of 120 terminal (the four
   defects above); after the fixes, 120 of 120.
-LADDER_EVIDENCE
+- `ai-ladder --content elevation --entrants random,contract,easy,standard --seeds-per-pairing 2`: the first run, 768
+  games, found 18 errors from four defects the random fuzz had missed (Aggressive Trendsetting's extra click failing the
+  turn-facts validator, a nested operation's deck-out, an exhausted R&D top for AU Co., IP Enforcement with no agenda of
+  value X); all fixed with regression tests (`fix: EL.4 …`, `fix: EL.5 …`). The rerun: 768 games, 0 errors, 0 capped.
+  The Corp order random < contract < easy < standard separates; on the Runner side contract and random do not separate
+  (contract − random = −8, 95% [−65, 48]), as the contract agent plays legal but aimless Runner turns.
 
 ### Bots
 
@@ -262,6 +267,8 @@ installed", and names the removed-from-game pile on the heap and Archives toolti
 states on the real table (`ELEVATION_TABLE PASS hosted_faceup=true threat=true removed=true`, required by
 `verify.sh`). **Deviation:** the removed-from-game piles have no table pile of their own yet; EL.8 (the client) gives
 them one.
+Screenshot (synthetic cards, 1920×1080): `docs/evidence/elevation/el5-hosted-faceup-runner-1920.png`, a card hosted
+faceup on the first rig program.
 
 ### Rulings and simplifications
 
@@ -273,3 +280,6 @@ them one.
 | Madani | "Install 1 hosted program" counts the console's hosted cards through the hosted zone, which holds one console's cards at a time (Limit 1 console). |
 | Bling | "Without spending credits" is an install whose final cost was 0, recurring and declared-use credits included. |
 
+### Gate
+
+- Synthetic suite green after the batch; `make gates` on the EL.5 head: see the PR.
