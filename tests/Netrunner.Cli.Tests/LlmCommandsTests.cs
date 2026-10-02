@@ -34,4 +34,19 @@ public sealed class LlmCommandsTests
         Assert.Equal(0, CliCommands.Run(["ai-codex-play", "--print-prompt", "runner"], prompt, TextWriter.Null));
         Assert.Contains("as the runner", prompt.ToString(), StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void CardVocabularyListsEachCardsEngineVocabulary()
+    {
+        if (Netrunner.Cards.CardDataResource.EmbeddedMode != Netrunner.Cards.CardDataResource.OfficialMode) return;
+        using var output = new StringWriter();
+        Assert.Equal(0, CliCommands.Run(["card-vocabulary", "--json"], output, TextWriter.Null));
+        using var document = System.Text.Json.JsonDocument.Parse(output.ToString());
+        var cards = document.RootElement.GetProperty("cards").EnumerateArray().ToArray();
+        Assert.Equal(77, cards.Length);
+        // E6 (docs/ELEVATION_PLAN.md): an icebreaker's spec type is part of its vocabulary.
+        var breaker = cards.Single(card => card.GetProperty("code").GetString() == "30005");
+        Assert.Contains("type:IcebreakerBehaviorSpec", breaker.GetProperty("vocabulary").EnumerateArray().Select(value => value.GetString()));
+        Assert.Equal(2, CliCommands.Run(["card-vocabulary", "--all"], TextWriter.Null, new StringWriter()));
+    }
 }

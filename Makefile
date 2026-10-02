@@ -78,6 +78,12 @@ ai-ladder:
 ai-lint:
 	bash scripts/ai-lint.sh $(LINT_ARGS)
 
+.PHONY: core-growth
+# E6 Core-growth report per card batch (docs/ELEVATION_PLAN.md), for example
+#   make core-growth CORE_GROWTH_ARGS='--registry data/m4/batch-registry.json --range slice-4.7=ade5111^..fa99e86'
+core-growth:
+	bash scripts/core-growth.sh $(CORE_GROWTH_ARGS)
+
 .PHONY: fuzz fuzz-developer fuzz-nightly
 fuzz:
 	bash scripts/fuzz.sh official $(FUZZ_ARGS)

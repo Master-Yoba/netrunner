@@ -1,0 +1,1071 @@
+{
+  "schemaVersion": 1,
+  "cardSet": "elevation",
+  "rulesVersion": "CR-26.03",
+  "packCode": "elev",
+  "batches": [
+    {
+      "id": "slice-EL.3",
+      "slice": "EL.3",
+      "title": "Batch 1: counters, economy, agendas and turn structure",
+      "status": "planned",
+      "completionRequired": true,
+      "codes": [
+        "35007",
+        "35008",
+        "35009",
+        "35010",
+        "35011",
+        "35014",
+        "35015",
+        "35017",
+        "35020",
+        "35022",
+        "35023",
+        "35025",
+        "35026",
+        "35029",
+        "35031",
+        "35032",
+        "35033",
+        "35034",
+        "35037",
+        "35039",
+        "35040",
+        "35043",
+        "35044",
+        "35047",
+        "35049",
+        "35051",
+        "35057",
+        "35058",
+        "35059",
+        "35060",
+        "35061",
+        "35062",
+        "35063",
+        "35065",
+        "35069",
+        "35070",
+        "35071",
+        "35072",
+        "35075",
+        "35076",
+        "35077",
+        "35078",
+        "35080",
+        "35082"
+      ]
+    },
+    {
+      "id": "slice-EL.5",
+      "slice": "EL.5",
+      "title": "Batch 2: zones and hidden information",
+      "status": "planned",
+      "completionRequired": true,
+      "codes": [
+        "35004",
+        "35006",
+        "35013",
+        "35018",
+        "35024",
+        "35028",
+        "35036",
+        "35038",
+        "35046",
+        "35050",
+        "35055",
+        "35066",
+        "35067",
+        "35068",
+        "35073",
+        "35081"
+      ]
+    },
+    {
+      "id": "slice-EL.7",
+      "slice": "EL.7",
+      "title": "Batch 3: runs, ICE and encounters",
+      "status": "planned",
+      "completionRequired": true,
+      "codes": [
+        "35001",
+        "35002",
+        "35003",
+        "35005",
+        "35012",
+        "35016",
+        "35019",
+        "35021",
+        "35027",
+        "35030",
+        "35035",
+        "35041",
+        "35042",
+        "35045",
+        "35048",
+        "35052",
+        "35053",
+        "35054",
+        "35056",
+        "35064",
+        "35074",
+        "35079"
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "code": "35001",
+      "title": "Ryo \"Phoenix\" Ono: Out of the Ashes",
+      "type": "identity",
+      "side": "runner",
+      "faction": "anarch",
+      "batch": "slice-EL.7",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-SUBROUTINE-RESOLVED-FACT"
+      ]
+    },
+    {
+      "code": "35002",
+      "title": "Topan: Ormas Leader",
+      "type": "identity",
+      "side": "runner",
+      "faction": "anarch",
+      "batch": "slice-EL.7",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-INSTALLED-THAT-CARD-TRIGGER"
+      ]
+    },
+    {
+      "code": "35003",
+      "title": "Charm Offensive",
+      "type": "event",
+      "side": "runner",
+      "faction": "anarch",
+      "batch": "slice-EL.7",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-COPY-OF-ACCESSED"
+      ]
+    },
+    {
+      "code": "35004",
+      "title": "Scrounge",
+      "type": "event",
+      "side": "runner",
+      "faction": "anarch",
+      "batch": "slice-EL.5",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-INSTALL-FROM-HEAP"
+      ]
+    },
+    {
+      "code": "35005",
+      "title": "Shred",
+      "type": "event",
+      "side": "runner",
+      "faction": "anarch",
+      "batch": "slice-EL.7",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-PREVENT-END-RUN",
+        "EL-RANDOM-HQ-TRASH"
+      ]
+    },
+    {
+      "code": "35006",
+      "title": "Bling",
+      "type": "hardware",
+      "side": "runner",
+      "faction": "anarch",
+      "batch": "slice-EL.5",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-HOSTED-FACEUP"
+      ]
+    },
+    {
+      "code": "35007",
+      "title": "Gourmand",
+      "type": "program",
+      "side": "runner",
+      "faction": "anarch",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": []
+    },
+    {
+      "code": "35008",
+      "title": "Hantu",
+      "type": "program",
+      "side": "runner",
+      "faction": "anarch",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": []
+    },
+    {
+      "code": "35009",
+      "title": "Rising Tide",
+      "type": "program",
+      "side": "runner",
+      "faction": "anarch",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": []
+    },
+    {
+      "code": "35010",
+      "title": "Cacophony",
+      "type": "resource",
+      "side": "runner",
+      "faction": "anarch",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-SABOTAGE",
+        "EL-ACTION-PHASE-END"
+      ]
+    },
+    {
+      "code": "35011",
+      "title": "Rent Rioters",
+      "type": "resource",
+      "side": "runner",
+      "faction": "anarch",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": []
+    },
+    {
+      "code": "35012",
+      "title": "Barry \"Baz\" Wong: Tri-Maf Veteran",
+      "type": "identity",
+      "side": "runner",
+      "faction": "criminal",
+      "batch": "slice-EL.7",
+      "status": "planned",
+      "newPrimitives": []
+    },
+    {
+      "code": "35013",
+      "title": "MuslihaT: Multifarious Marketeer",
+      "type": "identity",
+      "side": "runner",
+      "faction": "criminal",
+      "batch": "slice-EL.5",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-LOOK-TOP"
+      ]
+    },
+    {
+      "code": "35014",
+      "title": "Clean Getaway",
+      "type": "event",
+      "side": "runner",
+      "faction": "criminal",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": []
+    },
+    {
+      "code": "35015",
+      "title": "Lie Low",
+      "type": "event",
+      "side": "runner",
+      "faction": "criminal",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": []
+    },
+    {
+      "code": "35016",
+      "title": "Maintenance Access",
+      "type": "event",
+      "side": "runner",
+      "faction": "criminal",
+      "batch": "slice-EL.7",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-CHANGE-ATTACKED-SERVER"
+      ]
+    },
+    {
+      "code": "35017",
+      "title": "Transfer of Wealth",
+      "type": "event",
+      "side": "runner",
+      "faction": "criminal",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-AMOUNT"
+      ]
+    },
+    {
+      "code": "35018",
+      "title": "Detente",
+      "type": "hardware",
+      "side": "runner",
+      "faction": "criminal",
+      "batch": "slice-EL.5",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-HOSTED-FACEUP",
+        "EL-ANY-PLAYER-ABILITY"
+      ]
+    },
+    {
+      "code": "35019",
+      "title": "Maglectric Rapid (748 Mod)",
+      "type": "hardware",
+      "side": "runner",
+      "faction": "criminal",
+      "batch": "slice-EL.7",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-DEREZ"
+      ]
+    },
+    {
+      "code": "35020",
+      "title": "Sang Kancil",
+      "type": "program",
+      "side": "runner",
+      "faction": "criminal",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-RUN-EVENT-ACTIVE"
+      ]
+    },
+    {
+      "code": "35021",
+      "title": "Fransofia Ward",
+      "type": "resource",
+      "side": "runner",
+      "faction": "criminal",
+      "batch": "slice-EL.7",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-BYPASS",
+        "EL-REZ-COST-MODIFIER"
+      ]
+    },
+    {
+      "code": "35022",
+      "title": "Open Market",
+      "type": "resource",
+      "side": "runner",
+      "faction": "criminal",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": []
+    },
+    {
+      "code": "35023",
+      "title": "Dewi Subrotoputri: Pedagogical Dhalang",
+      "type": "identity",
+      "side": "runner",
+      "faction": "shaper",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-FLIP"
+      ]
+    },
+    {
+      "code": "35024",
+      "title": "Magdalene Keino-Chemutai: Cryptarchitect",
+      "type": "identity",
+      "side": "runner",
+      "faction": "shaper",
+      "batch": "slice-EL.5",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-HAND-SIZE-DISCARD"
+      ]
+    },
+    {
+      "code": "35025",
+      "title": "Illumination",
+      "type": "event",
+      "side": "runner",
+      "faction": "shaper",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": []
+    },
+    {
+      "code": "35026",
+      "title": "Ritual",
+      "type": "event",
+      "side": "runner",
+      "faction": "shaper",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-AMOUNT"
+      ]
+    },
+    {
+      "code": "35027",
+      "title": "GAMEDRAGON Pro",
+      "type": "hardware",
+      "side": "runner",
+      "faction": "shaper",
+      "batch": "slice-EL.7",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-MOD-HOST",
+        "EL-STRENGTH-PERSISTENCE"
+      ]
+    },
+    {
+      "code": "35028",
+      "title": "Madani",
+      "type": "hardware",
+      "side": "runner",
+      "faction": "shaper",
+      "batch": "slice-EL.5",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-HOSTED-FACEUP"
+      ]
+    },
+    {
+      "code": "35029",
+      "title": "Azimat",
+      "type": "program",
+      "side": "runner",
+      "faction": "shaper",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-RECURRING"
+      ]
+    },
+    {
+      "code": "35030",
+      "title": "Chromatophores",
+      "type": "program",
+      "side": "runner",
+      "faction": "shaper",
+      "batch": "slice-EL.7",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-ICE-GAINS-SUBTYPE"
+      ]
+    },
+    {
+      "code": "35031",
+      "title": "Devadatta Drone",
+      "type": "program",
+      "side": "runner",
+      "faction": "shaper",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": []
+    },
+    {
+      "code": "35032",
+      "title": "Principia",
+      "type": "program",
+      "side": "runner",
+      "faction": "shaper",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": []
+    },
+    {
+      "code": "35033",
+      "title": "\"Knickknack\" O'Brian",
+      "type": "resource",
+      "side": "runner",
+      "faction": "shaper",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": []
+    },
+    {
+      "code": "35034",
+      "title": "Side Hustle",
+      "type": "resource",
+      "side": "runner",
+      "faction": "neutral-runner",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": []
+    },
+    {
+      "code": "35035",
+      "title": "LEO Construction: Labor Solutions",
+      "type": "identity",
+      "side": "corp",
+      "faction": "haas-bioroid",
+      "batch": "slice-EL.7",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-ATTACKED-SERVER-TRASH-COST"
+      ]
+    },
+    {
+      "code": "35036",
+      "title": "Poetri Luxury Brands: All the Rage",
+      "type": "identity",
+      "side": "corp",
+      "faction": "haas-bioroid",
+      "batch": "slice-EL.5",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-LOOK-TOP"
+      ]
+    },
+    {
+      "code": "35037",
+      "title": "Aggressive Trendsetting",
+      "type": "agenda",
+      "side": "corp",
+      "faction": "haas-bioroid",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-FORFEIT"
+      ]
+    },
+    {
+      "code": "35038",
+      "title": "Project Ingatan",
+      "type": "agenda",
+      "side": "corp",
+      "faction": "haas-bioroid",
+      "batch": "slice-EL.5",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-DIVIDENDS",
+        "EL-INSTALL-FROM-ARCHIVES"
+      ]
+    },
+    {
+      "code": "35039",
+      "title": "Humanoid Resources",
+      "type": "asset",
+      "side": "corp",
+      "faction": "haas-bioroid",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-NESTED-PLAY"
+      ]
+    },
+    {
+      "code": "35040",
+      "title": "Otto Campaign",
+      "type": "asset",
+      "side": "corp",
+      "faction": "haas-bioroid",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": []
+    },
+    {
+      "code": "35041",
+      "title": "Bumi 1.0",
+      "type": "ice",
+      "side": "corp",
+      "faction": "haas-bioroid",
+      "batch": "slice-EL.7",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-REZ-DURING-RUN"
+      ]
+    },
+    {
+      "code": "35042",
+      "title": "Scatter Field",
+      "type": "ice",
+      "side": "corp",
+      "faction": "haas-bioroid",
+      "batch": "slice-EL.7",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-CONDITIONAL-STRENGTH"
+      ]
+    },
+    {
+      "code": "35043",
+      "title": "Nanomanagement",
+      "type": "operation",
+      "side": "corp",
+      "faction": "haas-bioroid",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": []
+    },
+    {
+      "code": "35044",
+      "title": "Top-Down Solutions",
+      "type": "operation",
+      "side": "corp",
+      "faction": "haas-bioroid",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": []
+    },
+    {
+      "code": "35045",
+      "title": "Mercia B4LL4RD",
+      "type": "upgrade",
+      "side": "corp",
+      "faction": "haas-bioroid",
+      "batch": "slice-EL.7",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-MOVE-UPGRADE"
+      ]
+    },
+    {
+      "code": "35046",
+      "title": "AU Co.: The Gold Standard in Clones",
+      "type": "identity",
+      "side": "corp",
+      "faction": "jinteki",
+      "batch": "slice-EL.5",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-LOOK-TOP"
+      ]
+    },
+    {
+      "code": "35047",
+      "title": "PT Untaian: Life's Building Blocks",
+      "type": "identity",
+      "side": "corp",
+      "faction": "jinteki",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": []
+    },
+    {
+      "code": "35048",
+      "title": "Proprionegation",
+      "type": "agenda",
+      "side": "corp",
+      "faction": "jinteki",
+      "batch": "slice-EL.7",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-MOVE-RUNNER"
+      ]
+    },
+    {
+      "code": "35049",
+      "title": "Sericulture Expansion",
+      "type": "agenda",
+      "side": "corp",
+      "faction": "jinteki",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-DIVIDENDS"
+      ]
+    },
+    {
+      "code": "35050",
+      "title": "Byte!",
+      "type": "asset",
+      "side": "corp",
+      "faction": "jinteki",
+      "batch": "slice-EL.5",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-REVEAL-ON-ACCESS"
+      ]
+    },
+    {
+      "code": "35051",
+      "title": "Phat Gioan Baotixita",
+      "type": "asset",
+      "side": "corp",
+      "faction": "jinteki",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-AMOUNT"
+      ]
+    },
+    {
+      "code": "35052",
+      "title": "Empiricist",
+      "type": "ice",
+      "side": "corp",
+      "faction": "jinteki",
+      "batch": "slice-EL.7",
+      "status": "planned",
+      "newPrimitives": []
+    },
+    {
+      "code": "35053",
+      "title": "Mycoweb",
+      "type": "ice",
+      "side": "corp",
+      "faction": "jinteki",
+      "batch": "slice-EL.7",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-INSTALL-FROM-ARCHIVES",
+        "EL-RESOLVE-OTHER-SUBROUTINE"
+      ]
+    },
+    {
+      "code": "35054",
+      "title": "Semak-samun",
+      "type": "ice",
+      "side": "corp",
+      "faction": "jinteki",
+      "batch": "slice-EL.7",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-BREAK-RESTRICTION"
+      ]
+    },
+    {
+      "code": "35055",
+      "title": "Peer Review",
+      "type": "operation",
+      "side": "corp",
+      "faction": "jinteki",
+      "batch": "slice-EL.5",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-REVEAL-SUBSET"
+      ]
+    },
+    {
+      "code": "35056",
+      "title": "Mitra Aman",
+      "type": "upgrade",
+      "side": "corp",
+      "faction": "jinteki",
+      "batch": "slice-EL.7",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-SWAP-APPROACHED-ICE"
+      ]
+    },
+    {
+      "code": "35057",
+      "title": "Nebula Talent Management: Making Stars",
+      "type": "identity",
+      "side": "corp",
+      "faction": "nbn",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-FLIP",
+        "EL-ACTION-PHASE-END"
+      ]
+    },
+    {
+      "code": "35058",
+      "title": "Synapse Global: Faster than Thought",
+      "type": "identity",
+      "side": "corp",
+      "faction": "nbn",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-TAG-REMOVED"
+      ]
+    },
+    {
+      "code": "35059",
+      "title": "Embedded Reporting",
+      "type": "agenda",
+      "side": "corp",
+      "faction": "nbn",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-DIVIDENDS"
+      ]
+    },
+    {
+      "code": "35060",
+      "title": "Next Big Thing",
+      "type": "agenda",
+      "side": "corp",
+      "faction": "nbn",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-SCORE-AREA-ABILITY"
+      ]
+    },
+    {
+      "code": "35061",
+      "title": "Idiosyncresis",
+      "type": "asset",
+      "side": "corp",
+      "faction": "nbn",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-AMOUNT"
+      ]
+    },
+    {
+      "code": "35062",
+      "title": "Public Access Plaza",
+      "type": "asset",
+      "side": "corp",
+      "faction": "nbn",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-THREAT"
+      ]
+    },
+    {
+      "code": "35063",
+      "title": "Doomscroll",
+      "type": "ice",
+      "side": "corp",
+      "faction": "nbn",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-TAG-COUNT"
+      ]
+    },
+    {
+      "code": "35064",
+      "title": "N-Pot",
+      "type": "ice",
+      "side": "corp",
+      "faction": "nbn",
+      "batch": "slice-EL.7",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-THREAT"
+      ]
+    },
+    {
+      "code": "35065",
+      "title": "Bigger Picture",
+      "type": "operation",
+      "side": "corp",
+      "faction": "nbn",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-AMOUNT"
+      ]
+    },
+    {
+      "code": "35066",
+      "title": "IP Enforcement",
+      "type": "operation",
+      "side": "corp",
+      "faction": "nbn",
+      "batch": "slice-EL.5",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-INSTALL-FROM-SCORE-AREA"
+      ]
+    },
+    {
+      "code": "35067",
+      "title": "Touch-ups",
+      "type": "operation",
+      "side": "corp",
+      "faction": "nbn",
+      "batch": "slice-EL.5",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-REVEAL-GRIP"
+      ]
+    },
+    {
+      "code": "35068",
+      "title": "BANGUN: When Disaster Strikes",
+      "type": "identity",
+      "side": "corp",
+      "faction": "weyland-consortium",
+      "batch": "slice-EL.5",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-FACEUP-AGENDA"
+      ]
+    },
+    {
+      "code": "35069",
+      "title": "The Zwicky Group: Invisible Hands",
+      "type": "identity",
+      "side": "corp",
+      "faction": "weyland-consortium",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": []
+    },
+    {
+      "code": "35070",
+      "title": "Greenmail",
+      "type": "agenda",
+      "side": "corp",
+      "faction": "weyland-consortium",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-FORFEIT"
+      ]
+    },
+    {
+      "code": "35071",
+      "title": "Off the Books",
+      "type": "agenda",
+      "side": "corp",
+      "faction": "weyland-consortium",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-DIVIDENDS"
+      ]
+    },
+    {
+      "code": "35072",
+      "title": "Anthill Excavation Contract",
+      "type": "asset",
+      "side": "corp",
+      "faction": "weyland-consortium",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": []
+    },
+    {
+      "code": "35073",
+      "title": "Plutus",
+      "type": "asset",
+      "side": "corp",
+      "faction": "weyland-consortium",
+      "batch": "slice-EL.5",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-PLAY-FROM-ARCHIVES",
+        "EL-FORFEIT",
+        "EL-REVEAL-TRASH-COST"
+      ]
+    },
+    {
+      "code": "35074",
+      "title": "Biawak",
+      "type": "ice",
+      "side": "corp",
+      "faction": "weyland-consortium",
+      "batch": "slice-EL.7",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-FORFEIT",
+        "EL-REZ-COST-PAYMENT"
+      ]
+    },
+    {
+      "code": "35075",
+      "title": "Kessleroid",
+      "type": "ice",
+      "side": "corp",
+      "faction": "weyland-consortium",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-CANNOT-TRASH"
+      ]
+    },
+    {
+      "code": "35076",
+      "title": "Syailendra",
+      "type": "ice",
+      "side": "corp",
+      "faction": "weyland-consortium",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": []
+    },
+    {
+      "code": "35077",
+      "title": "Key Performance Indicators",
+      "type": "operation",
+      "side": "corp",
+      "faction": "weyland-consortium",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": []
+    },
+    {
+      "code": "35078",
+      "title": "Measured Response",
+      "type": "operation",
+      "side": "corp",
+      "faction": "weyland-consortium",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-THREAT"
+      ]
+    },
+    {
+      "code": "35079",
+      "title": "Flyswatter",
+      "type": "ice",
+      "side": "corp",
+      "faction": "neutral-corp",
+      "batch": "slice-EL.7",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-REZ-DURING-RUN"
+      ]
+    },
+    {
+      "code": "35080",
+      "title": "Lamplighter",
+      "type": "ice",
+      "side": "corp",
+      "faction": "neutral-corp",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": []
+    },
+    {
+      "code": "35081",
+      "title": "Petty Cash",
+      "type": "operation",
+      "side": "corp",
+      "faction": "neutral-corp",
+      "batch": "slice-EL.5",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-PLAY-FROM-ARCHIVES",
+        "EL-ACTION-NOT-FINISHED"
+      ]
+    },
+    {
+      "code": "35082",
+      "title": "Mahkota Langit Grid",
+      "type": "upgrade",
+      "side": "corp",
+      "faction": "neutral-corp",
+      "batch": "slice-EL.3",
+      "status": "planned",
+      "newPrimitives": [
+        "EL-RECURRING",
+        "EL-REGION",
+        "EL-PERSISTENT"
+      ]
+    }
+  ]
+}
