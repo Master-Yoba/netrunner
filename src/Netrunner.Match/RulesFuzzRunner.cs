@@ -87,13 +87,24 @@ public static class RulesFuzzRunner
     /// <summary>Separates the Corp and Runner preset IDs in a named-preset content ID.</summary>
     public const char PairSeparator = '~';
 
+    /// <summary>
+    /// Every pairing of the Elevation simulation decks (the batch proofs), on
+    /// the System Gateway + Elevation pool.
+    /// </summary>
+    public static IReadOnlyList<string> ElevationContentIds =>
+        OfficialPresetCatalog.ElevationSimulation().ElevationSimulationDecks.Where(preset => preset.Side == PlayerSide.Corp)
+            .SelectMany(corp => OfficialPresetCatalog.ElevationSimulation().ElevationSimulationDecks.Where(preset => preset.Side == PlayerSide.Runner)
+                .Select(runner => $"{corp.PresetId}{PairSeparator}{runner.PresetId}"))
+            .ToArray();
+
     /// <summary>The content IDs a <c>--content</c> option names: developer, official (expanded) or gateway.</summary>
     public static IReadOnlyList<string> ContentIds(string content) => content switch
     {
         "developer" => [DeveloperContentId],
         "official" => OfficialContentIds,
         "gateway" => GatewayContentIds,
-        _ => throw new ArgumentException($"Unknown content '{content}'; expected developer, official or gateway.", nameof(content)),
+        "elevation" => ElevationContentIds,
+        _ => throw new ArgumentException($"Unknown content '{content}'; expected developer, official, gateway or elevation.", nameof(content)),
     };
 
     /// <summary>
@@ -105,7 +116,8 @@ public static class RulesFuzzRunner
         "developer" => "developer",
         "official" => "expanded-v1",
         "gateway" => "gateway-v1",
-        _ => throw new ArgumentException($"Unknown content '{content}'; expected developer, official or gateway.", nameof(content)),
+        "elevation" => "elevation-simulation-v1",
+        _ => throw new ArgumentException($"Unknown content '{content}'; expected developer, official, gateway or elevation.", nameof(content)),
     };
 
     /// <summary>Every official preset pairing, in the benchmark's corp/runner order (the frozen M5 suites).</summary>
@@ -153,11 +165,13 @@ public static class RulesFuzzRunner
         (string corpPreset, string runnerPreset) = PresetIds(contentId);
         if (!string.Equals(CardDataResource.EmbeddedMode, CardDataResource.OfficialMode, StringComparison.Ordinal))
             throw new InvalidOperationException("Official fuzz content requires the embedded official card snapshot.");
-        CardDataSet data = CardDataResource.LoadEmbedded();
-        BehaviorCatalog behavior = GatewayBehaviorCatalog.Create();
+        bool elevation = corpPreset.StartsWith(OfficialPresetCatalog.ElevationSimulationPrefix, StringComparison.Ordinal);
+        CardDataSet data = elevation ? CardDataResource.LoadEmbeddedPool() : CardDataResource.LoadEmbedded();
+        BehaviorCatalog behavior = elevation ? ElevationBehaviorCatalog.Create() : GatewayBehaviorCatalog.Create();
+        OfficialPresetCatalog presets = elevation ? OfficialPresetCatalog.ElevationSimulation() : OfficialPresetCatalog.Embedded();
         MatchRequest request = MatchRequestComposer.ComposeOfficial(
-            corpPreset, runnerPreset, data, seed, OfficialPresetCatalog.Embedded(), behaviorCatalog: behavior);
-        return FullMatchDefinition.FromRequest(request, data, behavior);
+            corpPreset, runnerPreset, data, seed, presets, behaviorCatalog: behavior);
+        return FullMatchDefinition.FromRequest(request, data, behavior, presets);
     }
 
     /// <summary>The Corp and Runner preset IDs a content ID names: <c>basic-expanded</c> style, or <c>corpId~runnerId</c>.</summary>
@@ -166,7 +180,9 @@ public static class RulesFuzzRunner
         ArgumentNullException.ThrowIfNull(contentId);
         if (contentId.Split(PairSeparator) is [string corp, string runner])
         {
-            OfficialPresetCatalog catalog = OfficialPresetCatalog.Embedded();
+            OfficialPresetCatalog catalog = corp.StartsWith(OfficialPresetCatalog.ElevationSimulationPrefix, StringComparison.Ordinal)
+                ? OfficialPresetCatalog.ElevationSimulation()
+                : OfficialPresetCatalog.Embedded();
             if (!catalog.TryGet(corp, out OfficialPreset corpPreset) || corpPreset.Side != PlayerSide.Corp
                 || !catalog.TryGet(runner, out OfficialPreset runnerPreset) || runnerPreset.Side != PlayerSide.Runner)
                 throw new ArgumentException($"Unknown fuzz content '{contentId}'.", nameof(contentId));

@@ -26,6 +26,36 @@ internal sealed class HeuristicContext
     public OfflineAgentConfiguration Configuration { get; }
 
     /// <summary>1 for the frozen M5 policies (Runner v1, Corp v2); 2 enables the A2 terms.</summary>
+    /// <summary>
+    /// The amount an instruction applies: its static amount, a source counter
+    /// times a multiplier, or (Elevation) a typed amount estimated from the
+    /// source and the observed board.
+    /// </summary>
+    /// <summary>A card-effect install choice (Synapse Global, Off the Books) valued as the equivalent install action.</summary>
+    public static InstallCardParameters AsInstall(BehaviorInstallChoice choice) =>
+        new(choice.CardId, choice.DestinationKind, choice.ServerId, choice.CreateNewRemote, choice.CreditCost);
+
+    public static int EffectAmount(HeuristicContext context, BehaviorInstruction instruction, AgentCard? source)
+    {
+        if (instruction.AmountOperand is not { } operand)
+        {
+            return instruction.Amount;
+        }
+
+        int counted = operand.Kind switch
+        {
+            null or BehaviorAmountKind.SourceCounter =>
+                source?.Counters.Where(counter => counter.CounterName == operand.SourceCounterName).Sum(counter => counter.Count) ?? 0,
+            BehaviorAmountKind.SourceAdvancementCounters => source?.AdvancementCounters ?? 0,
+            BehaviorAmountKind.SourceExcessAdvancement => 1,
+            BehaviorAmountKind.ControllerClicks => context.Self.Clicks,
+            BehaviorAmountKind.ChosenCardInstallCost => 2,
+            BehaviorAmountKind.Recorded => 1,
+            _ => 0,
+        };
+        return counted * operand.Multiplier + operand.Offset;
+    }
+
     public int Generation { get; }
     public AgentPlayer Self => Features.Self;
     public AgentPlayer Opponent => Features.Opponent;

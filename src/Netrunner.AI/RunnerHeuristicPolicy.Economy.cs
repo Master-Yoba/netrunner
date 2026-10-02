@@ -70,12 +70,21 @@ public sealed partial class RunnerHeuristicPolicy
         foreach (BehaviorInstruction instruction in instructions)
         {
             bool self = controller == PlayerSide.Runner;
+            if (instruction.Recipient is BehaviorPlayerSelector.Corp or BehaviorPlayerSelector.Runner)
+                self = instruction.Recipient == BehaviorPlayerSelector.Runner;
             int sign = self ? 1 : -1;
-            int amount = instruction.Amount;
-            if (instruction.AmountOperand is { } operand)
-                amount = (source?.Counters.Where(counter => counter.CounterName == operand.SourceCounterName).Sum(counter => counter.Count) ?? 0) * operand.Multiplier;
+            int amount = HeuristicContext.EffectAmount(context, instruction, source);
             switch (instruction.Kind)
             {
+                // Elevation (EL.3): counters, faces, tags, sabotage and additional access.
+                case BehaviorInstructionKind.RemoveCounter: total -= amount * 50; break;
+                case BehaviorInstructionKind.RemoveTags: total += amount * 200; break;
+                case BehaviorInstructionKind.FlipSelf: total += 50; break;
+                case BehaviorInstructionKind.GainAllottedClicksNextTurn: total += sign * amount * 90; break;
+                case BehaviorInstructionKind.Sabotage: total += amount * 80; break;
+                case BehaviorInstructionKind.AddBreachAccess: total += amount * 150; break;
+                case BehaviorInstructionKind.RefillRecurringCredits: total += 2 * context.CreditValue; break;
+                case BehaviorInstructionKind.ForfeitAgenda: total -= 600; break;
                 case BehaviorInstructionKind.GainCredits: total += sign * amount * context.CreditValue; break;
                 // v14 (Codex review, 1 October): Zahya pays a credit a card the ended run accessed; it scored 0 and was declined.
                 case BehaviorInstructionKind.GainCreditsPerAccess when context.Generation >= 10:

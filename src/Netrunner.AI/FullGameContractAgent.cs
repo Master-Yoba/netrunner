@@ -270,6 +270,7 @@ public sealed class FullGameContractAgent : IGameAgent
             DecisionKind.TurnDiscard => SelectTurnDiscard(observation.LegalActions),
             DecisionKind.BehaviorChoice => SelectBehaviorChoice(observation),
             DecisionKind.InstallChoice => SelectInstallChoice(observation.LegalActions),
+            DecisionKind.BehaviorInstallChoice => SelectBehaviorInstallChoice(observation.LegalActions),
             DecisionKind.InterruptChoice => SelectInterruptChoice(observation.LegalActions),
             DecisionKind.TriggerChoice => SelectTriggerChoice(observation.LegalActions),
             DecisionKind.IceSubroutineChoice => SelectIceSubroutineChoice(observation),
@@ -361,6 +362,13 @@ public sealed class FullGameContractAgent : IGameAgent
             FullGameActionClass.BehaviorChoice,
             BehaviorOrderKey);
     }
+
+    /// <summary>A card-effect install (Synapse Global, Off the Books): the first offered install, else decline.</summary>
+    private static LegalAction SelectBehaviorInstallChoice(IReadOnlyList<LegalAction> actions) =>
+        actions.FirstOrDefault(static action => action.Kind == ActionKind.InstallCard
+            && action.Parameters is BehaviorInstallChoiceParameters { Choice: not null })
+        ?? actions.First(static action => action.Kind == ActionKind.InstallCard
+            && action.Parameters is BehaviorInstallChoiceParameters);
 
     private static LegalAction SelectInstallChoice(IReadOnlyList<LegalAction> actions)
     {
@@ -1346,9 +1354,10 @@ public sealed class FullGameContractAgent : IGameAgent
 
         return activation switch
         {
+            // One click cost of one or more clicks (Elevation's multi-click actions).
             BehaviorAbilityActivation.ClickAction =>
                 clickCostCount == 1
-                && costs.Single(static cost => cost.Kind == BehaviorCostKind.Clicks).Amount == 1
+                && costs.Single(static cost => cost.Kind == BehaviorCostKind.Clicks).Amount >= 1
                 && !hasLoseClickCost,
             BehaviorAbilityActivation.PaidAbility => clickCostCount == 0,
             _ => false,

@@ -204,7 +204,7 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
         {
             ActionKind.GainCredit or ActionKind.DrawCard or ActionKind.PassPriority or ActionKind.EndTurn => action.Parameters is NoActionParameters,
             ActionKind.PlayCard => action.Parameters is PlayCardParameters,
-            ActionKind.InstallCard => action.Parameters is InstallCardParameters,
+            ActionKind.InstallCard => action.Parameters is InstallCardParameters or BehaviorInstallChoiceParameters,
             ActionKind.RezCard => action.Parameters is RezCardParameters,
             ActionKind.RezIce => action.Parameters is RunIceParameters,
             ActionKind.AdvanceAgenda or ActionKind.AdvanceCard => action.Parameters is AdvanceCardParameters,
@@ -240,6 +240,10 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
                 "economy/basic-credit-and-rez-reserve"),
             ActionKind.DrawCard => Value(features.Board.HiddenZoneCounts.CorpDeck > 1 ? context.DrawValue : -10000, "economy/draw-reserve"),
             ActionKind.PlayCard => Play(context, Require<PlayCardParameters>(action)),
+            ActionKind.InstallCard when action.Parameters is BehaviorInstallChoiceParameters behaviorInstall =>
+                behaviorInstall.Choice is { } chosen
+                    ? Install(context, HeuristicContext.AsInstall(chosen), Repairs)
+                    : Value(0, "install/decline-card-effect"),
             ActionKind.InstallCard => Install(context, Require<InstallCardParameters>(action), Repairs),
             ActionKind.RezCard => Rez(context, Require<RezCardParameters>(action).CardId, Require<RezCardParameters>(action).CreditCost, Repairs),
             ActionKind.RezIce => Rez(context, Require<RunIceParameters>(action).IceId, Require<RunIceParameters>(action).CostQuote?.EffectiveCost

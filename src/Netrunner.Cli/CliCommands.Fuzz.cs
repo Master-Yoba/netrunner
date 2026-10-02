@@ -45,8 +45,8 @@ public static partial class CliCommands
                         break;
                     case "--content" when index + 1 < args.Length:
                         content = args[++index];
-                        if (content is not ("developer" or "official" or "gateway"))
-                            throw new ArgumentException("--content requires 'developer', 'official' or 'gateway'.");
+                        if (content is not ("developer" or "official" or "gateway" or "elevation"))
+                            throw new ArgumentException("--content requires 'developer', 'official', 'gateway' or 'elevation'.");
                         break;
                     case "--action-cap" when index + 1 < args.Length:
                         if (!int.TryParse(args[++index], NumberStyles.None, CultureInfo.InvariantCulture, out actionCap)

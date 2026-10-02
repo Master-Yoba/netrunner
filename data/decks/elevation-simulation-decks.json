@@ -1,0 +1,471 @@
+{
+  "schemaVersion": 1,
+  "retrievedDate": "2026-10-02",
+  "publishedSourceUrl": "https://nullsignal.games/products/elevation/",
+  "metadataCommitSha": "236140cf84491c23995b028bc791281837520b97",
+  "provenanceNote": "Simulation decks for the Elevation batch proofs (ours, not published lists): each exercises the bound Elevation cards with System Gateway support, legal under the System Gateway + Elevation format.",
+  "decks": [
+    {
+      "presetId": "elevation-sim-nebula-corp",
+      "name": "Nebula simulation",
+      "summary": "Nebula Talent Management with the NBN Dividends agendas, Doomscroll and the economy assets.",
+      "side": "corp",
+      "identityCode": "35057",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/ELEVATION_PROGRESS.md",
+      "cards": [
+        {
+          "code": "35059",
+          "quantity": 3
+        },
+        {
+          "code": "35060",
+          "quantity": 3
+        },
+        {
+          "code": "30068",
+          "quantity": 3
+        },
+        {
+          "code": "35063",
+          "quantity": 3
+        },
+        {
+          "code": "35080",
+          "quantity": 3
+        },
+        {
+          "code": "30055",
+          "quantity": 2
+        },
+        {
+          "code": "30072",
+          "quantity": 3
+        },
+        {
+          "code": "30074",
+          "quantity": 3
+        },
+        {
+          "code": "30054",
+          "quantity": 2
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "35062",
+          "quantity": 3
+        },
+        {
+          "code": "35061",
+          "quantity": 2
+        },
+        {
+          "code": "30056",
+          "quantity": 2
+        },
+        {
+          "code": "30071",
+          "quantity": 2
+        },
+        {
+          "code": "35082",
+          "quantity": 2
+        },
+        {
+          "code": "35065",
+          "quantity": 2
+        },
+        {
+          "code": "30057",
+          "quantity": 2
+        },
+        {
+          "code": "30053",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "elevation-sim-zwicky-corp",
+      "name": "Zwicky simulation",
+      "summary": "The Zwicky Group with Greenmail, Off the Books, the Weyland ICE and operations, and Haas-Bioroid tempo.",
+      "side": "corp",
+      "identityCode": "35069",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/ELEVATION_PROGRESS.md",
+      "cards": [
+        {
+          "code": "35070",
+          "quantity": 3
+        },
+        {
+          "code": "35071",
+          "quantity": 3
+        },
+        {
+          "code": "30060",
+          "quantity": 1
+        },
+        {
+          "code": "30069",
+          "quantity": 3
+        },
+        {
+          "code": "35075",
+          "quantity": 3
+        },
+        {
+          "code": "35076",
+          "quantity": 2
+        },
+        {
+          "code": "35080",
+          "quantity": 3
+        },
+        {
+          "code": "30062",
+          "quantity": 2
+        },
+        {
+          "code": "30072",
+          "quantity": 3
+        },
+        {
+          "code": "30073",
+          "quantity": 2
+        },
+        {
+          "code": "35072",
+          "quantity": 3
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "35077",
+          "quantity": 2
+        },
+        {
+          "code": "30064",
+          "quantity": 2
+        },
+        {
+          "code": "35078",
+          "quantity": 2
+        },
+        {
+          "code": "30071",
+          "quantity": 2
+        },
+        {
+          "code": "35043",
+          "quantity": 1
+        },
+        {
+          "code": "35044",
+          "quantity": 2
+        },
+        {
+          "code": "35040",
+          "quantity": 2
+        },
+        {
+          "code": "35082",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "elevation-sim-untaian-corp",
+      "name": "PT Untaian simulation",
+      "summary": "PT Untaian advancing Sericulture Expansion, with Phat Gioan Baotixita and NBN assets.",
+      "side": "corp",
+      "identityCode": "35047",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/ELEVATION_PROGRESS.md",
+      "cards": [
+        {
+          "code": "35049",
+          "quantity": 3
+        },
+        {
+          "code": "30044",
+          "quantity": 1
+        },
+        {
+          "code": "30068",
+          "quantity": 3
+        },
+        {
+          "code": "30069",
+          "quantity": 2
+        },
+        {
+          "code": "30046",
+          "quantity": 3
+        },
+        {
+          "code": "30047",
+          "quantity": 3
+        },
+        {
+          "code": "35080",
+          "quantity": 3
+        },
+        {
+          "code": "30072",
+          "quantity": 3
+        },
+        {
+          "code": "30074",
+          "quantity": 2
+        },
+        {
+          "code": "35051",
+          "quantity": 2
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "30048",
+          "quantity": 3
+        },
+        {
+          "code": "30071",
+          "quantity": 2
+        },
+        {
+          "code": "30045",
+          "quantity": 2
+        },
+        {
+          "code": "35082",
+          "quantity": 2
+        },
+        {
+          "code": "30049",
+          "quantity": 2
+        },
+        {
+          "code": "35062",
+          "quantity": 3
+        },
+        {
+          "code": "35061",
+          "quantity": 2
+        },
+        {
+          "code": "35063",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "presetId": "elevation-sim-dewi-runner",
+      "name": "Dewi simulation",
+      "summary": "Dewi Subrotoputri with Azimat, Devadatta Drone, Principia, Knickknack and Side Hustle.",
+      "side": "runner",
+      "identityCode": "35023",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/ELEVATION_PROGRESS.md",
+      "cards": [
+        {
+          "code": "35025",
+          "quantity": 3
+        },
+        {
+          "code": "35026",
+          "quantity": 3
+        },
+        {
+          "code": "35029",
+          "quantity": 2
+        },
+        {
+          "code": "35031",
+          "quantity": 2
+        },
+        {
+          "code": "35032",
+          "quantity": 2
+        },
+        {
+          "code": "35033",
+          "quantity": 2
+        },
+        {
+          "code": "35034",
+          "quantity": 3
+        },
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "30028",
+          "quantity": 2
+        },
+        {
+          "code": "30029",
+          "quantity": 2
+        },
+        {
+          "code": "30020",
+          "quantity": 2
+        },
+        {
+          "code": "30025",
+          "quantity": 2
+        },
+        {
+          "code": "30026",
+          "quantity": 2
+        },
+        {
+          "code": "30032",
+          "quantity": 1
+        },
+        {
+          "code": "30031",
+          "quantity": 1
+        },
+        {
+          "code": "30022",
+          "quantity": 2
+        },
+        {
+          "code": "30033",
+          "quantity": 2
+        },
+        {
+          "code": "30027",
+          "quantity": 2
+        },
+        {
+          "code": "30034",
+          "quantity": 1
+        },
+        {
+          "code": "35022",
+          "quantity": 2
+        },
+        {
+          "code": "35010",
+          "quantity": 1
+        },
+        {
+          "code": "35015",
+          "quantity": 2
+        },
+        {
+          "code": "35014",
+          "quantity": 1
+        },
+        {
+          "code": "35011",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "elevation-sim-zahya-runner",
+      "name": "Zahya simulation",
+      "summary": "Zahya with Sang Kancil, the criminal run events, Open Market and the anarch breakers.",
+      "side": "runner",
+      "identityCode": "30010",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/ELEVATION_PROGRESS.md",
+      "cards": [
+        {
+          "code": "35020",
+          "quantity": 3
+        },
+        {
+          "code": "35017",
+          "quantity": 2
+        },
+        {
+          "code": "35014",
+          "quantity": 2
+        },
+        {
+          "code": "35015",
+          "quantity": 2
+        },
+        {
+          "code": "35022",
+          "quantity": 2
+        },
+        {
+          "code": "30015",
+          "quantity": 2
+        },
+        {
+          "code": "30016",
+          "quantity": 2
+        },
+        {
+          "code": "30013",
+          "quantity": 1
+        },
+        {
+          "code": "30018",
+          "quantity": 2
+        },
+        {
+          "code": "30012",
+          "quantity": 2
+        },
+        {
+          "code": "30011",
+          "quantity": 1
+        },
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "30028",
+          "quantity": 2
+        },
+        {
+          "code": "30029",
+          "quantity": 2
+        },
+        {
+          "code": "35034",
+          "quantity": 3
+        },
+        {
+          "code": "30033",
+          "quantity": 2
+        },
+        {
+          "code": "30031",
+          "quantity": 1
+        },
+        {
+          "code": "30032",
+          "quantity": 1
+        },
+        {
+          "code": "35008",
+          "quantity": 2
+        },
+        {
+          "code": "35009",
+          "quantity": 2
+        },
+        {
+          "code": "35007",
+          "quantity": 1
+        },
+        {
+          "code": "35011",
+          "quantity": 2
+        }
+      ]
+    }
+  ]
+}

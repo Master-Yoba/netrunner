@@ -184,7 +184,7 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
             ActionKind.GainCredit or ActionKind.DrawCard or ActionKind.PassPriority or ActionKind.EndTurn
                 or ActionKind.JackOut or ActionKind.ContinueRun or ActionKind.NoAccessAction => action.Parameters is NoActionParameters,
             ActionKind.PlayCard => action.Parameters is PlayCardParameters,
-            ActionKind.InstallCard => action.Parameters is InstallCardParameters,
+            ActionKind.InstallCard => action.Parameters is InstallCardParameters or BehaviorInstallChoiceParameters,
             ActionKind.StartRun => action.Parameters is RunServerParameters,
             ActionKind.RemoveTag => action.Parameters is RemoveTagParameters,
             ActionKind.PumpBreaker => action.Parameters is RunBreakerParameters,
@@ -236,6 +236,10 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
         ActionKind.DrawCard => Value(context.Features.Board.HiddenZoneCounts.RunnerStack > 0 ? context.DrawValue
             + (context.Features.Hand.Length < 2 && context.Features.Board.Servers.SelectMany(server => server.Ice).Any(card => context.Definition(card)?.Ice?.Subroutines.Any(subroutine => subroutine is DamageSubroutineSpec) == true) ? 80 : 0) : -1000, "economy/draw-and-survival"),
         ActionKind.PlayCard => Play(context, (PlayCardParameters)action.Parameters),
+        ActionKind.InstallCard when action.Parameters is BehaviorInstallChoiceParameters behaviorInstall =>
+            behaviorInstall.Choice is { } chosen
+                ? Install(context, HeuristicContext.AsInstall(chosen))
+                : new AgentUtility(0, 0, "install/decline-card-effect"),
         ActionKind.InstallCard => Install(context, (InstallCardParameters)action.Parameters),
         ActionKind.StartRun => Run(context, context.Server(((RunServerParameters)action.Parameters).ServerId)),
         ActionKind.RemoveTag => RemoveTag(context, (RemoveTagParameters)action.Parameters),

@@ -555,7 +555,10 @@ public sealed class OfficialPresetCatalog
             if (preset.Kind != GatewayKind) problems.Add($"{path}.kind: expected '{GatewayKind}'.");
             if (string.IsNullOrWhiteSpace(preset.Name) || string.IsNullOrWhiteSpace(preset.Summary) || string.IsNullOrWhiteSpace(preset.SourceUrl))
                 problems.Add($"{path}: a sample deck needs a name, a summary and a source URL.");
-            if (preset.CardCount != (preset.Side == PlayerSide.Corp ? 44 : 40))
+            // Our Elevation simulation decks follow their identity's minimum
+            // (checked against the metadata below), not the Gateway sample sizes.
+            if (!preset.PresetId.StartsWith(ElevationSimulationPrefix, StringComparison.Ordinal)
+                && preset.CardCount != (preset.Side == PlayerSide.Corp ? 44 : 40))
                 problems.Add($"{path}.cards: contains {preset.CardCount} cards; a Gateway sample deck has {(preset.Side == PlayerSide.Corp ? 44 : 40)}.");
             var codes = new HashSet<string>(StringComparer.Ordinal);
             foreach (DeckCardEntry card in preset.Cards)
@@ -603,6 +606,42 @@ public sealed class OfficialPresetCatalog
     }
 
     private const string GatewayResourceName = "Netrunner.Cards.Data.decks.gateway-sample-decks.json";
+
+    private const string ElevationSimulationResourceName = "Netrunner.Cards.Data.decks.elevation-simulation-decks.json";
+
+    /// <summary>The preset-ID prefix of the Elevation simulation decks.</summary>
+    public const string ElevationSimulationPrefix = "elevation-sim-";
+
+    private static readonly Lazy<OfficialPresetCatalog> ElevationSimulationCatalog = new(
+        LoadElevationSimulationCore,
+        LazyThreadSafetyMode.ExecutionAndPublication);
+
+    /// <summary>
+    /// The embedded catalog plus the Elevation simulation decks: our decks for
+    /// the batch proofs and fuzzing, not menu decks. Kept apart from
+    /// <see cref="Embedded"/> so the frozen Gateway preset pins are unchanged.
+    /// </summary>
+    public static OfficialPresetCatalog ElevationSimulation() => ElevationSimulationCatalog.Value;
+
+    /// <summary>The Elevation simulation decks alone.</summary>
+    public IReadOnlyList<OfficialPreset> ElevationSimulationDecks =>
+        Gateway.Where(static preset => preset.PresetId.StartsWith(ElevationSimulationPrefix, StringComparison.Ordinal)).ToArray();
+
+    private static OfficialPresetCatalog LoadElevationSimulationCore()
+    {
+        OfficialPresetCatalog embedded = Embedded();
+        Assembly assembly = typeof(OfficialPresetCatalog).Assembly;
+        using Stream? stream = assembly.GetManifestResourceStream(ElevationSimulationResourceName)
+            ?? throw new PresetDataValidationException(
+                [$"preset resource: embedded resource '{ElevationSimulationResourceName}' was not found."]);
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        var catalog = new OfficialPresetCatalog(
+            embedded.Provenance,
+            embedded.Teaching,
+            embedded.Gateway.Concat(ParseGatewayDecks(reader.ReadToEnd())).ToArray());
+        catalog.Validate();
+        return catalog;
+    }
 
     private static readonly IReadOnlySet<string> GatewayRootProperties = new HashSet<string>(
         ["schemaVersion", "retrievedDate", "publishedSourceUrl", "metadataCommitSha", "provenanceNote", "decks"], StringComparer.Ordinal);

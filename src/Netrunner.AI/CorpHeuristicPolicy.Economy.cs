@@ -91,14 +91,28 @@ public sealed partial class CorpHeuristicPolicy
                 chosenCount = instruction.Choice.Cardinality.Count ?? int.MaxValue;
             }
             bool self = controller == context.Features.Side;
+            // An explicit recipient (Elevation) names whose credits change, whoever controls the effect.
+            if (instruction.Recipient is BehaviorPlayerSelector.Corp or BehaviorPlayerSelector.Runner)
+                self = (instruction.Recipient == BehaviorPlayerSelector.Corp) == (context.Features.Side == PlayerSide.Corp);
             int sign = self ? 1 : -1;
-            int amount = instruction.Amount;
-            if (instruction.AmountOperand is { } operand)
-                amount = (source?.Counters.Where(counter => counter.CounterName == operand.SourceCounterName).Sum(counter => counter.Count) ?? 0) * operand.Multiplier;
+            int amount = HeuristicContext.EffectAmount(context, instruction, source);
             switch (instruction.Kind)
             {
                 case BehaviorInstructionKind.GainCredits: total += sign * amount * (self ? context.CreditValue : 100); break;
                 case BehaviorInstructionKind.LoseCredits: total -= sign * amount * context.CreditValue; break;
+                // Elevation (EL.3): counters, faces, agendas and turn structure.
+                case BehaviorInstructionKind.AddCounter: total += amount * 70; break;
+                case BehaviorInstructionKind.RemoveCounter: total -= amount * 50; break;
+                case BehaviorInstructionKind.RemoveTags: total -= amount * 150; break;
+                case BehaviorInstructionKind.FlipSelf: total += 50; break;
+                case BehaviorInstructionKind.ForfeitAgenda: total -= 600; break;
+                case BehaviorInstructionKind.GainAllottedClicksNextTurn: total += sign * amount * 90; break;
+                case BehaviorInstructionKind.ProhibitScoringTargetThisTurn: total -= 20; break;
+                case BehaviorInstructionKind.Sabotage: total -= amount * 80; break;
+                case BehaviorInstructionKind.PlaceOnTopOfDeck: total += 60; break;
+                case BehaviorInstructionKind.AddBreachAccess: total -= amount * 150; break;
+                case BehaviorInstructionKind.RefillRecurringCredits: total += 2 * context.CreditValue; break;
+                case BehaviorInstructionKind.InstallCard when instruction.IsZoneInstall: total += 250; break;
                 case BehaviorInstructionKind.GainClicks: total += sign * amount * 100; break;
                 case BehaviorInstructionKind.Draw:
                     if (controller == PlayerSide.Corp && amount >= context.Features.Board.HiddenZoneCounts.CorpDeck) return -20000;
