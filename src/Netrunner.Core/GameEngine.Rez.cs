@@ -141,7 +141,7 @@ public static partial class GameEngine
                         RuntimeCardClass.Ice,
                         out int iceCost,
                         out CostQuote? iceQuote)
-                    && corp.Credits >= iceCost)
+                    && corp.Credits + DeclaredHostedCredits(working, PlayerSide.Corp, BehaviorHostedCreditUseKind.RezInServer, currentIce) >= iceCost)
                 {
                     materialized.Add(new RezCardParameters(currentIce.Id, iceCost, iceQuote));
                 }
@@ -195,7 +195,7 @@ public static partial class GameEngine
                 || card.Rezzed
                 || (!isAsset && !isUpgrade)
                 || (isAsset && server.Kind != ServerKind.Remote)
-                || corpCredits < cost)
+                || corpCredits + DeclaredHostedCredits(working, PlayerSide.Corp, BehaviorHostedCreditUseKind.RezInServer, card) < cost)
             {
                 continue;
             }
@@ -282,10 +282,7 @@ public static partial class GameEngine
         RunState? runParent = isTurnRez ? null : working.RunState;
         PlayerState corp = GetPlayer(working, PlayerSide.Corp);
         int effectiveCost = issued.CreditCost;
-        if (effectiveCost > 0)
-        {
-            ApplyCreditDelta(working, corp.Id, -effectiveCost);
-        }
+        PayCreditsWithDeclaredHosted(working, corp.Id, BehaviorHostedCreditUseKind.RezInServer, card, effectiveCost);
 
         ReplaceCard(working, new CardInstanceState(
             card.Id,

@@ -407,7 +407,7 @@ public static partial class GameEngine
         int cost = frame.InitiationKind == InstallInitiationKind.BehaviorZoneInstall
             ? InstallFrameCost(working, frame, plan, frame.SelectedReplacementCardIds).Cost
             : frame.CostQuote?.EffectiveCost ?? baseCost;
-        if (player.Credits < cost)
+        if (player.Credits + DeclaredHostedCredits(working, player.Side, BehaviorHostedCreditUseKind.InstallResource, GetCard(working, frame.CardId)) < cost)
         {
             throw new ResolutionFailureException($"Installing '{frame.CardId}' requires {cost} credits.");
         }
@@ -452,7 +452,7 @@ public static partial class GameEngine
             RecalculateUsedMemory(working);
         }
 
-        ApplyCreditDeltaIfNonZero(working, player.Id, -cost);
+        PayCreditsWithDeclaredHosted(working, player.Id, BehaviorHostedCreditUseKind.InstallResource, GetCard(working, frame.CardId), cost);
         if (frame.InitiationKind == InstallInitiationKind.BasicAction)
         {
             SpendClick(working, player.Id);
@@ -1256,7 +1256,7 @@ public static partial class GameEngine
             : installCost;
         PlayerState player = GetPlayer(working, side);
         if ((!IsClickFreeInstall(initiationKind) && player.Clicks < 1)
-            || player.Credits < minimumCost)
+            || player.Credits + DeclaredHostedCredits(working, side, BehaviorHostedCreditUseKind.InstallResource, card) < minimumCost)
         {
             return null;
         }
@@ -1382,7 +1382,7 @@ public static partial class GameEngine
         CostQuote? installCostQuote = CostModifierProjection.RunnerInstall(working, card, baseInstallCost);
         int installCost = installCostQuote?.EffectiveCost ?? baseInstallCost;
         PlayerState player = GetPlayer(working, PlayerSide.Runner);
-        if (player.Credits < installCost)
+        if (player.Credits + DeclaredHostedCredits(working, PlayerSide.Runner, BehaviorHostedCreditUseKind.InstallResource, card) < installCost)
         {
             return null;
         }
@@ -2051,7 +2051,7 @@ public static partial class GameEngine
 
             PlayerState player = GetPlayer(working, frame.Owner);
             if ((frame.InitiationKind == InstallInitiationKind.BasicAction && player.Clicks < 1)
-                || player.Credits < expectedEffectiveCost)
+                || player.Credits + DeclaredHostedCredits(working, player.Side, BehaviorHostedCreditUseKind.InstallResource, GetCard(working, frame.CardId)) < expectedEffectiveCost)
             {
                 throw new ResolutionFailureException("The install is no longer affordable.");
             }

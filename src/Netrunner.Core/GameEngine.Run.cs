@@ -2428,10 +2428,12 @@ public static partial class GameEngine
                 $"The accessed card '{accessed}' is no longer in the authoritative source zone.");
         }
 
-        if (AccessTrashCost(working.BehaviorCatalog, working.RuntimeCardCatalog, card.DefinitionId) is not { } trashCost)
+        if (AccessTrashPayment(working, card) is not { } trashPayment)
         {
             throw new ResolutionFailureException($"The accessed card '{accessed}' has no trash cost.");
         }
+
+        int trashCost = trashPayment.Cost;
 
         ZoneState discardZone = GetZone(working, ZoneKind.CorpDiscard);
         if (card.ZoneId == discardZone.Id)
@@ -2440,14 +2442,16 @@ public static partial class GameEngine
         }
 
         PlayerState runner = GetPlayer(working, PlayerSide.Runner);
-        if (!CanAffordRunCredits(runner, run, trashCost))
+        if (!CanAffordRunCredits(runner, run, trashPayment.Remaining))
         {
             throw new ResolutionFailureException(
                 $"The Runner cannot pay the {trashCost} credit trash cost of '{accessed}' "
                 + $"from {runner.Credits} wallet and {run.RunCredits} run credits.");
         }
 
-        run = PayRunnerRunCredits(working, run, trashCost, hostedCredits);
+        SpendDeclaredHostedCredits(working, PlayerSide.Runner, BehaviorHostedCreditUseKind.TrashCost, card,
+            trashCost - trashPayment.Remaining);
+        run = PayRunnerRunCredits(working, working.RunState ?? run, trashPayment.Remaining, hostedCredits);
         run = RetainAccessTrashedAbilities(working, run, card);
         working.RunState = run;
         ZoneState trashedFrom = working.Zones.Single(zone => zone.Id == card.ZoneId);
@@ -3783,11 +3787,12 @@ public static partial class GameEngine
             && !HasRunRestriction(run, RunRestrictionKind.CannotStealOrTrashCorpCards)
             && accessedCard is not null
             && !working.BehaviorCatalog.TryGetAgenda(accessedCard.DefinitionId, out _)
-            && AccessTrashCost(working.BehaviorCatalog, working.RuntimeCardCatalog, accessedCard.DefinitionId) is { } trashCost
-            && CanAffordRunCredits(GetPlayer(working, PlayerSide.Runner), run, trashCost))
+            && AccessTrashPayment(working, accessedCard) is { } trashPayment
+            && CanAffordRunCredits(GetPlayer(working, PlayerSide.Runner), run, trashPayment.Remaining))
         {
+            int trashCost = trashPayment.Cost;
             PlayerState runner = GetPlayer(working, PlayerSide.Runner);
-            foreach (int hostedCredits in LegalHostedCreditSplits(runner, run, trashCost))
+            foreach (int hostedCredits in LegalHostedCreditSplits(runner, run, trashPayment.Remaining))
             {
                 actions.Add(new LegalAction(
                     working.Allocator.NextActionId(),

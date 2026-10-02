@@ -85,6 +85,10 @@ public static class BeneficialTriggers
             [BehaviorInstructionKind.GainAllottedClicksNextTurn] = EffectVerdict.PlayerDecides,
             [BehaviorInstructionKind.ProhibitScoringTargetThisTurn] = EffectVerdict.PlayerDecides,
             [BehaviorInstructionKind.Sabotage] = EffectVerdict.PlayerDecides,
+            [BehaviorInstructionKind.PlaceOnTopOfDeck] = EffectVerdict.PlayerDecides,
+            [BehaviorInstructionKind.ShuffleDeck] = EffectVerdict.PlayerDecides,
+            [BehaviorInstructionKind.AddBreachAccess] = EffectVerdict.PlayerDecides,
+            [BehaviorInstructionKind.RefillRecurringCredits] = EffectVerdict.Gain,
         };
 
     /// <summary>The verdict for an effect kind; an unclassified kind is the player's decision.</summary>

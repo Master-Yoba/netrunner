@@ -11,14 +11,17 @@ public static partial class GameEngine
             || !working.BehaviorCatalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? definition))
             return run;
         BehaviorTrigger[] triggers = definition.Triggers.Where(trigger => trigger.Persistent).ToArray();
-        if (triggers.Length == 0) return run;
+        string[] keys = triggers.Select(static trigger => trigger.Key)
+            .Concat(definition.RootAssetTrashCostIncrease > 0 ? [RootAssetTrashCostKey] : [])
+            .ToArray();
+        if (keys.Length == 0) return run;
         RunPersistentContext context = run.PersistentContext
             ?? new RunPersistentContext(run.Id, run.AttackedServer, [], []);
         var retained = context.Abilities.ToList();
-        foreach (BehaviorTrigger trigger in triggers)
+        foreach (string key in keys)
         {
-            if (!retained.Any(value => value.SourceCardId == card.Id && value.TriggerKey == trigger.Key))
-                retained.Add(new PersistentRunAbility(card.Id, card.DefinitionId, zone.Id, trigger.Key));
+            if (!retained.Any(value => value.SourceCardId == card.Id && value.TriggerKey == key))
+                retained.Add(new PersistentRunAbility(card.Id, card.DefinitionId, zone.Id, key));
         }
         return run.WithPersistentContext(new RunPersistentContext(run.Id, run.AttackedServer, context.StolenAgendas, retained, context.AccessOccurrenceCount));
     }
@@ -34,6 +37,11 @@ public static partial class GameEngine
             { Kind: OccurrenceKind.RunEnded, RunContext: { } context }) yield break;
         foreach (PersistentRunAbility retained in context.Abilities)
         {
+            if (string.Equals(retained.TriggerKey, RootAssetTrashCostKey, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
             CardInstanceState source = GetCard(working, retained.SourceCardId);
             if (!working.BehaviorCatalog.TryGet(retained.DefinitionId, out CardBehaviorDefinition? definition))
                 throw new ResolutionFailureException("Persistent source is absent from its authenticated catalog.");

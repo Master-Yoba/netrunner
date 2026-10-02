@@ -547,6 +547,20 @@ public static partial class GameEngine
             case BehaviorInstructionKind.Sabotage:
                 ResolveBehaviorSabotage(working, frame, instruction);
                 return;
+            case BehaviorInstructionKind.RefillRecurringCredits:
+                RefillRecurringCredits(working, frame.SourceCardId);
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.ShuffleDeck:
+                ShuffleProvenEmptyZone(working, frame, instruction.SourceZone!.Value, GetPlayer(working, frame.Controller).Side);
+                return;
+            case BehaviorInstructionKind.PlaceOnTopOfDeck:
+                ResolveBehaviorPlaceOnTopOfDeck(working, frame, instruction);
+                return;
+            case BehaviorInstructionKind.AddBreachAccess:
+                AddBehaviorBreachAccess(working, frame, instruction);
+                AdvanceBehaviorCursor(working, frame);
+                return;
             case BehaviorInstructionKind.RezIgnoringCosts:
                 ResolveBehaviorRezIgnoringCosts(working, frame, instruction);
                 break;

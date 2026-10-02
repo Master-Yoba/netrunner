@@ -1320,6 +1320,22 @@ public static partial class StateInvariantValidator
                         }
                         break;
 
+                    case RunBreachAccessModifierSourceKind.BehaviorEffect:
+                        if (source is not null
+                            && (!behaviorCatalog.TryGet(source.DefinitionId, out CardBehaviorDefinition? effectDefinition)
+                                || !BehaviorRunRules.HasBehaviorBreachAccessDeclaration(
+                                    effectDefinition,
+                                    modifier.ReasonKey,
+                                    modifier.Delta)))
+                        {
+                            Add(
+                                violations,
+                                "run.breach-modifier-undeclared",
+                                modifierPath,
+                                "Behavior breach access modifiers must match a declared additional-access instruction of the source.");
+                        }
+                        break;
+
                     case RunBreachAccessModifierSourceKind.RunEvent:
                         if (run.ActiveRunEventId is not { } activeRunEventId)
                         {
@@ -8953,8 +8969,9 @@ public static partial class StateInvariantValidator
                         {
                             unknownTrashCost = accessedCardId;
                         }
-                        else if (GameEngine.AccessTrashCost(behaviorCatalog, runtimeCardCatalog, accessedCard!.DefinitionId) is { } trashCost)
+                        else if (GameEngine.AccessTrashPayment(state, behaviorCatalog, runtimeCardCatalog, accessedCardId) is { } trashPayment)
                         {
+                            int trashCost = trashPayment.Remaining;
                             PlayerState? trashRunner = state.Players.FirstOrDefault(player => player?.Side == PlayerSide.Runner);
                             if (trashRunner is not null && (long)trashRunner.Credits + run.RunCredits >= trashCost)
                             {

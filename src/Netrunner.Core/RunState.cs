@@ -92,6 +92,9 @@ public enum RunBreachAccessModifierSourceKind
     FirstHeadquartersBreach,
     /// <summary>Additional access declared by the run event that started this run.</summary>
     RunEvent,
+
+    /// <summary>Additional access granted by a resolved Runner card ability (Devadatta Drone).</summary>
+    BehaviorEffect,
 }
 
 public enum RunEncounterStatus

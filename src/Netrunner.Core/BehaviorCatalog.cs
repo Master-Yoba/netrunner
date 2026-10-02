@@ -1394,12 +1394,18 @@ public sealed record BehaviorInstruction
             && Kind != BehaviorInstructionKind.AddToHand
             && Kind != BehaviorInstructionKind.InstallCard
             && Kind != BehaviorInstructionKind.ShuffleSearchedDeck
+            && Kind != BehaviorInstructionKind.ShuffleDeck
             && (SourceZone is not null || DestinationZone is not null))
         {
             throw new ArgumentException(
                 "Source and destination zones are not valid for this instruction kind.",
                 nameof(SourceZone));
         }
+
+        if (Kind == BehaviorInstructionKind.ShuffleDeck
+            && (SourceZone is not (BehaviorZone.Deck or BehaviorZone.Stack)
+                || DestinationZone is not null || Target is not null || Amount != 0))
+            throw new ArgumentException("A deck shuffle names only its Deck or Stack source zone.");
 
         if (Kind == BehaviorInstructionKind.ShuffleSearchedDeck
             && (SourceZone is not (BehaviorZone.Deck or BehaviorZone.Stack)
@@ -1421,7 +1427,8 @@ public sealed record BehaviorInstruction
             or BehaviorInstructionKind.RemoveCounter
             or BehaviorInstructionKind.ForfeitAgenda
             or BehaviorInstructionKind.ProhibitScoringTargetThisTurn
-            or BehaviorInstructionKind.Sabotage)
+            or BehaviorInstructionKind.Sabotage
+            or BehaviorInstructionKind.PlaceOnTopOfDeck)
             && Target is not null)
         {
             throw new ArgumentException(
@@ -1535,6 +1542,18 @@ public enum BehaviorInstructionKind
     /// </summary>
     Sabotage,
 
+    /// <summary>Moves the targeted card to the top of its owner's deck.</summary>
+    PlaceOnTopOfDeck,
+
+    /// <summary>Shuffles the controller's deck (the source zone), after an install from it.</summary>
+    ShuffleDeck,
+
+    /// <summary>EL-RECURRING: refills the source's recurring credits ("when you install / rez this").</summary>
+    RefillRecurringCredits,
+
+    /// <summary>The Runner accesses the amount in additional cards in the coming breach (the argument is a reason key).</summary>
+    AddBreachAccess,
+
     // Short aliases keep the contract pleasant for callers while the longer
     // names remain unambiguous in serialized/fingerprint output.
     Shuffle = ShuffleIntoDeck,
@@ -1646,6 +1665,47 @@ public enum RunOutcomeRequirement
 /// Immutable typed trigger declaration. A trigger's instruction list is the
 /// complete behavior executed when its declared occurrence is dispatched.
 /// </summary>
+/// <summary>What a card's declared-use hosted credits pay for.</summary>
+public enum BehaviorHostedCreditUseKind
+{
+    /// <summary>Trash costs of accessed cards (Azimat).</summary>
+    TrashCost,
+
+    /// <summary>Install costs of Runner resources with one of the subtypes (Open Market).</summary>
+    InstallResource,
+
+    /// <summary>Rez costs of assets in the root of, and ICE protecting, the card's own server (Mahkota Langit Grid).</summary>
+    RezInServer,
+}
+
+/// <summary>One declared use of a card's hosted credits.</summary>
+public sealed record BehaviorHostedCreditUse
+{
+    public BehaviorHostedCreditUse(BehaviorHostedCreditUseKind kind, IReadOnlyList<string>? subtypes = null)
+    {
+        if (!Enum.IsDefined(kind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(kind));
+        }
+
+        Kind = kind;
+        Subtypes = new ReadOnlyCollection<string>((subtypes ?? []).ToArray());
+        if (kind == BehaviorHostedCreditUseKind.InstallResource && Subtypes.Count == 0)
+        {
+            throw new ArgumentException("A resource-install use names the resource subtypes it pays for.", nameof(subtypes));
+        }
+    }
+
+    public BehaviorHostedCreditUseKind Kind { get; }
+
+    public IReadOnlyList<string> Subtypes { get; }
+
+    public bool Equals(BehaviorHostedCreditUse? other) =>
+        other is not null && Kind == other.Kind && Subtypes.SequenceEqual(other.Subtypes, StringComparer.Ordinal);
+
+    public override int GetHashCode() => HashCode.Combine(Kind, Subtypes.Count);
+}
+
 /// <summary>EL-FLIP: the two faces of a double-sided identity.</summary>
 public enum BehaviorFace
 {
@@ -1957,9 +2017,19 @@ public sealed class CardBehaviorDefinition
         IReadOnlyList<BehaviorFirstBasicDrawReplacement>? firstBasicDrawReplacements = null,
         bool canBeAdvanced = false,
         HostingBehaviorSpec? hosting = null,
-        bool runnerCannotTrash = false)
+        bool runnerCannotTrash = false,
+        IReadOnlyList<BehaviorHostedCreditUse>? hostedCreditUses = null,
+        int recurringCredits = 0,
+        int rootAssetTrashCostIncrease = 0)
     {
         DefinitionId = definitionId;
+        ArgumentOutOfRangeException.ThrowIfNegative(recurringCredits);
+        ArgumentOutOfRangeException.ThrowIfNegative(rootAssetTrashCostIncrease);
+        RootAssetTrashCostIncrease = rootAssetTrashCostIncrease;
+        RecurringCredits = recurringCredits;
+        HostedCreditUses = hostedCreditUses is null or { Count: 0 }
+            ? null
+            : new ReadOnlyCollection<BehaviorHostedCreditUse>(hostedCreditUses.ToArray());
         if (!Enum.IsDefined(controller))
         {
             throw new ArgumentOutOfRangeException(nameof(controller));
@@ -2027,6 +2097,22 @@ public sealed class CardBehaviorDefinition
     /// <summary>The Runner cannot trash this card while it is rezzed (Kessleroid).</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool RunnerCannotTrash { get; }
+
+    /// <summary>
+    /// EL-PERSISTENT: while this rezzed card is in a server's root, the trash
+    /// cost of each asset in that root rises by this amount; the increase
+    /// persists through the run in which the Runner trashes this card.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int RootAssetTrashCostIncrease { get; }
+
+    /// <summary>EL-RECURRING: hosted credits refilled to this amount before each of the controller's turns.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int RecurringCredits { get; }
+
+    /// <summary>What this card's hosted credits can be spent on (Azimat, Open Market, Mahkota Langit Grid).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<BehaviorHostedCreditUse>? HostedCreditUses { get; }
 
     public IReadOnlyList<BehaviorCost> Costs { get; }
 
@@ -2875,6 +2961,9 @@ internal static class BehaviorCatalogStructure
                 && a.Controller == b.Controller
                 && a.CanBeAdvanced == b.CanBeAdvanced
                 && a.RunnerCannotTrash == b.RunnerCannotTrash
+                && a.RecurringCredits == b.RecurringCredits
+                && a.RootAssetTrashCostIncrease == b.RootAssetTrashCostIncrease
+                && SequenceEquals(a.HostedCreditUses ?? [], b.HostedCreditUses ?? [])
                 && a.Hosting == b.Hosting
                 && SequenceEquals(a.Costs, b.Costs)
                 && SequenceEquals(a.Conditions, b.Conditions)
@@ -3099,6 +3188,22 @@ internal static class BehaviorCatalogFingerprint
         if (value.RunnerCannotTrash)
         {
             builder.Append(",runnerCannotTrash=1");
+        }
+        if (value.RecurringCredits != 0)
+        {
+            builder.Append(",recurringCredits=").Append(value.RecurringCredits);
+        }
+        if (value.RootAssetTrashCostIncrease != 0)
+        {
+            builder.Append(",rootAssetTrashCostIncrease=").Append(value.RootAssetTrashCostIncrease);
+        }
+        if (value.HostedCreditUses is { } uses)
+        {
+            builder.Append(",hostedCreditUses=");
+            foreach (BehaviorHostedCreditUse use in uses)
+            {
+                builder.Append((int)use.Kind).Append(':').Append(string.Join('+', use.Subtypes)).Append(';');
+            }
         }
         if (value.Hosting is { } hosting)
         {

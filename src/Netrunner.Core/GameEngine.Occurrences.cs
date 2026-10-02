@@ -312,4 +312,46 @@ public static partial class GameEngine
             TrashCard(working, GetCard(working, deck.CardIds[0]), deck, GetZone(working, ZoneKind.CorpDiscard));
         }
     }
+
+    /// <summary>Moves the targeted card to its owner's deck, on top.</summary>
+    private static void ResolveBehaviorPlaceOnTopOfDeck(
+        WorkingState working,
+        BehaviorResolutionFrame frame,
+        BehaviorInstruction instruction)
+    {
+        IReadOnlyList<CardInstanceId> cards = ResolveBehaviorCards(working, frame, instruction.Target);
+        ResolveBehaviorTransfer(
+            working,
+            frame,
+            new BehaviorInstruction(BehaviorInstructionKind.MoveCard, target: instruction.Target, destinationZone: BehaviorZone.Deck),
+            BehaviorTransferKind.Move);
+        foreach (CardInstanceId cardId in cards)
+        {
+            ZoneState deck = ZoneForCard(working, cardId);
+            ReplaceZone(working, new ZoneState(deck.Id, deck.Kind, deck.OwnerSide, deck.ServerId,
+                deck.CardIds.Where(candidate => candidate != cardId).Prepend(cardId).ToArray()));
+        }
+    }
+
+    /// <summary>"Access N additional cards" in the coming breach of the attacked server.</summary>
+    private static void AddBehaviorBreachAccess(
+        WorkingState working,
+        BehaviorResolutionFrame frame,
+        BehaviorInstruction instruction)
+    {
+        RunState run = working.RunState
+            ?? throw new ResolutionFailureException("Additional access requires a live run.");
+        if (run.Step != RunTimingStep.BreachBoundary)
+        {
+            throw new ResolutionFailureException("Additional access is granted only before the breach begins.");
+        }
+
+        RunBreachAccessModifier modifier = new(
+            frame.SourceCardId,
+            run.AttackedServer,
+            instruction.Amount,
+            instruction.Argument ?? throw new ResolutionFailureException("Additional access needs a reason key."),
+            RunBreachAccessModifierSourceKind.BehaviorEffect);
+        working.RunState = run.WithBreachAccessModifiers((run.BreachAccessModifiers ?? []).Append(modifier).ToArray());
+    }
 }

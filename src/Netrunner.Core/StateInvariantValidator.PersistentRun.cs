@@ -52,8 +52,10 @@ public static partial class StateInvariantValidator
             if (source is null || source.DefinitionId != retained.DefinitionId || source.OwnerSide != PlayerSide.Corp
                 || zone?.Kind != ZoneKind.ServerRoot || zone.ServerId != context.ServerId
                 || catalog is not null && (!catalog.TryGet(retained.DefinitionId, out CardBehaviorDefinition? definition)
-                    || !definition.Triggers.Any(trigger => trigger.Key == retained.TriggerKey && trigger.Persistent
-                        && trigger.Occurrence == OccurrenceKind.RunEnded)))
+                    || !(definition.Triggers.Any(trigger => trigger.Key == retained.TriggerKey && trigger.Persistent
+                            && trigger.Occurrence == OccurrenceKind.RunEnded)
+                        || string.Equals(retained.TriggerKey, GameEngine.RootAssetTrashCostKey, StringComparison.Ordinal)
+                            && definition.RootAssetTrashCostIncrease > 0)))
                 Add(violations, "run.persistent-source", "runPersistentContext.abilities", "Persistent source provenance must match its installed object and catalog declaration.");
         }
     }

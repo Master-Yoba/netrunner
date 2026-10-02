@@ -359,6 +359,7 @@ public static partial class GameEngine
             allotted,
             player.AgendaPoints));
 
+        RefillActiveRecurringCredits(working, frame.ActiveSide);
         TurnHistoryState history = (working.Turn.History ?? new TurnHistoryState())
             .Start(frame.ActiveSide, frame.TurnNumber, allotted);
         TurnStep step = frame.ActiveSide == PlayerSide.Corp ? TurnStep.CorpDraw : TurnStep.RunnerAction;
