@@ -11,11 +11,13 @@ namespace Netrunner.Cli;
 public static partial class CliCommands
 {
     /// <summary>
-    /// ai-fit-evaluation [--content official|gateway|both] [--games N] [--holdout-games N] [--seed S]
-    /// [--workers 1..64] --output file.json. A5: plays Standard self-play, takes each side's view
+    /// ai-fit-evaluation [--content official|gateway|both|gateway-elevation] [--games N] [--holdout-games N] [--seed S]
+    /// [--workers 1..64] [--compare fitted.json] --output file.json. A5: plays Standard self-play, takes each side's view
     /// at the start of every turn, labels it with who won, fits one logistic model per side, and
     /// reports log loss on held-out seeds for the fitted model and for the hand evaluation
-    /// (calibrated on the same training games). Exit 0 when the fitted model is better on both sides.
+    /// (calibrated on the same training games). Exit 0 when the fitted model is better on both sides. A7:
+    /// <c>--compare</c> also scores an existing fit (the general one) on the same held-out games, to decide
+    /// whether a pool keeps a fit of its own.
     /// </summary>
     private static int RunAiFitEvaluation(string[] args, TextWriter output, TextWriter error)
     {
@@ -23,6 +25,7 @@ public static partial class CliCommands
         int games = 400, holdoutGames = 120, workers = 1, featureVersion = 1;
         ulong seed = 1;
         string? destination = null;
+        string? compare = null;
         try
         {
             for (int index = 1; index < args.Length; index++)
@@ -31,13 +34,15 @@ public static partial class CliCommands
                 {
                     case "--content" when index + 1 < args.Length:
                         content = args[++index];
-                        if (content is not ("official" or "gateway" or "both")) throw new ArgumentException("--content requires official, gateway or both.");
+                        if (content is not ("official" or "gateway" or "both" or "gateway-elevation"))
+                            throw new ArgumentException("--content requires official, gateway, both or gateway-elevation.");
                         break;
                     case "--games" when index + 1 < args.Length: games = int.Parse(args[++index], CultureInfo.InvariantCulture); break;
                     case "--holdout-games" when index + 1 < args.Length: holdoutGames = int.Parse(args[++index], CultureInfo.InvariantCulture); break;
                     case "--seed" when index + 1 < args.Length: seed = ulong.Parse(args[++index], CultureInfo.InvariantCulture); break;
                     case "--workers" when index + 1 < args.Length: workers = Math.Clamp(int.Parse(args[++index], CultureInfo.InvariantCulture), 1, 64); break;
                     case "--output" when index + 1 < args.Length: destination = args[++index]; break;
+                    case "--compare" when index + 1 < args.Length: compare = args[++index]; break;
                     case "--feature-version" when index + 1 < args.Length:
                         featureVersion = int.Parse(args[++index], CultureInfo.InvariantCulture);
                         if (featureVersion is not (1 or 2)) throw new ArgumentException("--feature-version requires 1 or 2.");
@@ -46,6 +51,7 @@ public static partial class CliCommands
                 }
             }
             if (destination is null) throw new ArgumentException("--output is required.");
+            if (compare is not null && !File.Exists(compare)) throw new ArgumentException($"--compare file does not exist: {compare}");
             if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode)
                 throw new ArgumentException("Fitting needs previously provisioned official content embedded at build time.");
         }
@@ -59,11 +65,15 @@ public static partial class CliCommands
         {
             "official" => RulesFuzzRunner.OfficialContentIds,
             "gateway" => RulesFuzzRunner.GatewayContentIds,
+            "gateway-elevation" => RulesFuzzRunner.GatewayElevationContentIds,
             _ => [.. RulesFuzzRunner.OfficialContentIds, .. RulesFuzzRunner.GatewayContentIds],
         };
         // Held-out seeds come from a separate base seed, so no training game repeats.
         Samples training = Collect(pool, games, seed, workers, featureVersion);
         Samples holdout = Collect(pool, holdoutGames, seed + 1_000_003, workers, featureVersion);
+        FittedEvaluationDocument? compared = compare is null ? null
+            : JsonSerializer.Deserialize<FittedEvaluationDocument>(File.ReadAllText(compare), FitJsonOptions)
+                ?? throw new InvalidOperationException($"--compare file is empty: {compare}");
         var models = new Dictionary<PlayerSide, LogisticSideModel>();
         var report = new List<object>();
         bool better = true;
@@ -81,16 +91,19 @@ public static partial class CliCommands
             double baseLoss = LogisticSideModel.LogLoss(_ => baseRate, hx, hy);
             double accuracy = hx.Select((sample, index) => (model.Probability(sample) >= 0.5 ? 1.0 : 0.0) == hy[index] ? 1 : 0).Average();
             better &= fittedLoss < handLoss;
+            LogisticSideModel? comparedModel = compared is null ? null : side == PlayerSide.Corp ? compared.Corp : compared.Runner;
+            double? comparedLoss = comparedModel is null ? null : LogisticSideModel.LogLoss(comparedModel.Probability, hx, hy);
             output.WriteLine(string.Create(CultureInfo.InvariantCulture,
-                $"{side,-6} train={x.Count} holdout={hx.Count} logloss fitted={fittedLoss:F4} hand={handLoss:F4} base-rate={baseLoss:F4} accuracy={accuracy:P1}"));
-            report.Add(new { side = side.ToString().ToLowerInvariant(), train = x.Count, holdout = hx.Count, fittedLoss, handLoss, baseLoss, accuracy });
+                $"{side,-6} train={x.Count} holdout={hx.Count} logloss fitted={fittedLoss:F4} hand={handLoss:F4} base-rate={baseLoss:F4} accuracy={accuracy:P1}")
+                + (comparedLoss is { } loss ? string.Create(CultureInfo.InvariantCulture, $" compared={loss:F4}") : ""));
+            report.Add(new { side = side.ToString().ToLowerInvariant(), train = x.Count, holdout = hx.Count, fittedLoss, handLoss, baseLoss, accuracy, comparedLoss });
         }
         var document = new FittedEvaluationDocument(1, $"evaluation-v{featureVersion}", EvaluationFeatures.NamesFor(featureVersion), models[PlayerSide.Corp], models[PlayerSide.Runner],
             string.Create(CultureInfo.InvariantCulture,
                 $"Fitted by ai-fit-evaluation (feature set {featureVersion}) on {games} Standard self-play games (content {content}, seed {seed}); held out {holdoutGames} games on another seed."));
         File.WriteAllText(destination, JsonSerializer.Serialize(document, FitJsonOptions) + "\n");
         File.WriteAllText(Path.ChangeExtension(destination, ".report.json"),
-            JsonSerializer.Serialize(new { schemaVersion = 1, featureVersion, content, games, holdoutGames, seed, sides = report }, FitJsonOptions) + "\n");
+            JsonSerializer.Serialize(new { schemaVersion = 1, featureVersion, content, games, holdoutGames, seed, compare, sides = report }, FitJsonOptions) + "\n");
         output.WriteLine($"ai-fit-evaluation {(better ? "better" : "not-better")} output={destination}");
         return better ? 0 : 1;
     }
