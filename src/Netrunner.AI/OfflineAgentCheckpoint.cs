@@ -53,7 +53,11 @@ public sealed record AgentKnowledge(ImmutableArray<AgentRememberedCard> VisibleC
     /// </summary>
     public ImmutableArray<string>? Exposed { get; init; }
 
-    public AgentKnowledge Observe(AgentFeatures features, long sequence)
+    /// <param name="keepRootsThroughInstalls">
+    /// Runner v20: a remembered root card stays known when the Corp installs another card in its root. Installs append, so
+    /// the remembered card keeps its index; a root that shrinks still forgets, since a removal moves the later cards.
+    /// </param>
+    public AgentKnowledge Observe(AgentFeatures features, long sequence, bool keepRootsThroughInstalls = false)
     {
         // Precise identity/location exists only while currently visible. Reveals
         // remember a definition, not an instance in a shuffled/hidden deck.
@@ -100,7 +104,7 @@ public sealed record AgentKnowledge(ImmutableArray<AgentRememberedCard> VisibleC
             };
         }
         if (features.Board.Run is null && centrals?.DeckDuringRun is not null) centrals = centrals with { DeckDuringRun = null };
-        ImmutableArray<AgentRootMemory>? roots = features.Side == PlayerSide.Runner ? RememberRoots(features, Roots) : Roots;
+        ImmutableArray<AgentRootMemory>? roots = features.Side == PlayerSide.Runner ? RememberRoots(features, Roots, keepRootsThroughInstalls) : Roots;
         ImmutableArray<string>? exposed = Exposed;
         if (features.Side == PlayerSide.Corp && features.Board.Run?.Breach.Accessed is { Length: > 0 } breached)
         {
@@ -121,18 +125,20 @@ public sealed record AgentKnowledge(ImmutableArray<AgentRememberedCard> VisibleC
     /// Keeps what is still true of the remembered root cards and adds every root card visible now
     /// (an accessed card is visible to the Runner for the rest of its breach).
     /// </summary>
-    private static ImmutableArray<AgentRootMemory>? RememberRoots(AgentFeatures features, ImmutableArray<AgentRootMemory>? previous)
+    private static ImmutableArray<AgentRootMemory>? RememberRoots(AgentFeatures features, ImmutableArray<AgentRootMemory>? previous,
+        bool keepThroughInstalls)
     {
         var kept = new List<AgentRootMemory>();
         foreach (AgentRootMemory memory in previous ?? [])
         {
             AgentServer? server = features.Board.Servers.FirstOrDefault(value => value.Id == memory.ServerId);
-            if (server is null || server.Root.Length != memory.RootCount || memory.Index >= server.Root.Length || server.Root[memory.Index] is not null)
+            bool counted = server is not null && (server.Root.Length == memory.RootCount || keepThroughInstalls && server.Root.Length > memory.RootCount);
+            if (server is null || !counted || memory.Index >= server.Root.Length || server.Root[memory.Index] is not null)
                 continue;
             int advancement = features.Board.HiddenAdvancements?.FirstOrDefault(entry => entry.ServerId == memory.ServerId
                 && entry.Zone == "root" && entry.Index == memory.Index)?.AdvancementCounters ?? 0;
             if (advancement < memory.Advancement) continue;
-            kept.Add(memory with { Advancement = advancement });
+            kept.Add(memory with { Advancement = advancement, RootCount = server.Root.Length });
         }
         foreach (AgentServer server in features.Board.Servers)
             for (int index = 0; index < server.Root.Length; index++)

@@ -110,7 +110,8 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// a tutor's breaker is valued by what it breaks on the board, as installing it would be (Mutual Favor fetched Carmen with
     /// two barriers out and the R&amp;D barrier never broken); a tag is cleared first only while its risk is worth more than the
     /// clearing costs (broke, with two Sure Gambles in the grip, it paid 2 credits a tag seven times against a Corp that
-    /// never punished one).
+    /// never punished one); and a remembered root card stays known when the Corp installs beside it (against Claude Sonnet it
+    /// accessed an Urtica Cipher, forgot it when Manegarm Skunkworks went into the same root, and ran there again to flatline).
     /// </summary>
     public const string V20 = "runner-heuristic-v20";
     /// <summary>The version new games and new manifests use.</summary>
@@ -128,6 +129,9 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// </summary>
     public const string LatestHeuristic = V7;
     public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20];
+
+    /// <summary>Whether the version's memory of a face-down root card survives installs in that root (v20).</summary>
+    public static bool KeepsRootMemoryThroughInstalls(string version) => version == V20;
 
     public RunnerHeuristicPolicy() : this(PolicyVersion) { }
 

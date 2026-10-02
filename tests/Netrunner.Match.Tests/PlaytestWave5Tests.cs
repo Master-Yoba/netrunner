@@ -36,6 +36,20 @@ public sealed class PlaytestWave5Tests
     }
 
     [Theory]
+    [InlineData(RunnerHeuristicPolicy.V18, true)]
+    [InlineData(RunnerHeuristicPolicy.V20, false)]
+    public async Task AnAccessedTrapStaysKnownWhenTheCorpInstallsBesideIt(string version, bool runsIntoIt)
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        // Against Claude Sonnet 5.5 (2 October): Runner v20 accessed the Urtica Cipher in Remote 1 on turn 1, forgot it when
+        // Manegarm Skunkworks went into the same root, and ran there with one card in its grip.
+        (LegalAction chosen, GameState state) = await ChooseAtAsync("sonnet-w5-urtica-memory", PlayerSide.Runner, version, 67);
+        bool urticaServer = chosen.Parameters is RunServerParameters run && state.Zones.Any(zone => zone.ServerId == run.ServerId
+            && zone.Kind == ZoneKind.ServerRoot && zone.CardIds.Any(id => Title(state, id) == "Urtica Cipher"));
+        Assert.True(runsIntoIt == urticaServer, $"{version} chose {chosen.Kind} {chosen.Description}.");
+    }
+
+    [Theory]
     [InlineData(CorpHeuristicPolicy.V23, true)]
     [InlineData(CorpHeuristicPolicy.V25, false)]
     public async Task ATrapPastLethalIsNotAdvancedWhateverThePlannerSees(string version, bool advances)
