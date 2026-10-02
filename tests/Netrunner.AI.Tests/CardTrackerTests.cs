@@ -75,6 +75,28 @@ public sealed class CardTrackerTests
         Assert.Equal(2, TrackerPrior.Remaining(list, inArchives)[Tithe]);
     }
 
+    [Fact]
+    public void ACardHostedFaceUpFromHqLeavesIt()
+    {
+        // EL.7: Detente hosts a card from HQ face up on the Runner's console.
+        AgentFeatures hosted = Board(hand: 4) with
+        {
+            Board = Board(hand: 4).Board with { CorpHostedFaceUp = [new AgentCard { Id = "card:hedge-1", DefinitionId = Hedge }] },
+        };
+        CardTracker tracker = Seen(Hedge, hand: 5).Observe(hosted, Catalog, _ => 1 / 3.0, TrackerMemory.Full);
+        Assert.Equal(0, tracker.Expected(Hedge, TrackedPlace.Hand), 3);
+    }
+
+    [Fact]
+    public void AnIceInstalledFromFaceUpArchivesIsThatIce()
+    {
+        // EL.7: Mycoweb installs ICE from Archives; HQ didn't change, and Tithe left face-up Archives.
+        var tracker = new CardTracker([], new TrackerSnapshot(5, 20, 0, [Tithe],
+            [new("server:hq", "ice", []), new("server:hq", "root", [])], [], null, null, []));
+        tracker = tracker.Observe(Board(hand: 5, ice: [null]), Catalog, _ => 1 / 3.0, TrackerMemory.Full);
+        Assert.Equal(1, tracker.SlotBelief("server:hq", "ice", 0).GetValueOrDefault(Tithe), 3);
+    }
+
     /// <summary>A tracker that saw <paramref name="definition"/> in HQ on turn 1, and last saw HQ of <paramref name="hand"/> cards and no installs.</summary>
     private static CardTracker Seen(string definition, int hand) =>
         new([new(definition, TrackedPlace.Hand, 1, 1)], Snapshot(hand, deck: 20));
