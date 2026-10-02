@@ -196,4 +196,5 @@ forgetting on purpose, though this is one seed.
 - **The tracker:** loses some accuracy to stale shares of cards drawn from R&D at unknown depths, and could use the
   Corp's install timing (a card installed the turn it was drawn).
 
-The user skipped the A9b playtest to finish the wave.
+The user skipped the A9b playtest to finish the wave. After the merge they played one game against each bot on the new
+defaults: no major blunders, a small sample.

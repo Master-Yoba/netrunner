@@ -486,6 +486,13 @@ don't infer. A bigger card pool (Elevation, next) only adds more of these. See
 
 Hard knows the opponent's list, Standard and Easy the pool, and Easy forgets on purpose.
 
+### Next: the Elevation card set
+
+Planned in [ELEVATION_PLAN.md](ELEVATION_PLAN.md) (primitive audit: [ELEVATION_PRIMITIVES.md](ELEVATION_PRIMITIVES.md)):
+- slices EL.1 to EL.8: preparation, three primitive slices each followed by a card batch, and integration;
+- C2's format snapshots and A7 are part of it;
+- the E6 Core-growth budget is measured per card batch with `make core-growth`.
+
 ### C2. Format snapshots (with the next card set)
 
 Formats rotate. Startup in 2026 is System Gateway, Elevation and Vantage

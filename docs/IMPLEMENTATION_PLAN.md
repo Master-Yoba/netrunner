@@ -88,7 +88,8 @@ Elevation.**
   mechanics give the planner, the fitted evaluation (A7's per-format weights)
   and the personalities more to work with.
 
-What starting the card set requires, before its first batch:
+The plan is [ELEVATION_PLAN.md](ELEVATION_PLAN.md) (2 October 2026). What starting the card set requires, before its
+first batch:
 
 - **E6 Core-growth budget:** at least 80% of Elevation's cards need no Core
   change (no new `BehaviorInstructionKind`, frame type or Core file). Measure
