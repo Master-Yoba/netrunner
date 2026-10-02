@@ -118,4 +118,18 @@ public sealed class ElevationPrimitiveContractTests
         Assert.NotEqual(Fingerprint(Ability(false)), Fingerprint(Ability(true)));
         Assert.NotEqual(Ability(false), Ability(true));
     }
+
+    [Theory]
+    [InlineData(BehaviorInstructionKind.TrashCard, "trash")]
+    [InlineData(BehaviorInstructionKind.AdvanceCard, "advance")]
+    [InlineData(BehaviorInstructionKind.InstallCard, "installCard")]
+    [InlineData(BehaviorInstructionKind.ShuffleIntoDeck, "shuffleIntoDeck")]
+    [InlineData(BehaviorInstructionKind.FlipSelf, "flipSelf")]
+    public void InstructionKindsKeepTheirHistoricalJsonNames(BehaviorInstructionKind kind, string name)
+    {
+        Assert.Equal($"\"{name}\"", EngineJson.Serialize(kind));
+        Assert.Equal(kind, EngineJson.Deserialize<BehaviorInstructionKind>($"\"{name}\""));
+        Assert.Equal(BehaviorInstructionKind.TrashCard, EngineJson.Deserialize<BehaviorInstructionKind>("\"trashCard\""));
+    }
 }
+

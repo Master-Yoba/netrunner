@@ -191,6 +191,7 @@ public static class EngineJson
             ReadCommentHandling = JsonCommentHandling.Disallow,
             UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
         };
+        options.Converters.Add(new BehaviorInstructionKindJsonConverter());
         options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false));
         return options;
     }
