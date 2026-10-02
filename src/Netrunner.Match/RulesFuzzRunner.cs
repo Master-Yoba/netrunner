@@ -97,14 +97,28 @@ public static class RulesFuzzRunner
                 .Select(runner => $"{corp.PresetId}{PairSeparator}{runner.PresetId}"))
             .ToArray();
 
-    /// <summary>The content IDs a <c>--content</c> option names: developer, official (expanded) or gateway.</summary>
+    /// <summary>
+    /// EL.8: every pairing of the System Gateway + Elevation format's decks (D-EL-4),
+    /// the deck pool of that format.
+    /// </summary>
+    public static IReadOnlyList<string> GatewayElevationContentIds =>
+        OfficialPresetCatalog.GatewayElevation().ElevationDecks.Where(preset => preset.Side == PlayerSide.Corp)
+            .SelectMany(corp => OfficialPresetCatalog.GatewayElevation().ElevationDecks.Where(preset => preset.Side == PlayerSide.Runner)
+                .Select(runner => $"{corp.PresetId}{PairSeparator}{runner.PresetId}"))
+            .ToArray();
+
+    /// <summary>The <c>--content</c> options: developer, official (expanded), gateway, elevation (simulation) or gateway-elevation.</summary>
+    public static IReadOnlyList<string> ContentNames { get; } = ["developer", "official", "gateway", "elevation", "gateway-elevation"];
+
+    /// <summary>The content IDs a <c>--content</c> option names.</summary>
     public static IReadOnlyList<string> ContentIds(string content) => content switch
     {
         "developer" => [DeveloperContentId],
         "official" => OfficialContentIds,
         "gateway" => GatewayContentIds,
         "elevation" => ElevationContentIds,
-        _ => throw new ArgumentException($"Unknown content '{content}'; expected developer, official, gateway or elevation.", nameof(content)),
+        "gateway-elevation" => GatewayElevationContentIds,
+        _ => throw new ArgumentException($"Unknown content '{content}'; expected {string.Join(", ", ContentNames)}.", nameof(content)),
     };
 
     /// <summary>
@@ -117,7 +131,8 @@ public static class RulesFuzzRunner
         "official" => "expanded-v1",
         "gateway" => "gateway-v1",
         "elevation" => "elevation-simulation-v3",
-        _ => throw new ArgumentException($"Unknown content '{content}'; expected developer, official, gateway or elevation.", nameof(content)),
+        "gateway-elevation" => "gateway-elevation-v1",
+        _ => throw new ArgumentException($"Unknown content '{content}'; expected {string.Join(", ", ContentNames)}.", nameof(content)),
     };
 
     /// <summary>Every official preset pairing, in the benchmark's corp/runner order (the frozen M5 suites).</summary>
@@ -165,10 +180,10 @@ public static class RulesFuzzRunner
         (string corpPreset, string runnerPreset) = PresetIds(contentId);
         if (!string.Equals(CardDataResource.EmbeddedMode, CardDataResource.OfficialMode, StringComparison.Ordinal))
             throw new InvalidOperationException("Official fuzz content requires the embedded official card snapshot.");
-        bool elevation = corpPreset.StartsWith(OfficialPresetCatalog.ElevationSimulationPrefix, StringComparison.Ordinal);
+        OfficialPresetCatalog presets = CatalogOf(corpPreset);
+        bool elevation = !ReferenceEquals(presets, OfficialPresetCatalog.Embedded());
         CardDataSet data = elevation ? CardDataResource.LoadEmbeddedPool() : CardDataResource.LoadEmbedded();
         BehaviorCatalog behavior = elevation ? ElevationBehaviorCatalog.Create() : GatewayBehaviorCatalog.Create();
-        OfficialPresetCatalog presets = elevation ? OfficialPresetCatalog.ElevationSimulation() : OfficialPresetCatalog.Embedded();
         MatchRequest request = MatchRequestComposer.ComposeOfficial(
             corpPreset, runnerPreset, data, seed, presets, behaviorCatalog: behavior);
         return FullMatchDefinition.FromRequest(request, data, behavior, presets);
@@ -180,9 +195,7 @@ public static class RulesFuzzRunner
         ArgumentNullException.ThrowIfNull(contentId);
         if (contentId.Split(PairSeparator) is [string corp, string runner])
         {
-            OfficialPresetCatalog catalog = corp.StartsWith(OfficialPresetCatalog.ElevationSimulationPrefix, StringComparison.Ordinal)
-                ? OfficialPresetCatalog.ElevationSimulation()
-                : OfficialPresetCatalog.Embedded();
+            OfficialPresetCatalog catalog = CatalogOf(corp);
             if (!catalog.TryGet(corp, out OfficialPreset corpPreset) || corpPreset.Side != PlayerSide.Corp
                 || !catalog.TryGet(runner, out OfficialPreset runnerPreset) || runnerPreset.Side != PlayerSide.Runner)
                 throw new ArgumentException($"Unknown fuzz content '{contentId}'.", nameof(contentId));
@@ -193,6 +206,12 @@ public static class RulesFuzzRunner
             throw new ArgumentException($"Unknown fuzz content '{contentId}'.", nameof(contentId));
         return ($"system-gateway-{parts[0]}-corp", $"system-gateway-{parts[1]}-runner");
     }
+
+    /// <summary>The preset catalog a Corp preset ID belongs to: the simulation decks, the Elevation format's decks or the embedded catalog.</summary>
+    private static OfficialPresetCatalog CatalogOf(string corpPresetId) =>
+        corpPresetId.StartsWith(OfficialPresetCatalog.ElevationSimulationPrefix, StringComparison.Ordinal) ? OfficialPresetCatalog.ElevationSimulation()
+        : OfficialPresetCatalog.IsElevationDeck(corpPresetId) ? OfficialPresetCatalog.GatewayElevation()
+        : OfficialPresetCatalog.Embedded();
 
     public static Task<FuzzGameResult> RunAsync(FuzzGameCase fuzzCase, int actionCap = DefaultActionCap,
         CancellationToken cancellationToken = default) =>

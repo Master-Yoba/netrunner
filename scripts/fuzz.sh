@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Random-legal rules fuzzing. Usage:
-#   scripts/fuzz.sh official|elevation|developer [--games N] [--seed S] [--workers N] [--action-cap N] [--output <new dir>] [--json]
+#   scripts/fuzz.sh official|elevation|gateway-elevation|developer [--games N] [--seed S] [--workers N] [--action-cap N] [--output <new dir>] [--json]
 # Official fuzzing needs the provisioned System Gateway snapshot and never downloads it.
 set -euo pipefail
 
@@ -11,7 +11,7 @@ if (($#)); then shift; fi
 
 fuzz_build_arguments=()
 case "$fuzz_content" in
-  official|elevation)
+  official|elevation|gateway-elevation)
     fuzz_data="$fuzz_root/data/vendor/system-gateway"
     if [[ ! -f "$fuzz_data/cards.json" ]]; then
       echo "Official card metadata is missing. Run ./scripts/update-card-data.sh --commit 236140cf84491c23995b028bc791281837520b97 --retrieval-date 2026-08-28" >&2
@@ -24,7 +24,7 @@ case "$fuzz_content" in
     )
     ;;
   developer) ;;
-  *) echo "Usage: scripts/fuzz.sh official|elevation|developer [fuzz options]" >&2; exit 2 ;;
+  *) echo "Usage: scripts/fuzz.sh official|elevation|gateway-elevation|developer [fuzz options]" >&2; exit 2 ;;
 esac
 
 fuzz_arguments=(--content "$fuzz_content")
@@ -38,7 +38,9 @@ fi
 
 # Build in an isolated directory so fuzzing never replaces the solution's
 # content-specific build output.
-fuzz_build="$fuzz_root/.tools/fuzz-cli/${fuzz_content/elevation/official}"
+fuzz_build_lane=official
+if [[ "$fuzz_content" == developer ]]; then fuzz_build_lane=developer; fi
+fuzz_build="$fuzz_root/.tools/fuzz-cli/$fuzz_build_lane"
 dotnet build "$fuzz_root/src/Netrunner.Cli" -c Release --artifacts-path "$fuzz_build" -m:1 --disable-build-servers \
   "-p:NetrunnerCardDataGeneratedFile=$fuzz_build/generated/GeneratedCardData.g.cs" \
   "${fuzz_build_arguments[@]}" >&2

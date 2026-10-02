@@ -50,8 +50,8 @@ public static partial class CliCommands
                         break;
                     case "--content" when index + 1 < args.Length:
                         content = args[++index];
-                        if (content is not ("developer" or "official" or "gateway" or "elevation"))
-                            throw new ArgumentException("--content requires 'developer', 'official', 'gateway' or 'elevation'.");
+                        if (!RulesFuzzRunner.ContentNames.Contains(content, StringComparer.Ordinal))
+                            throw new ArgumentException($"--content requires one of {string.Join(", ", RulesFuzzRunner.ContentNames)}.");
                         break;
                     case "--entrants" when index + 1 < args.Length:
                         entrants = args[++index].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);

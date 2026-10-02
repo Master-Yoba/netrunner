@@ -37,6 +37,21 @@ public sealed class PlayFormatsTests
         Assert.Equal(ElevationBehaviorCatalog.Version, elevation.Behavior.Version);
     }
 
+    [Fact]
+    public async Task TheFormatsDeckPoolIsFuzzAndLadderContent()
+    {
+        Assert.Equal(48, RulesFuzzRunner.ContentIds("gateway-elevation").Count);
+        Assert.Equal("gateway-elevation-v1", RulesFuzzRunner.PoolVersion("gateway-elevation"));
+        if (!ElevationAvailable) return;
+        string content = RulesFuzzRunner.ContentIds("gateway-elevation")[0];
+
+        FuzzGameResult result = await RulesFuzzRunner.RunAsync(
+            new FuzzGameCase("pool", content, 11, FuzzAgentKind.Heuristic, FuzzAgentKind.Heuristic));
+
+        Assert.False(result.IsDefect, $"{content}: {result.Status} {result.Message}");
+        Assert.Equal(ElevationBehaviorCatalog.Version, RulesFuzzRunner.CreateDefinition(content, 11).Behavior.Version);
+    }
+
     [Theory]
     [InlineData(PlayerSide.Runner)]
     [InlineData(PlayerSide.Corp)]
