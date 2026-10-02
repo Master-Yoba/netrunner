@@ -24,9 +24,9 @@ public partial class Main
 
 		if (presetValue is not null)
 		{
-			if (presetValue is not ("basic" or "expanded" or "elevation"))
+			if (presetValue is not ("basic" or "expanded" or "elevation") && !IsElevationPairing(presetValue))
 			{
-				error = $"--preset requires 'basic', 'expanded' or 'elevation', found '{presetValue}'.";
+				error = $"--preset requires 'basic', 'expanded', 'elevation' or an Elevation pairing 'corp~runner', found '{presetValue}'.";
 				return false;
 			}
 
@@ -118,9 +118,17 @@ public partial class Main
 	/// A smoke's deck for a side: the teaching decks by kind, or for
 	/// <c>elevation</c> a Gateway + Elevation pairing (EL.8).
 	/// </summary>
-	private static string SmokePresetId(string preset, string side) => preset == "elevation"
-		? side == "corp" ? "elevation-synapse-fast-news" : "elevation-magdalene-cryptarchitect"
-		: $"system-gateway-{preset}-{side}";
+	private static string SmokePresetId(string preset, string side) => preset switch
+	{
+		"elevation" => side == "corp" ? "elevation-synapse-fast-news" : "elevation-magdalene-cryptarchitect",
+		_ when IsElevationPairing(preset) => preset.Split('~')[side == "corp" ? 0 : 1],
+		_ => $"system-gateway-{preset}-{side}",
+	};
+
+	/// <summary>A <c>corp~runner</c> pairing of two Gateway + Elevation decks (scripts/elevation-deck-smoke.sh).</summary>
+	private static bool IsElevationPairing(string preset) =>
+		preset.Split('~') is [string corp, string runner]
+		&& OfficialPresetCatalog.IsElevationDeck(corp) && OfficialPresetCatalog.IsElevationDeck(runner);
 
 	private bool HasAuthenticatedOfficialContent() =>
 		_embeddedCardData is not null
