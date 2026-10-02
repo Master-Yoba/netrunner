@@ -66,7 +66,6 @@
         "35004",
         "35006",
         "35013",
-        "35018",
         "35024",
         "35028",
         "35036",
@@ -95,6 +94,7 @@
         "35005",
         "35012",
         "35016",
+        "35018",
         "35019",
         "35021",
         "35027",
@@ -508,15 +508,16 @@
       "type": "hardware",
       "side": "runner",
       "faction": "criminal",
-      "batch": "slice-EL.5",
-      "slice": "EL.5",
+      "batch": "slice-EL.7",
+      "slice": "EL.7",
       "status": "planned",
       "textStatus": "planned",
       "reviewStatus": "audited",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-HOSTED-FACEUP",
-        "EL-ANY-PLAYER-ABILITY"
+        "EL-ANY-PLAYER-ABILITY",
+        "EL-ACCESS-OUTSIDE-RUN"
       ],
       "citations": [
         "EL-CR-3.8.5-console",
@@ -524,7 +525,7 @@
         "EL-CR-9.5-paid-abilities",
         "EL-CR-7.1-access"
       ],
-      "observation": "Console: first successful HQ run each turn may host a random HQ card faceup; any player may click and return two hosted cards to HQ to give a random HQ access.",
+      "observation": "Console: first successful HQ run each turn may host a random HQ card faceup; any player may click and return two hosted cards to HQ to give a random HQ access. Moved from EL.5 to EL.7 on 2 October 2026: its random HQ access happens outside a run, which needs the run and access machinery of EL.6 (EL-ACCESS-OUTSIDE-RUN).",
       "hiddenInformationImpact": "Hosted HQ cards become public; returning them to HQ hides them again.",
       "serializationImpact": "Hosted faceup cards and the any-player ability are serialized with the console."
     },

@@ -165,6 +165,7 @@ internal static class ElevationHarness
             ActionKind.ContinueRun,
             ActionKind.NoAccessAction,
             ActionKind.ChooseBreachCandidate,
+            ActionKind.OrderTriggers,
         ];
         LegalAction? action = order
             .Select(kind => decision.LegalActions.FirstOrDefault(candidate => candidate.Kind == kind))
@@ -317,7 +318,8 @@ internal sealed record Placement(
     int Server = 3,
     bool Rezzed = false,
     int Advancement = 0,
-    IReadOnlyDictionary<string, int>? Counters = null);
+    IReadOnlyDictionary<string, int>? Counters = null,
+    bool FaceUp = false);
 
 /// <summary>
 /// A declarative test board. Unless stated, both identities are absent, each
@@ -374,9 +376,9 @@ internal sealed class ElevationBoard
     }
 
     public ElevationBoard Add(string code, Place where, int server = Remote, bool rezzed = false, int advancement = 0,
-        IReadOnlyDictionary<string, int>? counters = null)
+        IReadOnlyDictionary<string, int>? counters = null, bool faceUp = false)
     {
-        _placements.Add(new Placement(code, where, server, rezzed, advancement, counters));
+        _placements.Add(new Placement(code, where, server, rezzed, advancement, counters, faceUp));
         return this;
     }
 
@@ -435,7 +437,7 @@ internal sealed class ElevationBoard
             {
                 Place.Rig or Place.CorpScore or Place.RunnerScore or Place.CorpIdentity or Place.RunnerIdentity
                     or Place.Heap or Place.ArchivesFaceUp => true,
-                Place.Root or Place.Ice => placement.Rezzed,
+                Place.Root or Place.Ice => placement.Rezzed || placement.FaceUp,
                 _ => false,
             };
             var card = new CardInstanceState(allocator.NextCardInstanceId(), new CardDefinitionId(placement.Code), zone.Id,

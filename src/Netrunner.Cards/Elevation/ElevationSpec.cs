@@ -48,8 +48,16 @@ internal static class ElevationSpec
     public static BehaviorInstruction NetDamage(int amount) =>
         new(BehaviorInstructionKind.DealDamage, amount: amount, damageKind: DamageKind.Net);
 
-    public static BehaviorInstruction Branch(BehaviorCondition condition, IReadOnlyList<BehaviorInstruction> instructions) =>
-        new(BehaviorInstructionKind.Branch, branch: new BehaviorBranchSpec(condition, instructions));
+    public static BehaviorInstruction Branch(
+        BehaviorCondition condition,
+        IReadOnlyList<BehaviorInstruction> instructions,
+        IReadOnlyList<BehaviorInstruction>? otherwise = null) =>
+        new(BehaviorInstructionKind.Branch, branch: new BehaviorBranchSpec(condition, instructions, otherwise));
+
+    /// <summary>EL-NESTED-PLAY: play the target (a chosen card, or the source) from inside this behavior.</summary>
+    public static BehaviorInstruction Play(BehaviorTarget target, bool removeFromGameAfter = false) =>
+        new(BehaviorInstructionKind.PlayCard, target: target,
+            destinationZone: removeFromGameAfter ? BehaviorZone.RemovedFromGame : null);
 
     /// <summary>EL-GENERIC-SUBROUTINE: the instruction list a <see cref="BehaviorSubroutineSpec"/> names.</summary>
     public static BehaviorTrigger Subroutine(string key, IReadOnlyList<BehaviorInstruction> instructions) =>
@@ -67,11 +75,14 @@ internal static class ElevationSpec
         BehaviorInstallCostRule costRule = BehaviorInstallCostRule.Normal,
         int discount = 0,
         BehaviorZone? destination = null,
-        string? subtype = null) =>
+        string? subtype = null,
+        int top = 0) =>
         new(
             BehaviorInstructionKind.InstallCard,
             amount: discount,
-            target: BehaviorTarget.CardInZone(zone, new BehaviorCardFilter(cardType, subtype: subtype, ownerSide: owner)),
+            target: top > 0
+                ? BehaviorTarget.TopOfZone(zone, top, new BehaviorCardFilter(cardType, subtype: subtype, ownerSide: owner))
+                : BehaviorTarget.CardInZone(zone, new BehaviorCardFilter(cardType, subtype: subtype, ownerSide: owner)),
             sourceZone: zone,
             destinationZone: destination,
             optional: optional,
@@ -214,7 +225,8 @@ internal static class ElevationSpec
         BehaviorAbilityUsageLimit limit = BehaviorAbilityUsageLimit.Unlimited,
         IReadOnlyList<BehaviorCondition>? conditions = null,
         IReadOnlyList<BehaviorTarget>? targets = null,
-        bool usableFromRunnerScoreArea = false) =>
+        bool usableFromRunnerScoreArea = false,
+        bool usableFromArchives = false) =>
         new(
             key,
             BehaviorAbilityTiming.ActionPhase,
@@ -224,7 +236,8 @@ internal static class ElevationSpec
             targets ?? [],
             instructions,
             limit,
-            usableFromRunnerScoreArea);
+            usableFromRunnerScoreArea,
+            usableFromArchives);
 
     /// <summary>
     /// Search a deck for one card matching the filter and reveal it; the deck

@@ -71,5 +71,8 @@ public static class ElevationBehaviorCatalog
             .Add(ElevationBatch1IceSpecs.GenericSpecs)
             .AddAsset(ElevationBatch1CorpSpecs.AssetSpecs)
             .AddAgenda(ElevationBatch1CorpSpecs.AgendaSpecs)
-            .Add(ElevationBatch1CorpSpecs.GenericSpecs);
+            .Add(ElevationBatch1CorpSpecs.GenericSpecs)
+            .AddAsset(ElevationBatch2Specs.AssetSpecs)
+            .AddAgenda(ElevationBatch2Specs.AgendaSpecs)
+            .Add(ElevationBatch2Specs.GenericSpecs);
 }
