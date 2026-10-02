@@ -940,6 +940,29 @@ public sealed record RunState
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public RunPersistentContext? PersistentContext { get; private set; }
 
+    /// <summary>
+    /// EL-MOVE-RUNNER: a server the Runner moves to the outermost position of,
+    /// set by an effect inside a paid ability and applied when the run cursor
+    /// resumes (Proprionegation).
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ServerId? PendingMoveServerId { get; private set; }
+
+    internal RunState WithPendingMove(ServerId? serverId) => this with { PendingMoveServerId = serverId };
+
+    /// <summary>
+    /// EL-BYPASS: the encountered ICE is bypassed when the run cursor resumes:
+    /// the Runner passes it and no subroutine resolves (Fransofia Ward).
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool PendingBypass { get; private set; }
+
+    internal RunState WithPendingBypass(bool bypass) => this with { PendingBypass = bypass };
+
+    internal RunState WithAttackedServer(ServerId serverId) => this with { AttackedServer = serverId };
+
     [JsonConstructor]
     public RunState(
         int version,
@@ -969,9 +992,13 @@ public sealed record RunState
         IReadOnlyList<RunRezCostModifier>? rezCostModifiers = null,
         IReadOnlyList<RunRestriction>? runRestrictions = null,
         IReadOnlyList<RunResolvedSubroutineLedgerEntry>? resolvedSubroutineLedger = null,
-        RunPersistentContext? persistentContext = null)
+        RunPersistentContext? persistentContext = null,
+        ServerId? pendingMoveServerId = null,
+        bool pendingBypass = false)
     {
         ArgumentNullException.ThrowIfNull(breachCandidates);
+        PendingMoveServerId = pendingMoveServerId;
+        PendingBypass = pendingBypass;
         ArgumentNullException.ThrowIfNull(chosenAccessCards);
         ArgumentNullException.ThrowIfNull(accessedCards);
         ArgumentNullException.ThrowIfNull(lingeringEffects);
@@ -1265,7 +1292,9 @@ public sealed record RunState
         RezCostModifiers,
         RunRestrictions,
         ResolvedSubroutineLedger,
-        PersistentContext);
+        PersistentContext,
+        PendingMoveServerId,
+        PendingBypass);
 
     /// <summary>
     /// Creates the next immutable timing cursor while retaining the run's
@@ -1309,7 +1338,9 @@ public sealed record RunState
             RezCostModifiers,
             RunRestrictions,
             ResolvedSubroutineLedger,
-        PersistentContext);
+        PersistentContext,
+        PendingMoveServerId,
+        PendingBypass);
 
     /// <summary>
     /// Replaces the run's encounter while retaining every other field; the
@@ -1350,7 +1381,9 @@ public sealed record RunState
         RezCostModifiers,
         RunRestrictions,
         ResolvedSubroutineLedger,
-        PersistentContext);
+        PersistentContext,
+        PendingMoveServerId,
+        PendingBypass);
 
     /// <summary>
     /// Replaces the run's run-scoped hosted credits while retaining every
@@ -1384,7 +1417,9 @@ public sealed record RunState
         RezCostModifiers,
         RunRestrictions,
         ResolvedSubroutineLedger,
-        PersistentContext);
+        PersistentContext,
+        PendingMoveServerId,
+        PendingBypass);
 
     /// <summary>
     /// Replaces the live run priority cursor while retaining the exact run
@@ -1419,7 +1454,9 @@ public sealed record RunState
         RezCostModifiers,
         RunRestrictions,
         ResolvedSubroutineLedger,
-        PersistentContext);
+        PersistentContext,
+        PendingMoveServerId,
+        PendingBypass);
 
     internal RunState WithEncounter(RunEncounterState encounter) => new(
         Version,
@@ -1449,7 +1486,9 @@ public sealed record RunState
         RezCostModifiers,
         RunRestrictions,
         ResolvedSubroutineLedger,
-        PersistentContext);
+        PersistentContext,
+        PendingMoveServerId,
+        PendingBypass);
 
     /// <summary>
     /// Replaces the run's breach candidate/access fields while retaining every
@@ -1488,7 +1527,9 @@ public sealed record RunState
         RezCostModifiers,
         RunRestrictions,
         ResolvedSubroutineLedger,
-        PersistentContext);
+        PersistentContext,
+        PendingMoveServerId,
+        PendingBypass);
 
     /// <summary>
     /// Replaces the immutable breach-access snapshot after the authoritative
@@ -1523,7 +1564,9 @@ public sealed record RunState
         RezCostModifiers,
         RunRestrictions,
         ResolvedSubroutineLedger,
-        PersistentContext);
+        PersistentContext,
+        PendingMoveServerId,
+        PendingBypass);
 
     /// <summary>Replaces the run-scoped typed restrictions immutably.</summary>
     internal RunState WithRunRestrictions(IReadOnlyList<RunRestriction>? runRestrictions) => new(
@@ -1554,7 +1597,9 @@ public sealed record RunState
         RezCostModifiers,
         runRestrictions,
         ResolvedSubroutineLedger,
-        PersistentContext);
+        PersistentContext,
+        PendingMoveServerId,
+        PendingBypass);
 
     /// <summary>Replaces the structural history of resolved unbroken subroutines.</summary>
     internal RunState WithResolvedSubroutineLedger(
@@ -1586,7 +1631,9 @@ public sealed record RunState
         RezCostModifiers,
         RunRestrictions,
         resolvedSubroutineLedger,
-        PersistentContext);
+        PersistentContext,
+        PendingMoveServerId,
+        PendingBypass);
 
     private static ReadOnlyCollection<CardInstanceId> FreezeIds(IEnumerable<CardInstanceId> values) =>
         new(values.ToArray());

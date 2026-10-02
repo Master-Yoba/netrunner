@@ -21,6 +21,72 @@ public static partial class GameEngine
         ApplyCreditDeltaIfNonZero(working, frame.Controller, context.AccessOccurrenceCount);
     }
 
+    /// <summary>
+    /// EL-SWAP-APPROACHED-ICE (Mitra Aman): the approached ICE leaves for the
+    /// zone the chosen ICE came from (HQ or Archives); the chosen ICE takes its
+    /// position, installed unrezzed, and is the ICE the Runner now approaches.
+    /// </summary>
+    private static void ResolveSwapApproachedIce(
+        WorkingState working, BehaviorResolutionFrame frame, BehaviorInstruction instruction)
+    {
+        IReadOnlyList<CardInstanceId> chosen = instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } chosenTarget
+            && IsProvenEmptyChosenCard(frame, chosenTarget)
+                ? []
+                : ResolveBehaviorCards(working, frame, instruction.Target);
+        if (chosen.Count == 0
+            || working.RunState is not { CurrentIceId: { } approachedId, CurrentIceIndex: >= 0 } run)
+        {
+            AdvanceBehaviorCursor(working, frame);
+            return;
+        }
+
+        CardInstanceState replacement = GetCard(working, chosen[0]);
+        ZoneKind originKind = OriginalZoneKind(working, frame, replacement.Id);
+        if (originKind is not (ZoneKind.CorpHand or ZoneKind.CorpDiscard)
+            || working.RuntimeCardCatalog?.GetSpec(replacement.DefinitionId).CardClass != RuntimeCardClass.Ice)
+        {
+            throw new ResolutionFailureException("The approached ICE is swapped with a piece of ICE from HQ or Archives.");
+        }
+
+        ServerState server = working.Servers.Single(candidate => candidate.Id == run.AttackedServer);
+        ZoneState iceZone = working.Zones.Single(zone => zone.Id == server.IceZoneId);
+        int index = run.CurrentIceIndex;
+        MoveCard(working, GetCard(working, approachedId), iceZone, GetZone(working, originKind));
+        MoveCard(working, replacement, ZoneForCard(working, replacement.Id), working.Zones.Single(zone => zone.Id == server.IceZoneId));
+        ZoneState placed = working.Zones.Single(zone => zone.Id == server.IceZoneId);
+        List<CardInstanceId> ordered = placed.CardIds.Where(id => id != replacement.Id).ToList();
+        ordered.Insert(index, replacement.Id);
+        ReplaceZone(working, new ZoneState(placed.Id, placed.Kind, placed.OwnerSide, placed.ServerId, ordered));
+        CardInstanceState installed = GetCard(working, replacement.Id);
+        ReplaceCard(working, new CardInstanceState(installed.Id, installed.DefinitionId, installed.ZoneId,
+            installed.OwnerSide, faceUp: false, rezzed: false, installed.AdvancementCounters));
+
+        RunState current = working.RunState!;
+        working.RunState = current.WithTiming(
+            current.Step,
+            index,
+            replacement.Id,
+            current.Successful,
+            current.Unsuccessful,
+            current.EndReason,
+            current.Priority is { } priority
+                ? new RunPriorityState(priority.Version, priority.Window, priority.PriorityHolder, priority.ConsecutivePasses,
+                    corpMayRezApproachedIce: true, corpMayRezNonIce: priority.CorpMayRezNonIce)
+                : null,
+            current.Encounter,
+            current.AccessState);
+
+        var remainingSetAside = frame.SetAside.Where(selected => selected.CardId != replacement.Id).ToList();
+        if (remainingSetAside.Count == 0
+            && frame.SetAsideZoneId is { } emptiedId
+            && working.Zones.SingleOrDefault(zone => zone.Id == emptiedId) is { CardIds.Count: 0 } emptied)
+        {
+            working.Zones.Remove(emptied);
+        }
+
+        AdvanceBehaviorCursor(working, frame.With(setAside: remainingSetAside, clearSetAsideZone: remainingSetAside.Count == 0));
+    }
+
     private static void ResolveSwapInstalledIce(
         WorkingState working, BehaviorResolutionFrame frame, BehaviorInstruction instruction)
     {

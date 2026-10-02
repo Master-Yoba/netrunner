@@ -190,10 +190,14 @@ public sealed record BehaviorCostModifier
             throw new ArgumentOutOfRangeException(nameof(kind));
         }
 
-        if (kind == BehaviorCostModifierKind.IceRezCreditCost)
+        // ICE rez-cost modifiers are run-scoped declarations on
+        // RunEventBehaviorSpec, or an unconditional modifier of every ICE
+        // while the source is installed (EL-REZ-COST-MODIFIER: Fransofia Ward).
+        if (kind == BehaviorCostModifierKind.IceRezCreditCost
+            && (condition is not null || perInstalledFilter is not null))
         {
             throw new ArgumentException(
-                "ICE rez-cost modifiers are run-scoped declarations on RunEventBehaviorSpec.",
+                "An installed card's ICE rez-cost modifier is unconditional.",
                 nameof(kind));
         }
 
@@ -634,7 +638,9 @@ public static partial class GameEngine
             ArgumentNullException.ThrowIfNull(target);
             ArgumentOutOfRangeException.ThrowIfNegative(baseCost);
 
-            if (working.RunState is not { RezCostModifiers: { Count: > 0 } modifiers }
+            IReadOnlyList<RunRezCostModifier> modifiers = working.RunState?.RezCostModifiers ?? [];
+            CostAdjustment[] installedAdjustments = InstalledIceRezAdjustments(working);
+            if (modifiers.Count == 0 && installedAdjustments.Length == 0
                 || target.OwnerSide != PlayerSide.Corp
                 || target.Rezzed)
             {
@@ -653,6 +659,7 @@ public static partial class GameEngine
 
             CostAdjustment[] adjustments = modifiers
                 .Select(static modifier => modifier.ToCostAdjustment())
+                .Concat(installedAdjustments)
                 .OrderBy(static adjustment => adjustment.SourceDefinitionId?.Value, StringComparer.Ordinal)
                 .ThenBy(static adjustment => adjustment.SourceCardId?.Value, StringComparer.Ordinal)
                 .ThenBy(static adjustment => adjustment.ReasonKey, StringComparer.Ordinal)
@@ -660,6 +667,17 @@ public static partial class GameEngine
                 .ToArray();
             return new CostQuote(baseCost, adjustments);
         }
+
+        /// <summary>EL-REZ-COST-MODIFIER: rez-cost changes of every ICE from installed Runner cards.</summary>
+        private static CostAdjustment[] InstalledIceRezAdjustments(WorkingState working) =>
+            ActiveInstalledCards(working, PlayerSide.Runner)
+                .OrderBy(static card => card.Id.Value, StringComparer.Ordinal)
+                .SelectMany(card => working.BehaviorCatalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? definition)
+                    ? (definition.CostModifiers ?? [])
+                        .Where(static modifier => modifier.Kind == BehaviorCostModifierKind.IceRezCreditCost)
+                        .Select(modifier => new CostAdjustment(modifier.Kind, modifier.Delta, modifier.ReasonKey, card.DefinitionId, card.Id))
+                    : [])
+                .ToArray();
 
         private static bool IsInZone(
             WorkingState working,

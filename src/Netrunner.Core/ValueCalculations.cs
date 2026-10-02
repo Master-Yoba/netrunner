@@ -38,6 +38,9 @@ public enum BehaviorValueSourceKind
     /// owner has in a public zone (fracters in the heap).
     /// </summary>
     PerCardInZone,
+
+    /// <summary>EL-CONDITIONAL-STRENGTH: the delta while the source is the only ICE protecting its server (Scatter Field).</summary>
+    OnlyIceProtectingServer,
 }
 
 /// <summary>
@@ -257,7 +260,8 @@ public sealed record BehaviorValueModifier
 
         if (source is BehaviorValueSourceKind.Static
             or BehaviorValueSourceKind.PerInstalledCard
-            or BehaviorValueSourceKind.PerCardInZone)
+            or BehaviorValueSourceKind.PerCardInZone
+            or BehaviorValueSourceKind.OnlyIceProtectingServer)
         {
             // These declarations are already scoped by their source kind.
             // Conditional behavior needs a dedicated typed source kind rather
@@ -526,6 +530,7 @@ public sealed record ValueCalculationTerm
             case BehaviorValueSourceKind.Static:
             case BehaviorValueSourceKind.CounterThreshold:
             case BehaviorValueSourceKind.EncounterScoped:
+            case BehaviorValueSourceKind.OnlyIceProtectingServer:
                 if (quantity is not null || unitDelta is not null || variableKey is not null)
                 {
                     throw new ArgumentException(
@@ -983,8 +988,26 @@ public static class EncounterStrength
         }
 
         var terms = new List<ValueCalculationTerm>();
-        AddPumpTerms(terms, spec, run?.LingeringEffects ?? [], breaker.Id);
+        bool runLongPumps = cards.Any(card => card.HostCardId == breaker.Id
+            && behaviorCatalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? pumpMod)
+            && pumpMod.HostIcebreakerStrength > 0);
+        AddPumpTerms(terms, spec, run?.LingeringEffects ?? [], breaker.Id, runLongPumps);
         AddRunValueAdjustmentTerms(terms, cards, run, breaker.Id);
+        // EL-MOD-HOST: a hosted mod's strength bonus (GAMEDRAGON™ Pro).
+        foreach (CardInstanceState mod in cards.Where(card => card.HostCardId == breaker.Id))
+        {
+            if (behaviorCatalog.TryGet(mod.DefinitionId, out CardBehaviorDefinition? modDefinition)
+                && modDefinition.HostIcebreakerStrength > 0)
+            {
+                terms.Add(new ValueCalculationTerm(
+                    BehaviorValueSourceKind.Static,
+                    BehaviorValueOperation.Add,
+                    modDefinition.HostIcebreakerStrength,
+                    "mod-host-strength",
+                    mod.DefinitionId,
+                    mod.Id));
+            }
+        }
         AddDeclaredTerms(
             terms,
             spec.ValueModifiers,
@@ -1053,12 +1076,15 @@ public static class EncounterStrength
         List<ValueCalculationTerm> terms,
         IcebreakerBehaviorSpec spec,
         IReadOnlyList<RunLingeringEffect> activeEffects,
-        CardInstanceId breakerId)
+        CardInstanceId breakerId,
+        bool runLongPumps = false)
     {
+        // A pump lasts the encounter, or the run on a breaker hosting a mod
+        // that says so (EL-STRENGTH-PERSISTENCE: GAMEDRAGON™ Pro).
         int count = activeEffects.Count(effect =>
             effect.BehaviorId == IcebreakerPumpBehavior
             && effect.SourceCardId == breakerId
-            && effect.Expiry == RunLingeringEffectExpiry.Encounter
+            && (effect.Expiry == RunLingeringEffectExpiry.Encounter || runLongPumps)
             && effect.ValueAdjustment is null);
         if (count == 0)
         {
@@ -1309,6 +1335,23 @@ public static class EncounterStrength
                         modifier.Delta,
                         targetDefinitionId,
                         counterSource));
+                    break;
+                case BehaviorValueSourceKind.OnlyIceProtectingServer:
+                    if (cards is null
+                        || zones is null
+                        || sourceCardId is not { } onlyIce
+                        || !IsActiveInstalled(onlyIce, cards, zones)
+                        || zones.FirstOrDefault(zone => zone.CardIds.Contains(onlyIce)) is not { Kind: ZoneKind.ServerIce, CardIds.Count: 1 })
+                    {
+                        continue;
+                    }
+
+                    terms.Add(Term(
+                        modifier,
+                        BehaviorValueSourceKind.OnlyIceProtectingServer,
+                        modifier.Delta,
+                        targetDefinitionId,
+                        onlyIce));
                     break;
                 case BehaviorValueSourceKind.EncounterScoped:
                     if (cards is null

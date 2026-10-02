@@ -38,6 +38,7 @@ public static partial class GameEngine
                 && IsInstalledCard(working, faceUp.Id),
             BehaviorTriggerCondition.SubjectInstalledWithoutCredits => occurrence.SourceCardId is { } installed
                 && facts?.FreeInstallIds?.Contains(installed) == true,
+            BehaviorTriggerCondition.SubroutineResolvedThisRun => working.RunState?.ResolvedSubroutineLedger is { Count: > 0 },
             _ => false,
         };
     }
@@ -60,6 +61,34 @@ public static partial class GameEngine
         if (turn.History?.ThisTurn(turn.ActiveSide) is not null)
             ReplaceTurn(working, turn.ActiveSide, turn.Phase, turn.TurnNumber, turn.Step,
                 turn.History.MarkAbilityUsed(turn.ActiveSide, source, ScoreProhibitionKey));
+    }
+
+    /// <summary>
+    /// EL-REZ-PAYING-LESS: rezzes the selected installed ICE, paying its rez
+    /// cost less the amount (Mycoweb); one the Corp cannot afford stays unrezzed.
+    /// </summary>
+    private static void ResolveBehaviorRezPayingLess(WorkingState working, BehaviorResolutionFrame frame,
+        BehaviorInstruction instruction)
+    {
+        IReadOnlyList<CardInstanceId> selected = ResolveBehaviorCards(working, frame, instruction.Target);
+        AdvanceBehaviorCursor(working, frame);
+        if (selected.Count == 0) return;
+        if (selected.Count != 1) throw new ResolutionFailureException("A rez instruction requires one selected ICE.");
+        CardInstanceState card = GetCard(working, selected[0]);
+        ZoneState zone = ZoneForCard(working, card.Id);
+        if (zone.Kind != ZoneKind.ServerIce || card.OwnerSide != PlayerSide.Corp
+            || working.RuntimeCardCatalog?.GetSpec(card.DefinitionId).CardClass != RuntimeCardClass.Ice)
+            throw new ResolutionFailureException("The selected rez target must be installed Corp ICE.");
+        if (card.Rezzed || !TryGetRezCostQuote(working, card, RuntimeCardClass.Ice, out int fullCost, out _)) return;
+        int cost = Math.Max(0, fullCost - instruction.Amount);
+        PlayerState corp = GetPlayer(working, PlayerSide.Corp);
+        if (corp.Credits < cost) return;
+        ApplyCreditDeltaIfNonZero(working, corp.Id, -cost);
+        ReplaceCard(working, new CardInstanceState(card.Id, card.DefinitionId, card.ZoneId, card.OwnerSide,
+            faceUp: true, rezzed: true, card.AdvancementCounters));
+        Emit(working, EngineEventKinds.CardRezzed, new CardRezzedEventPayload(card.Id, cost));
+        TrashCorpUniqueRezConflicts(working, card.Id);
+        QueueCardRezzedOccurrence(working, corp.Id, card.Id, zone.ServerId);
     }
 
     private static void ResolveBehaviorRezIgnoringCosts(WorkingState working, BehaviorResolutionFrame frame,

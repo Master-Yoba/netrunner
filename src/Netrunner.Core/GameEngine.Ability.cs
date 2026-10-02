@@ -982,6 +982,8 @@ public static partial class GameEngine
             // A paid ability has no search continuation; a forged declaration
             // depending on one therefore fails closed.
             BehaviorConditionKind.FoundCard => false,
+            BehaviorConditionKind.SourceHostsAtLeast or BehaviorConditionKind.RezzedInstalledCopy
+                => OptionConditionMatches(working, controllerId, source.Id, condition),
             _ => SharedConditionMatches(working, controllerId, condition) ?? false,
         };
     }

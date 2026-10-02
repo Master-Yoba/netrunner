@@ -258,6 +258,7 @@ public static partial class GameEngine
             || spec.PlayCost is not int printedCost
             || printedCost < 0
             || runEvent.Cost != printedCost
+            || GetPlayer(working, PlayerSide.Runner).Clicks < 1 + runEvent.AdditionalClicks
             || GetPlayer(working, PlayerSide.Runner).Credits < runEvent.Cost
             || (playArea is not null && playArea.CardIds.Count != 0))
         {
@@ -502,6 +503,12 @@ public static partial class GameEngine
 
         PlayerState runner = GetPlayer(working, PlayerSide.Runner);
         SpendClick(working, runner.Id);
+        for (int extra = 0; extra < plan.RunEvent.AdditionalClicks; extra++)
+        {
+            // Double: the additional cost spends a click on top of the play action's.
+            SpendClick(working, runner.Id);
+        }
+
         RecordTurnEvent(working, PlayerSide.Runner, TurnEventKind.EventPlayed);
         StartRunInWorkingState(
             working,

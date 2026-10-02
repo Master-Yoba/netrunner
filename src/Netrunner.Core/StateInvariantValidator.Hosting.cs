@@ -20,6 +20,18 @@ public static partial class StateInvariantValidator
             {
                 continue;
             }
+
+            // EL-MOD-HOST: a mod hosted on an installed non-AI icebreaker (GAMEDRAGON™ Pro).
+            if (definition?.HostIcebreakerStrength > 0)
+            {
+                if (zone?.Kind != ZoneKind.RunnerRig
+                    || !GameEngine.IsModHost(state.Cards, state.Zones, catalog, runtimeCatalog, hostId))
+                {
+                    Add(violations, "hosting.invalid-mod-host", "cards", "A mod is hosted on an installed non-AI icebreaker.");
+                }
+
+                continue;
+            }
             CardInstanceState? host = state.Cards.FirstOrDefault(value => value.Id == hostId);
             ZoneState? hostZone = state.Zones.FirstOrDefault(value => value.Id == host?.ZoneId);
             if (!requiresHost || hostId == card.Id || host is null || host.OwnerSide != PlayerSide.Corp

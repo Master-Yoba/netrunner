@@ -18,9 +18,16 @@ public sealed record IceBehaviorSpec
         IReadOnlyList<IceSubroutineSpec> subroutines,
         IReadOnlyList<IceStrengthModifierSpec> strengthModifiers,
         IReadOnlyList<BehaviorValueModifier>? valueModifiers = null,
-        IReadOnlyList<EncounteredBioroidAbilitySpec>? encounteredBioroidAbilities = null)
+        IReadOnlyList<EncounteredBioroidAbilitySpec>? encounteredBioroidAbilities = null,
+        string? breakableOnlyBySubtype = null)
     {
         DefinitionId = definitionId;
+        if (breakableOnlyBySubtype is not null && string.IsNullOrWhiteSpace(breakableOnlyBySubtype))
+        {
+            throw new ArgumentException("A break restriction names a breaker subtype.", nameof(breakableOnlyBySubtype));
+        }
+
+        BreakableOnlyBySubtype = breakableOnlyBySubtype;
         Strength = strength;
         IceType = iceType;
         RezCost = rezCost;
@@ -83,6 +90,13 @@ public sealed record IceBehaviorSpec
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<EncounteredBioroidAbilitySpec>? EncounteredBioroidAbilities { get; }
+
+    /// <summary>
+    /// EL-BREAK-RESTRICTION: the printed subroutines can be broken only by an
+    /// icebreaker with this subtype (Semak-samun: "except using a fracter").
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? BreakableOnlyBySubtype { get; }
 
     private static ReadOnlyCollection<BehaviorValueModifier>? FreezeValueModifiers(
         IReadOnlyList<BehaviorValueModifier>? valueModifiers)
@@ -152,10 +166,10 @@ public sealed record EncounteredBioroidAbilitySpec
         }
 
         ArgumentNullException.ThrowIfNull(cost);
-        if (cost.Kind != BehaviorCostKind.LoseClick || cost.Amount != 1)
+        if (!IsSupportedCost(cost))
         {
             throw new ArgumentException(
-                "An encountered-bioroid ability must cost exactly one typed lost click.",
+                "An encountered-ICE break ability costs exactly one typed lost click or a positive number of credits.",
                 nameof(cost));
         }
 
@@ -175,6 +189,14 @@ public sealed record EncounteredBioroidAbilitySpec
         : this(key, new BehaviorCost(BehaviorCostKind.LoseClick, 1))
     {
     }
+
+    /// <summary>
+    /// A lost click (bioroids), or credits (EL-RUNNER-ICE-ABILITY: N-Pot's
+    /// "3[credit]: Break 1 subroutine on this ice. Only the Runner can use this ability").
+    /// </summary>
+    public static bool IsSupportedCost(BehaviorCost cost) =>
+        cost.Kind == BehaviorCostKind.LoseClick && cost.Amount == 1
+        || cost.Kind == BehaviorCostKind.Credits && cost.Amount > 0;
 
     [JsonInclude]
     [JsonRequired]
@@ -696,11 +718,23 @@ public sealed record RunEventBehaviorSpec
         IReadOnlyList<BehaviorRunRezCostModifier>? rezCostModifiers = null,
         IReadOnlyList<ServerKind>? allowedTargetServers = null,
         BehaviorRunSuccessDraw? successDraw = null,
-        BehaviorRunBreachAccessModifier? breachAccessModifier = null)
+        BehaviorRunBreachAccessModifier? breachAccessModifier = null,
+        int additionalClicks = 0,
+        ServerKind? redirectApproachTo = null,
+        bool preventFirstEndRun = false)
     {
+        PreventFirstEndRun = preventFirstEndRun;
         DefinitionId = definitionId;
         Cost = cost;
         HostedCredits = hostedCredits;
+        ArgumentOutOfRangeException.ThrowIfNegative(additionalClicks);
+        AdditionalClicks = additionalClicks;
+        if (redirectApproachTo is not (null or ServerKind.Headquarters or ServerKind.RAndD or ServerKind.Archives))
+        {
+            throw new ArgumentException("A run redirect names a central server.", nameof(redirectApproachTo));
+        }
+
+        RedirectApproachTo = redirectApproachTo;
         if (cost < 0)
         {
             throw new ArgumentException(
@@ -756,6 +790,26 @@ public sealed record RunEventBehaviorSpec
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public BehaviorRunBreachAccessModifier? BreachAccessModifier { get; }
 
+    /// <summary>Double: the clicks spent as an additional cost to play this event (Maintenance Access).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int AdditionalClicks { get; }
+
+    /// <summary>
+    /// EL-CHANGE-ATTACKED-SERVER: when the Runner would approach the attacked
+    /// server, the attacked server becomes this central server instead, and
+    /// the Runner approaches it (Maintenance Access: Archives, then HQ).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ServerKind? RedirectApproachTo { get; }
+
+    /// <summary>
+    /// EL-PREVENT-END-RUN: the first time the Corp would end this run, it ends
+    /// only if the Corp reveals and trashes X random HQ cards, X being the
+    /// cards in the attacked server's root (Shred).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool PreventFirstEndRun { get; }
+
     private static ReadOnlyCollection<BehaviorRunRezCostModifier>? FreezeRezCostModifiers(
         IReadOnlyList<BehaviorRunRezCostModifier>? modifiers)
     {
@@ -793,10 +847,10 @@ public sealed record RunEventBehaviorSpec
         }
 
         ServerKind[] copy = servers.ToArray();
-        if (copy.Any(static server => server is not (ServerKind.Headquarters or ServerKind.RAndD)))
+        if (copy.Any(static server => server is not (ServerKind.Headquarters or ServerKind.RAndD or ServerKind.Archives)))
         {
             throw new ArgumentException(
-                "Run event target declarations may name only Headquarters or R&D.",
+                "Run event target declarations may name only central servers.",
                 nameof(servers));
         }
 

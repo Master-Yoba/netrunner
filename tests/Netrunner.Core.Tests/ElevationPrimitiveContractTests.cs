@@ -180,4 +180,83 @@ public sealed class ElevationPrimitiveContractTests
         Assert.Throws<ArgumentOutOfRangeException>(() => BehaviorTarget.TopOfZone(BehaviorZone.Deck, 0));
         Assert.Throws<ArgumentException>(() => BehaviorCondition.ZoneCountAtLeast(BehaviorZone.Grip, -1));
     }
+
+    [Fact]
+    public void RunAndIceDeclarationsChangeTheirFingerprints()
+    {
+        var id = new CardDefinitionId("probe-card");
+        string Definition(CardBehaviorDefinition definition) =>
+            new BehaviorCatalogBuilder("probe").Add(definition).Build().GetDefinitionFingerprint(id);
+        string Ice(IceBehaviorSpec spec) =>
+            new BehaviorCatalogBuilder("probe").AddIce([spec]).Build().Fingerprint;
+        string RunEvent(RunEventBehaviorSpec spec) =>
+            new BehaviorCatalogBuilder("probe").AddRunEvent([spec]).Build().Fingerprint;
+
+        Assert.NotEqual(Definition(new CardBehaviorDefinition(id, PlayerSide.Corp)),
+            Definition(new CardBehaviorDefinition(id, PlayerSide.Corp, rezForfeitDiscount: 10)));
+        Assert.NotEqual(Definition(new CardBehaviorDefinition(id, PlayerSide.Runner)),
+            Definition(new CardBehaviorDefinition(id, PlayerSide.Runner, hostIcebreakerStrength: 1)));
+        Assert.NotEqual(Definition(new CardBehaviorDefinition(id, PlayerSide.Runner, hosting: new HostingBehaviorSpec())),
+            Definition(new CardBehaviorDefinition(id, PlayerSide.Runner, hosting: new HostingBehaviorSpec(hostGainsEveryIceType: true))));
+        Assert.NotEqual(Ice(new IceBehaviorSpec(id, 3, IceType.Barrier, 3, [new EndRunSubroutineSpec()], [])),
+            Ice(new IceBehaviorSpec(id, 3, IceType.Barrier, 3, [new EndRunSubroutineSpec()], [], breakableOnlyBySubtype: "fracter")));
+        string plainEvent = RunEvent(new RunEventBehaviorSpec(id, 0, 0));
+        Assert.NotEqual(plainEvent, RunEvent(new RunEventBehaviorSpec(id, 0, 0, additionalClicks: 1)));
+        Assert.NotEqual(plainEvent, RunEvent(new RunEventBehaviorSpec(id, 0, 0, redirectApproachTo: ServerKind.Headquarters)));
+        Assert.NotEqual(plainEvent, RunEvent(new RunEventBehaviorSpec(id, 0, 0, preventFirstEndRun: true)));
+        Assert.Throws<ArgumentException>(() => new CardBehaviorDefinition(id, PlayerSide.Runner, rezForfeitDiscount: 10));
+        Assert.Throws<ArgumentException>(() => new CardBehaviorDefinition(id, PlayerSide.Corp, hostIcebreakerStrength: 1));
+    }
+
+    [Fact]
+    public void BreakRestrictionsAndGainedSubtypesShapeTheInterface()
+    {
+        var ice = new IceBehaviorSpec(new CardDefinitionId("probe-ice"), 3, IceType.Barrier, 3, [new EndRunSubroutineSpec()], [],
+            breakableOnlyBySubtype: "fracter");
+        var fracter = new IcebreakerBehaviorSpec(new CardDefinitionId("probe-fracter"), 2, IceType.Barrier, 1, 1, 1, 1);
+        var decoder = new IcebreakerBehaviorSpec(new CardDefinitionId("probe-decoder"), 2, IceType.CodeGate, 1, 1, 1, 1);
+        var ai = new IcebreakerBehaviorSpec(new CardDefinitionId("probe-ai"), 2, IceType.Any, 1, 1, 1, 1);
+
+        Assert.True(IceInterfaceMatcher.CanInterface(ice, false, fracter, ["icebreaker", "fracter"]));
+        Assert.False(IceInterfaceMatcher.CanInterface(ice, false, ai, ["icebreaker", "ai"]));
+        Assert.False(IceInterfaceMatcher.CanInterface(ice, true, decoder, ["icebreaker", "decoder"]));
+        var plain = new IceBehaviorSpec(new CardDefinitionId("probe-plain"), 3, IceType.Barrier, 3, [new EndRunSubroutineSpec()], []);
+        Assert.False(IceInterfaceMatcher.CanInterface(plain, false, decoder, ["decoder"]));
+        Assert.True(IceInterfaceMatcher.CanInterface(plain, true, decoder, ["decoder"]));
+    }
+
+    [Fact]
+    public void IceAbilitiesTheRunnerUsesCostAClickOrCredits()
+    {
+        _ = new EncounteredBioroidAbilitySpec("probe-credit-break", new BehaviorCost(BehaviorCostKind.Credits, 3));
+        Assert.Throws<ArgumentException>(() =>
+            new EncounteredBioroidAbilitySpec("probe-two-clicks", new BehaviorCost(BehaviorCostKind.LoseClick, 2)));
+        var parameters = new RunBioroidAbilityParameters(new CardInstanceId("card:1"), new SubroutineId("subroutine:1"),
+            "probe-credit-break", new BehaviorCost(BehaviorCostKind.Credits, 3), 0);
+        Assert.Equal(3, EngineJson.Deserialize<RunBioroidAbilityParameters>(EngineJson.Serialize(parameters)).Cost.Amount);
+    }
+
+    [Fact]
+    public void ForfeitRezActionsAndRunCursorFlagsKeepTheirJsonShape()
+    {
+        var plain = new RezCardParameters(new CardInstanceId("card:1"), 14);
+        var forfeit = new RezCardParameters(new CardInstanceId("card:1"), 4, forfeitAgendaId: new CardInstanceId("card:2"));
+
+        Assert.DoesNotContain("forfeitAgendaId", EngineJson.Serialize(plain), StringComparison.Ordinal);
+        Assert.Equal(new CardInstanceId("card:2"),
+            EngineJson.Deserialize<RezCardParameters>(EngineJson.Serialize(forfeit)).ForfeitAgendaId);
+        Assert.Throws<ArgumentException>(() => new RezCardParameters(new CardInstanceId("card:1"), 4,
+            new CostQuote(4), new CardInstanceId("card:2")));
+        Assert.Throws<ArgumentException>(() => new GameplayOccurrenceEffect(
+            OccurrenceKind.IceApproached, new PlayerId("player:1"), serverId: new ServerId("server:1")));
+    }
+
+    [Fact]
+    public void ElevationConditionsNameTheirSubject()
+    {
+        Assert.Equal(PlayerSide.Corp, BehaviorCondition.CreditsAtLeast(PlayerSide.Corp, 15).SubjectSide);
+        Assert.Throws<ArgumentException>(() => new BehaviorCondition(BehaviorConditionKind.CreditsAtLeast, value: 15));
+        Assert.Equal("bioroid", BehaviorCondition.RezzedSubtypeInAttackedServer("bioroid").Fact);
+        Assert.Equal(2, BehaviorCondition.SourceHostsAtLeast(2).Value);
+    }
 }

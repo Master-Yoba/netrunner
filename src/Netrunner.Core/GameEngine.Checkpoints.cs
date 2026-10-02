@@ -994,6 +994,7 @@ public static partial class GameEngine
             or OccurrenceKind.CardRezzed
             or OccurrenceKind.ServerApproached
             or OccurrenceKind.IceEncountered
+            or OccurrenceKind.IceApproached
             or OccurrenceKind.RunSuccessful
             or OccurrenceKind.RunEnded
             or OccurrenceKind.AgendaScoredOrStolen
@@ -1033,7 +1034,8 @@ public static partial class GameEngine
             {
                 if (!(CatalogTriggerSourceIsActive(working, source, trigger, activeRunEventSource)
                         || IsTrashedSelfTriggerSource(working, source, trigger, occurrence.SourceCardId)
-                            && SubjectWasRezzed(occurrence))
+                            && SubjectWasRezzed(occurrence)
+                        || IsEndedRunEventSource(working, source, trigger, occurrence.SourceCardId))
                     || trigger.Occurrence != occurrence.Kind
                     || occurrence.Kind == OccurrenceKind.TurnBegin
                         && trigger.Scope == BehaviorTriggerScope.Self
@@ -1128,6 +1130,7 @@ public static partial class GameEngine
 
         if (occurrence.Kind is not (OccurrenceKind.ServerApproached
             or OccurrenceKind.IceEncountered
+            or OccurrenceKind.IceApproached
             or OccurrenceKind.RunSuccessful
             or OccurrenceKind.RunEnded)
             || occurrence.Effect is not GameplayOccurrenceEffect gameplay
@@ -1151,7 +1154,7 @@ public static partial class GameEngine
             return true;
         }
 
-        if (occurrence.Kind is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded or OccurrenceKind.AgendaScoredOrStolen)
+        if (occurrence.Kind is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.IceApproached or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded or OccurrenceKind.AgendaScoredOrStolen)
             || occurrence.Effect is not GameplayOccurrenceEffect gameplay
             || gameplay.ServerId is not { } attackedServer)
         {
@@ -1189,17 +1192,18 @@ public static partial class GameEngine
             if (definition.Triggers.Any(trigger =>
                 trigger.Occurrence == occurrenceKind
                 && (CatalogTriggerSourceIsActive(working, source, trigger, activeRunEventSource)
-                    || IsTrashedSelfTriggerSource(working, source, trigger, subjectCardId))
+                    || IsTrashedSelfTriggerSource(working, source, trigger, subjectCardId)
+                    || IsEndedRunEventSource(working, source, trigger, subjectCardId))
                 && (trigger.ServerKindRequirement is null
                     || serverId is { } suppliedServerId
                         && working.Servers.FirstOrDefault(candidate => candidate.Id == suppliedServerId)?.Kind
                             == trigger.ServerKindRequirement)
                 && (!trigger.RequireSourceOnAttackedServer
-                    || occurrenceKind is OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded or OccurrenceKind.AgendaScoredOrStolen
+                    || occurrenceKind is OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.IceApproached or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded or OccurrenceKind.AgendaScoredOrStolen
                         && (occurrenceKind != OccurrenceKind.CardRezzed || working.RunState?.AttackedServer == serverId)
                         && serverId is { } suppliedServer
                         && working.Zones.FirstOrDefault(zone => zone.Id == source.ZoneId)?.ServerId == suppliedServer)
-                && (occurrenceKind is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered)
+                && (occurrenceKind is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.IceApproached)
                     || trigger.Scope != BehaviorTriggerScope.Controller
                     || source.OwnerSide == PlayerSide.Runner)
                 && (occurrenceKind != OccurrenceKind.RunSuccessful
@@ -1368,6 +1372,7 @@ public static partial class GameEngine
                 BehaviorCardType.Resource => runtime.CardClass == RuntimeCardClass.Resource,
                 BehaviorCardType.Upgrade => runtime.CardClass == RuntimeCardClass.Upgrade,
                 BehaviorCardType.ProgramOrHardware => runtime.CardClass is RuntimeCardClass.Program or RuntimeCardClass.Hardware,
+                BehaviorCardType.ResourceOrHardware => runtime.CardClass is RuntimeCardClass.Resource or RuntimeCardClass.Hardware,
                 BehaviorCardType.Advanceable => runtime.CardClass == RuntimeCardClass.Agenda
                     || working.BehaviorCatalog.TryGet(subject.DefinitionId, out CardBehaviorDefinition? advanceable)
                         && advanceable.CanBeAdvanced,

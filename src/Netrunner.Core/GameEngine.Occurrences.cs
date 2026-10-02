@@ -132,6 +132,22 @@ public static partial class GameEngine
         && source.OwnerSide == PlayerSide.Corp
         && working.Zones.Any(zone => zone.Id == source.ZoneId && zone.Kind == ZoneKind.CorpDiscard);
 
+    /// <summary>
+    /// EL-RUN-EVENT-RUN-END: "when that run ends" on a run event, which the
+    /// run's end has just trashed to the heap (Charm Offensive).
+    /// </summary>
+    private static bool IsEndedRunEventSource(
+        WorkingState working,
+        CardInstanceState source,
+        BehaviorTrigger trigger,
+        CardInstanceId? subjectCardId) =>
+        trigger.Occurrence == OccurrenceKind.RunEnded
+        && trigger.Scope == BehaviorTriggerScope.Self
+        && subjectCardId == source.Id
+        && source.OwnerSide == PlayerSide.Runner
+        && working.Zones.Any(zone => zone.Id == source.ZoneId && zone.Kind == ZoneKind.RunnerHeap)
+        && working.BehaviorCatalog.TryGetRunEvent(source.DefinitionId, out _);
+
     /// <summary>Whether a trashed-card occurrence records that its subject was rezzed.</summary>
     private static bool SubjectWasRezzed(OccurrenceSnapshot occurrence) =>
         occurrence.Effect is GameplayOccurrenceEffect { SubjectWasRezzed: true };
@@ -228,6 +244,56 @@ public static partial class GameEngine
     }
 
     /// <summary>EL-FORFEIT: forfeits the chosen agenda from its controller's score area.</summary>
+    /// <summary>
+    /// EL-ACCESS-OUTSIDE-RUN: the Runner steals an accessed agenda outside a run
+    /// (Detente). Returns whether the steal ended the game.
+    /// </summary>
+    private static bool StealAgendaOutsideRun(WorkingState working, CardInstanceId agendaId)
+    {
+        CardInstanceState card = GetCard(working, agendaId);
+        if (card.OwnerSide != PlayerSide.Corp
+            || !working.BehaviorCatalog.TryGetAgenda(card.DefinitionId, out AgendaBehaviorSpec? spec))
+        {
+            return false;
+        }
+
+        ZoneState score = GetZone(working, ZoneKind.RunnerScore);
+        MoveCard(working, card, ZoneForCard(working, card.Id), score);
+        CardInstanceState stolen = GetCard(working, card.Id);
+        ReplaceCard(working, new CardInstanceState(stolen.Id, stolen.DefinitionId, score.Id, stolen.OwnerSide,
+            true, false, stolen.AdvancementCounters));
+        AddAgendaPoints(working, PlayerSide.Runner, spec.AgendaPoints);
+        Emit(working, EngineEventKinds.AgendaStolen, new AgendaStolenEventPayload(PlayerSide.Runner, card.Id, spec.AgendaPoints));
+        RecordTurnAgendaChange(working, card.Id, PlayerSide.Runner, spec.AgendaPoints, AgendaTurnChangeKind.Steal);
+        RecordActiveTurnEvent(working, TurnEventKind.AgendaScoredOrStolen);
+        RecordActiveTurnEvent(working, TurnEventKind.CorpCardStolenOrTrashed);
+        if (GetPlayer(working, PlayerSide.Runner).AgendaPoints < RealGameRules.AgendaPointsToWin)
+        {
+            return false;
+        }
+
+        CompleteTurnGame(working, PlayerSide.Runner, GameWinReason.AgendaPoints);
+        working.RunState = null;
+        return true;
+    }
+
+    /// <summary>EL-FORFEIT: removes an agenda in its controller's score area from the game, with its points.</summary>
+    private static void ForfeitScoredAgenda(WorkingState working, PlayerSide controller, CardInstanceId agendaId)
+    {
+        CardInstanceState agenda = GetCard(working, agendaId);
+        ZoneState source = ZoneForCard(working, agendaId);
+        if (source.Kind != (controller == PlayerSide.Corp ? ZoneKind.CorpScore : ZoneKind.RunnerScore)
+            || working.RuntimeCardCatalog?.TryGet(agenda.DefinitionId, out CardRuntimeSpec? spec) != true
+            || spec!.CardClass != RuntimeCardClass.Agenda)
+        {
+            throw new ResolutionFailureException("Only an agenda in its controller's score area can be forfeited.");
+        }
+
+        MoveCard(working, agenda, source, GetBehaviorZone(working, BehaviorZone.RemovedFromGame, agenda.OwnerSide));
+        AddAgendaPoints(working, controller, -spec.AgendaPoints);
+        DeferOccurrence(working, OccurrenceKind.AgendaForfeited, controller, agenda.Id);
+    }
+
     private static void ResolveBehaviorForfeit(
         WorkingState working,
         BehaviorResolutionFrame frame,

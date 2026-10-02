@@ -92,6 +92,14 @@ public static partial class GameEngine
             Emit(working, EngineEventKinds.IceSubroutineJackOut,
                 new IceSubroutineJackOutEventPayload(run.Id, run.Encounter!.Id, ice.Id, subroutine.Id));
         }
+        else if (PreventsRunEnd(working, run))
+        {
+            // EL-PREVENT-END-RUN: the run goes on past this subroutine.
+            ResolveIceSubroutineWithoutChoice(working, working.RunState!, ice, subroutine);
+            working.ResolutionStack[^1] = new RunTimingFrame(run.Id, RunTimingStep.Encounter);
+            return;
+        }
+
         ResolveIceSubroutineWithoutChoice(working, run, ice, subroutine);
         run = working.RunState!;
         RunEncounterState encounter = run.Encounter!;

@@ -825,6 +825,7 @@ public sealed class BehaviorContractsTests
                 OccurrenceKind.CardInstalled,
                 OccurrenceKind.CardRezzed,
                 OccurrenceKind.IceEncountered,
+                OccurrenceKind.IceApproached,
                 OccurrenceKind.RunSuccessful,
                 OccurrenceKind.RunEnded,
                 OccurrenceKind.AgendaScoredOrStolen,

@@ -195,6 +195,9 @@ public enum BehaviorCardType
 
     /// <summary>A card the Corp can advance: an agenda, or a card whose behavior permits advancement.</summary>
     Advanceable,
+
+    /// <summary>A Runner resource or piece of hardware (Barry "Baz" Wong).</summary>
+    ResourceOrHardware,
 }
 
 /// <summary>

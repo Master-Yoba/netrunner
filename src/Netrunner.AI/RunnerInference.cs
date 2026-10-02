@@ -180,6 +180,7 @@ internal static class RunnerInference
         {
             BehaviorCardType.Any => true,
             BehaviorCardType.ProgramOrHardware => cardClass is RuntimeCardClass.Program or RuntimeCardClass.Hardware,
+            BehaviorCardType.ResourceOrHardware => cardClass is RuntimeCardClass.Resource or RuntimeCardClass.Hardware,
             BehaviorCardType.Program => cardClass == RuntimeCardClass.Program,
             BehaviorCardType.Icebreaker => definition.Icebreaker is not null,
             BehaviorCardType.Hardware => cardClass == RuntimeCardClass.Hardware,

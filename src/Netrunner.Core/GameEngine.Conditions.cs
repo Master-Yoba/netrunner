@@ -22,6 +22,15 @@ public static partial class GameEngine
         return condition.Kind switch
         {
             BehaviorConditionKind.RunEventActive => working.RunState?.ActiveRunEventId is not null,
+            BehaviorConditionKind.RunInProgress => working.RunState is not null,
+            BehaviorConditionKind.RezzedSubtypeInAttackedServer => working.RunState is { } attackedRun
+                && working.Cards.Any(card => card.OwnerSide == PlayerSide.Corp
+                    && card.Rezzed
+                    && working.Zones.FirstOrDefault(zone => zone.Id == card.ZoneId) is { Kind: ZoneKind.ServerRoot or ZoneKind.ServerIce } zone
+                    && zone.ServerId == attackedRun.AttackedServer
+                    && CardSubtypes(working.RuntimeCardCatalog, card.DefinitionId).Contains(condition.Fact!, StringComparer.Ordinal)),
+            BehaviorConditionKind.CreditsAtLeast when condition.SubjectSide is { } creditSide =>
+                GetPlayer(working, creditSide).Credits >= threshold,
             BehaviorConditionKind.ThreatLevelAtLeast => ThreatLevel(working.Players) >= threshold,
             BehaviorConditionKind.RunnerTagsAtLeast => RunnerTags(working) >= threshold,
             BehaviorConditionKind.ZoneCountAtMost =>

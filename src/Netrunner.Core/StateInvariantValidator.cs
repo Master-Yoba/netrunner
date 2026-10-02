@@ -1521,8 +1521,14 @@ public static partial class StateInvariantValidator
                     ServerKind? attackedKind = state.Servers
                         .FirstOrDefault(candidate => candidate?.Id == run.AttackedServer)
                         ?.Kind;
+                    // The attacked server may also have changed during the run: to the
+                    // event's own redirect (Maintenance Access: HQ), or to Archives by a
+                    // Runner move (Proprionegation).
                     if (activeRunEventSpec.AllowedTargetServers is { } allowed
-                        && (attackedKind is null || !allowed.Contains(attackedKind.Value)))
+                        && (attackedKind is null
+                            || !allowed.Contains(attackedKind.Value)
+                                && attackedKind != activeRunEventSpec.RedirectApproachTo
+                                && attackedKind != ServerKind.Archives))
                     {
                         Add(
                             violations,
@@ -1729,7 +1735,17 @@ public static partial class StateInvariantValidator
             // authoritative and cross-check the behavior ID against the
             // injected catalog; a caller cannot forge a cleanup by merely
             // placing a source card and arbitrary string in RunState.
+            // EL-STRENGTH-PERSISTENCE: a pump that lasts the run (GAMEDRAGON™ Pro)
+            // is not a cleanup; its breaker hosts the mod that makes it last.
+            bool persistentPump = effect.Expiry == RunLingeringEffectExpiry.Run
+                && effect.BehaviorId == EncounterStrength.IcebreakerPumpBehavior
+                && effect.ValueAdjustment is null
+                && effect.SourceCardId is { } pumpedBreaker
+                && state.Cards.Any(card => card?.HostCardId == pumpedBreaker
+                    && behaviorCatalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? pumpMod)
+                    && pumpMod.HostIcebreakerStrength > 0);
             if (effect.Expiry == RunLingeringEffectExpiry.Run
+                && !persistentPump
                 && effect.SourceCardId is { } cleanupSourceId)
             {
                 if (effect.Kind != RunLingeringEffectKind.IcebreakerRunEndCleanup)
@@ -2774,6 +2790,12 @@ public static partial class StateInvariantValidator
                 && run.CurrentIceId == encounteredIce
                 && run.Encounter is { Status: RunEncounterStatus.Initialized, IceId: var encounterIce }
                 && encounterIce == encounteredIce
+                && occurrence.ServerId == run.AttackedServer,
+            OccurrenceKind.IceApproached => run.Step == RunTimingStep.ApproachPaidWindow
+                && frame.Controller == run.InitiatingPlayer
+                && occurrence.Controller == run.InitiatingPlayer
+                && occurrence.SubjectCardId is { } approachedIce
+                && run.CurrentIceId == approachedIce
                 && occurrence.ServerId == run.AttackedServer,
             OccurrenceKind.CardAccessed => run.Step == RunTimingStep.BreachAccessAbility
                 && frame.Controller == run.InitiatingPlayer
@@ -6726,10 +6748,9 @@ public static partial class StateInvariantValidator
                         Add(violations, "decision.invalid-ability-action", $"{actionPath}.parameters.abilityKey", "A bioroid ability must identify a stable ability key.");
                     }
 
-                    if (bioroidAbility.Cost.Kind != BehaviorCostKind.LoseClick
-                        || bioroidAbility.Cost.Amount != 1)
+                    if (!EncounteredBioroidAbilitySpec.IsSupportedCost(bioroidAbility.Cost))
                     {
-                        Add(violations, "decision.invalid-bioroid-cost", $"{actionPath}.parameters.cost", "A bioroid ability action must carry exactly one typed lost click.");
+                        Add(violations, "decision.invalid-bioroid-cost", $"{actionPath}.parameters.cost", "A bioroid ability action must carry one typed lost click or a positive credit cost.");
                     }
 
                     break;
@@ -8836,12 +8857,13 @@ public static partial class StateInvariantValidator
                         PlayerState? runnerPlayer = state.Players.FirstOrDefault(player => player?.Side == PlayerSide.Runner);
 
                         if (runnerPlayer is not null
-                            && expectedIceSpec.EncounteredBioroidAbilities is { Count: > 0 } bioroidAbilities
-                            && runnerPlayer.Clicks > 0)
+                            && expectedIceSpec.EncounteredBioroidAbilities is { Count: > 0 } bioroidAbilities)
                         {
                             foreach (EncounteredBioroidAbilitySpec ability in bioroidAbilities)
                             {
-                                if (runnerPlayer.Clicks < ability.Cost.Amount)
+                                if (ability.Cost.Kind == BehaviorCostKind.Credits
+                                        ? (long)runnerPlayer.Credits + run.RunCredits < ability.Cost.Amount
+                                        : runnerPlayer.Clicks < ability.Cost.Amount)
                                 {
                                     continue;
                                 }
@@ -8898,7 +8920,11 @@ public static partial class StateInvariantValidator
                                     cardId);
                                 if (runnerPlayer is not null
                                     && expectedBreakerQuote is not null
-                                    && IceInterfaceMatcher.Matches(expectedIceSpec, expectedBreakerSpec)
+                                    && IceInterfaceMatcher.CanInterface(
+                                        expectedIceSpec,
+                                        GameEngine.IceGainsEveryType(state.Cards, behaviorCatalog, run.Encounter.IceId),
+                                        expectedBreakerSpec,
+                                        GameEngine.CardSubtypes(runtimeCardCatalog, card.DefinitionId))
                                     && expectedBreakerQuote.EffectiveValue >= iceStrength
                                     && (long)runnerPlayer.Credits + run.RunCredits >= (GameEngine.ProjectCostQuote(
                                         state,
@@ -12634,6 +12660,10 @@ public static partial class StateInvariantValidator
                 .Where(card => card is not null && IsInstalledCard(state, card.Id)
                     && (owner is null || card.OwnerSide == owner.Value)
                     && (!target.IsOther || card.Id != excludedCardId)
+                    && (!target.IsCopyOfArchives || GameEngine.IsCopyOfFaceUpArchivesCard(state.Cards, state.Zones, card))
+                    && (!target.IsNotAi || !GameEngine.CardSubtypes(runtimeCardCatalog, card.DefinitionId).Contains("ai", StringComparer.Ordinal))
+                    && (!target.IsInAttackedServer || state.RunState is { } attacked
+                        && state.Zones.FirstOrDefault(zone => zone.Id == card.ZoneId)?.ServerId == attacked.AttackedServer)
                     && (target.Kind != BehaviorTargetKind.InstalledCardNotThisTurn
                         || !IsInstalledThisTurn(state, card.Id, owner))
                     && BehaviorCardMatches(state, behaviorCatalog, runtimeCardCatalog, card.Id, target.Filter))
@@ -12753,6 +12783,7 @@ public static partial class StateInvariantValidator
                     && runtimeSpec.Subtypes.Contains("icebreaker", StringComparer.Ordinal),
                 BehaviorCardType.Program => runtimeSpec.CardClass == RuntimeCardClass.Program,
                 BehaviorCardType.ProgramOrHardware => runtimeSpec.CardClass is RuntimeCardClass.Program or RuntimeCardClass.Hardware,
+                BehaviorCardType.ResourceOrHardware => runtimeSpec.CardClass is RuntimeCardClass.Resource or RuntimeCardClass.Hardware,
                 BehaviorCardType.Identity => runtimeSpec.CardClass == RuntimeCardClass.Identity,
                 BehaviorCardType.Operation => runtimeSpec.CardClass == RuntimeCardClass.Operation,
                 BehaviorCardType.Resource => runtimeSpec.CardClass == RuntimeCardClass.Resource,
@@ -12773,6 +12804,8 @@ public static partial class StateInvariantValidator
         {
             BehaviorCardType.ProgramOrHardware => behaviorCatalog.TryGetCardType(card.DefinitionId, out BehaviorCardType installedClass)
                 && installedClass is BehaviorCardType.Program or BehaviorCardType.Icebreaker or BehaviorCardType.Hardware,
+            BehaviorCardType.ResourceOrHardware => behaviorCatalog.TryGetCardType(card.DefinitionId, out BehaviorCardType resourceOrHardware)
+                && resourceOrHardware is BehaviorCardType.Resource or BehaviorCardType.Hardware,
             BehaviorCardType.Ice => behaviorCatalog.TryGetIce(card.DefinitionId, out _),
             BehaviorCardType.Icebreaker => behaviorCatalog.TryGetIcebreaker(card.DefinitionId, out _),
             BehaviorCardType.Asset => behaviorCatalog.TryGetAsset(card.DefinitionId, out _),

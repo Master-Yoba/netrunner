@@ -375,6 +375,7 @@ public sealed record GameplayOccurrenceEffect : EffectInstruction
                 or OccurrenceKind.CardRezzed
                 or OccurrenceKind.ServerApproached
                 or OccurrenceKind.IceEncountered
+                or OccurrenceKind.IceApproached
                 or OccurrenceKind.RunSuccessful
                 or OccurrenceKind.RunEnded
                 or OccurrenceKind.AgendaScoredOrStolen
@@ -418,7 +419,7 @@ public sealed record GameplayOccurrenceEffect : EffectInstruction
                 nameof(serverId));
         }
 
-        if (kind == OccurrenceKind.IceEncountered
+        if (kind is OccurrenceKind.IceEncountered or OccurrenceKind.IceApproached
             && (serverId is null || subjectCardId is null))
         {
             throw new ArgumentException(
@@ -702,6 +703,7 @@ public static class EffectInstructionValidator
                                 or OccurrenceKind.CardRezzed
                                 or OccurrenceKind.ServerApproached
                                 or OccurrenceKind.IceEncountered
+                                or OccurrenceKind.IceApproached
                                 or OccurrenceKind.RunSuccessful
                                 or OccurrenceKind.RunEnded
                                 or OccurrenceKind.AgendaScoredOrStolen
@@ -744,7 +746,7 @@ public static class EffectInstructionValidator
                                 "A ServerApproached occurrence must identify its server and must not identify a subject card.");
                         }
 
-                        if (occurrence.Kind == OccurrenceKind.IceEncountered
+                        if (occurrence.Kind is OccurrenceKind.IceEncountered or OccurrenceKind.IceApproached
                             && (occurrence.ServerId is null || occurrence.SubjectCardId is null))
                         {
                             Add(

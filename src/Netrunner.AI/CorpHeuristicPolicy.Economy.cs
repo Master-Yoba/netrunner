@@ -256,6 +256,7 @@ public sealed partial class CorpHeuristicPolicy
             BehaviorCardType.Resource => cardClass == RuntimeCardClass.Resource,
             BehaviorCardType.Icebreaker => context.Definition(card)?.Icebreaker is not null,
             BehaviorCardType.ProgramOrHardware => cardClass is RuntimeCardClass.Program or RuntimeCardClass.Hardware,
+            BehaviorCardType.ResourceOrHardware => cardClass is RuntimeCardClass.Resource or RuntimeCardClass.Hardware,
             _ => cardClass == RuntimeCardClass.Program,
         };
     }

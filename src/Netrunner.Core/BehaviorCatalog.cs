@@ -290,10 +290,11 @@ public sealed record BehaviorCondition
             && kind is not (BehaviorConditionKind.Tagged
                 or BehaviorConditionKind.NotTagged
                 or BehaviorConditionKind.ClicksRemainingAtLeast
-                or BehaviorConditionKind.TurnEventCountIs))
+                or BehaviorConditionKind.TurnEventCountIs
+                or BehaviorConditionKind.CreditsAtLeast))
         {
             throw new ArgumentException(
-                "An explicit subject side is valid only for tag, click and turn-event conditions.",
+                "An explicit subject side is valid only for tag, click, credit and turn-event conditions.",
                 nameof(subjectSide));
         }
 
@@ -307,6 +308,11 @@ public sealed record BehaviorCondition
             && (fact is null || !Enum.TryParse<BehaviorZone>(fact, ignoreCase: false, out _) || value is null or < 0))
         {
             throw new ArgumentException("A zone-count condition names one typed zone and a nonnegative count.", nameof(fact));
+        }
+
+        if (kind == BehaviorConditionKind.CreditsAtLeast && (subjectSide is null || value is null or < 0 || fact is not null))
+        {
+            throw new ArgumentException("A credit condition names a side and a nonnegative amount.", nameof(value));
         }
 
         if (kind == BehaviorConditionKind.ChoseCards && (!StableIdentifier.TryValidate(fact) || value is not null))
@@ -438,6 +444,21 @@ public sealed record BehaviorCondition
     public static BehaviorCondition SourceNotIn(BehaviorZone zone) =>
         new(BehaviorConditionKind.SourceNotInZone, fact: zone.ToString());
 
+    public static BehaviorCondition SourceHostsAtLeast(int minimum) =>
+        new(BehaviorConditionKind.SourceHostsAtLeast, value: minimum);
+
+    public static BehaviorCondition ChosenTrashCostIs(string choiceKey, int cost) =>
+        new(BehaviorConditionKind.ChosenTrashCostIs, fact: choiceKey, value: cost);
+
+    public static BehaviorCondition RezzedSubtypeInAttackedServer(string subtype) =>
+        new(BehaviorConditionKind.RezzedSubtypeInAttackedServer, fact: subtype);
+
+    public static BehaviorCondition RezzedInstalledCopy(CardDefinitionId definitionId) =>
+        new(BehaviorConditionKind.RezzedInstalledCopy, fact: definitionId.Value);
+
+    public static BehaviorCondition CreditsAtLeast(PlayerSide side, int minimum) =>
+        new(BehaviorConditionKind.CreditsAtLeast, value: minimum, subjectSide: side);
+
     public static BehaviorCondition ZoneCountAtLeast(BehaviorZone zone, int minimum) =>
         new(BehaviorConditionKind.ZoneCountAtLeast, fact: zone.ToString(), value: minimum);
 
@@ -557,6 +578,33 @@ public enum BehaviorConditionKind
 
     /// <summary>The choice the fact names chose at least one card ("if you do", Touch-ups).</summary>
     ChoseCards,
+
+    /// <summary>A run is in progress ("Use this ability only during a run": Proprionegation).</summary>
+    RunInProgress,
+
+    /// <summary>The subject side's credit pool holds at least the value ("if the Corp has 15[credit] or more": Fransofia Ward).</summary>
+    CreditsAtLeast,
+
+    /// <summary>
+    /// A rezzed installed card other than the source has the definition the
+    /// fact names (Mycoweb: "a rezzed sentry", "another rezzed code gate").
+    /// </summary>
+    RezzedInstalledCopy,
+
+    /// <summary>
+    /// A rezzed Corp card with the subtype the fact names is in the root of,
+    /// or protecting, the attacked server (LEO Construction: a bioroid).
+    /// </summary>
+    RezzedSubtypeInAttackedServer,
+
+    /// <summary>The source hosts at least the value in cards faceup (Detente: "add 2 hosted cards to HQ").</summary>
+    SourceHostsAtLeast,
+
+    /// <summary>
+    /// The card bound to the choice key the fact names has an access trash
+    /// cost equal to the value (Detente's access: the trash option per cost).
+    /// </summary>
+    ChosenTrashCostIs,
 }
 
 /// <summary>A typed target selector; IDs are resolved by Core at runtime.</summary>
@@ -605,13 +653,17 @@ public sealed record BehaviorTarget
             }
 
             // Installed selectors use owner and printed card class. Hidden
-            // definition and subtype selectors remain zone-search vocabulary.
+            // definition selectors remain zone-search vocabulary; a subtype
+            // may name only public cards: Runner cards, or rezzed Corp cards
+            // (EL-INSTALLED-SUBTYPE: Bumi's trojan, LEO's rezzed bioroid).
             if (filter is not null
                 && (filter.DefinitionId is not null
-                    || filter.Subtype is not null))
+                    || filter.Subtype is not null
+                        && filter.OwnerSide != PlayerSide.Runner
+                        && filter.Rezzed != true))
             {
                 throw new ArgumentException(
-                    "Installed-card targets may carry only owner-side and card-class filters.",
+                    "Installed-card targets may carry only owner-side, card-class and public subtype filters.",
                     nameof(filter));
             }
         }
@@ -681,6 +733,31 @@ public sealed record BehaviorTarget
     /// <summary>Whether this installed-card target excludes the behavior's source.</summary>
     [JsonIgnore]
     public bool IsOther => string.Equals(Selector, OtherSelector, StringComparison.Ordinal);
+
+    /// <summary>
+    /// EL-COPY-OF-ACCESSED: an installed-card target over only copies (same
+    /// definition) of a faceup card in Archives (Charm Offensive, after a
+    /// successful Archives run accessed them all).
+    /// </summary>
+    public const string CopyOfArchivesSelector = "copy-of-archives";
+
+    /// <summary>
+    /// EL-ATTACKED-SERVER: an installed-card target over only cards in the root
+    /// of, or protecting, the attacked server (LEO Construction).
+    /// </summary>
+    public const string AttackedServerSelector = "attacked-server";
+
+    [JsonIgnore]
+    public bool IsInAttackedServer => string.Equals(Selector, AttackedServerSelector, StringComparison.Ordinal);
+
+    /// <summary>EL-MOD-HOST: an installed-card target over only cards without the AI subtype.</summary>
+    public const string NotAiSelector = "not-ai";
+
+    [JsonIgnore]
+    public bool IsNotAi => string.Equals(Selector, NotAiSelector, StringComparison.Ordinal);
+
+    [JsonIgnore]
+    public bool IsCopyOfArchives => string.Equals(Selector, CopyOfArchivesSelector, StringComparison.Ordinal);
 
     /// <summary>EL-HOSTED-FACEUP: a zone target over only the cards hosted on the behavior's source.</summary>
     public const string HostedOnSourceSelector = "hosted-on-source";
@@ -1355,7 +1432,8 @@ public sealed record BehaviorInstruction
                         BehaviorZone.Headquarters,
                         BehaviorZone.Archives,
                         BehaviorZone.Stack,
-                        BehaviorZone.Heap);
+                        BehaviorZone.Heap,
+                        BehaviorZone.HostedFaceUp);
                 }
 
                 RequireDestination(nameof(DestinationZone), BehaviorZone.Headquarters, BehaviorZone.Grip);
@@ -1518,7 +1596,14 @@ public sealed record BehaviorInstruction
             or BehaviorInstructionKind.PlaceOnTopOfDeck
             or BehaviorInstructionKind.PlayCard
             or BehaviorInstructionKind.TurnFaceUp
-            or BehaviorInstructionKind.HostFaceUp)
+            or BehaviorInstructionKind.HostFaceUp
+            or BehaviorInstructionKind.Derez
+            or BehaviorInstructionKind.RezPayingLess
+            or BehaviorInstructionKind.MoveSourceToServerOf
+            or BehaviorInstructionKind.SwapApproachedIce
+            or BehaviorInstructionKind.HostSourceOnTarget
+            or BehaviorInstructionKind.ChooseAtRandom
+            or BehaviorInstructionKind.StealAgenda)
             && Target is not null)
         {
             throw new ArgumentException(
@@ -1663,6 +1748,47 @@ public enum BehaviorInstructionKind
 
     /// <summary>The Runner accesses the amount in additional cards in the coming breach (the argument is a reason key).</summary>
     AddBreachAccess,
+
+    /// <summary>EL-PURGE: purges every virus counter (Flyswatter), as the basic purge action does.</summary>
+    PurgeVirusCounters,
+
+    /// <summary>EL-DEREZ: derezzes the targeted installed Corp cards; they turn facedown (Maglectric Rapid).</summary>
+    Derez,
+
+    /// <summary>EL-BYPASS: the Runner bypasses the encountered ICE (Fransofia Ward).</summary>
+    BypassEncounteredIce,
+
+    /// <summary>EL-REZ-PAYING-LESS: rezzes the targeted installed ICE paying the amount less (Mycoweb).</summary>
+    RezPayingLess,
+
+    /// <summary>EL-MOVE-UPGRADE: moves the installed source upgrade to the root of the targeted card's server (Mercia B4LL4RD).</summary>
+    MoveSourceToServerOf,
+
+    /// <summary>EL-MOD-HOST: hosts the source mod on the targeted installed non-AI icebreaker (GAMEDRAGON™ Pro).</summary>
+    HostSourceOnTarget,
+
+    /// <summary>
+    /// EL-RANDOM: binds the amount of cards chosen at random from the target
+    /// to the key the argument names (Detente: a card from HQ at random).
+    /// </summary>
+    ChooseAtRandom,
+
+    /// <summary>EL-ACCESS-OUTSIDE-RUN: the Runner steals the targeted agenda (Detente's access).</summary>
+    StealAgenda,
+
+    /// <summary>
+    /// EL-SWAP-APPROACHED-ICE: swaps the ICE being approached with the
+    /// targeted ICE from HQ or Archives, which is installed unrezzed in its
+    /// position (Mitra Aman).
+    /// </summary>
+    SwapApproachedIce,
+
+    /// <summary>
+    /// EL-MOVE-RUNNER: the Runner moves to the outermost position of the
+    /// server of the kind the argument names, which becomes the attacked
+    /// server (Proprionegation: Archives).
+    /// </summary>
+    MoveRunnerToServer,
 
     // Short aliases keep the contract pleasant for callers while the longer
     // names remain unambiguous in serialized/fingerprint output.
@@ -1909,7 +2035,8 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
                 || occurrence is not (OccurrenceKind.RunSuccessful
                     or OccurrenceKind.RunEnded
                     or OccurrenceKind.ServerApproached
-                    or OccurrenceKind.IceEncountered)))
+                    or OccurrenceKind.IceEncountered
+                    or OccurrenceKind.IceApproached)))
         {
             throw new ArgumentException(
                 "A server-kind requirement is valid only for run server occurrences and must name a defined server kind.",
@@ -1917,7 +2044,7 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         }
 
         if (requireSourceOnAttackedServer
-            && occurrence is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded or OccurrenceKind.AgendaScoredOrStolen))
+            && occurrence is not (OccurrenceKind.ServerApproached or OccurrenceKind.IceEncountered or OccurrenceKind.IceApproached or OccurrenceKind.CardRezzed or OccurrenceKind.RunEnded or OccurrenceKind.AgendaScoredOrStolen))
         {
             throw new ArgumentException(
                 "Requiring the source to occupy the attacked server is valid only for ServerApproached, IceEncountered, or CardRezzed triggers.",
@@ -2081,6 +2208,7 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         OccurrenceKind.CardInstalled
         or OccurrenceKind.CardRezzed
         or OccurrenceKind.IceEncountered
+        or OccurrenceKind.IceApproached
         or OccurrenceKind.RunSuccessful
         or OccurrenceKind.RunEnded
         or OccurrenceKind.AgendaScoredOrStolen
@@ -2148,9 +2276,25 @@ public sealed class CardBehaviorDefinition
         int recurringCredits = 0,
         int rootAssetTrashCostIncrease = 0,
         IReadOnlyList<BehaviorCondition>? rezRequirements = null,
-        bool hostedCardsPlayAsGrip = false)
+        bool hostedCardsPlayAsGrip = false,
+        int rezForfeitDiscount = 0,
+        int hostIcebreakerStrength = 0)
     {
         DefinitionId = definitionId;
+        ArgumentOutOfRangeException.ThrowIfNegative(hostIcebreakerStrength);
+        if (hostIcebreakerStrength > 0 && controller != PlayerSide.Runner)
+        {
+            throw new ArgumentException("Only Runner mods host on icebreakers.", nameof(hostIcebreakerStrength));
+        }
+
+        HostIcebreakerStrength = hostIcebreakerStrength;
+        ArgumentOutOfRangeException.ThrowIfNegative(rezForfeitDiscount);
+        if (rezForfeitDiscount > 0 && controller != PlayerSide.Corp)
+        {
+            throw new ArgumentException("Only Corp cards are rezzed.", nameof(rezForfeitDiscount));
+        }
+
+        RezForfeitDiscount = rezForfeitDiscount;
         HostedCardsPlayAsGrip = hostedCardsPlayAsGrip;
         if (hostedCardsPlayAsGrip && controller != PlayerSide.Runner)
         {
@@ -2257,6 +2401,21 @@ public sealed class CardBehaviorDefinition
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool HostedCardsPlayAsGrip { get; }
+
+    /// <summary>
+    /// EL-REZ-COST-PAYMENT: the Corp can forfeit 1 agenda as it rezzes this
+    /// card to pay for this much of its rez cost (Biawak).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int RezForfeitDiscount { get; }
+
+    /// <summary>
+    /// EL-MOD-HOST: this hardware hosts on an installed non-AI icebreaker, which
+    /// gets this much strength and keeps its pumped strength for the rest of the
+    /// run (GAMEDRAGON™ Pro). Zero for every other card.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int HostIcebreakerStrength { get; }
 
     /// <summary>EL-RECURRING: hosted credits refilled to this amount before each of the controller's turns.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
@@ -3076,6 +3235,7 @@ internal static class BehaviorCatalogStructure
                 && a.Strength == b.Strength
                 && a.IceType == b.IceType
                 && a.RezCost == b.RezCost
+                && string.Equals(a.BreakableOnlyBySubtype, b.BreakableOnlyBySubtype, StringComparison.Ordinal)
                 && SequenceEquals(a.Subroutines, b.Subroutines)
                 && SequenceEquals(a.StrengthModifiers, b.StrengthModifiers)
                 && BehaviorContractStructure.SequenceEquals(
@@ -3108,7 +3268,10 @@ internal static class BehaviorCatalogStructure
                     b.AllowedTargetServers ?? [],
                     static (left, right) => left == right)
                 && a.SuccessDraw == b.SuccessDraw
-                && a.BreachAccessModifier == b.BreachAccessModifier,
+                && a.BreachAccessModifier == b.BreachAccessModifier
+                && a.AdditionalClicks == b.AdditionalClicks
+                && a.RedirectApproachTo == b.RedirectApproachTo
+                && a.PreventFirstEndRun == b.PreventFirstEndRun,
             (CardBehaviorDefinition a, CardBehaviorDefinition b) => a.DefinitionId == b.DefinitionId
                 && a.Controller == b.Controller
                 && a.CanBeAdvanced == b.CanBeAdvanced
@@ -3117,6 +3280,8 @@ internal static class BehaviorCatalogStructure
                 && a.RootAssetTrashCostIncrease == b.RootAssetTrashCostIncrease
                 && SequenceEquals(a.RezRequirements ?? [], b.RezRequirements ?? [])
                 && a.HostedCardsPlayAsGrip == b.HostedCardsPlayAsGrip
+                && a.RezForfeitDiscount == b.RezForfeitDiscount
+                && a.HostIcebreakerStrength == b.HostIcebreakerStrength
                 && SequenceEquals(a.HostedCreditUses ?? [], b.HostedCreditUses ?? [])
                 && a.Hosting == b.Hosting
                 && SequenceEquals(a.Costs, b.Costs)
@@ -3255,6 +3420,11 @@ internal static class BehaviorCatalogFingerprint
             AppendSequence(builder, value.ValueModifiers, AppendValueModifier);
         }
 
+        if (value.BreakableOnlyBySubtype is { } breakerSubtype)
+        {
+            builder.Append("|breakable-only-by=").Append(breakerSubtype);
+        }
+
     }
 
     private static void AppendIcebreaker(StringBuilder builder, IcebreakerBehaviorSpec value)
@@ -3315,6 +3485,21 @@ internal static class BehaviorCatalogFingerprint
                 .Append(",reason=");
             AppendString(builder, breachAccessModifier.ReasonKey);
         }
+
+        if (value.AdditionalClicks != 0)
+        {
+            builder.Append("|additionalClicks=").Append(value.AdditionalClicks);
+        }
+
+        if (value.RedirectApproachTo is { } redirect)
+        {
+            builder.Append("|redirectApproachTo=").Append((int)redirect);
+        }
+
+        if (value.PreventFirstEndRun)
+        {
+            builder.Append("|preventFirstEndRun=1");
+        }
     }
 
     private static void AppendRunRezCostModifier(
@@ -3355,6 +3540,14 @@ internal static class BehaviorCatalogFingerprint
         {
             builder.Append(",hostedCardsPlayAsGrip=1");
         }
+        if (value.RezForfeitDiscount != 0)
+        {
+            builder.Append(",rezForfeitDiscount=").Append(value.RezForfeitDiscount);
+        }
+        if (value.HostIcebreakerStrength != 0)
+        {
+            builder.Append(",hostIcebreakerStrength=").Append(value.HostIcebreakerStrength);
+        }
         if (value.RezRequirements is { } rezRequirements)
         {
             builder.Append(",rezRequirements=");
@@ -3372,6 +3565,10 @@ internal static class BehaviorCatalogFingerprint
         {
             builder.Append("|hosting=").Append(hosting.BreakHostSubroutine ? 1 : 0)
                 .Append(':').Append(hosting.DerezAtVirusCounters);
+            if (hosting.HostGainsEveryIceType)
+            {
+                builder.Append(":gains-every-ice-type");
+            }
         }
         AppendSequence(builder, value.Targets, AppendTarget);
         AppendSequence(builder, value.Instructions, AppendInstruction);

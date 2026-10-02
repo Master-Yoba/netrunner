@@ -73,6 +73,9 @@ public enum OccurrenceKind
 
     /// <summary>EL-HAND-SIZE-DISCARD: the active player discarded cards to reach maximum hand size.</summary>
     HandSizeDiscarded,
+
+    /// <summary>EL-ICE-APPROACHED: the Runner approaches a piece of ICE (Mitra Aman); the subject is that ICE.</summary>
+    IceApproached,
 }
 
 public enum OccurrencePhase

@@ -12,4 +12,7 @@ public enum BehaviorTriggerCondition
 
     /// <summary>EL-HOSTED-FACEUP: the occurrence's subject was installed this turn without spending credits (Bling).</summary>
     SubjectInstalledWithoutCredits,
+
+    /// <summary>EL-SUBROUTINE-RESOLVED-FACT: a subroutine resolved during the live run (Ryō "Phoenix" Ōno).</summary>
+    SubroutineResolvedThisRun,
 }

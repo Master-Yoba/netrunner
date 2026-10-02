@@ -68,9 +68,21 @@ public static partial class GameEngine
         {
             return;
         }
-        ReplaceCard(working, new CardInstanceState(host.Id, host.DefinitionId, host.ZoneId,
-            host.OwnerSide, false, false, host.AdvancementCounters, host.HostCardId));
-        Emit(working, EngineEventKinds.CardDerezzed, new CardDerezzedEventPayload(hostId));
+        Derez(working, hostId);
+    }
+
+    /// <summary>Derezzes an installed rezzed Corp card: it turns facedown and stays installed.</summary>
+    private static void Derez(WorkingState working, CardInstanceId cardId)
+    {
+        CardInstanceState card = GetCard(working, cardId);
+        if (!card.Rezzed || card.OwnerSide != PlayerSide.Corp || !IsInstalledCard(working, cardId))
+        {
+            return;
+        }
+
+        ReplaceCard(working, new CardInstanceState(card.Id, card.DefinitionId, card.ZoneId,
+            card.OwnerSide, false, false, card.AdvancementCounters, card.HostCardId));
+        Emit(working, EngineEventKinds.CardDerezzed, new CardDerezzedEventPayload(cardId));
     }
 
     internal static bool CanBreakHostedCounter(GameState state, IBehaviorCatalog catalog, CardInstanceState card, RunState run) =>
@@ -131,6 +143,53 @@ public static partial class GameEngine
         ReplaceCard(working, new CardInstanceState(moved.Id, moved.DefinitionId, moved.ZoneId, moved.OwnerSide,
             faceUp: true, rezzed: false, moved.AdvancementCounters, hostId));
     }
+
+    /// <summary>EL-ICE-GAINS-SUBTYPE: a card installed on this ICE gives it every ICE subtype (Chromatophores).</summary>
+    internal static bool IceGainsEveryType(IEnumerable<CardInstanceState?> cards, IBehaviorCatalog catalog, CardInstanceId iceId) =>
+        cards.Any(card => card is not null
+            && card.HostCardId == iceId
+            && catalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? definition)
+            && definition.Hosting?.HostGainsEveryIceType == true);
+
+    /// <summary>A card's printed subtypes, lower-cased by the runtime catalog; none without one.</summary>
+    internal static IReadOnlyCollection<string> CardSubtypes(IRuntimeCardCatalog? runtime, CardDefinitionId definitionId) =>
+        runtime is not null && runtime.TryGet(definitionId, out CardRuntimeSpec? spec) ? spec.Subtypes.ToArray() : [];
+
+    /// <summary>EL-COPY-OF-ACCESSED: another card with this card's definition is faceup in Archives.</summary>
+    internal static bool IsCopyOfFaceUpArchivesCard(
+        IEnumerable<CardInstanceState?> cards,
+        IEnumerable<ZoneState?> zones,
+        CardInstanceState card)
+    {
+        ZoneState? archives = zones.FirstOrDefault(zone => zone?.Kind == ZoneKind.CorpDiscard && zone.ServerId is null);
+        return archives is not null
+            && cards.Any(candidate => candidate is not null
+                && candidate.Id != card.Id
+                && candidate.FaceUp
+                && candidate.DefinitionId == card.DefinitionId
+                && archives.CardIds.Contains(candidate.Id));
+    }
+
+    /// <summary>EL-MOD-HOST: an installed Runner icebreaker without the AI subtype.</summary>
+    private static bool IsModHost(WorkingState working, CardInstanceId hostId) =>
+        IsModHost(working.Cards, working.Zones, working.BehaviorCatalog, working.RuntimeCardCatalog, hostId);
+
+    internal static bool IsModHost(
+        IEnumerable<CardInstanceState?> cards,
+        IEnumerable<ZoneState?> zones,
+        IBehaviorCatalog catalog,
+        IRuntimeCardCatalog? runtime,
+        CardInstanceId hostId) =>
+        cards.FirstOrDefault(card => card?.Id == hostId) is { OwnerSide: PlayerSide.Runner } host
+        && zones.FirstOrDefault(zone => zone?.Id == host.ZoneId)?.Kind == ZoneKind.RunnerRig
+        && catalog.TryGetIcebreaker(host.DefinitionId, out _)
+        && !CardSubtypes(runtime, host.DefinitionId).Contains("ai", StringComparer.Ordinal);
+
+    /// <summary>EL-STRENGTH-PERSISTENCE: a mod on this breaker makes its pumped strength last the run.</summary>
+    private static bool BreakerPumpsLastTheRun(WorkingState working, CardInstanceId breakerId) =>
+        working.Cards.Any(card => card.HostCardId == breakerId
+            && working.BehaviorCatalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? definition)
+            && definition.HostIcebreakerStrength > 0);
 
     internal static bool IsHostedFaceUpZone(ZoneKind kind) => kind is ZoneKind.RunnerHostedFaceUp or ZoneKind.CorpHostedFaceUp;
 

@@ -3000,6 +3000,7 @@ public static class ResolutionFrameValidator
             or OccurrenceKind.CardRezzed
             or OccurrenceKind.ServerApproached
             or OccurrenceKind.IceEncountered
+            or OccurrenceKind.IceApproached
             or OccurrenceKind.RunSuccessful
             or OccurrenceKind.RunEnded
             or OccurrenceKind.AgendaScoredOrStolen
@@ -3048,7 +3049,7 @@ public static class ResolutionFrameValidator
                         "A ServerApproached occurrence must identify its server and must not identify a subject card."));
                 }
 
-                if (gameplay.Kind == OccurrenceKind.IceEncountered
+                if (gameplay.Kind is OccurrenceKind.IceEncountered or OccurrenceKind.IceApproached
                     && (gameplay.ServerId is null || gameplay.SubjectCardId is null))
                 {
                     violations.Add(new StateInvariantViolation(
