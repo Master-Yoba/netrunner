@@ -32,6 +32,12 @@ public static partial class GameEngine
                 working.Turn.History?.ThisTurn(controllerSide)?.EventCount(
                     controllerSide == PlayerSide.Corp ? TurnEventKind.OperationPlayed : TurnEventKind.EventPlayed) > 0,
             BehaviorConditionKind.NoActionFinishedThisTurn => !HasFinishedActionThisTurn(working),
+            BehaviorConditionKind.TurnEventCountIs =>
+                (condition.SubjectSide is not { } turnOf || working.Turn.ActiveSide == turnOf)
+                && Enum.TryParse(condition.Fact, ignoreCase: false, out TurnEventKind eventKind)
+                && ActiveTurnEventCount(working, eventKind) == threshold,
+            BehaviorConditionKind.ClicksRemainingAtLeast when condition.SubjectSide is { } clickSide =>
+                GetPlayer(working, clickSide).Clicks >= threshold,
             _ => null,
         };
     }

@@ -116,7 +116,8 @@ public sealed class BehaviorPaidAbility : IEquatable<BehaviorPaidAbility>
         IReadOnlyList<BehaviorCondition> conditions,
         IReadOnlyList<BehaviorTarget> targets,
         IReadOnlyList<BehaviorInstruction> instructions,
-        BehaviorAbilityUsageLimit usageLimit)
+        BehaviorAbilityUsageLimit usageLimit,
+        bool usableFromRunnerScoreArea = false)
     {
         if (!StableIdentifier.TryValidate(key))
         {
@@ -144,6 +145,7 @@ public sealed class BehaviorPaidAbility : IEquatable<BehaviorPaidAbility>
         Timing = timing;
         Activation = activation;
         UsageLimit = usageLimit;
+        UsableFromRunnerScoreArea = usableFromRunnerScoreArea;
         Costs = Freeze(costs, nameof(costs));
         Conditions = Freeze(conditions, nameof(conditions));
         Targets = Freeze(targets, nameof(targets));
@@ -192,12 +194,21 @@ public sealed class BehaviorPaidAbility : IEquatable<BehaviorPaidAbility>
     [JsonRequired]
     public IReadOnlyList<BehaviorInstruction> Instructions { get; private set; }
 
+    /// <summary>
+    /// EL-SCORE-AREA-ABILITY: the Corp can use this agenda ability even while
+    /// the agenda is in the Runner's score area.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool UsableFromRunnerScoreArea { get; private set; }
+
     public bool Equals(BehaviorPaidAbility? other) =>
         other is not null
         && string.Equals(Key, other.Key, StringComparison.Ordinal)
         && Timing == other.Timing
         && Activation == other.Activation
         && UsageLimit == other.UsageLimit
+        && UsableFromRunnerScoreArea == other.UsableFromRunnerScoreArea
         && SequenceEquals(Costs, other.Costs)
         && SequenceEquals(Conditions, other.Conditions)
         && SequenceEquals(Targets, other.Targets)

@@ -627,6 +627,10 @@ public static partial class GameEngine
             delta,
             (int)next));
         RecordTurnTagChange(working, target, delta);
+        if (delta < 0)
+        {
+            RecordFirstTimeOccurrence(working, TurnEventKind.TagRemoved, OccurrenceKind.FirstTagRemovalThisTurn, PlayerSide.Runner);
+        }
     }
 
     private static void ApplyBaseMemory(WorkingState working, PlayerId target, int delta)

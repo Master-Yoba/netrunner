@@ -407,6 +407,13 @@ public static partial class GameEngine
         // and giving a basic turn action the same run timing cursor.
         Emit(working, EngineEventKinds.RunInitiated, new RunInitiatedEventPayload(
             run.Id, server.Id, runner.Id));
+        if (QueueRunBeganOccurrence(working, run))
+        {
+            // "When a run begins" triggers resolve first; the initiation
+            // window opens when the run timing frame is stepped again.
+            return;
+        }
+
         YieldRunPriorityDecision(
             working,
             run,
@@ -2443,7 +2450,9 @@ public static partial class GameEngine
         run = PayRunnerRunCredits(working, run, trashCost, hostedCredits);
         run = RetainAccessTrashedAbilities(working, run, card);
         working.RunState = run;
-        TrashCard(working, card, working.Zones.Single(zone => zone.Id == card.ZoneId), discardZone);
+        ZoneState trashedFrom = working.Zones.Single(zone => zone.Id == card.ZoneId);
+        ServerId? installedServer = trashedFrom.Kind is ZoneKind.ServerRoot or ZoneKind.ServerIce ? trashedFrom.ServerId : null;
+        TrashCard(working, card, trashedFrom, discardZone);
         // A card trashed through access is revealed: it enters the Corp
         // discard faceup and unrezzed so both viewers can see what left the
         // breach.
@@ -2462,9 +2471,9 @@ public static partial class GameEngine
         // As with a steal: when a trigger waits on the trash (René "Loup" Arcemont),
         // the next breach decision is yielded only after that trigger resolves;
         // yielding it now left the occurrence frame stranded beneath the prompt.
-        bool hasTrashTrigger = HasActiveCatalogTrigger(working, OccurrenceKind.AccessedCardTrashed);
+        bool hasTrashTrigger = HasActiveCatalogTrigger(working, OccurrenceKind.AccessedCardTrashed, subjectCardId: accessed);
         AdvanceBreachAfterAccess(working, run, yieldDecision: !hasTrashTrigger);
-        QueueIdentityOccurrence(working, OccurrenceKind.AccessedCardTrashed, PlayerSide.Runner, accessed);
+        QueueAccessedCardTrashedOccurrence(working, accessed, card.Rezzed, installedServer);
     }
 
     /// <summary>
@@ -2566,6 +2575,8 @@ public static partial class GameEngine
             return;
         }
 
+        RecordActiveTurnEvent(working, TurnEventKind.AgendaScoredOrStolen);
+        RecordActiveTurnEvent(working, TurnEventKind.CorpCardStolenOrTrashed);
         bool hasAgendaTrigger = HasActiveCatalogTrigger(working, OccurrenceKind.AgendaScoredOrStolen);
         AdvanceBreachAfterAccess(working, run, yieldDecision: !hasAgendaTrigger);
         if (hasAgendaTrigger)

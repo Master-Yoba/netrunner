@@ -287,11 +287,23 @@ public sealed record BehaviorCondition
         }
 
         if (subjectSide is not null
-            && kind is not (BehaviorConditionKind.Tagged or BehaviorConditionKind.NotTagged))
+            && kind is not (BehaviorConditionKind.Tagged
+                or BehaviorConditionKind.NotTagged
+                or BehaviorConditionKind.ClicksRemainingAtLeast
+                or BehaviorConditionKind.TurnEventCountIs))
         {
             throw new ArgumentException(
-                "An explicit subject side is valid only for Tagged and NotTagged conditions.",
+                "An explicit subject side is valid only for tag, click and turn-event conditions.",
                 nameof(subjectSide));
+        }
+
+        if (kind == BehaviorConditionKind.TurnEventCountIs
+            && (fact is null || !Enum.TryParse<TurnEventKind>(fact, ignoreCase: false, out _)
+                || value is null or < 0))
+        {
+            throw new ArgumentException(
+                "A turn-event condition names a typed turn event and a nonnegative count.",
+                nameof(fact));
         }
 
         if (kind is BehaviorConditionKind.FactEquals or BehaviorConditionKind.CounterAtLeast)
@@ -391,6 +403,18 @@ public sealed record BehaviorCondition
     public static BehaviorCondition RunnerTagsAtLeast(int threshold) =>
         new(BehaviorConditionKind.RunnerTagsAtLeast, value: threshold);
 
+    /// <summary>
+    /// The active turn's count of a typed event is exactly the value ("the
+    /// first time each turn" is a count of 1), optionally only during one
+    /// side's turn.
+    /// </summary>
+    public static BehaviorCondition TurnEventCountIs(TurnEventKind kind, int count, PlayerSide? duringTurnOf = null) =>
+        new(BehaviorConditionKind.TurnEventCountIs, fact: kind.ToString(), value: count, subjectSide: duringTurnOf);
+
+    /// <summary>A player (by default the behavior controller) has at least the value in clicks.</summary>
+    public static BehaviorCondition ClicksAtLeast(int threshold, PlayerSide? side) =>
+        new(BehaviorConditionKind.ClicksRemainingAtLeast, value: threshold, subjectSide: side);
+
     public static BehaviorCondition SourceAdvancementAtLeast(int threshold) =>
         new(BehaviorConditionKind.SourceAdvancementAtLeast, value: threshold);
 
@@ -480,6 +504,12 @@ public enum BehaviorConditionKind
 
     /// <summary>The behavior's source card hosts at least the value in advancement counters.</summary>
     SourceAdvancementAtLeast,
+
+    /// <summary>
+    /// The active turn's count of the typed turn event named by the fact is
+    /// exactly the value; a subject side restricts it to that side's turn.
+    /// </summary>
+    TurnEventCountIs,
 }
 
 /// <summary>A typed target selector; IDs are resolved by Core at runtime.</summary>
@@ -597,6 +627,13 @@ public sealed record BehaviorTarget
     public BehaviorTargetKind Kind { get; }
 
     public string? Selector { get; }
+
+    /// <summary>The selector of an installed-card target that excludes the behavior's own source ("your other installed cards").</summary>
+    public const string OtherSelector = "other";
+
+    /// <summary>Whether this installed-card target excludes the behavior's source.</summary>
+    [JsonIgnore]
+    public bool IsOther => string.Equals(Selector, OtherSelector, StringComparison.Ordinal);
 
     /// <summary>The zone used by a <see cref="BehaviorTargetKind.ZoneCard"/> target.</summary>
     public BehaviorZone? Zone { get; }
@@ -942,7 +979,9 @@ public sealed record BehaviorInstruction
         if (Recipient is not null
             && Kind is not (BehaviorInstructionKind.AddTags
                 or BehaviorInstructionKind.GainCredits
-                or BehaviorInstructionKind.LoseCredits))
+                or BehaviorInstructionKind.LoseCredits
+                or BehaviorInstructionKind.LoseClicks
+                or BehaviorInstructionKind.GainAllottedClicksNextTurn))
         {
             throw new ArgumentException(
                 "A player recipient is valid only for tag and credit instructions.",
@@ -1018,10 +1057,11 @@ public sealed record BehaviorInstruction
             && Kind is not (BehaviorInstructionKind.GainCredits
                 or BehaviorInstructionKind.LoseCredits
                 or BehaviorInstructionKind.Draw
-                or BehaviorInstructionKind.RemoveTags))
+                or BehaviorInstructionKind.RemoveTags
+                or BehaviorInstructionKind.AddCounter))
         {
             throw new ArgumentException(
-                "A dynamic amount operand is valid only for credit, draw and tag-removal instructions.",
+                "A dynamic amount operand is valid only for credit, draw, counter and tag-removal instructions.",
                 nameof(AmountOperand));
         }
 
@@ -1108,9 +1148,9 @@ public sealed record BehaviorInstruction
                 "This executable numeric instruction requires a positive amount.");
         }
 
-        if (Kind == BehaviorInstructionKind.AddCounter)
+        if (Kind is BehaviorInstructionKind.AddCounter or BehaviorInstructionKind.RemoveCounter)
         {
-            if (Amount <= 0)
+            if (Amount <= 0 && AmountOperand is null)
             {
                 throw new ArgumentOutOfRangeException(
                     nameof(Amount),
@@ -1377,7 +1417,11 @@ public sealed record BehaviorInstruction
             or BehaviorInstructionKind.MoveCard
             or BehaviorInstructionKind.SwapInstalledIce
             or BehaviorInstructionKind.RezIgnoringCosts
-            or BehaviorInstructionKind.Choose)
+            or BehaviorInstructionKind.Choose
+            or BehaviorInstructionKind.RemoveCounter
+            or BehaviorInstructionKind.ForfeitAgenda
+            or BehaviorInstructionKind.ProhibitScoringTargetThisTurn
+            or BehaviorInstructionKind.Sabotage)
             && Target is not null)
         {
             throw new ArgumentException(
@@ -1469,6 +1513,27 @@ public enum BehaviorInstructionKind
     /// <see cref="ModifyEncounteredIceStrength"/>.
     /// </summary>
     ModifySourceStrength,
+
+    /// <summary>EL-FLIP: turns the source identity to its other face.</summary>
+    FlipSelf,
+
+    /// <summary>Removes up to the amount of the named counter (the argument) from the target, by default the source.</summary>
+    RemoveCounter,
+
+    /// <summary>EL-FORFEIT: forfeits the chosen agenda from the controller's score area.</summary>
+    ForfeitAgenda,
+
+    /// <summary>The recipient gets the amount as extra allotted clicks at the start of their next turn.</summary>
+    GainAllottedClicksNextTurn,
+
+    /// <summary>The Corp cannot score the targeted card this turn.</summary>
+    ProhibitScoringTargetThisTurn,
+
+    /// <summary>
+    /// EL-SABOTAGE: the Corp trashes the amount in cards of their choice from
+    /// HQ and/or the top of R&amp;D.
+    /// </summary>
+    Sabotage,
 
     // Short aliases keep the contract pleasant for callers while the longer
     // names remain unambiguous in serialized/fingerprint output.
@@ -1581,6 +1646,13 @@ public enum RunOutcomeRequirement
 /// Immutable typed trigger declaration. A trigger's instruction list is the
 /// complete behavior executed when its declared occurrence is dispatched.
 /// </summary>
+/// <summary>EL-FLIP: the two faces of a double-sided identity.</summary>
+public enum BehaviorFace
+{
+    Front,
+    Back,
+}
+
 public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
 {
     [JsonConstructor]
@@ -1601,7 +1673,8 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         PlayerSide? occurrenceControllerSide = null,
         bool oncePerTurn = false,
         BehaviorTriggerCondition? condition = null,
-        BehaviorCondition? requirement = null)
+        BehaviorCondition? requirement = null,
+        BehaviorFace? face = null)
     {
         if (!StableIdentifier.TryValidate(key))
         {
@@ -1611,6 +1684,12 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         }
 
         Requirement = requirement;
+        if (face is { } declaredFace && !Enum.IsDefined(declaredFace))
+        {
+            throw new ArgumentOutOfRangeException(nameof(face));
+        }
+
+        Face = face;
 
         if (!Enum.IsDefined(occurrence))
         {
@@ -1728,6 +1807,10 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public BehaviorCondition? Requirement { get; }
 
+    /// <summary>EL-FLIP: the face of a double-sided identity this ability is printed on; null for both.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BehaviorFace? Face { get; }
+
     public TriggerMode Mode { get; }
 
     public BehaviorTriggerScope Scope { get; }
@@ -1775,6 +1858,7 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         && OncePerTurn == other.OncePerTurn
         && Condition == other.Condition
         && Requirement == other.Requirement
+        && Face == other.Face
         && Mode == other.Mode
         && Scope == other.Scope
         && BehaviorContractStructure.AreEqual(SubjectCardFilter, other.SubjectCardFilter)
@@ -1817,7 +1901,10 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         or OccurrenceKind.CardAccessed
         or OccurrenceKind.HostedCreditPoolEmptied
         or OccurrenceKind.CardAdvancedFromZero
-        or OccurrenceKind.AccessedCardTrashed;
+        or OccurrenceKind.AccessedCardTrashed
+        or OccurrenceKind.AgendaForfeited
+        or OccurrenceKind.FirstCardCreditGainThisTurn
+        or OccurrenceKind.FirstOperationPlayedThisTurn;
 
     private static ReadOnlyCollection<BehaviorInstruction> Freeze(
         IEnumerable<BehaviorInstruction> values)
@@ -3152,6 +3239,10 @@ internal static class BehaviorCatalogFingerprint
         AppendSequence(builder, value.Conditions, AppendCondition);
         AppendSequence(builder, value.Targets, AppendTarget);
         AppendSequence(builder, value.Instructions, AppendInstruction);
+        if (value.UsableFromRunnerScoreArea)
+        {
+            builder.Append(",fromRunnerScoreArea=1");
+        }
     }
 
     private static void AppendSequence<T>(
@@ -3377,6 +3468,7 @@ internal static class BehaviorCatalogFingerprint
             builder.Append(",requirement=");
             AppendCondition(builder, requirement);
         }
+        if (value.Face is { } face) builder.Append(",face=").Append((int)face);
         if (value.Persistent) builder.Append(",persistent=1");
         if (value.RequireAgendaStolenDuringRun) builder.Append(",requireAgendaStolenDuringRun=1");
         if (value.ActiveWhileUnrezzed)

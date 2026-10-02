@@ -298,7 +298,9 @@ public static partial class GameEngine
                 return;
             case BehaviorInstructionKind.GainCredits:
                 int creditGain = StaticOrDynamicAmount(working, frame, instruction);
-                ApplyCreditDeltaIfNonZero(working, ResolveBehaviorRecipient(working, frame, instruction), creditGain);
+                PlayerId gainer = ResolveBehaviorRecipient(working, frame, instruction);
+                ApplyCreditDeltaIfNonZero(working, gainer, creditGain);
+                RecordCardCreditGain(working, frame, gainer, creditGain);
                 AdvanceBehaviorCursor(working, frame);
                 return;
             case BehaviorInstructionKind.LoseCredits:
@@ -327,7 +329,8 @@ public static partial class GameEngine
             case BehaviorInstructionKind.LoseClicks:
                 if (instruction.Condition is null || BehaviorConditionMatches(working, frame, instruction.Condition))
                 {
-                    ApplyClickDelta(working, frame.Controller, -instruction.Amount);
+                    PlayerId clickLoser = ResolveBehaviorRecipient(working, frame, instruction);
+                    ApplyClickDelta(working, clickLoser, -Math.Min(instruction.Amount, GetPlayer(working, clickLoser).Clicks));
                 }
 
                 AdvanceBehaviorCursor(working, frame);
@@ -471,7 +474,12 @@ public static partial class GameEngine
                         "A counter instruction must resolve exactly one card target.");
                 }
 
-                AdjustCounter(working, counterTargets[0], instruction.Argument ?? "counter", instruction.Amount);
+                int counterAmount = StaticOrDynamicAmount(working, frame, instruction);
+                if (counterAmount != 0)
+                {
+                    AdjustCounter(working, counterTargets[0], instruction.Argument ?? "counter", counterAmount);
+                }
+
                 AdvanceBehaviorCursor(working, frame);
                 return;
             case BehaviorInstructionKind.AddTags:
@@ -500,6 +508,45 @@ public static partial class GameEngine
                 MarkScoreProhibition(working, frame.SourceCardId);
                 AdvanceBehaviorCursor(working, frame);
                 break;
+            case BehaviorInstructionKind.RemoveCounter:
+                IReadOnlyList<CardInstanceId> removeTargets = instruction.Target is null
+                    || instruction.Target.Kind == BehaviorTargetKind.Self
+                    ? [frame.SourceCardId]
+                    : ResolveBehaviorCards(working, frame, instruction.Target);
+                foreach (CardInstanceId removeTarget in removeTargets)
+                {
+                    string counterName = instruction.Argument ?? "counter";
+                    int present = CurrentCounter(working, removeTarget, counterName);
+                    if (present > 0)
+                    {
+                        AdjustCounter(working, removeTarget, counterName, -Math.Min(present, instruction.Amount));
+                    }
+                }
+
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.FlipSelf:
+                FlipSource(working, frame.SourceCardId);
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.ForfeitAgenda:
+                ResolveBehaviorForfeit(working, frame, instruction);
+                return;
+            case BehaviorInstructionKind.GainAllottedClicksNextTurn:
+                GrantNextTurnClicks(working, GetPlayer(working, ResolveBehaviorRecipient(working, frame, instruction)).Side, instruction.Amount);
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.ProhibitScoringTargetThisTurn:
+                foreach (CardInstanceId prohibited in ResolveBehaviorCards(working, frame, instruction.Target))
+                {
+                    MarkCardScoreProhibition(working, prohibited);
+                }
+
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.Sabotage:
+                ResolveBehaviorSabotage(working, frame, instruction);
+                return;
             case BehaviorInstructionKind.RezIgnoringCosts:
                 ResolveBehaviorRezIgnoringCosts(working, frame, instruction);
                 break;
@@ -1744,7 +1791,9 @@ public static partial class GameEngine
         {
             BehaviorConditionKind.Tagged => TagsForCondition(working, frame, condition) > 0,
             BehaviorConditionKind.NotTagged => TagsForCondition(working, frame, condition) <= 0,
-            BehaviorConditionKind.ClicksRemainingAtLeast => controller.Clicks >= condition.Value.GetValueOrDefault(),
+            BehaviorConditionKind.ClicksRemainingAtLeast => (condition.SubjectSide is { } clickSide
+                ? GetPlayer(working, clickSide)
+                : controller).Clicks >= condition.Value.GetValueOrDefault(),
             BehaviorConditionKind.Installed => IsInstalledCard(working, frame.SourceCardId),
             BehaviorConditionKind.InstalledThisTurn => CurrentFacts(working, frame.Controller)?.InstalledCardIds.Contains(frame.SourceCardId) == true,
             BehaviorConditionKind.SuccessfulRun => working.RunState?.Successful == true,
@@ -1848,6 +1897,15 @@ public static partial class GameEngine
         return actual.HasValue && actual.Value == condition.Value;
     }
 
+    private static int SourceExcessAdvancement(WorkingState working, CardInstanceId cardId)
+    {
+        CardInstanceState card = GetCard(working, cardId);
+        int requirement = working.RuntimeCardCatalog?.TryGet(card.DefinitionId, out CardRuntimeSpec? spec) == true
+            ? spec!.AdvancementRequirement
+            : 0;
+        return Math.Max(0, card.AdvancementCounters - requirement);
+    }
+
     private static int CurrentCounter(WorkingState working, CardInstanceId cardId, string counterName) =>
         working.RulesState?.Counters.SingleOrDefault(counter =>
             counter.CardId == cardId
@@ -1874,6 +1932,7 @@ public static partial class GameEngine
                 BehaviorAmountKind.ControllerClicks => GetPlayer(working, frame.Controller).Clicks,
                 BehaviorAmountKind.SourceAdvancementCounters => GetCard(working, frame.SourceCardId).AdvancementCounters,
                 BehaviorAmountKind.ChosenCardInstallCost => ChosenCardInstallCost(working, frame),
+                BehaviorAmountKind.SourceExcessAdvancement => SourceExcessAdvancement(working, frame.SourceCardId),
                 _ => throw new ResolutionFailureException($"Amount kind '{kind}' is not executable."),
             };
             return checked(counted * operand.Multiplier + operand.Offset);
@@ -3035,6 +3094,7 @@ public static partial class GameEngine
             return working.Cards
                 .Where(card => IsInstalledCard(working, card.Id)
                     && (owner is null || card.OwnerSide == owner.Value)
+                    && (!target.IsOther || card.Id != excludedCardId)
                     && (target.Kind != BehaviorTargetKind.InstalledCardNotThisTurn
                         || !IsInstalledThisTurn(working, card.Id, owner))
                     && BehaviorCardMatches(working, card.Id, target.Filter))
@@ -3700,6 +3760,7 @@ public static partial class GameEngine
             CardInstanceState accessed = ResolveAccessedCardTarget(working, frame);
             ZoneState source = ZoneForCard(working, accessed.Id);
             ZoneState discard = GetBehaviorZone(working, BehaviorZone.Archives, PlayerSide.Corp);
+            ServerId? installedServer = source.Kind is ZoneKind.ServerRoot or ZoneKind.ServerIce ? source.ServerId : null;
             TrashCard(working, accessed, source, discard);
 
             // Access trash is a public reveal even when the card was an
@@ -3722,7 +3783,7 @@ public static partial class GameEngine
                 EngineEventKinds.AccessedCardTrashed,
                 new AccessedCardTrashedEventPayload(run.Id, accessed.Id, trashCost: 0));
             AdvanceBehaviorCursor(working, frame);
-            QueueIdentityOccurrence(working, OccurrenceKind.AccessedCardTrashed, PlayerSide.Runner, accessed.Id);
+            QueueAccessedCardTrashedOccurrence(working, accessed.Id, accessed.Rezzed, installedServer);
             return;
         }
 
@@ -4571,6 +4632,8 @@ public static partial class GameEngine
             BehaviorConditionKind.NotTagged => RunnerTags(working) <= 0,
             BehaviorConditionKind.SourceAdvancementAtLeast => sourceCardId is { } advanced
                 && GetCard(working, advanced).AdvancementCounters >= condition.Value.GetValueOrDefault(),
+            BehaviorConditionKind.ClicksRemainingAtLeast =>
+                GetPlayer(working, condition.SubjectSide ?? GetPlayer(working, owner).Side).Clicks >= condition.Value.GetValueOrDefault(),
             _ => SharedConditionMatches(working, owner, condition) ?? false,
         };
 }

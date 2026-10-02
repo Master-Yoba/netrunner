@@ -55,8 +55,9 @@ public static partial class GameEngine
         var materialized = new List<AbilityActionParameters>();
         foreach ((CardInstanceState source, ZoneState sourceZone) in EnumerateAbilitySources(working))
         {
+            bool inRunnerScoreArea = sourceZone.Kind == ZoneKind.RunnerScore;
             if (source.OwnerSide != window.ControllerSide
-                || sourceZone.OwnerSide != source.OwnerSide)
+                || sourceZone.OwnerSide != source.OwnerSide && !inRunnerScoreArea)
             {
                 continue;
             }
@@ -81,6 +82,11 @@ public static partial class GameEngine
 
             foreach (BehaviorPaidAbility ability in definition.PaidAbilities)
             {
+                if (inRunnerScoreArea && !ability.UsableFromRunnerScoreArea)
+                {
+                    continue;
+                }
+
                 if (!AbilityWindowMatches(window, ability)
                     || !AbilityConditionsMatch(working, source, window.ControllerId, ability.Conditions)
                     || !CanAffordAbility(working, source, window.ControllerId, ability))
@@ -790,7 +796,8 @@ public static partial class GameEngine
             };
 
             bool corpServer = server is not null;
-            if (!runnerRig && !corpServer)
+            bool identityOrScore = IsIdentityOrScoreAbilityZone(zone);
+            if (!runnerRig && !corpServer && !identityOrScore)
             {
                 continue;
             }
@@ -816,9 +823,34 @@ public static partial class GameEngine
                 {
                     yield return (card, zone);
                 }
+                else if (identityOrScore && IsIdentityOrScoreAbilitySource(card, zone))
+                {
+                    yield return (card, zone);
+                }
             }
         }
     }
+
+    /// <summary>Identity zones and score areas, whose faceup cards may have paid abilities (Elevation).</summary>
+    internal static bool IsIdentityOrScoreAbilityZone(ZoneState zone) =>
+        zone.ServerId is null
+        && zone.Kind is ZoneKind.CorpIdentity or ZoneKind.RunnerIdentity or ZoneKind.CorpScore or ZoneKind.RunnerScore;
+
+    /// <summary>
+    /// A faceup identity in its owner's identity zone, or a Corp agenda in
+    /// either score area (an agenda's ability in the Runner's score area also
+    /// needs <see cref="BehaviorPaidAbility.UsableFromRunnerScoreArea"/>).
+    /// </summary>
+    internal static bool IsIdentityOrScoreAbilitySource(CardInstanceState card, ZoneState zone) =>
+        card.FaceUp
+        && zone.ServerId is null
+        && zone.Kind switch
+        {
+            ZoneKind.CorpIdentity => card.OwnerSide == PlayerSide.Corp && zone.OwnerSide == PlayerSide.Corp,
+            ZoneKind.RunnerIdentity => card.OwnerSide == PlayerSide.Runner && zone.OwnerSide == PlayerSide.Runner,
+            ZoneKind.CorpScore or ZoneKind.RunnerScore => card.OwnerSide == PlayerSide.Corp,
+            _ => false,
+        };
 
     private static TurnFactsState? CurrentAbilityFacts(WorkingState working)
     {

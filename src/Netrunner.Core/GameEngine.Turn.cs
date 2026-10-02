@@ -285,6 +285,13 @@ public static partial class GameEngine
             throw new ResolutionFailureException("Turn frame does not match the active turn.");
         }
 
+        if (frame.Stage is TurnFrameStage.BeforeTurnPriority or TurnFrameStage.ActionPriority
+                or TurnFrameStage.DiscardPriority or TurnFrameStage.AwaitingAction
+            && FlushDeferredOccurrence(working))
+        {
+            return;
+        }
+
         switch (frame.Stage)
         {
             case TurnFrameStage.GainAllottedClicks:
@@ -343,7 +350,8 @@ public static partial class GameEngine
     private static void AllotTurnClicks(WorkingState working, TurnFrame frame)
     {
         PlayerState player = GetPlayer(working, frame.ActiveSide);
-        int allotted = frame.ActiveSide == PlayerSide.Corp ? 3 : 4;
+        int allotted = (frame.ActiveSide == PlayerSide.Corp ? 3 : 4)
+            + (working.Turn.History?.ThisTurn(frame.ActiveSide)?.NextTurnExtraClicks ?? 0);
         ReplacePlayer(working, new PlayerState(
             player.Id,
             player.Side,
@@ -676,6 +684,10 @@ public static partial class GameEngine
             frame.ActiveSide,
             frame.TurnNumber,
             TurnFrameStage.DiscardSelection);
+        if (working.BehaviorCatalog.TracksTurnEvents)
+        {
+            QueueIdentityOccurrence(working, OccurrenceKind.ActionPhaseEnded, frame.ActiveSide);
+        }
     }
 
     private static void BeginTurnDiscard(WorkingState working, TurnFrame frame)

@@ -420,6 +420,10 @@ public static partial class GameEngine
             playArea.Id,
             plan.CreditCost));
         RecordTurnEvent(working, side, side == PlayerSide.Corp ? TurnEventKind.OperationPlayed : TurnEventKind.EventPlayed);
+        if (side == PlayerSide.Corp && ActiveTurnEventCount(working, TurnEventKind.OperationPlayed) == 1)
+        {
+            DeferOccurrence(working, OccurrenceKind.FirstOperationPlayedThisTurn, PlayerSide.Corp, plan.Card.Id);
+        }
 
         PushBehaviorChild(
             working,

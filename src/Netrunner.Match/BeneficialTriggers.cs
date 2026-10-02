@@ -79,6 +79,12 @@ public static class BeneficialTriggers
             [BehaviorInstructionKind.ShuffleSearchedDeck] = EffectVerdict.PlayerDecides,
             [BehaviorInstructionKind.RemoveTags] = EffectVerdict.PlayerDecides,
             [BehaviorInstructionKind.ModifySourceStrength] = EffectVerdict.PlayerDecides,
+            [BehaviorInstructionKind.FlipSelf] = EffectVerdict.PlayerDecides,
+            [BehaviorInstructionKind.RemoveCounter] = EffectVerdict.PlayerDecides,
+            [BehaviorInstructionKind.ForfeitAgenda] = EffectVerdict.PlayerDecides,
+            [BehaviorInstructionKind.GainAllottedClicksNextTurn] = EffectVerdict.PlayerDecides,
+            [BehaviorInstructionKind.ProhibitScoringTargetThisTurn] = EffectVerdict.PlayerDecides,
+            [BehaviorInstructionKind.Sabotage] = EffectVerdict.PlayerDecides,
         };
 
     /// <summary>The verdict for an effect kind; an unclassified kind is the player's decision.</summary>

@@ -110,7 +110,9 @@ public sealed record TurnFactsState
         IReadOnlyList<CardInstanceId>? programInstallOccurrenceIds = null,
         IReadOnlyList<ServerId>? hqBreachOccurrenceServerIds = null,
         IReadOnlyList<OccurrenceId>? basicDrawOccurrenceIds = null,
-        IReadOnlyList<TurnEventCount>? eventCounts = null)
+        IReadOnlyList<TurnEventCount>? eventCounts = null,
+        IReadOnlyList<DeferredOccurrence>? deferredOccurrences = null,
+        int nextTurnExtraClicks = 0)
     {
         Version = version;
         Side = side;
@@ -175,6 +177,16 @@ public sealed record TurnFactsState
         }
 
         EventCounts = counts.Length == 0 ? null : new ReadOnlyCollection<TurnEventCount>(counts);
+        DeferredOccurrence[] deferred = (deferredOccurrences ?? [])
+            .Select(static value =>
+            {
+                ArgumentNullException.ThrowIfNull(value);
+                return new DeferredOccurrence(value.Kind, value.Controller, value.SubjectCardId);
+            })
+            .ToArray();
+        DeferredOccurrences = deferred.Length == 0 ? null : new ReadOnlyCollection<DeferredOccurrence>(deferred);
+        ArgumentOutOfRangeException.ThrowIfNegative(nextTurnExtraClicks);
+        NextTurnExtraClicks = nextTurnExtraClicks;
     }
 
     public TurnFactsState(PlayerSide side, int turnNumber, int clicksAllotted)
@@ -300,6 +312,56 @@ public sealed record TurnFactsState
     [JsonInclude]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<TurnEventCount>? EventCounts { get; private set; }
+
+    /// <summary>
+    /// Occurrences raised mid-action (a tag removed, credits gained through a
+    /// card ability, an agenda forfeited) that open their trigger checkpoint
+    /// once the action completes, in order. Omitted while empty.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<DeferredOccurrence>? DeferredOccurrences { get; private set; }
+
+    /// <summary>Extra clicks this side is allotted at the start of its next turn ("+1 allotted click").</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int NextTurnExtraClicks { get; private set; }
+
+    internal TurnFactsState WithDeferredOccurrences(IReadOnlyList<DeferredOccurrence> deferred) => New(
+        turnBegan: TurnBegan,
+        mandatoryDrawPerformed: MandatoryDrawPerformed,
+        actionPhaseEnded: ActionPhaseEnded,
+        discardPhaseEnded: DiscardPhaseEnded,
+        clicksLost: ClicksLost,
+        installedCardIds: InstalledCardIds,
+        successfulRun: SuccessfulRun,
+        usedAbilityKeys: UsedAbilityKeys,
+        attemptedRunServerIds: AttemptedRunServerIds,
+        successfulRunServerIds: SuccessfulRunServerIds,
+        accessedCardOccurrenceIds: AccessedCardOccurrenceIds,
+        trashedCardOccurrenceIds: TrashedCardOccurrenceIds,
+        agendaTurnChanges: AgendaTurnChanges,
+        tagTurnChanges: TagTurnChanges,
+        firstXUseKeys: FirstXUseKeys,
+        deferredOccurrences: deferred);
+
+    internal TurnFactsState WithNextTurnExtraClicks(int extra) => New(
+        turnBegan: TurnBegan,
+        mandatoryDrawPerformed: MandatoryDrawPerformed,
+        actionPhaseEnded: ActionPhaseEnded,
+        discardPhaseEnded: DiscardPhaseEnded,
+        clicksLost: ClicksLost,
+        installedCardIds: InstalledCardIds,
+        successfulRun: SuccessfulRun,
+        usedAbilityKeys: UsedAbilityKeys,
+        attemptedRunServerIds: AttemptedRunServerIds,
+        successfulRunServerIds: SuccessfulRunServerIds,
+        accessedCardOccurrenceIds: AccessedCardOccurrenceIds,
+        trashedCardOccurrenceIds: TrashedCardOccurrenceIds,
+        agendaTurnChanges: AgendaTurnChanges,
+        tagTurnChanges: TagTurnChanges,
+        firstXUseKeys: FirstXUseKeys,
+        nextTurnExtraClicks: extra);
 
     /// <summary>How many times an event happened this turn.</summary>
     public int EventCount(TurnEventKind kind) =>
@@ -665,7 +727,9 @@ public sealed record TurnFactsState
         IReadOnlyList<CardInstanceId>? programInstallOccurrenceIds = null,
         IReadOnlyList<ServerId>? hqBreachOccurrenceServerIds = null,
         IReadOnlyList<OccurrenceId>? basicDrawOccurrenceIds = null,
-        IReadOnlyList<TurnEventCount>? eventCounts = null) => new(
+        IReadOnlyList<TurnEventCount>? eventCounts = null,
+        IReadOnlyList<DeferredOccurrence>? deferredOccurrences = null,
+        int? nextTurnExtraClicks = null) => new(
         Version,
         Side,
         TurnNumber,
@@ -688,7 +752,9 @@ public sealed record TurnFactsState
         programInstallOccurrenceIds ?? ProgramInstallOccurrenceIds,
         hqBreachOccurrenceServerIds ?? HqBreachOccurrenceServerIds,
         basicDrawOccurrenceIds ?? BasicDrawOccurrenceIds,
-        eventCounts ?? EventCounts);
+        eventCounts ?? EventCounts,
+        deferredOccurrences ?? DeferredOccurrences,
+        nextTurnExtraClicks ?? NextTurnExtraClicks);
 
 }
 
@@ -878,6 +944,12 @@ public sealed record TurnHistoryState
 
     internal TurnHistoryState Copy() => new(Version, CorpThisTurn, CorpLastTurn, RunnerThisTurn, RunnerLastTurn);
 
+    internal TurnHistoryState WithDeferredOccurrences(PlayerSide side, IReadOnlyList<DeferredOccurrence> deferred) =>
+        ReplaceCurrent(side, RequireCurrent(side).WithDeferredOccurrences(deferred));
+
+    internal TurnHistoryState WithNextTurnExtraClicks(PlayerSide side, int extra) =>
+        ReplaceCurrent(side, RequireCurrent(side).WithNextTurnExtraClicks(extra));
+
     internal TurnHistoryState RecordEvent(PlayerSide side, TurnEventKind kind)
     {
         TurnFactsState current = ThisTurn(side)
@@ -1064,6 +1136,57 @@ public enum TurnEventKind
 
     /// <summary>The Runner played an event.</summary>
     EventPlayed,
+
+    /// <summary>The Runner stole an agenda or trashed a Corp card.</summary>
+    CorpCardStolenOrTrashed,
+
+    /// <summary>The Runner trashed an installed Corp card.</summary>
+    InstalledCorpCardTrashed,
+
+    /// <summary>An agenda was scored or stolen.</summary>
+    AgendaScoredOrStolen,
+
+    /// <summary>A run began.</summary>
+    RunBegan,
+
+    /// <summary>One of the Runner's tags was removed.</summary>
+    TagRemoved,
+
+    /// <summary>The Corp gained credits through an ability on an agenda or operation.</summary>
+    CardCreditGain,
+}
+
+/// <summary>
+/// An occurrence raised in the middle of an action whose trigger checkpoint
+/// opens once the action completes (CR 9.1: triggers wait for the current
+/// ability to finish resolving).
+/// </summary>
+public sealed record DeferredOccurrence
+{
+    [JsonConstructor]
+    public DeferredOccurrence(OccurrenceKind kind, PlayerSide controller, CardInstanceId? subjectCardId = null)
+    {
+        if (!Enum.IsDefined(kind) || !Enum.IsDefined(controller))
+        {
+            throw new ArgumentOutOfRangeException(nameof(kind));
+        }
+
+        Kind = kind;
+        Controller = controller;
+        SubjectCardId = subjectCardId;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public OccurrenceKind Kind { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public PlayerSide Controller { get; private set; }
+
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CardInstanceId? SubjectCardId { get; private set; }
 }
 
 /// <summary>How many times one typed event happened during a turn.</summary>

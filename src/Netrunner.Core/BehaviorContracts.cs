@@ -305,6 +305,12 @@ public enum BehaviorAmountKind
 
     /// <summary>The printed install cost of the card bound by the behavior's choice.</summary>
     ChosenCardInstallCost,
+
+    /// <summary>
+    /// EL-DIVIDENDS: the source agenda's advancement counters beyond its
+    /// advancement requirement (never negative).
+    /// </summary>
+    SourceExcessAdvancement,
 }
 
 /// <summary>

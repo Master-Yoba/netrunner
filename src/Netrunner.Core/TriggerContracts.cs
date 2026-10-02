@@ -43,6 +43,27 @@ public enum OccurrenceKind
     /// (<see cref="BehaviorSubroutineSpec"/>), with the ICE as its source.
     /// </summary>
     IceSubroutine,
+
+    /// <summary>EL-ACTION-PHASE-END: the active player's action phase ended.</summary>
+    ActionPhaseEnded,
+
+    /// <summary>A run began (after its initiation), on the attacked server.</summary>
+    RunBegan,
+
+    /// <summary>EL-FORFEIT: an agenda was forfeited; the subject is the agenda.</summary>
+    AgendaForfeited,
+
+    /// <summary>EL-TAG-REMOVED: the first time this turn one of the Runner's tags was removed.</summary>
+    FirstTagRemovalThisTurn,
+
+    /// <summary>
+    /// The first time this turn the Corp gained credits through an ability on
+    /// an agenda or operation; the subject is that card.
+    /// </summary>
+    FirstCardCreditGainThisTurn,
+
+    /// <summary>The first time this turn the Corp played an operation; the subject is the operation.</summary>
+    FirstOperationPlayedThisTurn,
 }
 
 public enum OccurrencePhase
@@ -193,7 +214,7 @@ public sealed record OccurrenceSnapshot
         RemoveLingeringEffect value => new RemoveLingeringEffect(value.EffectId),
         MoveCardEffect value => new MoveCardEffect(value.CardId, value.DestinationZoneId),
         TurnBoundaryEffect value => new TurnBoundaryEffect(value.Kind, value.Target, value.TurnNumber),
-        GameplayOccurrenceEffect value => new GameplayOccurrenceEffect(value.Kind, value.Controller, value.SubjectCardId, value.ServerId, value.Successful, value.RunContext),
+        GameplayOccurrenceEffect value => new GameplayOccurrenceEffect(value.Kind, value.Controller, value.SubjectCardId, value.ServerId, value.Successful, value.RunContext, value.SubjectWasRezzed),
         BasicDrawEffect value => new BasicDrawEffect(value.Side, value.DrawCount, value.IsReplacement, value.OccurrenceId, value.IsFirstBasicDraw),
         _ => throw new ArgumentException($"Unknown effect instruction type '{effect.GetType().Name}'.", nameof(effect)),
     };

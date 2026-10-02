@@ -145,10 +145,10 @@ public sealed class BehaviorContractsTests
         Assert.Equal(BehaviorConditionKind.SuccessfulRunThisTurn, successfulRun.Kind);
         Assert.Throws<ArgumentException>(() =>
             new BehaviorCondition(BehaviorConditionKind.Tagged, fact: "unexpected"));
+        Assert.Equal(PlayerSide.Runner, BehaviorCondition.ClicksAtLeast(1, PlayerSide.Runner).SubjectSide);
         Assert.Throws<ArgumentException>(() =>
             new BehaviorCondition(
-                BehaviorConditionKind.ClicksRemainingAtLeast,
-                value: 1,
+                BehaviorConditionKind.InstalledThisTurn,
                 subjectSide: PlayerSide.Runner));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             BehaviorCondition.Tagged((PlayerSide)999));
@@ -832,6 +832,9 @@ public sealed class BehaviorContractsTests
                 OccurrenceKind.HostedCreditPoolEmptied,
                 OccurrenceKind.CardAdvancedFromZero,
                 OccurrenceKind.AccessedCardTrashed,
+                OccurrenceKind.AgendaForfeited,
+                OccurrenceKind.FirstCardCreditGainThisTurn,
+                OccurrenceKind.FirstOperationPlayedThisTurn,
             }))
         {
             Assert.Throws<ArgumentException>(() => new BehaviorTrigger(

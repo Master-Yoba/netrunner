@@ -1003,7 +1003,13 @@ public static partial class GameEngine
             or OccurrenceKind.Tags
             or OccurrenceKind.CardAdvancedFromZero
             or OccurrenceKind.AccessedCardTrashed
-            or OccurrenceKind.DiscardPhaseEnded))
+            or OccurrenceKind.DiscardPhaseEnded
+                or OccurrenceKind.ActionPhaseEnded
+                or OccurrenceKind.RunBegan
+                or OccurrenceKind.AgendaForfeited
+                or OccurrenceKind.FirstTagRemovalThisTurn
+                or OccurrenceKind.FirstCardCreditGainThisTurn
+                or OccurrenceKind.FirstOperationPlayedThisTurn))
         {
             return [];
         }
@@ -1022,7 +1028,9 @@ public static partial class GameEngine
 
             foreach (BehaviorTrigger trigger in definition.Triggers)
             {
-                if (!CatalogTriggerSourceIsActive(working, source, trigger, activeRunEventSource)
+                if (!(CatalogTriggerSourceIsActive(working, source, trigger, activeRunEventSource)
+                        || IsTrashedSelfTriggerSource(working, source, trigger, occurrence.SourceCardId)
+                            && SubjectWasRezzed(occurrence))
                     || trigger.Occurrence != occurrence.Kind
                     || occurrence.Kind == OccurrenceKind.TurnBegin
                         && trigger.Scope == BehaviorTriggerScope.Self
@@ -1177,7 +1185,8 @@ public static partial class GameEngine
 
             if (definition.Triggers.Any(trigger =>
                 trigger.Occurrence == occurrenceKind
-                && CatalogTriggerSourceIsActive(working, source, trigger, activeRunEventSource)
+                && (CatalogTriggerSourceIsActive(working, source, trigger, activeRunEventSource)
+                    || IsTrashedSelfTriggerSource(working, source, trigger, subjectCardId))
                 && (trigger.ServerKindRequirement is null
                     || serverId is { } suppliedServerId
                         && working.Servers.FirstOrDefault(candidate => candidate.Id == suppliedServerId)?.Kind
@@ -1219,12 +1228,20 @@ public static partial class GameEngine
         bool activeRunEventSource)
     {
         bool installed = IsInstalledCard(working, source.Id);
+        if (trigger.Face is { } face && face != SourceFace(working, source.Id))
+        {
+            return false;
+        }
+
         return (!trigger.RequireSourceInstalled || installed)
             && (activeRunEventSource
                 || RuntimeCardActivity.IsActive(source, working.Zones)
                 || trigger.Occurrence == OccurrenceKind.AgendaScoredOrStolen
                     && trigger.Scope == BehaviorTriggerScope.Self
                     && working.Zones.Any(zone => zone.Id == source.ZoneId && zone.Kind == ZoneKind.RunnerScore)
+                || trigger.Occurrence == OccurrenceKind.AgendaForfeited
+                    && trigger.Scope == BehaviorTriggerScope.Self
+                    && working.Zones.Any(zone => zone.Id == source.ZoneId && zone.Kind == ZoneKind.CorpRemovedFromGame)
                 || trigger.ActiveWhileUnrezzed && installed && source.OwnerSide == PlayerSide.Corp);
     }
 

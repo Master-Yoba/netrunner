@@ -2744,7 +2744,7 @@ public static partial class StateInvariantValidator
                 && occurrence.SubjectCardId is { } trashed
                 && run.ChosenAccessCards.Contains(trashed)
                 && run.AccessedCards.Contains(trashed)
-                && occurrence.ServerId is null
+                && (occurrence.ServerId is null || occurrence.ServerId == run.AttackedServer)
                 && state.Zones.Any(zone => zone.Kind == ZoneKind.CorpDiscard && zone.CardIds.Contains(trashed)),
             OccurrenceKind.AgendaScoredOrStolen => run.InitiatingSide == PlayerSide.Runner
                 && run.Successful
@@ -2760,6 +2760,10 @@ public static partial class StateInvariantValidator
                     && zone.CardIds.Contains(agenda))
                 && occurrence.ServerId == run.AttackedServer,
             OccurrenceKind.CardRezzed => IsExpectedRunCardRezzedOccurrence(state, run, occurrence),
+            OccurrenceKind.RunBegan => run.Step == RunTimingStep.InitiationPaidWindow
+                && frame.Controller == run.InitiatingPlayer
+                && occurrence.SubjectCardId is null
+                && occurrence.ServerId == run.AttackedServer,
             _ => false,
         };
     }
@@ -5565,6 +5569,11 @@ public static partial class StateInvariantValidator
         CardInstanceState source,
         ZoneState zone)
     {
+        if (GameEngine.IsIdentityOrScoreAbilityZone(zone))
+        {
+            return GameEngine.IsIdentityOrScoreAbilitySource(source, zone);
+        }
+
         if (source.OwnerSide == PlayerSide.Runner)
         {
             return zone.Kind == ZoneKind.RunnerRig
@@ -12322,6 +12331,7 @@ public static partial class StateInvariantValidator
                 runtimeCardCatalog,
                 target,
                 instruction.Kind == BehaviorInstructionKind.Search || target.Kind is BehaviorTargetKind.ZoneCard or BehaviorTargetKind.ZoneCards
+                    || target.IsOther
                     ? frame.SourceCardId
                     : null);
             if (instruction.Kind == BehaviorInstructionKind.Choose
@@ -12536,6 +12546,7 @@ public static partial class StateInvariantValidator
             return state.Cards
                 .Where(card => card is not null && IsInstalledCard(state, card.Id)
                     && (owner is null || card.OwnerSide == owner.Value)
+                    && (!target.IsOther || card.Id != excludedCardId)
                     && (target.Kind != BehaviorTargetKind.InstalledCardNotThisTurn
                         || !IsInstalledThisTurn(state, card.Id, owner))
                     && BehaviorCardMatches(state, behaviorCatalog, runtimeCardCatalog, card.Id, target.Filter))

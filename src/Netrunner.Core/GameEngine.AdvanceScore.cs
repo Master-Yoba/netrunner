@@ -181,7 +181,8 @@ public static partial class GameEngine
                     || spec.CardClass != RuntimeCardClass.Agenda
                     || spec.AgendaPoints <= 0
                     || spec.AdvancementRequirement <= 0
-                    || card.AdvancementCounters < spec.AdvancementRequirement)
+                    || card.AdvancementCounters < spec.AdvancementRequirement
+                    || IsCardScoreProhibited(working, card.Id))
                 {
                     continue;
                 }
@@ -250,6 +251,9 @@ public static partial class GameEngine
         // the first evidence, then normalize the public scored card and emit
         // the typed score evidence.
         MoveCard(working, card, source, score);
+        // EL-DIVIDENDS: a scored agenda keeps its advancement counters as
+        // last-known information for "each excess advancement counter".
+        // Only the Elevation pool reads it, so Gateway scores keep their bytes.
         ReplaceCard(working, new CardInstanceState(
             card.Id,
             card.DefinitionId,
@@ -257,7 +261,7 @@ public static partial class GameEngine
             PlayerSide.Corp,
             faceUp: true,
             rezzed: false,
-            GetCard(working, card.Id).AdvancementCounters));
+            working.BehaviorCatalog.TracksTurnEvents ? card.AdvancementCounters : GetCard(working, card.Id).AdvancementCounters));
         AddAgendaPoints(working, PlayerSide.Corp, spec.AgendaPoints);
         Emit(working, EngineEventKinds.AgendaScored, new AgendaScoredEventPayload(
             PlayerSide.Corp,
@@ -271,6 +275,7 @@ public static partial class GameEngine
             AgendaTurnChangeKind.Score);
 
         RefreshRemoteLifecycle(working, server.Id);
+        RecordActiveTurnEvent(working, TurnEventKind.AgendaScoredOrStolen);
 
         if (GetPlayer(working, PlayerSide.Corp).AgendaPoints >= RealGameRules.AgendaPointsToWin)
         {
