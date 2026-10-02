@@ -117,9 +117,11 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// <remarks>
     /// V18 is V15 with only the reinstall fix (no install over its own copy or a second console), a fix that can only remove
     /// wasted installs. V16 and V17, with more changes, lost to Codex on deals V15 won (1 October), so they aren't the default,
-    /// nor is V19: level on the bot ladder, it won 1 of 12 on batch 3's deals where V18 won 6 of 24.
+    /// nor is V19: level on the bot ladder, it won 1 of 12 on batch 3's deals where V18 won 6 of 24. V20 (V18 with the Wave 5
+    /// playtest's fixes, 2 October) is: -17 and +49 on the bot ladder, and its fixes only remove plays the playtest showed were
+    /// wrong. Its Codex check was cut short when the quota ran out (1 of 6).
     /// </remarks>
-    public const string PolicyVersion = V18;
+    public const string PolicyVersion = V20;
     /// <summary>
     /// The planner's model of the Runner. It stays V7, which Corp v9 was measured
     /// with, so the shipped Corp planner plays as it did.

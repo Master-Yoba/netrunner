@@ -135,3 +135,32 @@ To play: **New game → Gateway decks**, pick a seat and decks, then **Easy, Sta
   - Asset spam: wide, with many assets.
   - Aggressive: runs from turn 1.
   - Rig-builder: sets up first.
+
+## The first playtest (2 October) and its fixes
+
+Three games, reviewed from their session zips (decision logs by `ai-llm-review --logs-only` over the sessions saved as
+ladder games). Each fault is a saved-game regression test (`PlaytestWave5Tests`).
+
+| Game | Played | What the player saw | Cause in the logs | Fix |
+|---|---|---|---|---|
+| 1 | Corp vs Standard Runner (Stolen Goods) | Never installed a fracter | Never drew Marjanah. At turn 7 Mutual Favor offered Carmen or Marjanah and took Carmen (506 to 431), with two barriers out and no sentry. A tutor's target was valued as a generic card, not by what it breaks. It also mulliganed an opening hand holding Mutual Favor. | **Runner v20:** a tutor's breaker is valued by its coverage, as installing it is; V19's fix that counts a tutor as coverage when keeping a hand |
+| 2 | Runner vs Standard Corp (Discretion Advised) | Overinvested in two Urticas; R&D thin | Both Urtica Ciphers were advanced past lethal (to +6 and +5) on remotes never run. The heuristic scored those advances −30 (already lethal), and the planner's rollouts raised them, since evaluation set 3 counts counters on any advanceable card as scoring progress. The clicks went to traps, HQ stayed empty, and R&D kept one Palisade while it was run six times. | **Corp v25:** a lethal trap's advance is a priority veto the planner can't lift, and the planner scores with set 4, where the Corp's own trap counters aren't progress |
+| 2 | | Didn't use the remote with the upgrade | Brân 1.0 went to protect a rezzed Nico Campaign (250) over the Manegarm Skunkworks remote (95), and Offworld Office followed Brân. The run model prices Manegarm's toll, and judged Brân's remote the harder one. | **Not changed.** An upgrade-remote bonus didn't move the planner, and the choice is defensible. |
+| 3 | Corp vs Hard aggressive Runner (Stolen Goods vs Quick and Dirty) | Felt easier than Standard | Broke all game (0 to 4 credits) with two Sure Gambles in the grip: it took tags through Funhouse and cleared seven at 2 credits each, against a Corp that never punished one. Clearing a tag had priority 10, so it outranked every other action whatever its score (−100 here). Standard has this too. | **Runner v20:** a tag is cleared first only while its risk is worth more than the clearing |
+
+Corp v25 is v23 with these fixes (not v24's); Runner v20 is v18 with these (not v19's wallet rule). Ladder entrant:
+`standard-w5` (both).
+
+**Ladder (Gateway, two seeds, 240 games each):** Corp v25 +6 [−86, 88] and +70 [−10, 150]; Runner v20 −17 [−96, 71] and
++49 [−27, 131].
+
+**Against Codex:** cut short when the Codex quota ran out. Only games Codex played to the end are counted:
+- `standard-w5`: 9 games. As Corp it won 1 of 3; as Runner, 1 of 6.
+- Standard on the same new deals: 0 of 3.
+
+That's far too few to separate versions (about 50 games are needed). The replay is worth repeating once the quota resets.
+
+**Decision: Corp v25 and Runner v20 are the defaults.** The ladder is level or better on both seeds, and each fix only
+removes a play the playtest showed was wrong. The promotion rule asks for a Codex check on fixed deals as well; this time
+it rests on the ladder alone, because the quota ran out. The tier, personality and hardening measurements above were made
+on Corp v23 and Runner v18. The Hard and personality profiles carry over unchanged to the new versions.
