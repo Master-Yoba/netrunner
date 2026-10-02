@@ -243,8 +243,10 @@ public sealed partial class CorpHeuristicPolicy
             int counters = card!.AdvancementCounters ?? 0;
             // v20 (Codex review, 1 October): past the Runner's grip, another counter adds no threat; Urtica Cipher
             // took every spare click and credit while the Corp stopped scoring.
+            // v25 (Wave 5 playtest, 2 October): ranked below every other option, so the planner's rollouts, which saw the
+            // counters as progress, can't bring it back (two Urtica Ciphers went to +6 and +5).
             if (context.Generation >= 15 && 2 + counters > context.Features.Board.HiddenZoneCounts.RunnerGrip + 1)
-                return Value(-30, "advance/trap-already-lethal", approximate: true);
+                return new(context.Generation >= 20 ? -1 : 0, -30, "advance/trap-already-lethal", Approximate: true);
             // v23 (reviews of batch 4's losses to Codex, 1 October): the Runner has accessed this trap and won't run into it
             // again; every advancement after that was a click and a credit lost (four games).
             if (context.Generation >= 18 && context.Knowledge?.Exposed?.Contains(card.Id) == true)

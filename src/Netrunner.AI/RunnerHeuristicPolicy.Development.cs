@@ -26,6 +26,17 @@ public sealed partial class RunnerHeuristicPolicy
         return 0;
     }
 
+    /// <summary>What a breaker adds to the rig: little for a second of a type, more against ICE of its type on the board.</summary>
+    internal static int BreakerCoverage(HeuristicContext context, IcebreakerBehaviorSpec breaker)
+    {
+        bool duplicate = context.Features.Board.RunnerRig.Any(known => context.Definition(known)?.Icebreaker?.InterfaceType == breaker.InterfaceType);
+        bool visibleThreat = context.Features.Board.Servers.SelectMany(server => server.Ice).Any(known => context.Definition(known)?.Ice is { } ice
+            && (breaker.InterfaceType == IceType.Any || ice.IceType == breaker.InterfaceType));
+        int value = duplicate ? 150 : breaker.InterfaceType == IceType.Any ? 550 : 730;
+        if (visibleThreat && !duplicate) value += 180;
+        return value;
+    }
+
     private static AgentUtility Install(HeuristicContext context, InstallCardParameters install)
     {
         AgentCard? card = context.Card(install.CardId);
@@ -53,11 +64,7 @@ public sealed partial class RunnerHeuristicPolicy
         int value;
         if (definition.Icebreaker is { } breaker)
         {
-            bool duplicate = context.Features.Board.RunnerRig.Any(known => context.Definition(known)?.Icebreaker?.InterfaceType == breaker.InterfaceType);
-            bool visibleThreat = context.Features.Board.Servers.SelectMany(server => server.Ice).Any(known => context.Definition(known)?.Ice is { } ice
-                && (breaker.InterfaceType == IceType.Any || ice.IceType == breaker.InterfaceType));
-            value = duplicate ? 150 : breaker.InterfaceType == IceType.Any ? 550 : 730;
-            if (visibleThreat && !duplicate) value += 180;
+            value = BreakerCoverage(context, breaker);
         }
         else if (definition.Behavior?.Hosting is not null)
         {

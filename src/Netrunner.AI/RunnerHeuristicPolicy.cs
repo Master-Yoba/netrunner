@@ -105,6 +105,14 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// when keeping an opening hand (it threw back Sure Gamble, Jailbreak and Mutual Favor).
     /// </summary>
     public const string V19 = "runner-heuristic-v19";
+    /// <summary>
+    /// V18 with the fixes from the Wave 5 playtest (2 October), and V19's tutor-in-the-opening-hand fix but not its wallet rule:
+    /// a tutor's breaker is valued by what it breaks on the board, as installing it would be (Mutual Favor fetched Carmen with
+    /// two barriers out and the R&amp;D barrier never broken); a tag is cleared first only while its risk is worth more than the
+    /// clearing costs (broke, with two Sure Gambles in the grip, it paid 2 credits a tag seven times against a Corp that
+    /// never punished one).
+    /// </summary>
+    public const string V20 = "runner-heuristic-v20";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V18 is V15 with only the reinstall fix (no install over its own copy or a second console), a fix that can only remove
@@ -117,7 +125,7 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// with, so the shipped Corp planner plays as it did.
     /// </summary>
     public const string LatestHeuristic = V7;
-    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19];
+    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20];
 
     public RunnerHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -125,10 +133,10 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Runner policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 or V8 or V9 => 6, V10 => 7, V11 or V12 => 8, V13 => 9, V14 => 10, V15 => 11, V16 => 12, V17 => 13, V18 => 14, V19 => 15, _ => 2 };
+        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 or V8 or V9 => 6, V10 => 7, V11 or V12 => 8, V13 => 9, V14 => 10, V15 => 11, V16 => 12, V17 => 13, V18 => 14, V19 => 15, V20 => 16, _ => 2 };
         // V18 on: only the Hard profile (A6) has planner parameters, so Standard and Easy play as before.
         Plans = version is V3 or V8 or V9 || Generation >= 14;
-        Repairs = version is V4 or V5 or V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19;
+        Repairs = version is V4 or V5 or V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19 or V20;
     }
 
     /// <summary>Whether this version has the playtest repairs (V4).</summary>
@@ -210,7 +218,7 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
         ActionKind.PlayCard => Play(context, (PlayCardParameters)action.Parameters),
         ActionKind.InstallCard => Install(context, (InstallCardParameters)action.Parameters),
         ActionKind.StartRun => Run(context, context.Server(((RunServerParameters)action.Parameters).ServerId)),
-        ActionKind.RemoveTag => new(10, RunnerValues.TagRisk(context) - ((RemoveTagParameters)action.Parameters).CreditCost * context.CreditValue, "defense/remove-tag"),
+        ActionKind.RemoveTag => RemoveTag(context, (RemoveTagParameters)action.Parameters),
         ActionKind.JackOut => Value(0, "run/exit"),
         ActionKind.ContinueRun => Continue(context),
         ActionKind.TrashAccessedCard => Trash(context, (RunCardPaymentParameters)action.Parameters),
@@ -260,5 +268,15 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
             || context.Generation >= 15 && context.Definition(card)?.Behavior is { } behavior
                 && HeuristicContext.Flatten(behavior.Instructions).Any(instruction => instruction.Kind == BehaviorInstructionKind.Search));
         return Value((choice.Value == 0) == (economy && coverage) ? 100 : 0, "opening/economy-and-breaker-foundation");
+    }
+
+    /// <summary>
+    /// Clearing a tag comes first (priority 10). v20 (Wave 5 playtest, 2 October): only while the tag's risk is worth more
+    /// than the clearing costs; otherwise it competes with every other action on its score.
+    /// </summary>
+    private static AgentUtility RemoveTag(HeuristicContext context, RemoveTagParameters remove)
+    {
+        int score = RunnerValues.TagRisk(context) - remove.CreditCost * context.CreditValue;
+        return new(context.Generation >= 16 && score <= 0 ? 0 : 10, score, "defense/remove-tag");
     }
 }

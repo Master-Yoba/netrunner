@@ -47,8 +47,9 @@ public sealed partial class RunnerHeuristicPolicy
         }
         int benefit = Effects(context, declaration.Instructions, card, PlayerSide.Runner);
         // v19 (Codex review, 1 October): credits the ability puts in the wallet now are worth what as many basic credits are,
-        // saving for a breaker included (Pennyshaver's 2 lost to a basic credit's 1).
-        if (context.Generation >= 15)
+        // saving for a breaker included (Pennyshaver's 2 lost to a basic credit's 1). Only v19: it lost to Codex where v18
+        // won, and v20 leaves it out.
+        if (context.Generation == 15)
         {
             IReadOnlyList<BehaviorInstruction> flat = [.. HeuristicContext.Flatten(declaration.Instructions)];
             int wallet = flat.Where(instruction => instruction.Kind == BehaviorInstructionKind.GainCredits && instruction.AmountOperand is null).Sum(instruction => instruction.Amount)

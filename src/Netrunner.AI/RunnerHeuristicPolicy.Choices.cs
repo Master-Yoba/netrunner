@@ -34,6 +34,12 @@ public sealed partial class RunnerHeuristicPolicy
         // would replace its own installed copy or a second console.
         if (context.Generation >= 13 && plan.Consumers.Any(instruction => instruction.Kind == BehaviorInstructionKind.InstallCard))
             value -= choice.CardIds.Count(id => ReplacesItsOwn(context, context.Card(id))) * 500;
+        // v20 (Wave 5 playtest, 2 October): a breaker a tutor finds is worth what it would break, as installing it is; Mutual
+        // Favor took Carmen over Marjanah with two barriers on the board and no sentry, and R&D's barrier was never broken.
+        // Measured against an ordinary new breaker, so a breaker keeps its rank against other kinds of cards.
+        if (context.Generation >= 16 && !trash)
+            value += choice.CardIds.Sum(id => context.Definition(context.Card(id))?.Icebreaker is { } breaker
+                ? BreakerCoverage(context, breaker) - 730 : 0);
         return Value(value + (choice.FinalizeSelection ? 1 : 0), "choice/target-value-and-confirmation", true);
     }
 
