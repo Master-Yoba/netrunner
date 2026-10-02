@@ -37,8 +37,7 @@ plays System Gateway, with:
   `make m5-gate`, the tactics suite and every regression suite green.
 - **Bots:**
   - every new card is played by the heuristic bots without errors, and with a valuation that isn't the default;
-  - the deck-pool ladder over the new decks shows no deck warning against the previous versions;
-  - a Claude Sonnet or Codex check on fixed deals doesn't regress.
+  - the deck-pool ladder over the new decks shows no deck warning against the previous versions.
 - **Client:** both sides finish games with every new deck through the client. Every new state is presented: agenda
   counters, flipped identities, threat level, face-up agendas, hosted face-up cards, recurring credits and removed-
   from-game cards.
@@ -61,7 +60,8 @@ plays System Gateway, with:
   - Corp v26 and Runner v22, with A9's tracker of hidden cards, inference and copy counting;
   - Easy, Standard and Hard, and five personalities;
   - the Gateway deck-pool ladder;
-  - Codex and Claude Sonnet as outside opponents (`scripts/ai-codex-play.sh`, `scripts/ai-claude-play.sh`).
+  - Codex and Claude Sonnet as outside opponents (`scripts/ai-codex-play.sh`, `scripts/ai-claude-play.sh`), run only when
+    the user asks (see section 11).
 
 **The E6 baseline** (`scripts/core-growth.py` over Gateway's slices, from git history):
 
@@ -122,7 +122,7 @@ occurrences; identity state; card sources and zones; information; and runs and I
 Each slice is a branch and a PR into `dev`, gated as AGENTS.md says:
 - `make bot-check` per change;
 - the full gates once per batch, in the worktree (`make gates REF=…`);
-- ladders and outside-opponent checks for bot changes.
+- a ladder for each new bot version.
 
 Progress goes to `docs/ELEVATION_PROGRESS.md`.
 
@@ -209,7 +209,6 @@ The ICE, the run events, and the run-interacting hardware, resources, upgrades a
     the new pool's games beats the general fit on held-out games.
   - The tracker (A9) follows the new zones: hosted face-up cards, face-up agendas, Archives installs and removed-from-
     game cards. `ai-belief` stays above its prior.
-  - A Claude Sonnet check on fixed deals against the previous defaults.
 - **Hardening:** 10,000 clean official fuzz games over the pool, and the full `make m5-gate` and tactics.
 - **Client:** every new state presented, accessibility re-checked at 1920×1080 and 2560×1440, and the smoke
   matrices extended to a new deck.
@@ -262,8 +261,7 @@ M4's process ([M4 plan](history/M4_PLAN.md), section 6), plus three steps:
 - [ ] **Bots:**
   - every Elevation card played without errors, with a non-default valuation;
   - the deck-pool ladder has no deck warning;
-  - `ai-belief` is above its prior on the new pool;
-  - an outside-opponent check doesn't regress.
+  - `ai-belief` is above its prior on the new pool.
 - [ ] **Client:** every new state presented; accessibility re-checked; the smoke matrices include a new deck.
 - [ ] `docs/ELEVATION_PROGRESS.md` complete, with evidence and deviations.
 
@@ -290,7 +288,7 @@ M4's process ([M4 plan](history/M4_PLAN.md), section 6), plus three steps:
 - **E6:** if a batch misses the budget, the primitive vocabulary is too specific. Mitigation: review each single-card
   primitive for a general form before it lands.
 - **Bots:** new decisions may fall back to the default valuation and play badly unnoticed. Mitigation: D-EL-6 per batch,
-  saved-game tests, the oddity lints, and outside-opponent reviews.
+  saved-game tests, the oddity lints, and the user's playtests.
 - **Formats:** Startup isn't complete without Vantage Point or Liberation. Mitigation: D-EL-3's interim format, and
   incomplete snapshots kept as data.
 
@@ -317,7 +315,8 @@ M4's process ([M4 plan](history/M4_PLAN.md), section 6), plus three steps:
   (D-EL-4) wait for the user's review before the menu offers them.
 - **Merging:** each slice's PR is merged into `dev` when its gates pass, if the user has allowed that for the session;
   otherwise the PRs are left ready. A stack is merged in one push.
-- **Outside opponents:**
-  - Claude Sonnet: about $0.90 a game; measure first and use paired fixed-deal arms.
-  - Codex: when its quota allows.
+- **No LLM playtesting or reviews:** the goal session doesn't run Codex or Claude games or reviews
+  (`ai-codex-play`, `ai-claude-play`, `ai-codex-review`, `ai-llm-play`, `ai-llm-review`), nor spend model usage on
+  testing. Bot quality is judged by the ladder, the oddity lints and saved-game tests. LLM games run only when the user
+  asks for them.
 - **Never commit** the official card data, card text, `.env` or `.tools/`.
