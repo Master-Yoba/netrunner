@@ -127,6 +127,11 @@ public static partial class CliCommands
             return RunAiStyle(args, output, error);
         }
 
+        if (args.Length > 0 && args[0] == "ai-belief")
+        {
+            return RunAiBelief(args, output, error);
+        }
+
         if (args.Length > 0 && args[0] == "ai-review")
         {
             return RunAiReview(args, output, error);
@@ -256,6 +261,7 @@ public static partial class CliCommands
             + "engine-bench [--content developer|official] [--games N] [--seed <unsigned-integer>] [--json] | "
             + "ai-lint <games-dir> [--workers N] [--examples N] [--output file] [--json] | "
             + "ai-style <games-dir> [--workers N] [--json] | "
+            + "ai-belief <games-dir> [--games N] [--json] | "
             + "ai-codex-play --output new-dir [--side corp|runner|both] [--games N] [--seed S] [--model gpt-6.1-sol] | ai-mcp-game --content ID --side corp|runner --output new-dir | "
             + "ai-codex-review <games-dir> --side corp|runner --output new-dir [--game ID]... [--games N] [--model gpt-6.1-sol] [--reasoning low|medium|high] | "
             + "ai-llm-play --output new-dir [--side corp|runner|both] [--games N] [--seed S] [--opponent ENTRANT] [--reasoning low|medium|high] [--model NAME] | "
