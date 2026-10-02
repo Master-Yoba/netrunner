@@ -79,18 +79,19 @@ internal static class RunnerValues
         // v21 (A9b): HQ and R&D are worth the agendas they likely hold. The unseen cards keep the deck-size estimate above;
         // what the Runner has seen moves it, against what it would expect knowing nothing (a known non-agenda on R&D's top,
         // an HQ it has seen to hold none, or one it knows holds an agenda). This replaces v10's freshness.
-        if (context.Generation >= 17 && server.Kind is ServerKind.Headquarters or ServerKind.RAndD
-            && RunnerInference.AgendaShare(context) is > 0 and var unseen)
-        {
-            // R&D moves only on a top card it knows: an agenda raises it, anything else keeps v10's floor for a seen top,
-            // which a multi-access run (Conduit) still values.
-            double relative = server.Kind == ServerKind.Headquarters
-                ? Math.Min(3, RunnerInference.HqAgendaShare(context) / unseen)
-                : RunnerInference.Tracker(context)?.DeckTopAt(0) is { } top
-                    ? context.Catalog.TryGet(new CardDefinitionId(top), out CardEvaluationDescriptor known) && known.Agenda is not null ? 3 : 0.3
-                    : 1;
-            central = (int)(central * (1 + inference * (relative - 1)));
-        }
+        // Only on real knowledge: HQ when the tracker knows at least half of it, R&D when it knows the top card (an agenda
+        // raises it; anything else keeps v10's floor for a seen top, which a multi-access run such as Conduit still values).
+        // Otherwise v10's freshness, so small stale shares don't move close calls.
+        double? known = context.Generation >= 17 && RunnerInference.AgendaShare(context) is > 0 and var unseen
+            ? server.Kind switch
+            {
+                ServerKind.Headquarters when RunnerInference.HqKnownShare(context) >= 0.5 => Math.Min(3, RunnerInference.HqAgendaShare(context) / unseen),
+                ServerKind.RAndD when RunnerInference.Tracker(context)?.DeckTopAt(0) is { } top =>
+                    context.Catalog.TryGet(new CardDefinitionId(top), out CardEvaluationDescriptor card) && card.Agenda is not null ? 3 : 0.3,
+                _ => null,
+            }
+            : null;
+        if (known is { } relative) central = (int)(central * (1 + inference * (relative - 1)));
         else if (context.Generation >= 7) central = (int)(central * CentralFreshness(context, server.Kind));
         if (context.Generation >= 8)
             central = (int)(central * server.Kind switch

@@ -31,6 +31,13 @@ internal static class RunnerInference
     public static double AgendaShare(HeuristicContext context) =>
         context.Memo("agenda-share", () => TrackerPrior.Share(Prior(context), definition => IsAgenda(context, definition)));
 
+    /// <summary>How much of HQ the tracker knows, by weight.</summary>
+    public static double HqKnownShare(HeuristicContext context)
+    {
+        int hand = context.Features.Board.HiddenZoneCounts.CorpHand;
+        return hand == 0 ? 0 : Math.Min(1, (Tracker(context)?.Cards.Where(card => card.Place == TrackedPlace.Hand).Sum(card => card.Weight) ?? 0) / hand);
+    }
+
     /// <summary>The expected share of HQ that is agendas: the tracked cards, and the rest at the unseen cards' rate.</summary>
     public static double HqAgendaShare(HeuristicContext context)
     {
