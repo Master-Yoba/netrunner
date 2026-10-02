@@ -600,6 +600,17 @@ public partial class Main
 				throw new InvalidOperationException($"A hosted faceup card escaped the viewport at {size.X} as the {side}.");
 		if (removedPile!.FocusMode == Control.FocusModeEnum.None)
 			throw new InvalidOperationException($"The removed-from-game pile can't take keyboard focus at {size.X} as the {side}.");
+		// The removed card is browsed with the heap, after its public cards.
+		RenderSnapshot(CreateSlice48Snapshot(elevation, elevation.Decision));
+		await TableFrames(3);
+		if (!ShowTablePile("zone:runner-heap") || !_tablePileTitle.Text.Contains("REMOVED FROM THE GAME", StringComparison.Ordinal)
+			|| !_tablePileSummary.Text.Contains("1 removed from the game", StringComparison.Ordinal))
+			throw new InvalidOperationException($"The heap browser doesn't show the removed-from-game pile at {size.X} as the {side}.");
+		await TableFrames(2);
+		if (!GetViewport().GetVisibleRect().Encloses(_tablePileOverlay!.GetGlobalRect()))
+			throw new InvalidOperationException($"The pile browser escaped the viewport at {size.X} as the {side}.");
+		if (screenshots) await SaveTableEvidence($"elevation-removed-{side.ToString().ToLowerInvariant()}-{size.X}");
+		HideTablePile();
 		if (screenshots) await SaveTableEvidence($"elevation-hosted-{side.ToString().ToLowerInvariant()}-{size.X}");
 		RenderSnapshot(CreateSlice48Snapshot(view, view.Decision));
 		await TableFrames(3);

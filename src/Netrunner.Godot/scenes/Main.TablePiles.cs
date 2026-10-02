@@ -40,11 +40,19 @@ public partial class Main
 			_tablePilePreviousFocusHidden = _tablePilePreviousFocus?.HasFocus(ignoreHiddenFocus: true) == false;
 		}
 
-		_tablePileTitle.Text = title;
-		_tablePileSummary.Text = concealed
+		// EL.8: a side's removed-from-game cards are browsed with its discard pile, after it.
+		IReadOnlyList<CardViewModel> removed = handle switch
+		{
+			"zone:corp-archives" => view.CorpRemovedFromGame,
+			"zone:runner-heap" => view.RunnerRemovedFromGame,
+			_ => [],
+		};
+		_tablePileTitle.Text = removed.Count > 0 ? $"{title} · REMOVED FROM THE GAME" : title;
+		_tablePileSummary.Text = (concealed
 			? $"{count} card(s) · count only · cards remain concealed"
-			: $"{count} card(s) · public faces shown where available · select a known card to inspect";
-		RenderTablePileCards(cards, count, concealed);
+			: $"{count} card(s) · public faces shown where available · select a known card to inspect")
+			+ (removed.Count > 0 ? $" · then {removed.Count} removed from the game" : "");
+		RenderTablePileCards([.. cards, .. removed], count + removed.Count, concealed);
 		HideCardHoverPreview();
 		_tablePileOverlay.Visible = true;
 		_tablePileOverlay.MoveToFront();
@@ -219,6 +227,16 @@ public partial class Main
 				title = "RUNNER SCORE";
 				count = view.RunnerScore.Count;
 				cards = view.RunnerScore;
+				break;
+			case "zone:corp-removed":
+				title = "CORP · REMOVED FROM THE GAME";
+				count = view.CorpRemovedFromGame.Count;
+				cards = view.CorpRemovedFromGame;
+				break;
+			case "zone:runner-removed":
+				title = "RUNNER · REMOVED FROM THE GAME";
+				count = view.RunnerRemovedFromGame.Count;
+				cards = view.RunnerRemovedFromGame;
 				break;
 			case "zone:corp-deck":
 				title = "CORP R&D";
