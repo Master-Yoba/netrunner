@@ -67,7 +67,9 @@ internal static class RunnerValues
                 : context.Generation >= 9 ? AffordableTrash(context, card) : Trash(context, card);
         }
 
-        double density = 1 + inference * (context.AgendaDensityFactor() - 1);
+        // v22 (A9c): a Runner that knows the Corp's list counts the agendas left in it, not the deck-size estimate.
+        double factor = (context.Generation >= 18 ? OpponentCounting.ListAgendaDensity(context) : null) ?? context.AgendaDensityFactor();
+        double density = 1 + inference * (factor - 1);
         int central = server.Kind switch
         {
             ServerKind.Headquarters => context.Features.Board.HiddenZoneCounts.CorpHand > 0 ? (int)(320 * density) : 0,

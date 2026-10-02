@@ -75,7 +75,9 @@ public sealed class OfflineAgent : IAgentLifecycle
     private PendingEvaluation? _pending;
 
     /// <summary>A9: whether this agent's version tracks the opponent's hidden cards.</summary>
-    private bool TracksOpponent => Configuration.Side == PlayerSide.Runner && RunnerHeuristicPolicy.UsesTracker(Configuration.PolicyVersion);
+    private bool TracksOpponent => Configuration.Side == PlayerSide.Runner
+        ? RunnerHeuristicPolicy.UsesTracker(Configuration.PolicyVersion)
+        : CorpHeuristicPolicy.UsesTracker(Configuration.PolicyVersion);
 
     /// <summary>A9: Easy forgets on purpose; Standard and Hard keep what they've seen.</summary>
     private TrackerMemory Memory => Configuration.ProfileId == "easy" ? TrackerMemory.Forgetful : TrackerMemory.Full;

@@ -64,6 +64,17 @@ public sealed class CardTrackerTests
         Assert.Equal(0, seen.Observe(Board(hand: 5, turn: 3), Catalog, _ => 1 / 3.0, TrackerMemory.Forgetful).Expected(Tithe, TrackedPlace.Hand), 3);
     }
 
+    [Fact]
+    public void CopiesAreCountedFromWhereTheyAreNowSoRecursionReturnsThem()
+    {
+        // Hard's list: three Hedge Funds. One in face-up Archives is not unseen; shuffled back into R&D (Spin Doctor), it is.
+        var list = TrackerPrior.List([(Hedge, 3), (Tithe, 2)]);
+        AgentFeatures inArchives = Board(hand: 5) with { Board = Board(hand: 5).Board with { CorpDiscard = [new AgentCard { Id = "card:hedge-1", DefinitionId = Hedge }] } };
+        Assert.Equal(2, TrackerPrior.Remaining(list, inArchives)[Hedge]);
+        Assert.Equal(3, TrackerPrior.Remaining(list, Board(hand: 5))[Hedge]);
+        Assert.Equal(2, TrackerPrior.Remaining(list, inArchives)[Tithe]);
+    }
+
     /// <summary>A tracker that saw <paramref name="definition"/> in HQ on turn 1, and last saw HQ of <paramref name="hand"/> cards and no installs.</summary>
     private static CardTracker Seen(string definition, int hand) =>
         new([new(definition, TrackedPlace.Hand, 1, 1)], Snapshot(hand, deck: 20));
