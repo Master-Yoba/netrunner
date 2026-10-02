@@ -92,6 +92,7 @@ public static class BeneficialTriggers
             [BehaviorInstructionKind.PlayCard] = EffectVerdict.PlayerDecides,
             [BehaviorInstructionKind.ReturnSetAside] = EffectVerdict.Harmless,
             [BehaviorInstructionKind.TurnFaceUp] = EffectVerdict.PlayerDecides,
+            [BehaviorInstructionKind.HostFaceUp] = EffectVerdict.PlayerDecides,
         };
 
     /// <summary>The verdict for an effect kind; an unclassified kind is the player's decision.</summary>
