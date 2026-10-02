@@ -297,15 +297,28 @@ public static partial class GameEngine
                 AdvanceBehaviorCursor(working, frame);
                 return;
             case BehaviorInstructionKind.GainCredits:
-                int creditGain = instruction.AmountOperand is null
-                    ? instruction.Amount
-                    : ResolveBehaviorDynamicAmount(working, frame, instruction);
-                ApplyCreditDeltaIfNonZero(working, frame.Controller, creditGain);
+                int creditGain = StaticOrDynamicAmount(working, frame, instruction);
+                ApplyCreditDeltaIfNonZero(working, ResolveBehaviorRecipient(working, frame, instruction), creditGain);
                 AdvanceBehaviorCursor(working, frame);
                 return;
             case BehaviorInstructionKind.LoseCredits:
-                ApplyCreditDelta(working, frame.Controller, -instruction.Amount);
-                AdvanceBehaviorCursor(working, frame);
+                // A player loses only the credits they have (CR 1.10); the
+                // realized loss is what a recorded amount reads.
+                PlayerId loser = ResolveBehaviorRecipient(working, frame, instruction);
+                int lost = Math.Min(GetPlayer(working, loser).Credits, StaticOrDynamicAmount(working, frame, instruction));
+                ApplyCreditDeltaIfNonZero(working, loser, -lost);
+                AdvanceBehaviorCursor(working, RecordBehaviorAmount(frame, instruction.RecordAs, lost));
+                return;
+            case BehaviorInstructionKind.RemoveTags:
+                PlayerId tagged = GetPlayer(working, PlayerSide.Runner).Id;
+                int removed = Math.Min(RunnerTags(working), StaticOrDynamicAmount(working, frame, instruction));
+                AdvanceBehaviorCursor(working, RecordBehaviorAmount(frame, instruction.RecordAs, removed));
+                if (removed > 0)
+                {
+                    working.ResolutionStack.Add(new EffectResolutionFrame(frame.Controller, new CostBundle(),
+                        new EffectBundle(new TagAdjustmentEffect(tagged, -removed))));
+                }
+
                 return;
             case BehaviorInstructionKind.GainClicks:
                 ApplyClickDelta(working, frame.Controller, instruction.Amount);
@@ -320,7 +333,7 @@ public static partial class GameEngine
                 AdvanceBehaviorCursor(working, frame);
                 return;
             case BehaviorInstructionKind.Draw:
-                ResolveBehaviorDraw(working, frame, instruction.Amount);
+                ResolveBehaviorDraw(working, frame, StaticOrDynamicAmount(working, frame, instruction));
                 if (working.Outcome.Kind == GameOutcomeKind.Won)
                 {
                     return;
@@ -444,6 +457,7 @@ public static partial class GameEngine
 
                 return;
             case BehaviorInstructionKind.ModifyEncounteredIceStrength:
+            case BehaviorInstructionKind.ModifySourceStrength:
                 ResolveBehaviorModifyEncounteredIceStrength(working, frame, instruction);
                 return;
             case BehaviorInstructionKind.AddCounter:
@@ -653,8 +667,12 @@ public static partial class GameEngine
         // The immediate parent must be an effect checkpoint for a gameplay
         // occurrence tied to this run. This excludes a forgeable standalone
         // behavior frame and prevents an old/non-run trigger from ending a
-        // later run.
-        if (working.ResolutionStack[^2] is not EffectCheckpointFrame checkpoint
+        // later run. A generic subroutine of the encountered ICE sits on the
+        // run timing frame itself.
+        bool encounterSubroutine = working.ResolutionStack[^2] is RunTimingFrame
+            && IsEncounteredIceSubroutineFrame(working, frame);
+        if (!encounterSubroutine
+            && (working.ResolutionStack[^2] is not EffectCheckpointFrame checkpoint
             || checkpoint.ChildKind != EffectCheckpointChildKind.Trigger
             || checkpoint.Occurrence.Effect is not GameplayOccurrenceEffect occurrence
             || occurrence.ServerId != run.AttackedServer
@@ -666,7 +684,7 @@ public static partial class GameEngine
                 && string.Equals(invocation.TriggerKey, frame.TriggerKey, StringComparison.Ordinal)
                 && invocation.SourceCardId == frame.SourceCardId
                 && invocation.SourceDefinitionId == frame.DefinitionId
-                && invocation.Controller == frame.Controller))
+                && invocation.Controller == frame.Controller)))
         {
             throw new ResolutionFailureException(
                 "EndRun requires a current run-owned catalog reaction occurrence.");
@@ -718,6 +736,12 @@ public static partial class GameEngine
         BehaviorResolutionFrame frame,
         BehaviorInstruction instruction)
     {
+        if (instruction.IsZoneInstall)
+        {
+            PushBehaviorZoneInstall(working, frame, instruction);
+            return;
+        }
+
         if (instruction.Optional
             && instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } optionalTarget
             && IsProvenEmptyChosenCard(frame, optionalTarget))
@@ -1037,7 +1061,7 @@ public static partial class GameEngine
         }
 
         if (rootInstructions.Any(static instruction =>
-                instruction.Kind == BehaviorInstructionKind.ModifyEncounteredIceStrength)
+                BehaviorEncounterStrengthContracts.IsStrengthInstruction(instruction.Kind))
             && (frame.AbilityKey is null
                 || !BehaviorEncounterStrengthContracts.TryGetExecutableInstruction(
                     definition,
@@ -1046,10 +1070,10 @@ public static partial class GameEngine
                     out BehaviorInstruction? declaredInstruction)
                 || declaredInstruction is null
                 || rootInstructions.Count(static instruction =>
-                    instruction.Kind == BehaviorInstructionKind.ModifyEncounteredIceStrength) != 1
+                    BehaviorEncounterStrengthContracts.IsStrengthInstruction(instruction.Kind)) != 1
                 || !BehaviorContractStructure.AreEqual(
                     rootInstructions.Single(static instruction =>
-                        instruction.Kind == BehaviorInstructionKind.ModifyEncounteredIceStrength),
+                        BehaviorEncounterStrengthContracts.IsStrengthInstruction(instruction.Kind)),
                     declaredInstruction)))
         {
             throw new ResolutionFailureException(
@@ -1518,6 +1542,7 @@ public static partial class GameEngine
         }
 
         CardInstanceState source = GetCard(working, frame.SourceCardId);
+        bool selfStrength = instruction.Kind == BehaviorInstructionKind.ModifySourceStrength;
         if (source.OwnerSide != PlayerSide.Runner
             || !working.BehaviorCatalog.TryGet(frame.DefinitionId, out CardBehaviorDefinition? definition)
             || !BehaviorEncounterStrengthContracts.MatchesEffect(
@@ -1536,6 +1561,42 @@ public static partial class GameEngine
         {
             throw new ResolutionFailureException(
                 "Encountered-ICE strength modifier provenance does not match its catalog paid ability.");
+        }
+
+        if (selfStrength)
+        {
+            // The source breaker's own strength: a realized variable term on
+            // the breaker, the same shape as a dynamic pump's snapshot.
+            if (!IsInstalledCard(working, source.Id)
+                || !working.BehaviorCatalog.TryGetIcebreaker(source.DefinitionId, out _))
+            {
+                throw new ResolutionFailureException(
+                    "A self-strength ability requires its installed icebreaker source.");
+            }
+
+            RunEffectId selfEffectId = new(
+                $"effect:source-strength:{run.Id.Value}:{encounter.Id.Value}:"
+                + $"{source.Id.Value}:{run.LingeringEffects.Count}");
+            working.RunState = run.WithLingeringEffects(
+                run.LingeringEffects.Append(
+                    new RunLingeringEffect(
+                        selfEffectId,
+                        BehaviorEncounterStrengthContracts.EffectBehaviorId(frame.DefinitionId, abilityKey),
+                        source.Id,
+                        RunLingeringEffectExpiry.Encounter,
+                        new RunValueAdjustment(
+                            BehaviorValueKind.Strength,
+                            BehaviorValueSourceKind.Variable,
+                            BehaviorValueOperation.Add,
+                            source.Id,
+                            source.Id,
+                            instruction.Amount,
+                            instruction.Argument!,
+                            instruction.Argument!,
+                            quantity: 1,
+                            unitDelta: instruction.Amount))).ToArray());
+            AdvanceBehaviorCursor(working, frame);
+            return;
         }
 
         CardInstanceState ice = GetCard(working, encounter.IceId);
@@ -1682,7 +1743,7 @@ public static partial class GameEngine
             BehaviorConditionKind.CounterAtLeast => CurrentCounter(working, frame.SourceCardId, condition.Fact!) >= condition.Value.GetValueOrDefault(),
             BehaviorConditionKind.FactEquals => BehaviorFactEquals(working, frame, condition),
             BehaviorConditionKind.FoundCard => FoundCardConditionMatches(working, frame),
-            _ => false,
+            _ => SharedConditionMatches(working, frame.Controller, condition) ?? false,
         };
     }
 
@@ -1791,9 +1852,22 @@ public static partial class GameEngine
     {
         BehaviorAmountOperand operand = instruction.AmountOperand
             ?? throw new ResolutionFailureException("A dynamic credit amount is missing its typed operand.");
+        if (operand.Kind is { } kind && kind != BehaviorAmountKind.SourceCounter)
+        {
+            int counted = kind switch
+            {
+                BehaviorAmountKind.Recorded => frame.Recorded(operand.RecordedKey!),
+                BehaviorAmountKind.ControllerClicks => GetPlayer(working, frame.Controller).Clicks,
+                BehaviorAmountKind.SourceAdvancementCounters => GetCard(working, frame.SourceCardId).AdvancementCounters,
+                BehaviorAmountKind.ChosenCardInstallCost => ChosenCardInstallCost(working, frame),
+                _ => throw new ResolutionFailureException($"Amount kind '{kind}' is not executable."),
+            };
+            return checked(counted * operand.Multiplier + operand.Offset);
+        }
+
         if (instruction.Kind != BehaviorInstructionKind.GainCredits)
         {
-            throw new ResolutionFailureException("A dynamic amount is executable only on GainCredits.");
+            throw new ResolutionFailureException("A source-counter amount is executable only on GainCredits.");
         }
 
         CardInstanceState source = GetCard(working, frame.SourceCardId);
@@ -1817,8 +1891,48 @@ public static partial class GameEngine
         }
 
         int count = counter?.Count ?? 0;
-        return checked(count * operand.Multiplier);
+        return checked(count * operand.Multiplier + operand.Offset);
     }
+
+    private static int ChosenCardInstallCost(WorkingState working, BehaviorResolutionFrame frame)
+    {
+        CardInstanceId[] chosen = frame.Bindings
+            .Where(static binding => string.Equals(binding.Key, "chosen", StringComparison.Ordinal))
+            .SelectMany(static binding => binding.CardIds)
+            .ToArray();
+        if (chosen.Length != 1
+            || working.RuntimeCardCatalog is null
+            || !working.RuntimeCardCatalog.TryGet(GetCard(working, chosen[0]).DefinitionId, out CardRuntimeSpec? spec))
+        {
+            return 0;
+        }
+
+        return spec.InstallCost ?? spec.RezCost ?? 0;
+    }
+
+    private static PlayerId ResolveBehaviorRecipient(WorkingState working, BehaviorResolutionFrame frame, BehaviorInstruction instruction) =>
+        instruction.Recipient switch
+        {
+            null or BehaviorPlayerSelector.Controller => frame.Controller,
+            BehaviorPlayerSelector.ActingPlayer => frame.ActingPlayer
+                ?? throw new ResolutionFailureException("An instruction targeting ActingPlayer requires an acting player."),
+            BehaviorPlayerSelector.Corp => GetPlayer(working, PlayerSide.Corp).Id,
+            BehaviorPlayerSelector.Runner => GetPlayer(working, PlayerSide.Runner).Id,
+            _ => throw new ResolutionFailureException("The instruction recipient is invalid."),
+        };
+
+    private static int StaticOrDynamicAmount(WorkingState working, BehaviorResolutionFrame frame, BehaviorInstruction instruction) =>
+        instruction.AmountOperand is null
+            ? instruction.Amount
+            : ResolveBehaviorDynamicAmount(working, frame, instruction);
+
+    private static BehaviorResolutionFrame RecordBehaviorAmount(BehaviorResolutionFrame frame, string? key, int value) =>
+        key is null
+            ? frame
+            : frame.With(recordedAmounts: (frame.RecordedAmounts ?? [])
+                .Where(entry => !string.Equals(entry.Key, key, StringComparison.Ordinal))
+                .Append(new BehaviorRecordedAmount(key, value))
+                .ToArray());
 
     private static bool IsAbilitySourceCounterRetention(
         WorkingState working,
@@ -1866,7 +1980,7 @@ public static partial class GameEngine
         foreach (BehaviorInstruction instruction in instructions)
         {
             if (instruction.Kind == BehaviorInstructionKind.GainCredits
-                && instruction.AmountOperand is { } amount
+                && instruction.AmountOperand is { Kind: null or BehaviorAmountKind.SourceCounter } amount
                 && (expected is null || amount.Equals(expected)))
             {
                 return true;
@@ -2020,7 +2134,7 @@ public static partial class GameEngine
         string[] optionKeys = spec.Options
             .Where(option => !IsBehaviorInstallOption(option)
                 || IsBehaviorInstallOptionAvailable(working, frame, option))
-            .Where(option => IsBehaviorChoiceOptionAffordable(working, owner, option))
+            .Where(option => IsBehaviorChoiceOptionAffordable(working, owner, option, frame.SourceCardId))
             .Select(option => option.Key)
             .ToArray();
         if (spec.Mode == BehaviorChoiceMode.Mode && optionKeys.Length == 0)
@@ -2365,10 +2479,17 @@ public static partial class GameEngine
     private static bool IsBehaviorChoiceOptionAffordable(
         WorkingState working,
         PlayerId owner,
-        BehaviorChoiceOption option)
+        BehaviorChoiceOption option,
+        CardInstanceId? sourceCardId = null)
     {
         try
         {
+            if (option.Condition is { } condition
+                && !OptionConditionMatches(working, owner, sourceCardId, condition))
+            {
+                return false;
+            }
+
             PlayerState payer = GetPlayer(working, owner);
             long credits = 0;
             long clicks = 0;
@@ -2415,12 +2536,13 @@ public static partial class GameEngine
         IBehaviorCatalog behaviorCatalog,
         IRuntimeCardCatalog? runtimeCardCatalog,
         PlayerId owner,
-        BehaviorChoiceOption option)
+        BehaviorChoiceOption option,
+        CardInstanceId? sourceCardId = null)
     {
         try
         {
             WorkingState working = WorkingState.From(state, behaviorCatalog, runtimeCardCatalog);
-            return IsBehaviorChoiceOptionAffordable(working, owner, option);
+            return IsBehaviorChoiceOptionAffordable(working, owner, option, sourceCardId);
         }
         catch (Exception exception) when (exception is ResolutionFailureException
             or InvalidOperationException
@@ -2461,7 +2583,7 @@ public static partial class GameEngine
 
                 BehaviorChoiceOption? option = specification.Options.SingleOrDefault(candidate =>
                     string.Equals(candidate.Key, parameters.OptionKeys[0], StringComparison.Ordinal));
-                if (option is null || !IsBehaviorChoiceOptionAffordable(working, choice.Owner, option))
+                if (option is null || !IsBehaviorChoiceOptionAffordable(working, choice.Owner, option, frame.SourceCardId))
                 {
                     return false;
                 }
@@ -3092,6 +3214,9 @@ public static partial class GameEngine
                 BehaviorCardType.Operation => runtimeSpec.CardClass == RuntimeCardClass.Operation,
                 BehaviorCardType.Resource => runtimeSpec.CardClass == RuntimeCardClass.Resource,
                 BehaviorCardType.Upgrade => runtimeSpec.CardClass == RuntimeCardClass.Upgrade,
+                BehaviorCardType.Advanceable => runtimeSpec.CardClass == RuntimeCardClass.Agenda
+                    || working.BehaviorCatalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? advanceable)
+                        && advanceable.CanBeAdvanced,
                 _ => false,
             };
         }
@@ -4403,4 +4528,20 @@ public static partial class GameEngine
             history!.MarkInstalled(activeSide, cardId));
     }
 
+    /// <summary>
+    /// Evaluates a choice option's condition: the shared game-state kinds, or
+    /// a counter on the behavior's source card.
+    /// </summary>
+    private static bool OptionConditionMatches(
+        WorkingState working,
+        PlayerId owner,
+        CardInstanceId? sourceCardId,
+        BehaviorCondition condition) => condition.Kind switch
+        {
+            BehaviorConditionKind.CounterAtLeast => sourceCardId is { } source
+                && CurrentCounter(working, source, condition.Fact!) >= condition.Value.GetValueOrDefault(),
+            BehaviorConditionKind.Tagged => RunnerTags(working) > 0,
+            BehaviorConditionKind.NotTagged => RunnerTags(working) <= 0,
+            _ => SharedConditionMatches(working, owner, condition) ?? false,
+        };
 }

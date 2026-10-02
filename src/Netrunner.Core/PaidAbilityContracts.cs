@@ -233,12 +233,14 @@ public sealed class BehaviorPaidAbility : IEquatable<BehaviorPaidAbility>
                     nameof(Timing));
             }
 
+            // CR 9.5: a click action may cost several clicks ("[click][click][click]"),
+            // declared as one Click cost carrying the count.
             if (Costs.Count(static cost => cost.Kind == BehaviorCostKind.Clicks) != 1
-                || Costs.Single(static cost => cost.Kind == BehaviorCostKind.Clicks).Amount != 1
+                || Costs.Single(static cost => cost.Kind == BehaviorCostKind.Clicks).Amount < 1
                 || hasLoseClickCost)
             {
                 throw new ArgumentException(
-                    "A click action requires exactly one Click cost of one click and may not use LoseClick.",
+                    "A click action requires exactly one Click cost and may not use LoseClick.",
                     nameof(Costs));
             }
         }

@@ -30,12 +30,13 @@ public static partial class GameEngine
     /// </summary>
     internal static IReadOnlyList<AbilityActionParameters> MaterializeAbilityActionParameters(
         GameState state,
-        IBehaviorCatalog behaviorCatalog)
+        IBehaviorCatalog behaviorCatalog,
+        IRuntimeCardCatalog? runtimeCardCatalog = null)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(behaviorCatalog);
         return new ReadOnlyCollection<AbilityActionParameters>(
-            MaterializeAbilityActionParameters(WorkingState.From(state, behaviorCatalog)).ToArray());
+            MaterializeAbilityActionParameters(WorkingState.From(state, behaviorCatalog, runtimeCardCatalog)).ToArray());
     }
 
     private static List<AbilityActionParameters> MaterializeAbilityActionParameters(WorkingState working)
@@ -280,7 +281,8 @@ public static partial class GameEngine
             || ability.Targets[0].Kind != BehaviorTargetKind.AccessedCard
             || window.RunTiming != BehaviorAbilityTiming.BreachAccessPaidWindow
             || working.RunState is not { Step: RunTimingStep.BreachAccessAbility } run
-            || !TryGetCurrentAccessCard(working, run, out CardInstanceState? card))
+            || !TryGetCurrentAccessCard(working, run, out CardInstanceState? card)
+            || !BehaviorCardMatches(working, card!.Id, ability.Targets[0].Filter))
         {
             return [];
         }
@@ -385,7 +387,8 @@ public static partial class GameEngine
 
         return !requireLiveSource
             || TryGetCurrentAccessCard(working, run, out CardInstanceState? card)
-                && card!.Id == frame.TargetCardIds[0];
+                && card!.Id == frame.TargetCardIds[0]
+                && BehaviorCardMatches(working, card.Id, declaration.Targets[0].Filter);
     }
 
     private static bool AdditionalCostSelectionsMatchDeclaration(
@@ -937,7 +940,7 @@ public static partial class GameEngine
             // A paid ability has no search continuation; a forged declaration
             // depending on one therefore fails closed.
             BehaviorConditionKind.FoundCard => false,
-            _ => false,
+            _ => SharedConditionMatches(working, controllerId, condition) ?? false,
         };
     }
 
@@ -1272,7 +1275,7 @@ public static partial class GameEngine
         CardInstanceState source = GetCard(working, frame.SourceCardId);
 
         if (declaration.Instructions.Any(static instruction =>
-                instruction.Kind == BehaviorInstructionKind.ModifyEncounteredIceStrength)
+                BehaviorEncounterStrengthContracts.IsStrengthInstruction(instruction.Kind))
             && !BehaviorEncounterStrengthContracts.TryGetExecutableInstruction(
                 definition,
                 declaration.Key,
@@ -1563,7 +1566,11 @@ public static partial class GameEngine
                     PayCreditCost(working, frame.Controller, cost.Amount);
                     break;
                 case BehaviorCostKind.Clicks:
-                    SpendClick(working, frame.Controller);
+                    for (int click = 0; click < cost.Amount; click++)
+                    {
+                        SpendClick(working, frame.Controller);
+                    }
+
                     break;
                 case BehaviorCostKind.LoseClick:
                     ApplyClickDelta(working, frame.Controller, checked(-cost.Amount));

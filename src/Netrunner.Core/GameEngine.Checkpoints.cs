@@ -1268,7 +1268,7 @@ public static partial class GameEngine
             (trigger.Mode != TriggerMode.Optional
                 || option.Semantic != BehaviorChoiceOptionSemantic.Fallback)
             &&
-            IsBehaviorChoiceOptionAffordable(working, controller, option));
+            IsBehaviorChoiceOptionAffordable(working, controller, option, source.Id));
     }
 
     private static bool CatalogTriggerScopeMatches(
@@ -1331,6 +1331,10 @@ public static partial class GameEngine
                 BehaviorCardType.Operation => runtime.CardClass == RuntimeCardClass.Operation,
                 BehaviorCardType.Resource => runtime.CardClass == RuntimeCardClass.Resource,
                 BehaviorCardType.Upgrade => runtime.CardClass == RuntimeCardClass.Upgrade,
+                BehaviorCardType.ProgramOrHardware => runtime.CardClass is RuntimeCardClass.Program or RuntimeCardClass.Hardware,
+                BehaviorCardType.Advanceable => runtime.CardClass == RuntimeCardClass.Agenda
+                    || working.BehaviorCatalog.TryGet(subject.DefinitionId, out CardBehaviorDefinition? advanceable)
+                        && advanceable.CanBeAdvanced,
                 _ => false,
             };
         }

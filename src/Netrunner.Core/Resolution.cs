@@ -43,6 +43,11 @@ public enum InstallInitiationKind
     IceSubroutineNormal = 2,
     /// <summary>Corp ICE install directly inward from a choice ICE subroutine.</summary>
     IceSubroutineInwardIgnoreCosts = 3,
+    /// <summary>
+    /// EL-BEHAVIOR-INSTALL: an install chosen in a <see cref="BehaviorInstallChoiceFrame"/>,
+    /// paid by that frame's cost rule.
+    /// </summary>
+    BehaviorZoneInstall = 4,
 }
 
 /// <summary>
@@ -86,6 +91,7 @@ public enum EffectResolutionStage
 [JsonDerivedType(typeof(BehaviorResolutionFrame), "card-behavior")]
 [JsonDerivedType(typeof(AbilityFrame), "ability")]
 [JsonDerivedType(typeof(IceSubroutineFrame), "ice-subroutine")]
+[JsonDerivedType(typeof(BehaviorInstallChoiceFrame), "behavior-install-choice")]
 public abstract record ResolutionFrame
 {
     protected ResolutionFrame(int version, string behaviorId)
@@ -1736,6 +1742,18 @@ public static class ResolutionFrameValidator
                 ValidateBehavior(frame, ResolutionBehaviorIds.IceSubroutine, path, violations);
                 ValidateIceSubroutineFrame(iceSubroutine, path, violations);
                 break;
+            case BehaviorInstallChoiceFrame behaviorInstall:
+                ValidateBehavior(frame, ResolutionBehaviorIds.BehaviorInstallChoice, path, violations);
+                ValidatePlayer(behaviorInstall.Owner, $"{path}.owner", violations);
+                if (behaviorInstall.Choices.Select(static choice => choice.CardId).Any(static id => !StableIdentifier.TryValidate(id.Value)))
+                {
+                    violations.Add(new StateInvariantViolation(
+                        "id.invalid",
+                        $"{path}.choices",
+                        "A behavior install choice names an invalid card ID."));
+                }
+
+                break;
             case EffectResolutionFrame effectResolution:
                 ValidateBehavior(frame, ResolutionBehaviorIds.EffectResolution, path, violations);
                 ValidatePlayer(effectResolution.Controller, $"{path}.controller", violations);
@@ -2322,7 +2340,7 @@ public static class ResolutionFrameValidator
                         || !hasClickCost
                         || hasLoseClickCost
                         || ability.Costs.Count(cost => cost is not null && cost.Kind == BehaviorCostKind.Clicks) != 1
-                        || ability.Costs.SingleOrDefault(cost => cost is not null && cost.Kind == BehaviorCostKind.Clicks)?.Amount != 1))
+                        || ability.Costs.SingleOrDefault(cost => cost is not null && cost.Kind == BehaviorCostKind.Clicks)?.Amount < 1))
                 {
                     violations.Add(new StateInvariantViolation(
                         "resolution.invalid-ability-combination",
@@ -3345,7 +3363,19 @@ internal static class ResolutionFrameCloner
             behavior.AbilityKey,
             behavior.TriggerKey,
             behavior.CatalogTriggerSourceMovedBeforeStart,
-            behavior.OccurrenceContinuation),
+            behavior.OccurrenceContinuation,
+            behavior.RecordedAmounts),
+        BehaviorInstallChoiceFrame behaviorInstall => new BehaviorInstallChoiceFrame(
+            behaviorInstall.Version,
+            behaviorInstall.BehaviorId,
+            behaviorInstall.Owner,
+            behaviorInstall.FrameIdentity,
+            behaviorInstall.ParentFrameIdentity,
+            behaviorInstall.CostRule,
+            behaviorInstall.Discount,
+            behaviorInstall.Optional,
+            behaviorInstall.Stage,
+            behaviorInstall.Choices),
         AbilityFrame ability => new AbilityFrame(
             ability.Version,
             ability.BehaviorId,

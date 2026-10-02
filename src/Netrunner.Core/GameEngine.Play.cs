@@ -162,6 +162,13 @@ public static partial class GameEngine
         {
             foreach (BehaviorCost behaviorCost in definition.Costs)
             {
+                // A "Double" card's additional cost spends a click on top of
+                // the click of the play action itself.
+                if (behaviorCost.Kind == BehaviorCostKind.Clicks)
+                {
+                    continue;
+                }
+
                 if (behaviorCost.Kind != BehaviorCostKind.Credits || behaviorCost.Amount < 0)
                 {
                     return false;
@@ -176,7 +183,8 @@ public static partial class GameEngine
         }
 
         if (cost != printedCost
-            || GetPlayer(working, side).Credits < cost)
+            || GetPlayer(working, side).Credits < cost
+            || GetPlayer(working, side).Clicks < 1 + AdditionalPlayClicks(definition))
         {
             return false;
         }
@@ -411,6 +419,7 @@ public static partial class GameEngine
             source.Id,
             playArea.Id,
             plan.CreditCost));
+        RecordTurnEvent(working, side, side == PlayerSide.Corp ? TurnEventKind.OperationPlayed : TurnEventKind.EventPlayed);
 
         PushBehaviorChild(
             working,
@@ -461,6 +470,7 @@ public static partial class GameEngine
 
         PlayerState runner = GetPlayer(working, PlayerSide.Runner);
         SpendClick(working, runner.Id);
+        RecordTurnEvent(working, PlayerSide.Runner, TurnEventKind.EventPlayed);
         StartRunInWorkingState(
             working,
             targetServerId,
@@ -598,6 +608,11 @@ public static partial class GameEngine
         {
             foreach (BehaviorCost cost in definition.Costs)
             {
+                if (cost.Kind == BehaviorCostKind.Clicks)
+                {
+                    continue;
+                }
+
                 if (cost.Kind != BehaviorCostKind.Credits || cost.Amount < 0)
                 {
                     throw new ResolutionFailureException("The card-play behavior has an unsupported cost.");
@@ -623,4 +638,8 @@ public static partial class GameEngine
         actual.CardId == expected.CardId
         && actual.CreditCost == expected.CreditCost
         && actual.TargetServerId == expected.TargetServerId;
+
+    /// <summary>Clicks a "Double" card's additional cost spends beyond the play action's click.</summary>
+    private static int AdditionalPlayClicks(CardBehaviorDefinition definition) =>
+        definition.Costs.Where(static cost => cost.Kind == BehaviorCostKind.Clicks).Sum(static cost => cost.Amount);
 }

@@ -943,6 +943,17 @@ public static partial class GameEngine
                         encounter.Id, encounter.IceId, encounter.Status, resolvedSubroutines));
                     QueueRunTagEffect(working, tags.Amount);
                     return;
+                case BehaviorSubroutineSpec behaviorSubroutine:
+                    // Mark it resolved first, as GiveTags does, so the encounter
+                    // resumes past it once the behavior child completes.
+                    resolvedSubroutines.Add(new RunSubroutineState(subroutine.Version, subroutine.Id,
+                        subroutine.Ordinal, subroutine.Broken, true));
+                    resolvedSubroutines.AddRange(encounter.Subroutines.Skip(index + 1));
+                    currentRun = RecordResolvedUnbrokenSubroutine(currentRun, ice, encounter.Id, subroutine);
+                    working.RunState = currentRun.WithEncounter(new RunEncounterState(encounter.Version,
+                        encounter.Id, encounter.IceId, encounter.Status, resolvedSubroutines));
+                    PushIceSubroutineBehavior(working, ice, behaviorSubroutine);
+                    return;
                 case LoseCreditsSubroutineSpec loseCredits:
                     PlayerState debtor = GetPlayer(working, loseCredits.Target);
                     // CR 26.03 1.10.3b (LOSE path): losing credits moves them
@@ -3208,6 +3219,12 @@ public static partial class GameEngine
                 + "it cannot be pumped.");
         }
 
+        if (!breakerSpec.HasPump)
+        {
+            throw new ResolutionFailureException(
+                $"Breaker '{breakerSpec.DefinitionId}' has no printed credit pump.");
+        }
+
         RunValueAdjustment? dynamicAdjustment = null;
         if (breakerSpec.DynamicPump is { } dynamicPump)
         {
@@ -3238,14 +3255,16 @@ public static partial class GameEngine
         }
 
         PlayerState runner = GetPlayer(working, PlayerSide.Runner);
-        if (!CanAffordRunCredits(runner, run, breakerSpec.PumpCost))
+        int pumpCost = CostModifierProjection.IcebreakerPump(working, breaker, breakerSpec.PumpCost)?.EffectiveCost
+            ?? breakerSpec.PumpCost;
+        if (!CanAffordRunCredits(runner, run, pumpCost))
         {
             throw new ResolutionFailureException(
-                $"The Runner cannot pay the {breakerSpec.PumpCost} credit pump cost of breaker "
+                $"The Runner cannot pay the {pumpCost} credit pump cost of breaker "
                 + $"'{breakerSpec.DefinitionId}' from {runner.Credits} wallet and {run.RunCredits} run credits.");
         }
 
-        run = PayRunnerRunCredits(working, run, breakerSpec.PumpCost, hostedCredits);
+        run = PayRunnerRunCredits(working, run, pumpCost, hostedCredits);
         RunEffectId effectId = new($"effect:pump:{run.Id.Value}:{breakerId.Value}:{run.LingeringEffects.Count}");
         RunState pumpedRun = run.WithLingeringEffects(
             run.LingeringEffects.Append(
@@ -3521,14 +3540,16 @@ public static partial class GameEngine
                             working.BehaviorCatalog,
                             out _,
                             out _);
-                    if (dynamicPumpAvailable && availableCredits >= breakerSpec.PumpCost)
+                    int pumpCost = CostModifierProjection.IcebreakerPump(working, breaker, breakerSpec.PumpCost)?.EffectiveCost
+                        ?? breakerSpec.PumpCost;
+                    if (breakerSpec.HasPump && dynamicPumpAvailable && availableCredits >= pumpCost)
                     {
-                        foreach (int hostedCredits in LegalHostedCreditSplits(runner, run, breakerSpec.PumpCost))
+                        foreach (int hostedCredits in LegalHostedCreditSplits(runner, run, pumpCost))
                         {
                             actions.Add(new LegalAction(
                                 working.Allocator.NextActionId(),
                                 ActionKind.PumpBreaker,
-                                $"Pump {cardId.Value} ({FormatPaymentSplit(breakerSpec.PumpCost, hostedCredits)})",
+                                $"Pump {cardId.Value} ({FormatPaymentSplit(pumpCost, hostedCredits)})",
                                 new RunBreakerParameters(cardId, hostedCredits)));
                         }
                     }
@@ -3866,4 +3887,50 @@ public static partial class GameEngine
 
         return cardId;
     }
+
+    /// <summary>
+    /// Pushes the behavior child of a generic ICE subroutine: the declared
+    /// trigger's instructions, sourced by the ICE and controlled by the Corp,
+    /// directly above the encounter's run timing frame.
+    /// </summary>
+    private static void PushIceSubroutineBehavior(
+        WorkingState working,
+        CardInstanceState ice,
+        BehaviorSubroutineSpec specification)
+    {
+        CardBehaviorDefinition definition = GetBehaviorDefinition(working, ice.DefinitionId);
+        BehaviorTrigger trigger = GetTriggerDeclaration(definition, specification.TriggerKey);
+        if (trigger.Occurrence != OccurrenceKind.IceSubroutine)
+        {
+            throw new ResolutionFailureException(
+                $"Subroutine trigger '{specification.TriggerKey}' is not declared as an ICE subroutine.");
+        }
+
+        ResolutionFrame parent = working.ResolutionStack[^1];
+        PlayerId corp = GetPlayer(working, PlayerSide.Corp).Id;
+        ZoneState zone = ZoneForCard(working, ice.Id);
+        BehaviorResolutionFrame child = new BehaviorResolutionFrame(
+            definition,
+            new BehaviorInvocationContext(ice.Id, corp, corp),
+            working.BehaviorCatalog.Fingerprint,
+            working.BehaviorCatalog.GetDefinitionFingerprint(ice.DefinitionId),
+            working.Allocator.NextBehaviorFrameId(),
+            zone.Id,
+            zone.Kind,
+            parent.BehaviorId,
+            BehaviorFrameIdentity.Compute(parent),
+            triggerKey: trigger.Key,
+            rootInstructions: trigger.Instructions,
+            instructions: trigger.Instructions)
+            .With(stage: BehaviorResolutionStage.Execute);
+        working.ResolutionStack.Add(child);
+    }
+
+    /// <summary>Whether a behavior frame is a generic subroutine of the ICE being encountered.</summary>
+    private static bool IsEncounteredIceSubroutineFrame(WorkingState working, BehaviorResolutionFrame frame) =>
+        frame.TriggerKey is { } key
+        && working.RunState?.Encounter?.IceId == frame.SourceCardId
+        && working.BehaviorCatalog.TryGet(frame.DefinitionId, out CardBehaviorDefinition? definition)
+        && definition.Triggers.Any(trigger => trigger.Occurrence == OccurrenceKind.IceSubroutine
+            && string.Equals(trigger.Key, key, StringComparison.Ordinal));
 }

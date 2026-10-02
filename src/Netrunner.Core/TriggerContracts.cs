@@ -36,6 +36,13 @@ public enum OccurrenceKind
     CardAdvancedFromZero,
     AccessedCardTrashed,
     DiscardPhaseEnded,
+
+    /// <summary>
+    /// Never dispatched: a trigger declared with this occurrence is a keyed
+    /// instruction list resolved as an ICE subroutine
+    /// (<see cref="BehaviorSubroutineSpec"/>), with the ICE as its source.
+    /// </summary>
+    IceSubroutine,
 }
 
 public enum OccurrencePhase

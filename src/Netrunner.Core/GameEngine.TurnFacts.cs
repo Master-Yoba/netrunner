@@ -382,4 +382,69 @@ public static partial class GameEngine
             turn.Step,
             history.RecordTagChange(turn.ActiveSide, affectedPlayerId, delta));
     }
+
+    /// <summary>
+    /// Records a typed turn event for a side whose current turn facts exist.
+    /// States without current facts (fixtures, setup) are left unchanged.
+    /// </summary>
+    private static void RecordTurnEvent(WorkingState working, PlayerSide side, TurnEventKind kind)
+    {
+        TurnState turn = working.Turn;
+        if (!working.BehaviorCatalog.TracksTurnEvents || turn.History?.ThisTurn(side) is null)
+        {
+            return;
+        }
+
+        ReplaceTurn(working, turn.ActiveSide, turn.Phase, turn.TurnNumber, turn.Step,
+            turn.History.RecordEvent(side, kind));
+    }
+
+    /// <summary>
+    /// CR 5.4: a click action taken at the action stage starts an action. The
+    /// count, less any action still resolving, is how many actions the player
+    /// has finished this turn.
+    /// </summary>
+    private static void RecordActionStarted(WorkingState working, LegalAction action)
+    {
+        if (working.ResolutionStack.Count == 0
+            || working.ResolutionStack[^1] is not TurnFrame { Stage: TurnFrameStage.AwaitingAction } frame)
+        {
+            return;
+        }
+
+        bool isAction = action.Kind switch
+        {
+            ActionKind.GainCredit
+                or ActionKind.DrawCard
+                or ActionKind.InstallCard
+                or ActionKind.PlayCard
+                or ActionKind.StartRun
+                or ActionKind.AdvanceCard
+                or ActionKind.RemoveTag
+                or ActionKind.TrashTaggedResource
+                or ActionKind.PurgeVirusCounters => true,
+            ActionKind.UseAbility => action.Parameters is AbilityActionParameters
+            {
+                Activation: BehaviorAbilityActivation.ClickAction,
+            },
+            _ => false,
+        };
+        if (isAction)
+        {
+            RecordTurnEvent(working, frame.ActiveSide, TurnEventKind.ActionStarted);
+        }
+    }
+
+    /// <summary>
+    /// Whether the active player has finished an action this turn: actions
+    /// started, less one still resolving under the action stage.
+    /// </summary>
+    private static bool HasFinishedActionThisTurn(WorkingState working)
+    {
+        PlayerSide side = working.Turn.ActiveSide;
+        int started = working.Turn.History?.ThisTurn(side)?.EventCount(TurnEventKind.ActionStarted) ?? 0;
+        bool inProgress = working.ResolutionStack.Any(static frame =>
+            frame is TurnFrame { Stage: TurnFrameStage.AwaitingAction });
+        return started - (inProgress ? 1 : 0) > 0;
+    }
 }

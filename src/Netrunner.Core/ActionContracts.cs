@@ -20,6 +20,7 @@ public enum DecisionKind
     BehaviorChoice,
     IceSubroutineChoice,
     Setup,
+    BehaviorInstallChoice,
 }
 
 public enum ActionKind
@@ -94,6 +95,7 @@ public enum ActionKind
 [JsonDerivedType(typeof(BreachCandidateParameters), "breach-candidate")]
 [JsonDerivedType(typeof(BehaviorChoiceParameters), "behavior-choice")]
 [JsonDerivedType(typeof(IceSubroutineChoiceParameters), "ice-subroutine-choice")]
+[JsonDerivedType(typeof(BehaviorInstallChoiceParameters), "behavior-install-choice")]
 [JsonDerivedType(typeof(AbilityActionParameters), "ability")]
 public abstract record ActionParameters;
 
@@ -1621,6 +1623,9 @@ public sealed class PendingDecision
             ability.SourceZoneId,
             ability.SourceZoneKind,
             ability.AdditionalCostSelections),
+        BehaviorInstallChoiceParameters behaviorInstall => new BehaviorInstallChoiceParameters(
+            behaviorInstall.FrameIdentity,
+            behaviorInstall.Choice),
         _ => throw new InvalidOperationException(
             $"No immutable clone is registered for action parameter type '{parameters.GetType().Name}'."),
     };

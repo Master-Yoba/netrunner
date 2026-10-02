@@ -201,7 +201,29 @@ public sealed record EncounteredBioroidAbilitySpec
 [JsonDerivedType(typeof(DamageSubroutineSpec), "damage")]
 [JsonDerivedType(typeof(GainCreditsSubroutineSpec), "gain-credits")]
 [JsonDerivedType(typeof(GiveTagsSubroutineSpec), "give-tags")]
+[JsonDerivedType(typeof(BehaviorSubroutineSpec), "behavior")]
 public abstract record IceSubroutineSpec;
+
+/// <summary>
+/// EL-GENERIC-SUBROUTINE: a subroutine whose effect is the instruction list
+/// of a trigger on the ICE's own behavior definition, declared with
+/// <see cref="OccurrenceKind.IceSubroutine"/>. It resolves as a behavior child
+/// of the encounter with the ICE as its source and the Corp as controller.
+/// </summary>
+public sealed record BehaviorSubroutineSpec : IceSubroutineSpec
+{
+    public BehaviorSubroutineSpec(string triggerKey)
+    {
+        if (!StableIdentifier.TryValidate(triggerKey))
+        {
+            throw new ArgumentException("A behavior subroutine names a stable trigger key.", nameof(triggerKey));
+        }
+
+        TriggerKey = triggerKey;
+    }
+
+    public string TriggerKey { get; }
+}
 
 /// <summary>"End the run."</summary>
 public sealed record EndRunSubroutineSpec : IceSubroutineSpec;
@@ -498,7 +520,10 @@ public sealed record IcebreakerBehaviorSpec
                 $"Card '{definitionId}' must not have a negative pump cost.", nameof(pumpCost));
         }
 
-        if (dynamicPump is null && pumpStrength <= 0)
+        // A breaker without a printed credit pump (Hantu) declares pump cost
+        // and strength 0; any other credit pump must add strength.
+        if (dynamicPump is null && pumpStrength < 0
+            || dynamicPump is null && pumpStrength == 0 && pumpCost != 0)
         {
             throw new ArgumentException(
                 $"Card '{definitionId}' must have a positive pump strength.", nameof(pumpStrength));
@@ -538,6 +563,10 @@ public sealed record IcebreakerBehaviorSpec
 
     /// <summary>Strength added per pump.</summary>
     public int PumpStrength { get; }
+
+    /// <summary>Whether the breaker has a printed credit pump.</summary>
+    [JsonIgnore]
+    public bool HasPump => DynamicPump is not null || PumpStrength > 0;
 
     /// <summary>Generic strength declarations owned by this breaker.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

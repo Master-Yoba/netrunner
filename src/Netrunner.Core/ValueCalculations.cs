@@ -32,6 +32,12 @@ public enum BehaviorValueSourceKind
     Variable,
     CounterThreshold,
     EncounterScoped,
+
+    /// <summary>
+    /// EL-AMOUNT: the delta times the number of matching cards the source's
+    /// owner has in a public zone (fracters in the heap).
+    /// </summary>
+    PerCardInZone,
 }
 
 /// <summary>
@@ -131,7 +137,8 @@ public sealed record BehaviorValueModifier
         BehaviorCardFilter? installedFilter = null,
         string? variableKey = null,
         string? counterName = null,
-        int? threshold = null)
+        int? threshold = null,
+        BehaviorZone? zone = null)
     {
         if (!Enum.IsDefined(valueKind))
         {
@@ -169,11 +176,27 @@ public sealed record BehaviorValueModifier
                 nameof(reasonKey));
         }
 
-        if (installedFilter is not null && source != BehaviorValueSourceKind.PerInstalledCard)
+        if (installedFilter is not null
+            && source is not (BehaviorValueSourceKind.PerInstalledCard or BehaviorValueSourceKind.PerCardInZone))
         {
             throw new ArgumentException(
-                "An installed-card filter is valid only for per-installed-card modifiers.",
+                "A card filter is valid only for per-installed-card and per-card-in-zone modifiers.",
                 nameof(installedFilter));
+        }
+
+        if ((zone is not null) != (source == BehaviorValueSourceKind.PerCardInZone)
+            || zone is not (null or BehaviorZone.Heap or BehaviorZone.Archives))
+        {
+            throw new ArgumentException(
+                "A per-card-in-zone modifier requires a public discard zone (Heap or Archives); no other modifier takes a zone.",
+                nameof(zone));
+        }
+
+        if (source == BehaviorValueSourceKind.PerCardInZone && installedFilter is null)
+        {
+            throw new ArgumentNullException(
+                nameof(installedFilter),
+                "Per-card-in-zone modifiers require a typed card filter.");
         }
 
         if (variableKey is not null
@@ -233,7 +256,8 @@ public sealed record BehaviorValueModifier
         }
 
         if (source is BehaviorValueSourceKind.Static
-            or BehaviorValueSourceKind.PerInstalledCard)
+            or BehaviorValueSourceKind.PerInstalledCard
+            or BehaviorValueSourceKind.PerCardInZone)
         {
             // These declarations are already scoped by their source kind.
             // Conditional behavior needs a dedicated typed source kind rather
@@ -280,6 +304,7 @@ public sealed record BehaviorValueModifier
         VariableKey = variableKey;
         CounterName = counterName;
         Threshold = threshold;
+        Zone = zone;
     }
 
     public BehaviorValueModifier(
@@ -353,6 +378,24 @@ public sealed record BehaviorValueModifier
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? Threshold { get; }
+
+    /// <summary>The public zone a per-card-in-zone modifier counts.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BehaviorZone? Zone { get; }
+
+    public static BehaviorValueModifier PerCardInZoneOf(
+        BehaviorZone zone,
+        BehaviorCardFilter filter,
+        int delta,
+        string reasonKey) =>
+        new(
+            BehaviorValueKind.Strength,
+            BehaviorValueSourceKind.PerCardInZone,
+            BehaviorValueOperation.Add,
+            delta,
+            reasonKey,
+            installedFilter: filter,
+            zone: zone);
 
     public static BehaviorValueModifier Static(
         int delta,
@@ -492,6 +535,7 @@ public sealed record ValueCalculationTerm
 
                 break;
             case BehaviorValueSourceKind.PerInstalledCard:
+            case BehaviorValueSourceKind.PerCardInZone:
                 if (quantity is null || unitDelta is null)
                 {
                     throw new ArgumentException(
@@ -1180,6 +1224,43 @@ public static class EncounterStrength
                         quantity: count,
                         unitDelta: modifier.Delta));
                     break;
+                case BehaviorValueSourceKind.PerCardInZone:
+                    if (cards is null
+                        || zones is null
+                        || behaviorCatalog is null
+                        || sourceCardId is not { } zoneSource
+                        || !IsActiveInstalled(zoneSource, cards, zones)
+                        || cards.FirstOrDefault(card => card.Id == zoneSource) is not { } zoneOwner)
+                    {
+                        continue;
+                    }
+
+                    ZoneKind countedKind = modifier.Zone == BehaviorZone.Archives
+                        ? ZoneKind.CorpDiscard
+                        : ZoneKind.RunnerHeap;
+                    PlayerSide countedSide = countedKind == ZoneKind.CorpDiscard ? PlayerSide.Corp : PlayerSide.Runner;
+                    int zoneCount = zones
+                        .Where(zone => zone.Kind == countedKind && zone.OwnerSide == countedSide)
+                        .SelectMany(static zone => zone.CardIds)
+                        .Select(cardId => cards.FirstOrDefault(card => card.Id == cardId))
+                        .Count(card => card is not null
+                            && card.FaceUp
+                            && MatchesFilter(card, modifier.InstalledFilter!, behaviorCatalog));
+                    _ = zoneOwner;
+                    if (zoneCount == 0)
+                    {
+                        continue;
+                    }
+
+                    terms.Add(Term(
+                        modifier,
+                        BehaviorValueSourceKind.PerCardInZone,
+                        checked(modifier.Delta * zoneCount),
+                        targetDefinitionId,
+                        zoneSource,
+                        quantity: zoneCount,
+                        unitDelta: modifier.Delta));
+                    break;
                 case BehaviorValueSourceKind.Variable:
                     if (cards is null
                         || zones is null
@@ -1399,10 +1480,12 @@ public static class EncounterStrength
             return false;
         }
 
-        if (filter.Subtype is not null)
+        if (filter.Subtype is not null
+            && !(behaviorCatalog.TryGetCardSubtypes(card.DefinitionId, out IReadOnlyList<string> subtypes)
+                && subtypes.Contains(filter.Subtype, StringComparer.Ordinal)))
         {
-            // Subtype metadata belongs to the optional runtime catalog and is
-            // intentionally not inferred from titles or rules text here.
+            // Subtype metadata is never inferred from titles or rules text;
+            // only a composition-registered subtype matches.
             return false;
         }
 

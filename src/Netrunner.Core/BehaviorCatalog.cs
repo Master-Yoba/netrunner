@@ -67,6 +67,24 @@ public interface IBehaviorCatalog
         cardType = default;
         return false;
     }
+
+    /// <summary>
+    /// Optional printed subtypes registered by composition for value filters
+    /// that run without runtime metadata (a strength that counts fracters).
+    /// Catalogs without registrations fail closed.
+    /// </summary>
+    bool TryGetCardSubtypes(CardDefinitionId definitionId, out IReadOnlyList<string> subtypes)
+    {
+        subtypes = [];
+        return false;
+    }
+
+    /// <summary>
+    /// Whether the engine records typed turn events (actions started,
+    /// operations played) for this catalog's cards. Off for catalogs that
+    /// never read them, so their states keep their historical bytes.
+    /// </summary>
+    bool TracksTurnEvents => false;
 }
 
 /// <summary>
@@ -322,7 +340,10 @@ public sealed record BehaviorCondition
         if ((kind is BehaviorConditionKind.InstalledThisTurn
                 or BehaviorConditionKind.SuccessfulRunThisTurn
                 or BehaviorConditionKind.FoundCard
-                or BehaviorConditionKind.SuccessfulRunDuringRunnerLastTurn)
+                or BehaviorConditionKind.SuccessfulRunDuringRunnerLastTurn
+                or BehaviorConditionKind.RunEventActive
+                or BehaviorConditionKind.PlayedThisTurn
+                or BehaviorConditionKind.NoActionFinishedThisTurn)
             && (fact is not null || value is not null))
         {
             throw new ArgumentException(
@@ -330,11 +351,47 @@ public sealed record BehaviorCondition
                 fact is not null ? nameof(fact) : nameof(value));
         }
 
+        if (kind is BehaviorConditionKind.ThreatLevelAtLeast
+                or BehaviorConditionKind.RunnerTagsAtLeast
+                or BehaviorConditionKind.ZoneCountAtMost
+                or BehaviorConditionKind.UnusedMemoryAtMost
+                or BehaviorConditionKind.UnusedMemoryAtLeast
+            && value is null or < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(value),
+                "A threshold condition requires a nonnegative value.");
+        }
+
+        if (kind == BehaviorConditionKind.ZoneCountAtMost
+            ? fact is null || !Enum.TryParse<BehaviorZone>(fact, ignoreCase: false, out _)
+            : kind is BehaviorConditionKind.ThreatLevelAtLeast
+                or BehaviorConditionKind.RunnerTagsAtLeast
+                or BehaviorConditionKind.UnusedMemoryAtMost
+                or BehaviorConditionKind.UnusedMemoryAtLeast
+                && fact is not null)
+        {
+            throw new ArgumentException(
+                "A zone-count condition names one typed zone; other threshold conditions take no fact.",
+                nameof(fact));
+        }
+
         Fact = fact;
         Kind = kind;
         SubjectSide = subjectSide;
         Value = value;
     }
+
+    public static BehaviorCondition RunEventActive() => new(BehaviorConditionKind.RunEventActive);
+
+    public static BehaviorCondition ThreatLevelAtLeast(int threshold) =>
+        new(BehaviorConditionKind.ThreatLevelAtLeast, value: threshold);
+
+    public static BehaviorCondition RunnerTagsAtLeast(int threshold) =>
+        new(BehaviorConditionKind.RunnerTagsAtLeast, value: threshold);
+
+    public static BehaviorCondition ZoneCountAtMost(BehaviorZone zone, int maximum) =>
+        new(BehaviorConditionKind.ZoneCountAtMost, fact: zone.ToString(), value: maximum);
 
     public BehaviorConditionKind Kind { get; }
 
@@ -389,6 +446,33 @@ public enum BehaviorConditionKind
     SuccessfulRunThisTurn,
     FoundCard,
     SuccessfulRunDuringRunnerLastTurn,
+
+    /// <summary>EL-RUN-EVENT-ACTIVE: the current run was started by a run event.</summary>
+    RunEventActive,
+
+    /// <summary>EL-THREAT: the threat level (the higher score) is at least the value.</summary>
+    ThreatLevelAtLeast,
+
+    /// <summary>EL-TAG-COUNT: the Runner has at least the value in tags.</summary>
+    RunnerTagsAtLeast,
+
+    /// <summary>
+    /// A zone of the source controller (named by the fact, a
+    /// <see cref="BehaviorZone"/> name) holds at most the value in cards.
+    /// </summary>
+    ZoneCountAtMost,
+
+    /// <summary>The Runner's unused memory is at most the value (0: memory is full).</summary>
+    UnusedMemoryAtMost,
+
+    /// <summary>The Runner's unused memory is at least the value.</summary>
+    UnusedMemoryAtLeast,
+
+    /// <summary>The source controller has played an operation or event this turn.</summary>
+    PlayedThisTurn,
+
+    /// <summary>EL-ACTION-NOT-FINISHED: the active player has not finished an action this turn.</summary>
+    NoActionFinishedThisTurn,
 }
 
 /// <summary>A typed target selector; IDs are resolved by Core at runtime.</summary>
@@ -444,6 +528,28 @@ public sealed record BehaviorTarget
             {
                 throw new ArgumentException(
                     "Installed-card targets may carry only owner-side and card-class filters.",
+                    nameof(filter));
+            }
+        }
+        else if (kind == BehaviorTargetKind.AccessedCard)
+        {
+            // EL-ACCESS-FILTER: an access ability may name the kind of card it
+            // affects ("the non-agenda card you are accessing"). Like installed
+            // targets, only owner-side and card-class filters are allowed.
+            if (zone is not null || reveal)
+            {
+                throw new ArgumentException(
+                    "Accessed-card targets may not carry a zone or reveal flag.",
+                    nameof(zone));
+            }
+
+            if (filter is not null
+                && (filter.DefinitionId is not null
+                    || filter.Subtype is not null
+                    || filter.Rezzed is not null))
+            {
+                throw new ArgumentException(
+                    "Accessed-card targets may carry only owner-side and card-class filters.",
                     nameof(filter));
             }
         }
@@ -652,14 +758,17 @@ public sealed record BehaviorInstruction
         BehaviorAmountOperand? amountOperand = null,
         BehaviorPlayerSelector? recipient = null,
         DamageKind? damageKind = null,
-        BehaviorDamageAmountOperand? damageAmountOperand = null)
+        BehaviorDamageAmountOperand? damageAmountOperand = null,
+        string? recordAs = null,
+        BehaviorInstallCostRule? costRule = null)
     {
         if (!Enum.IsDefined(kind))
         {
             throw new ArgumentOutOfRangeException(nameof(kind));
         }
 
-        if (kind != BehaviorInstructionKind.ModifyEncounteredIceStrength)
+        if (kind is not (BehaviorInstructionKind.ModifyEncounteredIceStrength
+            or BehaviorInstructionKind.ModifySourceStrength))
         {
             ArgumentOutOfRangeException.ThrowIfNegative(amount);
         }
@@ -683,6 +792,8 @@ public sealed record BehaviorInstruction
         Recipient = recipient == BehaviorPlayerSelector.Controller
             ? null
             : recipient;
+        RecordAs = recordAs;
+        CostRule = costRule;
         ValidateOperands();
     }
 
@@ -754,8 +865,47 @@ public sealed record BehaviorInstruction
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public BehaviorDamageAmountOperand? DamageAmountOperand { get; }
 
+    /// <summary>
+    /// EL-AMOUNT: a key under which the instruction records the amount it
+    /// actually applied (credits lost, tags removed), for a later
+    /// <see cref="BehaviorAmountKind.Recorded"/> amount.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RecordAs { get; }
+
+    /// <summary>
+    /// EL-BEHAVIOR-INSTALL: how a zone install pays. Set only on an
+    /// InstallCard instruction whose target is a zone of cards; its amount is
+    /// then a credit discount.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BehaviorInstallCostRule? CostRule { get; }
+
+    /// <summary>Whether this is an install from a zone chosen in its own decision.</summary>
+    [JsonIgnore]
+    public bool IsZoneInstall =>
+        Kind == BehaviorInstructionKind.InstallCard
+        && Target is { Kind: BehaviorTargetKind.ZoneCard or BehaviorTargetKind.ZoneCards };
+
     private void ValidateOperands()
     {
+        if (CostRule is { } rule
+            && (!Enum.IsDefined(rule) || !IsZoneInstall))
+        {
+            throw new ArgumentException(
+                "Only an InstallCard instruction over a zone of cards may declare a cost rule.",
+                nameof(CostRule));
+        }
+
+        if (RecordAs is not null
+            && (!StableIdentifier.TryValidate(RecordAs)
+                || Kind is not (BehaviorInstructionKind.LoseCredits or BehaviorInstructionKind.RemoveTags)))
+        {
+            throw new ArgumentException(
+                "Only credit-loss and tag-removal instructions may record a stable amount key.",
+                nameof(RecordAs));
+        }
+
         if (DamageKind is { } damageKind && !Enum.IsDefined(damageKind))
         {
             throw new ArgumentOutOfRangeException(nameof(DamageKind));
@@ -782,10 +932,13 @@ public sealed record BehaviorInstruction
             throw new ArgumentOutOfRangeException(nameof(Recipient));
         }
 
-        if (Recipient is not null && Kind != BehaviorInstructionKind.AddTags)
+        if (Recipient is not null
+            && Kind is not (BehaviorInstructionKind.AddTags
+                or BehaviorInstructionKind.GainCredits
+                or BehaviorInstructionKind.LoseCredits))
         {
             throw new ArgumentException(
-                "A player recipient is valid only for AddTags instructions.",
+                "A player recipient is valid only for tag and credit instructions.",
                 nameof(Recipient));
         }
 
@@ -811,7 +964,8 @@ public sealed record BehaviorInstruction
             }
         }
 
-        if (Kind == BehaviorInstructionKind.ModifyEncounteredIceStrength)
+        if (Kind is BehaviorInstructionKind.ModifyEncounteredIceStrength
+            or BehaviorInstructionKind.ModifySourceStrength)
         {
             if (Amount == 0)
             {
@@ -853,19 +1007,21 @@ public sealed record BehaviorInstruction
                 nameof(RunOperand));
         }
 
-        if (Kind != BehaviorInstructionKind.GainCredits && AmountOperand is not null)
+        if (AmountOperand is not null
+            && Kind is not (BehaviorInstructionKind.GainCredits
+                or BehaviorInstructionKind.LoseCredits
+                or BehaviorInstructionKind.Draw
+                or BehaviorInstructionKind.RemoveTags))
         {
             throw new ArgumentException(
-                "A dynamic amount operand is valid only for GainCredits instructions.",
+                "A dynamic amount operand is valid only for credit, draw and tag-removal instructions.",
                 nameof(AmountOperand));
         }
 
-        if (Kind == BehaviorInstructionKind.GainCredits
-            && AmountOperand is not null
-            && Amount != 0)
+        if (AmountOperand is not null && Amount != 0)
         {
             throw new ArgumentException(
-                "A GainCredits instruction must use either a static amount or a dynamic amount operand, not both.",
+                "An instruction must use either a static amount or a dynamic amount operand, not both.",
                 nameof(Amount));
         }
 
@@ -935,8 +1091,9 @@ public sealed record BehaviorInstruction
         if ((Kind is BehaviorInstructionKind.GainCredits
                 or BehaviorInstructionKind.Draw
                 or BehaviorInstructionKind.LoseClicks
-                or BehaviorInstructionKind.AdvanceCard)
-            && (Kind != BehaviorInstructionKind.GainCredits || AmountOperand is null)
+                or BehaviorInstructionKind.AdvanceCard
+                or BehaviorInstructionKind.RemoveTags)
+            && AmountOperand is null
             && Amount <= 0)
         {
             throw new ArgumentOutOfRangeException(
@@ -1083,7 +1240,29 @@ public sealed record BehaviorInstruction
                         BehaviorZone.Headquarters,
                         BehaviorZone.Grip,
                         BehaviorZone.Archives,
-                        BehaviorZone.Stack);
+                        BehaviorZone.Stack,
+                        BehaviorZone.Deck,
+                        BehaviorZone.Heap,
+                        BehaviorZone.ScoreArea);
+                }
+
+                if (IsZoneInstall)
+                {
+                    // A zone install chooses its card and destination in one
+                    // decision; a destination zone only narrows it (ServerRoot:
+                    // a remote server's root; ServerIce: protecting a server).
+                    if (Target!.Zone != SourceZone)
+                    {
+                        throw new ArgumentException("A zone install's target and source must name the same zone.", nameof(Target));
+                    }
+
+                    if (DestinationZone is { } narrowed
+                        && narrowed is not (BehaviorZone.ServerRoot or BehaviorZone.ServerIce or BehaviorZone.Rig))
+                    {
+                        throw new ArgumentException("A zone install may narrow its destination to a server root, server ice or the rig.", nameof(DestinationZone));
+                    }
+
+                    break;
                 }
 
                 RequireDestination(
@@ -1269,6 +1448,20 @@ public enum BehaviorInstructionKind
     ProhibitScoringThisTurn,
     RezIgnoringCosts,
     ShuffleSearchedDeck,
+
+    /// <summary>
+    /// EL-REMOVE-TAGS: removes up to the amount of the Runner's tags, as an
+    /// effect, recording how many were removed.
+    /// </summary>
+    RemoveTags,
+
+    /// <summary>
+    /// EL-SELF-STRENGTH: raises the source icebreaker's own strength for the
+    /// current encounter, from an encounter-paid ability ("Hosted virus
+    /// counter: +2 strength"). Shares the encounter-strength provenance of
+    /// <see cref="ModifyEncounteredIceStrength"/>.
+    /// </summary>
+    ModifySourceStrength,
 
     // Short aliases keep the contract pleasant for callers while the longer
     // names remain unambiguous in serialized/fingerprint output.
@@ -1978,6 +2171,7 @@ public sealed class BehaviorCatalog : IBehaviorCatalog, IBehaviorCardClassificat
     private readonly IReadOnlyDictionary<CardDefinitionId, RunEventBehaviorSpec> _runEvents;
     private readonly IReadOnlyDictionary<CardDefinitionId, CardBehaviorDefinition> _generic;
     private readonly ReadOnlyDictionary<CardDefinitionId, BehaviorCardType> _cardTypes;
+    private readonly ReadOnlyDictionary<CardDefinitionId, IReadOnlyList<string>> _cardSubtypes;
 
     internal BehaviorCatalog(
         string version,
@@ -1987,9 +2181,12 @@ public sealed class BehaviorCatalog : IBehaviorCatalog, IBehaviorCardClassificat
         IReadOnlyDictionary<CardDefinitionId, AgendaBehaviorSpec> agendas,
         IReadOnlyDictionary<CardDefinitionId, RunEventBehaviorSpec> runEvents,
         IReadOnlyDictionary<CardDefinitionId, CardBehaviorDefinition> generic,
-        IReadOnlyDictionary<CardDefinitionId, BehaviorCardType>? cardTypes = null)
+        IReadOnlyDictionary<CardDefinitionId, BehaviorCardType>? cardTypes = null,
+        IReadOnlyDictionary<CardDefinitionId, IReadOnlyList<string>>? cardSubtypes = null,
+        bool tracksTurnEvents = false)
     {
         Version = ValidateVersion(version);
+        TracksTurnEvents = tracksTurnEvents;
         BehaviorRegistryVersion = Version;
         _ice = Freeze(ice);
         _icebreakers = Freeze(icebreakers);
@@ -1998,6 +2195,9 @@ public sealed class BehaviorCatalog : IBehaviorCatalog, IBehaviorCardClassificat
         _runEvents = Freeze(runEvents);
         _generic = Freeze(generic);
         _cardTypes = FreezeCardTypes(cardTypes ?? new Dictionary<CardDefinitionId, BehaviorCardType>());
+        _cardSubtypes = new ReadOnlyDictionary<CardDefinitionId, IReadOnlyList<string>>(
+            (cardSubtypes ?? new Dictionary<CardDefinitionId, IReadOnlyList<string>>())
+                .ToDictionary(static pair => pair.Key, static pair => (IReadOnlyList<string>)pair.Value.ToArray()));
         ValidateTypedFamilyConflicts(_ice, _icebreakers, _assets, _agendas, _runEvents);
         ValidateClassificationBindings(
             _ice,
@@ -2015,10 +2215,15 @@ public sealed class BehaviorCatalog : IBehaviorCatalog, IBehaviorCardClassificat
             _agendas,
             _runEvents,
             _generic,
-            _cardTypes);
+            _cardTypes,
+            _cardSubtypes,
+            tracksTurnEvents);
     }
 
     public string Version { get; }
+
+    /// <inheritdoc />
+    public bool TracksTurnEvents { get; }
 
     public string BehaviorRegistryVersion { get; }
 
@@ -2091,6 +2296,13 @@ public sealed class BehaviorCatalog : IBehaviorCatalog, IBehaviorCardClassificat
     public bool TryGetCardType(CardDefinitionId definitionId, out BehaviorCardType cardType) =>
         _cardTypes.TryGetValue(definitionId, out cardType);
 
+    public bool TryGetCardSubtypes(CardDefinitionId definitionId, out IReadOnlyList<string> subtypes) =>
+        _cardSubtypes.TryGetValue(definitionId, out subtypes!);
+
+    /// <summary>The definitions with registered printed subtypes.</summary>
+    public IReadOnlyCollection<CardDefinitionId> SubtypedDefinitionIds =>
+        new ReadOnlyCollection<CardDefinitionId>(_cardSubtypes.Keys.ToArray());
+
     /// <summary>
     /// Builds an immutable catalog containing every typed and generic contract
     /// for the requested definition IDs. The source version is retained, so
@@ -2105,6 +2317,11 @@ public sealed class BehaviorCatalog : IBehaviorCatalog, IBehaviorCardClassificat
         ArgumentNullException.ThrowIfNull(definitionIds);
 
         var builder = new BehaviorCatalogBuilder(source.Version);
+        if (source.TracksTurnEvents)
+        {
+            builder.TrackTurnEvents();
+        }
+
         foreach (CardDefinitionId definitionId in definitionIds.Distinct())
         {
             if (source.TryGetIce(definitionId, out IceBehaviorSpec? ice))
@@ -2141,6 +2358,11 @@ public sealed class BehaviorCatalog : IBehaviorCatalog, IBehaviorCardClassificat
                 && classifications.TryGetCardType(definitionId, out BehaviorCardType cardType))
             {
                 builder.AddCardType(definitionId, cardType);
+            }
+
+            if (source.TryGetCardSubtypes(definitionId, out IReadOnlyList<string> subtypes))
+            {
+                builder.AddCardSubtypes(definitionId, subtypes);
             }
         }
 
@@ -2276,6 +2498,8 @@ public sealed class BehaviorCatalogBuilder
     private readonly Dictionary<CardDefinitionId, RunEventBehaviorSpec> _runEvents = new();
     private readonly Dictionary<CardDefinitionId, CardBehaviorDefinition> _generic = new();
     private readonly Dictionary<CardDefinitionId, BehaviorCardType> _cardTypes = new();
+    private readonly Dictionary<CardDefinitionId, IReadOnlyList<string>> _cardSubtypes = new();
+    private bool _tracksTurnEvents;
     private readonly Dictionary<CardDefinitionId, string> _typedFamilies = new();
 
     public BehaviorCatalogBuilder(string version)
@@ -2307,6 +2531,16 @@ public sealed class BehaviorCatalogBuilder
                 {
                     AddCardType(definitionId, cardType);
                 }
+            }
+        }
+
+        _tracksTurnEvents = baseCatalog.TracksTurnEvents;
+        if (baseCatalog is BehaviorCatalog compiled)
+        {
+            foreach (CardDefinitionId definitionId in compiled.SubtypedDefinitionIds)
+            {
+                compiled.TryGetCardSubtypes(definitionId, out IReadOnlyList<string> subtypes);
+                AddCardSubtypes(definitionId, subtypes);
             }
         }
     }
@@ -2372,6 +2606,30 @@ public sealed class BehaviorCatalogBuilder
         return this;
     }
 
+    /// <summary>
+    /// Registers a definition's printed subtypes for value filters that run
+    /// without runtime metadata. The definition needs an executable
+    /// registration of its own or in a composed base catalog.
+    /// </summary>
+    public BehaviorCatalogBuilder AddCardSubtypes(CardDefinitionId definitionId, IReadOnlyList<string> subtypes)
+    {
+        ArgumentNullException.ThrowIfNull(subtypes);
+        if (subtypes.Count == 0 || subtypes.Any(static subtype => !StableIdentifier.TryValidate(subtype)))
+        {
+            throw new ArgumentException("Registered subtypes must be stable non-empty identifiers.", nameof(subtypes));
+        }
+
+        _cardSubtypes[definitionId] = subtypes.ToArray();
+        return this;
+    }
+
+    /// <summary>Opts the catalog into typed turn-event tracking.</summary>
+    public BehaviorCatalogBuilder TrackTurnEvents()
+    {
+        _tracksTurnEvents = true;
+        return this;
+    }
+
     public BehaviorCatalog Build() => new(
         Version,
         _ice,
@@ -2380,7 +2638,9 @@ public sealed class BehaviorCatalogBuilder
         _agendas,
         _runEvents,
         _generic,
-        _cardTypes);
+        _cardTypes,
+        _cardSubtypes,
+        _tracksTurnEvents);
 
     private BehaviorCatalogBuilder AddTyped<T>(
         Dictionary<CardDefinitionId, T> map,
@@ -2567,7 +2827,9 @@ internal static class BehaviorCatalogFingerprint
         IReadOnlyDictionary<CardDefinitionId, AgendaBehaviorSpec> agendas,
         IReadOnlyDictionary<CardDefinitionId, RunEventBehaviorSpec> runEvents,
         IReadOnlyDictionary<CardDefinitionId, CardBehaviorDefinition> generic,
-        IReadOnlyDictionary<CardDefinitionId, BehaviorCardType>? cardTypes = null)
+        IReadOnlyDictionary<CardDefinitionId, BehaviorCardType>? cardTypes = null,
+        IReadOnlyDictionary<CardDefinitionId, IReadOnlyList<string>>? cardSubtypes = null,
+        bool tracksTurnEvents = false)
     {
         var builder = new StringBuilder();
         builder.Append("version\n").Append(version).Append('\n');
@@ -2580,6 +2842,19 @@ internal static class BehaviorCatalogFingerprint
         if (cardTypes is not null)
         {
             AppendFamily(builder, "card-type", cardTypes, AppendCardType);
+        }
+
+        // Emitted only when present, so catalogs without subtype
+        // registrations keep their historical fingerprint bytes.
+        if (tracksTurnEvents)
+        {
+            builder.Append("tracks-turn-events\n");
+        }
+
+        if (cardSubtypes is { Count: > 0 })
+        {
+            AppendFamily(builder, "card-subtypes", cardSubtypes,
+                static (target, subtypes) => target.Append(string.Join(',', subtypes)));
         }
 
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()))).ToLowerInvariant();
@@ -2759,6 +3034,11 @@ internal static class BehaviorCatalogFingerprint
         AppendCondition(builder, value.Condition);
         builder.Append(",reason=");
         AppendString(builder, value.ReasonKey);
+        if (value.PerInstalledFilter is { } perInstalled)
+        {
+            builder.Append(",per-installed=");
+            AppendFilter(builder, perInstalled);
+        }
     }
 
     private static void AppendFirstProgramInstallCostModifier(
@@ -2803,6 +3083,10 @@ internal static class BehaviorCatalogFingerprint
         AppendString(builder, value.CounterName);
         builder.Append(",threshold=");
         AppendNullableInt(builder, value.Threshold);
+        if (value.Zone is { } zone)
+        {
+            builder.Append(",zone=").Append((int)zone);
+        }
     }
 
     private static void AppendDynamicPump(
@@ -2970,6 +3254,23 @@ internal static class BehaviorCatalogFingerprint
             builder.Append(",amountOperand=counter=");
             AppendString(builder, amountOperand.SourceCounterName);
             builder.Append(",multiplier=").Append(amountOperand.Multiplier);
+            if (amountOperand.Kind is { } amountKind)
+            {
+                builder.Append(",amountKind=").Append((int)amountKind).Append(",recorded=");
+                AppendString(builder, amountOperand.RecordedKey);
+                builder.Append(",offset=").Append(amountOperand.Offset);
+            }
+        }
+
+        if (value.RecordAs is { } recordAs)
+        {
+            builder.Append(",recordAs=");
+            AppendString(builder, recordAs);
+        }
+
+        if (value.CostRule is { } costRule)
+        {
+            builder.Append(",costRule=").Append((int)costRule);
         }
 
         if (value.DamageKind is { } damageKind)
@@ -3084,6 +3385,12 @@ internal static class BehaviorCatalogFingerprint
         if (value.Semantic is { } semantic)
         {
             builder.Append(",semantic=").Append((int)semantic);
+        }
+
+        if (value.Condition is { } condition)
+        {
+            builder.Append(",condition=");
+            AppendCondition(builder, condition);
         }
     }
 

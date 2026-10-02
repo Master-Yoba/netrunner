@@ -14,9 +14,9 @@ public sealed partial class RunnerHeuristicPolicy
         foreach (BehaviorPaidAbility ability in behavior.PaidAbilities)
         {
             foreach (BehaviorInstruction gain in ability.Instructions.Where(instruction => instruction.Kind == BehaviorInstructionKind.GainCredits
-                && instruction.AmountOperand is not null))
+                && instruction.AmountOperand is { SourceCounterName: not null }))
             {
-                string counter = gain.AmountOperand!.SourceCounterName;
+                string counter = gain.AmountOperand!.SourceCounterName!;
                 int counters = behavior.Triggers.Sum(trigger => HeuristicContext.Flatten(trigger.Instructions)
                     .Where(instruction => instruction.Kind == BehaviorInstructionKind.AddCounter && instruction.Argument == counter)
                     .Sum(instruction => instruction.Amount * (trigger.Occurrence == OccurrenceKind.TurnBegin ? 2 : 1)));

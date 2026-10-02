@@ -109,7 +109,8 @@ public sealed record TurnFactsState
         IReadOnlyList<FirstXUseKey>? firstXUseKeys = null,
         IReadOnlyList<CardInstanceId>? programInstallOccurrenceIds = null,
         IReadOnlyList<ServerId>? hqBreachOccurrenceServerIds = null,
-        IReadOnlyList<OccurrenceId>? basicDrawOccurrenceIds = null)
+        IReadOnlyList<OccurrenceId>? basicDrawOccurrenceIds = null,
+        IReadOnlyList<TurnEventCount>? eventCounts = null)
     {
         Version = version;
         Side = side;
@@ -160,6 +161,20 @@ public sealed record TurnFactsState
             (hqBreachOccurrenceServerIds ?? []).ToArray());
         BasicDrawOccurrenceIds = new ReadOnlyCollection<OccurrenceId>(
             (basicDrawOccurrenceIds ?? []).ToArray());
+        TurnEventCount[] counts = (eventCounts ?? [])
+            .Select(static value =>
+            {
+                ArgumentNullException.ThrowIfNull(value);
+                return new TurnEventCount(value.Kind, value.Count);
+            })
+            .OrderBy(static value => value.Kind)
+            .ToArray();
+        if (counts.Select(static value => value.Kind).Distinct().Count() != counts.Length)
+        {
+            throw new ArgumentException("Turn event counts must not repeat a kind.", nameof(eventCounts));
+        }
+
+        EventCounts = counts.Length == 0 ? null : new ReadOnlyCollection<TurnEventCount>(counts);
     }
 
     public TurnFactsState(PlayerSide side, int turnNumber, int clicksAllotted)
@@ -276,6 +291,44 @@ public sealed record TurnFactsState
     /// <summary>Counted first-X usage keys observed during this turn.</summary>
     [JsonInclude]
     public IReadOnlyList<FirstXUseKey> FirstXUseKeys { get; private set; }
+
+    /// <summary>
+    /// Typed counts of turn events (actions started, operations and events
+    /// played, ...). Omitted while empty, so states without these facts keep
+    /// their historical bytes.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<TurnEventCount>? EventCounts { get; private set; }
+
+    /// <summary>How many times an event happened this turn.</summary>
+    public int EventCount(TurnEventKind kind) =>
+        EventCounts?.FirstOrDefault(value => value.Kind == kind)?.Count ?? 0;
+
+    internal TurnFactsState RecordEvent(TurnEventKind kind)
+    {
+        TurnEventCount[] counts = (EventCounts ?? [])
+            .Where(value => value.Kind != kind)
+            .Append(new TurnEventCount(kind, checked(EventCount(kind) + 1)))
+            .ToArray();
+        return New(
+            turnBegan: TurnBegan,
+            mandatoryDrawPerformed: MandatoryDrawPerformed,
+            actionPhaseEnded: ActionPhaseEnded,
+            discardPhaseEnded: DiscardPhaseEnded,
+            clicksLost: ClicksLost,
+            installedCardIds: InstalledCardIds,
+            successfulRun: SuccessfulRun,
+            usedAbilityKeys: UsedAbilityKeys,
+            attemptedRunServerIds: AttemptedRunServerIds,
+            successfulRunServerIds: SuccessfulRunServerIds,
+            accessedCardOccurrenceIds: AccessedCardOccurrenceIds,
+            trashedCardOccurrenceIds: TrashedCardOccurrenceIds,
+            agendaTurnChanges: AgendaTurnChanges,
+            tagTurnChanges: TagTurnChanges,
+            firstXUseKeys: FirstXUseKeys,
+            eventCounts: counts);
+    }
 
     internal TurnFactsState MarkTurnBegan() => New(
         turnBegan: true,
@@ -611,7 +664,8 @@ public sealed record TurnFactsState
         IReadOnlyList<FirstXUseKey>? firstXUseKeys = null,
         IReadOnlyList<CardInstanceId>? programInstallOccurrenceIds = null,
         IReadOnlyList<ServerId>? hqBreachOccurrenceServerIds = null,
-        IReadOnlyList<OccurrenceId>? basicDrawOccurrenceIds = null) => new(
+        IReadOnlyList<OccurrenceId>? basicDrawOccurrenceIds = null,
+        IReadOnlyList<TurnEventCount>? eventCounts = null) => new(
         Version,
         Side,
         TurnNumber,
@@ -633,7 +687,8 @@ public sealed record TurnFactsState
         firstXUseKeys,
         programInstallOccurrenceIds ?? ProgramInstallOccurrenceIds,
         hqBreachOccurrenceServerIds ?? HqBreachOccurrenceServerIds,
-        basicDrawOccurrenceIds ?? BasicDrawOccurrenceIds);
+        basicDrawOccurrenceIds ?? BasicDrawOccurrenceIds,
+        eventCounts ?? EventCounts);
 
 }
 
@@ -823,6 +878,13 @@ public sealed record TurnHistoryState
 
     internal TurnHistoryState Copy() => new(Version, CorpThisTurn, CorpLastTurn, RunnerThisTurn, RunnerLastTurn);
 
+    internal TurnHistoryState RecordEvent(PlayerSide side, TurnEventKind kind)
+    {
+        TurnFactsState current = ThisTurn(side)
+            ?? throw new InvalidOperationException($"No current {side} turn facts are available.");
+        return ReplaceCurrent(side, current.RecordEvent(kind));
+    }
+
     private TurnFactsState RequireCurrent(PlayerSide side) => ThisTurn(side)
         ?? throw new InvalidOperationException($"No current '{side}' turn facts are available.");
 
@@ -989,4 +1051,42 @@ public sealed record TurnDiscardFrame : ResolutionFrame
 
     private static ReadOnlyCollection<CardInstanceId> Freeze(IEnumerable<CardInstanceId>? values) =>
         new((values ?? []).ToArray());
+}
+
+/// <summary>A typed turn event counted by <see cref="TurnFactsState.EventCounts"/>.</summary>
+public enum TurnEventKind
+{
+    /// <summary>The active player began an action (a click action of the action phase).</summary>
+    ActionStarted,
+
+    /// <summary>The Corp played an operation.</summary>
+    OperationPlayed,
+
+    /// <summary>The Runner played an event.</summary>
+    EventPlayed,
+}
+
+/// <summary>How many times one typed event happened during a turn.</summary>
+public sealed record TurnEventCount
+{
+    [JsonConstructor]
+    public TurnEventCount(TurnEventKind kind, int count)
+    {
+        if (!Enum.IsDefined(kind))
+        {
+            throw new ArgumentOutOfRangeException(nameof(kind));
+        }
+
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(count);
+        Kind = kind;
+        Count = count;
+    }
+
+    [JsonInclude]
+    [JsonRequired]
+    public TurnEventKind Kind { get; private set; }
+
+    [JsonInclude]
+    [JsonRequired]
+    public int Count { get; private set; }
 }
