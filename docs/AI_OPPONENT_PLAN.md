@@ -533,10 +533,20 @@ of the owner's turns also becomes unknown, so nothing sticks forever.
 
 #### A9c. Copy and unique counting (both bots)
 
-- **Copies left:** for each definition, the limit minus the copies seen (played, in Archives or the heap, installed,
-  scored, trashed).
-  - The limit is the deck-building limit in the pool (3, or 1 for a limited card), or the exact list count for Hard.
-  - Unique cards also count against what can be installed.
+- **Copies left:** for each definition, counted from where the copies are now, not from what was ever seen. The copies
+  that can still come are the limit minus those currently known elsewhere:
+  - face-up Archives or the heap;
+  - installed, scored or removed from game;
+  - remembered in a hidden zone.
+
+  Recursion returns a copy to play:
+  - Spin Doctor shuffles up to two cards from Archives into R&D, and the face-up ones it takes become "in R&D,
+    position lost", available again.
+  - Face-down Archives cards were never known, so they stay in the unknown count.
+  - A Runner's heap-to-grip recursion works the same way.
+
+  The limit is the deck-building limit in the pool (3, or 1 for a limited card), or the exact list count for Hard.
+  Unique cards also count against what can be installed.
 - **What the Corp infers:**
   - The Runner's breaker types left: it has seen three killers trashed, so it probably has no killer.
   - Its burst economy left: three Sure Gambles played and a Runner low on money means no quick money, so a scoring
