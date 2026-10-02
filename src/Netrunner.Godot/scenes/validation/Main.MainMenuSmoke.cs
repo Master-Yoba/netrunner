@@ -7,8 +7,9 @@ namespace Netrunner.GodotClient;
 
 /// <summary>
 /// The main menu (U7): the title screen's entries, the New game view's Gateway
-/// and Tutorial areas, seat and deck choice, and a Gateway game started from
-/// the menu with the chosen decks, clicked as a player would.
+/// and Tutorial areas (and, previewed, the Gateway + Elevation area), seat and
+/// deck choice, and a Gateway game started from the menu with the chosen decks,
+/// clicked as a player would.
 /// </summary>
 public partial class Main
 {
@@ -50,7 +51,7 @@ public partial class Main
 				await ClickTableButton(FindDescendants<Button>(_menuNewGameView!).Single(button => button.Text == "Gateway decks"));
 				await ClickTableButton(FindDescendants<Button>(_menuNewGameView!).Single(button => button.Text == "Play as Runner"));
 				RequireInteraction(_menuNewGameView!.Visible && _menuMode == GatewayMode, "New game doesn't show the Gateway decks.");
-				OfficialPreset[] runners = _officialPresetCatalog!.Gateway.Where(preset => preset.Side == PlayerSide.Runner).ToArray();
+				OfficialPreset[] runners = MenuModeDecks(GatewayMode).Where(preset => preset.Side == PlayerSide.Runner).ToArray();
 				RequireInteraction(FindDescendants<Button>(_menuYourDecks!).Length == runners.Length
 					&& FindDescendants<Button>(_menuOpponentDecks!).Length == 5, "The Gateway area doesn't list three Runner decks and four Corp decks plus Random.");
 				// A6: three difficulties, and the Corp opponent's personalities.
@@ -63,6 +64,20 @@ public partial class Main
 				RequireInteraction(_menuSeat == PlayerSide.Corp && FindDescendants<Button>(_menuYourDecks!).Length == 4,
 					"Playing the Corp doesn't offer the four Corp decks.");
 				RequireInteraction(MenuPersonalities().SequenceEqual(["Balanced style", "Aggressive", "Rig-builder"]), "Playing the Corp doesn't offer the Runner's personalities.");
+				if (ElevationMenuOffered)
+				{
+					// D-EL-8: the Gateway + Elevation format offers its own fourteen decks, Random drawing from them.
+					await ClickTableButton(FindDescendants<Button>(_menuNewGameView).Single(button => button.Text == "Gateway + Elevation"));
+					RequireInteraction(_menuMode == ElevationMode
+						&& FindDescendants<Button>(_menuYourDecks!).Length == 8
+						&& FindDescendants<Button>(_menuOpponentDecks!).Length == 7
+						&& _menuOpponentDeck == RandomOpponent
+						&& FindDescendants<Button>(_menuYourDecks!).All(button => button.Name.ToString().StartsWith("Deck-elevation-", StringComparison.Ordinal)),
+						"The Gateway + Elevation area doesn't list eight Corp decks and six Runner decks plus Random.");
+					RequireInteraction(FindDescendants<Button>(_menuDifficulties!).Single(button => button.Text == "Hard opponent").Visible
+						&& _menuPersonalities!.Visible, "The Gateway + Elevation area lacks Hard or the personalities.");
+					if (screenshots) await SaveInteractionEvidence($"menu-elevation-corp-{size.X}");
+				}
 				await ClickTableButton(FindDescendants<Button>(_menuNewGameView).Single(button => button.Text == "Tutorial"));
 				RequireInteraction(_menuMode == TutorialMode && _menuYourDeck == "system-gateway-expanded-corp"
 					&& _menuOpponentDeck == "system-gateway-expanded-runner", "The Tutorial area doesn't default to the expanded decks.");
@@ -99,7 +114,7 @@ public partial class Main
 				&& view.CorpIdentity?.DefinitionId == _officialPresetCatalog.Get("gateway-advanced-yomi").IdentityCode,
 				"The match doesn't use the decks chosen in the menu.");
 			RequireInteraction(!_startPanel.IsVisibleInTree(), "The menu stays visible during the match.");
-			GD.Print("MAIN_MENU PASS views=3 resolutions=2 gateway_start=true difficulties=3 personalities=true");
+			GD.Print($"MAIN_MENU PASS views=3 resolutions=2 gateway_start=true difficulties=3 personalities=true elevation={(ElevationMenuOffered ? "true" : "false")}");
 			QuitCleanly();
 		}
 		catch (Exception exception)

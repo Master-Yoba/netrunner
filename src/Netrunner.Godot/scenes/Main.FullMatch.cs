@@ -24,9 +24,9 @@ public partial class Main
 
 		if (presetValue is not null)
 		{
-			if (presetValue is not ("basic" or "expanded"))
+			if (presetValue is not ("basic" or "expanded" or "elevation"))
 			{
-				error = $"--preset requires 'basic' or 'expanded', found '{presetValue}'.";
+				error = $"--preset requires 'basic', 'expanded' or 'elevation', found '{presetValue}'.";
 				return false;
 			}
 
@@ -101,7 +101,7 @@ public partial class Main
 			(_runnerPreset, _runnerPresetIds, "runner"),
 		})
 		{
-			string requested = $"system-gateway-{_fullMatchSmokePreset}-{side}";
+			string requested = SmokePresetId(_fullMatchSmokePreset, side);
 			int[] matches = ids.Where(pair => pair.Value == requested).Select(pair => pair.Key).ToArray();
 			if (matches.Length != 1 || button.IsItemDisabled(matches[0]))
 			{
@@ -113,6 +113,14 @@ public partial class Main
 		}
 		return true;
 	}
+
+	/// <summary>
+	/// A smoke's deck for a side: the teaching decks by kind, or for
+	/// <c>elevation</c> a Gateway + Elevation pairing (EL.8).
+	/// </summary>
+	private static string SmokePresetId(string preset, string side) => preset == "elevation"
+		? side == "corp" ? "elevation-synapse-fast-news" : "elevation-magdalene-cryptarchitect"
+		: $"system-gateway-{preset}-{side}";
 
 	private bool HasAuthenticatedOfficialContent() =>
 		_embeddedCardData is not null
@@ -170,10 +178,8 @@ public partial class Main
 			_coordinator = CreateOfficialFullMatchCoordinator(
 				corpPresetId,
 				runnerPresetId,
-				_embeddedCardData!,
 				humanSide,
-				seed: seed,
-				officialPresets: _officialPresetCatalog!);
+				seed: seed);
 			AttachCoordinatorPublications();
 			_startButton.Disabled = true;
 			_status.Text = "Shuffling decks and dealing opening hands…";
@@ -299,7 +305,9 @@ public partial class Main
 			_reducedMotion.ButtonPressed = true;
 			var policy = FullMatchFactory.CreateContractPolicy(
 				side,
-				_m4FullMatchSmoke ? _runtimeCardCatalog : null);
+				_m4FullMatchSmoke
+					? PlayFormats.Get(PlayFormats.FormatOfPreset(SmokePresetId(_fullMatchSmokePreset, "corp"))).Runtime
+					: null);
 			while (true)
 			{
 				pollingSteps++;

@@ -5,8 +5,13 @@ using Netrunner.Core;
 
 namespace Netrunner.Match;
 
+/// <param name="FormatId">
+/// D-EL-8: the format the game is played in. Saves made before formats
+/// existed carry none and load as System Gateway games.
+/// </param>
 public sealed record SoloSaveMetadata(string SaveId, string Name, DateTimeOffset CreatedUtc, DateTimeOffset UpdatedUtc,
-    string BuildVersion, PlayerSide HumanSide);
+    string BuildVersion, PlayerSide HumanSide,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? FormatId = null);
 
 /// <summary>Private, self-contained session payload; only allowlisted previews cross to the save browser.</summary>
 public sealed record SoloSavePayload(MatchRequest Request, GameSnapshot Snapshot, ReplayArtifact Replay, SoloAgentState Opponent);
@@ -26,12 +31,12 @@ public sealed record SoloSaveDocument(int SchemaVersion, string ArtifactKind, So
     }
 
     public static SoloSaveMetadata NewMetadata(string name, PlayerSide humanSide, string? saveId = null,
-        DateTimeOffset? createdUtc = null)
+        DateTimeOffset? createdUtc = null, string? formatId = null)
     {
         DateTimeOffset now = DateTimeOffset.UtcNow;
         return new(saveId ?? Guid.NewGuid().ToString("N"), name, createdUtc ?? now, now,
             typeof(SoloSaveDocument).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
-                ?? "unknown", humanSide);
+                ?? "unknown", humanSide, formatId);
     }
 
     public void ValidateIntegrity()
@@ -40,6 +45,7 @@ public sealed record SoloSaveDocument(int SchemaVersion, string ArtifactKind, So
             || Metadata.SaveId is null || Metadata.SaveId.Length != 32 || !Guid.TryParseExact(Metadata.SaveId, "N", out _)
             || string.IsNullOrWhiteSpace(Metadata.Name) || Metadata.Name.Length > 120 || Metadata.Name.Any(char.IsControl)
             || string.IsNullOrWhiteSpace(Metadata.BuildVersion) || !Enum.IsDefined(Metadata.HumanSide)
+            || (Metadata.FormatId is { } format && string.IsNullOrWhiteSpace(format))
             || Metadata.CreatedUtc == default || Metadata.UpdatedUtc < Metadata.CreatedUtc
             || Metadata.CreatedUtc.Offset != TimeSpan.Zero || Metadata.UpdatedUtc.Offset != TimeSpan.Zero
             || Payload.Request is null || Payload.Snapshot is null || Payload.Replay is null || Payload.Opponent is null)
@@ -90,7 +96,8 @@ public sealed record SoloSaveDocument(int SchemaVersion, string ArtifactKind, So
         Payload.Request.Seed, Payload.Request.CorpDeck.PresetId ?? "custom", Payload.Request.RunnerDeck.PresetId ?? "custom",
         Payload.Opponent.Configuration?.ProfileId ?? "contract-baseline", Payload.Snapshot.Turn.TurnNumber,
         Payload.Snapshot.Turn.Phase.ToString(), Metadata.UpdatedUtc, Payload.Snapshot.Outcome.Kind != GameOutcomeKind.Ongoing,
-        Payload.Opponent.Configuration is { } configuration ? AgentPersonalities.Of(configuration) : AgentPersonality.Balanced);
+        Payload.Opponent.Configuration is { } configuration ? AgentPersonalities.Of(configuration) : AgentPersonality.Balanced,
+        Metadata.FormatId);
 
     private static string Hash(int schema, string kind, SoloSaveMetadata metadata, SoloSavePayload payload,
         string engineStateHash, string policyStateHash) =>
@@ -99,4 +106,4 @@ public sealed record SoloSaveDocument(int SchemaVersion, string ArtifactKind, So
 
 public sealed record SoloSavePreview(string SaveId, string Name, PlayerSide HumanSide, ulong Seed,
     string CorpDeck, string RunnerDeck, string Difficulty, int Turn, string Phase, DateTimeOffset UpdatedUtc, bool IsTerminal,
-    AgentPersonality Personality = AgentPersonality.Balanced);
+    AgentPersonality Personality = AgentPersonality.Balanced, string? FormatId = null);

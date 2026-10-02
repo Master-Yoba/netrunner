@@ -138,7 +138,7 @@ public partial class SoloSaveDialog : Control
 		"system-gateway-basic-corp" or "system-gateway-basic-runner" => "Basic",
 		"system-gateway-expanded-corp" or "system-gateway-expanded-runner" => "Expanded",
 		// Gateway sample decks (Wave 4 C1) carry their published names.
-		_ when OfficialPresetCatalog.Embedded().TryGet(id, out OfficialPreset preset) && preset.Name is { } name => name,
+		_ when PlayFormats.TryGetPreset(id, out OfficialPreset preset) && preset.Name is { } name => name,
 		_ => "Custom",
 	};
 

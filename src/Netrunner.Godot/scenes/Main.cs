@@ -127,7 +127,10 @@ public partial class Main : Control
 	{
 		try
 		{
-			return OfficialPresetCatalog.Embedded();
+			// D-EL-8: with Elevation installed the setup form also lists its decks.
+			return PlayFormats.IsAvailable(CardFormatIds.GatewayElevation)
+				? OfficialPresetCatalog.GatewayElevation()
+				: OfficialPresetCatalog.Embedded();
 		}
 		catch (Exception exception) when (exception is PresetDataValidationException or InvalidOperationException)
 		{
@@ -424,7 +427,7 @@ public partial class Main : Control
 			string kindLabel = preset.Kind == "starter" ? "BASIC (STARTER)" : preset.Kind.ToUpperInvariant();
 			// Gateway sample decks show their name; the menu rework (U7) gives them their own area.
 			button.AddItem(preset.Name is { } name
-				? $"GATEWAY · {name} · {preset.CardCount} cards · {state}"
+				? $"{(OfficialPresetCatalog.IsElevationDeck(preset.PresetId) ? "ELEVATION" : "GATEWAY")} · {name} · {preset.CardCount} cards · {state}"
 				: $"{kindLabel} · {preset.PresetId} · {preset.CardCount} cards · {state}",
 				index);
 			if (preset.Summary is { } summary) button.SetItemTooltip(index, summary);

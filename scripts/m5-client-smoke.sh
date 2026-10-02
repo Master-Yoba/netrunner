@@ -30,6 +30,8 @@ matrix = [("runner", "expanded", "standard"), ("corp", "expanded", "standard")]
 if mode != "--quick":
     # A6: Hard against a human Corp is the Runner that plans.
     matrix += [("runner", "expanded", "easy"), ("corp", "expanded", "hard")]
+    # EL.8: a Gateway + Elevation game saves and resumes with its format.
+    matrix += [("runner", "elevation", "standard"), ("corp", "elevation", "hard")]
 def run_case(row):
     side, preset, difficulty = row
     case = f"{side}-{preset}-{difficulty}"

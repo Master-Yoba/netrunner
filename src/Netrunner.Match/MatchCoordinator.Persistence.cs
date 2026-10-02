@@ -49,7 +49,7 @@ public sealed partial class MatchCoordinator
                 throw new InvalidOperationException("Only started full matches with a supported persistent agent can be saved.");
             if (_traceFault is not null) throw new InvalidOperationException("A faulted session cannot be saved.", _traceFault);
             SoloSaveMetadata metadata = SoloSaveDocument.NewMetadata(command.Name, _options.HumanSide,
-                command.SaveId, command.CreatedUtc);
+                command.SaveId, command.CreatedUtc, PlayFormats.FormatOfBehavior(_behaviorCatalog));
             var replay = new ReplayArtifact(_replayInitial, _state.InitialSeed, _replayActions,
                 expectedFinalStateHash: DeterministicHash.ForState(_state));
             var payload = new SoloSavePayload(_fullMatch.Request, _state.CreateSnapshot(_behaviorCatalog, _runtimeCardCatalog!),

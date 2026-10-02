@@ -93,8 +93,8 @@ public partial class Main
 			_seedInput.Text = "56142";
 			_humanSide.Select(side == PlayerSide.Runner ? 0 : 1);
 			_difficulty!.Select(DifficultyIndex(difficulty));
-			SelectPresetById(_corpPreset, _corpPresetIds, $"system-gateway-{preset}-corp");
-			SelectPresetById(_runnerPreset, _runnerPresetIds, $"system-gateway-{preset}-runner");
+			SelectPresetById(_corpPreset, _corpPresetIds, SmokePresetId(preset, "corp"));
+			SelectPresetById(_runnerPreset, _runnerPresetIds, SmokePresetId(preset, "runner"));
 			_startButton.EmitSignal(BaseButton.SignalName.Pressed);
 			_reducedMotion.ButtonPressed = true;
 			await DriveSoloSmokeAsync(side, 2, untilTerminal: false);

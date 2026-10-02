@@ -88,7 +88,7 @@ public static class OfflineMatchFactory
     {
         ArgumentNullException.ThrowIfNull(deck);
         ArgumentNullException.ThrowIfNull(catalog);
-        if (deck.PresetId is { } id && OfficialPresetCatalog.Embedded().TryGet(id, out OfficialPreset preset) && preset.Archetypes.Count > 0)
+        if (PlayFormats.TryGetPreset(deck.PresetId, out OfficialPreset preset) && preset.Archetypes.Count > 0)
             return (RunnerArchetypes.Keys[preset.Archetypes[0]],
                 preset.Archetypes.Count > 1 ? RunnerArchetypes.Keys[preset.Archetypes[1]] : RunnerArchetype.Generic);
         return RunnerArchetypes.Infer(deck.Cards
@@ -104,7 +104,7 @@ public static class OfflineMatchFactory
     {
         ArgumentNullException.ThrowIfNull(deck);
         ArgumentNullException.ThrowIfNull(catalog);
-        if (deck.PresetId is { } id && OfficialPresetCatalog.Embedded().TryGet(id, out OfficialPreset preset) && preset.Archetypes.Count > 0)
+        if (PlayFormats.TryGetPreset(deck.PresetId, out OfficialPreset preset) && preset.Archetypes.Count > 0)
             return (CorpArchetypes.Keys[preset.Archetypes[0]],
                 preset.Archetypes.Count > 1 ? CorpArchetypes.Keys[preset.Archetypes[1]] : CorpArchetype.Generic);
         return CorpArchetypes.Infer(deck.Cards
