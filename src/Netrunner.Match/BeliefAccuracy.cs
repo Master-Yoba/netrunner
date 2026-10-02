@@ -49,7 +49,7 @@ public static class BeliefAccuracy
     private static IEnumerable<(string Tier, Totals Totals)> ScoreGame(LadderSavedGame saved, FullMatchDefinition definition)
     {
         ICardEvaluationCatalog catalog = new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior);
-        Dictionary<string, double> pool = Pool(catalog), list = List(definition.Request.CorpDeck);
+        Dictionary<string, double> pool = TrackerPrior.Pool(catalog, PlayerSide.Corp), list = TrackerPrior.List(definition.Request.CorpDeck.Cards.Select(entry => (entry.Code, entry.Quantity)));
         var trackers = BeliefTier.All.ToDictionary(tier => tier.Name, _ => CardTracker.Empty, StringComparer.Ordinal);
         var results = BeliefTier.All.ToDictionary(tier => tier.Name, _ => new Totals(), StringComparer.Ordinal);
         GameState state = saved.Replay.InitialSnapshot.ToState();
@@ -63,13 +63,13 @@ public static class BeliefAccuracy
                 AgentFeatures.VersionWithHiddenAdvancements);
             foreach (BeliefTier tier in BeliefTier.All)
             {
-                Dictionary<string, double> prior = Remaining(tier.KnowsList ? list : pool, features, catalog);
+                Dictionary<string, double> prior = TrackerPrior.Remaining(tier.KnowsList ? list : pool, features);
                 trackers[tier.Name] = trackers[tier.Name].Observe(features, catalog, zone => Fitting(prior, catalog, zone), tier.Memory);
             }
             // Score at each Runner turn start: what the Runner believes as it plans its turn.
             if (state.Turn.ActiveSide == PlayerSide.Runner && lastActive == PlayerSide.Corp)
                 foreach (BeliefTier tier in BeliefTier.All)
-                    Measure(results[tier.Name], trackers[tier.Name], features, state, catalog, Remaining(tier.KnowsList ? list : pool, features, catalog));
+                    Measure(results[tier.Name], trackers[tier.Name], features, state, catalog, TrackerPrior.Remaining(tier.KnowsList ? list : pool, features));
             lastActive = state.Turn.ActiveSide;
         }
         return results.Select(pair => (pair.Key, pair.Value));
@@ -82,7 +82,7 @@ public static class BeliefAccuracy
         ArgumentNullException.ThrowIfNull(definition);
         BeliefTier tier = BeliefTier.All.Single(value => value.Name == tierName);
         ICardEvaluationCatalog catalog = new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior);
-        Dictionary<string, double> prior = tier.KnowsList ? List(definition.Request.CorpDeck) : Pool(catalog);
+        Dictionary<string, double> prior = tier.KnowsList ? TrackerPrior.List(definition.Request.CorpDeck.Cards.Select(entry => (entry.Code, entry.Quantity))) : TrackerPrior.Pool(catalog, PlayerSide.Corp);
         CardTracker tracker = CardTracker.Empty;
         GameState state = saved.Replay.InitialSnapshot.ToState();
         foreach (ReplayAction recorded in saved.Replay.Actions)
@@ -174,52 +174,18 @@ public static class BeliefAccuracy
         }
     }
 
-    /// <summary>The pool prior: every Corp card of the content, up to the deck-building limit of three copies.</summary>
-    private static Dictionary<string, double> Pool(ICardEvaluationCatalog catalog) => catalog.DefinitionIds
-        .Where(id => catalog.TryGet(id, out CardEvaluationDescriptor card) && card.Printed.Side == PlayerSide.Corp && card.Printed.CardClass != RuntimeCardClass.Identity)
-        .ToDictionary(id => id.Value, _ => 3.0, StringComparer.Ordinal);
-
-    /// <summary>
-    /// The copies that can still be hidden: the prior's copies less those in public view now (Archives face up, scored,
-    /// installed face up, in play). A first use of A9c's counting, from where the copies are now, so recursion returns them.
-    /// </summary>
-    public static Dictionary<string, double> Remaining(Dictionary<string, double> prior, AgentFeatures features, ICardEvaluationCatalog catalog)
-    {
-        ArgumentNullException.ThrowIfNull(prior);
-        ArgumentNullException.ThrowIfNull(features);
-        var seen = features.VisibleCards().Where(pair => pair.Location != "access")
-            .GroupBy(pair => pair.Card.Id, StringComparer.Ordinal).Select(group => group.First().Card.DefinitionId)
-            .GroupBy(definition => definition, StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
-        return prior.ToDictionary(pair => pair.Key, pair => Math.Max(0, pair.Value - seen.GetValueOrDefault(pair.Key)), StringComparer.Ordinal);
-    }
-
-    /// <summary>Hard's prior: the Corp's decklist.</summary>
-    private static Dictionary<string, double> List(DeckRequest deck) => deck.Cards
-        .GroupBy(entry => entry.Code, StringComparer.Ordinal).ToDictionary(group => group.Key, group => (double)group.Sum(entry => entry.Quantity), StringComparer.Ordinal);
-
-    private static bool Fits(ICardEvaluationCatalog catalog, string definitionId, string zone) => catalog.TryGet(new CardDefinitionId(definitionId), out CardEvaluationDescriptor card)
-        && (zone == "ice" ? card.Printed.CardClass == RuntimeCardClass.Ice
-            : card.Printed.CardClass is RuntimeCardClass.Agenda or RuntimeCardClass.Asset or RuntimeCardClass.Upgrade);
-
     private static bool IsAgenda(ICardEvaluationCatalog catalog, string definitionId) =>
         catalog.TryGet(new CardDefinitionId(definitionId), out CardEvaluationDescriptor card) && card.Agenda is not null;
 
-    private static double Share(Dictionary<string, double> prior, ICardEvaluationCatalog catalog, Func<ICardEvaluationCatalog, string, bool> test)
-    {
-        double total = prior.Values.Sum();
-        return total <= 0 ? 0 : prior.Where(pair => test(catalog, pair.Key)).Sum(pair => pair.Value) / total;
-    }
+    private static double Share(Dictionary<string, double> prior, ICardEvaluationCatalog catalog, Func<ICardEvaluationCatalog, string, bool> test) =>
+        TrackerPrior.Share(prior, definition => test(catalog, definition));
 
     /// <summary>The share of the opponent's deck that fits a zone, which the tracker uses for unknown hand cards.</summary>
     public static double Fitting(Dictionary<string, double> prior, ICardEvaluationCatalog catalog, string zone) =>
-        Share(prior, catalog, (value, definition) => Fits(value, definition, zone));
+        TrackerPrior.Share(prior, definition => TrackerPrior.Fits(catalog, definition, zone));
 
-    private static Dictionary<string, double> Conditional(Dictionary<string, double> prior, ICardEvaluationCatalog catalog, string zone)
-    {
-        Dictionary<string, double> fitting = prior.Where(pair => Fits(catalog, pair.Key, zone)).ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
-        double total = fitting.Values.Sum();
-        return total <= 0 ? fitting : fitting.ToDictionary(pair => pair.Key, pair => pair.Value / total, StringComparer.Ordinal);
-    }
+    private static Dictionary<string, double> Conditional(Dictionary<string, double> prior, ICardEvaluationCatalog catalog, string zone) =>
+        TrackerPrior.Conditional(prior, definition => TrackerPrior.Fits(catalog, definition, zone));
 
     private static void Merge(Totals into, Totals add)
     {

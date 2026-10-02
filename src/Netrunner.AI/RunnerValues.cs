@@ -16,7 +16,9 @@ internal static class RunnerValues
     public static int TagRisk(HeuristicContext context, int additional = 1) =>
         180 * additional + (context.Features.Board.RunnerRig.Where(card => context.Definition(card)?.Printed.CardClass == RuntimeCardClass.Resource)
             .Select(card => Card(context, card)).DefaultIfEmpty(0).Max() * (context.Self.Clicks < (context.Self.Tags ?? 0) + additional ? 1 : 0))
-            + (context.Self.Clicks == 0 ? 120 : 0);
+            + (context.Self.Clicks == 0 ? 120 : 0)
+            // v21 (A9b): the tag punishers it knows the Corp holds (Retribution seen in HQ).
+            + (context.Generation >= 17 ? RunnerInference.KnownTagThreat(context) : 0);
 
     public static AgentServer? Attacked(HeuristicContext context) => context.Features.Board.Servers.FirstOrDefault(server => server.Id == context.Features.Board.Run?.AttackedServer);
     public static bool Winning(HeuristicContext context, AgentServer? server) => server is not null
@@ -57,6 +59,8 @@ internal static class RunnerValues
             int advancement = context.HiddenAdvancement(server.Id, "root", index);
             // v13: a card the Runner accessed before is known, face down or not.
             card ??= context.RememberedRoot(server, index);
+            // v21 (A9b): or one it's confident of from what it saw (an upgrade it left in HQ).
+            if (context.Generation >= 17) card ??= RunnerInference.Believed(context, server, "root", index);
             root += card is null
                 ? 190 + (int)(inference * advancement * 200)
                 : context.Definition(card)?.Agenda is { } agenda ? 500 + agenda.AgendaPoints * 180
@@ -72,7 +76,17 @@ internal static class RunnerValues
                 + Math.Max(0, (context.Features.Board.ZoneCounts?.CorpDiscard ?? 0) - context.Features.Board.CorpDiscard.Length) * 70,
             _ => 0,
         };
-        if (context.Generation >= 7) central = (int)(central * CentralFreshness(context, server.Kind));
+        // v21 (A9b): HQ and R&D are worth the agendas they likely hold, from what the Runner has seen, against a fresh deck's.
+        if (context.Generation >= 17 && server.Kind is ServerKind.Headquarters or ServerKind.RAndD
+            && RunnerInference.FreshAgendaShare(context) is > 0 and var fresh)
+        {
+            double held = server.Kind == ServerKind.Headquarters ? RunnerInference.HqAgendaShare(context) : RunnerInference.RdTopAgenda(context);
+            double relative = 1 + inference * (Math.Min(3, held / fresh) - 1);
+            central = server.Kind == ServerKind.Headquarters
+                ? context.Features.Board.HiddenZoneCounts.CorpHand > 0 ? (int)(320 * relative) : 0
+                : context.Features.Board.HiddenZoneCounts.CorpDeck > 0 ? (int)(340 * relative) : 0;
+        }
+        else if (context.Generation >= 7) central = (int)(central * CentralFreshness(context, server.Kind));
         if (context.Generation >= 8)
             central = (int)(central * server.Kind switch
             {
