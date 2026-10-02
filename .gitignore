@@ -26,6 +26,10 @@ src/Netrunner.Godot/.godot/
 /data/vendor/system-gateway/cards.json
 /data/vendor/system-gateway/manifest.json
 /data/vendor/system-gateway/SOURCE_COPYRIGHT.md
+# Local-only official Elevation metadata, created by the same updater.
+/data/vendor/elevation/cards.json
+/data/vendor/elevation/manifest.json
+/data/vendor/elevation/SOURCE_COPYRIGHT.md
 
 # OS/editor noise
 .DS_Store

@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "gateway-elevation",
+  "name": "System Gateway + Elevation",
+  "effectiveDate": "2026-05-01",
+  "complete": true,
+  "cardPool": "gateway-elevation",
+  "legalPacks": ["sg", "elev"],
+  "missingPacks": [],
+  "restriction": {
+    "id": "startup-balance-update-26-05-gateway-elevation",
+    "banned": ["30006", "30040", "30051", "30067", "35045"],
+    "restricted": []
+  },
+  "deckRules": {
+    "maxCopiesByName": 3,
+    "highValueAgendaLimit": {
+      "minimumPoints": 3,
+      "maximumCards": 3
+    }
+  },
+  "source": {
+    "snapshotId": "startup_10",
+    "cardPoolId": "startup_vantage_point",
+    "note": "Our interim playable format (D-EL-3): Startup-shaped deck rules over System Gateway and Elevation, with the Startup Balance Update 26.05 applied to the cards this build has. Its sixth banned card, from Vantage Point, is not in the pool."
+  }
+}

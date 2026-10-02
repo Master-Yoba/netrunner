@@ -274,12 +274,17 @@ public sealed record CardRuntimeSpec
             throw new ArgumentException("An agenda requires positive agenda points and advancement requirement.", nameof(agendaPoints));
         }
 
+        // CR 2.6.1: assets and upgrades have trash costs, as do some ice and
+        // operations.
         bool mayHavePrintedTrashCost = side == PlayerSide.Corp
-            && cardClass is RuntimeCardClass.Asset or RuntimeCardClass.Upgrade;
+            && cardClass is RuntimeCardClass.Asset
+                or RuntimeCardClass.Upgrade
+                or RuntimeCardClass.Operation
+                or RuntimeCardClass.Ice;
         if (!mayHavePrintedTrashCost && trashCost is not null)
         {
             throw new ArgumentException(
-                "Printed trash cost is only applicable to Corp assets and upgrades in this slice.",
+                "Printed trash cost is only applicable to Corp assets, upgrades, ice and operations.",
                 nameof(trashCost));
         }
 

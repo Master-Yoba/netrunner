@@ -1,6 +1,7 @@
 # Elevation primitive audit
 
-Status: planning audit, 2 October 2026, from the Elevation card data at the pinned upstream commit
+Status: planning audit, 2 October 2026, reviewed in EL.1 (see "EL.1 review" below and the registry, which is the source
+of truth), from the Elevation card data at the pinned upstream commit
 (`236140cf84491c23995b028bc791281837520b97`, pack `elev`, 82 records, local-only). Mechanics are summarized in our
 own words; no card text is reproduced. The plan is [ELEVATION_PLAN.md](ELEVATION_PLAN.md); the machine-readable
 assignment is `data/elevation/batch-registry.json`.
@@ -16,7 +17,9 @@ may already be expressible.
 
 | Id | What | Cards |
 |---|---|---|
-| `EL-AMOUNT` | Dynamic amounts: per click remaining, per tag removed, per counter removed, per credit the opponent lost, per hosted advancement counter. | Ritual, Transfer of Wealth, Bigger Picture, Phat Gioan Baotixita, Idiosyncresis |
+| `EL-REMOVE-TAGS` | Removing tags as an effect ("remove up to N", "remove any number") and as a cost, including a variable X. Added by EL.1's review. | Lie Low, Synapse Global, Bigger Picture, IP Enforcement |
+| `EL-OPERATION-TRASH-COST` | The basic trash ability on an accessed operation with a printed trash cost (CR 3.5.3). Added by EL.1's review. | IP Enforcement, Measured Response |
+| `EL-AMOUNT` | Dynamic amounts: per click remaining, per tag removed, per counter removed, per credit the opponent lost, per hosted advancement counter, per matching card in a zone. | Ritual, Transfer of Wealth, Bigger Picture, Phat Gioan Baotixita, Idiosyncresis, Rising Tide |
 | `EL-THREAT` | Threat level (the higher of the two scores) as a derived value; "if the threat level is X or greater" conditions and the Threat X keyword. | Public Access Plaza, Measured Response, N-Pot |
 | `EL-TAG-COUNT` | A condition on the Runner's tag count (at least N). | Doomscroll |
 | `EL-RUN-EVENT-ACTIVE` | A condition: a run event is active (the run was started by one). | Sang Kancil |
@@ -190,3 +193,19 @@ involved, and a serializable, replayable frame wherever it can yield, as in M4's
 
 **23 of 82 cards (28%) use only existing vocabulary**, against 17% of Gateway's registered cards over its batches
 (the E6 baseline in the plan). 51 primitives, most used by one card: each is a design review for a more general form.
+
+## EL.1 review
+
+Every row was checked against CR 26.03 and the engine's vocabulary (`card-vocabulary --json`, 200 items on Gateway's
+77 cards). Each card's citations, observation and hidden-information and serialization notes are in the registry. The
+corrections:
+
+- **Rising Tide** counts fracters in the heap for its strength: `EL-AMOUNT` (a count of matching cards in a zone).
+- **Lie Low**, **Synapse Global**, **Bigger Picture** and **IP Enforcement** remove tags as an effect or a cost:
+  `EL-REMOVE-TAGS`.
+- **IP Enforcement** and **Measured Response** carry trash costs, which the Runner may pay while accessing them
+  (CR 3.5.3): `EL-OPERATION-TRASH-COST`. IP Enforcement's play cost is X.
+
+That leaves 21 of 82 cards (26%) on existing vocabulary. The table above keeps the planning batches; the registry's
+`newPrimitives` field is the reviewed list.
+

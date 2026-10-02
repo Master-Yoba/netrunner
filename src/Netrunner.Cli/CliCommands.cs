@@ -278,8 +278,8 @@ public static partial class CliCommands
             + "ai-selfplay --content <corp~runner> --seed <n> [--corp <entrant>] [--runner <entrant>] --output <new dir> | "
             + "ai-review <session-directory> [--profile standard|easy] [--side corp|runner] [--all] [--output <new file>] [--json] | "
             + "card-data normalize --upstream <file> --copyright <file> --commit <40-hex-sha> "
-            + "--retrieval-date YYYY-MM-DD --output-dir <directory> [--json] | "
-            + "card-data validate [--root <directory>] [--json] | "
+            + "--retrieval-date YYYY-MM-DD --output-dir <directory> [--pack <sg|elev>] [--json] | "
+            + "card-data validate [--root <directory>] [--pack <sg|elev>] [--json] | "
             + "card-art fetch|validate|pack|unpack [options] [--json] | "
             + "play --seed <unsigned-integer> --goal corp-score|runner-steal|deck-out "
             + "[--json] [--replay-out <file>] | "
@@ -343,13 +343,16 @@ public static partial class CliCommands
     {
         try
         {
+            OfficialCardPack pack = OfficialCardPacks.Get(options.PackCode);
             byte[] upstreamBytes = ReadUtf8File(options.UpstreamPath!, "upstream card data");
             IReadOnlyList<NormalizedCardDefinition> cards =
-                CardDataNormalizer.Normalize(upstreamBytes, CardDataValidator.OfficialPackCode);
-            if (cards.Count != CardDataValidator.OfficialCardCount)
+                CardDataNormalizer.Normalize(upstreamBytes, pack.PackCode);
+            if (cards.Count != pack.CardCount)
             {
                 throw new CardDataValidationException(
-                    $"Expected {CardDataValidator.OfficialCardCount} System Gateway records, found {cards.Count}.");
+                    pack == OfficialCardPacks.SystemGateway
+                        ? $"Expected {pack.CardCount} System Gateway records, found {cards.Count}."
+                        : $"Expected {pack.CardCount} {pack.PackName} records, found {cards.Count}.");
             }
 
             byte[] copyrightBytes = ReadNormalizedCopyright(options.CopyrightPath!);
@@ -364,9 +367,9 @@ public static partial class CliCommands
                 CardDataJson.ComputeSha256Hex(cardsBytes),
                 "COPYRIGHT.md",
                 "NOASSERTION",
-                "pack/sg.json",
-                CardDataValidator.OfficialPackCode,
-                CardDataValidator.OfficialPackName,
+                pack.SourcePackPath,
+                pack.PackCode,
+                pack.PackName,
                 cards.Count);
             CardDataValidator.Validate(cards, manifest, requireOfficialGateway: true);
             byte[] manifestBytes = CardDataJson.SerializeManifest(manifest);
@@ -401,10 +404,11 @@ public static partial class CliCommands
     {
         try
         {
-            CardDataSet data = CardDataLoader.LoadSystemGateway(options.RootDirectory);
+            OfficialCardPack pack = OfficialCardPacks.Get(options.PackCode);
+            CardDataSet data = CardDataLoader.LoadOfficialPack(pack, options.RootDirectory);
             string dataDirectory = Path.Combine(
                 Path.GetFullPath(options.RootDirectory ?? Directory.GetCurrentDirectory()),
-                CardDataLoader.DefaultRelativeDirectory);
+                pack.RelativeDirectory);
             string copyrightPath = Path.Combine(dataDirectory, "SOURCE_COPYRIGHT.md");
             CardDataCommandOutput result = CreateCardDataOutput(
                 "validate",
@@ -633,6 +637,7 @@ public static partial class CliCommands
         string? retrievalDate = null;
         string? outputDirectory = null;
         string? rootDirectory = null;
+        string packCode = OfficialCardPacks.SystemGatewayCode;
         bool json = false;
         var seen = new HashSet<string>(StringComparer.Ordinal);
         for (int index = 2; index < args.Length; index++)
@@ -650,7 +655,7 @@ public static partial class CliCommands
                 continue;
             }
 
-            if (argument is not ("--upstream" or "--copyright" or "--commit" or "--retrieval-date" or "--output-dir" or "--root"))
+            if (argument is not ("--upstream" or "--copyright" or "--commit" or "--retrieval-date" or "--output-dir" or "--root" or "--pack"))
             {
                 error = $"Unknown card-data option '{argument}'.";
                 return false;
@@ -735,6 +740,15 @@ public static partial class CliCommands
 
                     rootDirectory = value;
                     break;
+                case "--pack":
+                    if (OfficialCardPacks.Find(value) is null)
+                    {
+                        error = $"--pack must name an official pack ({string.Join(", ", OfficialCardPacks.All.Select(static pack => pack.PackCode))}).";
+                        return false;
+                    }
+
+                    packCode = value!;
+                    break;
             }
         }
 
@@ -756,7 +770,8 @@ public static partial class CliCommands
             commitSha,
             retrievalDate,
             outputDirectory,
-            rootDirectory);
+            rootDirectory,
+            packCode);
         return true;
     }
 
@@ -1482,7 +1497,8 @@ public static partial class CliCommands
         string? CommitSha,
         string? RetrievalDate,
         string? OutputDirectory,
-        string? RootDirectory);
+        string? RootDirectory,
+        string PackCode);
 
     private sealed record CardDataCommandOutput(
         string Status,

@@ -117,15 +117,26 @@
   "cards": [
     {
       "code": "35001",
-      "title": "Ryo \"Phoenix\" Ono: Out of the Ashes",
+      "title": "Ryō “Phoenix” Ōno: Out of the Ashes",
       "type": "identity",
       "side": "runner",
       "faction": "anarch",
       "batch": "slice-EL.7",
+      "slice": "EL.7",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-SUBROUTINE-RESOLVED-FACT"
-      ]
+      ],
+      "citations": [
+        "EL-CR-9.1-triggered",
+        "EL-CR-9.8-subroutines"
+      ],
+      "observation": "Successful-run trigger gated on a per-run fact that a subroutine resolved; once per turn.",
+      "hiddenInformationImpact": "The Corp chooses the HQ card to trash; only the trashed card is revealed by moving to Archives faceup.",
+      "serializationImpact": "Persist the subroutine-resolved run fact and the first-time-each-turn fact."
     },
     {
       "code": "35002",
@@ -134,10 +145,22 @@
       "side": "runner",
       "faction": "anarch",
       "batch": "slice-EL.7",
+      "slice": "EL.7",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-INSTALLED-THAT-CARD-TRIGGER"
-      ]
+      ],
+      "citations": [
+        "EL-CR-9.5-paid-abilities",
+        "EL-CR-8.5-install",
+        "EL-CR-10.4-damage"
+      ],
+      "observation": "Once-per-turn click ability installs from the grip at a 2-credit discount, with a delayed meat-damage trigger on that card's install.",
+      "hiddenInformationImpact": "The installed card becomes public on install; the grip stays private.",
+      "serializationImpact": "Persist the bound installed card for the delayed trigger until its install completes."
     },
     {
       "code": "35003",
@@ -146,10 +169,21 @@
       "side": "runner",
       "faction": "anarch",
       "batch": "slice-EL.7",
+      "slice": "EL.7",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-COPY-OF-ACCESSED"
-      ]
+      ],
+      "citations": [
+        "EL-CR-6.8-run-ends",
+        "EL-CR-7.1-access"
+      ],
+      "observation": "Run event on Archives; at run end the Runner may trash one rezzed installed copy of a card accessed in Archives during the run.",
+      "hiddenInformationImpact": "Archives accesses are public; the copy filter reads only cards the Runner accessed.",
+      "serializationImpact": "Persist the set of accessed definition IDs in the run's persistent context."
     },
     {
       "code": "35004",
@@ -158,10 +192,21 @@
       "side": "runner",
       "faction": "anarch",
       "batch": "slice-EL.5",
+      "slice": "EL.5",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-INSTALL-FROM-HEAP"
-      ]
+      ],
+      "citations": [
+        "EL-CR-8.5-install",
+        "EL-CR-1.16-costs"
+      ],
+      "observation": "Double event: install one program from the heap, then optionally move one heap program to the bottom of the stack.",
+      "hiddenInformationImpact": "The heap is public; the stack bottom placement hides no new information.",
+      "serializationImpact": "Install-source zone (heap) is part of the install frame."
     },
     {
       "code": "35005",
@@ -170,11 +215,23 @@
       "side": "runner",
       "faction": "anarch",
       "batch": "slice-EL.7",
+      "slice": "EL.7",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-PREVENT-END-RUN",
         "EL-RANDOM-HQ-TRASH"
-      ]
+      ],
+      "citations": [
+        "EL-CR-6.8-run-ends",
+        "EL-CR-9.9-replacement",
+        "EL-CR-10.4-damage"
+      ],
+      "observation": "Run event; the first Corp end-run is prevented unless the Corp reveals and trashes X random HQ cards, X = cards in the attacked root.",
+      "hiddenInformationImpact": "Random HQ cards are revealed to both players as they are trashed.",
+      "serializationImpact": "Persist the one-shot prevention in the run state; the random draw uses DeterministicRandom."
     },
     {
       "code": "35006",
@@ -183,10 +240,21 @@
       "side": "runner",
       "faction": "anarch",
       "batch": "slice-EL.5",
+      "slice": "EL.5",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-HOSTED-FACEUP"
-      ]
+      ],
+      "citations": [
+        "EL-CR-3.8.5-console",
+        "EL-CR-1.13-hosting"
+      ],
+      "observation": "Console: after a credit-free install, may host the stack's top card faceup; hosted cards are playable or installable as from the grip; trashed at discard-phase end.",
+      "hiddenInformationImpact": "The hosted card becomes public when hosted faceup; the stack stays private.",
+      "serializationImpact": "Hosted faceup non-installed cards live in a hosted zone on the console."
     },
     {
       "code": "35007",
@@ -195,8 +263,19 @@
       "side": "runner",
       "faction": "anarch",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
-      "newPrimitives": []
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
+      "newPrimitives": [],
+      "citations": [
+        "EL-CR-7.1-access",
+        "EL-CR-9.5-paid-abilities"
+      ],
+      "observation": "Access ability: trash this program to trash the accessed non-agenda card and draw.",
+      "hiddenInformationImpact": "The accessed card is already visible to the Runner; trashing reveals it in Archives.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35008",
@@ -205,8 +284,19 @@
       "side": "runner",
       "faction": "anarch",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
-      "newPrimitives": []
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
+      "newPrimitives": [],
+      "citations": [
+        "EL-CR-3.9.5-interface",
+        "EL-CR-1.9-counters"
+      ],
+      "observation": "Killer with two virus counters on install; spending a hosted virus counter gives +2 strength for the encounter.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35009",
@@ -215,8 +305,21 @@
       "side": "runner",
       "faction": "anarch",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
-      "newPrimitives": []
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
+      "newPrimitives": [
+        "EL-AMOUNT"
+      ],
+      "citations": [
+        "EL-CR-3.9.5-interface",
+        "EL-CR-9.4-static"
+      ],
+      "observation": "Fracter whose strength rises with fracters in the heap; the heap count is a dynamic static value.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "Strength is derived from the public heap; nothing new is stored."
     },
     {
       "code": "35010",
@@ -225,11 +328,23 @@
       "side": "runner",
       "faction": "anarch",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-SABOTAGE",
         "EL-ACTION-PHASE-END"
-      ]
+      ],
+      "citations": [
+        "EL-CR-10.12-sabotage",
+        "EL-CR-5.4-action-phase",
+        "EL-CR-9.1-triggered"
+      ],
+      "observation": "First steal-or-trash of a Corp card each turn adds a power counter; at action-phase end may spend two to sabotage 3.",
+      "hiddenInformationImpact": "The Corp's HQ choice is private until trashed; trashed cards are revealed in Archives.",
+      "serializationImpact": "Persist the shared first-steal-or-trash turn fact and the sabotage choice frame."
     },
     {
       "code": "35011",
@@ -238,18 +353,39 @@
       "side": "runner",
       "faction": "anarch",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
-      "newPrimitives": []
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
+      "newPrimitives": [],
+      "citations": [
+        "EL-CR-9.5-paid-abilities"
+      ],
+      "observation": "Three clicks and trash: gain 9.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35012",
-      "title": "Barry \"Baz\" Wong: Tri-Maf Veteran",
+      "title": "Barry “Baz” Wong: Tri-Maf Veteran",
       "type": "identity",
       "side": "runner",
       "faction": "criminal",
       "batch": "slice-EL.7",
+      "slice": "EL.7",
       "status": "planned",
-      "newPrimitives": []
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
+      "newPrimitives": [],
+      "citations": [
+        "EL-CR-9.1-triggered",
+        "EL-CR-8.5-install"
+      ],
+      "observation": "Whenever the Corp rezzes ice, the Runner may install a resource or hardware from the grip, paying costs.",
+      "hiddenInformationImpact": "The installed card becomes public; the grip stays private.",
+      "serializationImpact": "The optional install yields inside the rez trigger frame."
     },
     {
       "code": "35013",
@@ -258,10 +394,21 @@
       "side": "runner",
       "faction": "criminal",
       "batch": "slice-EL.5",
+      "slice": "EL.5",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-LOOK-TOP"
-      ]
+      ],
+      "citations": [
+        "EL-CR-1.21-look-reveal",
+        "EL-CR-9.1-triggered"
+      ],
+      "observation": "At turn start look at the stack's top card; may reveal an icebreaker or run event to add it to the grip.",
+      "hiddenInformationImpact": "Only the Runner sees the looked-at card unless it is revealed.",
+      "serializationImpact": "The private look is a frame visible only to the Runner's observation."
     },
     {
       "code": "35014",
@@ -270,8 +417,19 @@
       "side": "runner",
       "faction": "criminal",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
-      "newPrimitives": []
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
+      "newPrimitives": [],
+      "citations": [
+        "EL-CR-8.6-play",
+        "EL-CR-6.7-success"
+      ],
+      "observation": "Run any server; if successful gain 6.",
+      "hiddenInformationImpact": "Run state is public; the effect reads no hidden zone.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35015",
@@ -280,8 +438,22 @@
       "side": "runner",
       "faction": "criminal",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
-      "newPrimitives": []
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
+      "newPrimitives": [
+        "EL-REMOVE-TAGS"
+      ],
+      "citations": [
+        "EL-CR-8.6-play",
+        "EL-CR-1.16-costs",
+        "EL-CR-10.5-tags"
+      ],
+      "observation": "Double event: choose draw 4 or remove up to 2 tags.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35016",
@@ -290,10 +462,22 @@
       "side": "runner",
       "faction": "criminal",
       "batch": "slice-EL.7",
+      "slice": "EL.7",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-CHANGE-ATTACKED-SERVER"
-      ]
+      ],
+      "citations": [
+        "EL-CR-6.6-movement",
+        "EL-CR-6.1-attacked-server",
+        "EL-CR-1.16-costs"
+      ],
+      "observation": "Double run event on Archives; on approaching Archives the attacked server becomes HQ and the Runner approaches HQ.",
+      "hiddenInformationImpact": "Run state is public; the effect reads no hidden zone.",
+      "serializationImpact": "Persist the replaced attacked server in the run state."
     },
     {
       "code": "35017",
@@ -302,10 +486,21 @@
       "side": "runner",
       "faction": "criminal",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-AMOUNT"
-      ]
+      ],
+      "citations": [
+        "EL-CR-6.7-success",
+        "EL-CR-10.5-tags"
+      ],
+      "observation": "Run HQ; if successful take a tag, the Corp loses 3, and the Runner gains 2 per credit lost.",
+      "hiddenInformationImpact": "Run state is public; the effect reads no hidden zone.",
+      "serializationImpact": "The credits-lost amount is computed and consumed in one frame."
     },
     {
       "code": "35018",
@@ -314,11 +509,24 @@
       "side": "runner",
       "faction": "criminal",
       "batch": "slice-EL.5",
+      "slice": "EL.5",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-HOSTED-FACEUP",
         "EL-ANY-PLAYER-ABILITY"
-      ]
+      ],
+      "citations": [
+        "EL-CR-3.8.5-console",
+        "EL-CR-1.13-hosting",
+        "EL-CR-9.5-paid-abilities",
+        "EL-CR-7.1-access"
+      ],
+      "observation": "Console: first successful HQ run each turn may host a random HQ card faceup; any player may click and return two hosted cards to HQ to give a random HQ access.",
+      "hiddenInformationImpact": "Hosted HQ cards become public; returning them to HQ hides them again.",
+      "serializationImpact": "Hosted faceup cards and the any-player ability are serialized with the console."
     },
     {
       "code": "35019",
@@ -327,10 +535,21 @@
       "side": "runner",
       "faction": "criminal",
       "batch": "slice-EL.7",
+      "slice": "EL.7",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-DEREZ"
-      ]
+      ],
+      "citations": [
+        "EL-CR-8.1.3-derez",
+        "EL-CR-9.1-triggered"
+      ],
+      "observation": "On a successful HQ run, may trash this to derez one installed Corp card.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "Derez turns the card facedown and keeps its counters."
     },
     {
       "code": "35020",
@@ -339,10 +558,20 @@
       "side": "runner",
       "faction": "criminal",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-RUN-EVENT-ACTIVE"
-      ]
+      ],
+      "citations": [
+        "EL-CR-3.9.5-interface"
+      ],
+      "observation": "Decoder whose strength pump is cheaper while a run event is active.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "The active run event is recorded on the run state."
     },
     {
       "code": "35021",
@@ -351,11 +580,22 @@
       "side": "runner",
       "faction": "criminal",
       "batch": "slice-EL.7",
+      "slice": "EL.7",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-BYPASS",
         "EL-REZ-COST-MODIFIER"
-      ]
+      ],
+      "citations": [
+        "EL-CR-9.4-static",
+        "EL-CR-6.5.8-bypass"
+      ],
+      "observation": "Raises every ice rez cost by 1; on encounter, if the Corp has 15+ credits, may trash this to bypass the ice.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "Bypass leaves no state past the encounter."
     },
     {
       "code": "35022",
@@ -364,8 +604,19 @@
       "side": "runner",
       "faction": "criminal",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
-      "newPrimitives": []
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
+      "newPrimitives": [],
+      "citations": [
+        "EL-CR-10.9-load-empty",
+        "EL-CR-1.10-credits"
+      ],
+      "observation": "Loads 6; hosted credits may pay for connection and job resources; take 1 at turn start; trashed when empty.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "Hosted pool with a spend restriction (existing)."
     },
     {
       "code": "35023",
@@ -374,10 +625,21 @@
       "side": "runner",
       "faction": "shaper",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-FLIP"
-      ]
+      ],
+      "citations": [
+        "EL-CR-3.1-identity",
+        "EL-CR-9.1-triggered"
+      ],
+      "observation": "Double-sided identity: on a successful run with full memory may flip and gain 1; flipped side flips back and draws with free memory.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "Persist the identity's face."
     },
     {
       "code": "35024",
@@ -386,10 +648,21 @@
       "side": "runner",
       "faction": "shaper",
       "batch": "slice-EL.5",
+      "slice": "EL.5",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-HAND-SIZE-DISCARD"
-      ]
+      ],
+      "citations": [
+        "EL-CR-5.5-discard",
+        "EL-CR-8.5-install"
+      ],
+      "observation": "When discarding to hand size, may install a program or hardware from among the discarded cards.",
+      "hiddenInformationImpact": "Discarded cards are public in the heap.",
+      "serializationImpact": "Persist the discarded set for the trigger."
     },
     {
       "code": "35025",
@@ -398,8 +671,19 @@
       "side": "runner",
       "faction": "shaper",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
-      "newPrimitives": []
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
+      "newPrimitives": [],
+      "citations": [
+        "EL-CR-6.7-success",
+        "EL-CR-8.5-install"
+      ],
+      "observation": "Run R&D; if successful install up to 3 cards from the grip one at a time, each 1 cheaper.",
+      "hiddenInformationImpact": "Installed cards become public; the grip stays private.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35026",
@@ -408,23 +692,45 @@
       "side": "runner",
       "faction": "shaper",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-AMOUNT"
-      ]
+      ],
+      "citations": [
+        "EL-CR-8.6-play",
+        "EL-CR-1.11-clicks"
+      ],
+      "observation": "Draw one card per remaining click.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35027",
-      "title": "GAMEDRAGON Pro",
+      "title": "GAMEDRAGON™ Pro",
       "type": "hardware",
       "side": "runner",
       "faction": "shaper",
       "batch": "slice-EL.7",
+      "slice": "EL.7",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-MOD-HOST",
         "EL-STRENGTH-PERSISTENCE"
-      ]
+      ],
+      "citations": [
+        "EL-CR-1.13-hosting",
+        "EL-CR-3.9.5-interface"
+      ],
+      "observation": "Mod hosted on a non-AI icebreaker, re-hostable at turn start; host gets +1 strength and its pumps last the run.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "Persist the hosting relationship and run-long strength boosts."
     },
     {
       "code": "35028",
@@ -433,10 +739,22 @@
       "side": "runner",
       "faction": "shaper",
       "batch": "slice-EL.5",
+      "slice": "EL.5",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-HOSTED-FACEUP"
-      ]
+      ],
+      "citations": [
+        "EL-CR-3.8.5-console",
+        "EL-CR-1.13-hosting",
+        "EL-CR-8.5-install"
+      ],
+      "observation": "Console: click to host any programs from the grip faceup; once per turn install one hosted program paying its cost.",
+      "hiddenInformationImpact": "Hosted programs become public when hosted.",
+      "serializationImpact": "Hosted faceup programs serialize with the console."
     },
     {
       "code": "35029",
@@ -445,10 +763,20 @@
       "side": "runner",
       "faction": "shaper",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-RECURRING"
-      ]
+      ],
+      "citations": [
+        "EL-CR-1.10.5-recurring"
+      ],
+      "observation": "2 recurring credits usable only for trash costs.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "Recurring pool refill and spend restriction."
     },
     {
       "code": "35030",
@@ -457,10 +785,21 @@
       "side": "runner",
       "faction": "shaper",
       "batch": "slice-EL.7",
+      "slice": "EL.7",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-ICE-GAINS-SUBTYPE"
-      ]
+      ],
+      "citations": [
+        "EL-CR-3.4-ice",
+        "EL-CR-1.13-hosting"
+      ],
+      "observation": "Trojan hosted on ice; the host gains barrier, code gate and sentry.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "Granted subtypes are derived from the hosted trojan."
     },
     {
       "code": "35031",
@@ -469,8 +808,19 @@
       "side": "runner",
       "faction": "shaper",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
-      "newPrimitives": []
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
+      "newPrimitives": [],
+      "citations": [
+        "EL-CR-7.3-breach",
+        "EL-CR-1.9-counters"
+      ],
+      "observation": "Two power counters on install; when breaching R&D may spend one to access an additional card.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35032",
@@ -479,18 +829,40 @@
       "side": "runner",
       "faction": "shaper",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
-      "newPrimitives": []
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
+      "newPrimitives": [],
+      "citations": [
+        "EL-CR-3.9.5-interface",
+        "EL-CR-9.4-static"
+      ],
+      "observation": "Fracter costing 1 less per other installed icebreaker.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35033",
-      "title": "\"Knickknack\" O'Brian",
+      "title": "“Knickknack” O’Brian",
       "type": "resource",
       "side": "runner",
       "faction": "shaper",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
-      "newPrimitives": []
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
+      "newPrimitives": [],
+      "citations": [
+        "EL-CR-9.1-triggered",
+        "EL-CR-1.19-trashing"
+      ],
+      "observation": "First run each turn: may trash another installed card to gain its printed install cost and draw 1.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "First-run-each-turn fact (existing)."
     },
     {
       "code": "35034",
@@ -499,8 +871,19 @@
       "side": "runner",
       "faction": "neutral-runner",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
-      "newPrimitives": []
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
+      "newPrimitives": [],
+      "citations": [
+        "EL-CR-1.13-hosting",
+        "EL-CR-9.1-triggered"
+      ],
+      "observation": "Places a credit on install and on each run; at 6+ hosted credits take them, trash it and draw.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "Hosted credit pool (existing)."
     },
     {
       "code": "35035",
@@ -509,22 +892,46 @@
       "side": "corp",
       "faction": "haas-bioroid",
       "batch": "slice-EL.7",
+      "slice": "EL.7",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-ATTACKED-SERVER-TRASH-COST"
-      ]
+      ],
+      "citations": [
+        "EL-CR-9.5-paid-abilities",
+        "EL-CR-1.16-costs",
+        "EL-CR-6.8-run-ends"
+      ],
+      "observation": "Once per turn, trash a rezzed bioroid in the attacked server's root or ice to end the run.",
+      "hiddenInformationImpact": "Run state is public; the effect reads no hidden zone.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35036",
-      "title": "Poetri Luxury Brands: All the Rage",
+      "title": "Poétrï Luxury Brands: All the Rage",
       "type": "identity",
       "side": "corp",
       "faction": "haas-bioroid",
       "batch": "slice-EL.5",
+      "slice": "EL.5",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-LOOK-TOP"
-      ]
+      ],
+      "citations": [
+        "EL-CR-1.21-look-reveal",
+        "EL-CR-8.5-install",
+        "EL-CR-9.1-triggered"
+      ],
+      "observation": "On score, look at R&D's top 3 and may install a non-agenda among them; on steal, may install a non-agenda from HQ.",
+      "hiddenInformationImpact": "The Corp alone sees the top 3; the installed card is facedown unless rezzed.",
+      "serializationImpact": "The private look frame is visible only to the Corp's observation."
     },
     {
       "code": "35037",
@@ -533,10 +940,21 @@
       "side": "corp",
       "faction": "haas-bioroid",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-FORFEIT"
-      ]
+      ],
+      "citations": [
+        "EL-CR-1.11-clicks",
+        "EL-CR-9.1-triggered"
+      ],
+      "observation": "First Runner trash of an installed Corp card each Runner turn: the Runner may spend a click, otherwise the Corp gets an extra allotted click next turn.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "Persist the pending extra click into the Corp's next turn."
     },
     {
       "code": "35038",
@@ -545,11 +963,23 @@
       "side": "corp",
       "faction": "haas-bioroid",
       "batch": "slice-EL.5",
+      "slice": "EL.5",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-DIVIDENDS",
         "EL-INSTALL-FROM-ARCHIVES"
-      ]
+      ],
+      "citations": [
+        "EL-CR-10.13-dividends",
+        "EL-CR-8.5-install",
+        "EL-CR-5.5-discard"
+      ],
+      "observation": "Dividends 1; at discard-phase end may spend an agenda counter to install a card from Archives ignoring costs.",
+      "hiddenInformationImpact": "Facedown Archives cards are visible to the Corp when chosen; the install stays facedown.",
+      "serializationImpact": "Agenda counters persist on the scored agenda."
     },
     {
       "code": "35039",
@@ -558,10 +988,22 @@
       "side": "corp",
       "faction": "haas-bioroid",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-NESTED-PLAY"
-      ]
+      ],
+      "citations": [
+        "EL-CR-9.5-paid-abilities",
+        "EL-CR-8.5-install",
+        "EL-CR-8.6-play"
+      ],
+      "observation": "Three clicks and trash: gain 4, draw 3, install up to 2 from HQ, then may play an operation.",
+      "hiddenInformationImpact": "Installed cards stay facedown; the played operation becomes public.",
+      "serializationImpact": "Nested play inside an ability frame."
     },
     {
       "code": "35040",
@@ -570,8 +1012,19 @@
       "side": "corp",
       "faction": "haas-bioroid",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
-      "newPrimitives": []
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
+      "newPrimitives": [],
+      "citations": [
+        "EL-CR-10.9-load-empty",
+        "EL-CR-1.11-clicks"
+      ],
+      "observation": "Loads 6 on rez; take 2 at turn start; when empty, trash it and gain two clicks.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "Hosted pool (existing)."
     },
     {
       "code": "35041",
@@ -580,10 +1033,22 @@
       "side": "corp",
       "faction": "haas-bioroid",
       "batch": "slice-EL.7",
+      "slice": "EL.7",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-REZ-DURING-RUN"
-      ]
+      ],
+      "citations": [
+        "EL-CR-6.4-approach-ice",
+        "EL-CR-10.4-damage",
+        "EL-CR-9.8-subroutines"
+      ],
+      "observation": "Bioroid sentry: rezzed during a run on its server may trash a trojan; Runner lose-click break; trash program and core damage subs.",
+      "hiddenInformationImpact": "Run state is public; the effect reads no hidden zone.",
+      "serializationImpact": "Rez-during-run trigger needs the run's attacked server."
     },
     {
       "code": "35042",
@@ -592,10 +1057,21 @@
       "side": "corp",
       "faction": "haas-bioroid",
       "batch": "slice-EL.7",
+      "slice": "EL.7",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-CONDITIONAL-STRENGTH"
-      ]
+      ],
+      "citations": [
+        "EL-CR-9.4-static",
+        "EL-CR-9.8-subroutines"
+      ],
+      "observation": "+4 strength while the only ice protecting its server; subs: install from HQ, end the run.",
+      "hiddenInformationImpact": "The installed card stays facedown.",
+      "serializationImpact": "Strength derived from the server's ice count."
     },
     {
       "code": "35043",
@@ -604,8 +1080,19 @@
       "side": "corp",
       "faction": "haas-bioroid",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
-      "newPrimitives": []
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
+      "newPrimitives": [],
+      "citations": [
+        "EL-CR-8.6-play",
+        "EL-CR-1.11-clicks"
+      ],
+      "observation": "Gain two clicks.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35044",
@@ -614,8 +1101,19 @@
       "side": "corp",
       "faction": "haas-bioroid",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
-      "newPrimitives": []
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
+      "newPrimitives": [],
+      "citations": [
+        "EL-CR-8.6-play",
+        "EL-CR-8.5-install"
+      ],
+      "observation": "Draw 2, then install up to 2 cards from HQ one at a time.",
+      "hiddenInformationImpact": "Installed cards stay facedown.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35045",
@@ -624,10 +1122,21 @@
       "side": "corp",
       "faction": "haas-bioroid",
       "batch": "slice-EL.7",
+      "slice": "EL.7",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-MOVE-UPGRADE"
-      ]
+      ],
+      "citations": [
+        "EL-CR-5.4-action-phase",
+        "EL-CR-8.5-install"
+      ],
+      "observation": "At action-phase end may install ice from HQ 1 cheaper, then move this upgrade to that server's root.",
+      "hiddenInformationImpact": "The installed ice stays facedown.",
+      "serializationImpact": "Persist the moved upgrade's new server."
     },
     {
       "code": "35046",
@@ -636,10 +1145,22 @@
       "side": "corp",
       "faction": "jinteki",
       "batch": "slice-EL.5",
+      "slice": "EL.5",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-LOOK-TOP"
-      ]
+      ],
+      "citations": [
+        "EL-CR-1.9-counters",
+        "EL-CR-1.21-look-reveal",
+        "EL-CR-10.4-damage"
+      ],
+      "observation": "Power counter whenever the Corp does damage or trashes HQ cards; at turn start may spend two to look at R&D's top 3, trash one, add the rest to HQ.",
+      "hiddenInformationImpact": "The Corp alone sees the top 3 and the HQ additions.",
+      "serializationImpact": "Private look frame."
     },
     {
       "code": "35047",
@@ -648,8 +1169,19 @@
       "side": "corp",
       "faction": "jinteki",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
-      "newPrimitives": []
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
+      "newPrimitives": [],
+      "citations": [
+        "EL-CR-5.5-discard",
+        "EL-CR-1.18-advance"
+      ],
+      "observation": "At discard-phase end with 3 or fewer HQ cards, may pay 1 to advance an unrezzed advanceable card; it can't be scored this turn.",
+      "hiddenInformationImpact": "The advanced card stays facedown.",
+      "serializationImpact": "Score prohibition (existing)."
     },
     {
       "code": "35048",
@@ -658,10 +1190,21 @@
       "side": "corp",
       "faction": "jinteki",
       "batch": "slice-EL.7",
+      "slice": "EL.7",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-MOVE-RUNNER"
-      ]
+      ],
+      "citations": [
+        "EL-CR-6.2-position",
+        "EL-CR-1.9-counters"
+      ],
+      "observation": "Scores with an agenda counter; spend it during a run to move the Runner to Archives' outermost position.",
+      "hiddenInformationImpact": "Run state is public; the effect reads no hidden zone.",
+      "serializationImpact": "Persist the moved position and attacked server."
     },
     {
       "code": "35049",
@@ -670,10 +1213,22 @@
       "side": "corp",
       "faction": "jinteki",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-DIVIDENDS"
-      ]
+      ],
+      "citations": [
+        "EL-CR-10.13-dividends",
+        "EL-CR-1.18-advance",
+        "EL-CR-5.5-discard"
+      ],
+      "observation": "Dividends 1; at discard-phase end may spend an agenda counter to place two advancements on an installed card; can't score it this turn.",
+      "hiddenInformationImpact": "The advanced card stays facedown.",
+      "serializationImpact": "Agenda counters persist on the scored agenda."
     },
     {
       "code": "35050",
@@ -682,22 +1237,46 @@
       "side": "corp",
       "faction": "jinteki",
       "batch": "slice-EL.5",
+      "slice": "EL.5",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-REVEAL-ON-ACCESS"
-      ]
+      ],
+      "citations": [
+        "EL-CR-7.1-access",
+        "EL-CR-10.4-damage",
+        "EL-CR-10.5-tags"
+      ],
+      "observation": "Must be revealed when accessed in R&D; on access outside Archives the Corp may pay 4 to tag and do 3 net.",
+      "hiddenInformationImpact": "Revealed on R&D access to both players.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35051",
-      "title": "Phat Gioan Baotixita",
+      "title": "Phật Gioan Baotixita",
       "type": "asset",
       "side": "corp",
       "faction": "jinteki",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-AMOUNT"
-      ]
+      ],
+      "citations": [
+        "EL-CR-5.5-discard",
+        "EL-CR-10.4-damage",
+        "EL-CR-9.1-triggered"
+      ],
+      "observation": "Power counter at discard-phase end; first score or steal each turn may spend up to two for 1+N net damage.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "Removed-counter amount feeds the damage in one frame."
     },
     {
       "code": "35052",
@@ -706,8 +1285,20 @@
       "side": "corp",
       "faction": "jinteki",
       "batch": "slice-EL.7",
+      "slice": "EL.7",
       "status": "planned",
-      "newPrimitives": []
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
+      "newPrimitives": [],
+      "citations": [
+        "EL-CR-9.8-subroutines",
+        "EL-CR-10.4-damage",
+        "EL-CR-10.5-tags"
+      ],
+      "observation": "Subs: draw then may put an HQ card on top of R&D; net damage plus tag; 2 net damage.",
+      "hiddenInformationImpact": "The card moved to R&D's top is chosen privately by the Corp.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35053",
@@ -716,11 +1307,22 @@
       "side": "corp",
       "faction": "jinteki",
       "batch": "slice-EL.7",
+      "slice": "EL.7",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-INSTALL-FROM-ARCHIVES",
         "EL-RESOLVE-OTHER-SUBROUTINE"
-      ]
+      ],
+      "citations": [
+        "EL-CR-9.8-subroutines",
+        "EL-CR-8.5-install"
+      ],
+      "observation": "Subs: install ice from Archives free; rez ice 2 cheaper; resolve a sentry's sub; resolve another code gate's sub.",
+      "hiddenInformationImpact": "Archives ice installed facedown.",
+      "serializationImpact": "Nested subroutine resolution frames."
     },
     {
       "code": "35054",
@@ -729,10 +1331,21 @@
       "side": "corp",
       "faction": "jinteki",
       "batch": "slice-EL.7",
+      "slice": "EL.7",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-BREAK-RESTRICTION"
-      ]
+      ],
+      "citations": [
+        "EL-CR-3.9.5-interface",
+        "EL-CR-10.4-damage"
+      ],
+      "observation": "Only a fracter can break its printed sub; end the run unless the Runner suffers 3 net.",
+      "hiddenInformationImpact": "Run state is public; the effect reads no hidden zone.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35055",
@@ -741,10 +1354,21 @@
       "side": "corp",
       "faction": "jinteki",
       "batch": "slice-EL.5",
+      "slice": "EL.5",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-REVEAL-SUBSET"
-      ]
+      ],
+      "citations": [
+        "EL-CR-1.21-look-reveal",
+        "EL-CR-8.5-install"
+      ],
+      "observation": "Reveal all but one HQ card, gain 7, may install from HQ in a remote root.",
+      "hiddenInformationImpact": "All but one HQ card are revealed to the Runner; the kept card stays secret.",
+      "serializationImpact": "Reveal events only."
     },
     {
       "code": "35056",
@@ -753,10 +1377,21 @@
       "side": "corp",
       "faction": "jinteki",
       "batch": "slice-EL.7",
+      "slice": "EL.7",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-SWAP-APPROACHED-ICE"
-      ]
+      ],
+      "citations": [
+        "EL-CR-6.4-approach-ice",
+        "EL-CR-8.8-swap"
+      ],
+      "observation": "When the Runner approaches its server's ice, may trash this to gain 3 and swap the approached ice with ice from Archives or HQ.",
+      "hiddenInformationImpact": "An HQ ice swapped in is installed facedown; Archives ice may be faceup.",
+      "serializationImpact": "The run's approached position keeps its ID through the swap."
     },
     {
       "code": "35057",
@@ -765,11 +1400,23 @@
       "side": "corp",
       "faction": "nbn",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-FLIP",
         "EL-ACTION-PHASE-END"
-      ]
+      ],
+      "citations": [
+        "EL-CR-3.1-identity",
+        "EL-CR-5.4-action-phase",
+        "EL-CR-9.1-triggered"
+      ],
+      "observation": "Double-sided: at action-phase end after an operation gain 1 and flip; flipped side gains a click on the first operation each turn and flips back on a successful HQ or R&D run.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "Persist the identity's face and the operation-played turn fact."
     },
     {
       "code": "35058",
@@ -778,10 +1425,23 @@
       "side": "corp",
       "faction": "nbn",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
-        "EL-TAG-REMOVED"
-      ]
+        "EL-TAG-REMOVED",
+        "EL-REMOVE-TAGS"
+      ],
+      "citations": [
+        "EL-CR-10.5-tags",
+        "EL-CR-8.5-install",
+        "EL-CR-9.5-paid-abilities"
+      ],
+      "observation": "First tag removal each turn: may reveal and install a card from HQ free; click and remove a tag: gain 2.",
+      "hiddenInformationImpact": "The installed card is revealed then installed facedown.",
+      "serializationImpact": "First-tag-removed turn fact."
     },
     {
       "code": "35059",
@@ -790,10 +1450,22 @@
       "side": "corp",
       "faction": "nbn",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-DIVIDENDS"
-      ]
+      ],
+      "citations": [
+        "EL-CR-10.13-dividends",
+        "EL-CR-8.7-search",
+        "EL-CR-5.5-discard"
+      ],
+      "observation": "Dividends 2; at discard-phase end may spend an agenda counter to search R&D for an operation, reveal it, shuffle, put it on top.",
+      "hiddenInformationImpact": "The searched operation is revealed; R&D order stays hidden after the shuffle.",
+      "serializationImpact": "Search frame (existing)."
     },
     {
       "code": "35060",
@@ -802,10 +1474,22 @@
       "side": "corp",
       "faction": "nbn",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-SCORE-AREA-ABILITY"
-      ]
+      ],
+      "citations": [
+        "EL-CR-3.2.3-agenda-active",
+        "EL-CR-9.5-paid-abilities",
+        "EL-CR-1.9-counters"
+      ],
+      "observation": "Agenda counter on score or steal; click and spend it to draw 4 and shuffle HQ cards into R&D, usable from either score area.",
+      "hiddenInformationImpact": "Cards shuffled into R&D are hidden from the Runner.",
+      "serializationImpact": "Agenda counters persist in either score area."
     },
     {
       "code": "35061",
@@ -814,10 +1498,21 @@
       "side": "corp",
       "faction": "nbn",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-AMOUNT"
-      ]
+      ],
+      "citations": [
+        "EL-CR-1.18-advance",
+        "EL-CR-9.1-triggered"
+      ],
+      "observation": "Advanceable asset; at turn start may trash it to gain 3 and drain 2 per advancement.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35062",
@@ -826,10 +1521,21 @@
       "side": "corp",
       "faction": "nbn",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-THREAT"
-      ]
+      ],
+      "citations": [
+        "EL-CR-1.17.1a-threat",
+        "EL-CR-10.5-tags"
+      ],
+      "observation": "Gain 1 at turn start; Threat 2: when the Runner trashes it while rezzed, tag them.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35063",
@@ -838,10 +1544,22 @@
       "side": "corp",
       "faction": "nbn",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-TAG-COUNT"
-      ]
+      ],
+      "citations": [
+        "EL-CR-9.8-subroutines",
+        "EL-CR-10.5-tags",
+        "EL-CR-10.4-damage"
+      ],
+      "observation": "Subs: give a tag; 1 net; 2 net if the Runner has 2+ tags.",
+      "hiddenInformationImpact": "Run state is public; the effect reads no hidden zone.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35064",
@@ -850,10 +1568,22 @@
       "side": "corp",
       "faction": "nbn",
       "batch": "slice-EL.7",
+      "slice": "EL.7",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-THREAT"
-      ]
+      ],
+      "citations": [
+        "EL-CR-1.17.1a-threat",
+        "EL-CR-9.8-subroutines",
+        "EL-CR-9.5-paid-abilities"
+      ],
+      "observation": "Runner-only 3-credit break ability; subs end the run, at threat 2+, at threat 4+.",
+      "hiddenInformationImpact": "Run state is public; the effect reads no hidden zone.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35065",
@@ -862,10 +1592,22 @@
       "side": "corp",
       "faction": "nbn",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
-        "EL-AMOUNT"
-      ]
+        "EL-AMOUNT",
+        "EL-REMOVE-TAGS"
+      ],
+      "citations": [
+        "EL-CR-10.5-tags",
+        "EL-CR-8.6-play"
+      ],
+      "observation": "Play only if tagged; give a tag, or remove any tags and drain 5 per tag removed, gaining what the Runner lost.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35066",
@@ -874,10 +1616,24 @@
       "side": "corp",
       "faction": "nbn",
       "batch": "slice-EL.5",
+      "slice": "EL.5",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
-        "EL-INSTALL-FROM-SCORE-AREA"
-      ]
+        "EL-INSTALL-FROM-SCORE-AREA",
+        "EL-REMOVE-TAGS",
+        "EL-OPERATION-TRASH-COST"
+      ],
+      "citations": [
+        "EL-CR-1.16-costs",
+        "EL-CR-8.5-install",
+        "EL-CR-3.5.3-operation-trash-cost"
+      ],
+      "observation": "Additional cost: remove X tags; install an agenda worth X from the Runner's score area, advancing it if the Runner is still tagged. Has a trash cost.",
+      "hiddenInformationImpact": "The agenda is installed facedown from a public zone; the Runner knows its identity.",
+      "serializationImpact": "Persist the variable X with the play frame."
     },
     {
       "code": "35067",
@@ -886,10 +1642,22 @@
       "side": "corp",
       "faction": "nbn",
       "batch": "slice-EL.5",
+      "slice": "EL.5",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-REVEAL-GRIP"
-      ]
+      ],
+      "citations": [
+        "EL-CR-1.18-advance",
+        "EL-CR-1.21-look-reveal",
+        "EL-CR-1.16-costs"
+      ],
+      "observation": "Double: place two advancements on an advanceable card; then name a type, reveal the grip and shuffle up to two of that type into the stack.",
+      "hiddenInformationImpact": "The whole grip is revealed to the Corp.",
+      "serializationImpact": "Reveal frame with the chosen type."
     },
     {
       "code": "35068",
@@ -898,10 +1666,22 @@
       "side": "corp",
       "faction": "weyland-consortium",
       "batch": "slice-EL.5",
+      "slice": "EL.5",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-FACEUP-AGENDA"
-      ]
+      ],
+      "citations": [
+        "EL-CR-8.5-install",
+        "EL-CR-7.1-access",
+        "EL-CR-10.4-damage"
+      ],
+      "observation": "Agendas may be installed faceup (inactive); accessing a faceup installed agenda does 2 meat and gives a tag.",
+      "hiddenInformationImpact": "A faceup installed agenda is public.",
+      "serializationImpact": "Persist the agenda's faceup install state."
     },
     {
       "code": "35069",
@@ -910,8 +1690,19 @@
       "side": "corp",
       "faction": "weyland-consortium",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
-      "newPrimitives": []
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
+      "newPrimitives": [],
+      "citations": [
+        "EL-CR-9.1-triggered",
+        "EL-CR-1.10-credits"
+      ],
+      "observation": "First credit gain each turn through an agenda or operation ability may draw 1.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "Credit-gain source classification on the occurrence."
     },
     {
       "code": "35070",
@@ -920,10 +1711,21 @@
       "side": "corp",
       "faction": "weyland-consortium",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-FORFEIT"
-      ]
+      ],
+      "citations": [
+        "EL-CR-8.2.5-forfeit",
+        "EL-CR-9.1-triggered"
+      ],
+      "observation": "Gain 2 on score; gain 4 when forfeited.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35071",
@@ -932,10 +1734,22 @@
       "side": "corp",
       "faction": "weyland-consortium",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-DIVIDENDS"
-      ]
+      ],
+      "citations": [
+        "EL-CR-10.13-dividends",
+        "EL-CR-8.7-search",
+        "EL-CR-8.5-install"
+      ],
+      "observation": "Dividends 1; at discard-phase end may spend an agenda counter to search R&D for a card, reveal it, then install it free or add it to HQ.",
+      "hiddenInformationImpact": "The searched card is revealed.",
+      "serializationImpact": "Search frame (existing)."
     },
     {
       "code": "35072",
@@ -944,8 +1758,18 @@
       "side": "corp",
       "faction": "weyland-consortium",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
-      "newPrimitives": []
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
+      "newPrimitives": [],
+      "citations": [
+        "EL-CR-10.9-load-empty"
+      ],
+      "observation": "Loads 8 on rez; take 4 and draw at turn start; trashed when empty.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "Hosted pool (existing)."
     },
     {
       "code": "35073",
@@ -954,12 +1778,25 @@
       "side": "corp",
       "faction": "weyland-consortium",
       "batch": "slice-EL.5",
+      "slice": "EL.5",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-PLAY-FROM-ARCHIVES",
         "EL-FORFEIT",
         "EL-REVEAL-TRASH-COST"
-      ]
+      ],
+      "citations": [
+        "EL-CR-1.16-costs",
+        "EL-CR-8.2.5-forfeit",
+        "EL-CR-8.6-play",
+        "EL-CR-4.9-removed-from-game"
+      ],
+      "observation": "Additional rez cost: forfeit an agenda or reveal and trash 3 HQ cards; at turn start may play a transaction from Archives, then remove it from the game.",
+      "hiddenInformationImpact": "The 3 HQ cards are revealed to the Runner.",
+      "serializationImpact": "Removed-from-game zone (existing)."
     },
     {
       "code": "35074",
@@ -968,11 +1805,23 @@
       "side": "corp",
       "faction": "weyland-consortium",
       "batch": "slice-EL.7",
+      "slice": "EL.7",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-FORFEIT",
         "EL-REZ-COST-PAYMENT"
-      ]
+      ],
+      "citations": [
+        "EL-CR-8.2.5-forfeit",
+        "EL-CR-1.16-costs",
+        "EL-CR-9.8-subroutines"
+      ],
+      "observation": "May forfeit an agenda while rezzing to pay 10 of its rez cost; subs trash a program or end the run, a resource or end the run, end the run.",
+      "hiddenInformationImpact": "Run state is public; the effect reads no hidden zone.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35075",
@@ -981,10 +1830,21 @@
       "side": "corp",
       "faction": "weyland-consortium",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-CANNOT-TRASH"
-      ]
+      ],
+      "citations": [
+        "EL-CR-9.4-static",
+        "EL-CR-1.19-trashing"
+      ],
+      "observation": "The Runner can't trash this ice while rezzed; two end-the-run subs.",
+      "hiddenInformationImpact": "Run state is public; the effect reads no hidden zone.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35076",
@@ -993,8 +1853,19 @@
       "side": "corp",
       "faction": "weyland-consortium",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
-      "newPrimitives": []
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
+      "newPrimitives": [],
+      "citations": [
+        "EL-CR-1.18-advance",
+        "EL-CR-9.8-subroutines"
+      ],
+      "observation": "Advanceable code gate; on encounter with 3+ advancements may advance another card; subs advance, drain 2, 1 net.",
+      "hiddenInformationImpact": "Run state is public; the effect reads no hidden zone.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35077",
@@ -1003,8 +1874,19 @@
       "side": "corp",
       "faction": "weyland-consortium",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
-      "newPrimitives": []
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
+      "newPrimitives": [],
+      "citations": [
+        "EL-CR-8.6-play",
+        "EL-CR-9.12.6-modal"
+      ],
+      "observation": "Resolve 2 of 4 modes in any order: draw and shuffle a card back; install ice from HQ free; place an advancement; gain 2.",
+      "hiddenInformationImpact": "The card shuffled into R&D is hidden.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35078",
@@ -1013,10 +1895,23 @@
       "side": "corp",
       "faction": "weyland-consortium",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
-        "EL-THREAT"
-      ]
+        "EL-THREAT",
+        "EL-OPERATION-TRASH-COST"
+      ],
+      "citations": [
+        "EL-CR-1.17.1a-threat",
+        "EL-CR-10.4-damage",
+        "EL-CR-3.5.3-operation-trash-cost"
+      ],
+      "observation": "Play only at threat 4+ after a successful Runner run last turn; 4 meat unless the Runner pays 8. Has a trash cost.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35079",
@@ -1025,10 +1920,21 @@
       "side": "corp",
       "faction": "neutral-corp",
       "batch": "slice-EL.7",
+      "slice": "EL.7",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-REZ-DURING-RUN"
-      ]
+      ],
+      "citations": [
+        "EL-CR-6.4-approach-ice",
+        "EL-CR-1.9-counters"
+      ],
+      "observation": "Rezzed during a run on its server: purge virus counters; one end-the-run sub.",
+      "hiddenInformationImpact": "Run state is public; the effect reads no hidden zone.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35080",
@@ -1037,8 +1943,19 @@
       "side": "corp",
       "faction": "neutral-corp",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
-      "newPrimitives": []
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
+      "newPrimitives": [],
+      "citations": [
+        "EL-CR-9.1-triggered",
+        "EL-CR-10.5-tags"
+      ],
+      "observation": "Trashes itself when an agenda is scored or stolen from its server; subs tag unless the Runner pays 3, end the run if tagged.",
+      "hiddenInformationImpact": "Run state is public; the effect reads no hidden zone.",
+      "serializationImpact": "No new state: the effect resolves inside existing behavior frames."
     },
     {
       "code": "35081",
@@ -1047,11 +1964,23 @@
       "side": "corp",
       "faction": "neutral-corp",
       "batch": "slice-EL.5",
+      "slice": "EL.5",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-PLAY-FROM-ARCHIVES",
         "EL-ACTION-NOT-FINISHED"
-      ]
+      ],
+      "citations": [
+        "EL-CR-8.6-play",
+        "EL-CR-4.9-removed-from-game",
+        "EL-CR-1.11-clicks"
+      ],
+      "observation": "Play only before finishing an action this turn; gain 5, plus a click if not played from HQ; a click ability plays it from Archives then removes it from the game.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "Turn fact for a finished action."
     },
     {
       "code": "35082",
@@ -1060,12 +1989,24 @@
       "side": "corp",
       "faction": "neutral-corp",
       "batch": "slice-EL.3",
+      "slice": "EL.3",
       "status": "planned",
+      "textStatus": "planned",
+      "reviewStatus": "audited",
+      "reviewer": "architect",
       "newPrimitives": [
         "EL-RECURRING",
         "EL-REGION",
         "EL-PERSISTENT"
-      ]
+      ],
+      "citations": [
+        "EL-CR-1.10.5-recurring",
+        "EL-CR-3.6.5-region",
+        "EL-CR-9.12.5-persistent"
+      ],
+      "observation": "2 recurring credits for rezzing in its server; Persistent: assets in its root cost 2 more to trash; limit 1 region per server.",
+      "hiddenInformationImpact": "Public effect; no hidden zone is read or exposed.",
+      "serializationImpact": "Recurring pool and persistent lingering effect."
     }
   ]
 }

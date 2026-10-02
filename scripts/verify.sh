@@ -14,12 +14,14 @@ elif (($# != 0)); then
   exit 1
 fi
 if ((m4_gate == 1)); then
-  for required_content in cards.json manifest.json SOURCE_COPYRIGHT.md; do
-    if [[ ! -f "$verify_root/data/vendor/system-gateway/$required_content" ]]; then
-      echo "M4 gate requires authenticated official content; missing $required_content." >&2
-      echo "Run ./scripts/update-card-data.sh --commit 236140cf84491c23995b028bc791281837520b97 --retrieval-date 2026-08-28" >&2
-      exit 1
-    fi
+  for required_pack in system-gateway elevation; do
+    for required_content in cards.json manifest.json SOURCE_COPYRIGHT.md; do
+      if [[ ! -f "$verify_root/data/vendor/$required_pack/$required_content" ]]; then
+        echo "M4 gate requires authenticated official content; missing $required_pack/$required_content." >&2
+        echo "Run ./scripts/update-card-data.sh --commit 236140cf84491c23995b028bc791281837520b97 --retrieval-date 2026-08-28" >&2
+        exit 1
+      fi
+    done
   done
 fi
 
@@ -76,14 +78,18 @@ card_data_dir="$verify_root/data/vendor/system-gateway"
 card_data_cards="$card_data_dir/cards.json"
 card_data_manifest="$card_data_dir/manifest.json"
 card_data_copyright="$card_data_dir/SOURCE_COPYRIGHT.md"
+elevation_data_dir="$verify_root/data/vendor/elevation"
 card_data_present=0
 card_data_content_enabled=0
 official_content_properties=(
   "-p:NetrunnerContentEnabled=true"
   "-p:NetrunnerCardDataMode=official"
   "-p:NetrunnerCardDataInputRoot=$card_data_dir"
+  "-p:NetrunnerElevationCardDataInputRoot=$elevation_data_dir"
 )
-for card_data_file in "$card_data_cards" "$card_data_manifest" "$card_data_copyright"; do
+# EL.1: an official snapshot is both packs, each with its own three files.
+for card_data_file in "$card_data_cards" "$card_data_manifest" "$card_data_copyright" \
+  "$elevation_data_dir/cards.json" "$elevation_data_dir/manifest.json" "$elevation_data_dir/SOURCE_COPYRIGHT.md"; do
   if [[ -e "$card_data_file" ]]; then
     card_data_present=$((card_data_present + 1))
   fi
@@ -92,9 +98,31 @@ if ((card_data_present == 0)); then
   echo "card-data=synthetic (local System Gateway snapshot absent; no network fetch)"
   echo "Provision official content explicitly with:"
   echo "  ./scripts/update-card-data.sh --commit 236140cf84491c23995b028bc791281837520b97 --retrieval-date 2026-08-28"
-elif ((card_data_present == 3)) && [[ -f "$card_data_cards" && -f "$card_data_manifest" && -f "$card_data_copyright" ]]; then
-  dotnet run --project "$verify_root/src/Netrunner.Cli" --no-build --no-restore -- \
-    card-data validate --root "$verify_root" --json
+elif ((card_data_present == 6)) && [[ -f "$card_data_cards" && -f "$card_data_manifest" && -f "$card_data_copyright" ]]; then
+  for card_data_pack in sg elev; do
+    dotnet run --project "$verify_root/src/Netrunner.Cli" --no-build --no-restore -- \
+      card-data validate --root "$verify_root" --pack "$card_data_pack" --json
+  done
+  # EL.1 DATA-400: an official build without the Elevation pack fails with an
+  # actionable diagnostic instead of silently embedding System Gateway alone.
+  elevation_missing_dir="$(mktemp -d "${TMPDIR:-/tmp}/netrunner-missing-elevation.XXXXXX")"
+  elevation_missing_log="$elevation_missing_dir/build.log"
+  elevation_missing_expected="DATA-400: normalized Elevation card data is missing at '$elevation_missing_dir/absent/cards.json'."
+  if dotnet build "$verify_root/src/Netrunner.Cards/Netrunner.Cards.csproj" \
+    --no-restore --nologo -m:1 \
+    -p:NetrunnerContentEnabled=true -p:NetrunnerCardDataInputRoot="$card_data_dir" \
+    -p:NetrunnerElevationCardDataInputRoot="$elevation_missing_dir/absent" \
+    >"$elevation_missing_log" 2>&1; then
+    echo "DATA-400 missing-Elevation contract unexpectedly succeeded." >&2
+    exit 1
+  fi
+  if ! grep -Fq "$elevation_missing_expected" "$elevation_missing_log"; then
+    echo "DATA-400 missing-Elevation diagnostic changed unexpectedly:" >&2
+    sed -n '1,80p' "$elevation_missing_log" >&2
+    exit 1
+  fi
+  rm -rf -- "$elevation_missing_dir"
+  echo "card-data=missing-elevation diagnostic=PASS"
   dotnet build "$verify_root/src/Netrunner.Cards/Netrunner.Cards.csproj" \
     --no-restore --nologo -m:1 \
     "${official_content_properties[@]}"
@@ -127,12 +155,12 @@ elif ((card_data_present == 3)) && [[ -f "$card_data_cards" && -f "$card_data_ma
     fuzz --content official --games 50 --seed 1 --workers 4 --output "$fuzz_official_dir/run"
   card_data_content_enabled=1
 else
-  echo "card-data validation failed: local System Gateway snapshot is partial." >&2
+  echo "card-data validation failed: the local official snapshot is partial (System Gateway and Elevation each need cards.json, manifest.json and SOURCE_COPYRIGHT.md)." >&2
   exit 1
 fi
 verify_temp_root="${TMPDIR:-/tmp}"
 verify_temp_root="${verify_temp_root%/}"
-coverage_report_dir="$(mktemp -d "$verify_temp_root/netrunner-gateway-coverage.XXXXXX")"
+coverage_report_dir="$(mktemp -d "$verify_temp_root/netrunner-card-coverage.XXXXXX")"
 if [[ -z "$coverage_report_dir" || ! -d "$coverage_report_dir" ]]; then
   echo "Unable to create the Gateway coverage report directory." >&2
   exit 1
@@ -172,38 +200,44 @@ fi
 echo "card-data=official-without-opt-in diagnostic=PASS"
 coverage_catalog="$verify_root/src/Netrunner.Cards/bin/Debug/net8.0/Netrunner.Cards.dll"
 coverage_tests="$verify_root/tests/Netrunner.Cards.Tests/bin/Debug/net8.0/Netrunner.Cards.Tests.dll"
-coverage_cards_arg=()
-if [[ -f "$card_data_cards" ]]; then
-  coverage_cards_arg=(--cards "$card_data_cards")
-fi
+# CARD-401: one report over both card sets. Without local card data the
+# tool reads titles from the registries, so the report is the same in both
+# content lanes.
 dotnet run --project "$verify_root/tools/Netrunner.CardCoverage" --no-build --no-restore -- \
   --root "$verify_root" \
   --catalog "$coverage_catalog" \
   --tests "$coverage_tests" \
-  "${coverage_cards_arg[@]}" \
-  --markdown "$coverage_report_dir/gateway-coverage.md" \
-  --json "$coverage_report_dir/gateway-coverage.json"
-if ! diff -u "$verify_root/docs/generated/gateway-coverage.md" \
-  "$coverage_report_dir/gateway-coverage.md"; then
-  echo "Gateway Markdown coverage report is stale. Regenerate it with Netrunner.CardCoverage." >&2
+  --markdown "$coverage_report_dir/card-coverage.md" \
+  --json "$coverage_report_dir/card-coverage.json"
+if ! diff -u "$verify_root/docs/generated/card-coverage.md" \
+  "$coverage_report_dir/card-coverage.md"; then
+  echo "Markdown card coverage report is stale. Regenerate it with Netrunner.CardCoverage." >&2
   exit 1
 fi
-if ! diff -u "$verify_root/docs/generated/gateway-coverage.json" \
-  "$coverage_report_dir/gateway-coverage.json"; then
-  echo "Gateway JSON coverage report is stale. Regenerate it with Netrunner.CardCoverage." >&2
+if ! diff -u "$verify_root/docs/generated/card-coverage.json" \
+  "$coverage_report_dir/card-coverage.json"; then
+  echo "JSON card coverage report is stale. Regenerate it with Netrunner.CardCoverage." >&2
   exit 1
 fi
-python3 - "$coverage_report_dir/gateway-coverage.json" <<'PY'
+python3 - "$coverage_report_dir/card-coverage.json" "$verify_root/data/elevation/batch-registry.json" <<'PY'
 import json
 import sys
 
 with open(sys.argv[1], encoding="utf-8") as report_file:
     report = json.load(report_file)
+with open(sys.argv[2], encoding="utf-8") as registry_file:
+    elevation = json.load(registry_file)
+sets = {entry["cardSet"]: entry["counts"] for entry in report["sets"]}
 expected = {"total": 77, "registered": 77, "tested": 77,
             "fullTextComplete": 77, "partial": 0, "unregistered": 0}
-if report["counts"] != expected or report["diagnostics"]:
+if sets.get("system-gateway") != expected or report["diagnostics"]:
     raise SystemExit("M4 coverage requires 77 complete, reviewed, tested designs with no diagnostics.")
 print("m4-coverage=PASS registered=77 tested=77 complete=77 diagnostics=0")
+registered = sum(1 for card in elevation["cards"] if card["status"] == "registered")
+counts = sets.get("elevation", {})
+if counts.get("total") != 82 or counts.get("registered") != registered or counts.get("tested") != registered:
+    raise SystemExit(f"Elevation coverage must list 82 cards with {registered} registered and tested: {counts}")
+print(f"elevation-coverage=PASS total=82 registered={registered} diagnostics=0")
 PY
 m1_replay_dir="$(mktemp -d "$verify_temp_root/netrunner-m1.XXXXXX")"
 if [[ -z "$m1_replay_dir" || ! -d "$m1_replay_dir" ]]; then

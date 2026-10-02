@@ -24,8 +24,16 @@ internal static class Program
                 Console.Error.WriteLine(diagnostic);
             }
 
+            foreach (SetReport set in report.Sets)
+            {
+                Console.WriteLine(
+                    $"card-coverage set={set.CardSet} total={set.Counts.Total} registered={set.Counts.Registered} "
+                    + $"tested={set.Counts.Tested} complete={set.Counts.FullTextComplete} "
+                    + $"partial={set.Counts.Partial} unregistered={set.Counts.Unregistered}");
+            }
+
             Console.WriteLine(
-                $"gateway-coverage total={report.Counts.Total} registered={report.Counts.Registered} "
+                $"card-coverage total={report.Counts.Total} registered={report.Counts.Registered} "
                 + $"tested={report.Counts.Tested} complete={report.Counts.FullTextComplete} "
                 + $"partial={report.Counts.Partial} unregistered={report.Counts.Unregistered}");
 
@@ -61,11 +69,51 @@ internal sealed class CoverageHelpException : Exception
 {
 }
 
-internal sealed record Options(
-    string Root,
+/// <summary>
+/// One card set the report covers: its registry, rulings, local-only card
+/// metadata, the compiled catalog that registers it and the codes it must
+/// hold.
+/// </summary>
+internal sealed record CardSetOptions(
+    CardSetDefinition Definition,
     string RegistryPath,
     string RulingsPath,
-    string? CardsPath,
+    string? CardsPath);
+
+internal sealed record CardSetDefinition(
+    string CardSet,
+    string Title,
+    string CatalogType,
+    IReadOnlySet<string> ExpectedCodes,
+    IReadOnlySet<string> ExcludedCatalogCodes)
+{
+    public static CardSetDefinition SystemGateway { get; } = new(
+        "system-gateway",
+        "System Gateway",
+        "Netrunner.Cards.GatewayBehaviorCatalog",
+        Codes(30001, 77),
+        new HashSet<string>(StringComparer.Ordinal));
+
+    /// <summary>
+    /// Elevation is registered in the Gateway + Elevation catalog, which also
+    /// holds every Gateway card; those are excluded from Elevation's set.
+    /// </summary>
+    public static CardSetDefinition Elevation { get; } = new(
+        "elevation",
+        "Elevation",
+        "Netrunner.Cards.ElevationBehaviorCatalog",
+        Codes(35001, 82),
+        Codes(30001, 77));
+
+    private static HashSet<string> Codes(int first, int count) =>
+        Enumerable.Range(first, count)
+            .Select(static code => code.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            .ToHashSet(StringComparer.Ordinal);
+}
+
+internal sealed record Options(
+    string Root,
+    IReadOnlyList<CardSetOptions> Sets,
     string? CatalogPath,
     IReadOnlyList<string> TestAssemblyPaths,
     string MarkdownPath,
@@ -74,18 +122,19 @@ internal sealed record Options(
     public const string Usage =
         "usage: dotnet run --project tools/Netrunner.CardCoverage -- "
         + "--root <repo> [--registry <path>] [--rulings <path>] [--cards <path>] "
+        + "[--elevation-registry <path>] [--elevation-rulings <path>] [--elevation-cards <path>] "
         + "[--catalog <Cards.dll>] [--tests <tests.dll> ...] "
         + "[--markdown <path>] [--json <path>]";
 
+    private static readonly string[] ValueOptions =
+    [
+        "--root", "--registry", "--rulings", "--cards", "--elevation-registry", "--elevation-rulings",
+        "--elevation-cards", "--catalog", "--tests", "--markdown", "--json",
+    ];
+
     public static Options Parse(IReadOnlyList<string> args)
     {
-        string root = Directory.GetCurrentDirectory();
-        string? registry = null;
-        string? rulings = null;
-        string? cards = null;
-        string? catalog = null;
-        string? markdown = null;
-        string? json = null;
+        var values = new Dictionary<string, string>(StringComparer.Ordinal);
         var tests = new List<string>();
 
         for (int index = 0; index < args.Count; index++)
@@ -97,58 +146,56 @@ internal sealed record Options(
                 throw new CoverageHelpException();
             }
 
-            string value = argument switch
+            if (!ValueOptions.Contains(argument, StringComparer.Ordinal))
             {
-                "--root" => ReadValue(args, ref index, argument),
-                "--registry" => ReadValue(args, ref index, argument),
-                "--rulings" => ReadValue(args, ref index, argument),
-                "--cards" => ReadValue(args, ref index, argument),
-                "--catalog" => ReadValue(args, ref index, argument),
-                "--tests" => ReadValue(args, ref index, argument),
-                "--markdown" => ReadValue(args, ref index, argument),
-                "--json" => ReadValue(args, ref index, argument),
-                _ => throw new CoverageUsageException($"Unknown argument '{argument}'."),
-            };
+                throw new CoverageUsageException($"Unknown argument '{argument}'.");
+            }
 
-            switch (argument)
+            string value = ReadValue(args, ref index, argument);
+            if (argument == "--tests")
             {
-                case "--root":
-                    root = value;
-                    break;
-                case "--registry":
-                    registry = value;
-                    break;
-                case "--rulings":
-                    rulings = value;
-                    break;
-                case "--cards":
-                    cards = value;
-                    break;
-                case "--catalog":
-                    catalog = value;
-                    break;
-                case "--tests":
-                    tests.Add(value);
-                    break;
-                case "--markdown":
-                    markdown = value;
-                    break;
-                case "--json":
-                    json = value;
-                    break;
+                tests.Add(value);
+            }
+            else
+            {
+                values[argument] = value;
             }
         }
 
-        root = Path.GetFullPath(root);
+        string root = Path.GetFullPath(values.GetValueOrDefault("--root") ?? Directory.GetCurrentDirectory());
+        string Value(string option, string fallback) => Path.GetFullPath(values.GetValueOrDefault(option) ?? Path.Combine(root, fallback));
+        string? Cards(string option, string fallback)
+        {
+            if (values.TryGetValue(option, out string? explicitPath))
+            {
+                return Path.GetFullPath(explicitPath);
+            }
+
+            string path = Path.Combine(root, fallback);
+            return File.Exists(path) ? path : null;
+        }
+
+        CardSetOptions[] sets =
+        [
+            new(
+                CardSetDefinition.SystemGateway,
+                Value("--registry", "data/m4/batch-registry.json"),
+                Value("--rulings", "data/m4/rulings.json"),
+                Cards("--cards", "data/vendor/system-gateway/cards.json")),
+            new(
+                CardSetDefinition.Elevation,
+                Value("--elevation-registry", "data/elevation/batch-registry.json"),
+                Value("--elevation-rulings", "data/elevation/rulings.json"),
+                Cards("--elevation-cards", "data/vendor/elevation/cards.json")),
+        ];
+
         return new Options(
             root,
-            Path.GetFullPath(registry ?? Path.Combine(root, "data/m4/batch-registry.json")),
-            Path.GetFullPath(rulings ?? Path.Combine(root, "data/m4/rulings.json")),
-            cards is null ? FindCards(root) : Path.GetFullPath(cards),
-            catalog is null ? FindCatalog(root) : Path.GetFullPath(catalog),
+            sets,
+            values.TryGetValue("--catalog", out string? catalog) ? Path.GetFullPath(catalog) : FindCatalog(root),
             tests.Count == 0 ? FindTests(root) : tests.Select(Path.GetFullPath).ToArray(),
-            Path.GetFullPath(markdown ?? Path.Combine(root, "docs/generated/gateway-coverage.md")),
-            Path.GetFullPath(json ?? Path.Combine(root, "docs/generated/gateway-coverage.json")));
+            Value("--markdown", "docs/generated/card-coverage.md"),
+            Value("--json", "docs/generated/card-coverage.json"));
     }
 
     private static string ReadValue(IReadOnlyList<string> args, ref int index, string argument)
@@ -159,12 +206,6 @@ internal sealed record Options(
         }
 
         return args[index];
-    }
-
-    private static string? FindCards(string root)
-    {
-        string path = Path.Combine(root, "data/vendor/system-gateway/cards.json");
-        return File.Exists(path) ? path : null;
     }
 
     private static string? FindCatalog(string root)
@@ -188,6 +229,33 @@ internal sealed record Options(
     }
 }
 
+internal sealed class CardSetInput
+{
+    public CardSetInput(
+        CardSetDefinition definition,
+        RegistryDocument registry,
+        RulingsDocument rulings,
+        IReadOnlyDictionary<string, CardMetadata> metadata,
+        IReadOnlySet<string> registeredCodes)
+    {
+        Definition = definition;
+        Registry = registry;
+        Rulings = rulings;
+        Metadata = metadata;
+        RegisteredCodes = registeredCodes;
+    }
+
+    public CardSetDefinition Definition { get; }
+
+    public RegistryDocument Registry { get; }
+
+    public RulingsDocument Rulings { get; }
+
+    public IReadOnlyDictionary<string, CardMetadata> Metadata { get; }
+
+    public IReadOnlySet<string> RegisteredCodes { get; }
+}
+
 internal sealed class CoverageInput
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -198,52 +266,47 @@ internal sealed class CoverageInput
     };
 
     private CoverageInput(
-        RegistryDocument registry,
-        RulingsDocument rulings,
-        IReadOnlyDictionary<string, CardMetadata> metadata,
-        IReadOnlySet<string> registeredCodes,
+        IReadOnlyList<CardSetInput> sets,
         IReadOnlyDictionary<string, IReadOnlyList<string>> tests)
     {
-        Registry = registry;
-        Rulings = rulings;
-        Metadata = metadata;
-        RegisteredCodes = registeredCodes;
+        Sets = sets;
         Tests = tests;
     }
 
-    public RegistryDocument Registry { get; }
-
-    public RulingsDocument Rulings { get; }
-
-    public IReadOnlyDictionary<string, CardMetadata> Metadata { get; }
-
-    public IReadOnlySet<string> RegisteredCodes { get; }
+    public IReadOnlyList<CardSetInput> Sets { get; }
 
     public IReadOnlyDictionary<string, IReadOnlyList<string>> Tests { get; }
 
     public static CoverageInput Load(Options options)
     {
-        RegistryDocument registry = ReadJson<RegistryDocument>(options.RegistryPath, "batch registry");
-        RulingsDocument rulings = ReadJson<RulingsDocument>(options.RulingsPath, "rulings");
-        RegistryValidator.Validate(registry, rulings);
-
-        IReadOnlyDictionary<string, CardMetadata> metadata = options.CardsPath is null
-            ? registry.Cards.ToDictionary(
-                static card => card.Code,
-                static card => new CardMetadata(card.Code, card.Title),
-                StringComparer.Ordinal)
-            : ReadCards(options.CardsPath, registry);
-
         if (options.CatalogPath is null)
         {
             throw new CoverageUsageException(
                 "A compiled catalog assembly is required; pass --catalog <Netrunner.Cards.dll> after building the Cards project.");
         }
 
-        IReadOnlySet<string> registeredCodes = CatalogReader.Read(options.CatalogPath);
+        var sets = new List<CardSetInput>();
+        foreach (CardSetOptions set in options.Sets)
+        {
+            RegistryDocument registry = ReadJson<RegistryDocument>(set.RegistryPath, $"{set.Definition.Title} batch registry");
+            RulingsDocument rulings = ReadJson<RulingsDocument>(set.RulingsPath, $"{set.Definition.Title} rulings");
+            RegistryValidator.Validate(registry, rulings, set.Definition);
+
+            IReadOnlyDictionary<string, CardMetadata> metadata = set.CardsPath is null
+                ? registry.Cards.ToDictionary(
+                    static card => card.Code,
+                    static card => new CardMetadata(card.Code, card.Title),
+                    StringComparer.Ordinal)
+                : ReadCards(set.CardsPath, registry);
+
+            IReadOnlySet<string> registered = CatalogReader.Read(options.CatalogPath, set.Definition.CatalogType)
+                .Except(set.Definition.ExcludedCatalogCodes, StringComparer.Ordinal)
+                .ToHashSet(StringComparer.Ordinal);
+            sets.Add(new CardSetInput(set.Definition, registry, rulings, metadata, registered));
+        }
 
         IReadOnlyDictionary<string, IReadOnlyList<string>> tests = TestMetadataReader.Read(options.TestAssemblyPaths);
-        return new CoverageInput(registry, rulings, metadata, registeredCodes, tests);
+        return new CoverageInput(sets, tests);
     }
 
     private static T ReadJson<T>(string path, string description)
@@ -398,31 +461,18 @@ internal sealed class Ruling
 
 internal static class RegistryValidator
 {
-    private static readonly IReadOnlySet<string> ExpectedCodes = new HashSet<string>(
-        new[]
-        {
-            "30001", "30002", "30003", "30004", "30005", "30006", "30007", "30008", "30009", "30010",
-            "30011", "30012", "30013", "30014", "30015", "30016", "30017", "30018", "30019", "30020",
-            "30021", "30022", "30023", "30024", "30025", "30026", "30027", "30028", "30029", "30030",
-            "30031", "30032", "30033", "30034", "30035", "30036", "30037", "30038", "30039", "30040",
-            "30041", "30042", "30043", "30044", "30045", "30046", "30047", "30048", "30049", "30050",
-            "30051", "30052", "30053", "30054", "30055", "30056", "30057", "30058", "30059", "30060",
-            "30061", "30062", "30063", "30064", "30065", "30066", "30067", "30068", "30069", "30070",
-            "30071", "30072", "30073", "30074", "30075", "30076", "30077",
-        },
-        StringComparer.Ordinal);
-
-    public static void Validate(RegistryDocument registry, RulingsDocument rulings)
+    public static void Validate(RegistryDocument registry, RulingsDocument rulings, CardSetDefinition set)
     {
         var errors = new List<string>();
+        IReadOnlySet<string> expectedCodes = set.ExpectedCodes;
         if (registry.SchemaVersion != 1)
         {
             errors.Add($"batch registry schemaVersion must be 1 (found {registry.SchemaVersion})");
         }
 
-        if (!string.Equals(registry.CardSet, "system-gateway", StringComparison.Ordinal))
+        if (!string.Equals(registry.CardSet, set.CardSet, StringComparison.Ordinal))
         {
-            errors.Add("batch registry cardSet must be 'system-gateway'");
+            errors.Add($"batch registry cardSet must be '{set.CardSet}'");
         }
 
         if (!string.Equals(registry.RulesVersion, "CR-26.03", StringComparison.Ordinal))
@@ -460,12 +510,12 @@ internal static class RegistryValidator
             }
         }
 
-        if (!cards.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(ExpectedCodes))
+        if (!cards.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(expectedCodes))
         {
             errors.Add(
-                $"registry must contain exactly the 77 expected Gateway codes "
-                + $"(missing: {string.Join(",", ExpectedCodes.Except(cards.Keys).Order())}; "
-                + $"extra: {string.Join(",", cards.Keys.Except(ExpectedCodes).Order())})");
+                $"registry must contain exactly the {expectedCodes.Count} expected {set.Title} codes "
+                + $"(missing: {string.Join(",", expectedCodes.Except(cards.Keys).Order())}; "
+                + $"extra: {string.Join(",", cards.Keys.Except(expectedCodes).Order())})");
         }
 
         var batches = new Dictionary<string, RegistryBatch>(StringComparer.Ordinal);
@@ -491,9 +541,9 @@ internal static class RegistryValidator
             }
         }
 
-        if (!assigned.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(ExpectedCodes))
+        if (!assigned.Keys.ToHashSet(StringComparer.Ordinal).SetEquals(expectedCodes))
         {
-            errors.Add("batches must assign every expected Gateway code exactly once");
+            errors.Add($"batches must assign every expected {set.Title} code exactly once");
         }
 
         foreach ((string code, RegistryCard card) in cards)
@@ -508,6 +558,7 @@ internal static class RegistryValidator
             }
 
             if (batch?.CompletionRequired == true
+                && string.Equals(batch.Status, "complete", StringComparison.Ordinal)
                 && (!string.Equals(card.ReviewStatus, "complete", StringComparison.Ordinal)
                     || string.IsNullOrWhiteSpace(card.Reviewer)))
             {
@@ -546,16 +597,14 @@ internal static class RegistryValidator
 
         if (errors.Count > 0)
         {
-            throw new CoverageUsageException("Invalid coverage inputs:\n- " + string.Join("\n- ", errors));
+            throw new CoverageUsageException($"Invalid {set.Title} coverage inputs:\n- " + string.Join("\n- ", errors));
         }
     }
-
-    public static IReadOnlySet<string> Codes => ExpectedCodes;
 }
 
 internal static class CatalogReader
 {
-    public static IReadOnlySet<string> Read(string path)
+    public static IReadOnlySet<string> Read(string path, string catalogTypeName)
     {
         if (!File.Exists(path))
         {
@@ -565,9 +614,9 @@ internal static class CatalogReader
         string fullPath = Path.GetFullPath(path);
         var context = new CatalogLoadContext(fullPath);
         Assembly assembly = context.LoadFromAssemblyPath(fullPath);
-        Type catalogType = assembly.GetType("Netrunner.Cards.GatewayBehaviorCatalog", throwOnError: false)
+        Type catalogType = assembly.GetType(catalogTypeName, throwOnError: false)
             ?? throw new CoverageUsageException(
-                "Compiled catalog assembly does not expose Netrunner.Cards.GatewayBehaviorCatalog.");
+                $"Compiled catalog assembly does not expose {catalogTypeName}.");
         MethodInfo create = catalogType.GetMethod(
                 "Create",
                 BindingFlags.Public | BindingFlags.Static,
@@ -575,29 +624,29 @@ internal static class CatalogReader
                 types: Type.EmptyTypes,
                 modifiers: null)
             ?? throw new CoverageUsageException(
-                "Compiled catalog does not expose the immutable GatewayBehaviorCatalog.Create() surface.");
+                $"Compiled catalog does not expose the immutable {catalogTypeName}.Create() surface.");
 
         object immutableCatalog;
         try
         {
             immutableCatalog = create.Invoke(null, null)
-                ?? throw new CoverageUsageException("Immutable Gateway behavior catalog creation returned null.");
+                ?? throw new CoverageUsageException($"Immutable {catalogTypeName} creation returned null.");
         }
         catch (TargetInvocationException exception)
         {
             throw new CoverageUsageException(
-                $"Immutable Gateway behavior catalog creation failed: {exception.InnerException?.Message ?? exception.Message}");
+                $"Immutable {catalogTypeName} creation failed: {exception.InnerException?.Message ?? exception.Message}");
         }
 
         PropertyInfo allDefinitionIds = immutableCatalog.GetType().GetProperty(
                 "AllDefinitionIds",
                 BindingFlags.Public | BindingFlags.Instance)
             ?? throw new CoverageUsageException(
-                "Immutable Gateway behavior catalog does not expose AllDefinitionIds.");
+                $"Immutable {catalogTypeName} does not expose AllDefinitionIds.");
         if (allDefinitionIds.GetValue(immutableCatalog) is not IEnumerable values)
         {
             throw new CoverageUsageException(
-                "Immutable Gateway behavior catalog AllDefinitionIds is not enumerable.");
+                $"Immutable {catalogTypeName} AllDefinitionIds is not enumerable.");
         }
 
         var codes = new HashSet<string>(StringComparer.Ordinal);
@@ -753,7 +802,7 @@ internal static class TestMetadataReader
 
             markers.Add(new Marker(
                 isFact,
-                isTrait && string.Equals(first, "GatewayCard", StringComparison.Ordinal)
+                isTrait && first is "GatewayCard" or "ElevationCard"
                     ? second
                     : isCardMarker ? first : null));
         }
@@ -802,6 +851,7 @@ internal static class TestMetadataReader
     private sealed record Marker(bool IsTest, string? CardCode);
 }
 
+
 internal sealed class CoverageReport
 {
     private static readonly JsonSerializerOptions ReportJsonOptions = new()
@@ -812,26 +862,14 @@ internal sealed class CoverageReport
         DefaultIgnoreCondition = JsonIgnoreCondition.Never,
     };
 
-    private CoverageReport(
-        RegistryDocument registry,
-        IReadOnlyList<CardReport> cards,
-        IReadOnlyList<string> diagnostics)
+    private CoverageReport(IReadOnlyList<SetReport> sets, IReadOnlyList<string> diagnostics)
     {
-        Registry = registry;
-        Cards = cards;
+        Sets = sets;
         Diagnostics = diagnostics;
-        Counts = new CoverageCounts(
-            cards.Count,
-            cards.Count(static card => card.Registered),
-            cards.Count(static card => card.Registered && card.Tests.Count > 0),
-            cards.Count(static card => card.FullTextComplete),
-            cards.Count(static card => card.Partial),
-            cards.Count(static card => !card.Registered));
+        Counts = CoverageCounts.From(sets.SelectMany(static set => set.Cards).ToArray());
     }
 
-    public RegistryDocument Registry { get; }
-
-    public IReadOnlyList<CardReport> Cards { get; }
+    public IReadOnlyList<SetReport> Sets { get; }
 
     public IReadOnlyList<string> Diagnostics { get; }
 
@@ -840,13 +878,27 @@ internal sealed class CoverageReport
     public static CoverageReport Create(CoverageInput input)
     {
         var diagnostics = new List<string>();
+        var sets = new List<SetReport>();
+        foreach (CardSetInput set in input.Sets)
+        {
+            sets.Add(CreateSet(set, input.Tests, diagnostics));
+        }
+
+        return new CoverageReport(sets, diagnostics);
+    }
+
+    private static SetReport CreateSet(
+        CardSetInput input,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> allTests,
+        List<string> diagnostics)
+    {
         var cards = new List<CardReport>();
         foreach (RegistryCard card in input.Registry.Cards.OrderBy(static card => card.Code, StringComparer.Ordinal))
         {
             string title = input.Metadata.TryGetValue(card.Code, out CardMetadata? metadata)
                 ? metadata.Title
                 : card.Title;
-            IReadOnlyList<string> tests = input.Tests.TryGetValue(card.Code, out IReadOnlyList<string>? found)
+            IReadOnlyList<string> tests = allTests.TryGetValue(card.Code, out IReadOnlyList<string>? found)
                 ? found
                 : Array.Empty<string>();
             bool registered = input.RegisteredCodes.Contains(card.Code);
@@ -859,6 +911,11 @@ internal sealed class CoverageReport
                 diagnostics.Add($"card {card.Code} is compiled/registered but registry status is unregistered");
             }
 
+            if (registered && string.Equals(card.Status, "planned", StringComparison.Ordinal))
+            {
+                diagnostics.Add($"card {card.Code} is compiled/registered but registry status is planned");
+            }
+
             if (!registered && string.Equals(card.Status, "registered", StringComparison.Ordinal))
             {
                 diagnostics.Add($"card {card.Code} is registry-registered but absent from the compiled catalog");
@@ -866,7 +923,7 @@ internal sealed class CoverageReport
 
             if (registered && tests.Count == 0)
             {
-                diagnostics.Add($"card {card.Code} ({title}) is registered but has no GatewayCard test metadata");
+                diagnostics.Add($"card {card.Code} ({title}) is registered but has no card test metadata");
             }
 
             if (fullTextComplete && !registered)
@@ -877,6 +934,7 @@ internal sealed class CoverageReport
             RegistryBatch? batch = input.Registry.Batches.FirstOrDefault(
                 candidate => string.Equals(candidate.Id, card.Batch, StringComparison.Ordinal));
             if (batch?.CompletionRequired == true
+                && string.Equals(batch.Status, "complete", StringComparison.Ordinal)
                 && (!registered || !fullTextComplete || tests.Count == 0
                     || !string.Equals(card.ReviewStatus, "complete", StringComparison.Ordinal)
                     || card.Citations.Count == 0))
@@ -885,6 +943,7 @@ internal sealed class CoverageReport
             }
 
             cards.Add(new CardReport(
+                input.Registry.CardSet,
                 card.Code,
                 title,
                 card.Batch,
@@ -903,17 +962,23 @@ internal sealed class CoverageReport
                 card.SerializationImpact));
         }
 
-        foreach (string code in input.RegisteredCodes.Except(RegistryValidator.Codes, StringComparer.Ordinal).Order())
+        foreach (string code in input.RegisteredCodes.Except(input.Definition.ExpectedCodes, StringComparer.Ordinal).Order())
         {
-            diagnostics.Add($"compiled catalog contains unknown Gateway definition '{code}'");
+            diagnostics.Add($"compiled catalog contains unknown {input.Definition.Title} definition '{code}'");
         }
 
-        if (cards.Count != RegistryValidator.Codes.Count)
+        if (cards.Count != input.Definition.ExpectedCodes.Count)
         {
-            diagnostics.Add($"coverage report has {cards.Count} cards; expected {RegistryValidator.Codes.Count}");
+            diagnostics.Add(
+                $"{input.Definition.Title} coverage has {cards.Count} cards; expected {input.Definition.ExpectedCodes.Count}");
         }
 
-        return new CoverageReport(input.Registry, cards, diagnostics);
+        return new SetReport(
+            input.Registry.CardSet,
+            input.Definition.Title,
+            input.Registry.Batches.Select(static batch => new BatchReport(batch.Id, batch.Slice, batch.Status, batch.OwnershipCodes.Count)).ToArray(),
+            CoverageCounts.From(cards),
+            cards);
     }
 
     public void Write(string markdownPath, string jsonPath)
@@ -923,12 +988,12 @@ internal sealed class CoverageReport
         File.WriteAllText(markdownPath, RenderMarkdown());
         File.WriteAllText(jsonPath, JsonSerializer.Serialize(new
         {
-            schemaVersion = 1,
-            cardSet = Registry.CardSet,
-            rulesVersion = Registry.RulesVersion,
+            schemaVersion = 2,
+            rulesVersion = "CR-26.03",
             counts = Counts,
+            sets = Sets.Select(static set => new { cardSet = set.CardSet, title = set.Title, batches = set.Batches, counts = set.Counts }),
             diagnostics = Diagnostics,
-            cards = Cards,
+            cards = Sets.SelectMany(static set => set.Cards),
         }, ReportJsonOptions) + Environment.NewLine);
     }
 
@@ -944,11 +1009,11 @@ internal sealed class CoverageReport
     private string RenderMarkdown()
     {
         var builder = new System.Text.StringBuilder();
-        builder.AppendLine("# System Gateway coverage");
+        builder.AppendLine("# Card coverage");
         builder.AppendLine();
         builder.AppendLine("> Generated by `tools/Netrunner.CardCoverage`; test metadata is read from compiled assemblies without executing tests.");
         builder.AppendLine();
-        builder.Append("- Rules: `").Append(Registry.RulesVersion).AppendLine("`");
+        builder.AppendLine("- Rules: `CR-26.03`");
         builder.Append("- Cards: `").Append(Counts.Total).AppendLine("` expected");
         builder.Append("- Registered: `").Append(Counts.Registered).AppendLine("`");
         builder.Append("- Registered with positive test metadata: `").Append(Counts.Tested).AppendLine("`");
@@ -958,20 +1023,45 @@ internal sealed class CoverageReport
         builder.AppendLine();
         builder.AppendLine("A partial registration is not full coverage. A completed batch requires full behavior registration, a positive test marker, review, citations, and an observation note.");
         builder.AppendLine();
-        builder.AppendLine("| Code | Card | Batch | Slice | Registration | Text | Review | Reviewer | Positive tests | CR/ruling citations | Observation | Hidden-info impact | Serialization impact |");
-        builder.AppendLine("|---|---|---|---|---|---|---|---|---|---|---|---|---|");
-        foreach (CardReport card in Cards)
+        builder.AppendLine("| Set | Cards | Registered | Tested | Complete | Partial | Unregistered |");
+        builder.AppendLine("|---|---|---|---|---|---|---|");
+        foreach (SetReport set in Sets)
         {
-            builder.Append('|').Append(card.Code).Append('|').Append(Escape(card.Title)).Append('|')
-                .Append(card.Batch).Append('|').Append(card.Slice).Append('|')
-                .Append(card.Registered ? "registered" : "unregistered").Append('|')
-                .Append(card.TextStatus).Append('|').Append(card.ReviewStatus).Append('|')
-                .Append(Escape(card.Reviewer)).Append('|')
-                .Append(card.Tests.Count == 0 ? "—" : string.Join("<br>", card.Tests.Select(Escape))).Append('|')
-                .Append(card.Citations.Count == 0 ? "—" : string.Join(", ", card.Citations.Select(Escape))).Append('|')
-                .Append(Escape(card.Observation)).Append('|')
-                .Append(Escape(card.HiddenInformationImpact)).Append('|')
-                .Append(Escape(card.SerializationImpact)).Append('|').AppendLine();
+            builder.Append('|').Append(set.Title).Append('|').Append(set.Counts.Total).Append('|')
+                .Append(set.Counts.Registered).Append('|').Append(set.Counts.Tested).Append('|')
+                .Append(set.Counts.FullTextComplete).Append('|').Append(set.Counts.Partial).Append('|')
+                .Append(set.Counts.Unregistered).Append('|').AppendLine();
+        }
+
+        foreach (SetReport set in Sets)
+        {
+            builder.AppendLine();
+            builder.Append("## ").AppendLine(set.Title);
+            builder.AppendLine();
+            builder.AppendLine("| Batch | Slice | Status | Cards |");
+            builder.AppendLine("|---|---|---|---|");
+            foreach (BatchReport batch in set.Batches)
+            {
+                builder.Append('|').Append(batch.Id).Append('|').Append(batch.Slice).Append('|')
+                    .Append(batch.Status).Append('|').Append(batch.Cards).Append('|').AppendLine();
+            }
+
+            builder.AppendLine();
+            builder.AppendLine("| Code | Card | Batch | Slice | Registration | Text | Review | Reviewer | Positive tests | CR/ruling citations | Observation | Hidden-info impact | Serialization impact |");
+            builder.AppendLine("|---|---|---|---|---|---|---|---|---|---|---|---|---|");
+            foreach (CardReport card in set.Cards)
+            {
+                builder.Append('|').Append(card.Code).Append('|').Append(Escape(card.Title)).Append('|')
+                    .Append(card.Batch).Append('|').Append(card.Slice).Append('|')
+                    .Append(card.Registered ? "registered" : "unregistered").Append('|')
+                    .Append(card.TextStatus).Append('|').Append(card.ReviewStatus).Append('|')
+                    .Append(Escape(card.Reviewer)).Append('|')
+                    .Append(card.Tests.Count == 0 ? "—" : string.Join("<br>", card.Tests.Select(Escape))).Append('|')
+                    .Append(card.Citations.Count == 0 ? "—" : string.Join(", ", card.Citations.Select(Escape))).Append('|')
+                    .Append(Escape(card.Observation)).Append('|')
+                    .Append(Escape(card.HiddenInformationImpact)).Append('|')
+                    .Append(Escape(card.SerializationImpact)).Append('|').AppendLine();
+            }
         }
 
         if (Diagnostics.Count > 0)
@@ -991,15 +1081,34 @@ internal sealed class CoverageReport
     private static string Escape(string value) => value.Replace("|", "\\|", StringComparison.Ordinal).Replace('\n', ' ');
 }
 
+internal sealed record SetReport(
+    string CardSet,
+    string Title,
+    IReadOnlyList<BatchReport> Batches,
+    CoverageCounts Counts,
+    IReadOnlyList<CardReport> Cards);
+
+internal sealed record BatchReport(string Id, string Slice, string Status, int Cards);
+
 internal sealed record CoverageCounts(
     int Total,
     int Registered,
     int Tested,
     int FullTextComplete,
     int Partial,
-    int Unregistered);
+    int Unregistered)
+{
+    public static CoverageCounts From(IReadOnlyCollection<CardReport> cards) => new(
+        cards.Count,
+        cards.Count(static card => card.Registered),
+        cards.Count(static card => card.Registered && card.Tests.Count > 0),
+        cards.Count(static card => card.FullTextComplete),
+        cards.Count(static card => card.Partial),
+        cards.Count(static card => !card.Registered));
+}
 
 internal sealed record CardReport(
+    string CardSet,
     string Code,
     string Title,
     string Batch,

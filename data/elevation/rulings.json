@@ -1,0 +1,289 @@
+{
+  "schemaVersion": 1,
+  "rulesVersion": "CR-26.03",
+  "sourceUrl": "https://rules.nullsignal.games/",
+  "rulings": [
+    {
+      "id": "EL-CR-1.10.5-recurring",
+      "cr": "1.10.5",
+      "summary": "Recurring credits are placed when the card becomes active and refilled to N before turn-begin trigger conditions are met; they may be spent only as the card allows.",
+      "jnetCrossCheck": "jnet refills recurring credits at turn start before start-of-turn prompts and spends them only through restricted payment prompts."
+    },
+    {
+      "id": "EL-CR-1.17.1a-threat",
+      "cr": "1.17.1a; 9.3.6f",
+      "summary": "The threat level is the greatest score of any player; a Threat N ability is active only while the threat level is N or greater.",
+      "jnetCrossCheck": "jnet compares threat N against the higher of both scores whenever the ability would apply."
+    },
+    {
+      "id": "EL-CR-10.13-dividends",
+      "cr": "10.13.1-10.13.2",
+      "summary": "Dividends N places N agenda counters per advancement counter past the requirement, judged as the agenda began to be scored.",
+      "jnetCrossCheck": "jnet counts excess advancements from the scored agenda before it leaves the server."
+    },
+    {
+      "id": "EL-CR-8.2.5-forfeit",
+      "cr": "8.2.5; 4.9.3",
+      "summary": "Forfeiting moves an agenda from a score area to the removed-from-game zone; its points stop counting and it is gone for good.",
+      "jnetCrossCheck": "jnet forfeits as a cost prompt and the agenda leaves the score area permanently."
+    },
+    {
+      "id": "EL-CR-3.6.5-region",
+      "cr": "3.6.5",
+      "summary": "Regions are upgrades limited to one per server root; installing a second trashes the first, and the limit ignores central servers' ice.",
+      "jnetCrossCheck": "jnet trashes the older region when a second is installed in the same root."
+    },
+    {
+      "id": "EL-CR-9.12.5-persistent",
+      "cr": "9.12.5",
+      "summary": "A persistent ability on a rezzed Corp card the Runner trashes while accessing it keeps applying through a lingering effect for the rest of the run.",
+      "jnetCrossCheck": "jnet keeps the persistent effect active until the run ends after an access trash."
+    },
+    {
+      "id": "EL-CR-3.8.5-console",
+      "cr": "3.8.5",
+      "summary": "Limit 1 console per player: a second installed console trashes all but the most recent.",
+      "jnetCrossCheck": "jnet trashes the previous console when another is installed."
+    },
+    {
+      "id": "EL-CR-10.12-sabotage",
+      "cr": "10.12.1-10.12.3",
+      "summary": "Sabotage N: the Corp chooses cards from HQ to trash and trashes the rest from the top of R&D, as one simultaneous trash; a short zone forces the other.",
+      "jnetCrossCheck": "jnet asks the Corp to choose HQ cards then trashes the remainder from R&D."
+    },
+    {
+      "id": "EL-CR-6.5.8-bypass",
+      "cr": "6.5.8",
+      "summary": "Bypassing ice aborts the encounter; the Runner passes the ice with no subroutines broken or resolved and no further encounter abilities.",
+      "jnetCrossCheck": "jnet bypass moves straight to passing the ice."
+    },
+    {
+      "id": "EL-CR-8.1.3-derez",
+      "cr": "8.1.3; 8.1",
+      "summary": "To derez a rezzed card is to turn it facedown; it stays installed and becomes inactive.",
+      "jnetCrossCheck": "jnet derez flips the card facedown in place; hosted counters stay."
+    },
+    {
+      "id": "EL-CR-4.9-removed-from-game",
+      "cr": "4.9.1-4.9.6",
+      "summary": "Removed-from-game cards are inactive, open information and never return.",
+      "jnetCrossCheck": "jnet shows a removed-from-game pile per player."
+    },
+    {
+      "id": "EL-CR-1.21-look-reveal",
+      "cr": "1.21.2-1.21.6",
+      "summary": "Looking shows a card only to the looking player; revealing shows it to all and returns it to its state; visibility lasts until the ability finishes resolving.",
+      "jnetCrossCheck": "jnet shows a private prompt for looks and a public log line for reveals."
+    },
+    {
+      "id": "EL-CR-5.4-action-phase",
+      "cr": "5.4.1-5.4.4; 5.6.2; 5.7.1",
+      "summary": "The action phase ends when the player has no clicks left or an ability ends it; 'when your action phase ends' triggers then, before the discard phase.",
+      "jnetCrossCheck": "jnet fires action-phase-end triggers after the last click and before discards."
+    },
+    {
+      "id": "EL-CR-5.5-discard",
+      "cr": "5.5.1-5.5.4",
+      "summary": "In the discard step the active player discards down to maximum hand size; the discarded cards are known to the discard step.",
+      "jnetCrossCheck": "jnet records the discarded cards and offers discard-triggered abilities after the step."
+    },
+    {
+      "id": "EL-CR-3.2.3-agenda-active",
+      "cr": "3.2.3; 3.2",
+      "summary": "Agendas are inactive while installed and in the Runner's score area unless their text says otherwise; they are active in the Corp's score area.",
+      "jnetCrossCheck": "jnet lets the Corp use an agenda ability from the Runner's score area only where printed."
+    },
+    {
+      "id": "EL-CR-3.5.3-operation-trash-cost",
+      "cr": "3.5.3; 2.6.1; 7.1.5",
+      "summary": "Some operations have trash costs; the Runner may pay them to trash such an operation while accessing it in HQ or R&D.",
+      "jnetCrossCheck": "jnet offers the basic trash ability on accessed operations with a trash cost."
+    },
+    {
+      "id": "EL-CR-6.2-position",
+      "cr": "6.2.1-6.2.8",
+      "summary": "Each server has a sequence of ice positions; abilities can move the Runner directly to a position during a run.",
+      "jnetCrossCheck": "jnet moves the Runner to the outermost position of the named server and continues by approaching that ice."
+    },
+    {
+      "id": "EL-CR-6.4-approach-ice",
+      "cr": "6.4.1-6.4.4",
+      "summary": "The approach ice phase lets the Corp rez the approached ice; changes to the ice in the Runner's position change what is encountered.",
+      "jnetCrossCheck": "jnet's approach triggers fire before the rez window."
+    },
+    {
+      "id": "EL-CR-6.6-movement",
+      "cr": "6.6.1-6.6.6",
+      "summary": "After passing all ice the Runner approaches the server; this is when 'when you would approach' replacements apply.",
+      "jnetCrossCheck": "jnet changes the attacked server before the approach-server triggers."
+    },
+    {
+      "id": "EL-CR-6.1-attacked-server",
+      "cr": "6.1.2; 6.3.2",
+      "summary": "The attacked server is the server the Runner is attempting to reach; abilities may change it during the run.",
+      "jnetCrossCheck": "jnet updates the attacked server for every later check in the run."
+    },
+    {
+      "id": "EL-CR-3.1-identity",
+      "cr": "3.1.1-3.1.4",
+      "summary": "Each player has one identity active in the play area; a double-sided identity's abilities are those of its current face.",
+      "jnetCrossCheck": "jnet flips identities in place and shows the active face."
+    },
+    {
+      "id": "EL-CR-9.5-paid-abilities",
+      "cr": "9.5.1-9.5.7",
+      "summary": "Paid abilities are optional, used by their controller in priority windows; a card may let any player use an ability.",
+      "jnetCrossCheck": "jnet offers 'any player' abilities to both players."
+    },
+    {
+      "id": "EL-CR-8.5-install",
+      "cr": "8.5.1-8.5.16",
+      "summary": "Installing follows the installation steps one card at a time; abilities may install from zones other than hand and may ignore costs.",
+      "jnetCrossCheck": "jnet installs from Archives, heap or score area through the same install prompt."
+    },
+    {
+      "id": "EL-CR-8.6-play",
+      "cr": "8.6.1-8.6.7",
+      "summary": "Playing an event or operation pays its costs and resolves it; abilities may play a card from another zone and say where it goes after.",
+      "jnetCrossCheck": "jnet plays from Archives and then removes the card from the game when printed."
+    },
+    {
+      "id": "EL-CR-8.7-search",
+      "cr": "8.7",
+      "summary": "Searching looks through a zone for a card meeting the criteria; a searched deck is shuffled.",
+      "jnetCrossCheck": "jnet shows the searchable cards privately and shuffles after."
+    },
+    {
+      "id": "EL-CR-8.8-swap",
+      "cr": "8.8",
+      "summary": "Swapping exchanges two cards' positions simultaneously.",
+      "jnetCrossCheck": "jnet swaps ice positions without passing through Archives or HQ."
+    },
+    {
+      "id": "EL-CR-10.5-tags",
+      "cr": "10.5.1-10.5.6",
+      "summary": "Tags are counters on the Runner; removing tags is an effect or the basic action; abilities may count tags.",
+      "jnetCrossCheck": "jnet counts the Runner's tags for conditions and removal triggers."
+    },
+    {
+      "id": "EL-CR-10.4-damage",
+      "cr": "10.4.1-10.4.4",
+      "summary": "Damage trashes cards from the grip at random; meat and net damage are prevented separately.",
+      "jnetCrossCheck": "jnet resolves damage as a single random trash."
+    },
+    {
+      "id": "EL-CR-9.1-triggered",
+      "cr": "9.6; 9.1",
+      "summary": "Conditional abilities trigger on their condition and resolve when their controller has priority; 'first time each turn' limits a trigger to one occurrence.",
+      "jnetCrossCheck": "jnet prompts optional conditional abilities and tracks first-time-each-turn facts."
+    },
+    {
+      "id": "EL-CR-9.8-subroutines",
+      "cr": "9.8",
+      "summary": "Subroutines resolve in order; an ability may resolve a subroutine of another card.",
+      "jnetCrossCheck": "jnet resolves another ice's subroutine as if printed on the resolving ice."
+    },
+    {
+      "id": "EL-CR-3.4-ice",
+      "cr": "3.4.1-3.4.6",
+      "summary": "Ice has subtypes, strength and subroutines; abilities may give ice subtypes or change strength.",
+      "jnetCrossCheck": "jnet applies granted subtypes to interface checks."
+    },
+    {
+      "id": "EL-CR-3.9.5-interface",
+      "cr": "3.9.5",
+      "summary": "Icebreakers interface with ice of matching subtype and sufficient strength; an ability may restrict which breakers can break a subroutine.",
+      "jnetCrossCheck": "jnet hides break options a restriction forbids."
+    },
+    {
+      "id": "EL-CR-1.13-hosting",
+      "cr": "1.13.1-1.13.14",
+      "summary": "Hosting places objects on a card; hosted cards may be faceup without being installed; a host changing zones trashes its hosted cards.",
+      "jnetCrossCheck": "jnet shows faceup hosted cards beside their host."
+    },
+    {
+      "id": "EL-CR-1.16-costs",
+      "cr": "1.16; 9.5.1",
+      "summary": "Costs are paid in full before effects; additional costs are part of the cost and may forfeit agendas or reveal and trash cards.",
+      "jnetCrossCheck": "jnet pays additional costs in the cost prompt."
+    },
+    {
+      "id": "EL-CR-7.1-access",
+      "cr": "7.1.1-7.2",
+      "summary": "Accessing a card shows it to the Runner; access abilities and the basic trash ability are available during access; some cards must be revealed while accessed.",
+      "jnetCrossCheck": "jnet reveals cards that must be revealed while accessed in R&D."
+    },
+    {
+      "id": "EL-CR-9.4-static",
+      "cr": "9.4",
+      "summary": "Static abilities apply continuously while active, including cost and strength modifiers.",
+      "jnetCrossCheck": "jnet recalculates rez costs and strengths when a static source enters or leaves play."
+    },
+    {
+      "id": "EL-CR-1.18-advance",
+      "cr": "1.18",
+      "summary": "Advancing places advancement counters; abilities may place counters on cards that can be advanced, and such a card cannot be scored that turn where printed.",
+      "jnetCrossCheck": "jnet blocks scoring of a card advanced by such an effect this turn."
+    },
+    {
+      "id": "EL-CR-1.9-counters",
+      "cr": "1.9.1-1.9.6",
+      "summary": "Counters are placed and removed as effects or costs; agenda and power counters are hosted counters.",
+      "jnetCrossCheck": "jnet treats hosted counter removal as a cost."
+    },
+    {
+      "id": "EL-CR-10.9-load-empty",
+      "cr": "10.9",
+      "summary": "Load places credits on a card; when a loaded card is empty its 'when empty' ability triggers.",
+      "jnetCrossCheck": "jnet trashes an emptied loaded card per its text."
+    },
+    {
+      "id": "EL-CR-1.11-clicks",
+      "cr": "1.11.1-1.11.6",
+      "summary": "Clicks are allotted each turn; abilities may grant extra allotted clicks for the next turn or make a player spend a click.",
+      "jnetCrossCheck": "jnet tracks extra allotted clicks into the next turn."
+    },
+    {
+      "id": "EL-CR-6.8-run-ends",
+      "cr": "6.8",
+      "summary": "The run ends phase resolves 'when the run ends' abilities; an end-run effect may be prevented by an ability.",
+      "jnetCrossCheck": "jnet resolves run-end abilities after the run is over."
+    },
+    {
+      "id": "EL-CR-9.9-replacement",
+      "cr": "9.9",
+      "summary": "Interrupts and replacement effects change or prevent an effect as it would happen.",
+      "jnetCrossCheck": "jnet prompts prevention before the run ends."
+    },
+    {
+      "id": "EL-CR-6.7-success",
+      "cr": "6.7",
+      "summary": "A run becomes successful in the success phase; 'if successful' effects then apply.",
+      "jnetCrossCheck": "jnet resolves run-event success effects at success."
+    },
+    {
+      "id": "EL-CR-7.3-breach",
+      "cr": "7.3",
+      "summary": "Breaching a server accesses cards; abilities may access additional cards from R&D.",
+      "jnetCrossCheck": "jnet adds accesses when an ability is used on breach."
+    },
+    {
+      "id": "EL-CR-1.10-credits",
+      "cr": "1.10",
+      "summary": "Credits are gained, lost, spent and hosted; hosted credits may be spent only as their host allows.",
+      "jnetCrossCheck": "jnet spends hosted credits only for permitted payments."
+    },
+    {
+      "id": "EL-CR-1.19-trashing",
+      "cr": "1.19",
+      "summary": "Trashing moves a card to its owner's discard pile; abilities may forbid the Runner from trashing a card.",
+      "jnetCrossCheck": "jnet hides the trash option when forbidden."
+    },
+    {
+      "id": "EL-CR-9.12.6-modal",
+      "cr": "9.12.6",
+      "summary": "Modal abilities resolve the chosen number of modes; 'in any order' lets the controller order them.",
+      "jnetCrossCheck": "jnet asks for modes then their order."
+    }
+  ]
+}

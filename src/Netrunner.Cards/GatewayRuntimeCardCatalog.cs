@@ -14,6 +14,7 @@ namespace Netrunner.Cards;
 public static class GatewayRuntimeCardCatalog
 {
     private const string VersionPrefix = "gateway-runtime-v1-";
+    private const string PoolVersionPrefix = "gateway-elevation-runtime-v1-";
     private const string RunnerConsoleKey = "runner-console";
 
     /// <summary>Builds a runtime catalog from one authenticated data snapshot.</summary>
@@ -25,13 +26,16 @@ public static class GatewayRuntimeCardCatalog
         // composition boundary revalidates it before any runtime metadata is
         // exposed. A pack labelled as System Gateway must retain the pinned
         // official identity; synthetic/fixture packs remain opt-in fixtures.
-        bool requireOfficialGateway = string.Equals(
-            data.Manifest.PackCode,
-            CardDataValidator.OfficialPackCode,
-            StringComparison.Ordinal);
-        CardDataValidator.Validate(data.Cards, data.Manifest, requireOfficialGateway);
+        // A combined pool is validated pack by pack, each against its own
+        // manifest; its version names the pool so it never collides with a
+        // single-pack Gateway catalog.
+        foreach (CardDataSet pack in data.Packs)
+        {
+            bool requireOfficial = OfficialCardPacks.Find(pack.Manifest.PackCode) is not null;
+            CardDataValidator.Validate(pack.Cards, pack.Manifest, requireOfficial);
+        }
 
-        string version = VersionPrefix + data.Manifest.CommitSha;
+        string version = (data.Packs.Count == 1 ? VersionPrefix : PoolVersionPrefix) + data.Manifest.CommitSha;
         var builder = new RuntimeCardCatalogBuilder(version);
         foreach (NormalizedCardDefinition card in data.Cards)
         {
@@ -73,8 +77,10 @@ public static class GatewayRuntimeCardCatalog
                 new CardDefinitionId(card.Code),
                 side,
                 cardClass,
+                // A printed X play cost is null upstream; the card's behavior
+                // charges X as part of its additional cost.
                 playCost: cardClass is RuntimeCardClass.Operation or RuntimeCardClass.Event
-                    ? card.Cost
+                    ? card.Cost ?? 0
                     : null,
                 installCost: cardClass is RuntimeCardClass.Program
                     or RuntimeCardClass.Hardware
@@ -89,7 +95,10 @@ public static class GatewayRuntimeCardCatalog
                 memoryUnits: cardClass == RuntimeCardClass.Program
                     ? card.MemoryCost!.Value
                     : 0,
-                trashCost: cardClass is RuntimeCardClass.Asset or RuntimeCardClass.Upgrade
+                trashCost: cardClass is RuntimeCardClass.Asset
+                    or RuntimeCardClass.Upgrade
+                    or RuntimeCardClass.Operation
+                    or RuntimeCardClass.Ice
                     ? card.TrashCost
                     : null,
                 agendaPoints: cardClass == RuntimeCardClass.Agenda
@@ -220,7 +229,8 @@ public static class GatewayRuntimeCardCatalog
             or RuntimeCardClass.Program
             or RuntimeCardClass.Hardware
             or RuntimeCardClass.Resource;
-        if (requiresCost && card.Cost is null)
+        bool variableCost = cardClass is RuntimeCardClass.Operation or RuntimeCardClass.Event;
+        if (requiresCost && card.Cost is null && !variableCost)
         {
             throw InvalidCard(card, "requires a printed cost.", null);
         }
@@ -280,7 +290,9 @@ public static class GatewayRuntimeCardCatalog
             throw InvalidCard(card, "requires trashCost.", null);
         }
 
-        if (!requiresTrashCost && card.TrashCost is not null)
+        bool mayHaveTrashCost = requiresTrashCost
+            || cardClass is RuntimeCardClass.Ice or RuntimeCardClass.Operation;
+        if (!mayHaveTrashCost && card.TrashCost is not null)
         {
             throw InvalidCard(card, "must not carry trashCost.", null);
         }

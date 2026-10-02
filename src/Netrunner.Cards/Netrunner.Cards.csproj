@@ -15,6 +15,15 @@
          presets.json so the frozen M5 manifests' preset pin is unchanged. -->
     <EmbeddedResource Include="../../data/decks/gateway-sample-decks.json"
                       LogicalName="Netrunner.Cards.Data.decks.gateway-sample-decks.json" />
+    <!-- EL.1 C2: versioned format snapshots, validated by CardFormatCatalog. -->
+    <EmbeddedResource Include="../../data/formats/gateway.json"
+                      LogicalName="Netrunner.Cards.Data.formats.gateway.json" />
+    <EmbeddedResource Include="../../data/formats/gateway-elevation.json"
+                      LogicalName="Netrunner.Cards.Data.formats.gateway-elevation.json" />
+    <EmbeddedResource Include="../../data/formats/startup-2025.json"
+                      LogicalName="Netrunner.Cards.Data.formats.startup-2025.json" />
+    <EmbeddedResource Include="../../data/formats/startup-2026.json"
+                      LogicalName="Netrunner.Cards.Data.formats.startup-2026.json" />
   </ItemGroup>
 
   <!--
@@ -34,6 +43,9 @@
     -->
     <NetrunnerContentEnabled Condition="'$(NetrunnerContentEnabled)' == ''">false</NetrunnerContentEnabled>
     <NetrunnerCardDataInputRoot Condition="'$(NetrunnerCardDataInputRoot)' == ''">$(MSBuildProjectDirectory)/../../data/vendor/system-gateway</NetrunnerCardDataInputRoot>
+    <!-- EL.1: the Elevation pack is a second local-only snapshot with its own
+         manifest, authenticated and embedded beside System Gateway. -->
+    <NetrunnerElevationCardDataInputRoot Condition="'$(NetrunnerElevationCardDataInputRoot)' == ''">$([System.IO.Path]::GetDirectoryName($(NetrunnerCardDataInputRoot.TrimEnd('/'))))/elevation</NetrunnerElevationCardDataInputRoot>
     <NetrunnerCardDataSyntheticRoot Condition="'$(NetrunnerCardDataSyntheticRoot)' == ''">$(MSBuildProjectDirectory)/../../data/m4/synthetic</NetrunnerCardDataSyntheticRoot>
     <NetrunnerCardDataMode Condition="'$(NetrunnerCardDataMode)' == '' and '$(NetrunnerContentEnabled)' == 'true'">official</NetrunnerCardDataMode>
     <!-- A clean clone must remain deterministic even if an ignored source
@@ -49,7 +61,7 @@
            Text="DATA-400: unsupported NetrunnerCardDataMode '$(NetrunnerCardDataMode)'; expected official or synthetic." />
     <Error Condition="'$(NetrunnerCardDataMode)' == 'official' and '$(NetrunnerContentEnabled)' != 'true'"
            Text="DATA-400: official card content is opt-in; set NetrunnerContentEnabled=true (and, when selecting a mode explicitly, NetrunnerCardDataMode=official). The default build uses the checked-in synthetic fixture." />
-    <Exec Command="&quot;$(NetrunnerPythonCommand)&quot; &quot;$(NetrunnerCardDataBuildScript)&quot; --mode $(NetrunnerCardDataMode) --input-root &quot;$(NetrunnerCardDataInputRoot)&quot; --synthetic-root &quot;$(NetrunnerCardDataSyntheticRoot)&quot; --output &quot;$(NetrunnerCardDataGeneratedFile)&quot;"
+    <Exec Command="&quot;$(NetrunnerPythonCommand)&quot; &quot;$(NetrunnerCardDataBuildScript)&quot; --mode $(NetrunnerCardDataMode) --input-root &quot;$(NetrunnerCardDataInputRoot)&quot; --synthetic-root &quot;$(NetrunnerCardDataSyntheticRoot)&quot; --elevation-root &quot;$(NetrunnerElevationCardDataInputRoot)&quot; --output &quot;$(NetrunnerCardDataGeneratedFile)&quot;"
           WorkingDirectory="$(MSBuildProjectDirectory)/../.." />
     <ItemGroup>
       <Compile Include="$(NetrunnerCardDataGeneratedFile)" Visible="false" />

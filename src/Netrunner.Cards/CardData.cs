@@ -160,13 +160,155 @@ public sealed class CardDataSet
         Cards = new ReadOnlyCollection<NormalizedCardDefinition>(cards.ToArray());
         CardDefinitions = new ReadOnlyCollection<CardDefinition>(
             Cards.Select(static card => card.ToCardDefinition()).ToArray());
+        Packs = new ReadOnlyCollection<CardDataSet>([this]);
     }
 
+    private CardDataSet(IReadOnlyList<CardDataSet> packs)
+    {
+        Manifest = packs[0].Manifest;
+        Cards = new ReadOnlyCollection<NormalizedCardDefinition>(
+            packs.SelectMany(static pack => pack.Cards).ToArray());
+        CardDefinitions = new ReadOnlyCollection<CardDefinition>(
+            Cards.Select(static card => card.ToCardDefinition()).ToArray());
+        Packs = new ReadOnlyCollection<CardDataSet>(packs.ToArray());
+    }
+
+    /// <summary>Every card in the set, pack by pack in composition order.</summary>
     public IReadOnlyList<NormalizedCardDefinition> Cards { get; }
 
     public IReadOnlyList<CardDefinition> CardDefinitions { get; }
 
+    /// <summary>
+    /// The first pack's manifest. Every pack in a combined set shares one
+    /// upstream commit, so <see cref="CardDataManifest.CommitSha"/> is the
+    /// set's card-data version.
+    /// </summary>
     public CardDataManifest Manifest { get; }
+
+    /// <summary>
+    /// The authenticated single-pack sets this set is made of, each with its
+    /// own manifest, count and checksum. A single-pack set lists itself.
+    /// </summary>
+    public IReadOnlyList<CardDataSet> Packs { get; }
+
+    /// <summary>The pack codes of <see cref="Packs"/>, in composition order.</summary>
+    public IReadOnlyList<string> PackCodes => Packs.Select(static pack => pack.Manifest.PackCode).ToArray();
+
+    /// <summary>Returns the pack code of the pack that holds a card code, if any.</summary>
+    public string? PackCodeOf(string cardCode)
+    {
+        foreach (CardDataSet pack in Packs)
+        {
+            if (pack.Cards.Any(card => string.Equals(card.Code, cardCode, StringComparison.Ordinal)))
+            {
+                return pack.Manifest.PackCode;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Combines authenticated single-pack sets into one pool. The packs must
+    /// share a commit and must not repeat a pack or card code.
+    /// </summary>
+    public static CardDataSet Combine(IReadOnlyList<CardDataSet> packs)
+    {
+        ArgumentNullException.ThrowIfNull(packs);
+        if (packs.Count == 0)
+        {
+            throw new CardDataValidationException("A card pool must contain at least one pack.");
+        }
+
+        if (packs.Count == 1)
+        {
+            return packs[0];
+        }
+
+        CardDataSet[] singles = packs.SelectMany(static pack => pack.Packs).ToArray();
+        string commit = singles[0].Manifest.CommitSha;
+        var packCodes = new HashSet<string>(StringComparer.Ordinal);
+        var cardCodes = new HashSet<string>(StringComparer.Ordinal);
+        foreach (CardDataSet pack in singles)
+        {
+            if (!string.Equals(pack.Manifest.CommitSha, commit, StringComparison.Ordinal))
+            {
+                throw new CardDataValidationException(
+                    $"Pack '{pack.Manifest.PackCode}' comes from commit '{pack.Manifest.CommitSha}', not '{commit}'.");
+            }
+
+            if (!packCodes.Add(pack.Manifest.PackCode))
+            {
+                throw new CardDataValidationException($"Pack '{pack.Manifest.PackCode}' appears twice in a card pool.");
+            }
+
+            foreach (NormalizedCardDefinition card in pack.Cards)
+            {
+                if (!cardCodes.Add(card.Code))
+                {
+                    throw new CardDataValidationException($"Card code '{card.Code}' appears in more than one pack.");
+                }
+            }
+        }
+
+        return new CardDataSet(singles);
+    }
+}
+
+/// <summary>
+/// One pinned official pack: its upstream path, expected identity and size,
+/// local-only directory and sentinel titles. Each pack is authenticated by its
+/// own manifest; a card pool is a combination of packs.
+/// </summary>
+public sealed record OfficialCardPack(
+    string PackCode,
+    string PackName,
+    string SourcePackPath,
+    int CardCount,
+    string RelativeDirectory,
+    IReadOnlyDictionary<string, string> SentinelTitles);
+
+/// <summary>The official packs this build knows how to authenticate.</summary>
+public static class OfficialCardPacks
+{
+    public const string SystemGatewayCode = "sg";
+
+    public const string ElevationCode = "elev";
+
+    public static OfficialCardPack SystemGateway { get; } = new(
+        SystemGatewayCode,
+        "System Gateway – Remastered Edition",
+        "pack/sg.json",
+        77,
+        "data/vendor/system-gateway",
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["30001"] = "René “Loup” Arcemont: Party Animal",
+            ["30036"] = "Luminal Transubstantiation",
+            ["30077"] = "The Syndicate: Profit over Principle",
+        });
+
+    public static OfficialCardPack Elevation { get; } = new(
+        ElevationCode,
+        "Elevation",
+        "pack/elev.json",
+        82,
+        "data/vendor/elevation",
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["35023"] = "Dewi Subrotoputri: Pedagogical Dhalang",
+            ["35057"] = "Nebula Talent Management: Making Stars",
+            ["35082"] = "Mahkota Langit Grid",
+        });
+
+    /// <summary>Every official pack, in pool order.</summary>
+    public static IReadOnlyList<OfficialCardPack> All { get; } = [SystemGateway, Elevation];
+
+    public static OfficialCardPack? Find(string? packCode) =>
+        All.FirstOrDefault(pack => string.Equals(pack.PackCode, packCode, StringComparison.Ordinal));
+
+    public static OfficialCardPack Get(string packCode) =>
+        Find(packCode) ?? throw new CardDataValidationException($"Unknown official pack '{packCode}'.");
 }
 
 /// <summary>Actionable error raised for malformed or incompatible card data.</summary>
@@ -347,7 +489,7 @@ public static class CardDataValidator
         if (requireOfficialGateway)
         {
             ValidateOfficialCardsUnbound(cards);
-            ValidateOfficialSentinels(cards);
+            ValidateOfficialSentinels(cards, OfficialCardPacks.Get(manifest.PackCode));
         }
     }
 
@@ -449,18 +591,21 @@ public static class CardDataValidator
             return;
         }
 
+        OfficialCardPack pack = OfficialCardPacks.Find(manifest.PackCode) ?? OfficialCardPacks.SystemGateway;
         if (!string.Equals(manifest.SourceUrl, OfficialSourceUrl, StringComparison.Ordinal)
             || !string.Equals(manifest.CommitSha, OfficialCommitSha, StringComparison.Ordinal)
-            || !string.Equals(manifest.SourcePackPath, "pack/sg.json", StringComparison.Ordinal)
+            || !string.Equals(manifest.SourcePackPath, pack.SourcePackPath, StringComparison.Ordinal)
             || !string.Equals(manifest.SourceLicensePath, "COPYRIGHT.md", StringComparison.Ordinal)
             || !string.Equals(manifest.UpstreamSchemaVersion, "v1", StringComparison.Ordinal)
-            || !string.Equals(manifest.PackCode, OfficialPackCode, StringComparison.Ordinal)
-            || !string.Equals(manifest.PackName, OfficialPackName, StringComparison.Ordinal)
+            || !string.Equals(manifest.PackCode, pack.PackCode, StringComparison.Ordinal)
+            || !string.Equals(manifest.PackName, pack.PackName, StringComparison.Ordinal)
             || !string.Equals(manifest.SourceLicenseIdentity, "NOASSERTION", StringComparison.Ordinal)
-            || manifest.CardCount != OfficialCardCount)
+            || manifest.CardCount != pack.CardCount)
         {
             throw new CardDataValidationException(
-                "The manifest does not describe the pinned System Gateway local-only snapshot.");
+                pack == OfficialCardPacks.SystemGateway
+                    ? "The manifest does not describe the pinned System Gateway local-only snapshot."
+                    : $"The manifest does not describe the pinned {pack.PackName} local-only snapshot.");
         }
     }
 
@@ -479,22 +624,18 @@ public static class CardDataValidator
     }
 
     private static void ValidateOfficialSentinels(
-        IReadOnlyList<NormalizedCardDefinition> cards)
+        IReadOnlyList<NormalizedCardDefinition> cards,
+        OfficialCardPack pack)
     {
-        var expected = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["30001"] = "René “Loup” Arcemont: Party Animal",
-            ["30036"] = "Luminal Transubstantiation",
-            ["30077"] = "The Syndicate: Profit over Principle",
-        };
-
         var byCode = cards.ToDictionary(static card => card.Code, StringComparer.Ordinal);
-        foreach ((string code, string title) in expected)
+        foreach ((string code, string title) in pack.SentinelTitles)
         {
             if (!byCode.TryGetValue(code, out NormalizedCardDefinition? card))
             {
                 throw new CardDataValidationException(
-                    $"Official System Gateway data is missing sentinel card '{code}'.");
+                    pack == OfficialCardPacks.SystemGateway
+                        ? $"Official System Gateway data is missing sentinel card '{code}'."
+                        : $"Official {pack.PackName} data is missing sentinel card '{code}'.");
             }
 
             if (!string.Equals(card.Title, title, StringComparison.Ordinal))
@@ -593,7 +734,9 @@ public static class CardDataValidator
                 $"Non-agenda card '{card.Code}' must not carry agenda-only numeric fields.");
         }
 
-        if (card.Type is not ("asset" or "upgrade") && card.TrashCost is not null)
+        // CR 2.6.1, 3.4.5 and 3.5.3: assets and upgrades have trash costs, as
+        // do some ice and operations (Elevation's gray and black ops).
+        if (card.Type is not ("asset" or "upgrade" or "ice" or "operation") && card.TrashCost is not null)
         {
             throw new CardDataValidationException(
                 $"Card '{card.Code}' type '{card.Type}' must not carry trashCost.");
@@ -808,7 +951,7 @@ public static class CardDataNormalizer
         }
 
         cards.Sort(CardDataValidator.CompareTitleThenCode);
-        CardDataValidator.ValidateRecords(cards, expectedPackCode, expectedPackCode == CardDataValidator.OfficialPackCode);
+        CardDataValidator.ValidateRecords(cards, expectedPackCode, OfficialCardPacks.Find(expectedPackCode) is not null);
         return new ReadOnlyCollection<NormalizedCardDefinition>(cards);
     }
 
@@ -1336,10 +1479,24 @@ public static class CardDataLoader
         return new CardDataSet(cards, manifest);
     }
 
-    public static CardDataSet LoadSystemGateway(string? rootDirectory = null)
+    public static CardDataSet LoadSystemGateway(string? rootDirectory = null) =>
+        LoadOfficialPack(OfficialCardPacks.SystemGateway, rootDirectory);
+
+    /// <summary>
+    /// Loads and authenticates every official pack from its local-only
+    /// directory, then combines them into one pool.
+    /// </summary>
+    public static CardDataSet LoadOfficialPool(string? rootDirectory = null) =>
+        CardDataSet.Combine(OfficialCardPacks.All
+            .Select(pack => LoadOfficialPack(pack, rootDirectory))
+            .ToArray());
+
+    /// <summary>Loads and authenticates one official pack from its local-only directory.</summary>
+    public static CardDataSet LoadOfficialPack(OfficialCardPack pack, string? rootDirectory = null)
     {
+        ArgumentNullException.ThrowIfNull(pack);
         string root = rootDirectory ?? Directory.GetCurrentDirectory();
-        string directory = Path.Combine(root, DefaultRelativeDirectory);
+        string directory = Path.Combine(root, pack.RelativeDirectory);
         CardDataSet data = Load(
             Path.Combine(directory, "cards.json"),
             Path.Combine(directory, "manifest.json"),
@@ -1362,6 +1519,12 @@ public static class CardDataLoader
         {
             throw new CardDataValidationException(
                 $"Source copyright notice at '{copyrightPath}' must not be empty.");
+        }
+
+        if (!string.Equals(data.Manifest.PackCode, pack.PackCode, StringComparison.Ordinal))
+        {
+            throw new CardDataValidationException(
+                $"The snapshot at '{directory}' is pack '{data.Manifest.PackCode}', not '{pack.PackCode}'.");
         }
 
         return data;

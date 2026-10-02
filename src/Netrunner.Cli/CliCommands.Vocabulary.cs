@@ -21,9 +21,12 @@ public static partial class CliCommands
             error.WriteLine("card-vocabulary failed: the only option is --json.");
             return 2;
         }
-        BehaviorCatalog behavior = GatewayBehaviorCatalog.Create();
+        // The widest embedded pool: Gateway + Elevation in an official build,
+        // so the E6 report sees every registered card of both sets.
+        CardPool pool = CardPools.GatewayElevation.IsEmbedded ? CardPools.GatewayElevation : CardPools.Gateway;
+        BehaviorCatalog behavior = pool.CreateBehavior();
         IRuntimeCardCatalog runtime = CardDataResource.EmbeddedMode == CardDataResource.OfficialMode
-            ? GatewayRuntimeCardCatalog.CreateEmbedded() : null!;
+            ? pool.CreateEmbeddedRuntime() : null!;
         if (runtime is null)
         {
             error.WriteLine("card-vocabulary failed: it needs previously provisioned official content embedded at build time.");
