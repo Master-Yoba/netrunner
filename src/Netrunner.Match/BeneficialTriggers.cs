@@ -101,6 +101,8 @@ public static class BeneficialTriggers
             [BehaviorInstructionKind.MoveSourceToServerOf] = EffectVerdict.PlayerDecides,
             [BehaviorInstructionKind.SwapApproachedIce] = EffectVerdict.PlayerDecides,
             [BehaviorInstructionKind.HostSourceOnTarget] = EffectVerdict.PlayerDecides,
+            [BehaviorInstructionKind.ChooseAtRandom] = EffectVerdict.PlayerDecides,
+            [BehaviorInstructionKind.StealAgenda] = EffectVerdict.PlayerDecides,
         };
 
     /// <summary>The verdict for an effect kind; an unclassified kind is the player's decision.</summary>
