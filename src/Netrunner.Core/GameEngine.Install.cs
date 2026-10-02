@@ -1203,6 +1203,15 @@ public static partial class GameEngine
         CardInstanceId[] candidates = inwardInstall
             ? []
             : InstallCandidates(working, spec, destinationKind, serverId, createNewRemote);
+        // A card-effect install during a run (Mycoweb) trashes no ICE on the
+        // attacked server, so the run's ICE cursor stays where it is.
+        if (initiationKind == InstallInitiationKind.BehaviorZoneInstall
+            && destinationKind == InstallDestinationKind.ServerIce
+            && working.RunState is { } liveRun
+            && serverId == liveRun.AttackedServer)
+        {
+            candidates = [];
+        }
         if (side == PlayerSide.Corp
             && destinationKind == InstallDestinationKind.ServerIce
             && candidates.Any(candidateId => RuntimeClass(working, candidateId) != RuntimeCardClass.Ice))

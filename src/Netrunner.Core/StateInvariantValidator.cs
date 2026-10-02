@@ -9356,7 +9356,8 @@ public static partial class StateInvariantValidator
                     $"Runtime rez action for '{candidate.CardId}' at cost {candidate.CreditCost} is duplicated.");
             }
 
-            RezCardParameters? expectedTarget = expected.FirstOrDefault(item => item.CardId == candidate.CardId);
+            RezCardParameters? expectedTarget = expected.FirstOrDefault(item => item.CardId == candidate.CardId
+                && item.ForfeitAgendaId == candidate.ForfeitAgendaId);
             if (expectedTarget is not null
                 && (expectedTarget.CreditCost != candidate.CreditCost
                     || (expectedTarget.CostQuote is null
@@ -11845,6 +11846,7 @@ public static partial class StateInvariantValidator
         RezCardParameters expected) =>
         actual.CardId == expected.CardId
         && actual.CreditCost == expected.CreditCost
+        && actual.ForfeitAgendaId == expected.ForfeitAgendaId
         && (actual.CostQuote is null
             ? expected.CostQuote is null
             : actual.CostQuote.Equals(expected.CostQuote));
