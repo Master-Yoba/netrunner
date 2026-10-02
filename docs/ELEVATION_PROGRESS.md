@@ -12,6 +12,8 @@ Registry: `data/elevation/batch-registry.json`. Evidence is from the Linux x86_6
 | EL.3 Batch 1: 43 cards | `feat/el3-batch1` | complete |
 | EL.4 primitives B: card sources, zones and information | `feat/el4-primitives-b` | complete |
 | EL.5 Batch 2: 16 cards | `feat/el5-batch2` | complete |
+| EL.6 primitives C: runs and ICE | `feat/el6-primitives-c` | complete |
+| EL.7 Batch 3: 23 cards | `feat/el7-batch3` | complete |
 
 ## E6 baseline
 
@@ -283,3 +285,97 @@ faceup on the first rig program.
 ### Gate
 
 - Synthetic suite green after the batch; `make gates` on the EL.5 head: see the PR.
+
+## EL.6 — Primitives C: runs and ICE
+
+On `feat/el6-primitives-c`, all in Core before any Batch 3 card, with the four EL.4-family primitives EL.4 handed over
+(moving an upgrade, random HQ trash, a copy of an accessed card, Detente's access outside a run):
+
+| Family | Primitives |
+|---|---|
+| Runs | A Runner move to another server's outermost position (`MoveRunnerToServer`, applied when the run cursor resumes); a run event's approach redirect and extra click (`RedirectApproachTo`, `AdditionalClicks`); Archives run events; a run event reacting to its own run's end; the first end of a run prevented unless the Corp trashes X random HQ cards (`PreventFirstEndRun`); bypass (`BypassEncounteredIce`); derez; ICE approached as an occurrence; swapping the approached ICE with ICE from HQ or Archives. |
+| ICE | Credit-cost break abilities only the Runner uses; breaker-subtype break restrictions (`BreakableOnlyBySubtype`); hosts gaining every ICE subtype (`HostGainsEveryIceType`); strength while the only ICE on a server; another ICE's subroutines resolved through options the catalog expands from the pool; rez paying less; forfeit-to-rez (`RezForfeitDiscount`, a `RezCardParameters.ForfeitAgendaId`); a global ICE rez-cost increase from an installed card. |
+| Cards and abilities | Mods hosted on non-AI icebreakers with run-long pumps (`HostIcebreakerStrength`); moving an upgrade; ending the run from a paid ability; rezzed cards in the attacked server as targets; random choices (`ChooseAtRandom`); a steal outside a run, with the trash offered at the card's cost. |
+
+The validator knows every new field and frame shape; contract, serialization and fingerprint tests are in
+`ElevationPrimitiveContractTests`, and the behavior tests ship with EL.7's cards. The EL.7 fuzz found two Core defects,
+fixed on this branch (`fix: EL.6 …`): forfeit-rez variants of the same ICE looked like duplicate actions, and a card-effect
+install mid-run (Mycoweb) could trash the encountered ICE and lose the run's ICE cursor. The gates found that the
+trigger-automation audit had no verdict for `ChooseAtRandom` and `StealAgenda` (both now the player's decision), as EL.4's
+`HostFaceUp` had none.
+
+## EL.7 — Batch 3
+
+23 cards on `feat/el7-batch3`: Ryō "Phoenix" Ōno, Topan, Charm Offensive, Shred, Barry "Baz" Wong, Maintenance Access,
+Detente, Maglectric Rapid, Fransofia Ward, GAMEDRAGON™ Pro, Chromatophores, LEO Construction, Bumi 1.0, Scatter Field,
+Mercia B4LL4RD, Proprionegation, Empiricist, Mycoweb, Semak-samun, Mitra Aman, N-Pot, Biawak and Flyswatter.
+
+- **Specs:** `src/Netrunner.Cards/Elevation/ElevationBatch3Specs.cs`; Mycoweb's options are expanded from the composed
+  pool when the catalog is built.
+- **Tests:** 43 Batch 3 tests (`ElevationBatch3Tests`), at least one per card, with the fuzz regressions.
+- **Registry and coverage:** EL.7 complete; **159 of 159** cards registered, tested and complete.
+
+### E6
+
+`make core-growth CORE_GROWTH_ARGS='--registry data/m4/batch-registry.json --registry data/elevation/batch-registry.json
+--range slice-EL.7=6a7483e..2b52122'`:
+
+| Batch | Core lines | New vocabulary | Cards needing no Core change |
+|---|---|---|---|
+| slice-EL.7 | +37/−8 | 1 | **23 of 23 (100%)** |
+
+The Core lines are the ladder fix below: the access-trash turn events recorded before the trigger check, and one trigger
+condition (`TrashedSubjectWasInstalled`) for Aggressive Trendsetting, an EL.3 card. No EL.7 card uses them.
+
+### Simulation decks and the batch proof
+
+- Four more simulation decks: LEO Construction and Synapse Global (Corp), Ryō and Barry (Runner); 8 Corp and 6 Runner
+  decks in all. The fuzz content is `elevation-simulation-v3`.
+- **Evidence:** `scripts/fuzz.sh elevation --games 192 --seed 7 --workers 12`: first 190 of 192 terminal (the two
+  defects above); after the fixes, 192 of 192.
+- `ai-ladder --content elevation --entrants random,contract,easy,standard --seeds-per-pairing 1`: the first run, 768
+  games, had 6 errors; the rerun on the fixed head, 768 games, 0 errors, 0 capped. The Corp order random < contract <
+  easy < standard separates (+110, +178, +154). On the Runner side, contract doesn't beat random (−35, 95% [−92, 14]),
+  as in EL.5, and standard − easy is +48 (95% [−24, 107]): one seed per pairing leaves it inside the noise.
+
+The first run's errors came from three defects, fixed on this branch with regression tests (`ElevationLadderRegressionTests`,
+`ElevationBatch1CorpTests`):
+
+- The contract agent rejected N-Pot's credit-cost break as malformed parameters (it expected a lost click).
+- When a trash during access was the first installed trash of the turn, Aggressive Trendsetting's trigger became active
+  only after the engine had yielded the next breach decision, and its occurrence frame was stranded beneath it
+  (`resolution.pending-frame-mismatch`). The trash's turn events are now recorded before the trigger check.
+- Aggressive Trendsetting fired again on a later trash of a card that wasn't installed (from HQ): it now needs the trashed
+  card to have been installed.
+
+### Bots
+
+The policies value bypasses (+300), derezzes (+200), steals outside a run (+400), mods (+80), Runner moves (+200), ICE
+swaps (+150), cheaper rezzes (credits) and purges (+60). Paths reached only by Elevation cards; policy versions unchanged.
+
+### Client
+
+Mods hosted on breakers and Corp cards hosted on Detente use the hosted-card rendering of EL.5; the M4.9 smoke's
+Elevation check now includes a Corp card hosted faceup on a console. The encounter panel's "can interface" uses the
+full check (gained subtypes, break restrictions).
+
+### Rulings and simplifications
+
+| Card | Note |
+|---|---|
+| Shred | The Corp pays (trashes X random HQ cards) whenever it can; it is not offered the choice to let the run go on. |
+| Detente | Only the Runner uses the click ability ("any player can use" is not modelled). The access outside a run steals an agenda or offers the trash at the card's cost; "when accessed" abilities and steal reactions do not fire. "The first time each turn" is once per turn when used. |
+| Mycoweb | "Resolve 1 subroutine" offers each subroutine of each sentry or code gate in the pool while a rezzed copy is installed; subroutines with no instruction equivalent (run restrictions, damage with a printed follow-up, inward installs) are not offered, and a "resolve nothing" option stays available. |
+| LEO Construction | The rezzed bioroid is trashed as the ability's first effect rather than as its cost; the ability is offered only when such a bioroid is in the attacked server. |
+| Charm Offensive | After a successful Archives run every card there was accessed, so "a copy of a card you accessed in Archives" is a copy of a faceup card in Archives. |
+| GAMEDRAGON™ Pro | Pumped strength lasts the run for fixed pumps; a dynamic pump (counted from installed cards) still lasts the encounter. |
+| Chromatophores | The gained subtypes count for breaker interfaces; subtype filters elsewhere (Mycoweb's "rezzed sentry") read the printed subtypes. |
+| Ryō "Phoenix" Ōno | The Corp chooses the HQ card to trash. |
+| Mercia B4LL4RD | Banned in System Gateway + Elevation; implemented for completeness. |
+
+### Gate
+
+- Synthetic suite green after the batch. `make gates` at `c589092` passed m5-gate, tactics and the AI and CLI suites; verify
+  and the Match suite failed only on the trigger-automation audit (verdicts now in EL.4 and EL.6) and a stale coverage
+  report, both fixed. The full gates for the stack run on the EL.8 head.
+
