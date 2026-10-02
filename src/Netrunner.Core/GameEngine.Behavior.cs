@@ -1780,6 +1780,17 @@ public static partial class GameEngine
                 "The active behavior frame changed before ordinary Corp play deck-out completion.");
         }
 
+        // EL-NESTED-PLAY: an operation played from inside another ability
+        // (Humanoid Resources) draws from an empty R&D. The game ends; the
+        // terminal cleanup clears the play area and the suspended parents.
+        if (cardPlay.IsNested)
+        {
+            RestoreBehaviorSetAside(working, frame);
+            CompleteTurnGame(working, PlayerSide.Runner, GameWinReason.DeckOut);
+            working.RunState = null;
+            return true;
+        }
+
         if (working.ResolutionStack.Count < 3
             || working.ResolutionStack[^3] is not TurnFrame turn
             || turn.Stage != TurnFrameStage.AwaitingAction
@@ -3898,10 +3909,12 @@ public static partial class GameEngine
         IReadOnlyList<CardInstanceId> cardIds = ResolveBehaviorCards(working, frame, instruction.Target);
         if (cardIds.Count == 0)
         {
-            // "All hosted cards" may be none (EL-HOSTED-FACEUP).
+            // "All hosted cards" may be none (EL-HOSTED-FACEUP), and the top
+            // cards of a deck may have run out (EL-LOOK-TOP: AU Co.).
             if (instruction.Target is { Kind: BehaviorTargetKind.ChosenCard }
                     && IsProvenEmptyChosenCard(frame, instruction.Target)
-                || instruction.Target is { IsHostedOnSource: true })
+                || instruction.Target is { IsHostedOnSource: true }
+                || instruction.Target is { TopCount: not null })
             {
                 AdvanceBehaviorCursor(working, frame);
                 return;

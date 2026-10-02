@@ -959,7 +959,8 @@ public static partial class StateInvariantValidator
                     state.Servers,
                     knownPlayers,
                     runtimeCardCatalog,
-                    violations);
+                    violations,
+                    turn.History.CorpLastTurn?.NextTurnExtraClicks ?? 0);
                 ValidateTurnFacts(
                     turn.History.CorpLastTurn,
                     PlayerSide.Corp,
@@ -969,7 +970,8 @@ public static partial class StateInvariantValidator
                     state.Servers,
                     knownPlayers,
                     runtimeCardCatalog,
-                    violations);
+                    violations,
+                    extraAllottedClicks: null);
                 ValidateTurnFacts(
                     turn.History.RunnerThisTurn,
                     PlayerSide.Runner,
@@ -979,7 +981,8 @@ public static partial class StateInvariantValidator
                     state.Servers,
                     knownPlayers,
                     runtimeCardCatalog,
-                    violations);
+                    violations,
+                    turn.History.RunnerLastTurn?.NextTurnExtraClicks ?? 0);
                 ValidateTurnFacts(
                     turn.History.RunnerLastTurn,
                     PlayerSide.Runner,
@@ -989,7 +992,8 @@ public static partial class StateInvariantValidator
                     state.Servers,
                     knownPlayers,
                     runtimeCardCatalog,
-                    violations);
+                    violations,
+                    extraAllottedClicks: null);
             }
             else if (turn.Step != TurnStep.None)
             {
@@ -13314,7 +13318,8 @@ public static partial class StateInvariantValidator
         IReadOnlyList<ServerState> knownServers,
         Dictionary<PlayerId, PlayerSide> knownPlayers,
         IRuntimeCardCatalog? runtimeCardCatalog,
-        List<StateInvariantViolation> violations)
+        List<StateInvariantViolation> violations,
+        int? extraAllottedClicks)
     {
         if (facts is null)
         {
@@ -13341,8 +13346,12 @@ public static partial class StateInvariantValidator
             Add(violations, "turn.facts-negative-clicks", path, "Turn facts click counts must be nonnegative.");
         }
 
-        int expectedClicks = expectedSide == PlayerSide.Corp ? 3 : 4;
-        if (facts.ClicksAllotted != expectedClicks)
+        // EL-EXTRA-CLICKS: "+1 allotted click next turn" (Aggressive
+        // Trendsetting) raises a turn's allotment by the previous own turn's
+        // extra clicks; a last turn's own predecessor is gone, so it may only
+        // exceed the base allotment.
+        int expectedClicks = (expectedSide == PlayerSide.Corp ? 3 : 4) + (extraAllottedClicks ?? 0);
+        if (extraAllottedClicks is null ? facts.ClicksAllotted < expectedClicks : facts.ClicksAllotted != expectedClicks)
         {
             Add(violations, "turn.facts-allotment-mismatch", $"{path}.clicksAllotted", $"'{expectedSide}' turn facts must record {expectedClicks} allotted clicks.");
         }
