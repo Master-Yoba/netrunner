@@ -992,16 +992,19 @@ public static partial class GameEngine
         IReadOnlyList<CardInstanceId> selected)
     {
         int baseCost = CalculateInstallBaseCost(working, frame, plan, selected);
-        CostQuote? quote = InstallCostQuote(working, plan.Card, baseCost, frame.InitiationKind);
-        int cost = quote?.EffectiveCost ?? baseCost;
-        if (frame.InitiationKind == InstallInitiationKind.BehaviorZoneInstall)
+        BehaviorZoneInstallRule? rule = frame.InitiationKind == InstallInitiationKind.BehaviorZoneInstall
+            ? ZoneInstallRuleFor(working, frame)
+            : null;
+        if (rule is not null)
         {
-            BehaviorZoneInstallRule rule = ZoneInstallRuleFor(working, frame);
-            cost = rule.Apply(cost);
-            quote = rule.CostRule == BehaviorInstallCostRule.IgnoreAllCosts ? null : quote;
+            // As in BuildInstallPlan: the zone discount comes before the quoted modifiers.
+            baseCost = rule.Apply(baseCost);
         }
 
-        return (cost, quote);
+        CostQuote? quote = rule?.CostRule == BehaviorInstallCostRule.IgnoreAllCosts
+            ? null
+            : InstallCostQuote(working, plan.Card, baseCost, frame.InitiationKind);
+        return (quote?.EffectiveCost ?? baseCost, quote);
     }
 
     private static InstallPlan? BuildInstallPlan(
@@ -1231,17 +1234,22 @@ public static partial class GameEngine
         int baseInstallCost = inwardInstall
             ? 0
             : CalculateInstallCost(working, spec, destinationKind, serverId, createNewRemote, []);
-        CostQuote? installCostQuote = InstallCostQuote(
-            working,
-            card,
-            baseInstallCost,
-            initiationKind);
-        int installCost = installCostQuote?.EffectiveCost ?? baseInstallCost;
+        // A zone install's own discount ("install it, paying 1 less") lowers
+        // the cost the other modifiers then quote, so the frozen quote stays
+        // the cost actually paid.
         if (zoneRule is not null)
         {
-            installCost = zoneRule.Apply(installCost);
-            installCostQuote = zoneRule.CostRule == BehaviorInstallCostRule.IgnoreAllCosts ? null : installCostQuote;
+            baseInstallCost = zoneRule.Apply(baseInstallCost);
         }
+
+        CostQuote? installCostQuote = zoneRule?.CostRule == BehaviorInstallCostRule.IgnoreAllCosts
+            ? null
+            : InstallCostQuote(
+                working,
+                card,
+                baseInstallCost,
+                initiationKind);
+        int installCost = installCostQuote?.EffectiveCost ?? baseInstallCost;
 
         if (!isCorpSubroutineInstall
             && zoneRule is null

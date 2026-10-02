@@ -23,6 +23,7 @@ public static partial class GameEngine
         BehaviorZone.Grip,
         BehaviorZone.Heap,
         BehaviorZone.Stack,
+        BehaviorZone.HostedFaceUp,
     ];
 
     private static void PushBehaviorZoneInstall(

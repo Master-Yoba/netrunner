@@ -2641,6 +2641,18 @@ public static partial class StateInvariantValidator
                         continue;
                     }
 
+                    // EL-BEHAVIOR-INSTALL: a zone install chosen by a paid
+                    // ability mid-run (Madani), and its install child.
+                    if (suffix is BehaviorInstallChoiceFrame
+                        && index == runFrameIndex + 3
+                        && state.ResolutionStack[index - 1] is BehaviorResolutionFrame
+                        || suffix is InstallFrame
+                        && index == runFrameIndex + 4
+                        && state.ResolutionStack[index - 1] is BehaviorInstallChoiceFrame)
+                    {
+                        continue;
+                    }
+
                     Add(
                         violations,
                         "run.stack-topology",
@@ -12224,6 +12236,14 @@ public static partial class StateInvariantValidator
                         "The chosen behavior binding does not match the latest reachable card-selection continuation.");
                 }
 
+                continue;
+            }
+
+            // EL-BEHAVIOR-INSTALL: a keyed zone install binds the card it installed.
+            if (!selectionsByKey.ContainsKey(binding.Key)
+                && binding.CardIds.Count == 1
+                && GameEngine.DeclaresKeyedInstall(rootInstructions, binding.Key))
+            {
                 continue;
             }
 

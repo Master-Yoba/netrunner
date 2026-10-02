@@ -1964,7 +1964,7 @@ public static partial class GameEngine
         return actual.HasValue && actual.Value == condition.Value;
     }
 
-    private static bool DeclaresKeyedInstall(IEnumerable<BehaviorInstruction> instructions, string key) =>
+    internal static bool DeclaresKeyedInstall(IEnumerable<BehaviorInstruction> instructions, string key) =>
         instructions.Any(instruction =>
             instruction.Kind == BehaviorInstructionKind.InstallCard && string.Equals(instruction.Argument, key, StringComparison.Ordinal)
             || instruction.Branch is { } branch && DeclaresKeyedInstall(branch.WhenTrue.Concat(branch.WhenFalse), key)
@@ -3898,8 +3898,10 @@ public static partial class GameEngine
         IReadOnlyList<CardInstanceId> cardIds = ResolveBehaviorCards(working, frame, instruction.Target);
         if (cardIds.Count == 0)
         {
+            // "All hosted cards" may be none (EL-HOSTED-FACEUP).
             if (instruction.Target is { Kind: BehaviorTargetKind.ChosenCard }
-                && IsProvenEmptyChosenCard(frame, instruction.Target))
+                    && IsProvenEmptyChosenCard(frame, instruction.Target)
+                || instruction.Target is { IsHostedOnSource: true })
             {
                 AdvanceBehaviorCursor(working, frame);
                 return;
