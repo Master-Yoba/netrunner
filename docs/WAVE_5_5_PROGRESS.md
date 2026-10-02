@@ -98,6 +98,13 @@ The first two seeds ran before HQ's change was limited to real knowledge.
 
 The arms cost about $46 at list price. 14 earlier v21 games, on a version since changed, were voided.
 
+`scripts/ai-claude-play.sh` plays these games:
+- **Deals:** the same numbered deals as `ai-codex-play`, from `ai-codex-play --print-deals`, with its prompt from
+  `--print-prompt`.
+- **Each game:** a `claude -p` session with only the game's MCP tools, capped by `--budget-usd`, run `--parallel` at a time.
+- **Output:** saved like the ladder's games, with Claude's usage beside each.
+- **Summary:** counts only games Claude played to the end.
+
 **Decision:** Runner v21 is the default. The user skipped the A9b playtest, to work on until the wave is done.
 
 ## A9c: copy and unique counting (Corp v26, Runner v22)

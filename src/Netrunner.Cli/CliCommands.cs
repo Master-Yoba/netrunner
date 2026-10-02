@@ -262,7 +262,7 @@ public static partial class CliCommands
             + "ai-lint <games-dir> [--workers N] [--examples N] [--output file] [--json] | "
             + "ai-style <games-dir> [--workers N] [--json] | "
             + "ai-belief <games-dir> [--games N] [--json] | "
-            + "ai-codex-play --output new-dir [--side corp|runner|both] [--games N] [--seed S] [--model gpt-6.1-sol] | ai-mcp-game --content ID --side corp|runner --output new-dir | "
+            + "ai-codex-play --output new-dir [--side corp|runner|both] [--games N] [--seed S] [--model gpt-6.1-sol] [--print-deals] [--print-prompt corp|runner] | ai-mcp-game --content ID --side corp|runner --output new-dir | "
             + "ai-codex-review <games-dir> --side corp|runner --output new-dir [--game ID]... [--games N] [--model gpt-6.1-sol] [--reasoning low|medium|high] | "
             + "ai-llm-play --output new-dir [--side corp|runner|both] [--games N] [--seed S] [--opponent ENTRANT] [--reasoning low|medium|high] [--model NAME] | "
             + "ai-llm-review <games-dir> --side corp|runner --output new-dir [--entrant NAME] [--game ID]... [--games N] [--skip N] [--temperature T] [--reasoning low|medium|high] [--min-tool-calls N] [--check] [--model NAME] [--logs-only] | "

@@ -22,6 +22,8 @@ public static partial class CliCommands
         string destination = "", opponent = "standard", model = "gpt-6.1-sol", reasoning = "medium", codex = "codex", sides = "both";
         int games = 1, firstGame = 0, timeoutMinutes = 120;
         ulong seed = 1;
+        bool printDeals = false;
+        string? printPrompt = null;
         try
         {
             for (int index = 1; index < args.Length; index++)
@@ -44,6 +46,12 @@ public static partial class CliCommands
                         break;
                     case "--codex": codex = Next(); break;
                     case "--timeout-minutes": timeoutMinutes = int.Parse(Next(), NumberStyles.None, CultureInfo.InvariantCulture); break;
+                    // For other players of the same deals (scripts/ai-claude-play.sh): the games' contents and seats, or the prompt.
+                    case "--print-deals": printDeals = true; break;
+                    case "--print-prompt":
+                        printPrompt = Next();
+                        if (printPrompt is not ("corp" or "runner")) throw new ArgumentException("--print-prompt requires corp or runner.");
+                        break;
                     case "--output":
                         destination = Next();
                         if (Directory.Exists(destination) || File.Exists(destination)) throw new ArgumentException("--output must name a new directory.");
@@ -51,7 +59,7 @@ public static partial class CliCommands
                     default: throw new ArgumentException($"Unsupported ai-codex-play argument '{args[index]}'.");
                 }
             }
-            if (destination.Length == 0) throw new ArgumentException("ai-codex-play requires --output <new directory>.");
+            if (destination.Length == 0 && !printDeals && printPrompt is null) throw new ArgumentException("ai-codex-play requires --output <new directory>.");
             if (games is < 1 or > 1000) throw new ArgumentException("--games requires 1 to 1000.");
             if (!RatingLadder.EntrantOrder.Contains(opponent)) throw new ArgumentException($"Unknown opponent entrant '{opponent}'.");
             if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode)
@@ -61,6 +69,20 @@ public static partial class CliCommands
         {
             error.WriteLine($"ai-codex-play failed: {exception.Message}");
             return 2;
+        }
+
+        if (printPrompt is not null)
+        {
+            output.WriteLine(CodexPlayPrompt(printPrompt));
+            return 0;
+        }
+        if (printDeals)
+        {
+            IReadOnlyList<string> deals = RulesFuzzRunner.ContentIds("gateway");
+            for (int number = firstGame + 1; number <= firstGame + games; number++)
+                output.WriteLine(FormattableString.Invariant(
+                    $"{number:D3} {deals[(number - 1) % deals.Count]} {(sides == "corp" || (sides == "both" && number % 2 == 1) ? "corp" : "runner")}"));
+            return 0;
         }
 
         Directory.CreateDirectory(destination);
