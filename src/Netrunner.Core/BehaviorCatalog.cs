@@ -356,6 +356,7 @@ public sealed record BehaviorCondition
                 or BehaviorConditionKind.ZoneCountAtMost
                 or BehaviorConditionKind.UnusedMemoryAtMost
                 or BehaviorConditionKind.UnusedMemoryAtLeast
+                or BehaviorConditionKind.SourceAdvancementAtLeast
             && value is null or < 0)
         {
             throw new ArgumentOutOfRangeException(
@@ -389,6 +390,9 @@ public sealed record BehaviorCondition
 
     public static BehaviorCondition RunnerTagsAtLeast(int threshold) =>
         new(BehaviorConditionKind.RunnerTagsAtLeast, value: threshold);
+
+    public static BehaviorCondition SourceAdvancementAtLeast(int threshold) =>
+        new(BehaviorConditionKind.SourceAdvancementAtLeast, value: threshold);
 
     public static BehaviorCondition ZoneCountAtMost(BehaviorZone zone, int maximum) =>
         new(BehaviorConditionKind.ZoneCountAtMost, fact: zone.ToString(), value: maximum);
@@ -473,6 +477,9 @@ public enum BehaviorConditionKind
 
     /// <summary>EL-ACTION-NOT-FINISHED: the active player has not finished an action this turn.</summary>
     NoActionFinishedThisTurn,
+
+    /// <summary>The behavior's source card hosts at least the value in advancement counters.</summary>
+    SourceAdvancementAtLeast,
 }
 
 /// <summary>A typed target selector; IDs are resolved by Core at runtime.</summary>
@@ -1593,7 +1600,8 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         bool requireAgendaStolenDuringRun = false,
         PlayerSide? occurrenceControllerSide = null,
         bool oncePerTurn = false,
-        BehaviorTriggerCondition? condition = null)
+        BehaviorTriggerCondition? condition = null,
+        BehaviorCondition? requirement = null)
     {
         if (!StableIdentifier.TryValidate(key))
         {
@@ -1601,6 +1609,8 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
                 "A behavior trigger key must be a stable identifier.",
                 nameof(key));
         }
+
+        Requirement = requirement;
 
         if (!Enum.IsDefined(occurrence))
         {
@@ -1709,6 +1719,15 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
 
     public BehaviorTriggerCondition? Condition { get; }
 
+    /// <summary>
+    /// A structured "if" the trigger needs to meet its condition (CR 9.6),
+    /// judged against its source card when the occurrence happens: the
+    /// threat level, a counter or advancement count on the source, a zone
+    /// size or a turn fact. Null for unconditional triggers.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public BehaviorCondition? Requirement { get; }
+
     public TriggerMode Mode { get; }
 
     public BehaviorTriggerScope Scope { get; }
@@ -1755,6 +1774,7 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         && OccurrenceControllerSide == other.OccurrenceControllerSide
         && OncePerTurn == other.OncePerTurn
         && Condition == other.Condition
+        && Requirement == other.Requirement
         && Mode == other.Mode
         && Scope == other.Scope
         && BehaviorContractStructure.AreEqual(SubjectCardFilter, other.SubjectCardFilter)
@@ -1849,7 +1869,8 @@ public sealed class CardBehaviorDefinition
         IReadOnlyList<BehaviorFirstHqBreachAccessModifier>? firstHqBreachAccessModifiers = null,
         IReadOnlyList<BehaviorFirstBasicDrawReplacement>? firstBasicDrawReplacements = null,
         bool canBeAdvanced = false,
-        HostingBehaviorSpec? hosting = null)
+        HostingBehaviorSpec? hosting = null,
+        bool runnerCannotTrash = false)
     {
         DefinitionId = definitionId;
         if (!Enum.IsDefined(controller))
@@ -1860,6 +1881,12 @@ public sealed class CardBehaviorDefinition
         Controller = controller;
         CanBeAdvanced = canBeAdvanced;
         Hosting = hosting;
+        RunnerCannotTrash = runnerCannotTrash;
+        if (runnerCannotTrash && controller != PlayerSide.Corp)
+        {
+            throw new ArgumentException("Only Corp cards can forbid the Runner trashing them.", nameof(runnerCannotTrash));
+        }
+
         if (canBeAdvanced && controller != PlayerSide.Corp)
         {
             throw new ArgumentException("Only Corp cards can permit advancement.", nameof(canBeAdvanced));
@@ -1909,6 +1936,10 @@ public sealed class CardBehaviorDefinition
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public HostingBehaviorSpec? Hosting { get; }
+
+    /// <summary>The Runner cannot trash this card while it is rezzed (Kessleroid).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool RunnerCannotTrash { get; }
 
     public IReadOnlyList<BehaviorCost> Costs { get; }
 
@@ -2756,6 +2787,7 @@ internal static class BehaviorCatalogStructure
             (CardBehaviorDefinition a, CardBehaviorDefinition b) => a.DefinitionId == b.DefinitionId
                 && a.Controller == b.Controller
                 && a.CanBeAdvanced == b.CanBeAdvanced
+                && a.RunnerCannotTrash == b.RunnerCannotTrash
                 && a.Hosting == b.Hosting
                 && SequenceEquals(a.Costs, b.Costs)
                 && SequenceEquals(a.Conditions, b.Conditions)
@@ -2976,6 +3008,10 @@ internal static class BehaviorCatalogFingerprint
         if (value.CanBeAdvanced)
         {
             builder.Append(",canBeAdvanced=1");
+        }
+        if (value.RunnerCannotTrash)
+        {
+            builder.Append(",runnerCannotTrash=1");
         }
         if (value.Hosting is { } hosting)
         {
@@ -3336,6 +3372,11 @@ internal static class BehaviorCatalogFingerprint
         if (value.OccurrenceControllerSide is { } occurrenceSide) builder.Append(",occurrenceSide=").Append((int)occurrenceSide);
         if (value.OncePerTurn) builder.Append(",oncePerTurn=1");
         if (value.Condition is { } condition) builder.Append(",condition=").Append((int)condition);
+        if (value.Requirement is { } requirement)
+        {
+            builder.Append(",requirement=");
+            AppendCondition(builder, requirement);
+        }
         if (value.Persistent) builder.Append(",persistent=1");
         if (value.RequireAgendaStolenDuringRun) builder.Append(",requireAgendaStolenDuringRun=1");
         if (value.ActiveWhileUnrezzed)

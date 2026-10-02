@@ -1033,6 +1033,7 @@ public static partial class GameEngine
                     || !CatalogRunAgendaConditionMatches(trigger, occurrence)
                     || !CatalogTriggerServerMatches(working, trigger, occurrence)
                     || !CatalogTriggerSourceLocationMatches(working, trigger, source, occurrence)
+                    || !CatalogTriggerRequirementMatches(working, source, trigger)
                     || !CatalogTriggerCanStart(working, source, trigger))
                 {
                     continue;
@@ -1201,6 +1202,7 @@ public static partial class GameEngine
                     || trigger.SubjectCardFilter is null
                     || subjectCardId is { } subject
                         && CatalogSubjectMatches(working, subject, trigger.SubjectCardFilter))
+                && CatalogTriggerRequirementMatches(working, source, trigger)
                 && CatalogTriggerCanStart(working, source, trigger)))
             {
                 return true;
@@ -1225,6 +1227,13 @@ public static partial class GameEngine
                     && working.Zones.Any(zone => zone.Id == source.ZoneId && zone.Kind == ZoneKind.RunnerScore)
                 || trigger.ActiveWhileUnrezzed && installed && source.OwnerSide == PlayerSide.Corp);
     }
+
+    private static bool CatalogTriggerRequirementMatches(
+        WorkingState working,
+        CardInstanceState source,
+        BehaviorTrigger trigger) =>
+        trigger.Requirement is not { } requirement
+        || OptionConditionMatches(working, GetPlayer(working, source.OwnerSide).Id, source.Id, requirement);
 
     private static bool CatalogTriggerDamageCostIsPayable(
         WorkingState working,

@@ -1097,6 +1097,18 @@ public static partial class GameEngine
                     "The trigger-subject binding is reserved for catalog trigger children.");
             }
         }
+        else if (working.ResolutionStack.Count >= 2
+            && working.ResolutionStack[^2] is RunTimingFrame
+            && IsEncounteredIceSubroutineFrame(working, frame))
+        {
+            // A generic ICE subroutine is keyed by its trigger declaration but
+            // runs directly above the encounter, not under a checkpoint.
+            if (triggerSubjectBindings.Length > 0)
+            {
+                throw new ResolutionFailureException(
+                    "A generic ICE subroutine must not retain a trigger-subject binding.");
+            }
+        }
         else
         {
             if (working.ResolutionStack.Count < 2
@@ -1743,6 +1755,8 @@ public static partial class GameEngine
             BehaviorConditionKind.CounterAtLeast => CurrentCounter(working, frame.SourceCardId, condition.Fact!) >= condition.Value.GetValueOrDefault(),
             BehaviorConditionKind.FactEquals => BehaviorFactEquals(working, frame, condition),
             BehaviorConditionKind.FoundCard => FoundCardConditionMatches(working, frame),
+            BehaviorConditionKind.SourceAdvancementAtLeast =>
+                GetCard(working, frame.SourceCardId).AdvancementCounters >= condition.Value.GetValueOrDefault(),
             _ => SharedConditionMatches(working, frame.Controller, condition) ?? false,
         };
     }
@@ -3725,6 +3739,12 @@ public static partial class GameEngine
             throw new ResolutionFailureException($"Behavior instruction '{instruction.Kind}' resolved no cards.");
         }
 
+        if (kind == BehaviorTransferKind.Trash
+            && GetPlayer(working, frame.Controller).Side == PlayerSide.Runner)
+        {
+            cardIds = cardIds.Where(cardId => !RunnerCannotTrash(working, GetCard(working, cardId))).ToArray();
+        }
+
         var remainingSetAside = frame.SetAside.ToList();
         var remainingBindings = frame.Bindings.ToList();
         bool leftRunnerRig = false;
@@ -4189,6 +4209,13 @@ public static partial class GameEngine
         }
     }
 
+    /// <summary>A rezzed Corp card that forbids the Runner trashing it (Kessleroid).</summary>
+    private static bool RunnerCannotTrash(WorkingState working, CardInstanceState card) =>
+        card.OwnerSide == PlayerSide.Corp
+        && card.Rezzed
+        && working.BehaviorCatalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? definition)
+        && definition.RunnerCannotTrash;
+
     private static bool IsProvenEmptyChosenCard(
         BehaviorResolutionFrame frame,
         BehaviorTarget target)
@@ -4542,6 +4569,8 @@ public static partial class GameEngine
                 && CurrentCounter(working, source, condition.Fact!) >= condition.Value.GetValueOrDefault(),
             BehaviorConditionKind.Tagged => RunnerTags(working) > 0,
             BehaviorConditionKind.NotTagged => RunnerTags(working) <= 0,
+            BehaviorConditionKind.SourceAdvancementAtLeast => sourceCardId is { } advanced
+                && GetCard(working, advanced).AdvancementCounters >= condition.Value.GetValueOrDefault(),
             _ => SharedConditionMatches(working, owner, condition) ?? false,
         };
 }

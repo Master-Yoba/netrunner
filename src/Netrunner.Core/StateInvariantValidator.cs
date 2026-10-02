@@ -2568,11 +2568,18 @@ public static partial class StateInvariantValidator
                 && damageIce.Subroutines[damageParent.Ordinal] is DamageSubroutineSpec printedDamage
                 && damage.Kind == printedDamage.Kind && damage.Amount == printedDamage.Amount
                 && state.Players.Any(player => player.Side == PlayerSide.Runner && player.Id == damage.Target);
+            // EL-GENERIC-SUBROUTINE: the behavior child of a generic
+            // subroutine of the encountered ICE; the behavior validators own
+            // its nested continuation.
+            bool expectedIceBehavior = suffixRoot is BehaviorResolutionFrame subroutineBehavior
+                && IsIceSubroutineTrigger(behaviorCatalog, subroutineBehavior)
+                && run.Encounter?.IceId == subroutineBehavior.SourceCardId;
             if (suffixRoot is not AbilityFrame
                 && !expectedGameplayOccurrence
                 && !expectedIceInstall
                 && !expectedIceDamage
-                && !expectedIceTag)
+                && !expectedIceTag
+                && !expectedIceBehavior)
             {
                 Add(
                     violations,
@@ -2582,7 +2589,8 @@ public static partial class StateInvariantValidator
                 return;
             }
 
-            if (!expectedGameplayOccurrence && !expectedIceInstall && !expectedIceDamage && !expectedIceTag)
+            if (!expectedGameplayOccurrence && !expectedIceInstall && !expectedIceDamage && !expectedIceTag
+                && !expectedIceBehavior)
             {
                 for (int index = runFrameIndex + 2; index < state.ResolutionStack.Count; index++)
                 {
