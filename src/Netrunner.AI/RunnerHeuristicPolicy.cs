@@ -130,9 +130,10 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// playtest's fixes, 2 October) is: -17 and +49 on the bot ladder, and its fixes only remove plays the playtest showed were
     /// wrong. Its Codex check was cut short when the quota ran out (1 of 6). V21 (A9b, inference from the A9a tracker, 2 October)
     /// is: +75, -31, +16 and +30 against V20 on the bot ladder, and against Claude Sonnet as Corp on 24 fixed deals it won 8
-    /// where V20 won 6.
+    /// where V20 won 6. V22 (A9c, 2 October) is: at Standard and Easy it plays as V21 (its counting needs the Corp's list),
+    /// and at Hard it was level with V21 on the bot ladder.
     /// </remarks>
-    public const string PolicyVersion = V21;
+    public const string PolicyVersion = V22;
     /// <summary>
     /// The planner's model of the Runner. It stays V7, which Corp v9 was measured
     /// with, so the shipped Corp planner plays as it did.

@@ -157,8 +157,10 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// where V21 and V22 won 8 of 36. V24, level on the bot ladder, won 3 of 12 on the same deals where V23 won 10 of 24, so it
     /// isn't the default. V25 (V23 with the Wave 5 playtest's fixes, 2 October) is: +6 and +70 on the bot ladder, and its
     /// fixes only remove plays the playtest showed were wrong. Its Codex check was cut short when the quota ran out (1 of 3).
+    /// V26 (A9c and A9d, 2 October) is: at Standard and Easy it plays as V25 (its counting needs the Runner's list), and at
+    /// Hard it was level with V25 on the bot ladder.
     /// </remarks>
-    public const string PolicyVersion = V25;
+    public const string PolicyVersion = V26;
     /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>
     public const string LatestHeuristic = V8;
     public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26];

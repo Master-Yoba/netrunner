@@ -67,7 +67,10 @@ public static class CorpPolicyProfiles
         (CorpHeuristicPolicy.V19 or CorpHeuristicPolicy.V20 or CorpHeuristicPolicy.V21 or CorpHeuristicPolicy.V22 or CorpHeuristicPolicy.V23 or CorpHeuristicPolicy.V24 or CorpHeuristicPolicy.V25 or CorpHeuristicPolicy.V26, "hard") => OfflineAgentConfiguration.Create(PlayerSide.Corp, policyVersion, profileId, policySeed,
             workBudget: 20000, nearTieTolerance: 0,
             parameters: [.. Parameters(100, 100, 100), new("coverage-scale", 100), .. Planning(PlanSamples, PlanWidth), new("plan-evaluation", policyVersion is CorpHeuristicPolicy.V25 or CorpHeuristicPolicy.V26 ? 4 : 3),
-                new("archetype-primary", 0), new("archetype-secondary", 0)]),
+                new("archetype-primary", 0), new("archetype-secondary", 0),
+                // A9d (2 October): from v26, Hard's planner deals its samples from the tracker and the Runner's list
+                // (+5, +5, +26 and +26 against Hard without it; within the noise, never below).
+                .. policyVersion == CorpHeuristicPolicy.V26 ? [new KeyValuePair<string, int>("plan-tracker", 1)] : Array.Empty<KeyValuePair<string, int>>()]),
         // A4: V8 choices with rez search, scored by the fitted evaluation; turn actions aren't planned.
         (CorpHeuristicPolicy.V10, "standard") => OfflineAgentConfiguration.Create(PlayerSide.Corp, policyVersion, profileId, policySeed,
             workBudget: 20000, nearTieTolerance: 0,
