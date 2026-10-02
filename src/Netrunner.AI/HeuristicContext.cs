@@ -38,8 +38,14 @@ internal sealed class HeuristicContext
 
     /// <summary>The Runner's archetype profile (A8, Runner v11); generic for earlier versions.</summary>
     public RunnerArchetypeProfile RunnerProfile => _runnerProfile ??= Features.Side == PlayerSide.Runner && Generation >= 8
-        ? RunnerArchetypes.Profile((RunnerArchetype)Parameter("archetype-primary", 0), (RunnerArchetype)Parameter("archetype-secondary", 0))
+        ? WithPersonality(RunnerArchetypes.Profile((RunnerArchetype)Parameter("archetype-primary", 0), (RunnerArchetype)Parameter("archetype-secondary", 0)))
         : RunnerArchetypeProfile.Generic;
+
+    /// <summary>A6: a personality leads with its archetype's traits, the deck's own profile second.</summary>
+    private RunnerArchetypeProfile WithPersonality(RunnerArchetypeProfile deck) =>
+        AgentPersonalities.RunnerArchetypeOf(AgentPersonalities.Of(Configuration)) is { } archetype
+            ? RunnerArchetypeProfile.Blend(RunnerArchetypes.Profile(archetype), deck, AgentPersonalities.DeckWeight)
+            : deck;
 
     /// <summary>Whether the Runner's installed breakers cover barriers, code gates and sentries.</summary>
     public bool RigComplete
@@ -55,8 +61,13 @@ internal sealed class HeuristicContext
 
     /// <summary>The Corp's archetype profile (A8, Corp v12); generic for earlier versions and undeclared decks.</summary>
     public CorpArchetypeProfile CorpProfile => _corpProfile ??= Generation >= 7
-        ? CorpArchetypes.Profile((CorpArchetype)Parameter("archetype-primary", 0), (CorpArchetype)Parameter("archetype-secondary", 0))
+        ? WithPersonality(CorpArchetypes.Profile((CorpArchetype)Parameter("archetype-primary", 0), (CorpArchetype)Parameter("archetype-secondary", 0)))
         : CorpArchetypeProfile.Generic;
+
+    private CorpArchetypeProfile WithPersonality(CorpArchetypeProfile deck) =>
+        AgentPersonalities.CorpProfileOf(AgentPersonalities.Of(Configuration)) is { } personality
+            ? CorpArchetypeProfile.Blend(personality, deck, AgentPersonalities.DeckWeight)
+            : deck;
 
     public int Parameter(string key, int fallback) => Configuration.Parameters.TryGetValue(key, out int value) ? value : fallback;
     public static int Hosted(AgentCard? card) => card?.Counters.Where(counter => counter.Purpose == CardCounterPurpose.HostedCredit).Sum(counter => counter.Count) ?? 0;

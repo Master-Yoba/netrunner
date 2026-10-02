@@ -458,3 +458,105 @@ take up.
 - **Duplicate installs:** a second Marjanah, Mutual Favor fetching one, and Verbal Plasticity replacing itself.
 - **Clearinghouse's damage left on the board** when trashing it was cheap.
 - **Smaller ones:** Tāo's ICE swaps, the order of economy plays, and break planning in an encounter.
+
+### Round three: batch 3 and its reviews
+
+**Batch 3, 24 games against Corp v21 and Runner v15:** Codex won 6 of 11 as Corp and 10 of 12 as Runner. The bots
+won 30% of their games against Codex, against 10% and 13% in the first two batches. Runner v15 alone took 5 games.
+One game failed when OpenAI's model was at capacity mid-game. Such a game is now finished by the heuristic and
+replayed, up to three times.
+
+**Codex's reviews** of the 14 games the bots lost (17 Corp and 17 Runner findings) became two more versions:
+
+| Version | Fixes | Gateway ladder, 240 games a seed |
+|---|---|---|
+| Corp v22 | A full HQ no longer pushes an agenda into a server the Runner's rig breaks (v21's rule exempted it, three steals); an asset loading three times its cost is rezzed despite the ICE budget (Regolith Mining License); a broke Corp builds money before purging | +11 and 0 over v21 |
+| Runner v16 | No unique card over its own copy (Verbal Plasticity, three times); Creative Commission waits for the last click; Docklands Pass's extra HQ access is worth installing | +22 and +45 over v15 |
+
+Both are now the defaults.
+
+**Still open from the reviews:**
+- **The Corp's memory of seen traps:** it keeps advancing an Urtica Cipher the Runner has accessed. Remembering
+  that needs a field in the Corp agent's checkpoint.
+- **Money for a match-point run:** the Runner doesn't plan it.
+- **Conduit:** multi-access programs aren't valued.
+- **Break planning against Ansel 1.0.**
+- **Tread Lightly against a remote.**
+
+### Batch 4 and the replay: the ladder doesn't measure play against Codex
+
+**Batch 4, 24 games against Corp v22 and Runner v16:** the bots won 3 (12%), against batch 3's 30%. To tell the version
+from the deals, batch 3's 24 deals were replayed against both version pairs at once. On the same deals:
+
+| Bot | Batch 3 | Replay | Combined |
+|---|---|---|---|
+| Runner v15, against Codex as Corp | 5 of 11 | 2 of 12 | 7 of 23 |
+| Runner v16 | | 0 of 12 | 0 of 12 |
+| Corp v21, against Codex as Runner | 2 of 12 | 3 of 12 | 5 of 24 |
+| Corp v22 | | 3 of 12 | 3 of 12 |
+
+**Runner v16 lost every game where v15 won 30%,** though the bot ladder had it +22 and +45 over v15. So Runner v15 is the
+default again. A version is now promoted only if it also holds up against Codex on fixed deals. The suspect is v16's
+click-loss rule, which prices "lose a click if any remain" at two clicks for VRcation as well as Creative Commission, and
+may hold back the Runner's draw and economy. Corp v22 plays level with v21 and stays.
+
+**Round four (batch 4's reviews):**
+
+| Version | Fixes | Against Codex on batch 3's deals |
+|---|---|---|
+| Corp v23 | A memory of the cards the Runner has accessed, so a known trap isn't advanced (four games); two agendas stay in a safer HQ (four steals); an asset that pays back at once is rezzed only with a click left (v22 rezzed Regolith with none) | 9 of 23 (39%), against 8 of 36 (22%) for v21 and v22; level with v22 on the bot ladder (−34 and +11) |
+| Runner v17 | v16 without the click-loss rule, and no install or install choice over its own copy or a second console | 2 of 12 |
+| Runner v18 | v15 with only the reinstall fix | 2 of 12 (v15: 13 of 47) |
+
+**The defaults are Corp v23 and Runner v18.**
+- **Runner v18** differs from v15 only by a fix that removes wasted installs, so it took over without a benchmark.
+- **Runner v16 and v17** (2 of 24 against Codex) aren't defaults. What they share beyond v18 is Docklands Pass's install bonus.
+- **Arms of 12 games are too small** to tell versions apart against Codex. A comparison worth making needs about 50 games on
+  fixed deals.
+
+### Round five: fixes that didn't hold up against Codex
+
+| Version | Fixes | Bot ladder vs default (two seeds) | Against Codex on batch 3's deals |
+|---|---|---|---|
+| Corp v24 | Program trashes and Runner-card targets valued by the threat to the Corp's ICE (each Corp ICE the breaker matches adds 150), which also fixes a sign error that made the Corp trash its least useful target; an End the Run choice valued by the attacked server | Corp +32 and 0, Runner 0 and 0 | 3 of 12, where v23 won 10 of 24 (4 of 12 in this replay) |
+| Runner v19 | A wallet ability (Pennyshaver's cash-out, taking all hosted credits) valued like as many basic credits; a tutor counts as breaker coverage when keeping an opening hand | Runner −11 and +33, Corp 0 and 0 | 1 of 12, where v18 won 6 of 24 (4 of 12 in this replay) |
+
+**Neither is the default; both stay ladder entrants** (`standard-c24`, `standard-r19`). Each fix was right in the games
+its review cited, but both versions are level on the ladder and point the wrong way against Codex. The arms are small (12
+games), so neither result proves a regression, but a fix that doesn't show up against the opponent it was made for isn't
+worth the risk to the defaults.
+
+## Wave 4.5 summary (1 October 2026)
+
+**Built:**
+- **P1, the oddity lints:** 12 detectors over saved ladder games (`ai-lint`). Counts per version are recorded, so a
+  repaired fault stays repaired.
+- **P2, the LLM game reviewer:**
+  - A dossier of one side's decisions, with the hand, the opponent's actions and named trigger sources, and tools for
+    rules, card text and history (`ai-llm-review`).
+  - Run against the local Qwen (byteshape Qwen3.8-27B IQ4_XS), and against Codex (gpt-6.1-sol, `ai-codex-review`),
+    which proved the stronger and faster reviewer.
+- **P3, the LLM opponent:**
+  - A wrapped heuristic whose strategic choices a model makes (`ai-llm-play`).
+  - Codex playing the bots through an MCP game server (`ai-codex-play`), which finishes a game with the heuristic if
+    Codex stops.
+- **Gate tooling:** `make bot-check` per change, and `make gates REF=` in a separate worktree, so gates no longer block
+  coding.
+
+**What the bots learned:**
+- **Corp, v20 to v23:** remembers the cards the Runner has accessed; no Archives ICE or agenda advances the planner used
+  to override; safer agenda holding.
+- **Runner, v14 to v18:** no install over its own copy or a second console; no unique card installed twice.
+- **Against Codex**, the bots won 10%, 13%, 30% and 12% of four batches. The best fixed-deal measures are now 42% for
+  Corp v23 (10 of 24) and 25% for Runner v18 (6 of 24).
+
+**Lessons:**
+- **The ladder and Codex disagree.** Self-play can't see a fault only a different player exploits, so a non-trivial
+  version is promoted only if it also holds up against Codex on fixed deals.
+- **Arms of 12 games can't separate versions.** About 50 games on fixed deals are needed.
+
+**Open, carried forward:**
+- **The Corp:** Spin Doctor's ability timing; scoring tempo; the Leech and Archives farming; Tread Lightly on a remote.
+- **The Runner:** money planning for a match-point run; break planning against Ansel 1.0; breakers installed for ICE
+  types the Corp doesn't have; Conduit and multi-access valuation.
+- **Deferred:** the overnight comparison of the two Qwen quants (byteshape IQ4_XS and unsloth UD-Q4_K_M).

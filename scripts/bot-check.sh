@@ -23,11 +23,9 @@ fi
 official=(-p:NetrunnerContentEnabled=true -p:NetrunnerCardDataMode=official)
 dotnet build "$check_root/Netrunner.sln" "${official[@]}" -m:1 --disable-build-servers >"$logs/build.log" 2>&1 \
   || { echo "bot-check build=FAIL ($logs/build.log)"; exit 1; }
-# Five official-data cases of this theory fail on dev too (they're tracked); left in, they'd hide a new failure.
-known="FullyQualifiedName!~SessionPolicyMatrixTests.EveryNestedBoundaryRetainsEngineEventsChoicesAndPolicy"
 pids=()
 for project in AI Match Cli; do
-  dotnet test "$check_root/tests/Netrunner.$project.Tests" "${official[@]}" --no-build --filter "$known" >"$logs/$project.log" 2>&1 &
+  dotnet test "$check_root/tests/Netrunner.$project.Tests" "${official[@]}" --no-build >"$logs/$project.log" 2>&1 &
   pids+=("$!")
 done
 status=0

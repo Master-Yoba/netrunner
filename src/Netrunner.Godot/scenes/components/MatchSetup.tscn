@@ -103,11 +103,33 @@ unique_name_in_owner = true
 layout_mode = 2
 accessibility_name = "Offline bot difficulty"
 selected = 0
-item_count = 2
+item_count = 3
 popup/item_0/text = "Standard"
 popup/item_0/id = 0
 popup/item_1/text = "Easy"
 popup/item_1/id = 1
+popup/item_2/text = "Hard"
+popup/item_2/id = 2
+
+[node name="Personality" type="OptionButton" parent="SetupContent"]
+unique_name_in_owner = true
+layout_mode = 2
+accessibility_name = "Offline bot personality"
+tooltip_text = "A play style for the bot's side; one for the other side plays Balanced."
+selected = 0
+item_count = 6
+popup/item_0/text = "Balanced"
+popup/item_0/id = 0
+popup/item_1/text = "Glacier (Corp)"
+popup/item_1/id = 1
+popup/item_2/text = "Rush (Corp)"
+popup/item_2/id = 2
+popup/item_3/text = "Asset spam (Corp)"
+popup/item_3/id = 3
+popup/item_4/text = "Aggressive (Runner)"
+popup/item_4/id = 4
+popup/item_5/text = "Rig-builder (Runner)"
+popup/item_5/id = 5
 
 [node name="SeedLabel" type="Label" parent="SetupContent"]
 layout_mode = 2

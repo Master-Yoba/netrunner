@@ -42,8 +42,8 @@ After M5, three proposed improvement tracks cover the
 [AI opponent](AI_OPPONENT_PLAN.md) and the
 [UI/UX redesign](UI_UX_REDESIGN_PLAN.md). The
 [improvement roadmap](IMPROVEMENT_ROADMAP.md) orders their phases (E*, A*,
-U*) into gated waves and recommends where M6 fits. That placement is still to
-be decided.
+U*) into gated waves and recommends where M6 fits. At Wave 5's decision
+point the next card set (Elevation) was chosen ahead of M6; see section 2.
 
 ## 2. Decisions made for implementation
 
@@ -67,6 +67,41 @@ Version policy: follow Godot 4.7 patch releases only after the verification suit
 passes; evaluate minor upgrades separately. Stay on an even-numbered .NET LTS
 SDK. Save artifacts record actual build, rules, data, and schema versions rather
 than assuming compatibility from package versions.
+
+### Wave 5 decision point: the next card set is Elevation (1 October 2026)
+
+The [roadmap](IMPROVEMENT_ROADMAP.md)'s Wave 5 ends with a choice between M6
+(LLM/hybrid mode), the next card set and an RC. **Decided: the next card set,
+Elevation.**
+
+- **Why not M6 first:** most of M6's machinery exists. Wave 4.5 built the
+  OpenAI-compatible chat transport, the legal-action and observation schemas,
+  strict validation and the heuristic takeover (P3's LLM opponent, which also
+  plays Codex through an MCP game server). What M6 adds (intent play, consent
+  UI, local-inference profiles) is worth more once there are more cards to
+  play.
+- **Why not an RC:** a release with one learn-to-play pool is small, and
+  Startup needs Elevation, then Vantage Point.
+- **Why Elevation:** the bots' remaining faults (see the
+  [Wave 4.5 progress](WAVE_4_5_PROGRESS.md)) increasingly come from a pool too
+  small to need deck-aware play. More cards and the remaining Netrunner
+  mechanics give the planner, the fitted evaluation (A7's per-format weights)
+  and the personalities more to work with.
+
+What starting the card set requires, before its first batch:
+
+- **E6 Core-growth budget:** at least 80% of Elevation's cards need no Core
+  change (no new `BehaviorInstructionKind`, frame type or Core file). Measure
+  it per card batch with a generated report, the first task of the card-set
+  wave. A miss is a design review of the primitive vocabulary, not a reason to
+  stop.
+- **C2 format snapshots:** a versioned format file per snapshot (Gateway,
+  Startup 2025/2026) before Elevation decks are offered.
+- **A7:** per-format fitted weights and priors, and deck-aware evaluation
+  features, as the pool grows.
+- **The hardening gate holds per set:** 10,000 clean official fuzz games, the
+  full `make m5-gate`, and the bot ladder with no deck warning, before the set
+  ships.
 
 ## 3. Target architecture
 

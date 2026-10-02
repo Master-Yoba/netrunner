@@ -82,6 +82,73 @@ public sealed class RunnerCodexV14Tests
         Assert.True(runs == chosen.Parameters is RunServerParameters { ServerId.Value: "server:10" }, $"{version} chose {chosen.Kind} {chosen.Description}.");
     }
 
+    [Theory]
+    [InlineData(RunnerHeuristicPolicy.V15, "codex-runner-unique-reinstall", 281, "Verbal Plasticity", true)]
+    [InlineData(RunnerHeuristicPolicy.V16, "codex-runner-unique-reinstall", 281, "Verbal Plasticity", false)]
+    [InlineData(RunnerHeuristicPolicy.V17, "codex-runner-unique-reinstall", 281, "Verbal Plasticity", false)]
+    [InlineData(RunnerHeuristicPolicy.V18, "codex-runner-unique-reinstall", 281, "Verbal Plasticity", false)]
+    [InlineData(RunnerHeuristicPolicy.V15, "codex-runner-docklands", 379, "Docklands Pass", false)]
+    [InlineData(RunnerHeuristicPolicy.V16, "codex-runner-docklands", 379, "Docklands Pass", true)]
+    public async Task InstallsThatAddSomething(string version, string fixture, long sequence, string title, bool installs)
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        // Games against Codex (1 October, batch 3): a second Verbal Plasticity over the first, and Docklands Pass kept in
+        // the grip for an HQ run.
+        (LegalAction chosen, GameState state) = await ChooseInAsync(fixture, version, sequence);
+        bool installed = chosen.Parameters is InstallCardParameters install
+            && CardDataResource.LoadEmbedded().Cards.Single(card => card.Code == state.GetCard(install.CardId).DefinitionId.Value).Title == title;
+        Assert.True(installs == installed, $"{version} chose {chosen.Kind} {chosen.Description}.");
+    }
+
+    [Fact]
+    public async Task NoInstallOverItsOwnCopy()
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        // A game against Codex (1 October, batch 4): Pantograph's trigger installed a second Pantograph over the first. v16
+        // scored it level with DZMZ Optimizer, so its pick was a coin flip; v17 never picks it.
+        (LegalAction chosen, GameState state) = await ChooseInAsync("codex-runner-console-reinstall", RunnerHeuristicPolicy.V18, 488);
+        bool pantograph = chosen.Parameters is BehaviorChoiceParameters choice && choice.CardIds.Any(id =>
+            CardDataResource.LoadEmbedded().Cards.Single(card => card.Code == state.GetCard(id).DefinitionId.Value).Title == "Pantograph");
+        Assert.False(pantograph, $"v18 chose {chosen.Kind} {chosen.Description}.");
+    }
+
+    [Theory]
+    [InlineData(RunnerHeuristicPolicy.V15, true)]
+    [InlineData(RunnerHeuristicPolicy.V16, false)]
+    public async Task CreativeCommissionWaitsForTheLastClick(string version, bool plays)
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        // A game against Codex (1 October, batch 3): played with two clicks left, losing one.
+        (LegalAction chosen, GameState state) = await ChooseInAsync("codex-runner-commission", version, 30);
+        bool commission = chosen.Parameters is PlayCardParameters play
+            && CardDataResource.LoadEmbedded().Cards.Single(card => card.Code == state.GetCard(play.CardId).DefinitionId.Value).Title == "Creative Commission";
+        Assert.True(plays == commission, $"{version} chose {chosen.Kind} {chosen.Description}.");
+    }
+
+    [Theory]
+    [InlineData(RunnerHeuristicPolicy.V18, false)]
+    [InlineData(RunnerHeuristicPolicy.V19, true)]
+    public async Task AHandWithEconomyAndATutorIsKept(string version, bool keeps)
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        // A game against Codex (1 October, batch 4): Sure Gamble, Jailbreak, Mutual Favor and Pennyshaver went back for a
+        // missing breaker that Mutual Favor finds.
+        LegalAction chosen = await ChooseAtAsync("codex-runner-economy", version, 2);
+        bool kept = chosen.Parameters is NumberChoiceParameters { Value: 0 };
+        Assert.True(keeps == kept, $"{version} chose {chosen.Kind} {chosen.Description}.");
+    }
+
+    [Theory]
+    [InlineData(RunnerHeuristicPolicy.V18, false)]
+    [InlineData(RunnerHeuristicPolicy.V19, true)]
+    public async Task PennyshaverIsCashedOutOverABasicCredit(string version, bool cashes)
+    {
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode) return;
+        // A game against Codex (1 October, batch 4): a basic credit over Pennyshaver's 2.
+        LegalAction chosen = await ChooseAtAsync("codex-runner-economy", version, 219);
+        Assert.True(cashes == (chosen.Kind == ActionKind.UseAbility), $"{version} chose {chosen.Kind} {chosen.Description}.");
+    }
+
     private static async Task<LegalAction> ChooseAtAsync(string fixture, string version, long sequence) =>
         (await ChooseInAsync(fixture, version, sequence)).Chosen;
 

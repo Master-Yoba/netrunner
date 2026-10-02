@@ -162,7 +162,7 @@ public partial class Main
 		IGameAgent opponent = resumeSource is not null
 			? OfflineMatchFactory.CreateTraceOpponent(definition, humanSide, resumeSource, _resumeThroughActionSequence)
 			: UseContractDiagnostic ? new FullGameContractAgent(new FullGameContractPolicy(opponentSide), definition.Runtime)
-			: OfflineMatchFactory.CreatePlayerOpponent(definition, humanSide, _difficulty?.Selected == 1 ? "easy" : "standard");
+			: OfflineMatchFactory.CreatePlayerOpponent(definition, humanSide, SelectedDifficulty, SelectedPersonality(opponentSide));
 		var options = new MatchCoordinatorOptions
 		{
 			EnableDeveloperTools = DeveloperToolsEnabled,

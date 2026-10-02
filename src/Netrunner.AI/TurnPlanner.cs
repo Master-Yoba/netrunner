@@ -38,8 +38,10 @@ internal sealed class TurnPlanner
         _configuration = configuration;
         _catalog = catalog;
         PlayerSide opponent = configuration.Side == PlayerSide.Corp ? PlayerSide.Runner : PlayerSide.Corp;
-        // The opponent is modelled by the latest Standard heuristic, which never plans.
-        _opponentConfiguration = OfflinePolicies.Configure(opponent, "standard", 0, OfflinePolicies.LatestHeuristic(opponent));
+        // The opponent is modelled by the latest Standard heuristic, which never plans; plan-model 1 (an A6 Hard
+        // setting) models it by the current Standard version instead.
+        _opponentConfiguration = OfflinePolicies.Configure(opponent, "standard", 0,
+            configuration.Parameters.GetValueOrDefault("plan-model") == 1 ? null : OfflinePolicies.LatestHeuristic(opponent));
         _opponentPolicy = OfflinePolicies.Create(_opponentConfiguration);
     }
 
@@ -161,8 +163,9 @@ internal sealed class TurnPlanner
             _configuration.FeatureVersion);
         // A5: planning versions score rollouts by the fitted win probability (as log-odds).
         // plan-evaluation 2: the refitted evaluation (feature set 2) Corp v11 plans with.
-        return _configuration.Parameters.GetValueOrDefault("plan-evaluation") is int version and (1 or 2 or 3)
-            ? FittedEvaluation.Score(features, _catalog, version)
+        // A6: a personality shifts named terms of the fitted evaluation.
+        return _configuration.Parameters.GetValueOrDefault("plan-evaluation") is int version and (1 or 2 or 3 or 4)
+            ? FittedEvaluation.Score(features, _catalog, version, AgentPersonalities.Of(_configuration))
             : PositionEvaluation.Score(features, _catalog, _configuration);
     }
 

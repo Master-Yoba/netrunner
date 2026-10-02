@@ -44,10 +44,12 @@ public static partial class RatingLadder
     /// frozen M5 policies (Runner v1, Corp v2), "standard-w1" the Wave 1
     /// policies (Runner v2, Corp v3) and "standard-w2" the last policies that
     /// don't plan (Runner v2, Corp v4), for before/after comparisons;
-    /// "standard-plan" is the A3 turn planner (Runner v3, Corp v5).
+    /// "standard-plan" is the A3 turn planner (Runner v3, Corp v5). The A6
+    /// entrants close the list: the personalities, each Standard with the style
+    /// in its own seat, and "hard".
     /// </summary>
     public static IReadOnlyList<string> EntrantOrder { get; } =
-        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19", "standard-r14", "standard-c20", "standard-r15", "standard-c21"];
+        ["random", "contract", "easy-m5", "standard-m5", "easy", "standard-w1", "standard-w2", "standard-w3", "standard-c1", "standard", "standard-plan", "standard-plan-fit", "standard-run", "standard-rez", "standard-w4a", "standard-w4b", "standard-arch", "standard-rarch", "standard-rgen", "standard-w4c", "standard-c13", "standard-w4d", "standard-c14", "standard-c15", "standard-c16", "standard-r13", "standard-c17", "standard-c18", "standard-c19", "standard-r14", "standard-c20", "standard-r15", "standard-c21", "standard-r16", "standard-c22", "standard-b3", "standard-c23", "standard-r17", "standard-r18", "standard-c24", "standard-r19", "standard-w5", "glacier", "rush", "asset-spam", "aggressive", "rig-builder", "hard", "hard-wide", "hard-weight", "hard-rez", "hard-model"];
 
     private const double EloScale = 400 / 2.302585092994046;
     private const double Ridge = 0.01;
@@ -89,7 +91,18 @@ public static partial class RatingLadder
         {
             "random" => new RandomLegalAgent(AgentLifecycleHost.DerivePolicySeed(definition.Request.Seed, side)),
             "contract" => new FullGameContractAgent(new FullGameContractPolicy(side), definition.Runtime),
-            "easy" or "standard" => OfflineMatchFactory.CreateOpponent(definition, other, entrant),
+            "easy" or "standard" or "hard" => OfflineMatchFactory.CreateOpponent(definition, other, entrant),
+            // A6 tuning, kept as entrants (none beat Hard): a wider plan (Corp 10 samples of 4 actions, Runner 6 of 4).
+            "hard-wide" => Replanned(OfflineMatchFactory.CreateOpponent(definition, other, "hard"), definition,
+                side == PlayerSide.Corp ? 10 : 6, 4),
+            // A6 tuning: Hard counting its rollouts double, adding the rez/run search, or modelling the current opponent.
+            "hard-weight" => Tuned(OfflineMatchFactory.CreateOpponent(definition, other, "hard"), definition, ("plan-weight", 200)),
+            "hard-rez" => Tuned(OfflineMatchFactory.CreateOpponent(definition, other, "hard"), definition,
+                ("run-samples", RunnerPolicyProfiles.RunSamples), ("run-width", 2)),
+            "hard-model" => Tuned(OfflineMatchFactory.CreateOpponent(definition, other, "hard"), definition, ("plan-model", 1)),
+            // A6 personalities: Standard with the style in its own seat, plain Standard in the other.
+            "glacier" or "rush" or "asset-spam" or "aggressive" or "rig-builder" => OfflineMatchFactory.CreateOpponent(definition, other, "standard", null,
+                AgentPersonalities.Keys[entrant] is var personality && AgentPersonalities.Side(personality) == side ? personality : AgentPersonality.Balanced),
             // The LLM opponent (Wave 4.5 P3) needs a model, or Codex through the MCP game server; their saved games
             // replay with the heuristic they wrap, so a review shows where their choices differ from it.
             "llm" or "codex" => OfflineMatchFactory.CreateOpponent(definition, other, "standard"),
@@ -141,6 +154,32 @@ public static partial class RatingLadder
             "standard-c15" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V15 : RunnerHeuristicPolicy.PolicyVersion),
             // The Corp planning with the corrected evaluation (v19) with the default Runner.
+            // Runner v19 (economy fixes, 1 October) with the default Corp.
+            "standard-r19" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
+                side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.V19),
+            // The Wave 5 playtest fixes (2 October): Corp v25 and Runner v20.
+            "standard-w5" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
+                side == PlayerSide.Corp ? CorpHeuristicPolicy.V25 : RunnerHeuristicPolicy.V20),
+            // Corp v24 (removal fixes, 1 October) with the default Runner.
+            "standard-c24" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
+                side == PlayerSide.Corp ? CorpHeuristicPolicy.V24 : RunnerHeuristicPolicy.PolicyVersion),
+            // Runner v18 (v15 with the reinstall fix) with the default Corp.
+            "standard-r18" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
+                side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.V18),
+            // Runner v17 (batch 4's reviews, 1 October) with the default Corp.
+            "standard-r17" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
+                side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.V17),
+            // Corp v23 (reviews of batch 4's losses to Codex, 1 October) with the default Runner.
+            "standard-c23" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
+                side == PlayerSide.Corp ? CorpHeuristicPolicy.V23 : RunnerHeuristicPolicy.PolicyVersion),
+            // The bots of Codex's batch 3 (Corp v21, Runner v15), to replay its deals against them.
+            "standard-b3" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
+                side == PlayerSide.Corp ? CorpHeuristicPolicy.V21 : RunnerHeuristicPolicy.V15),
+            // Batch 3 (reviews of the losses to Codex, 1 October): Corp v22 and Runner v16, each with the other default.
+            "standard-c22" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
+                side == PlayerSide.Corp ? CorpHeuristicPolicy.V22 : RunnerHeuristicPolicy.PolicyVersion),
+            "standard-r16" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
+                side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.V16),
             // Corp v21 (reviews of the losses to Codex, 1 October) with the default Runner.
             "standard-c21" => OfflineMatchFactory.CreateOpponent(definition, other, "standard",
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.V21 : RunnerHeuristicPolicy.PolicyVersion),
@@ -174,6 +213,34 @@ public static partial class RatingLadder
                 side == PlayerSide.Corp ? CorpHeuristicPolicy.PolicyVersion : RunnerHeuristicPolicy.V11),
             _ => throw new ArgumentException($"Unknown ladder entrant '{entrant}'.", nameof(entrant)),
         };
+    }
+
+    /// <summary>The same agent planning a different number of samples and actions.</summary>
+    private static OfflineAgent Replanned(OfflineAgent agent, FullMatchDefinition definition, int samples, int width)
+    {
+        OfflineAgentConfiguration current = agent.Configuration;
+        OfflineAgentConfiguration configuration = OfflineAgentConfiguration.Create(current.Side, current.PolicyVersion, current.ProfileId,
+            current.PolicySeed, current.WorkBudget, current.NearTieTolerance,
+            [.. current.Parameters.Select(pair => pair.Key switch
+            {
+                "plan-samples" => new KeyValuePair<string, int>(pair.Key, samples),
+                "plan-width" => new KeyValuePair<string, int>(pair.Key, width),
+                _ => pair,
+            })],
+            current.FeatureVersion);
+        return new OfflineAgent(configuration, OfflinePolicies.Create(configuration), new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior));
+    }
+
+    /// <summary>The same agent with planner settings added or replaced.</summary>
+    private static OfflineAgent Tuned(OfflineAgent agent, FullMatchDefinition definition, params (string Key, int Value)[] settings)
+    {
+        OfflineAgentConfiguration current = agent.Configuration;
+        OfflineAgentConfiguration configuration = OfflineAgentConfiguration.Create(current.Side, current.PolicyVersion, current.ProfileId,
+            current.PolicySeed, current.WorkBudget, current.NearTieTolerance,
+            [.. current.Parameters.Where(pair => settings.All(setting => setting.Key != pair.Key)),
+                .. settings.Select(setting => new KeyValuePair<string, int>(setting.Key, setting.Value))],
+            current.FeatureVersion);
+        return new OfflineAgent(configuration, OfflinePolicies.Create(configuration), new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior));
     }
 
     /// <summary>The same agent with a generic archetype profile.</summary>

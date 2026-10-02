@@ -112,7 +112,8 @@ public sealed class OfflineAgent : IAgentLifecycle
         {
             ObservationCursor = actionSequence,
             ObservationDigest = digest,
-            Knowledge = _checkpoint.Knowledge.Observe(features, actionSequence),
+            Knowledge = _checkpoint.Knowledge.Observe(features, actionSequence,
+                Configuration.Side == PlayerSide.Runner && RunnerHeuristicPolicy.KeepsRootMemoryThroughInstalls(Configuration.PolicyVersion)),
             Objective = objective,
         };
         DiscardDecision();

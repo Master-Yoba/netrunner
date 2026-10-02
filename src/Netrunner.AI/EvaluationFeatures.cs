@@ -32,7 +32,7 @@ public static class EvaluationFeatures
     public static IReadOnlyList<string> NamesFor(int version) => version switch
     {
         1 => Names,
-        2 or 3 => NamesV2,
+        2 or 3 or 4 => NamesV2,
         _ => throw new ArgumentOutOfRangeException(nameof(version), "Unknown evaluation feature set."),
     };
 
@@ -40,15 +40,22 @@ public static class EvaluationFeatures
     {
         double[] v1 = Extract(features, catalog);
         if (version == 1) return v1;
-        if (version is not (2 or 3)) throw new ArgumentOutOfRangeException(nameof(version), "Unknown evaluation feature set.");
+        if (version is not (2 or 3 or 4)) throw new ArgumentOutOfRangeException(nameof(version), "Unknown evaluation feature set.");
         // Feature set 3 (Oddity lints, 1 October): set 2 with its fitted weights, where board advancement
         // counts only counters that matter, on agendas and cards that can be advanced. Set 2 counted any
         // counter in a remote, so the planner played Seamless Launch onto a Nico Campaign.
-        if (version == 3)
+        // Feature set 4 (Wave 5 playtest, 2 October): set 3, except that the Corp's own view counts only its agendas' counters.
+        // A counter on its own trap isn't scoring progress, and the planner advanced two Urtica Ciphers to +6 and +5 for it.
+        // The Runner's view, which can't tell a trap from an agenda, is set 3's.
+        if (version is 3 or 4)
+        {
+            bool ownView = version == 4 && features.Side == PlayerSide.Corp;
             v1[Names.ToList().IndexOf("board-advancement")] = features.Board.Servers.Where(server => server.Kind == ServerKind.Remote)
                 .SelectMany(server => server.Root).OfType<AgentCard>()
                 .Sum(card => !catalog.TryGet(new CardDefinitionId(card.DefinitionId), out CardEvaluationDescriptor definition)
-                    || definition.Agenda is not null || definition.Behavior?.CanBeAdvanced == true ? card.AdvancementCounters ?? 0 : 0);
+                    ? ownView ? 0 : card.AdvancementCounters ?? 0
+                    : definition.Agenda is not null || !ownView && definition.Behavior?.CanBeAdvanced == true ? card.AdvancementCounters ?? 0 : 0);
+        }
         AgentServer[] remotes = [.. features.Board.Servers.Where(server => server.Kind == ServerKind.Remote)];
         int occupied = remotes.Count(server => server.Root.Length > 0);
         double[] v2 = [.. v1, remotes.Length - occupied];

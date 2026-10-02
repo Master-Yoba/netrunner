@@ -46,6 +46,17 @@ public sealed partial class RunnerHeuristicPolicy
                 upfrontCost: ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount));
         }
         int benefit = Effects(context, declaration.Instructions, card, PlayerSide.Runner);
+        // v19 (Codex review, 1 October): credits the ability puts in the wallet now are worth what as many basic credits are,
+        // saving for a breaker included (Pennyshaver's 2 lost to a basic credit's 1). Only v19: it lost to Codex where v18
+        // won, and v20 leaves it out.
+        if (context.Generation == 15)
+        {
+            IReadOnlyList<BehaviorInstruction> flat = [.. HeuristicContext.Flatten(declaration.Instructions)];
+            int wallet = flat.Where(instruction => instruction.Kind == BehaviorInstructionKind.GainCredits && instruction.AmountOperand is null).Sum(instruction => instruction.Amount)
+                + (flat.Any(instruction => instruction.Kind is BehaviorInstructionKind.TakeHostedCredits or BehaviorInstructionKind.TakeAllHostedCredits)
+                    ? HeuristicContext.Hosted(card) + flat.Where(instruction => instruction.Kind == BehaviorInstructionKind.PlaceHostedCredits).Sum(instruction => instruction.Amount) : 0);
+            if (wallet > 0) benefit = Math.Max(benefit, Credit(context) + (wallet - 1) * context.CreditValue);
+        }
         int cost = ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount) * context.CreditValue;
         cost += ability.AdditionalCostSelectionsOrEmpty.SelectMany(selection => selection.CardIds).Sum(id => RunnerValues.Card(context, context.Card(id)));
         cost += ability.Costs.Where(cost => cost.Kind is BehaviorCostKind.TrashSelf or BehaviorCostKind.RemoveSelfFromGame)
@@ -72,6 +83,13 @@ public sealed partial class RunnerHeuristicPolicy
                     break;
                 case BehaviorInstructionKind.LoseCredits: total -= sign * amount * context.CreditValue; break;
                 case BehaviorInstructionKind.GainClicks: total += sign * amount * 100; break;
+                // v16 (reviews of the losses to Codex, 1 October): "if you have any clicks remaining, lose one" costs nothing
+                // on the last click and a click before it, so Creative Commission waits for the last click.
+                // Only v16: v17 dropped it, as the suspect in v16's losses to Codex.
+                case BehaviorInstructionKind.LoseClicks when context.Generation == 12 && self
+                    && instruction.Condition is { Kind: BehaviorConditionKind.ClicksRemainingAtLeast } remaining:
+                    if (context.Self.Clicks - 1 >= (remaining.Value ?? 1)) total -= amount * 200;
+                    break;
                 case BehaviorInstructionKind.LoseClicks: total -= sign * amount * 100; break;
                 case BehaviorInstructionKind.Draw: total += sign * amount * context.DrawValue; break;
                 case BehaviorInstructionKind.LoadHostedCredits:

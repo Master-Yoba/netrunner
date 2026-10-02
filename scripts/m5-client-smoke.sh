@@ -28,7 +28,8 @@ root, output, godot, mode = sys.argv[1:]
 # Expanded decks only: the basic ones are a subset of their cards (27 September).
 matrix = [("runner", "expanded", "standard"), ("corp", "expanded", "standard")]
 if mode != "--quick":
-    matrix += [("runner", "expanded", "easy")]
+    # A6: Hard against a human Corp is the Runner that plans.
+    matrix += [("runner", "expanded", "easy"), ("corp", "expanded", "hard")]
 def run_case(row):
     side, preset, difficulty = row
     case = f"{side}-{preset}-{difficulty}"

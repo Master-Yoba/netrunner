@@ -98,8 +98,8 @@ public sealed class AiTacticsCommandTests : IDisposable
     [InlineData("")]
     [InlineData("missing --output unused --workers 0")]
     [InlineData("init --output unused --verify-fixtures")]
-    [InlineData("init --corp-profile hard --output unused")]
-    [InlineData("init --runner-profile hard --output unused")]
+    [InlineData("init --corp-profile nightmare --output unused")]
+    [InlineData("init --runner-profile nightmare --output unused")]
     [InlineData("init --corp-profile standard --runner-profile standard --output unused")]
     [InlineData("missing --output unused --json")]
     public void MalformedInputIsVersionedAndCreatesNoEvidence(string arguments)

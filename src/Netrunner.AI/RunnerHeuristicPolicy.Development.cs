@@ -26,6 +26,17 @@ public sealed partial class RunnerHeuristicPolicy
         return 0;
     }
 
+    /// <summary>What a breaker adds to the rig: little for a second of a type, more against ICE of its type on the board.</summary>
+    internal static int BreakerCoverage(HeuristicContext context, IcebreakerBehaviorSpec breaker)
+    {
+        bool duplicate = context.Features.Board.RunnerRig.Any(known => context.Definition(known)?.Icebreaker?.InterfaceType == breaker.InterfaceType);
+        bool visibleThreat = context.Features.Board.Servers.SelectMany(server => server.Ice).Any(known => context.Definition(known)?.Ice is { } ice
+            && (breaker.InterfaceType == IceType.Any || ice.IceType == breaker.InterfaceType));
+        int value = duplicate ? 150 : breaker.InterfaceType == IceType.Any ? 550 : 730;
+        if (visibleThreat && !duplicate) value += 180;
+        return value;
+    }
+
     private static AgentUtility Install(HeuristicContext context, InstallCardParameters install)
     {
         AgentCard? card = context.Card(install.CardId);
@@ -37,14 +48,23 @@ public sealed partial class RunnerHeuristicPolicy
             return new(20, (install.FinalizeSelection ? 1000 : required * 100) - optional, "install/complete-required-selection");
         }
         if (definition is null) return Value(-100, "install/unknown-metadata", true, true);
+        // v16 (reviews of the losses to Codex, 1 October): a unique card over its own copy pays for the same ability again.
+        if (context.Generation >= 12 && definition.Printed.Unique
+            && context.Features.Board.RunnerRig.Any(installed => installed.DefinitionId == card!.DefinitionId))
+            return Value(-500, "rig/unique-already-installed", true);
+        // v17 (batch 4's reviews, 1 October): an install that replaces an installed copy of the same card pays for what the
+        // rig already has (Verbal Plasticity, Pantograph, a unique program); one that replaces another card is judged below by
+        // what it gains over what it trashes.
+        if (context.Generation >= 13 && install.RequiredReplacementCardIds.Concat(install.SelectedReplacementCardIds)
+                .Any(id => context.Card(id)?.DefinitionId == card!.DefinitionId))
+            return Value(-500, "rig/replaces-its-own-copy", true);
+        if (context.Generation >= 13 && definition.Printed.Console
+            && context.Features.Board.RunnerRig.Any(installed => context.Definition(installed)?.Printed.Console == true))
+            return Value(-500, "rig/console-already-installed", true);
         int value;
         if (definition.Icebreaker is { } breaker)
         {
-            bool duplicate = context.Features.Board.RunnerRig.Any(known => context.Definition(known)?.Icebreaker?.InterfaceType == breaker.InterfaceType);
-            bool visibleThreat = context.Features.Board.Servers.SelectMany(server => server.Ice).Any(known => context.Definition(known)?.Ice is { } ice
-                && (breaker.InterfaceType == IceType.Any || ice.IceType == breaker.InterfaceType));
-            value = duplicate ? 150 : breaker.InterfaceType == IceType.Any ? 550 : 730;
-            if (visibleThreat && !duplicate) value += 180;
+            value = BreakerCoverage(context, breaker);
         }
         else if (definition.Behavior?.Hosting is not null)
         {
@@ -62,6 +82,9 @@ public sealed partial class RunnerHeuristicPolicy
             if (context.Generation >= 5)
                 value += (definition.Behavior?.FirstBasicDrawReplacements ?? []).Sum(replacement => (replacement.DrawCount - 1) * context.DrawValue * 3);
             if (definition.Printed.Console) value += 180;
+            // v16: an extra access on each HQ breach (Docklands Pass) is pressure the Runner kept in its grip.
+            // Only v16 and v17: both lost to Codex where v15 won, and v18 leaves it out.
+            if (context.Generation is 12 or 13) value += (definition.Behavior?.FirstHqBreachAccessModifiers ?? []).Sum(modifier => modifier.Delta * 250);
             if (context.Self.UsedMemory >= context.Self.MemoryLimit && definition.Printed.CardClass == RuntimeCardClass.Hardware) value += 170;
         }
         if (context.Generation >= 8)

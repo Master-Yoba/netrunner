@@ -119,16 +119,43 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// agendas or pays the Runner for running it.
     /// </summary>
     public const string V21 = "corp-heuristic-v21";
+    /// <summary>
+    /// V21 with the fixes from the reviews of its losses to Codex (1 October, batch 3): an agenda waits in HQ for
+    /// protection however full HQ is, unless it holds two agendas; an asset that pays back at once (Regolith Mining
+    /// License) is rezzed though it dips into the ICE budget; and a purge is worth less while the Corp is broke.
+    /// </summary>
+    public const string V22 = "corp-heuristic-v22";
+    /// <summary>
+    /// V22 with the fixes from the reviews of batch 4's losses to Codex (1 October): a trap the Runner has already
+    /// accessed isn't advanced (it won't be run into again), and an asset that pays back at once is rezzed only with a
+    /// click left to start taking its credits.
+    /// </summary>
+    public const string V23 = "corp-heuristic-v23";
+    /// <summary>
+    /// V23 with the removal fixes from the Codex reviews (1 October): a Runner card to trash is the one that threatens most,
+    /// a breaker by the installed Corp ICE it gets through (Retribution trashed Botulus over the Carmen breaking every
+    /// sentry, and its target score had the wrong sign), and Ballista's end-the-run is worth the server it protects.
+    /// </summary>
+    public const string V24 = "corp-heuristic-v24";
+    /// <summary>
+    /// V23 with the fixes from the Wave 5 playtest (2 October), without V24's: a trap already past lethal is never advanced,
+    /// even when the planner's rollouts like it (two Urtica Ciphers went to +6 and +5 on remotes the Runner never ran, while
+    /// HQ stayed empty and R&amp;D thin); and the planner scores rollouts with evaluation feature set 4, where counters on the Corp's
+    /// own non-agenda cards aren't scoring progress.
+    /// </summary>
+    public const string V25 = "corp-heuristic-v25";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
-    /// V21 fixes V20's faults the reviews of its losses to Codex found (1 October: agendas behind ICE the
-    /// Runner's rig breaks, ICE on an Archives of spent operations) and is level with it on the Gateway ladder
-    /// (0 and +11 on two seeds), so new games use it.
+    /// V23 fixes V22's faults the reviews of batch 4's losses to Codex found (1 October: known traps advanced, two agendas
+    /// pushed out of a safer HQ, Regolith rezzed with no click to use it). On batch 3's deals against Codex it won 6 of 12,
+    /// where V21 and V22 won 8 of 36. V24, level on the bot ladder, won 3 of 12 on the same deals where V23 won 10 of 24, so it
+    /// isn't the default. V25 (V23 with the Wave 5 playtest's fixes, 2 October) is: +6 and +70 on the bot ladder, and its
+    /// fixes only remove plays the playtest showed were wrong. Its Codex check was cut short when the quota ran out (1 of 3).
     /// </remarks>
-    public const string PolicyVersion = V21;
+    public const string PolicyVersion = V25;
     /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>
     public const string LatestHeuristic = V8;
-    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21];
+    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25];
 
     public CorpHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -136,9 +163,9 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Corp policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version switch { V2 => 1, V3 => 2, V7 => 4, V8 or V9 or V10 => 5, V11 => 6, V12 => 7, V13 => 8, V14 => 9, V15 => 10, V16 => 11, V17 => 12, V18 => 13, V19 => 14, V20 => 15, V21 => 16, _ => 3 };
-        Plans = version is V5 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19 or V20 or V21;
-        Repairs = version is V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19 or V20 or V21;
+        Generation = version switch { V2 => 1, V3 => 2, V7 => 4, V8 or V9 or V10 => 5, V11 => 6, V12 => 7, V13 => 8, V14 => 9, V15 => 10, V16 => 11, V17 => 12, V18 => 13, V19 => 14, V20 => 15, V21 => 16, V22 => 17, V23 => 18, V24 => 19, V25 => 20, _ => 3 };
+        Plans = version is V5 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19 or V20 or V21 or V22 or V23 or V24 or V25;
+        Repairs = version is V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19 or V20 or V21 or V22 or V23 or V24 or V25;
     }
 
     /// <summary>Whether this version has the playtest repairs (V6).</summary>
