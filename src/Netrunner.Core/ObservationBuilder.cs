@@ -944,6 +944,13 @@ public static partial class ObservationBuilder
         {
             view["hostCardId"] = hostId.Value;
         }
+        // EL-FACEUP-AGENDA: a card installed faceup without being rezzed (BANGUN's agendas)
+        // is public and inactive. Written only when true, so other observations keep their shape.
+        if (card.FaceUp && !card.Rezzed
+            && state.Zones.FirstOrDefault(zone => zone.Id == card.ZoneId)?.Kind == ZoneKind.ServerRoot)
+        {
+            view["faceUpInactive"] = true;
+        }
         AddCounters(view, state, card.Id);
         return view;
     }

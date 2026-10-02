@@ -281,6 +281,10 @@ public sealed class ElevationBatch2Tests
         Assert.False(CardState(state, CorpFillerAgenda).Rezzed);
         Assert.Contains(Actions(state), action => action.Kind == ActionKind.AdvanceCard
             && action.Parameters is AdvanceCardParameters advance && advance.CardId == Card(state, CorpFillerAgenda));
+        // EL.8: the Runner sees it, marked faceup and inactive.
+        string runnerView = EngineJson.Serialize(ObservationBuilder.Build(state, PlayerSide.Runner, CatalogFor(state)));
+        Assert.Contains(CorpFillerAgenda, runnerView);
+        Assert.Contains("\"faceUpInactive\":true", runnerView);
     }
 
     [Fact]

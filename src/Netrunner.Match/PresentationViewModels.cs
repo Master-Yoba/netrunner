@@ -363,8 +363,13 @@ public sealed record CardViewModel(
     /// </summary>
     public string? HostCardId { get; init; }
 
+    /// <summary>EL.4: installed faceup without being rezzed (BANGUN's agendas): public, and its abilities inactive.</summary>
+    public bool IsFaceUpInactive { get; init; }
+
     public string StatusLabel => Rezzed
             ? "REZZED"
+            : IsFaceUpInactive
+                ? "FACEUP · INACTIVE"
             : IsKnown
                 ? "KNOWN"
                 : "FACE-DOWN";
@@ -1838,6 +1843,7 @@ public static class ObservationViewMapper
         return mapped with
         {
             HostCardId = ReadNullableString(map, "hostCardId"),
+            IsFaceUpInactive = ReadBool(map, "faceUpInactive", fallback: false),
             TypedCounters = MapCounters(map, id),
             AbilityCue = abilityCue.For(id),
             FirstXUses = abilityCue.FirstXFor(id),

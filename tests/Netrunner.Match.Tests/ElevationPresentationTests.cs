@@ -12,6 +12,15 @@ public sealed class ElevationPresentationTests
         { TypedCounters = counters };
 
     [Fact]
+    public void AFaceupInstalledAgendaIsMarkedInactive()
+    {
+        CardViewModel agenda = new("card:9", "35071", "Off the Books", "agenda", true, false, 0,
+            null, null, 2, null, [], string.Empty, "weyland-consortium");
+        Assert.Equal("KNOWN", agenda.StatusLabel);
+        Assert.Equal("FACEUP · INACTIVE", (agenda with { IsFaceUpInactive = true }).StatusLabel);
+    }
+
+    [Fact]
     public void RunAndIceEffectsHaveReadableLabels()
     {
         // EL.8: the EL.6 instructions read as words in choice options and effect labels.
