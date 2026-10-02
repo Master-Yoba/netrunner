@@ -43,7 +43,10 @@ public sealed class LlmCommandsTests
         Assert.Equal(0, CliCommands.Run(["card-vocabulary", "--json"], output, TextWriter.Null));
         using var document = System.Text.Json.JsonDocument.Parse(output.ToString());
         var cards = document.RootElement.GetProperty("cards").EnumerateArray().ToArray();
-        Assert.Equal(77, cards.Length);
+        // Every Gateway card, plus the Elevation cards registered so far, each once.
+        string[] codes = cards.Select(static card => card.GetProperty("code").GetString()!).ToArray();
+        Assert.Equal(77, codes.Count(static code => code.StartsWith("30", StringComparison.Ordinal)));
+        Assert.Equal(codes.Length, codes.Distinct(StringComparer.Ordinal).Count());
         // E6 (docs/ELEVATION_PLAN.md): an icebreaker's spec type is part of its vocabulary.
         var breaker = cards.Single(card => card.GetProperty("code").GetString() == "30005");
         Assert.Contains("type:IcebreakerBehaviorSpec", breaker.GetProperty("vocabulary").EnumerateArray().Select(value => value.GetString()));
