@@ -33,6 +33,8 @@ public sealed class RealAdvanceScoreTests
         Fixture fixture = CreateFixture(agendaCounters: [0], credits: 3);
         GameState valid = OpenCorpAction(fixture);
         Assert.Single(GameEngine.MaterializeAdvanceCardParameters(valid, fixture.RuntimeCatalog));
+        // EL-FACEUP-AGENDA: an installed agenda turned faceup (BANGUN) stays unrezzed and can still be advanced.
+        Assert.Single(GameEngine.MaterializeAdvanceCardParameters(ReplaceTarget(valid, faceUp: true), fixture.RuntimeCatalog));
 
         var contexts = new (string Name, GameState State)[]
         {
@@ -51,7 +53,6 @@ public sealed class RealAdvanceScoreTests
             ("zero-click", ReplaceCorp(valid, clicks: 0)),
             ("zero-credit", ReplaceCorp(valid, credits: 0)),
             ("transient-play-area", AddTransientPlayArea(valid, PlayerSide.Corp)),
-            ("face-up", ReplaceTarget(valid, faceUp: true)),
             ("rezzed", ReplaceTarget(valid, rezzed: true)),
             ("wrong-topology", ReplaceTarget(valid, zoneId: valid.GetZone(ZoneKind.CorpDeck).Id)),
         };
@@ -206,6 +207,8 @@ public sealed class RealAdvanceScoreTests
         Fixture fixture = CreateFixture(agendaCounters: [2], credits: 0);
         GameState valid = OpenCorpTiming(fixture);
         Assert.Single(GameEngine.MaterializeScoreAgendaParameters(valid, fixture.RuntimeCatalog));
+        // EL-FACEUP-AGENDA: a faceup unrezzed agenda (BANGUN) can still be scored.
+        Assert.Single(GameEngine.MaterializeScoreAgendaParameters(ReplaceTarget(valid, faceUp: true), fixture.RuntimeCatalog));
         Assert.Single(
             GameEngine.MaterializeScoreAgendaParameters(
                 ReplaceCorp(valid, clicks: 0, credits: 0),
@@ -270,7 +273,6 @@ public sealed class RealAdvanceScoreTests
                         TurnFrameStage.BeforeTurnPriority,
                         TurnPriorityWindowKind.PaidRezAndScore,
                         PlayerSide.Corp)])),
-            ("face-up", ReplaceTarget(valid, faceUp: true)),
             ("rezzed", ReplaceTarget(valid, rezzed: true)),
             ("below-requirement", ReplaceTarget(valid, advancementCounters: 1)),
             ("wrong-topology", ReplaceTarget(valid, zoneId: valid.GetZone(ZoneKind.CorpDeck).Id)),

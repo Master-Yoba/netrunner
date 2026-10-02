@@ -64,6 +64,15 @@ public enum OccurrenceKind
 
     /// <summary>The first time this turn the Corp played an operation; the subject is the operation.</summary>
     FirstOperationPlayedThisTurn,
+
+    /// <summary>A side did damage (the controller is the side whose effect did it).</summary>
+    DamageDone,
+
+    /// <summary>A side trashed one or more cards from HQ (the controller is the side that trashed them).</summary>
+    CardsTrashedFromHq,
+
+    /// <summary>EL-HAND-SIZE-DISCARD: the active player discarded cards to reach maximum hand size.</summary>
+    HandSizeDiscarded,
 }
 
 public enum OccurrencePhase

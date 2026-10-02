@@ -388,7 +388,10 @@ public sealed record GameplayOccurrenceEffect : EffectInstruction
                 or OccurrenceKind.AgendaForfeited
                 or OccurrenceKind.FirstTagRemovalThisTurn
                 or OccurrenceKind.FirstCardCreditGainThisTurn
-                or OccurrenceKind.FirstOperationPlayedThisTurn))
+                or OccurrenceKind.FirstOperationPlayedThisTurn
+                or OccurrenceKind.DamageDone
+                or OccurrenceKind.CardsTrashedFromHq
+                or OccurrenceKind.HandSizeDiscarded))
         {
             throw new ArgumentOutOfRangeException(nameof(kind));
         }
@@ -712,7 +715,10 @@ public static class EffectInstructionValidator
                 or OccurrenceKind.AgendaForfeited
                 or OccurrenceKind.FirstTagRemovalThisTurn
                 or OccurrenceKind.FirstCardCreditGainThisTurn
-                or OccurrenceKind.FirstOperationPlayedThisTurn))
+                or OccurrenceKind.FirstOperationPlayedThisTurn
+                or OccurrenceKind.DamageDone
+                or OccurrenceKind.CardsTrashedFromHq
+                or OccurrenceKind.HandSizeDiscarded))
                         {
                             Add(violations, "effects.invalid-gameplay-occurrence-kind", $"{instructionPath}.kind", $"'{occurrence.Kind}' is not a supported gameplay occurrence.");
                         }

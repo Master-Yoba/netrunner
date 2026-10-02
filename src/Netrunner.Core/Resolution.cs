@@ -716,13 +716,23 @@ public sealed record CardPlayFrame : ResolutionFrame
         ZoneId discardZoneId,
         int creditCost,
         string catalogFingerprint,
-        string definitionFingerprint)
+        string definitionFingerprint,
+        string? parentFrameIdentity = null,
+        bool removeAfterResolution = false)
         : base(version, behaviorId)
     {
         if (!Enum.IsDefined(side))
         {
             throw new ArgumentOutOfRangeException(nameof(side));
         }
+
+        if (parentFrameIdentity is not null && !StableIdentifier.TryValidate(parentFrameIdentity))
+        {
+            throw new ArgumentException("A nested card play names its stable parent frame identity.", nameof(parentFrameIdentity));
+        }
+
+        ParentFrameIdentity = parentFrameIdentity;
+        RemoveAfterResolution = removeAfterResolution;
 
         if (!Enum.IsDefined(cardClass))
         {
@@ -780,6 +790,22 @@ public sealed record CardPlayFrame : ResolutionFrame
             definitionFingerprint)
     {
     }
+
+    /// <summary>
+    /// EL-NESTED-PLAY: the behavior frame that played this card from inside
+    /// its own resolution (an ability, a trigger), or null for the play action.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ParentFrameIdentity { get; private set; }
+
+    /// <summary>"After it resolves, remove it from the game" (Petty Cash, Plutus).</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool RemoveAfterResolution { get; private set; }
+
+    [JsonIgnore]
+    public bool IsNested => ParentFrameIdentity is not null;
 
     [JsonInclude]
     [JsonRequired]
@@ -1684,7 +1710,9 @@ public static class ResolutionFrameValidator
                 }
                 else if ((cardPlay.Side, cardPlay.SourceZoneKind) is not
                     (PlayerSide.Corp, ZoneKind.CorpHand)
-                    and not (PlayerSide.Runner, ZoneKind.RunnerGrip))
+                    and not (PlayerSide.Runner, ZoneKind.RunnerGrip)
+                    and not (PlayerSide.Runner, ZoneKind.RunnerHostedFaceUp)
+                    && !(cardPlay.IsNested && GameEngine.IsNestedPlaySourceKind(cardPlay.Side, cardPlay.SourceZoneKind)))
                 {
                     violations.Add(new StateInvariantViolation(
                         "resolution.invalid-source-zone-kind",
@@ -3298,7 +3326,9 @@ internal static class ResolutionFrameCloner
             cardPlay.DiscardZoneId,
             cardPlay.CreditCost,
             cardPlay.CatalogFingerprint,
-            cardPlay.DefinitionFingerprint),
+            cardPlay.DefinitionFingerprint,
+            cardPlay.ParentFrameIdentity,
+            cardPlay.RemoveAfterResolution),
         RunTimingFrame runTiming => new RunTimingFrame(
             runTiming.Version,
             runTiming.BehaviorId,

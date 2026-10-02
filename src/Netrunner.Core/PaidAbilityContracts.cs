@@ -117,7 +117,8 @@ public sealed class BehaviorPaidAbility : IEquatable<BehaviorPaidAbility>
         IReadOnlyList<BehaviorTarget> targets,
         IReadOnlyList<BehaviorInstruction> instructions,
         BehaviorAbilityUsageLimit usageLimit,
-        bool usableFromRunnerScoreArea = false)
+        bool usableFromRunnerScoreArea = false,
+        bool usableFromArchives = false)
     {
         if (!StableIdentifier.TryValidate(key))
         {
@@ -146,6 +147,7 @@ public sealed class BehaviorPaidAbility : IEquatable<BehaviorPaidAbility>
         Activation = activation;
         UsageLimit = usageLimit;
         UsableFromRunnerScoreArea = usableFromRunnerScoreArea;
+        UsableFromArchives = usableFromArchives;
         Costs = Freeze(costs, nameof(costs));
         Conditions = Freeze(conditions, nameof(conditions));
         Targets = Freeze(targets, nameof(targets));
@@ -202,6 +204,11 @@ public sealed class BehaviorPaidAbility : IEquatable<BehaviorPaidAbility>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool UsableFromRunnerScoreArea { get; private set; }
 
+    /// <summary>EL-PLAY-FROM-ARCHIVES: the Corp can use this ability while the card is in Archives (Petty Cash).</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool UsableFromArchives { get; private set; }
+
     public bool Equals(BehaviorPaidAbility? other) =>
         other is not null
         && string.Equals(Key, other.Key, StringComparison.Ordinal)
@@ -209,6 +216,7 @@ public sealed class BehaviorPaidAbility : IEquatable<BehaviorPaidAbility>
         && Activation == other.Activation
         && UsageLimit == other.UsageLimit
         && UsableFromRunnerScoreArea == other.UsableFromRunnerScoreArea
+        && UsableFromArchives == other.UsableFromArchives
         && SequenceEquals(Costs, other.Costs)
         && SequenceEquals(Conditions, other.Conditions)
         && SequenceEquals(Targets, other.Targets)

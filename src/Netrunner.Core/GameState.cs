@@ -40,6 +40,15 @@ public enum ZoneKind
     RunnerRemovedFromGame,
     CorpIdentity,
     RunnerIdentity,
+
+    /// <summary>
+    /// EL-HOSTED-FACEUP: Runner cards hosted faceup on a card without being
+    /// installed (Bling, Madani). Lazy and public; each card names its host.
+    /// </summary>
+    RunnerHostedFaceUp,
+
+    /// <summary>EL-HOSTED-FACEUP: Corp cards hosted faceup on a Runner card (Detente). Lazy and public.</summary>
+    CorpHostedFaceUp,
 }
 
 /// <summary>The stable topology kind of a Corp server.</summary>

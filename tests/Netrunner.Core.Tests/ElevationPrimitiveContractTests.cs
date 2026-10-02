@@ -131,5 +131,53 @@ public sealed class ElevationPrimitiveContractTests
         Assert.Equal(kind, EngineJson.Deserialize<BehaviorInstructionKind>($"\"{name}\""));
         Assert.Equal(BehaviorInstructionKind.TrashCard, EngineJson.Deserialize<BehaviorInstructionKind>("\"trashCard\""));
     }
-}
 
+    [Fact]
+    public void TurnFactsKeepHandSizeDiscardsAndFreeInstallsThroughJson()
+    {
+        var facts = new TurnFactsState(
+            1, PlayerSide.Runner, 3, 4, 0, true, false, true, true,
+            handSizeDiscardIds: [new CardInstanceId("card:7")],
+            freeInstallIds: [new CardInstanceId("card:9")]);
+
+        TurnFactsState restored = EngineJson.Deserialize<TurnFactsState>(EngineJson.Serialize(facts));
+
+        Assert.Equal(new CardInstanceId("card:7"), Assert.Single(restored.HandSizeDiscardIds!));
+        Assert.Equal(new CardInstanceId("card:9"), Assert.Single(restored.FreeInstallIds!));
+        string empty = EngineJson.Serialize(new TurnFactsState(PlayerSide.Runner, 2, 4));
+        Assert.DoesNotContain("handSizeDiscardIds", empty, StringComparison.Ordinal);
+        Assert.DoesNotContain("freeInstallIds", empty, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ZoneAndHostingDeclarationsChangeTheDefinitionFingerprint()
+    {
+        var id = new CardDefinitionId("probe-card");
+        string Fingerprint(CardBehaviorDefinition definition) =>
+            new BehaviorCatalogBuilder("probe").Add(definition).Build().GetDefinitionFingerprint(id);
+
+        Assert.NotEqual(
+            Fingerprint(new CardBehaviorDefinition(id, PlayerSide.Runner)),
+            Fingerprint(new CardBehaviorDefinition(id, PlayerSide.Runner, hostedCardsPlayAsGrip: true)));
+        Assert.NotEqual(
+            Fingerprint(new CardBehaviorDefinition(id, PlayerSide.Corp)),
+            Fingerprint(new CardBehaviorDefinition(id, PlayerSide.Corp,
+                rezRequirements: [BehaviorCondition.ZoneCountAtLeast(BehaviorZone.Headquarters, 3)])));
+        Assert.Throws<ArgumentException>(() => new CardBehaviorDefinition(id, PlayerSide.Corp, hostedCardsPlayAsGrip: true));
+    }
+
+    [Fact]
+    public void ZoneSelectorsNameTheirSubsetOfTheZone()
+    {
+        BehaviorTarget top = BehaviorTarget.TopOfZone(BehaviorZone.Stack, 3);
+        BehaviorTarget hosted = BehaviorTarget.HostedOnSource(PlayerSide.Runner, BehaviorCardType.Program);
+
+        Assert.Equal(3, top.TopCount);
+        Assert.False(top.IsHostedOnSource);
+        Assert.True(hosted.IsHostedOnSource);
+        Assert.Equal(BehaviorZone.HostedFaceUp, hosted.Zone);
+        Assert.Null(hosted.TopCount);
+        Assert.Throws<ArgumentOutOfRangeException>(() => BehaviorTarget.TopOfZone(BehaviorZone.Deck, 0));
+        Assert.Throws<ArgumentException>(() => BehaviorCondition.ZoneCountAtLeast(BehaviorZone.Grip, -1));
+    }
+}

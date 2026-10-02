@@ -554,6 +554,51 @@ public static partial class GameEngine
                 RefillRecurringCredits(working, frame.SourceCardId);
                 AdvanceBehaviorCursor(working, frame);
                 return;
+            case BehaviorInstructionKind.PlayCard:
+                ResolveBehaviorPlay(working, frame, instruction);
+                return;
+            case BehaviorInstructionKind.TurnFaceUp:
+                foreach (CardInstanceId faceUpId in ResolveBehaviorCards(working, frame, instruction.Target))
+                {
+                    CardInstanceState faceDown = GetCard(working, faceUpId);
+                    if (!IsInstalledCard(working, faceUpId) || faceDown.Rezzed)
+                    {
+                        throw new ResolutionFailureException("Only an unrezzed installed card can be turned faceup this way.");
+                    }
+
+                    ReplaceCard(working, new CardInstanceState(faceDown.Id, faceDown.DefinitionId, faceDown.ZoneId,
+                        faceDown.OwnerSide, faceUp: true, rezzed: false, faceDown.AdvancementCounters, faceDown.HostCardId));
+                    Emit(working, EngineEventKinds.BehaviorCardRevealed, new BehaviorCardRevealedEventPayload(
+                        faceDown.Id, faceDown.DefinitionId, faceDown.ZoneId, faceDown.OwnerSide));
+                }
+
+                AdvanceBehaviorCursor(working, frame);
+                return;
+            case BehaviorInstructionKind.HostFaceUp:
+                {
+                    var remainingSetAside = frame.SetAside.ToList();
+                    foreach (CardInstanceId hostedId in ResolveBehaviorCards(working, frame, instruction.Target).ToArray())
+                    {
+                        HostFaceUp(working, hostedId, frame.SourceCardId);
+                        remainingSetAside.RemoveAll(selected => selected.CardId == hostedId);
+                    }
+
+                    if (remainingSetAside.Count == 0
+                        && frame.SetAsideZoneId is { } emptiedId
+                        && working.Zones.SingleOrDefault(zone => zone.Id == emptiedId) is { CardIds.Count: 0 } emptied)
+                    {
+                        working.Zones.Remove(emptied);
+                    }
+
+                    AdvanceBehaviorCursor(working, frame.With(
+                        setAside: remainingSetAside,
+                        clearSetAsideZone: remainingSetAside.Count == 0));
+                    return;
+                }
+            case BehaviorInstructionKind.ReturnSetAside:
+                RestoreBehaviorSetAside(working, frame);
+                AdvanceBehaviorCursor(working, frame.With(setAside: [], clearSetAsideZone: true));
+                return;
             case BehaviorInstructionKind.ShuffleDeck:
                 ShuffleProvenEmptyZone(working, frame, instruction.SourceZone!.Value, GetPlayer(working, frame.Controller).Side);
                 return;
@@ -1821,6 +1866,11 @@ public static partial class GameEngine
             BehaviorConditionKind.CounterAtLeast => CurrentCounter(working, frame.SourceCardId, condition.Fact!) >= condition.Value.GetValueOrDefault(),
             BehaviorConditionKind.FactEquals => BehaviorFactEquals(working, frame, condition),
             BehaviorConditionKind.FoundCard => FoundCardConditionMatches(working, frame),
+            BehaviorConditionKind.SourceInZone => SourceZoneMatches(working, frame.SourceCardId, condition.Fact!),
+            BehaviorConditionKind.SourceNotInZone => !SourceZoneMatches(working, frame.SourceCardId, condition.Fact!),
+            BehaviorConditionKind.ChoseCards => frame.Bindings.Any(binding =>
+                string.Equals(binding.Key, condition.Fact, StringComparison.Ordinal) && binding.CardIds.Count > 0),
+            BehaviorConditionKind.PlayedFromZone => PlayedFromZone(working, frame, condition.Fact!),
             BehaviorConditionKind.SourceAdvancementAtLeast =>
                 GetCard(working, frame.SourceCardId).AdvancementCounters >= condition.Value.GetValueOrDefault(),
             _ => SharedConditionMatches(working, frame.Controller, condition) ?? false,
@@ -1912,6 +1962,39 @@ public static partial class GameEngine
             _ => null,
         };
         return actual.HasValue && actual.Value == condition.Value;
+    }
+
+    private static bool DeclaresKeyedInstall(IEnumerable<BehaviorInstruction> instructions, string key) =>
+        instructions.Any(instruction =>
+            instruction.Kind == BehaviorInstructionKind.InstallCard && string.Equals(instruction.Argument, key, StringComparison.Ordinal)
+            || instruction.Branch is { } branch && DeclaresKeyedInstall(branch.WhenTrue.Concat(branch.WhenFalse), key)
+            || instruction.Choice is { } choice && DeclaresKeyedInstall(choice.Options.SelectMany(static option => option.Instructions), key));
+
+    /// <summary>A card's zone before this behavior set it aside, or its current zone.</summary>
+    private static ZoneKind OriginalZoneKind(WorkingState working, BehaviorResolutionFrame frame, CardInstanceId cardId) =>
+        frame.SetAside.SingleOrDefault(selected => selected.CardId == cardId) is { } frozen
+            ? working.Zones.Single(zone => zone.Id == frozen.OriginalZoneId).Kind
+            : ZoneForCard(working, cardId).Kind;
+
+    private static bool SourceZoneMatches(WorkingState working, CardInstanceId cardId, string zoneName)
+    {
+        CardInstanceState card = GetCard(working, cardId);
+        ZoneState? zone = working.Zones.FirstOrDefault(candidate => candidate.Id == card.ZoneId);
+        return zone is not null
+            && Enum.TryParse(zoneName, ignoreCase: false, out BehaviorZone behaviorZone)
+            && BehaviorZoneMatches(behaviorZone, zone.Kind, card.OwnerSide);
+    }
+
+    /// <summary>Whether the card whose play this behavior resolves came from the named zone.</summary>
+    private static bool PlayedFromZone(WorkingState working, BehaviorResolutionFrame frame, string zoneName)
+    {
+        int index = working.ResolutionStack.FindLastIndex(candidate =>
+            candidate is BehaviorResolutionFrame behavior && behavior.FrameIdentity == frame.FrameIdentity);
+        return index > 0
+            && working.ResolutionStack[index - 1] is CardPlayFrame play
+            && play.CardId == frame.SourceCardId
+            && Enum.TryParse(zoneName, ignoreCase: false, out BehaviorZone zone)
+            && BehaviorZoneMatches(zone, play.SourceZoneKind, play.Side);
     }
 
     private static int SourceExcessAdvancement(WorkingState working, CardInstanceId cardId)
@@ -3094,12 +3177,15 @@ public static partial class GameEngine
     private static CardInstanceId[] MaterializeBehaviorCandidates(
         WorkingState working,
         BehaviorTarget target,
-        CardInstanceId? excludedCardId = null)
+        CardInstanceId? excludedCardId = null,
+        CardInstanceId? hostSourceId = null)
     {
         if (target.Kind is BehaviorTargetKind.ZoneCard or BehaviorTargetKind.ZoneCards)
         {
             ZoneState zone = GetBehaviorZone(working, target.Zone!.Value, target.Filter?.OwnerSide);
             return zone.CardIds
+                .Take(target.TopCount ?? int.MaxValue)
+                .Where(cardId => !target.IsHostedOnSource || GetCard(working, cardId).HostCardId == (hostSourceId ?? excludedCardId))
                 .Where(cardId => !excludedCardId.HasValue || cardId != excludedCardId.Value)
                 .Where(cardId => BehaviorCardMatches(working, cardId, target.Filter))
                 .ToArray();
@@ -3284,6 +3370,11 @@ public static partial class GameEngine
 
             if (filter.Subtype is not null
                 && !runtimeSpec.Subtypes.Contains(filter.Subtype, StringComparer.Ordinal))
+            {
+                return false;
+            }
+
+            if (filter.AgendaPoints is { } points && runtimeSpec.AgendaPoints != points)
             {
                 return false;
             }
@@ -3823,6 +3914,13 @@ public static partial class GameEngine
             cardIds = cardIds.Where(cardId => !RunnerCannotTrash(working, GetCard(working, cardId))).ToArray();
         }
 
+        if (kind == BehaviorTransferKind.Trash
+            && GetPlayer(working, frame.Controller).Side == PlayerSide.Corp
+            && cardIds.Any(cardId => OriginalZoneKind(working, frame, cardId) == ZoneKind.CorpHand))
+        {
+            DeferOccurrence(working, OccurrenceKind.CardsTrashedFromHq, PlayerSide.Corp);
+        }
+
         var remainingSetAside = frame.SetAside.ToList();
         var remainingBindings = frame.Bindings.ToList();
         bool leftRunnerRig = false;
@@ -4242,6 +4340,13 @@ public static partial class GameEngine
             : frame.TriggerKey is not null
                 ? GetTriggerDeclaration(definition, frame.TriggerKey).Instructions
                 : definition.Instructions;
+        if (DeclaresKeyedInstall(rootInstructions, bindingKey)
+            && cardIds.All(cardId => IsInstalledCard(working, cardId)))
+        {
+            // The card a keyed zone install placed ("that agenda").
+            return;
+        }
+
         List<BehaviorInstruction> replay = rootInstructions.ToList();
         BehaviorTarget? originatingTarget = null;
         IReadOnlyList<CardInstanceId>? originatingSelection = null;
@@ -4358,7 +4463,7 @@ public static partial class GameEngine
                 return installed;
             case BehaviorTargetKind.ZoneCard:
             case BehaviorTargetKind.ZoneCards:
-                return MaterializeBehaviorCandidates(working, target);
+                return MaterializeBehaviorCandidates(working, target, hostSourceId: frame.SourceCardId);
             default:
                 throw new ResolutionFailureException($"Card target kind '{target.Kind}' is not executable.");
         }
@@ -4551,6 +4656,12 @@ public static partial class GameEngine
                 PlayerSide.Runner => actual == ZoneKind.RunnerRemovedFromGame,
                 _ => false,
             },
+            BehaviorZone.HostedFaceUp => ownerSide switch
+            {
+                PlayerSide.Corp => actual == ZoneKind.CorpHostedFaceUp,
+                PlayerSide.Runner => actual == ZoneKind.RunnerHostedFaceUp,
+                _ => actual is ZoneKind.CorpHostedFaceUp or ZoneKind.RunnerHostedFaceUp,
+            },
             _ => false,
         };
 
@@ -4573,6 +4684,9 @@ public static partial class GameEngine
             BehaviorZone.RemovedFromGame => side == PlayerSide.Corp
                 ? ZoneKind.CorpRemovedFromGame
                 : ZoneKind.RunnerRemovedFromGame,
+            BehaviorZone.HostedFaceUp => side == PlayerSide.Corp
+                ? ZoneKind.CorpHostedFaceUp
+                : ZoneKind.RunnerHostedFaceUp,
             _ => throw new ResolutionFailureException($"Behavior zone '{zone}' is not executable."),
         };
 
@@ -4589,7 +4703,8 @@ public static partial class GameEngine
             return created;
         }
 
-        if (kind is ZoneKind.CorpRemovedFromGame or ZoneKind.RunnerRemovedFromGame)
+        if (kind is ZoneKind.CorpRemovedFromGame or ZoneKind.RunnerRemovedFromGame
+            or ZoneKind.CorpHostedFaceUp or ZoneKind.RunnerHostedFaceUp)
         {
             ZoneState? existing = working.Zones.FirstOrDefault(candidate => candidate.Kind == kind && candidate.ServerId is null);
             if (existing is not null)
@@ -4659,6 +4774,8 @@ public static partial class GameEngine
                 && GetCard(working, advanced).AdvancementCounters >= condition.Value.GetValueOrDefault(),
             BehaviorConditionKind.ClicksRemainingAtLeast =>
                 GetPlayer(working, condition.SubjectSide ?? GetPlayer(working, owner).Side).Clicks >= condition.Value.GetValueOrDefault(),
+            BehaviorConditionKind.SourceInZone => sourceCardId is { } inZone && SourceZoneMatches(working, inZone, condition.Fact!),
+            BehaviorConditionKind.SourceNotInZone => sourceCardId is { } notInZone && !SourceZoneMatches(working, notInZone, condition.Fact!),
             _ => SharedConditionMatches(working, owner, condition) ?? false,
         };
 }

@@ -290,6 +290,7 @@ public static partial class GameEngine
 
         if (fromHq.Count > 0)
         {
+            DeferOccurrence(working, OccurrenceKind.CardsTrashedFromHq, PlayerSide.Corp);
             ResolveBehaviorTransfer(
                 working,
                 frame,

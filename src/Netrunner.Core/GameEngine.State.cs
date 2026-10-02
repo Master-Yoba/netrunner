@@ -61,7 +61,7 @@ public static partial class GameEngine
             card.OwnerSide,
             !entersHiddenZone && (entersPublicFaceUpZone || card.FaceUp),
             !leavesInstalledZone && card.Rezzed,
-            card.AdvancementCounters, leavesInstalledZone ? null : card.HostCardId));
+            card.AdvancementCounters, leavesInstalledZone || IsHostedFaceUpZone(source.Kind) ? null : card.HostCardId));
         if (leavesInstalledZone)
         {
             TrashHostedDescendants(working, card.Id);
@@ -376,6 +376,12 @@ public static partial class GameEngine
         public RunState? RunState { get; set; }
 
         public RulesState? RulesState { get; set; }
+
+        /// <summary>
+        /// Transient: the action this Apply consumes has started but its
+        /// frames aren't on the stack yet ("finished an action yet" checks).
+        /// </summary>
+        public bool ActionJustStarted { get; set; }
 
         public List<EngineEvent> Events { get; }
 

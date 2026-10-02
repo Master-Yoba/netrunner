@@ -14,7 +14,9 @@ public static partial class StateInvariantValidator
             {
                 Add(violations, "hosting.missing-host", "cards", "An installed host-only program must identify its host ICE.");
             }
-            if (card.HostCardId is not { } hostId)
+            // EL-HOSTED-FACEUP: faceup-hosted cards are checked with their zone (cards.hosted-faceup).
+            if (card.HostCardId is not { } hostId
+                || zone?.Kind is ZoneKind.RunnerHostedFaceUp or ZoneKind.CorpHostedFaceUp)
             {
                 continue;
             }

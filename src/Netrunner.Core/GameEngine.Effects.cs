@@ -579,6 +579,14 @@ public static partial class GameEngine
         }
 
         bool flatlined = effect.Amount > available;
+        if (effect.Amount > 0)
+        {
+            PlayerSide damagingSide = working.ResolutionStack.Count > 0 && working.ResolutionStack[^1] is EffectResolutionFrame damaging
+                ? GetPlayer(working, damaging.Controller).Side
+                : PlayerSide.Corp;
+            DeferOccurrence(working, OccurrenceKind.DamageDone, damagingSide);
+        }
+
         int? conditionalPrintedCost = DivinerPrintedCost(working);
         Emit(working, EngineEventKinds.DamageDealt, new DamageDealtEventPayload(
             effect.Target,

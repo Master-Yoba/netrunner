@@ -203,10 +203,12 @@ public static partial class GameEngine
 
         PlayerSide side = turnFrame.ActiveSide;
         PlayerState player = GetPlayer(working, side);
-        ZoneKind sourceKind = side == PlayerSide.Corp ? ZoneKind.CorpHand : ZoneKind.RunnerGrip;
-        ZoneState source = GetZone(working, sourceKind);
         CardInstanceState card = working.Cards.SingleOrDefault(candidate => candidate.Id == parameters.CardId)
             ?? throw new ResolutionFailureException($"Card '{parameters.CardId}' does not exist.");
+        ZoneKind sourceKind = side == PlayerSide.Corp
+            ? ZoneKind.CorpHand
+            : IsGripLikeHosted(working, card) ? ZoneKind.RunnerHostedFaceUp : ZoneKind.RunnerGrip;
+        ZoneState source = GetZone(working, sourceKind);
         if (card.OwnerSide != side || card.ZoneId != source.Id || !source.CardIds.Contains(card.Id))
         {
             throw new ResolutionFailureException($"Card '{parameters.CardId}' is not in the active player's install source.");
@@ -455,6 +457,11 @@ public static partial class GameEngine
         }
 
         PayCreditsWithDeclaredHosted(working, player.Id, BehaviorHostedCreditUseKind.InstallResource, GetCard(working, frame.CardId), cost);
+        if (plan.Source.Kind is ZoneKind.CorpScore or ZoneKind.RunnerScore && plan.Spec.AgendaPoints > 0)
+        {
+            // EL-INSTALL-FROM-SCORE-AREA: the agenda's points leave that score area with it.
+            AddAgendaPoints(working, plan.Source.Kind == ZoneKind.CorpScore ? PlayerSide.Corp : PlayerSide.Runner, -plan.Spec.AgendaPoints);
+        }
         if (frame.InitiationKind == InstallInitiationKind.BasicAction)
         {
             SpendClick(working, player.Id);
@@ -500,6 +507,7 @@ public static partial class GameEngine
             source.Id,
             destination.Id,
             cost));
+        RecordFreeInstall(working, frame.CardId, cost);
 
         if (working.ResolutionStack.Count > 0 && working.ResolutionStack[^1] is InstallFrame)
         {
@@ -877,6 +885,7 @@ public static partial class GameEngine
             source.Id,
             destination.Id,
             plan.InstallCost));
+        RecordFreeInstall(working, plan.Card.Id, plan.InstallCost);
 
         ResumeTurnAfterInstall(working, parent);
         QueueCardInstalledOccurrence(
@@ -1098,12 +1107,14 @@ public static partial class GameEngine
         ZoneKind[] sourceKinds = initiationKind == InstallInitiationKind.BehaviorZoneInstall
             ? side == PlayerSide.Corp
                 ? [ZoneKind.CorpHand, ZoneKind.CorpDiscard, ZoneKind.CorpDeck, ZoneKind.RunnerScore]
-                : [ZoneKind.RunnerGrip, ZoneKind.RunnerHeap, ZoneKind.RunnerStack]
+                : [ZoneKind.RunnerGrip, ZoneKind.RunnerHeap, ZoneKind.RunnerStack, ZoneKind.RunnerHostedFaceUp]
             : side == PlayerSide.Corp
                 ? isCorpSubroutineInstall
                     ? [ZoneKind.CorpHand, ZoneKind.CorpDiscard]
                     : [ZoneKind.CorpHand]
-                : [ZoneKind.RunnerGrip];
+                : IsGripLikeHosted(working, card)
+                    ? [ZoneKind.RunnerHostedFaceUp]
+                    : [ZoneKind.RunnerGrip];
         ZoneState? source = working.Zones.FirstOrDefault(
             zone => sourceKinds.Contains(zone.Kind) && zone.ServerId is null && zone.Id == card.ZoneId);
         if (source is null || card.OwnerSide != side || card.ZoneId != source.Id || spec.Side != side)
@@ -2153,7 +2164,13 @@ public static partial class GameEngine
         ZoneState hand = GetZone(
             working,
             side == PlayerSide.Corp ? ZoneKind.CorpHand : ZoneKind.RunnerGrip);
-        foreach (CardInstanceId cardId in hand.CardIds.OrderBy(id => id.Value, StringComparer.Ordinal))
+        IEnumerable<CardInstanceId> sources = hand.CardIds.OrderBy(id => id.Value, StringComparer.Ordinal);
+        if (side == PlayerSide.Runner)
+        {
+            sources = sources.Concat(GripLikeHostedCardIds(working));
+        }
+
+        foreach (CardInstanceId cardId in sources)
         {
             CardInstanceState card = GetCard(working, cardId);
             if (!working.RuntimeCardCatalog.TryGet(card.DefinitionId, out CardRuntimeSpec? spec)

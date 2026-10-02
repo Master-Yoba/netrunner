@@ -812,6 +812,18 @@ public static partial class GameEngine
             TurnFrameStage.DiscardPriority,
             TurnWindow(parent.ActiveSide),
             parent.ActiveSide);
+
+        // EL-HAND-SIZE-DISCARD: remember what was discarded, for "from among those cards".
+        CardInstanceId[] discarded = frame.Candidates.Where(candidate => frame.Selected.Contains(candidate)).ToArray();
+        TurnState turn = working.Turn;
+        if (discarded.Length > 0
+            && working.BehaviorCatalog.TracksTurnEvents
+            && turn.History?.ThisTurn(side) is not null)
+        {
+            ReplaceTurn(working, turn.ActiveSide, turn.Phase, turn.TurnNumber, turn.Step,
+                turn.History.WithHandSizeDiscards(side, discarded));
+            QueueIdentityOccurrence(working, OccurrenceKind.HandSizeDiscarded, side);
+        }
     }
 
     private static void LoseTurnClicks(WorkingState working, TurnFrame frame)

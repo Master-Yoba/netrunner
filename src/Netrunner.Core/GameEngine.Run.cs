@@ -1720,8 +1720,9 @@ public static partial class GameEngine
         if (behaviorCatalog.TryGetAgenda(definitionId, out _)
             || runtimeCardCatalog?.TryGet(definitionId, out CardRuntimeSpec? spec) != true
             || spec.Side != PlayerSide.Corp
-            || spec.CardClass != RuntimeCardClass.Upgrade)
+            || spec.CardClass is not (RuntimeCardClass.Upgrade or RuntimeCardClass.Operation))
             return null;
+        // EL-OPERATION-TRASH-COST: an operation with a printed trash cost (CR 3.5.3).
         return spec.TrashCost;
     }
 

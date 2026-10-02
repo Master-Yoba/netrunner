@@ -112,7 +112,9 @@ public sealed record TurnFactsState
         IReadOnlyList<OccurrenceId>? basicDrawOccurrenceIds = null,
         IReadOnlyList<TurnEventCount>? eventCounts = null,
         IReadOnlyList<DeferredOccurrence>? deferredOccurrences = null,
-        int nextTurnExtraClicks = 0)
+        int nextTurnExtraClicks = 0,
+        IReadOnlyList<CardInstanceId>? handSizeDiscardIds = null,
+        IReadOnlyList<CardInstanceId>? freeInstallIds = null)
     {
         Version = version;
         Side = side;
@@ -187,6 +189,12 @@ public sealed record TurnFactsState
         DeferredOccurrences = deferred.Length == 0 ? null : new ReadOnlyCollection<DeferredOccurrence>(deferred);
         ArgumentOutOfRangeException.ThrowIfNegative(nextTurnExtraClicks);
         NextTurnExtraClicks = nextTurnExtraClicks;
+        HandSizeDiscardIds = handSizeDiscardIds is null or { Count: 0 }
+            ? null
+            : new ReadOnlyCollection<CardInstanceId>(handSizeDiscardIds.Distinct().ToArray());
+        FreeInstallIds = freeInstallIds is null or { Count: 0 }
+            ? null
+            : new ReadOnlyCollection<CardInstanceId>(freeInstallIds.Distinct().ToArray());
     }
 
     public TurnFactsState(PlayerSide side, int turnNumber, int clicksAllotted)
@@ -321,6 +329,52 @@ public sealed record TurnFactsState
     [JsonInclude]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<DeferredOccurrence>? DeferredOccurrences { get; private set; }
+
+    /// <summary>EL-HAND-SIZE-DISCARD: the cards discarded this turn to reach maximum hand size.</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<CardInstanceId>? HandSizeDiscardIds { get; private set; }
+
+    /// <summary>EL-HOSTED-FACEUP: the cards this side installed this turn without spending credits (Bling).</summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<CardInstanceId>? FreeInstallIds { get; private set; }
+
+    internal TurnFactsState WithFreeInstall(CardInstanceId cardId) => New(
+        turnBegan: TurnBegan,
+        mandatoryDrawPerformed: MandatoryDrawPerformed,
+        actionPhaseEnded: ActionPhaseEnded,
+        discardPhaseEnded: DiscardPhaseEnded,
+        clicksLost: ClicksLost,
+        installedCardIds: InstalledCardIds,
+        successfulRun: SuccessfulRun,
+        usedAbilityKeys: UsedAbilityKeys,
+        attemptedRunServerIds: AttemptedRunServerIds,
+        successfulRunServerIds: SuccessfulRunServerIds,
+        accessedCardOccurrenceIds: AccessedCardOccurrenceIds,
+        trashedCardOccurrenceIds: TrashedCardOccurrenceIds,
+        agendaTurnChanges: AgendaTurnChanges,
+        tagTurnChanges: TagTurnChanges,
+        firstXUseKeys: FirstXUseKeys,
+        freeInstallIds: (FreeInstallIds ?? []).Append(cardId).ToArray());
+
+    internal TurnFactsState WithHandSizeDiscards(IReadOnlyList<CardInstanceId> discarded) => New(
+        turnBegan: TurnBegan,
+        mandatoryDrawPerformed: MandatoryDrawPerformed,
+        actionPhaseEnded: ActionPhaseEnded,
+        discardPhaseEnded: DiscardPhaseEnded,
+        clicksLost: ClicksLost,
+        installedCardIds: InstalledCardIds,
+        successfulRun: SuccessfulRun,
+        usedAbilityKeys: UsedAbilityKeys,
+        attemptedRunServerIds: AttemptedRunServerIds,
+        successfulRunServerIds: SuccessfulRunServerIds,
+        accessedCardOccurrenceIds: AccessedCardOccurrenceIds,
+        trashedCardOccurrenceIds: TrashedCardOccurrenceIds,
+        agendaTurnChanges: AgendaTurnChanges,
+        tagTurnChanges: TagTurnChanges,
+        firstXUseKeys: FirstXUseKeys,
+        handSizeDiscardIds: discarded);
 
     /// <summary>Extra clicks this side is allotted at the start of its next turn ("+1 allotted click").</summary>
     [JsonInclude]
@@ -729,7 +783,9 @@ public sealed record TurnFactsState
         IReadOnlyList<OccurrenceId>? basicDrawOccurrenceIds = null,
         IReadOnlyList<TurnEventCount>? eventCounts = null,
         IReadOnlyList<DeferredOccurrence>? deferredOccurrences = null,
-        int? nextTurnExtraClicks = null) => new(
+        int? nextTurnExtraClicks = null,
+        IReadOnlyList<CardInstanceId>? handSizeDiscardIds = null,
+        IReadOnlyList<CardInstanceId>? freeInstallIds = null) => new(
         Version,
         Side,
         TurnNumber,
@@ -754,7 +810,9 @@ public sealed record TurnFactsState
         basicDrawOccurrenceIds ?? BasicDrawOccurrenceIds,
         eventCounts ?? EventCounts,
         deferredOccurrences ?? DeferredOccurrences,
-        nextTurnExtraClicks ?? NextTurnExtraClicks);
+        nextTurnExtraClicks ?? NextTurnExtraClicks,
+        handSizeDiscardIds ?? HandSizeDiscardIds,
+        freeInstallIds ?? FreeInstallIds);
 
 }
 
@@ -946,6 +1004,12 @@ public sealed record TurnHistoryState
 
     internal TurnHistoryState WithDeferredOccurrences(PlayerSide side, IReadOnlyList<DeferredOccurrence> deferred) =>
         ReplaceCurrent(side, RequireCurrent(side).WithDeferredOccurrences(deferred));
+
+    internal TurnHistoryState WithHandSizeDiscards(PlayerSide side, IReadOnlyList<CardInstanceId> discarded) =>
+        ReplaceCurrent(side, RequireCurrent(side).WithHandSizeDiscards(discarded));
+
+    internal TurnHistoryState WithFreeInstall(PlayerSide side, CardInstanceId cardId) =>
+        ReplaceCurrent(side, RequireCurrent(side).WithFreeInstall(cardId));
 
     internal TurnHistoryState WithNextTurnExtraClicks(PlayerSide side, int extra) =>
         ReplaceCurrent(side, RequireCurrent(side).WithNextTurnExtraClicks(extra));

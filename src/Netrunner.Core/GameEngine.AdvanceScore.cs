@@ -57,7 +57,7 @@ public static partial class GameEngine
                     || spec.Side != PlayerSide.Corp
                     || !(spec.CardClass == RuntimeCardClass.Agenda
                             && server.Kind == ServerKind.Remote && root.Kind == ZoneKind.ServerRoot
-                            && !card.FaceUp && !card.Rezzed && spec.AdvancementRequirement > 0
+                            && !card.Rezzed && spec.AdvancementRequirement > 0
                         || spec.CardClass is RuntimeCardClass.Asset or RuntimeCardClass.Ice or RuntimeCardClass.Upgrade
                             && working.BehaviorCatalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? definition)
                             && definition.CanBeAdvanced))
@@ -174,7 +174,6 @@ public static partial class GameEngine
                 if (card is null
                     || card.OwnerSide != PlayerSide.Corp
                     || card.ZoneId != root.Id
-                    || card.FaceUp
                     || card.Rezzed
                     || !working.RuntimeCardCatalog.TryGet(card.DefinitionId, out CardRuntimeSpec? spec)
                     || spec.Side != PlayerSide.Corp

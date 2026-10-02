@@ -141,7 +141,8 @@ public static partial class GameEngine
                         RuntimeCardClass.Ice,
                         out int iceCost,
                         out CostQuote? iceQuote)
-                    && corp.Credits + DeclaredHostedCredits(working, PlayerSide.Corp, BehaviorHostedCreditUseKind.RezInServer, currentIce) >= iceCost)
+                    && corp.Credits + DeclaredHostedCredits(working, PlayerSide.Corp, BehaviorHostedCreditUseKind.RezInServer, currentIce) >= iceCost
+                    && RezRequirementsMet(working, currentIce))
                 {
                     materialized.Add(new RezCardParameters(currentIce.Id, iceCost, iceQuote));
                 }
@@ -195,7 +196,8 @@ public static partial class GameEngine
                 || card.Rezzed
                 || (!isAsset && !isUpgrade)
                 || (isAsset && server.Kind != ServerKind.Remote)
-                || corpCredits + DeclaredHostedCredits(working, PlayerSide.Corp, BehaviorHostedCreditUseKind.RezInServer, card) < cost)
+                || corpCredits + DeclaredHostedCredits(working, PlayerSide.Corp, BehaviorHostedCreditUseKind.RezInServer, card) < cost
+                || !RezRequirementsMet(working, card))
             {
                 continue;
             }
@@ -396,4 +398,11 @@ public static partial class GameEngine
         }
     }
 
+
+    /// <summary>Whether the Corp can pay one of a card's additional rez costs (Plutus).</summary>
+    private static bool RezRequirementsMet(WorkingState working, CardInstanceState card) =>
+        !working.BehaviorCatalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? definition)
+        || definition.RezRequirements is not { } requirements
+        || requirements.Any(requirement =>
+            OptionConditionMatches(working, GetPlayer(working, PlayerSide.Corp).Id, card.Id, requirement));
 }

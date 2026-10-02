@@ -33,6 +33,11 @@ public static partial class GameEngine
             BehaviorTriggerCondition.HqOrRdRun => occurrence.Effect is GameplayOccurrenceEffect { ServerId: { } server, RunContext.AccessOccurrenceCount: > 0 }
                 && working.Servers.Any(value => value.Id == server
                     && value.Kind is ServerKind.Headquarters or ServerKind.RAndD),
+            BehaviorTriggerCondition.FaceUpInstalledSubject => occurrence.SourceCardId is { } subject
+                && working.Cards.FirstOrDefault(card => card.Id == subject) is { FaceUp: true } faceUp
+                && IsInstalledCard(working, faceUp.Id),
+            BehaviorTriggerCondition.SubjectInstalledWithoutCredits => occurrence.SourceCardId is { } installed
+                && facts?.FreeInstallIds?.Contains(installed) == true,
             _ => false,
         };
     }

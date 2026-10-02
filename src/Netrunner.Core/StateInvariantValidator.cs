@@ -540,6 +540,19 @@ public static partial class StateInvariantValidator
                         path,
                         $"Removed-from-game card '{card.Id}' must be faceup.");
                 }
+
+                if (zone.Kind is ZoneKind.CorpHostedFaceUp or ZoneKind.RunnerHostedFaceUp
+                    && (!card.FaceUp
+                        || card.HostCardId is not { } faceUpHost
+                        || !cardsById.TryGetValue(faceUpHost.Value, out CardInstanceState? host)
+                        || state.Zones.FirstOrDefault(candidate => candidate?.Id == host.ZoneId)?.Kind != ZoneKind.RunnerRig))
+                {
+                    Add(
+                        violations,
+                        "cards.hosted-faceup",
+                        path,
+                        $"Hosted faceup card '{card.Id}' must be faceup and name an installed Runner host.");
+                }
             }
         }
 
@@ -569,8 +582,8 @@ public static partial class StateInvariantValidator
 
         PlayerSide? expectedOwner = zone.Kind switch
         {
-            ZoneKind.CorpIdentity or ZoneKind.CorpDeck or ZoneKind.CorpHand or ZoneKind.CorpDiscard or ZoneKind.CorpScore or ZoneKind.CorpPlayArea or ZoneKind.CorpRemovedFromGame => PlayerSide.Corp,
-            ZoneKind.RunnerIdentity or ZoneKind.RunnerStack or ZoneKind.RunnerGrip or ZoneKind.RunnerPlayArea or ZoneKind.RunnerHeap or ZoneKind.RunnerRig or ZoneKind.RunnerScore or ZoneKind.RunnerRemovedFromGame => PlayerSide.Runner,
+            ZoneKind.CorpIdentity or ZoneKind.CorpDeck or ZoneKind.CorpHand or ZoneKind.CorpDiscard or ZoneKind.CorpScore or ZoneKind.CorpPlayArea or ZoneKind.CorpRemovedFromGame or ZoneKind.CorpHostedFaceUp => PlayerSide.Corp,
+            ZoneKind.RunnerIdentity or ZoneKind.RunnerStack or ZoneKind.RunnerGrip or ZoneKind.RunnerPlayArea or ZoneKind.RunnerHeap or ZoneKind.RunnerRig or ZoneKind.RunnerScore or ZoneKind.RunnerRemovedFromGame or ZoneKind.RunnerHostedFaceUp => PlayerSide.Runner,
             ZoneKind.ServerIce or ZoneKind.ServerRoot => PlayerSide.Corp,
             ZoneKind.BehaviorSetAside => null,
             _ => null,
@@ -651,7 +664,7 @@ public static partial class StateInvariantValidator
             }
         }
 
-        foreach (ZoneKind removedKind in new[] { ZoneKind.CorpRemovedFromGame, ZoneKind.RunnerRemovedFromGame })
+        foreach (ZoneKind removedKind in new[] { ZoneKind.CorpRemovedFromGame, ZoneKind.RunnerRemovedFromGame, ZoneKind.CorpHostedFaceUp, ZoneKind.RunnerHostedFaceUp })
         {
             int removedCount = state.Zones.Count(zone => zone is not null && zone.Kind == removedKind);
             if (removedCount > 1)
@@ -3746,12 +3759,16 @@ public static partial class StateInvariantValidator
                     }
 
                     ZoneState? installSource = state.Zones.FirstOrDefault(zone => zone?.Id == install.SourceZoneId);
+                    // EL-HOSTED-FACEUP: Bling's hosted cards install as if from the grip.
+                    ZoneKind installSourceKind = install.SourceZoneKind == ZoneKind.RunnerHostedFaceUp
+                        ? ZoneKind.RunnerHostedFaceUp
+                        : ZoneKind.RunnerGrip;
                     ZoneState? runnerGrip = state.Zones.FirstOrDefault(
-                        zone => zone?.Kind == ZoneKind.RunnerGrip
+                        zone => zone?.Kind == installSourceKind
                             && zone.ServerId is null);
-                    if (install.SourceZoneKind != ZoneKind.RunnerGrip
+                    if (install.SourceZoneKind != installSourceKind
                         || installSource is null
-                        || installSource.Kind != ZoneKind.RunnerGrip
+                        || installSource.Kind != installSourceKind
                         || installSource.OwnerSide != PlayerSide.Runner
                         || installSource.ServerId is not null
                         || runnerGrip is null
@@ -5451,7 +5468,8 @@ public static partial class StateInvariantValidator
                             : currentZone.Kind == ZoneKind.CorpRemovedFromGame)));
             behaviorCatalog.TryGet(frame.DefinitionId, out CardBehaviorDefinition? lifecycleDefinition);
             validLifecycleZone |= AbilityLifecycleRules.IsEmptyPoolSelfTrash(lifecycleDefinition, declaration, frame,
-                source, currentZone, state.RulesState, state.Turn);
+                source, currentZone, state.RulesState, state.Turn)
+                || AbilityLifecycleRules.IsSelfPlay(declaration, frame, source, currentZone);
             if (!validLifecycleZone || (selfTrash && selfRemove))
             {
                 Add(
@@ -5816,6 +5834,9 @@ public static partial class StateInvariantValidator
         BehaviorZone.RemovedFromGame => ownerSide == PlayerSide.Corp
             ? ZoneKind.CorpRemovedFromGame
             : ZoneKind.RunnerRemovedFromGame,
+        BehaviorZone.HostedFaceUp => ownerSide == PlayerSide.Corp
+            ? ZoneKind.CorpHostedFaceUp
+            : ZoneKind.RunnerHostedFaceUp,
         _ => throw new ArgumentOutOfRangeException(nameof(zone)),
     };
 
@@ -7776,7 +7797,21 @@ public static partial class StateInvariantValidator
         }
 
         TurnFrame? parent = index > 0 ? state.ResolutionStack[index - 1] as TurnFrame : null;
-        if (parent is null)
+        if (frame.IsNested)
+        {
+            // EL-NESTED-PLAY: the card is played from inside the behavior below.
+            if (index == 0
+                || state.ResolutionStack[index - 1] is not BehaviorResolutionFrame nestedParent
+                || !string.Equals(GameEngine.BehaviorFrameIdentityOf(nestedParent), frame.ParentFrameIdentity, StringComparison.Ordinal))
+            {
+                Add(
+                    violations,
+                    "resolution.card-play-parent-missing",
+                    path,
+                    "A nested CardPlayFrame requires the behavior frame that played it immediately beneath it.");
+            }
+        }
+        else if (parent is null)
         {
             Add(
                 violations,
@@ -7859,7 +7894,9 @@ public static partial class StateInvariantValidator
             return;
         }
 
-        ZoneKind sourceKind = frame.Side == PlayerSide.Corp ? ZoneKind.CorpHand : ZoneKind.RunnerGrip;
+        ZoneKind sourceKind = frame.Side == PlayerSide.Corp
+            ? ZoneKind.CorpHand
+            : frame.SourceZoneKind == ZoneKind.RunnerHostedFaceUp ? ZoneKind.RunnerHostedFaceUp : ZoneKind.RunnerGrip;
         ZoneKind discardKind = frame.Side == PlayerSide.Corp ? ZoneKind.CorpDiscard : ZoneKind.RunnerHeap;
         ZoneKind playAreaKind = frame.Side == PlayerSide.Corp ? ZoneKind.CorpPlayArea : ZoneKind.RunnerPlayArea;
 
@@ -7868,11 +7905,13 @@ public static partial class StateInvariantValidator
             .Select(zone => zone!)
             .ToArray();
         ZoneState? source = sourceMatches.Length == 1 ? sourceMatches[0] : null;
-        if (sourceMatches.Length != 1
-            || source!.OwnerSide != frame.Side
-            || source.ServerId is not null
-            || frame.SourceZoneId != source.Id
-            || frame.SourceZoneKind != sourceKind)
+        if (frame.IsNested
+                ? !GameEngine.IsNestedPlaySourceKind(frame.Side, frame.SourceZoneKind)
+                : sourceMatches.Length != 1
+                    || source!.OwnerSide != frame.Side
+                    || source.ServerId is not null
+                    || frame.SourceZoneId != source.Id
+                    || frame.SourceZoneKind != sourceKind)
         {
             Add(
                 violations,
@@ -12556,6 +12595,9 @@ public static partial class StateInvariantValidator
             return zone is null
                 ? []
                 : zone.CardIds
+                    .Take(target.TopCount ?? int.MaxValue)
+                    .Where(cardId => !target.IsHostedOnSource
+                        || state.Cards.FirstOrDefault(card => card.Id == cardId)?.HostCardId == excludedCardId)
                     .Where(cardId => !excludedCardId.HasValue || cardId != excludedCardId.Value)
                     .Where(cardId => BehaviorCardMatches(state, behaviorCatalog, runtimeCardCatalog, cardId, target.Filter))
                     .ToArray();
@@ -12597,6 +12639,12 @@ public static partial class StateInvariantValidator
             {
                 PlayerSide.Corp => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.CorpRemovedFromGame && value.ServerId is null),
                 PlayerSide.Runner => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.RunnerRemovedFromGame && value.ServerId is null),
+                _ => null,
+            },
+            BehaviorZone.HostedFaceUp => ownerSide switch
+            {
+                PlayerSide.Corp => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.CorpHostedFaceUp && value.ServerId is null),
+                PlayerSide.Runner => state.Zones.FirstOrDefault(value => value.Kind == ZoneKind.RunnerHostedFaceUp && value.ServerId is null),
                 _ => null,
             },
             BehaviorZone.ServerRoot => state.Servers
@@ -12659,6 +12707,11 @@ public static partial class StateInvariantValidator
 
             if (filter.Subtype is not null
                 && !runtimeSpec.Subtypes.Contains(filter.Subtype, StringComparer.Ordinal))
+            {
+                return false;
+            }
+
+            if (filter.AgendaPoints is { } points && runtimeSpec.AgendaPoints != points)
             {
                 return false;
             }

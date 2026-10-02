@@ -61,6 +61,21 @@ public static partial class GameEngine
             history.RecordAccess(turn.ActiveSide, cardId));
     }
 
+    /// <summary>EL-HOSTED-FACEUP: remembers an install that spent no credits, for "install a card without spending credits".</summary>
+    private static void RecordFreeInstall(WorkingState working, CardInstanceId cardId, int creditsSpent)
+    {
+        TurnState turn = working.Turn;
+        if (creditsSpent != 0
+            || !working.BehaviorCatalog.TracksTurnEvents
+            || turn.History?.ThisTurn(turn.ActiveSide) is null)
+        {
+            return;
+        }
+
+        ReplaceTurn(working, turn.ActiveSide, turn.Phase, turn.TurnNumber, turn.Step,
+            turn.History.WithFreeInstall(turn.ActiveSide, cardId));
+    }
+
     private static void RecordTurnTrash(WorkingState working, CardInstanceId cardId)
     {
         TurnState turn = working.Turn;
@@ -432,6 +447,7 @@ public static partial class GameEngine
         if (isAction)
         {
             RecordTurnEvent(working, frame.ActiveSide, TurnEventKind.ActionStarted);
+            working.ActionJustStarted = true;
         }
     }
 
@@ -443,8 +459,12 @@ public static partial class GameEngine
     {
         PlayerSide side = working.Turn.ActiveSide;
         int started = working.Turn.History?.ThisTurn(side)?.EventCount(TurnEventKind.ActionStarted) ?? 0;
-        bool inProgress = working.ResolutionStack.Any(static frame =>
-            frame is TurnFrame { Stage: TurnFrameStage.AwaitingAction });
+        // An action is in progress while its frames sit above the turn frame;
+        // a turn frame on top awaiting an action is choosing the next one.
+        bool inProgress = working.ActionJustStarted
+            || working.ResolutionStack.Count > 1
+            && working.ResolutionStack.Take(working.ResolutionStack.Count - 1)
+                .Any(static frame => frame is TurnFrame { Stage: TurnFrameStage.AwaitingAction });
         return started - (inProgress ? 1 : 0) > 0;
     }
 }

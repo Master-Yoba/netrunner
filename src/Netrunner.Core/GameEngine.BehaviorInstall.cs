@@ -63,6 +63,7 @@ public static partial class GameEngine
         (PlayerSide.Runner, BehaviorZone.Grip) => ZoneKind.RunnerGrip,
         (PlayerSide.Runner, BehaviorZone.Heap) => ZoneKind.RunnerHeap,
         (PlayerSide.Runner, BehaviorZone.Stack) => ZoneKind.RunnerStack,
+        (PlayerSide.Runner, BehaviorZone.HostedFaceUp) => ZoneKind.RunnerHostedFaceUp,
         _ => null,
     };
 
@@ -87,7 +88,12 @@ public static partial class GameEngine
             return choices;
         }
 
-        foreach (CardInstanceId cardId in source.CardIds)
+        IReadOnlyList<CardInstanceId>? discarded = instruction.Target!.IsHandSizeDiscards
+            ? working.Turn.History?.ThisTurn(working.Turn.ActiveSide)?.HandSizeDiscardIds ?? []
+            : null;
+        foreach (CardInstanceId cardId in source.CardIds.Take(instruction.Target!.TopCount ?? int.MaxValue)
+            .Where(cardId => discarded is null || discarded.Contains(cardId))
+            .Where(cardId => !instruction.Target!.IsHostedOnSource || GetCard(working, cardId).HostCardId == sourceCardId))
         {
             CardInstanceState card = GetCard(working, cardId);
             if (card.Id == sourceCardId
@@ -256,11 +262,14 @@ public static partial class GameEngine
             throw new ResolutionFailureException("The completed behavior zone install has no matching choice frame.");
         }
 
-        FinishBehaviorZoneInstallChoice(working, choice);
+        FinishBehaviorZoneInstallChoice(working, choice, install.CardId);
         QueueCardInstalledOccurrence(working, installer, install.CardId, destinationServer);
     }
 
-    private static void FinishBehaviorZoneInstallChoice(WorkingState working, BehaviorInstallChoiceFrame choice)
+    private static void FinishBehaviorZoneInstallChoice(
+        WorkingState working,
+        BehaviorInstallChoiceFrame choice,
+        CardInstanceId? installed = null)
     {
         working.ResolutionStack.RemoveAt(working.ResolutionStack.Count - 1);
         if (working.ResolutionStack.Count == 0
@@ -268,6 +277,17 @@ public static partial class GameEngine
             || !string.Equals(choice.ParentFrameIdentity, BehaviorFrameIdentity.Compute(parent), StringComparison.Ordinal))
         {
             throw new ResolutionFailureException("A behavior zone install has no matching behavior parent.");
+        }
+
+        // A keyed install binds the installed card for later instructions
+        // ("place 1 advancement counter on that agenda", IP Enforcement).
+        if (installed is { } cardId
+            && GetBehaviorInstructions(working, parent) is { } instructions
+            && parent.InstructionCursor < instructions.Count
+            && instructions[parent.InstructionCursor] is { Kind: BehaviorInstructionKind.InstallCard, Argument: { } key }
+            && StableIdentifier.TryValidate(key))
+        {
+            parent = parent.With(bindings: SetBehaviorBinding(parent.Bindings, key, [cardId]));
         }
 
         AdvanceBehaviorCursor(working, parent);

@@ -99,7 +99,8 @@ public sealed class BehaviorCardFilter : IEquatable<BehaviorCardFilter>
         CardDefinitionId? definitionId = null,
         PlayerSide? ownerSide = null,
         string? subtype = null,
-        bool? rezzed = null)
+        bool? rezzed = null,
+        int? agendaPoints = null)
     {
         if (!Enum.IsDefined(cardType))
         {
@@ -125,6 +126,12 @@ public sealed class BehaviorCardFilter : IEquatable<BehaviorCardFilter>
             throw new ArgumentOutOfRangeException(nameof(ownerSide));
         }
 
+        if (agendaPoints is < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(agendaPoints));
+        }
+
+        AgendaPoints = agendaPoints;
         Rezzed = rezzed;
         CardType = cardType;
         DefinitionId = definitionId;
@@ -142,6 +149,10 @@ public sealed class BehaviorCardFilter : IEquatable<BehaviorCardFilter>
 
     public string? Subtype { get; }
 
+    /// <summary>A printed agenda point value the card must have (IP Enforcement's "equal to X").</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? AgendaPoints { get; }
+
     public static BehaviorCardFilter Any { get; } = new();
 
     public bool Equals(BehaviorCardFilter? other) =>
@@ -150,6 +161,7 @@ public sealed class BehaviorCardFilter : IEquatable<BehaviorCardFilter>
         && CardType == other.CardType
         && DefinitionId == other.DefinitionId
         && OwnerSide == other.OwnerSide
+        && AgendaPoints == other.AgendaPoints
         && string.Equals(Subtype, other.Subtype, StringComparison.Ordinal);
 
     public override bool Equals(object? obj) => Equals(obj as BehaviorCardFilter);
@@ -331,6 +343,9 @@ public enum BehaviorZone
     ServerIce,
     ServerRoot,
     RemovedFromGame,
+
+    /// <summary>EL-HOSTED-FACEUP: cards hosted faceup without being installed.</summary>
+    HostedFaceUp,
 }
 
 /// <summary>

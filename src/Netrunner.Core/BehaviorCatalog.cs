@@ -297,6 +297,23 @@ public sealed record BehaviorCondition
                 nameof(subjectSide));
         }
 
+        if (kind is BehaviorConditionKind.PlayedFromZone or BehaviorConditionKind.SourceInZone or BehaviorConditionKind.SourceNotInZone
+            && (fact is null || !Enum.TryParse<BehaviorZone>(fact, ignoreCase: false, out _) || value is not null))
+        {
+            throw new ArgumentException("A zone condition names one typed zone.", nameof(fact));
+        }
+
+        if (kind == BehaviorConditionKind.ZoneCountAtLeast
+            && (fact is null || !Enum.TryParse<BehaviorZone>(fact, ignoreCase: false, out _) || value is null or < 0))
+        {
+            throw new ArgumentException("A zone-count condition names one typed zone and a nonnegative count.", nameof(fact));
+        }
+
+        if (kind == BehaviorConditionKind.ChoseCards && (!StableIdentifier.TryValidate(fact) || value is not null))
+        {
+            throw new ArgumentException("A chose-cards condition names its stable choice key.", nameof(fact));
+        }
+
         if (kind == BehaviorConditionKind.TurnEventCountIs
             && (fact is null || !Enum.TryParse<TurnEventKind>(fact, ignoreCase: false, out _)
                 || value is null or < 0))
@@ -415,6 +432,21 @@ public sealed record BehaviorCondition
     public static BehaviorCondition ClicksAtLeast(int threshold, PlayerSide? side) =>
         new(BehaviorConditionKind.ClicksRemainingAtLeast, value: threshold, subjectSide: side);
 
+    public static BehaviorCondition SourceIn(BehaviorZone zone) =>
+        new(BehaviorConditionKind.SourceInZone, fact: zone.ToString());
+
+    public static BehaviorCondition SourceNotIn(BehaviorZone zone) =>
+        new(BehaviorConditionKind.SourceNotInZone, fact: zone.ToString());
+
+    public static BehaviorCondition ZoneCountAtLeast(BehaviorZone zone, int minimum) =>
+        new(BehaviorConditionKind.ZoneCountAtLeast, fact: zone.ToString(), value: minimum);
+
+    public static BehaviorCondition Chose(string choiceKey) =>
+        new(BehaviorConditionKind.ChoseCards, fact: choiceKey);
+
+    public static BehaviorCondition PlayedFrom(BehaviorZone zone) =>
+        new(BehaviorConditionKind.PlayedFromZone, fact: zone.ToString());
+
     public static BehaviorCondition SourceAdvancementAtLeast(int threshold) =>
         new(BehaviorConditionKind.SourceAdvancementAtLeast, value: threshold);
 
@@ -510,6 +542,21 @@ public enum BehaviorConditionKind
     /// exactly the value; a subject side restricts it to that side's turn.
     /// </summary>
     TurnEventCountIs,
+
+    /// <summary>The operation or event resolving was played from the zone the fact names (Petty Cash).</summary>
+    PlayedFromZone,
+
+    /// <summary>The behavior's source card is in the zone the fact names (Byte! accessed in R&amp;D).</summary>
+    SourceInZone,
+
+    /// <summary>The behavior's source card is not in the zone the fact names.</summary>
+    SourceNotInZone,
+
+    /// <summary>A zone of the source controller (named by the fact) holds at least the value in cards.</summary>
+    ZoneCountAtLeast,
+
+    /// <summary>The choice the fact names chose at least one card ("if you do", Touch-ups).</summary>
+    ChoseCards,
 }
 
 /// <summary>A typed target selector; IDs are resolved by Core at runtime.</summary>
@@ -634,6 +681,42 @@ public sealed record BehaviorTarget
     /// <summary>Whether this installed-card target excludes the behavior's source.</summary>
     [JsonIgnore]
     public bool IsOther => string.Equals(Selector, OtherSelector, StringComparison.Ordinal);
+
+    /// <summary>EL-HOSTED-FACEUP: a zone target over only the cards hosted on the behavior's source.</summary>
+    public const string HostedOnSourceSelector = "hosted-on-source";
+
+    [JsonIgnore]
+    public bool IsHostedOnSource => string.Equals(Selector, HostedOnSourceSelector, StringComparison.Ordinal);
+
+    /// <summary>The cards of a hosted-faceup zone hosted on the behavior's source.</summary>
+    public static BehaviorTarget HostedOnSource(PlayerSide owner, BehaviorCardType cardType = BehaviorCardType.Any) =>
+        new(BehaviorTargetKind.ZoneCards, HostedOnSourceSelector, BehaviorZone.HostedFaceUp,
+            new BehaviorCardFilter(cardType, ownerSide: owner));
+
+    /// <summary>EL-HAND-SIZE-DISCARD: a zone target over only the cards discarded this turn to reach maximum hand size.</summary>
+    public const string HandSizeDiscardsSelector = "hand-size-discards";
+
+    [JsonIgnore]
+    public bool IsHandSizeDiscards => string.Equals(Selector, HandSizeDiscardsSelector, StringComparison.Ordinal);
+
+    private const string TopSelectorPrefix = "top:";
+
+    /// <summary>EL-LOOK-TOP: a zone target over only the top cards of a deck ("look at the top 3 cards of R&amp;D").</summary>
+    public static BehaviorTarget TopOfZone(BehaviorZone zone, int count, BehaviorCardFilter? filter = null)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(count);
+        return new BehaviorTarget(BehaviorTargetKind.ZoneCards, TopSelectorPrefix + count.ToString(System.Globalization.CultureInfo.InvariantCulture), zone, filter);
+    }
+
+    /// <summary>How many top cards of its zone a top-of-zone target covers, or null for the whole zone.</summary>
+    [JsonIgnore]
+    public int? TopCount => Selector is { } selector
+        && selector.StartsWith(TopSelectorPrefix, StringComparison.Ordinal)
+        && int.TryParse(selector.AsSpan(TopSelectorPrefix.Length), System.Globalization.NumberStyles.None,
+            System.Globalization.CultureInfo.InvariantCulture, out int count)
+        && count > 0
+            ? count
+            : null;
 
     /// <summary>The zone used by a <see cref="BehaviorTargetKind.ZoneCard"/> target.</summary>
     public BehaviorZone? Zone { get; }
@@ -1256,7 +1339,8 @@ public sealed record BehaviorInstruction
                         BehaviorZone.Deck,
                         BehaviorZone.Headquarters,
                         BehaviorZone.Archives,
-                        BehaviorZone.Stack);
+                        BehaviorZone.Stack,
+                        BehaviorZone.Grip);
                 }
 
                 RequireDestination(nameof(DestinationZone), BehaviorZone.Deck, BehaviorZone.Stack);
@@ -1290,7 +1374,8 @@ public sealed record BehaviorInstruction
                         BehaviorZone.Stack,
                         BehaviorZone.Deck,
                         BehaviorZone.Heap,
-                        BehaviorZone.ScoreArea);
+                        BehaviorZone.ScoreArea,
+                        BehaviorZone.HostedFaceUp);
                 }
 
                 if (IsZoneInstall)
@@ -1395,6 +1480,8 @@ public sealed record BehaviorInstruction
             && Kind != BehaviorInstructionKind.InstallCard
             && Kind != BehaviorInstructionKind.ShuffleSearchedDeck
             && Kind != BehaviorInstructionKind.ShuffleDeck
+            && !(Kind == BehaviorInstructionKind.PlayCard && SourceZone is null
+                && DestinationZone is null or BehaviorZone.RemovedFromGame)
             && (SourceZone is not null || DestinationZone is not null))
         {
             throw new ArgumentException(
@@ -1428,7 +1515,10 @@ public sealed record BehaviorInstruction
             or BehaviorInstructionKind.ForfeitAgenda
             or BehaviorInstructionKind.ProhibitScoringTargetThisTurn
             or BehaviorInstructionKind.Sabotage
-            or BehaviorInstructionKind.PlaceOnTopOfDeck)
+            or BehaviorInstructionKind.PlaceOnTopOfDeck
+            or BehaviorInstructionKind.PlayCard
+            or BehaviorInstructionKind.TurnFaceUp
+            or BehaviorInstructionKind.HostFaceUp)
             && Target is not null)
         {
             throw new ArgumentException(
@@ -1550,6 +1640,26 @@ public enum BehaviorInstructionKind
 
     /// <summary>EL-RECURRING: refills the source's recurring credits ("when you install / rez this").</summary>
     RefillRecurringCredits,
+
+    /// <summary>EL-FACEUP-AGENDA: turns the target installed card faceup without rezzing it (BANGUN).</summary>
+    TurnFaceUp,
+
+    /// <summary>EL-HOSTED-FACEUP: hosts the target cards faceup on the source, not installed.</summary>
+    HostFaceUp,
+
+    /// <summary>
+    /// Puts every card this behavior has set aside back where it came from now,
+    /// rather than when the behavior completes ("reveal all but 1 card in HQ",
+    /// then install from HQ: Peer Review).
+    /// </summary>
+    ReturnSetAside,
+
+    /// <summary>
+    /// EL-NESTED-PLAY: plays the targeted operation or event (a chosen card,
+    /// or the source itself) from inside this behavior; a RemovedFromGame
+    /// destination removes it from the game after it resolves.
+    /// </summary>
+    PlayCard,
 
     /// <summary>The Runner accesses the amount in additional cards in the coming breach (the argument is a reason key).</summary>
     AddBreachAccess,
@@ -1734,7 +1844,8 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         bool oncePerTurn = false,
         BehaviorTriggerCondition? condition = null,
         BehaviorCondition? requirement = null,
-        BehaviorFace? face = null)
+        BehaviorFace? face = null,
+        bool activeWhileAccessed = false)
     {
         if (!StableIdentifier.TryValidate(key))
         {
@@ -1838,6 +1949,12 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         RequireSourceOnAttackedServer = requireSourceOnAttackedServer;
         RequireSourceInstalled = requireSourceInstalled;
         ActiveWhileUnrezzed = activeWhileUnrezzed;
+        if (activeWhileAccessed && (occurrence != OccurrenceKind.CardAccessed || scope != BehaviorTriggerScope.Self))
+        {
+            throw new ArgumentException("An access-time ability is a self-scoped CardAccessed trigger.", nameof(activeWhileAccessed));
+        }
+
+        ActiveWhileAccessed = activeWhileAccessed;
         if ((persistent || requireAgendaStolenDuringRun) && occurrence != OccurrenceKind.RunEnded)
             throw new ArgumentException("Persistent run-end conditions require RunEnded.");
         Persistent = persistent;
@@ -1902,6 +2019,14 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool ActiveWhileUnrezzed { get; }
 
+    /// <summary>
+    /// An ability active while its own card is being accessed, wherever it is
+    /// except Archives ("when the Runner accesses this asset anywhere except
+    /// in Archives", Byte!).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool ActiveWhileAccessed { get; }
+
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool Persistent { get; }
 
@@ -1927,6 +2052,7 @@ public sealed class BehaviorTrigger : IEquatable<BehaviorTrigger>
         && RequireSourceOnAttackedServer == other.RequireSourceOnAttackedServer
         && RequireSourceInstalled == other.RequireSourceInstalled
         && ActiveWhileUnrezzed == other.ActiveWhileUnrezzed
+        && ActiveWhileAccessed == other.ActiveWhileAccessed
         && Persistent == other.Persistent
         && RequireAgendaStolenDuringRun == other.RequireAgendaStolenDuringRun
         && BehaviorContractStructure.SequenceEquals(
@@ -2020,9 +2146,20 @@ public sealed class CardBehaviorDefinition
         bool runnerCannotTrash = false,
         IReadOnlyList<BehaviorHostedCreditUse>? hostedCreditUses = null,
         int recurringCredits = 0,
-        int rootAssetTrashCostIncrease = 0)
+        int rootAssetTrashCostIncrease = 0,
+        IReadOnlyList<BehaviorCondition>? rezRequirements = null,
+        bool hostedCardsPlayAsGrip = false)
     {
         DefinitionId = definitionId;
+        HostedCardsPlayAsGrip = hostedCardsPlayAsGrip;
+        if (hostedCardsPlayAsGrip && controller != PlayerSide.Runner)
+        {
+            throw new ArgumentException("Only Runner cards host cards playable as if in the grip.", nameof(hostedCardsPlayAsGrip));
+        }
+
+        RezRequirements = rezRequirements is null or { Count: 0 }
+            ? null
+            : new ReadOnlyCollection<BehaviorCondition>(rezRequirements.ToArray());
         ArgumentOutOfRangeException.ThrowIfNegative(recurringCredits);
         ArgumentOutOfRangeException.ThrowIfNegative(rootAssetTrashCostIncrease);
         RootAssetTrashCostIncrease = rootAssetTrashCostIncrease;
@@ -2105,6 +2242,21 @@ public sealed class CardBehaviorDefinition
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public int RootAssetTrashCostIncrease { get; }
+
+    /// <summary>
+    /// What the Corp must be able to pay as an additional cost to rez this
+    /// card, any one of them (Plutus: an agenda to forfeit, or 3 HQ cards).
+    /// The cost itself is paid by the card's "when rezzed" ability.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<BehaviorCondition>? RezRequirements { get; }
+
+    /// <summary>
+    /// EL-HOSTED-FACEUP: the Runner can play or install cards hosted faceup on
+    /// this installed card as if they were in the grip (Bling).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool HostedCardsPlayAsGrip { get; }
 
     /// <summary>EL-RECURRING: hosted credits refilled to this amount before each of the controller's turns.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
@@ -2963,6 +3115,8 @@ internal static class BehaviorCatalogStructure
                 && a.RunnerCannotTrash == b.RunnerCannotTrash
                 && a.RecurringCredits == b.RecurringCredits
                 && a.RootAssetTrashCostIncrease == b.RootAssetTrashCostIncrease
+                && SequenceEquals(a.RezRequirements ?? [], b.RezRequirements ?? [])
+                && a.HostedCardsPlayAsGrip == b.HostedCardsPlayAsGrip
                 && SequenceEquals(a.HostedCreditUses ?? [], b.HostedCreditUses ?? [])
                 && a.Hosting == b.Hosting
                 && SequenceEquals(a.Costs, b.Costs)
@@ -3197,6 +3351,15 @@ internal static class BehaviorCatalogFingerprint
         {
             builder.Append(",rootAssetTrashCostIncrease=").Append(value.RootAssetTrashCostIncrease);
         }
+        if (value.HostedCardsPlayAsGrip)
+        {
+            builder.Append(",hostedCardsPlayAsGrip=1");
+        }
+        if (value.RezRequirements is { } rezRequirements)
+        {
+            builder.Append(",rezRequirements=");
+            AppendSequence(builder, rezRequirements, AppendCondition);
+        }
         if (value.HostedCreditUses is { } uses)
         {
             builder.Append(",hostedCreditUses=");
@@ -3347,6 +3510,10 @@ internal static class BehaviorCatalogFingerprint
         if (value.UsableFromRunnerScoreArea)
         {
             builder.Append(",fromRunnerScoreArea=1");
+        }
+        if (value.UsableFromArchives)
+        {
+            builder.Append(",fromArchives=1");
         }
     }
 
@@ -3580,6 +3747,10 @@ internal static class BehaviorCatalogFingerprint
         {
             builder.Append(",activeWhileUnrezzed=1");
         }
+        if (value.ActiveWhileAccessed)
+        {
+            builder.Append(",activeWhileAccessed=1");
+        }
         builder.Append(",instructions=");
         AppendSequence(builder, value.Instructions, AppendInstruction);
     }
@@ -3678,6 +3849,7 @@ internal static class BehaviorCatalogFingerprint
         builder.Append(",subtype=");
         AppendString(builder, value.Subtype);
         if (value.Rezzed is { } rezzed) builder.Append(",rezzed=").Append(rezzed ? 1 : 0);
+        if (value.AgendaPoints is { } points) builder.Append(",agendaPoints=").Append(points);
     }
 
     private static void AppendCardDefinitionId(StringBuilder builder, CardDefinitionId? value) =>

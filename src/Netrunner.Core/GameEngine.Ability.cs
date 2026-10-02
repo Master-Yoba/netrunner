@@ -56,6 +56,7 @@ public static partial class GameEngine
         foreach ((CardInstanceState source, ZoneState sourceZone) in EnumerateAbilitySources(working))
         {
             bool inRunnerScoreArea = sourceZone.Kind == ZoneKind.RunnerScore;
+            bool inArchives = sourceZone.Kind == ZoneKind.CorpDiscard;
             if (source.OwnerSide != window.ControllerSide
                 || sourceZone.OwnerSide != source.OwnerSide && !inRunnerScoreArea)
             {
@@ -82,7 +83,8 @@ public static partial class GameEngine
 
             foreach (BehaviorPaidAbility ability in definition.PaidAbilities)
             {
-                if (inRunnerScoreArea && !ability.UsableFromRunnerScoreArea)
+                if (inRunnerScoreArea && !ability.UsableFromRunnerScoreArea
+                    || inArchives && !ability.UsableFromArchives)
                 {
                     continue;
                 }
@@ -834,7 +836,8 @@ public static partial class GameEngine
     /// <summary>Identity zones and score areas, whose faceup cards may have paid abilities (Elevation).</summary>
     internal static bool IsIdentityOrScoreAbilityZone(ZoneState zone) =>
         zone.ServerId is null
-        && zone.Kind is ZoneKind.CorpIdentity or ZoneKind.RunnerIdentity or ZoneKind.CorpScore or ZoneKind.RunnerScore;
+        && zone.Kind is ZoneKind.CorpIdentity or ZoneKind.RunnerIdentity or ZoneKind.CorpScore or ZoneKind.RunnerScore
+            or ZoneKind.CorpDiscard;
 
     /// <summary>
     /// A faceup identity in its owner's identity zone, or a Corp agenda in
@@ -842,7 +845,11 @@ public static partial class GameEngine
     /// needs <see cref="BehaviorPaidAbility.UsableFromRunnerScoreArea"/>).
     /// </summary>
     internal static bool IsIdentityOrScoreAbilitySource(CardInstanceState card, ZoneState zone) =>
-        card.FaceUp
+        zone.ServerId is null
+        && zone.Kind == ZoneKind.CorpDiscard
+        && card.OwnerSide == PlayerSide.Corp
+        && zone.OwnerSide == PlayerSide.Corp
+        || card.FaceUp
         && zone.ServerId is null
         && zone.Kind switch
         {
@@ -885,6 +892,9 @@ public static partial class GameEngine
             BehaviorZone.RemovedFromGame => side == PlayerSide.Corp
                 ? ZoneKind.CorpRemovedFromGame
                 : ZoneKind.RunnerRemovedFromGame,
+            BehaviorZone.HostedFaceUp => side == PlayerSide.Corp
+                ? ZoneKind.CorpHostedFaceUp
+                : ZoneKind.RunnerHostedFaceUp,
             BehaviorZone.ServerIce or BehaviorZone.ServerRoot => null,
             _ => null,
         };
@@ -1414,7 +1424,8 @@ public static partial class GameEngine
             bool validLifecycleZone = (selfTrash && IsAbilityTrashZone(currentSourceZone, source))
                 || (selfRemove && IsAbilityRemoveZone(currentSourceZone, source))
                 || AbilityLifecycleRules.IsEmptyPoolSelfTrash(definition, declaration, frame,
-                    source, currentSourceZone, working.RulesState, working.Turn);
+                    source, currentSourceZone, working.RulesState, working.Turn)
+                || AbilityLifecycleRules.IsSelfPlay(declaration, frame, source, currentSourceZone);
             if (!paid || !validLifecycleZone || (selfTrash && selfRemove))
             {
                 throw new ResolutionFailureException("Ability source card moved outside its permitted lifecycle.");

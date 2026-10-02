@@ -1009,7 +1009,10 @@ public static partial class GameEngine
                 or OccurrenceKind.AgendaForfeited
                 or OccurrenceKind.FirstTagRemovalThisTurn
                 or OccurrenceKind.FirstCardCreditGainThisTurn
-                or OccurrenceKind.FirstOperationPlayedThisTurn))
+                or OccurrenceKind.FirstOperationPlayedThisTurn
+                or OccurrenceKind.DamageDone
+                or OccurrenceKind.CardsTrashedFromHq
+                or OccurrenceKind.HandSizeDiscarded))
         {
             return [];
         }
@@ -1242,8 +1245,15 @@ public static partial class GameEngine
                 || trigger.Occurrence == OccurrenceKind.AgendaForfeited
                     && trigger.Scope == BehaviorTriggerScope.Self
                     && working.Zones.Any(zone => zone.Id == source.ZoneId && zone.Kind == ZoneKind.CorpRemovedFromGame)
-                || trigger.ActiveWhileUnrezzed && installed && source.OwnerSide == PlayerSide.Corp);
+                || trigger.ActiveWhileUnrezzed && installed && source.OwnerSide == PlayerSide.Corp
+                || trigger.ActiveWhileAccessed && IsBeingAccessedOutsideArchives(working, source));
     }
+
+    private static bool IsBeingAccessedOutsideArchives(WorkingState working, CardInstanceState source) =>
+        source.OwnerSide == PlayerSide.Corp
+        && working.RunState is { ChosenAccessCards.Count: > 0 } run
+        && run.ChosenAccessCards[^1] == source.Id
+        && working.Zones.FirstOrDefault(zone => zone.Id == source.ZoneId)?.Kind is not ZoneKind.CorpDiscard;
 
     private static bool CatalogTriggerRequirementMatches(
         WorkingState working,

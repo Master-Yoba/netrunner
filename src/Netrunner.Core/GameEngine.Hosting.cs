@@ -111,4 +111,58 @@ public static partial class GameEngine
             new RunPriorityState(priority.Version, RunPriorityWindowKind.EncounterPaid, PlayerSide.Runner, 0,
                 priority.CorpMayRezApproachedIce, priority.CorpMayRezNonIce), broken.Encounter, broken.AccessState));
     }
+
+    /// <summary>
+    /// EL-HOSTED-FACEUP: hosts a card faceup on a host without installing it
+    /// (Bling, Madani, Detente). Hosted cards stay in their owner's hosted
+    /// zone, name their host, and are trashed when the host leaves play.
+    /// </summary>
+    private static void HostFaceUp(WorkingState working, CardInstanceId cardId, CardInstanceId hostId)
+    {
+        CardInstanceState card = GetCard(working, cardId);
+        ZoneState source = ZoneForCard(working, cardId);
+        ZoneState hosted = GetBehaviorZone(working, BehaviorZone.HostedFaceUp, card.OwnerSide);
+        if (source.Id != hosted.Id)
+        {
+            MoveCard(working, card, source, hosted);
+        }
+
+        CardInstanceState moved = GetCard(working, cardId);
+        ReplaceCard(working, new CardInstanceState(moved.Id, moved.DefinitionId, moved.ZoneId, moved.OwnerSide,
+            faceUp: true, rezzed: false, moved.AdvancementCounters, hostId));
+    }
+
+    internal static bool IsHostedFaceUpZone(ZoneKind kind) => kind is ZoneKind.RunnerHostedFaceUp or ZoneKind.CorpHostedFaceUp;
+
+    /// <summary>
+    /// EL-HOSTED-FACEUP: a Runner card hosted faceup on an installed card that
+    /// lets the Runner play or install its hosted cards as if they were in the
+    /// grip (Bling).
+    /// </summary>
+    private static bool IsGripLikeHosted(WorkingState working, CardInstanceState card)
+    {
+        if (card.OwnerSide != PlayerSide.Runner
+            || card.HostCardId is not { } hostId
+            || working.Zones.FirstOrDefault(zone => zone.Id == card.ZoneId)?.Kind != ZoneKind.RunnerHostedFaceUp)
+        {
+            return false;
+        }
+
+        CardInstanceState? host = working.Cards.FirstOrDefault(candidate => candidate.Id == hostId);
+        return host is not null
+            && working.Zones.FirstOrDefault(zone => zone.Id == host.ZoneId)?.Kind == ZoneKind.RunnerRig
+            && working.BehaviorCatalog.TryGet(host.DefinitionId, out CardBehaviorDefinition? definition)
+            && definition.HostedCardsPlayAsGrip;
+    }
+
+    private static CardInstanceId[] GripLikeHostedCardIds(WorkingState working)
+    {
+        ZoneState? hosted = working.Zones.FirstOrDefault(zone => zone.Kind == ZoneKind.RunnerHostedFaceUp && zone.ServerId is null);
+        return hosted is null
+            ? []
+            : hosted.CardIds
+                .Where(cardId => IsGripLikeHosted(working, GetCard(working, cardId)))
+                .OrderBy(id => id.Value, StringComparer.Ordinal)
+                .ToArray();
+    }
 }

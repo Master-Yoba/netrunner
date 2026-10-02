@@ -26,6 +26,8 @@ public static partial class GameEngine
             BehaviorConditionKind.RunnerTagsAtLeast => RunnerTags(working) >= threshold,
             BehaviorConditionKind.ZoneCountAtMost =>
                 ConditionZone(working, controllerSide, condition.Fact!) is { } zone && zone.CardIds.Count <= threshold,
+            BehaviorConditionKind.ZoneCountAtLeast =>
+                ConditionZone(working, controllerSide, condition.Fact!) is { } atLeastZone && atLeastZone.CardIds.Count >= threshold,
             BehaviorConditionKind.UnusedMemoryAtMost => UnusedRunnerMemory(working) <= threshold,
             BehaviorConditionKind.UnusedMemoryAtLeast => UnusedRunnerMemory(working) >= threshold,
             // "This turn" is the active turn: the controller's facts from its previous turn don't count.
@@ -71,6 +73,10 @@ public static partial class GameEngine
             (BehaviorZone.Grip, _) => ZoneKind.RunnerGrip,
             (BehaviorZone.Stack, _) => ZoneKind.RunnerStack,
             (BehaviorZone.Heap, _) => ZoneKind.RunnerHeap,
+            (BehaviorZone.ScoreArea, PlayerSide.Corp) => ZoneKind.CorpScore,
+            (BehaviorZone.ScoreArea, PlayerSide.Runner) => ZoneKind.RunnerScore,
+            (BehaviorZone.HostedFaceUp, PlayerSide.Corp) => ZoneKind.CorpHostedFaceUp,
+            (BehaviorZone.HostedFaceUp, PlayerSide.Runner) => ZoneKind.RunnerHostedFaceUp,
             _ => null,
         };
         return kind is { } value ? working.Zones.FirstOrDefault(candidate => candidate.Kind == value) : null;
