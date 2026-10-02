@@ -579,11 +579,14 @@ public partial class Main
 	{
 		CardViewModel host = view.RunnerRig.First(card => string.IsNullOrEmpty(card.HostCardId) && card.IsKnown);
 		CardViewModel hosted = UiPreviewSamples.Known("table-hosted-faceup", "Program", "Hosted faceup program") with { HostCardId = host.Id };
+		// EL.7: a Corp card hosted faceup on a Runner console (Detente).
+		CardViewModel corpHosted = UiPreviewSamples.Known("table-hosted-corp", "Operation", "Hosted HQ card") with { HostCardId = host.Id };
 		CardViewModel removed = UiPreviewSamples.Known("table-removed-event", "Event", "Removed event");
-		MatchViewModel elevation = view with { HostedFaceUp = [hosted], RunnerRemovedFromGame = [removed] };
+		MatchViewModel elevation = view with { HostedFaceUp = [hosted, corpHosted], RunnerRemovedFromGame = [removed] };
 		_gameTable.Render(elevation);
 		await TableFrames(3);
-		bool hostedShown = _gameTable.VisibleCards.Values.Any(control => control.Card?.Id == hosted.Id && control.IsVisibleInTree());
+		bool hostedShown = _gameTable.VisibleCards.Values.Any(control => control.Card?.Id == hosted.Id && control.IsVisibleInTree())
+			&& _gameTable.VisibleCards.Values.Any(control => control.Card?.Id == corpHosted.Id && control.IsVisibleInTree());
 		bool threat = FindDescendants<Label>(_gameTable).Any(label => label.Text.Contains("Threat", StringComparison.Ordinal));
 		bool removedNamed = FindDescendants<Button>(_gameTable).Any(button => button.TooltipText.Contains("Removed from the game: Removed event", StringComparison.Ordinal));
 		if (!hostedShown || !threat || !removedNamed)
