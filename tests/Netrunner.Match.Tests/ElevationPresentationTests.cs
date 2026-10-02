@@ -12,6 +12,19 @@ public sealed class ElevationPresentationTests
         { TypedCounters = counters };
 
     [Fact]
+    public void RunAndIceEffectsHaveReadableLabels()
+    {
+        // EL.8: the EL.6 instructions read as words in choice options and effect labels.
+        Assert.Equal("Bypass the encountered ICE; then Move the Runner to another server",
+            BehaviorEffectLabels.Describe([new BehaviorInstruction(BehaviorInstructionKind.BypassEncounteredIce),
+                new BehaviorInstruction(BehaviorInstructionKind.MoveRunnerToServer)], PlayerSide.Runner));
+        Assert.Equal("Rez the chosen card, paying 3 credits less",
+            BehaviorEffectLabels.Describe([new BehaviorInstruction(BehaviorInstructionKind.RezPayingLess, amount: 3)], PlayerSide.Corp));
+        Assert.Equal("Derez the chosen card",
+            BehaviorEffectLabels.Describe([new BehaviorInstruction(BehaviorInstructionKind.Derez)], PlayerSide.Runner));
+    }
+
+    [Fact]
     public void AgendaAndFlipCountersHaveTheirOwnLabels()
     {
         Assert.Equal("AGENDA ×2", new CardCounterViewModel("agenda", CardCounterPurpose.Generic, 2, null).ChipText);

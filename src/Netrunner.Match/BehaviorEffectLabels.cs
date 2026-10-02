@@ -44,6 +44,17 @@ internal static class BehaviorEffectLabels
                 choice.Cardinality.Kind == BehaviorChoiceCardinalityKind.UpTo ? $"Choose up to {choice.Cardinality.Count} cards"
                     : choice.Cardinality.Kind == BehaviorChoiceCardinalityKind.Exactly ? $"Choose {choice.Cardinality.Count} cards" : "Choose cards",
             BehaviorInstructionKind.ShuffleIntoDeck => $"Shuffle chosen cards into {(controller == PlayerSide.Corp ? "R&D" : "Stack")}",
+            // EL.4 and EL.6: zones, runs and ICE.
+            BehaviorInstructionKind.HostFaceUp => "Host the chosen card faceup",
+            BehaviorInstructionKind.PurgeVirusCounters => "Purge virus counters",
+            BehaviorInstructionKind.Derez => "Derez the chosen card",
+            BehaviorInstructionKind.BypassEncounteredIce => "Bypass the encountered ICE",
+            BehaviorInstructionKind.MoveRunnerToServer => "Move the Runner to another server",
+            BehaviorInstructionKind.SwapApproachedIce => "Swap the approached ICE",
+            BehaviorInstructionKind.RezPayingLess => $"Rez the chosen card, paying {Count(instruction.Amount, "credit")} less",
+            BehaviorInstructionKind.StealAgenda => "Steal the chosen agenda",
+            BehaviorInstructionKind.HostSourceOnTarget => "Host this card on the chosen card",
+            BehaviorInstructionKind.MoveSourceToServerOf => "Move this card to the chosen card's server",
             _ => null,
         };
     }

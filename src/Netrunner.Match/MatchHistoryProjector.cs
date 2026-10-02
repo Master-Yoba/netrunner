@@ -182,7 +182,10 @@ internal sealed class MatchHistoryProjector
                     Detail($"Runner reaches {ServerName(approached.ServerId.Value)}.", PlayerSide.Runner);
                     break;
                 case RunMovedEventPayload moved:
-                    Detail("Runner advances through the run.", PlayerSide.Runner);
+                    // EL.6: a move other than one position inward takes the Runner to another server.
+                    Detail(moved.ToIceIndex == moved.FromIceIndex - 1 ? "Runner advances through the run."
+                        : after.Run is { } movedRun ? $"Runner moves to the outermost position of {ServerName(movedRun.AttackedServerId)}."
+                        : "Runner moves to another server.", PlayerSide.Runner);
                     break;
                 case RunSuccessfulEventPayload successful:
                     Summary($"Runner completes a successful run on {ServerName(successful.ServerId.Value)}.", PlayerSide.Runner);
