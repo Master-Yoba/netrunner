@@ -80,6 +80,27 @@ public sealed class ElevationBatch1CorpTests
     }
 
     [Fact]
+    [Trait("ElevationCard", "35037")]
+    public void AggressiveTrendsettingsExtraClickIsAllottedOnTheCorpsNextTurn()
+    {
+        // Ladder regression: the turn-facts validator demanded exactly 3 allotted clicks.
+        GameState state = new ElevationBoard(PlayerSide.Runner) { CorpDeckFiller = 3 }
+            .Add("35037", Place.CorpScore)
+            .Add("35062", Place.Root)
+            .Begin();
+        state = RunTo(state, ElevationBoard.Remote, static value => value.PendingDecision?.LegalActions.Any(
+            static action => action.Kind == ActionKind.TrashAccessedCard) == true);
+        state = Apply(state, static action => action.Kind == ActionKind.TrashAccessedCard).State;
+        state = PassUntil(state, static value => value.PendingDecision?.Kind == DecisionKind.BehaviorChoice);
+        state = ChooseOption(state, "decline");
+        state = PassUntil(SpendRemainingClicks(ToAction(state)), static value => value.Turn.ActiveSide == PlayerSide.Corp
+            && value.PendingDecision?.Kind == DecisionKind.TurnAction);
+        state = RoundTrip(state);
+
+        Assert.Equal(4, state.Turn.History!.CorpThisTurn!.ClicksAllotted);
+    }
+
+    [Fact]
     [Trait("ElevationCard", "35057")]
     public void NebulaFlipsAfterAnOperationTurnAndItsBackGainsAClickOnTheFirstOperation()
     {

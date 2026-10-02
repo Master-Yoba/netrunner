@@ -313,8 +313,12 @@ public static class ElevationBatch2Specs
             sourceZone: BehaviorZone.ScoreArea,
             optional: false,
             costRule: BehaviorInstallCostRule.Normal),
-        Branch(BehaviorCondition.Tagged(PlayerSide.Runner),
-            [new BehaviorInstruction(BehaviorInstructionKind.AdvanceCard, amount: 1, target: ChosenBy($"ip-enforcement-agenda-{x}"))]),
+        // With no agenda of value X there is nothing to install or advance.
+        Branch(BehaviorCondition.Chose($"ip-enforcement-agenda-{x}"),
+        [
+            Branch(BehaviorCondition.Tagged(PlayerSide.Runner),
+                [new BehaviorInstruction(BehaviorInstructionKind.AdvanceCard, amount: 1, target: ChosenBy($"ip-enforcement-agenda-{x}"))]),
+        ]),
     ], BehaviorCondition.RunnerTagsAtLeast(x));
 
     // 35073 — EL-PLAY-FROM-ARCHIVES; EL-FORFEIT; EL-REVEAL-TRASH-COST. The

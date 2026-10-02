@@ -598,4 +598,63 @@ public sealed class ElevationBatch2Tests
         Assert.Equal(ZoneKind.CorpDiscard, ZoneOf(state, Regolith));
         Assert.Equal(1, CardState(state, OffworldOffice).AdvancementCounters);
     }
+
+    [Fact]
+    [Trait("ElevationCard", "35066")]
+    public void IpEnforcementWithNoAgendaOfValueXInstallsNothing()
+    {
+        // Ladder regression: the advance looked for a binding the empty install never made.
+        GameState state = new ElevationBoard { Tags = 3, RunnerPoints = 2 }
+            .Add("35066", Place.Hq)
+            .Add(OffworldOffice, Place.RunnerScore)
+            .Begin();
+        state = PlayFirst(state, "35066");
+        state = ChooseOption(state, "x-1");
+        state = RoundTrip(ToAction(state));
+
+        Assert.Equal(ZoneKind.RunnerScore, ZoneOf(state, OffworldOffice));
+        Assert.Equal(2, Rules(state, PlayerSide.Runner).Tags);
+    }
+
+    [Fact]
+    [Trait("ElevationCard", "35046")]
+    public void AuCoTakesWhatIsLeftOfAShortRAndD()
+    {
+        // Ladder regression: adding the top 2 cards to HQ found none.
+        GameState built = new ElevationBoard { CorpDeckFiller = 1 }
+            .Add("35046", Place.CorpIdentity, counters: new Dictionary<string, int> { ["power"] = 2 })
+            .Build();
+        GameState state = UseTrigger(PassToTrigger(GameEngine.BeginTurn(built, PlayerSide.Corp, Behavior, Runtime)));
+        CardInstanceId top = state.Zones.Single(static zone => zone.Kind == ZoneKind.CorpDeck).CardIds[0];
+        state = RoundTrip(ChooseCards(state, top));
+
+        Assert.Equal(ZoneKind.CorpDiscard, state.Zones.Single(zone => zone.CardIds.Contains(top)).Kind);
+    }
+
+    [Fact]
+    [Trait("ElevationCard", "35039")]
+    public void HumanoidResourcesNestedDrawFromAnEmptyRAndDEndsTheGame()
+    {
+        // Ladder regression: a nested operation's deck-out expected an ordinary play.
+        const string Sprint = "30041";
+        GameState state = new ElevationBoard { CorpDeckFiller = 3 }
+            .Add("35039", Place.Root, rezzed: true)
+            .Add(Sprint, Place.Hq)
+            .Begin();
+        state = UseAbilityOf(state, "35039");
+        for (int step = 0; step < 20 && state.Outcome.Kind != GameOutcomeKind.Won; step++)
+        {
+            LegalAction? play = state.PendingDecision?.LegalActions.FirstOrDefault(action => action.Kind == ActionKind.PlayCard
+                || action.Parameters is BehaviorChoiceParameters { CardIds.Count: > 0 } choice && choice.CardIds.Contains(Card(state, Sprint)));
+            state = play is not null
+                ? Apply(state, play).State
+                : state.PendingDecision?.LegalActions.FirstOrDefault(static action => action.Parameters is BehaviorInstallChoiceParameters { Choice: null }) is { } skip
+                    ? Apply(state, skip).State
+                    : Pass(state);
+        }
+
+        Assert.Equal(GameOutcomeKind.Won, state.Outcome.Kind);
+        Assert.Equal(PlayerSide.Runner, state.Outcome.Winner);
+        RoundTrip(state);
+    }
 }
