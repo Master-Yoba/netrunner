@@ -407,7 +407,8 @@ public static class ElevationBatch2Specs
                         BehaviorInstructionKind.TrashCard,
                         target: BehaviorTarget.HostedOnSource(PlayerSide.Runner)),
                 ],
-                occurrenceController: PlayerSide.Runner),
+                occurrenceController: PlayerSide.Runner,
+                requirement: BehaviorCondition.ZoneCountAtLeast(BehaviorZone.HostedFaceUp, 1)),
         ],
         hostedCardsPlayAsGrip: true);
 

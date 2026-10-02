@@ -95,8 +95,8 @@ public sealed class CardFormatTests
     public void ElevationSimulationDecksAreLegalAndFullyBound()
     {
         IReadOnlyList<OfficialPreset> decks = OfficialPresetCatalog.ElevationSimulation().ElevationSimulationDecks;
-        Assert.Equal(3, decks.Count(static deck => deck.Side == PlayerSide.Corp));
-        Assert.Equal(2, decks.Count(static deck => deck.Side == PlayerSide.Runner));
+        Assert.Equal(6, decks.Count(static deck => deck.Side == PlayerSide.Corp));
+        Assert.Equal(4, decks.Count(static deck => deck.Side == PlayerSide.Runner));
         Assert.DoesNotContain(OfficialPresetCatalog.Embedded().Presets,
             static preset => preset.PresetId.StartsWith(OfficialPresetCatalog.ElevationSimulationPrefix, StringComparison.Ordinal));
         BehaviorCatalog behavior = ElevationBehaviorCatalog.Create();

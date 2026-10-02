@@ -110,6 +110,10 @@ public sealed partial class CorpHeuristicPolicy
                 case BehaviorInstructionKind.ProhibitScoringTargetThisTurn: total -= 20; break;
                 case BehaviorInstructionKind.Sabotage: total -= amount * 80; break;
                 case BehaviorInstructionKind.PlaceOnTopOfDeck: total += 60; break;
+                // Elevation (EL.5): a nested play is the played operation's own value; a faceup agenda
+                // (BANGUN) punishes its access.
+                case BehaviorInstructionKind.PlayCard: total += 250; break;
+                case BehaviorInstructionKind.TurnFaceUp: total += 40; break;
                 case BehaviorInstructionKind.AddBreachAccess: total -= amount * 150; break;
                 case BehaviorInstructionKind.RefillRecurringCredits: total += 2 * context.CreditValue; break;
                 case BehaviorInstructionKind.InstallCard when instruction.IsZoneInstall: total += 250; break;

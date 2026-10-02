@@ -654,8 +654,8 @@ public partial class GameTableControl : Control
 		_runnerDeckPile.Text = view.RunnerDeck.Count == 0 ? "Stack\nEmpty" : string.Empty;
 		RenderPileFace("zone:runner-heap", (BoardActionButton)_runnerHeapPile,
 			view.RunnerHeap.Count > 0 ? view.RunnerHeap[^1] : null, view.RunnerHeap.Count, "Heap", PlayerSide.Runner, nextVisibleCards);
-		UpdatePileTooltip(_runnerHeapPile, $"Runner Heap · {view.RunnerHeap.Count} public cards",
-			view.RunnerHeap.Count > 0 && view.RunnerHeap[^1].IsKnown);
+		UpdatePileTooltip(_runnerHeapPile, $"Runner Heap · {view.RunnerHeap.Count} public cards{RemovedFromGameNote(view.RunnerRemovedFromGame)}",
+			view.RunnerHeap.Count > 0 && view.RunnerHeap[^1].IsKnown && view.RunnerRemovedFromGame.Count == 0);
 
 		RenderScorePile("zone:corp-score", _corpScoredPile, view.CorpScore, PlayerSide.Corp, nextVisibleCards);
 		RenderScorePile("zone:runner-score", _runnerScoredPile, view.RunnerScore, PlayerSide.Runner, nextVisibleCards);
@@ -846,7 +846,9 @@ public partial class GameTableControl : Control
 		_activeRigSlots.Clear();
 
 		IReadOnlyList<CardViewModel> cards = view.RunnerRig;
-		var hosted = cards
+		// Cards hosted faceup on a console (Bling, Madani) sit on their host like installed hosted cards.
+		HashSet<string> faceUpHosted = view.HostedFaceUp.Select(card => card.Id).ToHashSet(StringComparer.Ordinal);
+		var hosted = cards.Concat(view.HostedFaceUp)
 			.Where(card => card.HostCardId is { Length: > 0 })
 			.GroupBy(card => card.HostCardId!, StringComparer.Ordinal)
 			.ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.Ordinal);
@@ -855,7 +857,7 @@ public partial class GameTableControl : Control
 			Control slot = EnsureRigSlot(card.Id, RigArea(card));
 			_activeRigSlots.Add(card.Id);
 			ClearRigSlot(slot);
-			RenderHostedSlot(slot, card, hosted.GetValueOrDefault(card.Id) ?? Array.Empty<CardViewModel>(), nextVisibleCards);
+			RenderHostedSlot(slot, card, hosted.GetValueOrDefault(card.Id) ?? Array.Empty<CardViewModel>(), nextVisibleCards, faceUpHosted);
 		}
 		foreach (CardViewModel card in cards.Where(card => !string.IsNullOrEmpty(card.HostCardId) && !cards.Any(host => host.Id == card.HostCardId)
 			&& !view.Servers.SelectMany(server => server.OrderedIce).Any(host => host?.Id == card.HostCardId)
@@ -1002,11 +1004,17 @@ public partial class GameTableControl : Control
 		}
 	}
 
+	/// <summary>The removed-from-game pile, named beside the discard pile it would otherwise be mistaken for.</summary>
+	private static string RemovedFromGameNote(IReadOnlyList<CardViewModel> removed) => removed.Count == 0
+		? string.Empty
+		: $"\nRemoved from the game: {string.Join(", ", removed.Select(card => card.Title))}";
+
 	private void RenderHostedSlot(
 		Control slot,
 		CardViewModel host,
 		IReadOnlyList<CardViewModel> attachments,
-		Dictionary<string, TableCardControl> nextVisibleCards)
+		Dictionary<string, TableCardControl> nextVisibleCards,
+		HashSet<string>? faceUpHosted = null)
 	{
 		TableCardControl hostControl = EnsureCard(
 			$"rig:{host.Id}",
@@ -1029,6 +1037,8 @@ public partial class GameTableControl : Control
 				CardSizeRole.HostedPortrait);
 			attachmentControl.Position = HostedCardPosition(index);
 			attachmentControl.ZIndex = index + 2;
+			if (faceUpHosted?.Contains(attachment.Id) == true && !attachmentControl.UseHoverPreview)
+				attachmentControl.TooltipText = $"Hosted faceup on {host.Title} · not installed\n" + attachmentControl.TooltipText;
 			Vector2 edge = attachmentControl.Position + attachmentControl.DisplaySize;
 			footprint = new Vector2(Mathf.Max(footprint.X, edge.X), Mathf.Max(footprint.Y, edge.Y));
 		}
@@ -1351,6 +1361,8 @@ public partial class GameTableControl : Control
 			$"resources:{view.Corp.Credits}:{view.Corp.Clicks}:{view.Runner.Credits}:{view.Runner.Clicks}",
 			$"runnerhand:{view.RunnerHand.Count}:{CardsFingerprint(view.RunnerHand.VisibleCards)}",
 			$"rigrig:{CardsFingerprint(view.RunnerRig)}",
+			$"hostedfaceup:{CardsFingerprint(view.HostedFaceUp)}",
+			$"removed:{CardsFingerprint(view.CorpRemovedFromGame)}:{CardsFingerprint(view.RunnerRemovedFromGame)}",
 			$"corpscore:{CardsFingerprint(view.CorpScore)}",
 			$"runnerscore:{CardsFingerprint(view.RunnerScore)}",
 			$"corpid:{CardFingerprint(view.CorpIdentity)}",

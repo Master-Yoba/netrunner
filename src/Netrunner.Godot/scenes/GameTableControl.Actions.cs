@@ -44,10 +44,10 @@ public partial class GameTableControl
 		}
 		if (pile.GetParent() != parent) pile.Reparent(parent);
 		pile.TooltipText = handle == "zone:corp-deck" ? $"R&D · {count} cards · draw for 1 click when available"
-			: $"Archives · {count} cards · click to browse";
+			: $"Archives · {count} cards · click to browse{RemovedFromGameNote(_pendingView?.CorpRemovedFromGame ?? [])}";
 		if (handle == "zone:corp-deck") pile.SetActionAvailable(false);
 		RenderPileFace(handle, pile, model, count, handle == "zone:corp-deck" ? "R&D" : "Archives", PlayerSide.Corp, visible);
-		if (UseCardHoverPreview && model is { IsKnown: true }) pile.TooltipText = string.Empty;
+		if (UseCardHoverPreview && model is { IsKnown: true } && (_pendingView?.CorpRemovedFromGame.Count ?? 0) == 0) pile.TooltipText = string.Empty;
 	}
 
 	private TableCardControl RenderPileFace(string handle, BoardActionButton pile, CardViewModel? model, int count, string title,

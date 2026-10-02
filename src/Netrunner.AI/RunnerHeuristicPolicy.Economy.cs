@@ -85,6 +85,10 @@ public sealed partial class RunnerHeuristicPolicy
                 case BehaviorInstructionKind.AddBreachAccess: total += amount * 150; break;
                 case BehaviorInstructionKind.RefillRecurringCredits: total += 2 * context.CreditValue; break;
                 case BehaviorInstructionKind.ForfeitAgenda: total -= 600; break;
+                // Elevation (EL.5): a card hosted faceup on a console is one more card to play or install;
+                // a nested play is the played card's own value, roughly a good event.
+                case BehaviorInstructionKind.HostFaceUp: total += 100; break;
+                case BehaviorInstructionKind.PlayCard: total += 250; break;
                 case BehaviorInstructionKind.GainCredits: total += sign * amount * context.CreditValue; break;
                 // v14 (Codex review, 1 October): Zahya pays a credit a card the ended run accessed; it scored 0 and was declined.
                 case BehaviorInstructionKind.GainCreditsPerAccess when context.Generation >= 10:

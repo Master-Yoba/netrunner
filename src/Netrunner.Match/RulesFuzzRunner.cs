@@ -116,7 +116,7 @@ public static class RulesFuzzRunner
         "developer" => "developer",
         "official" => "expanded-v1",
         "gateway" => "gateway-v1",
-        "elevation" => "elevation-simulation-v1",
+        "elevation" => "elevation-simulation-v2",
         _ => throw new ArgumentException($"Unknown content '{content}'; expected developer, official, gateway or elevation.", nameof(content)),
     };
 

@@ -537,4 +537,65 @@ public sealed class ElevationBatch2Tests
 
     private static bool IsMadaniInstall(LegalAction action) =>
         action.Parameters is AbilityActionParameters { AbilityKey: "madani-install" };
+
+    [Fact]
+    [Trait("ElevationCard", "35006")]
+    public void BlingWithNothingHostedEndsTheTurnCleanly()
+    {
+        GameState state = new ElevationBoard(PlayerSide.Runner) { RunnerCredits = 10 }
+            .Add("35006", Place.Rig)
+            .Begin();
+        state = RoundTrip(PassUntil(SpendRemainingClicks(state), static value => value.Turn.ActiveSide == PlayerSide.Corp));
+
+        Assert.Equal(ZoneKind.RunnerRig, ZoneOf(state, "35006"));
+    }
+
+    [Fact]
+    [Trait("ElevationCard", "35028")]
+    public void MadaniInstallsAHostedProgramDuringARun()
+    {
+        GameState state = new ElevationBoard(PlayerSide.Runner) { RunnerCredits = 10 }
+            .Add("35028", Place.Rig)
+            .Add(Cleaver, Place.Grip)
+            .Begin();
+        state = UseAbilityOf(state, "35028");
+        state = ToAction(ChooseCards(state, Card(state, Cleaver)));
+        state = RunTo(state, 0, static value => value.PendingDecision?.LegalActions.Any(IsMadaniInstall) == true);
+        Assert.NotNull(state.RunState);
+        state = Apply(state, IsMadaniInstall).State;
+        state = RoundTrip(Apply(state, action => action.Parameters is BehaviorInstallChoiceParameters { Choice: { } choice }
+            && choice.CardId == Card(state, Cleaver)).State);
+
+        Assert.Equal(ZoneKind.RunnerRig, ZoneOf(state, Cleaver));
+        Assert.NotNull(state.RunState);
+        Assert.Equal(10 - 3, Player(state, PlayerSide.Runner).Credits);
+    }
+
+    [Fact]
+    [Trait("ElevationCard", "35066")]
+    public void IpEnforcementCanInstallOverACardInAnExistingRemote()
+    {
+        const string Regolith = "30071";
+        GameState state = new ElevationBoard { Tags = 3, RunnerPoints = 2 }
+            .Add("35066", Place.Hq)
+            .Add(OffworldOffice, Place.RunnerScore)
+            .Add(Regolith, Place.Root)
+            .Begin();
+        state = PlayFirst(state, "35066");
+        state = ChooseOption(state, "x-2");
+        state = Apply(state, action => action.Parameters is BehaviorInstallChoiceParameters
+        {
+            Choice: { CreateNewRemote: false, ServerId: not null } choice,
+        } && choice.CardId == Card(state, OffworldOffice)).State;
+        for (int step = 0; step < 4 && state.PendingDecision?.Kind == DecisionKind.InstallChoice; step++)
+        {
+            state = RoundTrip(Apply(state, static action => action.Parameters is InstallCardParameters install
+                && (install.FinalizeSelection || install.SelectedReplacementCardIds.Count > 0)).State);
+        }
+
+        state = RoundTrip(ToAction(state));
+        Assert.Equal(ZoneKind.ServerRoot, ZoneOf(state, OffworldOffice));
+        Assert.Equal(ZoneKind.CorpDiscard, ZoneOf(state, Regolith));
+        Assert.Equal(1, CardState(state, OffworldOffice).AdvancementCounters);
+    }
 }

@@ -60,7 +60,7 @@
       "id": "slice-EL.5",
       "slice": "EL.5",
       "title": "Batch 2: zones and hidden information",
-      "status": "planned",
+      "status": "complete",
       "completionRequired": true,
       "codes": [
         "35004",
@@ -193,9 +193,9 @@
       "faction": "anarch",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-INSTALL-FROM-HEAP"
@@ -241,9 +241,9 @@
       "faction": "anarch",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-HOSTED-FACEUP"
@@ -395,9 +395,9 @@
       "faction": "criminal",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-LOOK-TOP"
@@ -650,9 +650,9 @@
       "faction": "shaper",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-HAND-SIZE-DISCARD"
@@ -741,9 +741,9 @@
       "faction": "shaper",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-HOSTED-FACEUP"
@@ -918,9 +918,9 @@
       "faction": "haas-bioroid",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-LOOK-TOP"
@@ -965,9 +965,9 @@
       "faction": "haas-bioroid",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-DIVIDENDS",
@@ -990,9 +990,9 @@
       "faction": "haas-bioroid",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-NESTED-PLAY"
@@ -1147,9 +1147,9 @@
       "faction": "jinteki",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-LOOK-TOP"
@@ -1239,9 +1239,9 @@
       "faction": "jinteki",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-REVEAL-ON-ACCESS"
@@ -1356,9 +1356,9 @@
       "faction": "jinteki",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-REVEAL-SUBSET"
@@ -1618,9 +1618,9 @@
       "faction": "nbn",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-INSTALL-FROM-SCORE-AREA",
@@ -1644,9 +1644,9 @@
       "faction": "nbn",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-REVEAL-GRIP"
@@ -1668,9 +1668,9 @@
       "faction": "weyland-consortium",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-FACEUP-AGENDA"
@@ -1780,9 +1780,9 @@
       "faction": "weyland-consortium",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-PLAY-FROM-ARCHIVES",
@@ -1966,9 +1966,9 @@
       "faction": "neutral-corp",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
       "newPrimitives": [
         "EL-PLAY-FROM-ARCHIVES",

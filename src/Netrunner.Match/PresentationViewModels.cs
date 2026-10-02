@@ -31,6 +31,14 @@ public sealed record MatchViewModel(
 {
     public IReadOnlyList<CardViewModel> CorpDiscard { get; init; } = Array.Empty<CardViewModel>();
     public IReadOnlyList<CardViewModel> RunnerHeap { get; init; } = Array.Empty<CardViewModel>();
+    /// <summary>
+    /// Cards hosted faceup on a Runner console (Bling, Madani): not installed,
+    /// public to both sides, each naming its host in <see cref="CardViewModel.HostCardId"/>.
+    /// </summary>
+    public IReadOnlyList<CardViewModel> HostedFaceUp { get; init; } = Array.Empty<CardViewModel>();
+    /// <summary>Each side's removed-from-game pile; public.</summary>
+    public IReadOnlyList<CardViewModel> CorpRemovedFromGame { get; init; } = Array.Empty<CardViewModel>();
+    public IReadOnlyList<CardViewModel> RunnerRemovedFromGame { get; init; } = Array.Empty<CardViewModel>();
     /// <summary>Public cards currently resolving: a played Operation or Event.</summary>
     public IReadOnlyList<CardViewModel> PlayArea { get; init; } = Array.Empty<CardViewModel>();
     /// <summary>Advancement counters on installed cards, by presentation key; counters are public even on face-down cards.</summary>
@@ -925,6 +933,10 @@ public static class ObservationViewMapper
             CorpDiscardCount = OptionalMap(publicState, "zoneCounts") is { } zoneCounts
                 ? ReadInt(zoneCounts, "corpDiscard", fallback: 0) : 0,
             RunnerHeap = ReadCards(publicState, "runnerHeap", metadataResolver, abilityCue),
+            HostedFaceUp = ReadCards(publicState, "runnerHostedFaceUp", metadataResolver, abilityCue)
+                .Concat(ReadCards(publicState, "corpHostedFaceUp", metadataResolver, abilityCue)).ToArray(),
+            CorpRemovedFromGame = ReadCards(publicState, "corpRemovedFromGame", metadataResolver, abilityCue),
+            RunnerRemovedFromGame = ReadCards(publicState, "runnerRemovedFromGame", metadataResolver, abilityCue),
             PlayArea = ReadCards(publicState, "corpPlayArea", metadataResolver, abilityCue)
                 .Concat(ReadCards(publicState, "runnerPlayArea", metadataResolver, abilityCue)).ToArray(),
             CorpIdentity = ReadCards(publicState, "corpIdentity", metadataResolver, abilityCue).SingleOrDefault(),

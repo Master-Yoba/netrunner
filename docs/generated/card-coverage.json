@@ -3,11 +3,11 @@
   "rulesVersion": "CR-26.03",
   "counts": {
     "total": 159,
-    "registered": 120,
-    "tested": 120,
-    "fullTextComplete": 120,
+    "registered": 136,
+    "tested": 136,
+    "fullTextComplete": 136,
     "partial": 0,
-    "unregistered": 39
+    "unregistered": 23
   },
   "sets": [
     {
@@ -79,23 +79,23 @@
         {
           "id": "slice-EL.5",
           "slice": "EL.5",
-          "status": "planned",
-          "cards": 17
+          "status": "complete",
+          "cards": 16
         },
         {
           "id": "slice-EL.7",
           "slice": "EL.7",
           "status": "planned",
-          "cards": 22
+          "cards": 23
         }
       ],
       "counts": {
         "total": 82,
-        "registered": 43,
-        "tested": 43,
-        "fullTextComplete": 43,
+        "registered": 59,
+        "tested": 59,
+        "fullTextComplete": 59,
         "partial": 0,
-        "unregistered": 39
+        "unregistered": 23
       }
     }
   ],
@@ -2092,13 +2092,15 @@
       "title": "Scrounge",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.ScroungeInstallsAProgramFromTheHeapAndCanBottomAnother"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-8.5-install",
@@ -2137,13 +2139,18 @@
       "title": "Bling",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingDoesNotTriggerOnAPaidInstall",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingHostedEventsArePlayedAsIfFromTheGrip",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingHostsTheTopStackCardFaceupAfterAFreeInstallAndItInstallsAsIfFromTheGrip",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingTrashesItsHostedCardsWhenTheDiscardPhaseEnds"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-3.8.5-console",
@@ -2305,13 +2312,15 @@
       "title": "MuslihaT: Multifarious Marketeer",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.MuslihaTAddsATopIcebreakerToTheGrip"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-1.21-look-reveal",
@@ -2422,8 +2431,8 @@
       "cardSet": "elevation",
       "code": "35018",
       "title": "Detente",
-      "batch": "slice-EL.5",
-      "slice": "EL.5",
+      "batch": "slice-EL.7",
+      "slice": "EL.7",
       "status": "planned",
       "textStatus": "planned",
       "reviewStatus": "audited",
@@ -2438,7 +2447,7 @@
         "EL-CR-9.5-paid-abilities",
         "EL-CR-7.1-access"
       ],
-      "observation": "Console: first successful HQ run each turn may host a random HQ card faceup; any player may click and return two hosted cards to HQ to give a random HQ access.",
+      "observation": "Console: first successful HQ run each turn may host a random HQ card faceup; any player may click and return two hosted cards to HQ to give a random HQ access. Moved from EL.5 to EL.7 on 2 October 2026: its random HQ access happens outside a run, which needs the run and access machinery of EL.6 (EL-ACCESS-OUTSIDE-RUN).",
       "hiddenInformationImpact": "Hosted HQ cards become public; returning them to HQ hides them again.",
       "serializationImpact": "Hosted faceup cards and the any-player ability are serialized with the console."
     },
@@ -2566,13 +2575,15 @@
       "title": "Magdalene Keino-Chemutai: Cryptarchitect",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.MagdaleneInstallsAProgramDiscardedToHandSize"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-5.5-discard",
@@ -2658,13 +2669,15 @@
       "title": "Madani",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.MadaniHostsProgramsAndInstallsOneOncePerTurn"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-3.8.5-console",
@@ -2847,13 +2860,15 @@
       "title": "Poétrï Luxury Brands: All the Rage",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.PoetriInstallsANonAgendaFromTheTopThreeWhenScoring"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-1.21-look-reveal",
@@ -2894,13 +2909,15 @@
       "title": "Project Ingatan",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.ProjectIngatanInstallsFromArchivesIgnoringAllCosts"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-10.13-dividends",
@@ -2917,13 +2934,15 @@
       "title": "Humanoid Resources",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.HumanoidResourcesGainsDrawsInstallsAndPlaysAnOperation"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-9.5-paid-abilities",
@@ -3080,13 +3099,16 @@
       "title": "AU Co.: The Gold Standard in Clones",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.AuCoGetsAPowerCounterWhenItDoesDamage",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.AuCoTrashesOneOfTheTopThreeAndTakesTheRest"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-1.9-counters",
@@ -3175,13 +3197,16 @@
       "title": "Byte!",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.ByteDoesNothingWhenAccessedInArchives",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.ByteTagsAndDoesThreeNetWhenAccessedInRd"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-7.1-access",
@@ -3291,13 +3316,15 @@
       "title": "Peer Review",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.PeerReviewGainsSevenAndInstallsFromHq"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-1.21-look-reveal",
@@ -3560,13 +3587,15 @@
       "title": "IP Enforcement",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.IpEnforcementTakesBackAStolenAgendaAndAdvancesIt"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-1.16-costs",
@@ -3583,13 +3612,15 @@
       "title": "Touch-ups",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.TouchUpsAdvancesThenShufflesRevealedProgramsIntoTheStack"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-1.18-advance",
@@ -3606,13 +3637,16 @@
       "title": "BANGUN: When Disaster Strikes",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BangunPunishesAccessingAFaceupAgenda",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BangunTurnsAnInstalledAgendaFaceup"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-8.5-install",
@@ -3727,13 +3761,17 @@
       "title": "Plutus",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.PlutusCannotBeRezzedWithoutAnAlternativeCost",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.PlutusPlaysATransactionFromArchivesAndRemovesIt",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.PlutusRevealsAndTrashesThreeHqCardsToRez"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-1.16-costs",
@@ -3925,13 +3963,17 @@
       "title": "Petty Cash",
       "batch": "slice-EL.5",
       "slice": "EL.5",
-      "status": "planned",
-      "textStatus": "planned",
-      "reviewStatus": "audited",
+      "status": "registered",
+      "textStatus": "complete",
+      "reviewStatus": "complete",
       "reviewer": "architect",
-      "registered": false,
-      "tests": [],
-      "fullTextComplete": false,
+      "registered": true,
+      "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.PettyCashCannotBePlayedAfterAnActionFinished",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.PettyCashFromHqGainsFiveCredits",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.PettyCashPlayedFromArchivesGainsAClickAndIsRemovedFromTheGame"
+      ],
+      "fullTextComplete": true,
       "partial": false,
       "citations": [
         "EL-CR-8.6-play",

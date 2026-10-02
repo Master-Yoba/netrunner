@@ -313,6 +313,29 @@ public sealed class ElevationBatch1EconomyTests
     }
 
     [Fact]
+    [Trait("ElevationCard", "35025")]
+    public void IlluminationsDiscountStacksWithAFirstProgramInstallDiscount()
+    {
+        // Fuzz regression: the zone discount comes before the quoted DZMZ discount.
+        const string Unity = "30026";
+        GameState state = new ElevationBoard(PlayerSide.Runner) { RunnerCredits = 1 }
+            .Add("35025", Place.Grip)
+            .Add("30022", Place.Rig)
+            .Add(Unity, Place.Grip)
+            .Begin();
+        state = Apply(state, action => action.Parameters is PlayCardParameters { TargetServerId: not null } play
+            && play.CardId == Card(state, "35025")).State;
+        state = PassUntil(state, static value => value.PendingDecision?.Kind == DecisionKind.BehaviorInstallChoice);
+        Assert.Equal(3 - 1 - 1, Assert.Single(InstallChoices(state), choice => choice.CardId == Card(state, Unity)).CreditCost);
+        state = InstallChoice(state, choice => choice.CardId == Card(state, Unity));
+        state = PassUntil(state, static value => value.RunState is null);
+
+        Assert.Equal(ZoneKind.RunnerRig, ZoneOf(state, Unity));
+        Assert.Equal(1 - 1 + 0, Player(state, PlayerSide.Runner).Credits);
+        RoundTrip(state);
+    }
+
+    [Fact]
     [Trait("ElevationCard", "35077")]
     public void KeyPerformanceIndicatorsResolvesTwoChosenModesInOrder()
     {

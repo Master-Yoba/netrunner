@@ -283,6 +283,7 @@ public partial class Main
 						RenderSnapshot(CreateSlice48Snapshot(view, view.Decision));
 						await TableFrames(3);
 						GD.Print("M49_MOTION PASS replacement=true skip=true");
+						await AssertElevationTableStates(view, screenshots);
 					}
 					_matchHistory.SetExpanded(true);
 					_matchHistory.SetPinned(size.X >= 1800);
@@ -567,5 +568,29 @@ public partial class Main
 		using Image frame = GetViewport().GetTexture().GetImage();
 		if (frame.SavePng(Path.Combine(directory, name + ".png")) != Error.Ok)
 			throw new IOException("Could not save native table evidence.");
+	}
+
+	/// <summary>
+	/// EL.5 client states on the real table: cards hosted faceup on a console
+	/// sit on their host, the score row names the threat level, and the
+	/// removed-from-game pile is named on the heap.
+	/// </summary>
+	private async Task AssertElevationTableStates(MatchViewModel view, bool screenshots)
+	{
+		CardViewModel host = view.RunnerRig.First(card => string.IsNullOrEmpty(card.HostCardId) && card.IsKnown);
+		CardViewModel hosted = UiPreviewSamples.Known("table-hosted-faceup", "Program", "Hosted faceup program") with { HostCardId = host.Id };
+		CardViewModel removed = UiPreviewSamples.Known("table-removed-event", "Event", "Removed event");
+		MatchViewModel elevation = view with { HostedFaceUp = [hosted], RunnerRemovedFromGame = [removed] };
+		_gameTable.Render(elevation);
+		await TableFrames(3);
+		bool hostedShown = _gameTable.VisibleCards.Values.Any(control => control.Card?.Id == hosted.Id && control.IsVisibleInTree());
+		bool threat = FindDescendants<Label>(_gameTable).Any(label => label.Text.Contains("Threat", StringComparison.Ordinal));
+		bool removedNamed = FindDescendants<Button>(_gameTable).Any(button => button.TooltipText.Contains("Removed from the game: Removed event", StringComparison.Ordinal));
+		if (!hostedShown || !threat || !removedNamed)
+			throw new InvalidOperationException($"Elevation table states missing: hosted={hostedShown}, threat={threat}, removed={removedNamed}.");
+		if (screenshots) await SaveTableEvidence("elevation-hosted-runner-1920");
+		RenderSnapshot(CreateSlice48Snapshot(view, view.Decision));
+		await TableFrames(3);
+		GD.Print("ELEVATION_TABLE PASS hosted_faceup=true threat=true removed=true");
 	}
 }

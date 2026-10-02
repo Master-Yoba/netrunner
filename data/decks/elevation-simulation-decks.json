@@ -466,6 +466,468 @@
           "quantity": 2
         }
       ]
+    },
+    {
+      "presetId": "elevation-sim-auco-corp",
+      "name": "AU Co. simulation",
+      "summary": "AU Co. with Byte!, Peer Review, Petty Cash and the Jinteki ICE.",
+      "side": "corp",
+      "identityCode": "35046",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/ELEVATION_PROGRESS.md",
+      "cards": [
+        {
+          "code": "35049",
+          "quantity": 3
+        },
+        {
+          "code": "30044",
+          "quantity": 1
+        },
+        {
+          "code": "30068",
+          "quantity": 3
+        },
+        {
+          "code": "30069",
+          "quantity": 2
+        },
+        {
+          "code": "30046",
+          "quantity": 3
+        },
+        {
+          "code": "30047",
+          "quantity": 3
+        },
+        {
+          "code": "30072",
+          "quantity": 3
+        },
+        {
+          "code": "30074",
+          "quantity": 2
+        },
+        {
+          "code": "35080",
+          "quantity": 2
+        },
+        {
+          "code": "30073",
+          "quantity": 2
+        },
+        {
+          "code": "35050",
+          "quantity": 3
+        },
+        {
+          "code": "35055",
+          "quantity": 3
+        },
+        {
+          "code": "35081",
+          "quantity": 3
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "30048",
+          "quantity": 3
+        },
+        {
+          "code": "30045",
+          "quantity": 2
+        },
+        {
+          "code": "30071",
+          "quantity": 2
+        },
+        {
+          "code": "30049",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "elevation-sim-bangun-corp",
+      "name": "BANGUN simulation",
+      "summary": "BANGUN with Plutus, Off the Books, Greenmail, Touch-ups and IP Enforcement.",
+      "side": "corp",
+      "identityCode": "35068",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/ELEVATION_PROGRESS.md",
+      "cards": [
+        {
+          "code": "35070",
+          "quantity": 3
+        },
+        {
+          "code": "35071",
+          "quantity": 3
+        },
+        {
+          "code": "30060",
+          "quantity": 1
+        },
+        {
+          "code": "30069",
+          "quantity": 3
+        },
+        {
+          "code": "35075",
+          "quantity": 3
+        },
+        {
+          "code": "30062",
+          "quantity": 2
+        },
+        {
+          "code": "30063",
+          "quantity": 2
+        },
+        {
+          "code": "35076",
+          "quantity": 2
+        },
+        {
+          "code": "30072",
+          "quantity": 3
+        },
+        {
+          "code": "35080",
+          "quantity": 2
+        },
+        {
+          "code": "35073",
+          "quantity": 3
+        },
+        {
+          "code": "35072",
+          "quantity": 2
+        },
+        {
+          "code": "30064",
+          "quantity": 2
+        },
+        {
+          "code": "30065",
+          "quantity": 2
+        },
+        {
+          "code": "35077",
+          "quantity": 2
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "35081",
+          "quantity": 2
+        },
+        {
+          "code": "35067",
+          "quantity": 2
+        },
+        {
+          "code": "35066",
+          "quantity": 1
+        },
+        {
+          "code": "30061",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "elevation-sim-poetri-corp",
+      "name": "Poétrï simulation",
+      "summary": "Poétrï Luxury Brands with Project Ingatan, Humanoid Resources and the Haas-Bioroid tempo cards.",
+      "side": "corp",
+      "identityCode": "35036",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/ELEVATION_PROGRESS.md",
+      "cards": [
+        {
+          "code": "35038",
+          "quantity": 3
+        },
+        {
+          "code": "35037",
+          "quantity": 3
+        },
+        {
+          "code": "30036",
+          "quantity": 1
+        },
+        {
+          "code": "30068",
+          "quantity": 3
+        },
+        {
+          "code": "30070",
+          "quantity": 3
+        },
+        {
+          "code": "30038",
+          "quantity": 2
+        },
+        {
+          "code": "30039",
+          "quantity": 2
+        },
+        {
+          "code": "30072",
+          "quantity": 3
+        },
+        {
+          "code": "30074",
+          "quantity": 3
+        },
+        {
+          "code": "35080",
+          "quantity": 2
+        },
+        {
+          "code": "30073",
+          "quantity": 2
+        },
+        {
+          "code": "35039",
+          "quantity": 3
+        },
+        {
+          "code": "35040",
+          "quantity": 2
+        },
+        {
+          "code": "30037",
+          "quantity": 2
+        },
+        {
+          "code": "35043",
+          "quantity": 2
+        },
+        {
+          "code": "30041",
+          "quantity": 2
+        },
+        {
+          "code": "35044",
+          "quantity": 2
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "35081",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "elevation-sim-magdalene-runner",
+      "name": "Magdalene simulation",
+      "summary": "Magdalene Keino-Chemutai with Madani, the Shaper programs and Scrounge.",
+      "side": "runner",
+      "identityCode": "35024",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/ELEVATION_PROGRESS.md",
+      "cards": [
+        {
+          "code": "35028",
+          "quantity": 3
+        },
+        {
+          "code": "30026",
+          "quantity": 2
+        },
+        {
+          "code": "30025",
+          "quantity": 2
+        },
+        {
+          "code": "30024",
+          "quantity": 1
+        },
+        {
+          "code": "35029",
+          "quantity": 2
+        },
+        {
+          "code": "35031",
+          "quantity": 2
+        },
+        {
+          "code": "35032",
+          "quantity": 2
+        },
+        {
+          "code": "30022",
+          "quantity": 2
+        },
+        {
+          "code": "30023",
+          "quantity": 1
+        },
+        {
+          "code": "30027",
+          "quantity": 2
+        },
+        {
+          "code": "35033",
+          "quantity": 2
+        },
+        {
+          "code": "30020",
+          "quantity": 2
+        },
+        {
+          "code": "30021",
+          "quantity": 2
+        },
+        {
+          "code": "35025",
+          "quantity": 2
+        },
+        {
+          "code": "35026",
+          "quantity": 2
+        },
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "30028",
+          "quantity": 2
+        },
+        {
+          "code": "30029",
+          "quantity": 2
+        },
+        {
+          "code": "30032",
+          "quantity": 1
+        },
+        {
+          "code": "30033",
+          "quantity": 2
+        },
+        {
+          "code": "30034",
+          "quantity": 1
+        },
+        {
+          "code": "35034",
+          "quantity": 2
+        },
+        {
+          "code": "35004",
+          "quantity": 2
+        },
+        {
+          "code": "30031",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "presetId": "elevation-sim-muslihat-runner",
+      "name": "MuslihaT simulation",
+      "summary": "MuslihaT with Bling, free installs and the criminal programs and events.",
+      "side": "runner",
+      "identityCode": "35013",
+      "sourceUrl": "https://github.com/Master-Yoba/netrunner/blob/dev/docs/ELEVATION_PROGRESS.md",
+      "cards": [
+        {
+          "code": "35006",
+          "quantity": 3
+        },
+        {
+          "code": "30015",
+          "quantity": 3
+        },
+        {
+          "code": "30016",
+          "quantity": 3
+        },
+        {
+          "code": "30017",
+          "quantity": 1
+        },
+        {
+          "code": "35020",
+          "quantity": 2
+        },
+        {
+          "code": "30013",
+          "quantity": 1
+        },
+        {
+          "code": "30014",
+          "quantity": 1
+        },
+        {
+          "code": "30018",
+          "quantity": 2
+        },
+        {
+          "code": "35022",
+          "quantity": 2
+        },
+        {
+          "code": "30012",
+          "quantity": 3
+        },
+        {
+          "code": "30011",
+          "quantity": 1
+        },
+        {
+          "code": "35014",
+          "quantity": 2
+        },
+        {
+          "code": "35015",
+          "quantity": 3
+        },
+        {
+          "code": "35017",
+          "quantity": 1
+        },
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "30028",
+          "quantity": 2
+        },
+        {
+          "code": "30029",
+          "quantity": 2
+        },
+        {
+          "code": "30033",
+          "quantity": 3
+        },
+        {
+          "code": "30034",
+          "quantity": 2
+        },
+        {
+          "code": "35034",
+          "quantity": 2
+        },
+        {
+          "code": "30031",
+          "quantity": 1
+        },
+        {
+          "code": "30032",
+          "quantity": 2
+        }
+      ]
     }
   ]
 }
