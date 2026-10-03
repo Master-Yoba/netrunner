@@ -19,10 +19,11 @@ public sealed class CardFormatTests
         CardFormatCatalog catalog = CardFormatCatalog.Embedded();
 
         Assert.Equal(
-            [CardFormatIds.Gateway, CardFormatIds.GatewayElevation, CardFormatIds.Startup2025, CardFormatIds.Startup2026],
+            [CardFormatIds.Gateway, CardFormatIds.GatewayElevation, CardFormatIds.NsgCoreSets, CardFormatIds.Startup2025,
+                CardFormatIds.Startup2026],
             catalog.Formats.Select(static format => format.Id));
         Assert.Equal(
-            [CardFormatIds.Gateway, CardFormatIds.GatewayElevation],
+            [CardFormatIds.Gateway, CardFormatIds.GatewayElevation, CardFormatIds.NsgCoreSets],
             catalog.PlayableFormats.Select(static format => format.Id));
         CardFormat startup = catalog.Get(CardFormatIds.Startup2026);
         Assert.False(startup.Complete);
@@ -30,6 +31,7 @@ public sealed class CardFormatTests
         Assert.True(startup.IsBanned("35045"));
         Assert.Equal(new HighValueAgendaLimit(3, 3), startup.DeckRules.HighValueAgendaLimit);
         Assert.Null(catalog.Get(CardFormatIds.Gateway).Restriction);
+        Assert.Null(catalog.Get(CardFormatIds.NsgCoreSets).Restriction);
     }
 
     [Fact]
@@ -39,6 +41,7 @@ public sealed class CardFormatTests
 
         Assert.Same(CardPools.Gateway, CardPools.ForFormat(catalog.Get(CardFormatIds.Gateway)));
         Assert.Same(CardPools.GatewayElevation, CardPools.ForFormat(catalog.Get(CardFormatIds.GatewayElevation)));
+        Assert.Same(CardPools.GatewayElevation, CardPools.ForFormat(catalog.Get(CardFormatIds.NsgCoreSets)));
         Assert.True(CardPools.TryForBehaviorVersion(GatewayBehaviorCatalog.Version, out CardPool gateway));
         Assert.Same(CardPools.Gateway, gateway);
         Assert.True(CardPools.TryForBehaviorVersion(ElevationBehaviorCatalog.Version, out CardPool elevation));
@@ -169,6 +172,53 @@ public sealed class CardFormatTests
             DeckValidationResult result = FormatDeckValidator.Validate(request, format, pool);
             Assert.True(result.IsValid, $"{deck.PresetId}: {string.Join("; ", result.Diagnostics)}");
         }
+    }
+
+    [Fact]
+    public void NsgCoreSetsDecksAreOnePerIdentityLegalWithoutBansAndFullyBound()
+    {
+        IReadOnlyList<OfficialPreset> decks = OfficialPresetCatalog.NsgCoreSets().NsgCoreSetsDecks;
+        Assert.Equal(12, decks.Count(static deck => deck.Side == PlayerSide.Corp));
+        Assert.Equal(9, decks.Count(static deck => deck.Side == PlayerSide.Runner));
+        Assert.Equal(21, decks.Select(static deck => deck.IdentityCode).Distinct(StringComparer.Ordinal).Count());
+        Assert.All(decks, static deck => Assert.NotEmpty(deck.Archetypes));
+        Assert.All(decks, static deck => Assert.StartsWith("https://netrunnerdb.com/en/decklist/", deck.SourceUrl, StringComparison.Ordinal));
+        Assert.DoesNotContain(OfficialPresetCatalog.Embedded().Presets, static preset => OfficialPresetCatalog.IsNsgCoreSetsDeck(preset.PresetId));
+        Assert.DoesNotContain(OfficialPresetCatalog.NsgCoreSets().Presets, static preset => OfficialPresetCatalog.IsElevationDeck(preset.PresetId));
+        BehaviorCatalog behavior = ElevationBehaviorCatalog.Create();
+        foreach (OfficialPreset deck in decks)
+        {
+            Assert.All(deck.Cards.Select(static card => card.Code).Append(deck.IdentityCode),
+                code => Assert.True(
+                    behavior.TryGet(new CardDefinitionId(code), out _)
+                    || behavior.TryGetIce(new CardDefinitionId(code), out _)
+                    || behavior.TryGetIcebreaker(new CardDefinitionId(code), out _)
+                    || behavior.TryGetAgenda(new CardDefinitionId(code), out _)
+                    || behavior.TryGetAsset(new CardDefinitionId(code), out _)
+                    || behavior.TryGetRunEvent(new CardDefinitionId(code), out _),
+                    $"{deck.PresetId}: {code} is unbound."));
+        }
+
+        if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode)
+        {
+            return;
+        }
+
+        CardDataSet pool = CardDataResource.LoadEmbeddedPool();
+        OfficialPresetCatalog.NsgCoreSets().Validate(pool);
+        CardFormat format = CardFormatCatalog.Embedded().Get(CardFormatIds.NsgCoreSets);
+        CardFormat banned = CardFormatCatalog.Embedded().Get(CardFormatIds.GatewayElevation);
+        int illegalUnderBans = 0;
+        foreach (OfficialPreset deck in decks)
+        {
+            var request = new DeckRequest(DeckRequest.CurrentSchemaVersion, deck.Side, deck.IdentityCode, deck.Cards);
+            DeckValidationResult result = FormatDeckValidator.Validate(request, format, pool);
+            Assert.True(result.IsValid, $"{deck.PresetId}: {string.Join("; ", result.Diagnostics)}");
+            if (!FormatDeckValidator.Validate(request, banned, pool).IsValid) illegalUnderBans++;
+        }
+
+        // NSG built these for the Core Sets without the Startup bans: 9 Corp decks use a card banned in 26.05.
+        Assert.Equal(9, illegalUnderBans);
     }
 
     [Fact]

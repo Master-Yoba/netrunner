@@ -8,6 +8,7 @@ are legal, the ban list, the deck rules and an effective date. `format.schema.js
 |---|---|---|---|
 | `gateway.json` | System Gateway | `sg` | yes |
 | `gateway-elevation.json` | System Gateway + Elevation | `sg`, `elev` | yes |
+| `nsg-core-sets.json` | NSG Core Sets (System Gateway + Elevation), no ban list | `sg`, `elev` | yes |
 | `startup-2025.json` | Startup 2025 (`startup_8`) | `sg`, `elev`; Liberation missing | no, incomplete |
 | `startup-2026.json` | Startup 2026 (`startup_10`) | `sg`, `elev`; Vantage Point missing | no, incomplete |
 

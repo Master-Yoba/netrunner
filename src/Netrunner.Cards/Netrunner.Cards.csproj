@@ -19,11 +19,15 @@
                       LogicalName="Netrunner.Cards.Data.decks.elevation-simulation-decks.json" />
     <EmbeddedResource Include="../../data/decks/gateway-elevation-decks.json"
                       LogicalName="Netrunner.Cards.Data.decks.gateway-elevation-decks.json" />
+    <EmbeddedResource Include="../../data/decks/nsg-core-sets-decks.json"
+                      LogicalName="Netrunner.Cards.Data.decks.nsg-core-sets-decks.json" />
     <!-- EL.1 C2: versioned format snapshots, validated by CardFormatCatalog. -->
     <EmbeddedResource Include="../../data/formats/gateway.json"
                       LogicalName="Netrunner.Cards.Data.formats.gateway.json" />
     <EmbeddedResource Include="../../data/formats/gateway-elevation.json"
                       LogicalName="Netrunner.Cards.Data.formats.gateway-elevation.json" />
+    <EmbeddedResource Include="../../data/formats/nsg-core-sets.json"
+                      LogicalName="Netrunner.Cards.Data.formats.nsg-core-sets.json" />
     <EmbeddedResource Include="../../data/formats/startup-2025.json"
                       LogicalName="Netrunner.Cards.Data.formats.startup-2025.json" />
     <EmbeddedResource Include="../../data/formats/startup-2026.json"

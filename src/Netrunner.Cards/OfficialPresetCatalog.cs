@@ -555,9 +555,9 @@ public sealed class OfficialPresetCatalog
             if (preset.Kind != GatewayKind) problems.Add($"{path}.kind: expected '{GatewayKind}'.");
             if (string.IsNullOrWhiteSpace(preset.Name) || string.IsNullOrWhiteSpace(preset.Summary) || string.IsNullOrWhiteSpace(preset.SourceUrl))
                 problems.Add($"{path}: a sample deck needs a name, a summary and a source URL.");
-            // Our Elevation decks follow their identity's minimum
-            // (checked against the metadata below), not the Gateway sample sizes.
-            if (!preset.PresetId.StartsWith(ElevationDeckPrefix, StringComparison.Ordinal)
+            // Our Elevation decks and NSG's Core Sets decks follow their identity's
+            // minimum (checked against the metadata below), not the Gateway sample sizes.
+            if (!preset.PresetId.StartsWith(ElevationDeckPrefix, StringComparison.Ordinal) && !IsNsgCoreSetsDeck(preset.PresetId)
                 && preset.CardCount != (preset.Side == PlayerSide.Corp ? 44 : 40))
                 problems.Add($"{path}.cards: contains {preset.CardCount} cards; a Gateway sample deck has {(preset.Side == PlayerSide.Corp ? 44 : 40)}.");
             var codes = new HashSet<string>(StringComparer.Ordinal);
@@ -617,6 +617,11 @@ public sealed class OfficialPresetCatalog
     /// <summary>The preset-ID prefix of our Elevation decks: the format's decks and the simulation decks.</summary>
     public const string ElevationDeckPrefix = "elevation-";
 
+    private const string NsgCoreSetsDecksResourceName = "Netrunner.Cards.Data.decks.nsg-core-sets-decks.json";
+
+    /// <summary>The preset-ID prefix of Null Signal Games' Core Sets sample decks.</summary>
+    public const string NsgCoreSetsDeckPrefix = "nsg-core-";
+
     private static readonly Lazy<OfficialPresetCatalog> ElevationSimulationCatalog = new(
         () => WithEmbeddedDecks(ElevationSimulationResourceName),
         LazyThreadSafetyMode.ExecutionAndPublication);
@@ -624,6 +629,26 @@ public sealed class OfficialPresetCatalog
     private static readonly Lazy<OfficialPresetCatalog> GatewayElevationCatalog = new(
         () => WithEmbeddedDecks(ElevationDecksResourceName),
         LazyThreadSafetyMode.ExecutionAndPublication);
+
+    private static readonly Lazy<OfficialPresetCatalog> NsgCoreSetsCatalog = new(
+        () => WithEmbeddedDecks(NsgCoreSetsDecksResourceName),
+        LazyThreadSafetyMode.ExecutionAndPublication);
+
+    private static readonly Lazy<OfficialPresetCatalog> FormatDecksCatalog = new(
+        () => WithEmbeddedDecks(ElevationDecksResourceName, NsgCoreSetsDecksResourceName),
+        LazyThreadSafetyMode.ExecutionAndPublication);
+
+    /// <summary>
+    /// The embedded catalog plus Null Signal Games' Core Sets (System Gateway +
+    /// Elevation) sample decks: the decks of the NSG Core Sets format.
+    /// </summary>
+    public static OfficialPresetCatalog NsgCoreSets() => NsgCoreSetsCatalog.Value;
+
+    /// <summary>
+    /// Every playable format's decks in one catalog: the embedded catalog, our Gateway +
+    /// Elevation decks and NSG's Core Sets decks, for a form that lists them all.
+    /// </summary>
+    public static OfficialPresetCatalog FormatDecks() => FormatDecksCatalog.Value;
 
     /// <summary>
     /// The embedded catalog plus the Elevation simulation decks: our decks for
@@ -654,18 +679,31 @@ public sealed class OfficialPresetCatalog
             && !presetId.StartsWith(ElevationSimulationPrefix, StringComparison.Ordinal);
     }
 
-    private static OfficialPresetCatalog WithEmbeddedDecks(string resourceName)
+    /// <summary>The NSG Core Sets format's decks alone.</summary>
+    public IReadOnlyList<OfficialPreset> NsgCoreSetsDecks =>
+        Gateway.Where(static preset => IsNsgCoreSetsDeck(preset.PresetId)).ToArray();
+
+    /// <summary>Whether a preset is one of NSG's Core Sets sample decks.</summary>
+    public static bool IsNsgCoreSetsDeck(string presetId)
+    {
+        ArgumentNullException.ThrowIfNull(presetId);
+        return presetId.StartsWith(NsgCoreSetsDeckPrefix, StringComparison.Ordinal);
+    }
+
+    private static OfficialPresetCatalog WithEmbeddedDecks(params string[] resourceNames)
     {
         OfficialPresetCatalog embedded = Embedded();
         Assembly assembly = typeof(OfficialPresetCatalog).Assembly;
-        using Stream? stream = assembly.GetManifestResourceStream(resourceName)
-            ?? throw new PresetDataValidationException(
-                [$"preset resource: embedded resource '{resourceName}' was not found."]);
-        using var reader = new StreamReader(stream, Encoding.UTF8);
-        var catalog = new OfficialPresetCatalog(
-            embedded.Provenance,
-            embedded.Teaching,
-            embedded.Gateway.Concat(ParseGatewayDecks(reader.ReadToEnd())).ToArray());
+        var decks = new List<OfficialPreset>(embedded.Gateway);
+        foreach (string resourceName in resourceNames)
+        {
+            using Stream? stream = assembly.GetManifestResourceStream(resourceName)
+                ?? throw new PresetDataValidationException(
+                    [$"preset resource: embedded resource '{resourceName}' was not found."]);
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            decks.AddRange(ParseGatewayDecks(reader.ReadToEnd()));
+        }
+        var catalog = new OfficialPresetCatalog(embedded.Provenance, embedded.Teaching, decks);
         catalog.Validate();
         return catalog;
     }

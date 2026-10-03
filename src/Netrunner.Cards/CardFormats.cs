@@ -55,6 +55,9 @@ public static class CardFormatIds
 
     public const string GatewayElevation = "gateway-elevation";
 
+    /// <summary>NSG's Core Sets (System Gateway + Elevation) with no ban list: the format of NSG's Core Sets sample decks.</summary>
+    public const string NsgCoreSets = "nsg-core-sets";
+
     public const string Startup2025 = "startup-2025";
 
     public const string Startup2026 = "startup-2026";

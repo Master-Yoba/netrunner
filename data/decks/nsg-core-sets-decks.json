@@ -1,0 +1,1999 @@
+{
+  "schemaVersion": 1,
+  "retrievedDate": "2026-10-03",
+  "publishedSourceUrl": "https://nullsignal.games/players/getting-started-sample-decklists/",
+  "metadataCommitSha": "236140cf84491c23995b028bc791281837520b97",
+  "provenanceNote": "Null Signal Games' NSG Core Sets (System Gateway + Elevation) sample decks, designed by Phi (Girometics), retrieved from NetrunnerDB on 2026-10-03: the decks of the nsg-core-sets format. The lists are NSG's; the names are theirs and the summaries ours.",
+  "decks": [
+    {
+      "presetId": "nsg-core-agency",
+      "name": "Agency",
+      "summary": "LEO Construction: bioroid ice taxes the Runner's clicks while Mercia and Manegarm push agendas out.",
+      "archetypes": [
+        "glacier",
+        "fast-advance"
+      ],
+      "side": "corp",
+      "identityCode": "35035",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/8b2c2754-48c2-4375-a124-e1eebba9a95e",
+      "cards": [
+        {
+          "code": "30036",
+          "quantity": 1
+        },
+        {
+          "code": "30038",
+          "quantity": 2
+        },
+        {
+          "code": "30039",
+          "quantity": 3
+        },
+        {
+          "code": "30040",
+          "quantity": 1
+        },
+        {
+          "code": "30041",
+          "quantity": 1
+        },
+        {
+          "code": "30042",
+          "quantity": 3
+        },
+        {
+          "code": "30053",
+          "quantity": 3
+        },
+        {
+          "code": "30067",
+          "quantity": 3
+        },
+        {
+          "code": "30069",
+          "quantity": 2
+        },
+        {
+          "code": "30071",
+          "quantity": 1
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "35038",
+          "quantity": 3
+        },
+        {
+          "code": "35040",
+          "quantity": 3
+        },
+        {
+          "code": "35041",
+          "quantity": 3
+        },
+        {
+          "code": "35042",
+          "quantity": 1
+        },
+        {
+          "code": "35043",
+          "quantity": 1
+        },
+        {
+          "code": "35045",
+          "quantity": 3
+        },
+        {
+          "code": "35054",
+          "quantity": 3
+        },
+        {
+          "code": "35076",
+          "quantity": 3
+        },
+        {
+          "code": "35079",
+          "quantity": 1
+        },
+        {
+          "code": "35081",
+          "quantity": 3
+        },
+        {
+          "code": "35082",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "nsg-core-brick-stack",
+      "name": "Brick Stack",
+      "summary": "Weyland Consortium: big, advanceable ice protects a remote, and Above the Law and Off the Books close the game.",
+      "archetypes": [
+        "glacier",
+        "rush"
+      ],
+      "side": "corp",
+      "identityCode": "30059",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/51804cff-8a01-4b85-b1cc-a140935cf81c",
+      "cards": [
+        {
+          "code": "30041",
+          "quantity": 1
+        },
+        {
+          "code": "30050",
+          "quantity": 1
+        },
+        {
+          "code": "30053",
+          "quantity": 3
+        },
+        {
+          "code": "30060",
+          "quantity": 1
+        },
+        {
+          "code": "30062",
+          "quantity": 2
+        },
+        {
+          "code": "30063",
+          "quantity": 3
+        },
+        {
+          "code": "30064",
+          "quantity": 2
+        },
+        {
+          "code": "30067",
+          "quantity": 3
+        },
+        {
+          "code": "30069",
+          "quantity": 2
+        },
+        {
+          "code": "30071",
+          "quantity": 2
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "35041",
+          "quantity": 3
+        },
+        {
+          "code": "35061",
+          "quantity": 2
+        },
+        {
+          "code": "35071",
+          "quantity": 2
+        },
+        {
+          "code": "35075",
+          "quantity": 3
+        },
+        {
+          "code": "35076",
+          "quantity": 3
+        },
+        {
+          "code": "35077",
+          "quantity": 3
+        },
+        {
+          "code": "35079",
+          "quantity": 2
+        },
+        {
+          "code": "35081",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "presetId": "nsg-core-brutal-efficiency",
+      "name": "Brutal Efficiency",
+      "summary": "Haas-Bioroid: Precision Design: Seamless Launch and Mercia score from a single fortified remote.",
+      "archetypes": [
+        "fast-advance",
+        "glacier"
+      ],
+      "side": "corp",
+      "identityCode": "30035",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/b441510e-00e7-42b7-a559-a7eba52b31a4",
+      "cards": [
+        {
+          "code": "30036",
+          "quantity": 1
+        },
+        {
+          "code": "30038",
+          "quantity": 1
+        },
+        {
+          "code": "30039",
+          "quantity": 2
+        },
+        {
+          "code": "30040",
+          "quantity": 3
+        },
+        {
+          "code": "30042",
+          "quantity": 3
+        },
+        {
+          "code": "30050",
+          "quantity": 2
+        },
+        {
+          "code": "30053",
+          "quantity": 3
+        },
+        {
+          "code": "30056",
+          "quantity": 1
+        },
+        {
+          "code": "30067",
+          "quantity": 3
+        },
+        {
+          "code": "30069",
+          "quantity": 2
+        },
+        {
+          "code": "30071",
+          "quantity": 2
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "35038",
+          "quantity": 2
+        },
+        {
+          "code": "35039",
+          "quantity": 2
+        },
+        {
+          "code": "35041",
+          "quantity": 3
+        },
+        {
+          "code": "35042",
+          "quantity": 2
+        },
+        {
+          "code": "35045",
+          "quantity": 2
+        },
+        {
+          "code": "35075",
+          "quantity": 3
+        },
+        {
+          "code": "35079",
+          "quantity": 2
+        },
+        {
+          "code": "35082",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "nsg-core-fashion-lab",
+      "name": "Fashion Lab",
+      "summary": "Poétrï Luxury Brands: a board of campaigns funds scoring with extra clicks, installing from R&D on each score.",
+      "archetypes": [
+        "horizontal",
+        "fast-advance"
+      ],
+      "side": "corp",
+      "identityCode": "35036",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/8d182470-77e1-4d5e-b55e-19f08dc44470",
+      "cards": [
+        {
+          "code": "30036",
+          "quantity": 1
+        },
+        {
+          "code": "30037",
+          "quantity": 3
+        },
+        {
+          "code": "30038",
+          "quantity": 1
+        },
+        {
+          "code": "30039",
+          "quantity": 1
+        },
+        {
+          "code": "30040",
+          "quantity": 1
+        },
+        {
+          "code": "30042",
+          "quantity": 1
+        },
+        {
+          "code": "30053",
+          "quantity": 3
+        },
+        {
+          "code": "30056",
+          "quantity": 1
+        },
+        {
+          "code": "30069",
+          "quantity": 3
+        },
+        {
+          "code": "30075",
+          "quantity": 2
+        },
+        {
+          "code": "35037",
+          "quantity": 3
+        },
+        {
+          "code": "35038",
+          "quantity": 3
+        },
+        {
+          "code": "35039",
+          "quantity": 3
+        },
+        {
+          "code": "35040",
+          "quantity": 3
+        },
+        {
+          "code": "35041",
+          "quantity": 3
+        },
+        {
+          "code": "35042",
+          "quantity": 3
+        },
+        {
+          "code": "35043",
+          "quantity": 2
+        },
+        {
+          "code": "35044",
+          "quantity": 1
+        },
+        {
+          "code": "35045",
+          "quantity": 2
+        },
+        {
+          "code": "35053",
+          "quantity": 1
+        },
+        {
+          "code": "35072",
+          "quantity": 3
+        },
+        {
+          "code": "35075",
+          "quantity": 3
+        },
+        {
+          "code": "35082",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "nsg-core-fine-print",
+      "name": "Fine Print",
+      "summary": "NBN: Reality Plus: an asset-heavy board, tags from Public Trail and a fast scoring push.",
+      "archetypes": [
+        "horizontal",
+        "tag-punish"
+      ],
+      "side": "corp",
+      "identityCode": "30051",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/abc6721f-4680-40fe-b189-cdf19f416bd1",
+      "cards": [
+        {
+          "code": "30052",
+          "quantity": 1
+        },
+        {
+          "code": "30053",
+          "quantity": 3
+        },
+        {
+          "code": "30054",
+          "quantity": 2
+        },
+        {
+          "code": "30055",
+          "quantity": 3
+        },
+        {
+          "code": "30056",
+          "quantity": 3
+        },
+        {
+          "code": "30057",
+          "quantity": 2
+        },
+        {
+          "code": "30058",
+          "quantity": 2
+        },
+        {
+          "code": "30067",
+          "quantity": 2
+        },
+        {
+          "code": "30071",
+          "quantity": 2
+        },
+        {
+          "code": "35040",
+          "quantity": 3
+        },
+        {
+          "code": "35042",
+          "quantity": 1
+        },
+        {
+          "code": "35050",
+          "quantity": 2
+        },
+        {
+          "code": "35059",
+          "quantity": 3
+        },
+        {
+          "code": "35060",
+          "quantity": 2
+        },
+        {
+          "code": "35061",
+          "quantity": 2
+        },
+        {
+          "code": "35062",
+          "quantity": 3
+        },
+        {
+          "code": "35063",
+          "quantity": 3
+        },
+        {
+          "code": "35065",
+          "quantity": 2
+        },
+        {
+          "code": "35066",
+          "quantity": 1
+        },
+        {
+          "code": "35082",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "nsg-core-gimbatul",
+      "name": "Gimbatul",
+      "summary": "Synapse Global: tag the Runner, then each tag removed installs a card from HQ for free.",
+      "archetypes": [
+        "tag-punish",
+        "horizontal"
+      ],
+      "side": "corp",
+      "identityCode": "35058",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/19db2c28-8521-4b86-a45e-e46cb9830243",
+      "cards": [
+        {
+          "code": "30042",
+          "quantity": 2
+        },
+        {
+          "code": "30049",
+          "quantity": 1
+        },
+        {
+          "code": "30052",
+          "quantity": 1
+        },
+        {
+          "code": "30053",
+          "quantity": 3
+        },
+        {
+          "code": "30054",
+          "quantity": 2
+        },
+        {
+          "code": "30055",
+          "quantity": 3
+        },
+        {
+          "code": "30056",
+          "quantity": 3
+        },
+        {
+          "code": "30057",
+          "quantity": 1
+        },
+        {
+          "code": "30058",
+          "quantity": 2
+        },
+        {
+          "code": "30066",
+          "quantity": 2
+        },
+        {
+          "code": "30068",
+          "quantity": 3
+        },
+        {
+          "code": "30071",
+          "quantity": 3
+        },
+        {
+          "code": "30073",
+          "quantity": 3
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "35059",
+          "quantity": 3
+        },
+        {
+          "code": "35060",
+          "quantity": 2
+        },
+        {
+          "code": "35063",
+          "quantity": 3
+        },
+        {
+          "code": "35064",
+          "quantity": 3
+        },
+        {
+          "code": "35065",
+          "quantity": 1
+        },
+        {
+          "code": "35066",
+          "quantity": 1
+        },
+        {
+          "code": "35067",
+          "quantity": 3
+        },
+        {
+          "code": "35080",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "presetId": "nsg-core-glyph-of-warding",
+      "name": "Glyph of Warding",
+      "summary": "AU Co.: net damage and Measured Response sculpt R&D and punish runs on a deep server.",
+      "archetypes": [
+        "kill",
+        "glacier"
+      ],
+      "side": "corp",
+      "identityCode": "35046",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/da28fae5-8c7c-4354-8ed3-6ce6e5769cec",
+      "cards": [
+        {
+          "code": "30044",
+          "quantity": 1
+        },
+        {
+          "code": "30048",
+          "quantity": 3
+        },
+        {
+          "code": "30050",
+          "quantity": 2
+        },
+        {
+          "code": "30053",
+          "quantity": 3
+        },
+        {
+          "code": "30067",
+          "quantity": 3
+        },
+        {
+          "code": "30068",
+          "quantity": 3
+        },
+        {
+          "code": "30071",
+          "quantity": 3
+        },
+        {
+          "code": "30073",
+          "quantity": 3
+        },
+        {
+          "code": "30074",
+          "quantity": 2
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "35049",
+          "quantity": 3
+        },
+        {
+          "code": "35050",
+          "quantity": 2
+        },
+        {
+          "code": "35051",
+          "quantity": 3
+        },
+        {
+          "code": "35052",
+          "quantity": 2
+        },
+        {
+          "code": "35054",
+          "quantity": 3
+        },
+        {
+          "code": "35078",
+          "quantity": 3
+        },
+        {
+          "code": "35079",
+          "quantity": 1
+        },
+        {
+          "code": "35080",
+          "quantity": 3
+        },
+        {
+          "code": "35081",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "presetId": "nsg-core-hidden-funds",
+      "name": "Hidden Funds",
+      "summary": "Jinteki: Restoring Humanity: drip economy pays for big Jinteki ice around a Proprionegation remote.",
+      "archetypes": [
+        "glacier",
+        "kill"
+      ],
+      "side": "corp",
+      "identityCode": "30043",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/fd9af10d-4c0f-4b70-ad5d-83aa51903a16",
+      "cards": [
+        {
+          "code": "30039",
+          "quantity": 3
+        },
+        {
+          "code": "30048",
+          "quantity": 3
+        },
+        {
+          "code": "30050",
+          "quantity": 2
+        },
+        {
+          "code": "30053",
+          "quantity": 3
+        },
+        {
+          "code": "30069",
+          "quantity": 2
+        },
+        {
+          "code": "30071",
+          "quantity": 3
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "35048",
+          "quantity": 3
+        },
+        {
+          "code": "35049",
+          "quantity": 3
+        },
+        {
+          "code": "35052",
+          "quantity": 3
+        },
+        {
+          "code": "35053",
+          "quantity": 2
+        },
+        {
+          "code": "35054",
+          "quantity": 2
+        },
+        {
+          "code": "35055",
+          "quantity": 2
+        },
+        {
+          "code": "35056",
+          "quantity": 1
+        },
+        {
+          "code": "35063",
+          "quantity": 3
+        },
+        {
+          "code": "35079",
+          "quantity": 3
+        },
+        {
+          "code": "35081",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "presetId": "nsg-core-not-so-subtle",
+      "name": "Not so subtle",
+      "summary": "Nebula: an operation each turn turns the identity into clicks; tags and Predictive Planogram fuel a fast score.",
+      "archetypes": [
+        "rush",
+        "tag-punish"
+      ],
+      "side": "corp",
+      "identityCode": "35057",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/170f1c2f-e063-415a-ab06-7ef49763da04",
+      "cards": [
+        {
+          "code": "30052",
+          "quantity": 1
+        },
+        {
+          "code": "30053",
+          "quantity": 3
+        },
+        {
+          "code": "30055",
+          "quantity": 3
+        },
+        {
+          "code": "30056",
+          "quantity": 3
+        },
+        {
+          "code": "30067",
+          "quantity": 3
+        },
+        {
+          "code": "30071",
+          "quantity": 1
+        },
+        {
+          "code": "30073",
+          "quantity": 2
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "35054",
+          "quantity": 3
+        },
+        {
+          "code": "35055",
+          "quantity": 3
+        },
+        {
+          "code": "35059",
+          "quantity": 3
+        },
+        {
+          "code": "35060",
+          "quantity": 2
+        },
+        {
+          "code": "35063",
+          "quantity": 3
+        },
+        {
+          "code": "35064",
+          "quantity": 3
+        },
+        {
+          "code": "35065",
+          "quantity": 1
+        },
+        {
+          "code": "35067",
+          "quantity": 2
+        },
+        {
+          "code": "35073",
+          "quantity": 2
+        },
+        {
+          "code": "35079",
+          "quantity": 1
+        },
+        {
+          "code": "35080",
+          "quantity": 2
+        },
+        {
+          "code": "35081",
+          "quantity": 3
+        },
+        {
+          "code": "35082",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "nsg-core-peculiarity",
+      "name": "Peculiarity",
+      "summary": "PT Untaian: a shell game of advanced cards in remotes, with Proprionegation and Clearinghouse as the threats.",
+      "archetypes": [
+        "shell-game",
+        "kill"
+      ],
+      "side": "corp",
+      "identityCode": "35047",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/568d1eb8-340c-4bb1-bf77-54c21b514833",
+      "cards": [
+        {
+          "code": "30042",
+          "quantity": 1
+        },
+        {
+          "code": "30044",
+          "quantity": 1
+        },
+        {
+          "code": "30045",
+          "quantity": 2
+        },
+        {
+          "code": "30047",
+          "quantity": 3
+        },
+        {
+          "code": "30048",
+          "quantity": 3
+        },
+        {
+          "code": "30050",
+          "quantity": 2
+        },
+        {
+          "code": "30053",
+          "quantity": 3
+        },
+        {
+          "code": "30061",
+          "quantity": 3
+        },
+        {
+          "code": "30069",
+          "quantity": 2
+        },
+        {
+          "code": "30072",
+          "quantity": 2
+        },
+        {
+          "code": "30074",
+          "quantity": 3
+        },
+        {
+          "code": "30075",
+          "quantity": 2
+        },
+        {
+          "code": "35048",
+          "quantity": 3
+        },
+        {
+          "code": "35049",
+          "quantity": 3
+        },
+        {
+          "code": "35052",
+          "quantity": 2
+        },
+        {
+          "code": "35053",
+          "quantity": 2
+        },
+        {
+          "code": "35054",
+          "quantity": 3
+        },
+        {
+          "code": "35055",
+          "quantity": 3
+        },
+        {
+          "code": "35056",
+          "quantity": 2
+        },
+        {
+          "code": "35079",
+          "quantity": 1
+        },
+        {
+          "code": "35081",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "presetId": "nsg-core-pork-chops",
+      "name": "Pork Chops",
+      "summary": "BANGUN: faceup bait agendas and meat damage from Measured Response threaten every steal.",
+      "archetypes": [
+        "kill",
+        "rush"
+      ],
+      "side": "corp",
+      "identityCode": "35068",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/f315fb7f-798b-4b4a-b515-675590b3f258",
+      "cards": [
+        {
+          "code": "30053",
+          "quantity": 3
+        },
+        {
+          "code": "30060",
+          "quantity": 1
+        },
+        {
+          "code": "30061",
+          "quantity": 1
+        },
+        {
+          "code": "30063",
+          "quantity": 2
+        },
+        {
+          "code": "30064",
+          "quantity": 1
+        },
+        {
+          "code": "30065",
+          "quantity": 1
+        },
+        {
+          "code": "30067",
+          "quantity": 3
+        },
+        {
+          "code": "30068",
+          "quantity": 3
+        },
+        {
+          "code": "30071",
+          "quantity": 2
+        },
+        {
+          "code": "30073",
+          "quantity": 2
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "35041",
+          "quantity": 2
+        },
+        {
+          "code": "35050",
+          "quantity": 2
+        },
+        {
+          "code": "35054",
+          "quantity": 3
+        },
+        {
+          "code": "35067",
+          "quantity": 1
+        },
+        {
+          "code": "35071",
+          "quantity": 3
+        },
+        {
+          "code": "35072",
+          "quantity": 3
+        },
+        {
+          "code": "35074",
+          "quantity": 1
+        },
+        {
+          "code": "35076",
+          "quantity": 3
+        },
+        {
+          "code": "35078",
+          "quantity": 3
+        },
+        {
+          "code": "35079",
+          "quantity": 1
+        },
+        {
+          "code": "35081",
+          "quantity": 3
+        },
+        {
+          "code": "35082",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "nsg-core-quick-returns",
+      "name": "Quick Returns",
+      "summary": "The Zwicky Group: operations and agendas that pay out draw cards; Off the Books and Greenmail behind advanceable ice.",
+      "archetypes": [
+        "glacier",
+        "rush"
+      ],
+      "side": "corp",
+      "identityCode": "35069",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/1f9d8054-4993-4a09-91ba-4fca5fff3747",
+      "cards": [
+        {
+          "code": "30039",
+          "quantity": 3
+        },
+        {
+          "code": "30040",
+          "quantity": 1
+        },
+        {
+          "code": "30053",
+          "quantity": 3
+        },
+        {
+          "code": "30060",
+          "quantity": 1
+        },
+        {
+          "code": "30064",
+          "quantity": 1
+        },
+        {
+          "code": "30066",
+          "quantity": 2
+        },
+        {
+          "code": "30067",
+          "quantity": 3
+        },
+        {
+          "code": "30069",
+          "quantity": 1
+        },
+        {
+          "code": "30073",
+          "quantity": 3
+        },
+        {
+          "code": "30075",
+          "quantity": 3
+        },
+        {
+          "code": "35055",
+          "quantity": 2
+        },
+        {
+          "code": "35070",
+          "quantity": 3
+        },
+        {
+          "code": "35071",
+          "quantity": 3
+        },
+        {
+          "code": "35073",
+          "quantity": 3
+        },
+        {
+          "code": "35074",
+          "quantity": 2
+        },
+        {
+          "code": "35075",
+          "quantity": 3
+        },
+        {
+          "code": "35076",
+          "quantity": 3
+        },
+        {
+          "code": "35077",
+          "quantity": 3
+        },
+        {
+          "code": "35079",
+          "quantity": 2
+        },
+        {
+          "code": "35081",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "presetId": "nsg-core-bowel-movements",
+      "name": "Bowel Movements",
+      "summary": "René “Loup” Arcemont: trash cards on access for credits, with a Fermenter and Gourmand virus economy.",
+      "archetypes": [
+        "virus",
+        "econ-denial"
+      ],
+      "side": "runner",
+      "identityCode": "30001",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/81c60189-b0b9-429b-83a8-0cd6611fcff1",
+      "cards": [
+        {
+          "code": "30003",
+          "quantity": 3
+        },
+        {
+          "code": "30004",
+          "quantity": 2
+        },
+        {
+          "code": "30005",
+          "quantity": 1
+        },
+        {
+          "code": "30007",
+          "quantity": 3
+        },
+        {
+          "code": "30008",
+          "quantity": 2
+        },
+        {
+          "code": "30009",
+          "quantity": 2
+        },
+        {
+          "code": "30013",
+          "quantity": 1
+        },
+        {
+          "code": "30022",
+          "quantity": 1
+        },
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "30034",
+          "quantity": 2
+        },
+        {
+          "code": "35004",
+          "quantity": 3
+        },
+        {
+          "code": "35007",
+          "quantity": 3
+        },
+        {
+          "code": "35008",
+          "quantity": 1
+        },
+        {
+          "code": "35009",
+          "quantity": 3
+        },
+        {
+          "code": "35010",
+          "quantity": 3
+        },
+        {
+          "code": "35011",
+          "quantity": 2
+        },
+        {
+          "code": "35016",
+          "quantity": 2
+        },
+        {
+          "code": "35026",
+          "quantity": 2
+        },
+        {
+          "code": "35029",
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "presetId": "nsg-core-dashing-mad",
+      "name": "Dashing Mad",
+      "summary": "Ryō “Phoenix” Ōno: run early, take a subroutine for value, and trash HQ cards with Shred and the identity.",
+      "archetypes": [
+        "central-pressure",
+        "econ-denial"
+      ],
+      "side": "runner",
+      "identityCode": "35001",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/074c32b0-6429-49ec-91c1-46dcddba9e4b",
+      "cards": [
+        {
+          "code": "30004",
+          "quantity": 3
+        },
+        {
+          "code": "30007",
+          "quantity": 3
+        },
+        {
+          "code": "30008",
+          "quantity": 2
+        },
+        {
+          "code": "30015",
+          "quantity": 2
+        },
+        {
+          "code": "30026",
+          "quantity": 2
+        },
+        {
+          "code": "30028",
+          "quantity": 3
+        },
+        {
+          "code": "30029",
+          "quantity": 2
+        },
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "30033",
+          "quantity": 2
+        },
+        {
+          "code": "30034",
+          "quantity": 2
+        },
+        {
+          "code": "35003",
+          "quantity": 2
+        },
+        {
+          "code": "35004",
+          "quantity": 2
+        },
+        {
+          "code": "35005",
+          "quantity": 3
+        },
+        {
+          "code": "35009",
+          "quantity": 3
+        },
+        {
+          "code": "35011",
+          "quantity": 3
+        },
+        {
+          "code": "35015",
+          "quantity": 3
+        },
+        {
+          "code": "35018",
+          "quantity": 2
+        },
+        {
+          "code": "35034",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "presetId": "nsg-core-enthusiasm",
+      "name": "Enthusiasm",
+      "summary": "Dewi Subrotoputri: a memory-hungry rig of Devadatta Drones and Mayfly, paid for by Knickknack and Telework.",
+      "archetypes": [
+        "big-rig",
+        "central-pressure"
+      ],
+      "side": "runner",
+      "identityCode": "35023",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/14966eb5-a65c-4578-83bb-345e566df203",
+      "cards": [
+        {
+          "code": "30007",
+          "quantity": 3
+        },
+        {
+          "code": "30018",
+          "quantity": 2
+        },
+        {
+          "code": "30020",
+          "quantity": 3
+        },
+        {
+          "code": "30022",
+          "quantity": 2
+        },
+        {
+          "code": "30025",
+          "quantity": 1
+        },
+        {
+          "code": "30026",
+          "quantity": 1
+        },
+        {
+          "code": "30027",
+          "quantity": 3
+        },
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "30032",
+          "quantity": 3
+        },
+        {
+          "code": "35004",
+          "quantity": 1
+        },
+        {
+          "code": "35022",
+          "quantity": 2
+        },
+        {
+          "code": "35025",
+          "quantity": 2
+        },
+        {
+          "code": "35026",
+          "quantity": 3
+        },
+        {
+          "code": "35027",
+          "quantity": 1
+        },
+        {
+          "code": "35028",
+          "quantity": 2
+        },
+        {
+          "code": "35029",
+          "quantity": 1
+        },
+        {
+          "code": "35030",
+          "quantity": 2
+        },
+        {
+          "code": "35031",
+          "quantity": 3
+        },
+        {
+          "code": "35032",
+          "quantity": 1
+        },
+        {
+          "code": "35033",
+          "quantity": 3
+        },
+        {
+          "code": "35034",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "presetId": "nsg-core-flow-and-ebb",
+      "name": "Flow and Ebb",
+      "summary": "Tāo Salonga: swap ice when agendas are scored or stolen to open a path, then run with Jailbreak and Tread Lightly.",
+      "archetypes": [
+        "central-pressure",
+        "aggro"
+      ],
+      "side": "runner",
+      "identityCode": "30019",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/1bf875a5-4138-40d3-87f0-de874f63135e",
+      "cards": [
+        {
+          "code": "30005",
+          "quantity": 2
+        },
+        {
+          "code": "30008",
+          "quantity": 2
+        },
+        {
+          "code": "30011",
+          "quantity": 1
+        },
+        {
+          "code": "30012",
+          "quantity": 2
+        },
+        {
+          "code": "30014",
+          "quantity": 2
+        },
+        {
+          "code": "30020",
+          "quantity": 3
+        },
+        {
+          "code": "30022",
+          "quantity": 1
+        },
+        {
+          "code": "30024",
+          "quantity": 1
+        },
+        {
+          "code": "30025",
+          "quantity": 2
+        },
+        {
+          "code": "30027",
+          "quantity": 3
+        },
+        {
+          "code": "30028",
+          "quantity": 3
+        },
+        {
+          "code": "30029",
+          "quantity": 2
+        },
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "30034",
+          "quantity": 2
+        },
+        {
+          "code": "35026",
+          "quantity": 3
+        },
+        {
+          "code": "35027",
+          "quantity": 1
+        },
+        {
+          "code": "35030",
+          "quantity": 2
+        },
+        {
+          "code": "35032",
+          "quantity": 2
+        },
+        {
+          "code": "35034",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "presetId": "nsg-core-prick-thyself",
+      "name": "Prick Thyself",
+      "summary": "Topan: cheap installs paid in meat damage build a big anarch rig with Bling and viruses.",
+      "archetypes": [
+        "big-rig",
+        "virus"
+      ],
+      "side": "runner",
+      "identityCode": "35002",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/bbcf997a-3ec6-4728-9813-82df335db2f3",
+      "cards": [
+        {
+          "code": "30004",
+          "quantity": 3
+        },
+        {
+          "code": "30007",
+          "quantity": 3
+        },
+        {
+          "code": "30008",
+          "quantity": 2
+        },
+        {
+          "code": "30012",
+          "quantity": 1
+        },
+        {
+          "code": "30021",
+          "quantity": 3
+        },
+        {
+          "code": "30022",
+          "quantity": 1
+        },
+        {
+          "code": "30025",
+          "quantity": 1
+        },
+        {
+          "code": "30026",
+          "quantity": 1
+        },
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "30033",
+          "quantity": 3
+        },
+        {
+          "code": "30034",
+          "quantity": 3
+        },
+        {
+          "code": "35003",
+          "quantity": 1
+        },
+        {
+          "code": "35004",
+          "quantity": 3
+        },
+        {
+          "code": "35005",
+          "quantity": 2
+        },
+        {
+          "code": "35006",
+          "quantity": 3
+        },
+        {
+          "code": "35007",
+          "quantity": 2
+        },
+        {
+          "code": "35009",
+          "quantity": 3
+        },
+        {
+          "code": "35011",
+          "quantity": 3
+        },
+        {
+          "code": "35025",
+          "quantity": 1
+        },
+        {
+          "code": "35034",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "presetId": "nsg-core-professional-opportunities",
+      "name": "Professional Opportunities",
+      "summary": "Barry “Baz” Wong: every rezzed ice installs hardware or a resource; Fransofia Ward taxes the Corp's rezzes.",
+      "archetypes": [
+        "big-rig",
+        "econ-denial"
+      ],
+      "side": "runner",
+      "identityCode": "35012",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/aca8a765-6c5b-4f3a-81c8-16c4dde32fdd",
+      "cards": [
+        {
+          "code": "30008",
+          "quantity": 1
+        },
+        {
+          "code": "30011",
+          "quantity": 2
+        },
+        {
+          "code": "30013",
+          "quantity": 1
+        },
+        {
+          "code": "30015",
+          "quantity": 2
+        },
+        {
+          "code": "30016",
+          "quantity": 3
+        },
+        {
+          "code": "30017",
+          "quantity": 2
+        },
+        {
+          "code": "30018",
+          "quantity": 3
+        },
+        {
+          "code": "30022",
+          "quantity": 1
+        },
+        {
+          "code": "30029",
+          "quantity": 3
+        },
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "35009",
+          "quantity": 1
+        },
+        {
+          "code": "35014",
+          "quantity": 3
+        },
+        {
+          "code": "35015",
+          "quantity": 3
+        },
+        {
+          "code": "35019",
+          "quantity": 3
+        },
+        {
+          "code": "35020",
+          "quantity": 2
+        },
+        {
+          "code": "35021",
+          "quantity": 2
+        },
+        {
+          "code": "35022",
+          "quantity": 3
+        },
+        {
+          "code": "35028",
+          "quantity": 2
+        },
+        {
+          "code": "35030",
+          "quantity": 2
+        },
+        {
+          "code": "35034",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "presetId": "nsg-core-sabbatical",
+      "name": "Sabbatical",
+      "summary": "Magdalene Keino-Chemutai: overdraw with VRcation, then install programs and hardware from the stack.",
+      "archetypes": [
+        "big-rig",
+        "central-pressure"
+      ],
+      "side": "runner",
+      "identityCode": "35024",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/9727f883-4edd-4f1a-aabc-e1f94fd63834",
+      "cards": [
+        {
+          "code": "30004",
+          "quantity": 2
+        },
+        {
+          "code": "30007",
+          "quantity": 2
+        },
+        {
+          "code": "30012",
+          "quantity": 3
+        },
+        {
+          "code": "30020",
+          "quantity": 3
+        },
+        {
+          "code": "30021",
+          "quantity": 3
+        },
+        {
+          "code": "30022",
+          "quantity": 2
+        },
+        {
+          "code": "30023",
+          "quantity": 2
+        },
+        {
+          "code": "30025",
+          "quantity": 2
+        },
+        {
+          "code": "30026",
+          "quantity": 2
+        },
+        {
+          "code": "30027",
+          "quantity": 3
+        },
+        {
+          "code": "30029",
+          "quantity": 1
+        },
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "30033",
+          "quantity": 3
+        },
+        {
+          "code": "30034",
+          "quantity": 2
+        },
+        {
+          "code": "35004",
+          "quantity": 2
+        },
+        {
+          "code": "35026",
+          "quantity": 3
+        },
+        {
+          "code": "35027",
+          "quantity": 1
+        },
+        {
+          "code": "35029",
+          "quantity": 1
+        },
+        {
+          "code": "35031",
+          "quantity": 3
+        },
+        {
+          "code": "35032",
+          "quantity": 2
+        }
+      ]
+    },
+    {
+      "presetId": "nsg-core-shootin-n-lootin",
+      "name": "Shootin' 'n' Lootin'",
+      "summary": "MuslihaT: breakers and run events off the top of the stack fuel a run every turn.",
+      "archetypes": [
+        "aggro",
+        "central-pressure"
+      ],
+      "side": "runner",
+      "identityCode": "35013",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/a9c9e074-d20a-40ca-8030-f5d0d1ce677f",
+      "cards": [
+        {
+          "code": "30008",
+          "quantity": 2
+        },
+        {
+          "code": "30011",
+          "quantity": 1
+        },
+        {
+          "code": "30012",
+          "quantity": 2
+        },
+        {
+          "code": "30013",
+          "quantity": 1
+        },
+        {
+          "code": "30014",
+          "quantity": 2
+        },
+        {
+          "code": "30016",
+          "quantity": 3
+        },
+        {
+          "code": "30025",
+          "quantity": 2
+        },
+        {
+          "code": "30028",
+          "quantity": 3
+        },
+        {
+          "code": "30029",
+          "quantity": 3
+        },
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "35005",
+          "quantity": 2
+        },
+        {
+          "code": "35009",
+          "quantity": 1
+        },
+        {
+          "code": "35014",
+          "quantity": 3
+        },
+        {
+          "code": "35016",
+          "quantity": 2
+        },
+        {
+          "code": "35017",
+          "quantity": 3
+        },
+        {
+          "code": "35020",
+          "quantity": 2
+        },
+        {
+          "code": "35022",
+          "quantity": 3
+        },
+        {
+          "code": "35026",
+          "quantity": 3
+        },
+        {
+          "code": "35029",
+          "quantity": 1
+        },
+        {
+          "code": "35034",
+          "quantity": 3
+        }
+      ]
+    },
+    {
+      "presetId": "nsg-core-tickets-please",
+      "name": "Tickets, please",
+      "summary": "Zahya Sadeghi: an econ of Open Market and Side Hustle feeds runs on the centrals with Clean Getaway.",
+      "archetypes": [
+        "central-pressure",
+        "aggro"
+      ],
+      "side": "runner",
+      "identityCode": "30010",
+      "sourceUrl": "https://netrunnerdb.com/en/decklist/96ef311d-5a55-43e3-be41-28b072994e30",
+      "cards": [
+        {
+          "code": "30008",
+          "quantity": 2
+        },
+        {
+          "code": "30011",
+          "quantity": 2
+        },
+        {
+          "code": "30012",
+          "quantity": 2
+        },
+        {
+          "code": "30013",
+          "quantity": 2
+        },
+        {
+          "code": "30014",
+          "quantity": 2
+        },
+        {
+          "code": "30015",
+          "quantity": 1
+        },
+        {
+          "code": "30016",
+          "quantity": 3
+        },
+        {
+          "code": "30024",
+          "quantity": 1
+        },
+        {
+          "code": "30026",
+          "quantity": 1
+        },
+        {
+          "code": "30028",
+          "quantity": 3
+        },
+        {
+          "code": "30030",
+          "quantity": 3
+        },
+        {
+          "code": "35004",
+          "quantity": 1
+        },
+        {
+          "code": "35009",
+          "quantity": 1
+        },
+        {
+          "code": "35014",
+          "quantity": 3
+        },
+        {
+          "code": "35015",
+          "quantity": 3
+        },
+        {
+          "code": "35016",
+          "quantity": 2
+        },
+        {
+          "code": "35022",
+          "quantity": 3
+        },
+        {
+          "code": "35026",
+          "quantity": 1
+        },
+        {
+          "code": "35027",
+          "quantity": 1
+        },
+        {
+          "code": "35034",
+          "quantity": 3
+        }
+      ]
+    }
+  ]
+}

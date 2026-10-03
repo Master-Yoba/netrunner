@@ -116,6 +116,12 @@ occurrences; identity state; card sources and zones; information; and runs and I
 - **D-EL-8, the menu:**
   - *Default:* the Gateway decks stay; the new decks appear under a format choice (Gateway, Gateway + Elevation).
   - Random opponents draw from the chosen format.
+- **D-EL-9, NSG's Core Sets decks** (the user's decision, 3 October 2026): Null Signal Games does publish 21
+  System Gateway + Elevation sample decks, the "NSG Core Sets" decks, on its getting-started page (with NetrunnerDB
+  entries). They are built without the Startup ban list: 9 of the 12 Corp decks use a card banned in 26.05.
+  - Both formats ship. Gateway + Elevation keeps its ban list and our 14 decks (D-EL-4). A second format, NSG Core Sets
+    (`nsg-core-sets`), has the same pool and deck rules, no ban list, and NSG's 21 decks.
+  - NSG's lists are published decks, so the menu offers that format without a review gate.
 
 ## 4. Slices
 
