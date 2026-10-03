@@ -961,6 +961,9 @@ public sealed record RunState
 
     internal RunState WithPendingBypass(bool bypass) => this with { PendingBypass = bypass };
 
+    /// <summary>EL.8: the random accesses left, clamped when a card effect takes hidden cards away mid-breach.</summary>
+    internal RunState WithRandomAccessLimit(int randomAccessLimit) => this with { RandomAccessLimit = randomAccessLimit };
+
     /// <summary>
     /// EL-MOVE-RUNNER: the attacked server changes. Breach access modifiers ("when you breach
     /// the attacked server") follow the attacked server.

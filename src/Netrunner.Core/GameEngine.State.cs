@@ -140,10 +140,17 @@ public static partial class GameEngine
     /// </summary>
     private static void ClearRunValueAdjustments(WorkingState working, CardInstanceId cardId)
     {
+        // EL.8: so do a breaker's run-long pumps (GAMEDRAGON™ Pro), sourced by the breaker itself.
+        static bool Ends(RunLingeringEffect effect, CardInstanceId cardId) =>
+            effect.ValueAdjustment?.TargetCardId == cardId
+            || effect.ValueAdjustment is null
+            && effect.SourceCardId == cardId
+            && effect.Expiry == RunLingeringEffectExpiry.Run
+            && effect.BehaviorId == EncounterStrength.IcebreakerPumpBehavior;
         if (working.RunState is not { } run
-            || !run.LingeringEffects.Any(effect => effect.ValueAdjustment?.TargetCardId == cardId)) return;
+            || !run.LingeringEffects.Any(effect => Ends(effect, cardId))) return;
         working.RunState = run.WithLingeringEffects(run.LingeringEffects
-            .Where(effect => effect.ValueAdjustment?.TargetCardId != cardId).ToArray());
+            .Where(effect => !Ends(effect, cardId)).ToArray());
     }
 
     /// <summary>

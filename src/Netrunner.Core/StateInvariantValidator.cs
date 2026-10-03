@@ -1737,13 +1737,15 @@ public static partial class StateInvariantValidator
             // placing a source card and arbitrary string in RunState.
             // EL-STRENGTH-PERSISTENCE: a pump that lasts the run (GAMEDRAGON™ Pro)
             // is not a cleanup; its breaker hosts the mod that makes it last.
+            // The pump's duration is fixed when it is made, so it stays if the mod leaves (EL.8); it ends when its
+            // breaker leaves play.
             bool persistentPump = effect.Expiry == RunLingeringEffectExpiry.Run
                 && effect.BehaviorId == EncounterStrength.IcebreakerPumpBehavior
                 && effect.ValueAdjustment is null
                 && effect.SourceCardId is { } pumpedBreaker
-                && state.Cards.Any(card => card?.HostCardId == pumpedBreaker
-                    && behaviorCatalog.TryGet(card.DefinitionId, out CardBehaviorDefinition? pumpMod)
-                    && pumpMod.HostIcebreakerStrength > 0);
+                && state.Cards.FirstOrDefault(card => card?.Id == pumpedBreaker) is { } breaker
+                && state.Zones.Any(zone => zone?.Id == breaker.ZoneId && zone.Kind == ZoneKind.RunnerRig)
+                && behaviorCatalog.TryGetIcebreaker(breaker.DefinitionId, out _);
             if (effect.Expiry == RunLingeringEffectExpiry.Run
                 && !persistentPump
                 && effect.SourceCardId is { } cleanupSourceId)
@@ -2199,7 +2201,10 @@ public static partial class StateInvariantValidator
             hiddenChosen,
             movedOutOfPools,
             additionalRandomAccess);
-        long expectedMinimum = Math.Min(expectedAtMinimum, expectedAtMaximum);
+        // EL.8: a card effect resolved during the breach may take unaccessed hidden cards away (Poétrï installing
+        // from HQ); the engine clamps the cursor to the unaccessed cards left.
+        long availableHidden = hiddenZone is null ? 0 : RunState.AvailableHiddenBreachCards(hiddenZone, run.AccessedCards).Count;
+        long expectedMinimum = Math.Min(Math.Min(expectedAtMinimum, expectedAtMaximum), availableHidden);
         long expectedMaximum = Math.Max(expectedAtMinimum, expectedAtMaximum);
         if (run.RandomAccessLimit < expectedMinimum || run.RandomAccessLimit > expectedMaximum)
         {

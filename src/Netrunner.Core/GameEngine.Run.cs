@@ -3790,6 +3790,32 @@ public static partial class GameEngine
     {
         ServerState server = GetBreachServer(working, run);
         ZoneState? hiddenZone = GetBreachHiddenZone(working, server);
+        // EL.8: an effect resolved during the breach (Poétrï installing from HQ after a steal) may have taken
+        // hidden cards away. The random accesses left can't exceed the unaccessed cards there, and with no
+        // candidate left the breach is complete.
+        int availableHidden = hiddenZone is null ? 0 : RunState.AvailableHiddenBreachCards(hiddenZone, run.AccessedCards).Count;
+        if (run.RandomAccessLimit > availableHidden)
+        {
+            run = run.WithRandomAccessLimit(availableHidden);
+            SetRunTiming(working, run);
+        }
+
+        if (run.BreachCandidates.Count == 0
+            && RunState.HiddenBreachCandidate(server.Kind, hiddenZone, run.RandomAccessLimit, run.AccessedCards) is null)
+        {
+            SetRunTiming(working, run.WithTiming(
+                RunTimingStep.RunEnd,
+                -1,
+                null,
+                run.Successful,
+                run.Unsuccessful,
+                RunEndReason.BreachCompleted,
+                null,
+                null,
+                RunAccessState.Completed));
+            return;
+        }
+
         BreachHiddenCandidateSource? hiddenSource = RunState.HiddenBreachCandidate(
             server.Kind,
             hiddenZone,

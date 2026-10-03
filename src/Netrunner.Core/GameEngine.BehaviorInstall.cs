@@ -101,7 +101,9 @@ public static partial class GameEngine
                 || card.OwnerSide != side
                 || !working.RuntimeCardCatalog.TryGet(card.DefinitionId, out CardRuntimeSpec? spec)
                 || !IsBasicInstallClass(side, spec.CardClass)
-                || !BehaviorCardMatches(working, card.Id, instruction.Target!.Filter))
+                || !BehaviorCardMatches(working, card.Id, instruction.Target!.Filter)
+                // A card installed only on a host (a trojan on ICE) needs a host choice this install doesn't make.
+                || HostingSpec(working, card) is not null)
             {
                 continue;
             }
