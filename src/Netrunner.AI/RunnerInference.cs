@@ -46,7 +46,9 @@ internal static class RunnerInference
         ImmutableArray<TrackedCard> cards = Tracker(context)?.Cards ?? [];
         double tracked = cards.Where(card => card.Place == TrackedPlace.Hand).Sum(card => card.Weight);
         double agendas = cards.Where(card => card.Place == TrackedPlace.Hand && IsAgenda(context, card.DefinitionId)).Sum(card => card.Weight);
-        return Math.Clamp((agendas + Math.Max(0, hand - tracked) * AgendaShare(context)) / hand, 0, 1);
+        double untracked = TrackerPrior.UntrackedHqAgendas(hand, tracked, Prior(context), definition => IsAgenda(context, definition),
+            context.Catalog.BehaviorVersion);
+        return Math.Clamp((agendas + untracked) / hand, 0, 1);
     }
 
     /// <summary>The chance R&amp;D's top card is an agenda: known when the Runner has seen it, otherwise at the unseen rate.</summary>

@@ -157,7 +157,9 @@ public static class BeliefAccuracy
         List<string> trueHand = [.. state.GetZone(ZoneKind.CorpHand).CardIds.Select(id => state.GetCard(id).DefinitionId.Value)];
         double trackedHand = tracker.Cards.Where(card => card.Place == TrackedPlace.Hand).Sum(card => card.Weight);
         double trackedAgendas = tracker.Cards.Where(card => card.Place == TrackedPlace.Hand && IsAgenda(catalog, card.DefinitionId)).Sum(card => card.Weight);
-        double predicted = trackedAgendas + Math.Max(0, hand - trackedHand) * agendaShare;
+        // As Runner v21 plans with it (RunnerInference.HqAgendaShare), with the pool's HQ agenda factor (A7).
+        double predicted = trackedAgendas + TrackerPrior.UntrackedHqAgendas(hand, trackedHand, prior,
+            definition => IsAgenda(catalog, definition), catalog.BehaviorVersion);
         int actual = trueHand.Count(definition => IsAgenda(catalog, definition));
         totals.HqSamples++;
         totals.HqError += Math.Abs(predicted - actual);

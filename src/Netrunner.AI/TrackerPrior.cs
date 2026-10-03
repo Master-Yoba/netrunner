@@ -46,6 +46,30 @@ public static class TrackerPrior
                 : card.Printed.CardClass is RuntimeCardClass.Agenda or RuntimeCardClass.Asset or RuntimeCardClass.Upgrade);
     }
 
+    /// <summary>
+    /// A7 (EL.8): how much richer in agendas the untracked HQ cards are than the unseen cards at large, per pool:
+    /// the Corp bots hold agendas in HQ. Fitted on 480 saved Gateway + Elevation ladder games (1.866) and checked on
+    /// 480 held-out ones; the Gateway pool keeps 1, so its play and fixtures are unchanged.
+    /// </summary>
+    public static double HqAgendaFactor(string? behaviorVersion) =>
+        behaviorVersion == FittedEvaluation.GatewayElevationBehaviorVersion ? 1.866 : 1;
+
+    /// <summary>
+    /// The expected agendas among HQ's untracked cards: the unseen rate scaled by the pool's HQ factor, never more
+    /// than the untracked cards or the unseen agendas.
+    /// </summary>
+    public static double UntrackedHqAgendas(int hand, double trackedHand, IReadOnlyDictionary<string, double> prior,
+        Func<string, bool> isAgenda, string? behaviorVersion)
+    {
+        ArgumentNullException.ThrowIfNull(prior);
+        ArgumentNullException.ThrowIfNull(isAgenda);
+        double untracked = Math.Max(0, hand - trackedHand);
+        double factor = HqAgendaFactor(behaviorVersion);
+        if (factor == 1) return untracked * Share(prior, isAgenda);
+        double unseenAgendas = prior.Where(pair => isAgenda(pair.Key)).Sum(pair => pair.Value);
+        return Math.Min(untracked, Math.Min(unseenAgendas, untracked * Share(prior, isAgenda) * factor));
+    }
+
     /// <summary>The share of the prior's copies that pass a test.</summary>
     public static double Share(IReadOnlyDictionary<string, double> prior, Func<string, bool> test)
     {

@@ -15,6 +15,7 @@ public sealed class GatewayEvaluationCatalog : ICardEvaluationCatalog
     {
         ArgumentNullException.ThrowIfNull(runtime);
         ArgumentNullException.ThrowIfNull(behavior);
+        BehaviorVersion = behavior.Version;
         var cards = new Dictionary<CardDefinitionId, CardEvaluationDescriptor>();
         foreach (CardDefinitionId id in behavior.AllDefinitionIds.OrderBy(id => id.Value, StringComparer.Ordinal))
         {
@@ -51,6 +52,7 @@ public sealed class GatewayEvaluationCatalog : ICardEvaluationCatalog
     }
 
     public string Version => CurrentVersion;
+    public string? BehaviorVersion { get; }
     public string Fingerprint { get; }
     public IReadOnlyCollection<CardDefinitionId> DefinitionIds { get; }
     public bool TryGet(CardDefinitionId definitionId, out CardEvaluationDescriptor descriptor) => _cards.TryGetValue(definitionId, out descriptor!);
