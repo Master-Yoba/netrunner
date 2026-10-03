@@ -621,19 +621,31 @@ public static partial class GameEngine
                     return;
                 }
             case BehaviorInstructionKind.StealAgenda:
-                foreach (CardInstanceId stolenId in instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } stealTarget
-                    && IsProvenEmptyChosenCard(frame, stealTarget)
-                        ? []
-                        : ResolveBehaviorCards(working, frame, instruction.Target).ToArray())
                 {
-                    if (StealAgendaOutsideRun(working, stolenId))
+                    var stolenAgendas = new List<CardInstanceId>();
+                    foreach (CardInstanceId stolenId in instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } stealTarget
+                        && IsProvenEmptyChosenCard(frame, stealTarget)
+                            ? []
+                            : ResolveBehaviorCards(working, frame, instruction.Target).ToArray())
                     {
-                        return;
-                    }
-                }
+                        if (StealAgendaOutsideRun(working, stolenId))
+                        {
+                            return;
+                        }
 
-                AdvanceBehaviorCursor(working, frame);
-                return;
+                        stolenAgendas.Add(stolenId);
+                    }
+
+                    AdvanceBehaviorCursor(working, frame);
+                    // EL.6 review: "scored or stolen" triggers resolve before the behavior continues, as for a
+                    // breach steal.
+                    foreach (CardInstanceId stolenId in stolenAgendas)
+                    {
+                        QueueAgendaStolenOutsideRunOccurrence(working, stolenId);
+                    }
+
+                    return;
+                }
             case BehaviorInstructionKind.HostSourceOnTarget:
                 {
                     IReadOnlyList<CardInstanceId> hosts = instruction.Target is { Kind: BehaviorTargetKind.ChosenCard } hostTarget

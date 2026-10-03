@@ -277,6 +277,21 @@ public static partial class GameEngine
         return true;
     }
 
+    /// <summary>
+    /// The occurrence of an agenda stolen outside a run (Detente's HQ access), with HQ as its server, so agenda
+    /// scored-or-stolen triggers see it like a breach steal.
+    /// </summary>
+    private static void QueueAgendaStolenOutsideRunOccurrence(WorkingState working, CardInstanceId agendaId)
+    {
+        if (!HasActiveCatalogTrigger(working, OccurrenceKind.AgendaScoredOrStolen))
+        {
+            return;
+        }
+
+        ServerState hq = working.Servers.Single(server => server.Kind == ServerKind.Headquarters);
+        QueueAgendaScoredOrStolenOccurrence(working, GetPlayer(working, PlayerSide.Runner).Id, agendaId, hq.Id);
+    }
+
     /// <summary>EL-FORFEIT: removes an agenda in its controller's score area from the game, with its points.</summary>
     private static void ForfeitScoredAgenda(WorkingState working, PlayerSide controller, CardInstanceId agendaId)
     {

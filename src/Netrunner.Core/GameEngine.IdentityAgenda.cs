@@ -82,8 +82,9 @@ public static partial class GameEngine
         if (card.Rezzed || !TryGetRezCostQuote(working, card, RuntimeCardClass.Ice, out int fullCost, out _)) return;
         int cost = Math.Max(0, fullCost - instruction.Amount);
         PlayerState corp = GetPlayer(working, PlayerSide.Corp);
-        if (corp.Credits < cost) return;
-        ApplyCreditDeltaIfNonZero(working, corp.Id, -cost);
+        // Paid like an ordinary rez: the wallet and declared hosted credits (EL.6 review).
+        if (corp.Credits + DeclaredHostedCredits(working, PlayerSide.Corp, BehaviorHostedCreditUseKind.RezInServer, card) < cost) return;
+        PayCreditsWithDeclaredHosted(working, corp.Id, BehaviorHostedCreditUseKind.RezInServer, card, cost);
         ReplaceCard(working, new CardInstanceState(card.Id, card.DefinitionId, card.ZoneId, card.OwnerSide,
             faceUp: true, rezzed: true, card.AdvancementCounters));
         Emit(working, EngineEventKinds.CardRezzed, new CardRezzedEventPayload(card.Id, cost));

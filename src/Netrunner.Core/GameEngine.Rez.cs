@@ -182,7 +182,8 @@ public static partial class GameEngine
         }
 
         int reduced = Math.Max(0, fullCost - definition.RezForfeitDiscount);
-        if (corpCredits < reduced)
+        // The same affordability as the ordinary rez: the wallet and declared hosted credits (EL.6 review).
+        if (corpCredits + DeclaredHostedCredits(working, PlayerSide.Corp, BehaviorHostedCreditUseKind.RezInServer, ice) < reduced)
         {
             return;
         }
