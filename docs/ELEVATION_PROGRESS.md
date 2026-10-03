@@ -646,6 +646,40 @@ every format, with per-pool numbers, and Gateway as a regression floor).
 - `make gates REF=e2cc3f4` PASS: verify (with the NSG menu area and pairing), m5-gate, tactics and bot-check (AI 133,
   Match 1,011, CLI 171). The synthetic verify, the CI fast tier, passes too.
 
+## EL.10 — The Core Battle Box (D-EL-10)
+
+Real players' lists replace the 14 decks we built in EL.8. NetrunnerDB's popularity sort for System Gateway + Elevation
+lists is led by lunari's **Core Battle Box** (featured on
+[CardGamer](https://cardgamer.com/features/introducing-the-netrunner-core-battle-box/)): seven decks, one per faction,
+"designed to be played against the other decks", using only System Gateway and Elevation.
+
+- `data/decks/elevation-core-battle-box-decks.json`: Nebula Fast Advance, PT Untaian Shell Game, Zwicky Supermodernism and
+  LEO Glacier against Topan, MuslihaT and Magdalene, each with its NetrunnerDB URL (lunari's names; our summaries and
+  archetypes).
+- Zwicky Supermodernism (Offworld Office) and LEO Glacier (Seamless Launch, Offworld Office, Mercia B4LL4RD) use cards
+  banned in 26.05, so the format drops its ban list until the full Startup format is in. Its rules are now NSG Core
+  Sets'; the two differ in their decks.
+- Our 14 decks are retired: still in the catalog under their IDs (`RetiredElevationDecks`), so older saves load and EL.8's
+  seed replays play, but out of the menu and the deck pool (`gateway-elevation-v2`, 12 pairings).
+- The menu's **Core Battle Box** area needs no review gate (`--elevation-preview` is gone). Evidence:
+  `docs/evidence/elevation/el10-menu-core-battle-box-corp-{1920,2560}.png`.
+
+### Evidence
+
+- `scripts/fuzz.sh gateway-elevation --games 10000 --seed 12` (a new pool, so the milestone size, every replay
+  verified): **10,000 of 10,000 terminal** in 25 minutes.
+- `elevation-deck-smoke.sh --jobs 3`: **7 of 7** decks play human against bot through the client.
+- Ladder (`--deals 240 --batch-deals 48 --stop-when-clear`): 960 games, 0 errors, 0 capped, no deck warning. Standard
+  beats Easy on both seats, Corp +83 (95% [31, 130]) and Runner +47 ([1, 88]). The bots find this pool very Corp-sided:
+  Standard's Corp scores 86% and its Runner 21% (31% on NSG's decks). The box is built for human play, so the Runner
+  bots' play with these decks is a tuning lead.
+- Fitted evaluation (`ai-fit-evaluation --content gateway-elevation --compare
+  data/ai/evaluation-gateway-elevation-v2.json`): the shared fit matches one trained on the box (Corp 0.457 against
+  0.457, Runner 0.460 against 0.457), so the pool keeps it.
+- `ai-belief` with the sweep: every tier beats its prior on log loss, top-1 and HQ agenda error. As on NSG's decks, a
+  factor of 1.6 edges out the shared 1.866 (Standard 0.863 against 0.872), now measured on both deck pools the format
+  family offers, while 1.866 was fitted on the retired decks. Retuning it is a bot change for its own measured slice.
+
 ## Milestone gate (section 7)
 
 - [x] **Coverage:** 159 of 159 bound, tested and checklist-complete; no drift (`verify.sh`); CARD-401 green.
