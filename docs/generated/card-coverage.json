@@ -2032,7 +2032,8 @@
       "registered": true,
       "tests": [
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.RyoDoesNothingWithoutAResolvedSubroutine",
-        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.RyoGainsAndTheCorpTrashesFromHqAfterASubroutineResolved"
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.RyoGainsAndTheCorpTrashesFromHqAfterASubroutineResolved",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.RyosHqTrashIsTheCorpsToChooseButNotToSkip"
       ],
       "fullTextComplete": true,
       "partial": false,
@@ -3362,6 +3363,7 @@
       "reviewer": "architect",
       "registered": true,
       "tests": [
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.DamageTheRunnerSuffersToSemakSamunIsNotDamageAuCoDoes",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.SemakSamunEndsTheRunUnlessTheRunnerSuffersThreeNetDamage",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.SemakSamunIsBrokenOnlyByAFracter"
       ],
