@@ -19,6 +19,7 @@ public partial class Main
 	private const string GatewayMode = "gateway";
 	// D-EL-8: the mode's value is the format's ID.
 	private const string ElevationMode = CardFormatIds.GatewayElevation;
+	private const string NsgCoreMode = CardFormatIds.NsgCoreSets;
 	private const string RandomOpponent = "random";
 
 	private readonly List<Control> _legacySetupControls = [];
@@ -151,9 +152,13 @@ public partial class Main
 		var view = new VBoxContainer { Name = "NewGameView", SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
 		view.AddThemeConstantOverride("separation", 12);
 		view.AddChild(MakeLabel("NEW GAME", 32, Accent));
-		(string, string)[] modeOptions = ElevationMenuOffered
-			? [("Gateway decks", GatewayMode), ("Gateway + Elevation", ElevationMode), ("Tutorial", TutorialMode)]
-			: [("Gateway decks", GatewayMode), ("Tutorial", TutorialMode)];
+		(string, string)[] modeOptions =
+		[
+			("Gateway decks", GatewayMode),
+			.. ElevationMenuOffered ? [("Gateway + Elevation", ElevationMode)] : Array.Empty<(string, string)>(),
+			.. NsgCoreMenuOffered ? [("NSG Core Sets", NsgCoreMode)] : Array.Empty<(string, string)>(),
+			("Tutorial", TutorialMode),
+		];
 		HBoxContainer modes = MenuToggleRow(view, modeOptions, _menuMode, mode =>
 		{
 			_menuMode = mode;
@@ -218,12 +223,17 @@ public partial class Main
 		&& (PlayFormats.ElevationDecksReviewed || DeveloperToolsEnabled
 			|| OS.GetCmdlineUserArgs().Contains("--elevation-preview", StringComparer.Ordinal));
 
+	/// <summary>NSG's published Core Sets decks need no review: the format is offered wherever its pool is installed.</summary>
+	private bool NsgCoreMenuOffered =>
+		HasAuthenticatedOfficialContent() && PlayFormats.IsAvailable(CardFormatIds.NsgCoreSets);
+
 	/// <summary>A mode's decks: a format's own decks, or the teaching decks for the tutorial.</summary>
 	private IEnumerable<OfficialPreset> MenuModeDecks(string mode) => mode switch
 	{
 		TutorialMode => _officialPresetCatalog!.Teaching,
 		ElevationMode => PlayFormats.Get(CardFormatIds.GatewayElevation).Decks,
-		_ => _officialPresetCatalog!.Gateway.Where(preset => !OfficialPresetCatalog.IsElevationDeck(preset.PresetId)),
+		NsgCoreMode => PlayFormats.Get(CardFormatIds.NsgCoreSets).Decks,
+		_ => _officialPresetCatalog!.Gateway.Where(preset => PlayFormats.FormatOfPreset(preset.PresetId) == CardFormatIds.Gateway),
 	};
 
 	/// <summary>Card metadata for the menu's identity tiles: the whole pool when Elevation is installed.</summary>
@@ -249,6 +259,8 @@ public partial class Main
 				GatewayMode => "The seven System Gateway sample decks from Null Signal Games: one per faction, built to show how each plays.",
 				ElevationMode => "System Gateway + Elevation: fourteen decks of our own, one for each Elevation identity, "
 					+ "under the Startup ban list. Random opponents come from these decks.",
+				NsgCoreMode => "NSG Core Sets: Null Signal Games' twenty-one System Gateway + Elevation sample decks, one per identity, "
+					+ "with no ban list. Random opponents come from these decks.",
 				_ => "The Catalyst and the Syndicate, the learn-to-play decks. The basic decks start small; the expanded decks add the booster cards.",
 			};
 		FillMenuDecks(_menuYourDecks, yours, _menuYourDeck, allowRandom: false, id => { _menuYourDeck = id; RefreshMenuDecks(); });

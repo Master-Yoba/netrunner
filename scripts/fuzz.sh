@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Random-legal rules fuzzing. Usage:
-#   scripts/fuzz.sh official|elevation|gateway-elevation|developer [--games N] [--seed S] [--workers N] [--action-cap N] [--output <new dir>] [--json]
+#   scripts/fuzz.sh official|elevation|gateway-elevation|nsg-core-sets|developer [--games N] [--seed S] [--workers N] [--action-cap N] [--output <new dir>] [--json]
 # Official fuzzing needs the provisioned System Gateway snapshot and never downloads it.
 set -euo pipefail
 
@@ -11,7 +11,7 @@ if (($#)); then shift; fi
 
 fuzz_build_arguments=()
 case "$fuzz_content" in
-  official|elevation|gateway-elevation)
+  official|elevation|gateway-elevation|nsg-core-sets)
     fuzz_data="$fuzz_root/data/vendor/system-gateway"
     if [[ ! -f "$fuzz_data/cards.json" ]]; then
       echo "Official card metadata is missing. Run ./scripts/update-card-data.sh --commit 236140cf84491c23995b028bc791281837520b97 --retrieval-date 2026-08-28" >&2
@@ -24,7 +24,7 @@ case "$fuzz_content" in
     )
     ;;
   developer) ;;
-  *) echo "Usage: scripts/fuzz.sh official|elevation|gateway-elevation|developer [fuzz options]" >&2; exit 2 ;;
+  *) echo "Usage: scripts/fuzz.sh official|elevation|gateway-elevation|nsg-core-sets|developer [fuzz options]" >&2; exit 2 ;;
 esac
 
 fuzz_arguments=(--content "$fuzz_content")

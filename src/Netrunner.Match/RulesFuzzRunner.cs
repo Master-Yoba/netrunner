@@ -107,8 +107,19 @@ public static class RulesFuzzRunner
                 .Select(runner => $"{corp.PresetId}{PairSeparator}{runner.PresetId}"))
             .ToArray();
 
-    /// <summary>The <c>--content</c> options: developer, official (expanded), gateway, elevation (simulation) or gateway-elevation.</summary>
-    public static IReadOnlyList<string> ContentNames { get; } = ["developer", "official", "gateway", "elevation", "gateway-elevation"];
+    /// <summary>Every pairing of NSG's Core Sets decks, the deck pool of the NSG Core Sets format.</summary>
+    public static IReadOnlyList<string> NsgCoreSetsContentIds =>
+        OfficialPresetCatalog.NsgCoreSets().NsgCoreSetsDecks.Where(preset => preset.Side == PlayerSide.Corp)
+            .SelectMany(corp => OfficialPresetCatalog.NsgCoreSets().NsgCoreSetsDecks.Where(preset => preset.Side == PlayerSide.Runner)
+                .Select(runner => $"{corp.PresetId}{PairSeparator}{runner.PresetId}"))
+            .ToArray();
+
+    /// <summary>
+    /// The <c>--content</c> options: developer, official (expanded), gateway, elevation (simulation),
+    /// gateway-elevation or nsg-core-sets.
+    /// </summary>
+    public static IReadOnlyList<string> ContentNames { get; } =
+        ["developer", "official", "gateway", "elevation", "gateway-elevation", "nsg-core-sets"];
 
     /// <summary>The content IDs a <c>--content</c> option names.</summary>
     public static IReadOnlyList<string> ContentIds(string content) => content switch
@@ -118,6 +129,7 @@ public static class RulesFuzzRunner
         "gateway" => GatewayContentIds,
         "elevation" => ElevationContentIds,
         "gateway-elevation" => GatewayElevationContentIds,
+        "nsg-core-sets" => NsgCoreSetsContentIds,
         _ => throw new ArgumentException($"Unknown content '{content}'; expected {string.Join(", ", ContentNames)}.", nameof(content)),
     };
 
@@ -132,6 +144,7 @@ public static class RulesFuzzRunner
         "gateway" => "gateway-v1",
         "elevation" => "elevation-simulation-v3",
         "gateway-elevation" => "gateway-elevation-v1",
+        "nsg-core-sets" => "nsg-core-sets-v1",
         _ => throw new ArgumentException($"Unknown content '{content}'; expected {string.Join(", ", ContentNames)}.", nameof(content)),
     };
 
@@ -207,10 +220,14 @@ public static class RulesFuzzRunner
         return ($"system-gateway-{parts[0]}-corp", $"system-gateway-{parts[1]}-runner");
     }
 
-    /// <summary>The preset catalog a Corp preset ID belongs to: the simulation decks, the Elevation format's decks or the embedded catalog.</summary>
+    /// <summary>
+    /// The preset catalog a Corp preset ID belongs to: the simulation decks, the Elevation format's decks,
+    /// NSG's Core Sets decks or the embedded catalog.
+    /// </summary>
     private static OfficialPresetCatalog CatalogOf(string corpPresetId) =>
         corpPresetId.StartsWith(OfficialPresetCatalog.ElevationSimulationPrefix, StringComparison.Ordinal) ? OfficialPresetCatalog.ElevationSimulation()
         : OfficialPresetCatalog.IsElevationDeck(corpPresetId) ? OfficialPresetCatalog.GatewayElevation()
+        : OfficialPresetCatalog.IsNsgCoreSetsDeck(corpPresetId) ? OfficialPresetCatalog.NsgCoreSets()
         : OfficialPresetCatalog.Embedded();
 
     public static Task<FuzzGameResult> RunAsync(FuzzGameCase fuzzCase, int actionCap = DefaultActionCap,

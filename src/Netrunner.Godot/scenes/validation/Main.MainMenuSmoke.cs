@@ -78,6 +78,20 @@ public partial class Main
 						&& _menuPersonalities!.Visible, "The Gateway + Elevation area lacks Hard or the personalities.");
 					if (screenshots) await SaveInteractionEvidence($"menu-elevation-corp-{size.X}");
 				}
+				if (NsgCoreMenuOffered)
+				{
+					// NSG Core Sets offers NSG's twenty-one decks, Random drawing from them.
+					await ClickTableButton(FindDescendants<Button>(_menuNewGameView).Single(button => button.Text == "NSG Core Sets"));
+					RequireInteraction(_menuMode == NsgCoreMode
+						&& FindDescendants<Button>(_menuYourDecks!).Length == 12
+						&& FindDescendants<Button>(_menuOpponentDecks!).Length == 10
+						&& _menuOpponentDeck == RandomOpponent
+						&& FindDescendants<Button>(_menuYourDecks!).All(button => button.Name.ToString().StartsWith("Deck-nsg-core-", StringComparison.Ordinal)),
+						"The NSG Core Sets area doesn't list twelve Corp decks and nine Runner decks plus Random.");
+					RequireInteraction(FindDescendants<Button>(_menuDifficulties!).Single(button => button.Text == "Hard opponent").Visible
+						&& _menuPersonalities!.Visible, "The NSG Core Sets area lacks Hard or the personalities.");
+					if (screenshots) await SaveInteractionEvidence($"menu-nsg-core-corp-{size.X}");
+				}
 				await ClickTableButton(FindDescendants<Button>(_menuNewGameView).Single(button => button.Text == "Tutorial"));
 				RequireInteraction(_menuMode == TutorialMode && _menuYourDeck == "system-gateway-expanded-corp"
 					&& _menuOpponentDeck == "system-gateway-expanded-runner", "The Tutorial area doesn't default to the expanded decks.");
@@ -114,7 +128,7 @@ public partial class Main
 				&& view.CorpIdentity?.DefinitionId == _officialPresetCatalog.Get("gateway-advanced-yomi").IdentityCode,
 				"The match doesn't use the decks chosen in the menu.");
 			RequireInteraction(!_startPanel.IsVisibleInTree(), "The menu stays visible during the match.");
-			GD.Print($"MAIN_MENU PASS views=3 resolutions=2 gateway_start=true difficulties=3 personalities=true elevation={(ElevationMenuOffered ? "true" : "false")}");
+			GD.Print($"MAIN_MENU PASS views=3 resolutions=2 gateway_start=true difficulties=3 personalities=true elevation={(ElevationMenuOffered ? "true" : "false")} nsg_core={(NsgCoreMenuOffered ? "true" : "false")}");
 			QuitCleanly();
 		}
 		catch (Exception exception)

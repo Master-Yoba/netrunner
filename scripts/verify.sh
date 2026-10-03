@@ -451,6 +451,10 @@ if ((card_data_content_enabled == 1)) && ! grep -Fq "elevation=true" "$main_menu
   echo "Main menu smoke did not preview the Gateway + Elevation decks; see $main_menu_log." >&2
   exit 1
 fi
+if ((card_data_content_enabled == 1)) && ! grep -Fq "nsg_core=true" "$main_menu_log"; then
+  echo "Main menu smoke did not offer the NSG Core Sets decks; see $main_menu_log." >&2
+  exit 1
+fi
 grep -E "MAIN_MENU" "$main_menu_log"
 echo "main-menu-smoke=PASS"
 # The onboarding smoke starts a Gateway game from the menu, so it needs the
@@ -576,8 +580,8 @@ for full_match_side in corp runner; do
   echo "full-match-$full_match_side=PASS setup=true mulligan=true turn_pair=true identities=true terminal=true"
 done
 if ((card_data_content_enabled == 1)); then
-  # EL.8: the matrix includes a Gateway + Elevation pairing.
-  for m4_preset in expanded elevation; do
+  # EL.8: the matrix includes a Gateway + Elevation pairing and an NSG Core Sets pairing.
+  for m4_preset in expanded elevation nsg-core; do
     for m4_human_side in corp runner; do
       m4_full_smoke_log="$coverage_report_dir/m4-full-$m4_preset-$m4_human_side.log"
       if ! run_with_timeout 210 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \

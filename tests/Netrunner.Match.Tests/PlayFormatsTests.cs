@@ -20,6 +20,11 @@ public sealed class PlayFormatsTests
         Assert.True(PlayFormats.TryGetPreset("elevation-topan-street-gang", out OfficialPreset topan));
         Assert.Equal("35002", topan.IdentityCode);
         Assert.False(PlayFormats.TryGetPreset("elevation-sim-leo-corp", out _));
+        Assert.Equal(CardFormatIds.NsgCoreSets, PlayFormats.FormatOfPresets("nsg-core-gimbatul", "nsg-core-sabbatical"));
+        Assert.Equal(CardFormatIds.NsgCoreSets, PlayFormats.FormatOfPreset("nsg-core-dashing-mad"));
+        Assert.True(PlayFormats.TryGetPreset("nsg-core-gimbatul", out OfficialPreset gimbatul));
+        Assert.Equal("35058", gimbatul.IdentityCode);
+        Assert.False(PlayFormats.TryGetPreset("nsg-core-unknown", out _));
     }
 
     [Fact]
@@ -45,6 +50,12 @@ public sealed class PlayFormatsTests
         Assert.Same(OfficialPresetCatalog.Embedded(), gateway.Presets);
         Assert.Equal(GatewayBehaviorCatalog.Create().Fingerprint, gateway.Behavior.Fingerprint);
         Assert.Equal(ElevationBehaviorCatalog.Version, elevation.Behavior.Version);
+
+        PlayFormatContent nsg = PlayFormats.Get(CardFormatIds.NsgCoreSets);
+        Assert.Equal(21, nsg.Decks.Count);
+        Assert.All(nsg.Decks, deck => Assert.True(OfficialPresetCatalog.IsNsgCoreSetsDeck(deck.PresetId)));
+        Assert.Equal(elevation.Behavior.Fingerprint, nsg.Behavior.Fingerprint);
+        Assert.Null(nsg.Format.Restriction);
     }
 
     [Fact]
@@ -52,6 +63,8 @@ public sealed class PlayFormatsTests
     {
         Assert.Equal(48, RulesFuzzRunner.ContentIds("gateway-elevation").Count);
         Assert.Equal("gateway-elevation-v1", RulesFuzzRunner.PoolVersion("gateway-elevation"));
+        Assert.Equal(108, RulesFuzzRunner.ContentIds("nsg-core-sets").Count);
+        Assert.Equal("nsg-core-sets-v1", RulesFuzzRunner.PoolVersion("nsg-core-sets"));
         if (!ElevationAvailable) return;
         string content = RulesFuzzRunner.ContentIds("gateway-elevation")[0];
 
@@ -96,6 +109,33 @@ public sealed class PlayFormatsTests
             PlayFormatContent gateway = PlayFormats.Get(CardFormatIds.Gateway);
             using var gatewayStore = new SoloSaveStore(gateway.Behavior, gateway.Runtime, directory);
             Assert.All(await gatewayStore.BrowseAsync(), entry => Assert.False(entry.IsCompatible));
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [Fact]
+    public async Task AnNsgCoreSetsSaveRecordsItsFormatThoughItSharesTheElevationBehaviors()
+    {
+        if (!PlayFormats.IsAvailable(CardFormatIds.NsgCoreSets)) return;
+        string directory = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
+        try
+        {
+            PlayFormatContent content = PlayFormats.Get(CardFormatIds.NsgCoreSets);
+            FullMatchDefinition definition = content.Compose(content.ComposeOfficial("nsg-core-gimbatul", "nsg-core-sabbatical", 19));
+            Assert.Equal(CardFormatIds.NsgCoreSets, PlayFormats.FormatOf(definition.Request, content.Behavior));
+            await using var service = new SoloSessionService(PlayFormats.SaveContent, directory);
+            await using var original = new MatchCoordinator(definition, OfflineMatchFactory.CreateOpponent(definition, PlayerSide.Runner),
+                new MatchCoordinatorOptions { HumanSide = PlayerSide.Runner, AutoPassPriority = true });
+            service.SetActiveSession(original);
+            await original.StartAsync();
+            await original.WaitForHumanDecisionAsync();
+
+            SoloSaveReceipt receipt = await service.SaveAsync(original, "An NSG Core Sets game");
+
+            Assert.Equal(CardFormatIds.NsgCoreSets, receipt.Preview.FormatId);
+            LoadedSoloSession loaded = await service.LoadAsync(receipt.Preview.SaveId);
+            await using MatchCoordinator restored = loaded.Coordinator;
+            Assert.Equal(receipt.ActionCount, restored.CurrentSnapshot!.ActionCount);
         }
         finally { Directory.Delete(directory, recursive: true); }
     }

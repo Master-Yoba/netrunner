@@ -1,28 +1,42 @@
 #!/usr/bin/env bash
-# EL.8: plays every Gateway + Elevation deck through the client, as the human
-# seat of its side, with the M4 full-match smoke (the contract agent clicks for
-# the human; the latest bot is the opponent). Usage:
-#   scripts/elevation-deck-smoke.sh [--jobs N] [--output <new dir>]
+# EL.8: plays every deck of an Elevation-pool format through the client, as the
+# human seat of its side, with the M4 full-match smoke (the contract agent clicks
+# for the human; the latest bot is the opponent). The format is Gateway + Elevation
+# (the default) or NSG Core Sets. Usage:
+#   scripts/elevation-deck-smoke.sh [--format gateway-elevation|nsg-core-sets] [--jobs N] [--output <new dir>]
 set -euo pipefail
 
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$root/scripts/env.sh"
 jobs=2
+format=gateway-elevation
 output="$root/artifacts/elevation-deck-smoke/$(date -u +%Y%m%dT%H%M%SZ)"
+usage="Usage: scripts/elevation-deck-smoke.sh [--format gateway-elevation|nsg-core-sets] [--jobs N] [--output <new dir>]"
 while (($#)); do
   case "$1" in
+    --format) format="$2"; shift 2 ;;
     --jobs) jobs="$2"; shift 2 ;;
     --output) output="$2"; shift 2 ;;
-    *) echo "Usage: scripts/elevation-deck-smoke.sh [--jobs N] [--output <new dir>]" >&2; exit 2 ;;
+    *) echo "$usage" >&2; exit 2 ;;
   esac
 done
 if [[ -e "$output" ]]; then echo "--output must name a new directory." >&2; exit 2; fi
 mkdir -p "$output"
 
-corps=(elevation-leo-bioroid-wall elevation-poetri-trendsetters elevation-auco-clone-vats elevation-untaian-silk-road
-  elevation-nebula-headliners elevation-synapse-fast-news elevation-bangun-open-house elevation-zwicky-shell-companies)
-runners=(elevation-ryo-phoenix-fire elevation-topan-street-gang elevation-barry-tri-maf elevation-muslihat-market-runs
-  elevation-dewi-shadow-play elevation-magdalene-cryptarchitect)
+case "$format" in
+  gateway-elevation)
+    corps=(elevation-leo-bioroid-wall elevation-poetri-trendsetters elevation-auco-clone-vats elevation-untaian-silk-road
+      elevation-nebula-headliners elevation-synapse-fast-news elevation-bangun-open-house elevation-zwicky-shell-companies)
+    runners=(elevation-ryo-phoenix-fire elevation-topan-street-gang elevation-barry-tri-maf elevation-muslihat-market-runs
+      elevation-dewi-shadow-play elevation-magdalene-cryptarchitect) ;;
+  nsg-core-sets)
+    corps=(nsg-core-agency nsg-core-brick-stack nsg-core-brutal-efficiency nsg-core-fashion-lab nsg-core-fine-print
+      nsg-core-gimbatul nsg-core-glyph-of-warding nsg-core-hidden-funds nsg-core-not-so-subtle nsg-core-peculiarity
+      nsg-core-pork-chops nsg-core-quick-returns)
+    runners=(nsg-core-bowel-movements nsg-core-dashing-mad nsg-core-enthusiasm nsg-core-flow-and-ebb nsg-core-prick-thyself
+      nsg-core-professional-opportunities nsg-core-sabbatical nsg-core-shootin-n-lootin nsg-core-tickets-please) ;;
+  *) echo "$usage" >&2; exit 2 ;;
+esac
 cases=()
 for index in "${!corps[@]}"; do cases+=("corp ${corps[$index]}~${runners[$((index % ${#runners[@]}))]}"); done
 for index in "${!runners[@]}"; do cases+=("runner ${corps[$(((index + 3) % ${#corps[@]}))]}~${runners[$index]}"); done
@@ -42,5 +56,6 @@ export -f run_case
 export output GODOT4 NETRUNNER_GODOT_DATA root
 status=0
 printf '%s\n' "${cases[@]}" | xargs -P "$jobs" -L 1 bash -c 'run_case "$0" "$1"' || status=1
-if ((status == 0)); then echo "ELEVATION_DECK_SMOKE PASS decks=14 output=$output"; else echo "ELEVATION_DECK_SMOKE FAIL output=$output"; fi
+decks=$((${#corps[@]} + ${#runners[@]}))
+if ((status == 0)); then echo "ELEVATION_DECK_SMOKE PASS format=$format decks=$decks output=$output"; else echo "ELEVATION_DECK_SMOKE FAIL format=$format output=$output"; fi
 exit $status
