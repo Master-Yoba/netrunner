@@ -21,7 +21,7 @@ public sealed record BeliefTier(string Name, bool KnowsList, TrackerMemory Memor
 /// </summary>
 public sealed record BeliefScore(string Tier, int Slots, double SlotLogLoss, double SlotPriorLogLoss, double SlotTop1, double SlotPriorTop1,
     int HqSamples, double HqAgendaError, double HqPriorAgendaError, int RdSamples, double RdTopBrier, double RdTopPriorBrier,
-    double TrackedHandPrecision, int ConfidentSlots, double ConfidentPrecision);
+    double TrackedHandPrecision, int ConfidentSlots, double ConfidentPrecision, IReadOnlyList<double>? HqAgendaErrorSweep = null);
 
 /// <summary>
 /// A9a's accuracy measure: replays saved games, feeds the Runner's own observations to a tracker per tier, and scores
@@ -35,28 +35,38 @@ public static class BeliefAccuracy
         public double SlotLogLoss, SlotPriorLogLoss, SlotTop1, SlotPriorTop1, HqError, HqPriorError, RdBrier, RdPriorBrier;
         public double TrackedHand, TrackedHandCorrect;
         public int Confident, ConfidentCorrect;
+        public double[] HqErrorSweep = [];
     }
 
     /// <param name="hqAgendaFactor">The HQ agenda factor to measure with; null uses the pool's own (TrackerPrior.HqAgendaFactor).</param>
+    /// <param name="hqAgendaSweep">More HQ agenda factors, each scored in the same pass (<see cref="BeliefScore.HqAgendaErrorSweep"/>).</param>
+    /// <param name="workers">Games scored in parallel; the totals merge in game order, so the result doesn't depend on it.</param>
     public static IReadOnlyList<BeliefScore> Score(IEnumerable<(LadderSavedGame Game, FullMatchDefinition Definition)> games,
-        double? hqAgendaFactor = null)
+        double? hqAgendaFactor = null, IReadOnlyList<double>? hqAgendaSweep = null, int workers = 1)
     {
         ArgumentNullException.ThrowIfNull(games);
-        var totals = BeliefTier.All.ToDictionary(tier => tier.Name, _ => new Totals(), StringComparer.Ordinal);
-        foreach ((LadderSavedGame game, FullMatchDefinition definition) in games)
-            foreach ((string tier, Totals add) in ScoreGame(game, definition, hqAgendaFactor))
+        double[] sweep = [.. hqAgendaSweep ?? []];
+        (LadderSavedGame Game, FullMatchDefinition Definition)[] list = [.. games];
+        var perGame = new List<(string Tier, Totals Totals)>[list.Length];
+        Parallel.For(0, list.Length, new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, workers) },
+            index => perGame[index] = [.. ScoreGame(list[index].Game, list[index].Definition, hqAgendaFactor, sweep)]);
+        var totals = BeliefTier.All.ToDictionary(tier => tier.Name, _ => new Totals { HqErrorSweep = new double[sweep.Length] },
+            StringComparer.Ordinal);
+        foreach (List<(string Tier, Totals Totals)> game in perGame)
+            foreach ((string tier, Totals add) in game)
                 Merge(totals[tier], add);
-        return [.. BeliefTier.All.Select(tier => Result(tier.Name, totals[tier.Name]))];
+        return [.. BeliefTier.All.Select(tier => Result(tier.Name, totals[tier.Name], sweep.Length > 0))];
     }
 
     private static IEnumerable<(string Tier, Totals Totals)> ScoreGame(LadderSavedGame saved, FullMatchDefinition definition,
-        double? hqAgendaFactor)
+        double? hqAgendaFactor, double[] sweep)
     {
         ICardEvaluationCatalog catalog = new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior);
         double factor = hqAgendaFactor ?? TrackerPrior.HqAgendaFactor(catalog.BehaviorVersion);
         Dictionary<string, double> pool = TrackerPrior.Pool(catalog, PlayerSide.Corp), list = TrackerPrior.List(definition.Request.CorpDeck.Cards.Select(entry => (entry.Code, entry.Quantity)));
         var trackers = BeliefTier.All.ToDictionary(tier => tier.Name, _ => CardTracker.Empty, StringComparer.Ordinal);
-        var results = BeliefTier.All.ToDictionary(tier => tier.Name, _ => new Totals(), StringComparer.Ordinal);
+        var results = BeliefTier.All.ToDictionary(tier => tier.Name, _ => new Totals { HqErrorSweep = new double[sweep.Length] },
+            StringComparer.Ordinal);
         GameState state = saved.Replay.InitialSnapshot.ToState();
         PlayerSide? lastActive = null;
         foreach (ReplayAction recorded in saved.Replay.Actions)
@@ -75,7 +85,7 @@ public static class BeliefAccuracy
             if (state.Turn.ActiveSide == PlayerSide.Runner && lastActive == PlayerSide.Corp)
                 foreach (BeliefTier tier in BeliefTier.All)
                     Measure(results[tier.Name], trackers[tier.Name], features, state, catalog,
-                        TrackerPrior.Remaining(tier.KnowsList ? list : pool, features), factor);
+                        TrackerPrior.Remaining(tier.KnowsList ? list : pool, features), factor, sweep);
             lastActive = state.Turn.ActiveSide;
         }
         return results.Select(pair => (pair.Key, pair.Value));
@@ -123,7 +133,7 @@ public static class BeliefAccuracy
     private static string Title(string code) => Titles.Value.TryGetValue(code, out string? title) ? title : code;
 
     private static void Measure(Totals totals, CardTracker tracker, AgentFeatures features, GameState state, ICardEvaluationCatalog catalog,
-        Dictionary<string, double> prior, double hqAgendaFactor)
+        Dictionary<string, double> prior, double hqAgendaFactor, double[] sweep)
     {
         // Face-down Corp installs.
         foreach (AgentServer server in features.Board.Servers)
@@ -169,6 +179,9 @@ public static class BeliefAccuracy
         totals.HqSamples++;
         totals.HqError += Math.Abs(predicted - actual);
         totals.HqPriorError += Math.Abs(hand * agendaShare - actual);
+        for (int index = 0; index < sweep.Length; index++)
+            totals.HqErrorSweep[index] += Math.Abs(trackedAgendas + TrackerPrior.UntrackedHqAgendas(hand, trackedHand, prior,
+                definition => IsAgenda(catalog, definition), sweep[index]) - actual);
         foreach (IGrouping<string, TrackedCard> group in tracker.Cards.Where(card => card.Place == TrackedPlace.Hand).GroupBy(card => card.DefinitionId))
         {
             double mass = group.Sum(card => card.Weight);
@@ -208,13 +221,15 @@ public static class BeliefAccuracy
         into.HqError += add.HqError; into.HqPriorError += add.HqPriorError; into.RdBrier += add.RdBrier; into.RdPriorBrier += add.RdPriorBrier;
         into.TrackedHand += add.TrackedHand; into.TrackedHandCorrect += add.TrackedHandCorrect;
         into.Confident += add.Confident; into.ConfidentCorrect += add.ConfidentCorrect;
+        for (int index = 0; index < into.HqErrorSweep.Length; index++) into.HqErrorSweep[index] += add.HqErrorSweep[index];
     }
 
-    private static BeliefScore Result(string tier, Totals t)
+    private static BeliefScore Result(string tier, Totals t, bool sweep = false)
     {
         static double Mean(double sum, int count) => count == 0 ? 0 : Math.Round(sum / count, 4);
         return new(tier, t.Slots, Mean(t.SlotLogLoss, t.Slots), Mean(t.SlotPriorLogLoss, t.Slots), Mean(t.SlotTop1, t.Slots), Mean(t.SlotPriorTop1, t.Slots),
             t.HqSamples, Mean(t.HqError, t.HqSamples), Mean(t.HqPriorError, t.HqSamples), t.RdSamples, Mean(t.RdBrier, t.RdSamples), Mean(t.RdPriorBrier, t.RdSamples),
-            t.TrackedHand <= 0 ? 0 : Math.Round(t.TrackedHandCorrect / t.TrackedHand, 4), t.Confident, t.Confident == 0 ? 0 : Math.Round(t.ConfidentCorrect / (double)t.Confident, 4));
+            t.TrackedHand <= 0 ? 0 : Math.Round(t.TrackedHandCorrect / t.TrackedHand, 4), t.Confident, t.Confident == 0 ? 0 : Math.Round(t.ConfidentCorrect / (double)t.Confident, 4),
+            sweep ? [.. t.HqErrorSweep.Select(error => Mean(error, t.HqSamples))] : null);
     }
 }

@@ -34,20 +34,27 @@ public static class LadderGameArchive
     }
 
     /// <summary>Every saved game in a directory, in file-name order, with the definition its deal replays under.</summary>
-    public static IEnumerable<(LadderSavedGame Game, FullMatchDefinition Definition)> Read(string directory)
+    public static IEnumerable<(LadderSavedGame Game, FullMatchDefinition Definition)> Read(string directory) =>
+        Paths(directory).Select(Load);
+
+    /// <summary>Every saved game, loaded on up to <paramref name="workers"/> threads, in file order.</summary>
+    public static IReadOnlyList<(LadderSavedGame Game, FullMatchDefinition Definition)> ReadAll(string directory, int workers) =>
+        Paths(directory).AsParallel().AsOrdered().WithDegreeOfParallelism(Math.Clamp(workers, 1, 64)).Select(Load).ToArray();
+
+    private static IEnumerable<string> Paths(string directory) =>
+        Directory.EnumerateFiles(directory, "*.json").Order(StringComparer.Ordinal);
+
+    private static (LadderSavedGame Game, FullMatchDefinition Definition) Load(string path)
     {
-        foreach (string path in Directory.EnumerateFiles(directory, "*.json").Order(StringComparer.Ordinal))
-        {
-            JsonNode document = JsonNode.Parse(File.ReadAllText(path))
-                ?? throw new InvalidDataException($"{path} is not a saved ladder game.");
-            if ((int?)document["schemaVersion"] != SchemaVersion)
-                throw new InvalidDataException($"{path} has an unsupported schema version.");
-            var game = new LadderGame((string)document["id"]!, (string)document["contentId"]!, (ulong)document["gameSeed"]!,
-                (string)document["corp"]!, (string)document["runner"]!, (int?)document["deal"] ?? -1);
-            FullMatchDefinition definition = RulesFuzzRunner.CreateDefinition(game.ContentId, game.GameSeed);
-            ReplayArtifact replay = EngineJson.Deserialize<ReplayArtifact>(document["replay"]!.ToJsonString(), definition.Behavior, definition.Runtime);
-            yield return (new LadderSavedGame(game, (double)document["corpScore"]!, (bool)document["capped"]!, replay), definition);
-        }
+        JsonNode document = JsonNode.Parse(File.ReadAllText(path))
+            ?? throw new InvalidDataException($"{path} is not a saved ladder game.");
+        if ((int?)document["schemaVersion"] != SchemaVersion)
+            throw new InvalidDataException($"{path} has an unsupported schema version.");
+        var game = new LadderGame((string)document["id"]!, (string)document["contentId"]!, (ulong)document["gameSeed"]!,
+            (string)document["corp"]!, (string)document["runner"]!, (int?)document["deal"] ?? -1);
+        FullMatchDefinition definition = RulesFuzzRunner.CreateDefinition(game.ContentId, game.GameSeed);
+        ReplayArtifact replay = EngineJson.Deserialize<ReplayArtifact>(document["replay"]!.ToJsonString(), definition.Behavior, definition.Runtime);
+        return (new LadderSavedGame(game, (double)document["corpScore"]!, (bool)document["capped"]!, replay), definition);
     }
 
     private static string FileName(string id) =>
