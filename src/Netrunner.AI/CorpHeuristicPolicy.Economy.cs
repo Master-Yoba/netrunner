@@ -20,6 +20,13 @@ public sealed partial class CorpHeuristicPolicy
         AgentCard? card = context.Card(ability.SourceCardId);
         BehaviorPaidAbility? declaration = context.Definition(card)?.Behavior?.PaidAbilities.SingleOrDefault(value => value.Key == ability.AbilityKey);
         if (declaration is null) return Value(-50, "ability/unmodelled", approximate: true, fallback: true);
+        // v28 (bot loop 1): an ability that plays its own card plays nothing when the Corp can't pay the card's cost (Petty Cash
+        // from Archives with 2 credits spent the click for nothing).
+        if (context.Generation >= 23 && declaration.Instructions.Any(instruction => instruction.Kind == BehaviorInstructionKind.PlayCard
+                && instruction.Target?.Kind == BehaviorTargetKind.Self)
+            && (context.Definition(card)?.Printed.PlayCost ?? 0) > context.Self.Credits
+                - ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount))
+            return Value(-100, "ability/play-it-cannot-pay-for", approximate: true);
         int benefit = Effects(context, declaration.Instructions, card, context.Features.Side);
         int costs = ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount) * context.CreditValue;
         costs += ability.Costs.Where(cost => cost.Kind == BehaviorCostKind.TrashSelf
@@ -207,6 +214,13 @@ public sealed partial class CorpHeuristicPolicy
                     if (attacked?.Root.Any(card => context.Definition(card)?.Agenda is { } agenda
                         && context.Opponent.AgendaPoints + agenda.AgendaPoints >= 7) == true) total += 5000;
                     break;
+                // v28 (bot loop 1): the targets the choice can take, cards installed this turn included unless it says not
+                // (PT Untaian's counter on an Urtica Cipher installed that turn was worth nothing and declined).
+                case BehaviorInstructionKind.AdvanceCard when context.Generation >= 23 && chosenTarget is { } advanced:
+                    total += AdvanceTargets(context, advanced.Kind != BehaviorTargetKind.InstalledCardNotThisTurn)
+                        .Where(target => advanced.Filter?.Rezzed is not { } rezzed || (target.Rezzed == true) == rezzed)
+                        .Select(target => AdvanceTargetValue(context, target, amount, context.Self.Clicks - 1)).DefaultIfEmpty(0).Max();
+                    break;
                 case BehaviorInstructionKind.AdvanceCard when context.Generation >= 3:
                     // Playing the card spends a click before the counters land.
                     total += AdvanceTargets(context).Select(target => AdvanceTargetValue(context, target, amount, context.Self.Clicks - 1))
@@ -268,9 +282,9 @@ public sealed partial class CorpHeuristicPolicy
     }
 
     /// <summary>Installed Corp cards an effect can advance: installed before this turn.</summary>
-    private static IEnumerable<AgentCard> AdvanceTargets(HeuristicContext context)
+    private static IEnumerable<AgentCard> AdvanceTargets(HeuristicContext context, bool installedThisTurn = false)
     {
-        ImmutableArray<string> thisTurn = context.Features.Board.TurnFacts?.Corp.ThisTurn?.InstalledCardIds ?? [];
+        ImmutableArray<string> thisTurn = installedThisTurn ? [] : context.Features.Board.TurnFacts?.Corp.ThisTurn?.InstalledCardIds ?? [];
         return context.Features.Board.Servers.SelectMany(server => server.Root.Concat(server.Ice)).OfType<AgentCard>()
             .Select(card => context.Card(new CardInstanceId(card.Id)) ?? card)
             .Where(card => !thisTurn.Contains(card.Id));

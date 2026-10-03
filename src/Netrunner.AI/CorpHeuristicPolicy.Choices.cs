@@ -89,8 +89,12 @@ public sealed partial class CorpHeuristicPolicy
             int value = choice.OptionKeys.Sum(key =>
             {
                 BehaviorChoiceOption option = plan.Choice!.Options.Single(candidate => candidate.Key == key);
-                return Effects(context, option.Instructions, null, plan.Controller)
-                    - (option.Costs ?? []).Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount) * context.CreditValue;
+                int effect = Effects(context, option.Instructions, null, plan.Controller);
+                // v28 (bot loop 1): a useful counter a choice places saves the click an advance would spend (PT Untaian's
+                // 1-credit counter at the end of the discard phase was declined every turn).
+                if (context.Generation >= 23 && effect > 0)
+                    effect += option.Instructions.Where(instruction => instruction.Kind == BehaviorInstructionKind.AdvanceCard).Sum(instruction => instruction.Amount) * 100;
+                return effect - (option.Costs ?? []).Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount) * context.CreditValue;
             });
             value -= choice.CardIds.Sum(id => context.CardValue(context.Card(id)));
             return Value(value, "choice/mode-and-additional-cost", approximate: true);

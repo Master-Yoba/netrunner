@@ -17,6 +17,11 @@ public sealed partial class CorpHeuristicPolicy
                 "install/complete-required-replacement", Objective: new("install", null, null, install.CardId.Value));
         }
         AgentServer? server = context.Server(install.ServerId);
+        // v28 (bot loop 1): a card replaced by its own copy is paid for again, so it is only worth it when the installed copy
+        // has run down (a rezzed campaign out of credits); Mahkota Langit Grid replaced its unrezzed copy in R&D for a click.
+        if (context.Generation >= 23 && install.RequiredReplacementCardIds.Select(id => context.Card(id))
+                .Any(installed => installed?.DefinitionId == card!.DefinitionId && !RunDown(context, installed)))
+            return new(-100, -500, "development/replaces-its-own-copy", true, new("install", null, null, install.CardId.Value));
         int lost = install.RequiredReplacementCardIds.Sum(id => context.CardValue(context.Card(id), installed: true));
         // v6: a remote's root holds one agenda or asset, so installing another
         // there trashes it; an agenda thrown away costs far more than its card value.
@@ -337,6 +342,18 @@ public sealed partial class CorpHeuristicPolicy
                 ? Math.Min(450, SuccessfulRunsOn(context, server) * 150) + RunnerSuccessPayoffs(context) * 60
                 : Math.Min(200, SuccessfulRunsOn(context, server) * 70);
         return score;
+    }
+
+    /// <summary>
+    /// v28: whether an installed card has lost value a fresh copy would restore: rezzed, and holding fewer of the credits it
+    /// loads when rezzed (a campaign). A card without such credits (an upgrade, recurring credits) loses nothing over time.
+    /// </summary>
+    private static bool RunDown(HeuristicContext context, AgentCard installed)
+    {
+        int load = context.Definition(installed)?.Behavior?.Triggers.Where(trigger => trigger.Occurrence == OccurrenceKind.CardRezzed)
+            .SelectMany(trigger => HeuristicContext.Flatten(trigger.Instructions))
+            .Where(instruction => instruction.Kind == BehaviorInstructionKind.LoadHostedCredits).Sum(instruction => instruction.Amount) ?? 0;
+        return installed.Rezzed == true && load > 0 && HeuristicContext.Hosted(installed) < load;
     }
 
     /// <summary>

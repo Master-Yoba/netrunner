@@ -156,6 +156,14 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// counters (Humanoid Resources, Phật Gioan Baotixita) are rezzed at all.
     /// </summary>
     public const string V27 = "corp-heuristic-v27";
+    /// <summary>
+    /// V27 with bot loop 1's deferred fixes (docs/BOT_LOOP_1.md): a card that loses nothing over time (an unrezzed copy,
+    /// or one without credits or counters to run out) isn't replaced by its own copy (Mahkota Langit Grid); an ability that
+    /// plays a card the Corp can't pay for is a wasted click (Petty Cash from Archives with 2 credits); an advancement
+    /// counter a trigger places without a click (PT Untaian) is worth what an advance costs; and the run model reads its
+    /// Elevation ICE's behavior subroutines (N-Pot, Lamplighter) for what they do.
+    /// </summary>
+    public const string V28 = "corp-heuristic-v28";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V23 fixes V22's faults the reviews of batch 4's losses to Codex found (1 October: known traps advanced, two agendas
@@ -165,14 +173,15 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     /// fixes only remove plays the playtest showed were wrong. Its Codex check was cut short when the quota ran out (1 of 3).
     /// V26 (A9c and A9d, 2 October) is: at Standard and Easy it plays as V25 (its counting needs the Runner's list), and at
     /// Hard it was level with V25 on the bot ladder. V27 (bot loop 1, 3 October) is the default while the loop measures it.
+    /// V28 (loop 1's deferred fixes, 4 October) is the default loop 2 plays against.
     /// </remarks>
-    public const string PolicyVersion = V27;
+    public const string PolicyVersion = V28;
     /// <summary>The latest version that never plans: the planner's model of the Corp.</summary>
     public const string LatestHeuristic = V8;
-    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27];
+    public static IReadOnlyList<string> Versions { get; } = [V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24, V25, V26, V27, V28];
 
     /// <summary>Whether the version keeps the A9 tracker of the Runner's hidden cards (v26).</summary>
-    public static bool UsesTracker(string version) => version is V26 or V27;
+    public static bool UsesTracker(string version) => version is V26 or V27 or V28;
 
     public CorpHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -180,9 +189,9 @@ public sealed partial class CorpHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Corp policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version switch { V2 => 1, V3 => 2, V7 => 4, V8 or V9 or V10 => 5, V11 => 6, V12 => 7, V13 => 8, V14 => 9, V15 => 10, V16 => 11, V17 => 12, V18 => 13, V19 => 14, V20 => 15, V21 => 16, V22 => 17, V23 => 18, V24 => 19, V25 => 20, V26 => 21, V27 => 22, _ => 3 };
-        Plans = version is V5 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19 or V20 or V21 or V22 or V23 or V24 or V25 or V26 or V27;
-        Repairs = version is V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19 or V20 or V21 or V22 or V23 or V24 or V25 or V26 or V27;
+        Generation = version switch { V2 => 1, V3 => 2, V7 => 4, V8 or V9 or V10 => 5, V11 => 6, V12 => 7, V13 => 8, V14 => 9, V15 => 10, V16 => 11, V17 => 12, V18 => 13, V19 => 14, V20 => 15, V21 => 16, V22 => 17, V23 => 18, V24 => 19, V25 => 20, V26 => 21, V27 => 22, V28 => 23, _ => 3 };
+        Plans = version is V5 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19 or V20 or V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28;
+        Repairs = version is V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19 or V20 or V21 or V22 or V23 or V24 or V25 or V26 or V27 or V28;
     }
 
     /// <summary>Whether this version has the playtest repairs (V6).</summary>
