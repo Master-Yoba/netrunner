@@ -639,6 +639,12 @@ every format, with per-pool numbers, and Gateway as a regression floor).
   per pass, the fit 9 minutes). `ai-belief` now loads and scores games in parallel and sweeps factors in one pass; it
   still scales poorly with workers, which the next step (profiling the verification runs) looks into.
 
+### Gate
+
+- `elevation-deck-smoke.sh --format nsg-core-sets --jobs 3`: **21 of 21** decks play human against bot on their side.
+- `make gates REF=e2cc3f4` PASS: verify (with the NSG menu area and pairing), m5-gate, tactics and bot-check (AI 133,
+  Match 1,011, CLI 171). The synthetic verify, the CI fast tier, passes too.
+
 ## Milestone gate (section 7)
 
 - [x] **Coverage:** 159 of 159 bound, tested and checklist-complete; no drift (`verify.sh`); CARD-401 green.
