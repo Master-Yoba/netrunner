@@ -549,9 +549,9 @@ The fixes changed Core in the primitive slices (EL.2 +17/−3, EL.4 +16/−4, EL
 reveal fix let private choice candidates include cards in the opponent's hand (`ObservationBuilder.Cards`, +6/−2,
 no new vocabulary). The slice-EL.5 E6 row above predates that fix: counted strictly, Batch 2 is no longer free of Core
 changes, though it added no vocabulary.
-Four items stand as built and are answered on their PRs: Syailendra may target its own server, as the card text allows; the
-EL.1 snapshot marks the format complete because the behaviors ship in the stack; the order of Off the Books' install and
-reveal is unobservable; and a set-aside host is defensive bookkeeping with no current path.
+Three items stand as built and are answered on their PRs: Syailendra may target its own server, as the card text
+allows; the EL.1 snapshot marks the format complete because the behaviors ship in the stack and the menu stays behind the
+review flag; and Off the Books keeps its destination choice before the search, which offers the same outcomes.
 
 ## Milestone gate (section 7)
 
@@ -562,6 +562,9 @@ reveal is unobservable; and a set-aside host is defensive bookkeeping with no cu
 - [x] **Decks:** each new deck validates (`CardFormatTests`), loads and plays human against bot through the client on its side (`elevation-deck-smoke.sh`, 14 of 14). The decks wait for your review.
 - [x] **Hardening:** 10,000 clean official fuzz games over the pool; the full `make m5-gate`, tactics and every suite:
   `make gates REF=f9acda7` PASS (verify, m5-gate, tactics, bot-check: AI 132, Match 984, CLI 171).
+  After the review fixes, on `129c5cc`: `make gates` passed m5-gate and tactics. Its verify (card-art smoke) and one
+  Match coordinator timeout failed while a synthetic verify ran beside it, and both passed rerun alone (verify; bot-check:
+  AI 133, Match 985, CLI 171). The synthetic verify, the CI fast tier, passes too.
 - [x] **Bots:**
   - every Elevation card played without errors, with a non-default valuation (EL.3, EL.5, EL.7 ladders and proofs: 0 errors);
   - the deck-pool ladder has no deck warning;
