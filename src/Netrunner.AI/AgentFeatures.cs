@@ -31,7 +31,7 @@ public sealed record AgentFeatures(PlayerSide Side, AgentDecision? Decision,
             (Board.CorpIdentity, "corp-identity"), (Board.RunnerIdentity, "runner-identity"),
             (Board.CorpPlayArea, "corp-play"), (Board.RunnerPlayArea, "runner-play"),
             (Board.CorpRemovedFromGame, "corp-removed"), (Board.RunnerRemovedFromGame, "runner-removed"),
-            (Board.RunnerHostedFaceUp, "runner-hosted"), (Board.CorpHostedFaceUp, "corp-hosted"),
+            (Board.RunnerHostedFaceUp ?? [], "runner-hosted"), (Board.CorpHostedFaceUp ?? [], "corp-hosted"),
             (PrivateCards.Hand, "own-hand"), (PrivateCards.Grip, "own-hand"),
             (PrivateCards.FaceDownArchives, "corp-discard"), (PrivateCards.FaceDownIce, "own-ice"),
             (PrivateCards.ChoiceCards, "private-choice"),
@@ -67,10 +67,15 @@ public sealed record AgentBoard
     public ImmutableArray<AgentCard> RunnerPlayArea { get; init; } = [];
     public ImmutableArray<AgentCard> CorpRemovedFromGame { get; init; } = [];
     public ImmutableArray<AgentCard> RunnerRemovedFromGame { get; init; } = [];
-    /// <summary>EL.4: Runner cards hosted face up on a console (Bling, Madani), playable as if in the grip.</summary>
-    public ImmutableArray<AgentCard> RunnerHostedFaceUp { get; init; } = [];
-    /// <summary>EL.7: Corp cards hosted face up on a Runner card (Detente).</summary>
-    public ImmutableArray<AgentCard> CorpHostedFaceUp { get; init; } = [];
+    /// <summary>
+    /// EL.4: Runner cards hosted face up on a console (Bling, Madani), playable as if in the grip. Absent (null) when
+    /// the game has no such zone, so the feature digest of a Gateway game and its saves is unchanged (EL.8 review).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ImmutableArray<AgentCard>? RunnerHostedFaceUp { get; init; }
+    /// <summary>EL.7: Corp cards hosted face up on a Runner card (Detente); absent when the game has no such zone.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ImmutableArray<AgentCard>? CorpHostedFaceUp { get; init; }
     public AgentDiscardCounts? ZoneCounts { get; init; }
     public AgentTurnHistory? TurnFacts { get; init; }
     public AgentRun? Run { get; init; }

@@ -76,6 +76,19 @@ public sealed class CardTrackerTests
     }
 
     [Fact]
+    public void ABoardWithoutHostedZonesSerializesWithoutThem()
+    {
+        // EL.8 review: the hosted faceup fields must not change a Gateway game's feature digest (its saves).
+        string json = EngineJson.Serialize(Board(hand: 5).Board);
+        Assert.DoesNotContain("HostedFaceUp", json, StringComparison.OrdinalIgnoreCase);
+        string hosted = EngineJson.Serialize(Board(hand: 4).Board with
+        {
+            CorpHostedFaceUp = [new AgentCard { Id = "card:hedge-1", DefinitionId = Hedge }],
+        });
+        Assert.Contains("corpHostedFaceUp", hosted, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ACardHostedFaceUpFromHqLeavesIt()
     {
         // EL.7: Detente hosts a card from HQ face up on the Runner's console.
