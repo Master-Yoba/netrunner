@@ -462,20 +462,20 @@ for faceup inactive agendas, and the fixes the deck-pool ladder and the 10,000-g
   - The rerun: **960 games, 0 errors, 0 capped, no deck warning**. Standard beats Easy on both seats: Corp +119 Elo (95% [77, 161]), Runner +71 ([28, 117]).
   - The pool favours the Corp: Standard's Corp scores 75% and its Runner 39%.
 - **Tracker (A9):** the bots' board reads both hosted faceup zones; a card hosted from the hand (Madani, Detente) leaves it, and a face-down slot the hand can't account for is the card that left faceup Archives (Mycoweb). Faceup installed agendas and removed-from-game cards were already public (visible cards and Remaining counts).
-- **`ai-belief`** on the 960 saved games:
+- **`ai-belief`** on the saved games of the second ladder run (not used in any fit):
 
   | Tier | Slot log loss (prior) | Slot top-1 (prior) | HQ agenda error (prior) | Tracked-HQ precision | Confident guesses right |
   |---|---|---|---|---|---|
-  | Easy | 3.092 (3.284) | 11% (3%) | 0.884 (0.870) | 75% | 89% |
-  | Standard | 3.001 (3.284) | 15% (3%) | 0.901 (0.870) | 69% | 87% |
-  | Hard | 1.820 (1.940) | 27% (19%) | 0.848 (0.821) | 69% | 86% |
+  | Easy | 3.088 (3.282) | 11% (3%) | 0.786 (0.875) | 75% | 90% |
+  | Standard | 2.997 (3.282) | 15% (3%) | 0.765 (0.875) | 69% | 87% |
+  | Hard | 1.819 (1.941) | 27% (19%) | 0.756 (0.825) | 69% | 87% |
 
-  The tracker beats its prior on every face-down-slot measure, on every tier.
-  **Deviation:** on HQ's agendas it is slightly worse than the prior on this pool; the Gateway fixtures (`BeliefAccuracyTests`) still beat it.
-  - Why: the Corp bots hold agendas in HQ, so HQ has 1.40 agendas at a Runner turn start against the unseen rate's 0.80.
-  - The Runner almost never tracks an agenda in HQ (accessed ones are stolen).
-  - Knowing about 0.46 non-agenda HQ cards lowers the tracker's estimate further than the prior's.
-  - The fix is A7's per-pool hidden-card prior: an HQ agenda rate fitted to the pool. It changes Runner v21's HQ valuation, so it needs a new Runner version and its ladder. Left for the user to schedule.
+  Every tier beats its prior on every measure, and Easy's forgetting shows.
+  - **The HQ agenda rate per pool (A7, A9):** before it, the tracker's HQ agenda error was worse than the prior on this pool (Standard 0.901 against 0.870).
+    - Why: the Corp bots hold agendas in HQ, so at a Runner turn start HQ had 1.40 agendas against the unseen rate's 0.80. The Runner almost never tracks an agenda in HQ (accessed ones are stolen), and knowing about 0.46 non-agenda HQ cards lowered its estimate further.
+    - The fix, `TrackerPrior.HqAgendaFactor`, scales the untracked HQ cards' agenda rate for this pool by 1.866, capped by the untracked cards and the unseen agendas. It was fitted on 480 saved games of the first ladder run, and checked on the second run's games above.
+    - Runner v21's HQ valuation and the measure use it. The Gateway pool keeps 1, so its play and the `BeliefAccuracyTests` fixtures are unchanged.
+    - The deck-pool ladder with it: 960 games, 0 errors, no deck warning; Standard − Easy is Corp +100 (95% [59, 141]) and Runner +88 ([44, 130]), inside the previous intervals.
 - **Per-format fit (A7):** `ai-fit-evaluation --content gateway-elevation --games 400 --holdout-games 120 --feature-version 2 --compare data/ai/evaluation-v2.json`. On 2,574 held-out positions per side, the pool's own fit beats the general fit:
 
   | Side | Pool fit | General fit | Hand evaluation | Base rate |
@@ -531,10 +531,10 @@ for faceup inactive agendas, and the fixes the deck-pool ladder and the 10,000-g
 - [x] **Formats:** the snapshots load and validate; Gateway + Elevation is playable with its decks (menu behind the review flag).
 - [x] **Decks:** each new deck validates (`CardFormatTests`), loads and plays human against bot through the client on its side (`elevation-deck-smoke.sh`, 14 of 14). The decks wait for your review.
 - [x] **Hardening:** 10,000 clean official fuzz games over the pool; the full `make m5-gate`, tactics and every suite:
-  `make gates REF=abf66b5` PASS (verify 539 s, m5-gate, tactics, bot-check: AI 132, Match 984, CLI 171).
-- [ ] **Bots** (one deviation):
+  `make gates REF=f9acda7` PASS (verify, m5-gate, tactics, bot-check: AI 132, Match 984, CLI 171).
+- [x] **Bots:**
   - every Elevation card played without errors, with a non-default valuation (EL.3, EL.5, EL.7 ladders and proofs: 0 errors);
   - the deck-pool ladder has no deck warning;
-  - `ai-belief` beats its prior on the new pool's slots on every tier, **but not on HQ agendas** (deviation above).
+  - `ai-belief` beats its prior on the new pool on every measure and tier, with the pool's HQ agenda rate.
 - [x] **Client:** every new state presented; accessibility re-checked; the smoke matrices include a new deck.
 - [x] `docs/ELEVATION_PROGRESS.md` complete, with evidence and deviations.

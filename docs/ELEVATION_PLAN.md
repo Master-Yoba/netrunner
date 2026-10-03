@@ -253,14 +253,14 @@ M4's process ([M4 plan](history/M4_PLAN.md), section 6), plus three steps:
 
 ## 7. Milestone gate checklist
 
-Status on 3 October 2026 (EL.8): see [the progress record](ELEVATION_PROGRESS.md#milestone-gate-section-7). Open: `ai-belief`'s HQ agenda measure on the new pool, and the decklists' review.
+Status on 3 October 2026 (EL.8): see [the progress record](ELEVATION_PROGRESS.md#milestone-gate-section-7). Open: the decklists' review (D-EL-4) before the menu offers them.
 
 - [x] **Coverage:** 159 of 159 bound, tested and checklist-complete; no drift; CARD-401 green.
 - [x] **E6:** each card batch at or above 80% with no Core change past its primitive slice; the whole-set report recorded.
 - [x] **Formats:** the snapshots load and validate; Gateway + Elevation is playable with its decks.
 - [x] **Decks:** each new deck validates, loads and plays human against bot through the client, on each side.
 - [x] **Hardening:** 10,000 clean official fuzz games over the pool; the full `make m5-gate`; tactics; every suite green.
-- [ ] **Bots:**
+- [x] **Bots:**
   - every Elevation card played without errors, with a non-default valuation;
   - the deck-pool ladder has no deck warning;
   - `ai-belief` is above its prior on the new pool.
