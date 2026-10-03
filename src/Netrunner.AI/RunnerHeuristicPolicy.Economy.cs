@@ -72,8 +72,12 @@ public sealed partial class RunnerHeuristicPolicy
         int gripSpent = 0)
     {
         int total = 0;
+        // v23: what each choice from the grip may take, so the install or hosting it feeds is worth nothing when nothing matches.
+        var gripChoices = new Dictionary<string, BehaviorCardFilter?>(StringComparer.Ordinal);
         foreach (BehaviorInstruction instruction in instructions)
         {
+            if (instruction.Choice is { Target: { Zone: BehaviorZone.Grip } choiceTarget } gripChoice)
+                gripChoices[gripChoice.Key] = choiceTarget.Filter;
             bool self = controller == PlayerSide.Runner;
             if (instruction.Recipient is BehaviorPlayerSelector.Corp or BehaviorPlayerSelector.Runner)
                 self = instruction.Recipient == BehaviorPlayerSelector.Runner;
@@ -92,6 +96,10 @@ public sealed partial class RunnerHeuristicPolicy
                 case BehaviorInstructionKind.ForfeitAgenda: total -= 600; break;
                 // Elevation (EL.5): a card hosted faceup on a console is one more card to play or install;
                 // a nested play is the played card's own value, roughly a good event.
+                // v23 (bot loop 1): Madani hosted nothing 65 times in a game with no program in the grip.
+                case BehaviorInstructionKind.HostFaceUp when context.Generation >= 19 && instruction.Target?.Selector is { } hosted
+                    && gripChoices.TryGetValue(hosted, out BehaviorCardFilter? hostFilter) && !GripHolds(context, hostFilter, install: false):
+                    break;
                 case BehaviorInstructionKind.HostFaceUp: total += 100; break;
                 case BehaviorInstructionKind.PlayCard: total += 250; break;
                 // Elevation (EL.7): runs and ICE. A bypass passes the ICE untouched; a derez costs the
@@ -128,6 +136,10 @@ public sealed partial class RunnerHeuristicPolicy
                 case BehaviorInstructionKind.AddCounter: total += sign * amount * 70; break;
                 case BehaviorInstructionKind.Search: total += 220; break;
                 case BehaviorInstructionKind.AddToHand: total += 180; break;
+                // v23 (bot loop 1): Topan spent a click installing from a grip of events.
+                case BehaviorInstructionKind.InstallCard when context.Generation >= 19 && instruction.SourceZone == BehaviorZone.Grip
+                    && !GripHolds(context, instruction.Target?.Filter, install: true):
+                    break;
                 case BehaviorInstructionKind.InstallCard:
                     total += 350;
                     if (instruction.SourceZone == BehaviorZone.Grip) gripSpent++;
@@ -145,6 +157,11 @@ public sealed partial class RunnerHeuristicPolicy
                 case BehaviorInstructionKind.SwapInstalledIce: total += BestSwap(context, []); break;
                 case BehaviorInstructionKind.EndRun: total -= Math.Max(300, RunnerValues.Server(context, RunnerValues.Attacked(context))); break;
                 case BehaviorInstructionKind.AddTags: total -= RunnerValues.TagRisk(context, amount); break;
+                // v23: a card choice from a grip that holds nothing it takes chooses nothing (Madani's empty hosting).
+                case BehaviorInstructionKind.Choose when context.Generation >= 19
+                    && instruction.Choice is { Options.Count: 0, Target: { Zone: BehaviorZone.Grip } emptyTarget }
+                    && !GripHolds(context, emptyTarget.Filter, install: false):
+                    break;
                 case BehaviorInstructionKind.Choose:
                     total += instruction.Choice is { Options.Count: > 0 } choice
                         ? choice.Options.Max(option => Effects(context, option.Instructions, source, controller, gripSpent) - (option.Costs ?? []).Sum(cost => Cost(context, cost)))
@@ -167,6 +184,20 @@ public sealed partial class RunnerHeuristicPolicy
         }
         return total;
     }
+
+    /// <summary>v23: whether the grip holds a card a filter takes; an install never takes an event.</summary>
+    private static bool GripHolds(HeuristicContext context, BehaviorCardFilter? filter, bool install) =>
+        context.Features.Hand.Any(card => context.Definition(card) is { } definition
+            && !(install && definition.Printed.CardClass == RuntimeCardClass.Event)
+            && (filter?.CardType ?? BehaviorCardType.Any) switch
+            {
+                BehaviorCardType.Any => true,
+                BehaviorCardType.Event => definition.Printed.CardClass == RuntimeCardClass.Event,
+                BehaviorCardType.Hardware => definition.Printed.CardClass == RuntimeCardClass.Hardware,
+                BehaviorCardType.Resource => definition.Printed.CardClass == RuntimeCardClass.Resource,
+                BehaviorCardType.Program or BehaviorCardType.Icebreaker => definition.Printed.CardClass == RuntimeCardClass.Program,
+                _ => true,
+            });
 
     private static int Cost(HeuristicContext context, BehaviorCost cost) => cost.Kind switch
     {
