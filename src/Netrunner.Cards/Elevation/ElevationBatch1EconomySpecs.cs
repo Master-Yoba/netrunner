@@ -88,6 +88,8 @@ public static class ElevationBatch1EconomySpecs
                 [
                     new BehaviorChoiceOption("draw", [Draw(4)]),
                     new BehaviorChoiceOption("remove-tags", [new BehaviorInstruction(BehaviorInstructionKind.RemoveTags, amount: 2)]),
+                    // "Up to 2": the Runner may keep a tag (EL.3 review).
+                    new BehaviorChoiceOption("remove-1-tag", [new BehaviorInstruction(BehaviorInstructionKind.RemoveTags, amount: 1)]),
                 ])),
         ]);
 

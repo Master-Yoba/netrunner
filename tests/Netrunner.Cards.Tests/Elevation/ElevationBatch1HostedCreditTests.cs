@@ -73,6 +73,34 @@ public sealed class ElevationBatch1HostedCreditTests
 
     [Fact]
     [Trait("ElevationCard", "35022")]
+    public void OpenMarketPaysForAUniqueConnectionThatReplacesItsCopy()
+    {
+        // EL.2 review regression: the final install action needed the wallet alone, so a replacing install
+        // that hosted credits pay for had no legal continuation.
+        const string Knickknack = "35033";
+        GameState state = new ElevationBoard(PlayerSide.Runner) { RunnerCredits = 0 }
+            .Add("35022", Place.Rig, counters: Declared(6))
+            .Add(Knickknack, Place.Rig)
+            .Add(Knickknack, Place.Grip)
+            .Begin();
+        Assert.Equal(1, Player(state, PlayerSide.Runner).Credits);
+        CardInstanceId incoming = state.GetZone(ZoneKind.RunnerGrip).CardIds.Single();
+        for (int step = 0; step < 4 && state.GetCard(incoming).ZoneId == state.GetZone(ZoneKind.RunnerGrip).Id; step++)
+        {
+            LegalAction install = Actions(state).Where(action => action.Parameters is InstallCardParameters parameters
+                    && parameters.CardId == incoming)
+                .OrderByDescending(action => ((InstallCardParameters)action.Parameters).FinalizeSelection)
+                .First();
+            state = Apply(state, install).State;
+        }
+        state = RoundTrip(state);
+
+        Assert.Equal(ZoneKind.RunnerRig, state.GetZone(state.GetCard(incoming).ZoneId).Kind);
+        Assert.Equal(1, state.GetZone(ZoneKind.RunnerRig).CardIds.Count(id => state.GetCard(id).DefinitionId.Value == Knickknack));
+    }
+
+    [Fact]
+    [Trait("ElevationCard", "35022")]
     public void OpenMarketIsTrashedWhenEmpty()
     {
         GameState state = new ElevationBoard(PlayerSide.Runner)

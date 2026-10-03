@@ -105,6 +105,7 @@ public sealed class ElevationBatch1EconomyTests
     [Theory]
     [InlineData("draw", 3, 3, 4)]
     [InlineData("remove-tags", 3, 1, 0)]
+    [InlineData("remove-1-tag", 3, 2, 0)]
     [Trait("ElevationCard", "35015")]
     public void LieLowSpendsAnExtraClickThenDrawsFourOrRemovesUpToTwoTags(string mode, int tags, int tagsAfter, int drawn)
     {
