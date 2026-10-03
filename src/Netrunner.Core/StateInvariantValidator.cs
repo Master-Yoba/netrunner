@@ -2780,6 +2780,10 @@ public static partial class StateInvariantValidator
                 && frame.Controller == run.InitiatingPlayer
                 && occurrence.SubjectCardId is null
                 && occurrence.ServerId == run.AttackedServer,
+            // EL.2: an occurrence deferred to the end of the action that raised it (a forfeit to rez, an
+            // emptied hosted pool, a first tag removal or operation), opened when the run's cursor resumes.
+            OccurrenceKind.AgendaForfeited or OccurrenceKind.HostedCreditPoolEmptied
+                or OccurrenceKind.FirstTagRemovalThisTurn or OccurrenceKind.FirstOperationPlayedThisTurn => occurrence.ServerId is null,
             _ => false,
         };
     }

@@ -28,8 +28,9 @@ public static partial class GameEngine
                 ConditionZone(working, controllerSide, condition.Fact!) is { } zone && zone.CardIds.Count <= threshold,
             BehaviorConditionKind.UnusedMemoryAtMost => UnusedRunnerMemory(working) <= threshold,
             BehaviorConditionKind.UnusedMemoryAtLeast => UnusedRunnerMemory(working) >= threshold,
-            BehaviorConditionKind.PlayedThisTurn =>
-                working.Turn.History?.ThisTurn(controllerSide)?.EventCount(
+            // "This turn" is the active turn: the controller's facts from its previous turn don't count.
+            BehaviorConditionKind.PlayedThisTurn => working.Turn.ActiveSide == controllerSide
+                && working.Turn.History?.ThisTurn(controllerSide)?.EventCount(
                     controllerSide == PlayerSide.Corp ? TurnEventKind.OperationPlayed : TurnEventKind.EventPlayed) > 0,
             BehaviorConditionKind.NoActionFinishedThisTurn => !HasFinishedActionThisTurn(working),
             BehaviorConditionKind.TurnEventCountIs =>

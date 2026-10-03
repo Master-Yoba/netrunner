@@ -169,7 +169,9 @@ public static partial class GameEngine
         (int selectedCost, CostQuote? selectedQuote) = InstallFrameCost(working, frame, plan, frame.SelectedReplacementCardIds);
         if (InstallSelectionSatisfiesRequirements(working, frame, plan, frame.SelectedReplacementCardIds)
             && (IsClickFreeInstall(frame.InitiationKind) || player.Clicks >= 1)
-            && player.Credits >= selectedCost)
+            // The same affordability as planning and commit: the wallet and declared hosted credits (Open Market).
+            && player.Credits + DeclaredHostedCredits(working, player.Side, BehaviorHostedCreditUseKind.InstallResource,
+                GetCard(working, frame.CardId)) >= selectedCost)
         {
             materialized.Add(new InstallCardParameters(
                 frame.CardId,

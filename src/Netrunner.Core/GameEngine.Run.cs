@@ -726,6 +726,13 @@ public static partial class GameEngine
             return;
         }
 
+        // EL.2: an occurrence deferred during the run (a forfeit to rez, an emptied hosted pool) opens its
+        // checkpoint once the action that raised it completes, not when the whole run unwinds.
+        if (FlushDeferredOccurrence(working))
+        {
+            return;
+        }
+
         switch (frame.Step)
         {
             case RunTimingStep.InitiationPaidWindow:
