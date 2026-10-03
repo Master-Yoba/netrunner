@@ -57,6 +57,13 @@ internal sealed class HeuristicContext
     }
 
     public int Generation { get; }
+
+    /// <summary>
+    /// Bot loop 1's deferred fixes (Runner v24, Corp v28): an Elevation subroutine written as a behavior (N-Pot, Lamplighter,
+    /// Semak-samun) does what its instructions do; earlier versions saw it as harmless.
+    /// </summary>
+    public bool ReadsBehaviorSubroutines => Features.Side == PlayerSide.Runner ? Generation >= 20 : Generation >= 23;
+
     public AgentPlayer Self => Features.Self;
     public AgentPlayer Opponent => Features.Opponent;
     public AgentCard? Card(CardInstanceId id) => _visible.GetValueOrDefault(id.Value);

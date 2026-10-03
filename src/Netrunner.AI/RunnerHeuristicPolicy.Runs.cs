@@ -4,8 +4,9 @@ namespace Netrunner.AI;
 
 public sealed partial class RunnerHeuristicPolicy
 {
+    /// <param name="knownSuccessValue">v24: value the run pays only if it succeeds, counted when no ICE on the path is unknown.</param>
     private static AgentUtility Run(HeuristicContext context, AgentServer? server, int extraRunCredits = 0, int extraValue = 0,
-        int upfrontCost = 0)
+        int upfrontCost = 0, int knownSuccessValue = 0)
     {
         if (server is null) return Value(-1000, "run/unknown-server", true, true);
         (int cost, int loss, int damage, bool blocked, int unknown) = Protection(context, server, server.Ice.Length - 1, upfrontCost);
@@ -85,6 +86,7 @@ public sealed partial class RunnerHeuristicPolicy
             risk = (int)(risk * budget * coverage);
             if (context.Self.Credits >= 4) risk -= unknown * 60;
         }
+        if (unknown == 0) extraValue += knownSuccessValue;
         if (matchPoint)
         {
             trapRisk = Math.Min(trapRisk, 200);
@@ -279,6 +281,9 @@ public sealed partial class RunnerHeuristicPolicy
                 double share = context.Knowledge?.OpponentList is not null ? RunnerInference.ListTrapShare(context) : SeenTrap(context) ? 0.6 : 0.15;
                 risk += residual * share * (2 + counters > grip ? 6000 : (2 + counters) * 100);
             }
+            // v24 (bot loop 1): an unadvanced card may be an ambush that flatlines a small grip; the Runner ran an unknown remote
+            // with 2 cards into Byte!'s 3 net damage.
+            else if (context.Generation >= 20) risk += residual * RunnerInference.LethalAmbushShare(context, grip) * 6000;
         }
         return (int)risk;
     }

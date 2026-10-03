@@ -129,6 +129,15 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// Semak-samun's 3 net damage or Measured Response's 4 meat damage with too few cards in the grip.
     /// </summary>
     public const string V23 = "runner-heuristic-v23";
+    /// <summary>
+    /// V23 with bot loop 1's deferred fixes (docs/BOT_LOOP_1.md): Elevation subroutines written as behaviors are read for what
+    /// they do (N-Pot's end the run at threat 2 and 4, Lamplighter's on a tagged Runner), and N-Pot's break costs credits,
+    /// not clicks, so a run isn't left half-broken; an unadvanced root card may be an ambush that flatlines a small grip
+    /// (Byte!), and a known operation that would is trashed (Measured Response); Clean Getaway is played on a run whose
+    /// success it can see; a second copy of an installed breaker isn't installed; and a tutor isn't played when the rig and
+    /// grip already break every ICE type (Mutual Favor).
+    /// </summary>
+    public const string V24 = "runner-heuristic-v24";
     /// <summary>The version new games and new manifests use.</summary>
     /// <remarks>
     /// V18 is V15 with only the reinstall fix (no install over its own copy or a second console), a fix that can only remove
@@ -139,21 +148,22 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     /// is: +75, -31, +16 and +30 against V20 on the bot ladder, and against Claude Sonnet as Corp on 24 fixed deals it won 8
     /// where V20 won 6. V22 (A9c, 2 October) is: at Standard and Easy it plays as V21 (its counting needs the Corp's list),
     /// and at Hard it was level with V21 on the bot ladder. V23 (bot loop 1, 3 October) is the default while loop 1 plays
-    /// against it: its fixes remove plays that flatline the Runner itself.
+    /// against it: its fixes remove plays that flatline the Runner itself. V24 (loop 1's deferred fixes, 4 October) is the
+    /// default loop 2 plays against.
     /// </remarks>
-    public const string PolicyVersion = V23;
+    public const string PolicyVersion = V24;
     /// <summary>
     /// The planner's model of the Runner. It stays V7, which Corp v9 was measured
     /// with, so the shipped Corp planner plays as it did.
     /// </summary>
     public const string LatestHeuristic = V7;
-    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23];
+    public static IReadOnlyList<string> Versions { get; } = [V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21, V22, V23, V24];
 
     /// <summary>Whether the version's memory of a face-down root card survives installs in that root (v20).</summary>
-    public static bool KeepsRootMemoryThroughInstalls(string version) => version is V20 or V21 or V22 or V23;
+    public static bool KeepsRootMemoryThroughInstalls(string version) => version is V20 or V21 or V22 or V23 or V24;
 
     /// <summary>Whether the version keeps the A9a tracker of the Corp's hidden cards (v21).</summary>
-    public static bool UsesTracker(string version) => version is V21 or V22 or V23;
+    public static bool UsesTracker(string version) => version is V21 or V22 or V23 or V24;
 
     public RunnerHeuristicPolicy() : this(PolicyVersion) { }
 
@@ -161,10 +171,10 @@ public sealed partial class RunnerHeuristicPolicy : IOfflinePolicy
     {
         if (!Versions.Contains(version)) throw new ArgumentException($"Unknown Runner policy version '{version}'.", nameof(version));
         Version = version;
-        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 or V8 or V9 => 6, V10 => 7, V11 or V12 => 8, V13 => 9, V14 => 10, V15 => 11, V16 => 12, V17 => 13, V18 => 14, V19 => 15, V20 => 16, V21 => 17, V22 => 18, V23 => 19, _ => 2 };
+        Generation = version switch { V1 => 1, V4 => 3, V5 => 4, V6 => 5, V7 or V8 or V9 => 6, V10 => 7, V11 or V12 => 8, V13 => 9, V14 => 10, V15 => 11, V16 => 12, V17 => 13, V18 => 14, V19 => 15, V20 => 16, V21 => 17, V22 => 18, V23 => 19, V24 => 20, _ => 2 };
         // V18 on: only the Hard profile (A6) has planner parameters, so Standard and Easy play as before.
         Plans = version is V3 or V8 or V9 || Generation >= 14;
-        Repairs = version is V4 or V5 or V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19 or V20 or V21 or V22 or V23;
+        Repairs = version is V4 or V5 or V6 or V7 or V8 or V9 or V10 or V11 or V12 or V13 or V14 or V15 or V16 or V17 or V18 or V19 or V20 or V21 or V22 or V23 or V24;
     }
 
     /// <summary>Whether this version has the playtest repairs (V4).</summary>

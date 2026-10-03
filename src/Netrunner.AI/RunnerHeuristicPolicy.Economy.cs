@@ -15,12 +15,21 @@ public sealed partial class RunnerHeuristicPolicy
             int kept = rezDelta <= 0 ? 0 : context.Server(play.TargetServerId)?.Ice
                 .Count(ice => ice is { Rezzed: not true }) is int unrezzed and > 0
                     ? unrezzed * (context.Opponent.Credits < rezDelta + 4 ? 450 : context.Opponent.Credits < rezDelta + 7 ? 250 : 120) : 0;
+            // v24 (bot loop 1): what the event's own successful-run trigger pays (Clean Getaway's 6 credits), counted when the
+            // Runner can see the run succeed; a basic run was always preferred to it.
+            int success = context.Generation >= 20 ? definition.Behavior?.Triggers
+                .Where(trigger => trigger.Occurrence == OccurrenceKind.RunSuccessful && trigger.Scope == BehaviorTriggerScope.Self)
+                .Sum(trigger => Effects(context, trigger.Instructions, card, PlayerSide.Runner)) ?? 0 : 0;
             AgentUtility utility = Run(context, context.Server(play.TargetServerId), runEvent.HostedCredits,
                 (runEvent.BreachAccessModifier?.Delta ?? 0) * 140 + (runEvent.SuccessDraw?.DrawCount ?? 0) * context.DrawValue + kept,
-                upfrontCost: play.CreditCost);
+                upfrontCost: play.CreditCost, knownSuccessValue: success);
             return utility with { Reason = "run/event-benefit-and-issued-cost" };
         }
         if (definition?.Behavior is not { } behavior) return Value(-50, "play/unmodelled", true, true);
+        // v24 (bot loop 1): a tutor for a breaker finds nothing the Runner needs once its rig and grip break every ICE type
+        // (Mutual Favor, played twice to find nothing).
+        if (context.Generation >= 20 && TutorsOnlyBreakers(behavior) && BreakersCovered(context))
+            return Value(-100, "play/tutor-finds-nothing-needed", true);
         return Value(Effects(context, behavior.Instructions, card, behavior.Controller) - play.CreditCost * context.CreditValue, "economy/event-net-payoff", true);
     }
 
@@ -183,6 +192,21 @@ public sealed partial class RunnerHeuristicPolicy
             }
         }
         return total;
+    }
+
+    /// <summary>v24: whether every search the effect makes looks for an icebreaker.</summary>
+    private static bool TutorsOnlyBreakers(CardBehaviorDefinition behavior)
+    {
+        BehaviorInstruction[] searches = [.. HeuristicContext.Flatten(behavior.Instructions).Where(instruction => instruction.Kind == BehaviorInstructionKind.Search)];
+        return searches.Length > 0 && searches.All(search => search.Target?.Filter?.CardType == BehaviorCardType.Icebreaker);
+    }
+
+    /// <summary>v24: whether the installed breakers and those in the grip break barriers, code gates and sentries.</summary>
+    private static bool BreakersCovered(HeuristicContext context)
+    {
+        IceType[] types = [.. context.Features.Board.RunnerRig.Concat(context.Features.Hand)
+            .Select(card => context.Definition(card)?.Icebreaker?.InterfaceType).OfType<IceType>().Distinct()];
+        return types.Contains(IceType.Any) || new[] { IceType.Barrier, IceType.CodeGate, IceType.Sentry }.All(types.Contains);
     }
 
     /// <summary>v23: whether the grip holds a card a filter takes; an install never takes an event.</summary>

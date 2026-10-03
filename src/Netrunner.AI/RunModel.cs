@@ -57,6 +57,64 @@ public sealed record SubroutineEffect(bool EndsRun, int? EndsRunIfCreditsAtMost,
             _ => none,
         };
     }
+
+    /// <summary>
+    /// What a subroutine does with the board read in: a behavior subroutine (Elevation) does what its instructions do, its
+    /// branches on tags and the threat level taken as they stand when it fires. <paramref name="tags"/> are the tags the
+    /// Runner will have by then; a choice the Runner makes is the one it survives at least harm, the Corp's the worst.
+    /// </summary>
+    internal static SubroutineEffect Of(IceSubroutineSpec specification, HeuristicContext context, AgentCard? card, int tags, int grip)
+    {
+        if (specification is not BehaviorSubroutineSpec behavior || !context.ReadsBehaviorSubroutines) return Of(specification);
+        var none = new SubroutineEffect(false, null, 0, 0, 0, 0, 0, false, false, false, 0);
+        BehaviorTrigger? trigger = context.Definition(card)?.Behavior?.Triggers.FirstOrDefault(value => value.Key == behavior.TriggerKey);
+        return trigger is null ? none : Resolve(trigger.Instructions, none);
+
+        SubroutineEffect Resolve(IEnumerable<BehaviorInstruction> instructions, SubroutineEffect effect)
+        {
+            foreach (BehaviorInstruction instruction in instructions)
+            {
+                bool runner = instruction.Recipient is not BehaviorPlayerSelector.Corp;
+                effect = instruction.Kind switch
+                {
+                    BehaviorInstructionKind.EndRun => effect with { EndsRun = true },
+                    BehaviorInstructionKind.DealDamage => effect with { Damage = effect.Damage + instruction.Amount },
+                    BehaviorInstructionKind.AddTags when runner => effect with { Tags = effect.Tags + instruction.Amount },
+                    BehaviorInstructionKind.LoseCredits when runner => effect with { CreditsLost = effect.CreditsLost + instruction.Amount },
+                    BehaviorInstructionKind.InstallCard => effect with { InstallsIce = true },
+                    BehaviorInstructionKind.Branch when instruction.Branch is { } branch =>
+                        Resolve(Holds(branch.Condition, effect) ? branch.WhenTrue : branch.WhenFalse, effect),
+                    BehaviorInstructionKind.Choose when instruction.Choice is { Options.Count: > 0 } choice => Chosen(choice, effect),
+                    _ => effect,
+                };
+            }
+            return effect;
+        }
+
+        SubroutineEffect Chosen(BehaviorChoiceSpec choice, SubroutineEffect effect)
+        {
+            SubroutineEffect[] outcomes = [.. choice.Options.Select(option => Resolve(option.Instructions, effect))];
+            if (choice.Chooser != BehaviorChooser.Runner)
+                return outcomes.FirstOrDefault(outcome => outcome.EndsRun) ?? outcomes.MaxBy(outcome => outcome.Damage + outcome.Tags)!;
+            return outcomes.Where(outcome => !outcome.EndsRun && outcome.Damage < grip).MinBy(outcome => outcome.Damage + outcome.Tags)
+                ?? outcomes.FirstOrDefault(outcome => outcome.EndsRun) ?? outcomes[^1];
+        }
+
+        bool Holds(BehaviorCondition condition, SubroutineEffect effect)
+        {
+            int runnerTags = (context.Features.Board.Players.Runner.Tags ?? 0) + tags + effect.Tags;
+            return condition.Kind switch
+            {
+                BehaviorConditionKind.Tagged => runnerTags > 0,
+                BehaviorConditionKind.NotTagged => runnerTags == 0,
+                BehaviorConditionKind.RunnerTagsAtLeast => runnerTags >= (condition.Value ?? 1),
+                BehaviorConditionKind.ThreatLevelAtLeast => Math.Max(context.Features.Board.Players.Corp.AgendaPoints,
+                    context.Features.Board.Players.Runner.AgendaPoints) >= (condition.Value ?? 0),
+                // Anything else is taken to hold: the worse case for the Runner.
+                _ => true,
+            };
+        }
+    }
 }
 
 /// <summary>How the Runner gets past one piece of ICE on the planned path.</summary>
@@ -133,7 +191,7 @@ public static class RunModel
                 unknown++;
                 continue;
             }
-            IceCrossing? crossing = Cross(context, server, card!, ice!, balance - spent - lost, clicks - clicksSpent, gripSize - damage);
+            IceCrossing? crossing = Cross(context, server, card!, ice!, balance - spent - lost, clicks - clicksSpent, gripSize - damage, tags);
             if (crossing is null)
                 return new(false, card!.Id, spent, clicksSpent, lost, damage, tags, unknown, serious, crossings);
             crossings.Add(crossing);
@@ -152,7 +210,7 @@ public static class RunModel
 
     /// <summary>The cheapest way past one known piece of ICE within the budget, or null if every way ends the run.</summary>
     private static IceCrossing? Cross(HeuristicContext context, AgentServer server, AgentCard card, IceBehaviorSpec ice,
-        int credits, int clicks, int grip)
+        int credits, int clicks, int grip, int priorTags = 0)
     {
         IReadOnlyList<IceSubroutineSpec> subroutines = ice.Subroutines;
         if (subroutines.Count > 8) return null; // beyond the bounded search: treat as unknown-hard
@@ -191,7 +249,10 @@ public static class RunModel
                 options.Add((breakerCard.Id, pumps * breaker.PumpCost
                     + (rest + limit - 1) / limit * RunnerValues.BreakCost(context, breakerCard, breaker, useIssuedQuote: encountering), 0));
             }
-            if (rest > 0 && bioroid) options.Add(("bioroid", 0, rest));
+            // Runner v24: a "bioroid" ability may cost credits instead of a click (N-Pot's 3 credits a subroutine).
+            if (rest > 0 && bioroid)
+                options.Add(context.ReadsBehaviorSubroutines && ice.EncounteredBioroidAbilities![0].Cost is { Kind: BehaviorCostKind.Credits } price
+                    ? ("bioroid", rest * price.Amount, 0) : ("bioroid", 0, rest));
             foreach ((string method, int creditCost, int clickCost) in options)
             {
                 if (creditCost > credits || clickCost > clicks) continue;
@@ -202,7 +263,8 @@ public static class RunModel
                 for (int ordinal = 0; ordinal < effects.Length; ordinal++)
                 {
                     if ((fired & (1 << ordinal)) == 0) continue;
-                    SubroutineEffect effect = effects[ordinal];
+                    SubroutineEffect effect = context.ReadsBehaviorSubroutines
+                        ? SubroutineEffect.Of(subroutines[ordinal], context, card, priorTags + tags, grip) : effects[ordinal];
                     if (effect.Severity > worst) worst = effect.Severity;
                     int drained = Math.Min(balance, effect.CreditsLost);
                     balance -= drained;

@@ -64,9 +64,13 @@ internal static class RunnerEncounterPlanner
                         AgentAction? first;
                         if (method.Bioroid)
                         {
-                            clicks = count;
                             first = context.Features.Actions.FirstOrDefault(action => action.Parameters is RunBioroidAbilityParameters choice
                                 && Contains(mask, choice.SubroutineOrdinal));
+                            // v24 (bot loop 1): an ability may cost credits instead of a click (N-Pot's 3 credits a subroutine);
+                            // as clicks, the Runner with none left saw no way through and passed.
+                            if (context.ReadsBehaviorSubroutines && first?.Parameters is RunBioroidAbilityParameters { Cost: { Kind: BehaviorCostKind.Credits } price })
+                                credits = count * price.Amount;
+                            else clicks = count;
                         }
                         else if (method.Breaker is { } breaker)
                         {
@@ -158,6 +162,17 @@ internal static class RunnerEncounterPlanner
                     case RunRestrictionSubroutineSpec: restricted = true; break;
                     case GainCreditsSubroutineSpec gain: loss += gain.Amount * 20; break;
                     case InstallCardSubroutineSpec: loss += 30; break;
+                    // v24 (bot loop 1): an Elevation subroutine written as a behavior does what it does (N-Pot's end the run
+                    // at threat 2 and 4, Lamplighter's on a tagged Runner); as nothing, the Runner broke one and passed.
+                    case BehaviorSubroutineSpec when context.ReadsBehaviorSubroutines:
+                        SubroutineEffect effect = SubroutineEffect.Of(ice.Subroutines[pair.subroutine.Ordinal], context, encounter.Ice, tags,
+                            context.Features.Hand.Length);
+                        ends |= effect.EndsRun;
+                        damage += effect.Damage;
+                        tags += effect.Tags;
+                        int drained = Math.Min(balance, effect.CreditsLost); balance -= drained; loss += drained * context.CreditValue;
+                        if (effect.InstallsIce) loss += 30;
+                        break;
                 }
             }
             bool lethal = damage > context.Features.Hand.Length;
