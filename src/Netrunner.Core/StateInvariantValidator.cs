@@ -2851,8 +2851,11 @@ public static partial class StateInvariantValidator
                 && occurrence.ServerId == run.AttackedServer,
             // EL.2: an occurrence deferred to the end of the action that raised it (a forfeit to rez, an
             // emptied hosted pool, a first tag removal or operation), opened when the run's cursor resumes.
+            // EL.9: also the first credit gain through an agenda or operation (Greenmail forfeited to rez
+            // Biawak mid-run, for The Zwicky Group).
             OccurrenceKind.AgendaForfeited or OccurrenceKind.HostedCreditPoolEmptied
-                or OccurrenceKind.FirstTagRemovalThisTurn or OccurrenceKind.FirstOperationPlayedThisTurn => occurrence.ServerId is null,
+                or OccurrenceKind.FirstTagRemovalThisTurn or OccurrenceKind.FirstOperationPlayedThisTurn
+                or OccurrenceKind.FirstCardCreditGainThisTurn => occurrence.ServerId is null,
             _ => false,
         };
     }
@@ -4413,6 +4416,7 @@ public static partial class StateInvariantValidator
                             if (sourceCard is not null
                                 && sourceCard.ZoneId != sourceZone.Id
                                 && !catalogTriggerDetachedSource
+                                && !(behaviorFrame.TriggerKey is not null && behaviorFrame.CatalogTriggerSourceMovedAfterStart)
                                 && !movedAfterPayment)
                             {
                                 Add(violations, "resolution.behavior-source-location-mismatch", $"{path}.sourceZoneId", "Behavior source card no longer occupies its captured invocation location.");
@@ -4428,6 +4432,19 @@ public static partial class StateInvariantValidator
                             "resolution.behavior-detached-source-unexpected",
                             path,
                             "Detached-source authorization is reserved for catalog trigger behavior children.");
+                    }
+
+                    if (behaviorFrame.CatalogTriggerSourceMovedAfterStart
+                        && (behaviorFrame.TriggerKey is null
+                            || behaviorFrame.Stage != BehaviorResolutionStage.Execute
+                            || (behaviorFrame.InstructionCursor == 0 && behaviorFrame.Continuation.Count == 0)
+                            || state.Cards.SingleOrDefault(card => card.Id == behaviorFrame.SourceCardId)?.ZoneId == behaviorFrame.SourceZoneId))
+                    {
+                        Add(
+                            violations,
+                            "resolution.behavior-moved-source-unexpected",
+                            path,
+                            "Moved-after-start authorization is reserved for a begun catalog trigger whose source left its zone.");
                     }
 
                     BehaviorBinding[] triggerSubjectBindings = behaviorFrame.Bindings

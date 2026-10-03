@@ -32,6 +32,8 @@ public static partial class GameEngine
             throw new ResolutionFailureException("Cards cannot enter a destroyed server.");
         }
 
+        MarkTriggerSourcesMovedAfterStart(working, card, destination);
+
         ReplaceZone(working, new ZoneState(
             source.Id,
             source.Kind,
@@ -162,6 +164,26 @@ public static partial class GameEngine
         && (!(IsHostedFaceUpZone(source) || source == ZoneKind.BehaviorSetAside)
             || destination == ZoneKind.BehaviorSetAside
             || IsHostedFaceUpZone(destination));
+
+    /// <summary>
+    /// Records that a begun catalog trigger's source left its zone for one other than its owner's trash or
+    /// removed-from-game zone (those keep their own lifecycle rules), so the trigger may finish (EL.9).
+    /// </summary>
+    private static void MarkTriggerSourcesMovedAfterStart(WorkingState working, CardInstanceState card, ZoneState destination)
+    {
+        if (IsAbilityTrashZone(destination, card) || IsAbilityRemoveZone(destination, card)) return;
+        for (int index = 0; index < working.ResolutionStack.Count; index++)
+        {
+            if (working.ResolutionStack[index] is BehaviorResolutionFrame frame
+                && frame.SourceCardId == card.Id
+                && frame.SourceZoneId == card.ZoneId
+                && !frame.CatalogTriggerSourceMovedAfterStart
+                && CatalogTriggerBegan(frame))
+            {
+                working.ResolutionStack[index] = frame.With(catalogTriggerSourceMovedAfterStart: true);
+            }
+        }
+    }
 
     private static bool IsInstalledZone(ZoneKind kind) =>
         kind is ZoneKind.RunnerRig or ZoneKind.ServerIce or ZoneKind.ServerRoot;

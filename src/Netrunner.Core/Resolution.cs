@@ -3395,7 +3395,8 @@ internal static class ResolutionFrameCloner
             behavior.TriggerKey,
             behavior.CatalogTriggerSourceMovedBeforeStart,
             behavior.OccurrenceContinuation,
-            behavior.RecordedAmounts),
+            behavior.RecordedAmounts,
+            behavior.CatalogTriggerSourceMovedAfterStart),
         BehaviorInstallChoiceFrame behaviorInstall => new BehaviorInstallChoiceFrame(
             behaviorInstall.Version,
             behaviorInstall.BehaviorId,

@@ -1195,6 +1195,60 @@ public sealed class CatalogTriggerRuntimeTests
     }
 
     [Fact]
+    public void MovedAfterStartAuthorizationIsRejectedWhileTheSourceIsInPlace()
+    {
+        // EL.9: the engine marks a begun trigger whose source another effect moved; a frame that claims it
+        // while its source still occupies the captured zone is a forged state.
+        CardDefinitionId definitionId = new("test:el9-moved-after-start");
+        CardInstanceId sourceId = new("card:el9-moved-after-start");
+        BehaviorChoiceSpec pause = new(
+            "pause",
+            BehaviorChooser.Controller,
+            BehaviorChoiceMode.Mode,
+            BehaviorChoiceCardinality.Exactly(1),
+            options:
+            [
+                new BehaviorChoiceOption("continue", [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]),
+                new BehaviorChoiceOption("skip", [new BehaviorInstruction(BehaviorInstructionKind.NoOp)]),
+            ]);
+        BehaviorCatalog catalog = Catalog(
+            new CardBehaviorDefinition(
+                definitionId,
+                PlayerSide.Runner,
+                triggers:
+                [
+                    new BehaviorTrigger(
+                        "paused",
+                        OccurrenceKind.CardInstalled,
+                        TriggerMode.Mandatory,
+                        BehaviorTriggerScope.Self,
+                        null,
+                        [
+                            new BehaviorInstruction(BehaviorInstructionKind.NoOp),
+                            new BehaviorInstruction(BehaviorInstructionKind.Choose, choice: pause),
+                            new BehaviorInstruction(BehaviorInstructionKind.GainCredits, 1),
+                        ]),
+                ]));
+        GameState state = CreateState(catalog, (sourceId, definitionId, PlayerSide.Runner, true));
+        PlayerId runner = state.Players.Single(player => player.Side == PlayerSide.Runner).Id;
+        GameState prompt = GameEngine.BeginGameplayOccurrenceForTesting(
+            state,
+            new GameplayOccurrenceEffect(OccurrenceKind.CardInstalled, runner, sourceId),
+            catalog,
+            maxResolutionSteps: 32);
+        BehaviorResolutionFrame child = Assert.IsType<BehaviorResolutionFrame>(prompt.ResolutionStack[^1]);
+        Assert.Equal(1, child.InstructionCursor);
+        Assert.False(child.CatalogTriggerSourceMovedAfterStart);
+
+        var json = System.Text.Json.Nodes.JsonNode.Parse(EngineJson.Serialize(prompt))!;
+        System.Text.Json.Nodes.JsonArray stack = json["resolutionStack"]!.AsArray();
+        stack[stack.Count - 1]!["catalogTriggerSourceMovedAfterStart"] = true;
+
+        Exception rejected = Assert.ThrowsAny<Exception>(() => EngineJson.DeserializeState(json.ToJsonString(), catalog));
+        Assert.Contains("Moved-after-start authorization", rejected.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MarkerAndCatalogInvocationDiscriminatorsRoundTripAndRejectMixedFrameKeys()
     {
         PlayerId runner = new("player:runner");

@@ -583,7 +583,8 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
         string? triggerKey = null,
         bool catalogTriggerSourceMovedBeforeStart = false,
         BehaviorOccurrenceContinuation? occurrenceContinuation = null,
-        IReadOnlyList<BehaviorRecordedAmount>? recordedAmounts = null)
+        IReadOnlyList<BehaviorRecordedAmount>? recordedAmounts = null,
+        bool catalogTriggerSourceMovedAfterStart = false)
         : base(version, behaviorId)
     {
         if (abilityKey is not null && triggerKey is not null)
@@ -637,6 +638,7 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
         AbilityKey = abilityKey;
         TriggerKey = triggerKey;
         CatalogTriggerSourceMovedBeforeStart = catalogTriggerSourceMovedBeforeStart;
+        CatalogTriggerSourceMovedAfterStart = catalogTriggerSourceMovedAfterStart;
         OccurrenceContinuation = occurrenceContinuation;
         BehaviorRecordedAmount[] recorded = (recordedAmounts ?? []).ToArray();
         if (recorded.Any(static value => value is null)
@@ -850,6 +852,17 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
     public bool CatalogTriggerSourceMovedBeforeStart { get; private set; }
 
     /// <summary>
+    /// Engine-issued authorization for a catalog trigger that began resolving
+    /// and whose source another effect then moved, outside its owner's trash
+    /// or removed-from-game zone (EL.9: Byte!, accessed on top of R&amp;D, is
+    /// drawn by NBN: Reality Plus before its net damage). The trigger
+    /// finishes, as one whose source moved before it started does.
+    /// </summary>
+    [JsonInclude]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool CatalogTriggerSourceMovedAfterStart { get; private set; }
+
+    /// <summary>
     /// Typed parent continuation for a hosted-credit exhaustion occurrence.
     /// While the frame is AwaitingOccurrence this identifies the exact nested
     /// occurrence effect; after completion it is retained only when that
@@ -875,7 +888,8 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
         bool? catalogTriggerSourceMovedBeforeStart = null,
         BehaviorOccurrenceContinuation? occurrenceContinuation = null,
         bool clearOccurrenceContinuation = false,
-        IReadOnlyList<BehaviorRecordedAmount>? recordedAmounts = null) =>
+        IReadOnlyList<BehaviorRecordedAmount>? recordedAmounts = null,
+        bool? catalogTriggerSourceMovedAfterStart = null) =>
         new(
             Version,
             BehaviorId,
@@ -903,7 +917,8 @@ public sealed record BehaviorResolutionFrame : ResolutionFrame
             occurrenceContinuation: clearOccurrenceContinuation
                 ? null
                 : occurrenceContinuation ?? OccurrenceContinuation,
-            recordedAmounts: recordedAmounts ?? RecordedAmounts)
+            recordedAmounts: recordedAmounts ?? RecordedAmounts,
+            catalogTriggerSourceMovedAfterStart: catalogTriggerSourceMovedAfterStart ?? CatalogTriggerSourceMovedAfterStart)
         {
             RootInstructions = Freeze(RootInstructions),
             Instructions = Freeze(instructions ?? Instructions),

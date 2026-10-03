@@ -1277,6 +1277,12 @@ public static partial class GameEngine
         return instructions;
     }
 
+    /// <summary>Whether a catalog trigger has begun resolving: past its first instruction, or with a recorded choice.</summary>
+    private static bool CatalogTriggerBegan(BehaviorResolutionFrame frame) =>
+        frame.TriggerKey is not null
+        && frame.Stage == BehaviorResolutionStage.Execute
+        && (frame.InstructionCursor > 0 || frame.Continuation.Count > 0);
+
     private static void ValidateBehaviorRuntimeFrame(WorkingState working, BehaviorResolutionFrame frame)
     {
         CardBehaviorDefinition definition = GetBehaviorDefinition(working, frame);
@@ -1552,23 +1558,34 @@ public static partial class GameEngine
                         && instruction.DamageAmountOperand?.TrashSourceAsCost == true);
             // The trigger's own install may replace its source (a second Pantograph
             // trashes the first, Wave 4 C1); an ability that began resolving finishes.
+            // So may a card the trigger plays (EL.9: Plutus plays Peer Review from
+            // Archives, which installs into Plutus's server and trashes Plutus).
             bool installReplacedSource = frame.TriggerKey is not null
-                && BehaviorInstructionPath.HasReached(
-                    rootInstructions,
-                    frame.Continuation,
-                    frame.InstructionCursor,
-                    BehaviorInstructionKind.InstallCard);
+                && (BehaviorInstructionPath.HasReached(
+                        rootInstructions,
+                        frame.Continuation,
+                        frame.InstructionCursor,
+                        BehaviorInstructionKind.InstallCard)
+                    || BehaviorInstructionPath.HasReached(
+                        rootInstructions,
+                        frame.Continuation,
+                        frame.InstructionCursor,
+                        BehaviorInstructionKind.PlayCard));
             bool catalogTriggerLifecycleZone = (catalogTriggerSelfTrashReached || damageSelfTrashReached || installReplacedSource)
                 && IsAbilityTrashZone(currentSourceZone, source);
             bool catalogTriggerDetachedSource = frame.TriggerKey is not null
                 && frame.CatalogTriggerSourceMovedBeforeStart;
+            // A triggered ability that began resolving finishes after another effect moved its source,
+            // as one whose source moved before it started does (EL.9: Byte!, accessed on top of R&D,
+            // gives a tag; NBN: Reality Plus draws 2 and draws Byte! before its net damage).
+            bool catalogTriggerBegan = frame.TriggerKey is not null && frame.CatalogTriggerSourceMovedAfterStart;
             bool hostedCreditOccurrenceAuthorized = IsAuthorizedHostedCreditMovement(
                 working,
                 frame,
                 source,
                 currentSourceZone);
             bool validLifecycleZone = frame.TriggerKey is not null
-                ? catalogTriggerDetachedSource || catalogTriggerLifecycleZone || hostedCreditOccurrenceAuthorized
+                ? catalogTriggerDetachedSource || catalogTriggerBegan || catalogTriggerLifecycleZone || hostedCreditOccurrenceAuthorized
                 : (selfTrash && IsAbilityTrashZone(currentSourceZone, source))
                     || (selfRemove && IsAbilityRemoveZone(currentSourceZone, source))
                     || hostedCreditOccurrenceAuthorized;
