@@ -2,7 +2,10 @@
 # Claude plays the bot through the ai-mcp-game MCP server, on the same numbered deals as ai-codex-play, so the two
 # outside opponents (and versions against either) compare on fixed deals. Usage:
 #   scripts/ai-claude-play.sh --output <new dir> [--side corp|runner|both] [--first-game N] [--games N] [--seed S]
-#     [--opponent ENTRANT] [--model claude-sonnet-5-5] [--parallel N] [--budget-usd 10]
+#     [--deals FILE] [--opponent ENTRANT] [--model claude-sonnet-5-5] [--parallel N] [--budget-usd 10]
+# --deals plays a fixed list instead of the Gateway pool's numbered deals: one line per game, "NNN corp~runner seat",
+# where seat is Claude's side (blank lines and # comments are skipped). A deal's shuffle comes from --seed and its
+# number, so the same number replays the same deal (docs/BOT_IMPROVEMENT_PLAN.md).
 # Each game is one `claude -p` session with only the game's MCP tools (no shell or file tools), from an empty workspace,
 # capped at --budget-usd. Games are saved like ai-ladder --save-games (game-NNN/game/), with Claude's usage beside them
 # (game-NNN/claude.json); a line per game and a summary go to stdout. Needs the claude CLI, logged in. It spends plan
@@ -18,7 +21,7 @@ if [[ ! -f "$play_data/cards.json" ]]; then
 fi
 command -v claude >/dev/null || { echo "The claude CLI is not on PATH." >&2; exit 2; }
 
-output="" side="both" first=0 games=1 seed=1 opponent="standard" model="claude-sonnet-5-5" parallel=2 budget=10
+output="" side="both" first=0 games=1 seed=1 opponent="standard" model="claude-sonnet-5-5" parallel=2 budget=10 deals_file=""
 while (($#)); do
   case "$1" in
     --output) output="$2"; shift 2 ;;
@@ -26,6 +29,7 @@ while (($#)); do
     --first-game) first="$2"; shift 2 ;;
     --games) games="$2"; shift 2 ;;
     --seed) seed="$2"; shift 2 ;;
+    --deals) deals_file="$2"; shift 2 ;;
     --opponent) opponent="$2"; shift 2 ;;
     --model) model="$2"; shift 2 ;;
     --parallel) parallel="$2"; shift 2 ;;
@@ -44,8 +48,13 @@ dotnet build "$play_root/src/Netrunner.Cli" -c Release --artifacts-path "$play_b
   -p:NetrunnerContentEnabled=true -p:NetrunnerCardDataMode=official "-p:NetrunnerCardDataInputRoot=$play_data" >&2
 cli="$play_build/bin/Netrunner.Cli/release/Netrunner.Cli.dll"
 dotnet_host="$(command -v dotnet)"
-# The deals and the prompt come from ai-codex-play, so both outside opponents play the same games.
-mapfile -t deals < <(dotnet "$cli" ai-codex-play --print-deals --side "$side" --first-game "$first" --games "$games" --opponent "$opponent")
+# The deals and the prompt come from ai-codex-play, so both outside opponents play the same games; or from a deals file.
+if [[ -n "$deals_file" ]]; then
+  [[ -f "$deals_file" ]] || { echo "--deals file not found: $deals_file" >&2; exit 2; }
+  mapfile -t deals < <(grep -vE '^[[:space:]]*(#|$)' "$deals_file")
+else
+  mapfile -t deals < <(dotnet "$cli" ai-codex-play --print-deals --side "$side" --first-game "$first" --games "$games" --opponent "$opponent")
+fi
 
 play_one() {
   local number=$1 content=$2 seat=$3

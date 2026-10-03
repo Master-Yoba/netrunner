@@ -217,15 +217,20 @@ public sealed class GameReviewDossier
     /// <summary>The board before each of the reviewed bot's decisions.</summary>
     public string AllPositions() => string.Join("\n", Decisions.Select(decision => Position(decision.Sequence)));
 
+    // Every embedded pack (System Gateway and, when installed, Elevation), so reviews and the players' card_text
+    // tool read Elevation cards too, and boards name them.
+    private static readonly Lazy<IReadOnlyList<NormalizedCardDefinition>> PoolCards = new(
+        () => CardDataResource.LoadEmbeddedPool().Cards, LazyThreadSafetyMode.ExecutionAndPublication);
+
     /// <summary>Every card's printed text, one per line.</summary>
-    public static string AllCardTexts() => string.Join("\n", CardDataResource.LoadEmbedded().Cards.Select(card => CardText(card.Code)));
+    public static string AllCardTexts() => string.Join("\n", PoolCards.Value.Select(card => CardText(card.Code)));
 
     /// <summary>The <c>card_text</c> tool: a card's printed text, type, costs and subtypes.</summary>
     public static string CardText(string titleOrCode)
     {
-        NormalizedCardDefinition? card = CardDataResource.LoadEmbedded().Cards.FirstOrDefault(value =>
+        NormalizedCardDefinition? card = PoolCards.Value.FirstOrDefault(value =>
             value.Code == titleOrCode.Trim() || string.Equals(value.Title, titleOrCode.Trim(), StringComparison.OrdinalIgnoreCase));
-        card ??= CardDataResource.LoadEmbedded().Cards.FirstOrDefault(value => value.Title.Contains(titleOrCode.Trim(), StringComparison.OrdinalIgnoreCase));
+        card ??= PoolCards.Value.FirstOrDefault(value => value.Title.Contains(titleOrCode.Trim(), StringComparison.OrdinalIgnoreCase));
         if (card is null) return $"No card called '{titleOrCode}'.";
         var parts = new List<string> { $"{card.Title} ({card.Code}), {card.Side} {card.Faction} {card.Type}" };
         if (card.Subtypes.Count > 0) parts.Add("subtypes: " + string.Join(", ", card.Subtypes));
@@ -239,7 +244,7 @@ public sealed class GameReviewDossier
     }
 
     public static bool CardExists(string title) =>
-        CardDataResource.LoadEmbedded().Cards.Any(card => string.Equals(card.Title, title.Trim(), StringComparison.OrdinalIgnoreCase));
+        PoolCards.Value.Any(card => string.Equals(card.Title, title.Trim(), StringComparison.OrdinalIgnoreCase));
 
     private static string Describe(GameState state, LegalAction action)
     {
@@ -300,6 +305,6 @@ public sealed class GameReviewDossier
     private static string Title(GameState state, CardInstanceId id)
     {
         string code = state.GetCard(id).DefinitionId.Value;
-        return CardDataResource.LoadEmbedded().Cards.FirstOrDefault(card => card.Code == code)?.Title ?? code;
+        return PoolCards.Value.FirstOrDefault(card => card.Code == code)?.Title ?? code;
     }
 }

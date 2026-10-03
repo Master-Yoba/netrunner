@@ -123,6 +123,13 @@ public static class RulesFuzzRunner
     public static IReadOnlyList<string> ContentNames { get; } =
         ["developer", "official", "gateway", "elevation", "gateway-elevation", "nsg-core-sets"];
 
+    /// <summary>Whether a content ID is a pairing of one of the official pools (Gateway, the Elevation pools, the expanded decks).</summary>
+    public static bool IsKnownContentId(string contentId)
+    {
+        ArgumentNullException.ThrowIfNull(contentId);
+        return ContentNames.Where(name => name != "developer").Any(name => ContentIds(name).Contains(contentId, StringComparer.Ordinal));
+    }
+
     /// <summary>The content IDs a <c>--content</c> option names.</summary>
     public static IReadOnlyList<string> ContentIds(string content) => content switch
     {

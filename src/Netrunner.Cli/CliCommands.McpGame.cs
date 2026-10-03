@@ -53,7 +53,8 @@ public static partial class CliCommands
                 }
             }
             if (destination.Length == 0 || content.Length == 0) throw new ArgumentException("ai-mcp-game requires --content and --output.");
-            if (!RulesFuzzRunner.ContentIds("gateway").Contains(content)) throw new ArgumentException($"Unknown Gateway content '{content}'.");
+            // Any official pool's pairing: Gateway, the Elevation pools (the Core Battle Box, NSG Core Sets), the expanded decks.
+            if (!RulesFuzzRunner.IsKnownContentId(content)) throw new ArgumentException($"Unknown content '{content}'.");
             if (!RatingLadder.EntrantOrder.Contains(opponent)) throw new ArgumentException($"Unknown opponent entrant '{opponent}'.");
             if (CardDataResource.EmbeddedMode != CardDataResource.OfficialMode)
                 throw new ArgumentException("ai-mcp-game needs previously provisioned official content embedded at build time.");
