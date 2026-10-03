@@ -110,7 +110,11 @@ public static partial class HumanGameReview
         var titles = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (CardViewModel card in view.Servers.SelectMany(server => server.Root.Concat(server.Ice)).OfType<CardViewModel>()
             .Concat(view.CorpHand.VisibleCards).Concat(view.RunnerHand.VisibleCards).Concat(view.RunnerRig).Concat(view.CorpDiscard)
-            .Concat(view.RunnerHeap).Concat(view.ChoiceCards).Concat(view.CorpScore).Concat(view.RunnerScore))
+            .Concat(view.RunnerHeap).Concat(view.ChoiceCards).Concat(view.CorpScore).Concat(view.RunnerScore)
+            // Bot loop 1: the identities (Topan's ability read "Use a hidden card"), hosted faceup cards, the play area and
+            // removed-from-game cards.
+            .Concat(view.HostedFaceUp).Concat(view.PlayArea).Concat(view.CorpRemovedFromGame).Concat(view.RunnerRemovedFromGame)
+            .Concat(new[] { view.CorpIdentity, view.RunnerIdentity }.OfType<CardViewModel>()))
         {
             if (card.IsKnown) titles.TryAdd(card.Id, card.Title);
         }
