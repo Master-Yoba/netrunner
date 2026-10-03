@@ -524,10 +524,40 @@ for faceup inactive agendas, and the fixes the deck-pool ladder and the 10,000-g
 - **Every deck through the client:** `scripts/elevation-deck-smoke.sh` plays each of the 14 decks on its side as the human seat (the contract agent clicking through the presented actions) against the bot, to a finished game and a reload. **14 of 14 PASS.**
 - **Not done:** with a real display (Xvfb), the main-menu smoke fails at its first New game check, in this checkout and without the Elevation preview too; `make verify` runs it headless, where it passes. Menu and in-game captures with real decks show official card text and art, so they stay local.
 
+### Review fixes and CI
+
+The PR reviews (#84–#91) found 18 items; each slice's branch carries its own fix commit, and the stack was rebased onto
+them:
+
+- **EL.1:** the main-menu smoke and the onboarding smoke needed official card data, so the synthetic fast CI tier
+  failed. Without content, the menu smoke now checks that New game and Load game are disabled and the data notice shows,
+  and `verify.sh` skips the onboarding smoke.
+- **EL.2:** a deferred occurrence opens when a run resumes; install finalization counts declared hosted credits;
+  "played this turn" reads only the controller's own turn.
+- **EL.3:** Lie Low may remove 1 tag; Open Market pays for a unique connection that replaces its copy.
+- **EL.4:** a run event hosted on a console (Bling) plays from there; a hosted card set aside by a behavior keeps its
+  host.
+- **EL.5:** MuslihaT takes the first matching card and knows the top card; Synapse Global and Off the Books reveal what
+  they install; public reveals reach the other player (history names the card by title, not by instance).
+- **EL.6:** a steal outside a run raises the scored-or-stolen occurrence (Détente); rez effects pay with hosted rez
+  credits (Biawak's forfeit rez, Mycoweb); the credit-cost ICE ability event keeps its cost (N-Pot).
+- **EL.7:** Mycoweb's copy of a trash subroutine needs a target, or else ends the run.
+- **EL.8:** the hosted faceup board features are left out when absent, so Gateway feature digests and saves are
+  unchanged.
+
+The fixes changed Core in the primitive slices (EL.2 +17/−3, EL.4 +16/−4, EL.6 +42/−13) and once in a batch: EL.5's
+reveal fix let private choice candidates include cards in the opponent's hand (`ObservationBuilder.Cards`, +6/−2,
+no new vocabulary). The slice-EL.5 E6 row above predates that fix: counted strictly, Batch 2 is no longer free of Core
+changes, though it added no vocabulary.
+Four items stand as built and are answered on their PRs: Syailendra may target its own server, as the card text allows; the
+EL.1 snapshot marks the format complete because the behaviors ship in the stack; the order of Off the Books' install and
+reveal is unobservable; and a set-aside host is defensive bookkeeping with no current path.
+
 ## Milestone gate (section 7)
 
 - [x] **Coverage:** 159 of 159 bound, tested and checklist-complete; no drift (`verify.sh`); CARD-401 green.
-- [x] **E6:** each card batch at 100% with no Core change past its primitive slice; the whole-set report above (28%).
+- [x] **E6:** each card batch at 100% with no Core change past its primitive slice; the whole-set report above (28%). The
+  EL.5 review fix later added a 6-line observation change to Batch 2, with no new vocabulary (see Review fixes).
 - [x] **Formats:** the snapshots load and validate; Gateway + Elevation is playable with its decks (menu behind the review flag).
 - [x] **Decks:** each new deck validates (`CardFormatTests`), loads and plays human against bot through the client on its side (`elevation-deck-smoke.sh`, 14 of 14). The decks wait for your review.
 - [x] **Hardening:** 10,000 clean official fuzz games over the pool; the full `make m5-gate`, tactics and every suite:
