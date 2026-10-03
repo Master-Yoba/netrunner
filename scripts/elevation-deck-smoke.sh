@@ -25,10 +25,10 @@ mkdir -p "$output"
 
 case "$format" in
   gateway-elevation)
-    corps=(elevation-leo-bioroid-wall elevation-poetri-trendsetters elevation-auco-clone-vats elevation-untaian-silk-road
-      elevation-nebula-headliners elevation-synapse-fast-news elevation-bangun-open-house elevation-zwicky-shell-companies)
-    runners=(elevation-ryo-phoenix-fire elevation-topan-street-gang elevation-barry-tri-maf elevation-muslihat-market-runs
-      elevation-dewi-shadow-play elevation-magdalene-cryptarchitect) ;;
+    # D-EL-10: the Core Battle Box.
+    corps=(elevation-box-nebula-fast-advance elevation-box-untaian-shell-game elevation-box-zwicky-supermodernism
+      elevation-box-leo-glacier)
+    runners=(elevation-box-topan elevation-box-muslihat elevation-box-magdalene) ;;
   nsg-core-sets)
     corps=(nsg-core-agency nsg-core-brick-stack nsg-core-brutal-efficiency nsg-core-fashion-lab nsg-core-fine-print
       nsg-core-gimbatul nsg-core-glyph-of-warding nsg-core-hidden-funds nsg-core-not-so-subtle nsg-core-peculiarity

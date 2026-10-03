@@ -45,7 +45,8 @@ public sealed class PlayFormatsTests
         PlayFormatContent elevation = PlayFormats.Get(CardFormatIds.GatewayElevation);
 
         Assert.Equal(7, gateway.Decks.Count);
-        Assert.Equal(14, elevation.Decks.Count);
+        Assert.Equal(7, elevation.Decks.Count);
+        Assert.All(elevation.Decks, deck => Assert.StartsWith(OfficialPresetCatalog.CoreBattleBoxPrefix, deck.PresetId, StringComparison.Ordinal));
         Assert.All(elevation.Decks, deck => Assert.True(OfficialPresetCatalog.IsElevationDeck(deck.PresetId)));
         Assert.Same(OfficialPresetCatalog.Embedded(), gateway.Presets);
         Assert.Equal(GatewayBehaviorCatalog.Create().Fingerprint, gateway.Behavior.Fingerprint);
@@ -61,8 +62,8 @@ public sealed class PlayFormatsTests
     [Fact]
     public async Task TheFormatsDeckPoolIsFuzzAndLadderContent()
     {
-        Assert.Equal(48, RulesFuzzRunner.ContentIds("gateway-elevation").Count);
-        Assert.Equal("gateway-elevation-v1", RulesFuzzRunner.PoolVersion("gateway-elevation"));
+        Assert.Equal(12, RulesFuzzRunner.ContentIds("gateway-elevation").Count);
+        Assert.Equal("gateway-elevation-v2", RulesFuzzRunner.PoolVersion("gateway-elevation"));
         Assert.Equal(108, RulesFuzzRunner.ContentIds("nsg-core-sets").Count);
         Assert.Equal("nsg-core-sets-v1", RulesFuzzRunner.PoolVersion("nsg-core-sets"));
         if (!ElevationAvailable) return;
@@ -85,6 +86,7 @@ public sealed class PlayFormatsTests
         try
         {
             PlayFormatContent content = PlayFormats.Get(CardFormatIds.GatewayElevation);
+            // Two retired EL.8 decks (D-EL-10): a game saved with them still records and reloads its format.
             FullMatchDefinition definition = content.Compose(
                 content.ComposeOfficial("elevation-synapse-fast-news", "elevation-magdalene-cryptarchitect", 31));
             await using var service = new SoloSessionService(PlayFormats.SaveContent, directory);

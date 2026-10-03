@@ -145,7 +145,8 @@ public static class RulesFuzzRunner
         "official" => "expanded-v1",
         "gateway" => "gateway-v1",
         "elevation" => "elevation-simulation-v3",
-        "gateway-elevation" => "gateway-elevation-v1",
+        // v2: the Core Battle Box replaced our decks (D-EL-10).
+        "gateway-elevation" => "gateway-elevation-v2",
         "nsg-core-sets" => "nsg-core-sets-v1",
         _ => throw new ArgumentException($"Unknown content '{content}'; expected {string.Join(", ", ContentNames)}.", nameof(content)),
     };

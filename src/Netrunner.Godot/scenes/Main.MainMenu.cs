@@ -155,7 +155,7 @@ public partial class Main
 		(string, string)[] modeOptions =
 		[
 			("Gateway decks", GatewayMode),
-			.. ElevationMenuOffered ? [("Gateway + Elevation", ElevationMode)] : Array.Empty<(string, string)>(),
+			.. ElevationMenuOffered ? [("Core Battle Box", ElevationMode)] : Array.Empty<(string, string)>(),
 			.. NsgCoreMenuOffered ? [("NSG Core Sets", NsgCoreMode)] : Array.Empty<(string, string)>(),
 			("Tutorial", TutorialMode),
 		];
@@ -214,14 +214,9 @@ public partial class Main
 		return view;
 	}
 
-	/// <summary>
-	/// D-EL-4: our Gateway + Elevation decks wait for the user's review before the
-	/// menu offers them; developer builds and the smokes preview them.
-	/// </summary>
+	/// <summary>D-EL-10: the Core Battle Box decks are published lists, offered wherever the pool is installed.</summary>
 	private bool ElevationMenuOffered =>
-		HasAuthenticatedOfficialContent() && PlayFormats.IsAvailable(CardFormatIds.GatewayElevation)
-		&& (PlayFormats.ElevationDecksReviewed || DeveloperToolsEnabled
-			|| OS.GetCmdlineUserArgs().Contains("--elevation-preview", StringComparer.Ordinal));
+		HasAuthenticatedOfficialContent() && PlayFormats.IsAvailable(CardFormatIds.GatewayElevation);
 
 	/// <summary>NSG's published Core Sets decks need no review: the format is offered wherever its pool is installed.</summary>
 	private bool NsgCoreMenuOffered =>
@@ -257,8 +252,8 @@ public partial class Main
 			_menuModeDescription.Text = _menuMode switch
 			{
 				GatewayMode => "The seven System Gateway sample decks from Null Signal Games: one per faction, built to show how each plays.",
-				ElevationMode => "System Gateway + Elevation: fourteen decks of our own, one for each Elevation identity, "
-					+ "under the Startup ban list. Random opponents come from these decks.",
+				ElevationMode => "The Core Battle Box: seven System Gateway + Elevation decks by lunari, one per faction, "
+					+ "built to be played against each other. Random opponents come from these decks.",
 				NsgCoreMode => "NSG Core Sets: Null Signal Games' twenty-one System Gateway + Elevation sample decks, one per identity, "
 					+ "with no ban list. Random opponents come from these decks.",
 				_ => "The Catalyst and the Syndicate, the learn-to-play decks. The basic decks start small; the expanded decks add the booster cards.",

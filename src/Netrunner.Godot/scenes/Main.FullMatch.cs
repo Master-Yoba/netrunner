@@ -121,7 +121,7 @@ public partial class Main
 	/// </summary>
 	private static string SmokePresetId(string preset, string side) => preset switch
 	{
-		"elevation" => side == "corp" ? "elevation-synapse-fast-news" : "elevation-magdalene-cryptarchitect",
+		"elevation" => side == "corp" ? "elevation-box-nebula-fast-advance" : "elevation-box-magdalene",
 		"nsg-core" => side == "corp" ? "nsg-core-gimbatul" : "nsg-core-sabbatical",
 		_ when IsElevationPairing(preset) => preset.Split('~')[side == "corp" ? 0 : 1],
 		_ => $"system-gateway-{preset}-{side}",

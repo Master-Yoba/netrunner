@@ -66,16 +66,16 @@ public partial class Main
 				RequireInteraction(MenuPersonalities().SequenceEqual(["Balanced style", "Aggressive", "Rig-builder"]), "Playing the Corp doesn't offer the Runner's personalities.");
 				if (ElevationMenuOffered)
 				{
-					// D-EL-8: the Gateway + Elevation format offers its own fourteen decks, Random drawing from them.
-					await ClickTableButton(FindDescendants<Button>(_menuNewGameView).Single(button => button.Text == "Gateway + Elevation"));
+					// D-EL-10: the Gateway + Elevation format offers the Core Battle Box, Random drawing from it.
+					await ClickTableButton(FindDescendants<Button>(_menuNewGameView).Single(button => button.Text == "Core Battle Box"));
 					RequireInteraction(_menuMode == ElevationMode
-						&& FindDescendants<Button>(_menuYourDecks!).Length == 8
-						&& FindDescendants<Button>(_menuOpponentDecks!).Length == 7
+						&& FindDescendants<Button>(_menuYourDecks!).Length == 4
+						&& FindDescendants<Button>(_menuOpponentDecks!).Length == 4
 						&& _menuOpponentDeck == RandomOpponent
-						&& FindDescendants<Button>(_menuYourDecks!).All(button => button.Name.ToString().StartsWith("Deck-elevation-", StringComparison.Ordinal)),
-						"The Gateway + Elevation area doesn't list eight Corp decks and six Runner decks plus Random.");
+						&& FindDescendants<Button>(_menuYourDecks!).All(button => button.Name.ToString().StartsWith("Deck-elevation-box-", StringComparison.Ordinal)),
+						"The Core Battle Box area doesn't list four Corp decks and three Runner decks plus Random.");
 					RequireInteraction(FindDescendants<Button>(_menuDifficulties!).Single(button => button.Text == "Hard opponent").Visible
-						&& _menuPersonalities!.Visible, "The Gateway + Elevation area lacks Hard or the personalities.");
+						&& _menuPersonalities!.Visible, "The Core Battle Box area lacks Hard or the personalities.");
 					if (screenshots) await SaveInteractionEvidence($"menu-elevation-corp-{size.X}");
 				}
 				if (NsgCoreMenuOffered)

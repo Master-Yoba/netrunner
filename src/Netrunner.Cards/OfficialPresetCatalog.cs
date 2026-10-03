@@ -612,7 +612,14 @@ public sealed class OfficialPresetCatalog
     /// <summary>The preset-ID prefix of the Elevation simulation decks.</summary>
     public const string ElevationSimulationPrefix = "elevation-sim-";
 
+    // EL.8's own decks, retired from the menu and the deck pool (D-EL-10); kept so older saves load and the
+    // EL.8 seed-replay regressions still play.
     private const string ElevationDecksResourceName = "Netrunner.Cards.Data.decks.gateway-elevation-decks.json";
+
+    private const string CoreBattleBoxResourceName = "Netrunner.Cards.Data.decks.elevation-core-battle-box-decks.json";
+
+    /// <summary>The preset-ID prefix of the Core Battle Box decks, the Gateway + Elevation format's decks (D-EL-10).</summary>
+    public const string CoreBattleBoxPrefix = "elevation-box-";
 
     /// <summary>The preset-ID prefix of our Elevation decks: the format's decks and the simulation decks.</summary>
     public const string ElevationDeckPrefix = "elevation-";
@@ -627,7 +634,7 @@ public sealed class OfficialPresetCatalog
         LazyThreadSafetyMode.ExecutionAndPublication);
 
     private static readonly Lazy<OfficialPresetCatalog> GatewayElevationCatalog = new(
-        () => WithEmbeddedDecks(ElevationDecksResourceName),
+        () => WithEmbeddedDecks(CoreBattleBoxResourceName, ElevationDecksResourceName),
         LazyThreadSafetyMode.ExecutionAndPublication);
 
     private static readonly Lazy<OfficialPresetCatalog> NsgCoreSetsCatalog = new(
@@ -635,7 +642,7 @@ public sealed class OfficialPresetCatalog
         LazyThreadSafetyMode.ExecutionAndPublication);
 
     private static readonly Lazy<OfficialPresetCatalog> FormatDecksCatalog = new(
-        () => WithEmbeddedDecks(ElevationDecksResourceName, NsgCoreSetsDecksResourceName),
+        () => WithEmbeddedDecks(CoreBattleBoxResourceName, ElevationDecksResourceName, NsgCoreSetsDecksResourceName),
         LazyThreadSafetyMode.ExecutionAndPublication);
 
     /// <summary>
@@ -658,8 +665,8 @@ public sealed class OfficialPresetCatalog
     public static OfficialPresetCatalog ElevationSimulation() => ElevationSimulationCatalog.Value;
 
     /// <summary>
-    /// The embedded catalog plus our System Gateway + Elevation decks (D-EL-4):
-    /// one per Elevation identity, the decks of the Gateway + Elevation format.
+    /// The embedded catalog plus the Core Battle Box, the decks of the Gateway + Elevation
+    /// format (D-EL-10), and EL.8's retired decks (for older saves and regressions).
     /// </summary>
     public static OfficialPresetCatalog GatewayElevation() => GatewayElevationCatalog.Value;
 
@@ -667,11 +674,16 @@ public sealed class OfficialPresetCatalog
     public IReadOnlyList<OfficialPreset> ElevationSimulationDecks =>
         Gateway.Where(static preset => preset.PresetId.StartsWith(ElevationSimulationPrefix, StringComparison.Ordinal)).ToArray();
 
-    /// <summary>The System Gateway + Elevation format's decks alone.</summary>
+    /// <summary>The System Gateway + Elevation format's decks alone: the Core Battle Box (D-EL-10).</summary>
     public IReadOnlyList<OfficialPreset> ElevationDecks =>
-        Gateway.Where(static preset => IsElevationDeck(preset.PresetId)).ToArray();
+        Gateway.Where(static preset => preset.PresetId.StartsWith(CoreBattleBoxPrefix, StringComparison.Ordinal)).ToArray();
 
-    /// <summary>Whether a preset is one of the System Gateway + Elevation format's decks (not a simulation deck).</summary>
+    /// <summary>EL.8's retired decks: still in the catalog for older saves and regressions, offered nowhere.</summary>
+    public IReadOnlyList<OfficialPreset> RetiredElevationDecks =>
+        Gateway.Where(static preset => IsElevationDeck(preset.PresetId)
+            && !preset.PresetId.StartsWith(CoreBattleBoxPrefix, StringComparison.Ordinal)).ToArray();
+
+    /// <summary>Whether a preset belongs to the System Gateway + Elevation format: a Core Battle Box deck or a retired EL.8 deck (not a simulation deck).</summary>
     public static bool IsElevationDeck(string presetId)
     {
         ArgumentNullException.ThrowIfNull(presetId);

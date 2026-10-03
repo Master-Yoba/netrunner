@@ -132,13 +132,16 @@ public sealed class CardFormatTests
     }
 
     [Fact]
-    public void ElevationFormatDecksAreOnePerElevationIdentityLegalAndFullyBound()
+    public void TheCoreBattleBoxIsTheFormatsDecksLegalAndFullyBound()
     {
+        // D-EL-10: lunari's Core Battle Box, four Corp decks and three Runner decks; EL.8's own decks are retired.
         IReadOnlyList<OfficialPreset> decks = OfficialPresetCatalog.GatewayElevation().ElevationDecks;
-        Assert.Equal(8, decks.Count(static deck => deck.Side == PlayerSide.Corp));
-        Assert.Equal(6, decks.Count(static deck => deck.Side == PlayerSide.Runner));
-        Assert.Equal(14, decks.Select(static deck => deck.IdentityCode).Distinct(StringComparer.Ordinal).Count());
-        Assert.All(decks, static deck => Assert.StartsWith("35", deck.IdentityCode, StringComparison.Ordinal));
+        Assert.Equal(4, decks.Count(static deck => deck.Side == PlayerSide.Corp));
+        Assert.Equal(3, decks.Count(static deck => deck.Side == PlayerSide.Runner));
+        Assert.Equal(7, decks.Select(static deck => deck.IdentityCode).Distinct(StringComparer.Ordinal).Count());
+        Assert.All(decks, static deck => Assert.StartsWith("https://netrunnerdb.com/en/decklist/", deck.SourceUrl, StringComparison.Ordinal));
+        Assert.Equal(14, OfficialPresetCatalog.GatewayElevation().RetiredElevationDecks.Count);
+        Assert.Null(CardFormatCatalog.Embedded().Get(CardFormatIds.GatewayElevation).Restriction);
         Assert.All(decks, static deck => Assert.NotEmpty(deck.Archetypes));
         Assert.DoesNotContain(OfficialPresetCatalog.Embedded().Presets,
             static preset => preset.PresetId.StartsWith(OfficialPresetCatalog.ElevationDeckPrefix, StringComparison.Ordinal));
@@ -166,7 +169,8 @@ public sealed class CardFormatTests
         CardDataSet pool = CardDataResource.LoadEmbeddedPool();
         OfficialPresetCatalog.GatewayElevation().Validate(pool);
         CardFormat format = CardFormatCatalog.Embedded().Get(CardFormatIds.GatewayElevation);
-        foreach (OfficialPreset deck in decks)
+        // The retired decks stay valid, so a saved game that uses one still loads.
+        foreach (OfficialPreset deck in decks.Concat(OfficialPresetCatalog.GatewayElevation().RetiredElevationDecks))
         {
             var request = new DeckRequest(DeckRequest.CurrentSchemaVersion, deck.Side, deck.IdentityCode, deck.Cards);
             DeckValidationResult result = FormatDeckValidator.Validate(request, format, pool);
@@ -207,14 +211,14 @@ public sealed class CardFormatTests
         CardDataSet pool = CardDataResource.LoadEmbeddedPool();
         OfficialPresetCatalog.NsgCoreSets().Validate(pool);
         CardFormat format = CardFormatCatalog.Embedded().Get(CardFormatIds.NsgCoreSets);
-        CardFormat banned = CardFormatCatalog.Embedded().Get(CardFormatIds.GatewayElevation);
+        CardFormatRestriction startupBans = CardFormatCatalog.Embedded().Get(CardFormatIds.Startup2026).Restriction!;
         int illegalUnderBans = 0;
         foreach (OfficialPreset deck in decks)
         {
             var request = new DeckRequest(DeckRequest.CurrentSchemaVersion, deck.Side, deck.IdentityCode, deck.Cards);
             DeckValidationResult result = FormatDeckValidator.Validate(request, format, pool);
             Assert.True(result.IsValid, $"{deck.PresetId}: {string.Join("; ", result.Diagnostics)}");
-            if (!FormatDeckValidator.Validate(request, banned, pool).IsValid) illegalUnderBans++;
+            if (deck.Cards.Select(static card => card.Code).Append(deck.IdentityCode).Any(startupBans.Banned.Contains)) illegalUnderBans++;
         }
 
         // NSG built these for the Core Sets without the Startup bans: 9 Corp decks use a card banned in 26.05.
@@ -234,6 +238,8 @@ public sealed class CardFormatTests
         catalog.ValidateAgainst(pool);
         CardFormat gateway = catalog.Get(CardFormatIds.Gateway);
         CardFormat elevation = catalog.Get(CardFormatIds.GatewayElevation);
+        // Gateway + Elevation has no ban list since D-EL-10; Startup 2026 carries the bans and the agenda limit.
+        CardFormat startup = catalog.Get(CardFormatIds.Startup2026);
         foreach (OfficialPreset deck in OfficialPresetCatalog.Embedded().Gateway)
         {
             DeckValidationResult result = FormatDeckValidator.Validate(deck.ToDeckRequest(), gateway, pool);
@@ -247,11 +253,13 @@ public sealed class CardFormatTests
         Assert.DoesNotContain(FormatDeckValidator.Validate(withElevation, elevation, pool).Diagnostics,
             static diagnostic => diagnostic.Code == "format-pack");
 
-        // Ban list: Cleaver is banned in Gateway + Elevation but legal in Gateway.
+        // Ban list: Cleaver is banned in Startup 2026 but legal in Gateway and in Gateway + Elevation.
         DeckRequest withCleaver = Runner("30010", [("30006", 1)]);
-        Assert.Contains(FormatDeckValidator.Validate(withCleaver, elevation, pool).Diagnostics,
+        Assert.Contains(FormatDeckValidator.Validate(withCleaver, startup, pool).Diagnostics,
             static diagnostic => diagnostic.Code == "format-banned");
         Assert.DoesNotContain(FormatDeckValidator.Validate(withCleaver, gateway, pool).Diagnostics,
+            static diagnostic => diagnostic.Code == "format-banned");
+        Assert.DoesNotContain(FormatDeckValidator.Validate(withCleaver, elevation, pool).Diagnostics,
             static diagnostic => diagnostic.Code == "format-banned");
 
         // High-value agendas: four agendas worth 3 points break the Startup limit.
@@ -264,7 +272,9 @@ public sealed class CardFormatTests
             PlayerSide.Corp,
             "35058",
             [new DeckCardEntry(threePointer.Code, 3), new DeckCardEntry(otherThreePointer.Code, 1)]);
-        Assert.Contains(FormatDeckValidator.Validate(agendas, elevation, pool).Diagnostics,
+        Assert.Contains(FormatDeckValidator.Validate(agendas, startup, pool).Diagnostics,
+            static diagnostic => diagnostic.Code == "format-agenda-limit");
+        Assert.DoesNotContain(FormatDeckValidator.Validate(agendas, elevation, pool).Diagnostics,
             static diagnostic => diagnostic.Code == "format-agenda-limit");
         Assert.DoesNotContain(FormatDeckValidator.Validate(agendas, gateway, pool).Diagnostics,
             static diagnostic => diagnostic.Code == "format-agenda-limit");

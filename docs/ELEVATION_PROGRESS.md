@@ -14,8 +14,9 @@ Registry: `data/elevation/batch-registry.json`. Evidence is from the Linux x86_6
 | EL.5 Batch 2: 16 cards | `feat/el5-batch2` | complete |
 | EL.6 primitives C: runs and ICE | `feat/el6-primitives-c` | complete |
 | EL.7 Batch 3: 23 cards | `feat/el7-batch3` | complete |
-| EL.8 integration: decks, formats, bots, client and the milestone gate | `feat/el8-integration` | complete; the decks await review |
+| EL.8 integration: decks, formats, bots, client and the milestone gate | `feat/el8-integration` | complete; its decks retired by EL.10 |
 | EL.9 the NSG Core Sets format: NSG's 21 decks, no ban list (D-EL-9) | `feat/el9-nsg-core-sets` | complete |
+| EL.10 the Core Battle Box replaces our decks, no ban list (D-EL-10) | `feat/el10-core-battle-box` | complete |
 
 ## E6 baseline
 
@@ -650,8 +651,8 @@ every format, with per-pool numbers, and Gateway as a regression floor).
 - [x] **Coverage:** 159 of 159 bound, tested and checklist-complete; no drift (`verify.sh`); CARD-401 green.
 - [x] **E6:** each card batch at 100% with no Core change past its primitive slice; the whole-set report above (28%). The
   EL.5 review fix later added a 6-line observation change to Batch 2, with no new vocabulary (see Review fixes).
-- [x] **Formats:** the snapshots load and validate; Gateway + Elevation is playable with its decks (menu behind the review flag).
-- [x] **Decks:** each new deck validates (`CardFormatTests`), loads and plays human against bot through the client on its side (`elevation-deck-smoke.sh`, 14 of 14). The decks wait for your review.
+- [x] **Formats:** the snapshots load and validate; Gateway + Elevation is playable with its decks (since EL.10 the Core Battle Box, offered without a review gate).
+- [x] **Decks:** each new deck validates (`CardFormatTests`), loads and plays human against bot through the client on its side (`elevation-deck-smoke.sh`, 14 of 14). EL.10 replaced them with the Core Battle Box (D-EL-10).
 - [x] **Hardening:** 10,000 clean official fuzz games over the pool; the full `make m5-gate`, tactics and every suite:
   `make gates REF=f9acda7` PASS (verify, m5-gate, tactics, bot-check: AI 132, Match 984, CLI 171).
   After the review fixes, on `129c5cc`: `make gates` passed m5-gate and tactics. Its verify (card-art smoke) and one

@@ -122,6 +122,14 @@ occurrences; identity state; card sources and zones; information; and runs and I
   - Both formats ship. Gateway + Elevation keeps its ban list and our 14 decks (D-EL-4). A second format, NSG Core Sets
     (`nsg-core-sets`), has the same pool and deck rules, no ban list, and NSG's 21 decks.
   - NSG's lists are published decks, so the menu offers that format without a review gate.
+- **D-EL-10, the Core Battle Box** (the user's decision, 3 October 2026): real players' lists replace our 14 decks
+  (D-EL-4) as the Gateway + Elevation format's decks. The Core Battle Box by lunari (NetrunnerDB, featured on
+  [CardGamer](https://cardgamer.com/features/introducing-the-netrunner-core-battle-box/)) is seven decks, one per faction,
+  built to be played against each other; it topped NetrunnerDB's popularity sort for System Gateway + Elevation lists.
+  - Two of its Corp decks use cards banned in 26.05, so the format drops its ban list: Startup legality waits for the full
+    Startup format, when Vantage Point is in. Gateway + Elevation and NSG Core Sets now share rules; their decks differ.
+  - Our 14 decks are retired: kept in the catalog under their IDs, so older saves load and EL.8's seed replays still play,
+    but offered nowhere. The menu offers the box without a review gate.
 
 ## 4. Slices
 
@@ -259,7 +267,7 @@ M4's process ([M4 plan](history/M4_PLAN.md), section 6), plus three steps:
 
 ## 7. Milestone gate checklist
 
-Status on 3 October 2026 (EL.8): see [the progress record](ELEVATION_PROGRESS.md#milestone-gate-section-7). Open: the decklists' review (D-EL-4) before the menu offers them.
+Status on 3 October 2026 (EL.8): see [the progress record](ELEVATION_PROGRESS.md#milestone-gate-section-7). The decklists' review (D-EL-4) is settled by D-EL-10: published lists replace ours.
 
 - [x] **Coverage:** 159 of 159 bound, tested and checklist-complete; no drift; CARD-401 green.
 - [x] **E6:** each card batch at or above 80% with no Core change past its primitive slice; the whole-set report recorded.

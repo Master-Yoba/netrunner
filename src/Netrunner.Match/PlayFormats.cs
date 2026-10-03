@@ -54,12 +54,6 @@ public sealed class PlayFormatContent
 /// <summary>The formats a player can choose (D-EL-8), with their content loaded once.</summary>
 public static class PlayFormats
 {
-    /// <summary>
-    /// D-EL-4: our Gateway + Elevation decks wait for the user's review before the
-    /// menu offers them. Developer builds and the smokes can preview them.
-    /// </summary>
-    public static bool ElevationDecksReviewed => false;
-
     /// <summary>The formats in menu order.</summary>
     public static IReadOnlyList<string> Ids { get; } = [CardFormatIds.Gateway, CardFormatIds.GatewayElevation, CardFormatIds.NsgCoreSets];
 
