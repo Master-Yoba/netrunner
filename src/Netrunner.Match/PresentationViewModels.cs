@@ -1007,9 +1007,13 @@ public static class ObservationViewMapper
 
         IReadOnlyDictionary<string, object?> turnFacts = RequiredMap(rawFacts, "turnFacts");
         var uses = new List<AbilityUseViewModel>();
-        var keys = new HashSet<(string SourceCardId, string AbilityKey)>();
+        // A Runner card's once-per-turn ability can be used on both players' turns (Madani
+        // installs on the Runner's turn and again on the Corp's), so the same use can appear
+        // in both sides' facts. Each side's list must be unique; across sides it is shown once.
+        var shown = new HashSet<(string SourceCardId, string AbilityKey)>();
         foreach (string side in new[] { "corp", "runner" })
         {
+            var keys = new HashSet<(string SourceCardId, string AbilityKey)>();
             if (!turnFacts.TryGetValue(side, out object? rawSideFacts)
                 || rawSideFacts is null
                 || rawSideFacts is JsonElement { ValueKind: JsonValueKind.Null })
@@ -1058,7 +1062,7 @@ public static class ObservationViewMapper
                         $"Observation field 'turnFacts.{side}.thisTurn.usedAbilityKeys' contains duplicate use '{sourceCardId}/{abilityKey}'.");
                 }
 
-                uses.Add(new AbilityUseViewModel(sourceCardId, abilityKey));
+                if (shown.Add((sourceCardId, abilityKey))) uses.Add(new AbilityUseViewModel(sourceCardId, abilityKey));
             }
         }
 
