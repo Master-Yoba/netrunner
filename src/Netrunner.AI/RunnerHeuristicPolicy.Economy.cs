@@ -64,7 +64,12 @@ public sealed partial class RunnerHeuristicPolicy
         return Value(benefit - cost, "ability/benefit-minus-issued-additional-costs", true);
     }
 
-    private static int Effects(HeuristicContext context, IEnumerable<BehaviorInstruction> instructions, AgentCard? source, PlayerSide controller)
+    // v23: past any other cost, so a choice that flatlines the Runner is never taken while another isn't.
+    private const int Flatline = 100_000;
+
+    /// <param name="gripSpent">Cards an enclosing effect has already installed from the grip (v23's damage check).</param>
+    private static int Effects(HeuristicContext context, IEnumerable<BehaviorInstruction> instructions, AgentCard? source, PlayerSide controller,
+        int gripSpent = 0)
     {
         int total = 0;
         foreach (BehaviorInstruction instruction in instructions)
@@ -123,7 +128,16 @@ public sealed partial class RunnerHeuristicPolicy
                 case BehaviorInstructionKind.AddCounter: total += sign * amount * 70; break;
                 case BehaviorInstructionKind.Search: total += 220; break;
                 case BehaviorInstructionKind.AddToHand: total += 180; break;
-                case BehaviorInstructionKind.InstallCard: total += 350; break;
+                case BehaviorInstructionKind.InstallCard:
+                    total += 350;
+                    if (instruction.SourceZone == BehaviorZone.Grip) gripSpent++;
+                    break;
+                // v23 (bot loop 1, 3 October): damage is always the Runner's. It costs a card a point; more than the grip
+                // holds once this effect's installs from it are made is a flatline (Topan installing its last card,
+                // Semak-samun's 3 net or Measured Response's 4 meat with too few cards).
+                case BehaviorInstructionKind.DealDamage when context.Generation >= 19:
+                    total -= amount > context.Features.Hand.Length - gripSpent ? Flatline : amount * context.DrawValue;
+                    break;
                 case BehaviorInstructionKind.TrashSelf: total -= RunnerValues.Card(context, source); break;
                 case BehaviorInstructionKind.TrashCard:
                     total += context.Features.Board.Run?.Breach.Chosen.Where(card => card is not null).Select(card => RunnerValues.Trash(context, card)).DefaultIfEmpty(0).Max() ?? 0;
@@ -133,7 +147,7 @@ public sealed partial class RunnerHeuristicPolicy
                 case BehaviorInstructionKind.AddTags: total -= RunnerValues.TagRisk(context, amount); break;
                 case BehaviorInstructionKind.Choose:
                     total += instruction.Choice is { Options.Count: > 0 } choice
-                        ? choice.Options.Max(option => Effects(context, option.Instructions, source, controller) - (option.Costs ?? []).Sum(cost => Cost(context, cost)))
+                        ? choice.Options.Max(option => Effects(context, option.Instructions, source, controller, gripSpent) - (option.Costs ?? []).Sum(cost => Cost(context, cost)))
                         : 180;
                     break;
                 case BehaviorInstructionKind.Branch:
@@ -146,7 +160,7 @@ public sealed partial class RunnerHeuristicPolicy
                             BehaviorConditionKind.NotTagged => context.Self.Tags == 0,
                             _ => true,
                         };
-                        total += Effects(context, condition ? branch.WhenTrue : branch.WhenFalse, source, controller);
+                        total += Effects(context, condition ? branch.WhenTrue : branch.WhenFalse, source, controller, gripSpent);
                     }
                     break;
             }
