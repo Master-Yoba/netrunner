@@ -32,6 +32,19 @@ public partial class Main
 					RequireInteraction(entries.Contains(entry), $"The title screen lacks '{entry}'.");
 				RequireInteraction(!entries.Contains("Developer"), "The developer entry shows without --developer.");
 				if (screenshots) await SaveInteractionEvidence($"menu-title-{size.X}");
+				if (!HasAuthenticatedOfficialContent())
+				{
+					// The synthetic lane (CI's fast tier) has no official card data: games can't start, the title says
+					// how to provision it, and only the practice board opens.
+					Button[] title = FindDescendants<Button>(_menuTitleView);
+					RequireInteraction(title.Single(button => button.Text == "New game").Disabled
+						&& title.Single(button => button.Text == "Load game").Disabled
+						&& !title.Single(button => button.Text == "Practice board").Disabled
+						&& FindDescendants<Label>(_menuTitleView).Any(label => label.Visible
+							&& label.Text.Contains("card data isn't installed", StringComparison.Ordinal)),
+						"Without official content the title screen doesn't explain itself or still offers games.");
+					continue;
+				}
 
 				await ClickTableButton(FindDescendants<Button>(_menuTitleView).Single(button => button.Text == "New game"));
 				await ClickTableButton(FindDescendants<Button>(_menuNewGameView!).Single(button => button.Text == "Gateway decks"));
@@ -58,6 +71,13 @@ public partial class Main
 				if (screenshots) await SaveInteractionEvidence($"menu-tutorial-corp-{size.X}");
 				await ClickTableButton(FindDescendants<Button>(_menuNewGameActions!).Single(button => button.Text == "Back"));
 				RequireInteraction(_menuTitleView.Visible, "Back doesn't return to the title screen.");
+			}
+
+			if (!HasAuthenticatedOfficialContent())
+			{
+				GD.Print("MAIN_MENU PASS views=1 resolutions=2 content=false");
+				QuitCleanly();
+				return;
 			}
 
 			// Start a Gateway game as the Runner: Stolen Goods against Advanced Yomi.

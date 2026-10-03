@@ -448,23 +448,29 @@ if ! grep -Eq "MAIN_MENU PASS" "$main_menu_log" \
 fi
 grep -E "MAIN_MENU" "$main_menu_log"
 echo "main-menu-smoke=PASS"
-onboarding_log="$coverage_report_dir/onboarding-smoke.log"
-if ! run_with_timeout 180 env "${m49_ui_content_env[@]}" XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
-  NETRUNNER_SAVE_DIRECTORY="$coverage_report_dir/onboarding-saves" \
-  "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \
-  -- --onboarding-smoke >"$onboarding_log" 2>&1; then
-  echo "Onboarding smoke failed or timed out; see $onboarding_log." >&2
-  cat "$onboarding_log" >&2
-  exit 1
+# The onboarding smoke starts a Gateway game from the menu, so it needs the
+# official card data; the synthetic lane (CI's fast tier) has none.
+if ((card_data_content_enabled == 1)); then
+  onboarding_log="$coverage_report_dir/onboarding-smoke.log"
+  if ! run_with_timeout 180 env "${m49_ui_content_env[@]}" XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
+    NETRUNNER_SAVE_DIRECTORY="$coverage_report_dir/onboarding-saves" \
+    "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \
+    -- --onboarding-smoke >"$onboarding_log" 2>&1; then
+    echo "Onboarding smoke failed or timed out; see $onboarding_log." >&2
+    cat "$onboarding_log" >&2
+    exit 1
+  fi
+  if ! grep -Eq "ONBOARDING PASS" "$onboarding_log" \
+    || grep -Eq "ONBOARDING FAIL|SCRIPT ERROR|ERROR:" "$onboarding_log"; then
+    echo "Onboarding smoke did not pass; see $onboarding_log." >&2
+    cat "$onboarding_log" >&2
+    exit 1
+  fi
+  grep -E "ONBOARDING" "$onboarding_log"
+  echo "onboarding-smoke=PASS"
+else
+  echo "onboarding-smoke=SKIP official content absent"
 fi
-if ! grep -Eq "ONBOARDING PASS" "$onboarding_log" \
-  || grep -Eq "ONBOARDING FAIL|SCRIPT ERROR|ERROR:" "$onboarding_log"; then
-  echo "Onboarding smoke did not pass; see $onboarding_log." >&2
-  cat "$onboarding_log" >&2
-  exit 1
-fi
-grep -E "ONBOARDING" "$onboarding_log"
-echo "onboarding-smoke=PASS"
 m410_ui_smoke_log="$coverage_report_dir/m410-editor-ui-smoke.log"
 if ! run_with_timeout 60 env XDG_DATA_HOME="$NETRUNNER_GODOT_DATA" \
   "$GODOT4" --headless --path "$verify_root/src/Netrunner.Godot" \
