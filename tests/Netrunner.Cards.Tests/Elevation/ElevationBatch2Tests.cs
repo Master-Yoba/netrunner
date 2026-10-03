@@ -174,11 +174,34 @@ public sealed class ElevationBatch2Tests
             .Build();
         GameState state = GameEngine.BeginTurn(built, PlayerSide.Runner, Behavior, Runtime);
         state = PassUntil(state, static value => value.PendingDecision?.Kind == DecisionKind.BehaviorChoice);
-        state = ChooseOption(state, "icebreaker");
+        // EL.5 review: the Runner sees the top card before choosing what to reveal.
+        Assert.Contains(Cleaver, EngineJson.Serialize(ObservationBuilder.Build(state, PlayerSide.Runner, CatalogFor(state)).PrivateState));
+        Assert.DoesNotContain(Actions(state), static action => action.Parameters is BehaviorChoiceParameters { OptionKeys.Count: > 0 });
+        Assert.DoesNotContain(Cleaver, EngineJson.Serialize(ObservationBuilder.Build(state, PlayerSide.Corp, CatalogFor(state))));
         state = ChooseCards(state, Card(state, Cleaver));
         state = RoundTrip(ToAction(state));
 
         Assert.Equal(ZoneKind.RunnerGrip, ZoneOf(state, Cleaver));
+    }
+
+    [Theory]
+    [Trait("ElevationCard", "35013")]
+    [InlineData("30028", true)]
+    [InlineData("30030", false)]
+    public void MuslihaTOffersATopRunEventButNothingOfAnotherKind(string top, bool offered)
+    {
+        GameState built = new ElevationBoard(PlayerSide.Runner) { StackFiller = 0, GripFiller = 0 }
+            .Add("35013", Place.RunnerIdentity)
+            .Add(top, Place.Stack)
+            .Add(RunnerFiller, Place.Stack)
+            .Build();
+        GameState state = GameEngine.BeginTurn(built, PlayerSide.Runner, Behavior, Runtime);
+        state = PassUntil(state, static value => value.PendingDecision?.Kind is DecisionKind.BehaviorChoice or DecisionKind.TurnAction);
+        Assert.Equal(offered, state.PendingDecision!.Kind == DecisionKind.BehaviorChoice);
+        if (offered) state = ChooseCards(state, Card(state, top));
+        state = RoundTrip(ToAction(state));
+
+        Assert.Equal(offered ? ZoneKind.RunnerGrip : ZoneKind.RunnerStack, ZoneOf(state, top));
     }
 
     private const string Karuna = "30047";
@@ -347,6 +370,10 @@ public sealed class ElevationBatch2Tests
         state = PlayFirst(state, "35067");
         state = ChooseCards(state, Card(state, CorpFillerAgenda));
         state = ChooseOption(state, "program");
+        // EL.5 review: the Corp chooses among the revealed grip cards it can see; the unrevealed filler isn't offered.
+        string corpView = EngineJson.Serialize(ObservationBuilder.Build(state, PlayerSide.Corp, CatalogFor(state)).PrivateState);
+        Assert.Contains(Cleaver, corpView);
+        Assert.Contains("35008", corpView);
         state = ChooseCards(state, Card(state, Cleaver), Card(state, "35008"));
         state = RoundTrip(ToAction(state));
 
@@ -475,6 +502,20 @@ public sealed class ElevationBatch2Tests
 
         Assert.Equal(ZoneKind.RunnerHeap, ZoneOf(state, CreativeCommission));
         Assert.Equal(10 - 1 + 5, Player(state, PlayerSide.Runner).Credits);
+    }
+
+    [Fact]
+    [Trait("ElevationCard", "35006")]
+    public void BlingHostedRunEventsArePlayedAsIfFromTheGrip()
+    {
+        // EL.4 review: a hosted run event's source had to be in the grip.
+        const string Jailbreak = "30028";
+        GameState state = BlingWithFreeInstall(Jailbreak);
+        state = RoundTrip(PlayFirst(state, Jailbreak));
+
+        Assert.NotNull(state.RunState);
+        Assert.Equal(ZoneKind.RunnerPlayArea, ZoneOf(state, Jailbreak));
+        Assert.Null(CardState(state, Jailbreak).HostCardId);
     }
 
     [Fact]

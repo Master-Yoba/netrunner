@@ -240,8 +240,11 @@ public sealed class ElevationBatch1CorpTests
         state = Apply(state, action => action.Kind == ActionKind.UseAbility
             && action.Parameters is AbilityActionParameters use && use.SourceCardId == Card(state, "35058")).State;
         state = UseTrigger(PassToTrigger(state));
-        state = Apply(state, static action => action.Parameters is BehaviorInstallChoiceParameters { Choice: not null }).State;
-        state = RoundTrip(ToAction(state));
+        ApplyResult installed = Apply(state, static action => action.Parameters is BehaviorInstallChoiceParameters { Choice: not null });
+        // EL.5 review: "reveal and install": the installed card is revealed.
+        Assert.Contains(installed.Events, engineEvent => engineEvent.Payload is BehaviorCardRevealedEventPayload revealed
+            && revealed.CardId == Card(state, CorpFillerAsset));
+        state = RoundTrip(ToAction(installed.State));
 
         Assert.Equal(0, Rules(state, PlayerSide.Runner).Tags);
         Assert.Equal(5 + 2, Player(state, PlayerSide.Corp).Credits);

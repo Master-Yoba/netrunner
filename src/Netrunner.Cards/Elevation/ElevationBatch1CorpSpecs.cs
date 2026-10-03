@@ -180,7 +180,8 @@ public static class ElevationBatch1CorpSpecs
                 "synapse-first-tag-removed",
                 OccurrenceKind.FirstTagRemovalThisTurn,
                 BehaviorTriggerScope.Any,
-                [InstallFrom(BehaviorZone.Headquarters, PlayerSide.Corp, costRule: BehaviorInstallCostRule.IgnoreAllCosts)],
+                // "Reveal and install" (EL.5 review): the installed card is revealed to the Runner.
+                RevealedInstall("synapse-install", BehaviorZone.Headquarters),
                 TriggerMode.Optional),
         ],
         paidAbilities:
@@ -295,11 +296,8 @@ public static class ElevationBatch1CorpSpecs
                         Option(
                             "install",
                             [
-                                InstallFrom(
-                                    BehaviorZone.Deck,
-                                    PlayerSide.Corp,
-                                    optional: false,
-                                    costRule: BehaviorInstallCostRule.IgnoreAllCosts),
+                                // The searched card is revealed (EL.5 review), then installed.
+                                .. RevealedInstall("off-the-books-install", BehaviorZone.Deck, optional: false),
                                 new BehaviorInstruction(BehaviorInstructionKind.ShuffleDeck, sourceZone: BehaviorZone.Deck),
                             ]),
                         Option(
@@ -316,6 +314,22 @@ public static class ElevationBatch1CorpSpecs
                 TriggerMode.Optional,
                 requirement: CounterAtLeast(AgendaCounter, 1)),
         ]);
+
+    /// <summary>
+    /// An install of a Corp card from a zone, ignoring all costs, whose card is then revealed: the keyed install
+    /// binds the card it installed (EL.4).
+    /// </summary>
+    private static IReadOnlyList<BehaviorInstruction> RevealedInstall(string key, BehaviorZone zone, bool optional = true) =>
+    [
+        new BehaviorInstruction(
+            BehaviorInstructionKind.InstallCard,
+            argument: key,
+            target: BehaviorTarget.CardInZone(zone, new BehaviorCardFilter(ownerSide: PlayerSide.Corp)),
+            sourceZone: zone,
+            optional: optional,
+            costRule: BehaviorInstallCostRule.IgnoreAllCosts),
+        Branch(BehaviorCondition.Chose(key), [new BehaviorInstruction(BehaviorInstructionKind.Reveal, target: ChosenBy(key))]),
+    ];
 
     // 35082 — EL-RECURRING (rez in this server); EL-PERSISTENT; EL-REGION.
     private static readonly CardBehaviorDefinition MahkotaLangitGrid = new(

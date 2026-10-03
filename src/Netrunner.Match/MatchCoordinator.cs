@@ -210,6 +210,7 @@ public sealed partial class MatchCoordinator : IAsyncDisposable, IDisposable
         _metadataResolver = definition?.Metadata ?? _options.CardMetadataResolver
             ?? _options.MetadataResolver
             ?? CardMetadataResolvers.Default;
+        _historyProjector.Metadata = _metadataResolver;
         _suppliedBehaviorCatalog = definition?.Behavior ?? _options.BehaviorCatalog
             ?? GatewayBehaviorCatalog.Create();
         _runtimeCardCatalog = definition?.Runtime ?? _options.RuntimeCardCatalog;

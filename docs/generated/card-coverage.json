@@ -2147,8 +2147,10 @@
       "tests": [
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingDoesNotTriggerOnAPaidInstall",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingHostedEventsArePlayedAsIfFromTheGrip",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingHostedRunEventsArePlayedAsIfFromTheGrip",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingHostsTheTopStackCardFaceupAfterAFreeInstallAndItInstallsAsIfFromTheGrip",
-        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingTrashesItsHostedCardsWhenTheDiscardPhaseEnds"
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingTrashesItsHostedCardsWhenTheDiscardPhaseEnds",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingWithNothingHostedEndsTheTurnCleanly"
       ],
       "fullTextComplete": true,
       "partial": false,
@@ -2318,7 +2320,8 @@
       "reviewer": "architect",
       "registered": true,
       "tests": [
-        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.MuslihaTAddsATopIcebreakerToTheGrip"
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.MuslihaTAddsATopIcebreakerToTheGrip",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.MuslihaTOffersATopRunEventButNothingOfAnotherKind"
       ],
       "fullTextComplete": true,
       "partial": false,
@@ -2605,7 +2608,8 @@
       "reviewer": "architect",
       "registered": true,
       "tests": [
-        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch1EconomyTests.IlluminationInstallsFromTheGripOneCheaperEachAfterASuccessfulRdRun"
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch1EconomyTests.IlluminationInstallsFromTheGripOneCheaperEachAfterASuccessfulRdRun",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch1EconomyTests.IlluminationsDiscountStacksWithAFirstProgramInstallDiscount"
       ],
       "fullTextComplete": true,
       "partial": false,
@@ -2675,7 +2679,8 @@
       "reviewer": "architect",
       "registered": true,
       "tests": [
-        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.MadaniHostsProgramsAndInstallsOneOncePerTurn"
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.MadaniHostsProgramsAndInstallsOneOncePerTurn",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.MadaniInstallsAHostedProgramDuringARun"
       ],
       "fullTextComplete": true,
       "partial": false,
@@ -2891,7 +2896,8 @@
       "reviewer": "architect",
       "registered": true,
       "tests": [
-        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch1CorpTests.AggressiveTrendsettingMakesTheRunnerSpendAClickOrGivesTheCorpOne"
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch1CorpTests.AggressiveTrendsettingMakesTheRunnerSpendAClickOrGivesTheCorpOne",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch1CorpTests.AggressiveTrendsettingsExtraClickIsAllottedOnTheCorpsNextTurn"
       ],
       "fullTextComplete": true,
       "partial": false,
@@ -2940,7 +2946,8 @@
       "reviewer": "architect",
       "registered": true,
       "tests": [
-        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.HumanoidResourcesGainsDrawsInstallsAndPlaysAnOperation"
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.HumanoidResourcesGainsDrawsInstallsAndPlaysAnOperation",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.HumanoidResourcesNestedDrawFromAnEmptyRAndDEndsTheGame"
       ],
       "fullTextComplete": true,
       "partial": false,
@@ -3106,6 +3113,7 @@
       "registered": true,
       "tests": [
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.AuCoGetsAPowerCounterWhenItDoesDamage",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.AuCoTakesWhatIsLeftOfAShortRAndD",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.AuCoTrashesOneOfTheTopThreeAndTakesTheRest"
       ],
       "fullTextComplete": true,
@@ -3593,7 +3601,9 @@
       "reviewer": "architect",
       "registered": true,
       "tests": [
-        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.IpEnforcementTakesBackAStolenAgendaAndAdvancesIt"
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.IpEnforcementCanInstallOverACardInAnExistingRemote",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.IpEnforcementTakesBackAStolenAgendaAndAdvancesIt",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.IpEnforcementWithNoAgendaOfValueXInstallsNothing"
       ],
       "fullTextComplete": true,
       "partial": false,

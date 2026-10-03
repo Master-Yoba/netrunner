@@ -114,7 +114,10 @@ public static class ElevationBatch2Specs
         ]);
 
     // 35013 — EL-LOOK-TOP. The Runner looks at the top card and may reveal an
-    // icebreaker or run event and add it to the grip.
+    // icebreaker or run event and add it to the grip. The choice is over the
+    // top card itself (EL.5 review: the Runner chooses knowing the card), once
+    // as an icebreaker and, if none was taken, once as a run event; a card of
+    // neither kind offers nothing to take.
     private static readonly CardBehaviorDefinition MuslihaT = new(
         ElevationCardCodes.MuslihaT,
         PlayerSide.Runner,
@@ -125,14 +128,10 @@ public static class ElevationBatch2Specs
                 OccurrenceKind.TurnBegin,
                 BehaviorTriggerScope.Controller,
                 [
-                    ChooseOne(
-                        "muslihat-look",
-                        BehaviorChooser.Controller,
-                        Option("icebreaker", TakeTopCard("muslihat-icebreaker",
-                            new BehaviorCardFilter(BehaviorCardType.Icebreaker, ownerSide: PlayerSide.Runner))),
-                        Option("run-event", TakeTopCard("muslihat-run-event",
-                            new BehaviorCardFilter(BehaviorCardType.Event, subtype: "run", ownerSide: PlayerSide.Runner))),
-                        Decline()),
+                    .. TakeTopCard("muslihat-icebreaker",
+                        new BehaviorCardFilter(BehaviorCardType.Icebreaker, ownerSide: PlayerSide.Runner)),
+                    Branch(BehaviorCondition.FoundCard(), [new BehaviorInstruction(BehaviorInstructionKind.NoOp)], TakeTopCard("muslihat-run-event",
+                        new BehaviorCardFilter(BehaviorCardType.Event, subtype: "run", ownerSide: PlayerSide.Runner))),
                 ]),
         ]);
 

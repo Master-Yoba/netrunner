@@ -48,6 +48,26 @@ public sealed class MatchHistoryVisibilityTests
     }
 
     [Fact]
+    public void APublicRevealNamesTheCardButNotItsInstance()
+    {
+        // EL.5 review: Peer Review reveals HQ cards that stay hidden; history names them by title only.
+        GameState state = RepresentativeState();
+        ZoneState corpHand = state.GetZone(ZoneKind.CorpHand);
+        MatchViewModel view = EmptyView();
+        var hidden = new CardInstanceId("card:hidden-revealed");
+        EngineEvent revealed = new(1, EngineEventKinds.BehaviorCardRevealed,
+            new BehaviorCardRevealedEventPayload(hidden, new CardDefinitionId("30075"), corpHand.Id, PlayerSide.Corp));
+
+        MatchHistoryEntry entry = Project(NewProjector(), view, view, state, [revealed], PlayerSide.Corp,
+            Action(ActionKind.PlayCard)).Single();
+
+        string text = Flatten(entry);
+        Assert.Contains("Corp reveals", text, StringComparison.Ordinal);
+        Assert.Contains("from HQ", text, StringComparison.Ordinal);
+        Assert.DoesNotContain(hidden.Value, text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PublicDiscardAccessTrashAndShuffleDetailsRedactHiddenIdentityAndCounts()
     {
         GameState state = RepresentativeState();
