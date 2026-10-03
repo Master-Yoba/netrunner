@@ -1,6 +1,7 @@
 # Bot improvement plan: LLM review loops on the Elevation pools
 
-Status: written 3 October 2026, on the user's direction. Loop 1 runs, then stops for the user's decision.
+Status: written 3 October 2026, on the user's direction. Loop 1 is done ([BOT_LOOP_1.md](BOT_LOOP_1.md)); the loops
+wait for the user's decision.
 
 ## Why
 
