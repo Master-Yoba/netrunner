@@ -25,6 +25,9 @@ public sealed class PlayFormatsTests
         Assert.True(PlayFormats.TryGetPreset("nsg-core-gimbatul", out OfficialPreset gimbatul));
         Assert.Equal("35058", gimbatul.IdentityCode);
         Assert.False(PlayFormats.TryGetPreset("nsg-core-unknown", out _));
+        // A Gateway + Elevation deck and an NSG Core Sets deck share no format's deck list (PR #92's review).
+        Assert.Contains("different formats", Assert.Throws<ArgumentException>(
+            () => PlayFormats.FormatOfPresets("elevation-box-topan", "nsg-core-sabbatical")).Message, StringComparison.Ordinal);
     }
 
     [Fact]

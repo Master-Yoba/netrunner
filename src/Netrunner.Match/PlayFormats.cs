@@ -86,11 +86,18 @@ public static class PlayFormats
         : OfficialPresetCatalog.IsElevationDeck(presetId) ? CardFormatIds.GatewayElevation
         : CardFormatIds.Gateway;
 
-    /// <summary>The format of a pairing: the non-Gateway format either deck belongs to, else Gateway.</summary>
+    /// <summary>
+    /// The format of a pairing: the non-Gateway format either deck belongs to, else Gateway. A Gateway + Elevation deck
+    /// and an NSG Core Sets deck share no format's deck list, so they can't play each other.
+    /// </summary>
     public static string FormatOfPresets(string corpPresetId, string runnerPresetId)
     {
         string corp = FormatOfPreset(corpPresetId);
-        return corp != CardFormatIds.Gateway ? corp : FormatOfPreset(runnerPresetId);
+        string runner = FormatOfPreset(runnerPresetId);
+        if (corp != CardFormatIds.Gateway && runner != CardFormatIds.Gateway && corp != runner)
+            throw new ArgumentException($"'{corpPresetId}' ({corp}) and '{runnerPresetId}' ({runner}) are decks of different formats; "
+                + "choose two decks of one format.");
+        return corp != CardFormatIds.Gateway ? corp : runner;
     }
 
     /// <summary>

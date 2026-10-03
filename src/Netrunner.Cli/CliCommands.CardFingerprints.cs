@@ -47,7 +47,13 @@ public static partial class CliCommands
             pools[content] = [.. codes];
         }
 
-        output.WriteLine(EngineJson.Serialize(new { schemaVersion = 1, behaviorVersion = behavior.Version, cards, pools }));
+        // Catalog-wide behavior no card's fingerprint carries (PR #93's review): a change to it scopes every pool.
+        var catalog = new SortedDictionary<string, bool>(StringComparer.Ordinal)
+        {
+            ["gateway.tracksTurnEvents"] = CardPools.Gateway.CreateBehavior().TracksTurnEvents,
+            ["pool.tracksTurnEvents"] = behavior.TracksTurnEvents,
+        };
+        output.WriteLine(EngineJson.Serialize(new { schemaVersion = 1, behaviorVersion = behavior.Version, catalog, cards, pools }));
         return 0;
     }
 }

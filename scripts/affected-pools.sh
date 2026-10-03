@@ -5,7 +5,7 @@
 # - Docs, tests, the Godot client, scripts and tools affect no pool.
 # - A deck file affects its pool.
 # - Card behavior specs are scoped by card: the pools whose decks hold a card whose behavior fingerprint
-#   (card-fingerprints) differs between the base and this tree.
+#   (card-fingerprints) differs between the base and this tree; a change to catalog-wide behavior scopes every pool.
 # - Anything else under src/ or data/ (the engine, bots, Match, the CLI, card data) affects every pool.
 # Needs the provisioned official card data.
 set -euo pipefail
@@ -66,6 +66,11 @@ if ((specs_changed == 1)); then
   while IFS= read -r pool; do pools[$pool]=1; done < <(python3 - "$base_json" "$head_json" <<'PY'
 import json, sys
 base, head = (json.load(open(path)) for path in sys.argv[1:3])
+# Catalog-wide behavior (turn-event tracking) reaches every card, so a change to it, or a base that doesn't report it,
+# affects every pool.
+if base.get("catalog") != head.get("catalog"):
+    print("\n".join(sorted(set(base["pools"]) | set(head["pools"]))))
+    sys.exit(0)
 changed = {code for code in set(base["cards"]) | set(head["cards"])
            if base["cards"].get(code) != head["cards"].get(code)}
 for pool in sorted(set(base["pools"]) | set(head["pools"])):
