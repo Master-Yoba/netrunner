@@ -600,16 +600,17 @@ public static class ElevationBatch3Specs
             RuntimeCardClass.Resource => BehaviorCardType.Resource,
             _ => BehaviorCardType.Any,
         };
-        BehaviorInstruction[] trashOne =
-        [
-            ChooseCards($"{key}-trash", Installed(new BehaviorCardFilter(type, ownerSide: PlayerSide.Runner)), BehaviorChoiceCardinality.UpTo(1)),
-            new BehaviorInstruction(BehaviorInstructionKind.TrashCard, target: ChosenBy($"{key}-trash")),
-        ];
+        BehaviorTarget eligible = Installed(new BehaviorCardFilter(type, ownerSide: PlayerSide.Runner));
+        BehaviorInstruction trashChosen = new(BehaviorInstructionKind.TrashCard, target: ChosenBy($"{key}-trash"));
+        // As the printed subroutine resolves natively (EL.7 review): the trash needs a target, so a mandatory trash
+        // takes exactly one eligible card, and "trash or end the run" ends the run unless a card is chosen.
         return trash.EndRunAlternative
-            ? [ChooseOne($"{key}-or-end", BehaviorChooser.Corp,
-                Option("trash", trashOne),
-                Option("end-run", [new BehaviorInstruction(BehaviorInstructionKind.EndRun)]))]
-            : trashOne;
+            ?
+            [
+                ChooseCards($"{key}-trash", eligible, BehaviorChoiceCardinality.UpTo(1)),
+                Branch(BehaviorCondition.Chose($"{key}-trash"), [trashChosen], [new BehaviorInstruction(BehaviorInstructionKind.EndRun)]),
+            ]
+            : [ChooseCards($"{key}-trash", eligible, BehaviorChoiceCardinality.Exactly(1)), trashChosen];
     }
 
     public static IReadOnlyList<IceBehaviorSpec> IceSpecs { get; } =

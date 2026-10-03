@@ -2157,6 +2157,7 @@
       "tests": [
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingDoesNotTriggerOnAPaidInstall",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingHostedEventsArePlayedAsIfFromTheGrip",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingHostedRunEventsArePlayedAsIfFromTheGrip",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingHostsTheTopStackCardFaceupAfterAFreeInstallAndItInstallsAsIfFromTheGrip",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingTrashesItsHostedCardsWhenTheDiscardPhaseEnds",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.BlingWithNothingHostedEndsTheTurnCleanly"
@@ -2331,7 +2332,8 @@
       "reviewer": "architect",
       "registered": true,
       "tests": [
-        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.MuslihaTAddsATopIcebreakerToTheGrip"
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.MuslihaTAddsATopIcebreakerToTheGrip",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch2Tests.MuslihaTOffersATopRunEventButNothingOfAnotherKind"
       ],
       "fullTextComplete": true,
       "partial": false,
@@ -2458,7 +2460,8 @@
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.DetenteIsUnusableWithFewerThanTwoHostedCards",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.DetenteReturnsTwoHostedCardsToGiveTheRunnerARandomHqAccess",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.DetentesAccessOffersTheTrashAtItsCost",
-        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.DetentesAccessStealsAnAgenda"
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.DetentesAccessStealsAnAgenda",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.DetentesStealRaisesTheAgendaScoredOrStolenOccurrence"
       ],
       "fullTextComplete": true,
       "partial": false,
@@ -2557,6 +2560,7 @@
       "registered": true,
       "tests": [
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch1HostedCreditTests.OpenMarketIsTrashedWhenEmpty",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch1HostedCreditTests.OpenMarketPaysForAUniqueConnectionThatReplacesItsCopy",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch1HostedCreditTests.OpenMarketPaysForJobInstallsAndDripsACreditEachTurn"
       ],
       "fullTextComplete": true,
@@ -3329,7 +3333,9 @@
       "registered": true,
       "tests": [
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.MycowebInstallsFromArchivesRezzesCheaperAndResolvesASentrySubroutine",
-        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.MycowebInstallsOnTheAttackedServerWithoutTrashingItsIce"
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.MycowebInstallsOnTheAttackedServerWithoutTrashingItsIce",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.MycowebsCopyOfATrashOrEndTheRunSubroutineEndsTheRunWithoutATarget",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.MycowebsRezPaysWithHostedRezCredits"
       ],
       "fullTextComplete": true,
       "partial": false,
@@ -3603,7 +3609,8 @@
       "reviewer": "architect",
       "registered": true,
       "tests": [
-        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.NPotCanBeBrokenForThreeCreditsAndEndsTheRunAtThreatTwo"
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.NPotCanBeBrokenForThreeCreditsAndEndsTheRunAtThreatTwo",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.NPotsCreditCostBreakEventKeepsItsCost"
       ],
       "fullTextComplete": true,
       "partial": false,
@@ -3756,7 +3763,8 @@
       "registered": true,
       "tests": [
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch1CorpTests.GreenmailGainsFourWhenForfeited",
-        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch1CorpTests.GreenmailGainsTwoWhenScored"
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch1CorpTests.GreenmailGainsTwoWhenScored",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.GreenmailForfeitedToRezBiawakPaysAtOnceDuringTheRun"
       ],
       "fullTextComplete": true,
       "partial": false,
@@ -3859,7 +3867,8 @@
       "tests": [
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.BiawakCanBeRezzedByForfeitingAnAgendaForTenOfItsCost",
         "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.BiawakEndsTheRunWithItsLastSubroutine",
-        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.BiawakOffersOneForfeitRezPerScoredAgenda"
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.BiawakOffersOneForfeitRezPerScoredAgenda",
+        "Netrunner.Cards.Tests:Netrunner.Cards.Tests.Elevation.ElevationBatch3Tests.BiawaksForfeitRezCanBePaidWithHostedRezCredits"
       ],
       "fullTextComplete": true,
       "partial": false,

@@ -724,6 +724,19 @@ public sealed class ElevationBatch3Tests
         Assert.Equal(before + 2, Player(state, PlayerSide.Runner).AgendaPoints);
     }
 
+    [Fact]
+    [Trait("ElevationCard", "35018")]
+    public void DetentesStealRaisesTheAgendaScoredOrStolenOccurrence()
+    {
+        // EL.6 review: an outside-run steal raised no scored-or-stolen occurrence, so "when stolen" never fired.
+        const string TomorrowsHeadline = "30052";
+        GameState state = RoundTrip(ToAction(DetenteAccess(TomorrowsHeadline, out int before)));
+
+        // The earlier HQ runs may steal a copy too: every steal of a 2-point Headline gives 1 tag.
+        Assert.Equal(before + 2, Player(state, PlayerSide.Runner).AgendaPoints);
+        Assert.Equal(Player(state, PlayerSide.Runner).AgendaPoints / 2, Rules(state, PlayerSide.Runner).Tags);
+    }
+
     [Theory]
     [Trait("ElevationCard", "35018")]
     [InlineData("trash", true)]
@@ -755,6 +768,136 @@ public sealed class ElevationBatch3Tests
 
         Assert.Equal(2, Actions(state).Select(static action => action.Parameters).OfType<RezCardParameters>()
             .Select(static rez => rez.ForfeitAgendaId).Distinct().Count());
+    }
+
+    /// <summary>Runs on Mycoweb and passes its first two subroutines, up to the choice of a subroutine to resolve.</summary>
+    private static GameState MycowebToResolveChoice(GameState state, string option)
+    {
+        state = RunTo(state, ElevationBoard.Remote, InEncounter);
+        for (int step = 0; step < 60; step++)
+        {
+            if (state.PendingDecision?.LegalActions.Any(action => action.Parameters is BehaviorChoiceParameters choice
+                && choice.OptionKeys.Contains(option)) == true)
+                return ChooseOption(state, option);
+            LegalAction next = state.PendingDecision!.LegalActions.FirstOrDefault(static action =>
+                    action.Parameters is BehaviorInstallChoiceParameters { Choice: null }
+                    || action.Parameters is BehaviorChoiceParameters { CardIds.Count: 0, FinalizeSelection: true, OptionKeys.Count: 0 })
+                ?? state.PendingDecision.LegalActions.First(static action => action.Kind == ActionKind.PassPriority);
+            state = Apply(state, next).State;
+        }
+        throw new InvalidOperationException($"Mycoweb's option '{option}' never came up.");
+    }
+
+    [Theory]
+    [Trait("ElevationCard", "35053")]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void MycowebsCopyOfATrashOrEndTheRunSubroutineEndsTheRunWithoutATarget(bool programInstalled)
+    {
+        // EL.7 review: the copy allowed "trash" with nothing to trash, avoiding both the trash and the end of the run.
+        const string Mayfly = "30032";
+        var board = new ElevationBoard(PlayerSide.Runner) { GripFiller = 5 }
+            .Add("35053", Place.Ice, rezzed: true)
+            .Add("35074", Place.Ice, server: ElevationBoard.Hq, rezzed: true);
+        if (programInstalled) board = board.Add(Mayfly, Place.Rig);
+        GameState state = MycowebToResolveChoice(board.Begin(), "resolve-35074-0");
+        if (programInstalled)
+        {
+            state = ChooseCards(state, Card(state, Mayfly));
+            state = PassUntil(state, static value => value.RunState is null || value.PendingDecision?.Kind == DecisionKind.BehaviorChoice);
+            if (state.RunState is not null) state = ChooseOption(state, "none");
+        }
+        state = PassUntil(state, static value => value.RunState is null || InEncounter(value));
+
+        if (programInstalled)
+        {
+            Assert.Equal(ZoneKind.RunnerHeap, ZoneOf(state, Mayfly));
+        }
+        else
+        {
+            Assert.Null(state.RunState);
+            Assert.False(state.Turn.History!.RunnerThisTurn!.SuccessfulRun);
+        }
+    }
+
+    [Fact]
+    [Trait("ElevationCard", "35053")]
+    public void MycowebsRezPaysWithHostedRezCredits()
+    {
+        // EL.6 review: rezzing paying less ignored hosted credits that may pay for the rez (Mahkota Langit Grid).
+        const string Ballista = "30062";
+        GameState state = new ElevationBoard(PlayerSide.Runner) { CorpCredits = 1, GripFiller = 5 }
+            .Add("35053", Place.Ice, rezzed: true)
+            .Add("35082", Place.Root, server: ElevationBoard.Hq, rezzed: true, counters: new Dictionary<string, int> { ["declared-credit"] = 2 })
+            .Add(Ballista, Place.Ice, server: ElevationBoard.Hq)
+            .Begin();
+        state = RunTo(state, ElevationBoard.Remote, InEncounter);
+        for (int step = 0; step < 40 && !CardState(state, Ballista).Rezzed; step++)
+        {
+            LegalAction next = state.PendingDecision!.LegalActions.FirstOrDefault(action => action.Parameters is BehaviorChoiceParameters choice
+                    && choice.CardIds.SequenceEqual([Card(state, Ballista)]))
+                ?? state.PendingDecision.LegalActions.FirstOrDefault(static action => action.Parameters is BehaviorInstallChoiceParameters { Choice: null })
+                ?? state.PendingDecision.LegalActions.First(static action => action.Kind == ActionKind.PassPriority);
+            state = Apply(state, next).State;
+        }
+        state = RoundTrip(state);
+
+        // Ballista costs 5, 2 less is 3: Mahkota's 2 hosted credits and 1 from the wallet.
+        Assert.True(CardState(state, Ballista).Rezzed);
+        Assert.Equal(0, Player(state, PlayerSide.Corp).Credits);
+        Assert.Equal(0, Counter(state, "35082", "credit"));
+    }
+
+    [Fact]
+    [Trait("ElevationCard", "35074")]
+    public void BiawaksForfeitRezCanBePaidWithHostedRezCredits()
+    {
+        // EL.6 review: the forfeit variants weren't offered when only hosted rez credits made them affordable.
+        GameState state = new ElevationBoard(PlayerSide.Runner) { CorpCredits = 2, CorpPoints = 2 }
+            .Add("35074", Place.Ice)
+            .Add("35082", Place.Root, rezzed: true, counters: new Dictionary<string, int> { ["declared-credit"] = 2 })
+            .Add(CorpFillerAgenda, Place.CorpScore)
+            .Begin();
+        state = RunTo(state, ElevationBoard.Remote, value => CanRez(value, "35074"));
+        RezCardParameters rez = Assert.Single(Actions(state).Select(static action => action.Parameters).OfType<RezCardParameters>());
+        Assert.Equal(14 - 10, rez.CreditCost);
+        state = RoundTrip(Rez(state, "35074"));
+
+        Assert.True(CardState(state, "35074").Rezzed);
+        Assert.Equal(0, Player(state, PlayerSide.Corp).Credits);
+    }
+
+    [Fact]
+    [Trait("ElevationCard", "35070")]
+    public void GreenmailForfeitedToRezBiawakPaysAtOnceDuringTheRun()
+    {
+        // EL.2 review: an occurrence deferred during a run waited until the run ended.
+        const string Greenmail = "35070";
+        GameState state = new ElevationBoard(PlayerSide.Runner) { CorpCredits = 4, CorpPoints = 1 }
+            .Add("35074", Place.Ice)
+            .Add(Greenmail, Place.CorpScore)
+            .Begin();
+        state = RunTo(state, ElevationBoard.Remote, value => CanRez(value, "35074"));
+        state = RoundTrip(Rez(state, "35074"));
+        state = PassUntil(state, static value => value.RunState is null || InEncounter(value));
+
+        Assert.NotNull(state.RunState);
+        Assert.Equal(0 + 4, Player(state, PlayerSide.Corp).Credits);
+    }
+
+    [Fact]
+    [Trait("ElevationCard", "35064")]
+    public void NPotsCreditCostBreakEventKeepsItsCost()
+    {
+        // EL.6 review: EngineEvent.Copy dropped the credit cost of the break.
+        GameState state = new ElevationBoard(PlayerSide.Runner) { RunnerCredits = 5 }
+            .Add("35064", Place.Ice, rezzed: true)
+            .Begin();
+        state = RunTo(state, ElevationBoard.Remote, InEncounter);
+        LegalAction breakAction = Actions(state).First(static action => action.Kind == ActionKind.UseBioroidAbility);
+        ApplyResult result = Apply(state, breakAction);
+
+        Assert.Contains(result.Events, static engineEvent => engineEvent.Payload is BioroidAbilityUsedEventPayload { CreditCost: 3 });
     }
 
     [Fact]
