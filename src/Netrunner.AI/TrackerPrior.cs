@@ -59,12 +59,16 @@ public static class TrackerPrior
     /// than the untracked cards or the unseen agendas.
     /// </summary>
     public static double UntrackedHqAgendas(int hand, double trackedHand, IReadOnlyDictionary<string, double> prior,
-        Func<string, bool> isAgenda, string? behaviorVersion)
+        Func<string, bool> isAgenda, string? behaviorVersion) =>
+        UntrackedHqAgendas(hand, trackedHand, prior, isAgenda, HqAgendaFactor(behaviorVersion));
+
+    /// <summary>As above with an explicit factor, so a measure can try another pool's rate (<c>ai-belief --hq-agenda-factor</c>).</summary>
+    public static double UntrackedHqAgendas(int hand, double trackedHand, IReadOnlyDictionary<string, double> prior,
+        Func<string, bool> isAgenda, double factor)
     {
         ArgumentNullException.ThrowIfNull(prior);
         ArgumentNullException.ThrowIfNull(isAgenda);
         double untracked = Math.Max(0, hand - trackedHand);
-        double factor = HqAgendaFactor(behaviorVersion);
         if (factor == 1) return untracked * Share(prior, isAgenda);
         double unseenAgendas = prior.Where(pair => isAgenda(pair.Key)).Sum(pair => pair.Value);
         return Math.Min(untracked, Math.Min(unseenAgendas, untracked * Share(prior, isAgenda) * factor));

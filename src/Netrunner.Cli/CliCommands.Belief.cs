@@ -8,9 +8,10 @@ namespace Netrunner.Cli;
 public static partial class CliCommands
 {
     /// <summary>
-    /// ai-belief &lt;games-directory&gt; [--games N] [--trace GAME[:TIER]] [--json]. A9a's accuracy measure: replays games saved by
-    /// <c>ai-ladder --save-games</c> and scores each tier's tracker (Easy, Standard, Hard) of the Corp's hidden cards,
-    /// as the Runner sees them, against the truth, next to the prior alone. Exit 0 on success, 2 for invalid arguments.
+    /// ai-belief &lt;games-directory&gt; [--games N] [--trace GAME[:TIER]] [--hq-agenda-factor F] [--json]. A9a's accuracy measure:
+    /// replays games saved by <c>ai-ladder --save-games</c> and scores each tier's tracker (Easy, Standard, Hard) of the Corp's
+    /// hidden cards, as the Runner sees them, against the truth, next to the prior alone. <c>--hq-agenda-factor</c> measures
+    /// with another HQ agenda factor than the pool's own (A7). Exit 0 on success, 2 for invalid arguments.
     /// </summary>
     private static int RunAiBelief(string[] args, TextWriter output, TextWriter error)
     {
@@ -18,6 +19,7 @@ public static partial class CliCommands
         string directory;
         int? games = null;
         string? trace = null;
+        double? hqAgendaFactor = null;
         try
         {
             if (args.Length < 2 || args[1].StartsWith("--", StringComparison.Ordinal))
@@ -34,6 +36,10 @@ public static partial class CliCommands
                             ? count : throw new ArgumentException("--games requires a positive integer.");
                         break;
                     case "--trace" when index + 1 < args.Length: trace = args[++index]; break;
+                    case "--hq-agenda-factor" when index + 1 < args.Length:
+                        hqAgendaFactor = double.TryParse(args[++index], NumberStyles.Float, CultureInfo.InvariantCulture, out double factor)
+                            && factor > 0 ? factor : throw new ArgumentException("--hq-agenda-factor requires a positive number.");
+                        break;
                     default: throw new ArgumentException($"Unsupported ai-belief argument '{args[index]}'.");
                 }
             }
@@ -56,7 +62,7 @@ public static partial class CliCommands
             foreach (string line in BeliefAccuracy.Trace(game, definition, parts.Length > 1 ? parts[1] : "standard")) output.WriteLine(line);
             return 0;
         }
-        IReadOnlyList<BeliefScore> scores = BeliefAccuracy.Score(games is { } limit ? saved.Take(limit) : saved);
+        IReadOnlyList<BeliefScore> scores = BeliefAccuracy.Score(games is { } limit ? saved.Take(limit) : saved, hqAgendaFactor);
         if (json)
         {
             output.WriteLine(EngineJson.Serialize(new { schemaVersion = 1, status = "ok", directory, scores }));

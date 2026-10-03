@@ -37,19 +37,23 @@ public static class BeliefAccuracy
         public int Confident, ConfidentCorrect;
     }
 
-    public static IReadOnlyList<BeliefScore> Score(IEnumerable<(LadderSavedGame Game, FullMatchDefinition Definition)> games)
+    /// <param name="hqAgendaFactor">The HQ agenda factor to measure with; null uses the pool's own (TrackerPrior.HqAgendaFactor).</param>
+    public static IReadOnlyList<BeliefScore> Score(IEnumerable<(LadderSavedGame Game, FullMatchDefinition Definition)> games,
+        double? hqAgendaFactor = null)
     {
         ArgumentNullException.ThrowIfNull(games);
         var totals = BeliefTier.All.ToDictionary(tier => tier.Name, _ => new Totals(), StringComparer.Ordinal);
         foreach ((LadderSavedGame game, FullMatchDefinition definition) in games)
-            foreach ((string tier, Totals add) in ScoreGame(game, definition))
+            foreach ((string tier, Totals add) in ScoreGame(game, definition, hqAgendaFactor))
                 Merge(totals[tier], add);
         return [.. BeliefTier.All.Select(tier => Result(tier.Name, totals[tier.Name]))];
     }
 
-    private static IEnumerable<(string Tier, Totals Totals)> ScoreGame(LadderSavedGame saved, FullMatchDefinition definition)
+    private static IEnumerable<(string Tier, Totals Totals)> ScoreGame(LadderSavedGame saved, FullMatchDefinition definition,
+        double? hqAgendaFactor)
     {
         ICardEvaluationCatalog catalog = new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior);
+        double factor = hqAgendaFactor ?? TrackerPrior.HqAgendaFactor(catalog.BehaviorVersion);
         Dictionary<string, double> pool = TrackerPrior.Pool(catalog, PlayerSide.Corp), list = TrackerPrior.List(definition.Request.CorpDeck.Cards.Select(entry => (entry.Code, entry.Quantity)));
         var trackers = BeliefTier.All.ToDictionary(tier => tier.Name, _ => CardTracker.Empty, StringComparer.Ordinal);
         var results = BeliefTier.All.ToDictionary(tier => tier.Name, _ => new Totals(), StringComparer.Ordinal);
@@ -70,7 +74,8 @@ public static class BeliefAccuracy
             // Score at each Runner turn start: what the Runner believes as it plans its turn.
             if (state.Turn.ActiveSide == PlayerSide.Runner && lastActive == PlayerSide.Corp)
                 foreach (BeliefTier tier in BeliefTier.All)
-                    Measure(results[tier.Name], trackers[tier.Name], features, state, catalog, TrackerPrior.Remaining(tier.KnowsList ? list : pool, features));
+                    Measure(results[tier.Name], trackers[tier.Name], features, state, catalog,
+                        TrackerPrior.Remaining(tier.KnowsList ? list : pool, features), factor);
             lastActive = state.Turn.ActiveSide;
         }
         return results.Select(pair => (pair.Key, pair.Value));
@@ -118,7 +123,7 @@ public static class BeliefAccuracy
     private static string Title(string code) => Titles.Value.TryGetValue(code, out string? title) ? title : code;
 
     private static void Measure(Totals totals, CardTracker tracker, AgentFeatures features, GameState state, ICardEvaluationCatalog catalog,
-        Dictionary<string, double> prior)
+        Dictionary<string, double> prior, double hqAgendaFactor)
     {
         // Face-down Corp installs.
         foreach (AgentServer server in features.Board.Servers)
@@ -159,7 +164,7 @@ public static class BeliefAccuracy
         double trackedAgendas = tracker.Cards.Where(card => card.Place == TrackedPlace.Hand && IsAgenda(catalog, card.DefinitionId)).Sum(card => card.Weight);
         // As Runner v21 plans with it (RunnerInference.HqAgendaShare), with the pool's HQ agenda factor (A7).
         double predicted = trackedAgendas + TrackerPrior.UntrackedHqAgendas(hand, trackedHand, prior,
-            definition => IsAgenda(catalog, definition), catalog.BehaviorVersion);
+            definition => IsAgenda(catalog, definition), hqAgendaFactor);
         int actual = trueHand.Count(definition => IsAgenda(catalog, definition));
         totals.HqSamples++;
         totals.HqError += Math.Abs(predicted - actual);

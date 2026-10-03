@@ -11,7 +11,7 @@ namespace Netrunner.Cli;
 public static partial class CliCommands
 {
     /// <summary>
-    /// ai-fit-evaluation [--content official|gateway|both|gateway-elevation] [--games N] [--holdout-games N] [--seed S]
+    /// ai-fit-evaluation [--content official|gateway|both|gateway-elevation|nsg-core-sets] [--games N] [--holdout-games N] [--seed S]
     /// [--workers 1..64] [--compare fitted.json] --output file.json. A5: plays Standard self-play, takes each side's view
     /// at the start of every turn, labels it with who won, fits one logistic model per side, and
     /// reports log loss on held-out seeds for the fitted model and for the hand evaluation
@@ -34,8 +34,8 @@ public static partial class CliCommands
                 {
                     case "--content" when index + 1 < args.Length:
                         content = args[++index];
-                        if (content is not ("official" or "gateway" or "both" or "gateway-elevation"))
-                            throw new ArgumentException("--content requires official, gateway, both or gateway-elevation.");
+                        if (content is not ("official" or "gateway" or "both" or "gateway-elevation" or "nsg-core-sets"))
+                            throw new ArgumentException("--content requires official, gateway, both, gateway-elevation or nsg-core-sets.");
                         break;
                     case "--games" when index + 1 < args.Length: games = int.Parse(args[++index], CultureInfo.InvariantCulture); break;
                     case "--holdout-games" when index + 1 < args.Length: holdoutGames = int.Parse(args[++index], CultureInfo.InvariantCulture); break;
@@ -66,6 +66,7 @@ public static partial class CliCommands
             "official" => RulesFuzzRunner.OfficialContentIds,
             "gateway" => RulesFuzzRunner.GatewayContentIds,
             "gateway-elevation" => RulesFuzzRunner.GatewayElevationContentIds,
+            "nsg-core-sets" => RulesFuzzRunner.NsgCoreSetsContentIds,
             _ => [.. RulesFuzzRunner.OfficialContentIds, .. RulesFuzzRunner.GatewayContentIds],
         };
         // Held-out seeds come from a separate base seed, so no training game repeats.
