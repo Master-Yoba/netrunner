@@ -1136,15 +1136,18 @@ public sealed record BehaviorInstruction
             throw new ArgumentOutOfRangeException(nameof(Recipient));
         }
 
+        // A damage instruction may name the Runner as recipient: the Runner suffers it, so the Runner is responsible
+        // for it, not the Corp (rules 10.4.1; Semak-samun).
         if (Recipient is not null
             && Kind is not (BehaviorInstructionKind.AddTags
                 or BehaviorInstructionKind.GainCredits
                 or BehaviorInstructionKind.LoseCredits
                 or BehaviorInstructionKind.LoseClicks
-                or BehaviorInstructionKind.GainAllottedClicksNextTurn))
+                or BehaviorInstructionKind.GainAllottedClicksNextTurn)
+            && !(Kind == BehaviorInstructionKind.DealDamage && Recipient == BehaviorPlayerSelector.Runner))
         {
             throw new ArgumentException(
-                "A player recipient is valid only for tag and credit instructions.",
+                "A player recipient is valid only for tag and credit instructions, and the Runner for damage it suffers.",
                 nameof(Recipient));
         }
 

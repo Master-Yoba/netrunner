@@ -581,7 +581,9 @@ public static partial class GameEngine
         bool flatlined = effect.Amount > available;
         if (effect.Amount > 0)
         {
-            PlayerSide damagingSide = working.ResolutionStack.Count > 0 && working.ResolutionStack[^1] is EffectResolutionFrame damaging
+            // The responsible player is the nearest damage effect's controller: a checkpoint frame can sit above it
+            // (bot loop 1: damage the Runner suffered to Semak-samun counted as the Corp's for AU Co.).
+            PlayerSide damagingSide = working.ResolutionStack.OfType<EffectResolutionFrame>().LastOrDefault() is { } damaging
                 ? GetPlayer(working, damaging.Controller).Side
                 : PlayerSide.Corp;
             DeferOccurrence(working, OccurrenceKind.DamageDone, damagingSide);

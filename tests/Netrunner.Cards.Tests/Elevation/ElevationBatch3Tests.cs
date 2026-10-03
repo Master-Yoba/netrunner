@@ -166,6 +166,24 @@ public sealed class ElevationBatch3Tests
 
     [Fact]
     [Trait("ElevationCard", "35001")]
+    public void RyosHqTrashIsTheCorpsToChooseButNotToSkip()
+    {
+        // Bot loop 1 (Codex review): "the Corp trashes 1 card from HQ" was an up-to-one choice the Corp skipped.
+        GameState state = new ElevationBoard(PlayerSide.Runner) { RunnerCredits = 5, GripFiller = 5 }
+            .Add("35001", Place.RunnerIdentity)
+            .Add("35052", Place.Ice, rezzed: true)
+            .Add(HedgeFund, Place.Hq)
+            .Begin();
+        state = RunTo(state, ElevationBoard.Remote, InEncounter);
+        state = PassUntil(state, static value => value.PendingDecision?.Kind == DecisionKind.BehaviorChoice);
+        state = ChooseCards(state);
+        state = PassUntil(state, static value => value.PendingDecision?.Kind == DecisionKind.BehaviorChoice || value.RunState is null);
+
+        Assert.DoesNotContain(Actions(state), static action => action.Parameters is BehaviorChoiceParameters { CardIds.Count: 0, FinalizeSelection: true });
+    }
+
+    [Fact]
+    [Trait("ElevationCard", "35001")]
     public void RyoDoesNothingWithoutAResolvedSubroutine()
     {
         GameState state = new ElevationBoard(PlayerSide.Runner) { RunnerCredits = 5 }
@@ -252,6 +270,25 @@ public sealed class ElevationBatch3Tests
 
         Assert.Equal(option != "end-run", state.Turn.History!.RunnerThisTurn!.SuccessfulRun);
         Assert.Equal(option == "end-run" ? 5 : 2, state.Zones.Single(static zone => zone.Kind == ZoneKind.RunnerGrip).CardIds.Count);
+    }
+
+    [Fact]
+    [Trait("ElevationCard", "35054")]
+    public void DamageTheRunnerSuffersToSemakSamunIsNotDamageAuCoDoes()
+    {
+        // Bot loop 1 (Codex review): rules 10.4.1, the Runner is responsible for damage it suffers, so AU Co.'s "whenever
+        // you do damage" doesn't count Semak-samun's chosen 3 net damage.
+        GameState state = new ElevationBoard(PlayerSide.Runner) { GripFiller = 5 }
+            .Add("35046", Place.CorpIdentity)
+            .Add("35054", Place.Ice, rezzed: true)
+            .Begin();
+        state = RunTo(state, ElevationBoard.Remote, InEncounter);
+        state = PassUntil(state, static value => value.PendingDecision?.Kind == DecisionKind.BehaviorChoice);
+        state = RoundTrip(ChooseOption(state, "suffer-damage"));
+        state = PassUntil(state, static value => value.RunState is null);
+
+        Assert.Equal(5 - 3, state.Zones.Single(static zone => zone.Kind == ZoneKind.RunnerGrip).CardIds.Count);
+        Assert.Equal(0, Counter(state, "35046", "power"));
     }
 
     [Theory]

@@ -799,8 +799,10 @@ public static partial class GameEngine
         {
             return;
         }
+        // Damage the Runner suffers is the Runner's own (rules 10.4.1): the effect is the Runner's, so "whenever you do
+        // damage" (AU Co.) doesn't count it.
         working.ResolutionStack.Add(new EffectResolutionFrame(
-            frame.Controller,
+            instruction.Recipient == BehaviorPlayerSelector.Runner ? GetPlayer(working, PlayerSide.Runner).Id : frame.Controller,
             new CostBundle(),
             new EffectBundle(new DamageEffect(
                 GetPlayer(working, PlayerSide.Runner).Id,

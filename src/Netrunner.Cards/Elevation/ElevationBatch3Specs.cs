@@ -146,9 +146,13 @@ public static class ElevationBatch3Specs
                 null,
                 [
                     Gain(1),
-                    ChooseCards("ryo-hq", BehaviorTarget.CardsInZone(BehaviorZone.Headquarters, CorpCard),
-                        BehaviorChoiceCardinality.UpTo(1), BehaviorChooser.Corp),
-                    new BehaviorInstruction(BehaviorInstructionKind.TrashCard, target: ChosenBy("ryo-hq")),
+                    // "The Corp trashes 1 card from HQ": the Corp chooses which, but must trash one (bot loop 1).
+                    Branch(BehaviorCondition.ZoneCountAtLeast(BehaviorZone.Headquarters, 1),
+                    [
+                        ChooseCards("ryo-hq", BehaviorTarget.CardsInZone(BehaviorZone.Headquarters, CorpCard),
+                            BehaviorChoiceCardinality.Exactly(1), BehaviorChooser.Corp),
+                        new BehaviorInstruction(BehaviorInstructionKind.TrashCard, target: ChosenBy("ryo-hq")),
+                    ]),
                 ],
                 oncePerTurn: true,
                 condition: BehaviorTriggerCondition.SubroutineResolvedThisRun),
@@ -214,7 +218,9 @@ public static class ElevationBatch3Specs
                     ChooseOne(
                         "semak-samun-choice",
                         BehaviorChooser.Runner,
-                        Option("suffer-damage", [NetDamage(3)]),
+                        // The Runner suffers it (rules 10.4.1): the Corp doesn't do this damage (AU Co. gains nothing).
+                        Option("suffer-damage", [new BehaviorInstruction(BehaviorInstructionKind.DealDamage, amount: 3,
+                            damageKind: DamageKind.Net, recipient: BehaviorPlayerSelector.Runner)]),
                         Option("end-run", [new BehaviorInstruction(BehaviorInstructionKind.EndRun)])),
                 ]),
         ]);
