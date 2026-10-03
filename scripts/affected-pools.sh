@@ -31,7 +31,8 @@ while IFS= read -r path; do
     src/Netrunner.Cards/Gateway*BehaviorSpecs.cs|src/Netrunner.Cards/Gateway*CardCodes.cs|\
     src/Netrunner.Cards/GatewayBehaviorCatalog.cs|src/Netrunner.Cards/ElevationBehaviorCatalog.cs|\
     src/Netrunner.Cards/Elevation/*) specs_changed=1 ;;
-    *) everything=1 ;;
+    src/*|data/*) everything=1 ;;
+    *) ;;
   esac
 done < <( { git -C "$scope_root" diff --name-only "$merge_base"; git -C "$scope_root" ls-files --others --exclude-standard; } | sort -u)
 
