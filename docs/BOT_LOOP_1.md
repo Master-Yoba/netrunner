@@ -36,14 +36,14 @@ against the replay and has a regression test (`BotLoop1Tests`, `ElevationBatch3T
 | 102, 101 | 504, 54 | Mahkota Langit Grid misread; its server's rezzes unpaid | **fixed**, Corp v27 (rezzed when its server has work) |
 | 005 | 120 | Topan used with only events in the grip | **fixed**, Runner v23 |
 | 007 | 128 | Madani hosted nothing, 65 times in one game | **fixed**, Runner v23 |
-| 005 | 127 + game end | Ran an unknown remote with 2 cards into Byte!'s lethal ambush | confirmed; deferred (the trap-risk threshold) |
-| 006, 105, 007 | 607, 433, 47 | Breaks one end-the-run subroutine of several, then passes | confirmed; deferred (the encounter planner) |
-| 003 | 329 | Petty Cash's Archives ability used when its play can't happen (cost 3, not the first action) | confirmed; deferred (legal, wasted) |
-| 001 | 327 | Replaced an unrezzed Mahkota with its own copy | deferred |
-| 002 | 57 | PT Untaian's 1-credit advancement declined | deferred (advance-target valuation) |
-| 006, 005 | 532, 31 | Basic runs instead of Clean Getaway | deferred |
-| 006 | 251 | A second Marjanah installed beside the first | deferred |
-| 006 | 154 | Mutual Favor finds nothing | deferred |
+| 005 | 127 + game end | Left Measured Response in HQ, then ran an unknown remote with 2 cards into Byte!'s lethal ambush | **fixed**, Runner v24 |
+| 006, 105, 007 | 607, 433, 47 | Breaks one end-the-run subroutine of several, then passes | **fixed**, Runner v24 (behavior subroutines read; N-Pot's break costs credits) |
+| 003 | 329 | Petty Cash's Archives ability used when its play can't happen (cost 3, 2 credits) | **fixed**, Corp v28 |
+| 001 | 327 | Replaced an unrezzed Mahkota with its own copy | **fixed**, Corp v28 (no copy replaces one that hasn't run down) |
+| 002 | 57 | PT Untaian's 1-credit advancement declined | **fixed**, Corp v28 |
+| 006, 005 | 532, 31 | Basic runs instead of Clean Getaway | **fixed**, Runner v24 (on a run it sees succeed) |
+| 006 | 251 | A second Marjanah installed beside the first | **fixed**, Runner v24 |
+| 006 | 154 | Mutual Favor finds nothing | **fixed**, Runner v24 (no tutor when every ICE type is covered) |
 
 The other 27 (scoring tempo and lines, ICE placement, tag and economy management, run targeting) are strategy
 judgments; they are recorded in `artifacts/llm-loops/loop-1/findings.json` and wait for the next loop's evidence.
@@ -67,3 +67,39 @@ The batch is Runner v23 (with loop 1's grip checks), Corp v27, the two engine fi
   of 288 and NSG Core Sets 2,592 of 2,592 games reached a terminal state.
 - **Gates** (`make gates` on ea1927d): verify, m5-gate, tactics and bot-check pass. The first run, on a412778, failed
   verify on a stale card coverage report, regenerated in ea1927d.
+
+## Deferred fixes (4 October)
+
+On the user's direction, the deferred findings were fixed before loop 2: **Runner v24** and **Corp v28**.
+
+- **Elevation's behavior subroutines** (N-Pot, Lamplighter, Semak-samun, Doomscroll, Empiricist, Mycoweb) were invisible
+  to the encounter planner and the run model, which saw them as harmless. They are now read for what they do, their
+  branches on tags and the threat level included, so the Runner no longer breaks one end-the-run subroutine of several
+  and passes. N-Pot's break costs 3 credits, not a click.
+- **Ambushes and kill cards:** an unadvanced face-down root card may be an ambush that flatlines a small grip (Byte!),
+  priced by its share of the Corp's possible root cards, or at least one in five once seen. A known operation the Corp
+  could play next turn for more damage than the Runner can take or pay off (Measured Response) is trashed on access.
+- **Clean Getaway** counts its 6 credits on a run with no unknown ICE.
+- **No duplicate breakers:** a second copy of an installed breaker isn't installed.
+- **No empty tutors:** a breaker tutor (Mutual Favor) isn't played while the rig and grip break every ICE type.
+- **No copy over a copy that hasn't run down** (Corp): a card replaces its own copy only when that copy is a rezzed
+  card out of the credits it loaded (Mahkota Langit Grid replaced its unrezzed copy).
+- **Petty Cash:** its Archives ability isn't used when the Corp can't pay the play.
+- **PT Untaian:** a useful counter placed without a click is worth the click an advance would cost.
+
+Each has a regression test at the recorded decision (`BotLoop1Tests`, 18 more cases).
+
+### Verification
+
+- **Ladders** (240 deals each):
+
+  | Change | Core Battle Box | Gateway |
+  |---|---|---|
+  | Runner v24 against v23 | +34 Elo ([−4, 80]) | +16 ([−21, 53]) |
+  | Corp v28 against v27 | +18 ([−17, 64]) | −3 ([−42, 43]) |
+
+- **Runner diagnosis** on the box ladder's games: v24 wins 32%, v23 28%. Flatlines fell from 37% to 34% of games. The
+  rest of the "self-flatlines" (13% against 9%) are Measured Response's forced damage: the Runner can't pay 8, and v24's
+  longer games reach threat 4 more often.
+- **Fuzz** (per slice): official 24, Gateway 288, Gateway + Elevation 288 and NSG Core Sets 2,592 games, all terminal.
+- **Gates** (`make gates` on a61dc0e): verify, m5-gate, tactics and bot-check pass.
