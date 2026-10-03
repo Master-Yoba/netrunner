@@ -10,7 +10,8 @@ public static partial class CliCommands
 {
     /// <summary>
     /// fuzz [--games N | --games-per-pairing N] [--seed S] [--content developer|official|...] [--action-cap N]
-    /// [--workers 1..64] [--differential] [--output new-dir] [--json]. --differential
+    /// [--workers 1..64] [--verify-replays-every N] [--differential] [--output new-dir] [--json]. --verify-replays-every
+    /// verifies only every Nth finished game's replay (default 1, every game; a capped game always). --differential
     /// also checks Simulation-mode Apply against every authoritative action. --games-per-pairing plays N games of
     /// each deck pairing with each seat mix (the plan cycles both, so any count is spread evenly). Exit 0 means no defects,
     /// 1 means at least one defect, 2 means invalid arguments.
@@ -24,6 +25,7 @@ public static partial class CliCommands
         string content = "developer";
         int actionCap = RulesFuzzRunner.DefaultActionCap;
         int workers = 1;
+        int verifyReplaysEvery = 1;
         bool differential = false;
         string? destination = null;
         try
@@ -66,6 +68,11 @@ public static partial class CliCommands
                     case "--output" when index + 1 < args.Length:
                         destination = args[++index];
                         break;
+                    case "--verify-replays-every" when index + 1 < args.Length:
+                        if (!int.TryParse(args[++index], NumberStyles.None, CultureInfo.InvariantCulture, out verifyReplaysEvery)
+                            || verifyReplaysEvery is < 1 or > 1_000)
+                            throw new ArgumentException("--verify-replays-every requires an integer from 1 to 1000.");
+                        break;
                     default: throw new ArgumentException($"Unsupported fuzz argument '{args[index]}'.");
                 }
             }
@@ -93,7 +100,7 @@ public static partial class CliCommands
         }
 
         IReadOnlyList<FuzzGameCase> cases = RulesFuzzRunner.Plan(games, seed,
-            RulesFuzzRunner.ContentIds(content));
+            RulesFuzzRunner.ContentIds(content), verifyReplaysEvery);
         var results = new ConcurrentDictionary<string, FuzzGameResult>(StringComparer.Ordinal);
         Parallel.ForEachAsync(cases, new ParallelOptions { MaxDegreeOfParallelism = workers },
             async (fuzzCase, cancellation) =>
@@ -124,7 +131,7 @@ public static partial class CliCommands
         else
         {
             output.WriteLine(defects.Length == 0 ? "fuzz=ok" : "fuzz=defects");
-            output.WriteLine($"content={content} seed={seed} games={ordered.Length} action-cap={actionCap}");
+            output.WriteLine($"content={content} seed={seed} games={ordered.Length} action-cap={actionCap} replays-verified={ordered.Count(ReplayVerified)}");
             foreach (IGrouping<FuzzGameStatus, FuzzGameResult> group in ordered.GroupBy(result => result.Status).OrderBy(group => group.Key))
                 output.WriteLine($"status {group.Key}={group.Count()}");
             output.WriteLine($"mean-actions={ordered.Average(result => result.ActionCount).ToString("F1", CultureInfo.InvariantCulture)}");
@@ -161,6 +168,10 @@ public static partial class CliCommands
         return directory;
     }
 
+    // A finished game's replay is verified when its case asks (every Nth game at a per-slice size); a capped one always.
+    private static bool ReplayVerified(FuzzGameResult result) =>
+        result.Status == FuzzGameStatus.Capped || (result.Status == FuzzGameStatus.Terminal && result.Case.VerifyReplay);
+
     private static string FuzzSummaryJson(FuzzGameResult[] results, ulong seed, string content, int actionCap,
         string? destination = null, string? writeError = null) => EngineJson.Serialize(new
         {
@@ -171,6 +182,7 @@ public static partial class CliCommands
             seed,
             actionCap,
             games = results.Length,
+            replaysVerified = results.Count(ReplayVerified),
             statuses = results.GroupBy(result => result.Status).OrderBy(group => group.Key)
                 .ToDictionary(group => group.Key.ToString(), group => group.Count()),
             meanActions = results.Average(result => result.ActionCount),

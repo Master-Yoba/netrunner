@@ -61,8 +61,24 @@ public sealed class FuzzCommandTests
         Assert.Equal(2, CliCommands.Run(["fuzz", "--games-per-pairing", "1", "--games", "3"], output, error));
     }
 
+    [Fact]
+    public void VerifyReplaysEveryVerifiesOnlyEveryNthFinishedGame()
+    {
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        Assert.Equal(0, CliCommands.Run(["fuzz", "--games", "6", "--seed", "8", "--verify-replays-every", "3", "--json"], output, error));
+
+        using JsonDocument document = JsonDocument.Parse(output.ToString());
+        Assert.Equal(6, document.RootElement.GetProperty("games").GetInt32());
+        Assert.Equal(2, document.RootElement.GetProperty("replaysVerified").GetInt32());
+        Assert.Equal([true, false, false, true, false, false],
+            RulesFuzzRunner.Plan(6, 8, [RulesFuzzRunner.DeveloperContentId], 3).Select(fuzzCase => fuzzCase.VerifyReplay));
+    }
+
     [Theory]
     [InlineData("--games-per-pairing", "0")]
+    [InlineData("--verify-replays-every", "0")]
     [InlineData("--games", "0")]
     [InlineData("--content", "somewhere")]
     [InlineData("--workers", "65")]

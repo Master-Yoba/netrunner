@@ -31,7 +31,9 @@ public enum FuzzGameStatus
 }
 
 /// <summary>One deterministic fuzz game: content, seed and the agent kind in each seat.</summary>
-public sealed record FuzzGameCase(string Id, string ContentId, ulong GameSeed, FuzzAgentKind Corp, FuzzAgentKind Runner);
+/// <param name="VerifyReplay">Whether a game that ends normally has its replay verified; a capped game always does.</param>
+public sealed record FuzzGameCase(string Id, string ContentId, ulong GameSeed, FuzzAgentKind Corp, FuzzAgentKind Runner,
+    bool VerifyReplay = true);
 
 /// <summary>
 /// The exact position before a failing action. <see cref="ReplayPrefix"/>
@@ -160,10 +162,16 @@ public static class RulesFuzzRunner
         (FuzzAgentKind.Heuristic, FuzzAgentKind.RandomLegal),
     ];
 
-    /// <summary>Builds a deterministic case list that cycles content and seat pairings.</summary>
-    public static IReadOnlyList<FuzzGameCase> Plan(int games, ulong baseSeed, IReadOnlyList<string> contentIds)
+    /// <summary>
+    /// Builds a deterministic case list that cycles content and seat pairings. With <paramref name="verifyReplaysEvery"/>
+    /// above 1, only every Nth game that ends normally has its replay verified (a per-slice run; the milestone run
+    /// verifies every game).
+    /// </summary>
+    public static IReadOnlyList<FuzzGameCase> Plan(int games, ulong baseSeed, IReadOnlyList<string> contentIds,
+        int verifyReplaysEvery = 1)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(games);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(verifyReplaysEvery);
         ArgumentNullException.ThrowIfNull(contentIds);
         if (contentIds.Count == 0) throw new ArgumentException("At least one content ID is required.", nameof(contentIds));
         var cases = new List<FuzzGameCase>(games);
@@ -172,7 +180,8 @@ public static class RulesFuzzRunner
             string content = contentIds[index % contentIds.Count];
             (FuzzAgentKind corp, FuzzAgentKind runner) = Pairings[index / contentIds.Count % Pairings.Count];
             cases.Add(new FuzzGameCase(
-                $"{content}-{index + 1:D5}", content, DeriveGameSeed(baseSeed, index), corp, runner));
+                $"{content}-{index + 1:D5}", content, DeriveGameSeed(baseSeed, index), corp, runner,
+                VerifyReplay: index % verifyReplaysEvery == 0));
         }
         return cases;
     }
@@ -345,6 +354,8 @@ public static class RulesFuzzRunner
 
         Task<FuzzGameResult> FinishAsync(FuzzGameStatus status, string? message)
         {
+            if (status == FuzzGameStatus.Terminal && !fuzzCase.VerifyReplay)
+                return Task.FromResult(new FuzzGameResult(fuzzCase, status, actions.Count, state.Outcome, message, null));
             ReplayArtifact replay = Replay();
             ReplayVerificationResult verified;
             try
