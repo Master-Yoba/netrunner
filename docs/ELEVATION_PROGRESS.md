@@ -15,6 +15,7 @@ Registry: `data/elevation/batch-registry.json`. Evidence is from the Linux x86_6
 | EL.6 primitives C: runs and ICE | `feat/el6-primitives-c` | complete |
 | EL.7 Batch 3: 23 cards | `feat/el7-batch3` | complete |
 | EL.8 integration: decks, formats, bots, client and the milestone gate | `feat/el8-integration` | complete; the decks await review |
+| EL.9 the NSG Core Sets format: NSG's 21 decks, no ban list (D-EL-9) | `feat/el9-nsg-core-sets` | complete |
 
 ## E6 baseline
 
@@ -552,6 +553,91 @@ changes, though it added no vocabulary.
 Three items stand as built and are answered on their PRs: Syailendra may target its own server, as the card text
 allows; the EL.1 snapshot marks the format complete because the behaviors ship in the stack and the menu stays behind the
 review flag; and Off the Books keeps its destination choice before the search, which offers the same outcomes.
+
+## EL.9 — The NSG Core Sets format (D-EL-9)
+
+Null Signal Games publishes 21 System Gateway + Elevation sample decks, the "NSG Core Sets" decks, on its
+[getting-started page](https://nullsignal.games/players/getting-started-sample-decklists/), each with a NetrunnerDB
+entry. They are built without the Startup ban list: 9 of the 12 Corp decks use Offworld Office, Seamless Launch or
+Mercia B4LL4RD, and Fine Print is NBN: Reality Plus, all banned in 26.05. So they get a format of their own beside
+Gateway + Elevation, which keeps its ban list and our 14 decks.
+
+### Format and decks
+
+- `data/formats/nsg-core-sets.json`: the Gateway + Elevation pool and deck rules, no restriction, effective 24 April 2025.
+- `data/decks/nsg-core-sets-decks.json`: the 21 lists (12 Corp, 9 Runner, one per identity), each with its NetrunnerDB
+  URL. The names are NSG's; the one-line summaries and archetypes are ours.
+- `CardFormatTests`: every deck is bound, valid in the format, and 9 Corp decks fail under the 26.05 bans.
+- Every card in the lists was already implemented: the format needed no card work.
+
+### Plumbing
+
+- `PlayFormats` lists the format. Both Elevation-pool formats share one behavior catalog, so `FormatOf` tells them
+  apart by the match's decks, and a save records and reloads the right one (`PlayFormatsTests`).
+- The menu offers "NSG Core Sets" wherever the pool is installed: NSG's published lists need no review gate. Random
+  opponents come from its decks (`main-menu-smoke`: 12 Corp decks, 9 Runner decks plus Random).
+  Evidence: `docs/evidence/elevation/el9-menu-nsg-core-corp-{1920,2560}.png`.
+- `--content nsg-core-sets` (108 pairings, pool `nsg-core-sets-v1`) for the fuzzer, the ladder and `ai-fit-evaluation`;
+  `elevation-deck-smoke.sh --format nsg-core-sets`; verify's full-match matrix adds an NSG pairing.
+
+### Defects found
+
+- **Client deck smoke** (21 decks, human against bot on its side): 19 of 21 passed at `--jobs 6`.
+  - Gimbatul against Enthusiasm: Madani's once-per-turn install, used on the Runner's turn and again on the Corp's, was
+    in both players' turn facts, and the view mapper stopped the client on the "duplicate". Fixed (shown once, as
+    first-X uses are), with `AbilityUsePresentationTests`. Our Magdalene deck has Madani too; no smoke had hit it.
+  - Fashion Lab against Flow and Ebb hit the smoke's 180-second cap at turn 30 (2,259 actions, no repeated state)
+    with six games in parallel; it passes alone, as does the Madani pairing after the fix.
+- **10,000-game fuzz** (`scripts/fuzz.sh nsg-core-sets --games 10000 --seed 9 --workers 12`): 9,924 terminal, 76 defects
+  in three classes, all from cards and combinations our decks didn't have; each replayed by seed in
+  `NsgCoreSetsFuzzRegressionTests`:
+  - The Zwicky Group (61): Greenmail forfeited to rez Biawak mid-run gains credits through an agenda; the deferred
+    first-card-credit occurrence failed the run's stack topology when the run resumed.
+  - Plutus (7): it plays Peer Review from Archives, whose install replaces Plutus itself.
+  - Byte! (8): accessed on top of R&D, its tag made NBN: Reality Plus draw 2, which drew Byte! before its net damage.
+    The engine now records a begun trigger whose source another effect moved
+    (`CatalogTriggerSourceMovedAfterStart`, omitted when false, so saves and hashes are unchanged), and a forged flag is
+    rejected (`CatalogTriggerRuntimeTests`).
+
+- **The fuzz rerun** on the fixed head, same seed: **10,000 of 10,000 terminal**.
+
+### Bots on NSG's decks
+
+NSG Core Sets shares the Gateway + Elevation card pool, so its games use that pool's fitted evaluation and HQ agenda
+factor (1.866), both measured on our 14 decks. The slice checked both on NSG's decks (the user's decision: one bot for
+every format, with per-pool numbers, and Gateway as a regression floor).
+
+- **Deck-pool ladder:** `ai-ladder --content nsg-core-sets --entrants easy,standard --deals 240`, two runs (seeds 91 and
+  92; 960 games each): **0 errors, 0 capped**. Standard beats Easy on both seats in both runs: Corp +140 (95% [96, 179])
+  and +103 ([55, 154]), Runner +81 ([32, 127]) and +86 ([36, 134]). The pool favours the Corp more than ours: Standard's
+  Runner scores 31–32% (39% on our decks).
+  - Six pairing warnings over both runs (2–3 deals each, none repeated). Pooled per deck, Standard scores at least as
+    well as Easy with every deck on both seats, so they are small-sample noise. It adds least with Glyph of Warding
+    (Corp, +0.01) and with Enthusiasm and Prick Thyself (Runner, +0.01 to +0.02): tuning leads, not defects.
+- **Fitted evaluation:** `ai-fit-evaluation --content nsg-core-sets --games 400 --holdout-games 120 --feature-version 2
+  --compare data/ai/evaluation-gateway-elevation-v2.json`. On 2,309 held-out NSG positions per side, the shared
+  Gateway + Elevation fit is best:
+
+  | Side | Shared fit | NSG's own fit | Hand evaluation | Base rate |
+  |---|---|---|---|---|
+  | Corp | **0.665** | 0.709 | 0.707 | 0.732 |
+  | Runner | **0.672** | 0.712 | 0.693 | 0.732 |
+
+- **`ai-belief`** on both runs' saved games, with a sweep of HQ agenda factors in the same pass. Every tier beats its prior
+  on slot log loss and top-1 in both runs; the HQ agenda error:
+
+  | Factor | Easy (run A / B) | Standard | Hard |
+  |---|---|---|---|
+  | prior | 0.899 / 0.845 | 0.899 / 0.845 | 0.899 / 0.845 |
+  | **1.866 (the shared factor)** | 0.860 / 0.847 | 0.838 / 0.822 | 0.801 / 0.780 |
+  | 1.6 (NSG's best) | 0.841 / 0.813 | 0.836 / 0.808 | 0.814 / 0.782 |
+
+  NSG's decks would prefer about 1.6 for Easy and Standard, and the shared factor for Hard. The gain is at most 0.03
+  agendas and Hard loses, so NSG keeps the shared factor, and no number is keyed by format. One gap remains: with it,
+  Easy (the forgetful tier) misses its prior on run B by 0.002.
+- **Cost:** the measurement took about 3 hours (fuzz rerun 66 minutes, ladders 15 minutes each, `ai-belief` 6–12 minutes
+  per pass, the fit 9 minutes). `ai-belief` now loads and scores games in parallel and sweeps factors in one pass; it
+  still scales poorly with workers, which the next step (profiling the verification runs) looks into.
 
 ## Milestone gate (section 7)
 
