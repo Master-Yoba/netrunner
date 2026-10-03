@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Random-legal rules fuzzing. Usage:
-#   scripts/fuzz.sh official|elevation|gateway-elevation|nsg-core-sets|developer [--games N] [--seed S] [--workers N] [--action-cap N] [--output <new dir>] [--json]
+#   scripts/fuzz.sh official|elevation|gateway-elevation|nsg-core-sets|developer [--games N | --games-per-pairing N] [--seed S] [--workers N] [--action-cap N] [--output <new dir>] [--json]
 # Official fuzzing needs the provisioned System Gateway snapshot and never downloads it.
 set -euo pipefail
 

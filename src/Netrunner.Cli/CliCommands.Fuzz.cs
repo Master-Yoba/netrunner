@@ -9,15 +9,17 @@ namespace Netrunner.Cli;
 public static partial class CliCommands
 {
     /// <summary>
-    /// fuzz [--games N] [--seed S] [--content developer|official] [--action-cap N]
+    /// fuzz [--games N | --games-per-pairing N] [--seed S] [--content developer|official|...] [--action-cap N]
     /// [--workers 1..64] [--differential] [--output new-dir] [--json]. --differential
-    /// also checks Simulation-mode Apply against every authoritative action. Exit 0 means no defects,
+    /// also checks Simulation-mode Apply against every authoritative action. --games-per-pairing plays N games of
+    /// each deck pairing with each seat mix (the plan cycles both, so any count is spread evenly). Exit 0 means no defects,
     /// 1 means at least one defect, 2 means invalid arguments.
     /// </summary>
     private static int RunFuzz(string[] args, TextWriter output, TextWriter error)
     {
         bool json = args.Contains("--json", StringComparer.Ordinal);
         int games = 50;
+        int? gamesPerPairing = null;
         ulong seed = 1;
         string content = "developer";
         int actionCap = RulesFuzzRunner.DefaultActionCap;
@@ -38,6 +40,10 @@ public static partial class CliCommands
                     case "--games" when index + 1 < args.Length:
                         if (!int.TryParse(args[++index], NumberStyles.None, CultureInfo.InvariantCulture, out games) || games is < 1 or > 100_000)
                             throw new ArgumentException("--games requires an integer from 1 to 100000.");
+                        break;
+                    case "--games-per-pairing" when index + 1 < args.Length:
+                        gamesPerPairing = int.TryParse(args[++index], NumberStyles.None, CultureInfo.InvariantCulture, out int perPairing)
+                            && perPairing is >= 1 and <= 1_000 ? perPairing : throw new ArgumentException("--games-per-pairing requires an integer from 1 to 1000.");
                         break;
                     case "--seed" when index + 1 < args.Length:
                         if (!ulong.TryParse(args[++index], NumberStyles.None, CultureInfo.InvariantCulture, out seed))
@@ -64,8 +70,15 @@ public static partial class CliCommands
                 }
             }
 
+            if (gamesPerPairing is not null && seen.Contains("--games"))
+                throw new ArgumentException("--games and --games-per-pairing are alternatives.");
             if (content != "developer" && CardDataResource.EmbeddedMode != CardDataResource.OfficialMode)
                 throw new ArgumentException("Official fuzzing needs previously provisioned official content embedded at build time.");
+            if (gamesPerPairing is { } perPairingGames)
+            {
+                games = perPairingGames * RulesFuzzRunner.ContentIds(content).Count * RulesFuzzRunner.Pairings.Count;
+                if (games > 100_000) throw new ArgumentException("--games-per-pairing plans more than 100000 games for this content.");
+            }
             if (destination is not null)
             {
                 if (Directory.Exists(destination) || File.Exists(destination))

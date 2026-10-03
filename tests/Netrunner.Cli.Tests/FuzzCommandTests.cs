@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Netrunner.Match;
 using Xunit;
 
 namespace Netrunner.Cli.Tests;
@@ -45,7 +46,23 @@ public sealed class FuzzCommandTests
         Assert.Equal(serial.RootElement.GetProperty("results").GetRawText(), parallel.RootElement.GetProperty("results").GetRawText());
     }
 
+    [Fact]
+    public void GamesPerPairingPlaysEachPairingWithEachSeatMix()
+    {
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        // Developer content is one pairing; the plan cycles the three seat mixes.
+        Assert.Equal(0, CliCommands.Run(["fuzz", "--games-per-pairing", "1", "--seed", "8", "--json"], output, error));
+
+        using JsonDocument document = JsonDocument.Parse(output.ToString());
+        JsonElement[] results = [.. document.RootElement.GetProperty("results").EnumerateArray()];
+        Assert.Equal(RulesFuzzRunner.Pairings.Count, results.Length);
+        Assert.Equal(2, CliCommands.Run(["fuzz", "--games-per-pairing", "1", "--games", "3"], output, error));
+    }
+
     [Theory]
+    [InlineData("--games-per-pairing", "0")]
     [InlineData("--games", "0")]
     [InlineData("--content", "somewhere")]
     [InlineData("--workers", "65")]
