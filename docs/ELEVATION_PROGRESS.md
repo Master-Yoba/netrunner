@@ -14,6 +14,7 @@ Registry: `data/elevation/batch-registry.json`. Evidence is from the Linux x86_6
 | EL.5 Batch 2: 16 cards | `feat/el5-batch2` | complete |
 | EL.6 primitives C: runs and ICE | `feat/el6-primitives-c` | complete |
 | EL.7 Batch 3: 23 cards | `feat/el7-batch3` | complete |
+| EL.8 integration: decks, formats, bots, client and the milestone gate | `feat/el8-integration` | complete; the decks await review |
 
 ## E6 baseline
 
@@ -379,3 +380,161 @@ full check (gained subtypes, break restrictions).
   and the Match suite failed only on the trigger-automation audit (verdicts now in EL.4 and EL.6) and a stale coverage
   report, both fixed. The full gates for the stack run on the EL.8 head.
 
+## EL.8 — Integration: decks, formats, bots, client and the milestone gate
+
+On `feat/el8-integration`.
+
+<a id="el8-decks"></a>
+
+### Decks (D-EL-4)
+
+Fourteen decks of our own in `data/decks/gateway-elevation-decks.json`, one per Elevation identity, so every faction has a
+Corp or Runner deck for each of its two Elevation identities. Each has a one-line plan and declared archetypes. All are
+legal under the `gateway-elevation` format snapshot: 45 cards; influence within the identity's limit; 20 agenda points
+for the Corp decks, with at most 3 agendas of 3 or more points; no banned card (Cleaver, Seamless Launch, Offworld
+Office, Mercia B4LL4RD); and Limit 1 per deck respected. `CardFormatTests` validates them against the format, and every
+card is bound. Provenance: ours, built on 3 October 2026.
+
+| Deck | Identity | Plan |
+|---|---|---|
+| Bioroid Wall | LEO Construction | A wall of bioroids that ends runs, trashed by the identity when a run must stop. |
+| Trendsetters | Poétrï Luxury Brands | Score fast with extra clicks, installing from R&D on every score. |
+| Clone Vats | AU Co. | Net damage and HQ trashes charge the identity, which sculpts R&D. |
+| Silk Road | PT Untaian | Keep HQ small and seed advancement counters on unrezzed cards. |
+| Headliners | Nebula Talent Management | An operation every turn flips the identity for extra clicks. |
+| Fast News | Synapse Global | Tags in, tags out, and a free install from HQ whenever one is removed. |
+| Open House | BANGUN | Agendas installed faceup as bait; taking them costs meat damage and tags. |
+| Shell Companies | The Zwicky Group | Every credit from an agenda or operation draws a card. |
+| Phoenix Fire | Ryō "Phoenix" Ōno | Take a subroutine, finish the run, and burn a card from HQ. |
+| Street Gang | Topan | Cheap installs every turn, paid for in meat damage, for a big anarch rig. |
+| Tri-Maf | Barry "Baz" Wong | Every rezzed ICE installs hardware or a resource, and Fransofia Ward taxes the rez. |
+| Market Runs | MuslihaT | Breakers and run events off the top of the stack, then run every turn. |
+| Shadow Play | Dewi Subrotoputri | Fill memory, run, and flip between credits and cards. |
+| Cryptarchitect | Magdalene Keino-Chemutai | Overdraw, then install programs and hardware from the discards. |
+
+**For the user to review.** The menu doesn't offer them until `PlayFormats.ElevationDecksReviewed` is set. Until then,
+developer builds and `--elevation-preview` show them.
+
+### The format choice (D-EL-8)
+
+- **Menu:** New game offers a **Gateway + Elevation** mode next to Gateway decks and Tutorial. It is shown once the decks are reviewed (`PlayFormats.ElevationDecksReviewed`), or now in developer builds and with `--elevation-preview`. The mode lists the format's 14 decks as tiles (identity cards from the whole pool), with Hard and the personalities, and Random draws from the chosen format's decks.
+- **Games:** `PlayFormats` (Match) bundles each playable format's card data, behavior and runtime catalogs, metadata and presets. A pairing that includes an Elevation deck plays on the Gateway + Elevation pool; Gateway games keep the embedded Gateway payloads, so their pins are unchanged. The setup form lists the Elevation decks as `ELEVATION · …`.
+- **Saves:** a save records its format (`SoloSaveMetadata.FormatId`; absent in older saves, which load as Gateway), and the save service validates and loads each save with its own format's content. A build that can't play the format lists the save as incompatible.
+- **Client fixes found on the way:**
+  - A card effect's install choice (Synapse Global, Peer Review) had no controls or readable labels; it now groups with install choices.
+  - History names a Runner moved to another server, and the EL.6 instructions have effect labels.
+  - A faceup installed agenda reads `FACEUP · INACTIVE`, not `FACE-DOWN`.
+  - Removed-from-game cards are browsable with their side's discard pile (EL.5's deviation).
+
+### E6 over the milestone
+
+Each card batch, measured over its own range past its primitive slice (the gate):
+
+| Batch | Range | Core lines | New vocabulary | Cards needing no Core change |
+|---|---|---|---|---|
+| slice-EL.3 | `2ad657c..fa8ee4b` | +0/−0 | 0 | **43 of 43 (100%)** |
+| slice-EL.5 | `4862fc8..140fcc7` | +0/−0 | 0 | **16 of 16 (100%)** |
+| slice-EL.7 | `6a7483e..2b52122` | +37/−8 | 1 | **23 of 23 (100%)** |
+
+Each batch with its primitive slice (`--range slice-EL.3=bdc3d6f..142900b --range slice-EL.5=142900b..c7c89d4 --range
+slice-EL.7=c7c89d4..2b52122`), the whole-set report:
+
+| Batch | Core files | Core lines | New vocabulary | Cards needing no Core change |
+|---|---|---|---|---|
+| EL.2 + EL.3 | 39 | +3,394/−223 | 70 | 9 of 43 (21%) |
+| EL.4 + EL.5 | 30 | +1,030/−87 | 17 | 4 of 16 (25%) |
+| EL.6 + EL.7 | 29 | +1,217/−91 | 21 | 10 of 23 (44%) |
+| **All** | | **+5,641/−401** | **108** | **23 of 82 (28%)** |
+
+The plan expected about 28%. Against Gateway's 12 of 72 (17%) and +45,795 Core lines, Elevation's 82 cards needed
++5,641: the primitive vocabulary carried most of the set. EL.8's integration added a little Core: an observation field
+for faceup inactive agendas, and the fixes the deck-pool ladder and the 10,000-game fuzz found (seven, below).
+
+### Bots
+
+- **Deck-pool ladder (A1b, A7):** `ai-ladder --content gateway-elevation --entrants easy,standard --deals 240` (pool
+  `gateway-elevation-v1`, the 48 pairings of the format's decks; 960 games).
+  - The first run had 17 errors from four engine defects, all fixed with regression tests (`fix: EL.8 …`):
+    - Proprionegation moving the Runner from the server itself;
+    - breach access modifiers left on the old attacked server after a move;
+    - a run event hosted faceup on Bling;
+    - Aggressive Trendsetting's trash trigger under Gourmand's access ability.
+  - The rerun: **960 games, 0 errors, 0 capped, no deck warning**. Standard beats Easy on both seats: Corp +119 Elo (95% [77, 161]), Runner +71 ([28, 117]).
+  - The pool favours the Corp: Standard's Corp scores 75% and its Runner 39%.
+- **Tracker (A9):** the bots' board reads both hosted faceup zones; a card hosted from the hand (Madani, Detente) leaves it, and a face-down slot the hand can't account for is the card that left faceup Archives (Mycoweb). Faceup installed agendas and removed-from-game cards were already public (visible cards and Remaining counts).
+- **`ai-belief`** on the 960 saved games:
+
+  | Tier | Slot log loss (prior) | Slot top-1 (prior) | HQ agenda error (prior) | Tracked-HQ precision | Confident guesses right |
+  |---|---|---|---|---|---|
+  | Easy | 3.092 (3.284) | 11% (3%) | 0.884 (0.870) | 75% | 89% |
+  | Standard | 3.001 (3.284) | 15% (3%) | 0.901 (0.870) | 69% | 87% |
+  | Hard | 1.820 (1.940) | 27% (19%) | 0.848 (0.821) | 69% | 86% |
+
+  The tracker beats its prior on every face-down-slot measure, on every tier.
+  **Deviation:** on HQ's agendas it is slightly worse than the prior on this pool; the Gateway fixtures (`BeliefAccuracyTests`) still beat it.
+  - Why: the Corp bots hold agendas in HQ, so HQ has 1.40 agendas at a Runner turn start against the unseen rate's 0.80.
+  - The Runner almost never tracks an agenda in HQ (accessed ones are stolen).
+  - Knowing about 0.46 non-agenda HQ cards lowers the tracker's estimate further than the prior's.
+  - The fix is A7's per-pool hidden-card prior: an HQ agenda rate fitted to the pool. It changes Runner v21's HQ valuation, so it needs a new Runner version and its ladder. Left for the user to schedule.
+- **Per-format fit (A7):** `ai-fit-evaluation --content gateway-elevation --games 400 --holdout-games 120 --feature-version 2 --compare data/ai/evaluation-v2.json`. On 2,574 held-out positions per side, the pool's own fit beats the general fit:
+
+  | Side | Pool fit | General fit | Hand evaluation | Base rate |
+  |---|---|---|---|---|
+  | Corp | **0.528** | 0.558 | 0.606 | 0.674 |
+  | Runner | **0.535** | 0.561 | 0.591 | 0.674 |
+
+  So Gateway + Elevation games plan with `data/ai/evaluation-gateway-elevation-v2.json`, which `FittedEvaluation` selects by the game's behavior version. Gateway games keep the general fit, so the M5 pins are unchanged. Policy versions are unchanged too: the change reaches only Standard's and Hard's planning in Elevation games, which no saved game had before this slice.
+  The deck-pool ladder rerun with the pool's fit: 960 games, 0 errors, 0 capped, no deck warning. Standard against Easy
+  moved to Corp +111 (95% [72, 150], from +119) and Runner +90 ([45, 132], from +71), inside each other's intervals.
+  Easy doesn't plan, so this measures Standard.
+
+### Hardening
+
+- `scripts/fuzz.sh gateway-elevation --games 10000 --seed 8 --workers 12` (random-legal and heuristic seats over the 48 pairings). The first run had 9,975 of 10,000 terminal: 25 defects in three classes, fixed with `ElevationFuzzRegressionTests` (`fix: EL.8 …`):
+  - **21:** a card-effect install (Topan, Magdalene, Synapse) offered Botulus or Chromatophores for the rig, which install only on ICE;
+  - **3:** Poétrï installing from HQ after a steal left the breach more random accesses than cards, and the breach prompt had no action;
+  - **1:** an ICE subroutine trashing a breaker under GAMEDRAGON™ Pro left its run-long pumps behind.
+
+  The rerun on the fixed head: **10,000 of 10,000 terminal** (mean 389 actions; `status=ok`).
+- The deck-pool ladder's own defects are under Bots.
+
+### Rulings and simplifications
+
+| Card | Note |
+|---|---|
+| Topan, Synapse Global, Magdalene, Poétrï | A card-effect install doesn't choose a host, so it doesn't offer a program that installs only on ICE (Botulus, Tranquilizer, Chromatophores). |
+| GAMEDRAGON™ Pro | A pump made while it is hosted lasts the run even if the mod leaves; it ends when the breaker leaves play. |
+| Jailbreak (and other breach modifiers) | "When you breach the attacked server" follows the attacked server when the Runner is moved (Proprionegation). |
+
+### Client
+
+- **Every new state presented** (the plan's section 8):
+  - agenda counters, the threat level, flipped identities, recurring credits (EL.2, EL.3);
+  - faceup installed agendas, marked `FACEUP · INACTIVE`;
+  - hosted faceup cards on consoles, Runner's and Corp's;
+  - removed-from-game cards, named on the discard tooltips and browsable with each discard pile;
+  - for bypass, derez, a moved Runner and a changed server: the run HUD reads the attacked server, and history names a move to another server and each derez;
+  - card-effect install choices, with controls and labels.
+- **Accessibility re-check:** the M4.9 smoke checks the Elevation states at 1920×1080 and 2560×1440 on both seats. Hosted cards and the pile browser must stay inside the viewport, and the removed-from-game pile must take keyboard focus (`ELEVATION_TABLE PASS … side=… size=…`, four lines, required by `verify.sh`). Screenshots, synthetic cards:
+  - `docs/evidence/elevation/el8-elevation-states-{runner,corp}-{1920,2560}.png`;
+  - `docs/evidence/elevation/el8-removed-pile-{runner,corp}-{1920,2560}.png`.
+- **Smoke matrices:**
+  - the M4 full-match matrix and the M5 client save/resume matrix include a Gateway + Elevation pairing (Fast News against Cryptarchitect; `--preset elevation`);
+  - the main-menu smoke previews the Gateway + Elevation area at both resolutions (`elevation=true`).
+- **Every deck through the client:** `scripts/elevation-deck-smoke.sh` plays each of the 14 decks on its side as the human seat (the contract agent clicking through the presented actions) against the bot, to a finished game and a reload. **14 of 14 PASS.**
+- **Not done:** with a real display (Xvfb), the main-menu smoke fails at its first New game check, in this checkout and without the Elevation preview too; `make verify` runs it headless, where it passes. Menu and in-game captures with real decks show official card text and art, so they stay local.
+
+## Milestone gate (section 7)
+
+- [x] **Coverage:** 159 of 159 bound, tested and checklist-complete; no drift (`verify.sh`); CARD-401 green.
+- [x] **E6:** each card batch at 100% with no Core change past its primitive slice; the whole-set report above (28%).
+- [x] **Formats:** the snapshots load and validate; Gateway + Elevation is playable with its decks (menu behind the review flag).
+- [x] **Decks:** each new deck validates (`CardFormatTests`), loads and plays human against bot through the client on its side (`elevation-deck-smoke.sh`, 14 of 14). The decks wait for your review.
+- [x] **Hardening:** 10,000 clean official fuzz games over the pool; the full `make m5-gate`, tactics and every suite:
+  `make gates REF=abf66b5` PASS (verify 539 s, m5-gate, tactics, bot-check: AI 132, Match 984, CLI 171).
+- [ ] **Bots** (one deviation):
+  - every Elevation card played without errors, with a non-default valuation (EL.3, EL.5, EL.7 ladders and proofs: 0 errors);
+  - the deck-pool ladder has no deck warning;
+  - `ai-belief` beats its prior on the new pool's slots on every tier, **but not on HQ agendas** (deviation above).
+- [x] **Client:** every new state presented; accessibility re-checked; the smoke matrices include a new deck.
+- [x] `docs/ELEVATION_PROGRESS.md` complete, with evidence and deviations.
