@@ -2797,6 +2797,15 @@ public sealed class BehaviorCatalog : IBehaviorCatalog, IBehaviorCardClassificat
     public bool TryGet(CardDefinitionId definitionId, out CardBehaviorDefinition spec) =>
         _generic.TryGetValue(definitionId, out spec!);
 
+    /// <summary>
+    /// The stable fingerprint of everything this catalog registers for one card, in every family
+    /// (typed specs, generic definition, card type and subtypes). It changes exactly when that card's
+    /// behavior does, so a change can be scoped to the deck pools that hold the card (scripts/affected-pools.sh).
+    /// </summary>
+    public string GetCardBehaviorFingerprint(CardDefinitionId definitionId) =>
+        BehaviorCatalogFingerprint.ComputeCard(
+            definitionId, _ice, _icebreakers, _assets, _agendas, _runEvents, _generic, _cardTypes, _cardSubtypes);
+
     /// <summary>Returns the stable fingerprint of one generic definition.</summary>
     public string GetDefinitionFingerprint(CardDefinitionId definitionId)
     {
@@ -3386,6 +3395,35 @@ internal static class BehaviorCatalogFingerprint
 
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()))).ToLowerInvariant();
     }
+
+    internal static string ComputeCard(
+        CardDefinitionId id,
+        IReadOnlyDictionary<CardDefinitionId, IceBehaviorSpec> ice,
+        IReadOnlyDictionary<CardDefinitionId, IcebreakerBehaviorSpec> icebreakers,
+        IReadOnlyDictionary<CardDefinitionId, AssetBehaviorSpec> assets,
+        IReadOnlyDictionary<CardDefinitionId, AgendaBehaviorSpec> agendas,
+        IReadOnlyDictionary<CardDefinitionId, RunEventBehaviorSpec> runEvents,
+        IReadOnlyDictionary<CardDefinitionId, CardBehaviorDefinition> generic,
+        IReadOnlyDictionary<CardDefinitionId, BehaviorCardType> cardTypes,
+        IReadOnlyDictionary<CardDefinitionId, IReadOnlyList<string>> cardSubtypes)
+    {
+        var builder = new StringBuilder();
+        builder.Append("card\n").Append(id.Value).Append('\n');
+        AppendFamily(builder, "ice", Only(ice, id), AppendIce);
+        AppendFamily(builder, "icebreaker", Only(icebreakers, id), AppendIcebreaker);
+        AppendFamily(builder, "asset", Only(assets, id), AppendAsset);
+        AppendFamily(builder, "agenda", Only(agendas, id), AppendAgenda);
+        AppendFamily(builder, "run-event", Only(runEvents, id), AppendRunEvent);
+        AppendFamily(builder, "generic", Only(generic, id), AppendGeneric);
+        AppendFamily(builder, "card-type", Only(cardTypes, id), AppendCardType);
+        AppendFamily(builder, "card-subtypes", Only(cardSubtypes, id),
+            static (target, subtypes) => target.Append(string.Join(',', subtypes)));
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString()))).ToLowerInvariant();
+    }
+
+    private static Dictionary<CardDefinitionId, T> Only<T>(IReadOnlyDictionary<CardDefinitionId, T> values, CardDefinitionId id)
+        where T : notnull =>
+        values.TryGetValue(id, out T? value) ? new() { [id] = value } : [];
 
     private static void AppendFamily<T>(
         StringBuilder builder,

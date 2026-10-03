@@ -132,6 +132,11 @@ public static partial class CliCommands
             return RunAiBelief(args, output, error);
         }
 
+        if (args.Length > 0 && args[0] == "card-fingerprints")
+        {
+            return RunCardFingerprints(args, output, error);
+        }
+
         if (args.Length > 0 && args[0] == "card-vocabulary")
         {
             return RunCardVocabulary(args, output, error);
