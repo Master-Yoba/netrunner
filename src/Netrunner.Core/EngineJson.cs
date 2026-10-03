@@ -138,15 +138,10 @@ public static class EngineJson
         IBehaviorCatalog? behaviorCatalog,
         IRuntimeCardCatalog? runtimeCardCatalog)
     {
+        // Deserialize validates the restored state against both catalogs (ValidateRestorable), so the next
+        // authoritative action needn't validate it again as its input.
         GameState state = Deserialize<GameState>(json, behaviorCatalog, runtimeCardCatalog);
-        try
-        {
-            StateInvariantValidator.Validate(state, behaviorCatalog, runtimeCardCatalog);
-        }
-        catch (StateInvariantException exception)
-        {
-            throw new JsonException("The state JSON failed invariant validation.", exception);
-        }
+        state.MarkValidated(behaviorCatalog, runtimeCardCatalog);
 
         return state;
     }
@@ -167,17 +162,8 @@ public static class EngineJson
         IBehaviorCatalog? behaviorCatalog,
         IRuntimeCardCatalog? runtimeCardCatalog)
     {
-        GameSnapshot snapshot = Deserialize<GameSnapshot>(json, behaviorCatalog, runtimeCardCatalog);
-        try
-        {
-            StateInvariantValidator.Validate(snapshot.ToState(), behaviorCatalog, runtimeCardCatalog);
-        }
-        catch (StateInvariantException exception)
-        {
-            throw new JsonException("The snapshot JSON failed invariant validation.", exception);
-        }
-
-        return snapshot;
+        // Deserialize already validated the snapshot's state against both catalogs (ValidateRestorable).
+        return Deserialize<GameSnapshot>(json, behaviorCatalog, runtimeCardCatalog);
     }
 
     private static JsonSerializerOptions BuildOptions()

@@ -216,7 +216,9 @@ public static partial class GameEngine
                 runtimeMismatch!);
         }
 
-        if (!simulation && !StateInvariantValidator.TryValidate(
+        if (!simulation
+            && !state.WasValidatedWith(enforceCatalogCompatibility ? behaviorCatalog : null, runtimeCardCatalog)
+            && !StateInvariantValidator.TryValidate(
                 state,
                 enforceCatalogCompatibility ? behaviorCatalog : null,
                 runtimeCardCatalog,
@@ -305,6 +307,7 @@ public static partial class GameEngine
                 next,
                 enforceCatalogCompatibility ? behaviorCatalog : null,
                 runtimeCardCatalog);
+            next.MarkValidated(enforceCatalogCompatibility ? behaviorCatalog : null, runtimeCardCatalog);
             var acceptedAction = new AcceptedActionRecord(
                 working.ActionSequence,
                 submission,
