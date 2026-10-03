@@ -126,7 +126,7 @@ public static class BeliefAccuracy
 
     private static readonly Lazy<Dictionary<string, string>> Titles = new(() =>
     {
-        try { return Netrunner.Cards.CardDataResource.LoadEmbedded().Cards.ToDictionary(card => card.Code, card => card.Title, StringComparer.Ordinal); }
+        try { return Netrunner.Cards.CardDataResource.LoadEmbeddedPool().Cards.ToDictionary(card => card.Code, card => card.Title, StringComparer.Ordinal); }
         catch (InvalidOperationException) { return new(StringComparer.Ordinal); }
     });
 

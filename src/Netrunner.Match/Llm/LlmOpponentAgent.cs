@@ -55,7 +55,9 @@ public sealed class LlmOpponentAgent : IAgentLifecycle
         var standard = (OfflineAgent)RatingLadder.CreateAgent("standard", side, definition);
         var heuristic = new OfflineAgent(standard.Configuration, OfflinePolicies.Create(standard.Configuration),
             new GatewayEvaluationCatalog(definition.Runtime, definition.Behavior), null, captureDiagnostics: true);
-        return new LlmOpponentAgent(heuristic, decider, new CardCatalogMetadataResolver(CardDataResource.LoadEmbedded()), definition.Behavior);
+        // The match's own metadata: on an Elevation pool the Gateway data alone left Elevation cards untitled in the
+        // LLM's views (bot loop 1: Sonnet named them by code).
+        return new LlmOpponentAgent(heuristic, decider, definition.Metadata, definition.Behavior);
     }
 
     public PlayerSide ControlledSide => _heuristic.ControlledSide;
