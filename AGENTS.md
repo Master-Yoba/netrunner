@@ -29,11 +29,11 @@ Tests use xUnit (`[Fact]` and `[Theory]`) and follow `*Tests.cs`/`*Tests` naming
 
 For bot and Match changes, run `make bot-check` per change (formatting, the quick M5 cases, and the official-data AI, Match and CLI suites in parallel; about 15 minutes) plus the ladder a new policy version needs. Run the full gates (`make verify`, `make m5-gate`, `make ai-tactics-verify TACTICAL_ARGS='--workers 12'`) once per batch of changes, before pushing; `make gates REF=<commit>` runs them all in a separate worktree (`.tools/gate-worktree`), so work can continue in this checkout meanwhile.
 
-Size fuzzes and ladders by tier, and run them only on the deck pools a change can affect:
+Size fuzzes and ladders by tier, and run them only on the deck pools a change can affect: `scripts/affected-pools.sh [<base>]` lists them (every pool for an engine, bot or Match change; for card specs, the pools whose decks hold a changed card; none for docs, tests or the client).
 
 - **Per change:** `make bot-check` and focused regression tests.
-- **Per slice** that changes engine, card or bot behavior: `scripts/fuzz.sh <pool> --games-per-pairing 8` (every pairing with every seat mix; about 10 minutes for the 108 NSG Core Sets pairings) and, for bot changes, `scripts/ai-ladder.sh --content <pool> --deals 240 --batch-deals 48 --stop-when-clear` (it stops once every seat separates). Reuse the ladder's `--save-games` for `ai-belief --workers 12`, with `--hq-agenda-sweep` to try several factors in one pass.
-- **Per milestone** or new deck pool: a 10,000-game fuzz of each new pool and full-budget ladders, where a gate asks for them.
+- **Per slice** that changes engine, card or bot behavior, on each affected pool: `scripts/fuzz.sh <pool> --games-per-pairing 8 --verify-replays-every 8` (every pairing with every seat mix, and every eighth game's replay verified; a rare replay defect waits for the milestone run) and, for bot changes, `scripts/ai-ladder.sh --content <pool> --deals 240 --batch-deals 48 --stop-when-clear` (it stops once every seat separates). Reuse the ladder's `--save-games` for `ai-belief --workers 12`, with `--hq-agenda-sweep` to try several factors in one pass.
+- **Per milestone** or new deck pool: a 10,000-game fuzz of each pool with every replay verified, and full-budget ladders where a gate asks for them.
 
 The CLI runs on the server GC, so give these runs the machine to themselves: a concurrent Godot smoke or test suite makes timing-sensitive tests flaky.
 

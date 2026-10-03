@@ -49,6 +49,6 @@ step restore make restore
 step verify make verify
 step m5-gate make m5-gate
 step tactics make ai-tactics-verify "TACTICAL_ARGS=--workers 12"
-step bot-check bash scripts/bot-check.sh
+step bot-check env BOT_CHECK_SKIP_M5_QUICK=1 bash scripts/bot-check.sh
 if [[ $status -eq 0 ]]; then echo "GATES PASS commit=$commit"; else echo "GATES FAIL commit=$commit"; fi
 exit $status
