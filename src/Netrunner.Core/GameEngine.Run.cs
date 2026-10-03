@@ -346,7 +346,6 @@ public static partial class GameEngine
         // ordinary M1/M2 states retain their canonical topology and hashes.
         if (runEventSpec is not null)
         {
-            ZoneState grip = GetZone(working, ZoneKind.RunnerGrip);
             ZoneState? existingPlayArea = working.Zones.SingleOrDefault(zone =>
                 zone.Kind == ZoneKind.RunnerPlayArea
                 && zone.OwnerSide == PlayerSide.Runner
@@ -368,6 +367,8 @@ public static partial class GameEngine
             CardInstanceId sourceId = initiatingSource
                 ?? throw new ResolutionFailureException("A run event requires a source card.");
             CardInstanceState sourceCard = GetCard(working, sourceId);
+            // The grip, or a console's hosted faceup cards that play as if in the grip (Bling).
+            ZoneState sourceZone = working.Zones.Single(zone => zone.Id == sourceCard.ZoneId);
             MoveCard(
                 working,
                 new CardInstanceState(
@@ -378,7 +379,7 @@ public static partial class GameEngine
                     faceUp: true,
                     rezzed: sourceCard.Rezzed,
                     advancementCounters: sourceCard.AdvancementCounters),
-                grip,
+                sourceZone,
                 playArea);
         }
 
@@ -663,7 +664,8 @@ public static partial class GameEngine
     {
         ZoneState? grip = working.Zones.FirstOrDefault(zone =>
             zone.Kind == ZoneKind.RunnerGrip && zone.OwnerSide == PlayerSide.Runner);
-        if (grip is null || grip.Id != source.ZoneId)
+        // EL-HOSTED-FACEUP: a card hosted faceup on a console that plays as if in the grip (Bling).
+        if ((grip is null || grip.Id != source.ZoneId) && !IsGripLikeHosted(working, source))
         {
             throw new ResolutionFailureException(
                 $"Run source '{sourceId.Value}' must be a card in the Runner's grip.");

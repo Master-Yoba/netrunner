@@ -61,7 +61,7 @@ public static partial class GameEngine
             card.OwnerSide,
             !entersHiddenZone && (entersPublicFaceUpZone || card.FaceUp),
             !leavesInstalledZone && card.Rezzed,
-            card.AdvancementCounters, leavesInstalledZone || IsHostedFaceUpZone(source.Kind) ? null : card.HostCardId));
+            card.AdvancementCounters, KeepsHost(source.Kind, destination.Kind, leavesInstalledZone) ? card.HostCardId : null));
         if (leavesInstalledZone)
         {
             TrashHostedDescendants(working, card.Id);
@@ -145,6 +145,16 @@ public static partial class GameEngine
         working.RunState = run.WithLingeringEffects(run.LingeringEffects
             .Where(effect => effect.ValueAdjustment?.TargetCardId != cardId).ToArray());
     }
+
+    /// <summary>
+    /// Whether a moved card keeps its host. A card leaving play or its console's faceup zone loses it, except into
+    /// a behavior's temporary set-aside custody and back (EL.4 review): a returned selection is hosted as before.
+    /// </summary>
+    private static bool KeepsHost(ZoneKind source, ZoneKind destination, bool leavesInstalledZone) =>
+        !leavesInstalledZone
+        && (!(IsHostedFaceUpZone(source) || source == ZoneKind.BehaviorSetAside)
+            || destination == ZoneKind.BehaviorSetAside
+            || IsHostedFaceUpZone(destination));
 
     private static bool IsInstalledZone(ZoneKind kind) =>
         kind is ZoneKind.RunnerRig or ZoneKind.ServerIce or ZoneKind.ServerRoot;
