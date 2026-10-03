@@ -21,8 +21,12 @@ public static partial class ObservationBuilder
             // Only the owner of an issued choice receives its public catalog
             // key. Resolve physical sources through the existing visibility
             // boundary; never disclose other queued or concealed triggers.
-            if (trigger.Controller != pending.Owner || trigger.TriggerKey is null || trigger.SourceCardId is not { } source
-                || ObserveCard(state, viewer, source) is not { } card) continue;
+            if (trigger.Controller != pending.Owner || trigger.TriggerKey is null || trigger.SourceCardId is not { } source) continue;
+            // A trigger offered to its controller is its own card's ability, so the owner knows the card even where it
+            // isn't otherwise visible to them (bot loop 1: Byte! accessed from R&D; the Corp bot couldn't value its trigger).
+            IReadOnlyDictionary<string, object?>? card = ObserveCard(state, viewer, source)
+                ?? (state.GetCard(source).OwnerSide == viewer ? PrivateCardView(state, state.GetCard(source)) : null);
+            if (card is null) continue;
             contexts.Add(new Dictionary<string, object?>
             {
                 ["id"] = trigger.Id.Value,
