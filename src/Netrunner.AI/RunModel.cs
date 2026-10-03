@@ -93,7 +93,15 @@ public sealed record SubroutineEffect(bool EndsRun, int? EndsRunIfCreditsAtMost,
 
         SubroutineEffect Chosen(BehaviorChoiceSpec choice, SubroutineEffect effect)
         {
-            SubroutineEffect[] outcomes = [.. choice.Options.Select(option => Resolve(option.Instructions, effect))];
+            // Only the options the engine would offer: their condition holds and the chooser can pay (Mycoweb offers a copied
+            // subroutine only while a rezzed copy of its ICE is installed).
+            int credits = choice.Chooser == BehaviorChooser.Runner ? context.Features.Board.Players.Runner.Credits
+                : context.Features.Board.Players.Corp.Credits;
+            SubroutineEffect[] outcomes = [.. choice.Options
+                .Where(option => (option.Condition is not { } condition || Holds(condition, effect))
+                    && (option.Costs ?? []).Where(cost => cost.Kind == BehaviorCostKind.Credits).Sum(cost => cost.Amount) <= credits)
+                .Select(option => Resolve(option.Instructions, effect))];
+            if (outcomes.Length == 0) return effect;
             if (choice.Chooser != BehaviorChooser.Runner)
                 return outcomes.FirstOrDefault(outcome => outcome.EndsRun) ?? outcomes.MaxBy(outcome => outcome.Damage + outcome.Tags)!;
             return outcomes.Where(outcome => !outcome.EndsRun && outcome.Damage < grip).MinBy(outcome => outcome.Damage + outcome.Tags)
@@ -110,6 +118,8 @@ public sealed record SubroutineEffect(bool EndsRun, int? EndsRunIfCreditsAtMost,
                 BehaviorConditionKind.RunnerTagsAtLeast => runnerTags >= (condition.Value ?? 1),
                 BehaviorConditionKind.ThreatLevelAtLeast => Math.Max(context.Features.Board.Players.Corp.AgendaPoints,
                     context.Features.Board.Players.Runner.AgendaPoints) >= (condition.Value ?? 0),
+                BehaviorConditionKind.RezzedInstalledCopy => context.Features.Board.Servers.SelectMany(server => server.Ice.Concat(server.Root))
+                    .Any(installed => installed is { Rezzed: true } && installed.DefinitionId == condition.Fact),
                 // Anything else is taken to hold: the worse case for the Runner.
                 _ => true,
             };
